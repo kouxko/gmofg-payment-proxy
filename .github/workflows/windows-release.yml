@@ -3,6 +3,8 @@ name: Windows release artifacts
 on:
   workflow_dispatch:
   push:
+    branches:
+      - "codex/windows-ci-cache-warmup"
     tags:
       - "v*"
 
