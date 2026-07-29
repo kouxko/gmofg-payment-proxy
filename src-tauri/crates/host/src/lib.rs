@@ -16,7 +16,7 @@ use std::{
 
 use gmofg_proxy_application::{
     AppError, AppResult, Application, BreakpointCoordinator, BreakpointValidator, EventHub,
-    ProxyStatusViewModel, SettingsRepositoryPort,
+    ProxyStatusViewModel, ProxySupervisorPort, SettingsRepositoryPort,
 };
 #[cfg(not(target_os = "macos"))]
 use gmofg_proxy_infrastructure::DpapiProtector;
@@ -94,6 +94,8 @@ impl HostPlatformServices {
 pub struct ApplicationHostBuilder {
     data_dir: PathBuf,
     platform: HostPlatformServices,
+    proxy_override: Option<Arc<dyn ProxySupervisorPort>>,
+    breakpoint_coordinator: Option<Arc<BreakpointCoordinator>>,
 }
 
 impl ApplicationHostBuilder {
@@ -102,7 +104,30 @@ impl ApplicationHostBuilder {
         Self {
             data_dir: data_dir.into(),
             platform,
+            proxy_override: None,
+            breakpoint_coordinator: None,
         }
+    }
+
+    /// Replaces the network supervisor port while preserving every real
+    /// application, repository, rule, certificate, and settings adapter.
+    ///
+    /// This is intended for deterministic Rust-only integration tests and
+    /// alternate process hosts; production callers use the default runtime.
+    #[must_use]
+    pub fn with_proxy_supervisor(mut self, proxy: Arc<dyn ProxySupervisorPort>) -> Self {
+        self.proxy_override = Some(proxy);
+        self
+    }
+
+    /// Injects the coordinator shared by the application and runtime pipeline.
+    ///
+    /// Tests can retain their `Arc` to seed an in-flight breakpoint without
+    /// exposing application internals through the host after construction.
+    #[must_use]
+    pub fn with_breakpoint_coordinator(mut self, breakpoints: Arc<BreakpointCoordinator>) -> Self {
+        self.breakpoint_coordinator = Some(breakpoints);
+        self
     }
 
     pub async fn build(self) -> Result<ApplicationHost, HostBuildError> {
@@ -119,7 +144,9 @@ impl ApplicationHostBuilder {
             settings.stored.max_memory_bytes,
         )?;
 
-        let breakpoints = Arc::new(BreakpointCoordinator::default());
+        let breakpoints = self
+            .breakpoint_coordinator
+            .unwrap_or_else(|| Arc::new(BreakpointCoordinator::default()));
         let events = Arc::new(EventHub::new(EventHub::DEFAULT_CAPACITY));
         let pipeline = Arc::new(RuntimePipelineAdapter::new(
             services.rules.clone(),
@@ -137,11 +164,13 @@ impl ApplicationHostBuilder {
             Arc::new(TokioListenerBinder),
             service_factory,
         ));
-        let proxy = Arc::new(ApplicationProxyAdapter::new(
-            supervisor,
-            settings.stored,
-            pipeline,
-        ));
+        let proxy: Arc<dyn ProxySupervisorPort> = self.proxy_override.unwrap_or_else(|| {
+            Arc::new(ApplicationProxyAdapter::new(
+                supervisor,
+                settings.stored,
+                pipeline,
+            ))
+        });
         let application = Arc::new(Application::new(
             proxy,
             services.capture,

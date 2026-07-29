@@ -1544,6 +1544,8 @@ dependencies = [
 name = "gmofg-proxy-host"
 version = "1.0.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "gmofg-proxy-application",
  "gmofg-proxy-infrastructure",
  "gmofg-proxy-runtime",
@@ -1553,6 +1555,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
