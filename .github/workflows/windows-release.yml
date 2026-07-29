@@ -26,6 +26,15 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: Restore Rust and Tauri tool caches
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: windows-release
+          cache-directories: |
+            ~/AppData/Local/tauri
+          cache-on-failure: true
+
       - run: pnpm install --frozen-lockfile
 
       - name: Build MSI and NSIS installers
