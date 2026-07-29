@@ -6,7 +6,7 @@
 | --- | --- |
 | 产品名称 | GMO-FG Payment Proxy |
 | 文档类型 | 产品需求规格、UI 行为规范与代码设计 |
-| 文档版本 | v1.0.7 |
+| 文档版本 | v1.0.10 |
 | 文档状态 | 实施基线 |
 | 目标平台 | Windows 10/11 x64、macOS Apple Silicon |
 | UI 语言 | 中文 |
@@ -119,6 +119,10 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | UI-015 | 宽表格设置可读的最小宽度并通过 `Table.ScrollContainer` 横向滚动，不得通过单字换行压缩关键列。 |
 | UI-016 | Rust 返回的字段错误必须关联到对应 HeroUI 表单字段；页面级错误摘要只作为补充。 |
 | UI-017 | Tauri 负责物理窗口最小尺寸；Web 布局不得设置 1024px CSS 最小宽度，以保证浏览器缩放和系统大字体下仍可重排。 |
+| UI-018 | 顶部状态栏在全部八个业务页面提供当前页面专属的“使用说明”入口；入口只打开 HeroUI Drawer，不执行文档级导航或重载当前 WebView。 |
+| UI-019 | 每页使用说明至少覆盖页面用途、适用场景、前置条件、主要操作步骤、结果判断、风险和常见失败排查；说明必须与当前页面实际可见控件、Rust 行为和实机验收口径一致。 |
+| UI-020 | 使用说明只属于静态展示内容，不得在 TypeScript 中复制业务状态判断、校验、规则语义或网络实现；涉及成功/失败、字段错误和可执行动作时，仍以 Rust 当前 ViewModel 与 Command 返回为准。 |
+| UI-021 | 生产页面不得直接使用原生 `button`、`input`、`textarea`、`select`、`option` 或浏览器 `date`/`datetime-local`/`time` 控件；日期时间筛选使用 HeroUI DatePicker、DateField 和 Calendar，并由 `I18nProvider locale="zh-CN"` 提供中文本地化。 |
 
 ### 3.2 最终 UI 视觉基准
 
@@ -132,6 +136,30 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | 故障模拟 | ![故障模拟](assets/ui/06-fault-simulation.png) |
 | 证书管理 | ![证书管理](assets/ui/07-certificate-management.png) |
 | 系统设置 | ![系统设置](assets/ui/08-system-settings.png) |
+
+### 3.3 页面使用说明
+
+应用在顶部状态栏使用书本图标作为当前页面帮助入口。入口的无障碍名称固定为
+“打开{页面名称}使用说明”，并直接打开右侧 HeroUI Drawer。Drawer 使用 Accordion
+组织长篇说明，默认展开第一节；关闭说明后保持当前页面、选中行、Tab、表单草稿、
+滚动位置和 Rust 订阅状态不变。
+
+八个页面的最低说明范围如下：
+
+| 页面 | 必须说明的操作范围 |
+| --- | --- |
+| 代理控制台 | 首次设置/证书顺序、启动/停止/重启、顶部与双向健康状态、真实设备 DLL 的 `D48` 验收、常见启动/TLS/端口失败。 |
+| 实时抓包 | 实时列表、Rust 筛选与分页、暂停/恢复语义、清空当前显示、请求/响应/规则轨迹详情、转断点和从会话建规则。 |
+| 会话记录 | 多条件与时间筛选、分页、按需详情、敏感原始 JSON 导出、清空已完成会话、容量淘汰和找不到会话的排查。 |
+| 断点实验台 | 产生断点、原始/有效报文、Rust 格式化与校验、请求/响应阶段可执行动作、断点终态和高风险真机验证。 |
+| 拦截规则 | 列表执行顺序、基本信息、匹配条件、动作顺序与终止语义、保存门禁、复制/删除/导入/导出和命中验证。 |
+| 故障模拟 | 模板选择、参数、启用/保存为规则、活动模拟停用、请求前断开与上游后丢弃等关键网络语义。 |
+| 证书管理 | 首次 SAN/CA/PKCS12/上游 CA 顺序、两段 mTLS 身份、重新签发、检查、安全存储、重置本地 CA 和 TLS 排查。 |
+| 系统设置 | 网络/SAN/端口/上游、首次配置顺序、超时/Body/容量、校验/保存/重启/回滚、默认值与数据策略。 |
+
+说明中出现的默认值、状态、错误码和验收标准必须直接来自本需求文档。帮助内容可以
+解释操作，但不得替代页面上的实时 Rust 状态。例如，帮助中说明“修改后放行需要校验”
+不代表前端可以自行判断校验是否通过；是否可执行仍由 Rust ViewModel 决定。
 
 ## 4. 页面功能需求
 
@@ -165,7 +193,7 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | CAPTURE-005 | “暂停列表滚动”仅暂停 UI 更新，不暂停网络、规则、断点或会话记录。 |
 | CAPTURE-005A | 恢复列表滚动时由 Rust 返回当前筛选条件下的完整显示快照，不得把暂停游标永久写入查询而丢失暂停前仍可见的行。 |
 | CAPTURE-006 | 恢复滚动后，Rust 返回当前游标之后仍保留的事件；已淘汰事件不补发。 |
-| CAPTURE-007 | 选中一行后显示概览、请求、响应、原始字节、TLS 状态、时间信息和规则轨迹。 |
+| CAPTURE-007 | 选中一行后显示概览、请求、响应、TLS 状态、时间信息和规则轨迹；抓包详情不提供独立“原始字节”区域。 |
 | CAPTURE-008 | “转到断点”只对仍处于 `Pending` 的断点可用。 |
 | CAPTURE-009 | “基于此会话新建规则”由 Rust 生成预填的规则草稿，前端只负责打开规则编辑界面。 |
 | CAPTURE-010 | “清空当前显示”只重置抓包页面游标，不删除会话记录。 |
@@ -510,6 +538,9 @@ ConnectionId
 | ARCH-004 | Rust 领域模型是 IPC 类型的唯一来源，TypeScript 类型通过 Specta 生成。 |
 | ARCH-005 | `src-tauri` 只作为 Tauri 适配层，不承载代理、规则、证书或存储业务实现。 |
 | ARCH-006 | UI、IPC、应用用例、领域规则和基础设施之间使用单向依赖，禁止反向引用。 |
+| ARCH-007 | `host` crate 是唯一生产组合根，负责组装 `application`、`proxy`、`infrastructure`、后台事件任务和优雅关闭生命周期；不得依赖 Tauri、WebView 或 Next.js。 |
+| ARCH-008 | `domain`、`application`、`proxy`、`infrastructure` 和 `host` 必须能脱离 Tauri 独立构建及测试，并由自动化架构守卫禁止引入 Tauri 依赖。 |
+| ARCH-009 | Tauri、未来 TUI/CLI 和无 UI 集成测试必须调用同一个 `Arc<Application>` 用例门面；外层适配器仅注入应用数据目录、密钥保护和文件选择等平台端口。当前阶段只建立边界，不实现 TUI/CLI 产品入口。 |
 
 ### 11.2 项目结构
 
@@ -538,7 +569,8 @@ gmofg-payment-proxy/
         ├── domain/
         ├── application/
         ├── proxy/
-        └── infrastructure/
+        ├── infrastructure/
+        └── host/                     # UI 无关的生产组合根与生命周期
 ```
 
 ### 11.3 Rust crate 职责
@@ -575,9 +607,18 @@ gmofg-payment-proxy/
 - 实现文件选择、原子导入导出和结构化日志。
 - 为 `application` 定义的 Repository/Service trait 提供实现。
 
+#### `host`
+
+- 作为唯一生产组合根创建 SQLite、基础设施适配器、内存会话仓库、规则管线、rustls Runtime、ProxySupervisor 和 `Application`。
+- 承担 Rust 后台事件批处理任务的启动、取消、Join 和进程退出前的优雅关闭；后台任务不得由 Tauri Builder 直接组装。
+- 通过 `HostPlatformServices` 注入密钥保护和文件选择端口；Tauri Dialog、未来终端路径输入和自动化测试替身均复用相同端口。
+- 对外只暴露 `ApplicationHost` 生命周期以及 `Arc<Application>` 用例门面，不公开 SQLite、Listener、证书私钥或领域集合。
+- 不依赖 Tauri 或 Next.js，可由 Rust 单元/集成测试以及未来 TUI/CLI 直接构建。
+
 #### `src-tauri`
 
-- 创建并托管唯一 `AppState`。
+- 获取 Tauri 应用数据目录并实现原生文件选择端口，再调用 `host` 构建唯一 `ApplicationHost`。
+- 创建并托管只含 `Arc<Application>` 与 `Arc<ApplicationHost>` 生命周期引用的 `AppState`。
 - 注册 Tauri Commands 和 Channel。
 - 将 Command 输入转换为应用层 DTO，将结果序列化给前端。
 - 捕获 Command 边界错误并转换为 `AppErrorViewModel`。
@@ -617,10 +658,13 @@ gmofg-payment-proxy/
 
 ### 12.1 AppState
 
-Tauri 托管的 `AppState` 只持有应用层入口：
+Tauri 托管的 `AppState` 只持有应用层入口及 UI 无关 Host 生命周期引用：
 
 ```text
 AppState
+  ├── Arc<ApplicationHost>
+  │     ├── CancellationToken
+  │     └── UI 事件批处理任务句柄
   └── Arc<Application>
         ├── ProxySupervisor
         ├── SessionRepository
@@ -632,7 +676,9 @@ AppState
         └── UiEventHub
 ```
 
-`AppState` 不允许直接公开数据库连接、证书私钥、Listener 或领域集合给 Command。
+`AppState` 不允许直接公开数据库连接、证书私钥、Listener 或领域集合给 Command。Tauri
+Command 只能调用 `Arc<Application>`；Tauri 退出适配器只能调用
+`ApplicationHost::begin_shutdown` 和 `ApplicationHost::shutdown`，不得重复实现关闭编排。
 
 ### 12.2 ProxySupervisor
 
@@ -876,6 +922,7 @@ Command 前置条件和幂等性：
 | FRONTEND-006 | 禁止在 TypeScript 中实现 TLS、证书、哈希、Shift-JIS、JSON 业务校验、规则、分页、筛选、导出或持久化。 |
 | FRONTEND-007 | `src/generated/rust-types.ts` 由 Rust 生成，前端和人工修改均禁止。 |
 | FRONTEND-008 | 前端不得定义与 Rust DTO 重复的手写业务类型。 |
+| FRONTEND-009 | 页面帮助内容允许作为静态中文展示数据保存在前端；帮助 Drawer 只维护自身打开/关闭和 Accordion 展开状态，不访问 IPC、文件、浏览器存储或网络。 |
 
 ### 14.2 前端允许的状态
 
@@ -917,7 +964,7 @@ Rust 负责返回：
 | 应用导航与页面切换 | 语义化 `header` / `nav`、Toolbar、Link、Tabs、Breadcrumbs |
 | 状态和警告 | Alert、Chip、Toast、ProgressBar、Spinner |
 | 列表和数据 | Table、ListBox、Pagination |
-| 表单 | Form、TextField、TextArea、Select、NumberField、Checkbox、Switch、RadioGroup |
+| 表单 | Form、TextField、TextArea、Select、NumberField、Checkbox、Switch、RadioGroup、DatePicker、DateField、Calendar、TimeField |
 | 编辑面板 | Drawer、Modal、Accordion、Card、Separator |
 | 确认操作 | AlertDialog/Modal |
 | 操作 | Button、Tooltip |
@@ -929,6 +976,7 @@ HeroUI v3 的实现约束：
 - HeroUI v3 已移除 Navbar；应用壳使用语义化 `header` / `nav` 直接组合 HeroUI Toolbar、Link、Button、Tooltip、Chip 和 Separator。
 - 不创建 HeroUIProvider；根布局仅在需要 React Aria 中文本地化时使用 `I18nProvider locale="zh-CN"`，全局通知使用 `Toast.Provider`。
 - Table、Tabs、Select 等组件使用 HeroUI v3 compound API，不使用 v2 单体属性 API。
+- 日期和时间输入使用 HeroUI v3 DatePicker、DateField、Calendar 或 TimeField 的 compound API，不允许退回浏览器原生 `datetime-local` 弹层。
 - 不引入 Framer Motion；使用 HeroUI v3 自带 CSS 动画并尊重 `prefers-reduced-motion`。
 - 允许 AppShell、GlobalStatusBar、SideNavigation 和 RuntimeFooter 等产品级组合组件；禁止二次封装 Button、Table、TextField、Modal 等基础组件。
 - 应用壳采用紧凑顶部状态条和左侧工具轨，不设置重复的底部状态条；导航图标与文字相对工具轨水平居中。窗口宽度低于 1280px 时工具轨缩窄；完整报文和断点处理使用 Drawer，规则与故障配置自动滚动到可见位置。
@@ -1013,6 +1061,7 @@ HeroUI v3 的实现约束：
 | TEST-IPC | 每个 Command 的输入、输出、错误、前置状态、幂等性和 revision。 |
 | TEST-EVENT | Bootstrap、游标补发、Epoch、事件顺序、批量边界、溢出和重新快照。 |
 | TEST-BINDINGS | Rust 重新生成 TypeScript 类型后 Git 无差异。 |
+| TEST-HOST | 在不链接或启动 Tauri/WebView 的条件下构建 `ApplicationHost`，直接调用代理状态、设置和规则等 `Application` 用例并完成优雅关闭；架构守卫扫描五个可复用 Rust crate，禁止 Tauri 依赖。 |
 | TEST-UI | HeroUI 正确渲染 ViewModel、表单发送用户意图、焦点、键盘、确认弹窗、安全边距、加载/失败/空状态以及窄屏详情流程。 |
 | TEST-BOUNDARY | 扫描 TypeScript，禁止 fetch、WebSocket、Node API、localStorage、IndexedDB、业务实现以及将 Overlay `CloseTrigger` 作为普通容器。 |
 | TEST-STATIC | Next.js 静态导出成功，Tauri 正确加载 `out`。 |
@@ -1031,7 +1080,7 @@ HeroUI v3 的实现约束：
 | ACCEPT-008 | 上游处理后丢弃响应等场景记录实际网络行为，Payment 侧 T02/T03/T04/自动取消结果作为实机证据单独记录。 |
 | ACCEPT-009 | 重启后 Payload 和会话为空，规则、设置和证书配置仍存在。 |
 | ACCEPT-010 | 日志、SQLite 和普通配置文件中不存在 Payload、密码、私钥或 PKCS12 原始内容。 |
-| ACCEPT-011 | 在真实设备 `2740072778` 上执行 DLL instrumentation 测试时，设备只连接 Proxy 地址，Proxy 使用 rustls mTLS 连接真实 Server，并将上游响应原样回送；设备与 Proxy 记录的响应长度和 SHA-256 必须一致。真实 TID 未配置时，代理链路通过与 GMO-FG 业务结果通过必须分别记录。 |
+| ACCEPT-011 | 在真实设备 `2740072778` 上执行 `CreditDLL` instrumentation 测试时，设备只连接 Proxy 地址，Proxy 使用 rustls mTLS 连接真实 Server，并将上游响应原样回送；测试必须从真实上游响应中解析出 `ErrorCode=D48`，未取得 `D48` 一律不得判定成功。 |
 | ACCEPT-012 | macOS Apple Silicon `.app` 可保存网络/SAN 设置、生成并重启后读取 CA/叶子证书、以 Keychain 保护敏感材料、导入空密码 PKCS12 和上游 CA，并启动双端口监听。 |
 | ACCEPT-013 | macOS 防火墙启用时，正式 `.app` 二进制必须被明确允许接收入站连接；仅允许测试 harness 不能作为正式 App 实机验收通过。 |
 
@@ -1039,16 +1088,16 @@ HeroUI v3 的实现约束：
 
 | 项目 | 结果 |
 | --- | --- |
-| 执行日期 | 2026-07-28 |
+| 执行日期 | 2026-07-29 |
 | 设备 | A920MAX，序列号 `2740072778`，设备地址 `10.0.34.94` |
-| 测试入口 | Android instrumentation：`DllProxyRealDeviceTest.connectionTestIsForwardedThroughProxy` |
+| 测试入口 | Android instrumentation：`DllProxyRealDeviceTest.creditDllReturnsD48ThroughProxy` |
 | 设备目标 | `https://10.0.34.50:16127/` |
 | Proxy 上游 | `https://https.gmo-fg.net:16127`，解析并连接 `106.184.29.97:16127` |
-| 请求证据 | Proxy 完成 App 客户端证书校验；收到 `POST / HTTP/1.1`、`TransactionType=0000`、`RequestID=R`、Body 225 字节 |
-| 响应证据 | 正式 macOS `.app` 通过 rustls 转发后，设备收到 HTTP 200、Body 247 字节，SHA-256 为 `080bb8c17f54b35fd9af2a85cc678acf3efa413be68da8862b409e0ef60fa326`。 |
+| 请求证据 | Proxy 完成 App 客户端证书校验；收到 `POST / HTTP/1.1`、`TransactionType=0001`、`RequestID=R`、Body 227 字节。 |
+| 响应证据 | 正式 macOS `.app` 通过 rustls 转发后，设备收到 HTTP 200、Body 118 字节，SHA-256 为 `3fbef0a2fa9afc71801f2d06034296eced3fb176601da36bca8a4e4244e9bd80`，并解析出 `ErrorCode=D48`。 |
 | 自动化结果 | `OK (1 test)` |
-| macOS 前置条件 | 首轮因防火墙只允许 `real-device-dll-proxy` 测试 harness 而在 App TLS 握手阶段超时；将正式 `.app/Contents/MacOS/gmofg-payment-proxy` 加入“允许传入连接”后，同一 instrumentation 用例通过。 |
-| 业务边界 | 当前设备未提供真实 Payment TID，测试使用仓库既有测试参数；上游响应未解析为 `ConnectionTest.Response`。本记录证明 Proxy 双向转发通过，不声明 GMO-FG DLL 业务认证通过。 |
+| 上游兼容修复 | Hyper HTTP/1 客户端必须启用标题格式 Header；全小写 `content-length/host/connection` 会被 GMO-FG 前置网关返回 247 字节 `Request Rejected` 页面，标题格式后同一请求返回合法 `CreditDLL.Response`。 |
+| 业务判定 | `D48`（マスタファイル未登録）按 Payment 业务语义不是成功码，因此 `businessSuccess=false`；但它是本设备当前已知的真实 GMO-FG Server 验收信号，只有明确收到并解析出 `D48` 才证明 DLL 请求已正确经过 Proxy 到达 Server 并返回。 |
 | 设备恢复 | 测试仅通过 instrumentation 参数指定 Proxy URL，未修改 Launcher 或 Payment 的持久化联机地址；测试结束后卸载测试 APK。 |
 
 ## 17. 需求追踪矩阵
@@ -1056,7 +1105,7 @@ HeroUI v3 的实现约束：
 | 需求范围 | UI 页面/区域 | Rust Use Case/模块 | IPC | 主要测试 |
 | --- | --- | --- | --- | --- |
 | GLOBAL-001~014 | 全局与范围边界 | application / proxy / code review | app_bootstrap、全局事件 | TEST-PROXY、TEST-BOUNDARY、ACCEPT-004 |
-| UI-001~017 | 应用壳与全局交互 | application ViewModel | app_bootstrap、app_subscribe_events | TEST-UI、TEST-BOUNDARY |
+| UI-001~020 | 应用壳、全局交互与逐页使用说明 | application ViewModel；静态帮助内容 | app_bootstrap、app_subscribe_events；帮助无 IPC | TEST-UI、TEST-BOUNDARY、TEST-STATIC |
 | CONSOLE-001~010 | 代理控制台 | ProxySupervisorUseCase | proxy_*、RuntimeStatusChanged | TEST-STATE、TEST-PROXY |
 | CAPTURE-001~011 | 实时抓包 | CaptureUseCase / UiEventHub | capture_*、CaptureRowsAdded | TEST-EVENT、TEST-UI |
 | SESSION-001~011 | 会话记录 | SessionUseCase / SessionRepository | session_*、SessionUpdated | TEST-CAPACITY、TEST-EXPORT、TEST-UI |
@@ -1073,8 +1122,8 @@ HeroUI v3 的实现约束：
 | DATA-001~012 | 会话与容量 | application repositories | session_*、ResourceWarning | TEST-CAPACITY、TEST-CONCURRENCY |
 | SECURITY-001~018 | 安全与文件 | infrastructure | certificate_*、session_export | TEST-STORAGE、TEST-EXPORT |
 | NFR-001~010 | 平台和性能 | 全体 | 全体 | Windows/macOS 验收、TEST-CONCURRENCY |
-| ARCH-001~006 | 架构边界 | workspace crates | 生成绑定 | TEST-BOUNDARY、TEST-BINDINGS |
-| FRONTEND-001~008 | Next.js 展示层 | frontend | ipc adapter | TEST-UI、TEST-STATIC |
+| ARCH-001~009 | 架构边界 | workspace crates / host composition root | Tauri 仅调用 Application 门面；生成绑定 | TEST-HOST、TEST-BOUNDARY、TEST-BINDINGS |
+| FRONTEND-001~009 | Next.js 展示层 | frontend | ipc adapter；帮助无 IPC | TEST-UI、TEST-BOUNDARY、TEST-STATIC |
 | ACCEPT-001~013 | 桌面平台与 Payment 验收 | 全体 | 全体 | 安装、便携版、macOS、实机和安全验收记录 |
 
 开始实现前，每个具体测试文件应引用其覆盖的需求 ID。新增需求必须同时增加模块映射、IPC 映射和测试映射。
@@ -1097,7 +1146,7 @@ HeroUI v3 的实现约束：
 
 ### 18.2 变更控制
 
-- 本文档 v1.0.0 为首个实施基线；v1.0.1 修正 HeroUI v3 组件契约并明确容量与事件队列的可测试口径；v1.0.2 将 Windows 打包验收暂缓，并把真实设备 `2740072778` 的 DLL 代理单元测试设为新的第 8 步；v1.0.3 增加 macOS/Keychain 支持、首次设置与证书生成顺序、空密码 PKCS12、受限的旧式客户端信任锚兼容、正式 `.app` 防火墙验收以及紧凑应用壳和导航居中要求；v1.0.4 固化 Overlay Footer 安全边距、加载/失败/空状态、字段级错误、窄屏详情流程、宽表格滚动和缩放重排要求；v1.0.5 固化异步提交去重、详情请求竞态隔离、抓包暂停游标恢复、Rust 原子断点决策和 Rust Header 输入解析，并将 UI 合约、Rust fmt/clippy 纳入统一检查；v1.0.6 将断点可执行动作、规则字段/操作符默认值、故障默认值和设置 SAN 规范化收回 Rust，补充规则解析与 Bootstrap 迟到响应隔离，并改为抓包恢复时获取完整 Rust 显示快照；v1.0.7 将所有 Rust 规则草稿请求纳入统一保存门禁与代次淘汰，并要求异步字段结果函数式合并到最新动作，禁止回滚并发编辑。
+- 本文档 v1.0.0 为首个实施基线；v1.0.1 修正 HeroUI v3 组件契约并明确容量与事件队列的可测试口径；v1.0.2 将 Windows 打包验收暂缓，并把真实设备 `2740072778` 的 DLL 代理单元测试设为新的第 8 步；v1.0.3 增加 macOS/Keychain 支持、首次设置与证书生成顺序、空密码 PKCS12、受限的旧式客户端信任锚兼容、正式 `.app` 防火墙验收以及紧凑应用壳和导航居中要求；v1.0.4 固化 Overlay Footer 安全边距、加载/失败/空状态、字段级错误、窄屏详情流程、宽表格滚动和缩放重排要求；v1.0.5 固化异步提交去重、详情请求竞态隔离、抓包暂停游标恢复、Rust 原子断点决策和 Rust Header 输入解析，并将 UI 合约、Rust fmt/clippy 纳入统一检查；v1.0.6 将断点可执行动作、规则字段/操作符默认值、故障默认值和设置 SAN 规范化收回 Rust，补充规则解析与 Bootstrap 迟到响应隔离，并改为抓包恢复时获取完整 Rust 显示快照；v1.0.7 将所有 Rust 规则草稿请求纳入统一保存门禁与代次淘汰，并要求异步字段结果函数式合并到最新动作，禁止回滚并发编辑；v1.0.8 增加八个业务页面的上下文使用说明 Drawer，固化详细操作范围、无刷新边界和静态展示职责；v1.0.9 禁止生产页面使用浏览器原生表单和日期时间控件，统一使用 HeroUI v3 compound 组件并加入静态边界扫描；v1.0.10 将完整 Rust 生产组装与后台生命周期移入无 Tauri 的 `host` crate，增加未来 TUI/CLI 和无 UI 实机测试可复用的 `Application` 门面边界及架构守卫，但暂不实现 TUI/CLI 入口。
 - 需求变化必须新增或修改稳定需求 ID。
 - UI 变化必须同时更新对应图片、页面需求和追踪矩阵。
 - Rust Command/事件变化必须更新 IPC 章节和生成类型。
