@@ -1,0 +1,21 @@
+[package]
+name = "gmofg-proxy-host"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+gmofg-proxy-application = { path = "../application" }
+gmofg-proxy-infrastructure = { path = "../infrastructure" }
+gmofg-proxy-runtime = { path = "../proxy" }
+parking_lot.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true
