@@ -1,10 +1,7 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
+use std::sync::Arc;
 
 use gmofg_proxy_application::Application;
-use tokio_util::sync::CancellationToken;
+use gmofg_proxy_host::ApplicationHost;
 
 /// Tauri exposes only the application facade to commands.
 ///
@@ -13,29 +10,28 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug)]
 pub struct AppState {
     pub application: Arc<Application>,
-    shutdown: CancellationToken,
-    shutdown_started: AtomicBool,
+    host: Arc<ApplicationHost>,
 }
 
 impl AppState {
-    pub fn new(application: Arc<Application>, shutdown: CancellationToken) -> Self {
+    pub fn new(host: ApplicationHost) -> Self {
+        let host = Arc::new(host);
         Self {
-            application,
-            shutdown,
-            shutdown_started: AtomicBool::new(false),
+            application: host.application(),
+            host,
         }
     }
 
     pub fn begin_shutdown(&self) -> bool {
-        !self.shutdown_started.swap(true, Ordering::AcqRel)
-    }
-
-    pub fn shutdown_token(&self) -> CancellationToken {
-        self.shutdown.clone()
+        self.host.begin_shutdown()
     }
 
     pub fn shutdown(&self) {
-        self.shutdown.cancel();
+        self.host.cancel_background_tasks();
+    }
+
+    pub fn host(&self) -> Arc<ApplicationHost> {
+        Arc::clone(&self.host)
     }
 }
 

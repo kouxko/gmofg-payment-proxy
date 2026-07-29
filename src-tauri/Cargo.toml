@@ -79,6 +79,7 @@ tauri-build = { version = "2.6.3", features = [] }
 async-trait.workspace = true
 gmofg-proxy-application = { path = "crates/application" }
 gmofg-proxy-domain = { path = "crates/domain" }
+gmofg-proxy-host = { path = "crates/host" }
 gmofg-proxy-infrastructure = { path = "crates/infrastructure" }
 gmofg-proxy-runtime = { path = "crates/proxy" }
 log = "0.4"
