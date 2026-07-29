@@ -1,0 +1,49 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+:root {
+  color-scheme: light;
+  --telemetry-ink: #16212b;
+  --telemetry-muted: #5f6b76;
+  --telemetry-line: #d9e0e6;
+  --telemetry-soft: #f5f8fa;
+  --telemetry-accent: #007f8c;
+  --telemetry-accent-soft: #e9f7f8;
+  --telemetry-good: #2c9c45;
+  --telemetry-warning: #d77a00;
+  --telemetry-danger: #d92d35;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: #ffffff;
+  color: var(--telemetry-ink);
+  font-family:
+    "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: #bee9ec;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

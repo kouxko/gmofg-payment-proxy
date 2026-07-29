@@ -1,0 +1,270 @@
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    time::{Duration, SystemTime},
+};
+
+use gmofg_proxy_runtime::{
+    Channel, ConnectionContext, HandshakePolicy, ProxyError, Result, TlsPeerIdentity,
+    tls::{ClientTlsAdapter, ServerTlsAdapter},
+    transport::{BoxIo, ConnectionAcceptor, NoopPipelinePorts},
+};
+use rcgen::{
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
+    Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, SanType,
+};
+use ring::digest::{SHA256, digest};
+use rustls::{
+    ClientConfig, RootCertStore,
+    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
+    version::{TLS12, TLS13},
+};
+use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::TlsConnector;
+use uuid::Uuid;
+
+struct Identity {
+    cert: Vec<u8>,
+    key: Vec<u8>,
+    ca: Vec<u8>,
+}
+
+fn ca(common_name: &str) -> (Vec<u8>, Vec<u8>) {
+    let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
+    let mut params = CertificateParams::default();
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, common_name);
+    params.distinguished_name = dn;
+    params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+    let cert = params.self_signed(&key).unwrap();
+    (cert.der().to_vec(), key.serialize_der())
+}
+
+fn identity(common_name: &str, san: &str, client: bool) -> Identity {
+    let (ca_der, ca_key_der) = ca(&format!("{common_name} CA"));
+    let ca_key = KeyPair::try_from(ca_key_der.as_slice()).unwrap();
+    let issuer = Issuer::from_ca_cert_der(&ca_der.clone().into(), ca_key).unwrap();
+    let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
+    let mut params = CertificateParams::default();
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, common_name);
+    params.distinguished_name = dn;
+    params.is_ca = IsCa::ExplicitNoCa;
+    params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+    params.extended_key_usages = vec![if client {
+        ExtendedKeyUsagePurpose::ClientAuth
+    } else {
+        ExtendedKeyUsagePurpose::ServerAuth
+    }];
+    params.subject_alt_names = vec![SanType::DnsName(san.try_into().unwrap())];
+    let cert = params.signed_by(&key, &issuer).unwrap();
+    Identity {
+        cert: cert.der().to_vec(),
+        key: key.serialize_der(),
+        ca: ca_der,
+    }
+}
+
+fn context() -> ConnectionContext {
+    ConnectionContext {
+        runtime_epoch: Uuid::new_v4(),
+        connection_id: Uuid::new_v4(),
+        channel: Channel::Transaction,
+        peer_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 45_000),
+        accepted_at: SystemTime::now(),
+        tls_peer: None,
+    }
+}
+
+async fn listener() -> (TcpListener, SocketAddr) {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let address = listener.local_addr().unwrap();
+    (listener, address)
+}
+
+#[tokio::test]
+async fn valid_mtls_negotiates_tls12_and_exposes_peer_identity() {
+    let server = identity("proxy.local", "localhost", false);
+    let client = identity("payment-app", "payment-app", true);
+    let server_tls = ServerTlsAdapter::build(
+        vec![server.cert.clone(), server.ca.clone()],
+        server.key,
+        client.ca.clone(),
+        None,
+        Arc::new(NoopPipelinePorts),
+    )
+    .unwrap();
+    let client_tls =
+        ClientTlsAdapter::build(vec![client.cert, client.ca], client.key, server.ca).unwrap();
+    let (listener, address) = listener().await;
+    let server_task = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        server_tls.accept(Box::new(tcp) as BoxIo, &context()).await
+    });
+    let tcp = TcpStream::connect(address).await.unwrap();
+    client_tls
+        .connect("localhost", Box::new(tcp))
+        .await
+        .unwrap();
+    let accepted = server_task.await.unwrap().unwrap();
+    assert!(
+        accepted
+            .tls_peer
+            .unwrap()
+            .subject_summary
+            .contains("payment-app")
+    );
+}
+
+#[tokio::test]
+async fn wrong_ca_and_hostname_mismatch_are_rejected() {
+    let server = identity("proxy.local", "localhost", false);
+    let client = identity("payment-app", "payment-app", true);
+    let wrong_ca = ca("Wrong CA").0;
+    for (trusted_ca, host) in [(wrong_ca, "localhost"), (server.ca.clone(), "wrong.local")] {
+        let server_tls = ServerTlsAdapter::build(
+            vec![server.cert.clone(), server.ca.clone()],
+            server.key.clone(),
+            client.ca.clone(),
+            None,
+            Arc::new(NoopPipelinePorts),
+        )
+        .unwrap();
+        let client_tls = ClientTlsAdapter::build(
+            vec![client.cert.clone(), client.ca.clone()],
+            client.key.clone(),
+            trusted_ca,
+        )
+        .unwrap();
+        let (listener, address) = listener().await;
+        let server_task = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            server_tls.accept(Box::new(tcp) as BoxIo, &context()).await
+        });
+        let tcp = TcpStream::connect(address).await.unwrap();
+        assert!(client_tls.connect(host, Box::new(tcp)).await.is_err());
+        assert!(server_task.await.unwrap().is_err());
+    }
+}
+
+#[tokio::test]
+async fn missing_client_certificate_and_tls13_only_client_are_rejected() {
+    let server = identity("proxy.local", "localhost", false);
+    let client = identity("payment-app", "payment-app", true);
+    for (version, with_client_auth) in [(&TLS12, false), (&TLS13, true)] {
+        let server_tls = ServerTlsAdapter::build(
+            vec![server.cert.clone(), server.ca.clone()],
+            server.key.clone(),
+            client.ca.clone(),
+            None,
+            Arc::new(NoopPipelinePorts),
+        )
+        .unwrap();
+        let mut roots = RootCertStore::empty();
+        roots.add(CertificateDer::from(server.ca.clone())).unwrap();
+        let builder =
+            ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+                .with_protocol_versions(&[version])
+                .unwrap()
+                .with_root_certificates(roots);
+        let config = if with_client_auth {
+            builder
+                .with_client_auth_cert(
+                    vec![
+                        CertificateDer::from(client.cert.clone()),
+                        CertificateDer::from(client.ca.clone()),
+                    ],
+                    PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(client.key.clone())),
+                )
+                .unwrap()
+        } else {
+            builder.with_no_client_auth()
+        };
+        let (listener, address) = listener().await;
+        let server_task = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            server_tls.accept(Box::new(tcp) as BoxIo, &context()).await
+        });
+        let tcp = TcpStream::connect(address).await.unwrap();
+        let connector = TlsConnector::from(Arc::new(config));
+        assert!(
+            connector
+                .connect(ServerName::try_from("localhost").unwrap(), tcp)
+                .await
+                .is_err()
+        );
+        assert!(server_task.await.unwrap().is_err());
+    }
+}
+
+#[derive(Debug)]
+struct RejectPolicy {
+    called: Arc<AtomicBool>,
+}
+
+impl HandshakePolicy for RejectPolicy {
+    fn reject_tls_handshake(&self, _: &ConnectionContext, _: &TlsPeerIdentity) -> Result<bool> {
+        self.called.store(true, Ordering::SeqCst);
+        Ok(true)
+    }
+}
+
+#[tokio::test]
+async fn fingerprint_and_policy_reject_before_http_handler_can_open() {
+    let server = identity("proxy.local", "localhost", false);
+    let client = identity("payment-app", "payment-app", true);
+    for (pin, reject_policy) in [
+        (Some(vec![0; 32]), false),
+        (Some(digest(&SHA256, &client.cert).as_ref().to_vec()), true),
+    ] {
+        let policy_called = Arc::new(AtomicBool::new(false));
+        let handler_opened = Arc::new(AtomicBool::new(false));
+        let policy: Arc<dyn HandshakePolicy> = if reject_policy {
+            Arc::new(RejectPolicy {
+                called: Arc::clone(&policy_called),
+            })
+        } else {
+            Arc::new(NoopPipelinePorts)
+        };
+        let server_tls = ServerTlsAdapter::build(
+            vec![server.cert.clone(), server.ca.clone()],
+            server.key.clone(),
+            client.ca.clone(),
+            pin,
+            policy,
+        )
+        .unwrap();
+        let client_tls = ClientTlsAdapter::build(
+            vec![client.cert.clone(), client.ca.clone()],
+            client.key.clone(),
+            server.ca.clone(),
+        )
+        .unwrap();
+        let (listener, address) = listener().await;
+        let opened = Arc::clone(&handler_opened);
+        let server_task = tokio::spawn(async move {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let result = server_tls.accept(Box::new(tcp) as BoxIo, &context()).await;
+            if result.is_ok() {
+                opened.store(true, Ordering::SeqCst);
+            }
+            result
+        });
+        let tcp = TcpStream::connect(address).await.unwrap();
+        let client_result = tokio::time::timeout(
+            Duration::from_secs(2),
+            client_tls.connect("localhost", Box::new(tcp)),
+        )
+        .await
+        .unwrap();
+        assert!(client_result.is_err());
+        let error: ProxyError = server_task.await.unwrap().unwrap_err();
+        assert_eq!(error.code, "TLS_HANDSHAKE_FAILED");
+        assert!(!handler_opened.load(Ordering::SeqCst));
+        assert_eq!(policy_called.load(Ordering::SeqCst), reject_policy);
+    }
+}
