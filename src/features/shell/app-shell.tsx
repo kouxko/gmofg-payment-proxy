@@ -5,7 +5,6 @@ import {
   Button,
   Chip,
   Drawer,
-  Link,
   Modal,
   Separator,
   Spinner,
@@ -26,9 +25,10 @@ import {
   SlidersVertical,
 } from "@gravity-ui/icons";
 import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { BootstrapProvider, useBootstrap } from "./bootstrap-context";
+import { useWorkspaceNavigation } from "./workspace-navigation";
 import { toneColor } from "@/lib/format";
+import { PageHelp } from "@/features/help/page-help";
 
 export const navigation = [
   {
@@ -57,17 +57,16 @@ export const navigation = [
 ] as const;
 
 export const sideNavigationItemClassName =
-  "mx-auto flex min-h-20 !w-[calc(100%_-_1rem)] flex-col items-center justify-center gap-1.5 rounded-xl px-3 text-center text-sm";
+  "flex min-h-20 !w-full flex-col items-center justify-center gap-1.5 rounded-xl px-3 text-center text-sm";
 export const sideNavigationIconClassName =
   "block size-6 shrink-0 self-center";
 export const sideNavigationLabelClassName =
   "block w-14 shrink-0 whitespace-nowrap text-center leading-5";
+export const sideNavigationClassName =
+  "row-start-2 flex w-24 flex-col gap-2 overflow-y-auto border-r border-[var(--telemetry-line)] bg-white px-2 py-3 max-[1280px]:w-20 max-[1025px]:hidden";
+export const shellErrorRegionClassName = "px-5 pt-4";
 
-function GlobalStatusBar() {
-  const { proxy, bootstrap, isLoading } = useBootstrap();
-  const pathname = usePathname();
-  const router = useRouter();
-  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+function CurrentTime() {
   const [currentTime, setCurrentTime] = useState("—");
   useEffect(() => {
     const updateCurrentTime = () =>
@@ -76,6 +75,13 @@ function GlobalStatusBar() {
     const timer = window.setInterval(updateCurrentTime, 1000);
     return () => window.clearInterval(timer);
   }, []);
+  return <span className="ml-auto tabular-nums">{currentTime}</span>;
+}
+
+function GlobalStatusBar() {
+  const { proxy, bootstrap, isLoading } = useBootstrap();
+  const { pathname, navigate } = useWorkspaceNavigation();
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
   const transaction = proxy?.channels.find(
     (channel) => channel.kind === "transaction",
   );
@@ -105,9 +111,9 @@ function GlobalStatusBar() {
                 </Drawer.Header>
                 <Drawer.Body className="space-y-2">
                   {navigation.map(({ href, title, icon: Icon }) => (
-                    <Link
+                    <Button
                       key={href}
-                      href={href}
+                      variant="ghost"
                       className={[
                         "flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left",
                         pathname === href
@@ -115,12 +121,13 @@ function GlobalStatusBar() {
                           : "hover:bg-[var(--telemetry-soft)]",
                       ].join(" ")}
                       onPress={() => {
+                        navigate(href);
                         setMobileNavigationOpen(false);
                       }}
                     >
                       <Icon className="size-5" />
                       {title}
-                    </Link>
+                    </Button>
                   ))}
                 </Drawer.Body>
               </Drawer.Dialog>
@@ -181,7 +188,8 @@ function GlobalStatusBar() {
             <span>暂停数 {proxy?.pending_breakpoints ?? 0}</span>
           </>
         )}
-        <span className="ml-auto tabular-nums">{currentTime}</span>
+        <CurrentTime />
+        <PageHelp pathname={pathname} />
         <Tooltip>
           <Button
             isIconOnly
@@ -189,7 +197,7 @@ function GlobalStatusBar() {
             variant="ghost"
             aria-label="打开系统设置"
             onPress={() => {
-              router.push("/settings");
+              navigate("/settings");
             }}
           >
             <Gear className="size-4" />
@@ -202,18 +210,18 @@ function GlobalStatusBar() {
 }
 
 function SideNavigation() {
-  const pathname = usePathname();
+  const { pathname, navigate } = useWorkspaceNavigation();
   return (
     <nav
       aria-label="主导航"
-      className="row-start-2 flex w-24 flex-col border-r border-[var(--telemetry-line)] bg-white py-3 max-[1280px]:w-20 max-[1025px]:hidden"
+      className={sideNavigationClassName}
     >
       {navigation.map(({ href, label, title, icon: Icon }) => {
         const active = pathname === href;
         return (
-          <Link
+          <Button
             key={href}
-            href={href}
+            variant="ghost"
             aria-current={active ? "page" : undefined}
             className={[
               `relative ${sideNavigationItemClassName}`,
@@ -222,10 +230,11 @@ function SideNavigation() {
                 : "text-[var(--telemetry-ink)] hover:bg-[var(--telemetry-soft)]",
             ].join(" ")}
             aria-label={title}
+            onPress={() => navigate(href)}
           >
             <Icon className={sideNavigationIconClassName} />
             <span className={sideNavigationLabelClassName}>{label}</span>
-          </Link>
+          </Button>
         );
       })}
       <div className="mt-auto">
@@ -273,16 +282,18 @@ function ShellContent({ children }: Readonly<{ children: React.ReactNode }>) {
       <SideNavigation />
       <main className="min-w-0 overflow-auto bg-white">
         {error && (
-          <Alert status="danger" className="m-4">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>Rust 核心暂不可用</Alert.Title>
-              <Alert.Description>{error}</Alert.Description>
-            </Alert.Content>
-            <Button size="sm" variant="outline" onPress={() => void refresh()}>
-              重试
-            </Button>
-          </Alert>
+          <div className={shellErrorRegionClassName}>
+            <Alert status="danger">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Title>Rust 核心暂不可用</Alert.Title>
+                <Alert.Description>{error}</Alert.Description>
+              </Alert.Content>
+              <Button size="sm" variant="outline" onPress={() => void refresh()}>
+                重试
+              </Button>
+            </Alert>
+          </div>
         )}
         {children}
       </main>

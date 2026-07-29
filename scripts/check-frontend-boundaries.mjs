@@ -41,10 +41,24 @@ const forbidden = [
 const failures = [];
 for (const file of sourceFiles(sourceRoot)) {
   const content = readFileSync(file, "utf8");
+  const isTestFile = /\.(?:test|spec)\.(?:ts|tsx)$/.test(file);
   for (const [pattern, message] of forbidden) {
     if (pattern.test(content)) {
       failures.push(`${relative(root, file)}: ${message}`);
     }
+  }
+  if (
+    !isTestFile &&
+    /<(?:button|input|textarea|select|option)(?:\s|>)/.test(content)
+  ) {
+    failures.push(
+      `${relative(root, file)}: 生产 UI 控件必须使用 HeroUI 组件`,
+    );
+  }
+  if (!isTestFile && /\btype=["'](?:date|datetime-local|time)["']/.test(content)) {
+    failures.push(
+      `${relative(root, file)}: 日期与时间必须使用 HeroUI DatePicker、DateField 或 TimeField`,
+    );
   }
 
   const overlayFooterPattern =

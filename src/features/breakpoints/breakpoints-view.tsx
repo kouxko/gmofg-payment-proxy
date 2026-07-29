@@ -35,6 +35,7 @@ import {
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { formatTimestamp, toneColor } from "@/lib/format";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 
 export function buildBreakpointDecision(
   draft: BreakpointDraft,
@@ -60,6 +61,7 @@ export function buildBreakpointDecision(
 }
 
 export function BreakpointsView() {
+  const { searchParams } = useWorkspaceNavigation();
   const queue = useIpcQuery<BreakpointSummaryViewModel[]>(
     "breakpoint-query",
     () => callCommand(commands.breakpointQuery(null)),
@@ -69,9 +71,7 @@ export function BreakpointsView() {
     queue.refresh,
   );
   const [selectedId, setSelectedId] = useState<string | undefined>(() => {
-    const requested = new URLSearchParams(window.location.search).get(
-      "breakpointId",
-    );
+    const requested = searchParams.get("breakpointId");
     return requested ?? undefined;
   });
   const [bodyEdits, setBodyEdits] = useState<Record<string, string>>({});

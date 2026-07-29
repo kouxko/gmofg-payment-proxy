@@ -1,14 +1,4 @@
-"use client";
-
-import dynamic from "next/dynamic";
-
-const SettingsView = dynamic(
-  () =>
-    import("@/features/settings/settings-view").then(
-      (module) => module.SettingsView,
-    ),
-  { ssr: false },
-);
+import { SettingsView } from "@/features/settings/settings-view";
 
 export default function SettingsPage() {
   return <SettingsView />;

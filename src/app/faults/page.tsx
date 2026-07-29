@@ -1,14 +1,4 @@
-"use client";
-
-import dynamic from "next/dynamic";
-
-const FaultsView = dynamic(
-  () =>
-    import("@/features/faults/faults-view").then(
-      (module) => module.FaultsView,
-    ),
-  { ssr: false },
-);
+import { FaultsView } from "@/features/faults/faults-view";
 
 export default function FaultsPage() {
   return <FaultsView />;

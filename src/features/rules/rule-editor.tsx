@@ -765,36 +765,8 @@ function ConditionRow({
 
   return (
     <div className="rounded-xl border border-[var(--telemetry-line)] p-3">
-      <div className="mb-3 flex items-center gap-3">
-        <div className="grid flex-1 gap-1">
-          <Label>{`条件 ${index + 1}`}</Label>
-          <Select
-            aria-label={`条件 ${index + 1} 类型`}
-            selectedKey={condition.type}
-            onSelectionChange={(kind) => {
-              void runAsync(
-                "kind",
-                () => requestConditionDraft(kind as ConditionKind),
-                (next) => onChange(() => next),
-              );
-            }}
-          >
-            <Select.Trigger>
-              <Select.Value />
-              <Select.Indicator />
-            </Select.Trigger>
-            <Select.Popover>
-              <ListBox>
-                <ListBox.Item id="field" textValue="字段匹配">
-                  字段匹配
-                </ListBox.Item>
-                <ListBox.Item id="nth_hit" textValue="第 N 次命中">
-                  第 N 次命中
-                </ListBox.Item>
-              </ListBox>
-            </Select.Popover>
-          </Select>
-        </div>
+      <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
+        <span className="text-sm font-semibold">条件 {index + 1}</span>
         <Button
           isIconOnly
           variant="danger-soft"
@@ -803,6 +775,35 @@ function ConditionRow({
         >
           <TrashBin className="size-4" />
         </Button>
+      </div>
+      <div className="mb-3 grid gap-1">
+        <Label>条件类型</Label>
+        <Select
+          aria-label={`条件 ${index + 1} 类型`}
+          selectedKey={condition.type}
+          onSelectionChange={(kind) => {
+            void runAsync(
+              "kind",
+              () => requestConditionDraft(kind as ConditionKind),
+              (next) => onChange(() => next),
+            );
+          }}
+        >
+          <Select.Trigger>
+            <Select.Value />
+            <Select.Indicator />
+          </Select.Trigger>
+          <Select.Popover>
+            <ListBox>
+              <ListBox.Item id="field" textValue="字段匹配">
+                字段匹配
+              </ListBox.Item>
+              <ListBox.Item id="nth_hit" textValue="第 N 次命中">
+                第 N 次命中
+              </ListBox.Item>
+            </ListBox>
+          </Select.Popover>
+        </Select>
       </div>
       <ConditionEditor
         condition={condition}
@@ -919,7 +920,7 @@ export function ActionsEditor({
           key={`${editorKey}:${draft.actions.length}:${index}:${actionKind(action)}`}
           className="rounded-xl border border-[var(--telemetry-line)] p-3"
         >
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
             <span className="text-sm font-semibold">动作 {index + 1}</span>
             <Button
               isIconOnly

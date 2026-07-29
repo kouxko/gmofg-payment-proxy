@@ -36,9 +36,12 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn() }),
-  useSearchParams: () => ({ get: () => null }),
+vi.mock("@/features/shell/workspace-navigation", () => ({
+  useWorkspaceNavigation: () => ({
+    pathname: "/rules",
+    searchParams: new URLSearchParams(),
+    navigate: vi.fn(),
+  }),
 }));
 
 const summary: RuleSummaryViewModel = {

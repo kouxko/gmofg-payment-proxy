@@ -1,14 +1,4 @@
-"use client";
-
-import dynamic from "next/dynamic";
-
-const CaptureRoute = dynamic(
-  () =>
-    import("@/features/capture/capture-route").then(
-      (module) => module.CaptureRoute,
-    ),
-  { ssr: false },
-);
+import { CaptureRoute } from "@/features/capture/capture-route";
 
 export default function CapturePage() {
   return <CaptureRoute />;

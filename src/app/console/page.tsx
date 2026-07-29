@@ -1,14 +1,4 @@
-"use client";
-
-import dynamic from "next/dynamic";
-
-const ConsoleRoute = dynamic(
-  () =>
-    import("@/features/console/console-route").then(
-      (module) => module.ConsoleRoute,
-    ),
-  { ssr: false },
-);
+import { ConsoleRoute } from "@/features/console/console-route";
 
 export default function ConsolePage() {
   return <ConsoleRoute />;

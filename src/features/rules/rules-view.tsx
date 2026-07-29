@@ -22,7 +22,6 @@ import {
   toast,
 } from "@heroui/react";
 import { Copy, FileArrowUp, FileArrowRightOut, Plus, TrashBin } from "@gravity-ui/icons";
-import { useRouter, useSearchParams } from "next/navigation";
 import type {
   RuleDraft,
   RuleSummaryViewModel,
@@ -37,6 +36,7 @@ import {
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { formatTimestamp, toneColor } from "@/lib/format";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import {
   ActionsEditor,
   ConditionsEditor,
@@ -44,8 +44,7 @@ import {
 } from "./rule-editor";
 
 export function RulesView() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const { navigate, searchParams } = useWorkspaceNavigation();
   const sourceSessionId = searchParams.get("sessionId");
   const rules = useIpcQuery<RuleSummaryViewModel[]>("rule-list", () =>
     callCommand(commands.ruleList()),
@@ -130,7 +129,7 @@ export function RulesView() {
         setDraft(value);
         setEditorAsyncStates({});
         setSelectedId("new");
-        router.replace("/rules");
+        navigate("/rules");
       })
       .catch((reason) => {
         if (active) toast(errorMessage(reason), { variant: "danger" });
@@ -138,7 +137,7 @@ export function RulesView() {
     return () => {
       active = false;
     };
-  }, [router, sourceSessionId]);
+  }, [navigate, sourceSessionId]);
 
   async function newRule() {
     if (writePending || editorBlocked) return;
@@ -380,7 +379,7 @@ export function RulesView() {
 
       <aside
         ref={editorPanelRef}
-        className="scroll-mt-4 overflow-auto border-l border-[var(--telemetry-line)] p-5 max-[1280px]:border-l-0 max-[1280px]:border-t"
+        className="scroll-mt-4 overflow-auto border-l border-[var(--telemetry-line)] p-5 [scrollbar-gutter:stable] max-[1280px]:border-l-0 max-[1280px]:border-t"
       >
         <h2 className="mb-4 text-lg font-semibold">
           {draft

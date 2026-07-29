@@ -1,0 +1,19 @@
+import { describe, expect, it } from "vitest";
+import {
+  sessionFilterDateText,
+  sessionFilterDateValue,
+} from "./sessions-view";
+
+describe("HeroUI session date filters", () => {
+  it("preserves the existing minute-precision query format", () => {
+    const value = sessionFilterDateValue("2026-07-29T12:30");
+
+    expect(value).not.toBeNull();
+    expect(sessionFilterDateText(value)).toBe("2026-07-29T12:30");
+  });
+
+  it("returns an empty filter for invalid or cleared values", () => {
+    expect(sessionFilterDateValue("not-a-date")).toBeNull();
+    expect(sessionFilterDateText(null)).toBeNull();
+  });
+});

@@ -5,8 +5,11 @@ import {
   Alert,
   AlertDialog,
   Button,
+  Calendar,
   Card,
   Chip,
+  DateField,
+  DatePicker,
   Drawer,
   Input,
   Label,
@@ -18,6 +21,12 @@ import {
   Tabs,
   toast,
 } from "@heroui/react";
+import {
+  parseAbsoluteToLocal,
+  parseDateTime,
+  toCalendarDateTime,
+  type DateValue,
+} from "@internationalized/date";
 import { ArrowDownToLine, Eye, TrashBin } from "@gravity-ui/icons";
 import type {
   SessionDetailViewModel,
@@ -47,6 +56,24 @@ export const defaultSessionQuery: SessionQuery = {
   direction: "desc",
   page: { page: 1, page_size: 10 },
 };
+
+export function sessionFilterDateValue(value: string | null): DateValue | null {
+  if (!value) return null;
+  try {
+    return parseAbsoluteToLocal(value);
+  } catch {
+    try {
+      return parseDateTime(value);
+    } catch {
+      return null;
+    }
+  }
+}
+
+export function sessionFilterDateText(value: DateValue | null): string | null {
+  if (!value) return null;
+  return toCalendarDateTime(value).toString().slice(0, 16);
+}
 
 export function SessionsView() {
   const [selectedId, setSelectedId] = useState<string>();
@@ -209,36 +236,92 @@ export function SessionsView() {
                 }
               />
             </div>
-            <div className="grid min-w-0 gap-1">
+            <DatePicker
+              className="min-w-0"
+              granularity="minute"
+              hourCycle={24}
+              hideTimeZone
+              value={sessionFilterDateValue(query.started_from)}
+              onChange={(value) =>
+                setQuery({
+                  ...query,
+                  started_from: sessionFilterDateText(value),
+                  page: { ...query.page, page: 1 },
+                })
+              }
+            >
               <Label>开始时间</Label>
-              <Input
-                aria-label="开始时间"
-                type="datetime-local"
-                value={query.started_from ?? ""}
-                onChange={(event) =>
-                  setQuery({
-                    ...query,
-                    started_from: event.target.value || null,
-                    page: { ...query.page, page: 1 },
-                  })
-                }
-              />
-            </div>
-            <div className="grid min-w-0 gap-1">
+              <DateField.Group fullWidth>
+                <DateField.Input>
+                  {(segment) => <DateField.Segment segment={segment} />}
+                </DateField.Input>
+                <DateField.Suffix>
+                  <DatePicker.Trigger>
+                    <DatePicker.TriggerIndicator />
+                  </DatePicker.Trigger>
+                </DateField.Suffix>
+              </DateField.Group>
+              <DatePicker.Popover>
+                <Calendar aria-label="选择开始日期">
+                  <Calendar.Header>
+                    <Calendar.Heading />
+                    <Calendar.NavButton slot="previous" />
+                    <Calendar.NavButton slot="next" />
+                  </Calendar.Header>
+                  <Calendar.Grid>
+                    <Calendar.GridHeader>
+                      {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                    </Calendar.GridHeader>
+                    <Calendar.GridBody>
+                      {(date) => <Calendar.Cell date={date} />}
+                    </Calendar.GridBody>
+                  </Calendar.Grid>
+                </Calendar>
+              </DatePicker.Popover>
+            </DatePicker>
+            <DatePicker
+              className="min-w-0"
+              granularity="minute"
+              hourCycle={24}
+              hideTimeZone
+              value={sessionFilterDateValue(query.started_to)}
+              onChange={(value) =>
+                setQuery({
+                  ...query,
+                  started_to: sessionFilterDateText(value),
+                  page: { ...query.page, page: 1 },
+                })
+              }
+            >
               <Label>结束时间</Label>
-              <Input
-                aria-label="结束时间"
-                type="datetime-local"
-                value={query.started_to ?? ""}
-                onChange={(event) =>
-                  setQuery({
-                    ...query,
-                    started_to: event.target.value || null,
-                    page: { ...query.page, page: 1 },
-                  })
-                }
-              />
-            </div>
+              <DateField.Group fullWidth>
+                <DateField.Input>
+                  {(segment) => <DateField.Segment segment={segment} />}
+                </DateField.Input>
+                <DateField.Suffix>
+                  <DatePicker.Trigger>
+                    <DatePicker.TriggerIndicator />
+                  </DatePicker.Trigger>
+                </DateField.Suffix>
+              </DateField.Group>
+              <DatePicker.Popover>
+                <Calendar aria-label="选择结束日期">
+                  <Calendar.Header>
+                    <Calendar.Heading />
+                    <Calendar.NavButton slot="previous" />
+                    <Calendar.NavButton slot="next" />
+                  </Calendar.Header>
+                  <Calendar.Grid>
+                    <Calendar.GridHeader>
+                      {(day) => <Calendar.HeaderCell>{day}</Calendar.HeaderCell>}
+                    </Calendar.GridHeader>
+                    <Calendar.GridBody>
+                      {(date) => <Calendar.Cell date={date} />}
+                    </Calendar.GridBody>
+                  </Calendar.Grid>
+                </Calendar>
+              </DatePicker.Popover>
+            </DatePicker>
             <Button
               className="self-end"
               variant="primary"

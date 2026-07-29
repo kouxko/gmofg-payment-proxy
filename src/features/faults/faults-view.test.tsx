@@ -19,17 +19,19 @@ const refreshMocks = vi.hoisted(() => ({
   active: vi.fn(),
 }));
 
-const routerMocks = vi.hoisted(() => ({
-  push: vi.fn(),
+const workspaceNavigationMocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
 }));
 
 vi.mock("@/generated/rust-types", () => ({
   commands: commandMocks,
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({
-    push: routerMocks.push,
+vi.mock("@/features/shell/workspace-navigation", () => ({
+  useWorkspaceNavigation: () => ({
+    pathname: "/faults",
+    searchParams: new URLSearchParams(),
+    navigate: workspaceNavigationMocks.navigate,
   }),
 }));
 
@@ -137,6 +139,6 @@ describe("FaultsView", () => {
 
     await user.click(screen.getByRole("button", { name: "保存为规则" }));
 
-    expect(routerMocks.push).toHaveBeenCalledWith("/rules");
+    expect(workspaceNavigationMocks.navigate).toHaveBeenCalledWith("/rules");
   });
 });

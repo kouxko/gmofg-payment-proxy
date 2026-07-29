@@ -1,14 +1,4 @@
-"use client";
-
-import dynamic from "next/dynamic";
-
-const CertificatesView = dynamic(
-  () =>
-    import("@/features/certificates/certificates-view").then(
-      (module) => module.CertificatesView,
-    ),
-  { ssr: false },
-);
+import { CertificatesView } from "@/features/certificates/certificates-view";
 
 export default function CertificatesPage() {
   return <CertificatesView />;

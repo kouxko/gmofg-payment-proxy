@@ -17,6 +17,9 @@ importers:
       '@heroui/styles':
         specifier: 3.2.2
         version: 3.2.2(tailwind-merge@3.4.0)(tailwindcss@4.3.3)
+      '@internationalized/date':
+        specifier: 3.12.2
+        version: 3.12.2
       '@tauri-apps/api':
         specifier: 2.11.1
         version: 2.11.1
