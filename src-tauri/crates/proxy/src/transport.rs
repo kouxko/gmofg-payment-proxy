@@ -290,7 +290,10 @@ impl UpstreamConnector for HyperUpstreamConnector {
             .await??;
         }
 
-        let (mut sender, connection) = client_http1::handshake(TokioIo::new(io))
+        let mut http1 = client_http1::Builder::new();
+        http1.title_case_headers(true);
+        let (mut sender, connection) = http1
+            .handshake(TokioIo::new(io))
             .await
             .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
         let connection_task = tokio::spawn(connection);

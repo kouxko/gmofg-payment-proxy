@@ -29,13 +29,18 @@ async fn upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed(
         assert!(request.starts_with(b"POST /payment HTTP/1.1\r\n"));
         assert!(
             request
-                .windows(b"host: upstream.test".len())
-                .any(|window| window.eq_ignore_ascii_case(b"host: upstream.test"))
+                .windows(b"Host: upstream.test".len())
+                .any(|window| window == b"Host: upstream.test")
         );
         assert!(
             request
-                .windows(b"connection: close".len())
-                .any(|window| window.eq_ignore_ascii_case(b"connection: close"))
+                .windows(b"Connection: close".len())
+                .any(|window| window == b"Connection: close")
+        );
+        assert!(
+            request
+                .windows(b"Content-Length: 3".len())
+                .any(|window| window == b"Content-Length: 3")
         );
         stream
             .write_all(
