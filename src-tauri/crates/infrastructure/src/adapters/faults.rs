@@ -44,30 +44,7 @@ impl FaultServicePort for FaultServiceAdapter {
             .find(|template| template.view.template_id == configuration.template_id)
             .ok_or_else(|| AppError::new("RULE_INVALID", "故障模板不存在。"))?;
         let (stage, action) = (definition.action)(&configuration.parameters)?;
-        let mut conditions = Vec::new();
-        if let Some(terminal) = configuration
-            .terminal
-            .as_ref()
-            .filter(|value| !value.is_empty())
-        {
-            conditions.push(MatchCondition::Field {
-                field: MatchField::TerminalIp,
-                operator: MatchOperator::Equals(terminal.clone()),
-            });
-        }
-        if let Some(target) = configuration
-            .target
-            .as_ref()
-            .filter(|value| !value.is_empty())
-        {
-            conditions.push(MatchCondition::Field {
-                field: MatchField::PathOrRequestType,
-                operator: MatchOperator::Contains(target.clone()),
-            });
-        }
-        if let Some(nth) = configuration.nth_hit {
-            conditions.push(MatchCondition::NthHit(u64::from(nth)));
-        }
+        let conditions = configuration_conditions(&configuration, stage)?;
         let rule = self
             .rules
             .save(RuleDraft {
@@ -128,6 +105,72 @@ impl FaultServicePort for FaultServiceAdapter {
             rule.summary.name.trim_start_matches("故障模拟·"),
         ))
     }
+}
+
+fn configuration_conditions(
+    configuration: &FaultConfigurationDraft,
+    stage: MessageStage,
+) -> AppResult<Vec<MatchCondition>> {
+    if stage == MessageStage::TlsHandshake {
+        let mut field_errors = BTreeMap::new();
+        if configuration
+            .terminal
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            field_errors.insert(
+                "terminal".into(),
+                vec!["TLS 握手阶段不能按终端 IP 匹配，请在规则页面使用客户端证书指纹。".into()],
+            );
+        }
+        if configuration
+            .target
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty())
+        {
+            field_errors.insert(
+                "target".into(),
+                vec!["TLS 握手阶段尚未解析 HTTP 路径，不能配置路径条件。".into()],
+            );
+        }
+        if !field_errors.is_empty() {
+            return Err(AppError::field(
+                "RULE_INVALID",
+                "TLS 握手故障包含不支持的匹配条件。",
+                field_errors,
+            ));
+        }
+        return Ok(configuration
+            .nth_hit
+            .map(|nth| vec![MatchCondition::NthHit(u64::from(nth))])
+            .unwrap_or_default());
+    }
+
+    let mut conditions = Vec::new();
+    if let Some(terminal) = configuration
+        .terminal
+        .as_ref()
+        .filter(|value| !value.is_empty())
+    {
+        conditions.push(MatchCondition::Field {
+            field: MatchField::TerminalIp,
+            operator: MatchOperator::Equals(terminal.clone()),
+        });
+    }
+    if let Some(target) = configuration
+        .target
+        .as_ref()
+        .filter(|value| !value.is_empty())
+    {
+        conditions.push(MatchCondition::Field {
+            field: MatchField::PathOrRequestType,
+            operator: MatchOperator::Contains(target.clone()),
+        });
+    }
+    if let Some(nth) = configuration.nth_hit {
+        conditions.push(MatchCondition::NthHit(u64::from(nth)));
+    }
+    Ok(conditions)
 }
 
 struct TemplateDefinition {
@@ -874,6 +917,92 @@ mod tests {
                     field.key
                 );
             }
+        }
+    }
+
+    // FAULT-001~007, ACTION-001~013, TEST-FAULT:
+    // every visible template default must compile into the shared domain rule engine.
+    #[test]
+    fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage() {
+        for definition in template_definitions() {
+            let (stage, action) = (definition.action)(&definition.view.default_parameters)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "{} default parameters failed: {error}",
+                        definition.view.template_id
+                    )
+                });
+            let domain_stage = match stage {
+                MessageStage::TlsHandshake => gmofg_proxy_domain::MessageStage::TlsHandshake,
+                MessageStage::Request => gmofg_proxy_domain::MessageStage::Request,
+                MessageStage::Response => gmofg_proxy_domain::MessageStage::Response,
+                MessageStage::Terminal => {
+                    panic!(
+                        "{} default unexpectedly targets a terminal event",
+                        definition.view.template_id
+                    )
+                }
+            };
+            let conditions = vec![gmofg_proxy_domain::MatchCondition::NthHit(u64::from(
+                definition.view.default_nth_hit,
+            ))];
+            let draft = gmofg_proxy_domain::RuleDraft {
+                expected_revision: None,
+                name: definition.view.name.clone(),
+                description: definition.view.behavior_text.clone(),
+                enabled: true,
+                priority: u32::try_from(definition.view.default_priority)
+                    .expect("non-negative default priority"),
+                created_order: 1,
+                channel: Some(gmofg_proxy_domain::ChannelKind::Transaction),
+                stage: domain_stage,
+                conditions,
+                actions: vec![action],
+                one_shot: definition.view.default_one_shot,
+            };
+            gmofg_proxy_domain::validate_rule_draft(&draft).unwrap_or_else(|error| {
+                panic!(
+                    "{} default does not produce a valid domain rule: {error}",
+                    definition.view.template_id
+                )
+            });
+        }
+    }
+
+    // ACTION-001, FAULT-005~006, TEST-FAULT:
+    // TLS faults preserve the same per-terminal Nth-hit contract as HTTP rules.
+    #[test]
+    fn tls_template_preserves_nth_hit_and_rejects_http_only_filters() {
+        let defaults = FaultConfigurationDraft {
+            template_id: "reject_tls_handshake".into(),
+            existing_rule_id: None,
+            expected_revision: None,
+            channel: Some(gmofg_proxy_application::ChannelKind::Dll),
+            terminal: None,
+            target: None,
+            nth_hit: Some(1),
+            one_shot: false,
+            priority: 100,
+            parameters: BTreeMap::new(),
+        };
+        assert_eq!(
+            configuration_conditions(&defaults, MessageStage::TlsHandshake)
+                .expect("default TLS configuration"),
+            vec![gmofg_proxy_domain::MatchCondition::NthHit(1)]
+        );
+
+        let invalid = FaultConfigurationDraft {
+            terminal: Some("10.0.34.94".into()),
+            target: Some("/".into()),
+            ..defaults
+        };
+        let error = configuration_conditions(&invalid, MessageStage::TlsHandshake)
+            .expect_err("HTTP-only TLS filters");
+        for field in ["terminal", "target"] {
+            assert!(
+                error.view_model.field_errors.contains_key(field),
+                "missing field error for {field}"
+            );
         }
     }
 

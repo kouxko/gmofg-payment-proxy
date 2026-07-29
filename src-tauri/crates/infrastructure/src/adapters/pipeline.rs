@@ -1054,9 +1054,15 @@ fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultAction> {
     Ok(match action {
         TerminalAction::RejectTlsHandshake => FaultAction::RejectTls,
         TerminalAction::DisconnectBeforeUpstream => FaultAction::DisconnectBeforeUpstream,
-        TerminalAction::UpstreamConnectTimeout { .. } => FaultAction::UpstreamConnectTimeout,
-        TerminalAction::UpstreamWriteTimeout { .. } => FaultAction::UpstreamWriteTimeout,
-        TerminalAction::UpstreamReadTimeout { .. } => FaultAction::UpstreamReadTimeout,
+        TerminalAction::UpstreamConnectTimeout { milliseconds } => {
+            FaultAction::UpstreamConnectTimeout(Duration::from_millis(*milliseconds))
+        }
+        TerminalAction::UpstreamWriteTimeout { milliseconds } => {
+            FaultAction::UpstreamWriteTimeout(Duration::from_millis(*milliseconds))
+        }
+        TerminalAction::UpstreamReadTimeout { milliseconds } => {
+            FaultAction::UpstreamReadTimeout(Duration::from_millis(*milliseconds))
+        }
         TerminalAction::DropUpstreamResponse { mode } => FaultAction::DropResponse {
             read_upstream: *mode == DropResponseMode::ReadCompleteResponse,
         },
@@ -1516,6 +1522,8 @@ fn result_text(code: &str) -> &'static str {
         "BREAKPOINT_CLIENT_DISCONNECTED" => "App 断开",
         "BREAKPOINT_PROXY_STOPPED" => "Proxy 停止",
         "TLS_HANDSHAKE_FAILED" => "TLS 失败",
+        "INCORRECT_CONTENT_LENGTH" => "规则终止",
+        "TRUNCATED_RESPONSE" => "截断",
         _ => "内部错误",
     }
 }
@@ -1540,6 +1548,12 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn intentional_wire_faults_are_not_reported_as_internal_errors() {
+        assert_eq!(result_text("INCORRECT_CONTENT_LENGTH"), "规则终止");
+        assert_eq!(result_text("TRUNCATED_RESPONSE"), "截断");
+    }
 
     #[derive(Debug)]
     struct StaticRules {
@@ -1994,6 +2008,127 @@ mod tests {
         };
         assert_eq!(status.as_u16(), 503);
         assert_eq!(headers["x-mock"], "enabled");
+        assert_eq!(shift_jis_body, r#"{"mock":true}"#);
+    }
+
+    // RULE-008~009, ACTION-012~013, MESSAGE-004~006, TEST-RULE:
+    // later body/header mutations win and Rust rebuilds Content-Length exactly once.
+    #[test]
+    fn body_replacement_and_repeated_header_updates_preserve_action_order() {
+        let mut message = request_message(r#"{"original":true}"#);
+        message.headers.push(RawHeader {
+            name: b"x-test".to_vec().into(),
+            value: b"old".to_vec().into(),
+        });
+        let actions = vec![
+            RuleAction::ReplaceBodyText("最初".into()),
+            RuleAction::ReplaceBodyText("最終".into()),
+            RuleAction::SetHeader {
+                name: "x-test".into(),
+                value: "first".into(),
+            },
+            RuleAction::SetHeader {
+                name: "x-test".into(),
+                value: "last".into(),
+            },
+        ];
+
+        let (faults, pause) = apply_rule_actions(&mut message, &actions).expect("apply mutations");
+        assert!(faults.is_empty());
+        assert!(!pause);
+        assert_eq!(message.decoded_shift_jis().expect("Shift-JIS"), "最終");
+        assert_eq!(message.declared_content_length(), Some(message.body.len()));
+        assert_eq!(header_value(&message, "x-test").as_deref(), Some("last"));
+        assert_eq!(
+            message
+                .headers
+                .iter()
+                .filter(|header| header.name.eq_ignore_ascii_case(b"x-test"))
+                .count(),
+            1,
+            "SetHeader replaces all earlier values for the same header"
+        );
+    }
+
+    // ACTION-001~011, TEST-FAULT:
+    // all terminal domain actions map to one explicit transport disposition.
+    #[test]
+    fn every_terminal_action_maps_to_the_expected_transport_fault() {
+        let cases = vec![
+            (TerminalAction::RejectTlsHandshake, FaultAction::RejectTls),
+            (
+                TerminalAction::DisconnectBeforeUpstream,
+                FaultAction::DisconnectBeforeUpstream,
+            ),
+            (
+                TerminalAction::UpstreamConnectTimeout { milliseconds: 1 },
+                FaultAction::UpstreamConnectTimeout(Duration::from_millis(1)),
+            ),
+            (
+                TerminalAction::UpstreamWriteTimeout { milliseconds: 1 },
+                FaultAction::UpstreamWriteTimeout(Duration::from_millis(1)),
+            ),
+            (
+                TerminalAction::UpstreamReadTimeout { milliseconds: 1 },
+                FaultAction::UpstreamReadTimeout(Duration::from_millis(1)),
+            ),
+            (
+                TerminalAction::DropUpstreamResponse {
+                    mode: DropResponseMode::ReadCompleteResponse,
+                },
+                FaultAction::DropResponse {
+                    read_upstream: true,
+                },
+            ),
+            (
+                TerminalAction::DropUpstreamResponse {
+                    mode: DropResponseMode::CloseAfterRequestWrite,
+                },
+                FaultAction::DropResponse {
+                    read_upstream: false,
+                },
+            ),
+            (
+                TerminalAction::InvalidJson {
+                    shift_jis_body: b"{".to_vec(),
+                },
+                FaultAction::InvalidJson {
+                    shift_jis_text: "{".into(),
+                },
+            ),
+            (
+                TerminalAction::IncorrectContentLength { delta: -1 },
+                FaultAction::ContentLengthOffset(-1),
+            ),
+            (
+                TerminalAction::TruncateResponse { bytes: 2 },
+                FaultAction::TruncateResponse(2),
+            ),
+        ];
+        for (domain, expected) in cases {
+            assert_eq!(
+                map_terminal_action(&domain).expect("map terminal action"),
+                expected,
+                "unexpected transport mapping for {domain:?}"
+            );
+        }
+
+        let mock = map_terminal_action(&TerminalAction::MockResponse {
+            status: 202,
+            headers: vec![("x-mock".into(), "yes".into())],
+            shift_jis_body: br#"{"mock":true}"#.to_vec(),
+        })
+        .expect("map mock response");
+        let FaultAction::MockResponse {
+            status,
+            headers,
+            shift_jis_body,
+        } = mock
+        else {
+            panic!("expected mock response transport fault");
+        };
+        assert_eq!(status.as_u16(), 202);
+        assert_eq!(headers["x-mock"], "yes");
         assert_eq!(shift_jis_body, r#"{"mock":true}"#);
     }
 }

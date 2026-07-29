@@ -172,9 +172,10 @@ impl Message {
             name: Bytes::from_static(b"connection"),
             value: Bytes::from_static(b"close"),
         });
-        if self.body_modified {
-            self.set_content_length(self.body.len());
-        }
+        // Hyper decoded any transfer framing before this model was created.
+        // Forwarding therefore always needs one exact length, even when a
+        // rule did not modify the decoded body.
+        self.set_content_length(self.body.len());
     }
 
     pub fn header_map(&self) -> Result<HeaderMap> {
@@ -192,6 +193,16 @@ impl Message {
     }
 
     pub fn reconstruct(&self) -> Bytes {
+        self.reconstruct_with_header_style(false)
+    }
+
+    /// Reconstructs an upstream request using the same conventional header
+    /// casing as the normal Hyper HTTP/1.1 client path.
+    pub fn reconstruct_title_case_headers(&self) -> Bytes {
+        self.reconstruct_with_header_style(true)
+    }
+
+    fn reconstruct_with_header_style(&self, title_case_headers: bool) -> Bytes {
         let capacity = self.start_line.len()
             + self
                 .headers
@@ -204,7 +215,19 @@ impl Message {
         bytes.extend_from_slice(self.start_line.as_bytes());
         bytes.extend_from_slice(b"\r\n");
         for header in &self.headers {
-            bytes.extend_from_slice(&header.name);
+            if title_case_headers {
+                let mut capitalize = true;
+                for byte in header.name.iter().copied() {
+                    bytes.push(if capitalize {
+                        byte.to_ascii_uppercase()
+                    } else {
+                        byte.to_ascii_lowercase()
+                    });
+                    capitalize = byte == b'-';
+                }
+            } else {
+                bytes.extend_from_slice(&header.name);
+            }
             bytes.extend_from_slice(b": ");
             bytes.extend_from_slice(&header.value);
             bytes.extend_from_slice(b"\r\n");

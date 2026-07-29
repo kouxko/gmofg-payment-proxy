@@ -1,0 +1,265 @@
+use gmofg_proxy_domain::{
+    DropResponseMode, ErrorCode, MatchCondition, MatchField, MatchOperator, MessageStage,
+    RuleAction, RuleDraft, TerminalAction, validate_rule_draft,
+};
+use serde_json::json;
+
+fn draft(
+    stage: MessageStage,
+    conditions: Vec<MatchCondition>,
+    actions: Vec<RuleAction>,
+) -> RuleDraft {
+    RuleDraft {
+        expected_revision: None,
+        name: "validation test".into(),
+        description: String::new(),
+        enabled: true,
+        priority: 1,
+        created_order: 1,
+        channel: None,
+        stage,
+        conditions,
+        actions,
+        one_shot: false,
+    }
+}
+
+fn assert_invalid_field(draft: &RuleDraft, field: &str) {
+    let error = validate_rule_draft(draft).expect_err("rule must be rejected");
+    assert_eq!(error.code, ErrorCode::RuleInvalid);
+    assert!(
+        error.field_errors.contains_key(field),
+        "missing {field} in {:?}",
+        error.field_errors
+    );
+}
+
+#[test]
+fn rejects_action_when_it_is_not_legal_for_the_rule_stage() {
+    let invalid = draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![RuleAction::CustomHttpStatus { status: 503 }],
+    );
+
+    assert_invalid_field(&invalid, "actions.0");
+}
+
+#[test]
+fn rejects_invalid_json_path_in_match_condition() {
+    let invalid = draft(
+        MessageStage::Request,
+        vec![MatchCondition::Field {
+            field: MatchField::JsonPath("$.items[]".into()),
+            operator: MatchOperator::Equals("item".into()),
+        }],
+        vec![RuleAction::Pause],
+    );
+
+    assert_invalid_field(&invalid, "conditions.0.path");
+}
+
+#[test]
+fn rejects_invalid_json_path_in_set_json_action() {
+    let invalid = draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![RuleAction::SetJsonField {
+            path: "missing-root".into(),
+            value: json!("value"),
+        }],
+    );
+
+    assert_invalid_field(&invalid, "actions.0.path");
+}
+
+#[test]
+fn rejects_invalid_regular_expression() {
+    let invalid = draft(
+        MessageStage::Request,
+        vec![MatchCondition::Field {
+            field: MatchField::TerminalIp,
+            operator: MatchOperator::Regex("(".into()),
+        }],
+        vec![RuleAction::Pause],
+    );
+
+    assert_invalid_field(&invalid, "conditions.0.regex");
+}
+
+#[test]
+fn rejects_invalid_header_name() {
+    let invalid = draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![RuleAction::SetHeader {
+            name: "bad header".into(),
+            value: "value".into(),
+        }],
+    );
+
+    assert_invalid_field(&invalid, "actions.0.name");
+}
+
+#[test]
+fn rejects_header_value_containing_line_breaks() {
+    let invalid = draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![RuleAction::SetHeader {
+            name: "x-test".into(),
+            value: "value\r\nx-injected: yes".into(),
+        }],
+    );
+
+    assert_invalid_field(&invalid, "actions.0.value");
+}
+
+#[test]
+fn rejects_every_header_managed_by_the_forwarding_pipeline() {
+    for name in [
+        "Content-Length",
+        "transfer-encoding",
+        "Connection",
+        "proxy-connection",
+        "Keep-Alive",
+        "upgrade",
+        "TE",
+        "trailer",
+    ] {
+        let invalid = draft(
+            MessageStage::Request,
+            Vec::new(),
+            vec![RuleAction::SetHeader {
+                name: name.into(),
+                value: "value".into(),
+            }],
+        );
+
+        assert_invalid_field(&invalid, "actions.0.name");
+    }
+}
+
+#[test]
+fn rejects_zero_nth_hit() {
+    let invalid = draft(
+        MessageStage::Request,
+        vec![MatchCondition::NthHit(0)],
+        vec![RuleAction::Pause],
+    );
+
+    assert_invalid_field(&invalid, "conditions.0.nth_hit");
+}
+
+#[test]
+fn rejects_zero_duration_for_every_injected_timeout_stage() {
+    for action in [
+        TerminalAction::UpstreamConnectTimeout { milliseconds: 0 },
+        TerminalAction::UpstreamWriteTimeout { milliseconds: 0 },
+        TerminalAction::UpstreamReadTimeout { milliseconds: 0 },
+    ] {
+        let invalid = draft(
+            MessageStage::Request,
+            Vec::new(),
+            vec![RuleAction::Terminal(action)],
+        );
+
+        assert_invalid_field(&invalid, "actions.0.milliseconds");
+    }
+}
+
+#[test]
+fn rejects_zero_incorrect_content_length_delta() {
+    let invalid = draft(
+        MessageStage::Response,
+        Vec::new(),
+        vec![RuleAction::Terminal(
+            TerminalAction::IncorrectContentLength { delta: 0 },
+        )],
+    );
+
+    assert_invalid_field(&invalid, "actions.0.delta");
+}
+
+#[test]
+fn rejects_multiple_terminal_actions() {
+    let invalid = draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![
+            RuleAction::Terminal(TerminalAction::DropUpstreamResponse {
+                mode: DropResponseMode::ReadCompleteResponse,
+            }),
+            RuleAction::Terminal(TerminalAction::DisconnectBeforeUpstream),
+        ],
+    );
+
+    assert_invalid_field(&invalid, "actions");
+}
+
+#[test]
+fn rejects_terminal_action_that_is_not_final() {
+    let invalid = draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![
+            RuleAction::Terminal(TerminalAction::DisconnectBeforeUpstream),
+            RuleAction::Pause,
+        ],
+    );
+
+    assert_invalid_field(&invalid, "actions");
+}
+
+#[test]
+fn rejects_invalid_shift_jis_bytes_in_mock_response() {
+    let invalid = draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![RuleAction::Terminal(TerminalAction::MockResponse {
+            status: 200,
+            headers: Vec::new(),
+            shift_jis_body: vec![0x82],
+        })],
+    );
+
+    assert_invalid_field(&invalid, "actions.0.shift_jis_body");
+}
+
+#[test]
+fn rejects_invalid_shift_jis_bytes_in_invalid_json_fault() {
+    let invalid = draft(
+        MessageStage::Response,
+        Vec::new(),
+        vec![RuleAction::Terminal(TerminalAction::InvalidJson {
+            shift_jis_body: vec![0x82],
+        })],
+    );
+
+    assert_invalid_field(&invalid, "actions.0.shift_jis_body");
+}
+
+#[test]
+fn rejects_unencodable_shift_jis_replacement_text() {
+    let invalid = draft(
+        MessageStage::Response,
+        Vec::new(),
+        vec![RuleAction::ReplaceBodyText("emoji 🧪".into())],
+    );
+
+    assert_invalid_field(&invalid, "actions.0.text");
+}
+
+#[test]
+fn rejects_unencodable_shift_jis_json_value() {
+    let invalid = draft(
+        MessageStage::Response,
+        Vec::new(),
+        vec![RuleAction::SetJsonField {
+            path: "$.value".into(),
+            value: json!("🧪"),
+        }],
+    );
+
+    assert_invalid_field(&invalid, "actions.0.value_json");
+}

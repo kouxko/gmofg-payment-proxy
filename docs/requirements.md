@@ -1013,6 +1013,8 @@ HeroUI v3 的实现约束：
 | `SHIFT_JIS_DECODE_FAILED` | Shift-JIS 解码失败。 |
 | `SHIFT_JIS_ENCODE_FAILED` | 内容无法无损编码为 Shift-JIS。 |
 | `JSON_INVALID` | JSON 语法非法。 |
+| `INCORRECT_CONTENT_LENGTH` | 规则已故意发送与实际 Body 不一致的 Content-Length；不得归类为内部错误。 |
+| `TRUNCATED_RESPONSE` | 规则已故意截断响应并关闭连接；不得归类为内部错误。 |
 | `RULE_INVALID` | 规则配置非法。 |
 | `RULE_CONFLICT_WARNING` | 规则可能被高优先级终止规则遮蔽。 |
 | `BREAKPOINT_NOT_FOUND` | 断点不存在或已淘汰。 |
@@ -1053,6 +1055,7 @@ HeroUI v3 的实现约束：
 | TEST-STORAGE | SQLite 迁移、事务、规则导入原子性、Windows DPAPI、macOS Keychain 和无 Payload 持久化。 |
 | TEST-EXPORT | 原生路径选择、取消、覆盖、临时文件、原子替换和失败清理。 |
 | TEST-REAL-DLL-PROXY | 在 A920MAX `2740072778` 上运行 Android instrumentation 测试，将 DLL 请求发往 `https://10.0.34.50:16127/`，由 Rust Proxy 转发到真实 `https://https.gmo-fg.net:16127`；以客户端 mTLS 身份、请求类型、HTTP 状态、响应长度和响应 SHA-256 一致性证明双向转发。测试不得修改设备持久化联机地址。 |
+| TEST-REAL-DLL-RULE-MATRIX | 不启动 Tauri/WebView，由无 UI Rust `ApplicationHost` 在真实设备前逐项创建、命中、观测并删除规则。矩阵固定为 51 个唯一场景：A 修改/Mock/延迟 11 项，B TLS/断连/超时/畸形报文 10 项，C 请求/响应断点 2 项，D 计数/一次性/优先级/组合 5 项，E IP/证书/路径/JSON/AND 匹配 14 项，F 非法配置 9 项。每批结束必须再次从真实上游解析到 `D48`；最终报告必须绑定源码摘要、Runner/APK SHA-256、设备序列号、安全检查和规则清理结果。 |
 
 ### 16.3 IPC 与前端测试
 
@@ -1083,6 +1086,7 @@ HeroUI v3 的实现约束：
 | ACCEPT-011 | 在真实设备 `2740072778` 上执行 `CreditDLL` instrumentation 测试时，设备只连接 Proxy 地址，Proxy 使用 rustls mTLS 连接真实 Server，并将上游响应原样回送；测试必须从真实上游响应中解析出 `ErrorCode=D48`，未取得 `D48` 一律不得判定成功。 |
 | ACCEPT-012 | macOS Apple Silicon `.app` 可保存网络/SAN 设置、生成并重启后读取 CA/叶子证书、以 Keychain 保护敏感材料、导入空密码 PKCS12 和上游 CA，并启动双端口监听。 |
 | ACCEPT-013 | macOS 防火墙启用时，正式 `.app` 二进制必须被明确允许接收入站连接；仅允许测试 harness 不能作为正式 App 实机验收通过。 |
+| ACCEPT-014 | 在设备 `2740072778` 上执行 `TEST-REAL-DLL-RULE-MATRIX` 时，51 个唯一场景必须全部通过，A–F 每批后均取得真实 `D48`，延迟使用相邻基线差值判定，非法规则必须返回精确 `RULE_INVALID` 和唯一字段签名，退出后监听端口、测试 APK、临时主密钥及 SQLite 测试规则全部清零。 |
 
 ### 16.5 当前真实设备基线记录
 
@@ -1099,6 +1103,11 @@ HeroUI v3 的实现约束：
 | 上游兼容修复 | Hyper HTTP/1 客户端必须启用标题格式 Header；全小写 `content-length/host/connection` 会被 GMO-FG 前置网关返回 247 字节 `Request Rejected` 页面，标题格式后同一请求返回合法 `CreditDLL.Response`。 |
 | 业务判定 | `D48`（マスタファイル未登録）按 Payment 业务语义不是成功码，因此 `businessSuccess=false`；但它是本设备当前已知的真实 GMO-FG Server 验收信号，只有明确收到并解析出 `D48` 才证明 DLL 请求已正确经过 Proxy 到达 Server 并返回。 |
 | 设备恢复 | 测试仅通过 instrumentation 参数指定 Proxy URL，未修改 Launcher 或 Payment 的持久化联机地址；测试结束后卸载测试 APK。 |
+| 规则矩阵结果 | 无 UI Rust Host 创建并验证 51/51 个唯一场景，A/B/C/D/E/F 分别为 11/10/2/5/14/9；每批结束后的真实 `D48` 均通过。 |
+| 规则矩阵关键证据 | 请求延迟相邻基线增量 `2453 ms`，响应延迟相邻基线增量 `10882 ms`；错误 Content-Length 与截断分别稳定归类为“规则终止”和“截断”，不再落入“内部错误”；路径条件在 Request 阶段匹配真实 DLL 路径 `/`。 |
+| 规则矩阵安全与清理 | Instrumentation 参数不含密码/证书材料；私密临时文件权限为 `0600`；结束后测试 APK 已卸载、双端口无监听、SQLite headless/fault 规则为 `0/0`。 |
+| 规则矩阵证据绑定 | Source digest `cfc67ef2cd9294ea05a7f7ba544c913270630b90ae0f42662ca3b3aed705fd96`；Runner SHA-256 `52ac1c37d463428befa068b02125dd013a6a9c149fbe5f1c8a8396a20c5b860b`；Android test APK SHA-256 `bfa923f66adde39da62d3e013d89fe51153bf67c1ee79b5a4614a16171543b58`；最终报告 SHA-256 `6797e79a0ff8dde16c954607d808a634481fc8aa738ca576378cf447dedb96e0`。 |
+| 证据边界 | 真机证明 Android 客户端症状、规则命中、链路时长和 `D48` 恢复；connect/write/read 三个超时阶段的稳定错误码和阶段隔离由 Rust 单元测试证明，不把同为 `IOException` 的设备症状误称为阶段级证明。 |
 
 ## 17. 需求追踪矩阵
 
@@ -1110,8 +1119,8 @@ HeroUI v3 的实现约束：
 | CAPTURE-001~011 | 实时抓包 | CaptureUseCase / UiEventHub | capture_*、CaptureRowsAdded | TEST-EVENT、TEST-UI |
 | SESSION-001~011 | 会话记录 | SessionUseCase / SessionRepository | session_*、SessionUpdated | TEST-CAPACITY、TEST-EXPORT、TEST-UI |
 | BREAKPOINT-001~016 | 断点实验台 | BreakpointUseCase / BreakpointCoordinator | breakpoint_*、Breakpoint* | TEST-BREAKPOINT、TEST-IPC、TEST-UI |
-| RULE-001~017 | 拦截规则 | RuleUseCase / domain rules | rule_new_draft、rule_*、RuleHit | TEST-RULE、TEST-STORAGE、TEST-UI、TEST-BOUNDARY |
-| FAULT-001~011 | 故障模拟 | FaultTemplateUseCase / proxy actions | fault_* | TEST-FAULT、TEST-UI |
+| RULE-001~017 | 拦截规则 | RuleUseCase / domain rules | rule_new_draft、rule_*、RuleHit | TEST-RULE、TEST-STORAGE、TEST-UI、TEST-BOUNDARY、TEST-REAL-DLL-RULE-MATRIX |
+| FAULT-001~011 | 故障模拟 | FaultTemplateUseCase / proxy actions | fault_* | TEST-FAULT、TEST-UI、TEST-REAL-DLL-RULE-MATRIX |
 | CERT-001~020 | 证书管理 | CertificateUseCase / infrastructure certificates | certificate_*、CertificateStatusChanged | TEST-TLS、TEST-STORAGE |
 | SETTINGS-001~016 | 系统设置 | SettingsUseCase | settings_* | TEST-SETTINGS、TEST-UI |
 | STATE-001~016 | 全局状态 | ProxySupervisor / application permissions | proxy_*、状态事件 | TEST-STATE、TEST-EVENT |
@@ -1146,7 +1155,7 @@ HeroUI v3 的实现约束：
 
 ### 18.2 变更控制
 
-- 本文档 v1.0.0 为首个实施基线；v1.0.1 修正 HeroUI v3 组件契约并明确容量与事件队列的可测试口径；v1.0.2 将 Windows 打包验收暂缓，并把真实设备 `2740072778` 的 DLL 代理单元测试设为新的第 8 步；v1.0.3 增加 macOS/Keychain 支持、首次设置与证书生成顺序、空密码 PKCS12、受限的旧式客户端信任锚兼容、正式 `.app` 防火墙验收以及紧凑应用壳和导航居中要求；v1.0.4 固化 Overlay Footer 安全边距、加载/失败/空状态、字段级错误、窄屏详情流程、宽表格滚动和缩放重排要求；v1.0.5 固化异步提交去重、详情请求竞态隔离、抓包暂停游标恢复、Rust 原子断点决策和 Rust Header 输入解析，并将 UI 合约、Rust fmt/clippy 纳入统一检查；v1.0.6 将断点可执行动作、规则字段/操作符默认值、故障默认值和设置 SAN 规范化收回 Rust，补充规则解析与 Bootstrap 迟到响应隔离，并改为抓包恢复时获取完整 Rust 显示快照；v1.0.7 将所有 Rust 规则草稿请求纳入统一保存门禁与代次淘汰，并要求异步字段结果函数式合并到最新动作，禁止回滚并发编辑；v1.0.8 增加八个业务页面的上下文使用说明 Drawer，固化详细操作范围、无刷新边界和静态展示职责；v1.0.9 禁止生产页面使用浏览器原生表单和日期时间控件，统一使用 HeroUI v3 compound 组件并加入静态边界扫描；v1.0.10 将完整 Rust 生产组装与后台生命周期移入无 Tauri 的 `host` crate，增加未来 TUI/CLI 和无 UI 实机测试可复用的 `Application` 门面边界及架构守卫，但暂不实现 TUI/CLI 入口。
+- 本文档 v1.0.0 为首个实施基线；v1.0.1 修正 HeroUI v3 组件契约并明确容量与事件队列的可测试口径；v1.0.2 将 Windows 打包验收暂缓，并把真实设备 `2740072778` 的 DLL 代理单元测试设为新的第 8 步；v1.0.3 增加 macOS/Keychain 支持、首次设置与证书生成顺序、空密码 PKCS12、受限的旧式客户端信任锚兼容、正式 `.app` 防火墙验收以及紧凑应用壳和导航居中要求；v1.0.4 固化 Overlay Footer 安全边距、加载/失败/空状态、字段级错误、窄屏详情流程、宽表格滚动和缩放重排要求；v1.0.5 固化异步提交去重、详情请求竞态隔离、抓包暂停游标恢复、Rust 原子断点决策和 Rust Header 输入解析，并将 UI 合约、Rust fmt/clippy 纳入统一检查；v1.0.6 将断点可执行动作、规则字段/操作符默认值、故障默认值和设置 SAN 规范化收回 Rust，补充规则解析与 Bootstrap 迟到响应隔离，并改为抓包恢复时获取完整 Rust 显示快照；v1.0.7 将所有 Rust 规则草稿请求纳入统一保存门禁与代次淘汰，并要求异步字段结果函数式合并到最新动作，禁止回滚并发编辑；v1.0.8 增加八个业务页面的上下文使用说明 Drawer，固化详细操作范围、无刷新边界和静态展示职责；v1.0.9 禁止生产页面使用浏览器原生表单和日期时间控件，统一使用 HeroUI v3 compound 组件并加入静态边界扫描；v1.0.10 将完整 Rust 生产组装与后台生命周期移入无 Tauri 的 `host` crate，增加未来 TUI/CLI 和无 UI 实机测试可复用的 `Application` 门面边界及架构守卫，但暂不实现 TUI/CLI 入口；v1.0.11 固化 51 项无 UI 真机 DLL 规则矩阵、逐批 `D48` 恢复、证据哈希、安全清理和真实请求路径匹配边界。
 - 需求变化必须新增或修改稳定需求 ID。
 - UI 变化必须同时更新对应图片、页面需求和追踪矩阵。
 - Rust Command/事件变化必须更新 IPC 章节和生成类型。
