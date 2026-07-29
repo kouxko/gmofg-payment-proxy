@@ -1,0 +1,48 @@
+{
+  "name": "gmofg-payment-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.13.1",
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:ui-contracts": "vitest run src/test/overlay-contracts.test.tsx src/features/settings/settings-view.test.tsx src/features/rules/rules-view.test.tsx src/features/rules/rule-editor-async.test.tsx src/features/shell/navigation.test.ts src/features/shell/app-runtime.test.tsx src/features/shell/bootstrap-context.test.tsx src/lib/ipc/use-ipc-query.test.tsx src/features/console/console-view.test.tsx src/features/capture/capture-view.test.ts src/features/breakpoints/breakpoints-view.test.ts src/features/rules/rule-editor.test.ts src/features/faults/faults-view.test.tsx",
+    "test:watch": "vitest",
+    "scan:frontend-boundaries": "node scripts/check-frontend-boundaries.mjs",
+    "check:rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
+    "check:rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
+    "bindings": "cargo run --manifest-path src-tauri/Cargo.toml --bin export-bindings",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
+    "tauri:build": "tauri build",
+    "check": "pnpm bindings && pnpm scan:frontend-boundaries && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm check:rust:fmt && pnpm check:rust:clippy && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
+  },
+  "dependencies": {
+    "@gravity-ui/icons": "2.21.0",
+    "@heroui/react": "3.2.2",
+    "@heroui/styles": "3.2.2",
+    "@tauri-apps/api": "2.11.1",
+    "next": "16.2.12",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "2.11.4",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.12",
+    "jsdom": "28.1.0",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "4.0.17"
+  }
+}

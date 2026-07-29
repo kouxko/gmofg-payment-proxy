@@ -1,0 +1,46 @@
+name: Windows release artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.13.1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build MSI and NSIS installers
+        uses: tauri-apps/tauri-action@v0
+        with:
+          args: --bundles msi,nsis
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: "[name]-[version]-[platform]-[arch]-[bundle]"
+
+      - name: Package portable executable
+        shell: pwsh
+        run: ./scripts/package-portable.ps1 -SkipBuild
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GMO-FG-Payment-Proxy-portable-x64
+          path: dist/*.zip
+          if-no-files-found: error

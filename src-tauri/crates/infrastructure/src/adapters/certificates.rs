@@ -1,0 +1,777 @@
+use std::{fmt, net::IpAddr, sync::Arc};
+
+use async_trait::async_trait;
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use gmofg_proxy_application::{
+    AppError, AppResult, CertificateItemViewModel, CertificateOverviewViewModel,
+    CertificateServicePort, CertificateValidationViewModel, FieldValidationViewModel,
+    OperationResultViewModel, UiTone,
+};
+use gmofg_proxy_runtime::{
+    ErrorCode as ProxyErrorCode, ProxyError, TlsMaterialProvider, TlsMaterialSnapshot,
+};
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
+use x509_parser::pem::parse_x509_pem;
+use zeroize::{Zeroize, Zeroizing};
+
+use crate::{
+    AtomicFileExporter, CertificateMaterialRecord, CertificateService, LeafCertificateRequest,
+    SecretProtector, SqliteStore,
+};
+
+use super::{
+    common::{app_error, infra, json_error},
+    files::{NativeFileDialog, cancelled},
+};
+
+const ROOT: &str = "local_root_ca";
+const LEAF: &str = "proxy_leaf";
+const PKCS12: &str = "shared_pkcs12";
+const UPSTREAM_CA: &str = "upstream_ca";
+
+#[derive(Serialize, Deserialize)]
+struct ProtectedMaterial {
+    revision: u64,
+    certificate_der: Vec<u8>,
+    private_key_der: Vec<u8>,
+    chain_der: Vec<Vec<u8>>,
+    pkcs12_der: Vec<u8>,
+    password: String,
+    subject: String,
+    fingerprint: String,
+    sans: Vec<String>,
+    not_before: String,
+    not_after: String,
+}
+
+impl fmt::Debug for ProtectedMaterial {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProtectedMaterial")
+            .field("revision", &self.revision)
+            .field("subject", &self.subject)
+            .field("fingerprint", &self.fingerprint)
+            .field("sans", &self.sans)
+            .field("secret_material", &"<redacted>")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Drop for ProtectedMaterial {
+    fn drop(&mut self) {
+        self.private_key_der.zeroize();
+        for certificate in &mut self.chain_der {
+            certificate.zeroize();
+        }
+        self.pkcs12_der.zeroize();
+        self.password.zeroize();
+    }
+}
+
+pub struct CertificateServiceAdapter {
+    store: Arc<SqliteStore>,
+    protector: Arc<dyn SecretProtector>,
+    dialog: Arc<dyn NativeFileDialog>,
+    certificates: CertificateService,
+    exporter: AtomicFileExporter,
+    material_lock: Mutex<()>,
+}
+
+impl fmt::Debug for CertificateServiceAdapter {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CertificateServiceAdapter")
+            .field("protected_storage", &true)
+            .field("secret_material", &"<redacted>")
+            .finish_non_exhaustive()
+    }
+}
+
+impl CertificateServiceAdapter {
+    #[must_use]
+    pub fn new(
+        store: Arc<SqliteStore>,
+        protector: Arc<dyn SecretProtector>,
+        dialog: Arc<dyn NativeFileDialog>,
+    ) -> Self {
+        Self {
+            store,
+            protector,
+            dialog,
+            certificates: CertificateService,
+            exporter: AtomicFileExporter,
+            material_lock: Mutex::new(()),
+        }
+    }
+
+    fn load(&self, kind: &str) -> AppResult<Option<ProtectedMaterial>> {
+        let Some(record) = infra(self.store.load_certificate_material(kind))? else {
+            return Ok(None);
+        };
+        let plaintext = Zeroizing::new(
+            self.protector
+                .unprotect(&record.protected_blob)
+                .map_err(app_error)?,
+        );
+        serde_json::from_slice(&plaintext)
+            .map(Some)
+            .map_err(|error| json_error("受保护证书材料无效", error))
+    }
+
+    fn record(
+        &self,
+        kind: &str,
+        material: &ProtectedMaterial,
+    ) -> AppResult<CertificateMaterialRecord> {
+        let plaintext = Zeroizing::new(
+            serde_json::to_vec(material)
+                .map_err(|error| json_error("证书材料序列化失败", error))?,
+        );
+        let protected = self.protector.protect(&plaintext).map_err(app_error)?;
+        Ok(CertificateMaterialRecord {
+            kind: kind.into(),
+            protected_blob: protected,
+            metadata: serde_json::json!({
+                "revision": material.revision,
+                "subject": material.subject,
+                "fingerprint": material.fingerprint,
+                "sans": material.sans,
+            }),
+            updated_at: Utc::now(),
+        })
+    }
+
+    fn put(&self, kind: &str, material: &ProtectedMaterial) -> AppResult<()> {
+        let record = self.record(kind, material)?;
+        infra(self.store.put_certificate_material(&record))
+    }
+
+    fn revision_locked(&self) -> AppResult<u64> {
+        [ROOT, LEAF, PKCS12, UPSTREAM_CA]
+            .into_iter()
+            .map(|kind| {
+                self.load(kind)
+                    .map(|value| value.map_or(0, |value| value.revision))
+            })
+            .try_fold(0, |current, revision| {
+                revision.map(|revision| current.max(revision))
+            })
+    }
+
+    fn generate_locked(&self, sans: &[String], revision: u64) -> AppResult<()> {
+        let root = self
+            .certificates
+            .generate_root_ca("GMO-FG Payment Proxy Root")
+            .map_err(app_error)?;
+        let request = leaf_request(sans)?;
+        let leaf = self
+            .certificates
+            .generate_leaf(&root.certificate_der, &root.private_key_pkcs8_der, &request)
+            .map_err(app_error)?;
+        let root = from_bundle(revision, &root);
+        let leaf = from_bundle(revision, &leaf);
+        let records = [self.record(ROOT, &root)?, self.record(LEAF, &leaf)?];
+        infra(self.store.put_certificate_materials_atomically(&records))
+    }
+
+    fn overview_locked(&self) -> AppResult<CertificateOverviewViewModel> {
+        let materials = [
+            (ROOT, "本地 Root CA", "签发 Proxy 服务端证书"),
+            (LEAF, "Proxy 叶子证书", "App → Proxy TLS 服务端身份"),
+            (
+                PKCS12,
+                "共享 PKCS12",
+                "Proxy → Server 客户端身份及 App 指纹",
+            ),
+            (UPSTREAM_CA, "上游 CA", "验证 GMO-FG Server"),
+        ]
+        .into_iter()
+        .map(|(kind, display, usage)| {
+            self.load(kind)
+                .map(|material| (kind, display, usage, material))
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+        let errors = self.configuration_errors(&materials);
+        let ready = errors.is_empty();
+        Ok(CertificateOverviewViewModel {
+            revision: self.revision_locked()?,
+            ready,
+            status_text: if ready {
+                "证书已就绪".into()
+            } else {
+                "证书配置不完整".into()
+            },
+            ui_tone: if ready {
+                UiTone::Positive
+            } else {
+                UiTone::Warning
+            },
+            items: materials
+                .iter()
+                .filter_map(|(_, display, usage, material)| {
+                    material
+                        .as_ref()
+                        .map(|material| item(display, usage, material))
+                })
+                .collect(),
+            can_change: true,
+            disabled_reason: None,
+        })
+    }
+
+    fn configuration_errors(
+        &self,
+        materials: &[(&str, &str, &str, Option<ProtectedMaterial>)],
+    ) -> std::collections::BTreeMap<String, Vec<String>> {
+        let mut errors = std::collections::BTreeMap::new();
+        let find = |kind: &str| {
+            materials
+                .iter()
+                .find(|(candidate, _, _, _)| *candidate == kind)
+                .and_then(|(_, _, _, material)| material.as_ref())
+        };
+        for kind in [ROOT, LEAF, PKCS12, UPSTREAM_CA] {
+            if find(kind).is_none() {
+                errors.insert(kind.into(), vec!["证书材料尚未配置。".into()]);
+            }
+        }
+        let root_metadata = find(ROOT).and_then(|root| {
+            match self
+                .certificates
+                .validate_root(&root.certificate_der, &root.private_key_der)
+            {
+                Ok(metadata) if material_matches(root, &metadata) => Some(metadata),
+                Ok(_) | Err(_) => {
+                    errors.insert(ROOT.into(), vec!["Root CA 校验失败。".into()]);
+                    None
+                }
+            }
+        });
+        if let (Some(root), Some(leaf), Some(_)) = (find(ROOT), find(LEAF), root_metadata) {
+            match self.certificates.validate_leaf(
+                &root.certificate_der,
+                &leaf.certificate_der,
+                &leaf.private_key_der,
+                &leaf.sans,
+            ) {
+                Ok(metadata) if material_matches(leaf, &metadata) => {}
+                Ok(_) | Err(_) => {
+                    errors.insert(LEAF.into(), vec!["Proxy 叶子证书校验失败。".into()]);
+                }
+            }
+        }
+        if let Some(shared) = find(PKCS12) {
+            match self.certificates.validate_client_identity(
+                &shared.certificate_der,
+                &shared.private_key_der,
+                &shared.chain_der,
+            ) {
+                Ok(metadata) if material_matches(shared, &metadata) => {}
+                Ok(_) | Err(_) => {
+                    errors.insert(PKCS12.into(), vec!["共享 PKCS12 校验失败。".into()]);
+                }
+            }
+        }
+        if let Some(upstream) = find(UPSTREAM_CA) {
+            match self.certificates.validate_ca_der(&upstream.certificate_der) {
+                Ok(metadata) if material_matches(upstream, &metadata) => {}
+                Ok(_) | Err(_) => {
+                    errors.insert(UPSTREAM_CA.into(), vec!["上游 CA 校验失败。".into()]);
+                }
+            }
+        }
+        errors
+    }
+}
+
+#[async_trait]
+impl CertificateServicePort for CertificateServiceAdapter {
+    async fn overview(&self) -> AppResult<CertificateOverviewViewModel> {
+        let _guard = self.material_lock.lock();
+        self.overview_locked()
+    }
+
+    async fn generate_ca(&self, sans: Vec<String>) -> AppResult<CertificateOverviewViewModel> {
+        let _guard = self.material_lock.lock();
+        if self.load(ROOT)?.is_some() || self.load(LEAF)?.is_some() {
+            return Err(AppError::new(
+                "CERTIFICATE_ALREADY_EXISTS",
+                "本地 Root CA 或 Proxy 叶子证书已存在，请使用“重置 CA”重新生成。",
+            ));
+        }
+        let revision = self.revision_locked()?.saturating_add(1);
+        self.generate_locked(&sans, revision)?;
+        self.overview_locked()
+    }
+
+    async fn export_ca(&self) -> AppResult<OperationResultViewModel> {
+        let _guard = self.material_lock.lock();
+        let Some(root) = self.load(ROOT)? else {
+            return Err(AppError::new(
+                "CERTIFICATE_NOT_READY",
+                "本地 Root CA 尚未生成。",
+            ));
+        };
+        let Some(selection) = self.dialog.choose_save_file("root_ca")? else {
+            return Ok(cancelled("已取消 Root CA 导出。"));
+        };
+        infra(self.exporter.write(
+            &selection.path,
+            &root.certificate_der,
+            selection.overwrite_confirmed,
+        ))?;
+        Ok(OperationResultViewModel::success(
+            "公开 Root CA 证书已导出，未包含私钥。",
+        ))
+    }
+
+    async fn reissue_leaf(
+        &self,
+        expected_revision: u64,
+        sans: Vec<String>,
+    ) -> AppResult<CertificateOverviewViewModel> {
+        let _guard = self.material_lock.lock();
+        let revision = self.revision_locked()?;
+        verify_revision(revision, expected_revision)?;
+        let root = self
+            .load(ROOT)?
+            .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "本地 Root CA 尚未生成。"))?;
+        let request = leaf_request(&sans)?;
+        let leaf = self
+            .certificates
+            .generate_leaf(&root.certificate_der, &root.private_key_der, &request)
+            .map_err(app_error)?;
+        self.put(LEAF, &from_bundle(revision.saturating_add(1), &leaf))?;
+        self.overview_locked()
+    }
+
+    async fn import_pkcs12(&self, password: String) -> AppResult<CertificateOverviewViewModel> {
+        let _guard = self.material_lock.lock();
+        let Some(path) = self.dialog.choose_open_file("pkcs12")? else {
+            return self.overview_locked();
+        };
+        let bytes = Zeroizing::new(infra(self.exporter.read(&path))?);
+        let parsed = self
+            .certificates
+            .parse_pkcs12(&bytes, &password)
+            .map_err(app_error)?;
+        let revision = self.revision_locked()?.saturating_add(1);
+        self.put(
+            PKCS12,
+            &ProtectedMaterial {
+                revision,
+                certificate_der: parsed.certificate_der.clone(),
+                private_key_der: parsed.private_key_pkcs8_der.to_vec(),
+                chain_der: parsed.chain_der.clone(),
+                pkcs12_der: bytes.to_vec(),
+                password,
+                subject: parsed.metadata.subject.clone(),
+                fingerprint: parsed.metadata.fingerprint_sha256.clone(),
+                sans: parsed.metadata.san.clone(),
+                not_before: parsed.metadata.not_before.clone(),
+                not_after: parsed.metadata.not_after.clone(),
+            },
+        )?;
+        self.overview_locked()
+    }
+
+    async fn import_upstream_ca(&self) -> AppResult<CertificateOverviewViewModel> {
+        let _guard = self.material_lock.lock();
+        let Some(path) = self.dialog.choose_open_file("upstream_ca")? else {
+            return self.overview_locked();
+        };
+        let bytes = infra(self.exporter.read(&path))?;
+        let metadata = self.certificates.parse_ca(&bytes).map_err(app_error)?;
+        let certificate_der =
+            parse_x509_pem(&bytes).map_or_else(|_| bytes.clone(), |(_, pem)| pem.contents);
+        let revision = self.revision_locked()?.saturating_add(1);
+        self.put(
+            UPSTREAM_CA,
+            &ProtectedMaterial {
+                revision,
+                certificate_der,
+                private_key_der: Vec::new(),
+                chain_der: Vec::new(),
+                pkcs12_der: Vec::new(),
+                password: String::new(),
+                subject: metadata.subject,
+                fingerprint: metadata.fingerprint_sha256,
+                sans: metadata.san,
+                not_before: metadata.not_before,
+                not_after: metadata.not_after,
+            },
+        )?;
+        self.overview_locked()
+    }
+
+    async fn validate(&self) -> AppResult<CertificateValidationViewModel> {
+        let _guard = self.material_lock.lock();
+        let materials = [ROOT, LEAF, PKCS12, UPSTREAM_CA]
+            .into_iter()
+            .map(|kind| self.load(kind).map(|material| (kind, "", "", material)))
+            .collect::<AppResult<Vec<_>>>()?;
+        let field_errors = self.configuration_errors(&materials);
+        Ok(FieldValidationViewModel {
+            valid: field_errors.is_empty(),
+            field_errors,
+            warnings: Vec::new(),
+        })
+    }
+
+    async fn reset_ca(&self, expected_revision: u64) -> AppResult<CertificateOverviewViewModel> {
+        let _guard = self.material_lock.lock();
+        let revision = self.revision_locked()?;
+        verify_revision(revision, expected_revision)?;
+        let sans = self
+            .load(LEAF)?
+            .map(|leaf| {
+                leaf.sans
+                    .iter()
+                    .map(|san| {
+                        san.trim_start_matches("DNS:")
+                            .trim_start_matches("IP:")
+                            .to_owned()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        self.generate_locked(&sans, revision.saturating_add(1))?;
+        self.overview_locked()
+    }
+}
+
+#[async_trait]
+impl TlsMaterialProvider for CertificateServiceAdapter {
+    async fn load_epoch_snapshot(
+        &self,
+        leaf_sans: &[String],
+    ) -> gmofg_proxy_runtime::Result<TlsMaterialSnapshot> {
+        let _guard = self.material_lock.lock();
+        let leaf = self.load(LEAF).map_err(proxy_app_error)?.ok_or_else(|| {
+            ProxyError::new(
+                ProxyErrorCode::CertificateNotReady,
+                "Proxy leaf certificate missing",
+            )
+        })?;
+        let root = self.load(ROOT).map_err(proxy_app_error)?.ok_or_else(|| {
+            ProxyError::new(ProxyErrorCode::CertificateNotReady, "local Root CA missing")
+        })?;
+        self.certificates
+            .validate_root(&root.certificate_der, &root.private_key_der)
+            .and_then(|_| {
+                self.certificates.validate_leaf(
+                    &root.certificate_der,
+                    &leaf.certificate_der,
+                    &leaf.private_key_der,
+                    leaf_sans,
+                )
+            })
+            .map_err(proxy_infra_error)?;
+        let shared = self.load(PKCS12).map_err(proxy_app_error)?.ok_or_else(|| {
+            ProxyError::new(ProxyErrorCode::CertificateNotReady, "shared PKCS12 missing")
+        })?;
+        let upstream = self
+            .load(UPSTREAM_CA)
+            .map_err(proxy_app_error)?
+            .ok_or_else(|| {
+                ProxyError::new(ProxyErrorCode::CertificateNotReady, "upstream CA missing")
+            })?;
+        let app_client_ca_der = shared
+            .chain_der
+            .last()
+            .cloned()
+            .unwrap_or_else(|| shared.certificate_der.clone());
+        self.certificates
+            .validate_client_identity(
+                &shared.certificate_der,
+                &shared.private_key_der,
+                &shared.chain_der,
+            )
+            .map_err(proxy_infra_error)?;
+        self.certificates
+            .validate_client_trust_anchor_der(&app_client_ca_der)
+            .map_err(proxy_infra_error)?;
+        self.certificates
+            .validate_ca_der(&upstream.certificate_der)
+            .map_err(proxy_infra_error)?;
+        Ok(TlsMaterialSnapshot {
+            server_certificate_chain_der: vec![leaf.certificate_der.clone()],
+            server_private_key_pkcs8_der: Zeroizing::new(leaf.private_key_der.clone()),
+            app_client_ca_der,
+            allowed_app_client_fingerprint: Some(parse_fingerprint(&shared.fingerprint)?),
+            upstream_client_certificate_chain_der: std::iter::once(shared.certificate_der.clone())
+                .chain(shared.chain_der.clone())
+                .collect(),
+            upstream_client_private_key_pkcs8_der: Zeroizing::new(shared.private_key_der.clone()),
+            upstream_ca_der: upstream.certificate_der.clone(),
+        })
+    }
+}
+
+fn from_bundle(revision: u64, bundle: &crate::CertificateBundle) -> ProtectedMaterial {
+    ProtectedMaterial {
+        revision,
+        certificate_der: bundle.certificate_der.clone(),
+        private_key_der: bundle.private_key_pkcs8_der.to_vec(),
+        chain_der: Vec::new(),
+        pkcs12_der: Vec::new(),
+        password: String::new(),
+        subject: bundle.metadata.subject.clone(),
+        fingerprint: bundle.metadata.fingerprint_sha256.clone(),
+        sans: bundle.metadata.san.clone(),
+        not_before: bundle.metadata.not_before.clone(),
+        not_after: bundle.metadata.not_after.clone(),
+    }
+}
+
+fn leaf_request(sans: &[String]) -> AppResult<LeafCertificateRequest> {
+    if sans.is_empty() {
+        return Err(AppError::new(
+            "CERTIFICATE_INVALID",
+            "叶子证书至少需要一个 LAN IP 或 DNS SAN。",
+        ));
+    }
+    let mut dns_names = Vec::new();
+    let mut ip_addresses = Vec::new();
+    for san in sans {
+        match san.parse::<IpAddr>() {
+            Ok(address) => ip_addresses.push(address),
+            Err(_) => dns_names.push(san.clone()),
+        }
+    }
+    Ok(LeafCertificateRequest {
+        common_name: sans[0].clone(),
+        dns_names,
+        ip_addresses,
+    })
+}
+
+fn item(name: &str, usage: &str, material: &ProtectedMaterial) -> CertificateItemViewModel {
+    let now = Utc::now();
+    let (status_text, ui_tone) = match (
+        parse_validity_date(&material.not_before),
+        parse_validity_date(&material.not_after),
+    ) {
+        (Some(not_before), Some(not_after)) if now < not_before || now > not_after => {
+            ("证书无效或已过期".into(), UiTone::Danger)
+        }
+        (_, Some(not_after)) if not_after < now + chrono::Duration::days(60) => {
+            ("将在 60 天内到期".into(), UiTone::Warning)
+        }
+        (Some(_), Some(_)) => ("有效".into(), UiTone::Positive),
+        _ => ("证书无效".into(), UiTone::Danger),
+    };
+    CertificateItemViewModel {
+        kind: name.into(),
+        subject: material.subject.clone(),
+        usage: usage.into(),
+        sans: material.sans.clone(),
+        valid_from: parse_validity_date(&material.not_before),
+        valid_until: parse_validity_date(&material.not_after),
+        sha256_fingerprint: material.fingerprint.clone(),
+        status_text,
+        ui_tone,
+    }
+}
+
+fn material_matches(material: &ProtectedMaterial, metadata: &crate::CertificateMetadata) -> bool {
+    material.subject == metadata.subject
+        && material.fingerprint == metadata.fingerprint_sha256
+        && material.sans == metadata.san
+        && material.not_before == metadata.not_before
+        && material.not_after == metadata.not_after
+}
+
+fn parse_validity_date(value: &str) -> Option<DateTime<Utc>> {
+    NaiveDateTime::parse_from_str(value, "%b %e %H:%M:%S %Y GMT")
+        .ok()
+        .map(|value| Utc.from_utc_datetime(&value))
+}
+
+fn verify_revision(actual: u64, expected: u64) -> AppResult<()> {
+    if actual == expected {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            "REVISION_CONFLICT",
+            "证书配置已被其他操作更新。",
+        ))
+    }
+}
+
+fn parse_fingerprint(value: &str) -> gmofg_proxy_runtime::Result<Vec<u8>> {
+    value
+        .split(':')
+        .map(|part| {
+            u8::from_str_radix(part, 16).map_err(|error| {
+                ProxyError::new(ProxyErrorCode::CertificateInvalid, error.to_string())
+            })
+        })
+        .collect()
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn proxy_app_error(error: AppError) -> ProxyError {
+    let code = match error.view_model.code.as_str() {
+        "DPAPI_UNPROTECT_FAILED" => ProxyErrorCode::DpapiUnprotectFailed,
+        "CERTIFICATE_INVALID" => ProxyErrorCode::CertificateInvalid,
+        _ => ProxyErrorCode::CertificateNotReady,
+    };
+    ProxyError::new(code, error.view_model.message.clone())
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn proxy_infra_error(error: crate::InfrastructureError) -> ProxyError {
+    ProxyError::new(ProxyErrorCode::CertificateInvalid, error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::VecDeque, path::PathBuf, sync::Arc};
+
+    use p12_keystore::{Certificate, KeyStore, KeyStoreEntry, PrivateKey, PrivateKeyChain};
+    use parking_lot::Mutex as ParkingMutex;
+    use rcgen::{
+        CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa, Issuer,
+        KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256,
+    };
+
+    use super::*;
+    use crate::adapters::{FileSelection, NativeFileDialog};
+    use crate::{InfrastructureError, SecretProtector};
+
+    #[derive(Debug)]
+    struct QueueDialog {
+        open: ParkingMutex<VecDeque<PathBuf>>,
+    }
+
+    impl NativeFileDialog for QueueDialog {
+        fn choose_open_file(&self, _: &str) -> AppResult<Option<PathBuf>> {
+            Ok(self.open.lock().pop_front())
+        }
+
+        fn choose_save_file(&self, _: &str) -> AppResult<Option<FileSelection>> {
+            Ok(None)
+        }
+    }
+
+    #[derive(Debug)]
+    struct XorProtector;
+
+    impl SecretProtector for XorProtector {
+        fn protect(&self, plaintext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
+            Ok(plaintext.iter().map(|byte| byte ^ 0xA5).collect())
+        }
+
+        fn unprotect(&self, ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
+            self.protect(ciphertext)
+        }
+    }
+
+    // CERT-005~017, SECURITY-006~009, TEST-TLS
+    #[tokio::test]
+    async fn protected_material_builds_a_complete_epoch_snapshot() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let certificate_service = CertificateService;
+        let client_root = certificate_service
+            .generate_root_ca("Shared Client Root")
+            .expect("client root");
+        let client_root_key = KeyPair::from_pkcs8_der_and_sign_algo(
+            &client_root.private_key_pkcs8_der.as_slice().into(),
+            &PKCS_ECDSA_P256_SHA256,
+        )
+        .expect("client root key");
+        let client_issuer = Issuer::from_ca_cert_der(
+            &client_root.certificate_der.as_slice().into(),
+            client_root_key,
+        )
+        .expect("client issuer");
+        let client_key =
+            KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).expect("client identity key");
+        let mut client_params = CertificateParams::default();
+        let mut client_name = DistinguishedName::new();
+        client_name.push(DnType::CommonName, "Shared Client");
+        client_params.distinguished_name = client_name;
+        client_params.is_ca = IsCa::ExplicitNoCa;
+        client_params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        client_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
+        let client_certificate = client_params
+            .signed_by(&client_key, &client_issuer)
+            .expect("client certificate");
+        let client_private_key = client_key.serialize_der();
+        let mut keystore = KeyStore::new();
+        keystore.add_entry(
+            "shared",
+            KeyStoreEntry::PrivateKeyChain(PrivateKeyChain::new(
+                "shared-key",
+                PrivateKey::from_der(&client_private_key).expect("client key"),
+                [
+                    Certificate::from_der(client_certificate.der()).expect("client x509"),
+                    Certificate::from_der(&client_root.certificate_der).expect("client CA"),
+                ],
+            )),
+        );
+        let pkcs12 = keystore.writer("password").write().expect("pkcs12");
+        let pkcs12_path = directory.path().join("shared.p12");
+        std::fs::write(&pkcs12_path, pkcs12).expect("write pkcs12");
+
+        let upstream = certificate_service
+            .generate_root_ca("Upstream CA")
+            .expect("upstream");
+        let upstream_path = directory.path().join("upstream.cer");
+        std::fs::write(&upstream_path, &upstream.certificate_der).expect("write upstream");
+
+        let adapter = CertificateServiceAdapter::new(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(XorProtector),
+            Arc::new(QueueDialog {
+                open: ParkingMutex::new(VecDeque::from([pkcs12_path, upstream_path])),
+            }),
+        );
+        let generated = adapter
+            .generate_ca(vec!["127.0.0.1".into()])
+            .await
+            .expect("generate");
+        let duplicate = adapter
+            .generate_ca(vec!["127.0.0.1".into()])
+            .await
+            .expect_err("duplicate generation must fail");
+        assert_eq!(duplicate.view_model.code, "CERTIFICATE_ALREADY_EXISTS");
+        assert!(duplicate.view_model.message.contains("重置 CA"));
+        adapter
+            .import_pkcs12("password".into())
+            .await
+            .expect("import pkcs12");
+        let overview = adapter.import_upstream_ca().await.expect("import upstream");
+        assert!(
+            overview.ready,
+            "{:?}",
+            adapter.validate().await.expect("validation")
+        );
+        assert!(
+            overview
+                .items
+                .iter()
+                .all(|item| item.valid_from.is_some() && item.valid_until.is_some())
+        );
+        assert!(overview.revision > generated.revision);
+        assert!(adapter.validate().await.expect("validate").valid);
+
+        let snapshot = adapter
+            .load_epoch_snapshot(&["127.0.0.1".into()])
+            .await
+            .expect("snapshot");
+        assert_eq!(snapshot.upstream_client_certificate_chain_der.len(), 2);
+        assert!(!snapshot.upstream_client_private_key_pkcs8_der.is_empty());
+        let debug = format!("{adapter:?}");
+        assert!(!debug.contains("password"));
+        assert!(!debug.contains("PRIVATE"));
+
+        let mut leaf = adapter.load(LEAF).expect("load leaf").expect("leaf");
+        leaf.private_key_der = client_private_key;
+        adapter.put(LEAF, &leaf).expect("replace leaf");
+        assert!(!adapter.overview().await.expect("overview").ready);
+        assert!(!adapter.validate().await.expect("validate").valid);
+    }
+}

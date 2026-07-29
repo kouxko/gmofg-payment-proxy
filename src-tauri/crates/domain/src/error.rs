@@ -1,0 +1,209 @@
+use crate::{Revision, RuntimeEpoch};
+use serde::{Deserialize, Serialize};
+use specta::Type;
+use std::collections::BTreeMap;
+use thiserror::Error;
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ErrorCode {
+    ProxyAlreadyRunning,
+    ProxyNotRunning,
+    OperationInProgress,
+    PortInUse,
+    ConfigInvalid,
+    RevisionConflict,
+    CertificateNotReady,
+    CertificateInvalid,
+    Pkcs12PasswordInvalid,
+    DpapiProtectFailed,
+    DpapiUnprotectFailed,
+    TlsHandshakeFailed,
+    UpstreamConnectTimeout,
+    UpstreamWriteTimeout,
+    UpstreamReadTimeout,
+    BodyTooLarge,
+    HeaderLimitExceeded,
+    ShiftJisDecodeFailed,
+    ShiftJisEncodeFailed,
+    JsonInvalid,
+    RuleInvalid,
+    RuleConflictWarning,
+    BreakpointNotFound,
+    BreakpointAlreadyResolved,
+    BreakpointClientDisconnected,
+    BreakpointProxyStopped,
+    ResourceExhausted,
+    EventCursorExpired,
+    ExportFailed,
+    ImportFailed,
+    DatabaseMigrationFailed,
+    InvalidStateTransition,
+    InternalError,
+}
+
+impl ErrorCode {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ProxyAlreadyRunning => "PROXY_ALREADY_RUNNING",
+            Self::ProxyNotRunning => "PROXY_NOT_RUNNING",
+            Self::OperationInProgress => "OPERATION_IN_PROGRESS",
+            Self::PortInUse => "PORT_IN_USE",
+            Self::ConfigInvalid => "CONFIG_INVALID",
+            Self::RevisionConflict => "REVISION_CONFLICT",
+            Self::CertificateNotReady => "CERTIFICATE_NOT_READY",
+            Self::CertificateInvalid => "CERTIFICATE_INVALID",
+            Self::Pkcs12PasswordInvalid => "PKCS12_PASSWORD_INVALID",
+            Self::DpapiProtectFailed => "DPAPI_PROTECT_FAILED",
+            Self::DpapiUnprotectFailed => "DPAPI_UNPROTECT_FAILED",
+            Self::TlsHandshakeFailed => "TLS_HANDSHAKE_FAILED",
+            Self::UpstreamConnectTimeout => "UPSTREAM_CONNECT_TIMEOUT",
+            Self::UpstreamWriteTimeout => "UPSTREAM_WRITE_TIMEOUT",
+            Self::UpstreamReadTimeout => "UPSTREAM_READ_TIMEOUT",
+            Self::BodyTooLarge => "BODY_TOO_LARGE",
+            Self::HeaderLimitExceeded => "HEADER_LIMIT_EXCEEDED",
+            Self::ShiftJisDecodeFailed => "SHIFT_JIS_DECODE_FAILED",
+            Self::ShiftJisEncodeFailed => "SHIFT_JIS_ENCODE_FAILED",
+            Self::JsonInvalid => "JSON_INVALID",
+            Self::RuleInvalid => "RULE_INVALID",
+            Self::RuleConflictWarning => "RULE_CONFLICT_WARNING",
+            Self::BreakpointNotFound => "BREAKPOINT_NOT_FOUND",
+            Self::BreakpointAlreadyResolved => "BREAKPOINT_ALREADY_RESOLVED",
+            Self::BreakpointClientDisconnected => "BREAKPOINT_CLIENT_DISCONNECTED",
+            Self::BreakpointProxyStopped => "BREAKPOINT_PROXY_STOPPED",
+            Self::ResourceExhausted => "RESOURCE_EXHAUSTED",
+            Self::EventCursorExpired => "EVENT_CURSOR_EXPIRED",
+            Self::ExportFailed => "EXPORT_FAILED",
+            Self::ImportFailed => "IMPORT_FAILED",
+            Self::DatabaseMigrationFailed => "DATABASE_MIGRATION_FAILED",
+            Self::InvalidStateTransition => "INVALID_STATE_TRANSITION",
+            Self::InternalError => "INTERNAL_ERROR",
+        }
+    }
+}
+
+impl std::fmt::Display for ErrorCode {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Error, PartialEq, Serialize, Type)]
+#[error("{code}: {message}")]
+pub struct DomainError {
+    pub code: ErrorCode,
+    pub message: String,
+    pub field_errors: Box<BTreeMap<String, Vec<String>>>,
+    pub retryable: bool,
+    pub suggested_action: Option<String>,
+    pub entity_id: Option<String>,
+    pub runtime_epoch: Option<RuntimeEpoch>,
+    pub actual_revision: Option<Revision>,
+}
+
+impl DomainError {
+    #[must_use]
+    pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            field_errors: Box::default(),
+            retryable: false,
+            suggested_action: None,
+            entity_id: None,
+            runtime_epoch: None,
+            actual_revision: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_field_error(
+        mut self,
+        field: impl Into<String>,
+        message: impl Into<String>,
+    ) -> Self {
+        self.field_errors
+            .entry(field.into())
+            .or_default()
+            .push(message.into());
+        self
+    }
+
+    #[must_use]
+    pub const fn retryable(mut self, value: bool) -> Self {
+        self.retryable = value;
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // STATE-014, NFR-008
+    #[test]
+    fn error_codes_have_stable_wire_values() {
+        assert_eq!(ErrorCode::RevisionConflict.as_str(), "REVISION_CONFLICT");
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::BodyTooLarge).unwrap(),
+            "\"BODY_TOO_LARGE\""
+        );
+        let required = [
+            (ErrorCode::ProxyAlreadyRunning, "PROXY_ALREADY_RUNNING"),
+            (ErrorCode::ProxyNotRunning, "PROXY_NOT_RUNNING"),
+            (ErrorCode::OperationInProgress, "OPERATION_IN_PROGRESS"),
+            (ErrorCode::PortInUse, "PORT_IN_USE"),
+            (ErrorCode::ConfigInvalid, "CONFIG_INVALID"),
+            (ErrorCode::RevisionConflict, "REVISION_CONFLICT"),
+            (ErrorCode::CertificateNotReady, "CERTIFICATE_NOT_READY"),
+            (ErrorCode::CertificateInvalid, "CERTIFICATE_INVALID"),
+            (ErrorCode::Pkcs12PasswordInvalid, "PKCS12_PASSWORD_INVALID"),
+            (ErrorCode::DpapiProtectFailed, "DPAPI_PROTECT_FAILED"),
+            (ErrorCode::DpapiUnprotectFailed, "DPAPI_UNPROTECT_FAILED"),
+            (ErrorCode::TlsHandshakeFailed, "TLS_HANDSHAKE_FAILED"),
+            (
+                ErrorCode::UpstreamConnectTimeout,
+                "UPSTREAM_CONNECT_TIMEOUT",
+            ),
+            (ErrorCode::UpstreamWriteTimeout, "UPSTREAM_WRITE_TIMEOUT"),
+            (ErrorCode::UpstreamReadTimeout, "UPSTREAM_READ_TIMEOUT"),
+            (ErrorCode::BodyTooLarge, "BODY_TOO_LARGE"),
+            (ErrorCode::HeaderLimitExceeded, "HEADER_LIMIT_EXCEEDED"),
+            (ErrorCode::ShiftJisDecodeFailed, "SHIFT_JIS_DECODE_FAILED"),
+            (ErrorCode::ShiftJisEncodeFailed, "SHIFT_JIS_ENCODE_FAILED"),
+            (ErrorCode::JsonInvalid, "JSON_INVALID"),
+            (ErrorCode::RuleInvalid, "RULE_INVALID"),
+            (ErrorCode::RuleConflictWarning, "RULE_CONFLICT_WARNING"),
+            (ErrorCode::BreakpointNotFound, "BREAKPOINT_NOT_FOUND"),
+            (
+                ErrorCode::BreakpointAlreadyResolved,
+                "BREAKPOINT_ALREADY_RESOLVED",
+            ),
+            (
+                ErrorCode::BreakpointClientDisconnected,
+                "BREAKPOINT_CLIENT_DISCONNECTED",
+            ),
+            (
+                ErrorCode::BreakpointProxyStopped,
+                "BREAKPOINT_PROXY_STOPPED",
+            ),
+            (ErrorCode::ResourceExhausted, "RESOURCE_EXHAUSTED"),
+            (ErrorCode::EventCursorExpired, "EVENT_CURSOR_EXPIRED"),
+            (ErrorCode::ExportFailed, "EXPORT_FAILED"),
+            (ErrorCode::ImportFailed, "IMPORT_FAILED"),
+            (
+                ErrorCode::DatabaseMigrationFailed,
+                "DATABASE_MIGRATION_FAILED",
+            ),
+            (ErrorCode::InternalError, "INTERNAL_ERROR"),
+        ];
+        for (code, expected) in required {
+            assert_eq!(code.as_str(), expected);
+            assert_eq!(
+                serde_json::to_string(&code).unwrap(),
+                format!("\"{expected}\"")
+            );
+        }
+    }
+}

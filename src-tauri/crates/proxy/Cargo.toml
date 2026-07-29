@@ -1,0 +1,33 @@
+[package]
+name = "gmofg-proxy-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bytes.workspace = true
+encoding_rs.workspace = true
+futures-util.workspace = true
+gmofg-proxy-application = { path = "../application" }
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+ring.workspace = true
+rustls.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-rustls.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+x509-parser.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+rcgen.workspace = true
+
+[lints]
+workspace = true
