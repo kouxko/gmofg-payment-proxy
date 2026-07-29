@@ -1,27 +1,19 @@
 "use client";
 
-import { I18nProvider, RouterProvider, Toast } from "@heroui/react";
-import { useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { I18nProvider, Toast } from "@heroui/react";
 import { AppShell } from "@/features/shell/app-shell";
+import { WorkspaceContent } from "@/features/shell/workspace-content";
+import { WorkspaceNavigationProvider } from "@/features/shell/workspace-navigation";
 
-export function AppRuntime({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
-  const router = useRouter();
-  const navigate = useCallback(
-    (href: string) => {
-      router.push(href);
-    },
-    [router],
-  );
-
+export function AppRuntime() {
   return (
-    <RouterProvider navigate={navigate}>
-      <I18nProvider locale="zh-CN">
-        <Toast.Provider placement="top end" />
-        <AppShell>{children}</AppShell>
-      </I18nProvider>
-    </RouterProvider>
+    <I18nProvider locale="zh-CN">
+      <Toast.Provider placement="top end" />
+      <WorkspaceNavigationProvider>
+        <AppShell>
+          <WorkspaceContent />
+        </AppShell>
+      </WorkspaceNavigationProvider>
+    </I18nProvider>
   );
 }

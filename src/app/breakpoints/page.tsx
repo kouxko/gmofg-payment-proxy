@@ -1,14 +1,4 @@
-"use client";
-
-import dynamic from "next/dynamic";
-
-const BreakpointsView = dynamic(
-  () =>
-    import("@/features/breakpoints/breakpoints-view").then(
-      (module) => module.BreakpointsView,
-    ),
-  { ssr: false },
-);
+import { BreakpointsView } from "@/features/breakpoints/breakpoints-view";
 
 export default function BreakpointsPage() {
   return <BreakpointsView />;

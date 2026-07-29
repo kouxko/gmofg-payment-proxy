@@ -192,7 +192,7 @@ export function SettingsView() {
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_440px] gap-4 overflow-hidden p-5 max-[1280px]:block max-[1280px]:overflow-auto">
         <div className="min-w-0 overflow-auto max-[1280px]:overflow-visible">
           <h1 className="mb-4 text-2xl font-semibold">系统设置</h1>
-          <Card>
+          <Card className="border border-[var(--telemetry-line)] shadow-sm">
             <Card.Content className="p-0">
               <Tabs defaultSelectedKey="network">
                 <Tabs.ListContainer>
@@ -497,7 +497,7 @@ export function SettingsView() {
         </div>
 
         <aside className="overflow-auto max-[1280px]:mt-4 max-[1280px]:overflow-visible">
-          <Card>
+          <Card className="border border-[var(--telemetry-line)] shadow-sm">
             <Card.Header>
               <Card.Title>配置摘要与校验</Card.Title>
             </Card.Header>

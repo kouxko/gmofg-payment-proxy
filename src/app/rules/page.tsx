@@ -1,15 +1,5 @@
-"use client";
-
-import dynamic from "next/dynamic";
 import { Suspense } from "react";
-
-const RulesView = dynamic(
-  () =>
-    import("@/features/rules/rules-view").then(
-      (module) => module.RulesView,
-    ),
-  { ssr: false },
-);
+import { RulesView } from "@/features/rules/rules-view";
 
 export default function RulesPage() {
   return (

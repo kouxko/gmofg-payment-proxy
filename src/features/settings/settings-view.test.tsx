@@ -131,4 +131,17 @@ describe("production SettingsView overlay", () => {
       raw,
     );
   });
+
+  it("switches setting tabs without replacing the page document", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<SettingsView />);
+    const viewRoot = container.firstElementChild;
+    const locationBefore = window.location.href;
+
+    await user.click(screen.getByRole("tab", { name: "超时与容量" }));
+
+    expect(screen.getByRole("textbox", { name: "最大会话数" })).toBeVisible();
+    expect(container.firstElementChild).toBe(viewRoot);
+    expect(window.location.href).toBe(locationBefore);
+  });
 });

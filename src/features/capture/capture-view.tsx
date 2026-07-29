@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Alert,
   Button,
@@ -33,6 +32,7 @@ import {
   useAppEventRefresh,
   useBootstrap,
 } from "@/features/shell/bootstrap-context";
+import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 
 export const defaultCaptureQuery: CaptureQuery = {
   keyword: null,
@@ -65,7 +65,7 @@ export function CaptureView({
 }: {
   initialPage?: CapturePageViewModel;
 }) {
-  const router = useRouter();
+  const { navigate } = useWorkspaceNavigation();
   const { proxy } = useBootstrap();
   const [paused, setPaused] = useState(false);
   const [clearPending, setClearPending] = useState(false);
@@ -128,7 +128,7 @@ export function CaptureView({
 
   function createRuleFromSession() {
     if (!selectedId) return;
-    router.push(ruleEditorHref(selectedId));
+    navigate(ruleEditorHref(selectedId));
   }
 
   function togglePaused() {
@@ -321,10 +321,12 @@ export function CaptureView({
                 })
               }
             >
-              <Checkbox.Control>
-                <Checkbox.Indicator />
-              </Checkbox.Control>
-              <Checkbox.Content>仅看异常</Checkbox.Content>
+              <Checkbox.Content>
+                <Checkbox.Control>
+                  <Checkbox.Indicator />
+                </Checkbox.Control>
+                仅看异常
+              </Checkbox.Content>
             </Checkbox>
           </Card.Content>
         </Card>
@@ -485,10 +487,6 @@ export function CaptureView({
                 响应
                 <Tabs.Indicator />
               </Tabs.Tab>
-              <Tabs.Tab id="bytes">
-                原始字节
-                <Tabs.Indicator />
-              </Tabs.Tab>
             </Tabs.List>
           </Tabs.ListContainer>
           {selected && detail.error && (
@@ -573,7 +571,7 @@ export function CaptureView({
                   isDisabled={!selected.can_go_to_breakpoint}
                   onPress={() => {
                     if (selected.breakpoint_id) {
-                      router.push(
+                      navigate(
                         `/breakpoints?breakpointId=${encodeURIComponent(
                           selected.breakpoint_id,
                         )}`,
@@ -606,11 +604,6 @@ export function CaptureView({
                 ? "选择一条抓包记录查看响应"
                 : detail.data?.response?.body_text ?? "无响应正文"}
             </pre>
-          </Tabs.Panel>
-          <Tabs.Panel id="bytes" className="pt-4 font-mono text-xs">
-            {!selected
-              ? "选择一条抓包记录查看原始字节"
-              : detail.data?.request.body_bytes.join(" ") ?? "无原始字节"}
           </Tabs.Panel>
         </Tabs>
       </aside>

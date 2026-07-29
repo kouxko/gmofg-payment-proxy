@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Alert,
   AlertDialog,
@@ -33,9 +32,10 @@ import {
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 
 export function FaultsView() {
-  const router = useRouter();
+  const { navigate } = useWorkspaceNavigation();
   const templates =
     useIpcQuery<FaultTemplateViewModel[]>("fault-template-list", () =>
       callCommand(commands.faultTemplateList()),
@@ -159,7 +159,7 @@ export function FaultsView() {
       const result = await callCommand(commands.faultConfigure(draft));
       toast(result.status_text, { variant: toneColor(result.ui_tone) });
       await active.refresh();
-      if (openRules) router.push("/rules");
+      if (openRules) navigate("/rules");
     } catch (reason) {
       setFieldErrors(appErrorViewModel(reason)?.field_errors ?? {});
       toast(errorMessage(reason), { variant: "danger" });
