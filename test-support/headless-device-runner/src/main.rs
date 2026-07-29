@@ -1144,6 +1144,32 @@ async fn shutdown_signal() -> io::Result<()> {
     tokio::signal::ctrl_c().await
 }
 
+fn finish_run(
+    primary_error: Option<String>,
+    cleanup_errors: Vec<String>,
+    shutdown_error: Option<String>,
+) -> Result<(), Box<dyn Error>> {
+    let mut failures = Vec::new();
+    if let Some(error) = primary_error {
+        failures.push(format!("scenario failed: {error}"));
+    }
+    if !cleanup_errors.is_empty() {
+        failures.push(format!(
+            "emergency rule cleanup failed: {}",
+            cleanup_errors.join("; ")
+        ));
+    }
+    if let Some(error) = shutdown_error {
+        failures.push(format!("host shutdown failed: {error}"));
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join(" | ").into())
+    }
+}
+
 async fn wait_for_android_completion_signal() -> Result<(), String> {
     let path = env::var_os("GMOFG_ANDROID_COMPLETION_SIGNAL")
         .map(PathBuf::from)
@@ -1183,8 +1209,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     .build()
     .await?;
     let application = host.application();
+    let mut acquired_rule_ids = Vec::new();
 
-    let available_template_ids = application
+    let run_result = async {
+        let available_template_ids = application
         .fault_template_list()
         .await?
         .into_iter()
@@ -1299,6 +1327,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 parameters: scenario.fault_parameters(),
             })
             .await?;
+        acquired_rule_ids.push(active.rule_id);
         let mut draft = application.rule_get(active.rule_id).await?.draft;
         draft.name = format!("{TEST_RULE_PREFIX}{}", scenario.name());
         let saved = application.rule_save(draft).await?;
@@ -1322,6 +1351,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         draft.actions = scenario.actions();
         draft.one_shot = matches!(scenario, Scenario::OneShot);
         let saved = application.rule_save(draft).await?;
+        acquired_rule_ids.push(saved.summary.rule_id);
         vec![CreatedRule {
             rule_id: saved.summary.rule_id,
             via_fault_template: false,
@@ -1340,6 +1370,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             value: "yes".into(),
         }];
         let saved = application.rule_save(draft).await?;
+        acquired_rule_ids.push(saved.summary.rule_id);
         created_rules.push(CreatedRule {
             rule_id: saved.summary.rule_id,
             via_fault_template: false,
@@ -1367,7 +1398,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         .await?;
                 }
             }
-            host.shutdown().await?;
             return Err(error.into());
         }
     };
@@ -1767,7 +1797,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     io::stdout().flush()?;
     let _ = application.app_unsubscribe_events(subscription_id);
-    host.shutdown().await?;
     if let Some(error) = stop_error {
         return Err(format!("failed to stop proxy: {error}").into());
     }
@@ -1777,12 +1806,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let result = observation_result.map_err(|error| -> Box<dyn Error> { error.into() })?;
     println!("HEADLESS_RESULT {result}");
     io::stdout().flush()?;
-    Ok(())
+    Ok::<(), Box<dyn Error>>(())
+    }
+    .await;
+
+    let mut emergency_cleanup_errors = Vec::new();
+    match application.rule_list().await {
+        Ok(rules) => {
+            for rule in rules.into_iter().filter(|rule| {
+                rule.name.starts_with(TEST_RULE_PREFIX) || acquired_rule_ids.contains(&rule.rule_id)
+            }) {
+                if let Err(error) = application
+                    .rule_delete(rule.rule_id, rule.revision, true)
+                    .await
+                {
+                    emergency_cleanup_errors.push(error.to_string());
+                }
+            }
+        }
+        Err(error) => emergency_cleanup_errors.push(error.to_string()),
+    }
+    let shutdown_result = host.shutdown().await;
+
+    finish_run(
+        run_result.err().map(|error| error.to_string()),
+        emergency_cleanup_errors,
+        shutdown_result.err().map(|error| error.to_string()),
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use super::Scenario;
+    use super::{Scenario, finish_run};
 
     #[test]
     fn every_ready_matrix_scenario_is_supported_by_the_runner() {
@@ -1819,5 +1874,33 @@ mod tests {
             assert!(scenario.is_invalid_config(), "{}", scenario.name());
             assert_eq!(scenario.expected_hit_count(), 0);
         }
+    }
+
+    #[test]
+    fn reports_primary_and_cleanup_failures_together() {
+        let error = finish_run(
+            Some("request failed".to_owned()),
+            vec!["delete rule failed".to_owned()],
+            None,
+        )
+        .expect_err("both failures must be reported")
+        .to_string();
+
+        assert!(error.contains("scenario failed: request failed"));
+        assert!(error.contains("emergency rule cleanup failed: delete rule failed"));
+    }
+
+    #[test]
+    fn reports_primary_and_shutdown_failures_together() {
+        let error = finish_run(
+            Some("request failed".to_owned()),
+            Vec::new(),
+            Some("listener still running".to_owned()),
+        )
+        .expect_err("both failures must be reported")
+        .to_string();
+
+        assert!(error.contains("scenario failed: request failed"));
+        assert!(error.contains("host shutdown failed: listener still running"));
     }
 }

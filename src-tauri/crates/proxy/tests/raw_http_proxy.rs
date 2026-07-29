@@ -9,7 +9,6 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use gmofg_proxy_application::{ProxySupervisorPort, SettingsDraft};
 use gmofg_proxy_runtime::RuntimeServiceFactory;
 use gmofg_proxy_runtime::message::{Message, MessageLimits};
 use gmofg_proxy_runtime::supervisor::{Channel, ChannelConfig, ProxyConfig, ProxyState};
@@ -18,9 +17,8 @@ use gmofg_proxy_runtime::transport::{
     ForwardRequest, HandshakePolicy, NoopPipelinePorts, PipelinePorts,
 };
 use gmofg_proxy_runtime::{
-    ApplicationProxyAdapter, ChannelRuntimeMetrics, ErrorCode, FaultAction, ProxyError,
-    ProxySupervisor, Result, RuntimeMetricsProvider, RuntimeMetricsSnapshot, SystemClock,
-    TokioListenerBinder, UpstreamConnector,
+    ErrorCode, FaultAction, ProxyError, ProxySupervisor, Result, SystemClock, TokioListenerBinder,
+    UpstreamConnector,
 };
 use http::{HeaderMap, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -76,16 +74,6 @@ impl ConnectionAcceptor for TestPlaintextAcceptor {
 struct LifecyclePorts {
     events: Mutex<Vec<&'static str>>,
     opened: Notify,
-}
-
-#[derive(Debug)]
-struct StaticMetrics(RuntimeMetricsSnapshot);
-
-#[async_trait]
-impl RuntimeMetricsProvider for StaticMetrics {
-    async fn snapshot(&self, _runtime_epoch: Option<Uuid>) -> Result<RuntimeMetricsSnapshot> {
-        Ok(self.0.clone())
-    }
 }
 
 impl fmt::Debug for LifecyclePorts {
@@ -387,56 +375,6 @@ async fn runtime_stopping_is_delivered_before_active_connections_join() {
         .position(|event| *event == "connection_closed")
         .unwrap();
     assert!(stopping < closed, "events: {events:?}");
-}
-
-#[tokio::test]
-async fn application_adapter_maps_runtime_metrics_without_fixed_zeroes() {
-    let supervisor = Arc::new(ProxySupervisor::new(
-        Arc::new(TokioListenerBinder),
-        service(Arc::new(NoopPipelinePorts)),
-    ));
-    let metrics = RuntimeMetricsSnapshot {
-        channels: BTreeMap::from([
-            (
-                Channel::Transaction,
-                ChannelRuntimeMetrics {
-                    connected_clients: 3,
-                    request_count: 17,
-                    error_count: 2,
-                    ..ChannelRuntimeMetrics::default()
-                },
-            ),
-            (
-                Channel::Dll,
-                ChannelRuntimeMetrics {
-                    connected_clients: 1,
-                    request_count: 5,
-                    error_count: 4,
-                    ..ChannelRuntimeMetrics::default()
-                },
-            ),
-        ]),
-        active_sessions: 4,
-        pending_breakpoints: 6,
-        logical_memory_bytes: 8_192,
-    };
-    let adapter = ApplicationProxyAdapter::new(
-        supervisor,
-        SettingsDraft::default(),
-        Arc::new(StaticMetrics(metrics)),
-    );
-
-    let status = adapter.status().await.unwrap();
-
-    assert_eq!(status.channels[0].connected_clients, 3);
-    assert_eq!(status.channels[0].request_count, 17);
-    assert_eq!(status.channels[0].error_count, 2);
-    assert_eq!(status.channels[1].connected_clients, 1);
-    assert_eq!(status.channels[1].request_count, 5);
-    assert_eq!(status.channels[1].error_count, 4);
-    assert_eq!(status.active_sessions, 4);
-    assert_eq!(status.pending_breakpoints, 6);
-    assert_eq!(status.logical_memory_bytes, 8_192);
 }
 
 #[tokio::test]

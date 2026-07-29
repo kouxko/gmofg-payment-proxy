@@ -615,6 +615,7 @@ fn parse_fingerprint(value: &str) -> gmofg_proxy_runtime::Result<Vec<u8>> {
 fn proxy_app_error(error: AppError) -> ProxyError {
     let code = match error.view_model.code.as_str() {
         "DPAPI_UNPROTECT_FAILED" => ProxyErrorCode::DpapiUnprotectFailed,
+        "KEYCHAIN_UNPROTECT_FAILED" => ProxyErrorCode::KeychainUnprotectFailed,
         "CERTIFICATE_INVALID" => ProxyErrorCode::CertificateInvalid,
         _ => ProxyErrorCode::CertificateNotReady,
     };
@@ -667,6 +668,46 @@ mod tests {
         fn unprotect(&self, ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
             self.protect(ciphertext)
         }
+    }
+
+    #[derive(Debug)]
+    struct FailingUnprotectProtector;
+
+    impl SecretProtector for FailingUnprotectProtector {
+        fn protect(&self, plaintext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
+            Ok(plaintext.to_vec())
+        }
+
+        fn unprotect(&self, _: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
+            Err(InfrastructureError::KeychainUnprotect)
+        }
+    }
+
+    #[tokio::test]
+    async fn tls_snapshot_preserves_keychain_unprotect_error_code() {
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        store
+            .put_certificate_material(&CertificateMaterialRecord {
+                kind: LEAF.into(),
+                protected_blob: vec![1],
+                metadata: serde_json::json!({}),
+                updated_at: Utc::now(),
+            })
+            .expect("seed protected material");
+        let adapter = CertificateServiceAdapter::new(
+            store,
+            Arc::new(FailingUnprotectProtector),
+            Arc::new(QueueDialog {
+                open: ParkingMutex::new(VecDeque::new()),
+            }),
+        );
+
+        let error = adapter
+            .load_epoch_snapshot(&["127.0.0.1".into()])
+            .await
+            .expect_err("snapshot must fail");
+
+        assert_eq!(error.code, "KEYCHAIN_UNPROTECT_FAILED");
     }
 
     // CERT-005~017, SECURITY-006~009, TEST-TLS

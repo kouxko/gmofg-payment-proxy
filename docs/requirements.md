@@ -586,7 +586,7 @@ gmofg-payment-proxy/
 
 - 实现八个页面对应的应用 Use Case。
 - 负责权限判断、筛选、排序、分页、表单规范化和中文状态文案。
-- 将领域对象映射为只读 ViewModel。
+- 将领域对象映射为前端中立的只读展示模型；其中规范化值、中文文案、UI tone、权限和可执行动作是 Rust 共享展示契约，不属于 Tauri 或 HeroUI 专用逻辑，未来 TUI/CLI 必须复用而不得重写业务判断。
 - 编排 ProxySupervisor、仓库、证书、设置和文件服务。
 - 维护 UI 事件日志、批处理和订阅游标。
 
@@ -597,7 +597,7 @@ gmofg-payment-proxy/
 - 使用 rustls / tokio-rustls 完成服务端和客户端 TLS 1.2 mTLS。
 - 使用 `encoding_rs::SHIFT_JIS` 完成严格解码和编码。
 - 实现请求/响应处理管线、超时、断开检测和故障动作。
-- 不依赖 Tauri 或 Next.js。
+- 不依赖 Tauri、Next.js 或 `application`；面向应用层的 Runtime 适配器位于 `infrastructure`，避免传输层向上依赖。
 
 #### `infrastructure`
 

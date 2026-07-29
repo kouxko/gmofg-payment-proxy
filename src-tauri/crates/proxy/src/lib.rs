@@ -6,20 +6,18 @@
 
 #![allow(clippy::missing_errors_doc, clippy::too_many_lines)]
 
-pub mod application_adapter;
 pub mod codec;
 pub mod fault;
 pub mod message;
+pub mod metrics;
 pub mod production_factory;
 pub mod supervisor;
 pub mod tls;
 pub mod transport;
 
-pub use application_adapter::{
-    ApplicationProxyAdapter, ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot,
-};
 pub use fault::{FaultAction, ResponseDisposition};
 pub use message::{Message, MessageLimits, RawHeader};
+pub use metrics::{ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot};
 pub use production_factory::{
     RustlsRuntimeServiceFactory, TlsMaterialProvider, TlsMaterialSnapshot,
 };
@@ -48,6 +46,7 @@ pub enum ErrorCode {
     CertificateInvalid,
     Pkcs12PasswordInvalid,
     DpapiUnprotectFailed,
+    KeychainUnprotectFailed,
     TlsHandshakeFailed,
     UpstreamConnectTimeout,
     UpstreamWriteTimeout,
@@ -76,6 +75,7 @@ impl ErrorCode {
             Self::CertificateInvalid => "CERTIFICATE_INVALID",
             Self::Pkcs12PasswordInvalid => "PKCS12_PASSWORD_INVALID",
             Self::DpapiUnprotectFailed => "DPAPI_UNPROTECT_FAILED",
+            Self::KeychainUnprotectFailed => "KEYCHAIN_UNPROTECT_FAILED",
             Self::TlsHandshakeFailed => "TLS_HANDSHAKE_FAILED",
             Self::UpstreamConnectTimeout => "UPSTREAM_CONNECT_TIMEOUT",
             Self::UpstreamWriteTimeout => "UPSTREAM_WRITE_TIMEOUT",
@@ -116,3 +116,16 @@ impl ProxyError {
 }
 
 pub type Result<T> = std::result::Result<T, ProxyError>;
+
+#[cfg(test)]
+mod tests {
+    use super::ErrorCode;
+
+    #[test]
+    fn keychain_unprotect_error_code_is_stable() {
+        assert_eq!(
+            ErrorCode::KeychainUnprotectFailed.as_str(),
+            "KEYCHAIN_UNPROTECT_FAILED"
+        );
+    }
+}

@@ -33,7 +33,7 @@ pub struct Application {
     settings: Arc<dyn SettingsRepositoryPort>,
     file_export: Arc<dyn FileExportPort>,
     events: Arc<EventHub>,
-    rule_fault_lifecycle_gate: tokio::sync::Mutex<()>,
+    mutation_gate: tokio::sync::Mutex<()>,
 }
 
 impl Application {
@@ -63,7 +63,7 @@ impl Application {
             settings,
             file_export,
             events,
-            rule_fault_lifecycle_gate: tokio::sync::Mutex::new(()),
+            mutation_gate: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -122,7 +122,7 @@ impl Application {
     /// This bypasses the interactive lifecycle guard so an in-flight start or
     /// stop operation is awaited and then fully cleaned up by the supervisor.
     pub async fn app_shutdown(&self) -> AppResult<ProxyStatusViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         let before = self.proxy.status().await?;
         let stop_result = if before.state == ProxyState::Stopped {
             Ok(before.clone())
@@ -169,7 +169,7 @@ impl Application {
     }
 
     pub async fn proxy_start(&self) -> AppResult<ProxyStatusViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         self.proxy_start_inner().await
     }
 
@@ -199,7 +199,7 @@ impl Application {
     }
 
     pub async fn proxy_stop(&self) -> AppResult<ProxyStatusViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         self.proxy_stop_inner().await
     }
 
@@ -233,7 +233,7 @@ impl Application {
     }
 
     pub async fn proxy_restart(&self) -> AppResult<ProxyStatusViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         let current = self.proxy.status().await?;
         if matches!(current.state, ProxyState::Starting | ProxyState::Stopping) {
             return Err(AppError::new(
@@ -617,7 +617,7 @@ impl Application {
     }
 
     pub async fn rule_save(&self, mut draft: RuleDraft) -> AppResult<RuleViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_rule_or_fault_write_allowed().await?;
         draft.name = draft.name.trim().to_owned();
         draft.description = draft.description.trim().to_owned();
@@ -627,7 +627,7 @@ impl Application {
     }
 
     pub async fn rule_copy(&self, rule_id: RuleId) -> AppResult<RuleViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_rule_or_fault_write_allowed().await?;
         self.rules.copy(rule_id).await
     }
@@ -638,7 +638,7 @@ impl Application {
         expected_revision: u64,
         confirmed: bool,
     ) -> AppResult<OperationResultViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         require_confirmation(confirmed, "删除规则需要确认。")?;
         self.ensure_rule_or_fault_write_allowed().await?;
         self.rules.delete(rule_id, expected_revision).await
@@ -650,13 +650,13 @@ impl Application {
         expected_revision: u64,
         enabled: bool,
     ) -> AppResult<RuleViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_rule_or_fault_write_allowed().await?;
         self.rules.toggle(rule_id, expected_revision, enabled).await
     }
 
     pub async fn rule_import(&self) -> AppResult<OperationResultViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_rule_or_fault_write_allowed().await?;
         self.rules.import().await
     }
@@ -675,7 +675,7 @@ impl Application {
         &self,
         draft: FaultConfigurationDraft,
     ) -> AppResult<ActiveFaultViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_rule_or_fault_write_allowed().await?;
         self.faults.configure(draft).await
     }
@@ -692,7 +692,7 @@ impl Application {
         expected_revision: u64,
         confirmed: bool,
     ) -> AppResult<ActiveFaultViewModel> {
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
+        let _gate = self.mutation_gate.lock().await;
         require_confirmation(confirmed, "停止活动故障需要确认。")?;
         self.ensure_rule_or_fault_write_allowed().await?;
         self.faults.stop(rule_id, expected_revision).await
@@ -706,6 +706,7 @@ impl Application {
         &self,
         sans: Vec<String>,
     ) -> AppResult<CertificateOverviewViewModel> {
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_proxy_stopped_for_write().await?;
         let overview = self.certificates.generate_ca(normalize_sans(sans)).await?;
         self.publish_certificate(&overview);
@@ -721,6 +722,7 @@ impl Application {
         expected_revision: u64,
         sans: Vec<String>,
     ) -> AppResult<CertificateOverviewViewModel> {
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_proxy_stopped_for_write().await?;
         let overview = self
             .certificates
@@ -734,6 +736,7 @@ impl Application {
         &self,
         password: String,
     ) -> AppResult<CertificateOverviewViewModel> {
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_proxy_stopped_for_write().await?;
         let overview = self.certificates.import_pkcs12(password).await?;
         self.publish_certificate(&overview);
@@ -741,6 +744,7 @@ impl Application {
     }
 
     pub async fn certificate_import_upstream_ca(&self) -> AppResult<CertificateOverviewViewModel> {
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_proxy_stopped_for_write().await?;
         let overview = self.certificates.import_upstream_ca().await?;
         self.publish_certificate(&overview);
@@ -760,6 +764,7 @@ impl Application {
             confirmed,
             "重置本地 CA 后所有 Payment 终端都需要重新导入新 CA。",
         )?;
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_proxy_stopped_for_write().await?;
         let overview = self.certificates.reset_ca(expected_revision).await?;
         self.publish_certificate(&overview);
@@ -829,6 +834,11 @@ impl Application {
     }
 
     pub async fn settings_save(&self, draft: SettingsDraft) -> AppResult<SettingsViewModel> {
+        let _gate = self.mutation_gate.lock().await;
+        self.settings_save_inner(draft).await
+    }
+
+    async fn settings_save_inner(&self, draft: SettingsDraft) -> AppResult<SettingsViewModel> {
         self.ensure_settings_write_allowed().await?;
         let draft = normalize_settings(draft);
         let validation = self.settings_validate(draft.clone()).await?;
@@ -849,16 +859,16 @@ impl Application {
         &self,
         draft: SettingsDraft,
     ) -> AppResult<SettingsViewModel> {
+        let _gate = self.mutation_gate.lock().await;
         self.ensure_settings_write_allowed().await?;
         let old_settings = self.settings.get().await?;
         let old_status = self.proxy.status().await?;
         let was_running = old_status.state == ProxyState::Running;
-        let saved = self.settings_save(draft).await?;
+        let saved = self.settings_save_inner(draft).await?;
         if !was_running {
             return Ok(saved);
         }
 
-        let _gate = self.rule_fault_lifecycle_gate.lock().await;
         self.proxy_stop_inner().await?;
         let candidate_status = match self.proxy.start(saved.stored.clone()).await {
             Ok(status) => status,

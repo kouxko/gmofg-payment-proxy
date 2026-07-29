@@ -14,9 +14,10 @@ pub mod keychain;
 pub mod sqlite;
 
 pub use adapters::{
-    CaptureRepositoryAdapter, CertificateServiceAdapter, FaultServiceAdapter, FileExportAdapter,
-    InfrastructureServiceBundle, NativeFileDialog, RuleRepositoryAdapter, RuntimePipelineAdapter,
-    RuntimeRuleRepository, SettingsRepositoryAdapter,
+    ApplicationProxyAdapter, CaptureRepositoryAdapter, CertificateServiceAdapter,
+    FaultServiceAdapter, FileExportAdapter, InfrastructureServiceBundle, NativeFileDialog,
+    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimeRuleRepository,
+    SettingsRepositoryAdapter,
 };
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,

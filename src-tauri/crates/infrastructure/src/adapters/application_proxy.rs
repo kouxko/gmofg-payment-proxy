@@ -1,4 +1,4 @@
-//! Application-port adapter. Business mapping stays out of the Tauri shell.
+//! Application-port adapter. Business mapping stays out of the host shell.
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
@@ -11,40 +11,11 @@ use gmofg_proxy_application::{
     ConnectionHealthViewModel, DisabledReason, ProxyState as ApplicationProxyState,
     ProxyStatusViewModel, ProxySupervisorPort, SettingsDraft, UiTone,
 };
-use tokio::sync::RwLock;
-use uuid::Uuid;
-
-use crate::message::MessageLimits;
-use crate::supervisor::{
-    Channel, ChannelConfig, ProxyConfig, ProxyState, ProxySupervisor, RuntimeSnapshot,
+use gmofg_proxy_runtime::{
+    Channel, ChannelConfig, ChannelRuntimeMetrics, MessageLimits, ProxyConfig, ProxyError,
+    ProxyState, ProxySupervisor, RuntimeMetricsProvider, RuntimeSnapshot,
 };
-use crate::{ProxyError, Result};
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct ChannelRuntimeMetrics {
-    pub connected_clients: u32,
-    pub request_count: u64,
-    pub error_count: u64,
-    pub upstream_response_count: u64,
-    pub last_upstream_error: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct RuntimeMetricsSnapshot {
-    pub channels: std::collections::BTreeMap<Channel, ChannelRuntimeMetrics>,
-    pub active_sessions: usize,
-    pub pending_breakpoints: usize,
-    pub logical_memory_bytes: u64,
-}
-
-#[async_trait]
-pub trait RuntimeMetricsProvider: std::fmt::Debug + Send + Sync {
-    async fn configure_capacity(&self, _max_sessions: usize, _max_bytes: u64) -> Result<()> {
-        Ok(())
-    }
-
-    async fn snapshot(&self, runtime_epoch: Option<Uuid>) -> Result<RuntimeMetricsSnapshot>;
-}
+use tokio::sync::RwLock;
 
 /// Maps application DTOs to the transport supervisor without putting business
 /// conversion logic in `src-tauri`.
@@ -440,4 +411,91 @@ fn disabled_reason(disabled: bool, message: &str) -> Option<DisabledReason> {
 
 fn map_error(error: ProxyError) -> AppError {
     AppError::new(error.code, error.message)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use gmofg_proxy_runtime::transport::ConnectionService;
+    use gmofg_proxy_runtime::{
+        ChannelRuntimeMetrics, Result, RuntimeMetricsSnapshot, RuntimeServiceFactory,
+        TokioListenerBinder,
+    };
+    use uuid::Uuid;
+
+    use super::*;
+
+    #[derive(Debug)]
+    struct StaticMetrics(RuntimeMetricsSnapshot);
+
+    #[async_trait]
+    impl RuntimeMetricsProvider for StaticMetrics {
+        async fn snapshot(&self, _runtime_epoch: Option<Uuid>) -> Result<RuntimeMetricsSnapshot> {
+            Ok(self.0.clone())
+        }
+    }
+
+    #[derive(Debug)]
+    struct UnusedRuntimeServiceFactory;
+
+    #[async_trait]
+    impl RuntimeServiceFactory for UnusedRuntimeServiceFactory {
+        async fn build(
+            &self,
+            _config: &ProxyConfig,
+        ) -> Result<BTreeMap<Channel, ConnectionService>> {
+            unreachable!("status does not build runtime services")
+        }
+    }
+
+    #[tokio::test]
+    async fn maps_runtime_metrics_without_fixed_zeroes() {
+        let supervisor = Arc::new(ProxySupervisor::with_factory(
+            Arc::new(TokioListenerBinder),
+            Arc::new(UnusedRuntimeServiceFactory),
+        ));
+        let metrics = RuntimeMetricsSnapshot {
+            channels: BTreeMap::from([
+                (
+                    Channel::Transaction,
+                    ChannelRuntimeMetrics {
+                        connected_clients: 3,
+                        request_count: 17,
+                        error_count: 2,
+                        ..ChannelRuntimeMetrics::default()
+                    },
+                ),
+                (
+                    Channel::Dll,
+                    ChannelRuntimeMetrics {
+                        connected_clients: 1,
+                        request_count: 5,
+                        error_count: 4,
+                        ..ChannelRuntimeMetrics::default()
+                    },
+                ),
+            ]),
+            active_sessions: 4,
+            pending_breakpoints: 6,
+            logical_memory_bytes: 8_192,
+        };
+        let adapter = ApplicationProxyAdapter::new(
+            supervisor,
+            SettingsDraft::default(),
+            Arc::new(StaticMetrics(metrics)),
+        );
+
+        let status = adapter.status().await.unwrap();
+
+        assert_eq!(status.channels[0].connected_clients, 3);
+        assert_eq!(status.channels[0].request_count, 17);
+        assert_eq!(status.channels[0].error_count, 2);
+        assert_eq!(status.channels[1].connected_clients, 1);
+        assert_eq!(status.channels[1].request_count, 5);
+        assert_eq!(status.channels[1].error_count, 4);
+        assert_eq!(status.active_sessions, 4);
+        assert_eq!(status.pending_breakpoints, 6);
+        assert_eq!(status.logical_memory_bytes, 8_192);
+    }
 }

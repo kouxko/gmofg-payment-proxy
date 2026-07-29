@@ -124,80 +124,94 @@ impl BreakpointValidationPort for BreakpointValidator {
         detail: &BreakpointDetailViewModel,
         decision: &BreakpointDecision,
     ) -> AppResult<BreakpointValidationViewModel> {
-        let mut errors = BTreeMap::<String, Vec<String>>::new();
-        if decision.breakpoint_id != detail.summary.breakpoint_id {
-            push_error(&mut errors, "breakpoint_id", "断点标识与当前详情不一致。");
+        Ok(validate_breakpoint_decision(detail, decision))
+    }
+}
+
+pub(crate) fn validate_breakpoint_decision(
+    detail: &BreakpointDetailViewModel,
+    decision: &BreakpointDecision,
+) -> BreakpointValidationViewModel {
+    let mut errors = BTreeMap::<String, Vec<String>>::new();
+    if decision.breakpoint_id != detail.summary.breakpoint_id {
+        push_error(&mut errors, "breakpoint_id", "断点标识与当前详情不一致。");
+    }
+    if decision.expected_revision != detail.summary.revision {
+        push_error(
+            &mut errors,
+            "expected_revision",
+            "断点已更新，请重新加载后再处理。",
+        );
+    }
+    if !stage_supports_decision(detail.summary.stage, decision.kind) {
+        push_error(&mut errors, "kind", "该操作不适用于当前报文阶段。");
+    }
+    match decision.kind {
+        BreakpointDecisionKind::ForwardModified | BreakpointDecisionKind::MockResponse => {
+            match decision.message.as_ref() {
+                Some(message) => {
+                    let validation = BreakpointValidator::validate_message(message);
+                    merge_errors(&mut errors, validation.field_errors);
+                }
+                None => push_error(&mut errors, "message", "该操作必须提供报文。"),
+            }
         }
-        if decision.expected_revision != detail.summary.revision {
-            push_error(
-                &mut errors,
-                "expected_revision",
-                "断点已更新，请重新加载后再处理。",
-            );
+        BreakpointDecisionKind::Delay => {
+            if decision
+                .delay_ms
+                .is_none_or(|value| value == 0 || value > 600_000)
+            {
+                push_error(
+                    &mut errors,
+                    "delay_ms",
+                    "延迟时间必须位于 1 到 600000 毫秒。",
+                );
+            }
         }
-        if !stage_supports_decision(detail.summary.stage, decision.kind) {
-            push_error(&mut errors, "kind", "该操作不适用于当前报文阶段。");
+        BreakpointDecisionKind::CustomHttpStatus => {
+            if decision
+                .http_status
+                .and_then(|value| StatusCode::from_u16(value).ok())
+                .is_none()
+            {
+                push_error(
+                    &mut errors,
+                    "http_status",
+                    "HTTP 状态码必须位于 100 到 599。",
+                );
+            }
         }
-        match decision.kind {
-            BreakpointDecisionKind::ForwardModified | BreakpointDecisionKind::MockResponse => {
-                match decision.message.as_ref() {
-                    Some(message) => {
-                        let validation = Self::validate_message(message);
-                        merge_errors(&mut errors, validation.field_errors);
-                    }
-                    None => push_error(&mut errors, "message", "该操作必须提供报文。"),
-                }
+        BreakpointDecisionKind::WrongContentLength => {
+            if decision.content_length_delta.is_none_or(|value| value == 0) {
+                push_error(
+                    &mut errors,
+                    "content_length_delta",
+                    "Content-Length 偏移量不能为 0。",
+                );
             }
-            BreakpointDecisionKind::Delay => {
-                if decision.delay_ms.is_none_or(|value| value == 0) {
-                    push_error(&mut errors, "delay_ms", "延迟时间必须大于 0 毫秒。");
-                }
-            }
-            BreakpointDecisionKind::CustomHttpStatus => {
-                if decision
-                    .http_status
-                    .and_then(|value| StatusCode::from_u16(value).ok())
-                    .is_none()
-                {
-                    push_error(
-                        &mut errors,
-                        "http_status",
-                        "HTTP 状态码必须位于 100 到 599。",
-                    );
-                }
-            }
-            BreakpointDecisionKind::WrongContentLength => {
-                if decision.content_length_delta.is_none_or(|value| value == 0) {
-                    push_error(
-                        &mut errors,
-                        "content_length_delta",
-                        "Content-Length 偏移量不能为 0。",
-                    );
-                }
-            }
-            BreakpointDecisionKind::Truncate => {
-                let available = detail.effective.body_bytes.len();
-                if decision
-                    .truncate_at
-                    .is_none_or(|value| available == 0 || value >= available)
-                {
-                    push_error(
-                        &mut errors,
-                        "truncate_at",
-                        "截断位置必须位于 0 到当前 Body 字节数减 1 之间。",
-                    );
-                }
-            }
-            BreakpointDecisionKind::ForwardOriginal
-            | BreakpointDecisionKind::DisconnectBeforeUpstream
-            | BreakpointDecisionKind::InvalidJson
-            | BreakpointDecisionKind::DropResponse => {}
         }
-        Ok(BreakpointValidationViewModel {
-            valid: errors.is_empty(),
-            field_errors: errors,
-            warnings: Vec::new(),
-        })
+        BreakpointDecisionKind::Truncate => {
+            let available = detail.effective.body_bytes.len();
+            if decision
+                .truncate_at
+                .is_none_or(|value| available == 0 || value >= available)
+            {
+                push_error(
+                    &mut errors,
+                    "truncate_at",
+                    "截断位置必须位于 0 到当前 Body 字节数减 1 之间。",
+                );
+            }
+        }
+        BreakpointDecisionKind::ForwardOriginal
+        | BreakpointDecisionKind::DisconnectBeforeUpstream
+        | BreakpointDecisionKind::InvalidJson
+        | BreakpointDecisionKind::DropResponse => {}
+    }
+    BreakpointValidationViewModel {
+        valid: errors.is_empty(),
+        field_errors: errors,
+        warnings: Vec::new(),
     }
 }
 
