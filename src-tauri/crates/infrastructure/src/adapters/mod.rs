@@ -1,3 +1,4 @@
+mod application_proxy;
 mod bundle;
 mod capture;
 mod certificates;
@@ -8,6 +9,7 @@ mod pipeline;
 mod rules;
 mod settings;
 
+pub use application_proxy::ApplicationProxyAdapter;
 pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;

@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -702,6 +702,11 @@ struct FakePorts {
     start_results: parking_lot::Mutex<VecDeque<AppResult<ProxyStatusViewModel>>>,
     start_calls: AtomicUsize,
     stop_calls: AtomicUsize,
+    block_start: AtomicBool,
+    start_entered: tokio::sync::Notify,
+    continue_start: tokio::sync::Notify,
+    settings_save_calls: AtomicUsize,
+    certificate_import_calls: AtomicUsize,
     settings: parking_lot::Mutex<SettingsViewModel>,
     certificate_overview: parking_lot::Mutex<CertificateOverviewViewModel>,
 }
@@ -714,6 +719,11 @@ impl Default for FakePorts {
             start_results: parking_lot::Mutex::new(VecDeque::new()),
             start_calls: AtomicUsize::new(0),
             stop_calls: AtomicUsize::new(0),
+            block_start: AtomicBool::new(false),
+            start_entered: tokio::sync::Notify::new(),
+            continue_start: tokio::sync::Notify::new(),
+            settings_save_calls: AtomicUsize::new(0),
+            certificate_import_calls: AtomicUsize::new(0),
             settings: parking_lot::Mutex::new(fake_settings_view()),
             certificate_overview: parking_lot::Mutex::new(fake_certificate_overview()),
         }
@@ -731,6 +741,10 @@ impl ProxySupervisorPort for FakePorts {
     }
     async fn start(&self, _: SettingsDraft) -> AppResult<ProxyStatusViewModel> {
         self.start_calls.fetch_add(1, Ordering::SeqCst);
+        if self.block_start.load(Ordering::SeqCst) {
+            self.start_entered.notify_one();
+            self.continue_start.notified().await;
+        }
         if let Some(result) = self.start_results.lock().pop_front() {
             if let Ok(status) = &result {
                 *self.proxy_state.lock() = status.state;
@@ -880,6 +894,7 @@ impl CertificateServicePort for FakePorts {
         unused()
     }
     async fn import_pkcs12(&self, _: String) -> AppResult<CertificateOverviewViewModel> {
+        self.certificate_import_calls.fetch_add(1, Ordering::SeqCst);
         Ok(fake_certificate_overview())
     }
     async fn import_upstream_ca(&self) -> AppResult<CertificateOverviewViewModel> {
@@ -911,6 +926,7 @@ impl SettingsRepositoryPort for FakePorts {
         })
     }
     async fn save(&self, mut draft: SettingsDraft) -> AppResult<SettingsViewModel> {
+        self.settings_save_calls.fetch_add(1, Ordering::SeqCst);
         let mut settings = self.settings.lock();
         settings.revision = settings.revision.saturating_add(1);
         draft.expected_revision = Some(settings.revision);
@@ -1233,6 +1249,60 @@ async fn starting_and_stopping_block_every_rule_and_fault_write() {
             "OPERATION_IN_PROGRESS"
         );
     }
+}
+
+#[tokio::test]
+async fn lifecycle_mutations_serialize_settings_and_certificate_writes() {
+    let ports = Arc::new(FakePorts::default());
+    ports.block_start.store(true, Ordering::SeqCst);
+    let application = Arc::new(application_with_fake_ports(ports.clone()));
+
+    let starting = {
+        let application = application.clone();
+        tokio::spawn(async move { application.proxy_start().await })
+    };
+    ports.start_entered.notified().await;
+
+    let draft = ports.settings.lock().stored.clone();
+    let mut saving = {
+        let application = application.clone();
+        tokio::spawn(async move { application.settings_save(draft).await })
+    };
+    let mut importing = {
+        let application = application.clone();
+        tokio::spawn(async move { application.certificate_import_pkcs12(String::new()).await })
+    };
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut saving)
+            .await
+            .is_err(),
+        "settings save must wait for the lifecycle mutation"
+    );
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut importing)
+            .await
+            .is_err(),
+        "certificate import must wait for the lifecycle mutation"
+    );
+
+    ports.continue_start.notify_one();
+    assert_eq!(
+        starting.await.expect("start task").expect("start").state,
+        ProxyState::Running
+    );
+    saving
+        .await
+        .expect("settings task")
+        .expect("settings remain writable while running");
+    let import_error = importing
+        .await
+        .expect("certificate task")
+        .expect_err("certificate mutation requires a stopped proxy");
+
+    assert_eq!(import_error.view_model.code, "OPERATION_IN_PROGRESS");
+    assert_eq!(ports.settings_save_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(ports.certificate_import_calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]

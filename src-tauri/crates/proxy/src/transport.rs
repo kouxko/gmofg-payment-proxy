@@ -1,28 +1,30 @@
 //! Injectable TCP, HTTP/1.1 and pipeline transport.
 
 use std::convert::Infallible;
-use std::fmt::Debug;
+use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll};
 use std::time::{Duration, SystemTime};
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::{HeaderMap, Method, Request, Response, StatusCode, Uri};
-use http_body_util::{BodyExt, Full};
+use http_body_util::BodyExt;
 use hyper::body::{Body, Frame, Incoming, SizeHint};
 use hyper::client::conn::http1 as client_http1;
 use hyper::server::conn::http1 as server_http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::task::JoinSet;
+use tokio::sync::Notify;
+use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -35,6 +37,174 @@ use crate::{ErrorCode, ProxyError, Result};
 pub trait IoStream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T> IoStream for T where T: AsyncRead + AsyncWrite + Unpin + Send {}
 pub type BoxIo = Box<dyn IoStream>;
+
+#[derive(Debug, Default)]
+struct RequestWriteTracker {
+    body_complete: AtomicBool,
+    request_flushed: AtomicBool,
+    flushed: Notify,
+}
+
+impl RequestWriteTracker {
+    fn mark_body_complete(&self) {
+        self.body_complete.store(true, Ordering::Release);
+    }
+
+    fn mark_request_flushed(&self) {
+        if self.body_complete.load(Ordering::Acquire)
+            && !self.request_flushed.swap(true, Ordering::AcqRel)
+        {
+            self.flushed.notify_waiters();
+        }
+    }
+
+    async fn wait_until_flushed(&self) {
+        loop {
+            let notified = self.flushed.notified();
+            if self.request_flushed.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+}
+
+#[derive(Debug)]
+struct TrackedRequestBody {
+    data: Option<Bytes>,
+    tracker: Arc<RequestWriteTracker>,
+}
+
+impl TrackedRequestBody {
+    fn new(data: Bytes, tracker: Arc<RequestWriteTracker>) -> Self {
+        if data.is_empty() {
+            tracker.mark_body_complete();
+        }
+        Self {
+            data: (!data.is_empty()).then_some(data),
+            tracker,
+        }
+    }
+}
+
+impl Body for TrackedRequestBody {
+    type Data = Bytes;
+    type Error = Infallible;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _context: &mut Context<'_>,
+    ) -> Poll<Option<std::result::Result<Frame<Self::Data>, Self::Error>>> {
+        if let Some(data) = self.data.take() {
+            self.tracker.mark_body_complete();
+            return Poll::Ready(Some(Ok(Frame::data(data))));
+        }
+        self.tracker.mark_body_complete();
+        Poll::Ready(None)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.data.is_none()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        let remaining = self.data.as_ref().map_or(0, Bytes::len);
+        SizeHint::with_exact(u64::try_from(remaining).unwrap_or(u64::MAX))
+    }
+}
+
+struct TrackedIo {
+    inner: BoxIo,
+    tracker: Arc<RequestWriteTracker>,
+}
+
+impl Debug for TrackedIo {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TrackedIo")
+            .field("inner", &"<IoStream>")
+            .field("tracker", &self.tracker)
+            .finish()
+    }
+}
+
+impl TrackedIo {
+    fn new(inner: BoxIo, tracker: Arc<RequestWriteTracker>) -> Self {
+        Self { inner, tracker }
+    }
+}
+
+impl AsyncRead for TrackedIo {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(context, buffer)
+    }
+}
+
+impl AsyncWrite for TrackedIo {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(context, buffer)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match Pin::new(&mut self.inner).poll_flush(context) {
+            Poll::Ready(Ok(())) => {
+                self.tracker.mark_request_flushed();
+                Poll::Ready(Ok(()))
+            }
+            outcome => outcome,
+        }
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(context)
+    }
+}
+
+#[derive(Debug)]
+struct ConnectionTask {
+    handle: Option<JoinHandle<()>>,
+}
+
+impl ConnectionTask {
+    fn spawn(connection: impl Future<Output = hyper::Result<()>> + Send + 'static) -> Self {
+        let handle = tokio::spawn(async move {
+            if let Err(error) = connection.await {
+                tracing::debug!(?error, "upstream HTTP/1 connection ended");
+            }
+        });
+        Self {
+            handle: Some(handle),
+        }
+    }
+
+    async fn shutdown(mut self) {
+        let Some(handle) = self.handle.take() else {
+            return;
+        };
+        handle.abort();
+        if let Err(error) = handle.await
+            && !error.is_cancelled()
+        {
+            tracing::error!(?error, "upstream HTTP/1 connection task failed");
+        }
+    }
+}
+
+impl Drop for ConnectionTask {
+    fn drop(&mut self) {
+        if let Some(handle) = &self.handle {
+            handle.abort();
+        }
+    }
+}
 
 #[derive(Debug)]
 struct WireBody {
@@ -353,16 +523,44 @@ impl UpstreamConnector for HyperUpstreamConnector {
             ));
         }
 
-        let mut http1 = client_http1::Builder::new();
-        http1.title_case_headers(true);
-        let (mut sender, connection) = http1
-            .handshake(TokioIo::new(io))
-            .await
-            .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
-        let connection_task = tokio::spawn(connection);
-
-        timeout_stage(
+        send_http1_request(
+            io,
+            request,
             self.write_timeout,
+            self.read_timeout,
+            self.limits,
+            cancellation,
+        )
+        .await
+    }
+}
+
+enum WriteStageOutcome {
+    Flushed,
+    Response(hyper::Result<Response<Incoming>>),
+}
+
+async fn send_http1_request(
+    io: BoxIo,
+    request: ForwardRequest,
+    write_timeout: Duration,
+    read_timeout: Duration,
+    limits: MessageLimits,
+    cancellation: &CancellationToken,
+) -> Result<Message> {
+    let tracker = Arc::new(RequestWriteTracker::default());
+    let tracked_io = TrackedIo::new(io, tracker.clone());
+    let mut http1 = client_http1::Builder::new();
+    http1.title_case_headers(true);
+    let (mut sender, connection) = http1
+        .handshake(TokioIo::new(tracked_io))
+        .await
+        .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
+    let connection_task = ConnectionTask::spawn(connection);
+
+    let result = async {
+        timeout_stage(
+            write_timeout,
             cancellation,
             sender.ready(),
             ErrorCode::UpstreamWriteTimeout,
@@ -375,31 +573,56 @@ impl UpstreamConnector for HyperUpstreamConnector {
             .method(request.method)
             .uri(request.uri)
             .version(http::Version::HTTP_11)
-            .body(Full::new(request.message.body.clone()))
+            .body(TrackedRequestBody::new(
+                request.message.body.clone(),
+                tracker.clone(),
+            ))
             .map_err(|error| ProxyError::new(ErrorCode::Internal, error.to_string()))?;
         *outgoing.headers_mut() = headers;
-        let response = timeout_stage(
-            self.read_timeout,
+
+        let mut response_future = Box::pin(sender.send_request(outgoing));
+        let write_outcome = timeout_stage(
+            write_timeout,
             cancellation,
-            sender.send_request(outgoing),
-            ErrorCode::UpstreamReadTimeout,
+            async {
+                tokio::select! {
+                    response = &mut response_future => WriteStageOutcome::Response(response),
+                    () = tracker.wait_until_flushed() => WriteStageOutcome::Flushed,
+                }
+            },
+            ErrorCode::UpstreamWriteTimeout,
         )
-        .await?
+        .await?;
+        let response = match write_outcome {
+            WriteStageOutcome::Response(response) => response,
+            WriteStageOutcome::Flushed => {
+                timeout_stage(
+                    read_timeout,
+                    cancellation,
+                    &mut response_future,
+                    ErrorCode::UpstreamReadTimeout,
+                )
+                .await?
+            }
+        }
         .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
 
         let (parts, body) = response.into_parts();
         let body = timeout_stage(
-            self.read_timeout,
+            read_timeout,
             cancellation,
-            collect_limited(body, self.limits.max_body_bytes),
+            collect_limited(body, limits.max_body_bytes),
             ErrorCode::UpstreamReadTimeout,
         )
         .await??;
-        connection_task.abort();
         let message = Message::response(parts.status, &parts.headers, body);
-        message.validate(self.limits)?;
+        message.validate(limits)?;
         Ok(message)
     }
+    .await;
+
+    connection_task.shutdown().await;
+    result
 }
 
 #[derive(Debug, Clone)]

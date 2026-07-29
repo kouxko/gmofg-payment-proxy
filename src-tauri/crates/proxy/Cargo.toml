@@ -9,7 +9,6 @@ async-trait.workspace = true
 bytes.workspace = true
 encoding_rs.workspace = true
 futures-util.workspace = true
-gmofg-proxy-application = { path = "../application" }
 http.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true

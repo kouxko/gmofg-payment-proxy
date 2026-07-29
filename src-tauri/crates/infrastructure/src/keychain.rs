@@ -1,12 +1,15 @@
 //! macOS current-user secret protection backed by the login Keychain.
 
-use std::sync::Mutex;
+use std::{fmt, sync::Mutex};
 
 use ring::{
     aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey},
     rand::{SecureRandom, SystemRandom},
 };
-use security_framework::passwords::{PasswordOptions, generic_password, set_generic_password};
+use security_framework::{
+    os::macos::keychain::SecKeychain,
+    passwords::{PasswordOptions, generic_password},
+};
 use zeroize::Zeroizing;
 
 use crate::{InfrastructureError, SecretProtector};
@@ -18,6 +21,45 @@ const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
 const TAG_BYTES: usize = 16;
 const AAD: &[u8] = b"gmofg-payment-proxy/keychain-envelope/v1";
+const ERR_SEC_DUPLICATE_ITEM: i32 = -25_299;
+const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KeyStoreError {
+    NotFound,
+    Duplicate,
+    Other,
+}
+
+trait MasterKeyStore: fmt::Debug + Send + Sync {
+    fn read(&self, service: &str, account: &str) -> Result<Vec<u8>, KeyStoreError>;
+    fn add(&self, service: &str, account: &str, key: &[u8]) -> Result<(), KeyStoreError>;
+}
+
+#[derive(Debug)]
+struct SystemKeyStore;
+
+impl MasterKeyStore for SystemKeyStore {
+    fn read(&self, service: &str, account: &str) -> Result<Vec<u8>, KeyStoreError> {
+        generic_password(PasswordOptions::new_generic_password(service, account))
+            .map_err(|error| classify_status(error.code()))
+    }
+
+    fn add(&self, service: &str, account: &str, key: &[u8]) -> Result<(), KeyStoreError> {
+        SecKeychain::default()
+            .map_err(|error| classify_status(error.code()))?
+            .add_generic_password(service, account, key)
+            .map_err(|error| classify_status(error.code()))
+    }
+}
+
+const fn classify_status(status: i32) -> KeyStoreError {
+    match status {
+        ERR_SEC_ITEM_NOT_FOUND => KeyStoreError::NotFound,
+        ERR_SEC_DUPLICATE_ITEM => KeyStoreError::Duplicate,
+        _ => KeyStoreError::Other,
+    }
+}
 
 /// Uses a random AES-256-GCM master key stored in the current user's login
 /// Keychain. `SQLite` only receives authenticated ciphertext envelopes.
@@ -25,6 +67,7 @@ const AAD: &[u8] = b"gmofg-payment-proxy/keychain-envelope/v1";
 pub struct MacKeychainProtector {
     service: String,
     account: String,
+    key_store: Box<dyn MasterKeyStore>,
     key_gate: Mutex<()>,
 }
 
@@ -40,6 +83,17 @@ impl MacKeychainProtector {
         Self {
             service: service.into(),
             account: account.into(),
+            key_store: Box::new(SystemKeyStore),
+            key_gate: Mutex::new(()),
+        }
+    }
+
+    #[cfg(test)]
+    fn with_key_store(key_store: impl MasterKeyStore + 'static) -> Self {
+        Self {
+            service: DEFAULT_SERVICE.into(),
+            account: DEFAULT_ACCOUNT.into(),
+            key_store: Box::new(key_store),
             key_gate: Mutex::new(()),
         }
     }
@@ -49,20 +103,29 @@ impl MacKeychainProtector {
             .key_gate
             .lock()
             .map_err(|_| InfrastructureError::KeychainProtect)?;
-        if let Ok(key) = generic_password(PasswordOptions::new_generic_password(
-            &self.service,
-            &self.account,
-        )) {
-            return validate_key(key);
+        match self.key_store.read(&self.service, &self.account) {
+            Ok(key) => return validate_key(key),
+            Err(KeyStoreError::NotFound) => {}
+            Err(KeyStoreError::Duplicate | KeyStoreError::Other) => {
+                return Err(InfrastructureError::KeychainUnprotect);
+            }
         }
 
         let mut key = Zeroizing::new(vec![0_u8; KEY_BYTES]);
         SystemRandom::new()
             .fill(&mut key)
             .map_err(|_| InfrastructureError::KeychainProtect)?;
-        set_generic_password(&self.service, &self.account, &key)
-            .map_err(|_| InfrastructureError::KeychainProtect)?;
-        Ok(key)
+        match self.key_store.add(&self.service, &self.account, &key) {
+            Ok(()) => Ok(key),
+            Err(KeyStoreError::Duplicate) => self
+                .key_store
+                .read(&self.service, &self.account)
+                .map_err(|_| InfrastructureError::KeychainUnprotect)
+                .and_then(validate_key),
+            Err(KeyStoreError::NotFound | KeyStoreError::Other) => {
+                Err(InfrastructureError::KeychainProtect)
+            }
+        }
     }
 }
 
@@ -142,7 +205,131 @@ fn open(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
 
 #[cfg(test)]
 mod tests {
+    use std::{collections::VecDeque, sync::Arc};
+
     use super::*;
+
+    #[derive(Debug, Clone)]
+    struct FakeKeyStore {
+        state: Arc<Mutex<FakeKeyStoreState>>,
+    }
+
+    #[derive(Debug)]
+    struct FakeKeyStoreState {
+        reads: VecDeque<Result<Vec<u8>, KeyStoreError>>,
+        adds: Vec<Vec<u8>>,
+        add_result: Result<(), KeyStoreError>,
+    }
+
+    impl FakeKeyStore {
+        fn new(
+            reads: impl IntoIterator<Item = Result<Vec<u8>, KeyStoreError>>,
+            add_result: Result<(), KeyStoreError>,
+        ) -> Self {
+            Self {
+                state: Arc::new(Mutex::new(FakeKeyStoreState {
+                    reads: reads.into_iter().collect(),
+                    adds: Vec::new(),
+                    add_result,
+                })),
+            }
+        }
+
+        fn add_count(&self) -> usize {
+            self.state.lock().expect("fake key store").adds.len()
+        }
+
+        fn added_key(&self) -> Vec<u8> {
+            self.state.lock().expect("fake key store").adds[0].clone()
+        }
+
+        fn remaining_reads(&self) -> usize {
+            self.state.lock().expect("fake key store").reads.len()
+        }
+    }
+
+    impl MasterKeyStore for FakeKeyStore {
+        fn read(&self, _: &str, _: &str) -> Result<Vec<u8>, KeyStoreError> {
+            self.state
+                .lock()
+                .expect("fake key store")
+                .reads
+                .pop_front()
+                .expect("unexpected read")
+        }
+
+        fn add(&self, _: &str, _: &str, key: &[u8]) -> Result<(), KeyStoreError> {
+            let mut state = self.state.lock().expect("fake key store");
+            state.adds.push(key.to_vec());
+            state.add_result
+        }
+    }
+
+    #[test]
+    fn not_found_creates_a_new_master_key() {
+        let store = FakeKeyStore::new([Err(KeyStoreError::NotFound)], Ok(()));
+        let protector = MacKeychainProtector::with_key_store(store.clone());
+
+        let key = protector.master_key().expect("master key");
+
+        assert_eq!(store.add_count(), 1);
+        assert_eq!(key.as_slice(), store.added_key());
+        assert_eq!(key.len(), KEY_BYTES);
+    }
+
+    #[test]
+    fn ordinary_read_error_fails_closed_without_writing() {
+        let store = FakeKeyStore::new([Err(KeyStoreError::Other)], Ok(()));
+        let protector = MacKeychainProtector::with_key_store(store.clone());
+
+        assert!(matches!(
+            protector.protect(b"secret"),
+            Err(InfrastructureError::KeychainProtect)
+        ));
+        assert_eq!(store.add_count(), 0);
+    }
+
+    #[test]
+    fn existing_key_is_used_without_writing() {
+        let existing = vec![3_u8; KEY_BYTES];
+        let store = FakeKeyStore::new([Ok(existing.clone())], Ok(()));
+        let protector = MacKeychainProtector::with_key_store(store.clone());
+
+        assert_eq!(
+            protector.master_key().expect("master key").as_slice(),
+            existing
+        );
+        assert_eq!(store.add_count(), 0);
+    }
+
+    #[test]
+    fn invalid_existing_key_fails_closed_without_writing() {
+        let store = FakeKeyStore::new([Ok(vec![3_u8; KEY_BYTES - 1])], Ok(()));
+        let protector = MacKeychainProtector::with_key_store(store.clone());
+
+        assert!(matches!(
+            protector.unprotect(b"invalid envelope"),
+            Err(InfrastructureError::KeychainUnprotect)
+        ));
+        assert_eq!(store.add_count(), 0);
+    }
+
+    #[test]
+    fn duplicate_add_rereads_the_concurrently_created_key() {
+        let concurrent = vec![5_u8; KEY_BYTES];
+        let store = FakeKeyStore::new(
+            [Err(KeyStoreError::NotFound), Ok(concurrent.clone())],
+            Err(KeyStoreError::Duplicate),
+        );
+        let protector = MacKeychainProtector::with_key_store(store.clone());
+
+        assert_eq!(
+            protector.master_key().expect("master key").as_slice(),
+            concurrent
+        );
+        assert_eq!(store.add_count(), 1);
+        assert_eq!(store.remaining_reads(), 0);
+    }
 
     #[test]
     fn envelope_round_trip_is_randomized_and_authenticated() {

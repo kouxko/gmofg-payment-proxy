@@ -1,7 +1,12 @@
-//! Application use cases and IPC-facing view models.
+//! Application use cases and frontend-neutral presentation models.
 //!
-//! This crate owns the ports used by infrastructure and runtime adapters. It deliberately
-//! contains no Tauri, database, TLS, or filesystem implementation.
+//! Rust deliberately owns normalized values, Chinese status text, UI tone, permissions,
+//! pagination, validation, and stable errors so Tauri, a future TUI, and a future CLI can
+//! render one contract without reimplementing business decisions. These models are not
+//! coupled to Tauri or a specific widget toolkit.
+//!
+//! This crate also owns the ports implemented by infrastructure adapters. It contains no
+//! Tauri, database, TLS, or filesystem implementation.
 
 mod breakpoint_validation;
 mod breakpoints;

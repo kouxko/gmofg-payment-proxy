@@ -23,12 +23,11 @@ use gmofg_proxy_infrastructure::DpapiProtector;
 #[cfg(target_os = "macos")]
 use gmofg_proxy_infrastructure::MacKeychainProtector;
 use gmofg_proxy_infrastructure::{
-    InfrastructureError, InfrastructureServiceBundle, NativeFileDialog, RuntimePipelineAdapter,
-    SecretProtector, SqliteStore,
+    ApplicationProxyAdapter, InfrastructureError, InfrastructureServiceBundle, NativeFileDialog,
+    RuntimePipelineAdapter, SecretProtector, SqliteStore,
 };
 use gmofg_proxy_runtime::{
-    ApplicationProxyAdapter, ProxySupervisor, RustlsRuntimeServiceFactory, SystemClock,
-    TokioListenerBinder,
+    ProxySupervisor, RustlsRuntimeServiceFactory, SystemClock, TokioListenerBinder,
 };
 use parking_lot::Mutex;
 use thiserror::Error;

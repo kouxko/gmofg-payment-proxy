@@ -7,6 +7,7 @@ use crate::{
     AppError, AppResult, BreakpointActionOptionViewModel, BreakpointDecision,
     BreakpointDecisionKind, BreakpointDetailViewModel, BreakpointId, BreakpointState,
     BreakpointSummaryViewModel, DisabledReason, Revision, RuntimeEpoch, UiTone,
+    breakpoint_validation::validate_breakpoint_decision,
 };
 
 #[derive(Debug)]
@@ -254,92 +255,16 @@ fn validate_decision(
     detail: &BreakpointDetailViewModel,
     decision: &BreakpointDecision,
 ) -> AppResult<()> {
-    let stage_compatible = match detail.summary.stage {
-        crate::MessageStage::Request => matches!(
-            decision.kind,
-            crate::BreakpointDecisionKind::ForwardOriginal
-                | crate::BreakpointDecisionKind::ForwardModified
-                | crate::BreakpointDecisionKind::MockResponse
-                | crate::BreakpointDecisionKind::Delay
-                | crate::BreakpointDecisionKind::DisconnectBeforeUpstream
-        ),
-        crate::MessageStage::Response => !matches!(
-            decision.kind,
-            crate::BreakpointDecisionKind::MockResponse
-                | crate::BreakpointDecisionKind::DisconnectBeforeUpstream
-        ),
-        crate::MessageStage::TlsHandshake | crate::MessageStage::Terminal => false,
-    };
-    if !stage_compatible {
-        return Err(AppError::new(
+    let validation = validate_breakpoint_decision(detail, decision);
+    if validation.valid {
+        Ok(())
+    } else {
+        Err(AppError::field(
             "CONFIG_INVALID",
-            "断点决策与当前报文阶段不兼容。",
-        ));
+            "断点决策校验失败。",
+            validation.field_errors,
+        ))
     }
-    if matches!(
-        decision.kind,
-        crate::BreakpointDecisionKind::ForwardModified
-            | crate::BreakpointDecisionKind::MockResponse
-    ) && decision.message.is_none()
-    {
-        return Err(AppError::new(
-            "CONFIG_INVALID",
-            "该断点操作必须提供有效报文。",
-        ));
-    }
-    if decision.kind == crate::BreakpointDecisionKind::Delay && decision.delay_ms.is_none() {
-        return Err(AppError::new(
-            "CONFIG_INVALID",
-            "延迟操作必须提供延迟毫秒数。",
-        ));
-    }
-    if let Some(delay_ms) = decision.delay_ms
-        && delay_ms > 600_000
-    {
-        return Err(AppError::new(
-            "CONFIG_INVALID",
-            "断点延迟不能超过 600000 毫秒。",
-        ));
-    }
-    if decision.kind == crate::BreakpointDecisionKind::CustomHttpStatus
-        && !decision
-            .http_status
-            .is_some_and(|status| (100..=599).contains(&status))
-    {
-        return Err(AppError::new(
-            "CONFIG_INVALID",
-            "自定义 HTTP 状态码必须位于 100 到 599 之间。",
-        ));
-    }
-    if decision.kind == crate::BreakpointDecisionKind::WrongContentLength
-        && decision.content_length_delta.is_none_or(|delta| delta == 0)
-    {
-        return Err(AppError::new(
-            "CONFIG_INVALID",
-            "错误 Content-Length 必须提供非零差值。",
-        ));
-    }
-    if decision.kind == crate::BreakpointDecisionKind::Truncate && decision.truncate_at.is_none() {
-        return Err(AppError::new(
-            "CONFIG_INVALID",
-            "截断操作必须提供截断位置。",
-        ));
-    }
-    if let Some(at) = decision.truncate_at {
-        let body_len = decision
-            .message
-            .as_ref()
-            .unwrap_or(&detail.effective)
-            .body_bytes
-            .len();
-        if body_len == 0 || at >= body_len {
-            return Err(AppError::new(
-                "CONFIG_INVALID",
-                "截断位置必须位于 0 到 Body 长度减 1 之间。",
-            ));
-        }
-    }
-    Ok(())
 }
 
 fn apply_breakpoint_display(detail: &mut BreakpointDetailViewModel) {
@@ -400,3 +325,113 @@ fn apply_summary_display(summary: &mut BreakpointSummaryViewModel) {
 
 #[allow(dead_code)]
 fn _revision_is_contract(_: Revision) {}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    use super::*;
+    use crate::{ChannelKind, MessageContentViewModel, MessageStage};
+
+    fn message(body: &[u8]) -> MessageContentViewModel {
+        MessageContentViewModel {
+            headers: BTreeMap::new(),
+            body_text: None,
+            body_bytes: body.to_vec(),
+            json: None,
+            content_length: body.len(),
+        }
+    }
+
+    fn detail(stage: MessageStage, effective_body: &[u8]) -> BreakpointDetailViewModel {
+        let original = message(b"original");
+        BreakpointDetailViewModel {
+            summary: BreakpointSummaryViewModel {
+                breakpoint_id: Uuid::new_v4(),
+                session_id: Uuid::new_v4(),
+                runtime_epoch: Uuid::new_v4(),
+                stage,
+                title: String::new(),
+                terminal_ip: "127.0.0.1".into(),
+                channel: ChannelKind::Transaction,
+                method: "POST".into(),
+                target: "/pay".into(),
+                waiting_since: Utc::now(),
+                certificate_fingerprint_suffix: "1234".into(),
+                state: BreakpointState::Pending,
+                state_text: String::new(),
+                ui_tone: UiTone::Warning,
+                revision: 1,
+            },
+            original,
+            effective: message(effective_body),
+            can_resolve: true,
+            resolve_disabled_reason: None,
+            available_actions: Vec::new(),
+        }
+    }
+
+    fn decision(
+        detail: &BreakpointDetailViewModel,
+        kind: BreakpointDecisionKind,
+    ) -> BreakpointDecision {
+        BreakpointDecision {
+            breakpoint_id: detail.summary.breakpoint_id,
+            expected_revision: detail.summary.revision,
+            kind,
+            message: None,
+            delay_ms: None,
+            http_status: None,
+            content_length_delta: None,
+            truncate_at: None,
+        }
+    }
+
+    #[test]
+    fn coordinator_rejects_zero_and_over_limit_delay() {
+        let coordinator = BreakpointCoordinator::default();
+        let detail = detail(MessageStage::Request, b"body");
+        let epoch = detail.summary.runtime_epoch;
+        let _ticket = coordinator.register(detail.clone()).expect("register");
+
+        for delay_ms in [0, 600_001] {
+            let error = coordinator
+                .resolve(
+                    epoch,
+                    BreakpointDecision {
+                        delay_ms: Some(delay_ms),
+                        ..decision(&detail, BreakpointDecisionKind::Delay)
+                    },
+                )
+                .expect_err("invalid delay must be rejected");
+
+            assert_eq!(error.view_model.code, "CONFIG_INVALID");
+            assert!(error.view_model.field_errors.contains_key("delay_ms"));
+        }
+    }
+
+    #[test]
+    fn coordinator_validates_truncate_against_effective_message_length() {
+        let coordinator = BreakpointCoordinator::default();
+        let detail = detail(MessageStage::Response, b"abc");
+        let epoch = detail.summary.runtime_epoch;
+        let _ticket = coordinator.register(detail.clone()).expect("register");
+
+        let error = coordinator
+            .resolve(
+                epoch,
+                BreakpointDecision {
+                    message: Some(message(b"much longer replacement")),
+                    truncate_at: Some(3),
+                    ..decision(&detail, BreakpointDecisionKind::Truncate)
+                },
+            )
+            .expect_err("truncate at effective length must be rejected");
+
+        assert_eq!(error.view_model.code, "CONFIG_INVALID");
+        assert!(error.view_model.field_errors.contains_key("truncate_at"));
+    }
+}

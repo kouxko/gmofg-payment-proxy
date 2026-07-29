@@ -642,7 +642,6 @@ dependencies = [
  "bytes",
  "encoding_rs",
  "futures-util",
- "gmofg-proxy-application",
  "http",
  "http-body-util",
  "hyper",

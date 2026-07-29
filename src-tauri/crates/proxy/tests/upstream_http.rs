@@ -263,3 +263,47 @@ async fn injected_read_timeout_starts_after_the_complete_request_write() {
     );
     assert!(request.ends_with(b"\r\n\r\nraw"));
 }
+
+#[tokio::test]
+async fn backpressured_request_body_uses_write_timeout_and_releases_connection() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let mut received = Vec::new();
+        tokio::time::timeout(Duration::from_secs(2), stream.read_to_end(&mut received))
+            .await
+            .expect("timed-out client must release its upstream connection")
+            .ok();
+    });
+
+    let body = Bytes::from(vec![b'x'; 32 * 1024 * 1024]);
+    let mut headers = HeaderMap::new();
+    headers.insert("host", HeaderValue::from_static("payment-app"));
+    headers.insert(
+        "content-length",
+        HeaderValue::from_str(&body.len().to_string()).unwrap(),
+    );
+    let request = ForwardRequest {
+        method: Method::POST,
+        uri: Uri::from_static("/payment"),
+        message: Message::request(&Method::POST, &Uri::from_static("/payment"), &headers, body),
+    };
+    let connector = HyperUpstreamConnector {
+        write_timeout: Duration::from_millis(20),
+        read_timeout: Duration::from_secs(2),
+        limits: MessageLimits {
+            max_body_bytes: 32 * 1024 * 1024,
+            ..MessageLimits::default()
+        },
+        ..fault_test_connector(address)
+    };
+
+    let error = connector
+        .send(request, &[], &CancellationToken::new())
+        .await
+        .expect_err("an upstream that does not read must hit the write-stage timeout");
+    assert_eq!(error.code, "UPSTREAM_WRITE_TIMEOUT");
+    server.await.unwrap();
+}
