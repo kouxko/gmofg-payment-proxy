@@ -68,8 +68,8 @@
 - 1024 宽度使用紧凑顶栏、Drawer 导航及内部滚动；固定操作区保持可见。
 - HeroUI Tabs、Drawer、Table、Form 与 Dialog 交互均可用。
 - 页面底部不再展示无实际控制功能的内存占用状态条。
-- 统一门禁当前通过：12 个 UI contract 文件 / 30 个测试、12 个前端测试文件 /
-  30 个测试，以及 Rust workspace 118 个测试。
+- 统一门禁当前通过：12 个 UI contract 文件 / 35 个测试、12 个前端测试文件 /
+  35 个测试；Rust workspace 118 个测试沿用上一轮验证结果。
 
 ## 证据边界
 
@@ -77,5 +77,56 @@
   交互，不替代真实 Tauri 窗口、系统文件选择器、Keychain/DPAPI、证书链和网络代理验证。
 - 键盘操作覆盖了导航、Dialog 和 Escape 等主路径，不等同于完整 WCAG
   辅助技术审计。
+
+## 2026-07-29 侧栏与右侧安全边距复验
+
+### 对照目标
+
+- 源视觉真值：
+  - `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-58213799-dd86-465b-aed5-e247951fe155.png`
+  - `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-14002c3d-2b18-46b1-823c-ea66c77f96fb.png`
+- Edge 实现截图：
+  - `output/playwright/ui-spacing-2026-07-29/certificates-sidebar-hover-edge-1440.png`
+  - `output/playwright/ui-spacing-2026-07-29/faults-error-edge-1440.png`
+- 等尺寸完整页面对照：
+  `output/playwright/ui-spacing-2026-07-29/faults-error-source-vs-edge.png`
+- 等尺寸侧栏局部对照：
+  `output/playwright/ui-spacing-2026-07-29/certificates-sidebar-source-vs-edge.png`
+- 浏览器：Microsoft Edge；实现视口：1440×1024；完整页面对照按源图可见区域裁切为
+  1440×900 后等比例并排。
+- 状态：证书页选中“证书”并悬浮“模拟”；故障模拟页显示 Rust 核心不可用错误条。
+- 源图与实现中的故障模板数据不同；本轮对照只判断应用壳层、侧栏交互背景和错误条
+  边界，不把 Rust 模拟数据差异计为视觉偏差。
+
+### 比较历史与修复
+
+- 首轮 P2：侧栏按钮没有垂直间隔，悬浮态与选中态背景相接；全宽 Alert
+  叠加外边距后超出内容盒，导致“重试”贴近窗口右边。
+- 修复：
+  - 侧栏容器增加 `gap-2` 与 `px-2`，按钮统一使用容器内 `w-full`。
+  - 全局错误条改由 `px-5` 容器提供安全区，删除 Alert 自身外边距。
+- 修复后证据：
+  - Edge 几何测量显示每个侧栏按钮左右边界为 8px/87px，相邻按钮垂直间隔为
+    8px。
+  - 错误条相对主内容左右边距均为 20px。
+  - 两个验证页面均满足 `main.scrollWidth === main.clientWidth`。
+  - Edge 控制台为 0 Error、0 Warning。
+
+### 必查视觉面
+
+- 字体与层级：未修改，标题、正文、按钮字重及换行与现有 HeroUI 设计保持一致。
+- 间距与布局节奏：侧栏选中/悬浮背景已有明确分隔；错误条与右侧窗口边界保留
+  20px 安全距离。
+- 色彩与令牌：继续使用现有 `telemetry-*` 语义令牌，无新增颜色。
+- 图像与图标：继续使用 Gravity UI 图标，无替代图、手绘 SVG 或清晰度变化。
+- 文案与内容：未修改业务文案和 Rust ViewModel 内容。
+
+### 交互与回归
+
+- Edge 验证了侧栏悬浮态、选中态、错误状态与“重试”按钮可见性。
+- UI contracts：12 个文件、35 个测试全部通过。
+- 前端测试：12 个文件、35 个测试全部通过。
+- Next.js 生产静态导出成功。
+- 未发现剩余 P0、P1 或 P2 视觉问题；无需额外局部放大对照。
 
 final result: passed
