@@ -14,9 +14,9 @@ use crate::{ErrorCode, ProxyError, Result};
 pub enum FaultAction {
     RejectTls,
     DisconnectBeforeUpstream,
-    UpstreamConnectTimeout,
-    UpstreamWriteTimeout,
-    UpstreamReadTimeout,
+    UpstreamConnectTimeout(Duration),
+    UpstreamWriteTimeout(Duration),
+    UpstreamReadTimeout(Duration),
     DropResponse {
         read_upstream: bool,
     },
@@ -120,9 +120,9 @@ pub async fn apply_response_actions(
             }
             FaultAction::RejectTls
             | FaultAction::DisconnectBeforeUpstream
-            | FaultAction::UpstreamConnectTimeout
-            | FaultAction::UpstreamWriteTimeout
-            | FaultAction::UpstreamReadTimeout => {
+            | FaultAction::UpstreamConnectTimeout(_)
+            | FaultAction::UpstreamWriteTimeout(_)
+            | FaultAction::UpstreamReadTimeout(_) => {
                 return Err(ProxyError::new(
                     ErrorCode::ConfigInvalid,
                     "request-stage fault used during response processing",
@@ -172,5 +172,76 @@ mod tests {
             .await
             .is_err()
         );
+    }
+
+    // ACTION-008~010, ACTION-013, TEST-FAULT:
+    // response mutations execute in order and the final declared length is observable on wire.
+    #[tokio::test]
+    async fn response_status_body_and_declared_length_faults_compose_in_order() {
+        let source =
+            Message::response(StatusCode::OK, &HeaderMap::new(), Bytes::from_static(b"{}"));
+        let result = apply_response_actions(
+            source,
+            &[
+                FaultAction::InvalidJson {
+                    shift_jis_text: "{".into(),
+                },
+                FaultAction::CustomStatus(StatusCode::SERVICE_UNAVAILABLE),
+                FaultAction::ContentLengthOffset(5),
+            ],
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("compose response faults");
+        let ResponseDisposition::Send(message) = result else {
+            panic!("expected response to be sent");
+        };
+        assert_eq!(message.start_line, "HTTP/1.1 503 Service Unavailable");
+        assert_eq!(message.decoded_shift_jis().expect("Shift-JIS"), "{");
+        assert_eq!(message.body.len(), 1);
+        assert_eq!(message.declared_content_length(), Some(6));
+    }
+
+    // ACTION-006, ENGINE-006, TEST-FAULT:
+    // a terminal response disposition prevents every later mutation.
+    #[tokio::test]
+    async fn drop_response_short_circuits_later_response_actions() {
+        let source = Message::response(
+            StatusCode::OK,
+            &HeaderMap::new(),
+            Bytes::from_static(b"original"),
+        );
+        let result = apply_response_actions(
+            source,
+            &[
+                FaultAction::DropResponse {
+                    read_upstream: true,
+                },
+                FaultAction::InvalidJson {
+                    shift_jis_text: "{later".into(),
+                },
+            ],
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("drop response");
+        assert!(matches!(result, ResponseDisposition::Drop));
+    }
+
+    // ACTION-012, STATE-012, TEST-FAULT:
+    // delays remain cancellable and never keep shutdown waiting for the full configured duration.
+    #[tokio::test]
+    async fn delay_observes_proxy_cancellation() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        let source = Message::response(StatusCode::OK, &HeaderMap::new(), Bytes::new());
+        let error = apply_response_actions(
+            source,
+            &[FaultAction::Delay(Duration::from_mins(1))],
+            &cancellation,
+        )
+        .await
+        .expect_err("cancelled delay");
+        assert_eq!(error.code, ErrorCode::ProxyStopped.as_str());
     }
 }

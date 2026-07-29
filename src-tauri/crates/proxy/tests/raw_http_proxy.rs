@@ -18,9 +18,9 @@ use gmofg_proxy_runtime::transport::{
     ForwardRequest, HandshakePolicy, NoopPipelinePorts, PipelinePorts,
 };
 use gmofg_proxy_runtime::{
-    ApplicationProxyAdapter, ChannelRuntimeMetrics, FaultAction, ProxySupervisor, Result,
-    RuntimeMetricsProvider, RuntimeMetricsSnapshot, SystemClock, TokioListenerBinder,
-    UpstreamConnector,
+    ApplicationProxyAdapter, ChannelRuntimeMetrics, ErrorCode, FaultAction, ProxyError,
+    ProxySupervisor, Result, RuntimeMetricsProvider, RuntimeMetricsSnapshot, SystemClock,
+    TokioListenerBinder, UpstreamConnector,
 };
 use http::{HeaderMap, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -147,6 +147,53 @@ impl PipelinePorts for ResponseFaultPorts {
     }
 }
 
+#[derive(Default)]
+struct ClosedResultPorts {
+    request_actions: Vec<FaultAction>,
+    closed_code: Mutex<Option<String>>,
+    closed: Notify,
+}
+
+impl fmt::Debug for ClosedResultPorts {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.debug_struct("ClosedResultPorts").finish()
+    }
+}
+
+impl HandshakePolicy for ClosedResultPorts {}
+
+#[async_trait]
+impl PipelinePorts for ClosedResultPorts {
+    async fn request(
+        &self,
+        _context: &ConnectionContext,
+        _message: &mut Message,
+    ) -> Result<Vec<FaultAction>> {
+        Ok(self.request_actions.clone())
+    }
+
+    async fn connection_closed(&self, _context: &ConnectionContext, result: &Result<()>) {
+        *self.closed_code.lock().unwrap() =
+            result.as_ref().err().map(|error| error.code.to_owned());
+        self.closed.notify_one();
+    }
+}
+
+#[derive(Debug)]
+struct FailingConnector(ErrorCode);
+
+#[async_trait]
+impl UpstreamConnector for FailingConnector {
+    async fn send(
+        &self,
+        _request: ForwardRequest,
+        _actions: &[FaultAction],
+        _cancellation: &CancellationToken,
+    ) -> Result<Message> {
+        Err(ProxyError::new(self.0, "injected connector failure"))
+    }
+}
+
 #[derive(Debug)]
 struct RecordingFactory {
     calls: AtomicUsize,
@@ -168,9 +215,16 @@ impl RuntimeServiceFactory for RecordingFactory {
 }
 
 fn service(ports: Arc<dyn PipelinePorts>) -> ConnectionService {
+    service_with_connector(ports, Arc::new(EchoConnector))
+}
+
+fn service_with_connector(
+    ports: Arc<dyn PipelinePorts>,
+    upstream: Arc<dyn UpstreamConnector>,
+) -> ConnectionService {
     ConnectionService {
         acceptor: Arc::new(TestPlaintextAcceptor),
-        upstream: Arc::new(EchoConnector),
+        upstream,
         ports,
         clock: Arc::new(SystemClock),
         limits: MessageLimits::default(),
@@ -223,6 +277,47 @@ async fn exchange(address: SocketAddr, body: &[u8]) -> Vec<u8> {
         ));
     }
     received
+}
+
+#[tokio::test]
+async fn request_handler_preserves_stable_fault_error_codes_on_connection_close() {
+    let cases = [
+        (
+            vec![FaultAction::DisconnectBeforeUpstream],
+            None,
+            ErrorCode::ClientDisconnected.as_str(),
+        ),
+        (
+            Vec::new(),
+            Some(ErrorCode::UpstreamConnectTimeout),
+            ErrorCode::UpstreamConnectTimeout.as_str(),
+        ),
+    ];
+
+    for (request_actions, connector_error, expected_code) in cases {
+        let ports = Arc::new(ClosedResultPorts {
+            request_actions,
+            ..ClosedResultPorts::default()
+        });
+        let upstream: Arc<dyn UpstreamConnector> = connector_error.map_or_else(
+            || Arc::new(EchoConnector) as Arc<dyn UpstreamConnector>,
+            |code| Arc::new(FailingConnector(code)) as Arc<dyn UpstreamConnector>,
+        );
+        let supervisor = ProxySupervisor::new(
+            Arc::new(TokioListenerBinder),
+            service_with_connector(ports.clone(), upstream),
+        );
+        let started = supervisor.start(config()).await.unwrap();
+        let _response = exchange(started.listeners[&Channel::Dll], b"request").await;
+        tokio::time::timeout(Duration::from_secs(1), ports.closed.notified())
+            .await
+            .expect("connection closed callback");
+        assert_eq!(
+            ports.closed_code.lock().unwrap().as_deref(),
+            Some(expected_code)
+        );
+        supervisor.stop().await.unwrap();
+    }
 }
 
 #[tokio::test]

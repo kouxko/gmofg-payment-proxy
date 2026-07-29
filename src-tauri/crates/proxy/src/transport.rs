@@ -43,6 +43,27 @@ struct WireBody {
     finish_delay: Option<Pin<Box<tokio::time::Sleep>>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IntentionalWireFault {
+    IncorrectContentLength,
+    TruncatedResponse,
+}
+
+impl IntentionalWireFault {
+    fn error(self) -> ProxyError {
+        match self {
+            Self::IncorrectContentLength => ProxyError::new(
+                ErrorCode::IncorrectContentLength,
+                "response sent with intentionally incorrect content-length",
+            ),
+            Self::TruncatedResponse => ProxyError::new(
+                ErrorCode::TruncatedResponse,
+                "response intentionally truncated before completion",
+            ),
+        }
+    }
+}
+
 impl WireBody {
     fn new(data: Bytes, claimed_length: usize) -> Self {
         let finish_delay = (data.len() != claimed_length)
@@ -254,17 +275,7 @@ impl UpstreamConnector for HyperUpstreamConnector {
         actions: &[FaultAction],
         cancellation: &CancellationToken,
     ) -> Result<Message> {
-        if actions
-            .iter()
-            .any(|action| matches!(action, FaultAction::UpstreamConnectTimeout))
-        {
-            wait_for_timeout(
-                self.connect_timeout,
-                cancellation,
-                ErrorCode::UpstreamConnectTimeout,
-            )
-            .await?;
-        }
+        wait_for_injected_timeout(actions, InjectedTimeoutStage::Connect, cancellation).await?;
 
         request
             .message
@@ -290,6 +301,58 @@ impl UpstreamConnector for HyperUpstreamConnector {
             .await??;
         }
 
+        wait_for_injected_timeout(actions, InjectedTimeoutStage::Write, cancellation).await?;
+
+        let close_after_request_write = actions.iter().any(|action| {
+            matches!(
+                action,
+                FaultAction::DropResponse {
+                    read_upstream: false
+                }
+            )
+        });
+        let inject_read_timeout = injected_timeout(actions, InjectedTimeoutStage::Read).is_some();
+        if close_after_request_write || inject_read_timeout {
+            let wire_request = request.message.reconstruct_title_case_headers();
+            timeout_stage(
+                self.write_timeout,
+                cancellation,
+                io.write_all(&wire_request),
+                ErrorCode::UpstreamWriteTimeout,
+            )
+            .await?
+            .map_err(|error| ProxyError::io("write injected upstream request", &error))?;
+            timeout_stage(
+                self.write_timeout,
+                cancellation,
+                io.flush(),
+                ErrorCode::UpstreamWriteTimeout,
+            )
+            .await?
+            .map_err(|error| ProxyError::io("flush injected upstream request", &error))?;
+
+            if close_after_request_write {
+                timeout_stage(
+                    self.write_timeout,
+                    cancellation,
+                    io.shutdown(),
+                    ErrorCode::UpstreamWriteTimeout,
+                )
+                .await?
+                .map_err(|error| ProxyError::io("close injected upstream request", &error))?;
+                return Err(ProxyError::new(
+                    ErrorCode::ClientDisconnected,
+                    "upstream request intentionally closed after complete write",
+                ));
+            }
+
+            wait_for_injected_timeout(actions, InjectedTimeoutStage::Read, cancellation).await?;
+            return Err(ProxyError::new(
+                ErrorCode::Internal,
+                "injected read timeout unexpectedly completed",
+            ));
+        }
+
         let mut http1 = client_http1::Builder::new();
         http1.title_case_headers(true);
         let (mut sender, connection) = http1
@@ -298,18 +361,6 @@ impl UpstreamConnector for HyperUpstreamConnector {
             .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
         let connection_task = tokio::spawn(connection);
 
-        if actions
-            .iter()
-            .any(|action| matches!(action, FaultAction::UpstreamWriteTimeout))
-        {
-            connection_task.abort();
-            wait_for_timeout(
-                self.write_timeout,
-                cancellation,
-                ErrorCode::UpstreamWriteTimeout,
-            )
-            .await?;
-        }
         timeout_stage(
             self.write_timeout,
             cancellation,
@@ -335,33 +386,6 @@ impl UpstreamConnector for HyperUpstreamConnector {
         )
         .await?
         .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
-
-        if actions
-            .iter()
-            .any(|action| matches!(action, FaultAction::UpstreamReadTimeout))
-        {
-            connection_task.abort();
-            wait_for_timeout(
-                self.read_timeout,
-                cancellation,
-                ErrorCode::UpstreamReadTimeout,
-            )
-            .await?;
-        }
-        if actions.iter().any(|action| {
-            matches!(
-                action,
-                FaultAction::DropResponse {
-                    read_upstream: false
-                }
-            )
-        }) {
-            connection_task.abort();
-            return Err(ProxyError::new(
-                ErrorCode::ClientDisconnected,
-                "upstream response intentionally abandoned",
-            ));
-        }
 
         let (parts, body) = response.into_parts();
         let body = timeout_stage(
@@ -459,16 +483,32 @@ impl ConnectionService {
         let request_cancel = cancellation.clone();
         let raw_tail = Arc::new(StdMutex::new(None::<Bytes>));
         let handler_tail = Arc::clone(&raw_tail);
+        let intentional_wire_fault = Arc::new(StdMutex::new(None::<IntentionalWireFault>));
+        let handler_wire_fault = Arc::clone(&intentional_wire_fault);
+        let handler_error = Arc::new(StdMutex::new(None::<ProxyError>));
+        let service_error = Arc::clone(&handler_error);
         let handler = service_fn(move |request| {
             let service = service.clone();
             let context = context.clone();
             let cancellation = request_cancel.clone();
             let raw_tail = Arc::clone(&handler_tail);
+            let intentional_wire_fault = Arc::clone(&handler_wire_fault);
+            let service_error = Arc::clone(&service_error);
             async move {
                 service
-                    .handle_request(request, &context, &cancellation, &raw_tail)
+                    .handle_request(
+                        request,
+                        &context,
+                        &cancellation,
+                        &raw_tail,
+                        &intentional_wire_fault,
+                    )
                     .await
-                    .map_err(|error| io::Error::other(error.to_string()))
+                    .map_err(|error| {
+                        let wire_error = io::Error::other(error.to_string());
+                        *service_error.lock().expect("handler error mutex poisoned") = Some(error);
+                        wire_error
+                    })
             }
         });
         let connection = server_http1::Builder::new()
@@ -482,19 +522,57 @@ impl ConnectionService {
                 "proxy stopped while connection was active",
             )),
             result = connection => {
-                let parts = result.map_err(|error| {
-                    ProxyError::new(ErrorCode::Io, format!("HTTP/1.1 connection failed: {error}"))
-                })?;
+                let parts = match result {
+                    Ok(parts) => parts,
+                    Err(error) => {
+                        let original = handler_error
+                            .lock()
+                            .expect("handler error mutex poisoned")
+                            .take();
+                        if let Some(original) = original {
+                            return Err(original);
+                        }
+                        if let Some(fault) = *intentional_wire_fault
+                            .lock()
+                            .expect("intentional wire fault mutex poisoned")
+                        {
+                            return Err(fault.error());
+                        }
+                        return Err(ProxyError::new(
+                            ErrorCode::Io,
+                            format!("HTTP/1.1 connection failed: {error}"),
+                        ));
+                    }
+                };
                 let mut io = parts.io.into_inner();
                 let tail = raw_tail.lock().expect("raw tail mutex poisoned").take();
-                if let Some(tail) = tail {
-                    io.write_all(&tail).await.map_err(|error| {
-                        ProxyError::io("write short content-length tail", &error)
-                    })?;
+                if let Some(tail) = tail
+                    && let Err(error) = io.write_all(&tail).await
+                {
+                    if let Some(fault) = *intentional_wire_fault
+                        .lock()
+                        .expect("intentional wire fault mutex poisoned")
+                    {
+                        return Err(fault.error());
+                    }
+                    return Err(ProxyError::io("write short content-length tail", &error));
                 }
-                io.shutdown().await.map_err(|error| {
-                    ProxyError::io("shutdown client connection", &error)
-                })
+                if let Err(error) = io.shutdown().await {
+                    if let Some(fault) = *intentional_wire_fault
+                        .lock()
+                        .expect("intentional wire fault mutex poisoned")
+                    {
+                        return Err(fault.error());
+                    }
+                    return Err(ProxyError::io("shutdown client connection", &error));
+                }
+                if let Some(fault) = *intentional_wire_fault
+                    .lock()
+                    .expect("intentional wire fault mutex poisoned")
+                {
+                    return Err(fault.error());
+                }
+                Ok(())
             },
         }
     }
@@ -505,6 +583,7 @@ impl ConnectionService {
         context: &ConnectionContext,
         cancellation: &CancellationToken,
         raw_tail: &StdMutex<Option<Bytes>>,
+        intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
     ) -> Result<Response<WireBody>> {
         let (parts, body) = request.into_parts();
         validate_headers(&parts.headers, self.limits)?;
@@ -542,7 +621,11 @@ impl ConnectionService {
                     shift_jis_body,
                 } => {
                     let message = fault::mock_response(*status, headers, shift_jis_body)?;
-                    return response_from_disposition(ResponseDisposition::Send(message), raw_tail);
+                    return response_from_disposition(
+                        ResponseDisposition::Send(message),
+                        raw_tail,
+                        intentional_wire_fault,
+                    );
                 }
                 FaultAction::RejectTls => {
                     return Err(ProxyError::new(
@@ -580,18 +663,19 @@ impl ConnectionService {
         let disposition =
             fault::apply_response_actions(upstream_response, &response_actions, cancellation)
                 .await?;
-        response_from_disposition(disposition, raw_tail)
+        response_from_disposition(disposition, raw_tail, intentional_wire_fault)
     }
 }
 
 fn response_from_disposition(
     disposition: ResponseDisposition,
     raw_tail: &StdMutex<Option<Bytes>>,
+    intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
 ) -> Result<Response<WireBody>> {
-    let (message, body) = match disposition {
+    let (message, body, disposition_fault) = match disposition {
         ResponseDisposition::Send(message) => {
             let body = message.body.clone();
-            (message, body)
+            (message, body, None)
         }
         ResponseDisposition::Drop => {
             return Err(ProxyError::new(
@@ -601,13 +685,21 @@ fn response_from_disposition(
         }
         ResponseDisposition::Truncate { message, bytes } => {
             let body = message.body.slice(..bytes);
-            (message, body)
+            (message, body, Some(IntentionalWireFault::TruncatedResponse))
         }
     };
     let status = parse_response_status(&message.start_line)?;
     let claimed_length = message
         .declared_content_length()
         .unwrap_or(message.body.len());
+    let disposition_fault = disposition_fault.or_else(|| {
+        (claimed_length != body.len()).then_some(IntentionalWireFault::IncorrectContentLength)
+    });
+    if let Some(fault) = disposition_fault {
+        *intentional_wire_fault
+            .lock()
+            .expect("intentional wire fault mutex poisoned") = Some(fault);
+    }
     let body = if claimed_length < body.len() {
         let tail = body.slice(claimed_length..);
         *raw_tail.lock().expect("raw tail mutex poisoned") = Some(tail);
@@ -711,5 +803,178 @@ async fn wait_for_timeout(
             code,
             format!("injected timeout after {} ms", timeout.as_millis()),
         )),
+    }
+}
+
+#[derive(Clone, Copy)]
+enum InjectedTimeoutStage {
+    Connect,
+    Write,
+    Read,
+}
+
+impl InjectedTimeoutStage {
+    const fn error_code(self) -> ErrorCode {
+        match self {
+            Self::Connect => ErrorCode::UpstreamConnectTimeout,
+            Self::Write => ErrorCode::UpstreamWriteTimeout,
+            Self::Read => ErrorCode::UpstreamReadTimeout,
+        }
+    }
+}
+
+fn injected_timeout(actions: &[FaultAction], stage: InjectedTimeoutStage) -> Option<Duration> {
+    actions.iter().find_map(|action| match (stage, action) {
+        (InjectedTimeoutStage::Connect, FaultAction::UpstreamConnectTimeout(timeout))
+        | (InjectedTimeoutStage::Write, FaultAction::UpstreamWriteTimeout(timeout))
+        | (InjectedTimeoutStage::Read, FaultAction::UpstreamReadTimeout(timeout)) => Some(*timeout),
+        _ => None,
+    })
+}
+
+async fn wait_for_injected_timeout(
+    actions: &[FaultAction],
+    stage: InjectedTimeoutStage,
+    cancellation: &CancellationToken,
+) -> Result<()> {
+    let Some(timeout) = injected_timeout(actions, stage) else {
+        return Ok(());
+    };
+    wait_for_timeout(timeout, cancellation, stage.error_code()).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn intentional_content_length_and_truncation_faults_have_stable_classifications() {
+        let cases = [
+            (
+                ResponseDisposition::Send({
+                    let mut message = Message::response(
+                        StatusCode::OK,
+                        &HeaderMap::new(),
+                        Bytes::from_static(b"body"),
+                    );
+                    message.set_content_length(24);
+                    message
+                }),
+                IntentionalWireFault::IncorrectContentLength,
+                ErrorCode::IncorrectContentLength,
+            ),
+            (
+                ResponseDisposition::Send({
+                    let mut message = Message::response(
+                        StatusCode::OK,
+                        &HeaderMap::new(),
+                        Bytes::from_static(b"body"),
+                    );
+                    message.set_content_length(2);
+                    message
+                }),
+                IntentionalWireFault::IncorrectContentLength,
+                ErrorCode::IncorrectContentLength,
+            ),
+            (
+                ResponseDisposition::Truncate {
+                    message: Message::response(
+                        StatusCode::OK,
+                        &HeaderMap::new(),
+                        Bytes::from_static(b"body"),
+                    ),
+                    bytes: 2,
+                },
+                IntentionalWireFault::TruncatedResponse,
+                ErrorCode::TruncatedResponse,
+            ),
+        ];
+
+        for (disposition, expected_fault, expected_code) in cases {
+            let raw_tail = StdMutex::new(None);
+            let fault = StdMutex::new(None);
+            response_from_disposition(disposition, &raw_tail, &fault)
+                .expect("intentional wire response should be constructed");
+            let actual = fault
+                .lock()
+                .expect("intentional wire fault mutex poisoned")
+                .expect("intentional wire fault marker");
+            assert_eq!(actual, expected_fault);
+            assert_eq!(actual.error().code, expected_code.as_str());
+        }
+    }
+
+    // ACTION-003~005, TEST-FAULT:
+    // the runtime must wait for each rule's exact duration, not the global connector timeout.
+    #[tokio::test]
+    async fn injected_timeouts_use_the_duration_carried_by_each_rule_action() {
+        let cases = [
+            (
+                InjectedTimeoutStage::Connect,
+                FaultAction::UpstreamConnectTimeout(Duration::from_millis(2)),
+                ErrorCode::UpstreamConnectTimeout,
+                2,
+            ),
+            (
+                InjectedTimeoutStage::Write,
+                FaultAction::UpstreamWriteTimeout(Duration::from_millis(3)),
+                ErrorCode::UpstreamWriteTimeout,
+                3,
+            ),
+            (
+                InjectedTimeoutStage::Read,
+                FaultAction::UpstreamReadTimeout(Duration::from_millis(4)),
+                ErrorCode::UpstreamReadTimeout,
+                4,
+            ),
+        ];
+
+        for (stage, action, code, milliseconds) in cases {
+            let error = wait_for_injected_timeout(&[action], stage, &CancellationToken::new())
+                .await
+                .expect_err("configured timeout must terminate with its stage error");
+            assert_eq!(error.code, code.as_str());
+            assert_eq!(
+                error.message,
+                format!("injected timeout after {milliseconds} ms")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn injected_timeout_only_applies_to_its_matching_stage() {
+        let action = FaultAction::UpstreamReadTimeout(Duration::from_mins(1));
+        wait_for_injected_timeout(
+            &[action],
+            InjectedTimeoutStage::Connect,
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("read timeout must not affect connect stage");
+    }
+
+    #[tokio::test]
+    async fn injected_timeouts_stop_immediately_when_proxy_is_cancelled() {
+        let cancellation = CancellationToken::new();
+        cancellation.cancel();
+        for (stage, action) in [
+            (
+                InjectedTimeoutStage::Connect,
+                FaultAction::UpstreamConnectTimeout(Duration::from_mins(1)),
+            ),
+            (
+                InjectedTimeoutStage::Write,
+                FaultAction::UpstreamWriteTimeout(Duration::from_mins(1)),
+            ),
+            (
+                InjectedTimeoutStage::Read,
+                FaultAction::UpstreamReadTimeout(Duration::from_mins(1)),
+            ),
+        ] {
+            let error = wait_for_injected_timeout(&[action], stage, &cancellation)
+                .await
+                .expect_err("proxy stop must cancel every injected timeout");
+            assert_eq!(error.code, ErrorCode::ProxyStopped.as_str());
+        }
     }
 }
