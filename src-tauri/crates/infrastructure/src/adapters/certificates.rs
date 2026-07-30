@@ -1,4 +1,4 @@
-use std::{fmt, net::IpAddr, sync::Arc};
+use std::{collections::BTreeMap, fmt, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
@@ -29,8 +29,9 @@ const ROOT: &str = "local_root_ca";
 const LEAF: &str = "proxy_leaf";
 const PKCS12: &str = "shared_pkcs12";
 const UPSTREAM_CA: &str = "upstream_ca";
+const MATERIAL_KINDS: [&str; 4] = [ROOT, LEAF, PKCS12, UPSTREAM_CA];
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct ProtectedMaterial {
     revision: u64,
     certificate_der: Vec<u8>,
@@ -41,6 +42,11 @@ struct ProtectedMaterial {
     sans: Vec<String>,
     not_before: String,
     not_after: String,
+}
+
+struct MaterialSnapshot {
+    revision: u64,
+    materials: BTreeMap<String, ProtectedMaterial>,
 }
 
 impl fmt::Debug for ProtectedMaterial {
@@ -101,18 +107,34 @@ impl CertificateServiceAdapter {
         }
     }
 
-    fn load(&self, kind: &str) -> AppResult<Option<ProtectedMaterial>> {
-        let Some(record) = infra(self.store.load_certificate_material(kind))? else {
-            return Ok(None);
-        };
-        let plaintext = Zeroizing::new(
-            self.protector
-                .unprotect(&record.protected_blob)
-                .map_err(app_error)?,
-        );
-        serde_json::from_slice(&plaintext)
-            .map(Some)
-            .map_err(|error| json_error("受保护证书材料无效", error))
+    fn load_snapshot(&self, kinds: &[&str]) -> AppResult<MaterialSnapshot> {
+        let snapshot = infra(self.store.load_certificate_materials_snapshot(kinds))?;
+        let mut materials = BTreeMap::new();
+        for record in snapshot.records {
+            let plaintext = Zeroizing::new(
+                self.protector
+                    .unprotect(&record.protected_blob)
+                    .map_err(app_error)?,
+            );
+            let material: ProtectedMaterial = serde_json::from_slice(&plaintext)
+                .map_err(|error| json_error("受保护证书材料无效", error))?;
+            if record
+                .metadata
+                .get("revision")
+                .and_then(serde_json::Value::as_u64)
+                != Some(material.revision)
+            {
+                return Err(AppError::new(
+                    "CERTIFICATE_INVALID",
+                    "证书材料与元数据修订号不一致。",
+                ));
+            }
+            materials.insert(record.kind, material);
+        }
+        Ok(MaterialSnapshot {
+            revision: snapshot.revision,
+            materials,
+        })
     }
 
     fn record(
@@ -138,24 +160,23 @@ impl CertificateServiceAdapter {
         })
     }
 
-    fn put(&self, kind: &str, material: &ProtectedMaterial) -> AppResult<()> {
-        let record = self.record(kind, material)?;
-        infra(self.store.put_certificate_material(&record))
+    fn commit_snapshot(&self, mut snapshot: MaterialSnapshot) -> AppResult<u64> {
+        let next_revision = snapshot.revision.saturating_add(1);
+        let records = snapshot
+            .materials
+            .iter_mut()
+            .map(|(kind, material)| {
+                material.revision = next_revision;
+                self.record(kind, material)
+            })
+            .collect::<AppResult<Vec<_>>>()?;
+        infra(
+            self.store
+                .compare_and_swap_certificate_materials(snapshot.revision, &records),
+        )
     }
 
-    fn revision_locked(&self) -> AppResult<u64> {
-        [ROOT, LEAF, PKCS12, UPSTREAM_CA]
-            .into_iter()
-            .map(|kind| {
-                self.load(kind)
-                    .map(|value| value.map_or(0, |value| value.revision))
-            })
-            .try_fold(0, |current, revision| {
-                revision.map(|revision| current.max(revision))
-            })
-    }
-
-    fn generate_locked(&self, sans: &[String], revision: u64) -> AppResult<()> {
+    fn generate_locked(&self, sans: &[String], mut snapshot: MaterialSnapshot) -> AppResult<u64> {
         let root = self
             .certificates
             .generate_root_ca("GMO-FG Payment Proxy Root")
@@ -165,13 +186,17 @@ impl CertificateServiceAdapter {
             .certificates
             .generate_leaf(&root.certificate_der, &root.private_key_pkcs8_der, &request)
             .map_err(app_error)?;
-        let root = from_bundle(revision, &root);
-        let leaf = from_bundle(revision, &leaf);
-        let records = [self.record(ROOT, &root)?, self.record(LEAF, &leaf)?];
-        infra(self.store.put_certificate_materials_atomically(&records))
+        snapshot
+            .materials
+            .insert(ROOT.into(), from_bundle(snapshot.revision, &root));
+        snapshot
+            .materials
+            .insert(LEAF.into(), from_bundle(snapshot.revision, &leaf));
+        self.commit_snapshot(snapshot)
     }
 
     fn overview_locked(&self) -> AppResult<CertificateOverviewViewModel> {
+        let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
         let materials = [
             (ROOT, "本地 Root CA", "签发 Proxy 服务端证书"),
             (LEAF, "Proxy 叶子证书", "App → Proxy TLS 服务端身份"),
@@ -183,15 +208,12 @@ impl CertificateServiceAdapter {
             (UPSTREAM_CA, "上游 CA", "验证 GMO-FG Server"),
         ]
         .into_iter()
-        .map(|(kind, display, usage)| {
-            self.load(kind)
-                .map(|material| (kind, display, usage, material))
-        })
-        .collect::<AppResult<Vec<_>>>()?;
+        .map(|(kind, display, usage)| (kind, display, usage, snapshot.materials.get(kind).cloned()))
+        .collect::<Vec<_>>();
         let errors = self.configuration_errors(&materials);
         let ready = errors.is_empty();
         Ok(CertificateOverviewViewModel {
-            revision: self.revision_locked()?,
+            revision: snapshot.revision,
             ready,
             status_text: if ready {
                 "证书已就绪".into()
@@ -290,20 +312,21 @@ impl CertificateServicePort for CertificateServiceAdapter {
 
     async fn generate_ca(&self, sans: Vec<String>) -> AppResult<CertificateOverviewViewModel> {
         let _guard = self.material_lock.lock();
-        if self.load(ROOT)?.is_some() || self.load(LEAF)?.is_some() {
+        let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
+        if snapshot.materials.contains_key(ROOT) || snapshot.materials.contains_key(LEAF) {
             return Err(AppError::new(
                 "CERTIFICATE_ALREADY_EXISTS",
                 "本地 Root CA 或 Proxy 叶子证书已存在，请使用“重置 CA”重新生成。",
             ));
         }
-        let revision = self.revision_locked()?.saturating_add(1);
-        self.generate_locked(&sans, revision)?;
+        self.generate_locked(&sans, snapshot)?;
         self.overview_locked()
     }
 
     async fn export_ca(&self) -> AppResult<OperationResultViewModel> {
         let _guard = self.material_lock.lock();
-        let Some(root) = self.load(ROOT)? else {
+        let snapshot = self.load_snapshot(&[ROOT])?;
+        let Some(root) = snapshot.materials.get(ROOT) else {
             return Err(AppError::new(
                 "CERTIFICATE_NOT_READY",
                 "本地 Root CA 尚未生成。",
@@ -328,17 +351,23 @@ impl CertificateServicePort for CertificateServiceAdapter {
         sans: Vec<String>,
     ) -> AppResult<CertificateOverviewViewModel> {
         let _guard = self.material_lock.lock();
-        let revision = self.revision_locked()?;
-        verify_revision(revision, expected_revision)?;
-        let root = self
-            .load(ROOT)?
+        let mut snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
+        verify_revision(snapshot.revision, expected_revision)?;
+        let root = snapshot
+            .materials
+            .get(ROOT)
+            .cloned()
             .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "本地 Root CA 尚未生成。"))?;
         let request = leaf_request(&sans)?;
         let leaf = self
             .certificates
             .generate_leaf(&root.certificate_der, &root.private_key_der, &request)
             .map_err(app_error)?;
-        self.put(LEAF, &from_bundle(revision.saturating_add(1), &leaf))?;
+        snapshot.materials.insert(
+            LEAF.into(),
+            from_bundle(snapshot.revision.saturating_add(1), &leaf),
+        );
+        self.commit_snapshot(snapshot)?;
         self.overview_locked()
     }
 
@@ -353,11 +382,11 @@ impl CertificateServicePort for CertificateServiceAdapter {
             .certificates
             .parse_pkcs12(&bytes, &password)
             .map_err(app_error)?;
-        let revision = self.revision_locked()?.saturating_add(1);
-        self.put(
-            PKCS12,
-            &ProtectedMaterial {
-                revision,
+        let mut snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
+        snapshot.materials.insert(
+            PKCS12.into(),
+            ProtectedMaterial {
+                revision: snapshot.revision.saturating_add(1),
                 certificate_der: parsed.certificate_der.clone(),
                 private_key_der: parsed.private_key_pkcs8_der.to_vec(),
                 chain_der: parsed.chain_der.clone(),
@@ -367,7 +396,8 @@ impl CertificateServicePort for CertificateServiceAdapter {
                 not_before: parsed.metadata.not_before.clone(),
                 not_after: parsed.metadata.not_after.clone(),
             },
-        )?;
+        );
+        self.commit_snapshot(snapshot)?;
         self.overview_locked()
     }
 
@@ -380,11 +410,11 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let metadata = self.certificates.parse_ca(&bytes).map_err(app_error)?;
         let certificate_der =
             parse_x509_pem(&bytes).map_or_else(|_| bytes.clone(), |(_, pem)| pem.contents);
-        let revision = self.revision_locked()?.saturating_add(1);
-        self.put(
-            UPSTREAM_CA,
-            &ProtectedMaterial {
-                revision,
+        let mut snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
+        snapshot.materials.insert(
+            UPSTREAM_CA.into(),
+            ProtectedMaterial {
+                revision: snapshot.revision.saturating_add(1),
                 certificate_der,
                 private_key_der: Vec::new(),
                 chain_der: Vec::new(),
@@ -394,16 +424,18 @@ impl CertificateServicePort for CertificateServiceAdapter {
                 not_before: metadata.not_before,
                 not_after: metadata.not_after,
             },
-        )?;
+        );
+        self.commit_snapshot(snapshot)?;
         self.overview_locked()
     }
 
     async fn validate(&self) -> AppResult<CertificateValidationViewModel> {
         let _guard = self.material_lock.lock();
-        let materials = [ROOT, LEAF, PKCS12, UPSTREAM_CA]
+        let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
+        let materials = MATERIAL_KINDS
             .into_iter()
-            .map(|kind| self.load(kind).map(|material| (kind, "", "", material)))
-            .collect::<AppResult<Vec<_>>>()?;
+            .map(|kind| (kind, "", "", snapshot.materials.get(kind).cloned()))
+            .collect::<Vec<_>>();
         let field_errors = self.configuration_errors(&materials);
         Ok(FieldValidationViewModel {
             valid: field_errors.is_empty(),
@@ -414,10 +446,11 @@ impl CertificateServicePort for CertificateServiceAdapter {
 
     async fn reset_ca(&self, expected_revision: u64) -> AppResult<CertificateOverviewViewModel> {
         let _guard = self.material_lock.lock();
-        let revision = self.revision_locked()?;
-        verify_revision(revision, expected_revision)?;
-        let sans = self
-            .load(LEAF)?
+        let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
+        verify_revision(snapshot.revision, expected_revision)?;
+        let sans = snapshot
+            .materials
+            .get(LEAF)
             .map(|leaf| {
                 leaf.sans
                     .iter()
@@ -429,7 +462,7 @@ impl CertificateServicePort for CertificateServiceAdapter {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        self.generate_locked(&sans, revision.saturating_add(1))?;
+        self.generate_locked(&sans, snapshot)?;
         self.overview_locked()
     }
 }
@@ -441,13 +474,16 @@ impl TlsMaterialProvider for CertificateServiceAdapter {
         leaf_sans: &[String],
     ) -> gmofg_proxy_runtime::Result<TlsMaterialSnapshot> {
         let _guard = self.material_lock.lock();
-        let leaf = self.load(LEAF).map_err(proxy_app_error)?.ok_or_else(|| {
+        let snapshot = self
+            .load_snapshot(&MATERIAL_KINDS)
+            .map_err(proxy_app_error)?;
+        let leaf = snapshot.materials.get(LEAF).ok_or_else(|| {
             ProxyError::new(
                 ProxyErrorCode::CertificateNotReady,
                 "Proxy leaf certificate missing",
             )
         })?;
-        let root = self.load(ROOT).map_err(proxy_app_error)?.ok_or_else(|| {
+        let root = snapshot.materials.get(ROOT).ok_or_else(|| {
             ProxyError::new(ProxyErrorCode::CertificateNotReady, "local Root CA missing")
         })?;
         self.certificates
@@ -461,15 +497,12 @@ impl TlsMaterialProvider for CertificateServiceAdapter {
                 )
             })
             .map_err(proxy_infra_error)?;
-        let shared = self.load(PKCS12).map_err(proxy_app_error)?.ok_or_else(|| {
+        let shared = snapshot.materials.get(PKCS12).ok_or_else(|| {
             ProxyError::new(ProxyErrorCode::CertificateNotReady, "shared PKCS12 missing")
         })?;
-        let upstream = self
-            .load(UPSTREAM_CA)
-            .map_err(proxy_app_error)?
-            .ok_or_else(|| {
-                ProxyError::new(ProxyErrorCode::CertificateNotReady, "upstream CA missing")
-            })?;
+        let upstream = snapshot.materials.get(UPSTREAM_CA).ok_or_else(|| {
+            ProxyError::new(ProxyErrorCode::CertificateNotReady, "upstream CA missing")
+        })?;
         let app_client_ca_der = shared
             .chain_der
             .last()
@@ -739,12 +772,15 @@ mod tests {
     async fn tls_snapshot_preserves_keychain_unprotect_error_code() {
         let store = Arc::new(SqliteStore::in_memory().expect("store"));
         store
-            .put_certificate_material(&CertificateMaterialRecord {
-                kind: LEAF.into(),
-                protected_blob: vec![1],
-                metadata: serde_json::json!({}),
-                updated_at: Utc::now(),
-            })
+            .compare_and_swap_certificate_materials(
+                0,
+                &[CertificateMaterialRecord {
+                    kind: LEAF.into(),
+                    protected_blob: vec![1],
+                    metadata: serde_json::json!({"revision": 1}),
+                    updated_at: Utc::now(),
+                }],
+            )
             .expect("seed protected material");
         let adapter = CertificateServiceAdapter::new(
             store,
@@ -766,12 +802,15 @@ mod tests {
     async fn tls_snapshot_distinguishes_corrupt_material_from_missing_material() {
         let store = Arc::new(SqliteStore::in_memory().expect("store"));
         store
-            .put_certificate_material(&CertificateMaterialRecord {
-                kind: LEAF.into(),
-                protected_blob: b"not-json".iter().map(|byte| byte ^ 0xA5).collect(),
-                metadata: serde_json::json!({}),
-                updated_at: Utc::now(),
-            })
+            .compare_and_swap_certificate_materials(
+                0,
+                &[CertificateMaterialRecord {
+                    kind: LEAF.into(),
+                    protected_blob: b"not-json".iter().map(|byte| byte ^ 0xA5).collect(),
+                    metadata: serde_json::json!({"revision": 1}),
+                    updated_at: Utc::now(),
+                }],
+            )
             .expect("seed corrupt protected material");
         let dialog = Arc::new(QueueDialog {
             open: ParkingMutex::new(VecDeque::new()),
@@ -858,9 +897,17 @@ mod tests {
         assert!(!debug.contains("password"));
         assert!(!debug.contains("PRIVATE"));
 
-        let mut leaf = adapter.load(LEAF).expect("load leaf").expect("leaf");
-        leaf.private_key_der = client_private_key;
-        adapter.put(LEAF, &leaf).expect("replace leaf");
+        let mut material_snapshot = adapter
+            .load_snapshot(&MATERIAL_KINDS)
+            .expect("load materials");
+        material_snapshot
+            .materials
+            .get_mut(LEAF)
+            .expect("leaf")
+            .private_key_der = client_private_key;
+        adapter
+            .commit_snapshot(material_snapshot)
+            .expect("replace leaf");
         assert!(!adapter.overview().await.expect("overview").ready);
         assert!(!adapter.validate().await.expect("validate").valid);
     }

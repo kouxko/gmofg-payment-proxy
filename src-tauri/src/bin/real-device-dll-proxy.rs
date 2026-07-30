@@ -386,6 +386,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         admission: ConnectionAdmission::new(DEFAULT_MAX_CONNECTIONS).map_err(proxy_error)?,
         limits,
         read_timeout: Duration::from_secs(90),
+        write_timeout: Duration::from_secs(30),
     };
     let supervisor = ProxySupervisor::new(Arc::new(TokioListenerBinder), service);
     let snapshot = supervisor

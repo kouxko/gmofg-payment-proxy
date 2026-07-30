@@ -442,7 +442,9 @@ impl Application {
             RuleMatchFieldKind::TerminalIp => RuleMatchField::TerminalIp,
             RuleMatchFieldKind::CertificateFingerprint => RuleMatchField::CertificateFingerprint,
             RuleMatchFieldKind::PathOrRequestType => RuleMatchField::PathOrRequestType,
-            RuleMatchFieldKind::JsonPath => RuleMatchField::JsonPath { path: "$".into() },
+            RuleMatchFieldKind::JsonPath => RuleMatchField::JsonPath {
+                path: "$.field".into(),
+            },
         }
     }
 

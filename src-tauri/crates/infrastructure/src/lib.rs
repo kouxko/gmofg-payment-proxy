@@ -28,4 +28,7 @@ pub use error::{InfrastructureError, InfrastructureErrorCode};
 pub use files::{AtomicFileExporter, ExportOutcome};
 #[cfg(target_os = "macos")]
 pub use keychain::MacKeychainProtector;
-pub use sqlite::{CertificateMaterialRecord, RuleRecord, SqliteStore, StoredSettings};
+pub use sqlite::{
+    CertificateMaterialRecord, CertificateMaterialSnapshot, RuleCollectionSnapshot, RuleRecord,
+    SqliteStore, StoredSettings,
+};

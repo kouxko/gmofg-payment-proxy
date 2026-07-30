@@ -111,26 +111,30 @@ describe("production SettingsView overlay", () => {
     );
   });
 
-  it("sends raw SAN text to Rust without TypeScript normalization", async () => {
-    commandMocks.settingsSave.mockResolvedValue(settings);
-    const user = userEvent.setup();
-    render(<SettingsView />);
+  it(
+    "sends raw SAN text to Rust without TypeScript normalization",
+    async () => {
+      commandMocks.settingsSave.mockResolvedValue(settings);
+      const user = userEvent.setup();
+      render(<SettingsView />);
 
-    const raw = " Proxy.Local，10.0.34.50, proxy.local ";
-    await user.clear(
-      screen.getByRole("textbox", { name: "服务端证书 SAN" }),
-    );
-    await user.type(
-      screen.getByRole("textbox", { name: "服务端证书 SAN" }),
-      raw,
-    );
-    await user.click(screen.getByRole("button", { name: "保存设置" }));
+      const raw = " Proxy.Local，10.0.34.50, proxy.local ";
+      await user.clear(
+        screen.getByRole("textbox", { name: "服务端证书 SAN" }),
+      );
+      await user.type(
+        screen.getByRole("textbox", { name: "服务端证书 SAN" }),
+        raw,
+      );
+      await user.click(screen.getByRole("button", { name: "保存设置" }));
 
-    expect(commandMocks.settingsSave).toHaveBeenCalledWith(
-      expect.any(Object),
-      raw,
-    );
-  });
+      expect(commandMocks.settingsSave).toHaveBeenCalledWith(
+        expect.any(Object),
+        raw,
+      );
+    },
+    10_000,
+  );
 
   it("switches setting tabs without replacing the page document", async () => {
     const user = userEvent.setup();

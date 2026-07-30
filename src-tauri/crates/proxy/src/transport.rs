@@ -45,6 +45,30 @@ struct RequestWriteTracker {
     flushed: Notify,
 }
 
+#[derive(Debug, Default)]
+struct ResponseWriteTracker {
+    response_ready: AtomicBool,
+    ready: Notify,
+}
+
+impl ResponseWriteTracker {
+    fn mark_response_ready(&self) {
+        if !self.response_ready.swap(true, Ordering::AcqRel) {
+            self.ready.notify_waiters();
+        }
+    }
+
+    async fn wait_until_ready(&self) {
+        loop {
+            let notified = self.ready.notified();
+            if self.response_ready.load(Ordering::Acquire) {
+                return;
+            }
+            notified.await;
+        }
+    }
+}
+
 impl RequestWriteTracker {
     fn mark_body_complete(&self) {
         self.body_complete.store(true, Ordering::Release);
@@ -635,6 +659,8 @@ pub struct ConnectionService {
     pub limits: MessageLimits,
     /// Covers the inbound TLS handshake and the Payment App request body.
     pub read_timeout: Duration,
+    /// Covers each response write stage to the Payment App.
+    pub write_timeout: Duration,
 }
 
 /// Shared per-epoch admission control. Both channel listeners clone the same
@@ -759,6 +785,8 @@ impl ConnectionService {
         let handler_wire_fault = Arc::clone(&intentional_wire_fault);
         let handler_error = Arc::new(StdMutex::new(None::<ProxyError>));
         let service_error = Arc::clone(&handler_error);
+        let response_write = Arc::new(ResponseWriteTracker::default());
+        let handler_response_write = Arc::clone(&response_write);
         let handler = service_fn(move |request| {
             let service = service.clone();
             let context = context.clone();
@@ -766,8 +794,9 @@ impl ConnectionService {
             let raw_tail = Arc::clone(&handler_tail);
             let intentional_wire_fault = Arc::clone(&handler_wire_fault);
             let service_error = Arc::clone(&service_error);
+            let response_write = Arc::clone(&handler_response_write);
             async move {
-                service
+                let result = service
                     .handle_request(
                         request,
                         &context,
@@ -775,68 +804,55 @@ impl ConnectionService {
                         &raw_tail,
                         &intentional_wire_fault,
                     )
-                    .await
-                    .map_err(|error| {
-                        let wire_error = io::Error::other(error.to_string());
-                        *service_error.lock().expect("handler error mutex poisoned") = Some(error);
-                        wire_error
-                    })
+                    .await;
+                if result.is_ok() {
+                    response_write.mark_response_ready();
+                }
+                result.map_err(|error| {
+                    let wire_error = io::Error::other(error.to_string());
+                    *service_error.lock().expect("handler error mutex poisoned") = Some(error);
+                    wire_error
+                })
             }
         });
-        let connection = server_http1::Builder::new()
-            .keep_alive(false)
-            .max_headers(self.limits.max_headers)
-            .serve_connection(TokioIo::new(io), handler)
-            .without_shutdown();
-        tokio::select! {
-            () = cancellation.cancelled() => Err(ProxyError::new(
-                ErrorCode::ProxyStopped,
-                "proxy stopped while connection was active",
-            )),
-            result = connection => {
-                let parts = match result {
-                    Ok(parts) => parts,
-                    Err(error) => {
-                        let original = handler_error
-                            .lock()
-                            .expect("handler error mutex poisoned")
-                            .take();
-                        if let Some(original) = original {
-                            return Err(original);
-                        }
-                        if let Some(fault) = *intentional_wire_fault
-                            .lock()
-                            .expect("intentional wire fault mutex poisoned")
-                        {
-                            return Err(fault.error());
-                        }
-                        return Err(ProxyError::new(
-                            ErrorCode::Io,
-                            format!("HTTP/1.1 connection failed: {error}"),
-                        ));
-                    }
-                };
-                let mut io = parts.io.into_inner();
-                let tail = raw_tail.lock().expect("raw tail mutex poisoned").take();
-                if let Some(tail) = tail
-                    && let Err(error) = io.write_all(&tail).await
-                {
-                    if let Some(fault) = *intentional_wire_fault
-                        .lock()
-                        .expect("intentional wire fault mutex poisoned")
-                    {
-                        return Err(fault.error());
-                    }
-                    return Err(ProxyError::io("write short content-length tail", &error));
-                }
-                if let Err(error) = io.shutdown().await {
-                    if let Some(fault) = *intentional_wire_fault
-                        .lock()
-                        .expect("intentional wire fault mutex poisoned")
-                    {
-                        return Err(fault.error());
-                    }
-                    return Err(ProxyError::io("shutdown client connection", &error));
+        let mut connection = Box::pin(
+            server_http1::Builder::new()
+                .keep_alive(false)
+                .max_headers(self.limits.max_headers)
+                .serve_connection(TokioIo::new(io), handler)
+                .without_shutdown(),
+        );
+        let initial = tokio::select! {
+            () = cancellation.cancelled() => {
+                return Err(ProxyError::new(
+                    ErrorCode::ProxyStopped,
+                    "proxy stopped while connection was active",
+                ));
+            }
+            result = &mut connection => Some(result),
+            () = response_write.wait_until_ready() => None,
+        };
+        let result = match initial {
+            Some(result) => result,
+            None => {
+                timeout_stage(
+                    self.write_timeout,
+                    &cancellation,
+                    &mut connection,
+                    ErrorCode::Io,
+                )
+                .await?
+            }
+        };
+        let parts = match result {
+            Ok(parts) => parts,
+            Err(error) => {
+                let original = handler_error
+                    .lock()
+                    .expect("handler error mutex poisoned")
+                    .take();
+                if let Some(original) = original {
+                    return Err(original);
                 }
                 if let Some(fault) = *intentional_wire_fault
                     .lock()
@@ -844,9 +860,22 @@ impl ConnectionService {
                 {
                     return Err(fault.error());
                 }
-                Ok(())
-            },
-        }
+                return Err(ProxyError::new(
+                    ErrorCode::Io,
+                    format!("HTTP/1.1 connection failed: {error}"),
+                ));
+            }
+        };
+        let mut io = parts.io.into_inner();
+        let tail = raw_tail.lock().expect("raw tail mutex poisoned").take();
+        finish_downstream_write(
+            &mut io,
+            tail,
+            self.write_timeout,
+            &cancellation,
+            &intentional_wire_fault,
+        )
+        .await
     }
 
     async fn handle_request(
@@ -937,6 +966,65 @@ impl ConnectionService {
                 .await?;
         response_from_disposition(disposition, raw_tail, intentional_wire_fault)
     }
+}
+
+async fn finish_downstream_write(
+    io: &mut BoxIo,
+    tail: Option<Bytes>,
+    write_timeout: Duration,
+    cancellation: &CancellationToken,
+    intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
+) -> Result<()> {
+    if let Some(tail) = tail
+        && let Err(error) = timeout_stage(
+            write_timeout,
+            cancellation,
+            io.write_all(&tail),
+            ErrorCode::Io,
+        )
+        .await
+        .and_then(|result| {
+            result.map_err(|error| ProxyError::io("write short content-length tail", &error))
+        })
+    {
+        return Err(intentional_fault_or(error, intentional_wire_fault));
+    }
+    if let Err(error) = timeout_stage(write_timeout, cancellation, io.flush(), ErrorCode::Io)
+        .await
+        .and_then(|result| {
+            result.map_err(|error| ProxyError::io("flush client connection", &error))
+        })
+    {
+        return Err(intentional_fault_or(error, intentional_wire_fault));
+    }
+    if let Err(error) = timeout_stage(write_timeout, cancellation, io.shutdown(), ErrorCode::Io)
+        .await
+        .and_then(|result| {
+            result.map_err(|error| ProxyError::io("shutdown client connection", &error))
+        })
+    {
+        return Err(intentional_fault_or(error, intentional_wire_fault));
+    }
+    if let Some(fault) = *intentional_wire_fault
+        .lock()
+        .expect("intentional wire fault mutex poisoned")
+    {
+        return Err(fault.error());
+    }
+    Ok(())
+}
+
+fn intentional_fault_or(
+    error: ProxyError,
+    intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
+) -> ProxyError {
+    if error.code == ErrorCode::ProxyStopped.as_str() {
+        return error;
+    }
+    intentional_wire_fault
+        .lock()
+        .expect("intentional wire fault mutex poisoned")
+        .map_or(error, IntentionalWireFault::error)
 }
 
 fn response_from_disposition(
@@ -1118,6 +1206,131 @@ async fn wait_for_injected_timeout(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    #[derive(Debug)]
+    struct FixedResponseConnector {
+        body: Bytes,
+        declared_content_length: Option<usize>,
+    }
+
+    #[derive(Debug)]
+    struct UnusedAcceptor;
+
+    #[derive(Debug, Clone, Copy)]
+    enum PendingWriteStage {
+        Tail,
+        Flush,
+        Shutdown,
+    }
+
+    #[derive(Debug)]
+    struct PendingWriteIo(PendingWriteStage);
+
+    impl AsyncRead for PendingWriteIo {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _context: &mut Context<'_>,
+            _buffer: &mut ReadBuf<'_>,
+        ) -> Poll<io::Result<()>> {
+            Poll::Pending
+        }
+    }
+
+    impl AsyncWrite for PendingWriteIo {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            _context: &mut Context<'_>,
+            buffer: &[u8],
+        ) -> Poll<io::Result<usize>> {
+            match self.0 {
+                PendingWriteStage::Tail => Poll::Pending,
+                PendingWriteStage::Flush | PendingWriteStage::Shutdown => {
+                    Poll::Ready(Ok(buffer.len()))
+                }
+            }
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<io::Result<()>> {
+            match self.0 {
+                PendingWriteStage::Flush => Poll::Pending,
+                PendingWriteStage::Tail | PendingWriteStage::Shutdown => Poll::Ready(Ok(())),
+            }
+        }
+
+        fn poll_shutdown(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<io::Result<()>> {
+            match self.0 {
+                PendingWriteStage::Tail | PendingWriteStage::Flush => Poll::Ready(Ok(())),
+                PendingWriteStage::Shutdown => Poll::Pending,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl ConnectionAcceptor for UnusedAcceptor {
+        async fn accept(
+            &self,
+            _io: BoxIo,
+            _context: &ConnectionContext,
+        ) -> Result<AcceptedConnection> {
+            unreachable!("run_connection_inner does not invoke the acceptor")
+        }
+    }
+
+    #[async_trait]
+    impl UpstreamConnector for FixedResponseConnector {
+        async fn send(
+            &self,
+            _request: ForwardRequest,
+            _actions: &[FaultAction],
+            _cancellation: &CancellationToken,
+        ) -> Result<Message> {
+            let mut message =
+                Message::response(StatusCode::OK, &HeaderMap::new(), self.body.clone());
+            if let Some(length) = self.declared_content_length {
+                message.set_content_length(length);
+            }
+            Ok(message)
+        }
+    }
+
+    fn downstream_test_service(
+        body: Bytes,
+        declared_content_length: Option<usize>,
+        write_timeout: Duration,
+    ) -> ConnectionService {
+        ConnectionService {
+            acceptor: Arc::new(UnusedAcceptor),
+            upstream: Arc::new(FixedResponseConnector {
+                body,
+                declared_content_length,
+            }),
+            ports: Arc::new(NoopPipelinePorts),
+            clock: Arc::new(SystemClock),
+            admission: ConnectionAdmission::new(1).expect("valid test capacity"),
+            limits: MessageLimits::default(),
+            read_timeout: Duration::from_secs(1),
+            write_timeout,
+        }
+    }
+
+    fn downstream_test_context() -> ConnectionContext {
+        ConnectionContext {
+            runtime_epoch: Uuid::new_v4(),
+            connection_id: Uuid::new_v4(),
+            channel: Channel::Dll,
+            peer_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 12_345),
+            accepted_at: SystemTime::now(),
+            tls_peer: None,
+        }
+    }
+
+    async fn write_test_request(client: &mut tokio::io::DuplexStream) {
+        client
+            .write_all(b"POST / HTTP/1.1\r\nHost: proxy.test\r\nContent-Length: 0\r\n\r\n")
+            .await
+            .expect("write test request");
+    }
 
     #[tokio::test]
     async fn intentional_content_length_and_truncation_faults_have_stable_classifications() {
@@ -1247,6 +1460,126 @@ mod tests {
                 .await
                 .expect_err("proxy stop must cancel every injected timeout");
             assert_eq!(error.code, ErrorCode::ProxyStopped.as_str());
+        }
+    }
+
+    #[tokio::test]
+    async fn payment_app_response_write_respects_write_timeout() {
+        let (mut client, server) = tokio::io::duplex(128);
+        write_test_request(&mut client).await;
+        let service = downstream_test_service(
+            Bytes::from(vec![b'x'; 4 * 1024]),
+            None,
+            Duration::from_millis(10),
+        );
+
+        let error = tokio::time::timeout(
+            Duration::from_secs(1),
+            service.run_connection_inner(
+                Box::new(server),
+                &downstream_test_context(),
+                CancellationToken::new(),
+            ),
+        )
+        .await
+        .expect("downstream write must terminate within the configured timeout")
+        .expect_err("a Payment App that does not read must time out");
+
+        assert_eq!(error.code, ErrorCode::Io.as_str());
+        assert!(error.message.contains("timed out after 10 ms"));
+    }
+
+    #[tokio::test]
+    async fn payment_app_response_write_stops_when_supervisor_cancels() {
+        let (mut client, server) = tokio::io::duplex(128);
+        write_test_request(&mut client).await;
+        let service = downstream_test_service(
+            Bytes::from(vec![b'x'; 4 * 1024]),
+            None,
+            Duration::from_secs(30),
+        );
+        let cancellation = CancellationToken::new();
+        let stop = cancellation.clone();
+        let context = downstream_test_context();
+
+        let ((), result) = tokio::join!(
+            async move {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                stop.cancel();
+            },
+            service.run_connection_inner(Box::new(server), &context, cancellation,)
+        );
+        let error = result.expect_err("supervisor cancellation must stop the downstream write");
+
+        assert_eq!(error.code, ErrorCode::ProxyStopped.as_str());
+    }
+
+    #[tokio::test]
+    async fn incorrect_content_length_tail_write_is_bounded() {
+        let (mut client, server) = tokio::io::duplex(256);
+        write_test_request(&mut client).await;
+        let service = downstream_test_service(
+            Bytes::from(vec![b'x'; 4 * 1024]),
+            Some(1),
+            Duration::from_millis(10),
+        );
+
+        let error = tokio::time::timeout(
+            Duration::from_secs(1),
+            service.run_connection_inner(
+                Box::new(server),
+                &downstream_test_context(),
+                CancellationToken::new(),
+            ),
+        )
+        .await
+        .expect("incorrect content-length tail write must be bounded")
+        .expect_err("intentional incorrect content-length remains a terminal fault");
+
+        assert_eq!(error.code, ErrorCode::IncorrectContentLength.as_str());
+    }
+
+    #[tokio::test]
+    async fn incorrect_content_length_tail_write_stops_when_supervisor_cancels() {
+        let mut io: BoxIo = Box::new(PendingWriteIo(PendingWriteStage::Tail));
+        let cancellation = CancellationToken::new();
+        let stop = cancellation.clone();
+        let intentional_fault = StdMutex::new(Some(IntentionalWireFault::IncorrectContentLength));
+
+        let ((), result) = tokio::join!(
+            async move {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+                stop.cancel();
+            },
+            finish_downstream_write(
+                &mut io,
+                Some(Bytes::from_static(b"tail")),
+                Duration::from_secs(30),
+                &cancellation,
+                &intentional_fault,
+            )
+        );
+        let error = result.expect_err("supervisor cancellation must stop the raw tail write");
+
+        assert_eq!(error.code, ErrorCode::ProxyStopped.as_str());
+    }
+
+    #[tokio::test]
+    async fn payment_app_flush_and_shutdown_each_respect_write_timeout() {
+        for stage in [PendingWriteStage::Flush, PendingWriteStage::Shutdown] {
+            let mut io: BoxIo = Box::new(PendingWriteIo(stage));
+            let error = finish_downstream_write(
+                &mut io,
+                None,
+                Duration::from_millis(5),
+                &CancellationToken::new(),
+                &StdMutex::new(None),
+            )
+            .await
+            .expect_err("a stalled downstream write stage must time out");
+
+            assert_eq!(error.code, ErrorCode::Io.as_str());
+            assert!(error.message.contains("timed out after 5 ms"));
         }
     }
 }

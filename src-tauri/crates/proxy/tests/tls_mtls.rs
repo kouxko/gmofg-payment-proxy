@@ -332,6 +332,7 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
         admission: ConnectionAdmission::new(4).unwrap(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(30),
+        write_timeout: Duration::from_secs(30),
     };
     let supervisor = ProxySupervisor::new(Arc::new(TokioListenerBinder), service);
     let started = supervisor
@@ -397,6 +398,7 @@ async fn silent_inbound_tls_handshake_times_out_and_releases_its_permit() {
         admission: ConnectionAdmission::new(1).unwrap(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_millis(30),
+        write_timeout: Duration::from_secs(30),
     };
     let supervisor = ProxySupervisor::new(Arc::new(TokioListenerBinder), service);
     let started = supervisor

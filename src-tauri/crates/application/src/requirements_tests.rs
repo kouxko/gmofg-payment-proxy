@@ -1339,7 +1339,9 @@ fn rule_editor_primitives_and_byte_parser_are_owned_by_rust() {
     ));
     assert_eq!(
         application.rule_match_field_draft(RuleMatchFieldKind::JsonPath),
-        RuleMatchField::JsonPath { path: "$".into() }
+        RuleMatchField::JsonPath {
+            path: "$.field".into()
+        }
     );
     assert_eq!(
         application.rule_match_operator_draft(RuleMatchOperatorKind::Regex),

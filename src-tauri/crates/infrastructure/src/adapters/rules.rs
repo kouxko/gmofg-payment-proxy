@@ -52,30 +52,43 @@ impl RuleRepositoryAdapter {
     }
 
     fn load(&self) -> AppResult<Vec<Rule>> {
-        infra(self.store.list_rules())?
+        let snapshot = infra(self.store.load_rules_snapshot())?;
+        Self::parse_records(snapshot.records)
+    }
+
+    fn parse_records(records: Vec<RuleRecord>) -> AppResult<Vec<Rule>> {
+        records
             .into_iter()
             .map(|record| {
-                serde_json::from_value(record.value)
-                    .map_err(|error| json_error("持久化规则无效", error))
+                let rule: Rule = serde_json::from_value(record.value)
+                    .map_err(|error| json_error("持久化规则无效", error))?;
+                validate_persisted_rule(&rule).map_err(AppError::from)?;
+                Ok(rule)
             })
             .collect()
     }
 
-    fn persist(&self, rules: &[Rule]) -> AppResult<()> {
+    fn record(rule: &Rule) -> AppResult<RuleRecord> {
+        Ok(RuleRecord {
+            id: rule.id.as_uuid(),
+            revision: rule.revision.get(),
+            enabled: rule.enabled,
+            value: serde_json::to_value(rule)
+                .map_err(|error| json_error("规则序列化失败", error))?,
+            updated_at: Utc::now(),
+        })
+    }
+
+    fn replace_all(&self, expected_collection_revision: u64, rules: &[Rule]) -> AppResult<()> {
         let records = rules
             .iter()
-            .map(|rule| {
-                Ok(RuleRecord {
-                    id: rule.id.as_uuid(),
-                    revision: rule.revision.get(),
-                    enabled: rule.enabled,
-                    value: serde_json::to_value(rule)
-                        .map_err(|error| json_error("规则序列化失败", error))?,
-                    updated_at: Utc::now(),
-                })
-            })
+            .map(Self::record)
             .collect::<AppResult<Vec<_>>>()?;
-        infra(self.store.replace_rules_atomically(&records))
+        infra(
+            self.store
+                .replace_rules_atomically(expected_collection_revision, &records),
+        )
+        .map(|_| ())
     }
 
     fn save_locked(&self, draft: &AppRuleDraft) -> AppResult<Rule> {
@@ -110,11 +123,17 @@ impl RuleRepositoryAdapter {
                 .cloned()
                 .expect("domain engine retained saved rule")
         } else {
-            let rule = Rule::create(domain_draft).map_err(AppError::from)?;
-            rules.push(rule.clone());
-            rule
+            Rule::create(domain_draft).map_err(AppError::from)?
         };
-        self.persist(&rules)?;
+        let record = Self::record(&changed)?;
+        if draft.rule_id.is_some() {
+            let expected_revision = draft.expected_revision.ok_or_else(|| {
+                AppError::new("REVISION_CONFLICT", "修改规则必须提供当前 revision。")
+            })?;
+            infra(self.store.compare_and_swap_rule(expected_revision, &record))?;
+        } else {
+            infra(self.store.insert_rule(&record))?;
+        }
         Ok(changed)
     }
 
@@ -144,20 +163,28 @@ impl RuleRepositoryAdapter {
             .find(|rule| rule.id == domain_id)
             .cloned()
             .expect("domain engine retained toggled rule");
-        self.persist(&rules)?;
+        infra(
+            self.store
+                .compare_and_swap_rule(expected_revision, &Self::record(&changed)?),
+        )?;
         Ok(changed)
     }
 
     pub fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
         let _operation = self.operations.lock();
-        self.load().map(RuleRuntimeSnapshot::new)
+        let snapshot = infra(self.store.load_rules_snapshot())?;
+        let rules = Self::parse_records(snapshot.records)?;
+        Ok(RuleRuntimeSnapshot::with_collection_revision(
+            snapshot.revision,
+            rules,
+        ))
     }
 
     pub fn commit_runtime_snapshot(
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
-    ) -> AppResult<()> {
+    ) -> AppResult<u64> {
         let _operation = self.operations.lock();
         if RuleSetSignature::from_rules(&snapshot.rules) != snapshot.signature {
             return Err(AppError::new(
@@ -172,15 +199,18 @@ impl RuleRepositoryAdapter {
             .iter()
             .map(|entry| (entry.rule_id.as_uuid(), entry.revision.get()))
             .collect::<Vec<_>>();
-        infra(
-            self.store
-                .compare_and_swap_rule_runtime(&signature, &updates),
-        )
+        infra(self.store.compare_and_swap_rule_runtime(
+            snapshot.collection_revision,
+            &signature,
+            &updates,
+        ))
     }
 
     pub fn reset_runtime_hit_metadata(&self) -> AppResult<()> {
         let _operation = self.operations.lock();
-        let rules = self.load()?;
+        let stored = infra(self.store.load_rules_snapshot())?;
+        let collection_revision = stored.revision;
+        let rules = Self::parse_records(stored.records)?;
         let signature = RuleSetSignature::from_rules(&rules);
         let updates = rules
             .iter()
@@ -200,9 +230,26 @@ impl RuleRepositoryAdapter {
             .collect::<Vec<_>>();
         infra(
             self.store
-                .compare_and_swap_rule_runtime(&signature, &updates),
+                .compare_and_swap_rule_runtime(collection_revision, &signature, &updates),
         )
+        .map(|_| ())
     }
+}
+
+fn validate_persisted_rule(rule: &Rule) -> Result<(), gmofg_proxy_domain::DomainError> {
+    validate_rule_draft(&RuleDraft {
+        expected_revision: Some(rule.revision),
+        name: rule.name.clone(),
+        description: rule.description.clone(),
+        enabled: rule.enabled,
+        priority: rule.priority,
+        created_order: rule.created_order,
+        channel: rule.channel,
+        stage: rule.stage,
+        conditions: rule.conditions.clone(),
+        actions: rule.actions.clone(),
+        one_shot: rule.one_shot,
+    })
 }
 
 #[async_trait]
@@ -316,16 +363,15 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         expected_revision: u64,
     ) -> AppResult<OperationResultViewModel> {
         let _operation = self.operations.lock();
-        let mut rules = self.load()?;
-        let index = rules
-            .iter()
-            .position(|rule| rule.id.as_uuid() == rule_id)
+        let rule = self
+            .load()?
+            .into_iter()
+            .find(|rule| rule.id.as_uuid() == rule_id)
             .ok_or_else(|| AppError::new("RULE_INVALID", "规则不存在。"))?;
-        if rules[index].revision.get() != expected_revision {
+        if rule.revision.get() != expected_revision {
             return Err(AppError::new("REVISION_CONFLICT", "规则已被其他操作更新。"));
         }
-        rules.remove(index);
-        self.persist(&rules)?;
+        infra(self.store.delete_rule(rule_id, expected_revision))?;
         Ok(OperationResultViewModel::success("规则已删除。"))
     }
 
@@ -339,6 +385,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
     }
 
     async fn import(&self) -> AppResult<OperationResultViewModel> {
+        let expected_collection_revision = infra(self.store.load_rules_snapshot())?.revision;
         let Some(path) = self.dialog.choose_open_file("rules_json")? else {
             return Ok(cancelled("已取消规则导入。"));
         };
@@ -346,23 +393,10 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         let rules: Vec<Rule> = serde_json::from_slice(&bytes)
             .map_err(|error| json_error("规则导入文件无效", error))?;
         for rule in &rules {
-            validate_rule_draft(&RuleDraft {
-                expected_revision: Some(rule.revision),
-                name: rule.name.clone(),
-                description: rule.description.clone(),
-                enabled: rule.enabled,
-                priority: rule.priority,
-                created_order: rule.created_order,
-                channel: rule.channel,
-                stage: rule.stage,
-                conditions: rule.conditions.clone(),
-                actions: rule.actions.clone(),
-                one_shot: rule.one_shot,
-            })
-            .map_err(AppError::from)?;
+            validate_persisted_rule(rule).map_err(AppError::from)?;
         }
         let _operation = self.operations.lock();
-        self.persist(&rules)?;
+        self.replace_all(expected_collection_revision, &rules)?;
         Ok(OperationResultViewModel::success(format!(
             "已导入 {} 条规则。",
             rules.len()
@@ -800,6 +834,24 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct MutatingOpenDialog {
+        path: PathBuf,
+        store: Arc<SqliteStore>,
+        concurrent_rule: RuleRecord,
+    }
+
+    impl NativeFileDialog for MutatingOpenDialog {
+        fn choose_open_file(&self, _: &str) -> AppResult<Option<PathBuf>> {
+            infra(self.store.insert_rule(&self.concurrent_rule))?;
+            Ok(Some(self.path.clone()))
+        }
+
+        fn choose_save_file(&self, _: &str) -> AppResult<Option<FileSelection>> {
+            Ok(None)
+        }
+    }
+
     fn request_delay_draft(name: &str, one_shot: bool) -> AppRuleDraft {
         AppRuleDraft {
             rule_id: None,
@@ -932,6 +984,54 @@ mod tests {
             .await
             .expect("stored winner");
         assert_eq!(stored.summary.revision, 2);
+    }
+
+    #[tokio::test]
+    async fn import_rejects_cross_process_changes_instead_of_replacing_them() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let database = directory.path().join("rules.sqlite3");
+        let import = directory.path().join("rules.json");
+        std::fs::write(&import, b"[]").expect("import file");
+        let primary_store = Arc::new(SqliteStore::open(&database).expect("primary store"));
+        let secondary_store = Arc::new(SqliteStore::open(&database).expect("secondary store"));
+
+        let existing = Rule::create(
+            to_domain_draft(&request_delay_draft("existing", false), 1).expect("existing draft"),
+        )
+        .expect("existing rule");
+        primary_store
+            .insert_rule(&RuleRepositoryAdapter::record(&existing).expect("existing record"))
+            .expect("seed existing");
+        let concurrent = Rule::create(
+            to_domain_draft(&request_delay_draft("concurrent", false), 2)
+                .expect("concurrent draft"),
+        )
+        .expect("concurrent rule");
+        let adapter = RuleRepositoryAdapter::new(
+            Arc::clone(&primary_store),
+            Arc::new(MutatingOpenDialog {
+                path: import,
+                store: secondary_store,
+                concurrent_rule: RuleRepositoryAdapter::record(&concurrent)
+                    .expect("concurrent record"),
+            }),
+            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+        );
+
+        let error = adapter.import().await.expect_err("stale import");
+        assert_eq!(error.view_model.code, "REVISION_CONFLICT");
+        let stored = primary_store.list_rules().expect("stored rules");
+        assert_eq!(stored.len(), 2);
+        assert!(
+            stored
+                .iter()
+                .any(|record| record.id == existing.id.as_uuid())
+        );
+        assert!(
+            stored
+                .iter()
+                .any(|record| record.id == concurrent.id.as_uuid())
+        );
     }
 
     #[tokio::test]
