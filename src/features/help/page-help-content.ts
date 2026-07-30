@@ -116,7 +116,6 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
           "“终端 IP”用于多设备同时测试时只查看指定终端。",
           "“通道”选择交易、DLL 或全部通道；“阶段”选择请求、响应或终态。",
           "“结果”可输入 success、timeout 等结果文本；“规则 ID”只看命中特定规则的事件。",
-          "启用“仅看异常”可快速排除成功流量，定位超时、TLS、规则终止或内部错误。",
           "每次修改筛选条件都会回到第 1 页，并由 Rust 重新执行筛选、排序和总数计算。",
         ],
         notes: [

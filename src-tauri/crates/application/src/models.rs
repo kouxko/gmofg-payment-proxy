@@ -205,7 +205,6 @@ pub struct CaptureQuery {
     pub stage: Option<MessageStage>,
     pub result: Option<String>,
     pub rule_id: Option<RuleId>,
-    pub exceptions_only: bool,
     /// When present, returns only retained rows newer than this cursor.
     pub after_event_id: Option<u64>,
     pub sort: CaptureSort,

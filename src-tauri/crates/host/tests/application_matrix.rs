@@ -112,7 +112,6 @@ fn capture_query() -> CaptureQuery {
         stage: None,
         result: None,
         rule_id: None,
-        exceptions_only: false,
         after_event_id: None,
         sort: CaptureSort::OccurredAt,
         direction: SortDirection::Desc,

@@ -77,7 +77,6 @@ impl Application {
                 stage: None,
                 result: None,
                 rule_id: None,
-                exceptions_only: false,
                 after_event_id: None,
                 sort: crate::CaptureSort::OccurredAt,
                 direction: crate::SortDirection::Desc,

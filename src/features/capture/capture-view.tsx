@@ -5,7 +5,6 @@ import {
   Alert,
   Button,
   Card,
-  Checkbox,
   Chip,
   Input,
   Label,
@@ -41,7 +40,6 @@ export const defaultCaptureQuery: CaptureQuery = {
   stage: null,
   result: null,
   rule_id: null,
-  exceptions_only: false,
   after_event_id: null,
   sort: "occurred_at",
   direction: "desc",
@@ -309,25 +307,6 @@ export function CaptureView({
                 }
               />
             </TextField>
-            <Checkbox
-              className="min-h-10 self-end"
-              isSelected={query.exceptions_only}
-              onChange={(exceptions_only) =>
-                setQuery({
-                  ...query,
-                  exceptions_only,
-                  after_event_id: null,
-                  page: { ...query.page, page: 1 },
-                })
-              }
-            >
-              <Checkbox.Content>
-                <Checkbox.Control>
-                  <Checkbox.Indicator />
-                </Checkbox.Control>
-                仅看异常
-              </Checkbox.Content>
-            </Checkbox>
           </Card.Content>
         </Card>
 

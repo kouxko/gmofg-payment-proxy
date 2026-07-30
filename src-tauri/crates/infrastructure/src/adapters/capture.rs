@@ -120,14 +120,6 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
                     .rule_id
                     .is_none_or(|rule_id| row.matched_rule_ids.contains(&rule_id))
             })
-            .filter(|row| {
-                !query.exceptions_only
-                    || matches!(
-                        row.ui_tone,
-                        gmofg_proxy_application::UiTone::Danger
-                            | gmofg_proxy_application::UiTone::Warning
-                    )
-            })
             .cloned()
             .collect::<Vec<_>>();
         rows.sort_by(|left, right| {
@@ -296,7 +288,6 @@ mod tests {
             stage: Some(MessageStage::Request),
             result: Some("成功".into()),
             rule_id: None,
-            exceptions_only: false,
             after_event_id: None,
             sort: CaptureSort::OccurredAt,
             direction: SortDirection::Asc,
@@ -334,7 +325,6 @@ mod tests {
                 stage: None,
                 result: None,
                 rule_id: None,
-                exceptions_only: false,
                 after_event_id: Some(0),
                 sort: CaptureSort::OccurredAt,
                 direction: SortDirection::Asc,

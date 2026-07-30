@@ -184,7 +184,6 @@ export type CaptureQuery = {
 	stage: MessageStage | null,
 	result: string | null,
 	rule_id: string | null,
-	exceptions_only: boolean,
 	/**  When present, returns only retained rows newer than this cursor. */
 	after_event_id: number | null,
 	sort: CaptureSort,
