@@ -456,7 +456,7 @@ impl Scenario {
                 value: "rule-hit".into(),
             },
             Self::RequestDelay => RuleAction::Delay {
-                milliseconds: 1_500,
+                milliseconds: 10_000,
             },
             Self::CustomStatus => RuleAction::CustomHttpStatus { status: 503 },
             Self::Delay => RuleAction::Delay {
@@ -574,7 +574,7 @@ impl Scenario {
                 ),
             ]),
             Self::RequestDelay => {
-                BTreeMap::from([("milliseconds".into(), FaultParameterValue::Integer(1_500))])
+                BTreeMap::from([("milliseconds".into(), FaultParameterValue::Integer(10_000))])
             }
             Self::Delay => {
                 BTreeMap::from([("milliseconds".into(), FaultParameterValue::Integer(10_000))])
@@ -1044,7 +1044,7 @@ fn action_effect_confirmed(
         Scenario::ResponseReplaceBody => response_body_contains("RULE_MARKER"),
         Scenario::RequestSetHeader => request_header(),
         Scenario::ResponseSetHeader => response_header(),
-        Scenario::RequestDelay => duration_ms.is_some_and(|duration| duration >= 1_500),
+        Scenario::RequestDelay => duration_ms.is_some_and(|duration| duration >= 10_000),
         Scenario::Delay => duration_ms.is_some_and(|duration| duration >= 10_000),
         // Synthetic terminal responses are not stored as upstream response
         // snapshots. Rust proves their rule hit/trace; Android verifies the
@@ -1837,6 +1837,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
+    use gmofg_proxy_application::{FaultParameterValue, RuleAction};
+
     use super::{Scenario, finish_run};
 
     #[test]
@@ -1856,6 +1858,23 @@ mod tests {
         assert_eq!(Scenario::OneShot.request_count(), 2);
         assert!(Scenario::PauseRequest.needs_breakpoint_resolution());
         assert!(Scenario::PauseResponse.needs_breakpoint_resolution());
+    }
+
+    #[test]
+    fn request_delay_uses_a_window_that_dominates_real_upstream_jitter() {
+        assert_eq!(
+            Scenario::RequestDelay.action(),
+            RuleAction::Delay {
+                milliseconds: 10_000
+            }
+        );
+        assert_eq!(
+            Scenario::RequestDelay.fault_parameters(),
+            std::collections::BTreeMap::from([(
+                "milliseconds".into(),
+                FaultParameterValue::Integer(10_000)
+            )])
+        );
     }
 
     #[test]

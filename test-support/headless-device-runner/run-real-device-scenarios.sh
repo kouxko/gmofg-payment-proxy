@@ -642,24 +642,31 @@ while IFS= read -r scenario_json <&3; do
   current_batch="$scenario_batch"
   if [[ "$scenario_id" == "request-delay" || "$scenario_id" == "delay" ]]; then
     run_baseline "baseline-before-$scenario_id"
-    baseline_elapsed_ms="$LAST_ANDROID_ELAPSED_MS"
+    baseline_before_elapsed_ms="$LAST_ANDROID_ELAPSED_MS"
     run_probe "$scenario_json"
     delayed_elapsed_ms="$LAST_ANDROID_ELAPSED_MS"
-    delay_delta_ms="$((delayed_elapsed_ms - baseline_elapsed_ms))"
-    if [[ "$scenario_id" == "request-delay" ]]; then
-      minimum_delta_ms=1000
+    run_baseline "baseline-after-$scenario_id"
+    baseline_after_elapsed_ms="$LAST_ANDROID_ELAPSED_MS"
+    if ((baseline_before_elapsed_ms > baseline_after_elapsed_ms)); then
+      baseline_reference_elapsed_ms="$baseline_before_elapsed_ms"
     else
-      minimum_delta_ms=8500
+      baseline_reference_elapsed_ms="$baseline_after_elapsed_ms"
     fi
+    delay_delta_ms="$((delayed_elapsed_ms - baseline_reference_elapsed_ms))"
+    minimum_delta_ms=8500
     jq -cn \
       --arg scenario "$scenario_id" \
-      --argjson baseline_elapsed_ms "$baseline_elapsed_ms" \
+      --argjson baseline_before_elapsed_ms "$baseline_before_elapsed_ms" \
+      --argjson baseline_after_elapsed_ms "$baseline_after_elapsed_ms" \
+      --argjson baseline_reference_elapsed_ms "$baseline_reference_elapsed_ms" \
       --argjson delayed_elapsed_ms "$delayed_elapsed_ms" \
       --argjson delta_ms "$delay_delta_ms" \
       --argjson minimum_delta_ms "$minimum_delta_ms" \
       '{
         scenario: $scenario,
-        baseline_elapsed_ms: $baseline_elapsed_ms,
+        baseline_before_elapsed_ms: $baseline_before_elapsed_ms,
+        baseline_after_elapsed_ms: $baseline_after_elapsed_ms,
+        baseline_reference_elapsed_ms: $baseline_reference_elapsed_ms,
         delayed_elapsed_ms: $delayed_elapsed_ms,
         delta_ms: $delta_ms,
         minimum_delta_ms: $minimum_delta_ms,
