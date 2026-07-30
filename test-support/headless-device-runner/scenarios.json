@@ -73,7 +73,7 @@
       "template_id": "request_delay",
       "stage": "request",
       "android_expected_kind": "d48",
-      "minimum_elapsed_ms": 1200,
+      "minimum_elapsed_ms": 9000,
       "expected_rule_hits": 1
     },
     {
