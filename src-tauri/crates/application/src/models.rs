@@ -575,6 +575,20 @@ pub enum RuleDropResponseMode {
     CloseAfterRequestWrite,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleTrafficDirection {
+    Upstream,
+    Downstream,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleJitterScope {
+    BeforeMessage,
+    PerChunk,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RuleTerminalAction {
@@ -606,18 +620,53 @@ pub enum RuleTerminalAction {
     TruncateResponse {
         bytes: u64,
     },
+    DisconnectDuringUpstreamWrite {
+        after_bytes: u64,
+    },
+    DisconnectDuringDownstreamWrite {
+        after_bytes: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RuleAction {
-    SetJsonField { path: String, value_json: String },
-    ReplaceBodyText { text: String },
-    SetHeader { name: String, value: String },
-    Delay { milliseconds: u64 },
+    SetJsonField {
+        path: String,
+        value_json: String,
+    },
+    ReplaceBodyText {
+        text: String,
+    },
+    SetHeader {
+        name: String,
+        value: String,
+    },
+    Delay {
+        milliseconds: u64,
+    },
+    Jitter {
+        minimum_milliseconds: u64,
+        maximum_milliseconds: u64,
+        scope: RuleJitterScope,
+    },
+    Throttle {
+        bytes_per_second: u64,
+        chunk_bytes: u64,
+        direction: RuleTrafficDirection,
+    },
+    Intermittent {
+        available_milliseconds: u64,
+        blocked_milliseconds: u64,
+        direction: RuleTrafficDirection,
+    },
     Pause,
-    CustomHttpStatus { status: u16 },
-    Terminal { action: RuleTerminalAction },
+    CustomHttpStatus {
+        status: u16,
+    },
+    Terminal {
+        action: RuleTerminalAction,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -627,6 +676,9 @@ pub enum RuleActionKind {
     ReplaceBodyText,
     SetHeader,
     Delay,
+    Jitter,
+    Throttle,
+    Intermittent,
     Pause,
     CustomHttpStatus,
     RejectTlsHandshake,
@@ -639,6 +691,8 @@ pub enum RuleActionKind {
     InvalidJson,
     IncorrectContentLength,
     TruncateResponse,
+    DisconnectDuringUpstreamWrite,
+    DisconnectDuringDownstreamWrite,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -785,6 +839,7 @@ pub struct CertificateOverviewViewModel {
     pub status_text: String,
     pub ui_tone: UiTone,
     pub items: Vec<CertificateItemViewModel>,
+    pub can_initialize: bool,
     pub can_change: bool,
     pub disabled_reason: Option<DisabledReason>,
 }
@@ -903,6 +958,7 @@ pub enum UiEventPayload {
     BreakpointResolved(BreakpointSummaryViewModel),
     RuleHit(RuleSummaryViewModel),
     CertificateStatusChanged(CertificateOverviewViewModel),
+    SettingsChanged(Box<SettingsViewModel>),
     ResourceWarning { message: String },
     OperationFailed(crate::AppErrorViewModel),
     SnapshotRequired { reason: String },

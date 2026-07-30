@@ -29,20 +29,23 @@ import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { formatTimestamp, toneColor } from "@/lib/format";
-import {
-  useAppEventRefresh,
-  useBootstrap,
-} from "@/features/shell/bootstrap-context";
+import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 
 export function CertificatesView() {
-  const { bootstrap } = useBootstrap();
   const overview =
     useIpcQuery<CertificateOverviewViewModel>("certificate-overview", () =>
       callCommand(commands.certificateOverview()),
     );
+  const settings = useIpcQuery("certificate-settings", () =>
+    callCommand(commands.settingsGet()),
+  );
   useAppEventRefresh(
     ["certificate_status_changed", "snapshot_required"],
     overview.refresh,
+  );
+  useAppEventRefresh(
+    ["settings_changed", "snapshot_required"],
+    settings.refresh,
   );
   const [password, setPassword] = useState("");
   const [pkcs12Open, setPkcs12Open] = useState(false);
@@ -55,7 +58,7 @@ export function CertificatesView() {
   const [resetCaPending, setResetCaPending] = useState(false);
   const [validation, setValidation] =
     useState<FieldValidationViewModel>();
-  const leafSans = bootstrap?.settings.stored.leaf_sans;
+  const leafSans = settings.data?.stored.leaf_sans;
   const writePending =
     pendingAction != null || pkcs12Pending || resetCaPending;
 
@@ -96,6 +99,12 @@ export function CertificatesView() {
     } finally {
       setPkcs12Pending(false);
     }
+  }
+
+  async function currentLeafSans() {
+    const latest = await callCommand(commands.settingsGet());
+    settings.setData(latest);
+    return latest.stored.leaf_sans;
   }
 
   async function exportCa() {
@@ -151,10 +160,21 @@ export function CertificatesView() {
       <Alert status="warning">
         <Alert.Indicator />
         <Alert.Content>
-          <Alert.Title>敏感材料由当前系统用户密钥保护</Alert.Title>
+          <Alert.Title>本机证书材料由当前系统用户密钥保护</Alert.Title>
           <Alert.Description>
-            Windows 使用 DPAPI，macOS 使用 Keychain；私钥和 PKCS12
-            密码不持久化、不记录日志，并在提交成功或关闭弹窗后清除。
+            Windows 使用 DPAPI，macOS 使用 Keychain 保护本机叶子私钥和导入的
+            PKCS12 身份；密码不持久化、不记录日志，并在提交成功或关闭弹窗后清除。
+          </Alert.Description>
+        </Alert.Content>
+      </Alert>
+      <Alert status="danger">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Title>统一测试 Root CA 仅限隔离测试环境</Alert.Title>
+          <Alert.Description>
+            当前简化测试模式随安装包提供统一签发能力，凭据可能被提取；不得用于生产、
+            预生产或真实商户信任体系。Root CA 首次集成与轮换由受控的测试 Payment
+            构建/发布流程完成。
           </Alert.Description>
         </Alert.Content>
       </Alert>
@@ -164,7 +184,7 @@ export function CertificatesView() {
           <Alert.Content>
             <Alert.Title>设置快照不可用</Alert.Title>
             <Alert.Description>
-              已禁用 CA 生成和叶子证书重签，避免使用空 SAN
+              已禁用证书初始化和叶子证书重签，避免使用空 SAN
               继续执行。请先恢复 Rust 核心连接。
             </Alert.Description>
           </Alert.Content>
@@ -190,7 +210,7 @@ export function CertificatesView() {
       <div className="grid grid-cols-2 items-start gap-4 max-[1180px]:grid-cols-1">
         <Card>
           <Card.Header>
-            <Card.Title>A. 证书清单与 App → Proxy 服务端身份</Card.Title>
+            <Card.Title>A. 统一测试 CA 与 App → Proxy 服务端身份</Card.Title>
           </Card.Header>
           <Card.Content className="space-y-4">
             {(overview.data?.items ?? []).map((item) => (
@@ -226,7 +246,7 @@ export function CertificatesView() {
               </div>
             ))}
             <div className="flex flex-wrap gap-3">
-              {overview.data?.items.length === 0 && (
+              {overview.data?.can_initialize && (
                 <Button
                   variant="primary"
                   isDisabled={
@@ -235,16 +255,18 @@ export function CertificatesView() {
                   onPress={() =>
                     void refreshAfter(
                       "generate",
-                      () =>
+                      async () =>
                         callCommand(
-                          commands.certificateGenerateCa(leafSans!),
+                          commands.certificateGenerateCa(
+                            await currentLeafSans(),
+                          ),
                         ),
                     )
                   }
                 >
                   {pendingAction === "generate"
                     ? "正在生成…"
-                    : "生成本地 CA"}
+                    : "初始化本机测试证书"}
                 </Button>
               )}
               <Button
@@ -255,7 +277,7 @@ export function CertificatesView() {
                 <ArrowDownToLine className="size-4" />
                 {pendingAction === "export"
                   ? "正在导出…"
-                  : "导出 Payment 需导入的 CA 证书"}
+                  : "导出测试 Payment 编译用 Root CA"}
               </Button>
               <Button
                 variant="outline"
@@ -265,11 +287,11 @@ export function CertificatesView() {
                 onPress={() =>
                   void refreshAfter(
                     "reissue",
-                    () =>
+                    async () =>
                       callCommand(
                         commands.certificateReissueLeaf(
                           overview.data!.revision,
-                          leafSans!,
+                          await currentLeafSans(),
                         ),
                       ),
                   )
@@ -289,8 +311,9 @@ export function CertificatesView() {
           </Card.Header>
           <Card.Content className="space-y-4">
             <p className="text-sm text-[var(--telemetry-muted)]">
-              共享客户端身份与上游 CA 的文件读取、解析、校验和安全存储均由
-              Rust 完成。
+              导入 Launcher 原有客户端 P12 作为上游客户端身份。Payment 原始
+              server.crt 已内置并默认作为 GMO-FG Server 信任锚；环境证书变化时
+              可以选择文件替换。上游信任与下游 Proxy 测试 CA 无关。
             </p>
             <div className="flex flex-wrap gap-3">
               <Modal
@@ -374,7 +397,7 @@ export function CertificatesView() {
                 <FileArrowUp className="size-4" />
                 {pendingAction === "import_upstream"
                   ? "正在导入…"
-                  : "导入 / 替换上游 CA"}
+                  : "选择性替换上游 CA"}
               </Button>
             </div>
           </Card.Content>
@@ -412,7 +435,7 @@ export function CertificatesView() {
                 <Alert.Content>
                   <Alert.Title>暂无证书检查结果</Alert.Title>
                   <Alert.Description>
-                    生成本地 CA 或导入证书后，此处显示证书状态与校验详情。
+                    初始化本机测试证书或导入上游材料后，此处显示证书状态与校验详情。
                   </Alert.Description>
                 </Alert.Content>
               </Alert>
@@ -456,7 +479,7 @@ export function CertificatesView() {
           </Card.Header>
           <Card.Content className="space-y-3 text-sm">
             {[
-              "Payment (App) → Proxy（服务端证书）：Payment 导入本地 CA。",
+              "Payment (App) → Proxy（服务端证书）：测试版 Payment 在构建时已内置统一测试 Root CA。",
               "Proxy（服务端）→ Payment（客户端证书）：Proxy 验证终端客户端证书。",
               "GMO-FG Server → Proxy（共享客户端证书）：Server 验证 Proxy 身份。",
               "Proxy（客户端）→ GMO-FG Server：Proxy 使用上游 CA 验证 Server。",
@@ -477,10 +500,10 @@ export function CertificatesView() {
           <Shield className="size-5" />
         </Alert.Indicator>
         <Alert.Content>
-          <Alert.Title>重置本地 CA（危险操作）</Alert.Title>
+          <Alert.Title>重新初始化本机服务端证书（危险操作）</Alert.Title>
           <Alert.Description>
-            将生成新的 Root CA 和叶子证书，所有 Payment
-            终端必须重新导入；仅 Proxy 已停止时可执行。
+            将使用同一统一测试 Root CA 重新生成本机私钥和叶子证书；Payment
+            无需重新导入证书。仅 Proxy 已停止时可执行。
           </Alert.Description>
         </Alert.Content>
         <AlertDialog
@@ -495,16 +518,17 @@ export function CertificatesView() {
             isDisabled={!overview.data?.can_change || writePending}
           >
             <TrashBin className="size-4" />
-            重置本地 CA
+            重新初始化本机证书
           </Button>
           <AlertDialog.Backdrop>
             <AlertDialog.Container>
               <AlertDialog.Dialog>
                 <AlertDialog.Header>
-                  <AlertDialog.Heading>确认重置本地 CA？</AlertDialog.Heading>
+                  <AlertDialog.Heading>确认重新初始化本机证书？</AlertDialog.Heading>
                 </AlertDialog.Header>
                 <AlertDialog.Body>
-                  此操作不可撤销，所有 Payment 终端需要重新导入新 CA。
+                  本机服务端私钥和叶子证书将被替换；统一测试 Root CA
+                  保持不变，Payment 无需重新编译或导入。
                 </AlertDialog.Body>
                 <AlertDialog.Footer>
                   <Button

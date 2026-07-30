@@ -119,12 +119,14 @@ describe("FaultsView", () => {
     expect(
       screen.getByRole("textbox", { name: "Shift-JIS JSON Body" }),
     ).toHaveValue("{}");
+    expect(screen.getByLabelText("代理通道")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "启用模拟" }));
 
     expect(commandMocks.faultConfigure).toHaveBeenCalledWith(
       expect.objectContaining({
         template_id: "mock_shift_jis_json",
+        channel: "transaction",
         parameters: {
           status: { kind: "integer", value: 200 },
           body: { kind: "json", value: "{}" },

@@ -7,14 +7,15 @@ use gmofg_proxy_application::{
     MessageStage as AppMessageStage, OperationResultViewModel, RuleAction as AppRuleAction,
     RuleCondition as AppRuleCondition, RuleDraft as AppRuleDraft,
     RuleDropResponseMode as AppRuleDropResponseMode, RuleId as AppRuleId,
-    RuleMatchField as AppRuleMatchField, RuleMatchOperator as AppRuleMatchOperator,
-    RuleRepositoryPort, RuleSummaryViewModel, RuleTerminalAction as AppRuleTerminalAction,
+    RuleJitterScope as AppRuleJitterScope, RuleMatchField as AppRuleMatchField,
+    RuleMatchOperator as AppRuleMatchOperator, RuleRepositoryPort, RuleSummaryViewModel,
+    RuleTerminalAction as AppRuleTerminalAction, RuleTrafficDirection as AppRuleTrafficDirection,
     RuleValidationViewModel, RuleViewModel, SessionId, SessionQueryPort, UiTone,
 };
 use gmofg_proxy_domain::{
-    ChannelKind, DropResponseMode, MatchCondition, MatchField, MatchOperator, MessageStage,
-    Revision, Rule, RuleAction, RuleDraft, RuleEngine, RuleId, RuleRuntimeSnapshot,
-    RuleSetSignature, RuntimeEpoch, TerminalAction, validate_rule_draft,
+    ChannelKind, DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator,
+    MessageStage, Revision, Rule, RuleAction, RuleDraft, RuleEngine, RuleId, RuleRuntimeSnapshot,
+    RuleSetSignature, RuntimeEpoch, TerminalAction, TrafficDirection, validate_rule_draft,
 };
 use parking_lot::Mutex;
 
@@ -624,6 +625,36 @@ pub(crate) fn action_to_domain(action: &AppRuleAction) -> Result<RuleAction, ser
         AppRuleAction::Delay { milliseconds } => RuleAction::Delay {
             milliseconds: *milliseconds,
         },
+        AppRuleAction::Jitter {
+            minimum_milliseconds,
+            maximum_milliseconds,
+            scope,
+        } => RuleAction::Jitter {
+            minimum_milliseconds: *minimum_milliseconds,
+            maximum_milliseconds: *maximum_milliseconds,
+            scope: match scope {
+                AppRuleJitterScope::BeforeMessage => JitterScope::BeforeMessage,
+                AppRuleJitterScope::PerChunk => JitterScope::PerChunk,
+            },
+        },
+        AppRuleAction::Throttle {
+            bytes_per_second,
+            chunk_bytes,
+            direction,
+        } => RuleAction::Throttle {
+            bytes_per_second: *bytes_per_second,
+            chunk_bytes: *chunk_bytes,
+            direction: traffic_direction_to_domain(*direction),
+        },
+        AppRuleAction::Intermittent {
+            available_milliseconds,
+            blocked_milliseconds,
+            direction,
+        } => RuleAction::Intermittent {
+            available_milliseconds: *available_milliseconds,
+            blocked_milliseconds: *blocked_milliseconds,
+            direction: traffic_direction_to_domain(*direction),
+        },
         AppRuleAction::Pause => RuleAction::Pause,
         AppRuleAction::CustomHttpStatus { status } => {
             RuleAction::CustomHttpStatus { status: *status }
@@ -683,6 +714,16 @@ fn terminal_action_to_domain(action: &AppRuleTerminalAction) -> TerminalAction {
         AppRuleTerminalAction::TruncateResponse { bytes } => {
             TerminalAction::TruncateResponse { bytes: *bytes }
         }
+        AppRuleTerminalAction::DisconnectDuringUpstreamWrite { after_bytes } => {
+            TerminalAction::DisconnectDuringUpstreamWrite {
+                after_bytes: *after_bytes,
+            }
+        }
+        AppRuleTerminalAction::DisconnectDuringDownstreamWrite { after_bytes } => {
+            TerminalAction::DisconnectDuringDownstreamWrite {
+                after_bytes: *after_bytes,
+            }
+        }
     }
 }
 
@@ -699,6 +740,36 @@ pub(crate) fn action_to_app(action: &RuleAction) -> Result<AppRuleAction, serde_
         },
         RuleAction::Delay { milliseconds } => AppRuleAction::Delay {
             milliseconds: *milliseconds,
+        },
+        RuleAction::Jitter {
+            minimum_milliseconds,
+            maximum_milliseconds,
+            scope,
+        } => AppRuleAction::Jitter {
+            minimum_milliseconds: *minimum_milliseconds,
+            maximum_milliseconds: *maximum_milliseconds,
+            scope: match scope {
+                JitterScope::BeforeMessage => AppRuleJitterScope::BeforeMessage,
+                JitterScope::PerChunk => AppRuleJitterScope::PerChunk,
+            },
+        },
+        RuleAction::Throttle {
+            bytes_per_second,
+            chunk_bytes,
+            direction,
+        } => AppRuleAction::Throttle {
+            bytes_per_second: *bytes_per_second,
+            chunk_bytes: *chunk_bytes,
+            direction: traffic_direction_to_app(*direction),
+        },
+        RuleAction::Intermittent {
+            available_milliseconds,
+            blocked_milliseconds,
+            direction,
+        } => AppRuleAction::Intermittent {
+            available_milliseconds: *available_milliseconds,
+            blocked_milliseconds: *blocked_milliseconds,
+            direction: traffic_direction_to_app(*direction),
         },
         RuleAction::Pause => AppRuleAction::Pause,
         RuleAction::CustomHttpStatus { status } => {
@@ -759,6 +830,30 @@ fn terminal_action_to_app(action: &TerminalAction) -> AppRuleTerminalAction {
         TerminalAction::TruncateResponse { bytes } => {
             AppRuleTerminalAction::TruncateResponse { bytes: *bytes }
         }
+        TerminalAction::DisconnectDuringUpstreamWrite { after_bytes } => {
+            AppRuleTerminalAction::DisconnectDuringUpstreamWrite {
+                after_bytes: *after_bytes,
+            }
+        }
+        TerminalAction::DisconnectDuringDownstreamWrite { after_bytes } => {
+            AppRuleTerminalAction::DisconnectDuringDownstreamWrite {
+                after_bytes: *after_bytes,
+            }
+        }
+    }
+}
+
+const fn traffic_direction_to_domain(direction: AppRuleTrafficDirection) -> TrafficDirection {
+    match direction {
+        AppRuleTrafficDirection::Upstream => TrafficDirection::Upstream,
+        AppRuleTrafficDirection::Downstream => TrafficDirection::Downstream,
+    }
+}
+
+const fn traffic_direction_to_app(direction: TrafficDirection) -> AppRuleTrafficDirection {
+    match direction {
+        TrafficDirection::Upstream => AppRuleTrafficDirection::Upstream,
+        TrafficDirection::Downstream => AppRuleTrafficDirection::Downstream,
     }
 }
 

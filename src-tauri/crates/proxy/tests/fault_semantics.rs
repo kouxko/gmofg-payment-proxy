@@ -19,7 +19,7 @@ async fn content_length_offset_changes_only_the_declared_length() {
     )
     .await
     .expect("content-length fault");
-    let ResponseDisposition::Send(message) = result else {
+    let ResponseDisposition::Send { message, .. } = result else {
         panic!("expected send disposition");
     };
 
@@ -40,7 +40,7 @@ async fn truncate_response_preserves_declared_length_and_selects_a_strict_prefix
     )
     .await
     .expect("truncate fault");
-    let ResponseDisposition::Truncate { message, bytes } = result else {
+    let ResponseDisposition::Truncate { message, bytes, .. } = result else {
         panic!("expected truncate disposition");
     };
 

@@ -13,11 +13,11 @@ use crate::{
     FileExportPort, OperationResultViewModel, PageRequest, ProxyState, ProxyStatusViewModel,
     ProxySupervisorPort, RuleAction, RuleActionKind, RuleByteInputViewModel, RuleCondition,
     RuleConditionKind, RuleDraft, RuleDropResponseMode, RuleHeaderInputViewModel, RuleId,
-    RuleMatchField, RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind,
-    RuleRepositoryPort, RuleSummaryViewModel, RuleTerminalAction, RuleViewModel, RuntimeEpoch,
-    SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery, SessionQueryPort,
-    SettingsDraft, SettingsRepositoryPort, SettingsValidationViewModel, SettingsViewModel,
-    UiEventEnvelope, UiEventPayload,
+    RuleJitterScope, RuleMatchField, RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind,
+    RuleRepositoryPort, RuleSummaryViewModel, RuleTerminalAction, RuleTrafficDirection,
+    RuleViewModel, RuntimeEpoch, SessionDetailViewModel, SessionId, SessionPageViewModel,
+    SessionQuery, SessionQueryPort, SettingsDraft, SettingsRepositoryPort,
+    SettingsValidationViewModel, SettingsViewModel, UiEventEnvelope, UiEventPayload,
 };
 
 #[derive(Debug)]
@@ -475,6 +475,21 @@ impl Application {
                 value: String::new(),
             },
             RuleActionKind::Delay => RuleAction::Delay { milliseconds: 100 },
+            RuleActionKind::Jitter => RuleAction::Jitter {
+                minimum_milliseconds: 0,
+                maximum_milliseconds: 100,
+                scope: RuleJitterScope::PerChunk,
+            },
+            RuleActionKind::Throttle => RuleAction::Throttle {
+                bytes_per_second: 1024,
+                chunk_bytes: 16 * 1024,
+                direction: RuleTrafficDirection::Upstream,
+            },
+            RuleActionKind::Intermittent => RuleAction::Intermittent {
+                available_milliseconds: 1000,
+                blocked_milliseconds: 1000,
+                direction: RuleTrafficDirection::Upstream,
+            },
             RuleActionKind::Pause => RuleAction::Pause,
             RuleActionKind::CustomHttpStatus => RuleAction::CustomHttpStatus { status: 500 },
             RuleActionKind::RejectTlsHandshake => RuleAction::Terminal {
@@ -520,6 +535,12 @@ impl Application {
             },
             RuleActionKind::TruncateResponse => RuleAction::Terminal {
                 action: RuleTerminalAction::TruncateResponse { bytes: 1 },
+            },
+            RuleActionKind::DisconnectDuringUpstreamWrite => RuleAction::Terminal {
+                action: RuleTerminalAction::DisconnectDuringUpstreamWrite { after_bytes: 1 },
+            },
+            RuleActionKind::DisconnectDuringDownstreamWrite => RuleAction::Terminal {
+                action: RuleTerminalAction::DisconnectDuringDownstreamWrite { after_bytes: 1 },
             },
         }
     }
@@ -761,10 +782,7 @@ impl Application {
         expected_revision: u64,
         confirmed: bool,
     ) -> AppResult<CertificateOverviewViewModel> {
-        require_confirmation(
-            confirmed,
-            "重置本地 CA 后所有 Payment 终端都需要重新导入新 CA。",
-        )?;
+        require_confirmation(confirmed, "重新初始化会替换本机服务端私钥和叶子证书。")?;
         let _gate = self.mutation_gate.lock().await;
         self.ensure_proxy_stopped_for_write().await?;
         let overview = self.certificates.reset_ca(expected_revision).await?;
@@ -791,7 +809,7 @@ impl Application {
         }
 
         let certificate_overview = self.certificates.overview().await?;
-        if certificate_overview.items.is_empty() {
+        if certificate_overview.can_initialize {
             validation
                 .warnings
                 .push("证书材料尚未配置；保存设置后请先完成证书配置再启动 Proxy。".into());
@@ -836,7 +854,9 @@ impl Application {
 
     pub async fn settings_save(&self, draft: SettingsDraft) -> AppResult<SettingsViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        self.settings_save_inner(draft).await
+        let saved = self.settings_save_inner(draft).await?;
+        self.publish_settings(&saved);
+        Ok(saved)
     }
 
     async fn settings_save_inner(&self, draft: SettingsDraft) -> AppResult<SettingsViewModel> {
@@ -867,6 +887,7 @@ impl Application {
         let was_running = old_status.state == ProxyState::Running;
         let saved = self.settings_save_inner(draft).await?;
         if !was_running {
+            self.publish_settings(&saved);
             return Ok(saved);
         }
 
@@ -882,7 +903,9 @@ impl Application {
         match self.settings.apply_effective(saved.stored).await {
             Ok(_) => {
                 self.publish_runtime(&candidate_status);
-                self.settings.get().await
+                let settings = self.settings.get().await?;
+                self.publish_settings(&settings);
+                Ok(settings)
             }
             Err(apply_error) => match self.proxy.stop().await {
                 Ok(stopped) => {
@@ -1019,6 +1042,16 @@ impl Application {
             Some("certificates".into()),
             Some(overview.revision),
             UiEventPayload::CertificateStatusChanged(overview.clone()),
+        );
+    }
+
+    fn publish_settings(&self, settings: &SettingsViewModel) {
+        self.events.publish(
+            None,
+            Utc::now(),
+            Some("settings".into()),
+            Some(settings.revision),
+            UiEventPayload::SettingsChanged(Box::new(settings.clone())),
         );
     }
 

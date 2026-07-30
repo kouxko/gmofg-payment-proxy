@@ -10,7 +10,9 @@ import {
   FieldError,
   Input,
   Label,
+  ListBox,
   NumberField,
+  Select,
   Switch,
   Table,
   TextArea,
@@ -19,6 +21,7 @@ import {
 } from "@heroui/react";
 import type {
   ActiveFaultViewModel,
+  ChannelKind,
   FaultConfigurationDraft,
   FaultParameterValue,
   FaultTemplateViewModel,
@@ -57,6 +60,7 @@ export function FaultsView() {
   const [nthHit, setNthHit] = useState<number>();
   const [priority, setPriority] = useState<number>();
   const [oneShot, setOneShot] = useState<boolean>();
+  const [channel, setChannel] = useState<ChannelKind>();
   const [parameterOverrides, setParameterOverrides] = useState<
     Record<string, Record<string, FaultParameterValue>>
   >({});
@@ -80,10 +84,12 @@ export function FaultsView() {
   const effectiveNthHit = nthHit ?? selected?.default_nth_hit;
   const effectivePriority = priority ?? selected?.default_priority;
   const effectiveOneShot = oneShot ?? selected?.default_one_shot;
+  const effectiveChannel = channel ?? selected?.default_channel;
 
   const draft = useMemo<FaultConfigurationDraft | undefined>(() => {
     if (
       !selected ||
+      effectiveChannel == null ||
       effectiveNthHit == null ||
       effectivePriority == null ||
       effectiveOneShot == null
@@ -94,7 +100,7 @@ export function FaultsView() {
       template_id: selected.template_id,
       existing_rule_id: null,
       expected_revision: null,
-      channel: selected.default_channel,
+      channel: effectiveChannel,
       terminal: terminal || null,
       target: target || null,
       nth_hit: effectiveNthHit,
@@ -106,6 +112,7 @@ export function FaultsView() {
     effectiveNthHit,
     effectiveOneShot,
     effectivePriority,
+    effectiveChannel,
     parameters,
     selected,
     target,
@@ -144,6 +151,7 @@ export function FaultsView() {
     setNthHit(template?.default_nth_hit);
     setPriority(template?.default_priority);
     setOneShot(template?.default_one_shot);
+    setChannel(template?.default_channel);
     if (window.matchMedia("(max-width: 1280px)").matches) {
       requestAnimationFrame(() => {
         configurationPanelRef.current?.scrollIntoView({ block: "start" });
@@ -551,6 +559,27 @@ export function FaultsView() {
             >
               {selected.risk_text}
             </Alert>
+            <div className="grid gap-1">
+              <Label>代理通道</Label>
+              <Select
+                aria-label="代理通道"
+                selectedKey={effectiveChannel}
+                onSelectionChange={(value) =>
+                  setChannel(value as ChannelKind)
+                }
+              >
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    <ListBox.Item id="transaction">交易（16627）</ListBox.Item>
+                    <ListBox.Item id="dll">DLL（16127）</ListBox.Item>
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+            </div>
             <TextField isInvalid={Boolean(fieldError("terminal"))}>
               <Label>终端过滤（可选）</Label>
               <Input

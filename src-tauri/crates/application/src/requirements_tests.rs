@@ -690,6 +690,7 @@ fn fake_certificate_overview() -> CertificateOverviewViewModel {
             status_text: "有效".into(),
             ui_tone: UiTone::Positive,
         }],
+        can_initialize: false,
         can_change: true,
         disabled_reason: None,
     }
@@ -1123,6 +1124,9 @@ async fn settings_san_raw_input_is_normalized_atomically_in_rust() {
     let ports = Arc::new(FakePorts::default());
     let application = application_with_fake_ports(ports.clone());
     let draft = ports.settings.lock().stored.clone();
+    let mut events = application
+        .app_subscribe_events(0)
+        .expect("subscribe before save");
 
     let saved = application
         .settings_save_input(draft, " 127.0.0.1，127.0.0.1, ".into())
@@ -1130,6 +1134,13 @@ async fn settings_san_raw_input_is_normalized_atomically_in_rust() {
         .expect("save normalized settings");
 
     assert_eq!(saved.stored.leaf_sans, vec!["127.0.0.1"]);
+    let event = events.live.recv().await.expect("settings changed event");
+    assert_eq!(event.entity_id.as_deref(), Some("settings"));
+    assert_eq!(event.entity_revision, Some(saved.revision));
+    let UiEventPayload::SettingsChanged(changed) = event.payload else {
+        panic!("expected SettingsChanged");
+    };
+    assert_eq!(changed.stored.leaf_sans, vec!["127.0.0.1"]);
 }
 
 #[tokio::test]
@@ -1139,6 +1150,7 @@ async fn settings_can_be_saved_before_first_certificate_setup() {
         let mut overview = ports.certificate_overview.lock();
         overview.ready = false;
         overview.items.clear();
+        overview.can_initialize = true;
         overview.status_text = "证书配置不完整".into();
         overview.ui_tone = UiTone::Warning;
     }

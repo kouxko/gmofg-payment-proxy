@@ -119,6 +119,12 @@ export function BootstrapProvider({
             : current,
         );
       }
+      if (event.payload.type === "settings_changed") {
+        const settings = event.payload.data;
+        setBootstrap((current) =>
+          current ? { ...current, settings } : current,
+        );
+      }
       if (event.payload.type === "snapshot_required") {
         scheduleSnapshotRefresh();
       }
@@ -135,6 +141,7 @@ export function BootstrapProvider({
           "breakpoint_queued",
           "breakpoint_resolved",
           "certificate_status_changed",
+          "settings_changed",
         ].includes(event.payload.type)
       ) {
         scheduleSnapshotRefresh();

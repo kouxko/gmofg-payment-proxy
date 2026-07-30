@@ -35,7 +35,7 @@ export GMOFG_CLIENT_P12=/secure/path/client.p12
 
 ## 场景与判定
 
-`scenarios.json` 是机器可读矩阵。`GMOFG_BATCH=A|B|C|D|E|F|ALL` 选择批次，
+`scenarios.json` 是机器可读矩阵。`GMOFG_BATCH=A|B|C|D|E|F|G|ALL` 选择批次，
 `GMOFG_SCENARIO=<id>` 可定向复测。每项同时要求 Android 结果、Rust
 hit count/规则轨迹、动作效果以及创建 rule ID 清理为 0；批次前后都执行
 D48 baseline。
@@ -46,10 +46,14 @@ D48 baseline。
 - D：NthHit（三次序列）、OneShot、优先级、非终止动作组合、延迟 + Mock。
 - E：四类匹配字段、Equals/Contains/Regex、正反例、AND 与失败轨迹。
 - F：九类非法配置必须由 Rust 拒绝，随后真实 DLL D48 baseline 仍可用。
+- G：上下行限速、抖动、间歇通断保持 Android D48，并验证规则动作与耗时；
+  间歇通断会组合一个只用于分块的限速动作，确保小型 DLL 报文真实跨过阻塞
+  窗口。上行 Body 中途断连必须产生 `IOException`，下行不完整 Body 必须产生
+  `ProtocolException`，批次后再以 D48 baseline 证明链路恢复。
 
 `request-delay` 和 `response-delay` 会各自在紧邻场景前执行一次 D48 baseline，
 除了绝对耗时外还校验差值。`ALL` 会在一个证据包中执行全部批次，并生成
-`batch_summaries`；模板清单必须与矩阵中的 14 个模板完全一致。
+`batch_summaries`；模板清单必须与矩阵中的 22 个模板完全一致。
 
 每个场景保存 runner、instrumentation 与过滤后的设备日志，并生成
 `results.jsonl` 与 `report.json`。`security-checks.txt` 记录私有材料权限和

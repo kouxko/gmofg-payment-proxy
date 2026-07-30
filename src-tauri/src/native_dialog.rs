@@ -31,7 +31,7 @@ impl TauriNativeFileDialog {
                 .set_title("导入上游 PKCS12")
                 .add_filter("PKCS12", &["p12", "pfx"]),
             "upstream_ca" => builder
-                .set_title("导入上游 CA")
+                .set_title("选择替换用上游 CA")
                 .add_filter("证书", &["cer", "crt", "pem", "der"]),
             _ => builder.set_title("选择文件"),
         }
@@ -49,9 +49,9 @@ impl TauriNativeFileDialog {
                 .set_file_name("rules.json")
                 .add_filter("JSON", &["json"]),
             "root_ca" => builder
-                .set_title("导出 Root CA")
-                .set_file_name("gmofg-proxy-root-ca.cer")
-                .add_filter("证书", &["cer"]),
+                .set_title("导出统一测试 Root CA 公开证书")
+                .set_file_name("gmofg-test-proxy-root-ca.crt")
+                .add_filter("X.509 证书", &["crt", "cer", "pem"]),
             _ => builder.set_title("保存文件"),
         }
     }

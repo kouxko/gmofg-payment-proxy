@@ -7,7 +7,8 @@ use gmofg_proxy_application::{
     FaultTemplateViewModel, MessageStage, RuleDraft, RuleRepositoryPort, UiTone,
 };
 use gmofg_proxy_domain::{
-    DropResponseMode, MatchCondition, MatchField, MatchOperator, RuleAction, TerminalAction,
+    DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator, RuleAction,
+    TerminalAction, TrafficDirection,
 };
 use gmofg_proxy_runtime::codec::encode_strict;
 use serde_json::Value;
@@ -310,6 +311,78 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "高",
             truncate,
         ),
+        template(
+            "throttle_upstream",
+            "上行限速",
+            "请求阶段",
+            "按指定速率分块发送请求 Body",
+            "GMO-FG Server",
+            "中",
+            throttle_upstream,
+        ),
+        template(
+            "throttle_downstream",
+            "下行限速",
+            "响应阶段",
+            "按指定速率分块返回响应 Body",
+            "Payment App",
+            "中",
+            throttle_downstream,
+        ),
+        template(
+            "jitter_upstream",
+            "上行抖动",
+            "请求阶段",
+            "请求 Body 每个分块发送前加入确定性随机抖动",
+            "GMO-FG Server",
+            "中",
+            jitter_upstream,
+        ),
+        template(
+            "jitter_downstream",
+            "下行抖动",
+            "响应阶段",
+            "响应 Body 每个分块发送前加入确定性随机抖动",
+            "Payment App",
+            "中",
+            jitter_downstream,
+        ),
+        template(
+            "intermittent_upstream",
+            "上行间歇通断",
+            "请求阶段",
+            "按可用窗口和阻断窗口循环发送请求 Body",
+            "GMO-FG Server",
+            "高",
+            intermittent_upstream,
+        ),
+        template(
+            "intermittent_downstream",
+            "下行间歇通断",
+            "响应阶段",
+            "按可用窗口和阻断窗口循环返回响应 Body",
+            "Payment App",
+            "高",
+            intermittent_downstream,
+        ),
+        template(
+            "disconnect_upstream_mid_body",
+            "上行 Body 中途断连",
+            "请求阶段",
+            "发送指定字节数后中止上游请求",
+            "GMO-FG Server",
+            "高",
+            disconnect_upstream_mid_body,
+        ),
+        template(
+            "disconnect_downstream_mid_body",
+            "下行 Body 中途断连",
+            "响应阶段",
+            "返回指定字节数后中止 App 响应",
+            "Payment App",
+            "高",
+            disconnect_downstream_mid_body,
+        ),
     ]
 }
 
@@ -355,6 +428,7 @@ fn template(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn parameter_definitions(
     template_id: &str,
 ) -> (
@@ -449,6 +523,104 @@ fn parameter_definitions(
             "bytes",
             "发送字节数",
             "仅发送响应 Body 的前 N 字节后断开。",
+            1,
+            0,
+            i64::MAX,
+        ),
+        "throttle_upstream" | "throttle_downstream" => (
+            BTreeMap::from([
+                (
+                    "bytes_per_second".into(),
+                    FaultParameterValue::Integer(1024),
+                ),
+                (
+                    "chunk_bytes".into(),
+                    FaultParameterValue::Integer(16 * 1024),
+                ),
+            ]),
+            vec![
+                integer_field(
+                    "bytes_per_second",
+                    "速率（B/s）",
+                    "每秒最多发送的 Body 字节数。",
+                    1,
+                    100 * 1024 * 1024,
+                ),
+                integer_field(
+                    "chunk_bytes",
+                    "分块大小（字节）",
+                    "每个发送分块的最大字节数。",
+                    1,
+                    1024 * 1024,
+                ),
+            ],
+        ),
+        "jitter_upstream" | "jitter_downstream" => (
+            BTreeMap::from([
+                (
+                    "minimum_milliseconds".into(),
+                    FaultParameterValue::Integer(0),
+                ),
+                (
+                    "maximum_milliseconds".into(),
+                    FaultParameterValue::Integer(100),
+                ),
+                ("per_chunk".into(), FaultParameterValue::Boolean(true)),
+            ]),
+            vec![
+                integer_field(
+                    "minimum_milliseconds",
+                    "最小抖动（毫秒）",
+                    "每次抖动的最短等待时间。",
+                    0,
+                    600_000,
+                ),
+                integer_field(
+                    "maximum_milliseconds",
+                    "最大抖动（毫秒）",
+                    "每次抖动的最长等待时间。",
+                    0,
+                    600_000,
+                ),
+                boolean_field(
+                    "per_chunk",
+                    "每个分块均抖动",
+                    "开启后每个分块独立抖动；关闭时仅消息发送前抖动一次。",
+                ),
+            ],
+        ),
+        "intermittent_upstream" | "intermittent_downstream" => (
+            BTreeMap::from([
+                (
+                    "available_milliseconds".into(),
+                    FaultParameterValue::Integer(1000),
+                ),
+                (
+                    "blocked_milliseconds".into(),
+                    FaultParameterValue::Integer(1000),
+                ),
+            ]),
+            vec![
+                integer_field(
+                    "available_milliseconds",
+                    "可用窗口（毫秒）",
+                    "允许发送数据的连续时长。",
+                    1,
+                    600_000,
+                ),
+                integer_field(
+                    "blocked_milliseconds",
+                    "阻断窗口（毫秒）",
+                    "暂停发送数据的连续时长。",
+                    1,
+                    600_000,
+                ),
+            ],
+        ),
+        "disconnect_upstream_mid_body" | "disconnect_downstream_mid_body" => one_integer(
+            "after_bytes",
+            "断连偏移（字节）",
+            "成功发送前 N 字节后立即中止连接；必须小于实际 Body 长度。",
             1,
             0,
             i64::MAX,
@@ -667,6 +839,95 @@ fn truncate(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
     ))
 }
 
+fn throttle_upstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+    throttle(values, MessageStage::Request, TrafficDirection::Upstream)
+}
+
+fn throttle_downstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+    throttle(values, MessageStage::Response, TrafficDirection::Downstream)
+}
+
+fn throttle(
+    values: &FaultParameters,
+    stage: MessageStage,
+    direction: TrafficDirection,
+) -> AppResult<(MessageStage, RuleAction)> {
+    Ok((
+        stage,
+        RuleAction::Throttle {
+            bytes_per_second: u64_parameter(values, "bytes_per_second")?,
+            chunk_bytes: u64_parameter(values, "chunk_bytes")?,
+            direction,
+        },
+    ))
+}
+
+fn jitter_upstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+    jitter(values, MessageStage::Request)
+}
+
+fn jitter_downstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+    jitter(values, MessageStage::Response)
+}
+
+fn jitter(values: &FaultParameters, stage: MessageStage) -> AppResult<(MessageStage, RuleAction)> {
+    Ok((
+        stage,
+        RuleAction::Jitter {
+            minimum_milliseconds: u64_parameter(values, "minimum_milliseconds")?,
+            maximum_milliseconds: u64_parameter(values, "maximum_milliseconds")?,
+            scope: if boolean_parameter(values, "per_chunk")? {
+                JitterScope::PerChunk
+            } else {
+                JitterScope::BeforeMessage
+            },
+        },
+    ))
+}
+
+fn intermittent_upstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+    intermittent(values, MessageStage::Request, TrafficDirection::Upstream)
+}
+
+fn intermittent_downstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+    intermittent(values, MessageStage::Response, TrafficDirection::Downstream)
+}
+
+fn intermittent(
+    values: &FaultParameters,
+    stage: MessageStage,
+    direction: TrafficDirection,
+) -> AppResult<(MessageStage, RuleAction)> {
+    Ok((
+        stage,
+        RuleAction::Intermittent {
+            available_milliseconds: u64_parameter(values, "available_milliseconds")?,
+            blocked_milliseconds: u64_parameter(values, "blocked_milliseconds")?,
+            direction,
+        },
+    ))
+}
+
+fn disconnect_upstream_mid_body(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+    Ok((
+        MessageStage::Request,
+        RuleAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite {
+            after_bytes: u64_parameter(values, "after_bytes")?,
+        }),
+    ))
+}
+
+fn disconnect_downstream_mid_body(
+    values: &FaultParameters,
+) -> AppResult<(MessageStage, RuleAction)> {
+    Ok((
+        MessageStage::Response,
+        RuleAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
+            after_bytes: u64_parameter(values, "after_bytes")?,
+        }),
+    ))
+}
+
 fn status_parameter(values: &FaultParameters) -> AppResult<u16> {
     let status = integer_parameter(values, "status")?;
     if !(100..=599).contains(&status) {
@@ -774,6 +1035,14 @@ mod tests {
             "upstream_connect_timeout",
             "upstream_write_timeout",
             "upstream_read_timeout",
+            "throttle_upstream",
+            "throttle_downstream",
+            "jitter_upstream",
+            "jitter_downstream",
+            "intermittent_upstream",
+            "intermittent_downstream",
+            "disconnect_upstream_mid_body",
+            "disconnect_downstream_mid_body",
         ] {
             assert!(ids.contains(&required), "missing template {required}");
         }

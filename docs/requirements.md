@@ -80,10 +80,10 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 
 | 编号 | 方向 | 验证关系 |
 | --- | --- | --- |
-| CERT-001 | Payment App -> Proxy | Proxy 提供由本地 Root CA 签发的服务端证书；Payment 信任该 Root CA。 |
+| CERT-001 | Payment App -> Proxy | Proxy 提供由安装包内置统一测试 Root CA 签发的本机服务端叶子证书；测试版 Payment 信任该公开 Root CA。 |
 | CERT-002 | Proxy -> Payment App | Proxy 校验 Payment 提供的客户端证书，并与允许的共享客户端证书指纹匹配。 |
 | CERT-003 | Proxy -> GMO-FG Server | Proxy 使用测试人员导入的共享 PKCS12 客户端身份。 |
-| CERT-004 | GMO-FG Server -> Proxy | Proxy 使用导入的上游 CA 验证 Server 证书链和主机名。 |
+| CERT-004 | GMO-FG Server -> Proxy | Proxy 默认使用安装包内置的 Payment 原始 `server.crt` 信任锚验证 Server 证书链和主机名；用户替换后使用替换值。 |
 
 ## 3. 全局 UI 与交互规则
 
@@ -154,7 +154,7 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | 断点实验台 | 产生断点、原始/有效报文、Rust 格式化与校验、请求/响应阶段可执行动作、断点终态和高风险真机验证。 |
 | 拦截规则 | 列表执行顺序、基本信息、匹配条件、动作顺序与终止语义、保存门禁、复制/删除/导入/导出和命中验证。 |
 | 故障模拟 | 模板选择、参数、启用/保存为规则、活动模拟停用、请求前断开与上游后丢弃等关键网络语义。 |
-| 证书管理 | 首次 SAN/CA/PKCS12/上游 CA 顺序、两段 mTLS 身份、重新签发、检查、安全存储、重置本地 CA 和 TLS 排查。 |
+| 证书管理 | 首次 SAN/本机叶子/PKCS12/上游 CA 顺序、公开 Root CA 导出、两段 mTLS 身份、重新签发、检查、安全存储、重新初始化本机证书和 TLS 排查。 |
 | 系统设置 | 网络/SAN/端口/上游、首次配置顺序、超时/Body/容量、校验/保存/重启/回滚、默认值与数据策略。 |
 
 说明中出现的默认值、状态、错误码和验收标准必须直接来自本需求文档。帮助内容可以
@@ -281,6 +281,8 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | FAULT-009 | 活动模拟显示模板、目标、规则优先级、命中次数和状态，并支持停用。 |
 | FAULT-010 | “保存为规则”进入规则管理；复杂条件继续在规则页面编辑。 |
 | FAULT-011 | 1280px 及以下选择故障模板后，页面自动将配置面板滚动到可见位置。 |
+| FAULT-012 | 弱网模板包括上/下行限速、上/下行抖动、上/下行间歇通断、上/下行 Body 中途断连；模板仍保存为普通规则。 |
+| FAULT-013 | 故障配置面板必须明确选择交易或 DLL 通道，默认值来自 Rust 模板 ViewModel。 |
 
 ### 4.7 证书管理
 
@@ -288,17 +290,17 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 
 | 编号 | 功能需求 |
 | --- | --- |
-| CERT-005 | 首次使用时由 Rust 生成本地 Root CA 和 Proxy 服务端叶子证书。 |
+| CERT-005 | 安装包内置完整的统一测试 Root CA 签发材料；首次使用时 Rust 使用它生成本机独立私钥和 SAN 匹配的 Proxy 服务端叶子证书。统一测试 Root CA 仅限隔离测试环境。 |
 | CERT-006 | 叶子证书 SAN 包含用户配置的 LAN IP 和/或 DNS。 |
-| CERT-007 | 用户可以导出 Payment 需要导入的公开 Root CA 证书。 |
-| CERT-008 | 导出 Root CA 时不得导出 CA 私钥。 |
-| CERT-009 | LAN IP/DNS 变化时使用原 Root CA 重新签发叶子证书。 |
+| CERT-007 | 用户可以随时从证书页导出安装包内置的统一测试 Root CA 公开 PEM `.crt`，用于测试版 Payment 编译流程；导出不依赖本机叶子证书是否已初始化。 |
+| CERT-008 | 导出文件必须与 Rust 签发叶子证书使用的统一测试 Root CA 公开证书逐字节一致，不得包含或导出 CA 私钥、叶子私钥或其他受保护材料。 |
+| CERT-009 | LAN IP/DNS 变化时使用同一统一测试 Root CA 重新签发本机叶子证书；Payment 无需因叶子证书变化重新编译。 |
 | CERT-010 | 用户可以导入或替换共享 PKCS12，并输入密码。 |
-| CERT-011 | 用户可以导入或替换上游 Server CA。 |
+| CERT-011 | 安装包内置当前 Payment 固定的原始 `assets/server.crt`，Rust 从 PEM Bundle 中选择有效 CA 信任锚作为默认上游 CA；用户可以选择性导入其他 CA Bundle 覆盖默认值。 |
 | CERT-012 | 页面显示证书主题、用途、SAN、有效期、SHA-256 指纹和检查结果，但不显示密码或私钥。 |
-| CERT-013 | Rust 检查本地 CA、叶子证书 SAN、App 客户端指纹、PKCS12、上游 CA 和到期时间。 |
+| CERT-013 | Rust 检查统一测试 Root、本机叶子证书 SAN、App 客户端指纹、PKCS12、当前生效的内置或替换上游 CA 和到期时间。 |
 | CERT-014 | 叶子证书到期前 60 天开始警告。 |
-| CERT-015 | 重置本地 CA 属于危险操作，必须明确提示所有 Payment 终端需要重新导入新 CA。 |
+| CERT-015 | 重新初始化本机服务端证书属于危险操作；它只替换本机叶子私钥和叶子证书，不轮换统一测试 Root CA。 |
 | CERT-016 | 证书私钥、PKCS12 原始字节和密码使用 Windows 当前用户范围 DPAPI 保护。 |
 | CERT-017 | DPAPI 保护或解密失败时禁止启动 Proxy，不提供明文回退。 |
 | CERT-018 | macOS 使用当前登录用户 Keychain 保护证书私钥、PKCS12 原始字节和密码；保护或解密失败时禁止启动 Proxy，不提供明文回退。 |
@@ -327,6 +329,7 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | SETTINGS-014 | 恢复默认值必须二次确认，不删除证书或规则。 |
 | SETTINGS-015 | 网络设置包含“服务端证书 SAN”；首次配置时允许先保存合法网络/SAN 设置，再生成证书。尚无任何证书材料时 Rust 返回明确警告，但不得形成“必须先有证书才能保存 SAN、又必须先保存 SAN 才能生成证书”的循环依赖。 |
 | SETTINGS-016 | Rust 校验返回的绑定地址、SAN、端口、上游 URL、超时、Body 和容量错误显示在对应 HeroUI 字段下方，并标记字段无效。 |
+| SETTINGS-017 | Rust 在没有已保存 SAN 时根据操作系统路由选择探测首选本机 IPv4，并自动填入“服务端证书 SAN”。探测不得覆盖任何已保存的非空 SAN；离线、无可用路由或仅得到未指定、回环、链路本地、组播、广播地址时保持为空并允许用户手动填写。前端不得自行探测网卡或推断地址。 |
 
 ## 5. 跨页面状态与操作规则
 
@@ -440,8 +443,29 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | ACTION-011 | 截断响应 | 发送响应 Body 前 N 字节后立即关闭连接；N 必须位于 `0..body_len-1`。 |
 | ACTION-012 | 请求/响应延迟 | 在指定阶段等待设定时间；等待期间检测客户端断开和 Proxy 取消。 |
 | ACTION-013 | 自定义 HTTP 状态 | 由 Rust 生成合法 HTTP 状态行；Body 和 Headers 按用户配置处理。 |
+| ACTION-014 | 上/下行限速 | Rust 将 Body 分块并按单调时间基准控制累计发送速率；配置范围为 `1..104857600 B/s`，分块为 `1..1048576` 字节。 |
+| ACTION-015 | 网络抖动 | Rust 以运行 epoch、连接/会话、规则 revision 和命中次数派生确定性种子；支持消息前一次或每分块抖动，单次最大 600,000 毫秒。 |
+| ACTION-016 | 间歇通断 | Rust 按 `available_milliseconds` 与 `blocked_milliseconds` 循环控制对应方向的 Body 发送，两者均为 `1..600000` 毫秒。 |
+| ACTION-017 | Body 中途断连 | 上行或下行成功发送前 N 字节后主动中止 HTTP/1.1 Body；N 在运行时必须位于 `0..body_len-1`。 |
 
 所有故障结果只描述 Proxy 实际执行的网络行为。T02、T03、T04、自动取消等 Payment 侧结果属于实机观察结果，不属于 Proxy 保证。
+
+### 7.3 弱网模拟执行约束
+
+| 编号 | 需求 |
+| --- | --- |
+| WN-001 | 弱网模拟不得建立第二套匹配或计数引擎，必须通过 `RuleDraft`、CAS 规则仓库和现有规则评估轨迹执行。 |
+| WN-002 | 网络调度全部位于 Rust `proxy::traffic`，Next.js 只编辑 Rust DTO 和显示结果。 |
+| WN-003 | 请求阶段只影响 Proxy→Server 上行 Body；响应阶段只影响 Proxy→Payment App 下行 Body。 |
+| WN-004 | 未命中弱网动作时保持当前原始字节透传、Header 管理和 Shift-JIS 语义。 |
+| WN-005 | 限速使用分块 Body 和 Tokio 单调时间调度，不得一次性 sleep 后发送完整 Body。 |
+| WN-006 | 抖动随机数由 Rust 生成且可复现，前端不得生成种子或随机延迟。 |
+| WN-007 | 多个非终止动作按规则顺序组合；中途断连属于唯一且末尾的终止动作。 |
+| WN-008 | Proxy 停止时必须取消所有限速、抖动和间歇等待，不等待配置时长自然结束。 |
+| WN-009 | 中途断连保持原声明长度并产生稳定的 `FAULT_STREAM_ABORTED` 结果，不得伪装为成功响应。 |
+| WN-010 | 参数在规则保存时由 domain 校验，Body 相关偏移在实际报文长度已知后由 transport 再校验。 |
+| WN-011 | Tokio 可控时间测试必须证明分块速率、确定性抖动、间歇窗口、精确断连偏移和取消语义。 |
+| WN-012 | 真机验收分别记录规则命中、链路耗时/断连症状和 GMO-FG 业务响应，HTTP 成功不得替代 `D48` 业务证据。 |
 
 ## 8. 会话、断点与容量设计
 
@@ -508,8 +532,8 @@ ConnectionId
 | SECURITY-012 | 导出使用同目录临时文件写入，完成后原子替换；失败时删除临时文件。 |
 | SECURITY-013 | 覆盖已有文件必须二次确认，取消时不改变任何状态。 |
 | SECURITY-014 | 会话导出包含敏感数据提示和明确的用户确认结果。 |
-| SECURITY-015 | 重置本地 CA 只删除并重建本地 Root CA 与叶子证书，保留共享 PKCS12 和上游 CA。 |
-| SECURITY-016 | 重置 CA 只允许在 Proxy `Stopped` 时执行。 |
+| SECURITY-015 | 重新初始化本机证书只重建本机叶子私钥和叶子证书，继续使用安装包内置的同一统一测试 Root CA，并保留共享 PKCS12 和上游 CA。 |
+| SECURITY-016 | 重新初始化本机证书只允许在 Proxy `Stopped` 时执行；公开 Root CA 导出是只读操作，不要求先初始化本机证书。 |
 
 ## 10. 非功能需求
 
@@ -597,6 +621,7 @@ gmofg-payment-proxy/
 - 使用 rustls / tokio-rustls 完成服务端和客户端 TLS 1.2 mTLS。
 - 使用 `encoding_rs::SHIFT_JIS` 完成严格解码和编码。
 - 实现请求/响应处理管线、超时、断开检测和故障动作。
+- `traffic` 子模块实现确定性随机、调度配置和可取消的分块 `PacedBody`，供桌面 UI、未来 TUI/CLI 及无 UI 测试共同复用。
 - 不依赖 Tauri、Next.js 或 `application`；面向应用层的 Runtime 适配器位于 `infrastructure`，避免传输层向上依赖。
 
 #### `infrastructure`
@@ -1043,6 +1068,7 @@ HeroUI v3 的实现约束：
 | TEST-STATE | 启动、停止、重启、重复调用、部分启动回滚和 Faulted 清理。 |
 | TEST-BREAKPOINT | Pending、解决、重复解决、App 断开、Proxy 停止和 revision 冲突。 |
 | TEST-SETTINGS | 校验、保存、运行快照、重启失败回滚和默认草稿。 |
+| TEST-WEAK-NETWORK | 参数上下界、确定性种子、分块限速、抖动范围、间歇窗口、中途断连偏移和取消。 |
 
 ### 16.2 Rust 集成测试
 
@@ -1050,7 +1076,7 @@ HeroUI v3 的实现约束：
 | --- | --- |
 | TEST-TLS | 正确/错误 CA、客户端指纹、空/错误 PKCS12 密码、链尾旧式自签名信任锚、过期、尚未生效、SAN、用途和私钥不匹配。 |
 | TEST-PROXY | 双端口、HTTP/1.1、连接关闭、不重试、不重定向和字节级透传。 |
-| TEST-FAULT | TLS 拒绝、上游前断开、连接/写入/读取超时、响应丢弃、Mock、非法 JSON、错误长度和截断。 |
+| TEST-FAULT | TLS 拒绝、上游前断开、连接/写入/读取超时、响应丢弃、Mock、非法 JSON、错误长度、截断、上/下行限速、抖动、间歇通断和 Body 中途断连。 |
 | TEST-CONCURRENCY | 至少 20 个终端、独立规则计数、独立断点、停止取消和事件顺序。 |
 | TEST-STORAGE | SQLite 迁移、事务、规则导入原子性、Windows DPAPI、macOS Keychain 和无 Payload 持久化。 |
 | TEST-EXPORT | 原生路径选择、取消、覆盖、临时文件、原子替换和失败清理。 |
@@ -1084,7 +1110,7 @@ HeroUI v3 的实现约束：
 | ACCEPT-009 | 重启后 Payload 和会话为空，规则、设置和证书配置仍存在。 |
 | ACCEPT-010 | 日志、SQLite 和普通配置文件中不存在 Payload、密码、私钥或 PKCS12 原始内容。 |
 | ACCEPT-011 | 在真实设备 `2740072778` 上执行 `CreditDLL` instrumentation 测试时，设备只连接 Proxy 地址，Proxy 使用 rustls mTLS 连接真实 Server，并将上游响应原样回送；测试必须从真实上游响应中解析出 `ErrorCode=D48`，未取得 `D48` 一律不得判定成功。 |
-| ACCEPT-012 | macOS Apple Silicon `.app` 可保存网络/SAN 设置、生成并重启后读取 CA/叶子证书、以 Keychain 保护敏感材料、导入空密码 PKCS12 和上游 CA，并启动双端口监听。 |
+| ACCEPT-012 | macOS Apple Silicon `.app` 可保存网络/SAN 设置、生成并重启后读取 CA/叶子证书、以 Keychain 保护敏感材料、导入空密码 PKCS12、默认读取内置 Payment `server.crt` 且允许替换上游 CA，并启动双端口监听。 |
 | ACCEPT-013 | macOS 防火墙启用时，正式 `.app` 二进制必须被明确允许接收入站连接；仅允许测试 harness 不能作为正式 App 实机验收通过。 |
 | ACCEPT-014 | 在设备 `2740072778` 上执行 `TEST-REAL-DLL-RULE-MATRIX` 时，51 个唯一场景必须全部通过，A–F 每批后均取得真实 `D48`，延迟使用相邻基线差值判定，非法规则必须返回精确 `RULE_INVALID` 和唯一字段签名，退出后监听端口、测试 APK、临时主密钥及 SQLite 测试规则全部清零。 |
 
@@ -1120,14 +1146,15 @@ HeroUI v3 的实现约束：
 | SESSION-001~011 | 会话记录 | SessionUseCase / SessionRepository | session_*、SessionUpdated | TEST-CAPACITY、TEST-EXPORT、TEST-UI |
 | BREAKPOINT-001~016 | 断点实验台 | BreakpointUseCase / BreakpointCoordinator | breakpoint_*、Breakpoint* | TEST-BREAKPOINT、TEST-IPC、TEST-UI |
 | RULE-001~017 | 拦截规则 | RuleUseCase / domain rules | rule_new_draft、rule_*、RuleHit | TEST-RULE、TEST-STORAGE、TEST-UI、TEST-BOUNDARY、TEST-REAL-DLL-RULE-MATRIX |
-| FAULT-001~011 | 故障模拟 | FaultTemplateUseCase / proxy actions | fault_* | TEST-FAULT、TEST-UI、TEST-REAL-DLL-RULE-MATRIX |
+| FAULT-001~013 | 故障模拟 | FaultTemplateUseCase / proxy actions | fault_* | TEST-FAULT、TEST-UI、TEST-REAL-DLL-RULE-MATRIX |
 | CERT-001~020 | 证书管理 | CertificateUseCase / infrastructure certificates | certificate_*、CertificateStatusChanged | TEST-TLS、TEST-STORAGE |
-| SETTINGS-001~016 | 系统设置 | SettingsUseCase | settings_* | TEST-SETTINGS、TEST-UI |
+| SETTINGS-001~017 | 系统设置 | SettingsUseCase | settings_* | TEST-SETTINGS、TEST-UI |
 | STATE-001~016 | 全局状态 | ProxySupervisor / application permissions | proxy_*、状态事件 | TEST-STATE、TEST-EVENT |
 | PROXY-001~012 | 网络管线 | proxy transport/tls | 状态和错误 ViewModel | TEST-TLS、TEST-PROXY |
 | MESSAGE-001~010 | 报文 | proxy codec/message | capture/session/breakpoint detail | TEST-CODEC、TEST-MESSAGE |
 | ENGINE-001~008 | 规则引擎 | domain rules | rule_* | TEST-DOMAIN、TEST-RULE |
-| ACTION-001~013 | 故障动作 | proxy fault actions | fault_*、breakpoint_resolve | TEST-FAULT |
+| ACTION-001~017 | 故障动作 | proxy fault actions / proxy traffic | fault_*、breakpoint_resolve | TEST-FAULT、TEST-WEAK-NETWORK |
+| WN-001~012 | 弱网模拟 | domain rules / infrastructure pipeline / proxy traffic | rule_*、fault_*、RuleHit | TEST-WEAK-NETWORK、TEST-FAULT、TEST-UI、TEST-REAL-DLL-RULE-MATRIX |
 | DATA-001~012 | 会话与容量 | application repositories | session_*、ResourceWarning | TEST-CAPACITY、TEST-CONCURRENCY |
 | SECURITY-001~018 | 安全与文件 | infrastructure | certificate_*、session_export | TEST-STORAGE、TEST-EXPORT |
 | NFR-001~010 | 平台和性能 | 全体 | 全体 | Windows/macOS 验收、TEST-CONCURRENCY |

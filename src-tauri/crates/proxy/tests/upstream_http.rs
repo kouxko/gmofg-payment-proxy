@@ -3,9 +3,9 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use gmofg_proxy_runtime::FaultAction;
 use gmofg_proxy_runtime::message::{Message, MessageLimits};
 use gmofg_proxy_runtime::transport::{ForwardRequest, HyperUpstreamConnector, UpstreamConnector};
+use gmofg_proxy_runtime::{FaultAction, TrafficDirection};
 use http::{HeaderMap, HeaderValue, Method, Uri};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -306,4 +306,46 @@ async fn backpressured_request_body_uses_write_timeout_and_releases_connection()
         .expect_err("an upstream that does not read must hit the write-stage timeout");
     assert_eq!(error.code, "UPSTREAM_WRITE_TIMEOUT");
     server.await.unwrap();
+}
+
+// WN-009, ACTION-017, TEST-WEAK-NETWORK:
+// the HTTP/1.1 connector must expose a stable intentional-abort result after
+// writing exactly the configured request-body prefix.
+#[tokio::test]
+async fn upstream_mid_body_disconnect_writes_exact_prefix_and_is_classified() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(accept_request_until_eof(listener));
+    let connector = fault_test_connector(address);
+    let body = Bytes::from_static(b"abcdefgh");
+    let mut headers = HeaderMap::new();
+    headers.insert("host", HeaderValue::from_static("payment-app"));
+    headers.insert("content-length", HeaderValue::from_static("8"));
+    let request = ForwardRequest {
+        method: Method::POST,
+        uri: Uri::from_static("/payment"),
+        message: Message::request(&Method::POST, &Uri::from_static("/payment"), &headers, body),
+    };
+
+    let error = connector
+        .send(
+            request,
+            &[FaultAction::DisconnectDuringWrite {
+                after_bytes: 3,
+                direction: TrafficDirection::Upstream,
+            }],
+            &CancellationToken::new(),
+        )
+        .await
+        .expect_err("intentional upstream body abort");
+    assert_eq!(error.code, "FAULT_STREAM_ABORTED");
+
+    let request = server.await.unwrap();
+    assert!(
+        request
+            .windows(b"Content-Length: 8".len())
+            .any(|window| window == b"Content-Length: 8"),
+        "{request:?}"
+    );
+    assert!(request.ends_with(b"\r\n\r\nabc"), "{request:?}");
 }

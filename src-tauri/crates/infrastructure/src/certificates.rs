@@ -8,8 +8,10 @@ use rcgen::{
 };
 use ring::digest::{SHA256, digest};
 use x509_parser::{
-    certificate::X509Certificate, extensions::GeneralName, parse_x509_certificate,
-    pem::parse_x509_pem,
+    certificate::X509Certificate,
+    extensions::GeneralName,
+    parse_x509_certificate,
+    pem::{Pem, parse_x509_pem},
 };
 use zeroize::{Zeroize, Zeroizing};
 
@@ -17,6 +19,13 @@ use crate::InfrastructureError;
 
 const ROOT_VALIDITY_DAYS: i64 = 3650;
 const LEAF_VALIDITY_DAYS: i64 = 825;
+const TEST_ROOT_CA_CERTIFICATE_PEM: &[u8] =
+    include_bytes!("../../../../test-support/certificates/unified-test-proxy-root-ca.crt");
+const TEST_ROOT_CA_SIGNING_KEY_PEM: &str = include_str!(
+    "../../../../test-support/certificates/unified-test-proxy-root-ca-signing-key.TEST-ONLY.txt"
+);
+const BUNDLED_PAYMENT_SERVER_CERTIFICATES_PEM: &[u8] =
+    include_bytes!("../../../../test-support/certificates/bundled-payment-server.crt");
 
 pub struct CertificateBundle {
     pub certificate_der: Vec<u8>,
@@ -50,6 +59,12 @@ pub struct ParsedPkcs12 {
     pub metadata: CertificateMetadata,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrustedCa {
+    pub certificate_der: Vec<u8>,
+    pub metadata: CertificateMetadata,
+}
+
 impl fmt::Debug for CertificateBundle {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -77,6 +92,41 @@ impl fmt::Debug for ParsedPkcs12 {
 pub struct CertificateService;
 
 impl CertificateService {
+    #[must_use]
+    pub const fn test_root_ca_certificate_pem(&self) -> &'static [u8] {
+        TEST_ROOT_CA_CERTIFICATE_PEM
+    }
+
+    pub fn load_test_root_ca(&self) -> Result<CertificateBundle, InfrastructureError> {
+        let (_, pem) = parse_x509_pem(TEST_ROOT_CA_CERTIFICATE_PEM).map_err(x509_error)?;
+        let key = KeyPair::from_pem(TEST_ROOT_CA_SIGNING_KEY_PEM).map_err(rcgen_error)?;
+        let bundle = bundle(pem.contents, key.serialize_der())?;
+        self.validate_root(&bundle.certificate_der, &bundle.private_key_pkcs8_der)?;
+        if !bundle.metadata.subject.contains("TEST ONLY") {
+            return Err(invalid("统一测试 Root CA 主题必须明确包含 TEST ONLY"));
+        }
+        Ok(bundle)
+    }
+
+    pub fn load_bundled_payment_server_ca(&self) -> Result<TrustedCa, InfrastructureError> {
+        self.parse_upstream_ca(BUNDLED_PAYMENT_SERVER_CERTIFICATES_PEM)
+    }
+
+    pub fn validate_test_root(
+        &self,
+        certificate_der: &[u8],
+        private_key_der: &[u8],
+    ) -> Result<CertificateMetadata, InfrastructureError> {
+        let metadata = self.validate_root(certificate_der, private_key_der)?;
+        let expected = self.load_test_root_ca()?;
+        if certificate_der != expected.certificate_der {
+            return Err(invalid(
+                "Root CA 不是当前构建固定的统一测试 Root CA，请重新初始化本机证书",
+            ));
+        }
+        Ok(metadata)
+    }
+
     pub fn generate_root_ca(
         &self,
         common_name: &str,
@@ -190,6 +240,34 @@ impl CertificateService {
         metadata(&certificate)
     }
 
+    pub fn parse_upstream_ca(&self, bytes: &[u8]) -> Result<TrustedCa, InfrastructureError> {
+        let pem_entries = Pem::iter_from_buffer(bytes)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(x509_error)?;
+        if pem_entries.is_empty() {
+            let metadata = self.validate_ca_der(bytes)?;
+            return Ok(TrustedCa {
+                certificate_der: bytes.to_vec(),
+                metadata,
+            });
+        }
+
+        for pem in pem_entries.into_iter().rev() {
+            if pem.label != "CERTIFICATE" {
+                continue;
+            }
+            if let Ok(metadata) = self.validate_ca_der(&pem.contents) {
+                return Ok(TrustedCa {
+                    certificate_der: pem.contents,
+                    metadata,
+                });
+            }
+        }
+        Err(invalid(
+            "上游证书文件不包含当前有效且具备证书签发用途的 CA 信任锚",
+        ))
+    }
+
     pub fn validate_root(
         &self,
         certificate_der: &[u8],
@@ -227,7 +305,7 @@ impl CertificateService {
                 .verify_signature(Some(root.public_key()))
                 .is_err()
         {
-            return Err(invalid("Proxy 叶子证书不是由本地 Root CA 签发"));
+            return Err(invalid("Proxy 叶子证书不是由统一测试 Root CA 签发"));
         }
         let eku = certificate
             .extended_key_usage()
@@ -565,6 +643,52 @@ mod tests {
                 &["proxy.local".into(), "192.168.10.20".into()],
             )
             .expect("validate generated leaf");
+    }
+
+    #[test]
+    fn embedded_test_root_is_stable_and_explicitly_test_only() {
+        let service = CertificateService;
+        let first = service.load_test_root_ca().expect("test root");
+        let second = service.load_test_root_ca().expect("same test root");
+
+        assert_eq!(first.certificate_der, second.certificate_der);
+        assert_eq!(
+            first.metadata.fingerprint_sha256,
+            "E6:0C:7C:71:6A:1A:E9:08:F8:87:8E:4E:98:27:FC:B1:9C:3B:2D:B8:CA:36:15:09:2C:E6:3F:32:94:A1:2B:66"
+        );
+        assert!(first.metadata.subject.contains("TEST ONLY"));
+    }
+
+    #[test]
+    fn bundled_payment_server_crt_selects_the_final_valid_ca_trust_anchor() {
+        let service = CertificateService;
+        let trusted = service
+            .load_bundled_payment_server_ca()
+            .expect("bundled Payment server.crt");
+
+        assert_eq!(
+            fingerprint(BUNDLED_PAYMENT_SERVER_CERTIFICATES_PEM),
+            "9D:73:2D:2D:8B:F2:9C:97:83:88:ED:99:35:65:9C:39:BA:2E:E9:17:C2:6E:69:7E:44:1D:02:30:7C:F2:17:28"
+        );
+        assert!(trusted.metadata.is_ca);
+        assert!(trusted.metadata.subject.contains("GlobalSign Root CA - R3"));
+        service
+            .validate_ca_der(&trusted.certificate_der)
+            .expect("selected trust anchor");
+    }
+
+    #[test]
+    fn another_local_root_is_not_accepted_as_the_unified_test_root() {
+        let service = CertificateService;
+        let local = service
+            .generate_root_ca("Old Local Root")
+            .expect("local root");
+
+        assert!(
+            service
+                .validate_test_root(&local.certificate_der, &local.private_key_pkcs8_der,)
+                .is_err()
+        );
     }
 
     #[test]

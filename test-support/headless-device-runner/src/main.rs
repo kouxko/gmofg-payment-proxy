@@ -12,8 +12,8 @@ use std::{
 use gmofg_proxy_application::{
     AppResult, BreakpointDecision, BreakpointDecisionKind, BreakpointState, CaptureQuery,
     CaptureSort, ChannelKind, FaultConfigurationDraft, FaultParameterValue, MessageStage,
-    PageRequest, RuleAction, RuleCondition, RuleDraft, RuleId, RuleMatchField, RuleMatchOperator,
-    RuleTerminalAction, SortDirection, UiEventPayload,
+    PageRequest, RuleAction, RuleCondition, RuleDraft, RuleId, RuleJitterScope, RuleMatchField,
+    RuleMatchOperator, RuleTerminalAction, RuleTrafficDirection, SortDirection, UiEventPayload,
 };
 use gmofg_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use gmofg_proxy_infrastructure::{
@@ -197,6 +197,14 @@ enum Scenario {
     InvalidContentLengthDeltaZero,
     InvalidTerminalCombination,
     InvalidShiftJis,
+    ThrottleUpstream,
+    ThrottleDownstream,
+    JitterUpstream,
+    JitterDownstream,
+    IntermittentUpstream,
+    IntermittentDownstream,
+    DisconnectUpstreamMidBody,
+    DisconnectDownstreamMidBody,
 }
 
 impl Scenario {
@@ -254,6 +262,14 @@ impl Scenario {
             "invalid-content-length-delta-zero" => Ok(Self::InvalidContentLengthDeltaZero),
             "invalid-terminal-combination" => Ok(Self::InvalidTerminalCombination),
             "invalid-shift-jis" => Ok(Self::InvalidShiftJis),
+            "throttle-upstream" => Ok(Self::ThrottleUpstream),
+            "throttle-downstream" => Ok(Self::ThrottleDownstream),
+            "jitter-upstream" => Ok(Self::JitterUpstream),
+            "jitter-downstream" => Ok(Self::JitterDownstream),
+            "intermittent-upstream" => Ok(Self::IntermittentUpstream),
+            "intermittent-downstream" => Ok(Self::IntermittentDownstream),
+            "disconnect-upstream-mid-body" => Ok(Self::DisconnectUpstreamMidBody),
+            "disconnect-downstream-mid-body" => Ok(Self::DisconnectDownstreamMidBody),
             other => Err(format!("unsupported scenario: {other}").into()),
         }
     }
@@ -312,6 +328,14 @@ impl Scenario {
             Self::InvalidContentLengthDeltaZero => "invalid-content-length-delta-zero",
             Self::InvalidTerminalCombination => "invalid-terminal-combination",
             Self::InvalidShiftJis => "invalid-shift-jis",
+            Self::ThrottleUpstream => "throttle-upstream",
+            Self::ThrottleDownstream => "throttle-downstream",
+            Self::JitterUpstream => "jitter-upstream",
+            Self::JitterDownstream => "jitter-downstream",
+            Self::IntermittentUpstream => "intermittent-upstream",
+            Self::IntermittentDownstream => "intermittent-downstream",
+            Self::DisconnectUpstreamMidBody => "disconnect-upstream-mid-body",
+            Self::DisconnectDownstreamMidBody => "disconnect-downstream-mid-body",
         }
     }
 
@@ -335,6 +359,14 @@ impl Scenario {
                 Some("wrong_content_length")
             }
             Self::TruncateResponse => Some("truncate_response"),
+            Self::ThrottleUpstream => Some("throttle_upstream"),
+            Self::ThrottleDownstream => Some("throttle_downstream"),
+            Self::JitterUpstream => Some("jitter_upstream"),
+            Self::JitterDownstream => Some("jitter_downstream"),
+            Self::IntermittentUpstream => Some("intermittent_upstream"),
+            Self::IntermittentDownstream => Some("intermittent_downstream"),
+            Self::DisconnectUpstreamMidBody => Some("disconnect_upstream_mid_body"),
+            Self::DisconnectDownstreamMidBody => Some("disconnect_downstream_mid_body"),
             Self::Baseline
             | Self::ResponseSetJson
             | Self::RequestReplaceBody
@@ -404,7 +436,11 @@ impl Scenario {
             | Self::InvalidNthHitZero
             | Self::InvalidTimeoutZero
             | Self::InvalidTerminalCombination
-            | Self::InvalidShiftJis => MessageStage::Request,
+            | Self::InvalidShiftJis
+            | Self::ThrottleUpstream
+            | Self::JitterUpstream
+            | Self::IntermittentUpstream
+            | Self::DisconnectUpstreamMidBody => MessageStage::Request,
             Self::ResponseSetJson
             | Self::ResponseReplaceBody
             | Self::ResponseSetHeader
@@ -425,7 +461,11 @@ impl Scenario {
             | Self::MatchCertificateContains
             | Self::MatchCertificateRegex
             | Self::MatchNonmatch
-            | Self::InvalidContentLengthDeltaZero => MessageStage::Response,
+            | Self::InvalidContentLengthDeltaZero
+            | Self::ThrottleDownstream
+            | Self::JitterDownstream
+            | Self::IntermittentDownstream
+            | Self::DisconnectDownstreamMidBody => MessageStage::Response,
             Self::InvalidStageAction => MessageStage::TlsHandshake,
             Self::Baseline => unreachable!(),
         }
@@ -513,6 +553,35 @@ impl Scenario {
             },
             Self::TruncateResponse => RuleAction::Terminal {
                 action: RuleTerminalAction::TruncateResponse { bytes: 8 },
+            },
+            Self::ThrottleUpstream | Self::ThrottleDownstream => RuleAction::Throttle {
+                bytes_per_second: 512,
+                chunk_bytes: 16,
+                direction: if matches!(self, Self::ThrottleUpstream) {
+                    RuleTrafficDirection::Upstream
+                } else {
+                    RuleTrafficDirection::Downstream
+                },
+            },
+            Self::JitterUpstream | Self::JitterDownstream => RuleAction::Jitter {
+                minimum_milliseconds: 1_200,
+                maximum_milliseconds: 1_200,
+                scope: RuleJitterScope::BeforeMessage,
+            },
+            Self::IntermittentUpstream | Self::IntermittentDownstream => RuleAction::Intermittent {
+                available_milliseconds: 1,
+                blocked_milliseconds: 200,
+                direction: if matches!(self, Self::IntermittentUpstream) {
+                    RuleTrafficDirection::Upstream
+                } else {
+                    RuleTrafficDirection::Downstream
+                },
+            },
+            Self::DisconnectUpstreamMidBody => RuleAction::Terminal {
+                action: RuleTerminalAction::DisconnectDuringUpstreamWrite { after_bytes: 1 },
+            },
+            Self::DisconnectDownstreamMidBody => RuleAction::Terminal {
+                action: RuleTerminalAction::DisconnectDuringDownstreamWrite { after_bytes: 1 },
             },
             Self::PauseRequest | Self::PauseResponse => RuleAction::Pause,
             Self::NthHit
@@ -614,6 +683,34 @@ impl Scenario {
             Self::TruncateResponse => {
                 BTreeMap::from([("bytes".into(), FaultParameterValue::Integer(8))])
             }
+            Self::ThrottleUpstream | Self::ThrottleDownstream => BTreeMap::from([
+                ("bytes_per_second".into(), FaultParameterValue::Integer(512)),
+                ("chunk_bytes".into(), FaultParameterValue::Integer(16)),
+            ]),
+            Self::JitterUpstream | Self::JitterDownstream => BTreeMap::from([
+                (
+                    "minimum_milliseconds".into(),
+                    FaultParameterValue::Integer(1_200),
+                ),
+                (
+                    "maximum_milliseconds".into(),
+                    FaultParameterValue::Integer(1_200),
+                ),
+                ("per_chunk".into(), FaultParameterValue::Boolean(false)),
+            ]),
+            Self::IntermittentUpstream | Self::IntermittentDownstream => BTreeMap::from([
+                (
+                    "available_milliseconds".into(),
+                    FaultParameterValue::Integer(1),
+                ),
+                (
+                    "blocked_milliseconds".into(),
+                    FaultParameterValue::Integer(200),
+                ),
+            ]),
+            Self::DisconnectUpstreamMidBody | Self::DisconnectDownstreamMidBody => {
+                BTreeMap::from([("after_bytes".into(), FaultParameterValue::Integer(1))])
+            }
             Self::RejectTlsHandshake | Self::DisconnectBeforeUpstream => BTreeMap::new(),
             Self::Baseline
             | Self::ResponseSetJson
@@ -654,6 +751,23 @@ impl Scenario {
         }
     }
 
+    fn supporting_actions(self) -> Vec<RuleAction> {
+        match self {
+            Self::IntermittentUpstream | Self::IntermittentDownstream => {
+                vec![RuleAction::Throttle {
+                    bytes_per_second: 512,
+                    chunk_bytes: 16,
+                    direction: if matches!(self, Self::IntermittentUpstream) {
+                        RuleTrafficDirection::Upstream
+                    } else {
+                        RuleTrafficDirection::Downstream
+                    },
+                }]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     const fn expected_final_action_contains(self) -> Option<&'static str> {
         match self {
             Self::UpstreamConnectTimeout
@@ -664,6 +778,12 @@ impl Scenario {
             }
             Self::DropResponseAfterWrite => {
                 Some("upstream request intentionally closed after complete write")
+            }
+            Self::DisconnectUpstreamMidBody => {
+                Some("request intentionally disconnected during upstream write")
+            }
+            Self::DisconnectDownstreamMidBody => {
+                Some("response intentionally disconnected during downstream write")
             }
             _ => None,
         }
@@ -692,6 +812,8 @@ impl Scenario {
                 | Self::WrongContentLengthPositive
                 | Self::WrongContentLengthNegative
                 | Self::TruncateResponse
+                | Self::DisconnectUpstreamMidBody
+                | Self::DisconnectDownstreamMidBody
         )
     }
 
@@ -705,6 +827,22 @@ impl Scenario {
             Self::UpstreamReadTimeout => "upstream read timeout after 1500 ms",
             Self::DropResponseAfterRead => "drop after complete upstream response read",
             Self::DropResponseAfterWrite => "close after complete upstream request write",
+            Self::ThrottleUpstream => "send upstream body at 512 B/s in 16-byte chunks",
+            Self::ThrottleDownstream => "send downstream body at 512 B/s in 16-byte chunks",
+            Self::JitterUpstream => "wait 1200 ms before sending the upstream body",
+            Self::JitterDownstream => "wait 1200 ms before sending the downstream body",
+            Self::IntermittentUpstream => {
+                "cycle 16-byte upstream chunks through 1 ms available and 200 ms blocked windows"
+            }
+            Self::IntermittentDownstream => {
+                "cycle 16-byte downstream chunks through 1 ms available and 200 ms blocked windows"
+            }
+            Self::DisconnectUpstreamMidBody => {
+                "send 1 upstream body byte then intentionally disconnect"
+            }
+            Self::DisconnectDownstreamMidBody => {
+                "send 1 downstream body byte then intentionally disconnect"
+            }
             Self::PauseRequest => "request breakpoint queued and forwarded original",
             Self::PauseResponse => "response breakpoint queued and forwarded original",
             Self::NthHit => "second request only returns HTTP 503",
@@ -772,6 +910,38 @@ impl Scenario {
 
     const fn needs_breakpoint_resolution(self) -> bool {
         matches!(self, Self::PauseRequest | Self::PauseResponse)
+    }
+
+    const fn is_weak_network(self) -> bool {
+        matches!(
+            self,
+            Self::ThrottleUpstream
+                | Self::ThrottleDownstream
+                | Self::JitterUpstream
+                | Self::JitterDownstream
+                | Self::IntermittentUpstream
+                | Self::IntermittentDownstream
+                | Self::DisconnectUpstreamMidBody
+                | Self::DisconnectDownstreamMidBody
+        )
+    }
+
+    const fn reasonable_duration(self, duration_ms: Option<u64>) -> bool {
+        match self {
+            Self::ThrottleUpstream | Self::ThrottleDownstream => {
+                matches!(duration_ms, Some(100..=60_000))
+            }
+            Self::JitterUpstream | Self::JitterDownstream => {
+                matches!(duration_ms, Some(1_200..=60_000))
+            }
+            Self::IntermittentUpstream | Self::IntermittentDownstream => {
+                matches!(duration_ms, Some(3_000..=60_000))
+            }
+            Self::DisconnectUpstreamMidBody | Self::DisconnectDownstreamMidBody => {
+                matches!(duration_ms, Some(0..=30_000))
+            }
+            _ => true,
+        }
     }
 
     const fn expected_invalid_field(self) -> Option<&'static str> {
@@ -1046,6 +1216,12 @@ fn action_effect_confirmed(
         Scenario::ResponseSetHeader => response_header(),
         Scenario::RequestDelay => duration_ms.is_some_and(|duration| duration >= 10_000),
         Scenario::Delay => duration_ms.is_some_and(|duration| duration >= 10_000),
+        Scenario::ThrottleUpstream
+        | Scenario::ThrottleDownstream
+        | Scenario::JitterUpstream
+        | Scenario::JitterDownstream
+        | Scenario::IntermittentUpstream
+        | Scenario::IntermittentDownstream => scenario.reasonable_duration(duration_ms),
         // Synthetic terminal responses are not stored as upstream response
         // snapshots. Rust proves their rule hit/trace; Android verifies the
         // exact downstream body or parse failure.
@@ -1061,6 +1237,8 @@ fn action_effect_confirmed(
         | Scenario::WrongContentLengthPositive
         | Scenario::WrongContentLengthNegative
         | Scenario::TruncateResponse
+        | Scenario::DisconnectUpstreamMidBody
+        | Scenario::DisconnectDownstreamMidBody
         | Scenario::PauseRequest
         | Scenario::PauseResponse
         | Scenario::NthHit
@@ -1328,6 +1506,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await?;
         acquired_rule_ids.push(active.rule_id);
         let mut draft = application.rule_get(active.rule_id).await?.draft;
+        if scenario.is_weak_network()
+            && (draft.stage != Some(scenario.stage()) || draft.actions != vec![scenario.action()])
+        {
+            return Err(format!(
+                "{} template instantiated unexpected semantics: stage={:?}, actions={:?}",
+                scenario.name(),
+                draft.stage,
+                draft.actions
+            )
+            .into());
+        }
+        draft.actions.extend(scenario.supporting_actions());
         draft.name = format!("{TEST_RULE_PREFIX}{}", scenario.name());
         let saved = application.rule_save(draft).await?;
         vec![CreatedRule {
@@ -1711,6 +1901,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "rule_hit_count": if rule_ids.is_empty() { None } else { Some(total_hit_count) },
             "rule_hit_counts": hit_counts,
             "action_effect_confirmed": action_effect_confirmed,
+            "action_semantic_confirmed": scenario.is_weak_network(),
+            "reasonable_duration_confirmed": scenario.reasonable_duration(terminal.duration_ms),
             "expected_semantic": scenario.expected_semantic(),
             "final_action": sessions
                 .iter()
@@ -1836,7 +2028,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
-    use gmofg_proxy_application::{FaultParameterValue, RuleAction};
+    use gmofg_proxy_application::{
+        FaultParameterValue, RuleAction, RuleJitterScope, RuleTerminalAction, RuleTrafficDirection,
+    };
 
     use super::{Scenario, finish_run};
 
@@ -1874,6 +2068,129 @@ mod tests {
                 FaultParameterValue::Integer(10_000)
             )])
         );
+    }
+
+    #[test]
+    fn batch_g_is_exactly_the_eight_weak_network_scenarios() {
+        let matrix: serde_json::Value =
+            serde_json::from_str(include_str!("../scenarios.json")).expect("matrix JSON");
+        let mut ids = matrix["scenarios"]
+            .as_array()
+            .expect("scenario array")
+            .iter()
+            .filter(|scenario| scenario["batch"] == "G")
+            .map(|scenario| scenario["id"].as_str().expect("scenario id"))
+            .collect::<Vec<_>>();
+        ids.sort_unstable();
+
+        assert_eq!(
+            ids,
+            [
+                "disconnect-downstream-mid-body",
+                "disconnect-upstream-mid-body",
+                "intermittent-downstream",
+                "intermittent-upstream",
+                "jitter-downstream",
+                "jitter-upstream",
+                "throttle-downstream",
+                "throttle-upstream",
+            ]
+        );
+    }
+
+    #[test]
+    fn weak_network_scenarios_lock_template_action_semantics() {
+        assert_eq!(
+            Scenario::ThrottleUpstream.action(),
+            RuleAction::Throttle {
+                bytes_per_second: 512,
+                chunk_bytes: 16,
+                direction: RuleTrafficDirection::Upstream,
+            }
+        );
+        assert_eq!(
+            Scenario::ThrottleDownstream.action(),
+            RuleAction::Throttle {
+                bytes_per_second: 512,
+                chunk_bytes: 16,
+                direction: RuleTrafficDirection::Downstream,
+            }
+        );
+        assert_eq!(
+            Scenario::JitterUpstream.action(),
+            RuleAction::Jitter {
+                minimum_milliseconds: 1_200,
+                maximum_milliseconds: 1_200,
+                scope: RuleJitterScope::BeforeMessage,
+            }
+        );
+        assert_eq!(
+            Scenario::JitterDownstream.action(),
+            Scenario::JitterUpstream.action()
+        );
+        assert_eq!(
+            Scenario::IntermittentUpstream.action(),
+            RuleAction::Intermittent {
+                available_milliseconds: 1,
+                blocked_milliseconds: 200,
+                direction: RuleTrafficDirection::Upstream,
+            }
+        );
+        assert_eq!(
+            Scenario::IntermittentDownstream.action(),
+            RuleAction::Intermittent {
+                available_milliseconds: 1,
+                blocked_milliseconds: 200,
+                direction: RuleTrafficDirection::Downstream,
+            }
+        );
+        assert_eq!(
+            Scenario::DisconnectUpstreamMidBody.action(),
+            RuleAction::Terminal {
+                action: RuleTerminalAction::DisconnectDuringUpstreamWrite { after_bytes: 1 },
+            }
+        );
+        assert_eq!(
+            Scenario::DisconnectDownstreamMidBody.action(),
+            RuleAction::Terminal {
+                action: RuleTerminalAction::DisconnectDuringDownstreamWrite { after_bytes: 1 },
+            }
+        );
+    }
+
+    #[test]
+    fn weak_network_duration_windows_reject_too_fast_or_stalled_runs() {
+        assert!(!Scenario::ThrottleUpstream.reasonable_duration(Some(99)));
+        assert!(Scenario::ThrottleUpstream.reasonable_duration(Some(100)));
+        assert!(!Scenario::JitterDownstream.reasonable_duration(Some(1_199)));
+        assert!(Scenario::JitterDownstream.reasonable_duration(Some(1_200)));
+        assert!(!Scenario::IntermittentUpstream.reasonable_duration(None));
+        assert!(!Scenario::IntermittentUpstream.reasonable_duration(Some(2_999)));
+        assert!(Scenario::IntermittentUpstream.reasonable_duration(Some(3_000)));
+        assert!(!Scenario::IntermittentUpstream.reasonable_duration(Some(60_001)));
+        assert!(Scenario::DisconnectDownstreamMidBody.reasonable_duration(Some(0)));
+        assert!(!Scenario::DisconnectDownstreamMidBody.reasonable_duration(Some(30_001)));
+    }
+
+    #[test]
+    fn intermittent_device_scenarios_add_chunking_support_without_changing_template_semantics() {
+        assert_eq!(
+            Scenario::IntermittentUpstream.supporting_actions(),
+            vec![RuleAction::Throttle {
+                bytes_per_second: 512,
+                chunk_bytes: 16,
+                direction: RuleTrafficDirection::Upstream,
+            }]
+        );
+        assert_eq!(
+            Scenario::IntermittentDownstream.supporting_actions(),
+            vec![RuleAction::Throttle {
+                bytes_per_second: 512,
+                chunk_bytes: 16,
+                direction: RuleTrafficDirection::Downstream,
+            }]
+        );
+        assert!(Scenario::ThrottleUpstream.supporting_actions().is_empty());
     }
 
     #[test]
