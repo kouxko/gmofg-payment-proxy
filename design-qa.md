@@ -130,3 +130,36 @@
 - 未发现剩余 P0、P1 或 P2 视觉问题；无需额外局部放大对照。
 
 final result: passed
+
+## 2026-07-30 删除实时抓包异常筛选
+
+### 对照证据
+
+- 源视觉真值：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-dbb182f7-5ef4-4362-b141-61b21018da26.png`
+- 实现：重新打包并打开的 macOS Tauri App。
+- 视口：当前 macOS 应用窗口。
+- 状态：实时抓包页、代理已停止、筛选条件为空。
+
+### 调整
+
+- 用户确认异常筛选控件与当前筛选区不协调，要求删除该功能。
+- 删除前端 Checkbox/Switch、帮助文案和对应 UI 测试。
+- 删除 Rust `CaptureQuery.exceptions_only` 字段及仓库异常过滤分支。
+- 更新需求 CAPTURE-003，只保留关键字/请求 ID、终端 IP、通道、阶段、结果和规则筛选。
+- 重新生成 Specta TypeScript 绑定，前端与 Rust 不再暴露该字段。
+
+### 自动化与构建
+
+- UI contracts：15 个文件、42 个测试全部通过。
+- ESLint、TypeScript 检查通过。
+- Rust 抓包仓库测试：2 个通过。
+- Specta 绑定已重新生成。
+
+### 视觉复验边界
+
+- 按用户要求，重新打开页面后不由 Codex继续做视觉判断，交由用户直接检查。
+- 当前验收目标是控件和功能完全消失；不对筛选区其余字体、间距、色彩、图像和文案
+  做额外视觉改动。
+
+final result: blocked

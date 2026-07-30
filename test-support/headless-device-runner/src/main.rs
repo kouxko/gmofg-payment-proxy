@@ -1117,7 +1117,6 @@ fn capture_query(rule_id: Option<RuleId>, after_event_id: Option<u64>) -> Captur
         stage: None,
         result: None,
         rule_id,
-        exceptions_only: false,
         after_event_id,
         sort: CaptureSort::OccurredAt,
         direction: SortDirection::Desc,
