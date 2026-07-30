@@ -2,8 +2,8 @@
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -13,8 +13,12 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::message::MessageLimits;
-use crate::transport::{BoundListener, ConnectionService, ListenerBinder, PipelinePorts};
+use crate::transport::{
+    BoundListener, ConnectionAdmission, ConnectionService, ListenerBinder, PipelinePorts,
+};
 use crate::{ErrorCode, ProxyError, Result};
+
+pub const DEFAULT_MAX_CONNECTIONS: usize = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Channel {
@@ -34,6 +38,7 @@ pub struct ChannelConfig {
 pub struct ProxyConfig {
     pub channels: Vec<ChannelConfig>,
     pub limits: MessageLimits,
+    pub max_connections: usize,
     pub connect_timeout: Duration,
     pub write_timeout: Duration,
     pub read_timeout: Duration,
@@ -67,10 +72,11 @@ impl ProxyConfig {
             || self.write_timeout.is_zero()
             || self.read_timeout.is_zero()
             || self.limits.max_body_bytes == 0
+            || self.max_connections == 0
         {
             return Err(ProxyError::new(
                 ErrorCode::ConfigInvalid,
-                "timeouts and body limit must be greater than zero",
+                "timeouts, body limit, and connection limit must be greater than zero",
             ));
         }
         let transaction_count = self
@@ -130,6 +136,30 @@ struct Runtime {
 }
 
 #[derive(Debug)]
+struct CancelOnDrop {
+    token: CancellationToken,
+    armed: bool,
+}
+
+impl CancelOnDrop {
+    fn new(token: CancellationToken) -> Self {
+        Self { token, armed: true }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        if self.armed {
+            self.token.cancel();
+        }
+    }
+}
+
+#[derive(Debug)]
 struct Lifecycle {
     state: ProxyState,
     epoch: Option<Uuid>,
@@ -156,6 +186,7 @@ impl RuntimeServiceFactory for StaticRuntimeServiceFactory {
         let mut service = self.service.clone();
         service.limits = config.limits;
         service.read_timeout = config.read_timeout;
+        service.admission = ConnectionAdmission::new(config.max_connections)?;
         Ok(config
             .channels
             .iter()
@@ -173,6 +204,7 @@ pub struct ProxySupervisor {
     operation: Mutex<()>,
     lifecycle: Arc<RwLock<Lifecycle>>,
     runtime: Mutex<Option<Runtime>>,
+    active_cancellation: StdMutex<Option<CancellationToken>>,
 }
 
 impl ProxySupervisor {
@@ -198,6 +230,7 @@ impl ProxySupervisor {
                 fault: None,
             })),
             runtime: Mutex::new(None),
+            active_cancellation: StdMutex::new(None),
         }
     }
 
@@ -216,10 +249,10 @@ impl ProxySupervisor {
                     "proxy is already running",
                 ));
             }
-            ProxyState::Starting | ProxyState::Stopping => {
-                return Ok(self.snapshot().await);
-            }
-            ProxyState::Stopped | ProxyState::Faulted => {}
+            ProxyState::Starting
+            | ProxyState::Stopping
+            | ProxyState::Stopped
+            | ProxyState::Faulted => {}
         }
         self.cleanup_runtime().await;
         {
@@ -293,6 +326,11 @@ impl ProxySupervisor {
 
         let epoch = Uuid::new_v4();
         let cancellation = CancellationToken::new();
+        let mut start_guard = CancelOnDrop::new(cancellation.clone());
+        *self
+            .active_cancellation
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(cancellation.clone());
         let (fatal_tx, mut fatal_rx) = mpsc::channel::<(Channel, ProxyError)>(prepared.len());
         let mut listener_tasks = Vec::with_capacity(prepared.len());
         let mut listener_addresses = BTreeMap::new();
@@ -349,6 +387,7 @@ impl ProxySupervisor {
                 stopping_notified,
             });
         }
+        start_guard.disarm();
         {
             let mut lifecycle = self.lifecycle.write().await;
             lifecycle.state = ProxyState::Running;
@@ -361,10 +400,13 @@ impl ProxySupervisor {
     pub async fn stop(&self) -> Result<RuntimeSnapshot> {
         let _operation = self.operation.lock().await;
         match self.lifecycle.read().await.state {
-            ProxyState::Stopped | ProxyState::Stopping | ProxyState::Starting => {
+            ProxyState::Stopped => {
                 return Ok(self.snapshot().await);
             }
-            ProxyState::Running | ProxyState::Faulted => {}
+            ProxyState::Starting
+            | ProxyState::Stopping
+            | ProxyState::Running
+            | ProxyState::Faulted => {}
         }
         self.lifecycle.write().await.state = ProxyState::Stopping;
         self.cleanup_runtime().await;
@@ -386,15 +428,38 @@ impl ProxySupervisor {
     async fn cleanup_runtime(&self) {
         let runtime = self.runtime.lock().await.take();
         if let Some(runtime) = runtime {
+            let mut cancellation_guard = CancelOnDrop::new(runtime.cancellation.clone());
             tracing::debug!(runtime_epoch = %runtime.epoch, "stopping proxy runtime");
             if !runtime.stopping_notified.swap(true, Ordering::AcqRel) {
                 runtime.ports.runtime_stopping(runtime.epoch).await;
             }
             runtime.cancellation.cancel();
+            cancellation_guard.disarm();
             for task in runtime.listener_tasks {
                 let _ = task.await;
             }
             let _ = runtime.watchdog.await;
+        }
+        if let Some(cancellation) = self
+            .active_cancellation
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+        {
+            cancellation.cancel();
+        }
+    }
+}
+
+impl Drop for ProxySupervisor {
+    fn drop(&mut self) {
+        if let Some(cancellation) = self
+            .active_cancellation
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take()
+        {
+            cancellation.cancel();
         }
     }
 }

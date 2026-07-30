@@ -12,8 +12,8 @@ use gmofg_proxy_application::{
     ProxyStatusViewModel, ProxySupervisorPort, SettingsDraft, UiTone,
 };
 use gmofg_proxy_runtime::{
-    Channel, ChannelConfig, ChannelRuntimeMetrics, MessageLimits, ProxyConfig, ProxyError,
-    ProxyState, ProxySupervisor, RuntimeMetricsProvider, RuntimeSnapshot,
+    Channel, ChannelConfig, ChannelRuntimeMetrics, DEFAULT_MAX_CONNECTIONS, MessageLimits,
+    ProxyConfig, ProxyError, ProxyState, ProxySupervisor, RuntimeMetricsProvider, RuntimeSnapshot,
 };
 use tokio::sync::RwLock;
 
@@ -369,6 +369,7 @@ fn proxy_config(settings: &SettingsDraft) -> AppResult<ProxyConfig> {
             max_body_bytes,
             ..MessageLimits::default()
         },
+        max_connections: DEFAULT_MAX_CONNECTIONS,
         connect_timeout: Duration::from_secs(settings.connect_timeout_seconds),
         write_timeout: Duration::from_secs(settings.write_timeout_seconds),
         read_timeout: Duration::from_secs(settings.read_timeout_seconds),
@@ -497,5 +498,17 @@ mod tests {
         assert_eq!(status.active_sessions, 4);
         assert_eq!(status.pending_breakpoints, 6);
         assert_eq!(status.logical_memory_bytes, 8_192);
+    }
+
+    #[test]
+    fn retained_session_capacity_does_not_change_live_connection_admission() {
+        let settings = SettingsDraft {
+            max_sessions: 1,
+            ..SettingsDraft::default()
+        };
+
+        let config = proxy_config(&settings).expect("proxy config");
+
+        assert_eq!(config.max_connections, DEFAULT_MAX_CONNECTIONS);
     }
 }

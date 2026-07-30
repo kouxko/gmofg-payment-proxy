@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use gmofg_proxy_application::{
     AppError, AppResult, FileExportPort, OperationResultViewModel, SessionDetailViewModel, UiTone,
 };
+use zeroize::Zeroizing;
 
 use crate::AtomicFileExporter;
 
@@ -52,8 +53,10 @@ impl FileExportPort for FileExportAdapter {
         let Some(selection) = self.dialog.choose_save_file("session_json")? else {
             return Ok(cancelled("已取消会话导出。"));
         };
-        let bytes = serde_json::to_vec_pretty(&session)
-            .map_err(|error| json_error("会话导出序列化失败", error))?;
+        let bytes = Zeroizing::new(
+            serde_json::to_vec_pretty(&session)
+                .map_err(|error| json_error("会话导出序列化失败", error))?,
+        );
         let outcome = infra(self.exporter.write(
             &selection.path,
             &bytes,

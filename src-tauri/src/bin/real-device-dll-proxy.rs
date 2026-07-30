@@ -11,9 +11,9 @@ use std::{
 use async_trait::async_trait;
 use gmofg_proxy_infrastructure::{CertificateService, LeafCertificateRequest};
 use gmofg_proxy_runtime::{
-    Channel, ChannelConfig, ConnectionContext, FaultAction, HandshakePolicy, Message,
-    MessageLimits, PipelinePorts, ProxyConfig, ProxyError, ProxySupervisor, SystemClock,
-    TokioListenerBinder,
+    Channel, ChannelConfig, ConnectionAdmission, ConnectionContext, DEFAULT_MAX_CONNECTIONS,
+    FaultAction, HandshakePolicy, Message, MessageLimits, PipelinePorts, ProxyConfig, ProxyError,
+    ProxySupervisor, SystemClock, TokioListenerBinder,
     tls::{ClientTlsAdapter, ServerTlsAdapter},
     transport::{ConnectionService, ForwardRequest, HyperUpstreamConnector, UpstreamConnector},
 };
@@ -383,6 +383,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }),
         ports,
         clock: Arc::new(SystemClock),
+        admission: ConnectionAdmission::new(DEFAULT_MAX_CONNECTIONS).map_err(proxy_error)?,
         limits,
         read_timeout: Duration::from_secs(90),
     };
@@ -396,6 +397,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 upstream_url: format!("https://{UPSTREAM_HOST}:{UPSTREAM_PORT}"),
             }],
             limits,
+            max_connections: DEFAULT_MAX_CONNECTIONS,
             connect_timeout: Duration::from_secs(30),
             write_timeout: Duration::from_secs(30),
             read_timeout: Duration::from_secs(90),

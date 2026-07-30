@@ -22,12 +22,12 @@ pub use production_factory::{
     RustlsRuntimeServiceFactory, TlsMaterialProvider, TlsMaterialSnapshot,
 };
 pub use supervisor::{
-    Channel, ChannelConfig, ProxyConfig, ProxyState, ProxySupervisor, RuntimeServiceFactory,
-    RuntimeSnapshot,
+    Channel, ChannelConfig, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,
+    RuntimeServiceFactory, RuntimeSnapshot,
 };
 pub use transport::{
-    AcceptedConnection, Clock, ConnectionContext, HandshakePolicy, PipelinePorts, SystemClock,
-    TlsPeerIdentity, TokioListenerBinder, UpstreamConnector,
+    AcceptedConnection, Clock, ConnectionAdmission, ConnectionContext, HandshakePolicy,
+    PipelinePorts, SystemClock, TlsPeerIdentity, TokioListenerBinder, UpstreamConnector,
 };
 
 use std::fmt::Debug;
