@@ -233,6 +233,7 @@ export type CertificateOverviewViewModel = {
 	status_text: string,
 	ui_tone: UiTone,
 	items: CertificateItemViewModel[],
+	can_initialize: boolean,
 	can_change: boolean,
 	disabled_reason: DisabledReason | null,
 };
@@ -376,9 +377,9 @@ export type ProxyStatusViewModel = {
 	fault_reason: string | null,
 };
 
-export type RuleAction = { type: "set_json_field"; path: string; value_json: string } | { type: "replace_body_text"; text: string } | { type: "set_header"; name: string; value: string } | { type: "delay"; milliseconds: number } | { type: "pause" } | { type: "custom_http_status"; status: number } | { type: "terminal"; action: RuleTerminalAction };
+export type RuleAction = { type: "set_json_field"; path: string; value_json: string } | { type: "replace_body_text"; text: string } | { type: "set_header"; name: string; value: string } | { type: "delay"; milliseconds: number } | { type: "jitter"; minimum_milliseconds: number; maximum_milliseconds: number; scope: RuleJitterScope } | { type: "throttle"; bytes_per_second: number; chunk_bytes: number; direction: RuleTrafficDirection } | { type: "intermittent"; available_milliseconds: number; blocked_milliseconds: number; direction: RuleTrafficDirection } | { type: "pause" } | { type: "custom_http_status"; status: number } | { type: "terminal"; action: RuleTerminalAction };
 
-export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "pause" | "custom_http_status" | "reject_tls_handshake" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response";
+export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "pause" | "custom_http_status" | "reject_tls_handshake" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
 
 export type RuleByteInputViewModel = {
 	bytes: number[],
@@ -410,6 +411,8 @@ export type RuleHeaderInputViewModel = {
 	normalized: string,
 };
 
+export type RuleJitterScope = "before_message" | "per_chunk";
+
 export type RuleMatchField = { type: "terminal_ip" } | { type: "certificate_fingerprint" } | { type: "path_or_request_type" } | { type: "json_path"; path: string };
 
 export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "path_or_request_type" | "json_path";
@@ -434,7 +437,9 @@ export type RuleSummaryViewModel = {
 	ui_tone: UiTone,
 };
 
-export type RuleTerminalAction = { type: "reject_tls_handshake" } | { type: "disconnect_before_upstream" } | { type: "upstream_connect_timeout"; milliseconds: number } | { type: "upstream_write_timeout"; milliseconds: number } | { type: "upstream_read_timeout"; milliseconds: number } | { type: "drop_upstream_response"; mode: RuleDropResponseMode } | { type: "mock_response"; status: number; headers: ([string, string])[]; shift_jis_body: number[] } | { type: "invalid_json"; shift_jis_body: number[] } | { type: "incorrect_content_length"; delta: number } | { type: "truncate_response"; bytes: number };
+export type RuleTerminalAction = { type: "reject_tls_handshake" } | { type: "disconnect_before_upstream" } | { type: "upstream_connect_timeout"; milliseconds: number } | { type: "upstream_write_timeout"; milliseconds: number } | { type: "upstream_read_timeout"; milliseconds: number } | { type: "drop_upstream_response"; mode: RuleDropResponseMode } | { type: "mock_response"; status: number; headers: ([string, string])[]; shift_jis_body: number[] } | { type: "invalid_json"; shift_jis_body: number[] } | { type: "incorrect_content_length"; delta: number } | { type: "truncate_response"; bytes: number } | { type: "disconnect_during_upstream_write"; after_bytes: number } | { type: "disconnect_during_downstream_write"; after_bytes: number };
+
+export type RuleTrafficDirection = "upstream" | "downstream";
 
 export type RuleViewModel = {
 	summary: RuleSummaryViewModel,
@@ -551,7 +556,7 @@ export type UiEventEnvelope = {
 	payload: UiEventPayload,
 };
 
-export type UiEventPayload = { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "resource_warning"; data: {
+export type UiEventPayload = { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
 	message: string,
 } } | { type: "operation_failed"; data: AppErrorViewModel } | { type: "snapshot_required"; data: {
 	reason: string,

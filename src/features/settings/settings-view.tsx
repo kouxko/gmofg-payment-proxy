@@ -42,7 +42,7 @@ export function SettingsView() {
     callCommand(commands.settingsGet()),
   );
   useAppEventRefresh(
-    ["runtime_status_changed", "snapshot_required"],
+    ["runtime_status_changed", "settings_changed", "snapshot_required"],
     settings.refresh,
   );
   const [draftState, setDraftState] = useState<SettingsDraft>();

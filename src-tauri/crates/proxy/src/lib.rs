@@ -13,6 +13,7 @@ pub mod metrics;
 pub mod production_factory;
 pub mod supervisor;
 pub mod tls;
+pub mod traffic;
 pub mod transport;
 
 pub use fault::{FaultAction, ResponseDisposition};
@@ -25,6 +26,7 @@ pub use supervisor::{
     Channel, ChannelConfig, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,
     RuntimeServiceFactory, RuntimeSnapshot,
 };
+pub use traffic::{JitterScope, TrafficDirection};
 pub use transport::{
     AcceptedConnection, Clock, ConnectionAdmission, ConnectionContext, HandshakePolicy,
     PipelinePorts, SystemClock, TlsPeerIdentity, TokioListenerBinder, UpstreamConnector,
@@ -58,6 +60,8 @@ pub enum ErrorCode {
     JsonInvalid,
     IncorrectContentLength,
     TruncatedResponse,
+    FaultStreamAborted,
+    FaultExecutionCancelled,
     ClientDisconnected,
     ProxyStopped,
     Io,
@@ -87,6 +91,8 @@ impl ErrorCode {
             Self::JsonInvalid => "JSON_INVALID",
             Self::IncorrectContentLength => "INCORRECT_CONTENT_LENGTH",
             Self::TruncatedResponse => "TRUNCATED_RESPONSE",
+            Self::FaultStreamAborted => "FAULT_STREAM_ABORTED",
+            Self::FaultExecutionCancelled => "FAULT_EXECUTION_CANCELLED",
             Self::ClientDisconnected => "BREAKPOINT_CLIENT_DISCONNECTED",
             Self::ProxyStopped => "BREAKPOINT_PROXY_STOPPED",
             Self::Io => "IO_ERROR",

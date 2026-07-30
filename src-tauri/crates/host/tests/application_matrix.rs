@@ -301,13 +301,20 @@ async fn production_host_covers_certificate_overview_and_validation_without_ui()
         .await
         .expect("query initial certificate overview");
     assert!(!empty_certificates.ready);
-    assert!(empty_certificates.items.is_empty());
+    assert!(empty_certificates.can_initialize);
+    assert_eq!(empty_certificates.items.len(), 1);
+    assert!(
+        empty_certificates.items[0]
+            .usage
+            .contains("内置 Payment server.crt")
+    );
 
     let generated = application
         .certificate_generate_ca(vec![" 127.0.0.1 ".into(), "127.0.0.1".into()])
         .await
         .expect("generate CA and leaf through real certificate adapter");
-    assert_eq!(generated.items.len(), 2);
+    assert!(!generated.can_initialize);
+    assert_eq!(generated.items.len(), 3);
     let certificate_validation = application
         .certificate_validate()
         .await
@@ -319,7 +326,7 @@ async fn production_host_covers_certificate_overview_and_validation_without_ui()
             .contains_key("shared_pkcs12")
     );
     assert!(
-        certificate_validation
+        !certificate_validation
             .field_errors
             .contains_key("upstream_ca")
     );

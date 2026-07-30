@@ -8,6 +8,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::codec;
 use crate::message::Message;
+use crate::traffic::{
+    IntermittentProfile, JitterProfile, JitterScope, ThrottleProfile, TrafficDirection,
+    TrafficSchedule,
+};
 use crate::{ErrorCode, ProxyError, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,14 +35,41 @@ pub enum FaultAction {
     ContentLengthOffset(i64),
     TruncateResponse(usize),
     Delay(Duration),
+    Jitter {
+        minimum: Duration,
+        maximum: Duration,
+        scope: JitterScope,
+        seed: u64,
+    },
+    Throttle {
+        bytes_per_second: u64,
+        chunk_bytes: usize,
+        direction: TrafficDirection,
+    },
+    Intermittent {
+        available: Duration,
+        blocked: Duration,
+        direction: TrafficDirection,
+    },
+    DisconnectDuringWrite {
+        after_bytes: usize,
+        direction: TrafficDirection,
+    },
     CustomStatus(StatusCode),
 }
 
 #[derive(Debug, Clone)]
 pub enum ResponseDisposition {
-    Send(Message),
+    Send {
+        message: Message,
+        schedule: TrafficSchedule,
+    },
     Drop,
-    Truncate { message: Message, bytes: usize },
+    Truncate {
+        message: Message,
+        bytes: usize,
+        schedule: TrafficSchedule,
+    },
 }
 
 pub async fn cancellable_delay(duration: Duration, cancellation: &CancellationToken) -> Result<()> {
@@ -69,6 +100,7 @@ pub async fn apply_response_actions(
     actions: &[FaultAction],
     cancellation: &CancellationToken,
 ) -> Result<ResponseDisposition> {
+    let mut schedule = TrafficSchedule::default();
     for action in actions {
         match action {
             FaultAction::Delay(duration) => cancellable_delay(*duration, cancellation).await?,
@@ -103,8 +135,46 @@ pub async fn apply_response_actions(
                 return Ok(ResponseDisposition::Truncate {
                     message,
                     bytes: *bytes,
+                    schedule,
                 });
             }
+            FaultAction::Jitter {
+                minimum,
+                maximum,
+                scope,
+                seed,
+            } => {
+                schedule.jitter = Some(JitterProfile {
+                    minimum: *minimum,
+                    maximum: *maximum,
+                    scope: *scope,
+                });
+                schedule.seed = *seed;
+            }
+            FaultAction::Throttle {
+                bytes_per_second,
+                chunk_bytes,
+                direction: TrafficDirection::Downstream,
+            } => {
+                schedule.throttle = Some(ThrottleProfile {
+                    bytes_per_second: *bytes_per_second,
+                    chunk_bytes: *chunk_bytes,
+                });
+            }
+            FaultAction::Intermittent {
+                available,
+                blocked,
+                direction: TrafficDirection::Downstream,
+            } => {
+                schedule.intermittent = Some(IntermittentProfile {
+                    available: *available,
+                    blocked: *blocked,
+                });
+            }
+            FaultAction::DisconnectDuringWrite {
+                after_bytes,
+                direction: TrafficDirection::Downstream,
+            } => schedule.disconnect_after_bytes = Some(*after_bytes),
             FaultAction::CustomStatus(status) => {
                 let headers = message.header_map()?;
                 message = Message::response(*status, &headers, message.body);
@@ -122,7 +192,19 @@ pub async fn apply_response_actions(
             | FaultAction::DisconnectBeforeUpstream
             | FaultAction::UpstreamConnectTimeout(_)
             | FaultAction::UpstreamWriteTimeout(_)
-            | FaultAction::UpstreamReadTimeout(_) => {
+            | FaultAction::UpstreamReadTimeout(_)
+            | FaultAction::Throttle {
+                direction: TrafficDirection::Upstream,
+                ..
+            }
+            | FaultAction::Intermittent {
+                direction: TrafficDirection::Upstream,
+                ..
+            }
+            | FaultAction::DisconnectDuringWrite {
+                direction: TrafficDirection::Upstream,
+                ..
+            } => {
                 return Err(ProxyError::new(
                     ErrorCode::ConfigInvalid,
                     "request-stage fault used during response processing",
@@ -130,7 +212,7 @@ pub async fn apply_response_actions(
             }
         }
     }
-    Ok(ResponseDisposition::Send(message))
+    Ok(ResponseDisposition::Send { message, schedule })
 }
 
 #[cfg(test)]
@@ -149,7 +231,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let ResponseDisposition::Send(message) = result else {
+        let ResponseDisposition::Send { message, .. } = result else {
             panic!("expected response");
         };
         assert_eq!(message.declared_content_length(), Some(7));
@@ -193,7 +275,7 @@ mod tests {
         )
         .await
         .expect("compose response faults");
-        let ResponseDisposition::Send(message) = result else {
+        let ResponseDisposition::Send { message, .. } = result else {
             panic!("expected response to be sent");
         };
         assert_eq!(message.start_line, "HTTP/1.1 503 Service Unavailable");

@@ -6,6 +6,7 @@
 
 use std::{
     collections::{BTreeMap, HashMap},
+    hash::{DefaultHasher, Hash, Hasher},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -24,14 +25,14 @@ use gmofg_proxy_application::{
     SessionSummaryViewModel, UiEventPayload, UiTone,
 };
 use gmofg_proxy_domain::{
-    ChannelKind, DropResponseMode, JsonPath, MatchContext, MessageStage as DomainMessageStage,
-    Rule, RuleAction, RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
-    TerminalIdentity,
+    ChannelKind, DropResponseMode, JitterScope as DomainJitterScope, JsonPath, MatchContext,
+    MessageStage as DomainMessageStage, Rule, RuleAction, RuleEngine, RuleRuntimeSnapshot,
+    RuntimeEpoch, TerminalAction, TerminalIdentity, TrafficDirection as DomainTrafficDirection,
 };
 use gmofg_proxy_runtime::{
     Channel, ChannelRuntimeMetrics, ConnectionContext, ErrorCode, FaultAction, HandshakePolicy,
-    Message, PipelinePorts, ProxyError, RawHeader, Result as ProxyResult, RuntimeMetricsProvider,
-    RuntimeMetricsSnapshot, TlsPeerIdentity,
+    JitterScope, Message, PipelinePorts, ProxyError, RawHeader, Result as ProxyResult,
+    RuntimeMetricsProvider, RuntimeMetricsSnapshot, TlsPeerIdentity, TrafficDirection,
 };
 use parking_lot::Mutex;
 use serde_json::Value;
@@ -847,7 +848,8 @@ impl PipelinePorts for RuntimePipelineAdapter {
         let original = message.clone();
         self.begin_session(context, &original)?;
         let evaluated = self.evaluate(context, DomainMessageStage::Request, Some(message))?;
-        let (mut actions, pause) = apply_rule_actions(message, &evaluated.actions)?;
+        let seed = weak_network_seed(context, DomainMessageStage::Request, &evaluated.hit_rules);
+        let (mut actions, pause) = apply_rule_actions(message, &evaluated.actions, seed)?;
         self.publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if pause {
             actions.extend(
@@ -890,7 +892,8 @@ impl PipelinePorts for RuntimePipelineAdapter {
         }
         let original = message.clone();
         let evaluated = self.evaluate(context, DomainMessageStage::Response, Some(message))?;
-        let (mut actions, pause) = apply_rule_actions(message, &evaluated.actions)?;
+        let seed = weak_network_seed(context, DomainMessageStage::Response, &evaluated.hit_rules);
+        let (mut actions, pause) = apply_rule_actions(message, &evaluated.actions, seed)?;
         self.publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if pause {
             actions.extend(
@@ -1050,6 +1053,7 @@ impl RuntimeMetricsProvider for RuntimePipelineAdapter {
 fn apply_rule_actions(
     message: &mut Message,
     actions: &[RuleAction],
+    seed: u64,
 ) -> ProxyResult<(Vec<FaultAction>, bool)> {
     let mut faults = Vec::new();
     let mut pause = false;
@@ -1078,6 +1082,39 @@ fn apply_rule_actions(
             RuleAction::Delay { milliseconds } => {
                 faults.push(FaultAction::Delay(Duration::from_millis(*milliseconds)));
             }
+            RuleAction::Jitter {
+                minimum_milliseconds,
+                maximum_milliseconds,
+                scope,
+            } => faults.push(FaultAction::Jitter {
+                minimum: Duration::from_millis(*minimum_milliseconds),
+                maximum: Duration::from_millis(*maximum_milliseconds),
+                scope: match scope {
+                    DomainJitterScope::BeforeMessage => JitterScope::BeforeMessage,
+                    DomainJitterScope::PerChunk => JitterScope::PerChunk,
+                },
+                seed,
+            }),
+            RuleAction::Throttle {
+                bytes_per_second,
+                chunk_bytes,
+                direction,
+            } => faults.push(FaultAction::Throttle {
+                bytes_per_second: *bytes_per_second,
+                chunk_bytes: usize::try_from(*chunk_bytes).map_err(|_| {
+                    ProxyError::new(ErrorCode::ConfigInvalid, "traffic chunk exceeds platform")
+                })?,
+                direction: traffic_direction(*direction),
+            }),
+            RuleAction::Intermittent {
+                available_milliseconds,
+                blocked_milliseconds,
+                direction,
+            } => faults.push(FaultAction::Intermittent {
+                available: Duration::from_millis(*available_milliseconds),
+                blocked: Duration::from_millis(*blocked_milliseconds),
+                direction: traffic_direction(*direction),
+            }),
             RuleAction::Pause => pause = true,
             RuleAction::CustomHttpStatus { status } => {
                 faults.push(FaultAction::CustomStatus(proxy_status!(*status)?));
@@ -1089,6 +1126,30 @@ fn apply_rule_actions(
         message.set_content_length(message.body.len());
     }
     Ok((faults, pause))
+}
+
+fn weak_network_seed(
+    context: &ConnectionContext,
+    stage: DomainMessageStage,
+    hit_rules: &[RuleSummaryViewModel],
+) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    context.runtime_epoch.hash(&mut hasher);
+    context.connection_id.hash(&mut hasher);
+    std::mem::discriminant(&stage).hash(&mut hasher);
+    for rule in hit_rules {
+        rule.rule_id.hash(&mut hasher);
+        rule.revision.hash(&mut hasher);
+        rule.hit_count.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+const fn traffic_direction(direction: DomainTrafficDirection) -> TrafficDirection {
+    match direction {
+        DomainTrafficDirection::Upstream => TrafficDirection::Upstream,
+        DomainTrafficDirection::Downstream => TrafficDirection::Downstream,
+    }
 }
 
 fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultAction> {
@@ -1141,6 +1202,28 @@ fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultAction> {
                     "truncate size exceeds platform range",
                 )
             })?)
+        }
+        TerminalAction::DisconnectDuringUpstreamWrite { after_bytes } => {
+            FaultAction::DisconnectDuringWrite {
+                after_bytes: usize::try_from(*after_bytes).map_err(|_| {
+                    ProxyError::new(
+                        ErrorCode::ConfigInvalid,
+                        "upstream disconnect offset exceeds platform range",
+                    )
+                })?,
+                direction: TrafficDirection::Upstream,
+            }
+        }
+        TerminalAction::DisconnectDuringDownstreamWrite { after_bytes } => {
+            FaultAction::DisconnectDuringWrite {
+                after_bytes: usize::try_from(*after_bytes).map_err(|_| {
+                    ProxyError::new(
+                        ErrorCode::ConfigInvalid,
+                        "downstream disconnect offset exceeds platform range",
+                    )
+                })?,
+                direction: TrafficDirection::Downstream,
+            }
         }
     })
 }
@@ -1488,10 +1571,11 @@ fn result_text(code: &str) -> &'static str {
             "上游超时"
         }
         "BREAKPOINT_CLIENT_DISCONNECTED" => "App 断开",
-        "BREAKPOINT_PROXY_STOPPED" => "Proxy 停止",
+        "BREAKPOINT_PROXY_STOPPED" | "FAULT_EXECUTION_CANCELLED" => "Proxy 停止",
         "TLS_HANDSHAKE_FAILED" => "TLS 失败",
         "INCORRECT_CONTENT_LENGTH" => "规则终止",
         "TRUNCATED_RESPONSE" => "截断",
+        "FAULT_STREAM_ABORTED" => "弱网断连",
         _ => "内部错误",
     }
 }
@@ -2078,7 +2162,7 @@ mod tests {
             RuleAction::Delay { milliseconds: 25 },
             RuleAction::Pause,
         ];
-        let (faults, pause) = apply_rule_actions(&mut message, &actions).expect("apply");
+        let (faults, pause) = apply_rule_actions(&mut message, &actions, 42).expect("apply");
         assert!(pause);
         assert_eq!(faults, vec![FaultAction::Delay(Duration::from_millis(25))]);
         assert_eq!(
@@ -2129,7 +2213,8 @@ mod tests {
             },
         ];
 
-        let (faults, pause) = apply_rule_actions(&mut message, &actions).expect("apply mutations");
+        let (faults, pause) =
+            apply_rule_actions(&mut message, &actions, 42).expect("apply mutations");
         assert!(faults.is_empty());
         assert!(!pause);
         assert_eq!(message.decoded_shift_jis().expect("Shift-JIS"), "最終");

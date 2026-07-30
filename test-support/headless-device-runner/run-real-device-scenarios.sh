@@ -46,7 +46,7 @@ for required_file in "$MATRIX_FILE" "$GMOFG_PROXY_CA_DER" "$GMOFG_CLIENT_P12"; d
   fi
 done
 jq -e '
-  ([.scenarios[].template_id | select(. != null)] | unique | length) == 14
+  ([.scenarios[].template_id | select(. != null)] | unique | length) == 22
   and (
     [.scenarios[] | select(.batch == "E") | .match_field | select(. != null)]
     | unique
@@ -62,6 +62,41 @@ jq -e '
     [.scenarios[] | select(.batch == "F")]
     | length == 9
     and all(.[]; .expected_invalid_error == true)
+  )
+  and (
+    [.scenarios[] | select(.batch == "G") | .id] | sort
+  ) == [
+    "disconnect-downstream-mid-body",
+    "disconnect-upstream-mid-body",
+    "intermittent-downstream",
+    "intermittent-upstream",
+    "jitter-downstream",
+    "jitter-upstream",
+    "throttle-downstream",
+    "throttle-upstream"
+  ]
+  and all(
+    .scenarios[] | select(.batch == "G");
+    .expected_rule_hits == 1
+    and (
+      if .id == "disconnect-upstream-mid-body"
+      then (
+        .android_expected_kind == "io_failure"
+        and .expected_exception == "IOException"
+        and .requires_batch_recovery_d48 == true
+      )
+      elif .id == "disconnect-downstream-mid-body"
+      then (
+        .android_expected_kind == "body_read_failure"
+        and .expected_exception == "ProtocolException"
+        and .requires_batch_recovery_d48 == true
+      )
+      else (
+        .android_expected_kind == "d48"
+        and (.minimum_elapsed_ms | type == "number" and . > 0)
+      )
+      end
+    )
   )
   and all(
     .scenarios[];
@@ -513,6 +548,9 @@ run_probe() {
         'if has("expected_failed_trace") then .expected_failed_trace else false end' \
         <<<"$scenario_json"
     )" \
+    --argjson expect_weak_network "$(
+      jq -r 'if .batch == "G" then true else false end' <<<"$scenario_json"
+    )" \
     '.action_effect_confirmed == true
       and (
         if $expected_hits == null
@@ -548,6 +586,15 @@ run_probe() {
       and (
         if $expect_failed_trace
         then any(.rule_trace[]; contains("[未命中]"))
+        else true
+        end
+      )
+      and (
+        if $expect_weak_network
+        then (
+          .action_semantic_confirmed == true
+          and .reasonable_duration_confirmed == true
+        )
         else true
         end
       )' \

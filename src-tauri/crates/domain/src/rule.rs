@@ -11,6 +11,8 @@ use specta::Type;
 use std::collections::HashMap;
 
 pub const MAX_TOTAL_DELAY_MS: u64 = 600_000;
+pub const MAX_THROTTLE_BYTES_PER_SECOND: u64 = 100 * 1024 * 1024;
+pub const MAX_TRAFFIC_CHUNK_BYTES: u64 = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub enum MatchField {
@@ -40,6 +42,18 @@ pub enum MatchCondition {
 pub enum DropResponseMode {
     ReadCompleteResponse,
     CloseAfterRequestWrite,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+pub enum TrafficDirection {
+    Upstream,
+    Downstream,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+pub enum JitterScope {
+    BeforeMessage,
+    PerChunk,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -72,22 +86,34 @@ pub enum TerminalAction {
     TruncateResponse {
         bytes: u64,
     },
+    DisconnectDuringUpstreamWrite {
+        after_bytes: u64,
+    },
+    DisconnectDuringDownstreamWrite {
+        after_bytes: u64,
+    },
 }
 
 impl TerminalAction {
     pub fn validate_for_body(&self, body_len: usize) -> Result<(), DomainError> {
-        if let Self::TruncateResponse { bytes } = self {
-            let bytes = usize::try_from(*bytes).map_err(|_| {
-                DomainError::new(ErrorCode::RuleInvalid, "截断长度超出平台范围")
-                    .with_field_error("bytes", "截断长度非法")
-            })?;
-            if body_len == 0 || bytes >= body_len {
-                return Err(DomainError::new(
-                    ErrorCode::RuleInvalid,
-                    "截断长度必须小于响应 Body 长度",
-                )
-                .with_field_error("bytes", "必须位于 0..body_len-1"));
+        let (bytes, field, message) = match self {
+            Self::TruncateResponse { bytes } => (*bytes, "bytes", "截断长度"),
+            Self::DisconnectDuringUpstreamWrite { after_bytes }
+            | Self::DisconnectDuringDownstreamWrite { after_bytes } => {
+                (*after_bytes, "after_bytes", "断连偏移")
             }
+            _ => return Ok(()),
+        };
+        let bytes = usize::try_from(bytes).map_err(|_| {
+            DomainError::new(ErrorCode::RuleInvalid, format!("{message}超出平台范围"))
+                .with_field_error(field, format!("{message}非法"))
+        })?;
+        if body_len == 0 || bytes >= body_len {
+            return Err(DomainError::new(
+                ErrorCode::RuleInvalid,
+                format!("{message}必须小于 Body 长度"),
+            )
+            .with_field_error(field, "必须位于 0..body_len-1"));
         }
         Ok(())
     }
@@ -95,12 +121,37 @@ impl TerminalAction {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub enum RuleAction {
-    SetJsonField { path: String, value: Value },
+    SetJsonField {
+        path: String,
+        value: Value,
+    },
     ReplaceBodyText(String),
-    SetHeader { name: String, value: String },
-    Delay { milliseconds: u64 },
+    SetHeader {
+        name: String,
+        value: String,
+    },
+    Delay {
+        milliseconds: u64,
+    },
+    Jitter {
+        minimum_milliseconds: u64,
+        maximum_milliseconds: u64,
+        scope: JitterScope,
+    },
+    Throttle {
+        bytes_per_second: u64,
+        chunk_bytes: u64,
+        direction: TrafficDirection,
+    },
+    Intermittent {
+        available_milliseconds: u64,
+        blocked_milliseconds: u64,
+        direction: TrafficDirection,
+    },
     Pause,
-    CustomHttpStatus { status: u16 },
+    CustomHttpStatus {
+        status: u16,
+    },
     Terminal(TerminalAction),
 }
 
@@ -547,6 +598,10 @@ pub fn validate_rule_draft(draft: &RuleDraft) -> Result<(), DomainError> {
     let total_delay = draft.actions.iter().fold(0_u64, |total, action| {
         total.saturating_add(match action {
             RuleAction::Delay { milliseconds } => *milliseconds,
+            RuleAction::Jitter {
+                maximum_milliseconds,
+                ..
+            } => *maximum_milliseconds,
             _ => 0,
         })
     });
@@ -580,6 +635,7 @@ pub fn validate_rule_draft(draft: &RuleDraft) -> Result<(), DomainError> {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn validate_actions(draft: &RuleDraft, error: &mut DomainError) {
     let terminal_positions: Vec<usize> = draft
         .actions
@@ -607,6 +663,75 @@ fn validate_actions(draft: &RuleDraft, error: &mut DomainError) {
                 format!("actions.{index}.status"),
                 "HTTP 状态码必须位于 100..599",
             );
+        }
+        match action {
+            RuleAction::Jitter {
+                minimum_milliseconds,
+                maximum_milliseconds,
+                ..
+            } => {
+                if minimum_milliseconds > maximum_milliseconds {
+                    push_field_error(
+                        error,
+                        format!("actions.{index}.minimum_milliseconds"),
+                        "最小抖动不得大于最大抖动",
+                    );
+                }
+                if *maximum_milliseconds > MAX_TOTAL_DELAY_MS {
+                    push_field_error(
+                        error,
+                        format!("actions.{index}.maximum_milliseconds"),
+                        "单次抖动不得超过 600000 毫秒",
+                    );
+                }
+            }
+            RuleAction::Throttle {
+                bytes_per_second,
+                chunk_bytes,
+                ..
+            } => {
+                if !(1..=MAX_THROTTLE_BYTES_PER_SECOND).contains(bytes_per_second) {
+                    push_field_error(
+                        error,
+                        format!("actions.{index}.bytes_per_second"),
+                        "限速必须位于 1..104857600 B/s",
+                    );
+                }
+                if !(1..=MAX_TRAFFIC_CHUNK_BYTES).contains(chunk_bytes) {
+                    push_field_error(
+                        error,
+                        format!("actions.{index}.chunk_bytes"),
+                        "分块大小必须位于 1..1048576 字节",
+                    );
+                }
+            }
+            RuleAction::Intermittent {
+                available_milliseconds,
+                blocked_milliseconds,
+                ..
+            } => {
+                if !(1..=MAX_TOTAL_DELAY_MS).contains(available_milliseconds) {
+                    push_field_error(
+                        error,
+                        format!("actions.{index}.available_milliseconds"),
+                        "可用窗口必须位于 1..600000 毫秒",
+                    );
+                }
+                if !(1..=MAX_TOTAL_DELAY_MS).contains(blocked_milliseconds) {
+                    push_field_error(
+                        error,
+                        format!("actions.{index}.blocked_milliseconds"),
+                        "阻断窗口必须位于 1..600000 毫秒",
+                    );
+                }
+            }
+            RuleAction::SetJsonField { .. }
+            | RuleAction::ReplaceBodyText(_)
+            | RuleAction::SetHeader { .. }
+            | RuleAction::Delay { .. }
+            | RuleAction::Pause
+            | RuleAction::CustomHttpStatus { .. }
+            | RuleAction::Terminal(_) => {}
         }
         if let RuleAction::Terminal(TerminalAction::IncorrectContentLength { delta }) = action
             && *delta == 0
@@ -818,7 +943,15 @@ fn action_compatible(stage: MessageStage, action: &RuleAction) -> bool {
         | RuleAction::ReplaceBodyText(_)
         | RuleAction::SetHeader { .. }
         | RuleAction::Delay { .. }
+        | RuleAction::Jitter { .. }
         | RuleAction::Pause => stage != MessageStage::TlsHandshake,
+        RuleAction::Throttle { direction, .. } | RuleAction::Intermittent { direction, .. } => {
+            matches!(
+                (stage, direction),
+                (MessageStage::Request, TrafficDirection::Upstream)
+                    | (MessageStage::Response, TrafficDirection::Downstream)
+            )
+        }
         RuleAction::CustomHttpStatus { .. } => stage == MessageStage::Response,
         RuleAction::Terminal(terminal) => match terminal {
             TerminalAction::RejectTlsHandshake => stage == MessageStage::TlsHandshake,
@@ -827,10 +960,16 @@ fn action_compatible(stage: MessageStage, action: &RuleAction) -> bool {
             | TerminalAction::UpstreamWriteTimeout { .. }
             | TerminalAction::UpstreamReadTimeout { .. }
             | TerminalAction::DropUpstreamResponse { .. }
-            | TerminalAction::MockResponse { .. } => stage == MessageStage::Request,
+            | TerminalAction::MockResponse { .. }
+            | TerminalAction::DisconnectDuringUpstreamWrite { .. } => {
+                stage == MessageStage::Request
+            }
             TerminalAction::InvalidJson { .. }
             | TerminalAction::IncorrectContentLength { .. }
-            | TerminalAction::TruncateResponse { .. } => stage == MessageStage::Response,
+            | TerminalAction::TruncateResponse { .. }
+            | TerminalAction::DisconnectDuringDownstreamWrite { .. } => {
+                stage == MessageStage::Response
+            }
         },
     }
 }
@@ -1589,5 +1728,84 @@ mod tests {
         let warnings = RuleEngine::new(epoch, vec![lower, higher]).conflict_warnings();
         assert_eq!(warnings.len(), 1);
         assert_eq!(warnings[0].code, ErrorCode::RuleConflictWarning);
+    }
+
+    #[test]
+    fn validates_weak_network_parameter_boundaries_and_stages() {
+        let valid = draft(
+            MessageStage::Request,
+            Vec::new(),
+            vec![
+                RuleAction::Jitter {
+                    minimum_milliseconds: 10,
+                    maximum_milliseconds: 20,
+                    scope: JitterScope::PerChunk,
+                },
+                RuleAction::Throttle {
+                    bytes_per_second: 1,
+                    chunk_bytes: MAX_TRAFFIC_CHUNK_BYTES,
+                    direction: TrafficDirection::Upstream,
+                },
+                RuleAction::Intermittent {
+                    available_milliseconds: 1,
+                    blocked_milliseconds: MAX_TOTAL_DELAY_MS,
+                    direction: TrafficDirection::Upstream,
+                },
+                RuleAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite {
+                    after_bytes: 1,
+                }),
+            ],
+        );
+        assert!(validate_rule_draft(&valid).is_ok());
+
+        let invalid = draft(
+            MessageStage::Request,
+            Vec::new(),
+            vec![
+                RuleAction::Jitter {
+                    minimum_milliseconds: 2,
+                    maximum_milliseconds: 1,
+                    scope: JitterScope::BeforeMessage,
+                },
+                RuleAction::Throttle {
+                    bytes_per_second: 0,
+                    chunk_bytes: MAX_TRAFFIC_CHUNK_BYTES + 1,
+                    direction: TrafficDirection::Upstream,
+                },
+                RuleAction::Intermittent {
+                    available_milliseconds: 0,
+                    blocked_milliseconds: MAX_TOTAL_DELAY_MS + 1,
+                    direction: TrafficDirection::Upstream,
+                },
+                RuleAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
+                    after_bytes: 1,
+                }),
+            ],
+        );
+        let error = validate_rule_draft(&invalid).expect_err("weak network bounds");
+        for field in [
+            "actions.0.minimum_milliseconds",
+            "actions.1.bytes_per_second",
+            "actions.1.chunk_bytes",
+            "actions.2.available_milliseconds",
+            "actions.2.blocked_milliseconds",
+            "actions.3",
+        ] {
+            assert!(
+                error.field_errors.contains_key(field),
+                "missing field error for {field}: {:?}",
+                error.field_errors
+            );
+        }
+    }
+
+    #[test]
+    fn mid_body_disconnect_offset_is_validated_against_runtime_body() {
+        let upstream = TerminalAction::DisconnectDuringUpstreamWrite { after_bytes: 3 };
+        assert!(upstream.validate_for_body(4).is_ok());
+        assert!(upstream.validate_for_body(3).is_err());
+        let downstream = TerminalAction::DisconnectDuringDownstreamWrite { after_bytes: 0 };
+        assert!(downstream.validate_for_body(1).is_ok());
+        assert!(downstream.validate_for_body(0).is_err());
     }
 }

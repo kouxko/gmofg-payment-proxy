@@ -25,6 +25,7 @@ import type {
   RuleMatchOperator,
   RuleMatchOperatorKind,
   RuleTerminalAction,
+  RuleTrafficDirection,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
@@ -145,6 +146,9 @@ const actionLabels: Record<ActionKind, string> = {
   replace_body_text: "替换 Body 文本",
   set_header: "设置 Header",
   delay: "延迟",
+  jitter: "网络抖动",
+  throttle: "带宽限速",
+  intermittent: "间歇通断",
   pause: "暂停并进入断点",
   custom_http_status: "自定义 HTTP 状态码",
   reject_tls_handshake: "拒绝 TLS 握手",
@@ -157,6 +161,8 @@ const actionLabels: Record<ActionKind, string> = {
   invalid_json: "非法 JSON 响应",
   incorrect_content_length: "错误 Content-Length",
   truncate_response: "截断响应",
+  disconnect_during_upstream_write: "上行 Body 中途断连",
+  disconnect_during_downstream_write: "下行 Body 中途断连",
 };
 
 const actionKinds = Object.keys(actionLabels) as ActionKind[];
@@ -179,6 +185,38 @@ function NumericInput({
         <NumberField.IncrementButton />
       </NumberField.Group>
     </NumberField>
+  );
+}
+
+function TrafficDirectionSelect({
+  value,
+  onChange,
+}: {
+  value: RuleTrafficDirection;
+  onChange: (value: RuleTrafficDirection) => void;
+}) {
+  return (
+    <div className="grid gap-1">
+      <Label>流量方向</Label>
+      <Select
+        aria-label="流量方向"
+        selectedKey={value}
+        onSelectionChange={(direction) =>
+          onChange(direction as RuleTrafficDirection)
+        }
+      >
+        <Select.Trigger>
+          <Select.Value />
+          <Select.Indicator />
+        </Select.Trigger>
+        <Select.Popover>
+          <ListBox>
+            <ListBox.Item id="upstream">上行：Proxy → Server</ListBox.Item>
+            <ListBox.Item id="downstream">下行：Proxy → App</ListBox.Item>
+          </ListBox>
+        </Select.Popover>
+      </Select>
+    </div>
   );
 }
 
@@ -555,6 +593,21 @@ function TerminalActionFields({
           }
         />
       );
+    case "disconnect_during_upstream_write":
+    case "disconnect_during_downstream_write":
+      return (
+        <NumericInput
+          label="发送后断连（字节）"
+          value={action.after_bytes}
+          onChange={(after_bytes) =>
+            onChange((current) =>
+              current.type === action.type
+                ? { ...current, after_bytes }
+                : current,
+            )
+          }
+        />
+      );
     case "reject_tls_handshake":
     case "disconnect_before_upstream":
       return null;
@@ -659,6 +712,138 @@ function ActionEditor({
               )
             }
           />
+        );
+      case "jitter":
+        return (
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <NumericInput
+                label="最小抖动（毫秒）"
+                value={action.minimum_milliseconds}
+                onChange={(minimum_milliseconds) =>
+                  onChange((current) =>
+                    current.type === "jitter"
+                      ? { ...current, minimum_milliseconds }
+                      : current,
+                  )
+                }
+              />
+              <NumericInput
+                label="最大抖动（毫秒）"
+                value={action.maximum_milliseconds}
+                onChange={(maximum_milliseconds) =>
+                  onChange((current) =>
+                    current.type === "jitter"
+                      ? { ...current, maximum_milliseconds }
+                      : current,
+                  )
+                }
+              />
+            </div>
+            <div className="grid gap-1">
+              <Label>抖动范围</Label>
+              <Select
+                aria-label="抖动范围"
+                selectedKey={action.scope}
+                onSelectionChange={(scope) =>
+                  onChange((current) =>
+                    current.type === "jitter"
+                      ? { ...current, scope: scope as typeof action.scope }
+                      : current,
+                  )
+                }
+              >
+                <Select.Trigger>
+                  <Select.Value />
+                  <Select.Indicator />
+                </Select.Trigger>
+                <Select.Popover>
+                  <ListBox>
+                    <ListBox.Item id="before_message">消息发送前一次</ListBox.Item>
+                    <ListBox.Item id="per_chunk">每个分块</ListBox.Item>
+                  </ListBox>
+                </Select.Popover>
+              </Select>
+            </div>
+          </div>
+        );
+      case "throttle":
+        return (
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <NumericInput
+                label="速率（B/s）"
+                value={action.bytes_per_second}
+                onChange={(bytes_per_second) =>
+                  onChange((current) =>
+                    current.type === "throttle"
+                      ? { ...current, bytes_per_second }
+                      : current,
+                  )
+                }
+              />
+              <NumericInput
+                label="分块大小（字节）"
+                value={action.chunk_bytes}
+                onChange={(chunk_bytes) =>
+                  onChange((current) =>
+                    current.type === "throttle"
+                      ? { ...current, chunk_bytes }
+                      : current,
+                  )
+                }
+              />
+            </div>
+            <TrafficDirectionSelect
+              value={action.direction}
+              onChange={(direction) =>
+                onChange((current) =>
+                  current.type === "throttle"
+                    ? { ...current, direction }
+                    : current,
+                )
+              }
+            />
+          </div>
+        );
+      case "intermittent":
+        return (
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <NumericInput
+                label="可用窗口（毫秒）"
+                value={action.available_milliseconds}
+                onChange={(available_milliseconds) =>
+                  onChange((current) =>
+                    current.type === "intermittent"
+                      ? { ...current, available_milliseconds }
+                      : current,
+                  )
+                }
+              />
+              <NumericInput
+                label="阻断窗口（毫秒）"
+                value={action.blocked_milliseconds}
+                onChange={(blocked_milliseconds) =>
+                  onChange((current) =>
+                    current.type === "intermittent"
+                      ? { ...current, blocked_milliseconds }
+                      : current,
+                  )
+                }
+              />
+            </div>
+            <TrafficDirectionSelect
+              value={action.direction}
+              onChange={(direction) =>
+                onChange((current) =>
+                  current.type === "intermittent"
+                    ? { ...current, direction }
+                    : current,
+                )
+              }
+            />
+          </div>
         );
       case "custom_http_status":
         return (

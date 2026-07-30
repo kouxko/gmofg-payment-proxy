@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
-    net::{IpAddr, SocketAddr, TcpListener},
+    fmt::Debug,
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, UdpSocket},
     sync::Arc,
 };
 
@@ -18,31 +19,74 @@ use crate::SqliteStore;
 
 use super::common::{infra, json_error};
 
+trait LocalAddressProvider: Debug + Send + Sync {
+    fn preferred_lan_ipv4(&self) -> Option<Ipv4Addr>;
+}
+
+#[derive(Debug, Default)]
+struct SystemLocalAddressProvider;
+
+impl LocalAddressProvider for SystemLocalAddressProvider {
+    fn preferred_lan_ipv4(&self) -> Option<Ipv4Addr> {
+        // UDP connect only asks the operating system which local interface it
+        // would route through. It does not establish a connection or send data.
+        let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+        socket.connect((Ipv4Addr::new(8, 8, 8, 8), 80)).ok()?;
+        let IpAddr::V4(address) = socket.local_addr().ok()?.ip() else {
+            return None;
+        };
+        is_usable_lan_ipv4(address).then_some(address)
+    }
+}
+
+fn is_usable_lan_ipv4(address: Ipv4Addr) -> bool {
+    !address.is_unspecified()
+        && !address.is_loopback()
+        && !address.is_link_local()
+        && !address.is_multicast()
+        && !address.is_broadcast()
+}
+
 #[derive(Debug)]
 pub struct SettingsRepositoryAdapter {
     store: Arc<SqliteStore>,
     effective: RwLock<Option<SettingsDraft>>,
+    local_address: Arc<dyn LocalAddressProvider>,
 }
 
 impl SettingsRepositoryAdapter {
     #[must_use]
     pub fn new(store: Arc<SqliteStore>) -> Self {
+        Self::with_local_address_provider(store, Arc::new(SystemLocalAddressProvider))
+    }
+
+    fn with_local_address_provider(
+        store: Arc<SqliteStore>,
+        local_address: Arc<dyn LocalAddressProvider>,
+    ) -> Self {
         Self {
             store,
             effective: RwLock::new(None),
+            local_address,
         }
     }
 
     fn load_stored(&self) -> AppResult<(SettingsDraft, u64)> {
-        match infra(self.store.load_settings())? {
+        let (mut draft, revision) = match infra(self.store.load_settings())? {
             Some(stored) => {
                 let mut draft: SettingsDraft = serde_json::from_value(stored.value)
                     .map_err(|error| json_error("持久化设置无效", error))?;
                 draft.expected_revision = Some(stored.revision);
-                Ok((draft, stored.revision))
+                (draft, stored.revision)
             }
-            None => Ok((SettingsDraft::default(), 0)),
+            None => (SettingsDraft::default(), 0),
+        };
+        if draft.leaf_sans.is_empty()
+            && let Some(address) = self.local_address.preferred_lan_ipv4()
+        {
+            draft.leaf_sans.push(address.to_string());
         }
+        Ok((draft, revision))
     }
 
     fn view(&self) -> AppResult<SettingsViewModel> {
@@ -229,12 +273,60 @@ fn to_domain_settings(draft: &SettingsDraft) -> Result<Settings, gmofg_proxy_dom
 mod tests {
     use super::*;
 
+    #[derive(Debug)]
+    struct FixedLocalAddressProvider(Option<Ipv4Addr>);
+
+    impl LocalAddressProvider for FixedLocalAddressProvider {
+        fn preferred_lan_ipv4(&self) -> Option<Ipv4Addr> {
+            self.0
+        }
+    }
+
+    fn adapter_with_address(address: Option<Ipv4Addr>) -> SettingsRepositoryAdapter {
+        SettingsRepositoryAdapter::with_local_address_provider(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(FixedLocalAddressProvider(address)),
+        )
+    }
+
     fn valid_draft() -> SettingsDraft {
         SettingsDraft {
             upstream_transaction_url: "https://transaction.example.test".into(),
             upstream_dll_url: "https://dll.example.test".into(),
             ..SettingsDraft::default()
         }
+    }
+
+    #[tokio::test]
+    async fn initial_settings_autofill_the_preferred_lan_ipv4_as_leaf_san() {
+        let adapter = adapter_with_address(Some(Ipv4Addr::new(10, 0, 34, 50)));
+
+        let settings = adapter.get().await.expect("settings");
+
+        assert_eq!(settings.stored.leaf_sans, vec!["10.0.34.50"]);
+        assert_eq!(settings.revision, 0);
+    }
+
+    #[tokio::test]
+    async fn stored_leaf_san_is_never_overwritten_by_address_detection() {
+        let adapter = adapter_with_address(Some(Ipv4Addr::new(10, 0, 34, 50)));
+        let mut draft = valid_draft();
+        draft.leaf_sans = vec!["10.0.28.99".into()];
+        adapter.save(draft).await.expect("save");
+
+        let settings = adapter.get().await.expect("settings");
+
+        assert_eq!(settings.stored.leaf_sans, vec!["10.0.28.99"]);
+        assert_eq!(settings.revision, 1);
+    }
+
+    #[tokio::test]
+    async fn unavailable_address_detection_keeps_the_leaf_san_empty() {
+        let adapter = adapter_with_address(None);
+
+        let settings = adapter.get().await.expect("settings");
+
+        assert!(settings.stored.leaf_sans.is_empty());
     }
 
     // SETTINGS-010~013, ENGINE-008, TEST-SETTINGS

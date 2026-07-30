@@ -53,6 +53,11 @@ function RefreshProbe() {
   );
 }
 
+function SettingsProbe() {
+  const { bootstrap } = useBootstrap();
+  return <div>{bootstrap?.settings?.stored.leaf_sans.join(",")}</div>;
+}
+
 describe("BootstrapProvider event distribution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -135,5 +140,35 @@ describe("BootstrapProvider event distribution", () => {
       expect(screen.queryByText("迟到旧快照")).not.toBeInTheDocument(),
     );
     expect(screen.getByText("事件新状态")).toBeVisible();
+  });
+
+  it("replaces the global settings snapshot from a normalized Rust event", async () => {
+    clientMocks.appBootstrap.mockResolvedValueOnce({
+      proxy: { state_text: "运行中" },
+      settings: { stored: { leaf_sans: [] } },
+      event_cursor: 4,
+    });
+    render(
+      <BootstrapProvider>
+        <SettingsProbe />
+      </BootstrapProvider>,
+    );
+
+    await waitFor(() => expect(clientMocks.eventHandler).toBeTypeOf("function"));
+    clientMocks.eventHandler?.({
+      event_id: 5,
+      runtime_epoch: null,
+      occurred_at: "2026-07-30T00:00:00Z",
+      entity_id: "settings",
+      entity_revision: 2,
+      payload: {
+        type: "settings_changed",
+        data: {
+          stored: { leaf_sans: ["10.0.28.99"] },
+        } as never,
+      },
+    });
+
+    expect(await screen.findByText("10.0.28.99")).toBeVisible();
   });
 });

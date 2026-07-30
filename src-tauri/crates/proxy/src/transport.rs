@@ -1,6 +1,5 @@
 //! Injectable TCP, HTTP/1.1 and pipeline transport.
 
-use std::convert::Infallible;
 use std::fmt::{Debug, Formatter};
 use std::future::Future;
 use std::io;
@@ -32,6 +31,10 @@ use crate::fault::{self, FaultAction, ResponseDisposition};
 use crate::message::{self, Message, MessageLimits};
 use crate::supervisor::Channel;
 use crate::tls::ClientTlsAdapter;
+use crate::traffic::{
+    IntermittentProfile, JitterProfile, PacedBody, PacedBodyError, ThrottleProfile,
+    TrafficDirection, TrafficSchedule,
+};
 use crate::{ErrorCode, ProxyError, Result};
 
 pub trait IoStream: AsyncRead + AsyncWrite + Unpin + Send {}
@@ -95,17 +98,23 @@ impl RequestWriteTracker {
 
 #[derive(Debug)]
 struct TrackedRequestBody {
-    data: Option<Bytes>,
+    inner: PacedBody,
     tracker: Arc<RequestWriteTracker>,
 }
 
 impl TrackedRequestBody {
-    fn new(data: Bytes, tracker: Arc<RequestWriteTracker>) -> Self {
+    fn new(
+        data: Bytes,
+        tracker: Arc<RequestWriteTracker>,
+        schedule: TrafficSchedule,
+        cancellation: CancellationToken,
+    ) -> Self {
+        let data_len = data.len();
         if data.is_empty() {
             tracker.mark_body_complete();
         }
         Self {
-            data: (!data.is_empty()).then_some(data),
+            inner: PacedBody::new(data, data_len, schedule, cancellation),
             tracker,
         }
     }
@@ -113,27 +122,27 @@ impl TrackedRequestBody {
 
 impl Body for TrackedRequestBody {
     type Data = Bytes;
-    type Error = Infallible;
+    type Error = PacedBodyError;
 
     fn poll_frame(
         mut self: Pin<&mut Self>,
-        _context: &mut Context<'_>,
+        context: &mut Context<'_>,
     ) -> Poll<Option<std::result::Result<Frame<Self::Data>, Self::Error>>> {
-        if let Some(data) = self.data.take() {
+        let outcome = Pin::new(&mut self.inner).poll_frame(context);
+        if matches!(&outcome, Poll::Ready(None))
+            || matches!(&outcome, Poll::Ready(Some(Ok(_)))) && self.inner.is_end_stream()
+        {
             self.tracker.mark_body_complete();
-            return Poll::Ready(Some(Ok(Frame::data(data))));
         }
-        self.tracker.mark_body_complete();
-        Poll::Ready(None)
+        outcome
     }
 
     fn is_end_stream(&self) -> bool {
-        self.data.is_none()
+        self.inner.is_end_stream()
     }
 
     fn size_hint(&self) -> SizeHint {
-        let remaining = self.data.as_ref().map_or(0, Bytes::len);
-        SizeHint::with_exact(u64::try_from(remaining).unwrap_or(u64::MAX))
+        self.inner.size_hint()
     }
 }
 
@@ -232,8 +241,7 @@ impl Drop for ConnectionTask {
 
 #[derive(Debug)]
 struct WireBody {
-    data: Option<Bytes>,
-    claimed_length: u64,
+    inner: PacedBody,
     finish_delay: Option<Pin<Box<tokio::time::Sleep>>>,
 }
 
@@ -241,6 +249,7 @@ struct WireBody {
 enum IntentionalWireFault {
     IncorrectContentLength,
     TruncatedResponse,
+    StreamAborted,
 }
 
 impl IntentionalWireFault {
@@ -254,17 +263,25 @@ impl IntentionalWireFault {
                 ErrorCode::TruncatedResponse,
                 "response intentionally truncated before completion",
             ),
+            Self::StreamAborted => ProxyError::new(
+                ErrorCode::FaultStreamAborted,
+                "response intentionally disconnected during downstream write",
+            ),
         }
     }
 }
 
 impl WireBody {
-    fn new(data: Bytes, claimed_length: usize) -> Self {
+    fn new(
+        data: Bytes,
+        claimed_length: usize,
+        schedule: TrafficSchedule,
+        cancellation: CancellationToken,
+    ) -> Self {
         let finish_delay = (data.len() != claimed_length)
             .then(|| Box::pin(tokio::time::sleep(Duration::from_millis(1))));
         Self {
-            data: Some(data),
-            claimed_length: u64::try_from(claimed_length).unwrap_or(u64::MAX),
+            inner: PacedBody::new(data, claimed_length, schedule, cancellation),
             finish_delay,
         }
     }
@@ -272,14 +289,15 @@ impl WireBody {
 
 impl Body for WireBody {
     type Data = Bytes;
-    type Error = Infallible;
+    type Error = PacedBodyError;
 
     fn poll_frame(
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
     ) -> Poll<Option<std::result::Result<Frame<Self::Data>, Self::Error>>> {
-        if let Some(data) = self.data.take() {
-            return Poll::Ready(Some(Ok(Frame::data(data))));
+        match Pin::new(&mut self.inner).poll_frame(context) {
+            Poll::Ready(None) => {}
+            outcome => return outcome,
         }
         if let Some(delay) = self.finish_delay.as_mut() {
             if delay.as_mut().poll(context).is_pending() {
@@ -291,7 +309,7 @@ impl Body for WireBody {
     }
 
     fn size_hint(&self) -> SizeHint {
-        SizeHint::with_exact(self.claimed_length)
+        self.inner.size_hint()
     }
 }
 
@@ -496,6 +514,17 @@ impl UpstreamConnector for HyperUpstreamConnector {
         }
 
         wait_for_injected_timeout(actions, InjectedTimeoutStage::Write, cancellation).await?;
+        let schedule = traffic_schedule(actions, TrafficDirection::Upstream)?;
+        if schedule.disconnect_after_bytes.is_some() {
+            return send_scheduled_upstream_abort(
+                &mut io,
+                &request.message,
+                schedule,
+                self.write_timeout,
+                cancellation,
+            )
+            .await;
+        }
 
         let close_after_request_write = actions.iter().any(|action| {
             matches!(
@@ -550,6 +579,7 @@ impl UpstreamConnector for HyperUpstreamConnector {
         send_http1_request(
             io,
             request,
+            schedule,
             self.write_timeout,
             self.read_timeout,
             self.limits,
@@ -567,11 +597,14 @@ enum WriteStageOutcome {
 async fn send_http1_request(
     io: BoxIo,
     request: ForwardRequest,
+    schedule: TrafficSchedule,
     write_timeout: Duration,
     read_timeout: Duration,
     limits: MessageLimits,
     cancellation: &CancellationToken,
 ) -> Result<Message> {
+    let effective_write_timeout =
+        write_timeout.saturating_add(schedule.estimated_delay(request.message.body.len()));
     let tracker = Arc::new(RequestWriteTracker::default());
     let tracked_io = TrackedIo::new(io, tracker.clone());
     let mut http1 = client_http1::Builder::new();
@@ -584,7 +617,7 @@ async fn send_http1_request(
 
     let result = async {
         timeout_stage(
-            write_timeout,
+            effective_write_timeout,
             cancellation,
             sender.ready(),
             ErrorCode::UpstreamWriteTimeout,
@@ -600,13 +633,15 @@ async fn send_http1_request(
             .body(TrackedRequestBody::new(
                 request.message.body.clone(),
                 tracker.clone(),
+                schedule,
+                cancellation.clone(),
             ))
             .map_err(|error| ProxyError::new(ErrorCode::Internal, error.to_string()))?;
         *outgoing.headers_mut() = headers;
 
         let mut response_future = Box::pin(sender.send_request(outgoing));
         let write_outcome = timeout_stage(
-            write_timeout,
+            effective_write_timeout,
             cancellation,
             async {
                 tokio::select! {
@@ -647,6 +682,142 @@ async fn send_http1_request(
 
     connection_task.shutdown().await;
     result
+}
+
+async fn send_scheduled_upstream_abort(
+    io: &mut BoxIo,
+    message: &Message,
+    schedule: TrafficSchedule,
+    write_timeout: Duration,
+    cancellation: &CancellationToken,
+) -> Result<Message> {
+    let after_bytes = schedule
+        .disconnect_after_bytes
+        .expect("disconnect schedule was checked");
+    if after_bytes >= message.body.len() {
+        return Err(ProxyError::new(
+            ErrorCode::ConfigInvalid,
+            "upstream disconnect offset must be smaller than request body",
+        ));
+    }
+    let wire = message.reconstruct_title_case_headers();
+    let header_end = wire
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|index| index + 4)
+        .ok_or_else(|| ProxyError::new(ErrorCode::Internal, "request headers are incomplete"))?;
+    timeout_stage(
+        write_timeout,
+        cancellation,
+        io.write_all(&wire[..header_end]),
+        ErrorCode::UpstreamWriteTimeout,
+    )
+    .await?
+    .map_err(|error| ProxyError::io("write upstream request headers", &error))?;
+
+    let mut body = PacedBody::new(
+        message.body.clone(),
+        message.body.len(),
+        schedule,
+        cancellation.clone(),
+    );
+    while let Some(frame) = body.frame().await {
+        match frame {
+            Ok(frame) => {
+                if let Ok(data) = frame.into_data() {
+                    timeout_stage(
+                        write_timeout,
+                        cancellation,
+                        io.write_all(&data),
+                        ErrorCode::UpstreamWriteTimeout,
+                    )
+                    .await?
+                    .map_err(|error| ProxyError::io("write paced upstream body", &error))?;
+                }
+            }
+            Err(PacedBodyError::Disconnected) => {
+                let _ = io.shutdown().await;
+                return Err(ProxyError::new(
+                    ErrorCode::FaultStreamAborted,
+                    "request intentionally disconnected during upstream write",
+                ));
+            }
+            Err(PacedBodyError::Cancelled) => {
+                return Err(ProxyError::new(
+                    ErrorCode::FaultExecutionCancelled,
+                    "weak-network request cancelled",
+                ));
+            }
+        }
+    }
+    Err(ProxyError::new(
+        ErrorCode::Internal,
+        "upstream disconnect schedule completed without disconnecting",
+    ))
+}
+
+fn traffic_schedule(
+    actions: &[FaultAction],
+    direction: TrafficDirection,
+) -> Result<TrafficSchedule> {
+    let mut schedule = TrafficSchedule::default();
+    for action in actions {
+        match action {
+            FaultAction::Jitter {
+                minimum,
+                maximum,
+                scope,
+                seed,
+            } => {
+                schedule.jitter = Some(JitterProfile {
+                    minimum: *minimum,
+                    maximum: *maximum,
+                    scope: *scope,
+                });
+                schedule.seed = *seed;
+            }
+            FaultAction::Throttle {
+                bytes_per_second,
+                chunk_bytes,
+                direction: action_direction,
+            } if *action_direction == direction => {
+                if *bytes_per_second == 0 || *chunk_bytes == 0 {
+                    return Err(ProxyError::new(
+                        ErrorCode::ConfigInvalid,
+                        "throttle rate and chunk size must be greater than zero",
+                    ));
+                }
+                schedule.throttle = Some(ThrottleProfile {
+                    bytes_per_second: *bytes_per_second,
+                    chunk_bytes: *chunk_bytes,
+                });
+            }
+            FaultAction::Intermittent {
+                available,
+                blocked,
+                direction: action_direction,
+            } if *action_direction == direction => {
+                if available.is_zero() || blocked.is_zero() {
+                    return Err(ProxyError::new(
+                        ErrorCode::ConfigInvalid,
+                        "intermittent windows must be greater than zero",
+                    ));
+                }
+                schedule.intermittent = Some(IntermittentProfile {
+                    available: *available,
+                    blocked: *blocked,
+                });
+            }
+            FaultAction::DisconnectDuringWrite {
+                after_bytes,
+                direction: action_direction,
+            } if *action_direction == direction => {
+                schedule.disconnect_after_bytes = Some(*after_bytes);
+            }
+            _ => {}
+        }
+    }
+    Ok(schedule)
 }
 
 #[derive(Debug, Clone)]
@@ -923,9 +1094,13 @@ impl ConnectionService {
                 } => {
                     let message = fault::mock_response(*status, headers, shift_jis_body)?;
                     return response_from_disposition(
-                        ResponseDisposition::Send(message),
+                        ResponseDisposition::Send {
+                            message,
+                            schedule: TrafficSchedule::default(),
+                        },
                         raw_tail,
                         intentional_wire_fault,
+                        cancellation,
                     );
                 }
                 FaultAction::RejectTls => {
@@ -964,7 +1139,7 @@ impl ConnectionService {
         let disposition =
             fault::apply_response_actions(upstream_response, &response_actions, cancellation)
                 .await?;
-        response_from_disposition(disposition, raw_tail, intentional_wire_fault)
+        response_from_disposition(disposition, raw_tail, intentional_wire_fault, cancellation)
     }
 }
 
@@ -1031,11 +1206,12 @@ fn response_from_disposition(
     disposition: ResponseDisposition,
     raw_tail: &StdMutex<Option<Bytes>>,
     intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
+    cancellation: &CancellationToken,
 ) -> Result<Response<WireBody>> {
-    let (message, body, disposition_fault) = match disposition {
-        ResponseDisposition::Send(message) => {
+    let (message, mut body, mut schedule, disposition_fault) = match disposition {
+        ResponseDisposition::Send { message, schedule } => {
             let body = message.body.clone();
-            (message, body, None)
+            (message, body, schedule, None)
         }
         ResponseDisposition::Drop => {
             return Err(ProxyError::new(
@@ -1043,16 +1219,37 @@ fn response_from_disposition(
                 "response intentionally dropped",
             ));
         }
-        ResponseDisposition::Truncate { message, bytes } => {
+        ResponseDisposition::Truncate {
+            message,
+            bytes,
+            schedule,
+        } => {
             let body = message.body.slice(..bytes);
-            (message, body, Some(IntentionalWireFault::TruncatedResponse))
+            (
+                message,
+                body,
+                schedule,
+                Some(IntentionalWireFault::TruncatedResponse),
+            )
         }
     };
     let status = parse_response_status(&message.start_line)?;
     let claimed_length = message
         .declared_content_length()
         .unwrap_or(message.body.len());
-    let disposition_fault = disposition_fault.or_else(|| {
+    let scheduled_abort = if let Some(after_bytes) = schedule.disconnect_after_bytes.take() {
+        if after_bytes >= body.len() {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "downstream disconnect offset must be smaller than response body",
+            ));
+        }
+        body = body.slice(..after_bytes);
+        Some(IntentionalWireFault::StreamAborted)
+    } else {
+        None
+    };
+    let disposition_fault = disposition_fault.or(scheduled_abort).or_else(|| {
         (claimed_length != body.len()).then_some(IntentionalWireFault::IncorrectContentLength)
     });
     if let Some(fault) = disposition_fault {
@@ -1070,7 +1267,12 @@ fn response_from_disposition(
     let mut response = Response::builder()
         .status(status)
         .version(http::Version::HTTP_11)
-        .body(WireBody::new(body, claimed_length))
+        .body(WireBody::new(
+            body,
+            claimed_length,
+            schedule,
+            cancellation.clone(),
+        ))
         .map_err(|error| ProxyError::new(ErrorCode::Internal, error.to_string()))?;
     *response.headers_mut() = message.header_map()?;
     message::force_connection_close(response.headers_mut());
@@ -1336,28 +1538,34 @@ mod tests {
     async fn intentional_content_length_and_truncation_faults_have_stable_classifications() {
         let cases = [
             (
-                ResponseDisposition::Send({
-                    let mut message = Message::response(
-                        StatusCode::OK,
-                        &HeaderMap::new(),
-                        Bytes::from_static(b"body"),
-                    );
-                    message.set_content_length(24);
-                    message
-                }),
+                ResponseDisposition::Send {
+                    message: {
+                        let mut message = Message::response(
+                            StatusCode::OK,
+                            &HeaderMap::new(),
+                            Bytes::from_static(b"body"),
+                        );
+                        message.set_content_length(24);
+                        message
+                    },
+                    schedule: TrafficSchedule::default(),
+                },
                 IntentionalWireFault::IncorrectContentLength,
                 ErrorCode::IncorrectContentLength,
             ),
             (
-                ResponseDisposition::Send({
-                    let mut message = Message::response(
-                        StatusCode::OK,
-                        &HeaderMap::new(),
-                        Bytes::from_static(b"body"),
-                    );
-                    message.set_content_length(2);
-                    message
-                }),
+                ResponseDisposition::Send {
+                    message: {
+                        let mut message = Message::response(
+                            StatusCode::OK,
+                            &HeaderMap::new(),
+                            Bytes::from_static(b"body"),
+                        );
+                        message.set_content_length(2);
+                        message
+                    },
+                    schedule: TrafficSchedule::default(),
+                },
                 IntentionalWireFault::IncorrectContentLength,
                 ErrorCode::IncorrectContentLength,
             ),
@@ -1369,6 +1577,7 @@ mod tests {
                         Bytes::from_static(b"body"),
                     ),
                     bytes: 2,
+                    schedule: TrafficSchedule::default(),
                 },
                 IntentionalWireFault::TruncatedResponse,
                 ErrorCode::TruncatedResponse,
@@ -1378,7 +1587,7 @@ mod tests {
         for (disposition, expected_fault, expected_code) in cases {
             let raw_tail = StdMutex::new(None);
             let fault = StdMutex::new(None);
-            response_from_disposition(disposition, &raw_tail, &fault)
+            response_from_disposition(disposition, &raw_tail, &fault, &CancellationToken::new())
                 .expect("intentional wire response should be constructed");
             let actual = fault
                 .lock()
@@ -1387,6 +1596,41 @@ mod tests {
             assert_eq!(actual, expected_fault);
             assert_eq!(actual.error().code, expected_code.as_str());
         }
+    }
+
+    #[tokio::test]
+    async fn downstream_mid_body_disconnect_sends_exact_prefix_and_keeps_declared_length() {
+        let raw_tail = StdMutex::new(None);
+        let fault = StdMutex::new(None);
+        let response = response_from_disposition(
+            ResponseDisposition::Send {
+                message: Message::response(
+                    StatusCode::OK,
+                    &HeaderMap::new(),
+                    Bytes::from_static(b"abcdefgh"),
+                ),
+                schedule: TrafficSchedule {
+                    disconnect_after_bytes: Some(3),
+                    ..TrafficSchedule::default()
+                },
+            },
+            &raw_tail,
+            &fault,
+            &CancellationToken::new(),
+        )
+        .expect("downstream abort response");
+        assert_eq!(
+            response.headers().get("content-length").unwrap(),
+            http::HeaderValue::from_static("8")
+        );
+        let mut body = response.into_body();
+        let prefix = body.frame().await.unwrap().unwrap().into_data().unwrap();
+        assert_eq!(prefix, Bytes::from_static(b"abc"));
+        assert!(body.frame().await.is_none());
+        assert_eq!(
+            *fault.lock().expect("intentional fault mutex poisoned"),
+            Some(IntentionalWireFault::StreamAborted)
+        );
     }
 
     // ACTION-003~005, TEST-FAULT:

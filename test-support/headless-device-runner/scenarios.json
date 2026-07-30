@@ -546,6 +546,88 @@
       "expected_rule_hits": null,
       "expected_invalid_error": true,
       "expected_invalid_field": "actions.0.text"
+    },
+    {
+      "id": "intermittent-upstream",
+      "batch": "G",
+      "implementation": "ready",
+      "template_id": "intermittent_upstream",
+      "stage": "request",
+      "android_expected_kind": "d48",
+      "minimum_elapsed_ms": 3000,
+      "expected_rule_hits": 1
+    },
+    {
+      "id": "intermittent-downstream",
+      "batch": "G",
+      "implementation": "ready",
+      "template_id": "intermittent_downstream",
+      "stage": "response",
+      "android_expected_kind": "d48",
+      "minimum_elapsed_ms": 3000,
+      "expected_rule_hits": 1
+    },
+    {
+      "id": "throttle-upstream",
+      "batch": "G",
+      "implementation": "ready",
+      "template_id": "throttle_upstream",
+      "stage": "request",
+      "android_expected_kind": "d48",
+      "minimum_elapsed_ms": 100,
+      "expected_rule_hits": 1
+    },
+    {
+      "id": "throttle-downstream",
+      "batch": "G",
+      "implementation": "ready",
+      "template_id": "throttle_downstream",
+      "stage": "response",
+      "android_expected_kind": "d48",
+      "minimum_elapsed_ms": 100,
+      "expected_rule_hits": 1
+    },
+    {
+      "id": "jitter-upstream",
+      "batch": "G",
+      "implementation": "ready",
+      "template_id": "jitter_upstream",
+      "stage": "request",
+      "android_expected_kind": "d48",
+      "minimum_elapsed_ms": 1200,
+      "expected_rule_hits": 1
+    },
+    {
+      "id": "jitter-downstream",
+      "batch": "G",
+      "implementation": "ready",
+      "template_id": "jitter_downstream",
+      "stage": "response",
+      "android_expected_kind": "d48",
+      "minimum_elapsed_ms": 1200,
+      "expected_rule_hits": 1
+    },
+    {
+      "id": "disconnect-upstream-mid-body",
+      "batch": "G",
+      "implementation": "ready",
+      "template_id": "disconnect_upstream_mid_body",
+      "stage": "request",
+      "android_expected_kind": "io_failure",
+      "expected_exception": "IOException",
+      "requires_batch_recovery_d48": true,
+      "expected_rule_hits": 1
+    },
+    {
+      "id": "disconnect-downstream-mid-body",
+      "batch": "G",
+      "implementation": "ready",
+      "template_id": "disconnect_downstream_mid_body",
+      "stage": "response",
+      "android_expected_kind": "body_read_failure",
+      "expected_exception": "ProtocolException",
+      "requires_batch_recovery_d48": true,
+      "expected_rule_hits": 1
     }
   ]
 }
