@@ -1,5 +1,5 @@
 use crate::{
-    ChannelKind, DomainError, ErrorCode, MessageStage, Revision, RuleId, RuntimeEpoch,
+    ChannelKind, DomainError, ErrorCode, JsonPath, MessageStage, Revision, RuleId, RuntimeEpoch,
     TerminalIdentity,
 };
 use chrono::{DateTime, Utc};
@@ -172,6 +172,7 @@ impl RuleSetSignature {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub struct RuleRuntimeSnapshot {
+    pub collection_revision: u64,
     pub signature: RuleSetSignature,
     pub rules: Vec<Rule>,
 }
@@ -179,7 +180,13 @@ pub struct RuleRuntimeSnapshot {
 impl RuleRuntimeSnapshot {
     #[must_use]
     pub fn new(rules: Vec<Rule>) -> Self {
+        Self::with_collection_revision(0, rules)
+    }
+
+    #[must_use]
+    pub fn with_collection_revision(collection_revision: u64, rules: Vec<Rule>) -> Self {
         Self {
+            collection_revision,
             signature: RuleSetSignature::from_rules(&rules),
             rules,
         }
@@ -369,7 +376,7 @@ impl RuleEngine {
 
         // ENGINE-002: this clone is the immutable rule snapshot for one message.
         let mut snapshot = self.rules.clone();
-        snapshot.sort_by_key(|rule| (rule.priority, rule.created_order));
+        snapshot.sort_by_key(|rule| (rule.priority, rule.created_order, rule.id));
         let mut evaluation = RuleEvaluation::default();
         let mut hit_ids = Vec::new();
 
@@ -435,7 +442,7 @@ impl RuleEngine {
     #[must_use]
     pub fn conflict_warnings(&self) -> Vec<RuleConflictWarning> {
         let mut sorted: Vec<&Rule> = self.rules.iter().filter(|rule| rule.enabled).collect();
-        sorted.sort_by_key(|rule| (rule.priority, rule.created_order));
+        sorted.sort_by_key(|rule| (rule.priority, rule.created_order, rule.id));
         let mut warnings = Vec::new();
         for (index, higher) in sorted.iter().enumerate() {
             if !higher.actions.iter().any(RuleAction::is_terminal) {
@@ -516,7 +523,7 @@ pub fn validate_rule_draft(draft: &RuleDraft) -> Result<(), DomainError> {
             MatchCondition::Field {
                 field: MatchField::JsonPath(path),
                 ..
-            } if !valid_json_path(path) => {
+            } if JsonPath::parse(path).is_err() => {
                 error =
                     error.with_field_error(format!("conditions.{index}.path"), "JSON 字段路径非法");
             }
@@ -639,7 +646,7 @@ fn validate_actions(draft: &RuleDraft, error: &mut DomainError) {
 fn validate_action_content(error: &mut DomainError, index: usize, action: &RuleAction) {
     match action {
         RuleAction::SetJsonField { path, value } => {
-            if !valid_json_path(path) {
+            if JsonPath::parse(path).is_err() {
                 push_field_error(error, format!("actions.{index}.path"), "JSON 字段路径非法");
             }
             if serde_json::to_string(value).is_ok_and(|text| !is_strict_shift_jis_text(&text)) {
@@ -845,7 +852,9 @@ fn matches_condition(
             let Some(json) = context.json_body else {
                 return Err("Body 不是可解析 JSON，JSON 字段条件不匹配".into());
             };
-            let Some(value) = resolve_json_path(json, path) else {
+            let parsed = JsonPath::parse(path)
+                .map_err(|_| "规则包含未通过保存校验的 JSON 字段路径".to_owned())?;
+            let Some(value) = parsed.resolve(json) else {
                 return Err(format!("JSON 字段路径不存在：{path}"));
             };
             json_scalar(value)
@@ -865,63 +874,6 @@ fn json_scalar(value: &Value) -> String {
         Value::String(value) => value.clone(),
         _ => value.to_string(),
     }
-}
-
-fn valid_json_path(path: &str) -> bool {
-    let Some(path) = path.strip_prefix("$.") else {
-        return false;
-    };
-    !path.is_empty() && path.split('.').all(valid_json_path_segment)
-}
-
-fn valid_json_path_segment(segment: &str) -> bool {
-    let name_end = segment.find('[').unwrap_or(segment.len());
-    let name = &segment[..name_end];
-    if name.is_empty()
-        || !name
-            .chars()
-            .all(|character| character.is_alphanumeric() || matches!(character, '_' | '-'))
-    {
-        return false;
-    }
-    let mut rest = &segment[name_end..];
-    while !rest.is_empty() {
-        let Some(index_text) = rest.strip_prefix('[') else {
-            return false;
-        };
-        let Some(close) = index_text.find(']') else {
-            return false;
-        };
-        if index_text[..close].is_empty()
-            || index_text[..close]
-                .bytes()
-                .any(|byte| !byte.is_ascii_digit())
-        {
-            return false;
-        }
-        rest = &index_text[close + 1..];
-    }
-    true
-}
-
-fn resolve_json_path<'a>(root: &'a Value, path: &str) -> Option<&'a Value> {
-    let path = path.strip_prefix("$.").unwrap_or(path);
-    let mut current = root;
-    for segment in path.split('.') {
-        let name_end = segment.find('[').unwrap_or(segment.len());
-        current = current.get(&segment[..name_end])?;
-        let mut rest = &segment[name_end..];
-        while let Some(index_text) = rest.strip_prefix('[') {
-            let close = index_text.find(']')?;
-            let index = index_text[..close].parse::<usize>().ok()?;
-            current = current.get(index)?;
-            rest = &index_text[close + 1..];
-        }
-        if !rest.is_empty() {
-            return None;
-        }
-    }
-    Some(current)
 }
 
 #[cfg(test)]
@@ -1002,6 +954,38 @@ mod tests {
         assert_eq!(result.traces.len(), 2);
     }
 
+    #[test]
+    fn equal_priority_and_creation_order_use_rule_id_as_a_stable_tiebreaker() {
+        let epoch = RuntimeEpoch::new();
+        let first = Rule::create(draft(
+            MessageStage::Request,
+            Vec::new(),
+            vec![RuleAction::Terminal(
+                TerminalAction::DisconnectBeforeUpstream,
+            )],
+        ))
+        .expect("first rule");
+        let second = Rule::create(draft(
+            MessageStage::Request,
+            Vec::new(),
+            vec![RuleAction::Terminal(
+                TerminalAction::DisconnectBeforeUpstream,
+            )],
+        ))
+        .expect("second rule");
+        let expected = first.id.min(second.id);
+        let terminal = TerminalIdentity {
+            source_ip: "10.0.0.1".into(),
+            certificate_sha256: "cert".into(),
+        };
+
+        for rules in [vec![first.clone(), second.clone()], vec![second, first]] {
+            let mut engine = RuleEngine::new(epoch, rules);
+            let evaluation = engine.evaluate(&context(epoch, &terminal, None), Utc::now());
+            assert_eq!(evaluation.traces[0].rule_id, expected);
+        }
+    }
+
     // RULE-004, ENGINE-003, ENGINE-004, TEST-RULE
     #[test]
     fn matches_json_path_equals_contains_and_regex_without_panicking() {
@@ -1039,6 +1023,35 @@ mod tests {
         );
         let no_json = engine.evaluate(&context(epoch, &terminal, None), Utc::now());
         assert!(no_json.traces[0].reason.contains("JSON"));
+    }
+
+    #[test]
+    fn invalid_persisted_json_path_is_a_non_match_instead_of_a_panic() {
+        let epoch = RuntimeEpoch::new();
+        let mut rule = Rule::create(draft(
+            MessageStage::Request,
+            vec![MatchCondition::Field {
+                field: MatchField::JsonPath("$.valid".into()),
+                operator: MatchOperator::Equals("value".into()),
+            }],
+            vec![RuleAction::Pause],
+        ))
+        .expect("initial valid rule");
+        rule.conditions = vec![MatchCondition::Field {
+            field: MatchField::JsonPath("$.items[]".into()),
+            operator: MatchOperator::Equals("value".into()),
+        }];
+        let terminal = TerminalIdentity {
+            source_ip: "10.0.0.8".into(),
+            certificate_sha256: "cert".into(),
+        };
+        let body = json!({"items": ["value"]});
+        let mut engine = RuleEngine::new(epoch, vec![rule]);
+
+        let evaluation = engine.evaluate(&context(epoch, &terminal, Some(&body)), Utc::now());
+
+        assert!(!evaluation.traces[0].matched);
+        assert!(evaluation.traces[0].reason.contains("未通过保存校验"));
     }
 
     // RULE-006, RULE-007, ENGINE-007

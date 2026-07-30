@@ -24,8 +24,9 @@ use gmofg_proxy_application::{
     SessionSummaryViewModel, UiEventPayload, UiTone,
 };
 use gmofg_proxy_domain::{
-    ChannelKind, DropResponseMode, MatchContext, MessageStage as DomainMessageStage, Rule,
-    RuleAction, RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction, TerminalIdentity,
+    ChannelKind, DropResponseMode, JsonPath, MatchContext, MessageStage as DomainMessageStage,
+    Rule, RuleAction, RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
+    TerminalIdentity,
 };
 use gmofg_proxy_runtime::{
     Channel, ChannelRuntimeMetrics, ConnectionContext, ErrorCode, FaultAction, HandshakePolicy,
@@ -56,7 +57,7 @@ pub trait RuntimeRuleRepository: std::fmt::Debug + Send + Sync {
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
-    ) -> AppResult<()>;
+    ) -> AppResult<u64>;
     fn reset_runtime_hit_metadata(&self) -> AppResult<()>;
 }
 
@@ -69,7 +70,7 @@ impl RuntimeRuleRepository for RuleRepositoryAdapter {
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
-    ) -> AppResult<()> {
+    ) -> AppResult<u64> {
         RuleRepositoryAdapter::commit_runtime_snapshot(self, snapshot, evaluated_rules)
     }
 
@@ -164,6 +165,16 @@ impl RuntimePipelineAdapter {
         stage: DomainMessageStage,
         message: Option<&Message>,
     ) -> ProxyResult<EvaluatedRules> {
+        self.evaluate_with_retries(context, stage, message, 3)
+    }
+
+    fn evaluate_with_retries(
+        &self,
+        context: &ConnectionContext,
+        stage: DomainMessageStage,
+        message: Option<&Message>,
+        remaining_retries: usize,
+    ) -> ProxyResult<EvaluatedRules> {
         self.ensure_rule_epoch(context.runtime_epoch)?;
         let terminal = TerminalIdentity {
             source_ip: context.peer_addr.ip().to_string(),
@@ -191,7 +202,8 @@ impl RuntimePipelineAdapter {
                 snapshot,
             });
         } else if let Some(runtime) = pipeline_state.rule_runtime.as_mut()
-            && runtime.snapshot.signature != snapshot.signature
+            && (runtime.snapshot.collection_revision != snapshot.collection_revision
+                || runtime.snapshot.signature != snapshot.signature)
         {
             runtime.engine.reconcile(snapshot.rules.clone());
             runtime.snapshot = snapshot;
@@ -200,6 +212,10 @@ impl RuntimePipelineAdapter {
             .rule_runtime
             .as_mut()
             .expect("rule runtime was initialized");
+        // A failed durable commit must not consume this message's transient
+        // NthHit increments. Restore this checkpoint before re-evaluating
+        // against the newer persisted collection snapshot.
+        let engine_before_evaluation = runtime.engine.clone();
         let evaluation = runtime.engine.evaluate(
             &MatchContext {
                 runtime_epoch,
@@ -216,22 +232,40 @@ impl RuntimePipelineAdapter {
         if matched {
             let base_snapshot = runtime.snapshot.clone();
             let evaluated_rules = runtime.engine.rules().to_vec();
-            if let Err(error) = self
+            let next_collection_revision = match self
                 .rules
                 .commit_runtime_snapshot(&base_snapshot, &evaluated_rules)
             {
-                pipeline_state.rule_runtime = None;
-                drop(pipeline_state);
-                self.events.publish(
-                    Some(context.runtime_epoch),
-                    Utc::now(),
-                    error.view_model.entity_id.clone(),
-                    None,
-                    UiEventPayload::OperationFailed((*error.view_model).clone()),
-                );
-                return Err(app_to_proxy(error));
-            }
-            runtime.snapshot = RuleRuntimeSnapshot::new(evaluated_rules);
+                Ok(revision) => revision,
+                Err(error)
+                    if error.view_model.code == "REVISION_CONFLICT" && remaining_retries > 0 =>
+                {
+                    runtime.engine = engine_before_evaluation;
+                    drop(pipeline_state);
+                    return self.evaluate_with_retries(
+                        context,
+                        stage,
+                        message,
+                        remaining_retries - 1,
+                    );
+                }
+                Err(error) => {
+                    pipeline_state.rule_runtime = None;
+                    drop(pipeline_state);
+                    self.events.publish(
+                        Some(context.runtime_epoch),
+                        Utc::now(),
+                        error.view_model.entity_id.clone(),
+                        None,
+                        UiEventPayload::OperationFailed((*error.view_model).clone()),
+                    );
+                    return Err(app_to_proxy(error));
+                }
+            };
+            runtime.snapshot = RuleRuntimeSnapshot::with_collection_revision(
+                next_collection_revision,
+                evaluated_rules,
+            );
         }
 
         let traces = rule_trace_text(&evaluation);
@@ -1023,7 +1057,14 @@ fn apply_rule_actions(
         match action {
             RuleAction::SetJsonField { path, value } => {
                 let mut json = message.parse_shift_jis_json()?;
-                set_json_path(&mut json, path, value.clone())?;
+                JsonPath::parse(path)
+                    .and_then(|path| path.set(&mut json, value.clone()))
+                    .map_err(|error| {
+                        ProxyError::new(
+                            ErrorCode::ConfigInvalid,
+                            format!("JSON path `{path}` is invalid: {error}"),
+                        )
+                    })?;
                 message.replace_json(&json)?;
             }
             RuleAction::ReplaceBodyText(text) => message.replace_shift_jis_text(text)?,
@@ -1175,79 +1216,6 @@ fn apply_breakpoint_decision(
         }
     }
     Ok(actions)
-}
-
-fn set_json_path(root: &mut Value, path: &str, value: Value) -> ProxyResult<()> {
-    let path = path.strip_prefix("$.").unwrap_or(path);
-    let mut segments = path.split('.').peekable();
-    let mut current = root;
-    while let Some(segment) = segments.next() {
-        let (name, indexes) = parse_segment(segment)?;
-        if segments.peek().is_none() && indexes.is_empty() {
-            let object = current.as_object_mut().ok_or_else(|| {
-                ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    "JSON path parent is not an object",
-                )
-            })?;
-            object.insert(name.to_owned(), value);
-            return Ok(());
-        }
-        current = current.get_mut(name).ok_or_else(|| {
-            ProxyError::new(
-                ErrorCode::ConfigInvalid,
-                format!("JSON path not found: {path}"),
-            )
-        })?;
-        for (position, index) in indexes.iter().enumerate() {
-            if segments.peek().is_none() && position + 1 == indexes.len() {
-                let array = current.as_array_mut().ok_or_else(|| {
-                    ProxyError::new(ErrorCode::ConfigInvalid, "JSON path parent is not an array")
-                })?;
-                let slot = array.get_mut(*index).ok_or_else(|| {
-                    ProxyError::new(ErrorCode::ConfigInvalid, "JSON array index is out of range")
-                })?;
-                *slot = value;
-                return Ok(());
-            }
-            current = current.get_mut(*index).ok_or_else(|| {
-                ProxyError::new(ErrorCode::ConfigInvalid, "JSON array index is out of range")
-            })?;
-        }
-    }
-    Err(ProxyError::new(
-        ErrorCode::ConfigInvalid,
-        "JSON path cannot be empty",
-    ))
-}
-
-fn parse_segment(segment: &str) -> ProxyResult<(&str, Vec<usize>)> {
-    let name_end = segment.find('[').unwrap_or(segment.len());
-    let name = &segment[..name_end];
-    if name.is_empty() {
-        return Err(ProxyError::new(
-            ErrorCode::ConfigInvalid,
-            "JSON path segment cannot be empty",
-        ));
-    }
-    let mut indexes = Vec::new();
-    let mut rest = &segment[name_end..];
-    while let Some(index_text) = rest.strip_prefix('[') {
-        let close = index_text.find(']').ok_or_else(|| {
-            ProxyError::new(ErrorCode::ConfigInvalid, "JSON path index is not closed")
-        })?;
-        indexes.push(index_text[..close].parse().map_err(|_| {
-            ProxyError::new(ErrorCode::ConfigInvalid, "JSON path index is invalid")
-        })?);
-        rest = &index_text[close + 1..];
-    }
-    if !rest.is_empty() {
-        return Err(ProxyError::new(
-            ErrorCode::ConfigInvalid,
-            "JSON path segment is invalid",
-        ));
-    }
-    Ok((name, indexes))
 }
 
 #[cfg(test)]
@@ -1539,7 +1507,7 @@ fn result_tone(code: &str) -> UiTone {
 mod tests {
     use std::{
         net::SocketAddr,
-        sync::atomic::{AtomicBool, Ordering as AtomicOrdering},
+        sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering},
         time::SystemTime,
     };
 
@@ -1566,19 +1534,26 @@ mod tests {
         reject_commit: AtomicBool,
     }
 
+    #[derive(Debug)]
+    struct ConflictOnceRules {
+        snapshot: Mutex<RuleRuntimeSnapshot>,
+        conflict_once: AtomicBool,
+        commit_attempts: AtomicUsize,
+    }
+
     impl RuntimeRuleRepository for RejectingCommitRules {
         fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
             Ok(self.snapshot.lock().clone())
         }
 
-        fn commit_runtime_snapshot(&self, _: &RuleRuntimeSnapshot, _: &[Rule]) -> AppResult<()> {
+        fn commit_runtime_snapshot(&self, _: &RuleRuntimeSnapshot, _: &[Rule]) -> AppResult<u64> {
             if self.reject_commit.load(AtomicOrdering::Acquire) {
                 Err(AppError::new(
                     "REVISION_CONFLICT",
                     "模拟运行态事务提交失败。",
                 ))
             } else {
-                Ok(())
+                Ok(1)
             }
         }
 
@@ -1596,13 +1571,19 @@ mod tests {
             &self,
             snapshot: &RuleRuntimeSnapshot,
             evaluated_rules: &[Rule],
-        ) -> AppResult<()> {
+        ) -> AppResult<u64> {
             let mut current = self.snapshot.lock();
-            if current.signature != snapshot.signature {
+            if current.signature != snapshot.signature
+                || current.collection_revision != snapshot.collection_revision
+            {
                 return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
             }
-            *current = RuleRuntimeSnapshot::new(evaluated_rules.to_vec());
-            Ok(())
+            let next_revision = current.collection_revision.saturating_add(1);
+            *current = RuleRuntimeSnapshot::with_collection_revision(
+                next_revision,
+                evaluated_rules.to_vec(),
+            );
+            Ok(next_revision)
         }
 
         fn reset_runtime_hit_metadata(&self) -> AppResult<()> {
@@ -1611,7 +1592,51 @@ mod tests {
                 rule.hit_count = 0;
                 rule.last_hit_at = None;
             }
-            *current = RuleRuntimeSnapshot::new(current.rules.clone());
+            let next_revision = current.collection_revision.saturating_add(1);
+            *current =
+                RuleRuntimeSnapshot::with_collection_revision(next_revision, current.rules.clone());
+            Ok(())
+        }
+    }
+
+    impl RuntimeRuleRepository for ConflictOnceRules {
+        fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
+            Ok(self.snapshot.lock().clone())
+        }
+
+        fn commit_runtime_snapshot(
+            &self,
+            snapshot: &RuleRuntimeSnapshot,
+            evaluated_rules: &[Rule],
+        ) -> AppResult<u64> {
+            self.commit_attempts.fetch_add(1, AtomicOrdering::AcqRel);
+            let mut current = self.snapshot.lock();
+            if self.conflict_once.swap(false, AtomicOrdering::AcqRel) {
+                let externally_advanced_revision = current.collection_revision.saturating_add(1);
+                let externally_preserved_rules = current.rules.clone();
+                *current = RuleRuntimeSnapshot::with_collection_revision(
+                    externally_advanced_revision,
+                    externally_preserved_rules,
+                );
+                return Err(AppError::new(
+                    "REVISION_CONFLICT",
+                    "模拟评估后发生外部规则集合更新。",
+                ));
+            }
+            if current.signature != snapshot.signature
+                || current.collection_revision != snapshot.collection_revision
+            {
+                return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
+            }
+            let next_revision = current.collection_revision.saturating_add(1);
+            *current = RuleRuntimeSnapshot::with_collection_revision(
+                next_revision,
+                evaluated_rules.to_vec(),
+            );
+            Ok(next_revision)
+        }
+
+        fn reset_runtime_hit_metadata(&self) -> AppResult<()> {
             Ok(())
         }
     }
@@ -1936,6 +1961,77 @@ mod tests {
             rules.snapshot.lock().rules[0].hit_count,
             20,
             "serialized evaluate+commit preserves every concurrent hit"
+        );
+    }
+
+    #[test]
+    fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message() {
+        let rule = view_to_domain_rule({
+            let mut view = one_shot_delay_rule();
+            view.draft.conditions =
+                vec![gmofg_proxy_application::RuleCondition::NthHit { count: 2 }];
+            view.draft.one_shot = false;
+            view
+        })
+        .expect("rule");
+        let rules = Arc::new(ConflictOnceRules {
+            snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
+            conflict_once: AtomicBool::new(true),
+            commit_attempts: AtomicUsize::new(0),
+        });
+        let pipeline = RuntimePipelineAdapter::new(
+            rules.clone(),
+            Arc::new(InMemorySessionStore::new(10, 64 * 1024 * 1024)),
+            Arc::new(BreakpointCoordinator::default()),
+            Arc::new(EventHub::new(128)),
+            Arc::new(CaptureRepositoryAdapter::default()),
+        );
+        let epoch = Uuid::new_v4();
+        let context = test_context(epoch, Uuid::new_v4(), Channel::Transaction);
+        let message = request_message(r#"{"amount":100}"#);
+
+        let first = pipeline
+            .evaluate(&context, DomainMessageStage::Request, Some(&message))
+            .expect("first evaluation");
+        assert!(
+            first.actions.is_empty(),
+            "the first NthHit(2) evaluation only advances the in-memory counter"
+        );
+        assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 0);
+
+        let second = pipeline
+            .evaluate(&context, DomainMessageStage::Request, Some(&message))
+            .expect("second evaluation retries after the injected conflict");
+        assert_eq!(
+            second.actions,
+            vec![RuleAction::Delay { milliseconds: 25 }],
+            "the same second request must still hit after rollback and re-evaluation"
+        );
+        assert_eq!(
+            rules.commit_attempts.load(AtomicOrdering::Acquire),
+            2,
+            "one conflicting CAS and one successful retry are expected"
+        );
+        {
+            let persisted = rules.snapshot.lock();
+            assert_eq!(persisted.rules[0].hit_count, 1);
+            assert_eq!(
+                persisted.collection_revision, 2,
+                "the external advance and successful retry each advance once"
+            );
+        }
+
+        let third = pipeline
+            .evaluate(&context, DomainMessageStage::Request, Some(&message))
+            .expect("third evaluation");
+        assert!(
+            third.actions.is_empty(),
+            "the retry must not count the second request twice"
+        );
+        assert_eq!(
+            rules.snapshot.lock().rules[0].hit_count,
+            1,
+            "only the exact second hit executes and persists"
         );
     }
 

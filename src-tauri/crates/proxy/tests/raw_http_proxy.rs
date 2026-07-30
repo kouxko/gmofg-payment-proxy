@@ -220,6 +220,7 @@ fn service_with_connector(
         admission: ConnectionAdmission::new(500).unwrap(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(2),
+        write_timeout: Duration::from_secs(2),
     }
 }
 

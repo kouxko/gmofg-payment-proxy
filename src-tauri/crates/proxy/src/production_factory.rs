@@ -2,8 +2,11 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::future::Future;
+use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use http::Uri;
@@ -97,7 +100,8 @@ impl RuntimeServiceFactory for RustlsRuntimeServiceFactory {
 
         let mut services = BTreeMap::new();
         for channel in config.channels.iter().filter(|channel| channel.enabled) {
-            let endpoint = HttpsEndpoint::parse(&channel.upstream_url).await?;
+            let endpoint =
+                HttpsEndpoint::parse(&channel.upstream_url, config.connect_timeout).await?;
             let connector = HyperUpstreamConnector {
                 address: endpoint.address,
                 host: endpoint.server_name,
@@ -119,6 +123,7 @@ impl RuntimeServiceFactory for RustlsRuntimeServiceFactory {
                     admission: admission.clone(),
                     limits: config.limits,
                     read_timeout: config.read_timeout,
+                    write_timeout: config.write_timeout,
                 },
             );
         }
@@ -134,7 +139,7 @@ struct HttpsEndpoint {
 }
 
 impl HttpsEndpoint {
-    async fn parse(value: &str) -> Result<Self> {
+    async fn parse(value: &str, connect_timeout: Duration) -> Result<Self> {
         let uri = value.parse::<Uri>().map_err(|error| {
             ProxyError::new(
                 ErrorCode::ConfigInvalid,
@@ -155,21 +160,12 @@ impl HttpsEndpoint {
             .and_then(|value| value.strip_suffix(']'))
             .unwrap_or(uri_host);
         let port = uri.port_u16().unwrap_or(443);
-        let address = tokio::net::lookup_host((host, port))
-            .await
-            .map_err(|error| {
-                ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    format!("cannot resolve upstream host {host}: {error}"),
-                )
-            })?
-            .next()
-            .ok_or_else(|| {
-                ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    format!("upstream host {host} resolved to no addresses"),
-                )
-            })?;
+        let address = resolve_address(host, connect_timeout, async {
+            tokio::net::lookup_host((host, port))
+                .await
+                .map(Iterator::collect)
+        })
+        .await?;
         let authority_host = if host.contains(':') {
             format!("[{host}]")
         } else {
@@ -188,23 +184,58 @@ impl HttpsEndpoint {
     }
 }
 
+async fn resolve_address<F>(host: &str, connect_timeout: Duration, lookup: F) -> Result<SocketAddr>
+where
+    F: Future<Output = io::Result<Vec<SocketAddr>>>,
+{
+    tokio::time::timeout(connect_timeout, lookup)
+        .await
+        .map_err(|_| {
+            ProxyError::new(
+                ErrorCode::UpstreamConnectTimeout,
+                format!(
+                    "upstream DNS resolution timed out after {} ms",
+                    connect_timeout.as_millis()
+                ),
+            )
+        })?
+        .map_err(|error| {
+            ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                format!("cannot resolve upstream host {host}: {error}"),
+            )
+        })?
+        .into_iter()
+        .next()
+        .ok_or_else(|| {
+            ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                format!("upstream host {host} resolved to no addresses"),
+            )
+        })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[tokio::test]
     async fn production_endpoint_rejects_plain_http() {
-        let error = HttpsEndpoint::parse("http://localhost:8080/")
-            .await
-            .unwrap_err();
+        let error =
+            HttpsEndpoint::parse("http://localhost:8080/", std::time::Duration::from_secs(1))
+                .await
+                .unwrap_err();
         assert_eq!(error.code, "CONFIG_INVALID");
     }
 
     #[tokio::test]
     async fn endpoint_preserves_non_default_port_in_host_header() {
-        let endpoint = HttpsEndpoint::parse("https://127.0.0.1:18443/api")
-            .await
-            .unwrap();
+        let endpoint = HttpsEndpoint::parse(
+            "https://127.0.0.1:18443/api",
+            std::time::Duration::from_secs(1),
+        )
+        .await
+        .unwrap();
         assert_eq!(endpoint.server_name, "127.0.0.1");
         assert_eq!(endpoint.host_header, "127.0.0.1:18443");
         assert_eq!(endpoint.address.port(), 18_443);
@@ -212,12 +243,27 @@ mod tests {
 
     #[tokio::test]
     async fn endpoint_brackets_ipv6_host_header() {
-        let endpoint = HttpsEndpoint::parse("https://[::1]:18443/api")
-            .await
-            .unwrap();
+        let endpoint =
+            HttpsEndpoint::parse("https://[::1]:18443/api", std::time::Duration::from_secs(1))
+                .await
+                .unwrap();
         assert_eq!(endpoint.server_name, "::1");
         assert_eq!(endpoint.host_header, "[::1]:18443");
         assert_eq!(endpoint.address.port(), 18_443);
+    }
+
+    #[tokio::test]
+    async fn dns_resolution_uses_the_configured_connect_timeout() {
+        let error = resolve_address(
+            "slow.test",
+            Duration::from_millis(5),
+            std::future::pending(),
+        )
+        .await
+        .expect_err("a stalled resolver must respect the configured connect timeout");
+
+        assert_eq!(error.code, ErrorCode::UpstreamConnectTimeout.as_str());
+        assert!(error.message.contains("5 ms"));
     }
 
     #[test]
