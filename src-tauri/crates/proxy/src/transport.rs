@@ -23,7 +23,7 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Notify;
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, TryAcquireError};
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -631,8 +631,36 @@ pub struct ConnectionService {
     pub upstream: Arc<dyn UpstreamConnector>,
     pub ports: Arc<dyn PipelinePorts>,
     pub clock: Arc<dyn Clock>,
+    pub admission: ConnectionAdmission,
     pub limits: MessageLimits,
+    /// Covers the inbound TLS handshake and the Payment App request body.
     pub read_timeout: Duration,
+}
+
+/// Shared per-epoch admission control. Both channel listeners clone the same
+/// instance so their combined pre-handshake and active connection count stays
+/// within one configured capacity.
+#[derive(Debug, Clone)]
+pub struct ConnectionAdmission {
+    permits: Arc<Semaphore>,
+}
+
+impl ConnectionAdmission {
+    pub fn new(capacity: usize) -> Result<Self> {
+        if capacity == 0 {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "connection capacity must be greater than zero",
+            ));
+        }
+        Ok(Self {
+            permits: Arc::new(Semaphore::new(capacity)),
+        })
+    }
+
+    fn try_acquire(&self) -> std::result::Result<OwnedSemaphorePermit, TryAcquireError> {
+        Arc::clone(&self.permits).try_acquire_owned()
+    }
 }
 
 impl ConnectionService {
@@ -650,6 +678,19 @@ impl ConnectionService {
                 accepted = listener.accept() => {
                     let (io, peer_addr) = accepted
                         .map_err(|error| ProxyError::io("accept connection", &error))?;
+                    let permit = match self.admission.try_acquire() {
+                        Ok(permit) => permit,
+                        Err(error) => {
+                            tracing::warn!(
+                                ?channel,
+                                %peer_addr,
+                                ?error,
+                                "proxy connection rejected because runtime capacity is exhausted"
+                            );
+                            drop(io);
+                            continue;
+                        }
+                    };
                     let context = ConnectionContext {
                         runtime_epoch: epoch,
                         connection_id: Uuid::new_v4(),
@@ -661,6 +702,7 @@ impl ConnectionService {
                     let service = self.clone();
                     let child_cancel = cancellation.child_token();
                     connections.spawn(async move {
+                        let _permit = permit;
                         service.run_connection(io, context, child_cancel).await;
                     });
                 }
@@ -682,7 +724,14 @@ impl ConnectionService {
         mut context: ConnectionContext,
         cancellation: CancellationToken,
     ) {
-        let accepted = self.acceptor.accept(io, &context).await;
+        let accepted = timeout_stage(
+            self.read_timeout,
+            &cancellation,
+            self.acceptor.accept(io, &context),
+            ErrorCode::TlsHandshakeFailed,
+        )
+        .await
+        .and_then(std::convert::identity);
         let result = match accepted {
             Ok(accepted) => {
                 context.tls_peer = accepted.tls_peer;

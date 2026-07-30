@@ -17,8 +17,8 @@ use gmofg_proxy_runtime::transport::{
     ForwardRequest, HandshakePolicy, NoopPipelinePorts, PipelinePorts,
 };
 use gmofg_proxy_runtime::{
-    ErrorCode, FaultAction, ProxyError, ProxySupervisor, Result, SystemClock, TokioListenerBinder,
-    UpstreamConnector,
+    ConnectionAdmission, ErrorCode, FaultAction, ProxyError, ProxySupervisor, Result, SystemClock,
+    TokioListenerBinder, UpstreamConnector,
 };
 use http::{HeaderMap, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -74,6 +74,7 @@ impl ConnectionAcceptor for TestPlaintextAcceptor {
 struct LifecyclePorts {
     events: Mutex<Vec<&'static str>>,
     opened: Notify,
+    closed: Notify,
 }
 
 impl fmt::Debug for LifecyclePorts {
@@ -97,6 +98,7 @@ impl PipelinePorts for LifecyclePorts {
 
     async fn connection_closed(&self, _context: &ConnectionContext, _result: &Result<()>) {
         self.events.lock().unwrap().push("connection_closed");
+        self.closed.notify_one();
     }
 }
 
@@ -215,6 +217,7 @@ fn service_with_connector(
         upstream,
         ports,
         clock: Arc::new(SystemClock),
+        admission: ConnectionAdmission::new(500).unwrap(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(2),
     }
@@ -237,6 +240,7 @@ fn config() -> ProxyConfig {
             },
         ],
         limits: MessageLimits::default(),
+        max_connections: 500,
         connect_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),
         read_timeout: Duration::from_secs(2),
@@ -410,6 +414,47 @@ async fn stop_cancels_twenty_active_clients() {
 }
 
 #[tokio::test]
+async fn connection_capacity_rejects_excess_and_releases_permit_after_close() {
+    let ports = Arc::new(LifecyclePorts::default());
+    let supervisor = ProxySupervisor::new(Arc::new(TokioListenerBinder), service(ports.clone()));
+    let mut limited_config = config();
+    limited_config.max_connections = 1;
+    let started = supervisor.start(limited_config).await.unwrap();
+    let address = started.listeners[&Channel::Transaction];
+
+    let first = TcpStream::connect(address).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(1), ports.opened.notified())
+        .await
+        .expect("first connection acquired the only permit");
+
+    let mut excess = TcpStream::connect(address).await.unwrap();
+    let mut byte = [0_u8; 1];
+    let rejected = tokio::time::timeout(Duration::from_secs(1), excess.read(&mut byte))
+        .await
+        .expect("excess connection is rejected promptly");
+    match rejected {
+        Ok(0) => {}
+        Err(error)
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::ConnectionReset
+                    | std::io::ErrorKind::ConnectionAborted
+                    | std::io::ErrorKind::BrokenPipe
+            ) => {}
+        other => panic!("unexpected excess connection result: {other:?}"),
+    }
+
+    drop(first);
+    tokio::time::timeout(Duration::from_secs(1), ports.closed.notified())
+        .await
+        .expect("closing the admitted connection releases its permit");
+
+    let response = exchange(address, b"after-release").await;
+    assert!(response.ends_with(b"after-release"));
+    supervisor.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn second_listener_bind_failure_rolls_back_first_listener() {
     let first_reservation = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .await
@@ -440,6 +485,7 @@ async fn second_listener_bind_failure_rolls_back_first_listener() {
             },
         ],
         limits: MessageLimits::default(),
+        max_connections: 500,
         connect_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),
         read_timeout: Duration::from_secs(2),

@@ -164,12 +164,12 @@ fn seal(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
     SystemRandom::new()
         .fill(&mut nonce)
         .map_err(|_| InfrastructureError::KeychainProtect)?;
-    let mut protected = plaintext.to_vec();
+    let mut protected = Zeroizing::new(plaintext.to_vec());
     cipher
         .seal_in_place_append_tag(
             Nonce::assume_unique_for_key(nonce),
             Aad::from(AAD),
-            &mut protected,
+            &mut *protected,
         )
         .map_err(|_| InfrastructureError::KeychainProtect)?;
 

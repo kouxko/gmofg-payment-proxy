@@ -12,7 +12,8 @@ use zeroize::Zeroizing;
 use crate::supervisor::{Channel, ProxyConfig, RuntimeServiceFactory};
 use crate::tls::{ClientTlsAdapter, ServerTlsAdapter};
 use crate::transport::{
-    Clock, ConnectionService, HandshakePolicy, HyperUpstreamConnector, PipelinePorts,
+    Clock, ConnectionAdmission, ConnectionService, HandshakePolicy, HyperUpstreamConnector,
+    PipelinePorts,
 };
 use crate::{ErrorCode, ProxyError, Result};
 
@@ -92,6 +93,7 @@ impl RuntimeServiceFactory for RustlsRuntimeServiceFactory {
             materials.upstream_client_private_key_pkcs8_der.to_vec(),
             materials.upstream_ca_der,
         )?;
+        let admission = ConnectionAdmission::new(config.max_connections)?;
 
         let mut services = BTreeMap::new();
         for channel in config.channels.iter().filter(|channel| channel.enabled) {
@@ -114,6 +116,7 @@ impl RuntimeServiceFactory for RustlsRuntimeServiceFactory {
                     upstream: Arc::new(connector),
                     ports: Arc::clone(&self.ports),
                     clock: Arc::clone(&self.clock),
+                    admission: admission.clone(),
                     limits: config.limits,
                     read_timeout: config.read_timeout,
                 },

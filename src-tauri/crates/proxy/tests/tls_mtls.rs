@@ -7,10 +7,16 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use async_trait::async_trait;
 use gmofg_proxy_runtime::{
-    Channel, ConnectionContext, HandshakePolicy, ProxyError, Result, TlsPeerIdentity,
+    Channel, ChannelConfig, ConnectionAdmission, ConnectionContext, FaultAction, HandshakePolicy,
+    Message, MessageLimits, ProxyConfig, ProxyError, ProxySupervisor, Result, SystemClock,
+    TlsPeerIdentity, TokioListenerBinder, UpstreamConnector,
     tls::{ClientTlsAdapter, ServerTlsAdapter},
-    transport::{BoxIo, ConnectionAcceptor, NoopPipelinePorts},
+    transport::{
+        AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionService, ForwardRequest,
+        NoopPipelinePorts,
+    },
 };
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
@@ -22,8 +28,12 @@ use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
     version::{TLS12, TLS13},
 };
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    sync::Notify,
+};
 use tokio_rustls::TlsConnector;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 struct Identity {
@@ -84,6 +94,35 @@ async fn listener() -> (TcpListener, SocketAddr) {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
     let address = listener.local_addr().unwrap();
     (listener, address)
+}
+
+#[derive(Debug)]
+struct SignalingAcceptor {
+    inner: ServerTlsAdapter,
+    entered: Arc<Notify>,
+}
+
+#[async_trait]
+impl ConnectionAcceptor for SignalingAcceptor {
+    async fn accept(&self, io: BoxIo, context: &ConnectionContext) -> Result<AcceptedConnection> {
+        self.entered.notify_one();
+        self.inner.accept(io, context).await
+    }
+}
+
+#[derive(Debug)]
+struct UnusedUpstream;
+
+#[async_trait]
+impl UpstreamConnector for UnusedUpstream {
+    async fn send(
+        &self,
+        _request: ForwardRequest,
+        _actions: &[FaultAction],
+        _cancellation: &CancellationToken,
+    ) -> Result<Message> {
+        unreachable!("silent TLS clients never reach the upstream connector")
+    }
 }
 
 #[tokio::test]
@@ -267,4 +306,138 @@ async fn fingerprint_and_policy_reject_before_http_handler_can_open() {
         assert!(!handler_opened.load(Ordering::SeqCst));
         assert_eq!(policy_called.load(Ordering::SeqCst), reject_policy);
     }
+}
+
+#[tokio::test]
+async fn stop_cancels_a_silent_inbound_tls_handshake() {
+    let server = identity("proxy.local", "localhost", false);
+    let client = identity("payment-app", "payment-app", true);
+    let entered = Arc::new(Notify::new());
+    let acceptor = SignalingAcceptor {
+        inner: ServerTlsAdapter::build(
+            vec![server.cert, server.ca],
+            server.key,
+            client.ca,
+            None,
+            Arc::new(NoopPipelinePorts),
+        )
+        .unwrap(),
+        entered: Arc::clone(&entered),
+    };
+    let service = ConnectionService {
+        acceptor: Arc::new(acceptor),
+        upstream: Arc::new(UnusedUpstream),
+        ports: Arc::new(NoopPipelinePorts),
+        clock: Arc::new(SystemClock),
+        admission: ConnectionAdmission::new(4).unwrap(),
+        limits: MessageLimits::default(),
+        read_timeout: Duration::from_secs(30),
+    };
+    let supervisor = ProxySupervisor::new(Arc::new(TokioListenerBinder), service);
+    let started = supervisor
+        .start(ProxyConfig {
+            channels: vec![ChannelConfig {
+                channel: Channel::Transaction,
+                enabled: true,
+                listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),
+                upstream_url: "https://upstream.test/".into(),
+            }],
+            limits: MessageLimits::default(),
+            max_connections: 4,
+            connect_timeout: Duration::from_secs(30),
+            write_timeout: Duration::from_secs(30),
+            read_timeout: Duration::from_secs(30),
+            rewrite_host: true,
+            leaf_sans: vec!["localhost".into()],
+        })
+        .await
+        .unwrap();
+
+    let _silent = TcpStream::connect(started.listeners[&Channel::Transaction])
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(1), entered.notified())
+        .await
+        .expect("connection entered the rustls handshake");
+
+    let stopped = tokio::time::timeout(Duration::from_secs(1), supervisor.stop())
+        .await
+        .expect("stop cancels the silent TLS handshake")
+        .unwrap();
+    assert_eq!(stopped.state, gmofg_proxy_runtime::ProxyState::Stopped);
+}
+
+#[tokio::test]
+async fn silent_inbound_tls_handshake_times_out_and_releases_its_permit() {
+    let server = identity("proxy.local", "localhost", false);
+    let client = identity("payment-app", "payment-app", true);
+    let client_tls = ClientTlsAdapter::build(
+        vec![client.cert.clone(), client.ca.clone()],
+        client.key.clone(),
+        server.ca.clone(),
+    )
+    .unwrap();
+    let entered = Arc::new(Notify::new());
+    let acceptor = SignalingAcceptor {
+        inner: ServerTlsAdapter::build(
+            vec![server.cert, server.ca],
+            server.key,
+            client.ca,
+            None,
+            Arc::new(NoopPipelinePorts),
+        )
+        .unwrap(),
+        entered: Arc::clone(&entered),
+    };
+    let service = ConnectionService {
+        acceptor: Arc::new(acceptor),
+        upstream: Arc::new(UnusedUpstream),
+        ports: Arc::new(NoopPipelinePorts),
+        clock: Arc::new(SystemClock),
+        admission: ConnectionAdmission::new(1).unwrap(),
+        limits: MessageLimits::default(),
+        read_timeout: Duration::from_millis(30),
+    };
+    let supervisor = ProxySupervisor::new(Arc::new(TokioListenerBinder), service);
+    let started = supervisor
+        .start(ProxyConfig {
+            channels: vec![ChannelConfig {
+                channel: Channel::Transaction,
+                enabled: true,
+                listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),
+                upstream_url: "https://upstream.test/".into(),
+            }],
+            limits: MessageLimits::default(),
+            max_connections: 1,
+            connect_timeout: Duration::from_secs(30),
+            write_timeout: Duration::from_secs(30),
+            read_timeout: Duration::from_millis(30),
+            rewrite_host: true,
+            leaf_sans: vec!["localhost".into()],
+        })
+        .await
+        .unwrap();
+    let address = started.listeners[&Channel::Transaction];
+
+    let silent = TcpStream::connect(address).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(1), entered.notified())
+        .await
+        .expect("connection entered the rustls handshake");
+    let mut byte = [0_u8; 1];
+    let closed = tokio::time::timeout(Duration::from_secs(1), silent.readable())
+        .await
+        .expect("silent TLS handshake reaches its read timeout");
+    closed.unwrap();
+    assert_eq!(silent.try_read(&mut byte).unwrap_or(0), 0);
+
+    let tcp = TcpStream::connect(address).await.unwrap();
+    tokio::time::timeout(
+        Duration::from_secs(1),
+        client_tls.connect("localhost", Box::new(tcp)),
+    )
+    .await
+    .expect("the handshake permit was released after timeout")
+    .unwrap();
+
+    supervisor.stop().await.unwrap();
 }

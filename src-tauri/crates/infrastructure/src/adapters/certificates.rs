@@ -36,8 +36,6 @@ struct ProtectedMaterial {
     certificate_der: Vec<u8>,
     private_key_der: Vec<u8>,
     chain_der: Vec<Vec<u8>>,
-    pkcs12_der: Vec<u8>,
-    password: String,
     subject: String,
     fingerprint: String,
     sans: Vec<String>,
@@ -64,8 +62,6 @@ impl Drop for ProtectedMaterial {
         for certificate in &mut self.chain_der {
             certificate.zeroize();
         }
-        self.pkcs12_der.zeroize();
-        self.password.zeroize();
     }
 }
 
@@ -351,6 +347,7 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let Some(path) = self.dialog.choose_open_file("pkcs12")? else {
             return self.overview_locked();
         };
+        let password = Zeroizing::new(password);
         let bytes = Zeroizing::new(infra(self.exporter.read(&path))?);
         let parsed = self
             .certificates
@@ -364,8 +361,6 @@ impl CertificateServicePort for CertificateServiceAdapter {
                 certificate_der: parsed.certificate_der.clone(),
                 private_key_der: parsed.private_key_pkcs8_der.to_vec(),
                 chain_der: parsed.chain_der.clone(),
-                pkcs12_der: bytes.to_vec(),
-                password,
                 subject: parsed.metadata.subject.clone(),
                 fingerprint: parsed.metadata.fingerprint_sha256.clone(),
                 sans: parsed.metadata.san.clone(),
@@ -393,8 +388,6 @@ impl CertificateServicePort for CertificateServiceAdapter {
                 certificate_der,
                 private_key_der: Vec::new(),
                 chain_der: Vec::new(),
-                pkcs12_der: Vec::new(),
-                password: String::new(),
                 subject: metadata.subject,
                 fingerprint: metadata.fingerprint_sha256,
                 sans: metadata.san,
@@ -515,8 +508,6 @@ fn from_bundle(revision: u64, bundle: &crate::CertificateBundle) -> ProtectedMat
         certificate_der: bundle.certificate_der.clone(),
         private_key_der: bundle.private_key_pkcs8_der.to_vec(),
         chain_der: Vec::new(),
-        pkcs12_der: Vec::new(),
-        password: String::new(),
         subject: bundle.metadata.subject.clone(),
         fingerprint: bundle.metadata.fingerprint_sha256.clone(),
         sans: bundle.metadata.san.clone(),
@@ -617,7 +608,8 @@ fn proxy_app_error(error: AppError) -> ProxyError {
         "DPAPI_UNPROTECT_FAILED" => ProxyErrorCode::DpapiUnprotectFailed,
         "KEYCHAIN_UNPROTECT_FAILED" => ProxyErrorCode::KeychainUnprotectFailed,
         "CERTIFICATE_INVALID" => ProxyErrorCode::CertificateInvalid,
-        _ => ProxyErrorCode::CertificateNotReady,
+        "CERTIFICATE_NOT_READY" => ProxyErrorCode::CertificateNotReady,
+        _ => ProxyErrorCode::Internal,
     };
     ProxyError::new(code, error.view_model.message.clone())
 }
@@ -683,37 +675,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn tls_snapshot_preserves_keychain_unprotect_error_code() {
-        let store = Arc::new(SqliteStore::in_memory().expect("store"));
-        store
-            .put_certificate_material(&CertificateMaterialRecord {
-                kind: LEAF.into(),
-                protected_blob: vec![1],
-                metadata: serde_json::json!({}),
-                updated_at: Utc::now(),
-            })
-            .expect("seed protected material");
-        let adapter = CertificateServiceAdapter::new(
-            store,
-            Arc::new(FailingUnprotectProtector),
-            Arc::new(QueueDialog {
-                open: ParkingMutex::new(VecDeque::new()),
-            }),
-        );
-
-        let error = adapter
-            .load_epoch_snapshot(&["127.0.0.1".into()])
-            .await
-            .expect_err("snapshot must fail");
-
-        assert_eq!(error.code, "KEYCHAIN_UNPROTECT_FAILED");
-    }
-
-    // CERT-005~017, SECURITY-006~009, TEST-TLS
-    #[tokio::test]
-    async fn protected_material_builds_a_complete_epoch_snapshot() {
-        let directory = tempfile::tempdir().expect("tempdir");
+    fn shared_client_pkcs12() -> (Vec<u8>, Vec<u8>) {
         let certificate_service = CertificateService;
         let client_root = certificate_service
             .generate_root_ca("Shared Client Root")
@@ -754,6 +716,91 @@ mod tests {
             )),
         );
         let pkcs12 = keystore.writer("password").write().expect("pkcs12");
+        (pkcs12, client_private_key)
+    }
+
+    fn assert_raw_pkcs12_secrets_are_not_persisted(store: &SqliteStore) {
+        let protected = store
+            .load_certificate_material(PKCS12)
+            .expect("load protected PKCS12 material")
+            .expect("PKCS12 material");
+        let plaintext = protected
+            .protected_blob
+            .iter()
+            .map(|byte| byte ^ 0xA5)
+            .collect::<Vec<_>>();
+        let persisted: serde_json::Value =
+            serde_json::from_slice(&plaintext).expect("protected material JSON");
+        assert!(persisted.get("password").is_none());
+        assert!(persisted.get("pkcs12_der").is_none());
+    }
+
+    #[tokio::test]
+    async fn tls_snapshot_preserves_keychain_unprotect_error_code() {
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        store
+            .put_certificate_material(&CertificateMaterialRecord {
+                kind: LEAF.into(),
+                protected_blob: vec![1],
+                metadata: serde_json::json!({}),
+                updated_at: Utc::now(),
+            })
+            .expect("seed protected material");
+        let adapter = CertificateServiceAdapter::new(
+            store,
+            Arc::new(FailingUnprotectProtector),
+            Arc::new(QueueDialog {
+                open: ParkingMutex::new(VecDeque::new()),
+            }),
+        );
+
+        let error = adapter
+            .load_epoch_snapshot(&["127.0.0.1".into()])
+            .await
+            .expect_err("snapshot must fail");
+
+        assert_eq!(error.code, "KEYCHAIN_UNPROTECT_FAILED");
+    }
+
+    #[tokio::test]
+    async fn tls_snapshot_distinguishes_corrupt_material_from_missing_material() {
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        store
+            .put_certificate_material(&CertificateMaterialRecord {
+                kind: LEAF.into(),
+                protected_blob: b"not-json".iter().map(|byte| byte ^ 0xA5).collect(),
+                metadata: serde_json::json!({}),
+                updated_at: Utc::now(),
+            })
+            .expect("seed corrupt protected material");
+        let dialog = Arc::new(QueueDialog {
+            open: ParkingMutex::new(VecDeque::new()),
+        });
+        let corrupt = CertificateServiceAdapter::new(store, Arc::new(XorProtector), dialog.clone());
+        let corrupt_error = corrupt
+            .load_epoch_snapshot(&["127.0.0.1".into()])
+            .await
+            .expect_err("corrupt material must fail");
+        assert_eq!(corrupt_error.code, "INTERNAL_ERROR");
+
+        let missing = CertificateServiceAdapter::new(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(XorProtector),
+            dialog,
+        );
+        let missing_error = missing
+            .load_epoch_snapshot(&["127.0.0.1".into()])
+            .await
+            .expect_err("missing material must fail");
+        assert_eq!(missing_error.code, "CERTIFICATE_NOT_READY");
+    }
+
+    // CERT-005~017, SECURITY-006~009, TEST-TLS
+    #[tokio::test]
+    async fn protected_material_builds_a_complete_epoch_snapshot() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let certificate_service = CertificateService;
+        let (pkcs12, client_private_key) = shared_client_pkcs12();
         let pkcs12_path = directory.path().join("shared.p12");
         std::fs::write(&pkcs12_path, pkcs12).expect("write pkcs12");
 
@@ -763,8 +810,9 @@ mod tests {
         let upstream_path = directory.path().join("upstream.cer");
         std::fs::write(&upstream_path, &upstream.certificate_der).expect("write upstream");
 
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
         let adapter = CertificateServiceAdapter::new(
-            Arc::new(SqliteStore::in_memory().expect("store")),
+            store.clone(),
             Arc::new(XorProtector),
             Arc::new(QueueDialog {
                 open: ParkingMutex::new(VecDeque::from([pkcs12_path, upstream_path])),
@@ -784,6 +832,7 @@ mod tests {
             .import_pkcs12("password".into())
             .await
             .expect("import pkcs12");
+        assert_raw_pkcs12_secrets_are_not_persisted(&store);
         let overview = adapter.import_upstream_ca().await.expect("import upstream");
         assert!(
             overview.ready,
