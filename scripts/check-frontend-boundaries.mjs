@@ -60,6 +60,16 @@ for (const file of sourceFiles(sourceRoot)) {
       `${relative(root, file)}: 日期与时间必须使用 HeroUI DatePicker、DateField 或 TimeField`,
     );
   }
+  if (
+    !isTestFile &&
+    /GMO-FG|Payment|\b(?:transaction|dll|DLL)\b|16_627|16_127|16627|16127/.test(
+      content,
+    )
+  ) {
+    failures.push(
+      `${relative(root, file)}: 产品名称、通道 ID、端口和专属文案必须来自 Rust DTO，禁止写死在生产前端`,
+    );
+  }
 
   const overlayFooterPattern =
     /<(Modal|AlertDialog|Drawer)\.Footer(?:\s[^>]*)?>([\s\S]*?)<\/\1\.Footer>/g;
@@ -175,6 +185,58 @@ if (
   failures.push(
     "src/features/faults/faults-view.tsx: 故障通道、命中次数、优先级和一次性默认值必须来自 Rust 模板",
   );
+}
+if (
+  /templates\.data\?\.[\s\S]{0,120}default_channel/.test(faultSource) ||
+  !faultSource.includes("channel_catalog")
+) {
+  failures.push(
+    "src/features/faults/faults-view.tsx: 故障可选通道必须来自完整 Rust channel catalog，不能从模板默认通道反推",
+  );
+}
+
+const productChannelUiContracts = [
+  ["features/capture/capture-view.tsx", ["channel_catalog", "channel_text"]],
+  ["features/sessions/sessions-view.tsx", ["channel_catalog", "channel_text"]],
+  ["features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
+  ["features/rules/rules-view.tsx", ["channel_catalog", "channel_text"]],
+  ["features/faults/faults-view.tsx", ["channel_catalog"]],
+];
+for (const [relativePath, requiredContracts] of productChannelUiContracts) {
+  const source = readFileSync(join(sourceRoot, relativePath), "utf8");
+  if (/["'](?:transaction|dll)["']/.test(source)) {
+    failures.push(
+      `src/${relativePath}: 产品通道 ID 和展示名称必须来自 Rust DTO/catalog，禁止写死 transaction/dll`,
+    );
+  }
+  for (const contract of requiredContracts) {
+    if (!source.includes(contract)) {
+      failures.push(
+        `src/${relativePath}: 缺少 Rust 产品通道展示契约 ${contract}`,
+      );
+    }
+  }
+}
+
+const httpInspectionUiContracts = [
+  [
+    "features/capture/capture-view.tsx",
+    ["http_status", ".headers", "HTTP 状态码"],
+  ],
+  [
+    "features/sessions/sessions-view.tsx",
+    ["http_status", ".headers", "HTTP 状态码"],
+  ],
+];
+for (const [relativePath, requiredContracts] of httpInspectionUiContracts) {
+  const source = readFileSync(join(sourceRoot, relativePath), "utf8");
+  for (const contract of requiredContracts) {
+    if (!source.includes(contract)) {
+      failures.push(
+        `src/${relativePath}: 缺少 Rust HTTP 报文检查契约 ${contract}`,
+      );
+    }
+  }
 }
 
 const settingsSource = readFileSync(

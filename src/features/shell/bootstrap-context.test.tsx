@@ -37,8 +37,14 @@ vi.mock("@/lib/ipc/client", () => ({
   ),
 }));
 
-function EventProbe({ refresh }: { refresh: () => Promise<void> }) {
-  useAppEventRefresh(["session_updated"], refresh);
+function EventProbe({
+  refresh,
+  entityId,
+}: {
+  refresh: () => Promise<void>;
+  entityId?: string;
+}) {
+  useAppEventRefresh(["session_updated"], refresh, { entityId });
   const { proxy } = useBootstrap();
   return <div>{proxy?.state_text}</div>;
 }
@@ -94,6 +100,82 @@ describe("BootstrapProvider event distribution", () => {
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
     view.unmount();
     expect(clientMocks.unsubscribe).toHaveBeenCalledOnce();
+  });
+
+  it("refreshes an open detail only for its selected Rust entity", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    render(
+      <BootstrapProvider>
+        <EventProbe refresh={refresh} entityId="session-2" />
+      </BootstrapProvider>,
+    );
+
+    expect(await screen.findByText("运行中")).toBeVisible();
+    await waitFor(() => expect(clientMocks.eventHandler).toBeTypeOf("function"));
+
+    clientMocks.eventHandler?.({
+      event_id: 5,
+      runtime_epoch: "epoch-1",
+      occurred_at: "2026-07-28T00:00:00Z",
+      entity_id: "session-1",
+      entity_revision: 1,
+      payload: {
+        type: "session_updated",
+        data: {} as never,
+      },
+    });
+    expect(refresh).not.toHaveBeenCalled();
+
+    clientMocks.eventHandler?.({
+      event_id: 6,
+      runtime_epoch: "epoch-1",
+      occurred_at: "2026-07-28T00:00:01Z",
+      entity_id: "session-2",
+      entity_revision: 2,
+      payload: {
+        type: "session_updated",
+        data: {} as never,
+      },
+    });
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+  });
+
+  it("runs one trailing refresh when a newer matching event arrives in flight", async () => {
+    let finishFirst!: () => void;
+    const first = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const refresh = vi
+      .fn<() => Promise<void>>()
+      .mockReturnValueOnce(first)
+      .mockResolvedValue(undefined);
+    render(
+      <BootstrapProvider>
+        <EventProbe refresh={refresh} entityId="session-2" />
+      </BootstrapProvider>,
+    );
+
+    expect(await screen.findByText("运行中")).toBeVisible();
+    await waitFor(() => expect(clientMocks.eventHandler).toBeTypeOf("function"));
+
+    for (const eventId of [5, 6]) {
+      clientMocks.eventHandler?.({
+        event_id: eventId,
+        runtime_epoch: "epoch-1",
+        occurred_at: `2026-07-28T00:00:0${eventId - 5}Z`,
+        entity_id: "session-2",
+        entity_revision: eventId - 4,
+        payload: {
+          type: "session_updated",
+          data: {} as never,
+        },
+      });
+    }
+    expect(refresh).toHaveBeenCalledOnce();
+
+    finishFirst();
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(2));
   });
 
   it("does not let an older bootstrap response overwrite a newer Rust event", async () => {

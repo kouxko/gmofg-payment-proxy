@@ -64,7 +64,8 @@ export function CaptureView({
   initialPage?: CapturePageViewModel;
 }) {
   const { navigate } = useWorkspaceNavigation();
-  const { proxy } = useBootstrap();
+  const { bootstrap, proxy } = useBootstrap();
+  const channelCatalog = bootstrap?.channel_catalog ?? [];
   const [paused, setPaused] = useState(false);
   const [clearPending, setClearPending] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<number>();
@@ -108,6 +109,17 @@ export function CaptureView({
     undefined,
     { enabled: Boolean(selected) },
   );
+  useAppEventRefresh(["session_updated"], detail.refresh, {
+    paused: !selectedId,
+    entityId: selectedId,
+  });
+
+  const requestHeaderCount = Object.values(
+    detail.data?.request.headers ?? {},
+  ).reduce((count, values) => count + values.length, 0);
+  const responseHeaderCount = Object.values(
+    detail.data?.response?.headers ?? {},
+  ).reduce((count, values) => count + values.length, 0);
 
   async function clearCurrentView() {
     if (!page.data || clearPending) return;
@@ -241,9 +253,18 @@ export function CaptureView({
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
-                    <ListBox.Item id="all">全部通道</ListBox.Item>
-                    <ListBox.Item id="transaction">交易</ListBox.Item>
-                    <ListBox.Item id="dll">DLL</ListBox.Item>
+                    <ListBox.Item id="all" textValue="全部通道">
+                      全部通道
+                    </ListBox.Item>
+                    {channelCatalog.map((channel) => (
+                      <ListBox.Item
+                        key={channel.id}
+                        id={channel.id}
+                        textValue={channel.display_name}
+                      >
+                        {channel.display_name}
+                      </ListBox.Item>
+                    ))}
                   </ListBox>
                 </Select.Popover>
               </Select>
@@ -346,6 +367,7 @@ export function CaptureView({
                 <Table.Column>方向</Table.Column>
                 <Table.Column>方法</Table.Column>
                 <Table.Column>路径 / 请求类型</Table.Column>
+                <Table.Column>HTTP 状态码</Table.Column>
                 <Table.Column>结果</Table.Column>
                 <Table.Column>耗时</Table.Column>
                 <Table.Column>匹配规则</Table.Column>
@@ -373,6 +395,15 @@ export function CaptureView({
                     <Table.Cell>{row.method}</Table.Cell>
                     <Table.Cell className="max-w-64 truncate font-mono text-xs">
                       {row.target}
+                    </Table.Cell>
+                    <Table.Cell>
+                      {row.http_status == null ? (
+                        "—"
+                      ) : (
+                        <Chip size="sm" color="accent" variant="soft">
+                          {row.http_status}
+                        </Chip>
+                      )}
                     </Table.Cell>
                     <Table.Cell>
                       <span
@@ -459,11 +490,14 @@ export function CaptureView({
                 <Tabs.Indicator />
               </Tabs.Tab>
               <Tabs.Tab id="request">
-                请求
+                请求{detail.data ? ` · ${requestHeaderCount} Header` : ""}
                 <Tabs.Indicator />
               </Tabs.Tab>
               <Tabs.Tab id="response">
                 响应
+                {detail.data?.response
+                  ? ` · ${detail.data.response.http_status ?? "未知状态"} · ${responseHeaderCount} Header`
+                  : ""}
                 <Tabs.Indicator />
               </Tabs.Tab>
             </Tabs.List>
@@ -511,6 +545,20 @@ export function CaptureView({
                     <Chip color={toneColor(selected.ui_tone)} size="sm">
                       {selected.result}
                     </Chip>
+                  </dd>
+                  <dt>HTTP 状态码</dt>
+                  <dd>
+                    <Chip size="sm" color="accent" variant="soft">
+                      {detail.data?.response?.http_status ?? "等待响应"}
+                    </Chip>
+                  </dd>
+                  <dt>请求 Header</dt>
+                  <dd>{requestHeaderCount} 项</dd>
+                  <dt>响应 Header</dt>
+                  <dd>
+                    {detail.data?.response
+                      ? `${responseHeaderCount} 项`
+                      : "等待响应"}
                   </dd>
                 </dl>
                 <div>
@@ -570,19 +618,127 @@ export function CaptureView({
               </>
             )}
           </Tabs.Panel>
-          <Tabs.Panel id="request" className="pt-4">
-            <pre className="whitespace-pre-wrap break-all text-xs">
-              {!selected
-                ? "选择一条抓包记录查看请求"
-                : detail.data?.request.body_text ?? "无请求正文"}
-            </pre>
+          <Tabs.Panel id="request" className="space-y-4 pt-4">
+            {!selected ? (
+              <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">
+                选择一条抓包记录查看请求
+              </p>
+            ) : (
+              <>
+                <dl className="grid grid-cols-[110px_1fr] gap-y-3 text-sm">
+                  <dt>请求行</dt>
+                  <dd className="break-all font-mono text-xs">
+                    {selected.method} {selected.target}
+                  </dd>
+                  <dt>Header 数量</dt>
+                  <dd>{requestHeaderCount}</dd>
+                </dl>
+                <div>
+                  <h2 className="mb-2 font-semibold">请求 Header</h2>
+                  <Table>
+                    <Table.ScrollContainer>
+                      <Table.Content aria-label="请求 HTTP Header">
+                        <Table.Header>
+                          <Table.Column isRowHeader>名称</Table.Column>
+                          <Table.Column>值</Table.Column>
+                        </Table.Header>
+                        <Table.Body
+                          renderEmptyState={() => (
+                            <div className="p-4 text-center text-sm text-[var(--telemetry-muted)]">
+                              无请求 Header
+                            </div>
+                          )}
+                        >
+                          {Object.entries(detail.data?.request.headers ?? {}).flatMap(
+                            ([name, values]) =>
+                              values.map((value, index) => (
+                                <Table.Row key={`${name}-${index}`}>
+                                  <Table.Cell className="font-mono text-xs">
+                                    {name}
+                                  </Table.Cell>
+                                  <Table.Cell className="break-all font-mono text-xs">
+                                    {value}
+                                  </Table.Cell>
+                                </Table.Row>
+                              )),
+                          )}
+                        </Table.Body>
+                      </Table.Content>
+                    </Table.ScrollContainer>
+                  </Table>
+                </div>
+                <div>
+                  <h2 className="mb-2 font-semibold">请求 Body</h2>
+                  <pre className="whitespace-pre-wrap break-all text-xs">
+                    {detail.data?.request.body_text ?? "无请求正文"}
+                  </pre>
+                </div>
+              </>
+            )}
           </Tabs.Panel>
-          <Tabs.Panel id="response" className="pt-4">
-            <pre className="whitespace-pre-wrap break-all text-xs">
-              {!selected
-                ? "选择一条抓包记录查看响应"
-                : detail.data?.response?.body_text ?? "无响应正文"}
-            </pre>
+          <Tabs.Panel id="response" className="space-y-4 pt-4">
+            {!selected ? (
+              <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">
+                选择一条抓包记录查看响应
+              </p>
+            ) : !detail.data?.response ? (
+              <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">
+                当前会话没有响应报文
+              </p>
+            ) : (
+              <>
+                <dl className="grid grid-cols-[110px_1fr] gap-y-3 text-sm">
+                  <dt>HTTP 状态码</dt>
+                  <dd>
+                    <Chip size="sm" color="accent" variant="soft">
+                      {detail.data.response.http_status ?? "未知"}
+                    </Chip>
+                  </dd>
+                  <dt>Header 数量</dt>
+                  <dd>{responseHeaderCount}</dd>
+                </dl>
+                <div>
+                  <h2 className="mb-2 font-semibold">响应 Header</h2>
+                  <Table>
+                    <Table.ScrollContainer>
+                      <Table.Content aria-label="响应 HTTP Header">
+                        <Table.Header>
+                          <Table.Column isRowHeader>名称</Table.Column>
+                          <Table.Column>值</Table.Column>
+                        </Table.Header>
+                        <Table.Body
+                          renderEmptyState={() => (
+                            <div className="p-4 text-center text-sm text-[var(--telemetry-muted)]">
+                              无响应 Header
+                            </div>
+                          )}
+                        >
+                          {Object.entries(detail.data.response.headers).flatMap(
+                            ([name, values]) =>
+                              values.map((value, index) => (
+                                <Table.Row key={`${name}-${index}`}>
+                                  <Table.Cell className="font-mono text-xs">
+                                    {name}
+                                  </Table.Cell>
+                                  <Table.Cell className="break-all font-mono text-xs">
+                                    {value}
+                                  </Table.Cell>
+                                </Table.Row>
+                              )),
+                          )}
+                        </Table.Body>
+                      </Table.Content>
+                    </Table.ScrollContainer>
+                  </Table>
+                </div>
+                <div>
+                  <h2 className="mb-2 font-semibold">响应 Body</h2>
+                  <pre className="whitespace-pre-wrap break-all text-xs">
+                    {detail.data.response.body_text ?? "无响应正文"}
+                  </pre>
+                </div>
+              </>
+            )}
           </Tabs.Panel>
         </Tabs>
       </aside>

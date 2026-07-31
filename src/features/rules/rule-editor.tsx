@@ -379,7 +379,7 @@ function TerminalActionFields({
 }) {
   const currentBytes =
     action.type === "mock_response" || action.type === "invalid_json"
-      ? action.shift_jis_body
+      ? action.body_bytes
       : [];
   const normalizedBytes = byteText(currentBytes);
   const [rawBytes, setRawBytes] = useState(normalizedBytes);
@@ -420,7 +420,7 @@ function TerminalActionFields({
       setByteError(undefined);
       onChange((current) =>
         current.type === "mock_response" || current.type === "invalid_json"
-          ? { ...current, shift_jis_body: parsed.bytes }
+          ? { ...current, body_bytes: parsed.bytes }
           : current,
       );
       onAsyncStateChange("bytes", undefined);

@@ -1,10 +1,8 @@
-use crate::{DomainError, ErrorCode, Revision};
+use crate::{ChannelId, DomainError, ErrorCode, Revision};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::net::IpAddr;
 
-pub const DEFAULT_TRANSACTION_PORT: u16 = 16_627;
-pub const DEFAULT_DLL_PORT: u16 = 16_127;
 pub const DEFAULT_TIMEOUT_MS: u64 = 70_000;
 pub const DEFAULT_MAX_BODY_BYTES: u64 = 4 * 1024 * 1024;
 pub const DEFAULT_MAX_SESSIONS: u32 = 500;
@@ -18,6 +16,7 @@ pub enum TlsVersion {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub struct ChannelSettings {
+    pub id: ChannelId,
     pub enabled: bool,
     pub port: u16,
     pub upstream_url: String,
@@ -42,8 +41,7 @@ pub struct CapacitySettings {
 pub struct Settings {
     pub revision: Revision,
     pub bind_address: String,
-    pub transaction: ChannelSettings,
-    pub dll: ChannelSettings,
+    pub channels: Vec<ChannelSettings>,
     pub tls_version: TlsVersion,
     pub follow_redirects: bool,
     pub automatic_retries: bool,
@@ -58,16 +56,7 @@ impl Default for Settings {
         Self {
             revision: Revision::INITIAL,
             bind_address: "0.0.0.0".into(),
-            transaction: ChannelSettings {
-                enabled: true,
-                port: DEFAULT_TRANSACTION_PORT,
-                upstream_url: String::new(),
-            },
-            dll: ChannelSettings {
-                enabled: true,
-                port: DEFAULT_DLL_PORT,
-                upstream_url: String::new(),
-            },
+            channels: Vec::new(),
             tls_version: TlsVersion::Tls12,
             follow_redirects: false,
             automatic_retries: false,
@@ -108,14 +97,28 @@ impl Settings {
         if bind_ip.is_err() {
             error = error.with_field_error("bind_address", "绑定地址必须是有效 IP 地址");
         }
-        if !self.transaction.enabled && !self.dll.enabled {
+        if !self.channels.iter().any(|channel| channel.enabled) {
             error = error.with_field_error("channels", "至少启用一个通道");
         }
-        if self.transaction.enabled && self.transaction.port == self.dll.port && self.dll.enabled {
-            error = error.with_field_error("dll.port", "交易端口和 DLL 端口不能相同");
+        let mut channel_ids = std::collections::BTreeSet::new();
+        let mut ports = std::collections::BTreeMap::new();
+        for channel in &self.channels {
+            if !channel_ids.insert(channel.id.as_str()) {
+                error = error.with_field_error(
+                    format!("channels.{}.id", channel.id.as_str()),
+                    "通道 ID 不能重复",
+                );
+            }
+            if channel.enabled
+                && let Some(existing) = ports.insert(channel.port, channel.id.as_str())
+            {
+                error = error.with_field_error(
+                    format!("channels.{}.port", channel.id.as_str()),
+                    format!("监听端口与通道 {existing} 重复"),
+                );
+            }
+            validate_channel(channel, &mut error);
         }
-        validate_channel("transaction", &self.transaction, &mut error);
-        validate_channel("dll", &self.dll, &mut error);
         if self.follow_redirects {
             error = error.with_field_error("follow_redirects", "HTTP 重定向固定关闭");
         }
@@ -164,10 +167,11 @@ impl Settings {
     }
 }
 
-fn validate_channel(prefix: &str, channel: &ChannelSettings, error: &mut DomainError) {
+fn validate_channel(channel: &ChannelSettings, error: &mut DomainError) {
     if !channel.enabled {
         return;
     }
+    let prefix = format!("channels.{}", channel.id.as_str());
     if channel.port == 0 {
         *error = std::mem::replace(
             error,
@@ -251,14 +255,20 @@ mod tests {
 
     fn valid_settings() -> Settings {
         Settings {
-            transaction: ChannelSettings {
-                upstream_url: "https://transaction.example.test/api".into(),
-                ..Settings::default().transaction
-            },
-            dll: ChannelSettings {
-                upstream_url: "https://dll.example.test/api".into(),
-                ..Settings::default().dll
-            },
+            channels: vec![
+                ChannelSettings {
+                    id: ChannelId::new("alpha").unwrap(),
+                    enabled: true,
+                    port: 20_001,
+                    upstream_url: "https://alpha.example.test/api".into(),
+                },
+                ChannelSettings {
+                    id: ChannelId::new("beta").unwrap(),
+                    enabled: true,
+                    port: 20_002,
+                    upstream_url: "https://beta.example.test/api".into(),
+                },
+            ],
             ..Settings::default()
         }
     }
@@ -268,8 +278,7 @@ mod tests {
     fn defaults_are_frozen_and_safe() {
         let defaults = Settings::default();
         assert_eq!(defaults.bind_address, "0.0.0.0");
-        assert_eq!(defaults.transaction.port, 16_627);
-        assert_eq!(defaults.dll.port, 16_127);
+        assert!(defaults.channels.is_empty());
         assert_eq!(defaults.tls_version, TlsVersion::Tls12);
         assert!(!defaults.follow_redirects);
         assert!(!defaults.automatic_retries);
@@ -283,9 +292,9 @@ mod tests {
     fn validates_channels_ports_urls_and_certificate_san() {
         let mut settings = valid_settings();
         settings.bind_address = "192.168.1.10".into();
-        settings.dll.port = settings.transaction.port;
+        settings.channels[1].port = settings.channels[0].port;
         let error = settings.validate().unwrap_err();
-        assert!(error.field_errors.contains_key("dll.port"));
+        assert!(error.field_errors.contains_key("channels.beta.port"));
         assert!(error.field_errors.contains_key("leaf_certificate_sans"));
     }
 
@@ -293,9 +302,13 @@ mod tests {
     #[test]
     fn rejects_plain_http_upstream_urls() {
         let mut settings = valid_settings();
-        settings.transaction.upstream_url = "http://transaction.example.test/api".into();
+        settings.channels[0].upstream_url = "http://alpha.example.test/api".into();
         let error = settings.validate().expect_err("http must be rejected");
-        assert!(error.field_errors.contains_key("transaction.upstream_url"));
+        assert!(
+            error
+                .field_errors
+                .contains_key("channels.alpha.upstream_url")
+        );
     }
 
     #[test]
@@ -325,7 +338,7 @@ mod tests {
         let mut stored = valid_settings();
         let effective = stored.clone();
         let mut candidate = valid_settings();
-        candidate.transaction.port = 20_000;
+        candidate.channels[0].port = 20_003;
         let revision = stored
             .apply_draft(SettingsDraft {
                 expected_revision: Revision::INITIAL,

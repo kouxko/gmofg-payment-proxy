@@ -1,17 +1,82 @@
 //! Byte-preserving HTTP message representation and reconstruction.
 
 use bytes::Bytes;
-use http::header::{CONNECTION, CONTENT_LENGTH, HeaderName, HeaderValue};
+use http::header::{HeaderName, HeaderValue};
 use http::{HeaderMap, Method, StatusCode, Uri};
-use serde_json::Value;
 
-use crate::codec;
 use crate::{ErrorCode, ProxyError, Result};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RawHeader {
     pub name: Bytes,
     pub value: Bytes,
+    leading_ows: Bytes,
+    trailing_ows: Bytes,
+}
+
+impl RawHeader {
+    #[must_use]
+    pub fn new(name: impl Into<Bytes>, value: impl Into<Bytes>) -> Self {
+        Self {
+            name: name.into(),
+            value: value.into(),
+            leading_ows: Bytes::from_static(b" "),
+            trailing_ows: Bytes::new(),
+        }
+    }
+
+    pub fn with_wire_ows(
+        name: impl Into<Bytes>,
+        value: impl Into<Bytes>,
+        leading_ows: impl Into<Bytes>,
+        trailing_ows: impl Into<Bytes>,
+    ) -> Result<Self> {
+        let leading_ows = leading_ows.into();
+        let trailing_ows = trailing_ows.into();
+        if leading_ows
+            .iter()
+            .chain(trailing_ows.iter())
+            .any(|byte| !matches!(byte, b' ' | b'\t'))
+        {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "HTTP header wire whitespace contains a non-OWS byte",
+            ));
+        }
+        Ok(Self {
+            name: name.into(),
+            value: value.into(),
+            leading_ows,
+            trailing_ows,
+        })
+    }
+
+    #[must_use]
+    pub fn leading_ows(&self) -> &[u8] {
+        &self.leading_ows
+    }
+
+    #[must_use]
+    pub fn trailing_ows(&self) -> &[u8] {
+        &self.trailing_ows
+    }
+
+    fn from_wire(name: &[u8], raw_value: &[u8]) -> Self {
+        let leading_end = raw_value
+            .iter()
+            .position(|byte| !matches!(byte, b' ' | b'\t'))
+            .unwrap_or(raw_value.len());
+        let semantic_end = raw_value[leading_end..]
+            .iter()
+            .rposition(|byte| !matches!(byte, b' ' | b'\t'))
+            .map_or(leading_end, |index| leading_end + index + 1);
+        Self {
+            name: Bytes::copy_from_slice(name),
+            value: Bytes::copy_from_slice(&raw_value[leading_end..semantic_end]),
+            leading_ows: Bytes::copy_from_slice(&raw_value[..leading_end]),
+            trailing_ows: Bytes::copy_from_slice(&raw_value[semantic_end..]),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +110,54 @@ pub struct Message {
 }
 
 impl Message {
+    /// Builds a message from a captured HTTP/1 head without passing header
+    /// names or values through `HeaderMap`.
+    ///
+    /// Hyper's semantic model normalizes header names and groups duplicates.
+    /// This parser is intentionally small because Hyper still owns framing and
+    /// protocol validation; it only recovers the already-accepted start line
+    /// and ordered field bytes for capture and breakpoint round trips.
+    pub fn from_raw_http1_head(head: &[u8], body: Bytes) -> Result<Self> {
+        let head = head.strip_suffix(b"\r\n\r\n").ok_or_else(|| {
+            ProxyError::new(
+                ErrorCode::HeaderLimitExceeded,
+                "captured HTTP/1 head is incomplete",
+            )
+        })?;
+        let mut lines = head.split(|byte| *byte == b'\n');
+        let start_line = lines.next().ok_or_else(|| {
+            ProxyError::new(ErrorCode::HeaderLimitExceeded, "HTTP start-line is missing")
+        })?;
+        let start_line = start_line.strip_suffix(b"\r").unwrap_or(start_line);
+        let start_line = std::str::from_utf8(start_line).map_err(|_| {
+            ProxyError::new(
+                ErrorCode::HeaderLimitExceeded,
+                "HTTP start-line is not valid ASCII/UTF-8",
+            )
+        })?;
+        let mut headers = Vec::new();
+        for line in lines {
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            if line.is_empty() {
+                continue;
+            }
+            let colon = line.iter().position(|byte| *byte == b':').ok_or_else(|| {
+                ProxyError::new(
+                    ErrorCode::HeaderLimitExceeded,
+                    "captured HTTP header is missing ':'",
+                )
+            })?;
+            let name = &line[..colon];
+            headers.push(RawHeader::from_wire(name, &line[colon + 1..]));
+        }
+        Ok(Self {
+            start_line: start_line.to_owned(),
+            headers,
+            body,
+            body_modified: false,
+        })
+    }
+
     pub fn request(method: &Method, uri: &Uri, headers: &HeaderMap, body: Bytes) -> Self {
         Self {
             start_line: format!("{method} {uri} HTTP/1.1"),
@@ -62,6 +175,19 @@ impl Message {
             body,
             body_modified: false,
         }
+    }
+
+    #[must_use]
+    pub fn http_status(&self) -> Option<u16> {
+        let mut parts = self.start_line.split_ascii_whitespace();
+        let version = parts.next()?;
+        if !version.starts_with("HTTP/") {
+            return None;
+        }
+        let status = parts.next()?.parse::<u16>().ok()?;
+        StatusCode::from_u16(status)
+            .ok()
+            .map(|value| value.as_u16())
     }
 
     pub fn validate(&self, limits: MessageLimits) -> Result<()> {
@@ -83,9 +209,14 @@ impl Message {
         }
         let mut total = 0usize;
         for header in &self.headers {
-            total = total.saturating_add(header.name.len() + header.value.len());
+            let wire_value_len = header
+                .leading_ows
+                .len()
+                .saturating_add(header.value.len())
+                .saturating_add(header.trailing_ows.len());
+            total = total.saturating_add(header.name.len() + wire_value_len);
             if header.name.len() > limits.max_header_name_bytes
-                || header.value.len() > limits.max_header_value_bytes
+                || wire_value_len > limits.max_header_value_bytes
                 || total > limits.max_total_header_bytes
             {
                 return Err(ProxyError::new(
@@ -102,35 +233,23 @@ impl Message {
         self.body.clone()
     }
 
-    pub fn decoded_shift_jis(&self) -> Result<String> {
-        codec::decode_strict(&self.body)
-    }
-
-    pub fn parse_shift_jis_json(&self) -> Result<Value> {
-        let text = self.decoded_shift_jis()?;
-        serde_json::from_str(&text)
-            .map_err(|error| ProxyError::new(ErrorCode::JsonInvalid, error.to_string()))
-    }
-
-    pub fn replace_shift_jis_text(&mut self, text: &str) -> Result<()> {
-        self.body = Bytes::from(codec::encode_strict(text)?);
+    /// Replaces the body with already-encoded bytes.
+    ///
+    /// Character decoding, structured-data parsing, and product-specific
+    /// serialization belong to the application/product layer. The runtime
+    /// only preserves or forwards the resulting wire bytes.
+    pub fn replace_body(&mut self, body: Bytes) {
+        self.body = body;
         self.body_modified = true;
         self.set_content_length(self.body.len());
-        Ok(())
-    }
-
-    pub fn replace_json(&mut self, value: &Value) -> Result<()> {
-        let text = serde_json::to_string(value)
-            .map_err(|error| ProxyError::new(ErrorCode::JsonInvalid, error.to_string()))?;
-        self.replace_shift_jis_text(&text)
     }
 
     pub fn set_content_length(&mut self, length: usize) {
         self.remove_header("content-length");
-        self.headers.push(RawHeader {
-            name: Bytes::from_static(b"content-length"),
-            value: Bytes::from(length.to_string()),
-        });
+        self.headers.push(RawHeader::new(
+            Bytes::from_static(b"Content-Length"),
+            Bytes::from(length.to_string()),
+        ));
     }
 
     pub fn declared_content_length(&self) -> Option<usize> {
@@ -162,16 +281,16 @@ impl Message {
         }
         if rewrite_host {
             self.remove_header("host");
-            self.headers.push(RawHeader {
-                name: Bytes::from_static(b"host"),
-                value: Bytes::copy_from_slice(upstream_host.as_bytes()),
-            });
+            self.headers.push(RawHeader::new(
+                Bytes::from_static(b"Host"),
+                Bytes::copy_from_slice(upstream_host.as_bytes()),
+            ));
         }
         self.remove_header("connection");
-        self.headers.push(RawHeader {
-            name: Bytes::from_static(b"connection"),
-            value: Bytes::from_static(b"close"),
-        });
+        self.headers.push(RawHeader::new(
+            Bytes::from_static(b"Connection"),
+            Bytes::from_static(b"close"),
+        ));
         // Hyper decoded any transfer framing before this model was created.
         // Forwarding therefore always needs one exact length, even when a
         // rule did not modify the decoded body.
@@ -207,7 +326,9 @@ impl Message {
             + self
                 .headers
                 .iter()
-                .map(|h| h.name.len() + h.value.len() + 4)
+                .map(|h| {
+                    h.name.len() + h.leading_ows.len() + h.value.len() + h.trailing_ows.len() + 3
+                })
                 .sum::<usize>()
             + 4
             + self.body.len();
@@ -228,8 +349,10 @@ impl Message {
             } else {
                 bytes.extend_from_slice(&header.name);
             }
-            bytes.extend_from_slice(b": ");
+            bytes.push(b':');
+            bytes.extend_from_slice(&header.leading_ows);
             bytes.extend_from_slice(&header.value);
+            bytes.extend_from_slice(&header.trailing_ows);
             bytes.extend_from_slice(b"\r\n");
         }
         bytes.extend_from_slice(b"\r\n");
@@ -238,25 +361,14 @@ impl Message {
     }
 }
 
-pub(crate) fn force_connection_close(headers: &mut HeaderMap) {
-    headers.remove(CONNECTION);
-    headers.insert(CONNECTION, HeaderValue::from_static("close"));
-}
-
-pub(crate) fn content_length(headers: &mut HeaderMap, length: usize) -> Result<()> {
-    let value = HeaderValue::from_str(&length.to_string())
-        .map_err(|error| ProxyError::new(ErrorCode::Internal, error.to_string()))?;
-    headers.remove(CONTENT_LENGTH);
-    headers.insert(CONTENT_LENGTH, value);
-    Ok(())
-}
-
 pub(crate) fn raw_headers(headers: &HeaderMap) -> Vec<RawHeader> {
     headers
         .iter()
-        .map(|(name, value)| RawHeader {
-            name: Bytes::copy_from_slice(name.as_str().as_bytes()),
-            value: Bytes::copy_from_slice(value.as_bytes()),
+        .map(|(name, value)| {
+            RawHeader::new(
+                Bytes::copy_from_slice(name.as_str().as_bytes()),
+                Bytes::copy_from_slice(value.as_bytes()),
+            )
         })
         .collect()
 }
@@ -270,26 +382,40 @@ mod tests {
         let body = Bytes::from_static(&[0x81, 0x00, 0xff]);
         let mut message = Message {
             start_line: "POST / HTTP/1.1".into(),
-            headers: vec![RawHeader {
-                name: Bytes::from_static(b"Content-Length"),
-                value: Bytes::from_static(b"999"),
-            }],
+            headers: vec![RawHeader::new(
+                Bytes::from_static(b"Content-Length"),
+                Bytes::from_static(b"999"),
+            )],
             body: body.clone(),
             body_modified: false,
         };
         assert_eq!(message.passthrough_body(), body);
-        message.replace_shift_jis_text("OK").unwrap();
+        message.replace_body(Bytes::from_static(b"OK"));
         assert_eq!(message.declared_content_length(), Some(2));
+    }
+
+    #[test]
+    fn exposes_response_status_without_misclassifying_request_start_lines() {
+        let response = Message::response(StatusCode::BAD_GATEWAY, &HeaderMap::new(), Bytes::new());
+        let request = Message::request(
+            &Method::POST,
+            &"/resource".parse().expect("URI"),
+            &HeaderMap::new(),
+            Bytes::new(),
+        );
+
+        assert_eq!(response.http_status(), Some(502));
+        assert_eq!(request.http_status(), None);
     }
 
     #[test]
     fn reconstruction_uses_crlf_and_exact_body() {
         let message = Message {
             start_line: "HTTP/1.1 200 OK".into(),
-            headers: vec![RawHeader {
-                name: Bytes::from_static(b"x-test"),
-                value: Bytes::from_static(b"yes"),
-            }],
+            headers: vec![RawHeader::new(
+                Bytes::from_static(b"x-test"),
+                Bytes::from_static(b"yes"),
+            )],
             body: Bytes::from_static(b"\0raw"),
             body_modified: false,
         };
@@ -300,17 +426,96 @@ mod tests {
     }
 
     #[test]
-    fn shift_jis_json_is_structured_only_when_valid() {
+    fn replacement_accepts_arbitrary_binary_bytes_without_decoding() {
         let mut message = Message::response(
             StatusCode::OK,
             &HeaderMap::new(),
-            Bytes::from(codec::encode_strict(r#"{"result":"成功"}"#).unwrap()),
+            Bytes::from_static(b"old"),
         );
-        assert_eq!(message.parse_shift_jis_json().unwrap()["result"], "成功");
-        message.body = Bytes::from_static(b"{broken");
+        let replacement = Bytes::from_static(&[0x00, 0x80, 0xff, b'{']);
+
+        message.replace_body(replacement.clone());
+
+        assert_eq!(message.body, replacement);
+        assert!(message.body_modified);
+        assert_eq!(message.declared_content_length(), Some(4));
+    }
+
+    #[test]
+    fn raw_head_parser_preserves_binary_values_case_and_interleaved_duplicates() {
+        let head = b"POST /raw HTTP/1.1\r\n\
+X-Trace: first\x80\r\n\
+x-Other: middle\xff\r\n\
+x-TRACE: second\r\n\
+x-Other: last\r\n\r\n";
+
+        let message =
+            Message::from_raw_http1_head(head, Bytes::from_static(b"body")).expect("raw head");
+
+        assert_eq!(message.start_line, "POST /raw HTTP/1.1");
         assert_eq!(
-            message.parse_shift_jis_json().unwrap_err().code,
-            "JSON_INVALID"
+            message
+                .headers
+                .iter()
+                .map(|header| (header.name.as_ref(), header.value.as_ref()))
+                .collect::<Vec<_>>(),
+            vec![
+                (b"X-Trace".as_slice(), b"first\x80".as_slice()),
+                (b"x-Other".as_slice(), b"middle\xff".as_slice()),
+                (b"x-TRACE".as_slice(), b"second".as_slice()),
+                (b"x-Other".as_slice(), b"last".as_slice()),
+            ]
+        );
+        assert_eq!(
+            message.reconstruct(),
+            Bytes::from_static(
+                b"POST /raw HTTP/1.1\r\n\
+X-Trace: first\x80\r\n\
+x-Other: middle\xff\r\n\
+x-TRACE: second\r\n\
+x-Other: last\r\n\r\nbody"
+            )
+        );
+    }
+
+    #[test]
+    fn raw_head_parser_preserves_each_header_separator_and_optional_whitespace() {
+        let head = b"GET /ows HTTP/1.1\r\n\
+X-Mixed:\t  value \t\r\n\
+X-Compact:value\r\n\
+X-Only-Ows:\t \t\r\n\r\n";
+
+        let message = Message::from_raw_http1_head(head, Bytes::new()).expect("raw head");
+
+        assert_eq!(message.headers[0].value, "value");
+        assert_eq!(message.headers[0].leading_ows(), b"\t  ");
+        assert_eq!(message.headers[0].trailing_ows(), b" \t");
+        assert_eq!(message.headers[1].leading_ows(), b"");
+        assert_eq!(message.headers[1].trailing_ows(), b"");
+        assert_eq!(message.headers[2].value, "");
+        assert_eq!(message.headers[2].leading_ows(), b"\t \t");
+        assert_eq!(message.headers[2].trailing_ows(), b"");
+        assert_eq!(message.reconstruct(), Bytes::from_static(head));
+        assert_eq!(
+            message.header_map().expect("semantic headers")["x-mixed"],
+            "value"
+        );
+    }
+
+    #[test]
+    fn raw_head_parser_preserves_non_standard_reason_phrase() {
+        let message = Message::from_raw_http1_head(
+            b"HTTP/1.1 299 Vendor Specific Result\r\nX-Test: yes\r\n\r\n",
+            Bytes::new(),
+        )
+        .expect("raw response head");
+
+        assert_eq!(message.start_line, "HTTP/1.1 299 Vendor Specific Result");
+        assert_eq!(message.http_status(), Some(299));
+        assert!(
+            message
+                .reconstruct()
+                .starts_with(b"HTTP/1.1 299 Vendor Specific Result\r\n")
         );
     }
 }

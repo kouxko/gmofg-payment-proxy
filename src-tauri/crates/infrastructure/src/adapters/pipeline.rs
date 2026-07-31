@@ -15,22 +15,25 @@ use std::{
 };
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use gmofg_proxy_application::{
     AppError, AppResult, BreakpointCoordinator, BreakpointDecision, BreakpointDecisionKind,
     BreakpointDetailViewModel, BreakpointOutcome, BreakpointState, BreakpointSummaryViewModel,
-    CaptureRowViewModel, ChannelKind as AppChannelKind, DisabledReason, EventHub,
-    InMemorySessionStore, MessageContentViewModel, MessageStage as AppMessageStage,
+    CaptureRowViewModel, ChannelId as AppChannelId, DisabledReason, EventHub, InMemorySessionStore,
+    MessageContentViewModel, MessageStage as AppMessageStage, RawHttpHeaderViewModel,
     RuleSummaryViewModel, SessionDetailViewModel, SessionRecord, SessionStore,
     SessionSummaryViewModel, UiEventPayload, UiTone,
 };
 use gmofg_proxy_domain::{
-    ChannelKind, DropResponseMode, JitterScope as DomainJitterScope, JsonPath, MatchContext,
-    MessageStage as DomainMessageStage, Rule, RuleAction, RuleEngine, RuleRuntimeSnapshot,
-    RuntimeEpoch, TerminalAction, TerminalIdentity, TrafficDirection as DomainTrafficDirection,
+    ChannelId as DomainChannelId, DropResponseMode, JitterScope as DomainJitterScope, JsonPath,
+    MatchContext, MessageStage as DomainMessageStage, Rule, RuleAction, RuleEngine,
+    RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction, TerminalIdentity,
+    TrafficDirection as DomainTrafficDirection,
 };
+use gmofg_proxy_product_api::{BodyCodec, ProductHeader, ProductMessageContext, RequestClassifier};
 use gmofg_proxy_runtime::{
-    Channel, ChannelRuntimeMetrics, ConnectionContext, ErrorCode, FaultAction, HandshakePolicy,
+    ChannelId, ChannelRuntimeMetrics, ConnectionContext, ErrorCode, FaultAction, HandshakePolicy,
     JitterScope, Message, PipelinePorts, ProxyError, RawHeader, Result as ProxyResult,
     RuntimeMetricsProvider, RuntimeMetricsSnapshot, TlsPeerIdentity, TrafficDirection,
 };
@@ -82,7 +85,18 @@ impl RuntimeRuleRepository for RuleRepositoryAdapter {
 
 /// One adapter instance is shared by both listeners for the lifetime of the app.
 #[derive(Debug)]
+pub struct RuntimePipelineProductHooks {
+    pub body_codec: Arc<dyn BodyCodec>,
+    pub request_classifier: Arc<dyn RequestClassifier>,
+    pub channel_labels: BTreeMap<String, String>,
+}
+
+/// One adapter instance is shared by both listeners for the lifetime of the app.
+#[derive(Debug)]
 pub struct RuntimePipelineAdapter {
+    body_codec: Arc<dyn BodyCodec>,
+    request_classifier: Arc<dyn RequestClassifier>,
+    channel_labels: BTreeMap<String, String>,
     rules: Arc<dyn RuntimeRuleRepository>,
     sessions: Arc<InMemorySessionStore>,
     breakpoints: Arc<BreakpointCoordinator>,
@@ -99,12 +113,12 @@ struct PipelineState {
     live_sessions: HashMap<Uuid, LiveSession>,
     rule_runtime: Option<RuleRuntime>,
     metrics_epoch: Option<Uuid>,
-    channels: BTreeMap<Channel, ChannelRuntimeMetrics>,
+    channels: BTreeMap<ChannelId, ChannelRuntimeMetrics>,
 }
 
 #[derive(Debug)]
 struct ConnectionRuntime {
-    channel: Channel,
+    channel: ChannelId,
     session_id: Option<Uuid>,
     pending_breakpoints: Vec<Uuid>,
 }
@@ -142,6 +156,7 @@ struct CapturePublication<'a> {
 impl RuntimePipelineAdapter {
     #[must_use]
     pub fn new(
+        product: RuntimePipelineProductHooks,
         rules: Arc<dyn RuntimeRuleRepository>,
         sessions: Arc<InMemorySessionStore>,
         breakpoints: Arc<BreakpointCoordinator>,
@@ -149,6 +164,9 @@ impl RuntimePipelineAdapter {
         captures: Arc<CaptureRepositoryAdapter>,
     ) -> Self {
         Self {
+            body_codec: product.body_codec,
+            request_classifier: product.request_classifier,
+            channel_labels: product.channel_labels,
             rules,
             sessions,
             breakpoints,
@@ -177,14 +195,9 @@ impl RuntimePipelineAdapter {
         remaining_retries: usize,
     ) -> ProxyResult<EvaluatedRules> {
         self.ensure_rule_epoch(context.runtime_epoch)?;
-        let terminal = TerminalIdentity {
-            source_ip: context.peer_addr.ip().to_string(),
-            certificate_sha256: context
-                .tls_peer
-                .as_ref()
-                .map_or_else(String::new, |identity| identity.sha256_fingerprint.clone()),
-        };
-        let json = message.and_then(|message| message.parse_shift_jis_json().ok());
+        let terminal = terminal_identity(context);
+        let json =
+            message.and_then(|message| decode_json(self.body_codec.as_ref(), &message.body).ok());
         let target = message.and_then(|message| message_target(&message.start_line));
         let runtime_epoch = RuntimeEpoch::from_uuid(context.runtime_epoch);
         // Evaluation and its durable runtime metadata commit are one serialized
@@ -220,7 +233,7 @@ impl RuntimePipelineAdapter {
         let evaluation = runtime.engine.evaluate(
             &MatchContext {
                 runtime_epoch,
-                channel: domain_channel(context.channel),
+                channel: domain_channel(&context.channel)?,
                 stage,
                 terminal: &terminal,
                 path_or_request_type: target,
@@ -228,7 +241,8 @@ impl RuntimePipelineAdapter {
             },
             Utc::now(),
         );
-        let hit_rules = matched_rule_summaries(&evaluation, runtime.engine.rules());
+        let hit_rules =
+            matched_rule_summaries(&evaluation, runtime.engine.rules(), &self.channel_labels);
         let matched = evaluation.traces.iter().any(|trace| trace.matched);
         if matched {
             let base_snapshot = runtime.snapshot.clone();
@@ -297,6 +311,13 @@ impl RuntimePipelineAdapter {
         Ok(())
     }
 
+    fn channel_label(&self, channel_id: &str) -> String {
+        self.channel_labels
+            .get(channel_id)
+            .cloned()
+            .unwrap_or_else(|| channel_id.to_owned())
+    }
+
     fn publish_rule_hits(&self, epoch: Uuid, rules: Vec<RuleSummaryViewModel>) {
         for rule in rules {
             self.events.publish(
@@ -336,13 +357,19 @@ impl RuntimePipelineAdapter {
     fn begin_session(&self, context: &ConnectionContext, original: &Message) -> ProxyResult<Uuid> {
         let now = Utc::now();
         let session_id = Uuid::new_v4();
-        let request = content_view(original);
-        let request_id = request_id(original).unwrap_or_else(|| session_id.to_string());
+        let request = content_view(self.body_codec.as_ref(), original);
+        let classified =
+            classify_request(self.request_classifier.as_ref(), &context.channel, original);
+        let request_id = classified
+            .request_id
+            .unwrap_or_else(|| session_id.to_string());
         let terminal_ip = context.peer_addr.ip().to_string();
         let fingerprint = fingerprint(context);
-        let target = message_target(&original.start_line)
-            .unwrap_or_default()
-            .to_owned();
+        let target = classified.request_type.unwrap_or_else(|| {
+            message_target(&original.start_line)
+                .unwrap_or_default()
+                .to_owned()
+        });
         let method = message_method(&original.start_line)
             .unwrap_or_default()
             .to_owned();
@@ -352,9 +379,11 @@ impl RuntimePipelineAdapter {
             started_at: now,
             completed_at: None,
             terminal_ip: terminal_ip.clone(),
-            channel: app_channel(context.channel),
+            channel: app_channel(&context.channel)?,
+            channel_text: self.channel_label(context.channel.as_str()),
             method,
             target,
+            http_status: None,
             result: "处理中".into(),
             ui_tone: UiTone::Info,
             duration_ms: None,
@@ -398,7 +427,7 @@ impl RuntimePipelineAdapter {
             if let Some(connection) = state.connections.get_mut(&context.connection_id) {
                 connection.session_id = Some(session_id);
             }
-            let metrics = state.channels.entry(context.channel).or_default();
+            let metrics = state.channels.entry(context.channel.clone()).or_default();
             metrics.request_count = metrics.request_count.saturating_add(1);
         }
         Ok(session_id)
@@ -428,7 +457,7 @@ impl RuntimePipelineAdapter {
                 UiTone::Info
             };
             summary.revision = summary.revision.saturating_add(1);
-            record.detail.request = Some(content_view(effective));
+            record.detail.request = Some(content_view(self.body_codec.as_ref(), effective));
             record.detail.rule_trace.clone_from(&rules.traces);
             record.breakpoint_draft = breakpoint_draft;
         })
@@ -450,6 +479,7 @@ impl RuntimePipelineAdapter {
                 }
             }
             summary.response_size_bytes = effective.body.len() as u64;
+            summary.http_status = effective.http_status();
             summary.pending_breakpoint = pending_breakpoint;
             summary.result = if pending_breakpoint {
                 "断点等待".into()
@@ -462,7 +492,7 @@ impl RuntimePipelineAdapter {
                 UiTone::Info
             };
             summary.revision = summary.revision.saturating_add(1);
-            record.detail.response = Some(content_view(effective));
+            record.detail.response = Some(content_view(self.body_codec.as_ref(), effective));
             record.detail.rule_trace.extend(rules.traces.clone());
             record.breakpoint_draft = breakpoint_draft;
         })
@@ -516,12 +546,14 @@ impl RuntimePipelineAdapter {
         rules: &EvaluatedRules,
     ) -> ProxyResult<Vec<FaultAction>> {
         let detail = breakpoint_detail(
+            self.body_codec.as_ref(),
             context,
+            self.channel_label(context.channel.as_str()),
             stage,
             original,
             effective,
             self.session_id(context)?,
-        );
+        )?;
         let breakpoint_id = detail.summary.breakpoint_id;
         let effective_view = detail.effective.clone();
         let ticket = self.breakpoints.register(detail).map_err(app_to_proxy)?;
@@ -572,7 +604,13 @@ impl RuntimePipelineAdapter {
         self.remove_pending_breakpoint(context.connection_id, breakpoint_id);
         match outcome {
             BreakpointOutcome::Decision(decision) => {
-                let actions = apply_breakpoint_decision(stage, original, effective, &decision)?;
+                let actions = apply_breakpoint_decision(
+                    self.body_codec.as_ref(),
+                    stage,
+                    original,
+                    effective,
+                    decision.as_ref(),
+                )?;
                 match stage {
                     AppMessageStage::Request => {
                         self.update_request(context, effective, rules, false, None)?;
@@ -586,7 +624,7 @@ impl RuntimePipelineAdapter {
             }
             BreakpointOutcome::ClientDisconnected => Err(ProxyError::new(
                 ErrorCode::ClientDisconnected,
-                "Payment App 已断开，断点已终止。",
+                "客户端已断开，断点已终止。",
             )),
             BreakpointOutcome::ProxyStopped => Err(ProxyError::new(
                 ErrorCode::ProxyStopped,
@@ -647,7 +685,7 @@ impl RuntimePipelineAdapter {
                 Ok(()) => {
                     summary.result = "成功".into();
                     summary.ui_tone = UiTone::Positive;
-                    record.detail.final_action = "响应已返回 Payment App".into();
+                    record.detail.final_action = "响应已返回客户端".into();
                     record.detail.proxy_to_server_tls = "TLS 1.2 mTLS".into();
                 }
                 Err(error) => {
@@ -704,12 +742,13 @@ impl RuntimePipelineAdapter {
             session_id: summary.session_id,
             occurred_at: Utc::now(),
             terminal_ip: summary.terminal_ip.clone(),
-            channel: summary.channel,
-            channel_text: summary.channel.display_zh().into(),
+            channel: summary.channel.clone(),
+            channel_text: self.channel_label(summary.channel.as_str()),
             stage: publication.stage,
             stage_text: publication.stage.display_zh().into(),
             method: summary.method.clone(),
             target: summary.target.clone(),
+            http_status: summary.http_status,
             result: publication.result.into(),
             ui_tone: publication.tone,
             duration_ms: summary.duration_ms,
@@ -734,7 +773,7 @@ impl RuntimePipelineAdapter {
     fn resource_exhausted(&self, context: &ConnectionContext, error: &AppError) {
         {
             let mut state = self.state.lock();
-            let metrics = state.channels.entry(context.channel).or_default();
+            let metrics = state.channels.entry(context.channel.clone()).or_default();
             metrics.error_count = metrics.error_count.saturating_add(1);
         }
         self.events.publish(
@@ -831,12 +870,12 @@ impl PipelinePorts for RuntimePipelineAdapter {
         state.connections.insert(
             context.connection_id,
             ConnectionRuntime {
-                channel: context.channel,
+                channel: context.channel.clone(),
                 session_id: None,
                 pending_breakpoints: Vec::new(),
             },
         );
-        let metrics = state.channels.entry(context.channel).or_default();
+        let metrics = state.channels.entry(context.channel.clone()).or_default();
         metrics.connected_clients = metrics.connected_clients.saturating_add(1);
     }
 
@@ -849,7 +888,8 @@ impl PipelinePorts for RuntimePipelineAdapter {
         self.begin_session(context, &original)?;
         let evaluated = self.evaluate(context, DomainMessageStage::Request, Some(message))?;
         let seed = weak_network_seed(context, DomainMessageStage::Request, &evaluated.hit_rules);
-        let (mut actions, pause) = apply_rule_actions(message, &evaluated.actions, seed)?;
+        let (mut actions, pause) =
+            apply_rule_actions(self.body_codec.as_ref(), message, &evaluated.actions, seed)?;
         self.publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if pause {
             actions.extend(
@@ -886,14 +926,15 @@ impl PipelinePorts for RuntimePipelineAdapter {
     ) -> ProxyResult<Vec<FaultAction>> {
         {
             let mut state = self.state.lock();
-            let metrics = state.channels.entry(context.channel).or_default();
+            let metrics = state.channels.entry(context.channel.clone()).or_default();
             metrics.upstream_response_count = metrics.upstream_response_count.saturating_add(1);
             metrics.last_upstream_error = None;
         }
         let original = message.clone();
         let evaluated = self.evaluate(context, DomainMessageStage::Response, Some(message))?;
         let seed = weak_network_seed(context, DomainMessageStage::Response, &evaluated.hit_rules);
-        let (mut actions, pause) = apply_rule_actions(message, &evaluated.actions, seed)?;
+        let (mut actions, pause) =
+            apply_rule_actions(self.body_codec.as_ref(), message, &evaluated.actions, seed)?;
         self.publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if pause {
             actions.extend(
@@ -940,7 +981,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
             if let Some(channel) = state
                 .connections
                 .get(&context.connection_id)
-                .map(|connection| connection.channel)
+                .map(|connection| connection.channel.clone())
             {
                 let metrics = state.channels.entry(channel).or_default();
                 metrics.connected_clients = metrics.connected_clients.saturating_sub(1);
@@ -956,7 +997,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
         self.state.lock().connections.remove(&context.connection_id);
     }
 
-    async fn runtime_fault(&self, epoch: Uuid, channel: Channel, error: &ProxyError) {
+    async fn runtime_fault(&self, epoch: Uuid, channel: ChannelId, error: &ProxyError) {
         {
             let mut state = self.state.lock();
             let metrics = state.channels.entry(channel).or_default();
@@ -978,6 +1019,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
 fn matched_rule_summaries(
     evaluation: &gmofg_proxy_domain::RuleEvaluation,
     rules: &[Rule],
+    channel_labels: &BTreeMap<String, String>,
 ) -> Vec<RuleSummaryViewModel> {
     evaluation
         .traces
@@ -987,7 +1029,7 @@ fn matched_rule_summaries(
             rules
                 .iter()
                 .find(|rule| rule.id == trace.rule_id)
-                .map(rule_summary)
+                .map(|rule| rule_summary(rule, channel_labels))
         })
         .collect()
 }
@@ -1051,6 +1093,7 @@ impl RuntimeMetricsProvider for RuntimePipelineAdapter {
 }
 
 fn apply_rule_actions(
+    body_codec: &dyn BodyCodec,
     message: &mut Message,
     actions: &[RuleAction],
     seed: u64,
@@ -1060,7 +1103,7 @@ fn apply_rule_actions(
     for action in actions {
         match action {
             RuleAction::SetJsonField { path, value } => {
-                let mut json = message.parse_shift_jis_json()?;
+                let mut json = decode_json(body_codec, &message.body)?;
                 JsonPath::parse(path)
                     .and_then(|path| path.set(&mut json, value.clone()))
                     .map_err(|error| {
@@ -1069,15 +1112,21 @@ fn apply_rule_actions(
                             format!("JSON path `{path}` is invalid: {error}"),
                         )
                     })?;
-                message.replace_json(&json)?;
+                let text = serde_json::to_string(&json).map_err(|error| ProxyError {
+                    code: "BODY_ENCODE_FAILED",
+                    message: format!("failed to serialize structured body: {error}"),
+                })?;
+                message.replace_body(Bytes::from(encode_body(body_codec, &text)?));
             }
-            RuleAction::ReplaceBodyText(text) => message.replace_shift_jis_text(text)?,
+            RuleAction::ReplaceBodyText(text) => {
+                message.replace_body(Bytes::from(encode_body(body_codec, text)?));
+            }
             RuleAction::SetHeader { name, value } => {
                 message.remove_header(name);
-                message.headers.push(RawHeader {
-                    name: name.as_bytes().to_vec().into(),
-                    value: value.as_bytes().to_vec().into(),
-                });
+                message.headers.push(RawHeader::new(
+                    name.as_bytes().to_vec(),
+                    value.as_bytes().to_vec(),
+                ));
             }
             RuleAction::Delay { milliseconds } => {
                 faults.push(FaultAction::Delay(Duration::from_millis(*milliseconds)));
@@ -1145,6 +1194,16 @@ fn weak_network_seed(
     hasher.finish()
 }
 
+fn terminal_identity(context: &ConnectionContext) -> TerminalIdentity {
+    TerminalIdentity {
+        source_ip: context.peer_addr.ip().to_string(),
+        certificate_sha256: context
+            .tls_peer
+            .as_ref()
+            .map_or_else(String::new, |identity| identity.sha256_fingerprint.clone()),
+    }
+}
+
 const fn traffic_direction(direction: DomainTrafficDirection) -> TrafficDirection {
     match direction {
         DomainTrafficDirection::Upstream => TrafficDirection::Upstream,
@@ -1171,26 +1230,25 @@ fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultAction> {
         TerminalAction::MockResponse {
             status,
             headers,
-            shift_jis_body,
+            body_bytes,
         } => FaultAction::MockResponse {
             status: proxy_status!(*status)?,
             headers: Message {
                 start_line: String::new(),
                 headers: headers
                     .iter()
-                    .map(|(name, value)| RawHeader {
-                        name: name.as_bytes().to_vec().into(),
-                        value: value.as_bytes().to_vec().into(),
+                    .map(|(name, value)| {
+                        RawHeader::new(name.as_bytes().to_vec(), value.as_bytes().to_vec())
                     })
                     .collect(),
                 body: Vec::new().into(),
                 body_modified: false,
             }
             .header_map()?,
-            shift_jis_body: decode_shift_jis_bytes(shift_jis_body)?,
+            body: Bytes::copy_from_slice(body_bytes),
         },
-        TerminalAction::InvalidJson { shift_jis_body } => FaultAction::InvalidJson {
-            shift_jis_text: decode_shift_jis_bytes(shift_jis_body)?,
+        TerminalAction::InvalidJson { body_bytes } => FaultAction::ReplaceBody {
+            body: Bytes::copy_from_slice(body_bytes),
         },
         TerminalAction::IncorrectContentLength { delta } => {
             FaultAction::ContentLengthOffset(*delta)
@@ -1229,6 +1287,7 @@ fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultAction> {
 }
 
 fn apply_breakpoint_decision(
+    body_codec: &dyn BodyCodec,
     stage: AppMessageStage,
     original: &Message,
     effective: &mut Message,
@@ -1243,19 +1302,23 @@ fn apply_breakpoint_decision(
                     ProxyError::new(ErrorCode::ConfigInvalid, "modified message is missing")
                 })?,
                 &effective.start_line,
-            );
+            )?;
         }
         BreakpointDecisionKind::MockResponse => {
             let message = decision.message.as_ref().ok_or_else(|| {
                 ProxyError::new(ErrorCode::ConfigInvalid, "mock response is missing")
             })?;
-            let mock = proxy_message(message, "HTTP/1.1 200 OK");
+            let mock = proxy_message(message, "HTTP/1.1 200 OK")?;
             actions.push(FaultAction::MockResponse {
                 status: proxy_status!(decision.http_status.unwrap_or(200))?,
                 headers: mock.header_map()?,
-                shift_jis_body: message.body_text.clone().ok_or_else(|| {
-                    ProxyError::new(ErrorCode::ShiftJisDecodeFailed, "mock body is not text")
-                })?,
+                body: Bytes::from(encode_body(
+                    body_codec,
+                    message.body_text.as_deref().ok_or_else(|| ProxyError {
+                        code: "BODY_ENCODE_FAILED",
+                        message: "mock body text is missing".into(),
+                    })?,
+                )?),
             });
         }
         BreakpointDecisionKind::Delay => {
@@ -1275,8 +1338,8 @@ fn apply_breakpoint_decision(
                 })?
             )?));
         }
-        BreakpointDecisionKind::InvalidJson => actions.push(FaultAction::InvalidJson {
-            shift_jis_text: "{invalid-json".into(),
+        BreakpointDecisionKind::InvalidJson => actions.push(FaultAction::ReplaceBody {
+            body: Bytes::from(encode_body(body_codec, "{invalid-json")?),
         }),
         BreakpointDecisionKind::WrongContentLength => {
             actions.push(FaultAction::ContentLengthOffset(
@@ -1336,10 +1399,7 @@ fn view_to_domain_rule(view: gmofg_proxy_application::RuleViewModel) -> ProxyRes
             ProxyError::new(ErrorCode::ConfigInvalid, "rule priority cannot be negative")
         })?,
         created_order: view.summary.creation_order,
-        channel: draft.channel.map(|channel| match channel {
-            AppChannelKind::Transaction => ChannelKind::Transaction,
-            AppChannelKind::Dll => ChannelKind::Dll,
-        }),
+        channel: draft.channel,
         stage,
         conditions,
         actions,
@@ -1350,18 +1410,20 @@ fn view_to_domain_rule(view: gmofg_proxy_application::RuleViewModel) -> ProxyRes
 }
 
 fn breakpoint_detail(
+    body_codec: &dyn BodyCodec,
     context: &ConnectionContext,
+    channel_text: String,
     stage: AppMessageStage,
     original: &Message,
     effective: &Message,
     session_id: Uuid,
-) -> BreakpointDetailViewModel {
+) -> ProxyResult<BreakpointDetailViewModel> {
     let title = match stage {
         AppMessageStage::Request => "请求断点·发送至服务器前",
         AppMessageStage::Response => "响应断点·返回 App 前",
         AppMessageStage::TlsHandshake | AppMessageStage::Terminal => "终态",
     };
-    BreakpointDetailViewModel {
+    Ok(BreakpointDetailViewModel {
         summary: BreakpointSummaryViewModel {
             breakpoint_id: Uuid::new_v4(),
             session_id,
@@ -1369,7 +1431,8 @@ fn breakpoint_detail(
             stage,
             title: title.into(),
             terminal_ip: context.peer_addr.ip().to_string(),
-            channel: app_channel(context.channel),
+            channel: app_channel(&context.channel)?,
+            channel_text,
             method: message_method(&effective.start_line)
                 .unwrap_or_default()
                 .to_owned(),
@@ -1383,15 +1446,15 @@ fn breakpoint_detail(
             ui_tone: UiTone::Warning,
             revision: 1,
         },
-        original: content_view(original),
-        effective: content_view(effective),
+        original: content_view(body_codec, original),
+        effective: content_view(body_codec, effective),
         can_resolve: true,
         resolve_disabled_reason: None,
         available_actions: Vec::new(),
-    }
+    })
 }
 
-fn rule_summary(rule: &Rule) -> RuleSummaryViewModel {
+fn rule_summary(rule: &Rule, channel_labels: &BTreeMap<String, String>) -> RuleSummaryViewModel {
     RuleSummaryViewModel {
         rule_id: rule.id.as_uuid(),
         revision: rule.revision.get(),
@@ -1399,10 +1462,15 @@ fn rule_summary(rule: &Rule) -> RuleSummaryViewModel {
         enabled: rule.enabled,
         priority: i32::try_from(rule.priority).unwrap_or(i32::MAX),
         creation_order: rule.created_order,
-        channel_text: rule.channel.map_or("全部".into(), |channel| match channel {
-            ChannelKind::Transaction => "交易".into(),
-            ChannelKind::Dll => "DLL".into(),
-        }),
+        channel_text: rule.channel.as_ref().map_or_else(
+            || "全部".into(),
+            |channel| {
+                channel_labels
+                    .get(channel.as_str())
+                    .cloned()
+                    .unwrap_or_else(|| channel.to_string())
+            },
+        ),
         stage_text: match rule.stage {
             DomainMessageStage::Request => "请求",
             DomainMessageStage::Response => "响应",
@@ -1421,19 +1489,26 @@ fn rule_summary(rule: &Rule) -> RuleSummaryViewModel {
     }
 }
 
-fn content_view(message: &Message) -> MessageContentViewModel {
-    let mut headers = BTreeMap::<String, Vec<String>>::new();
-    for header in &message.headers {
-        headers
-            .entry(String::from_utf8_lossy(&header.name).into_owned())
-            .or_default()
-            .push(String::from_utf8_lossy(&header.value).into_owned());
-    }
-    let body_text = message.decoded_shift_jis().ok();
+fn content_view(body_codec: &dyn BodyCodec, message: &Message) -> MessageContentViewModel {
+    let raw_headers = message
+        .headers
+        .iter()
+        .map(|header| RawHttpHeaderViewModel {
+            name_bytes: header.name.to_vec(),
+            value_bytes: header.value.to_vec(),
+            leading_ows_bytes: header.leading_ows().to_vec(),
+            trailing_ows_bytes: header.trailing_ows().to_vec(),
+        })
+        .collect::<Vec<_>>();
+    let headers = display_headers(&raw_headers);
+    let body_text = decode_body(body_codec, &message.body).ok();
     let json = body_text
         .as_deref()
         .and_then(|text| serde_json::from_str(text).ok());
     MessageContentViewModel {
+        http_status: message.http_status(),
+        start_line_bytes: message.start_line.as_bytes().to_vec(),
+        raw_headers,
         headers,
         body_text,
         body_bytes: message.body.to_vec(),
@@ -1442,32 +1517,149 @@ fn content_view(message: &Message) -> MessageContentViewModel {
     }
 }
 
-fn proxy_message(view: &MessageContentViewModel, start_line: &str) -> Message {
-    Message {
-        start_line: start_line.to_owned(),
-        headers: view
-            .headers
-            .iter()
-            .flat_map(|(name, values)| {
-                values.iter().map(|value| RawHeader {
-                    name: name.as_bytes().to_vec().into(),
-                    value: value.as_bytes().to_vec().into(),
-                })
-            })
-            .collect(),
-        body: view.body_bytes.clone().into(),
-        body_modified: true,
+fn display_headers(raw_headers: &[RawHttpHeaderViewModel]) -> BTreeMap<String, Vec<String>> {
+    let mut groups = BTreeMap::<String, (String, Vec<String>)>::new();
+    for header in raw_headers {
+        let display_name = String::from_utf8_lossy(&header.name_bytes).into_owned();
+        let normalized = display_name.to_ascii_lowercase();
+        let (_, values) = groups
+            .entry(normalized)
+            .or_insert_with(|| (display_name, Vec::new()));
+        values.push(String::from_utf8_lossy(&header.value_bytes).into_owned());
     }
+    groups.into_values().collect()
 }
 
-fn decode_shift_jis_bytes(bytes: &[u8]) -> ProxyResult<String> {
-    Message {
-        start_line: String::new(),
-        headers: Vec::new(),
-        body: bytes.to_vec().into(),
-        body_modified: false,
+fn group_edited_headers(
+    headers: &BTreeMap<String, Vec<String>>,
+) -> BTreeMap<String, (String, Vec<String>)> {
+    let mut groups = BTreeMap::<String, (String, Vec<String>)>::new();
+    for (name, values) in headers {
+        groups.insert(name.to_ascii_lowercase(), (name.clone(), values.clone()));
     }
-    .decoded_shift_jis()
+    groups
+}
+
+fn proxy_message(
+    view: &MessageContentViewModel,
+    fallback_start_line: &str,
+) -> ProxyResult<Message> {
+    // The start-line is immutable transport metadata. Breakpoint IPC may
+    // display its exact bytes, but it can only change the response status
+    // through the separately validated `http_status` field.
+    let mut start_line = fallback_start_line.to_owned();
+    if let Some(status) = view.http_status {
+        let current = Message {
+            start_line: start_line.clone(),
+            headers: Vec::new(),
+            body: Bytes::new(),
+            body_modified: false,
+        }
+        .http_status();
+        if current != Some(status) {
+            if !(100..=599).contains(&status) {
+                return Err(ProxyError::new(
+                    ErrorCode::ConfigInvalid,
+                    format!("invalid modified HTTP status: {status}"),
+                ));
+            }
+            let version = start_line
+                .split_ascii_whitespace()
+                .next()
+                .filter(|version| version.starts_with("HTTP/"))
+                .unwrap_or("HTTP/1.1");
+            let reason = start_line.splitn(3, ' ').nth(2).unwrap_or_default();
+            let modified = format!("{version} {status} {reason}");
+            start_line.clear();
+            start_line.push_str(modified.trim_end());
+        }
+    }
+    let headers = merge_edited_headers(&view.raw_headers, &view.headers)?;
+    Ok(Message {
+        start_line,
+        headers,
+        body: view.body_bytes.clone().into(),
+        body_modified: true,
+    })
+}
+
+fn merge_edited_headers(
+    raw_headers: &[RawHttpHeaderViewModel],
+    edited: &BTreeMap<String, Vec<String>>,
+) -> ProxyResult<Vec<RawHeader>> {
+    if raw_headers.is_empty() {
+        return Ok(edited
+            .iter()
+            .flat_map(|(name, values)| {
+                values.iter().map(|value| {
+                    RawHeader::new(
+                        Bytes::copy_from_slice(name.as_bytes()),
+                        Bytes::copy_from_slice(value.as_bytes()),
+                    )
+                })
+            })
+            .collect());
+    }
+
+    let original = group_edited_headers(&display_headers(raw_headers));
+    let edited = group_edited_headers(edited);
+    let mut emitted_edited_keys = std::collections::BTreeSet::<String>::new();
+    let mut headers = Vec::new();
+    for raw in raw_headers {
+        let key = String::from_utf8_lossy(&raw.name_bytes).to_ascii_lowercase();
+        let original_values = original.get(&key).map(|(_, values)| values);
+        let edited_values = edited.get(&key).map(|(_, values)| values);
+        if original_values == edited_values {
+            headers.push(RawHeader::with_wire_ows(
+                Bytes::copy_from_slice(&raw.name_bytes),
+                Bytes::copy_from_slice(&raw.value_bytes),
+                Bytes::copy_from_slice(&raw.leading_ows_bytes),
+                Bytes::copy_from_slice(&raw.trailing_ows_bytes),
+            )?);
+        } else if emitted_edited_keys.insert(key.clone())
+            && let Some((edited_name, values)) = edited.get(&key)
+        {
+            headers.extend(values.iter().map(|value| {
+                RawHeader::new(
+                    Bytes::copy_from_slice(edited_name.as_bytes()),
+                    Bytes::copy_from_slice(value.as_bytes()),
+                )
+            }));
+        }
+    }
+    for (normalized, (name, values)) in edited {
+        if !original.contains_key(&normalized) {
+            headers.extend(values.iter().map(|value| {
+                RawHeader::new(
+                    Bytes::copy_from_slice(name.as_bytes()),
+                    Bytes::copy_from_slice(value.as_bytes()),
+                )
+            }));
+        }
+    }
+    Ok(headers)
+}
+
+fn decode_body(body_codec: &dyn BodyCodec, bytes: &[u8]) -> ProxyResult<String> {
+    body_codec.decode(bytes).map_err(|error| ProxyError {
+        code: error.code,
+        message: error.message,
+    })
+}
+
+fn encode_body(body_codec: &dyn BodyCodec, text: &str) -> ProxyResult<Vec<u8>> {
+    body_codec.encode(text).map_err(|error| ProxyError {
+        code: error.code,
+        message: error.message,
+    })
+}
+
+fn decode_json(body_codec: &dyn BodyCodec, bytes: &[u8]) -> ProxyResult<Value> {
+    let text = decode_body(body_codec, bytes)?;
+    serde_json::from_str(&text).map_err(|error| ProxyError {
+        code: "JSON_INVALID",
+        message: format!("decoded body is not valid JSON: {error}"),
+    })
 }
 
 fn app_to_proxy(error: AppError) -> ProxyError {
@@ -1485,28 +1677,42 @@ fn app_to_proxy(error: AppError) -> ProxyError {
             message: error.view_model.message,
         };
     }
+    if matches!(
+        error.view_model.code.as_str(),
+        "BODY_DECODE_FAILED" | "BODY_ENCODE_FAILED"
+    ) {
+        return ProxyError {
+            code: if error.view_model.code == "BODY_DECODE_FAILED" {
+                "BODY_DECODE_FAILED"
+            } else {
+                "BODY_ENCODE_FAILED"
+            },
+            message: error.view_model.message,
+        };
+    }
     let code = match error.view_model.code.as_str() {
-        "SHIFT_JIS_DECODE_FAILED" => ErrorCode::ShiftJisDecodeFailed,
-        "SHIFT_JIS_ENCODE_FAILED" => ErrorCode::ShiftJisEncodeFailed,
-        "JSON_INVALID" => ErrorCode::JsonInvalid,
-        "CONFIG_INVALID" | "RULE_INVALID" => ErrorCode::ConfigInvalid,
+        "JSON_INVALID" | "CONFIG_INVALID" | "RULE_INVALID" => ErrorCode::ConfigInvalid,
         _ => ErrorCode::Internal,
     };
     ProxyError::new(code, error.view_model.message)
 }
 
-fn app_channel(channel: Channel) -> AppChannelKind {
-    match channel {
-        Channel::Transaction => AppChannelKind::Transaction,
-        Channel::Dll => AppChannelKind::Dll,
-    }
+fn app_channel(channel: &ChannelId) -> ProxyResult<AppChannelId> {
+    AppChannelId::new(channel.as_str()).map_err(|error| {
+        ProxyError::new(
+            ErrorCode::ConfigInvalid,
+            format!("invalid application channel `{channel}`: {error}"),
+        )
+    })
 }
 
-fn domain_channel(channel: Channel) -> ChannelKind {
-    match channel {
-        Channel::Transaction => ChannelKind::Transaction,
-        Channel::Dll => ChannelKind::Dll,
-    }
+fn domain_channel(channel: &ChannelId) -> ProxyResult<DomainChannelId> {
+    DomainChannelId::new(channel.as_str()).map_err(|error| {
+        ProxyError::new(
+            ErrorCode::ConfigInvalid,
+            format!("invalid domain channel `{channel}`: {error}"),
+        )
+    })
 }
 
 fn message_method(start_line: &str) -> Option<&str> {
@@ -1525,19 +1731,25 @@ fn header_value(message: &Message, name: &str) -> Option<String> {
         .map(|header| String::from_utf8_lossy(&header.value).into_owned())
 }
 
-fn request_id(message: &Message) -> Option<String> {
-    ["x-request-id", "request-id", "x-correlation-id"]
-        .into_iter()
-        .find_map(|name| header_value(message, name))
-        .or_else(|| {
-            message.parse_shift_jis_json().ok().and_then(|json| {
-                ["requestId", "request_id", "reqId"]
-                    .into_iter()
-                    .find_map(|name| json.get(name))
-                    .and_then(Value::as_str)
-                    .map(str::to_owned)
-            })
+fn classify_request(
+    classifier: &dyn RequestClassifier,
+    channel: &ChannelId,
+    message: &Message,
+) -> gmofg_proxy_product_api::ClassifiedRequest {
+    let headers = message
+        .headers
+        .iter()
+        .map(|header| ProductHeader {
+            name: &header.name,
+            value: &header.value,
         })
+        .collect::<Vec<_>>();
+    classifier.classify(ProductMessageContext {
+        channel_id: channel.as_str(),
+        start_line: message.start_line.as_bytes(),
+        headers: &headers,
+        body: &message.body,
+    })
 }
 
 fn fingerprint(context: &ConnectionContext) -> String {
@@ -1601,10 +1813,438 @@ mod tests {
 
     use super::*;
 
+    #[derive(Debug)]
+    struct Utf8BodyCodec;
+
+    impl BodyCodec for Utf8BodyCodec {
+        fn id(&self) -> &'static str {
+            "test-utf8"
+        }
+
+        fn name(&self) -> &'static str {
+            "Test UTF-8"
+        }
+
+        fn decode(&self, bytes: &[u8]) -> Result<String, gmofg_proxy_product_api::ProductError> {
+            std::str::from_utf8(bytes)
+                .map(str::to_owned)
+                .map_err(|error| {
+                    gmofg_proxy_product_api::ProductError::new(
+                        "BODY_DECODE_FAILED",
+                        error.to_string(),
+                    )
+                })
+        }
+
+        fn encode(&self, text: &str) -> Result<Vec<u8>, gmofg_proxy_product_api::ProductError> {
+            Ok(text.as_bytes().to_vec())
+        }
+    }
+
+    fn test_body_codec() -> Arc<dyn BodyCodec> {
+        Arc::new(Utf8BodyCodec)
+    }
+
+    #[derive(Debug)]
+    struct TestRequestClassifier;
+
+    impl RequestClassifier for TestRequestClassifier {
+        fn classify(
+            &self,
+            message: ProductMessageContext<'_>,
+        ) -> gmofg_proxy_product_api::ClassifiedRequest {
+            let request_id = message
+                .headers
+                .iter()
+                .find(|header| header.name.eq_ignore_ascii_case(b"x-test-request-id"))
+                .map(|header| String::from_utf8_lossy(header.value).into_owned());
+            gmofg_proxy_product_api::ClassifiedRequest {
+                request_id,
+                request_type: None,
+            }
+        }
+    }
+
+    fn test_request_classifier() -> Arc<dyn RequestClassifier> {
+        Arc::new(TestRequestClassifier)
+    }
+
+    fn test_channel_labels() -> BTreeMap<String, String> {
+        BTreeMap::from([
+            ("transaction".into(), "交易".into()),
+            ("dll".into(), "DLL".into()),
+            ("alpha".into(), "Alpha".into()),
+        ])
+    }
+
+    fn test_product_hooks() -> RuntimePipelineProductHooks {
+        RuntimePipelineProductHooks {
+            body_codec: test_body_codec(),
+            request_classifier: test_request_classifier(),
+            channel_labels: test_channel_labels(),
+        }
+    }
+
+    #[derive(Debug)]
+    struct StableErrorCodec;
+
+    impl BodyCodec for StableErrorCodec {
+        fn id(&self) -> &'static str {
+            "stable-error"
+        }
+
+        fn name(&self) -> &'static str {
+            "Stable Error"
+        }
+
+        fn decode(&self, _bytes: &[u8]) -> Result<String, gmofg_proxy_product_api::ProductError> {
+            Err(gmofg_proxy_product_api::ProductError::new(
+                "PRODUCT_DECODE_FAILED",
+                "decode failed",
+            ))
+        }
+
+        fn encode(&self, _text: &str) -> Result<Vec<u8>, gmofg_proxy_product_api::ProductError> {
+            Err(gmofg_proxy_product_api::ProductError::new(
+                "PRODUCT_ENCODE_FAILED",
+                "encode failed",
+            ))
+        }
+    }
+
+    #[test]
+    fn product_codec_error_codes_and_json_syntax_classification_are_stable() {
+        let decode = decode_body(&StableErrorCodec, b"wire").expect_err("decode must fail");
+        assert_eq!(decode.code, "PRODUCT_DECODE_FAILED");
+        assert_eq!(decode.message, "decode failed");
+
+        let encode = encode_body(&StableErrorCodec, "text").expect_err("encode must fail");
+        assert_eq!(encode.code, "PRODUCT_ENCODE_FAILED");
+        assert_eq!(encode.message, "encode failed");
+
+        let json = decode_json(&Utf8BodyCodec, b"{invalid").expect_err("JSON must fail");
+        assert_eq!(json.code, "JSON_INVALID");
+        assert!(json.message.contains("not valid JSON"));
+    }
+
+    #[test]
+    fn product_request_classifier_receives_canonical_wire_metadata() {
+        #[derive(Debug)]
+        struct InspectingClassifier;
+
+        impl RequestClassifier for InspectingClassifier {
+            fn classify(
+                &self,
+                message: ProductMessageContext<'_>,
+            ) -> gmofg_proxy_product_api::ClassifiedRequest {
+                assert_eq!(message.channel_id, "alpha");
+                assert_eq!(message.start_line, b"POST /vendor HTTP/1.1");
+                assert_eq!(
+                    message
+                        .headers
+                        .iter()
+                        .map(|header| (header.name, header.value))
+                        .collect::<Vec<_>>(),
+                    vec![
+                        (b"X-Vendor".as_slice(), b"value\x80\xff".as_slice()),
+                        (b"x-vendor".as_slice(), b"second".as_slice()),
+                    ]
+                );
+                assert_eq!(message.body, b"opaque");
+                gmofg_proxy_product_api::ClassifiedRequest {
+                    request_id: Some("product-id".into()),
+                    request_type: Some("product-type".into()),
+                }
+            }
+        }
+
+        let channel = ChannelId::new("alpha").expect("channel");
+        let message = Message {
+            start_line: "POST /vendor HTTP/1.1".into(),
+            headers: vec![
+                RawHeader::new(
+                    Bytes::from_static(b"X-Vendor"),
+                    Bytes::from_static(b"value\x80\xff"),
+                ),
+                RawHeader::new(
+                    Bytes::from_static(b"x-vendor"),
+                    Bytes::from_static(b"second"),
+                ),
+            ],
+            body: Bytes::from_static(b"opaque"),
+            body_modified: false,
+        };
+
+        let classified = classify_request(&InspectingClassifier, &channel, &message);
+        assert_eq!(classified.request_id.as_deref(), Some("product-id"));
+        assert_eq!(classified.request_type.as_deref(), Some("product-type"));
+    }
+
+    #[test]
+    fn forward_modified_uses_canonical_wire_headers_instead_of_lossy_display_projection() {
+        let original = Message {
+            start_line: "HTTP/1.1 299 Vendor Specific Result".into(),
+            headers: vec![
+                RawHeader::new(
+                    Bytes::from_static(b"X-Trace"),
+                    Bytes::from_static(b"first\x80"),
+                ),
+                RawHeader::new(
+                    Bytes::from_static(b"x-Other"),
+                    Bytes::from_static(b"middle\xff"),
+                ),
+                RawHeader::new(
+                    Bytes::from_static(b"x-TRACE"),
+                    Bytes::from_static(b"second"),
+                ),
+                RawHeader::new(Bytes::from_static(b"x-Other"), Bytes::from_static(b"last")),
+            ],
+            body: Bytes::from_static(b"old"),
+            body_modified: false,
+        };
+        let mut edited = content_view(&Utf8BodyCodec, &original);
+        edited.body_bytes = b"new".to_vec();
+        edited.body_text = Some("new".into());
+        edited.content_length = 3;
+        let decision = BreakpointDecision {
+            breakpoint_id: Uuid::new_v4(),
+            expected_revision: 1,
+            kind: BreakpointDecisionKind::ForwardModified,
+            message: Some(edited),
+            delay_ms: None,
+            http_status: None,
+            content_length_delta: None,
+            truncate_at: None,
+        };
+        let mut effective = original.clone();
+
+        let faults = apply_breakpoint_decision(
+            &Utf8BodyCodec,
+            AppMessageStage::Response,
+            &original,
+            &mut effective,
+            &decision,
+        )
+        .expect("forward modified");
+
+        assert!(faults.is_empty());
+        assert_eq!(effective.start_line, original.start_line);
+        assert_eq!(effective.headers, original.headers);
+        assert_eq!(effective.body, Bytes::from_static(b"new"));
+        assert_eq!(
+            effective.reconstruct(),
+            Bytes::from_static(
+                b"HTTP/1.1 299 Vendor Specific Result\r\n\
+X-Trace: first\x80\r\n\
+x-Other: middle\xff\r\n\
+x-TRACE: second\r\n\
+x-Other: last\r\n\r\nnew"
+            )
+        );
+    }
+
+    #[test]
+    fn forward_modified_preserves_unedited_header_ows_byte_for_byte() {
+        let original = Message::from_raw_http1_head(
+            b"POST /ows HTTP/1.1\r\n\
+X-Mixed:\t  value \t\r\n\
+X-Compact:value\r\n\r\n",
+            Bytes::from_static(b"body"),
+        )
+        .expect("raw message");
+        let view = content_view(&Utf8BodyCodec, &original);
+
+        let effective = proxy_message(&view, &original.start_line).expect("effective message");
+
+        assert_eq!(effective.reconstruct(), original.reconstruct());
+    }
+
+    #[test]
+    fn forward_modified_rejects_non_ows_wire_metadata_from_the_frontend() {
+        let original = Message::from_raw_http1_head(
+            b"POST /ows HTTP/1.1\r\nX-Test: value\r\n\r\n",
+            Bytes::new(),
+        )
+        .expect("raw message");
+        let mut view = content_view(&Utf8BodyCodec, &original);
+        view.raw_headers[0].leading_ows_bytes = b"\r\nInjected: ".to_vec();
+
+        let error = proxy_message(&view, &original.start_line).expect_err("invalid OWS");
+
+        assert_eq!(error.code, ErrorCode::ConfigInvalid.as_str());
+    }
+
+    #[test]
+    fn breakpoint_ipc_cannot_replace_the_rust_owned_start_line_or_use_status_600() {
+        let original = Message::from_raw_http1_head(
+            b"POST /safe HTTP/1.1\r\nHost: example.test\r\n\r\n",
+            Bytes::new(),
+        )
+        .expect("raw message");
+        let mut view = content_view(&Utf8BodyCodec, &original);
+        view.start_line_bytes = b"POST / HTTP/1.1\r\nX-Injected: value".to_vec();
+
+        let reconstructed = proxy_message(&view, &original.start_line).expect("safe message");
+        assert_eq!(reconstructed.start_line, original.start_line);
+        assert!(
+            !reconstructed
+                .reconstruct()
+                .windows(10)
+                .any(|window| window == b"X-Injected")
+        );
+
+        view.http_status = Some(600);
+        let error = proxy_message(&view, "HTTP/1.1 200 OK").expect_err("invalid status");
+        assert_eq!(error.code, ErrorCode::ConfigInvalid.as_str());
+    }
+
+    #[test]
+    fn forward_modified_merges_header_edits_and_applies_changed_http_status() {
+        let original = Message {
+            start_line: "HTTP/1.1 299 Vendor Specific Result".into(),
+            headers: vec![
+                RawHeader::new(
+                    Bytes::from_static(b"X-Keep"),
+                    Bytes::from_static(b"binary\x80\xff"),
+                ),
+                RawHeader::new(Bytes::from_static(b"X-Edit"), Bytes::from_static(b"old")),
+                RawHeader::new(Bytes::from_static(b"x-remove"), Bytes::from_static(b"gone")),
+            ],
+            body: Bytes::from_static(b"body"),
+            body_modified: false,
+        };
+        let mut edited = content_view(&Utf8BodyCodec, &original);
+        edited.http_status = Some(503);
+        edited.headers.insert("X-Edit".into(), vec!["new".into()]);
+        edited.headers.remove("x-remove");
+        edited.headers.insert("X-Added".into(), vec!["yes".into()]);
+        let decision = BreakpointDecision {
+            breakpoint_id: Uuid::new_v4(),
+            expected_revision: 1,
+            kind: BreakpointDecisionKind::ForwardModified,
+            message: Some(edited),
+            delay_ms: None,
+            http_status: None,
+            content_length_delta: None,
+            truncate_at: None,
+        };
+        let mut effective = original.clone();
+
+        apply_breakpoint_decision(
+            &Utf8BodyCodec,
+            AppMessageStage::Response,
+            &original,
+            &mut effective,
+            &decision,
+        )
+        .expect("forward modified");
+
+        assert_eq!(effective.start_line, "HTTP/1.1 503 Vendor Specific Result");
+        assert_eq!(effective.http_status(), Some(503));
+        assert_eq!(
+            effective
+                .headers
+                .iter()
+                .map(|header| (header.name.as_ref(), header.value.as_ref()))
+                .collect::<Vec<_>>(),
+            vec![
+                (b"X-Keep".as_slice(), b"binary\x80\xff".as_slice()),
+                (b"X-Edit".as_slice(), b"new".as_slice()),
+                (b"X-Added".as_slice(), b"yes".as_slice()),
+            ],
+            "untouched wire fields stay exact while edited/deleted/added fields follow the UI"
+        );
+    }
+
+    #[test]
+    fn mixed_case_header_edit_and_delete_apply_to_one_case_insensitive_field_group() {
+        let raw = vec![
+            RawHttpHeaderViewModel {
+                name_bytes: b"X-Trace".to_vec(),
+                value_bytes: b"first".to_vec(),
+                leading_ows_bytes: b" ".to_vec(),
+                trailing_ows_bytes: Vec::new(),
+            },
+            RawHttpHeaderViewModel {
+                name_bytes: b"X-Keep".to_vec(),
+                value_bytes: b"binary\x80\xff".to_vec(),
+                leading_ows_bytes: b" ".to_vec(),
+                trailing_ows_bytes: Vec::new(),
+            },
+            RawHttpHeaderViewModel {
+                name_bytes: b"x-TRACE".to_vec(),
+                value_bytes: b"second".to_vec(),
+                leading_ows_bytes: b" ".to_vec(),
+                trailing_ows_bytes: Vec::new(),
+            },
+            RawHttpHeaderViewModel {
+                name_bytes: b"X-Remove".to_vec(),
+                value_bytes: b"gone".to_vec(),
+                leading_ows_bytes: b" ".to_vec(),
+                trailing_ows_bytes: Vec::new(),
+            },
+        ];
+        let mut edited = display_headers(&raw);
+        assert_eq!(
+            edited.get("X-Trace"),
+            Some(&vec!["first".into(), "second".into()])
+        );
+        // Simulate an editor returning a different casing for the same field.
+        edited.insert("x-trace".into(), vec!["replacement".into()]);
+        edited.remove("X-Remove");
+
+        let merged = merge_edited_headers(&raw, &edited).expect("valid wire whitespace");
+
+        assert_eq!(
+            merged
+                .iter()
+                .map(|header| (header.name.as_ref(), header.value.as_ref()))
+                .collect::<Vec<_>>(),
+            vec![
+                (b"x-trace".as_slice(), b"replacement".as_slice()),
+                (b"X-Keep".as_slice(), b"binary\x80\xff".as_slice()),
+            ]
+        );
+    }
+
     #[test]
     fn intentional_wire_faults_are_not_reported_as_internal_errors() {
         assert_eq!(result_text("INCORRECT_CONTENT_LENGTH"), "规则终止");
         assert_eq!(result_text("TRUNCATED_RESPONSE"), "截断");
+    }
+
+    #[derive(Debug)]
+    struct RejectingCodec;
+
+    impl BodyCodec for RejectingCodec {
+        fn id(&self) -> &'static str {
+            "rejecting"
+        }
+
+        fn name(&self) -> &'static str {
+            "Rejecting Codec"
+        }
+
+        fn decode(&self, _: &[u8]) -> Result<String, gmofg_proxy_product_api::ProductError> {
+            Ok(String::new())
+        }
+
+        fn encode(&self, _: &str) -> Result<Vec<u8>, gmofg_proxy_product_api::ProductError> {
+            Err(gmofg_proxy_product_api::ProductError::new(
+                "PRODUCT_SPECIFIC_CODE",
+                "rejected",
+            ))
+        }
+    }
+
+    #[test]
+    fn codec_failures_keep_generic_stable_error_codes() {
+        let codec = Utf8BodyCodec;
+        let decode_error = decode_body(&codec, &[0xff]).expect_err("invalid UTF-8");
+        assert_eq!(decode_error.code, "BODY_DECODE_FAILED");
+
+        let encode_error = encode_body(&RejectingCodec, "body").expect_err("rejected body");
+        assert_eq!(encode_error.code, "PRODUCT_SPECIFIC_CODE");
     }
 
     #[derive(Debug)]
@@ -1816,6 +2456,7 @@ mod tests {
             .collect::<ProxyResult<Vec<_>>>()
             .expect("valid test rules");
         Arc::new(RuntimePipelineAdapter::new(
+            test_product_hooks(),
             Arc::new(StaticRules {
                 snapshot: Mutex::new(RuleRuntimeSnapshot::new(rules)),
             }),
@@ -1826,7 +2467,15 @@ mod tests {
         ))
     }
 
-    fn test_context(epoch: Uuid, connection_id: Uuid, channel: Channel) -> ConnectionContext {
+    fn transaction_channel() -> ChannelId {
+        ChannelId::new("transaction").expect("valid transaction channel")
+    }
+
+    fn dll_channel() -> ChannelId {
+        ChannelId::new("dll").expect("valid DLL channel")
+    }
+
+    fn test_context(epoch: Uuid, connection_id: Uuid, channel: ChannelId) -> ConnectionContext {
         ConnectionContext {
             runtime_epoch: epoch,
             connection_id,
@@ -1835,7 +2484,7 @@ mod tests {
             accepted_at: SystemTime::now(),
             tls_peer: Some(TlsPeerIdentity {
                 sha256_fingerprint: "AA:BB:CC:DD:EE:FF".into(),
-                subject_summary: "CN=Payment App".into(),
+                subject_summary: "CN=Test Client".into(),
             }),
         }
     }
@@ -1844,14 +2493,8 @@ mod tests {
         Message {
             start_line: "POST /payment HTTP/1.1".into(),
             headers: vec![
-                RawHeader {
-                    name: b"host".to_vec().into(),
-                    value: b"example.test".to_vec().into(),
-                },
-                RawHeader {
-                    name: b"x-request-id".to_vec().into(),
-                    value: b"REQ-1".to_vec().into(),
-                },
+                RawHeader::new(b"host".to_vec(), b"example.test".to_vec()),
+                RawHeader::new(b"x-request-id".to_vec(), b"REQ-1".to_vec()),
             ],
             body: body.as_bytes().to_vec().into(),
             body_modified: false,
@@ -1861,7 +2504,7 @@ mod tests {
     fn response_message() -> Message {
         Message {
             start_line: "HTTP/1.1 200 OK".into(),
-            headers: Vec::new(),
+            headers: vec![RawHeader::new(b"x-server".to_vec(), b"gmo-fg".to_vec())],
             body: br#"{"result":"ok"}"#.to_vec().into(),
             body_modified: false,
         }
@@ -1871,11 +2514,11 @@ mod tests {
     async fn records_request_response_terminal_events_and_real_metrics() {
         let pipeline = adapter(Vec::new(), 10);
         let epoch = Uuid::new_v4();
-        let context = test_context(epoch, Uuid::new_v4(), Channel::Transaction);
+        let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
 
         pipeline.connection_opened(&context).await;
         let opened = pipeline.snapshot(Some(epoch)).await.expect("metrics");
-        assert_eq!(opened.channels[&Channel::Transaction].connected_clients, 1);
+        assert_eq!(opened.channels[&transaction_channel()].connected_clients, 1);
 
         let mut request = request_message(r#"{"amount":100}"#);
         assert!(
@@ -1886,7 +2529,7 @@ mod tests {
                 .is_empty()
         );
         let running = pipeline.snapshot(Some(epoch)).await.expect("metrics");
-        assert_eq!(running.channels[&Channel::Transaction].request_count, 1);
+        assert_eq!(running.channels[&transaction_channel()].request_count, 1);
         assert_eq!(running.active_sessions, 1);
 
         let mut response = response_message();
@@ -1897,10 +2540,56 @@ mod tests {
                 .expect("response")
                 .is_empty()
         );
+        let session_id = pipeline
+            .state
+            .lock()
+            .connections
+            .get(&context.connection_id)
+            .and_then(|connection| connection.session_id)
+            .expect("active session");
+        let recorded = pipeline
+            .sessions
+            .get_record(session_id)
+            .expect("recorded session");
+        let recorded_request = recorded.detail.request.as_ref().expect("request");
+        assert_eq!(recorded_request.http_status, None);
+        assert_eq!(recorded_request.start_line_bytes, b"POST /payment HTTP/1.1");
+        assert_eq!(recorded_request.headers["x-request-id"], ["REQ-1"]);
+        assert_eq!(
+            recorded_request.raw_headers,
+            vec![
+                RawHttpHeaderViewModel {
+                    name_bytes: b"host".to_vec(),
+                    value_bytes: b"example.test".to_vec(),
+                    leading_ows_bytes: b" ".to_vec(),
+                    trailing_ows_bytes: Vec::new(),
+                },
+                RawHttpHeaderViewModel {
+                    name_bytes: b"x-request-id".to_vec(),
+                    value_bytes: b"REQ-1".to_vec(),
+                    leading_ows_bytes: b" ".to_vec(),
+                    trailing_ows_bytes: Vec::new(),
+                },
+            ]
+        );
+        let recorded_response = recorded.detail.response.as_ref().expect("response");
+        assert_eq!(recorded_response.http_status, Some(200));
+        assert_eq!(recorded.detail.summary.http_status, Some(200));
+        assert_eq!(recorded_response.start_line_bytes, b"HTTP/1.1 200 OK");
+        assert_eq!(recorded_response.headers["x-server"], ["gmo-fg"]);
+        assert_eq!(
+            recorded_response.raw_headers,
+            vec![RawHttpHeaderViewModel {
+                name_bytes: b"x-server".to_vec(),
+                value_bytes: b"gmo-fg".to_vec(),
+                leading_ows_bytes: b" ".to_vec(),
+                trailing_ows_bytes: Vec::new(),
+            }]
+        );
         pipeline.connection_closed(&context, &Ok(())).await;
 
         let closed = pipeline.snapshot(Some(epoch)).await.expect("metrics");
-        assert_eq!(closed.channels[&Channel::Transaction].connected_clients, 0);
+        assert_eq!(closed.channels[&transaction_channel()].connected_clients, 0);
         assert_eq!(closed.active_sessions, 0);
         assert!(closed.logical_memory_bytes > 0);
         assert!(pipeline.events.current_cursor() > 0);
@@ -1913,14 +2602,14 @@ mod tests {
             .and_then(|connection| connection.session_id);
         assert!(session_id.is_none(), "closed connection state is removed");
 
-        let next_context = test_context(Uuid::new_v4(), Uuid::new_v4(), Channel::Transaction);
+        let next_context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
         pipeline.connection_opened(&next_context).await;
         let next_epoch = pipeline
             .snapshot(Some(next_context.runtime_epoch))
             .await
             .expect("next epoch metrics");
         assert_eq!(
-            next_epoch.channels[&Channel::Transaction].request_count,
+            next_epoch.channels[&transaction_channel()].request_count,
             0,
             "runtime counters reset for a new epoch"
         );
@@ -1931,7 +2620,7 @@ mod tests {
     async fn pending_breakpoints_are_never_evicted_and_stop_unblocks_waiters() {
         let pipeline = adapter(vec![pause_rule()], 1);
         let epoch = Uuid::new_v4();
-        let first_context = test_context(epoch, Uuid::new_v4(), Channel::Transaction);
+        let first_context = test_context(epoch, Uuid::new_v4(), transaction_channel());
         pipeline.connection_opened(&first_context).await;
 
         let first = {
@@ -1950,7 +2639,7 @@ mod tests {
         }
         assert_eq!(pipeline.breakpoints.query(Some(epoch)).len(), 1);
 
-        let second_context = test_context(epoch, Uuid::new_v4(), Channel::Dll);
+        let second_context = test_context(epoch, Uuid::new_v4(), dll_channel());
         pipeline.connection_opened(&second_context).await;
         let mut second_message = request_message(r#"{"requestId":"second"}"#);
         let exhausted = pipeline
@@ -1980,6 +2669,7 @@ mod tests {
             reject_commit: AtomicBool::new(true),
         });
         let pipeline = RuntimePipelineAdapter::new(
+            test_product_hooks(),
             rules.clone(),
             Arc::new(InMemorySessionStore::new(10, 64 * 1024 * 1024)),
             Arc::new(BreakpointCoordinator::default()),
@@ -1987,7 +2677,7 @@ mod tests {
             Arc::new(CaptureRepositoryAdapter::default()),
         );
         let epoch = Uuid::new_v4();
-        let context = test_context(epoch, Uuid::new_v4(), Channel::Transaction);
+        let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
         pipeline.connection_opened(&context).await;
         let mut message = request_message(r#"{"amount":100}"#);
 
@@ -2020,6 +2710,7 @@ mod tests {
             snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
         });
         let pipeline = Arc::new(RuntimePipelineAdapter::new(
+            test_product_hooks(),
             rules.clone(),
             Arc::new(InMemorySessionStore::new(32, 64 * 1024 * 1024)),
             Arc::new(BreakpointCoordinator::default()),
@@ -2030,7 +2721,7 @@ mod tests {
         let mut tasks = Vec::new();
         for index in 0..20_u128 {
             let pipeline = pipeline.clone();
-            let context = test_context(epoch, Uuid::from_u128(index + 1), Channel::Transaction);
+            let context = test_context(epoch, Uuid::from_u128(index + 1), transaction_channel());
             pipeline.connection_opened(&context).await;
             tasks.push(tokio::spawn(async move {
                 let mut message = request_message(r#"{"amount":100}"#);
@@ -2064,6 +2755,7 @@ mod tests {
             commit_attempts: AtomicUsize::new(0),
         });
         let pipeline = RuntimePipelineAdapter::new(
+            test_product_hooks(),
             rules.clone(),
             Arc::new(InMemorySessionStore::new(10, 64 * 1024 * 1024)),
             Arc::new(BreakpointCoordinator::default()),
@@ -2071,7 +2763,7 @@ mod tests {
             Arc::new(CaptureRepositoryAdapter::default()),
         );
         let epoch = Uuid::new_v4();
-        let context = test_context(epoch, Uuid::new_v4(), Channel::Transaction);
+        let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
         let message = request_message(r#"{"amount":100}"#);
 
         let first = pipeline
@@ -2124,7 +2816,7 @@ mod tests {
         let fingerprint = "11:22:33:44";
         let pipeline = adapter(vec![tls_fingerprint_reject_rule(fingerprint)], 10);
         let epoch = Uuid::new_v4();
-        let mut context = test_context(epoch, Uuid::new_v4(), Channel::Transaction);
+        let mut context = test_context(epoch, Uuid::new_v4(), transaction_channel());
         context.tls_peer = None;
         let matching_peer = TlsPeerIdentity {
             sha256_fingerprint: fingerprint.into(),
@@ -2148,7 +2840,8 @@ mod tests {
     }
 
     #[test]
-    fn rule_mutations_preserve_shift_jis_rebuild_and_action_order() {
+    fn rule_mutations_use_injected_codec_and_preserve_action_order() {
+        let body_codec = test_body_codec();
         let mut message = request_message(r#"{"payment":{"amount":100}}"#);
         let actions = vec![
             RuleAction::SetJsonField {
@@ -2162,11 +2855,12 @@ mod tests {
             RuleAction::Delay { milliseconds: 25 },
             RuleAction::Pause,
         ];
-        let (faults, pause) = apply_rule_actions(&mut message, &actions, 42).expect("apply");
+        let (faults, pause) =
+            apply_rule_actions(body_codec.as_ref(), &mut message, &actions, 42).expect("apply");
         assert!(pause);
         assert_eq!(faults, vec![FaultAction::Delay(Duration::from_millis(25))]);
         assert_eq!(
-            message.parse_shift_jis_json().expect("json")["payment"]["amount"],
+            decode_json(body_codec.as_ref(), &message.body).expect("json")["payment"]["amount"],
             200
         );
         assert_eq!(message.declared_content_length(), Some(message.body.len()));
@@ -2175,31 +2869,31 @@ mod tests {
         let mock = map_terminal_action(&TerminalAction::MockResponse {
             status: 503,
             headers: vec![("x-mock".into(), "enabled".into())],
-            shift_jis_body: br#"{"mock":true}"#.to_vec(),
+            body_bytes: br#"{"mock":true}"#.to_vec(),
         })
         .expect("mock");
         let FaultAction::MockResponse {
             status,
             headers,
-            shift_jis_body,
+            body,
         } = mock
         else {
             panic!("expected mock action");
         };
         assert_eq!(status.as_u16(), 503);
         assert_eq!(headers["x-mock"], "enabled");
-        assert_eq!(shift_jis_body, r#"{"mock":true}"#);
+        assert_eq!(body, Bytes::from_static(br#"{"mock":true}"#));
     }
 
     // RULE-008~009, ACTION-012~013, MESSAGE-004~006, TEST-RULE:
     // later body/header mutations win and Rust rebuilds Content-Length exactly once.
     #[test]
     fn body_replacement_and_repeated_header_updates_preserve_action_order() {
+        let body_codec = test_body_codec();
         let mut message = request_message(r#"{"original":true}"#);
-        message.headers.push(RawHeader {
-            name: b"x-test".to_vec().into(),
-            value: b"old".to_vec().into(),
-        });
+        message
+            .headers
+            .push(RawHeader::new(b"x-test".to_vec(), b"old".to_vec()));
         let actions = vec![
             RuleAction::ReplaceBodyText("最初".into()),
             RuleAction::ReplaceBodyText("最終".into()),
@@ -2213,11 +2907,14 @@ mod tests {
             },
         ];
 
-        let (faults, pause) =
-            apply_rule_actions(&mut message, &actions, 42).expect("apply mutations");
+        let (faults, pause) = apply_rule_actions(body_codec.as_ref(), &mut message, &actions, 42)
+            .expect("apply mutations");
         assert!(faults.is_empty());
         assert!(!pause);
-        assert_eq!(message.decoded_shift_jis().expect("Shift-JIS"), "最終");
+        assert_eq!(
+            decode_body(body_codec.as_ref(), &message.body).expect("decode"),
+            "最終"
+        );
         assert_eq!(message.declared_content_length(), Some(message.body.len()));
         assert_eq!(header_value(&message, "x-test").as_deref(), Some("last"));
         assert_eq!(
@@ -2271,10 +2968,10 @@ mod tests {
             ),
             (
                 TerminalAction::InvalidJson {
-                    shift_jis_body: b"{".to_vec(),
+                    body_bytes: b"{".to_vec(),
                 },
-                FaultAction::InvalidJson {
-                    shift_jis_text: "{".into(),
+                FaultAction::ReplaceBody {
+                    body: Bytes::from_static(b"{"),
                 },
             ),
             (
@@ -2297,19 +2994,19 @@ mod tests {
         let mock = map_terminal_action(&TerminalAction::MockResponse {
             status: 202,
             headers: vec![("x-mock".into(), "yes".into())],
-            shift_jis_body: br#"{"mock":true}"#.to_vec(),
+            body_bytes: br#"{"mock":true}"#.to_vec(),
         })
         .expect("map mock response");
         let FaultAction::MockResponse {
             status,
             headers,
-            shift_jis_body,
+            body,
         } = mock
         else {
             panic!("expected mock response transport fault");
         };
         assert_eq!(status.as_u16(), 202);
         assert_eq!(headers["x-mock"], "yes");
-        assert_eq!(shift_jis_body, r#"{"mock":true}"#);
+        assert_eq!(body, Bytes::from_static(br#"{"mock":true}"#));
     }
 }

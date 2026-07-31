@@ -7,17 +7,22 @@ use std::{
 
 use async_trait::async_trait;
 use gmofg_proxy_application::{
-    AppError, AppResult, FieldValidationViewModel, SettingsDraft, SettingsRepositoryPort,
-    SettingsValidationViewModel, SettingsViewModel,
+    AppError, AppResult, ChannelSettingsDraft, FieldValidationViewModel, SettingsDraft,
+    SettingsRepositoryPort, SettingsValidationViewModel, SettingsViewModel,
 };
 use gmofg_proxy_domain::{
     CapacitySettings, ChannelSettings, Revision, Settings, TimeoutSettings, TlsVersion,
 };
+use gmofg_proxy_product_api::{LegacySettingsChannelMapping, ProductProfile};
 use parking_lot::RwLock;
+use serde_json::{Map, Value};
 
 use crate::SqliteStore;
 
 use super::common::{infra, json_error};
+
+const PERSISTENCE_VERSION_FIELD: &str = "_persistence_version";
+const SETTINGS_PERSISTENCE_VERSION: u64 = 1;
 
 trait LocalAddressProvider: Debug + Send + Sync {
     fn preferred_lan_ipv4(&self) -> Option<Ipv4Addr>;
@@ -50,22 +55,33 @@ fn is_usable_lan_ipv4(address: Ipv4Addr) -> bool {
 #[derive(Debug)]
 pub struct SettingsRepositoryAdapter {
     store: Arc<SqliteStore>,
+    defaults: SettingsDraft,
+    legacy_settings_channels: &'static [LegacySettingsChannelMapping],
     effective: RwLock<Option<SettingsDraft>>,
     local_address: Arc<dyn LocalAddressProvider>,
 }
 
 impl SettingsRepositoryAdapter {
     #[must_use]
-    pub fn new(store: Arc<SqliteStore>) -> Self {
-        Self::with_local_address_provider(store, Arc::new(SystemLocalAddressProvider))
+    pub fn new(store: Arc<SqliteStore>, product: &dyn ProductProfile) -> Self {
+        Self::with_local_address_provider(
+            store,
+            default_settings(product),
+            product.persistence_migrations().settings_channels,
+            Arc::new(SystemLocalAddressProvider),
+        )
     }
 
     fn with_local_address_provider(
         store: Arc<SqliteStore>,
+        defaults: SettingsDraft,
+        legacy_settings_channels: &'static [LegacySettingsChannelMapping],
         local_address: Arc<dyn LocalAddressProvider>,
     ) -> Self {
         Self {
             store,
+            defaults,
+            legacy_settings_channels,
             effective: RwLock::new(None),
             local_address,
         }
@@ -74,12 +90,17 @@ impl SettingsRepositoryAdapter {
     fn load_stored(&self) -> AppResult<(SettingsDraft, u64)> {
         let (mut draft, revision) = match infra(self.store.load_settings())? {
             Some(stored) => {
-                let mut draft: SettingsDraft = serde_json::from_value(stored.value)
-                    .map_err(|error| json_error("持久化设置无效", error))?;
+                let mut draft = deserialize_settings(
+                    stored.value,
+                    &self.defaults,
+                    self.legacy_settings_channels,
+                )
+                .map_err(|error| json_error("持久化设置无效", error))?;
+                self.canonicalize_catalog(&mut draft)?;
                 draft.expected_revision = Some(stored.revision);
                 (draft, stored.revision)
             }
-            None => (SettingsDraft::default(), 0),
+            None => (self.defaults.clone(), 0),
         };
         if draft.leaf_sans.is_empty()
             && let Some(address) = self.local_address.preferred_lan_ipv4()
@@ -131,51 +152,115 @@ impl SettingsRepositoryAdapter {
             return;
         };
         let effective = self.effective.read();
-        for (field, enabled, port, unchanged) in [
-            (
-                "transaction_port",
-                draft.transaction_enabled,
-                draft.transaction_port,
-                effective.as_ref().is_some_and(|settings| {
-                    settings.bind_address == draft.bind_address
-                        && settings.transaction_enabled
-                        && settings.transaction_port == draft.transaction_port
-                }),
-            ),
-            (
-                "dll_port",
-                draft.dll_enabled,
-                draft.dll_port,
-                effective.as_ref().is_some_and(|settings| {
-                    settings.bind_address == draft.bind_address
-                        && settings.dll_enabled
-                        && settings.dll_port == draft.dll_port
-                }),
-            ),
-        ] {
-            if enabled
+        for channel in &draft.channels {
+            let unchanged = effective.as_ref().is_some_and(|settings| {
+                settings.bind_address == draft.bind_address
+                    && settings.channels.iter().any(|effective_channel| {
+                        effective_channel.id == channel.id
+                            && effective_channel.enabled
+                            && effective_channel.port == channel.port
+                    })
+            });
+            if channel.enabled
                 && !unchanged
-                && TcpListener::bind(SocketAddr::new(bind_address, port)).is_err()
+                && TcpListener::bind(SocketAddr::new(bind_address, channel.port)).is_err()
             {
                 validation.valid = false;
                 validation
                     .field_errors
-                    .entry(field.into())
+                    .entry(format!("channels.{}.port", channel.id.as_str()))
                     .or_default()
-                    .push(format!("端口 {port} 已被占用或当前用户无权监听。"));
+                    .push(format!(
+                        "端口 {} 已被占用或当前用户无权监听。",
+                        channel.port
+                    ));
             }
         }
+    }
+
+    fn validate_catalog(
+        &self,
+        draft: &SettingsDraft,
+        validation: &mut SettingsValidationViewModel,
+    ) {
+        for expected in &self.defaults.channels {
+            match draft
+                .channels
+                .iter()
+                .find(|channel| channel.id == expected.id)
+            {
+                None => {
+                    validation.valid = false;
+                    validation
+                        .field_errors
+                        .entry("channels".into())
+                        .or_default()
+                        .push(format!("缺少产品通道 {}。", expected.id));
+                }
+                Some(channel) if channel.display_name != expected.display_name => {
+                    validation.valid = false;
+                    validation
+                        .field_errors
+                        .entry(format!("channels.{}.display_name", channel.id))
+                        .or_default()
+                        .push("通道显示名由产品配置固定提供。".into());
+                }
+                Some(_) => {}
+            }
+        }
+        for channel in &draft.channels {
+            if !self
+                .defaults
+                .channels
+                .iter()
+                .any(|expected| expected.id == channel.id)
+            {
+                validation.valid = false;
+                validation
+                    .field_errors
+                    .entry(format!("channels.{}.id", channel.id))
+                    .or_default()
+                    .push("产品未声明该通道。".into());
+            }
+        }
+    }
+
+    fn canonicalize_catalog(&self, draft: &mut SettingsDraft) -> AppResult<()> {
+        let mut validation = valid();
+        self.validate_catalog(draft, &mut validation);
+        if !validation.valid {
+            return Err(AppError::field(
+                "PERSISTENCE_CORRUPT",
+                "持久化设置中的通道目录与当前产品不兼容。",
+                validation.field_errors,
+            ));
+        }
+        for channel in &mut draft.channels {
+            let expected = self
+                .defaults
+                .channels
+                .iter()
+                .find(|expected| expected.id == channel.id)
+                .expect("catalog validated");
+            channel.display_name.clone_from(&expected.display_name);
+        }
+        Ok(())
     }
 }
 
 #[async_trait]
 impl SettingsRepositoryPort for SettingsRepositoryAdapter {
+    async fn defaults(&self) -> AppResult<SettingsDraft> {
+        Ok(self.defaults.clone())
+    }
+
     async fn get(&self) -> AppResult<SettingsViewModel> {
         self.view()
     }
 
     async fn validate(&self, draft: &SettingsDraft) -> AppResult<SettingsValidationViewModel> {
         let mut validation = Self::validate_domain(draft);
+        self.validate_catalog(draft, &mut validation);
         if validation.valid {
             self.validate_ports(draft, &mut validation);
         }
@@ -183,7 +268,8 @@ impl SettingsRepositoryPort for SettingsRepositoryAdapter {
     }
 
     async fn save(&self, mut draft: SettingsDraft) -> AppResult<SettingsViewModel> {
-        let validation = Self::validate_domain(&draft);
+        let mut validation = Self::validate_domain(&draft);
+        self.validate_catalog(&draft, &mut validation);
         if !validation.valid {
             return Err(AppError::field(
                 "CONFIG_INVALID",
@@ -194,7 +280,7 @@ impl SettingsRepositoryPort for SettingsRepositoryAdapter {
         let expected = draft.expected_revision.unwrap_or(0);
         draft.expected_revision = Some(expected.saturating_add(1));
         let value =
-            serde_json::to_value(&draft).map_err(|error| json_error("设置序列化失败", error))?;
+            serialize_settings(&draft).map_err(|error| json_error("设置序列化失败", error))?;
         infra(self.store.save_settings(expected, &value))?;
         self.view()
     }
@@ -203,7 +289,7 @@ impl SettingsRepositoryPort for SettingsRepositoryAdapter {
         let (_, current_revision) = self.load_stored()?;
         let mut restored = settings.stored;
         restored.expected_revision = Some(current_revision.saturating_add(1));
-        let value = serde_json::to_value(&restored)
+        let value = serialize_settings(&restored)
             .map_err(|error| json_error("设置回滚序列化失败", error))?;
         infra(self.store.save_settings(current_revision, &value))?;
         *self.effective.write() = settings.effective;
@@ -229,6 +315,94 @@ fn valid() -> SettingsValidationViewModel {
     }
 }
 
+fn serialize_settings(draft: &SettingsDraft) -> Result<Value, serde_json::Error> {
+    let mut value = serde_json::to_value(draft)?;
+    value
+        .as_object_mut()
+        .expect("SettingsDraft always serializes as an object")
+        .insert(
+            PERSISTENCE_VERSION_FIELD.into(),
+            Value::from(SETTINGS_PERSISTENCE_VERSION),
+        );
+    Ok(value)
+}
+
+fn deserialize_settings(
+    mut value: Value,
+    defaults: &SettingsDraft,
+    legacy_channels: &[LegacySettingsChannelMapping],
+) -> Result<SettingsDraft, serde_json::Error> {
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| serde::de::Error::custom("settings root must be an object"))?;
+    let version = take_persistence_version(object)?;
+    let has_channels = object.contains_key("channels");
+    match (version, has_channels) {
+        (Some(SETTINGS_PERSISTENCE_VERSION) | None, true) => serde_json::from_value(value),
+        (None, false) if !legacy_channels.is_empty() => {
+            migrate_legacy_channel_settings(value, defaults, legacy_channels)
+        }
+        (Some(version), _) => Err(serde::de::Error::custom(format!(
+            "unsupported settings persistence version {version}"
+        ))),
+        _ => serde_json::from_value(value),
+    }
+}
+
+fn take_persistence_version(
+    object: &mut Map<String, Value>,
+) -> Result<Option<u64>, serde_json::Error> {
+    object
+        .remove(PERSISTENCE_VERSION_FIELD)
+        .map(|value| {
+            value.as_u64().ok_or_else(|| {
+                serde::de::Error::custom("persistence version must be an unsigned integer")
+            })
+        })
+        .transpose()
+}
+
+fn migrate_legacy_channel_settings(
+    mut value: Value,
+    defaults: &SettingsDraft,
+    mappings: &[LegacySettingsChannelMapping],
+) -> Result<SettingsDraft, serde_json::Error> {
+    let object = value
+        .as_object_mut()
+        .expect("settings root was validated before migration");
+    let mut channels = Vec::with_capacity(mappings.len());
+    for mapping in mappings {
+        let expected = defaults
+            .channels
+            .iter()
+            .find(|channel| channel.id.as_str() == mapping.channel_id)
+            .ok_or_else(|| {
+                serde::de::Error::custom(format!(
+                    "product profile does not declare legacy channel {}",
+                    mapping.channel_id
+                ))
+            })?;
+        channels.push(serde_json::json!({
+            "id": expected.id,
+            "display_name": expected.display_name,
+            "enabled": take_legacy_field(object, mapping.enabled_field)?,
+            "port": take_legacy_field(object, mapping.port_field)?,
+            "upstream_url": take_legacy_field(object, mapping.upstream_url_field)?,
+        }));
+    }
+    object.insert("channels".into(), Value::Array(channels));
+    serde_json::from_value(value)
+}
+
+fn take_legacy_field(
+    object: &mut Map<String, Value>,
+    field: &str,
+) -> Result<Value, serde_json::Error> {
+    object.remove(field).ok_or_else(|| {
+        serde::de::Error::custom(format!("legacy settings field {field:?} is missing"))
+    })
+}
+
 fn to_domain_settings(draft: &SettingsDraft) -> Result<Settings, gmofg_proxy_domain::DomainError> {
     let max_sessions = u32::try_from(draft.max_sessions).map_err(|_| {
         gmofg_proxy_domain::DomainError::new(
@@ -240,16 +414,16 @@ fn to_domain_settings(draft: &SettingsDraft) -> Result<Settings, gmofg_proxy_dom
     Ok(Settings {
         revision: Revision::new(draft.expected_revision.unwrap_or(0).max(1)),
         bind_address: draft.bind_address.clone(),
-        transaction: ChannelSettings {
-            enabled: draft.transaction_enabled,
-            port: draft.transaction_port,
-            upstream_url: draft.upstream_transaction_url.clone(),
-        },
-        dll: ChannelSettings {
-            enabled: draft.dll_enabled,
-            port: draft.dll_port,
-            upstream_url: draft.upstream_dll_url.clone(),
-        },
+        channels: draft
+            .channels
+            .iter()
+            .map(|channel| ChannelSettings {
+                id: channel.id.clone(),
+                enabled: channel.enabled,
+                port: channel.port,
+                upstream_url: channel.upstream_url.clone(),
+            })
+            .collect(),
         tls_version: TlsVersion::Tls12,
         follow_redirects: false,
         automatic_retries: false,
@@ -269,9 +443,30 @@ fn to_domain_settings(draft: &SettingsDraft) -> Result<Settings, gmofg_proxy_dom
     })
 }
 
+fn default_settings(product: &dyn ProductProfile) -> SettingsDraft {
+    SettingsDraft {
+        channels: product
+            .channels()
+            .iter()
+            .map(|channel| ChannelSettingsDraft {
+                id: gmofg_proxy_domain::ChannelId::new(channel.id)
+                    .expect("product channel IDs are compile-time validated"),
+                display_name: channel.display_name.into(),
+                enabled: channel.enabled_by_default,
+                port: channel.listen_port,
+                upstream_url: channel.upstream_url.into(),
+            })
+            .collect(),
+        ..SettingsDraft::default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+    use gmofg_proxy_product_payment::PaymentProductProfile;
+    use rusqlite::params;
 
     #[derive(Debug)]
     struct FixedLocalAddressProvider(Option<Ipv4Addr>);
@@ -282,19 +477,85 @@ mod tests {
         }
     }
 
+    fn test_defaults() -> SettingsDraft {
+        SettingsDraft {
+            channels: vec![
+                ChannelSettingsDraft {
+                    id: gmofg_proxy_domain::ChannelId::new("alpha").unwrap(),
+                    display_name: "Alpha".into(),
+                    enabled: true,
+                    port: 20_001,
+                    upstream_url: "https://alpha.example.test".into(),
+                },
+                ChannelSettingsDraft {
+                    id: gmofg_proxy_domain::ChannelId::new("beta").unwrap(),
+                    display_name: "Beta".into(),
+                    enabled: true,
+                    port: 20_002,
+                    upstream_url: "https://beta.example.test".into(),
+                },
+            ],
+            ..SettingsDraft::default()
+        }
+    }
+
     fn adapter_with_address(address: Option<Ipv4Addr>) -> SettingsRepositoryAdapter {
         SettingsRepositoryAdapter::with_local_address_provider(
             Arc::new(SqliteStore::in_memory().expect("store")),
+            test_defaults(),
+            &[],
             Arc::new(FixedLocalAddressProvider(address)),
         )
     }
 
     fn valid_draft() -> SettingsDraft {
-        SettingsDraft {
-            upstream_transaction_url: "https://transaction.example.test".into(),
-            upstream_dll_url: "https://dll.example.test".into(),
-            ..SettingsDraft::default()
-        }
+        test_defaults()
+    }
+
+    fn legacy_payment_settings_json() -> Value {
+        serde_json::json!({
+            "expected_revision": 2,
+            "bind_address": "10.0.34.50",
+            "transaction_enabled": true,
+            "transaction_port": 26627,
+            "dll_enabled": false,
+            "dll_port": 26127,
+            "upstream_transaction_url": "https://legacy-transaction.example.test",
+            "upstream_dll_url": "https://legacy-dll.example.test",
+            "connect_timeout_seconds": 11,
+            "write_timeout_seconds": 12,
+            "read_timeout_seconds": 13,
+            "rewrite_host": false,
+            "max_body_bytes": 1_048_576,
+            "max_sessions": 99,
+            "max_memory_bytes": 67_108_864,
+            "leaf_sans": ["10.0.34.50"]
+        })
+    }
+
+    fn create_legacy_settings_database(path: &std::path::Path, revision: u64, value: &Value) {
+        let connection = rusqlite::Connection::open(path).expect("legacy database");
+        connection
+            .execute_batch(
+                "CREATE TABLE settings (
+                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+                    revision INTEGER NOT NULL,
+                    json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );",
+            )
+            .expect("legacy settings schema");
+        connection
+            .execute(
+                "INSERT INTO settings(singleton_id, revision, json, updated_at)
+                 VALUES (1, ?1, ?2, ?3)",
+                params![
+                    i64::try_from(revision).expect("test revision"),
+                    value.to_string(),
+                    Utc::now().to_rfc3339()
+                ],
+            )
+            .expect("legacy settings row");
     }
 
     #[tokio::test]
@@ -332,8 +593,7 @@ mod tests {
     // SETTINGS-010~013, ENGINE-008, TEST-SETTINGS
     #[tokio::test]
     async fn persists_revision_and_tracks_effective_snapshot_separately() {
-        let adapter =
-            SettingsRepositoryAdapter::new(Arc::new(SqliteStore::in_memory().expect("store")));
+        let adapter = adapter_with_address(None);
         let saved = adapter.save(valid_draft()).await.expect("save");
         assert_eq!(saved.revision, 1);
         assert!(saved.effective.is_none());
@@ -344,12 +604,12 @@ mod tests {
         assert!(!applied.requires_restart);
 
         let mut changed = applied.stored;
-        changed.transaction_port = 20_000;
+        changed.channels[0].port = 20_003;
         let changed = adapter.save(changed).await.expect("change");
         assert!(changed.requires_restart);
         assert_eq!(
-            changed.effective.expect("effective").transaction_port,
-            16_627
+            changed.effective.expect("effective").channels[0].port,
+            20_001
         );
     }
 
@@ -357,17 +617,111 @@ mod tests {
     async fn validation_reports_an_occupied_listener_port() {
         let listener = TcpListener::bind(("127.0.0.1", 0)).expect("reserve port");
         let port = listener.local_addr().expect("local address").port();
-        let adapter =
-            SettingsRepositoryAdapter::new(Arc::new(SqliteStore::in_memory().expect("store")));
-        let draft = SettingsDraft {
-            bind_address: "127.0.0.1".into(),
-            transaction_port: port,
-            dll_enabled: false,
-            leaf_sans: vec!["127.0.0.1".into()],
-            ..valid_draft()
-        };
+        let adapter = adapter_with_address(None);
+        let mut draft = valid_draft();
+        draft.bind_address = "127.0.0.1".into();
+        draft.channels[0].port = port;
+        draft.leaf_sans = vec!["127.0.0.1".into()];
         let validation = adapter.validate(&draft).await.expect("validation");
         assert!(!validation.valid);
-        assert!(validation.field_errors.contains_key("transaction_port"));
+        assert!(validation.field_errors.contains_key("channels.alpha.port"));
+    }
+
+    #[tokio::test]
+    async fn product_channel_catalog_rejects_unknown_missing_and_renamed_channels() {
+        let adapter = adapter_with_address(None);
+        let mut renamed = valid_draft();
+        renamed.channels[0].display_name = "Spoofed".into();
+        let validation = adapter.validate(&renamed).await.unwrap();
+        assert!(
+            validation
+                .field_errors
+                .contains_key("channels.alpha.display_name")
+        );
+
+        let mut unknown = valid_draft();
+        unknown.channels.pop();
+        unknown.channels.push(ChannelSettingsDraft {
+            id: gmofg_proxy_domain::ChannelId::new("gamma").unwrap(),
+            display_name: "Gamma".into(),
+            enabled: false,
+            port: 20_003,
+            upstream_url: "https://gamma.example.test".into(),
+        });
+        let validation = adapter.validate(&unknown).await.unwrap();
+        assert!(validation.field_errors.contains_key("channels"));
+        assert!(validation.field_errors.contains_key("channels.gamma.id"));
+    }
+
+    #[tokio::test]
+    async fn payment_profile_migrates_real_legacy_settings_sqlite_and_preserves_cas_revision() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let database = directory.path().join("legacy-payment.sqlite3");
+        create_legacy_settings_database(&database, 7, &legacy_payment_settings_json());
+        let store = Arc::new(SqliteStore::open(&database).expect("open legacy database"));
+        let adapter =
+            SettingsRepositoryAdapter::new(Arc::clone(&store), &PaymentProductProfile::default());
+
+        let loaded = adapter.get().await.expect("load migrated settings");
+        assert_eq!(loaded.revision, 7);
+        assert_eq!(loaded.stored.expected_revision, Some(7));
+        assert_eq!(
+            loaded
+                .stored
+                .channels
+                .iter()
+                .map(|channel| (
+                    channel.id.as_str(),
+                    channel.display_name.as_str(),
+                    channel.enabled,
+                    channel.port,
+                    channel.upstream_url.as_str()
+                ))
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "transaction",
+                    "交易",
+                    true,
+                    26_627,
+                    "https://legacy-transaction.example.test"
+                ),
+                (
+                    "dll",
+                    "DLL",
+                    false,
+                    26_127,
+                    "https://legacy-dll.example.test"
+                )
+            ]
+        );
+
+        let saved = adapter
+            .save(loaded.stored.clone())
+            .await
+            .expect("save migrated settings");
+        assert_eq!(saved.revision, 8);
+        let persisted = store.load_settings().unwrap().unwrap();
+        assert_eq!(
+            persisted
+                .value
+                .get(PERSISTENCE_VERSION_FIELD)
+                .and_then(Value::as_u64),
+            Some(SETTINGS_PERSISTENCE_VERSION)
+        );
+        assert!(persisted.value.get("transaction_enabled").is_none());
+
+        let stale = adapter
+            .save(loaded.stored)
+            .await
+            .expect_err("legacy revision must still participate in CAS");
+        assert_eq!(stale.view_model.code, "REVISION_CONFLICT");
+    }
+
+    #[test]
+    fn non_payment_profile_rejects_legacy_payment_settings_instead_of_consuming_them() {
+        let error = deserialize_settings(legacy_payment_settings_json(), &test_defaults(), &[])
+            .expect_err("non-Payment profile must reject Payment persistence");
+        assert!(error.to_string().contains("missing field `channels`"));
     }
 }

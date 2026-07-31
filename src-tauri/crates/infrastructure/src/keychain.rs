@@ -2,6 +2,7 @@
 
 use std::{fmt, sync::Mutex};
 
+use gmofg_proxy_product_api::ProductStorageNamespace;
 use ring::{
     aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey},
     rand::{SecureRandom, SystemRandom},
@@ -14,13 +15,13 @@ use zeroize::Zeroizing;
 
 use crate::{InfrastructureError, SecretProtector};
 
-const DEFAULT_SERVICE: &str = "com.gmofg.payment-proxy";
+const DEFAULT_SERVICE: &str = "com.generic-proxy";
 const DEFAULT_ACCOUNT: &str = "secret-protection-master-key-v1";
-const ENVELOPE_MAGIC: &[u8; 5] = b"GMPK1";
+const DEFAULT_ENVELOPE_MAGIC: &[u8; 5] = b"GPXK1";
 const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
 const TAG_BYTES: usize = 16;
-const AAD: &[u8] = b"gmofg-payment-proxy/keychain-envelope/v1";
+const DEFAULT_AAD: &[u8] = b"generic-proxy/keychain-envelope/v1";
 const ERR_SEC_DUPLICATE_ITEM: i32 = -25_299;
 const ERR_SEC_ITEM_NOT_FOUND: i32 = -25_300;
 
@@ -67,6 +68,8 @@ const fn classify_status(status: i32) -> KeyStoreError {
 pub struct MacKeychainProtector {
     service: String,
     account: String,
+    envelope_magic: [u8; 5],
+    aad: Vec<u8>,
     key_store: Box<dyn MasterKeyStore>,
     key_gate: Mutex<()>,
 }
@@ -83,6 +86,20 @@ impl MacKeychainProtector {
         Self {
             service: service.into(),
             account: account.into(),
+            envelope_magic: *DEFAULT_ENVELOPE_MAGIC,
+            aad: DEFAULT_AAD.to_vec(),
+            key_store: Box::new(SystemKeyStore),
+            key_gate: Mutex::new(()),
+        }
+    }
+
+    #[must_use]
+    pub fn for_namespace(namespace: ProductStorageNamespace) -> Self {
+        Self {
+            service: namespace.secret_service.into(),
+            account: namespace.secret_account.into(),
+            envelope_magic: *namespace.secret_envelope_magic,
+            aad: namespace.secret_aad.to_vec(),
             key_store: Box::new(SystemKeyStore),
             key_gate: Mutex::new(()),
         }
@@ -93,6 +110,8 @@ impl MacKeychainProtector {
         Self {
             service: DEFAULT_SERVICE.into(),
             account: DEFAULT_ACCOUNT.into(),
+            envelope_magic: *DEFAULT_ENVELOPE_MAGIC,
+            aad: DEFAULT_AAD.to_vec(),
             key_store: Box::new(key_store),
             key_gate: Mutex::new(()),
         }
@@ -134,14 +153,14 @@ impl SecretProtector for MacKeychainProtector {
         let key = self
             .master_key()
             .map_err(|_| InfrastructureError::KeychainProtect)?;
-        seal(&key, plaintext)
+        seal(&key, self.envelope_magic, &self.aad, plaintext)
     }
 
     fn unprotect(&self, ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
         let key = self
             .master_key()
             .map_err(|_| InfrastructureError::KeychainUnprotect)?;
-        open(&key, ciphertext)
+        open(&key, self.envelope_magic, &self.aad, ciphertext)
     }
 }
 
@@ -158,7 +177,12 @@ fn cipher(key: &[u8], error: InfrastructureError) -> Result<LessSafeKey, Infrast
         .map_err(|_| error)
 }
 
-fn seal(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
+fn seal(
+    key: &[u8],
+    envelope_magic: [u8; 5],
+    aad: &[u8],
+    plaintext: &[u8],
+) -> Result<Vec<u8>, InfrastructureError> {
     let cipher = cipher(key, InfrastructureError::KeychainProtect)?;
     let mut nonce = [0_u8; NONCE_BYTES];
     SystemRandom::new()
@@ -168,21 +192,26 @@ fn seal(key: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
     cipher
         .seal_in_place_append_tag(
             Nonce::assume_unique_for_key(nonce),
-            Aad::from(AAD),
+            Aad::from(aad),
             &mut *protected,
         )
         .map_err(|_| InfrastructureError::KeychainProtect)?;
 
-    let mut envelope = Vec::with_capacity(ENVELOPE_MAGIC.len() + NONCE_BYTES + protected.len());
-    envelope.extend_from_slice(ENVELOPE_MAGIC);
+    let mut envelope = Vec::with_capacity(envelope_magic.len() + NONCE_BYTES + protected.len());
+    envelope.extend_from_slice(&envelope_magic);
     envelope.extend_from_slice(&nonce);
     envelope.extend_from_slice(&protected);
     Ok(envelope)
 }
 
-fn open(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
+fn open(
+    key: &[u8],
+    envelope_magic: [u8; 5],
+    aad: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, InfrastructureError> {
     let payload = ciphertext
-        .strip_prefix(ENVELOPE_MAGIC)
+        .strip_prefix(&envelope_magic)
         .ok_or(InfrastructureError::KeychainUnprotect)?;
     if payload.len() < NONCE_BYTES + TAG_BYTES {
         return Err(InfrastructureError::KeychainUnprotect);
@@ -196,7 +225,7 @@ fn open(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
     let plaintext = cipher
         .open_in_place(
             Nonce::assume_unique_for_key(nonce),
-            Aad::from(AAD),
+            Aad::from(aad),
             &mut protected,
         )
         .map_err(|_| InfrastructureError::KeychainUnprotect)?;
@@ -208,6 +237,21 @@ mod tests {
     use std::{collections::VecDeque, sync::Arc};
 
     use super::*;
+
+    #[test]
+    fn product_namespace_controls_keychain_and_envelope_context() {
+        let protector = MacKeychainProtector::for_namespace(ProductStorageNamespace {
+            database_file_name: "ignored.sqlite3",
+            secret_service: "com.example.alpha",
+            secret_account: "alpha-key",
+            secret_envelope_magic: b"ALPK1",
+            secret_aad: b"alpha/envelope/v1",
+        });
+        assert_eq!(protector.service, "com.example.alpha");
+        assert_eq!(protector.account, "alpha-key");
+        assert_eq!(&protector.envelope_magic, b"ALPK1");
+        assert_eq!(protector.aad, b"alpha/envelope/v1");
+    }
 
     #[derive(Debug, Clone)]
     struct FakeKeyStore {
@@ -334,16 +378,19 @@ mod tests {
     #[test]
     fn envelope_round_trip_is_randomized_and_authenticated() {
         let key = [7_u8; KEY_BYTES];
-        let first = seal(&key, b"secret").expect("seal");
-        let second = seal(&key, b"secret").expect("seal");
+        let first = seal(&key, *DEFAULT_ENVELOPE_MAGIC, DEFAULT_AAD, b"secret").expect("seal");
+        let second = seal(&key, *DEFAULT_ENVELOPE_MAGIC, DEFAULT_AAD, b"secret").expect("seal");
         assert_ne!(first, second);
-        assert_eq!(open(&key, &first).expect("open"), b"secret");
+        assert_eq!(
+            open(&key, *DEFAULT_ENVELOPE_MAGIC, DEFAULT_AAD, &first).expect("open"),
+            b"secret"
+        );
 
         let last = first.len() - 1;
         let mut tampered = first;
         tampered[last] ^= 1;
         assert!(matches!(
-            open(&key, &tampered),
+            open(&key, *DEFAULT_ENVELOPE_MAGIC, DEFAULT_AAD, &tampered),
             Err(InfrastructureError::KeychainUnprotect)
         ));
     }
@@ -351,8 +398,16 @@ mod tests {
     #[test]
     fn malformed_envelopes_fail_closed() {
         let key = [9_u8; KEY_BYTES];
-        assert!(open(&key, b"plaintext").is_err());
-        assert!(open(&key, ENVELOPE_MAGIC).is_err());
+        assert!(open(&key, *DEFAULT_ENVELOPE_MAGIC, DEFAULT_AAD, b"plaintext").is_err());
+        assert!(
+            open(
+                &key,
+                *DEFAULT_ENVELOPE_MAGIC,
+                DEFAULT_AAD,
+                DEFAULT_ENVELOPE_MAGIC
+            )
+            .is_err()
+        );
         assert!(cipher(&key[..KEY_BYTES - 1], InfrastructureError::KeychainProtect).is_err());
     }
 }

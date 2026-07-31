@@ -108,7 +108,12 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
                     .as_ref()
                     .is_none_or(|needle| contains(&row.terminal_ip, needle))
             })
-            .filter(|row| query.channel.is_none_or(|channel| row.channel == channel))
+            .filter(|row| {
+                query
+                    .channel
+                    .as_ref()
+                    .is_none_or(|channel| &row.channel == channel)
+            })
             .filter(|row| query.stage.is_none_or(|stage| row.stage == stage))
             .filter(|row| {
                 result
@@ -235,7 +240,7 @@ fn compare(left: &CaptureRowViewModel, right: &CaptureRowViewModel, sort: Captur
 mod tests {
     use chrono::{TimeZone, Utc};
     use gmofg_proxy_application::{
-        CaptureSort, ChannelKind, MessageStage, PageRequest, SortDirection, UiTone,
+        CaptureSort, ChannelId, MessageStage, PageRequest, SortDirection, UiTone,
     };
     use uuid::Uuid;
 
@@ -258,12 +263,13 @@ mod tests {
                 .single()
                 .expect("timestamp"),
             terminal_ip: terminal.into(),
-            channel: ChannelKind::Transaction,
+            channel: ChannelId::new("alpha").unwrap(),
             channel_text: "交易".into(),
             stage: MessageStage::Request,
             stage_text: "请求".into(),
             method: "POST".into(),
             target: "/payment".into(),
+            http_status: None,
             result: "成功".into(),
             ui_tone: UiTone::Positive,
             duration_ms: Some(event_id),
@@ -284,7 +290,7 @@ mod tests {
         let query = CaptureQuery {
             keyword: Some("payment".into()),
             terminal_ip: Some("10.0.0".into()),
-            channel: Some(ChannelKind::Transaction),
+            channel: Some(ChannelId::new("alpha").unwrap()),
             stage: Some(MessageStage::Request),
             result: Some("成功".into()),
             rule_id: None,

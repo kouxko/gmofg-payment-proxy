@@ -3,29 +3,35 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use chrono::Utc;
 use gmofg_proxy_application::{
-    AppError, AppResult, ChannelKind as AppChannelKind, FieldValidationViewModel,
-    MessageStage as AppMessageStage, OperationResultViewModel, RuleAction as AppRuleAction,
-    RuleCondition as AppRuleCondition, RuleDraft as AppRuleDraft,
-    RuleDropResponseMode as AppRuleDropResponseMode, RuleId as AppRuleId,
-    RuleJitterScope as AppRuleJitterScope, RuleMatchField as AppRuleMatchField,
-    RuleMatchOperator as AppRuleMatchOperator, RuleRepositoryPort, RuleSummaryViewModel,
-    RuleTerminalAction as AppRuleTerminalAction, RuleTrafficDirection as AppRuleTrafficDirection,
-    RuleValidationViewModel, RuleViewModel, SessionId, SessionQueryPort, UiTone,
+    AppError, AppResult, FieldValidationViewModel, MessageStage as AppMessageStage,
+    OperationResultViewModel, RuleAction as AppRuleAction, RuleCondition as AppRuleCondition,
+    RuleDraft as AppRuleDraft, RuleDropResponseMode as AppRuleDropResponseMode,
+    RuleId as AppRuleId, RuleJitterScope as AppRuleJitterScope,
+    RuleMatchField as AppRuleMatchField, RuleMatchOperator as AppRuleMatchOperator,
+    RuleRepositoryPort, RuleSummaryViewModel, RuleTerminalAction as AppRuleTerminalAction,
+    RuleTrafficDirection as AppRuleTrafficDirection, RuleValidationViewModel, RuleViewModel,
+    SessionId, SessionQueryPort, UiTone,
 };
 use gmofg_proxy_domain::{
-    ChannelKind, DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator,
+    ChannelId, DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator,
     MessageStage, Revision, Rule, RuleAction, RuleDraft, RuleEngine, RuleId, RuleRuntimeSnapshot,
     RuleSetSignature, RuntimeEpoch, TerminalAction, TrafficDirection, validate_rule_draft,
 };
+use gmofg_proxy_product_api::ProductChannel;
 use parking_lot::Mutex;
+use serde_json::{Map, Value};
 
+use crate::files::RULE_IMPORT_MAX_BYTES;
 use crate::sqlite::RuleRuntimeUpdate;
-use crate::{AtomicFileExporter, RuleRecord, SqliteStore};
+use crate::{AtomicFileExporter, InfrastructureError, RuleRecord, SqliteStore};
 
 use super::{
-    common::{infra, json_error},
+    common::{app_error, infra, json_error},
     files::{NativeFileDialog, cancelled},
 };
+
+const PERSISTENCE_VERSION_FIELD: &str = "_persistence_version";
+const RULE_PERSISTENCE_VERSION: u64 = 1;
 
 #[derive(Debug)]
 pub struct RuleRepositoryAdapter {
@@ -34,6 +40,8 @@ pub struct RuleRepositoryAdapter {
     sessions: Arc<dyn SessionQueryPort>,
     exporter: AtomicFileExporter,
     operations: Mutex<()>,
+    channel_names: BTreeMap<ChannelId, String>,
+    legacy_terminal_body_fields: &'static [&'static str],
 }
 
 impl RuleRepositoryAdapter {
@@ -42,6 +50,8 @@ impl RuleRepositoryAdapter {
         store: Arc<SqliteStore>,
         dialog: Arc<dyn NativeFileDialog>,
         sessions: Arc<dyn SessionQueryPort>,
+        channels: &[ProductChannel],
+        legacy_terminal_body_fields: &'static [&'static str],
     ) -> Self {
         Self {
             store,
@@ -49,33 +59,54 @@ impl RuleRepositoryAdapter {
             sessions,
             exporter: AtomicFileExporter,
             operations: Mutex::new(()),
+            channel_names: channels
+                .iter()
+                .map(|channel| {
+                    (
+                        ChannelId::new(channel.id)
+                            .expect("product channel IDs are compile-time validated"),
+                        channel.display_name.to_owned(),
+                    )
+                })
+                .collect(),
+            legacy_terminal_body_fields,
         }
     }
 
     fn load(&self) -> AppResult<Vec<Rule>> {
         let snapshot = infra(self.store.load_rules_snapshot())?;
-        Self::parse_records(snapshot.records)
+        self.parse_records(snapshot.records)
     }
 
-    fn parse_records(records: Vec<RuleRecord>) -> AppResult<Vec<Rule>> {
+    fn parse_records(&self, records: Vec<RuleRecord>) -> AppResult<Vec<Rule>> {
         records
             .into_iter()
             .map(|record| {
-                let rule: Rule = serde_json::from_value(record.value)
-                    .map_err(|error| json_error("持久化规则无效", error))?;
-                validate_persisted_rule(&rule).map_err(AppError::from)?;
+                let rule =
+                    deserialize_persisted_rule(record.value, self.legacy_terminal_body_fields)
+                        .map_err(|error| persisted_rule_error(format!("规则结构无效：{error}")))?;
+                validate_persisted_rule(&rule)
+                    .map_err(|error| persisted_rule_error(format!("规则语义无效：{error}")))?;
                 Ok(rule)
             })
             .collect()
     }
 
     fn record(rule: &Rule) -> AppResult<RuleRecord> {
+        let mut value =
+            serde_json::to_value(rule).map_err(|error| json_error("规则序列化失败", error))?;
+        value
+            .as_object_mut()
+            .expect("Rule always serializes as an object")
+            .insert(
+                PERSISTENCE_VERSION_FIELD.into(),
+                Value::from(RULE_PERSISTENCE_VERSION),
+            );
         Ok(RuleRecord {
             id: rule.id.as_uuid(),
             revision: rule.revision.get(),
             enabled: rule.enabled,
-            value: serde_json::to_value(rule)
-                .map_err(|error| json_error("规则序列化失败", error))?,
+            value,
             updated_at: Utc::now(),
         })
     }
@@ -174,7 +205,7 @@ impl RuleRepositoryAdapter {
     pub fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
         let _operation = self.operations.lock();
         let snapshot = infra(self.store.load_rules_snapshot())?;
-        let rules = Self::parse_records(snapshot.records)?;
+        let rules = self.parse_records(snapshot.records)?;
         Ok(RuleRuntimeSnapshot::with_collection_revision(
             snapshot.revision,
             rules,
@@ -211,7 +242,7 @@ impl RuleRepositoryAdapter {
         let _operation = self.operations.lock();
         let stored = infra(self.store.load_rules_snapshot())?;
         let collection_revision = stored.revision;
-        let rules = Self::parse_records(stored.records)?;
+        let rules = self.parse_records(stored.records)?;
         let signature = RuleSetSignature::from_rules(&rules);
         let updates = rules
             .iter()
@@ -237,6 +268,112 @@ impl RuleRepositoryAdapter {
     }
 }
 
+fn persisted_rule_error(message: String) -> AppError {
+    app_error(InfrastructureError::PersistenceCorrupt {
+        entity: "rule",
+        message,
+    })
+}
+
+fn deserialize_persisted_rule(
+    mut value: Value,
+    legacy_terminal_body_fields: &[&str],
+) -> Result<Rule, String> {
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| "rule root must be an object".to_owned())?;
+    let version = take_rule_persistence_version(object)?;
+    let has_legacy_body = has_legacy_terminal_body(object, legacy_terminal_body_fields);
+
+    match (version, has_legacy_body) {
+        (Some(RULE_PERSISTENCE_VERSION) | None, false) => {}
+        (None, true) => {
+            migrate_legacy_terminal_bodies(object, legacy_terminal_body_fields)?;
+        }
+        (Some(version), _) => {
+            return Err(format!("unsupported rule persistence version {version}"));
+        }
+    }
+    serde_json::from_value(value).map_err(|error| error.to_string())
+}
+
+fn take_rule_persistence_version(object: &mut Map<String, Value>) -> Result<Option<u64>, String> {
+    object
+        .remove(PERSISTENCE_VERSION_FIELD)
+        .map(|value| {
+            value
+                .as_u64()
+                .ok_or_else(|| "rule persistence version must be an unsigned integer".to_owned())
+        })
+        .transpose()
+}
+
+fn has_legacy_terminal_body(rule: &Map<String, Value>, legacy_fields: &[&str]) -> bool {
+    terminal_action_objects(rule).any(|action| {
+        legacy_fields
+            .iter()
+            .any(|field| action.contains_key(*field))
+    })
+}
+
+fn migrate_legacy_terminal_bodies(
+    rule: &mut Map<String, Value>,
+    legacy_fields: &[&str],
+) -> Result<(), String> {
+    for action in terminal_action_objects_mut(rule) {
+        let mut legacy_body = None;
+        for field in legacy_fields {
+            let Some(value) = action.remove(*field) else {
+                continue;
+            };
+            if legacy_body.replace(value).is_some() {
+                return Err("terminal action contains multiple legacy body fields".into());
+            }
+        }
+        let Some(legacy_body) = legacy_body else {
+            continue;
+        };
+        if action.insert("body_bytes".into(), legacy_body).is_some() {
+            return Err("terminal action contains both legacy and current body fields".into());
+        }
+    }
+    Ok(())
+}
+
+fn terminal_action_objects(rule: &Map<String, Value>) -> impl Iterator<Item = &Map<String, Value>> {
+    rule.get("actions")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|action| action.get("Terminal"))
+        .filter_map(Value::as_object)
+        .filter_map(|terminal| {
+            terminal
+                .get("MockResponse")
+                .or_else(|| terminal.get("InvalidJson"))
+        })
+        .filter_map(Value::as_object)
+}
+
+fn terminal_action_objects_mut(
+    rule: &mut Map<String, Value>,
+) -> impl Iterator<Item = &mut Map<String, Value>> {
+    rule.get_mut("actions")
+        .and_then(Value::as_array_mut)
+        .into_iter()
+        .flatten()
+        .filter_map(|action| action.get_mut("Terminal"))
+        .filter_map(Value::as_object_mut)
+        .filter_map(|terminal| {
+            if terminal.contains_key("MockResponse") {
+                terminal.get_mut("MockResponse")
+            } else {
+                terminal.get_mut("InvalidJson")
+            }
+        })
+        .filter_map(Value::as_object_mut)
+}
+
 fn validate_persisted_rule(rule: &Rule) -> Result<(), gmofg_proxy_domain::DomainError> {
     validate_rule_draft(&RuleDraft {
         expected_revision: Some(rule.revision),
@@ -245,7 +382,7 @@ fn validate_persisted_rule(rule: &Rule) -> Result<(), gmofg_proxy_domain::Domain
         enabled: rule.enabled,
         priority: rule.priority,
         created_order: rule.created_order,
-        channel: rule.channel,
+        channel: rule.channel.clone(),
         stage: rule.stage,
         conditions: rule.conditions.clone(),
         actions: rule.actions.clone(),
@@ -256,11 +393,16 @@ fn validate_persisted_rule(rule: &Rule) -> Result<(), gmofg_proxy_domain::Domain
 #[async_trait]
 impl RuleRepositoryPort for RuleRepositoryAdapter {
     async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>> {
-        self.load()?.iter().map(summary).collect()
+        self.load().and_then(|rules| {
+            rules
+                .iter()
+                .map(|rule| summary(rule, &self.channel_names))
+                .collect()
+        })
     }
 
     async fn get(&self, rule_id: AppRuleId) -> AppResult<RuleViewModel> {
-        view(&self.get_domain(rule_id)?)
+        view(&self.get_domain(rule_id)?, &self.channel_names)
     }
 
     async fn new_draft(&self) -> AppResult<AppRuleDraft> {
@@ -339,7 +481,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
 
     async fn save(&self, draft: AppRuleDraft) -> AppResult<RuleViewModel> {
         let _operation = self.operations.lock();
-        view(&self.save_locked(&draft)?)
+        view(&self.save_locked(&draft)?, &self.channel_names)
     }
 
     async fn copy(&self, rule_id: AppRuleId) -> AppResult<RuleViewModel> {
@@ -355,7 +497,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         draft.rule_id = None;
         draft.expected_revision = None;
         draft.name = format!("{}（副本）", draft.name);
-        view(&self.save_locked(&draft)?)
+        view(&self.save_locked(&draft)?, &self.channel_names)
     }
 
     async fn delete(
@@ -382,7 +524,10 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         expected_revision: u64,
         enabled: bool,
     ) -> AppResult<RuleViewModel> {
-        view(&self.toggle_domain(rule_id, expected_revision, enabled)?)
+        view(
+            &self.toggle_domain(rule_id, expected_revision, enabled)?,
+            &self.channel_names,
+        )
     }
 
     async fn import(&self) -> AppResult<OperationResultViewModel> {
@@ -390,8 +535,13 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         let Some(path) = self.dialog.choose_open_file("rules_json")? else {
             return Ok(cancelled("已取消规则导入。"));
         };
-        let bytes = infra(self.exporter.read(&path))?;
-        let rules: Vec<Rule> = serde_json::from_slice(&bytes)
+        let bytes = infra(self.exporter.read_bounded(&path, RULE_IMPORT_MAX_BYTES))?;
+        let values: Vec<Value> = serde_json::from_slice(&bytes)
+            .map_err(|error| json_error("规则导入文件无效", error))?;
+        let rules = values
+            .into_iter()
+            .map(|value| deserialize_persisted_rule(value, self.legacy_terminal_body_fields))
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|error| json_error("规则导入文件无效", error))?;
         for rule in &rules {
             validate_persisted_rule(rule).map_err(AppError::from)?;
@@ -527,10 +677,7 @@ fn to_domain_draft(
         enabled: draft.enabled,
         priority,
         created_order: creation_order,
-        channel: draft.channel.map(|channel| match channel {
-            AppChannelKind::Transaction => ChannelKind::Transaction,
-            AppChannelKind::Dll => ChannelKind::Dll,
-        }),
+        channel: draft.channel.clone(),
         stage,
         conditions,
         actions,
@@ -547,10 +694,7 @@ fn app_draft(rule: &Rule) -> AppResult<AppRuleDraft> {
         enabled: rule.enabled,
         priority: i32::try_from(rule.priority)
             .map_err(|error| json_error("规则优先级超出 UI 范围", error))?,
-        channel: rule.channel.map(|channel| match channel {
-            ChannelKind::Transaction => AppChannelKind::Transaction,
-            ChannelKind::Dll => AppChannelKind::Dll,
-        }),
+        channel: rule.channel.clone(),
         stage: Some(match rule.stage {
             MessageStage::Request => AppMessageStage::Request,
             MessageStage::Response => AppMessageStage::Response,
@@ -699,14 +843,14 @@ fn terminal_action_to_domain(action: &AppRuleTerminalAction) -> TerminalAction {
         AppRuleTerminalAction::MockResponse {
             status,
             headers,
-            shift_jis_body,
+            body_bytes,
         } => TerminalAction::MockResponse {
             status: *status,
             headers: headers.clone(),
-            shift_jis_body: shift_jis_body.clone(),
+            body_bytes: body_bytes.clone(),
         },
-        AppRuleTerminalAction::InvalidJson { shift_jis_body } => TerminalAction::InvalidJson {
-            shift_jis_body: shift_jis_body.clone(),
+        AppRuleTerminalAction::InvalidJson { body_bytes } => TerminalAction::InvalidJson {
+            body_bytes: body_bytes.clone(),
         },
         AppRuleTerminalAction::IncorrectContentLength { delta } => {
             TerminalAction::IncorrectContentLength { delta: *delta }
@@ -815,14 +959,14 @@ fn terminal_action_to_app(action: &TerminalAction) -> AppRuleTerminalAction {
         TerminalAction::MockResponse {
             status,
             headers,
-            shift_jis_body,
+            body_bytes,
         } => AppRuleTerminalAction::MockResponse {
             status: *status,
             headers: headers.clone(),
-            shift_jis_body: shift_jis_body.clone(),
+            body_bytes: body_bytes.clone(),
         },
-        TerminalAction::InvalidJson { shift_jis_body } => AppRuleTerminalAction::InvalidJson {
-            shift_jis_body: shift_jis_body.clone(),
+        TerminalAction::InvalidJson { body_bytes } => AppRuleTerminalAction::InvalidJson {
+            body_bytes: body_bytes.clone(),
         },
         TerminalAction::IncorrectContentLength { delta } => {
             AppRuleTerminalAction::IncorrectContentLength { delta: *delta }
@@ -857,7 +1001,10 @@ const fn traffic_direction_to_app(direction: TrafficDirection) -> AppRuleTraffic
     }
 }
 
-fn summary(rule: &Rule) -> AppResult<RuleSummaryViewModel> {
+fn summary(
+    rule: &Rule,
+    channel_names: &BTreeMap<ChannelId, String>,
+) -> AppResult<RuleSummaryViewModel> {
     Ok(RuleSummaryViewModel {
         rule_id: rule.id.as_uuid(),
         revision: rule.revision.get(),
@@ -866,10 +1013,15 @@ fn summary(rule: &Rule) -> AppResult<RuleSummaryViewModel> {
         priority: i32::try_from(rule.priority)
             .map_err(|error| json_error("规则优先级超出 UI 范围", error))?,
         creation_order: rule.created_order,
-        channel_text: rule.channel.map_or("全部".into(), |channel| match channel {
-            ChannelKind::Transaction => "交易".into(),
-            ChannelKind::Dll => "DLL".into(),
-        }),
+        channel_text: rule.channel.as_ref().map_or_else(
+            || "全部".into(),
+            |channel| {
+                channel_names
+                    .get(channel)
+                    .cloned()
+                    .unwrap_or_else(|| channel.to_string())
+            },
+        ),
         stage_text: match rule.stage {
             MessageStage::Request => "请求".into(),
             MessageStage::Response => "响应".into(),
@@ -887,9 +1039,9 @@ fn summary(rule: &Rule) -> AppResult<RuleSummaryViewModel> {
     })
 }
 
-fn view(rule: &Rule) -> AppResult<RuleViewModel> {
+fn view(rule: &Rule, channel_names: &BTreeMap<ChannelId, String>) -> AppResult<RuleViewModel> {
     Ok(RuleViewModel {
-        summary: summary(rule)?,
+        summary: summary(rule, channel_names)?,
         draft: app_draft(rule)?,
     })
 }
@@ -912,6 +1064,7 @@ mod tests {
 
     use chrono::TimeZone;
     use gmofg_proxy_domain::{MatchContext, TerminalIdentity};
+    use rusqlite::params;
 
     use super::*;
     use crate::adapters::{FileSelection, NativeFileDialog};
@@ -922,6 +1075,21 @@ mod tests {
     impl NativeFileDialog for NoDialog {
         fn choose_open_file(&self, _: &str) -> AppResult<Option<PathBuf>> {
             Ok(None)
+        }
+
+        fn choose_save_file(&self, _: &str) -> AppResult<Option<FileSelection>> {
+            Ok(None)
+        }
+    }
+
+    #[derive(Debug)]
+    struct StaticOpenDialog {
+        path: PathBuf,
+    }
+
+    impl NativeFileDialog for StaticOpenDialog {
+        fn choose_open_file(&self, _: &str) -> AppResult<Option<PathBuf>> {
+            Ok(Some(self.path.clone()))
         }
 
         fn choose_save_file(&self, _: &str) -> AppResult<Option<FileSelection>> {
@@ -955,7 +1123,7 @@ mod tests {
             description: String::new(),
             enabled: true,
             priority: 10,
-            channel: Some(AppChannelKind::Transaction),
+            channel: Some(ChannelId::new("alpha").unwrap()),
             stage: Some(AppMessageStage::Request),
             conditions: Vec::new(),
             actions: vec![AppRuleAction::Delay { milliseconds: 10 }],
@@ -968,7 +1136,50 @@ mod tests {
             Arc::new(SqliteStore::in_memory().expect("store")),
             Arc::new(NoDialog),
             Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            &[],
+            &[],
         ))
+    }
+
+    fn legacy_rule_json(rule_id: uuid::Uuid, terminal_action: &Value) -> Value {
+        serde_json::json!({
+            "id": rule_id,
+            "revision": 3,
+            "name": "legacy Shift-JIS rule",
+            "description": "persisted by the pre-generic Payment proxy",
+            "enabled": true,
+            "priority": 10,
+            "created_order": 1,
+            "channel": null,
+            "stage": "Request",
+            "conditions": [],
+            "actions": [{"Terminal": terminal_action}],
+            "one_shot": false,
+            "hit_count": 0,
+            "last_hit_at": null
+        })
+    }
+
+    fn create_legacy_rule_database(path: &std::path::Path, id: uuid::Uuid, rule: &Value) {
+        let connection = rusqlite::Connection::open(path).expect("legacy database");
+        connection
+            .execute_batch(
+                "CREATE TABLE rules (
+                    id TEXT PRIMARY KEY,
+                    revision INTEGER NOT NULL,
+                    enabled INTEGER NOT NULL,
+                    json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );",
+            )
+            .expect("legacy rule schema");
+        connection
+            .execute(
+                "INSERT INTO rules(id, revision, enabled, json, updated_at)
+                 VALUES (?1, 3, 1, ?2, ?3)",
+                params![id.to_string(), rule.to_string(), Utc::now().to_rfc3339()],
+            )
+            .expect("legacy rule row");
     }
 
     #[test]
@@ -996,7 +1207,7 @@ mod tests {
             RuleAction::Terminal(TerminalAction::MockResponse {
                 status: 200,
                 headers: vec![("content-type".into(), "application/json".into())],
-                shift_jis_body: vec![0x82, 0xa0],
+                body_bytes: vec![0x82, 0xa0],
             }),
         ];
 
@@ -1111,6 +1322,8 @@ mod tests {
                     .expect("concurrent record"),
             }),
             Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            &[],
+            &[],
         );
 
         let error = adapter.import().await.expect_err("stale import");
@@ -1130,6 +1343,171 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn rule_import_rejects_files_over_the_rule_specific_limit() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let import = directory.path().join("oversized-rules.json");
+        std::fs::File::create(&import)
+            .expect("create import")
+            .set_len(RULE_IMPORT_MAX_BYTES + 1)
+            .expect("size import");
+        let adapter = RuleRepositoryAdapter::new(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(StaticOpenDialog { path: import }),
+            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            &[],
+            &[],
+        );
+
+        let error = adapter.import().await.expect_err("oversized import");
+        assert_eq!(error.view_model.code, "IMPORT_TOO_LARGE");
+    }
+
+    #[tokio::test]
+    async fn malformed_persisted_rule_maps_to_persistence_corrupt() {
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        store
+            .insert_rule(&RuleRecord {
+                id: uuid::Uuid::new_v4(),
+                revision: 1,
+                enabled: true,
+                value: serde_json::json!({"not": "a rule"}),
+                updated_at: Utc::now(),
+            })
+            .expect("seed malformed rule");
+        let adapter = RuleRepositoryAdapter::new(
+            store,
+            Arc::new(NoDialog),
+            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            &[],
+            &[],
+        );
+
+        let error = adapter.list().await.expect_err("corrupt rule");
+        assert_eq!(error.view_model.code, "PERSISTENCE_CORRUPT");
+        assert_ne!(error.view_model.code, "CERTIFICATE_INVALID");
+    }
+
+    #[tokio::test]
+    async fn real_legacy_rule_sqlite_migrates_shift_jis_body_and_preserves_cas_revision() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let database = directory.path().join("legacy-rules.sqlite3");
+        let id = uuid::Uuid::new_v4();
+        create_legacy_rule_database(
+            &database,
+            id,
+            &legacy_rule_json(
+                id,
+                &serde_json::json!({
+                    "MockResponse": {
+                        "status": 200,
+                        "headers": [["content-type", "application/json"]],
+                        "shift_jis_body": [130, 160]
+                    }
+                }),
+            ),
+        );
+        let store = Arc::new(SqliteStore::open(&database).expect("open legacy database"));
+        let adapter = RuleRepositoryAdapter::new(
+            Arc::clone(&store),
+            Arc::new(NoDialog),
+            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            &[],
+            &["shift_jis_body"],
+        );
+
+        let loaded = adapter.get(id).await.expect("load migrated legacy rule");
+        assert_eq!(loaded.summary.revision, 3);
+        assert!(matches!(
+            loaded.draft.actions.as_slice(),
+            [AppRuleAction::Terminal {
+                action: AppRuleTerminalAction::MockResponse { body_bytes, .. }
+            }] if body_bytes == &[0x82, 0xa0]
+        ));
+
+        let mut update = loaded.draft.clone();
+        update.name = "migrated".into();
+        let saved = adapter.save(update).await.expect("save migrated rule");
+        assert_eq!(saved.summary.revision, 4);
+        let persisted = store
+            .list_rules()
+            .expect("persisted rules")
+            .into_iter()
+            .next()
+            .expect("persisted rule");
+        assert_eq!(
+            persisted
+                .value
+                .get(PERSISTENCE_VERSION_FIELD)
+                .and_then(Value::as_u64),
+            Some(RULE_PERSISTENCE_VERSION)
+        );
+        assert!(!persisted.value.to_string().contains("shift_jis_body"));
+
+        let stale = adapter
+            .save(loaded.draft)
+            .await
+            .expect_err("legacy revision must still participate in CAS");
+        assert_eq!(stale.view_model.code, "REVISION_CONFLICT");
+    }
+
+    #[tokio::test]
+    async fn legacy_rule_json_import_migrates_shift_jis_body() {
+        let directory = tempfile::tempdir().expect("temp directory");
+        let import = directory.path().join("legacy-rules.json");
+        let id = uuid::Uuid::new_v4();
+        let legacy = legacy_rule_json(
+            id,
+            &serde_json::json!({
+                "MockResponse": {
+                    "status": 200,
+                    "headers": [],
+                    "shift_jis_body": [123, 125]
+                }
+            }),
+        );
+        std::fs::write(
+            &import,
+            serde_json::to_vec_pretty(&vec![legacy]).expect("legacy JSON"),
+        )
+        .expect("write legacy JSON");
+        let adapter = RuleRepositoryAdapter::new(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(StaticOpenDialog { path: import }),
+            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            &[],
+            &["shift_jis_body"],
+        );
+
+        let result = adapter.import().await.expect("import legacy JSON");
+        assert!(result.success);
+        let loaded = adapter.get(id).await.expect("imported legacy rule");
+        assert!(matches!(
+            loaded.draft.actions.as_slice(),
+            [AppRuleAction::Terminal {
+                action: AppRuleTerminalAction::MockResponse { body_bytes, .. }
+            }] if body_bytes == b"{}"
+        ));
+    }
+
+    #[test]
+    fn legacy_invalid_json_terminal_body_has_an_explicit_v0_compatibility_path() {
+        let id = uuid::Uuid::new_v4();
+        let rule = deserialize_persisted_rule(
+            legacy_rule_json(
+                id,
+                &serde_json::json!({"InvalidJson": {"shift_jis_body": [123]}}),
+            ),
+            &["shift_jis_body"],
+        )
+        .expect("migrate legacy InvalidJson body");
+        assert!(matches!(
+            rule.actions.as_slice(),
+            [RuleAction::Terminal(TerminalAction::InvalidJson { body_bytes })]
+                if body_bytes == b"{"
+        ));
+    }
+
+    #[tokio::test]
     async fn runtime_commit_is_full_signature_cas_and_reset_preserves_enabled() {
         let adapter = adapter();
         let created = adapter
@@ -1146,7 +1524,7 @@ mod tests {
         engine.evaluate(
             &MatchContext {
                 runtime_epoch: epoch,
-                channel: ChannelKind::Transaction,
+                channel: ChannelId::new("alpha").unwrap(),
                 stage: MessageStage::Request,
                 terminal: &terminal,
                 path_or_request_type: None,

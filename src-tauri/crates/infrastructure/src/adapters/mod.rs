@@ -15,6 +15,6 @@ pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;
 pub use faults::FaultServiceAdapter;
 pub use files::{FileExportAdapter, FileSelection, NativeFileDialog};
-pub use pipeline::{RuntimePipelineAdapter, RuntimeRuleRepository};
+pub use pipeline::{RuntimePipelineAdapter, RuntimePipelineProductHooks, RuntimeRuleRepository};
 pub use rules::RuleRepositoryAdapter;
 pub use settings::SettingsRepositoryAdapter;

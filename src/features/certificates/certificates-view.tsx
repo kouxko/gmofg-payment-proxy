@@ -172,9 +172,8 @@ export function CertificatesView() {
         <Alert.Content>
           <Alert.Title>统一测试 Root CA 仅限隔离测试环境</Alert.Title>
           <Alert.Description>
-            当前简化测试模式随安装包提供统一签发能力，凭据可能被提取；不得用于生产、
-            预生产或真实商户信任体系。Root CA 首次集成与轮换由受控的测试 Payment
-            构建/发布流程完成。
+            当前简化测试模式随安装包提供统一签发能力，凭据可能被提取；不得用于生产、预生产或真实商户信任体系。Root
+            CA 首次集成与轮换由受控的测试客户端构建/发布流程完成。
           </Alert.Description>
         </Alert.Content>
       </Alert>
@@ -277,7 +276,7 @@ export function CertificatesView() {
                 <ArrowDownToLine className="size-4" />
                 {pendingAction === "export"
                   ? "正在导出…"
-                  : "导出测试 Payment 编译用 Root CA"}
+                  : "导出测试客户端编译用 Root CA"}
               </Button>
               <Button
                 variant="outline"
@@ -307,13 +306,13 @@ export function CertificatesView() {
 
         <Card>
           <Card.Header>
-            <Card.Title>B. Proxy → GMO-FG Server 客户端身份</Card.Title>
+            <Card.Title>B. Proxy → 上游服务器客户端身份</Card.Title>
           </Card.Header>
           <Card.Content className="space-y-4">
             <p className="text-sm text-[var(--telemetry-muted)]">
-              导入 Launcher 原有客户端 P12 作为上游客户端身份。Payment 原始
-              server.crt 已内置并默认作为 GMO-FG Server 信任锚；环境证书变化时
-              可以选择文件替换。上游信任与下游 Proxy 测试 CA 无关。
+              导入产品原有客户端 P12 作为上游客户端身份。产品原始上游 CA
+              已内置并默认作为上游服务器信任锚；环境证书变化时可以选择文件替换。
+              上游信任与下游 Proxy 测试 CA 无关。
             </p>
             <div className="flex flex-wrap gap-3">
               <Modal
@@ -479,10 +478,10 @@ export function CertificatesView() {
           </Card.Header>
           <Card.Content className="space-y-3 text-sm">
             {[
-              "Payment (App) → Proxy（服务端证书）：测试版 Payment 在构建时已内置统一测试 Root CA。",
-              "Proxy（服务端）→ Payment（客户端证书）：Proxy 验证终端客户端证书。",
-              "GMO-FG Server → Proxy（共享客户端证书）：Server 验证 Proxy 身份。",
-              "Proxy（客户端）→ GMO-FG Server：Proxy 使用上游 CA 验证 Server。",
+              "客户端应用 → Proxy（服务端证书）：测试版客户端在构建时已内置统一测试 Root CA。",
+              "Proxy（服务端）→ 客户端应用（客户端证书）：Proxy 验证终端客户端证书。",
+              "上游服务器 → Proxy（共享客户端证书）：上游验证 Proxy 身份。",
+              "Proxy（客户端）→ 上游服务器：Proxy 使用上游 CA 验证服务器。",
             ].map((text, index) => (
               <div key={text} className="flex gap-3">
                 <Chip size="sm" variant="soft">
@@ -502,7 +501,7 @@ export function CertificatesView() {
         <Alert.Content>
           <Alert.Title>重新初始化本机服务端证书（危险操作）</Alert.Title>
           <Alert.Description>
-            将使用同一统一测试 Root CA 重新生成本机私钥和叶子证书；Payment
+            将使用同一统一测试 Root CA 重新生成本机私钥和叶子证书；测试客户端
             无需重新导入证书。仅 Proxy 已停止时可执行。
           </Alert.Description>
         </Alert.Content>
@@ -528,7 +527,7 @@ export function CertificatesView() {
                 </AlertDialog.Header>
                 <AlertDialog.Body>
                   本机服务端私钥和叶子证书将被替换；统一测试 Root CA
-                  保持不变，Payment 无需重新编译或导入。
+                  保持不变，测试客户端无需重新编译或导入。
                 </AlertDialog.Body>
                 <AlertDialog.Footer>
                   <Button

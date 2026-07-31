@@ -390,26 +390,17 @@ impl SqliteStore {
                 .map_err(|source| InfrastructureError::Database { source })?
                 .ok_or(InfrastructureError::RevisionConflict)
                 .and_then(|json| {
-                    serde_json::from_str::<Value>(&json).map_err(|error| {
-                        InfrastructureError::CertificateInvalid {
-                            message: format!("持久化规则 JSON 无效：{error}"),
-                        }
-                    })
+                    serde_json::from_str::<Value>(&json)
+                        .map_err(|error| rule_record_corrupt(format!("JSON 无效：{error}")))
                 })?;
-            let object =
-                value
-                    .as_object_mut()
-                    .ok_or_else(|| InfrastructureError::CertificateInvalid {
-                        message: "持久化规则 JSON 必须是对象".into(),
-                    })?;
+            let object = value
+                .as_object_mut()
+                .ok_or_else(|| rule_record_corrupt("JSON 必须是对象"))?;
             object.insert("hit_count".into(), Value::from(update.hit_count));
             object.insert(
                 "last_hit_at".into(),
-                serde_json::to_value(update.last_hit_at).map_err(|error| {
-                    InfrastructureError::CertificateInvalid {
-                        message: format!("规则命中时间序列化失败：{error}"),
-                    }
-                })?,
+                serde_json::to_value(update.last_hit_at)
+                    .map_err(|error| rule_record_corrupt(format!("命中时间序列化失败：{error}")))?,
             );
             if update.revision != update.expected_revision {
                 object.insert("revision".into(), Value::from(update.revision));
@@ -632,10 +623,9 @@ fn rule_signature(transaction: &Transaction<'_>) -> Result<Vec<(Uuid, u64)>, Inf
         .map(|row| {
             let (id, revision) = row.map_err(|source| InfrastructureError::Database { source })?;
             Ok((
-                Uuid::parse_str(&id).map_err(|error| InfrastructureError::CertificateInvalid {
-                    message: format!("持久化规则 ID 无效：{error}"),
-                })?,
-                revision_from_i64(revision)?,
+                Uuid::parse_str(&id)
+                    .map_err(|error| rule_record_corrupt(format!("ID 无效：{error}")))?,
+                rule_revision_from_i64(revision)?,
             ))
         })
         .collect()
@@ -663,20 +653,14 @@ fn load_rule_records(connection: &Connection) -> Result<Vec<RuleRecord>, Infrast
         let (id, revision, enabled, json, updated_at) =
             row.map_err(|source| InfrastructureError::Database { source })?;
         Ok(RuleRecord {
-            id: Uuid::parse_str(&id).map_err(|error| InfrastructureError::CertificateInvalid {
-                message: format!("持久化规则 ID 无效：{error}"),
-            })?,
-            revision: revision_from_i64(revision)?,
+            id: Uuid::parse_str(&id)
+                .map_err(|error| rule_record_corrupt(format!("ID 无效：{error}")))?,
+            revision: rule_revision_from_i64(revision)?,
             enabled,
-            value: serde_json::from_str(&json).map_err(|error| {
-                InfrastructureError::CertificateInvalid {
-                    message: format!("持久化规则 JSON 无效：{error}"),
-                }
-            })?,
+            value: serde_json::from_str(&json)
+                .map_err(|error| rule_record_corrupt(format!("JSON 无效：{error}")))?,
             updated_at: DateTime::parse_from_rfc3339(&updated_at)
-                .map_err(|error| InfrastructureError::CertificateInvalid {
-                    message: format!("持久化规则时间无效：{error}"),
-                })?
+                .map_err(|error| rule_record_corrupt(format!("时间无效：{error}")))?
                 .with_timezone(&Utc),
         })
     })
@@ -719,16 +703,12 @@ fn parse_settings_row(
     (revision, json, updated_at): (i64, String, String),
 ) -> Result<StoredSettings, InfrastructureError> {
     Ok(StoredSettings {
-        revision: revision_from_i64(revision)?,
-        value: serde_json::from_str(&json).map_err(|error| {
-            InfrastructureError::CertificateInvalid {
-                message: format!("持久化设置 JSON 无效：{error}"),
-            }
-        })?,
+        revision: u64::try_from(revision)
+            .map_err(|_| settings_record_corrupt("revision 不能为负数"))?,
+        value: serde_json::from_str(&json)
+            .map_err(|error| settings_record_corrupt(format!("JSON 无效：{error}")))?,
         updated_at: DateTime::parse_from_rfc3339(&updated_at)
-            .map_err(|error| InfrastructureError::CertificateInvalid {
-                message: format!("持久化设置时间无效：{error}"),
-            })?
+            .map_err(|error| settings_record_corrupt(format!("时间无效：{error}")))?
             .with_timezone(&Utc),
     })
 }
@@ -739,6 +719,24 @@ fn revision_to_i64(revision: u64) -> Result<i64, InfrastructureError> {
 
 fn revision_from_i64(revision: i64) -> Result<u64, InfrastructureError> {
     u64::try_from(revision).map_err(|_| InfrastructureError::RevisionConflict)
+}
+
+fn rule_revision_from_i64(revision: i64) -> Result<u64, InfrastructureError> {
+    u64::try_from(revision).map_err(|_| rule_record_corrupt("revision 不能为负数"))
+}
+
+fn rule_record_corrupt(message: impl Into<String>) -> InfrastructureError {
+    InfrastructureError::PersistenceCorrupt {
+        entity: "rule",
+        message: message.into(),
+    }
+}
+
+fn settings_record_corrupt(message: impl Into<String>) -> InfrastructureError {
+    InfrastructureError::PersistenceCorrupt {
+        entity: "settings",
+        message: message.into(),
+    }
 }
 
 #[cfg(test)]
@@ -787,6 +785,79 @@ mod tests {
             store.load_settings().expect("load").expect("value").value,
             json!({"port": 16627})
         );
+    }
+
+    #[test]
+    fn corrupt_settings_revision_json_and_time_use_persistence_error_classification() {
+        for (column, value) in [
+            ("revision", "-1"),
+            ("json", "{not-json"),
+            ("updated_at", "not-a-time"),
+        ] {
+            let store = SqliteStore::in_memory().expect("store");
+            store
+                .save_settings(0, &json!({"channel": "alpha"}))
+                .expect("seed settings");
+            let sql = format!("UPDATE settings SET {column} = ?1 WHERE singleton_id = 1");
+            store
+                .connection
+                .lock()
+                .execute(&sql, [value])
+                .expect("corrupt settings");
+
+            let error = store
+                .load_settings()
+                .expect_err("corrupt settings must fail");
+            assert_eq!(
+                error.code(),
+                crate::InfrastructureErrorCode::PersistenceCorrupt,
+                "wrong classification for {column}"
+            );
+            assert!(!matches!(
+                error,
+                InfrastructureError::CertificateInvalid { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn corrupt_rule_id_json_and_time_use_persistence_error_classification() {
+        for (column, value) in [
+            ("id", "not-a-uuid"),
+            ("json", "{not-json"),
+            ("updated_at", "not-a-time"),
+        ] {
+            let store = SqliteStore::in_memory().expect("store");
+            let id = Uuid::new_v4().to_string();
+            let json = json!({"name": "rule"}).to_string();
+            let updated_at = Utc::now().to_rfc3339();
+            let (id, json, updated_at) = match column {
+                "id" => (value.to_owned(), json, updated_at),
+                "json" => (id, value.to_owned(), updated_at),
+                "updated_at" => (id, json, value.to_owned()),
+                _ => unreachable!(),
+            };
+            store
+                .connection
+                .lock()
+                .execute(
+                    "INSERT INTO rules(id, revision, enabled, json, updated_at)
+                     VALUES (?1, 1, 1, ?2, ?3)",
+                    params![id, json, updated_at],
+                )
+                .expect("insert corrupt rule");
+
+            let error = store.list_rules().expect_err("corrupt rule must fail");
+            assert_eq!(
+                error.code(),
+                crate::InfrastructureErrorCode::PersistenceCorrupt,
+                "wrong classification for {column}"
+            );
+            assert!(!matches!(
+                error,
+                InfrastructureError::CertificateInvalid { .. }
+            ));
+        }
     }
 
     #[test]

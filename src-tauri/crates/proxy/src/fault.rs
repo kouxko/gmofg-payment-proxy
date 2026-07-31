@@ -6,7 +6,6 @@ use bytes::Bytes;
 use http::{HeaderMap, StatusCode};
 use tokio_util::sync::CancellationToken;
 
-use crate::codec;
 use crate::message::Message;
 use crate::traffic::{
     IntermittentProfile, JitterProfile, JitterScope, ThrottleProfile, TrafficDirection,
@@ -27,10 +26,10 @@ pub enum FaultAction {
     MockResponse {
         status: StatusCode,
         headers: HeaderMap,
-        shift_jis_body: String,
+        body: Bytes,
     },
-    InvalidJson {
-        shift_jis_text: String,
+    ReplaceBody {
+        body: Bytes,
     },
     ContentLengthOffset(i64),
     TruncateResponse(usize),
@@ -82,16 +81,11 @@ pub async fn cancellable_delay(duration: Duration, cancellation: &CancellationTo
     }
 }
 
-pub fn mock_response(
-    status: StatusCode,
-    headers: &HeaderMap,
-    shift_jis_body: &str,
-) -> Result<Message> {
-    let body = Bytes::from(codec::encode_strict(shift_jis_body)?);
+pub fn mock_response(status: StatusCode, headers: &HeaderMap, body: Bytes) -> Message {
     let mut message = Message::response(status, headers, body);
     message.body_modified = true;
     message.set_content_length(message.body.len());
-    Ok(message)
+    message
 }
 
 /// Applies response-stage wire faults in order.
@@ -105,10 +99,8 @@ pub async fn apply_response_actions(
         match action {
             FaultAction::Delay(duration) => cancellable_delay(*duration, cancellation).await?,
             FaultAction::DropResponse { .. } => return Ok(ResponseDisposition::Drop),
-            FaultAction::InvalidJson { shift_jis_text } => {
-                message.body = Bytes::from(codec::encode_strict(shift_jis_text)?);
-                message.body_modified = true;
-                message.set_content_length(message.body.len());
+            FaultAction::ReplaceBody { body } => {
+                message.replace_body(body.clone());
             }
             FaultAction::ContentLengthOffset(offset) => {
                 let actual = i64::try_from(message.body.len()).unwrap_or(i64::MAX);
@@ -184,9 +176,9 @@ pub async fn apply_response_actions(
             FaultAction::MockResponse {
                 status,
                 headers,
-                shift_jis_body,
+                body,
             } => {
-                message = mock_response(*status, headers, shift_jis_body)?;
+                message = mock_response(*status, headers, body.clone());
             }
             FaultAction::RejectTls
             | FaultAction::DisconnectBeforeUpstream
@@ -220,12 +212,13 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn invalid_json_is_encodable_and_length_is_rebuilt() {
+    async fn arbitrary_replacement_body_rebuilds_length_without_decoding() {
         let source = Message::response(StatusCode::OK, &HeaderMap::new(), Bytes::new());
+        let replacement = Bytes::from_static(&[0x00, 0x80, 0xff]);
         let result = apply_response_actions(
             source,
-            &[FaultAction::InvalidJson {
-                shift_jis_text: "{broken".into(),
+            &[FaultAction::ReplaceBody {
+                body: replacement.clone(),
             }],
             &CancellationToken::new(),
         )
@@ -234,8 +227,8 @@ mod tests {
         let ResponseDisposition::Send { message, .. } = result else {
             panic!("expected response");
         };
-        assert_eq!(message.declared_content_length(), Some(7));
-        assert_eq!(message.decoded_shift_jis().unwrap(), "{broken");
+        assert_eq!(message.declared_content_length(), Some(3));
+        assert_eq!(message.body, replacement);
     }
 
     #[tokio::test]
@@ -265,8 +258,8 @@ mod tests {
         let result = apply_response_actions(
             source,
             &[
-                FaultAction::InvalidJson {
-                    shift_jis_text: "{".into(),
+                FaultAction::ReplaceBody {
+                    body: Bytes::from_static(b"{"),
                 },
                 FaultAction::CustomStatus(StatusCode::SERVICE_UNAVAILABLE),
                 FaultAction::ContentLengthOffset(5),
@@ -279,7 +272,7 @@ mod tests {
             panic!("expected response to be sent");
         };
         assert_eq!(message.start_line, "HTTP/1.1 503 Service Unavailable");
-        assert_eq!(message.decoded_shift_jis().expect("Shift-JIS"), "{");
+        assert_eq!(message.body, Bytes::from_static(b"{"));
         assert_eq!(message.body.len(), 1);
         assert_eq!(message.declared_content_length(), Some(6));
     }
@@ -299,8 +292,8 @@ mod tests {
                 FaultAction::DropResponse {
                     read_upstream: true,
                 },
-                FaultAction::InvalidJson {
-                    shift_jis_text: "{later".into(),
+                FaultAction::ReplaceBody {
+                    body: Bytes::from_static(b"{later"),
                 },
             ],
             &CancellationToken::new(),

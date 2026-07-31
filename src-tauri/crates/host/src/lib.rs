@@ -6,6 +6,7 @@
 //! and network assembly stays here.
 
 use std::{
+    collections::BTreeMap,
     io,
     path::{Path, PathBuf},
     sync::{
@@ -24,7 +25,10 @@ use gmofg_proxy_infrastructure::DpapiProtector;
 use gmofg_proxy_infrastructure::MacKeychainProtector;
 use gmofg_proxy_infrastructure::{
     ApplicationProxyAdapter, InfrastructureError, InfrastructureServiceBundle, NativeFileDialog,
-    RuntimePipelineAdapter, SecretProtector, SqliteStore,
+    RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector, SqliteStore,
+};
+use gmofg_proxy_product_api::{
+    ProductError, ProductProfile, ProductStorageNamespace, validate_product_profile,
 };
 use gmofg_proxy_runtime::{
     ProxySupervisor, RustlsRuntimeServiceFactory, SystemClock, TokioListenerBinder,
@@ -34,10 +38,10 @@ use thiserror::Error;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-const DATABASE_FILE_NAME: &str = "gmofg-payment-proxy.sqlite3";
-
 #[derive(Debug, Error)]
 pub enum HostBuildError {
+    #[error(transparent)]
+    InvalidProductProfile(#[from] ProductError),
     #[error("无法创建应用数据目录 {path}: {source}")]
     CreateDataDirectory {
         path: PathBuf,
@@ -82,8 +86,11 @@ impl HostPlatformServices {
     }
 
     #[must_use]
-    pub fn production(file_dialog: Arc<dyn NativeFileDialog>) -> Self {
-        Self::new(platform_secret_protector(), file_dialog)
+    pub fn production(
+        file_dialog: Arc<dyn NativeFileDialog>,
+        storage: ProductStorageNamespace,
+    ) -> Self {
+        Self::new(platform_secret_protector(storage), file_dialog)
     }
 }
 
@@ -93,16 +100,22 @@ impl HostPlatformServices {
 pub struct ApplicationHostBuilder {
     data_dir: PathBuf,
     platform: HostPlatformServices,
+    product: Arc<dyn ProductProfile>,
     proxy_override: Option<Arc<dyn ProxySupervisorPort>>,
     breakpoint_coordinator: Option<Arc<BreakpointCoordinator>>,
 }
 
 impl ApplicationHostBuilder {
     #[must_use]
-    pub fn new(data_dir: impl Into<PathBuf>, platform: HostPlatformServices) -> Self {
+    pub fn new(
+        data_dir: impl Into<PathBuf>,
+        platform: HostPlatformServices,
+        product: Arc<dyn ProductProfile>,
+    ) -> Self {
         Self {
             data_dir: data_dir.into(),
             platform,
+            product,
             proxy_override: None,
             breakpoint_coordinator: None,
         }
@@ -130,12 +143,18 @@ impl ApplicationHostBuilder {
     }
 
     pub async fn build(self) -> Result<ApplicationHost, HostBuildError> {
+        validate_product_profile(self.product.as_ref())?;
         create_data_directory(&self.data_dir)?;
-        let store = Arc::new(SqliteStore::open(&self.data_dir.join(DATABASE_FILE_NAME))?);
+        let store = Arc::new(SqliteStore::open(
+            &self
+                .data_dir
+                .join(self.product.storage().database_file_name),
+        )?);
         let services = InfrastructureServiceBundle::new(
             store,
             self.platform.secret_protector,
             self.platform.file_dialog,
+            Arc::clone(&self.product),
         );
         let settings = services.settings.get().await?;
         services.sessions.set_limits(
@@ -147,7 +166,18 @@ impl ApplicationHostBuilder {
             .breakpoint_coordinator
             .unwrap_or_else(|| Arc::new(BreakpointCoordinator::default()));
         let events = Arc::new(EventHub::new(EventHub::DEFAULT_CAPACITY));
+        let channel_labels = self
+            .product
+            .channels()
+            .iter()
+            .map(|channel| (channel.id.to_owned(), channel.display_name.to_owned()))
+            .collect::<BTreeMap<_, _>>();
         let pipeline = Arc::new(RuntimePipelineAdapter::new(
+            RuntimePipelineProductHooks {
+                body_codec: self.product.body_codec(),
+                request_classifier: self.product.request_classifier(),
+                channel_labels,
+            },
             services.rules.clone(),
             services.sessions.clone(),
             breakpoints.clone(),
@@ -168,14 +198,16 @@ impl ApplicationHostBuilder {
                 supervisor,
                 settings.stored,
                 pipeline,
+                self.product.labels(),
             ))
         });
         let application = Arc::new(Application::new(
+            self.product.name().to_owned(),
             proxy,
             services.capture,
             services.sessions,
             breakpoints,
-            Arc::new(BreakpointValidator),
+            Arc::new(BreakpointValidator::new(self.product.body_codec())),
             services.rules,
             services.faults,
             services.certificates,
@@ -261,17 +293,19 @@ fn create_data_directory(path: &Path) -> Result<(), HostBuildError> {
     })
 }
 
-fn platform_secret_protector() -> Arc<dyn SecretProtector> {
+fn platform_secret_protector(storage: ProductStorageNamespace) -> Arc<dyn SecretProtector> {
     #[cfg(windows)]
     {
+        let _ = storage;
         Arc::new(DpapiProtector)
     }
     #[cfg(target_os = "macos")]
     {
-        Arc::new(MacKeychainProtector::default())
+        Arc::new(MacKeychainProtector::for_namespace(storage))
     }
     #[cfg(not(any(windows, target_os = "macos")))]
     {
+        let _ = storage;
         Arc::new(DpapiProtector)
     }
 }
@@ -284,6 +318,7 @@ mod tests {
     use gmofg_proxy_infrastructure::{
         InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
     };
+    use gmofg_proxy_product_payment::PaymentProductProfile;
 
     use super::*;
 
@@ -319,6 +354,7 @@ mod tests {
         let host = ApplicationHostBuilder::new(
             temp.path(),
             HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
+            Arc::new(PaymentProductProfile::isolated_test_tool()),
         )
         .build()
         .await

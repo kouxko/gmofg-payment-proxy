@@ -1,6 +1,7 @@
 use std::{fmt, net::IpAddr};
 
 use chrono::{TimeZone, Utc};
+use gmofg_proxy_product_api::EmbeddedTestCertificateAuthority;
 use p12_keystore::{KeyStore, KeyStoreEntry, Pkcs12ImportPolicy};
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
@@ -19,14 +20,6 @@ use crate::InfrastructureError;
 
 const ROOT_VALIDITY_DAYS: i64 = 3650;
 const LEAF_VALIDITY_DAYS: i64 = 825;
-const TEST_ROOT_CA_CERTIFICATE_PEM: &[u8] =
-    include_bytes!("../../../../test-support/certificates/unified-test-proxy-root-ca.crt");
-const TEST_ROOT_CA_SIGNING_KEY_PEM: &str = include_str!(
-    "../../../../test-support/certificates/unified-test-proxy-root-ca-signing-key.TEST-ONLY.txt"
-);
-const BUNDLED_PAYMENT_SERVER_CERTIFICATES_PEM: &[u8] =
-    include_bytes!("../../../../test-support/certificates/bundled-payment-server.crt");
-
 pub struct CertificateBundle {
     pub certificate_der: Vec<u8>,
     pub private_key_pkcs8_der: Zeroizing<Vec<u8>>,
@@ -92,37 +85,44 @@ impl fmt::Debug for ParsedPkcs12 {
 pub struct CertificateService;
 
 impl CertificateService {
-    #[must_use]
-    pub const fn test_root_ca_certificate_pem(&self) -> &'static [u8] {
-        TEST_ROOT_CA_CERTIFICATE_PEM
-    }
-
-    pub fn load_test_root_ca(&self) -> Result<CertificateBundle, InfrastructureError> {
-        let (_, pem) = parse_x509_pem(TEST_ROOT_CA_CERTIFICATE_PEM).map_err(x509_error)?;
-        let key = KeyPair::from_pem(TEST_ROOT_CA_SIGNING_KEY_PEM).map_err(rcgen_error)?;
+    pub fn load_embedded_test_root(
+        &self,
+        authority: EmbeddedTestCertificateAuthority,
+    ) -> Result<CertificateBundle, InfrastructureError> {
+        let (_, pem) = parse_x509_pem(authority.public_certificate_pem).map_err(x509_error)?;
+        let key = KeyPair::from_pem(authority.signing_key_pem).map_err(rcgen_error)?;
         let bundle = bundle(pem.contents, key.serialize_der())?;
         self.validate_root(&bundle.certificate_der, &bundle.private_key_pkcs8_der)?;
-        if !bundle.metadata.subject.contains("TEST ONLY") {
-            return Err(invalid("统一测试 Root CA 主题必须明确包含 TEST ONLY"));
+        if !bundle
+            .metadata
+            .subject
+            .contains(authority.required_subject_marker)
+        {
+            return Err(invalid(format!(
+                "嵌入测试 Root CA 主题必须包含标记 {}",
+                authority.required_subject_marker
+            )));
         }
         Ok(bundle)
     }
 
-    pub fn load_bundled_payment_server_ca(&self) -> Result<TrustedCa, InfrastructureError> {
-        self.parse_upstream_ca(BUNDLED_PAYMENT_SERVER_CERTIFICATES_PEM)
+    pub fn load_bundled_upstream_ca(
+        &self,
+        certificates_pem: &[u8],
+    ) -> Result<TrustedCa, InfrastructureError> {
+        self.parse_upstream_ca(certificates_pem)
     }
 
-    pub fn validate_test_root(
+    pub fn validate_embedded_test_root(
         &self,
         certificate_der: &[u8],
         private_key_der: &[u8],
+        authority: EmbeddedTestCertificateAuthority,
     ) -> Result<CertificateMetadata, InfrastructureError> {
         let metadata = self.validate_root(certificate_der, private_key_der)?;
-        let expected = self.load_test_root_ca()?;
+        let expected = self.load_embedded_test_root(authority)?;
         if certificate_der != expected.certificate_der {
-            return Err(invalid(
-                "Root CA 不是当前构建固定的统一测试 Root CA，请重新初始化本机证书",
-            ));
+            return Err(invalid("Root CA 与当前产品固定测试 Root CA 不一致"));
         }
         Ok(metadata)
     }
@@ -610,7 +610,13 @@ impl Drop for ParsedPkcs12 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gmofg_proxy_product_api::ProductCertificatePolicy;
+    use gmofg_proxy_product_payment::PaymentProductProfile;
     use p12_keystore::{Certificate, KeyStoreEntry, PrivateKey, PrivateKeyChain};
+
+    fn payment_profile() -> PaymentProductProfile {
+        PaymentProductProfile::isolated_test_tool()
+    }
 
     #[test]
     fn generates_root_and_leaf_with_expected_policies() {
@@ -648,8 +654,15 @@ mod tests {
     #[test]
     fn embedded_test_root_is_stable_and_explicitly_test_only() {
         let service = CertificateService;
-        let first = service.load_test_root_ca().expect("test root");
-        let second = service.load_test_root_ca().expect("same test root");
+        let authority = payment_profile()
+            .embedded_test_authority()
+            .expect("test authority");
+        let first = service
+            .load_embedded_test_root(authority)
+            .expect("test root");
+        let second = service
+            .load_embedded_test_root(authority)
+            .expect("same test root");
 
         assert_eq!(first.certificate_der, second.certificate_der);
         assert_eq!(
@@ -662,12 +675,16 @@ mod tests {
     #[test]
     fn bundled_payment_server_crt_selects_the_final_valid_ca_trust_anchor() {
         let service = CertificateService;
+        let profile = payment_profile();
+        let bundled = profile
+            .bundled_upstream_ca_pem()
+            .expect("bundled Payment server.crt");
         let trusted = service
-            .load_bundled_payment_server_ca()
+            .load_bundled_upstream_ca(bundled)
             .expect("bundled Payment server.crt");
 
         assert_eq!(
-            fingerprint(BUNDLED_PAYMENT_SERVER_CERTIFICATES_PEM),
+            fingerprint(bundled),
             "9D:73:2D:2D:8B:F2:9C:97:83:88:ED:99:35:65:9C:39:BA:2E:E9:17:C2:6E:69:7E:44:1D:02:30:7C:F2:17:28"
         );
         assert!(trusted.metadata.is_ca);
@@ -686,7 +703,13 @@ mod tests {
 
         assert!(
             service
-                .validate_test_root(&local.certificate_der, &local.private_key_pkcs8_der,)
+                .validate_embedded_test_root(
+                    &local.certificate_der,
+                    &local.private_key_pkcs8_der,
+                    payment_profile()
+                        .embedded_test_authority()
+                        .expect("test authority"),
+                )
                 .is_err()
         );
     }
