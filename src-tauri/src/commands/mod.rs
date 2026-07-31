@@ -43,17 +43,22 @@ pub async fn app_subscribe_events(
         .app_subscribe_events(after_event_id)
         .map_err(command_error)?;
     let acknowledgement = subscription.ack.clone();
-    for event in subscription.replay.drain(..) {
-        on_event.send(event).map_err(|_| AppErrorViewModel {
-            code: "CHANNEL_SEND_FAILED".to_owned(),
-            message: "实时事件通道已关闭。".to_owned(),
-            field_errors: BTreeMap::default(),
-            retryable: true,
-            suggested_action: Some("请重新获取应用快照并订阅事件。".to_owned()),
-            entity_id: None,
-            runtime_epoch: None,
-        })?;
-    }
+    subscription
+        .replay
+        .drain_with(|event| {
+            on_event.send(event).map_err(|_| {
+                Box::new(AppErrorViewModel {
+                    code: "CHANNEL_SEND_FAILED".to_owned(),
+                    message: "实时事件通道已关闭。".to_owned(),
+                    field_errors: BTreeMap::default(),
+                    retryable: true,
+                    suggested_action: Some("请重新获取应用快照并订阅事件。".to_owned()),
+                    entity_id: None,
+                    runtime_epoch: None,
+                })
+            })
+        })
+        .map_err(|error| *error)?;
     let application = state.application.clone();
     tauri::async_runtime::spawn(async move {
         while let Some(event) = subscription.live.recv().await {

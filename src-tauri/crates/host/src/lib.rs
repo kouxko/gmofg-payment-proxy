@@ -59,7 +59,7 @@ pub enum HostBuildError {
 /// The file dialog can be backed by Tauri, a scripted headless test, or a
 /// future terminal prompt without changing any application use case.
 pub struct HostPlatformServices {
-    pub secret_protector: Arc<dyn SecretProtector>,
+    secret_protector_override: Option<Arc<dyn SecretProtector>>,
     pub file_dialog: Arc<dyn NativeFileDialog>,
 }
 
@@ -67,30 +67,47 @@ impl std::fmt::Debug for HostPlatformServices {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("HostPlatformServices")
-            .field("secret_protector", &"<SecretProtector>")
+            .field(
+                "secret_protector_override",
+                &self
+                    .secret_protector_override
+                    .as_ref()
+                    .map(|_| "<SecretProtector>"),
+            )
             .field("file_dialog", &self.file_dialog)
             .finish()
     }
 }
 
 impl HostPlatformServices {
+    /// Creates a platform boundary with an explicit secret protector.
+    ///
+    /// This is intended for deterministic tests and advanced embedders. Normal
+    /// production hosts should use [`Self::production`] so the protector
+    /// namespace is derived from the same product profile as the database.
     #[must_use]
     pub fn new(
         secret_protector: Arc<dyn SecretProtector>,
         file_dialog: Arc<dyn NativeFileDialog>,
     ) -> Self {
         Self {
-            secret_protector,
+            secret_protector_override: Some(secret_protector),
             file_dialog,
         }
     }
 
+    /// Creates production platform services without accepting a second,
+    /// independently supplied product namespace.
+    ///
+    /// The builder derives the protector from `ProductProfile::storage`,
+    /// preventing a host from opening one product database while encrypting
+    /// its secrets under another product's keychain/DPAPI namespace.
     #[must_use]
-    pub fn production(
-        file_dialog: Arc<dyn NativeFileDialog>,
-        storage: ProductStorageNamespace,
-    ) -> Self {
-        Self::new(platform_secret_protector(storage), file_dialog)
+    pub fn production(file_dialog: Arc<dyn NativeFileDialog>) -> Self {
+        Self {
+            secret_protector_override: None,
+            file_dialog,
+        }
     }
 }
 
@@ -150,10 +167,14 @@ impl ApplicationHostBuilder {
                 .data_dir
                 .join(self.product.storage().database_file_name),
         )?);
+        let secret_protector = self
+            .platform
+            .secret_protector_override
+            .unwrap_or_else(|| platform_secret_protector(self.product.storage()));
         let capacity = Arc::new(CapacityLedger::default());
         let services = InfrastructureServiceBundle::new(
             store,
-            self.platform.secret_protector,
+            secret_protector,
             self.platform.file_dialog,
             Arc::clone(&self.product),
             Arc::clone(&capacity),

@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, VecDeque},
     sync::{
         Arc, Weak,
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicBool, AtomicU64, Ordering},
     },
     time::Duration,
 };
@@ -28,8 +28,55 @@ pub struct EventReplay {
 pub struct EventSubscription {
     pub subscription_id: u64,
     pub ack: SubscriptionAckViewModel,
-    pub replay: Vec<UiEventEnvelope>,
+    pub replay: TrackedReplay,
     pub live: TrackedEventReceiver,
+}
+
+/// Replay events whose cloned bytes remain reserved until an outer adapter
+/// actually consumes them.
+///
+/// `drain_with` defines the application boundary: reservation is released only
+/// after the callback returns, so synchronous serializers such as the Tauri
+/// channel cannot observe an unaccounted clone. Unsent events are released by
+/// `Drop`.
+#[derive(Debug)]
+pub struct TrackedReplay {
+    events: VecDeque<UiEventEnvelope>,
+    reserved_logical_bytes: u64,
+    capacity: Arc<CapacityLedger>,
+}
+
+impl TrackedReplay {
+    fn new(events: Vec<UiEventEnvelope>, capacity: Arc<CapacityLedger>) -> Self {
+        let reserved_logical_bytes = events.iter().map(UiEventEnvelope::logical_bytes).sum();
+        Self {
+            events: events.into(),
+            reserved_logical_bytes,
+            capacity,
+        }
+    }
+
+    pub fn drain_with<E>(
+        &mut self,
+        mut consume: impl FnMut(UiEventEnvelope) -> Result<(), E>,
+    ) -> Result<(), E> {
+        while let Some(event) = self.events.pop_front() {
+            let bytes = event.logical_bytes();
+            let result = consume(event);
+            self.reserved_logical_bytes = self.reserved_logical_bytes.saturating_sub(bytes);
+            self.capacity.release_event_bytes(bytes);
+            result?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for TrackedReplay {
+    fn drop(&mut self) {
+        self.capacity
+            .release_event_bytes(self.reserved_logical_bytes);
+        self.reserved_logical_bytes = 0;
+    }
 }
 
 #[derive(Debug)]
@@ -40,32 +87,63 @@ pub struct TrackedEventReceiver {
     capacity: Arc<CapacityLedger>,
     subscription_id: u64,
     cancellation: CancellationToken,
+    snapshot_required_on_cancel: Arc<AtomicBool>,
+    terminal_event_id: Arc<AtomicU64>,
 }
 
 impl TrackedEventReceiver {
     pub async fn recv(&mut self) -> Option<UiEventEnvelope> {
         let event = tokio::select! {
             biased;
-            () = self.cancellation.cancelled() => return None,
+            () = self.cancellation.cancelled() => {
+                if self
+                    .snapshot_required_on_cancel
+                    .swap(false, Ordering::AcqRel)
+                {
+                    self.discard_queued_events();
+                    return Some(UiEventEnvelope {
+                        event_id: self.terminal_event_id.load(Ordering::Acquire),
+                        runtime_epoch: None,
+                        occurred_at: Utc::now(),
+                        entity_id: None,
+                        entity_revision: None,
+                        payload: UiEventPayload::SnapshotRequired {
+                            reason: "实时事件容量不足，订阅已终止；请重新获取应用快照。".into(),
+                        },
+                    });
+                }
+                return None;
+            },
             event = self.receiver.recv() => event?,
         };
         let released = subtract_saturating(&self.queued_logical_bytes, event.logical_bytes());
         self.capacity.release_event_bytes(released);
         Some(event)
     }
+
+    /// Destroys receiver-owned buffered events before releasing their logical
+    /// reservations. This is used only for the bounded control termination
+    /// path, where returning stale queued data before `SnapshotRequired` would
+    /// violate event ordering.
+    fn discard_queued_events(&mut self) {
+        self.receiver.close();
+        while let Ok(event) = self.receiver.try_recv() {
+            let released = subtract_saturating(&self.queued_logical_bytes, event.logical_bytes());
+            self.capacity.release_event_bytes(released);
+        }
+        let residual = self.queued_logical_bytes.swap(0, Ordering::Relaxed);
+        self.capacity.release_event_bytes(residual);
+    }
 }
 
 impl Drop for TrackedEventReceiver {
     fn drop(&mut self) {
         self.cancellation.cancel();
+        let released = self.queued_logical_bytes.swap(0, Ordering::Relaxed);
+        self.capacity.release_event_bytes(released);
         if let Some(state) = self.state.upgrade() {
             let mut state = state.lock();
-            remove_subscriber(
-                &mut state,
-                self.capacity.as_ref(),
-                self.subscription_id,
-                true,
-            );
+            remove_subscriber(&mut state, self.subscription_id);
             remove_subscription_failures(&mut state, self.capacity.as_ref(), self.subscription_id);
         }
     }
@@ -96,6 +174,8 @@ struct EventState {
 struct LiveSubscriber {
     sender: mpsc::Sender<UiEventEnvelope>,
     cancellation: CancellationToken,
+    snapshot_required_on_cancel: Arc<AtomicBool>,
+    terminal_event_id: Arc<AtomicU64>,
 }
 
 struct PendingEvent {
@@ -161,6 +241,7 @@ impl EventHub {
             &mut state,
             self.replay_capacity,
             self.capacity.as_ref(),
+            0,
             PendingEvent {
                 runtime_epoch,
                 occurred_at,
@@ -169,7 +250,18 @@ impl EventHub {
                 payload,
             },
         );
-        Self::dispatch_live(&mut state, self.capacity.as_ref(), &envelope);
+        let live_overflow_started =
+            Self::dispatch_live(&mut state, self.capacity.as_ref(), &envelope);
+        let warning = warning.or_else(|| {
+            live_overflow_started.then(|| {
+                Self::record_replay_overflow_warning(
+                    &mut state,
+                    self.replay_capacity,
+                    self.capacity.as_ref(),
+                    &envelope,
+                )
+            })
+        });
         if let Some(warning) = warning {
             Self::dispatch_live(&mut state, self.capacity.as_ref(), &warning);
         }
@@ -218,6 +310,7 @@ impl EventHub {
                 &mut state,
                 self.replay_capacity,
                 self.capacity.as_ref(),
+                0,
                 PendingEvent {
                     runtime_epoch: Some(runtime_epoch),
                     occurred_at,
@@ -226,7 +319,18 @@ impl EventHub {
                     payload: UiEventPayload::CaptureRowsAdded(vec![row]),
                 },
             );
-            Self::dispatch_live(&mut state, self.capacity.as_ref(), &direct);
+            let live_overflow_started =
+                Self::dispatch_live(&mut state, self.capacity.as_ref(), &direct);
+            let warning = warning.or_else(|| {
+                live_overflow_started.then(|| {
+                    Self::record_replay_overflow_warning(
+                        &mut state,
+                        self.replay_capacity,
+                        self.capacity.as_ref(),
+                        &direct,
+                    )
+                })
+            });
             if let Some(warning) = warning {
                 Self::dispatch_live(&mut state, self.capacity.as_ref(), &warning);
             }
@@ -284,25 +388,75 @@ impl EventHub {
         queue_capacity: usize,
     ) -> AppResult<EventSubscription> {
         let mut state = self.state.lock();
-        let replay = Self::replay_locked(&state, after_event_id);
-        if !replay.snapshot_required && state.subscribers.len() >= Self::MAX_SUBSCRIBERS {
+        let current_cursor = state.next_id.saturating_sub(1);
+        let oldest = state
+            .retained
+            .front()
+            .map_or(state.next_id, |event| event.event_id);
+        let mut snapshot_required =
+            after_event_id < current_cursor && after_event_id.saturating_add(1) < oldest;
+
+        if !snapshot_required && state.subscribers.len() >= Self::MAX_SUBSCRIBERS {
             return Err(
                 AppError::new("RESOURCE_EXHAUSTED", "实时事件订阅数量已达到上限。")
                     .retryable("请关闭未使用的窗口后重试。"),
             );
         }
+
+        // Measure retained references and reserve their second ownership before
+        // cloning. If the full replay cannot be admitted, return one bounded
+        // SnapshotRequired event instead of briefly creating unaccounted data.
+        let mut replay_events = Vec::new();
+        if !snapshot_required {
+            let replay_bytes = state
+                .retained
+                .iter()
+                .filter(|event| event.event_id > after_event_id)
+                .map(UiEventEnvelope::logical_bytes)
+                .sum();
+            if self.capacity.try_reserve_event_bytes(replay_bytes) {
+                replay_events = state
+                    .retained
+                    .iter()
+                    .filter(|event| event.event_id > after_event_id)
+                    .cloned()
+                    .collect();
+            } else {
+                snapshot_required = true;
+            }
+        }
+        if snapshot_required {
+            let snapshot = snapshot_required_event(current_cursor);
+            if !reserve_event_history_bytes(
+                &mut state,
+                self.capacity.as_ref(),
+                snapshot.logical_bytes(),
+            ) {
+                return Err(AppError::new(
+                    "RESOURCE_EXHAUSTED",
+                    "实时事件补发数据超过当前内存容量。",
+                )
+                .retryable("请重新获取应用快照后重试。"));
+            }
+            replay_events.push(snapshot);
+        }
+
         let subscription_id = state.next_subscription_id;
         state.next_subscription_id = state.next_subscription_id.saturating_add(1);
         let (sender, receiver) =
             mpsc::channel(queue_capacity.clamp(1, Self::DEFAULT_SUBSCRIBER_CAPACITY));
         let queued_logical_bytes = Arc::new(AtomicU64::new(0));
         let cancellation = CancellationToken::new();
-        if !replay.snapshot_required {
+        let snapshot_required_on_cancel = Arc::new(AtomicBool::new(false));
+        let terminal_event_id = Arc::new(AtomicU64::new(current_cursor));
+        if !snapshot_required {
             state.subscribers.insert(
                 subscription_id,
                 LiveSubscriber {
                     sender,
                     cancellation: cancellation.clone(),
+                    snapshot_required_on_cancel: Arc::clone(&snapshot_required_on_cancel),
+                    terminal_event_id: Arc::clone(&terminal_event_id),
                 },
             );
             state
@@ -314,10 +468,10 @@ impl EventHub {
             ack: SubscriptionAckViewModel {
                 subscription_id,
                 accepted_after_event_id: after_event_id,
-                current_event_id: replay.current_cursor,
-                snapshot_required: replay.snapshot_required,
+                current_event_id: current_cursor,
+                snapshot_required,
             },
-            replay: replay.events,
+            replay: TrackedReplay::new(replay_events, Arc::clone(&self.capacity)),
             live: TrackedEventReceiver {
                 receiver,
                 queued_logical_bytes,
@@ -325,6 +479,8 @@ impl EventHub {
                 capacity: Arc::clone(&self.capacity),
                 subscription_id,
                 cancellation,
+                snapshot_required_on_cancel,
+                terminal_event_id,
             },
         })
     }
@@ -335,7 +491,7 @@ impl EventHub {
 
     pub fn unsubscribe(&self, subscription_id: u64) {
         let mut state = self.state.lock();
-        remove_subscriber(&mut state, self.capacity.as_ref(), subscription_id, true);
+        remove_subscriber(&mut state, subscription_id);
     }
 
     /// Returns non-blocking delivery failures for adapters to log or surface.
@@ -386,7 +542,7 @@ impl EventHub {
             let Some(subscription_id) = state.subscribers.keys().next().copied() else {
                 break;
             };
-            remove_subscriber(&mut state, self.capacity.as_ref(), subscription_id, true);
+            remove_subscriber(&mut state, subscription_id);
         }
         self.capacity.logical_bytes() <= max_bytes
     }
@@ -422,16 +578,7 @@ impl EventHub {
             after_event_id < current_cursor && after_event_id.saturating_add(1) < oldest;
         if snapshot_required {
             EventReplay {
-                events: vec![UiEventEnvelope {
-                    event_id: current_cursor,
-                    runtime_epoch: None,
-                    occurred_at: Utc::now(),
-                    entity_id: None,
-                    entity_revision: None,
-                    payload: UiEventPayload::SnapshotRequired {
-                        reason: "事件游标已过期，请重新获取应用快照。".into(),
-                    },
-                }],
+                events: vec![snapshot_required_event(current_cursor)],
                 current_cursor,
                 snapshot_required: true,
             }
@@ -460,13 +607,13 @@ impl EventHub {
         }
         let pending_bytes = pending_capture_bytes(&state.pending_capture);
         let rows = std::mem::take(&mut state.pending_capture);
-        capacity.release_event_bytes(pending_bytes);
         let epoch = state.capture_epoch.take();
         state.capture_started_at = None;
         let (envelope, warning) = Self::append_log(
             state,
             replay_capacity,
             capacity,
+            pending_bytes,
             PendingEvent {
                 runtime_epoch: epoch,
                 occurred_at,
@@ -475,7 +622,12 @@ impl EventHub {
                 payload: UiEventPayload::CaptureRowsAdded(rows),
             },
         );
-        Self::dispatch_live(state, capacity, &envelope);
+        let live_overflow_started = Self::dispatch_live(state, capacity, &envelope);
+        let warning = warning.or_else(|| {
+            live_overflow_started.then(|| {
+                Self::record_replay_overflow_warning(state, replay_capacity, capacity, &envelope)
+            })
+        });
         if let Some(warning) = warning {
             Self::dispatch_live(state, capacity, &warning);
         }
@@ -486,6 +638,7 @@ impl EventHub {
         state: &mut EventState,
         replay_capacity: usize,
         capacity: &CapacityLedger,
+        replaced_event_bytes: u64,
         pending: PendingEvent,
     ) -> (UiEventEnvelope, Option<UiEventEnvelope>) {
         let envelope = UiEventEnvelope {
@@ -499,7 +652,14 @@ impl EventHub {
         state.next_id = state.next_id.saturating_add(1);
         let envelope_bytes = envelope.logical_bytes();
         let overflow_was_active = state.replay_overflowed;
-        let retained = reserve_with_reclamation(state, capacity, envelope_bytes);
+        let retained = if replaced_event_bytes == 0 {
+            reserve_with_reclamation(state, capacity, envelope_bytes)
+        } else {
+            replace_event_with_reclamation(state, capacity, replaced_event_bytes, envelope_bytes)
+        };
+        if !retained && replaced_event_bytes > 0 {
+            capacity.release_event_bytes(replaced_event_bytes);
+        }
         if retained {
             state.retained.push_back(envelope.clone());
         }
@@ -540,31 +700,76 @@ impl EventHub {
         (envelope, warning)
     }
 
+    /// Records the one-way transition from complete replay history to
+    /// snapshot-required recovery when live-delivery admission caused the
+    /// eviction.
+    ///
+    /// `append_log` handles the same transition while retaining the primary
+    /// event. This companion covers the later live-clone reservation phase so
+    /// replay truncation is never silent.
+    fn record_replay_overflow_warning(
+        state: &mut EventState,
+        replay_capacity: usize,
+        capacity: &CapacityLedger,
+        cause: &UiEventEnvelope,
+    ) -> UiEventEnvelope {
+        let warning = UiEventEnvelope {
+            event_id: state.next_id,
+            runtime_epoch: cause.runtime_epoch,
+            occurred_at: cause.occurred_at,
+            entity_id: None,
+            entity_revision: None,
+            payload: UiEventPayload::ResourceWarning {
+                message: "UI 补发日志已淘汰旧事件；页面必须重新查询快照。".into(),
+            },
+        };
+        state.next_id = state.next_id.saturating_add(1);
+        if reserve_event_history_bytes(state, capacity, warning.logical_bytes()) {
+            state.retained.push_back(warning.clone());
+        }
+        while state.retained.len() > replay_capacity {
+            release_oldest_retained(state, capacity);
+        }
+        warning
+    }
+
     fn dispatch_live(
         state: &mut EventState,
         capacity: &CapacityLedger,
         envelope: &UiEventEnvelope,
-    ) {
+    ) -> bool {
+        let overflow_was_active = state.replay_overflowed;
         let mut terminated = Vec::new();
-        for (subscription_id, subscriber) in &state.subscribers {
-            let logical_bytes = envelope.logical_bytes();
-            let Some(queued_bytes) = state.subscription_bytes.get(subscription_id) else {
-                terminated.push(*subscription_id);
+        let mut subscription_ids = state.subscribers.keys().copied().collect::<Vec<_>>();
+        subscription_ids.sort_by_key(|subscription_id| {
+            state
+                .subscription_bytes
+                .get(subscription_id)
+                .map_or(u64::MAX, |bytes| bytes.load(Ordering::Relaxed))
+        });
+
+        for subscription_id in subscription_ids {
+            let Some(subscriber) = state.subscribers.get(&subscription_id) else {
                 continue;
             };
-            if !capacity.try_reserve_event_bytes(logical_bytes) {
-                terminated.push(*subscription_id);
+            let sender = subscriber.sender.clone();
+            let Some(queued_bytes) = state.subscription_bytes.get(&subscription_id).cloned() else {
+                terminated.push(subscription_id);
+                continue;
+            };
+            let logical_bytes = envelope.logical_bytes();
+            if !reserve_event_history_bytes(state, capacity, logical_bytes) {
+                terminated.push(subscription_id);
                 continue;
             }
             queued_bytes.fetch_add(logical_bytes, Ordering::Relaxed);
-            if subscriber.sender.try_send(envelope.clone()).is_err() {
-                let released = subtract_saturating(queued_bytes, logical_bytes);
+            if sender.try_send(envelope.clone()).is_err() {
+                let released = subtract_saturating(&queued_bytes, logical_bytes);
                 capacity.release_event_bytes(released);
-                terminated.push(*subscription_id);
+                terminated.push(subscription_id);
             }
         }
         for subscription_id in terminated {
-            remove_subscriber(state, capacity, subscription_id, true);
             let failure = (
                 subscription_id,
                 UiEventEnvelope {
@@ -579,13 +784,35 @@ impl EventHub {
                 },
             );
             let failure_bytes = failure_logical_bytes(&failure);
-            if reserve_with_reclamation(state, capacity, failure_bytes) {
+            if reserve_event_history_bytes(state, capacity, failure_bytes) {
                 state.subscription_failures.push_back(failure);
+            } else if let Some(subscriber) = state.subscribers.get(&subscription_id) {
+                subscriber
+                    .terminal_event_id
+                    .store(envelope.event_id, Ordering::Release);
+                subscriber
+                    .snapshot_required_on_cancel
+                    .store(true, Ordering::Release);
             }
+            remove_subscriber(state, subscription_id);
             while state.subscription_failures.len() > Self::DEFAULT_FAILURE_CAPACITY {
                 release_oldest_failure(state, capacity);
             }
         }
+        !overflow_was_active && state.replay_overflowed
+    }
+}
+
+fn snapshot_required_event(current_cursor: u64) -> UiEventEnvelope {
+    UiEventEnvelope {
+        event_id: current_cursor,
+        runtime_epoch: None,
+        occurred_at: Utc::now(),
+        entity_id: None,
+        entity_revision: None,
+        payload: UiEventPayload::SnapshotRequired {
+            reason: "事件游标已过期，请重新获取应用快照。".into(),
+        },
     }
 }
 
@@ -633,32 +860,48 @@ fn remove_subscription_failures(
     state.subscription_failures = retained;
 }
 
-/// Removes a live sender and, when requested, discards its queue atomically
-/// from capacity accounting. Slow subscribers are cancelled rather than
-/// allowing their detached queues to retain unbounded memory.
-fn remove_subscriber(
-    state: &mut EventState,
-    capacity: &CapacityLedger,
-    subscription_id: u64,
-    discard_queued: bool,
-) {
-    let subscriber = state.subscribers.remove(&subscription_id);
-    if discard_queued {
-        if let Some(subscriber) = subscriber {
-            subscriber.cancellation.cancel();
-        }
-        if let Some(bytes) = state.subscription_bytes.remove(&subscription_id) {
-            capacity.release_event_bytes(bytes.swap(0, Ordering::Relaxed));
-        }
+/// Stops future delivery without pretending the receiver's buffered events
+/// have already been destroyed.
+///
+/// The receiver owns the queue, so its `Drop` implementation is the only
+/// authority allowed to release queued bytes. This keeps accounting exact even
+/// when cancellation is observed long before the adapter drops the receiver.
+fn remove_subscriber(state: &mut EventState, subscription_id: u64) {
+    if let Some(subscriber) = state.subscribers.remove(&subscription_id) {
+        subscriber.cancellation.cancel();
     }
+    state.subscription_bytes.remove(&subscription_id);
 }
 
-/// Reclaims event-owned storage until an exact reservation succeeds.
+/// Arms the fixed-size control lane before cancelling a subscriber because of
+/// shared-capacity pressure.
 ///
-/// Replay is intentionally the first sacrifice. Delivery failures are next,
-/// and live queues are terminated only when retained diagnostic history cannot
-/// make enough room. Sessions are never touched from the event path.
-fn reserve_with_reclamation(state: &mut EventState, capacity: &CapacityLedger, bytes: u64) -> bool {
+/// The receiver will destroy its owned queue and return exactly one
+/// `SnapshotRequired` event even when no ordinary event/failure envelope can
+/// be reserved.
+fn terminate_subscriber_for_snapshot(state: &mut EventState, subscription_id: u64) {
+    if let Some(subscriber) = state.subscribers.get(&subscription_id) {
+        subscriber
+            .terminal_event_id
+            .store(state.next_id.saturating_sub(1), Ordering::Release);
+        subscriber
+            .snapshot_required_on_cancel
+            .store(true, Ordering::Release);
+    }
+    remove_subscriber(state, subscription_id);
+}
+
+/// Reserves event history or one live delivery clone after reclaiming only
+/// memory whose ownership is held by this state lock.
+///
+/// Receiver queues are intentionally excluded: cancelling a subscriber does
+/// not destroy its buffered channel, so those bytes remain owned until the
+/// receiver is dropped.
+fn reserve_event_history_bytes(
+    state: &mut EventState,
+    capacity: &CapacityLedger,
+    bytes: u64,
+) -> bool {
     if bytes == 0 || capacity.try_reserve_event_bytes(bytes) {
         return true;
     }
@@ -673,12 +916,62 @@ fn reserve_with_reclamation(state: &mut EventState, capacity: &CapacityLedger, b
             return true;
         }
     }
-    let subscriber_ids = state.subscribers.keys().copied().collect::<Vec<_>>();
-    for subscription_id in subscriber_ids {
-        remove_subscriber(state, capacity, subscription_id, true);
-        if capacity.try_reserve_event_bytes(bytes) {
+    false
+}
+
+/// Reclaims event-owned storage until an exact reservation succeeds.
+///
+/// Replay is intentionally the first sacrifice. Delivery failures are next,
+/// and live queues are terminated only when retained diagnostic history cannot
+/// make enough room. Sessions are never touched from the event path.
+fn reserve_with_reclamation(state: &mut EventState, capacity: &CapacityLedger, bytes: u64) -> bool {
+    if reserve_event_history_bytes(state, capacity, bytes) {
+        return true;
+    }
+
+    // Queue bytes cannot be released until the receiver is dropped. Cancel the
+    // single slowest subscriber to trigger that handoff, but do not pretend the
+    // current reservation can succeed or terminate healthy subscribers.
+    let slowest = state
+        .subscription_bytes
+        .iter()
+        .max_by_key(|(_, queued)| queued.load(Ordering::Relaxed))
+        .map(|(subscription_id, _)| *subscription_id);
+    if let Some(subscription_id) = slowest {
+        terminate_subscriber_for_snapshot(state, subscription_id);
+    }
+    false
+}
+
+/// Replaces one already-accounted event allocation without exposing a free
+/// interval to concurrent session admission.
+fn replace_event_with_reclamation(
+    state: &mut EventState,
+    capacity: &CapacityLedger,
+    current: u64,
+    replacement: u64,
+) -> bool {
+    if capacity.try_replace_event_bytes(current, replacement) {
+        return true;
+    }
+    while release_oldest_retained(state, capacity) {
+        state.replay_overflowed = true;
+        if capacity.try_replace_event_bytes(current, replacement) {
             return true;
         }
+    }
+    while release_oldest_failure(state, capacity) {
+        if capacity.try_replace_event_bytes(current, replacement) {
+            return true;
+        }
+    }
+    let slowest = state
+        .subscription_bytes
+        .iter()
+        .max_by_key(|(_, queued)| queued.load(Ordering::Relaxed))
+        .map(|(subscription_id, _)| *subscription_id);
+    if let Some(subscription_id) = slowest {
+        terminate_subscriber_for_snapshot(state, subscription_id);
     }
     false
 }
@@ -702,11 +995,7 @@ impl Drop for EventHub {
         let mut state = self.state.lock();
         let subscriber_ids = state.subscribers.keys().copied().collect::<Vec<_>>();
         for subscription_id in subscriber_ids {
-            remove_subscriber(&mut state, self.capacity.as_ref(), subscription_id, true);
-        }
-        for queued in state.subscription_bytes.values() {
-            self.capacity
-                .release_event_bytes(queued.swap(0, Ordering::Relaxed));
+            remove_subscriber(&mut state, subscription_id);
         }
         state.subscription_bytes.clear();
         while release_oldest_retained(&mut state, self.capacity.as_ref()) {}
