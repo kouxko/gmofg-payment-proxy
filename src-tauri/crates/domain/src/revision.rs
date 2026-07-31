@@ -1,3 +1,8 @@
+//! 乐观并发版本号。
+//!
+//! 调用方提交自己读取时的版本，领域层验证一致后才允许写入，避免 UI 编辑期间实体已
+//! 被别的任务更新却被旧数据静默覆盖。
+
 use crate::{DomainError, ErrorCode};
 use serde::{Deserialize, Serialize};
 use specta::Type;

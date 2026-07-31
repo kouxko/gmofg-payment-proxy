@@ -1,4 +1,8 @@
-//! Production epoch composition for rustls mTLS and Hyper upstream channels.
+//! 为每个运行 epoch 组装 rustls mTLS 与 Hyper 上游连接服务。
+//!
+//! 启动时一次性读取设置和证书，构建不可变 TLS 快照，再为全部启用通道准备服务；任一
+//! 通道失败会让整个 epoch 启动失败。DNS、TCP、TLS 和 HTTP 握手分别受超时/取消约束，
+//! 不能把“连上 TCP”误认为 mTLS 或业务请求成功。
 
 use std::collections::BTreeMap;
 use std::fmt;

@@ -1,3 +1,8 @@
+//! 面向展示适配器的统一应用错误。
+//!
+//! 应用层把领域、存储、证书和网络错误整理成稳定错误码、中文说明、字段错误、重试
+//! 建议和实体 ID。前端只展示，不应解析字符串猜测业务原因。
+
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};

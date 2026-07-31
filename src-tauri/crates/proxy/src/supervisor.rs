@@ -1,4 +1,8 @@
-//! Transactional multi-listener Tokio supervisor (`STATE-001` through `STATE-009`).
+//! 事务式多监听器 Tokio supervisor（`STATE-001` 至 `STATE-009`）。
+//!
+//! 启动先绑定全部端口并构建全部服务，再创建 epoch 和任务，最后一次性发布 `Running`；
+//! 中途失败通过资源析构回滚。运行时拥有根取消令牌、listener join handles 和 watchdog，
+//! stop/restart 必须先通知 pipeline、取消任务并等待 join，避免端口或后台事件泄漏到下一代。
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -442,6 +446,8 @@ impl SupervisorCore {
     }
 
     async fn start_inner(&self, config: ProxyConfig) -> Result<RuntimeSnapshot> {
+        // operation 锁覆盖整个生命周期事务，确保 start/stop/restart 不会交错操作同一批
+        // socket 与任务。锁内的阶段顺序也是外部可观察状态机的唯一发布顺序。
         let _operation = self.operation.lock().await;
         config.validate()?;
         match self.lifecycle.read().await.state {
@@ -478,6 +484,8 @@ impl SupervisorCore {
 
         let epoch = Uuid::new_v4();
         let cancellation = CancellationToken::new();
+        // 直到 Runtime 成功放入 self.runtime 前，guard 都拥有“异常路径必须取消”的责任；
+        // 调用 future 被 abort 或发生 panic 时，也不会遗留孤儿 listener。
         let mut start_guard = CancelOnDrop::new(cancellation.clone());
         *self
             .active_cancellation
@@ -733,6 +741,8 @@ fn spawn_listener_task(
     mut listeners_ready: tokio::sync::watch::Receiver<bool>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
+        // listener 已经创建，但必须等 supervisor 发布 Running 后再 accept；这道门避免客户端
+        // 在 lifecycle/listener 地址尚不可见时抢先进入 pipeline。
         if !*listeners_ready.borrow() && listeners_ready.changed().await.is_err() {
             return;
         }
@@ -780,6 +790,8 @@ fn spawn_watchdog(
     mut fatal_rx: mpsc::Receiver<(ChannelId, ProxyError)>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
+        // watchdog 与正常取消竞速：取消胜出时安静结束；首个 listener 故障胜出时先通知
+        // stopping，再取消兄弟任务、标记同一 epoch Faulted，最后发布 fault 事件。
         tokio::select! {
             () = cancellation.cancelled() => {}
             fault = fatal_rx.recv() => {

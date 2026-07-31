@@ -1,3 +1,8 @@
+//! 基础设施服务的统一装配包。
+//!
+//! 它共享数据库、对话框、事件中心等长生命周期资源，并确保各适配器拿到同一份状态；
+//! 构造失败会整体返回，避免应用只启动一半服务。
+
 use std::sync::Arc;
 
 use gmofg_proxy_application::{CapacityLedger, InMemorySessionStore};

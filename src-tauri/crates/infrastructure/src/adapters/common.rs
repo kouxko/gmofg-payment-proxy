@@ -1,3 +1,7 @@
+//! 基础设施错误到应用错误的公共映射。
+//!
+//! 集中映射可保持前端错误码稳定，并保证底层错误链不会把敏感内容直接暴露给 `WebView`。
+
 use gmofg_proxy_application::{AppError, AppResult};
 
 use crate::{InfrastructureError, InfrastructureErrorCode};

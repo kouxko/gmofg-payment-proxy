@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证控制台启停按钮权限、pending 去重和 Rust 状态渲染。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

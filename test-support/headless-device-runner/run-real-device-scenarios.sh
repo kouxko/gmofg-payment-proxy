@@ -1,11 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# 真实设备无 UI 验收总控脚本。
+#
+# 它不启动 Tauri 窗口，而是为每个场景启动一次 Rust ApplicationHost runner，再通过
+# Android instrumentation 让真实 Payment 流量经过 Proxy。Rust 侧验证规则轨迹/会话/抓包，
+# Android 侧验证客户端实际看到的 HTTP、正文、异常或 D48；两边证据缺一不可。
+#
+# 如果只想快速确认“证书和转发链路能否通”，应使用 real-device-dll-proxy 单场景探针；
+# 本脚本用于规则、断点、故障模板和弱网动作的完整场景矩阵，运行时间会更长。
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNNER_MANIFEST="$SCRIPT_DIR/Cargo.toml"
 RUNNER_BIN="$SCRIPT_DIR/target/debug/gmofg-headless-device-runner"
 MATRIX_FILE="$SCRIPT_DIR/scenarios.json"
 
+# 环境变量分为四类：
+# 1. 设备/网络：设备序列号与 Android 实际访问的 Proxy URL；
+# 2. Rust 数据：桌面应用数据目录、SQLite 和测试 Root CA；
+# 3. Android 工程：源码、JDK、instrumentation APK 及是否自动构建安装；
+# 4. 选择/证据：批次、单个场景和证据输出目录。
+# 默认值面向当前实验室环境；证书、PKCS12 等敏感路径必须显式提供或指向受控文件。
 GMOFG_DEVICE_SERIAL="${GMOFG_DEVICE_SERIAL:-2740072778}"
 GMOFG_PROXY_URL="${GMOFG_PROXY_URL:-https://10.0.34.50:16127/}"
 GMOFG_PROXY_URL_HOST_PORT="$(
@@ -20,6 +35,10 @@ GMOFG_ANDROID_JAVA_HOME="${GMOFG_ANDROID_JAVA_HOME:-$HOME/.sdkman/candidates/jav
 GMOFG_ANDROID_TEST_APK="${GMOFG_ANDROID_TEST_APK:-$GMOFG_ANDROID_PROJECT/payment/build/outputs/apk/androidTest/gmofg/debug/payment-gmofg-debug-androidTest.apk}"
 GMOFG_PREPARE_ANDROID="${GMOFG_PREPARE_ANDROID:-1}"
 GMOFG_KEEP_ANDROID_TEST_PACKAGE="${GMOFG_KEEP_ANDROID_TEST_PACKAGE:-0}"
+# 批次按风险主题拆分，便于失败后只重跑相关范围：
+# A=报文修改/延迟/Mock，B=连接与响应破坏，C=请求/响应断点，D=规则状态与组合顺序，
+# E=各类匹配条件，F=应被 Rust 拒绝的非法配置，G=限速/抖动/间歇/中途断开等弱网动作。
+# 设为 ALL 执行全部批次；GMOFG_SCENARIO 非空时会进一步缩小到一个场景。
 GMOFG_BATCH="${GMOFG_BATCH:-A}"
 GMOFG_SCENARIO="${GMOFG_SCENARIO:-}"
 EVIDENCE_ROOT="${GMOFG_EVIDENCE_ROOT:-$(mktemp -d /private/tmp/gmofg-headless-matrix.XXXXXX)}"
@@ -45,6 +64,8 @@ for required_file in "$MATRIX_FILE" "$GMOFG_PROXY_CA_DER" "$GMOFG_CLIENT_P12"; d
     exit 1
   fi
 done
+# 在连接设备前先验证矩阵结构。这里不是重复测试业务实现，而是保证：模板数量、匹配字段、
+# 非法配置、弱网场景及其期望结果没有被维护者误删或改成无法判定的宽松条件。
 jq -e '
   ([.scenarios[].template_id | select(. != null)] | unique | length) == 22
   and (
@@ -153,6 +174,8 @@ if [[ "$SELECTED_SCENARIO_COUNT" == "0" ]]; then
 fi
 
 if [[ "$GMOFG_PREPARE_ANDROID" == "1" ]]; then
+  # instrumentation APK 是测试包，不是桌面 UI。它在真机进程内调用 Payment 的 DLL 请求路径，
+  # 因而能够证明 Android 客户端实际观察结果，而不仅是主机侧模拟一个 HTTP 请求。
   (
     export JAVA_HOME="$GMOFG_ANDROID_JAVA_HOME"
     export PATH="$JAVA_HOME/bin:$PATH"
@@ -171,6 +194,8 @@ cargo build --manifest-path "$RUNNER_MANIFEST" >"$EVIDENCE_ROOT/rust-build.txt" 
 RUNNER_PID=""
 INSTRUMENTATION_PID=""
 SOURCE_DIGEST="$(
+  # 证据目录记录源码状态、runner 和 APK 摘要。这样以后查看日志时，可以确认它们对应哪一份
+  # 已提交/未提交代码；摘要用于可追溯性，不代表二进制签名或发布可信度。
   {
     git -C "$SCRIPT_DIR/../.." rev-parse HEAD 2>/dev/null || true
     git -C "$SCRIPT_DIR/../.." status --porcelain 2>/dev/null || true
@@ -206,6 +231,8 @@ read_device_setting() {
 }
 
 cleanup_device_artifacts() {
+  # 设备上的证书、PKCS12 与 Payment 设置只为本轮 instrumentation 准备。
+  # 无论成功、失败还是 Ctrl-C，都应删除，避免敏感材料残留在测试包私有目录。
   DEVICE_CREDIT_TID=""
   DEVICE_CONFIRM_CODE=""
   DEVICE_PAYMENT_PASSWORD=""
@@ -227,6 +254,8 @@ cleanup_device_artifacts() {
 }
 
 cleanup_all() {
+  # 清理顺序很重要：先停止仍在发请求的 instrumentation，再停止 Rust runner，
+  # 然后删除主密钥临时文件和设备材料，避免进程继续读取已删除或半清理的数据。
   if [[ -n "$INSTRUMENTATION_PID" ]] && kill -0 "$INSTRUMENTATION_PID" 2>/dev/null; then
     adb -s "$GMOFG_DEVICE_SERIAL" shell am force-stop jp.gmofg.payment.test \
       >/dev/null 2>&1 || true
@@ -255,6 +284,8 @@ trap cleanup_all EXIT INT TERM
 
 HEADLESS_MASTER_KEY_FILE="$(mktemp /private/tmp/gmofg-headless-master-key.XXXXXX)"
 chmod 600 "$HEADLESS_MASTER_KEY_FILE"
+# 未签名的 runner 直接访问 Keychain 可能弹授权框，因此由系统 security 命令导出当前用户主密钥。
+# 文件权限强制为 0600，并由 EXIT trap 删除；任何日志和 instrumentation 参数都不得包含该值。
 if ! security find-generic-password \
   -s com.gmofg.payment-proxy \
   -a secret-protection-master-key-v1 \
@@ -283,6 +314,8 @@ DEVICE_SETTINGS_JSON="$(
     "$(printf '%s' "$DEVICE_CONFIRM_CODE" | jq -Rs .)" \
     "$(printf '%s' "$DEVICE_PAYMENT_PASSWORD" | jq -Rs .)"
 )"
+# 敏感材料通过 adb 标准输入写进测试包私有目录，而不是命令行参数。
+# 命令行可能出现在进程列表和测试报告中；私有文件则使用 umask 077 并随后检查权限为 600。
 adb -s "$GMOFG_DEVICE_SERIAL" shell \
   "run-as jp.gmofg.payment.test sh -c \
   'mkdir -p files && umask 077 && cat > files/gmofg-proxy-ca.der'" \
@@ -350,6 +383,8 @@ append_failure() {
 }
 
 run_probe() {
+  # 一个场景对应一个独立目录、一个 Rust runner 进程和一次 Android instrumentation。
+  # 这种隔离让失败证据不会被前后场景的日志、规则计数或运行时 epoch 污染。
   local scenario_json="$1"
   local scenario
   local template_id
@@ -422,6 +457,7 @@ run_probe() {
     -e expectedKind "$expected_kind"
     -e proxyUrl "$GMOFG_PROXY_URL"
   )
+  # instrumentation 参数只传“如何断言”的非敏感信息。证书和终端配置已经通过私有文件下发。
   if jq -e 'has("expected_status")' <<<"$scenario_json" >/dev/null; then
     instrumentation_args+=(
       -e expectedStatus "$(jq -r '.expected_status' <<<"$scenario_json")"
@@ -496,6 +532,8 @@ run_probe() {
   INSTRUMENTATION_PID=""
   touch "$completion_signal"
 
+  # Android 完成后仍要等待 Rust 输出 HEADLESS_CLEAN；只看到 Android OK 并不代表规则已经删除，
+  # 若直接进入下一场景，命中次数和动作可能串场。
   if ! wait_for_log "$RUNNER_PID" "$runner_log" \
     "HEADLESS_CLEAN scenario=$scenario remaining_test_rules=0 created_rule_remaining=0" \
     1500; then
@@ -514,6 +552,8 @@ run_probe() {
     | rg 'DllProxyRealDeviceTest|DLL_PROXY_SCENARIO_CONFIRMED' \
     >"$device_log" || true
 
+  # 三层证据分别回答不同问题：instrumentation 是否通过、Rust 是否观察到预期内部语义、
+  # 真机 logcat 是否留下对应场景确认标记。任何一层缺失都记为 FAIL。
   if [[ "$adb_status" != "0" ]] || ! rg -q 'OK \(1 test\)' "$instrumentation_log"; then
     append_failure "$scenario" "$template_id" "Android instrumentation failed"
     return 1

@@ -1,3 +1,8 @@
+//! 应用端口到数据库、证书、文件系统和代理运行时的适配器集合。
+//!
+//! 适配器负责 DTO/错误映射与资源组合，不把 Tauri/WebView 类型带入业务层，也不在此处
+//! 重新定义领域规则。
+
 mod application_proxy;
 mod bundle;
 mod capture;

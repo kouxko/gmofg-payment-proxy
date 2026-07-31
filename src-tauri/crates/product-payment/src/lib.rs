@@ -1,11 +1,8 @@
-//! GMO-FG Payment product profile.
+//! GMO-FG Payment 产品配置。
 //!
-//! Product certificate assets live here so the generic proxy infrastructure
-//! can be reused without carrying Payment names or private test material.
-//! The default library dependency graph contains only product contracts and
-//! codecs. The standalone real-device proxy is deliberately isolated behind
-//! the `real-device-tool` Cargo feature because it composes runtime and
-//! infrastructure adapters rather than defining reusable product policy.
+//! 产品证书资源放在这里，使通用代理基础设施无需知道 Payment 名称或测试私密材料。默认
+//! 依赖图只包含产品契约与编解码器。独立真机代理会装配 runtime/infrastructure，因此刻意
+//! 隔离在 `real-device-tool` Cargo feature 后面，不污染可复用产品策略库。
 
 use encoding_rs::SHIFT_JIS;
 use gmofg_proxy_product_api::{
@@ -23,8 +20,9 @@ const TEST_ROOT_CA_SIGNING_KEY_PEM: &str = include_str!(
 const BUNDLED_PAYMENT_SERVER_CERTIFICATES_PEM: &[u8] =
     include_bytes!("../../../../test-support/certificates/bundled-payment-server.crt");
 
-/// Controls whether this process may use the embedded isolated-test signing
-/// key. The default is deliberately disabled.
+/// 控制当前进程是否允许使用内置的隔离测试签名私钥。
+///
+/// 默认必须关闭；只有明确创建真机隔离测试配置时才能启用，不能让生产路径意外签发证书。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum EmbeddedTestSigning {
     #[default]
@@ -33,14 +31,17 @@ pub enum EmbeddedTestSigning {
 }
 
 #[derive(Debug, Default)]
+/// GMO-FG Payment 对通用代理核心提供的全部产品策略。
 pub struct PaymentProductProfile {
     embedded_test_signing: EmbeddedTestSigning,
 }
 
 #[derive(Debug, Default)]
+/// Payment Body 的 Shift-JIS 无损编解码器。
 struct PaymentBodyCodec;
 
 #[derive(Debug, Default)]
+/// 从 Payment JSON/Header 中提取请求 ID 和交易类型的分类器。
 struct PaymentRequestClassifier;
 
 const PAYMENT_CHANNELS: &[ProductChannel] = &[
@@ -278,7 +279,9 @@ impl PaymentProductProfile {
         }
     }
 
-    /// Explicit profile for the Payment proxy test tool.
+    /// 创建专用于 Payment 代理隔离测试工具的配置。
+    ///
+    /// 这是唯一开启内置测试 CA 私钥的公开构造路径，正常 `default()` 仍保持关闭。
     #[must_use]
     pub const fn isolated_test_tool() -> Self {
         Self::new(EmbeddedTestSigning::EnabledForIsolatedTesting)
@@ -342,6 +345,8 @@ impl ProductProfile for PaymentProductProfile {
 
 impl RequestClassifier for PaymentRequestClassifier {
     fn classify(&self, message: ProductMessageContext<'_>) -> ClassifiedRequest {
+        // 请求 ID 优先取 HTTP Header。这样即使 Body 不是合法 Shift-JIS/JSON，抓包仍能
+        // 利用网关提供的关联 ID；只有 Header 缺失时才回退到产品 JSON 字段。
         let header_request_id = message
             .headers
             .iter()
@@ -358,6 +363,8 @@ impl RequestClassifier for PaymentRequestClassifier {
             .map(str::to_owned);
         let (decoded, had_errors) = SHIFT_JIS.decode_without_bom_handling(message.body);
         if had_errors {
+            // 分类只是辅助元数据，不能因无法解码而拒绝真实网络报文；返回已有 Header
+            // 信息并让通用代理继续按原始字节转发。
             return ClassifiedRequest {
                 request_id: header_request_id,
                 request_type: None,
@@ -396,6 +403,8 @@ impl BodyCodec for PaymentBodyCodec {
     }
 
     fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
+        // `decode_without_bom_handling` 符合 Payment 协议：Body 不使用 Unicode BOM。
+        // `had_errors` 必须作为失败返回，不能让替换字符进入用户编辑并破坏原始报文。
         let (decoded, had_errors) = SHIFT_JIS.decode_without_bom_handling(bytes);
         if had_errors {
             return Err(ProductError::new(
@@ -407,6 +416,8 @@ impl BodyCodec for PaymentBodyCodec {
     }
 
     fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
+        // encoding_rs 可能用替换字符处理不可表示文本，因此必须检查 `had_errors`，
+        // 例如 Emoji 不能悄悄变为 `?` 后发送到 GMO-FG Server。
         let (encoded, _encoding, had_errors) = SHIFT_JIS.encode(text);
         if had_errors {
             return Err(ProductError::new(

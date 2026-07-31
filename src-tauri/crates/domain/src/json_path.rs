@@ -1,3 +1,8 @@
+//! 受控 JSON Path 解析与读写。
+//!
+//! 规则只需要 `$.result.code`、`$.items[0].id` 这类确定路径，因此刻意实现一个小而
+//! 可验证的子集，不支持模糊查询或脚本执行，保证行为安全且可预测。
+
 use serde_json::Value;
 use thiserror::Error;
 
@@ -7,8 +12,7 @@ struct Segment {
     indexes: Vec<usize>,
 }
 
-/// Parsed representation of the deliberately small `JSONPath` subset supported
-/// by rule matching and mutation.
+/// 规则匹配和修改所支持的小型 `JSONPath` 子集的解析结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JsonPath {
     segments: Vec<Segment>,

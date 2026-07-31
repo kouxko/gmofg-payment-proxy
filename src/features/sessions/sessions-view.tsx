@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * 会话历史页面。
+ *
+ * Rust 内存仓库负责会话容量、筛选、排序和分页；这里保存查询表单、选中会话、
+ * Overlay 开关与确认状态。完整 Payload 按需读取，关闭详情时会失效并释放引用。
+ */
+
 import { useMemo, useState } from "react";
 import {
   Alert,
@@ -61,6 +68,8 @@ export const defaultSessionQuery: SessionQuery = {
 };
 
 export function sessionFilterDateValue(value: string | null): DateValue | null {
+  // 同时兼容带时区和不带时区的 Rust/旧草稿文本；解析失败显示为空，由 Rust
+  // 在提交查询时继续承担最终合法性判断。
   if (!value) return null;
   try {
     return parseAbsoluteToLocal(value);
@@ -74,6 +83,7 @@ export function sessionFilterDateValue(value: string | null): DateValue | null {
 }
 
 export function sessionFilterDateText(value: DateValue | null): string | null {
+  // IPC 约定保留到分钟，秒和毫秒不会由前端凭空补齐。
   if (!value) return null;
   return toCalendarDateTime(value).toString().slice(0, 16);
 }
@@ -100,6 +110,8 @@ export function SessionsView() {
     undefined,
     { enabled: Boolean(selectedId && detailRequested) },
   );
+  // detailRequested 将“选中列表行”和“确实需要 Payload”分开，避免列表浏览时
+  // 自动把大量敏感报文加载进 WebView。
   useAppEventRefresh(["session_updated"], detail.refresh, {
     paused: !selectedId || !detailRequested,
     entityId: selectedId,
@@ -109,6 +121,7 @@ export function SessionsView() {
   );
 
   async function exportSelected() {
+    // Rust 打开系统保存对话框并写文件；前端只负责敏感数据二次确认。
     if (!selectedId || exportPending) return;
     setExportPending(true);
     try {
@@ -123,6 +136,7 @@ export function SessionsView() {
   }
 
   async function clearSessions() {
+    // 清空成功后同时关闭详情并让旧 Promise/引用失效，避免展示已删除数据。
     if (clearPending) return;
     setClearPending(true);
     try {

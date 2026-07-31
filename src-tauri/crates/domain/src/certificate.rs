@@ -1,11 +1,18 @@
+//! 证书元数据与启动前校验规则。
+//!
+//! 本模块不读取文件，也不执行 TLS 握手。它只根据已解析的元数据判断有效期、用途和
+//! 密钥保护状态，使桌面 UI、未来 TUI/CLI 与无界面测试复用同一套判断。
+
 use crate::{CertificateId, DomainError, ErrorCode, Revision};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+/// 距离到期不足该天数时显示预警，但仍允许启动。
 pub const CERTIFICATE_EXPIRY_WARNING_DAYS: i64 = 60;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 代理涉及的四类证书角色。
 pub enum CertificateKind {
     LocalRootCa,
     ProxyLeaf,
@@ -14,6 +21,7 @@ pub enum CertificateKind {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 证书在指定时间点的可用状态。
 pub enum CertificateStatus {
     Missing,
     Valid,
@@ -24,6 +32,7 @@ pub enum CertificateStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 不含私钥的证书摘要，可安全用于状态展示和持久化。
 pub struct CertificateMetadata {
     pub id: CertificateId,
     pub revision: Revision,
@@ -53,6 +62,7 @@ impl CertificateMetadata {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 启动代理所需的完整证书清单。
 pub struct CertificateInventory {
     pub local_root_ca: Option<CertificateMetadata>,
     pub proxy_leaf: Option<CertificateMetadata>,
@@ -67,6 +77,7 @@ impl CertificateInventory {
         required_sans: &[String],
         now: DateTime<Utc>,
     ) -> Result<(), DomainError> {
+        // 一次收集所有缺失/过期证书与 SAN 问题，让操作者无需反复“修一个、再校验”。
         let required = [
             ("local_root_ca", self.local_root_ca.as_ref()),
             ("proxy_leaf", self.proxy_leaf.as_ref()),

@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 八个业务页面共用的永久桌面外壳。
+ *
+ * 负责顶部运行状态、左侧导航、全局 Rust 错误和帮助入口。它只显示
+ * BootstrapProvider 提供的 ViewModel，并通过内存导航切换中央内容；代理启停、
+ * 证书判断等业务均不在此处实现。
+ */
+
 import {
   Alert,
   Button,
@@ -67,6 +75,7 @@ export const sideNavigationClassName =
 export const shellErrorRegionClassName = "px-5 pt-4";
 
 function CurrentTime() {
+  // 时间只属于 UI 装饰状态，因此可以在前端每秒更新；它不参与会话时间计算。
   const [currentTime, setCurrentTime] = useState("—");
   useEffect(() => {
     const updateCurrentTime = () =>
@@ -274,6 +283,7 @@ function SideNavigation() {
 }
 
 function ShellContent({ children }: Readonly<{ children: React.ReactNode }>) {
+  // 全局错误区独立于页面错误区：这里表示 Rust 核心/订阅层不可用。
   const { error, refresh } = useBootstrap();
   return (
     <div className="grid h-full grid-cols-[96px_minmax(0,1fr)] grid-rows-[56px_minmax(0,1fr)] max-[1280px]:grid-cols-[80px_minmax(0,1fr)] max-[1025px]:grid-cols-1 max-[1025px]:grid-rows-[auto_minmax(0,1fr)]">

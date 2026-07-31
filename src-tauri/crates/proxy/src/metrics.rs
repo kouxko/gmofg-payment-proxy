@@ -1,4 +1,7 @@
-//! Runtime metrics contract shared by transport-independent pipeline adapters.
+//! 供传输层与 pipeline 共享的运行时指标契约。
+//!
+//! 指标按 runtime epoch 查询，防止重启后把旧连接计入新实例；采集失败返回错误而不是伪造
+//! 零值。容量配置是运行时约束，不承担持久化或业务告警职责。
 
 use std::collections::BTreeMap;
 

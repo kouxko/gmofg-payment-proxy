@@ -1,3 +1,9 @@
+//! `SQLite` 持久化边界：保存设置、规则运行态和加密后的证书材料。
+//!
+//! 本模块用单连接互斥锁串行化事务，并用 revision 做 CAS（比较后更新）：调用方必须带上
+//! 自己读到的版本，版本不一致就返回冲突，避免两个窗口或后台任务静默覆盖彼此的数据。
+//! 数据库只保存密文证书材料；明文私钥不应越过上层的短生命周期内存边界。
+
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
@@ -59,6 +65,8 @@ pub struct CertificateMaterialSnapshot {
 
 #[derive(Debug)]
 pub struct SqliteStore {
+    // rusqlite 的 Connection 不是并发事务池；单锁明确规定本进程内只有一个事务所有者。
+    // 不要在持锁期间调用外部 async 服务，否则会把一次慢 I/O 放大成所有持久化阻塞。
     connection: Mutex<Connection>,
 }
 
@@ -200,6 +208,8 @@ impl SqliteStore {
         value: &Value,
     ) -> Result<StoredSettings, InfrastructureError> {
         let mut connection = self.connection.lock();
+        // IMMEDIATE 在读取 revision 前取得写入权，使“比较 + 更新”成为一个不可分割事务。
+        // 若调用方版本已旧，返回 RevisionConflict，由上层重新加载，绝不后写覆盖先写。
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|source| InfrastructureError::Database { source })?;
@@ -323,6 +333,8 @@ impl SqliteStore {
         records: &[RuleRecord],
     ) -> Result<u64, InfrastructureError> {
         let mut connection = self.connection.lock();
+        // 整套规则先 CAS 推进集合版本，再删除/插入；任一条失败都会回滚整个事务，读者
+        // 不可能看到“旧规则已删、新规则只写了一半”的中间状态。
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|source| InfrastructureError::Database { source })?;

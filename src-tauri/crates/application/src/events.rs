@@ -1,3 +1,8 @@
+//! 有序实时事件、回放与订阅生命周期。
+//!
+//! `EventHub` 连接事件生产者与 Tauri、未来 TUI 或测试适配器。它按游标回放事件，并
+//! 对回放副本和慢订阅者占用的内存记账，防止实时展示拖垮代理核心。
+
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
@@ -18,6 +23,9 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
+/// 按游标读取历史事件的结果。
+///
+/// `snapshot_required` 为真表示请求位置太旧，调用方必须重新查询页面快照。
 pub struct EventReplay {
     pub events: Vec<UiEventEnvelope>,
     pub current_cursor: u64,
@@ -25,6 +33,7 @@ pub struct EventReplay {
 }
 
 #[derive(Debug)]
+/// 一次完整订阅：确认信息、历史回放以及后续实时接收器。
 pub struct EventSubscription {
     pub subscription_id: u64,
     pub ack: SubscriptionAckViewModel,
@@ -32,13 +41,10 @@ pub struct EventSubscription {
     pub live: TrackedEventReceiver,
 }
 
-/// Replay events whose cloned bytes remain reserved until an outer adapter
-/// actually consumes them.
+/// 带内存记账的历史回放集合。
 ///
-/// `drain_with` defines the application boundary: reservation is released only
-/// after the callback returns, so synchronous serializers such as the Tauri
-/// channel cannot observe an unaccounted clone. Unsent events are released by
-/// `Drop`.
+/// 克隆事件在外层真正消费前仍占用容量；回调返回后才释放对应字节。未发送部分会在
+/// `Drop` 时自动归还，避免 Tauri 序列化期间出现未记账副本。
 #[derive(Debug)]
 pub struct TrackedReplay {
     events: VecDeque<UiEventEnvelope>,
@@ -80,6 +86,7 @@ impl Drop for TrackedReplay {
 }
 
 #[derive(Debug)]
+/// 带内存记账的实时事件接收器，取出或丢弃事件时都会归还容量。
 pub struct TrackedEventReceiver {
     receiver: mpsc::Receiver<UiEventEnvelope>,
     queued_logical_bytes: Arc<AtomicU64>,
@@ -150,6 +157,10 @@ impl Drop for TrackedEventReceiver {
 }
 
 #[derive(Debug)]
+/// 应用内唯一的有序事件中心。
+///
+/// 所有事件获得单调递增 ID；抓包高频事件合批，控制事件立即发布。内部同时维护有限
+/// 回放日志和每个订阅者的有界队列。
 pub struct EventHub {
     replay_capacity: usize,
     capacity: Arc<CapacityLedger>,

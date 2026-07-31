@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证异步 Rust 草稿请求的代次淘汰、保存门禁与并发编辑保护。 */
+
 import "@testing-library/jest-dom/vitest";
 import {
   act,

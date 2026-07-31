@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 系统设置的草稿编辑页面。
+ *
+ * stored 是已保存配置，effective 是当前运行实例正在使用的不可变快照，draft 是
+ * 用户尚未保存的输入。Rust 负责规范化、字段校验、持久化以及是否需要重启；
+ * 前端不能因输入“看起来正确”就自行判定可生效。
+ */
+
 import { useMemo, useState } from "react";
 import {
   Accordion,
@@ -35,6 +43,7 @@ import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 
 function mib(bytes: number) {
+  // ViewModel 使用字节，页面按需求用 MiB 展示；保存时仍通过 Rust Draft 字段提交。
   return Math.round(bytes / 1024 / 1024);
 }
 
@@ -58,11 +67,13 @@ export function SettingsView() {
   const fieldError = (field: string) =>
     validation?.field_errors[field]?.join("；");
   function setDraft(next: SettingsDraft | undefined) {
+    // 用户继续编辑后，旧校验结果不再可信，必须清除并重新请求 Rust 校验。
     setDraftState(next);
     setValidation(undefined);
   }
   const draft = draftState ?? settings.data?.stored;
   const draftDirty = useMemo(
+    // 只用于提示“有未保存改动”，不承担业务字段校验。
     () =>
       Boolean(
         draft &&
@@ -76,6 +87,7 @@ export function SettingsView() {
   const writePending = pendingAction != null || resetPending;
 
   async function validate(candidate = draft) {
+    // leafSansRaw 保留用户逗号输入；Rust 负责拆分、去重、IP/DNS 合法性和规范化。
     if (!candidate || writePending) return;
     setPendingAction("validate");
     try {
@@ -103,6 +115,7 @@ export function SettingsView() {
   }
 
   async function save(restart: boolean) {
+    // 保存与保存并重启是两个明确用例，运行时配置不会由前端直接修改。
     if (!draft || writePending) return;
     setPendingAction(restart ? "save_restart" : "save");
     try {
@@ -142,6 +155,7 @@ export function SettingsView() {
   }
 
   async function resetDefaults() {
+    // 恢复默认值只加载草稿，不自动覆盖已保存配置，仍需用户显式保存。
     if (writePending) return;
     setResetPending(true);
     try {

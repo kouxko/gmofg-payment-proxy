@@ -1,4 +1,7 @@
-//! Raw TCP/HTTP integration coverage for TEST-PROXY and TEST-CONCURRENCY.
+//! `TEST-PROXY` 与 `TEST-CONCURRENCY` 的原始 TCP/HTTP 集成测试。
+//!
+//! 这里从真实本机 socket 驱动 Listener、连接服务和 pipeline，验证并发、容量、取消与
+//! 原始 HTTP 行为；上游和证书仍是测试替身，不能把通过结果直接当成 GMO-FG 真机证据。
 
 use std::collections::BTreeMap;
 use std::fmt;

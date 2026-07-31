@@ -1,3 +1,8 @@
+//! 断点编辑内容的校验与规范化。
+//!
+//! 前端只提交输入；本模块校验状态码、Header、JSON，调用产品编码器重建字节并同步
+//! `Content-Length`，从而让桌面 UI 与未来 TUI/CLI 共用同一套报文修改规则。
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use gmofg_proxy_product_api::BodyCodec;
@@ -9,7 +14,7 @@ use crate::{
     MessageContentViewModel, MessageStage,
 };
 
-/// Canonical Rust-side validator and normalizer for breakpoint edits.
+/// 断点编辑在 Rust 侧的唯一校验器和规范化器。
 #[derive(Debug)]
 pub struct BreakpointValidator {
     body_codec: Arc<dyn BodyCodec>,

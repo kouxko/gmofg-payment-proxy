@@ -1,4 +1,8 @@
-//! rustls TLS 1.2-only mTLS adapters (`PROXY-001` through `PROXY-005`).
+//! 仅允许 TLS 1.2 的 rustls 双向认证适配器（`PROXY-001` 至 `PROXY-005`）。
+//!
+//! 下游服务端要求受信客户端证书，上游客户端同时验证服务器链/主机名并提交客户端身份。
+//! 握手受超时和取消令牌控制；证书、协议版本或主机名不匹配都在进入 HTTP pipeline 前
+//! 封闭失败，调试输出不得包含私钥字节。
 
 use std::{fmt, sync::Arc};
 
@@ -48,6 +52,10 @@ impl fmt::Debug for ServerTlsAdapter {
 }
 
 impl ServerTlsAdapter {
+    /// 构建下游 mTLS 服务端的不可变证书快照。
+    ///
+    /// CA、服务端证书或私钥任一无效都会在监听发布前失败；运行中不会热换其中一部分，
+    /// 因此一次握手看到的链和私钥始终来自同一 epoch。
     pub fn build(
         certificate_chain: Vec<Vec<u8>>,
         private_key_pkcs8_der: Vec<u8>,
@@ -110,6 +118,8 @@ impl ServerTlsAdapter {
 #[async_trait]
 impl ConnectionAcceptor for ServerTlsAdapter {
     async fn accept(&self, io: BoxIo, context: &ConnectionContext) -> Result<AcceptedConnection> {
+        // rustls 先完成链校验、客户端证书要求和策略验证；只有全部通过，连接及对端身份
+        // 才能进入 HTTP pipeline。失败的裸 TCP 连接不会被记作已认证客户端。
         let stream = self
             .acceptor_for(context)?
             .accept(io)
@@ -217,6 +227,7 @@ impl fmt::Debug for ClientTlsAdapter {
 }
 
 impl ClientTlsAdapter {
+    /// 构建访问上游的 mTLS 客户端快照；仅信任显式提供的 CA，并携带指定客户端身份。
     pub fn build(
         certificate_chain: Vec<Vec<u8>>,
         private_key_pkcs8_der: Vec<u8>,
@@ -244,7 +255,9 @@ impl ClientTlsAdapter {
         })
     }
 
-    /// The owned `ServerName` enables both real SNI and `WebPKI` hostname/IP verification.
+    /// 拥有所有权的 `ServerName` 同时用于真实 SNI 与 `WebPKI` 主机名/IP 校验。
+    ///
+    /// TCP 已连接不代表这里成功；链、主机名、协议版本或客户端身份任一不符都会终止 TLS。
     pub async fn connect(&self, domain: &str, io: BoxIo) -> Result<BoxIo> {
         let server_name = ServerName::try_from(domain.to_owned()).map_err(tls_config)?;
         let stream = self

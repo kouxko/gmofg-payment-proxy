@@ -1,3 +1,5 @@
+/** 断点决策 DTO 的纯函数测试；证明默认参数合并，不代表网络任务已实际放行。 */
+
 import { describe, expect, it } from "vitest";
 import type {
   BreakpointActionOptionViewModel,

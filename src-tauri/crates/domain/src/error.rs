@@ -1,3 +1,8 @@
+//! 领域层统一错误模型。
+//!
+//! `ErrorCode` 是稳定机器码，中文 `message` 给人阅读，`field_errors` 精确指出错误字段。
+//! 领域层不决定弹窗、颜色或按钮，这些展示行为由外层适配器处理。
+
 use crate::{Revision, RuntimeEpoch};
 use serde::{Deserialize, Serialize};
 use specta::Type;

@@ -7,6 +7,8 @@ on:
 
 jobs:
   verify:
+    # Windows 与 macOS 都执行同一套边界、前端和 Rust 检查，防止只在开发者当前平台可用。
+    # 这里证明源码可构建/可测试；安装包签名和发布物验证由 windows-release.yml 负责。
     name: Verify (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -47,11 +49,13 @@ jobs:
       - name: Verify generated IPC bindings
         shell: pwsh
         run: |
+          # Rust 是 IPC 类型的唯一来源。重新生成后必须零差异，禁止手改 TypeScript 镜像类型。
           pnpm bindings
           git diff --exit-code -- src/generated/rust-types.ts
 
       - name: Verify frontend
         run: |
+          # 先跑 Rust-only 架构门禁，再跑普通 lint/typecheck/test/build；两类检查关注点不同。
           pnpm scan:frontend-boundaries
           pnpm lint
           pnpm typecheck

@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 规则条件和动作的表单编辑器。
+ *
+ * 这是 UI 表单，不是规则引擎。切换条件/动作类型、解析字节或 Header 时，会请求
+ * Rust 生成规范草稿；TypeScript 仅渲染返回的枚举结构。这样桌面 UI、未来 TUI
+ * 和无 UI 单元测试始终共享同一套语义。
+ */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Button,
@@ -48,6 +56,7 @@ function useAsyncRequestSlots(
   prefix: string,
   onAsyncStateChange: AsyncStateChange,
 ) {
+  // 每个下拉框拥有独立 generation。用户快速连续切换时，旧请求不能覆盖新草稿。
   const generations = useRef(new Map<string, number>());
   const activeKeys = useRef(new Set<string>());
 
@@ -94,6 +103,7 @@ function errorText(
   fieldErrors: Record<string, string[]>,
   prefix: string,
 ): string | undefined {
+  // Rust 字段路径可能指向父项或具体子字段，这里只负责把相关中文消息聚合显示。
   const messages = Object.entries(fieldErrors)
     .filter(([field]) => field === prefix || field.startsWith(`${prefix}.`))
     .flatMap(([, values]) => values);
@@ -131,6 +141,7 @@ export function parseRuleHeaderInput(raw: string) {
 }
 
 export function actionKind(action: RuleAction): ActionKind {
+  // terminal 是 Rust 的包装枚举；UI 下拉框需要展示内部真正动作类型。
   return action.type === "terminal" ? action.action.type : action.type;
 }
 
@@ -231,6 +242,7 @@ function ConditionEditor({
   asyncStateKey: string;
   onAsyncStateChange: AsyncStateChange;
 }) {
+  // runAsync 向父级报告 pending/invalid，父级会在任何子编辑器未稳定时禁用保存。
   const runAsync = useAsyncRequestSlots(
     asyncStateKey,
     onAsyncStateChange,

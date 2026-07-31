@@ -1,3 +1,8 @@
+//! 弱网动作合并后的不可变调度描述。
+//!
+//! 调度只计算“何时、每块多大、何处断开”，不进行 I/O；无动作时保持零额外开销，非法
+//! 参数应在更早的规则校验阶段拒绝。
+
 use std::time::Duration;
 
 const DEFAULT_TRAFFIC_CHUNK_BYTES: usize = 16 * 1024;

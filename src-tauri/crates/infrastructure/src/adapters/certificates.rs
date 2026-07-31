@@ -1,3 +1,8 @@
+//! 证书应用服务适配器：连接持久化密文、系统密钥保护器与证书解析器。
+//!
+//! 私钥只在导入、签发或构建 TLS 快照时短暂解密；数据库保存的是受当前用户保护的密文。
+//! 任一步失败都不发布部分证书快照，避免证书与私钥来自不同版本。
+
 use std::{collections::BTreeMap, fmt, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;

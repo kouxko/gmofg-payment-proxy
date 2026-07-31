@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 拦截规则的列表与编辑工作台。
+ *
+ * 左侧列表来自 Rust，右侧 draft 是尚未保存的用户输入。规则匹配、优先级执行、
+ * 第 N 次命中、终止动作、revision 冲突和持久化全部由 Rust 负责。前端只调用
+ * Rust 提供的草稿/解析/保存命令并显示字段错误。
+ */
+
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -69,6 +77,7 @@ export function RulesView() {
   const editorPanelRef = useRef<HTMLElement>(null);
 
   function revealEditor() {
+    // 窄窗口中列表和编辑器上下排列，选择后滚到编辑区，避免用户误以为没响应。
     if (window.matchMedia("(max-width: 1280px)").matches) {
       requestAnimationFrame(() => {
         editorPanelRef.current?.scrollIntoView({ block: "start" });
@@ -77,6 +86,7 @@ export function RulesView() {
   }
 
   const effectiveSelectedId =
+    // 第一次进入时默认选中 Rust 列表中的第一条；“new”明确表示本地新草稿。
     selectedId === "new" ? undefined : (selectedId ?? rules.data?.[0]?.rule_id);
   const ruleDetail = useIpcQuery<RuleViewModel>(
     `rule-detail:${effectiveSelectedId ?? "none"}`,
@@ -105,6 +115,7 @@ export function RulesView() {
   );
 
   function updateDraft(change: RuleDraftChange) {
+    // 任意编辑都会清除上一次 Rust 字段错误，避免旧错误继续误导用户。
     setDraft((current) => {
       if (!current) return current;
       return typeof change === "function" ? change(current) : change;
@@ -113,6 +124,7 @@ export function RulesView() {
   }
 
   useEffect(() => {
+    // 详情异步到达后再装入草稿；timeout 避免在 effect 同步阶段级联更新。
     if (
       ruleDetail.data &&
       ruleDetail.data.summary.rule_id === effectiveSelectedId
@@ -126,6 +138,7 @@ export function RulesView() {
   }, [effectiveSelectedId, ruleDetail.data]);
 
   useEffect(() => {
+    // 从抓包/会话进入时只携带 sessionId，Rust 负责生成合法的预填草稿。
     if (!sourceSessionId) return;
     let active = true;
     void callCommand(commands.ruleCreateFromSession(sourceSessionId))
@@ -176,6 +189,7 @@ export function RulesView() {
   }
 
   async function save() {
+    // editorBlocked 表示某个异步草稿转换还未完成或失败，不能保存半成品。
     if (!draft || writePending || editorBlocked) return;
     setPendingAction("save");
     try {
@@ -195,6 +209,7 @@ export function RulesView() {
   }
 
   async function toggle(rule: RuleSummaryViewModel, enabled: boolean) {
+    // 启停也带 revision，防止两个窗口用旧版本互相覆盖。
     if (writePending) return;
     setPendingAction(`toggle:${rule.rule_id}`);
     try {

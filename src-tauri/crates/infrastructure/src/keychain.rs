@@ -1,4 +1,8 @@
-//! macOS current-user secret protection backed by the login Keychain.
+//! 使用 macOS 登录 Keychain 保护当前用户的敏感数据。
+//!
+//! Keychain 只保存随机生成的主密钥，证书材料使用 AES-GCM 信封加密后再交给数据库。
+//! 进程内互斥锁避免首次创建主密钥的竞态；若另一进程抢先创建，则重新读取而不是覆盖。
+//! 认证失败、条目丢失或系统状态异常都会封闭失败，绝不回退为明文。
 
 use std::{fmt, sync::Mutex};
 
@@ -118,6 +122,8 @@ impl MacKeychainProtector {
     }
 
     fn master_key(&self) -> Result<Zeroizing<Vec<u8>>, InfrastructureError> {
+        // 锁只保护“读取或首次创建”这一小段，防止同一进程生成两把主密钥。跨进程仍可能
+        // 同时创建，所以 Duplicate 分支必须丢弃本地候选并重新读取系统中的胜者。
         let _guard = self
             .key_gate
             .lock()

@@ -2,6 +2,8 @@ param(
     [switch]$SkipBuild
 )
 
+# 便携版只打包已经生成的主程序和说明文件，不执行安装，也不写系统目录。
+# CI 在完成 MSI/NSIS 构建后使用 -SkipBuild，避免重复编译；开发者本地省略该参数时会先构建。
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
 $Executable = Join-Path $ProjectRoot "src-tauri/target/release/gmofg-payment-proxy.exe"
@@ -24,6 +26,7 @@ if (-not (Test-Path $Executable -PathType Leaf)) {
 }
 
 if (Test-Path $PortableDirectory) {
+    # 删除范围被限制在仓库 dist 下的固定目录和同名 zip，不能把变量改成用户目录或磁盘根目录。
     Remove-Item $PortableDirectory -Recurse -Force
 }
 if (Test-Path $Archive) {
@@ -42,6 +45,8 @@ GMO-FG Payment Proxy portable build
 - Certificates, settings, and rules are stored in the current user's application data.
 - Private keys and passwords are protected with Windows DPAPI current-user scope and cannot be moved to another Windows user.
 "@
+# 便携只表示“无需安装”，不表示数据也能随 U 盘跨机器/跨用户复制。
+# 私钥和密码仍由当前 Windows 用户范围的 DPAPI 保护，这是安全设计而不是功能缺失。
 Set-Content -Path (Join-Path $PortableDirectory "PORTABLE.txt") -Value $PortableNotice -Encoding UTF8
 
 Compress-Archive -Path "$PortableDirectory/*" -DestinationPath $Archive -CompressionLevel Optimal

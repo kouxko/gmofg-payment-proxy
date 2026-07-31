@@ -1,8 +1,8 @@
-//! Raw HTTP/1 head capture and byte-preserving I/O wrappers.
+//! HTTP/1 原始 head 捕获与保字节 I/O 包装器。
 //!
-//! Hyper owns semantic parsing, while these wrappers retain the exact wire
-//! bytes required by capture, replay, informational-response handling, and
-//! intentional protocol-fault tests.
+//! Hyper 拥有语义解析，这些包装器只旁路记录线上字节，用于抓包、重放、1xx 响应和故意
+//! 制造协议故障。捕获有严格上限；边界不完整或超限时返回错误，绝不从 Hyper 规范化后的
+//! header 反推原始报文。
 
 use std::fmt::{Debug, Formatter};
 use std::io;

@@ -1,4 +1,8 @@
-//! Network fault primitives (`ACTION-001` through `ACTION-013`).
+//! 网络故障动作原语（`ACTION-001` 至 `ACTION-013`）。
+//!
+//! 本模块定义动作如何组合以及何时终止后续处理；动作可以故意制造不规范 HTTP，因而
+//! “修复”Content-Length 或截断会改变产品语义。延迟类动作必须观察取消令牌，停止代理
+//! 时立即退出。
 
 use std::time::Duration;
 

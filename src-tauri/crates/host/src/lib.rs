@@ -1,9 +1,7 @@
-//! UI-neutral composition root for the payment proxy.
+//! 与 UI 无关的代理装配根。
 //!
-//! Desktop, future TUI/CLI, and headless integration tests all construct the
-//! same [`ApplicationHost`]. Presentation adapters provide only platform
-//! services such as file selection; use-case, persistence, certificate, rule,
-//! and network assembly stays here.
+//! 桌面、未来 TUI/CLI 和无界面集成测试都创建同一个 [`ApplicationHost`]。展示适配器
+//! 只提供文件选择等平台服务；用例、持久化、证书、规则和网络实现统一在这里组装。
 
 use std::{
     collections::BTreeMap,
@@ -55,10 +53,9 @@ pub enum HostBuildError {
     Application(#[from] AppError),
 }
 
-/// Platform services that are intentionally supplied by the outer adapter.
+/// 刻意由最外层适配器提供的平台服务。
 ///
-/// The file dialog can be backed by Tauri, a scripted headless test, or a
-/// future terminal prompt without changing any application use case.
+/// 文件对话框可以来自 Tauri、无界面测试脚本或未来终端提示，而无需修改任何应用用例。
 pub struct HostPlatformServices {
     secret_protector_override: Option<Arc<dyn SecretProtector>>,
     pub file_dialog: Arc<dyn NativeFileDialog>,
@@ -81,11 +78,10 @@ impl std::fmt::Debug for HostPlatformServices {
 }
 
 impl HostPlatformServices {
-    /// Creates a platform boundary with an explicit secret protector.
+    /// 使用显式秘密保护器创建平台边界。
     ///
-    /// This is intended for deterministic tests and advanced embedders. Normal
-    /// production hosts should use [`Self::production`] so the protector
-    /// namespace is derived from the same product profile as the database.
+    /// 仅供确定性测试和高级嵌入场景。正常生产 Host 应使用 [`Self::production`]，确保
+    /// 保护器命名空间与数据库来自同一个产品配置。
     #[must_use]
     pub fn new(
         secret_protector: Arc<dyn SecretProtector>,
@@ -97,12 +93,10 @@ impl HostPlatformServices {
         }
     }
 
-    /// Creates production platform services without accepting a second,
-    /// independently supplied product namespace.
+    /// 创建生产平台服务，不接受第二套独立产品命名空间。
     ///
-    /// The builder derives the protector from `ProductProfile::storage`,
-    /// preventing a host from opening one product database while encrypting
-    /// its secrets under another product's keychain/DPAPI namespace.
+    /// Builder 从 `ProductProfile::storage` 推导保护器，防止 Host 打开产品 A 的数据库，
+    /// 却把秘密加密到产品 B 的 Keychain/DPAPI 命名空间。
     #[must_use]
     pub fn production(file_dialog: Arc<dyn NativeFileDialog>) -> Self {
         Self {
@@ -112,8 +106,9 @@ impl HostPlatformServices {
     }
 }
 
-/// Builds the complete Rust application from a data directory and platform
-/// boundary implementations. No Tauri or `WebView` type crosses this boundary.
+/// 使用数据目录和平台边界实现装配完整 Rust 应用。
+///
+/// Tauri 或 `WebView` 类型不允许跨过该边界。
 #[derive(Debug)]
 pub struct ApplicationHostBuilder {
     data_dir: PathBuf,
@@ -139,21 +134,18 @@ impl ApplicationHostBuilder {
         }
     }
 
-    /// Replaces the network supervisor port while preserving every real
-    /// application, repository, rule, certificate, and settings adapter.
+    /// 只替换网络监督器，同时保留真实应用、仓储、规则、证书和设置适配器。
     ///
-    /// This is intended for deterministic Rust-only integration tests and
-    /// alternate process hosts; production callers use the default runtime.
+    /// 用于确定性的纯 Rust 集成测试和其他进程 Host；生产调用者使用默认 runtime。
     #[must_use]
     pub fn with_proxy_supervisor(mut self, proxy: Arc<dyn ProxySupervisorPort>) -> Self {
         self.proxy_override = Some(proxy);
         self
     }
 
-    /// Injects the coordinator shared by the application and runtime pipeline.
+    /// 注入 application 与 runtime 管线共用的断点协调器。
     ///
-    /// Tests can retain their `Arc` to seed an in-flight breakpoint without
-    /// exposing application internals through the host after construction.
+    /// 测试可保留同一个 `Arc` 来创建处理中断点，无需在 Host 构建后暴露应用内部字段。
     #[must_use]
     pub fn with_breakpoint_coordinator(mut self, breakpoints: Arc<BreakpointCoordinator>) -> Self {
         self.breakpoint_coordinator = Some(breakpoints);
@@ -161,6 +153,8 @@ impl ApplicationHostBuilder {
     }
 
     pub async fn build(self) -> Result<ApplicationHost, HostBuildError> {
+        // 必须先验证纯静态产品配置，再创建目录和打开数据库。若产品契约错误，构建过程
+        // 不应在磁盘留下任何新状态。
         validate_product_profile(self.product.as_ref())?;
         create_data_directory(&self.data_dir)?;
         let store = Arc::new(SqliteStore::open(
@@ -181,6 +175,8 @@ impl ApplicationHostBuilder {
             Arc::clone(&capacity),
         );
         let settings = services.settings.get().await?;
+        // 会话仓储必须在接收任何 runtime 数据前使用持久化配置的容量限制，不能短暂按
+        // 默认值运行后再缩小，否则启动阶段可能已经超额接纳。
         services.sessions.set_limits(
             settings.stored.max_sessions,
             settings.stored.max_memory_bytes,
@@ -221,6 +217,8 @@ impl ApplicationHostBuilder {
             service_factory,
         ));
         let proxy: Arc<dyn ProxySupervisorPort> = self.proxy_override.unwrap_or_else(|| {
+            // 只有测试/嵌入方显式提供 override 时才跳过真实网络监督器；其余应用端口仍
+            // 使用相同真实实现，保证无 UI 测试能覆盖完整业务装配。
             Arc::new(ApplicationProxyAdapter::new(
                 supervisor,
                 settings.stored,
@@ -247,6 +245,8 @@ impl ApplicationHostBuilder {
             },
         ));
         let background_cancellation = CancellationToken::new();
+        // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle
+        // 都归 Host 所有，确保不同展示适配器有相同的关闭行为。
         let event_task = events.spawn_capture_flush_task(background_cancellation.child_token());
 
         Ok(ApplicationHost {
@@ -259,10 +259,10 @@ impl ApplicationHostBuilder {
     }
 }
 
-/// Owns the UI-independent application facade and its background lifecycle.
+/// 持有与 UI 无关的应用门面及其后台任务生命周期。
 ///
-/// Callers invoke use cases through [`Self::application`]. The same object is
-/// suitable for Tauri commands, headless tests, and future terminal adapters.
+/// 调用方通过 [`Self::application`] 执行用例；同一对象适用于 Tauri Command、无界面测试
+/// 和未来终端适配器。
 #[derive(Debug)]
 pub struct ApplicationHost {
     application: Arc<Application>,
@@ -278,23 +278,20 @@ impl ApplicationHost {
         Arc::clone(&self.application)
     }
 
-    /// Claims the single graceful-shutdown owner.
+    /// 争抢唯一的优雅关闭执行权。
     ///
-    /// Presentation runtimes can receive duplicate exit notifications; only
-    /// the caller that receives `true` should spawn graceful shutdown.
+    /// 展示运行时可能重复收到退出通知，只有拿到 `true` 的调用者应启动关闭任务。
     pub fn begin_shutdown(&self) -> bool {
         !self.shutdown_started.swap(true, Ordering::AcqRel)
     }
 
-    /// Reports whether the graceful shutdown attempt and background-task join
-    /// have completed, regardless of whether the application stop succeeded.
+    /// 报告关闭尝试及后台任务回收是否完成，不受应用停止成功与否影响。
     #[must_use]
     pub fn shutdown_completed(&self) -> bool {
         self.shutdown_completed.load(Ordering::Acquire)
     }
 
-    /// Stops network activity, resolves application shutdown state, and joins
-    /// UI-independent background tasks.
+    /// 停止网络、完成应用关闭状态，并等待所有与 UI 无关的后台任务退出。
     pub async fn shutdown(&self) -> AppResult<ProxyStatusViewModel> {
         let result = self.application.app_shutdown().await;
         self.stop_background_tasks().await;

@@ -1,3 +1,5 @@
+/** 验证查询 Hook 的 loading/error、禁用、刷新和过期 Promise 淘汰。 */
+
 import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { useIpcQuery } from "./use-ipc-query";

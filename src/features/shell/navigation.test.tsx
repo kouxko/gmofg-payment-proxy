@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证桌面外壳导航、移动 Drawer 和选中态不会触发整页刷新。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

@@ -1,3 +1,5 @@
+/** 规则编辑器的 DTO 适配纯函数测试；规则合法性最终仍由 Rust 验证。 */
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RuleAction, RuleCondition } from "@/generated/rust-types";
 import {

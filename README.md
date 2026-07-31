@@ -8,6 +8,41 @@ Next.js + HeroUI 仅负责展示 Rust ViewModel 和发送用户操作。
 产品、UI、Rust 架构、IPC 和测试的唯一实施基线是
 [`docs/requirements.md`](docs/requirements.md)。
 
+## 第一次阅读本项目
+
+如果你暂时不了解 Rust、Tauri、mTLS 或网络代理，建议按下面顺序阅读：
+
+1. 先读 [`docs/requirements.md`](docs/requirements.md) 的“给第一次接触本项目的读者”、
+   “新手术语表”和“第一次使用的端到端旅程”。它是需求与代码设计的唯一事实来源。
+2. 再读 [`docs/user-operation-guide.md`](docs/user-operation-guide.md)，按页面学习怎样操作成品。
+3. 想理解为什么核心能脱离 UI 复用时，读
+   [`docs/generic-core-product-boundary.md`](docs/generic-core-product-boundary.md)。
+4. 想理解限速、抖动、间歇通断和中途断连时，读
+   [`docs/proxy-weak-network-fault-injection-design.md`](docs/proxy-weak-network-fault-injection-design.md)。
+5. 最后从 `src-tauri/crates/domain` 开始读 Rust，再依次阅读 `application`、`proxy`、
+   `infrastructure`、`host`、`product-payment`、`src-tauri` 和 `src`。关键模块已经补充
+   中文注释，重点解释职责、调用方向、状态机、失败边界和不能跨越的边界。
+
+可以把仓库先简化理解为：
+
+```text
+Next.js + HeroUI（只显示和收集操作）
+                 │ Tauri Command / Channel
+                 ▼
+Tauri 薄适配层 ──► UI 无关的 Rust Host / Application
+                             │
+          ┌──────────────────┼──────────────────┐
+          ▼                  ▼                  ▼
+      领域规则           代理运行时          基础设施
+   domain/application   rustls/HTTP/1      SQLite/密钥/文件
+                             ▲
+                             │ ProductProfile
+                      Payment 产品适配层
+```
+
+如果代码注释与需求文档出现冲突，以 `docs/requirements.md` 为准，并先修正文档和测试，
+再修改实现。不要只根据截图或某一次实机结果推断完整需求。
+
 ## 技术边界
 
 - Tauri 2 加载 Next.js 静态导出，不运行 Node.js 服务端。

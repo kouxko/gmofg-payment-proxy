@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * 控制台的数据装配层。
+ *
+ * 全局代理状态来自 BootstrapContext，最近抓包则用独立 Rust 查询加载。将数据加载
+ * 与 ConsoleView 的纯展示分开，便于测试加载、失败和成功三种状态。
+ */
+
 import { Alert, Button, Spinner } from "@heroui/react";
 import { ConsoleView } from "@/features/console/console-view";
 import {
@@ -25,6 +32,7 @@ export function ConsoleRoute() {
     bootstrap?.recent_capture,
   );
   useAppEventRefresh(
+    // 新抓包或 Rust 要求重建快照时，仅刷新“最近事件”这一小块。
     ["capture_rows_added", "snapshot_required"],
     recentCapture.refresh,
   );

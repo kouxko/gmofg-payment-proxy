@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证启动快照、事件游标、迟到响应淘汰和合并刷新策略。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

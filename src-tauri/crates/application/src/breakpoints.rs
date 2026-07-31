@@ -1,3 +1,8 @@
+//! 待处理断点的应用层协调器。
+//!
+//! runtime 注册断点并异步等待，展示适配器按 ID 查询和提交决定。协调器保证一个断点
+//! 只能终结一次，并保留有限终态记录，让重复操作得到明确错误。
+
 use std::collections::{HashMap, VecDeque};
 
 use parking_lot::Mutex;
@@ -11,12 +16,14 @@ use crate::{
 };
 
 #[derive(Debug)]
+/// runtime 注册断点后得到的“展示数据 + 等待句柄”。
 pub struct BreakpointTicket {
     pub detail: BreakpointDetailViewModel,
     pub outcome: oneshot::Receiver<BreakpointOutcome>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// 网络任务等待到的最终结果。
 pub enum BreakpointOutcome {
     Decision(Box<BreakpointDecision>),
     ClientDisconnected,
@@ -24,6 +31,7 @@ pub enum BreakpointOutcome {
 }
 
 #[derive(Debug, Default)]
+/// 连接 runtime 等待方与用户操作方的并发协调器。
 pub struct BreakpointCoordinator {
     state: Mutex<CoordinatorState>,
 }
@@ -45,6 +53,7 @@ impl BreakpointCoordinator {
     const MAX_TERMINAL_TOMBSTONES: usize = 4_096;
 
     pub fn register(&self, mut detail: BreakpointDetailViewModel) -> AppResult<BreakpointTicket> {
+        // 重复检查和插入必须在同一次加锁期间完成，防止两个网络任务为同一 ID 创建等待者。
         if detail.summary.state != BreakpointState::Pending {
             return Err(AppError::new(
                 "BREAKPOINT_INVALID",

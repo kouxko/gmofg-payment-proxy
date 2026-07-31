@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 前端的全局 Rust 快照与事件订阅协调器。
+ *
+ * 启动时先通过 app_bootstrap 取得完整快照，再从快照中的 event_cursor 开始订阅
+ * Rust Channel。常见状态事件会就地更新顶部栏；需要一致性重建时，再合并触发
+ * 一次快照刷新。前端不持久化这些数据，也不推导代理业务状态。
+ */
+
 import {
   createContext,
   useCallback,
@@ -43,6 +51,7 @@ export function BootstrapProvider({
   const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
+    // generation 解决并发刷新竞态：只有最后一次请求可以替换全局快照。
     const generation = refreshGeneration.current + 1;
     refreshGeneration.current = generation;
     setIsLoading(true);
@@ -62,6 +71,7 @@ export function BootstrapProvider({
   }, []);
 
   useEffect(() => {
+    // 推迟到当前 React 提交之后再首次加载，避免在 effect 同步阶段级联 setState。
     const task = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(task);
   }, [refresh]);
@@ -80,6 +90,7 @@ export function BootstrapProvider({
     let active = true;
     let unsubscribe: (() => Promise<void>) | undefined;
     const scheduleSnapshotRefresh = () => {
+      // 多个事件常在同一批到达。50ms 合并窗口避免每条事件都发一次全量查询。
       if (refreshTimer.current != null) return;
       refreshTimer.current = window.setTimeout(() => {
         refreshTimer.current = undefined;
@@ -92,6 +103,7 @@ export function BootstrapProvider({
       setIsLoading(false);
       listeners.current.forEach((listener) => listener(event));
       if (event.payload.type === "runtime_status_changed") {
+        // 高频且体积小的状态直接补丁更新，顶部栏可以立即响应。
         const status = event.payload.data;
         setProxy(status);
         setBootstrap((current) =>
@@ -126,6 +138,7 @@ export function BootstrapProvider({
         );
       }
       if (event.payload.type === "snapshot_required") {
+        // Rust 明确要求重取时，以完整快照为最终事实来源。
         scheduleSnapshotRefresh();
       }
       if (event.payload.type === "operation_failed") {
@@ -184,6 +197,11 @@ export function useAppEventRefresh(
   refresh: () => Promise<void>,
   options?: { paused?: boolean; entityId?: string },
 ) {
+  /**
+   * 页面级事件刷新器：只监听调用方关心的事件类型，可按 entityId 精确过滤。
+   * 刷新执行期间再次收到事件不会并发发请求，而是记为 refreshAgain，前一次完成
+   * 后再补一次，既不丢最终状态也不制造请求风暴。
+   */
   const { subscribe } = useBootstrap();
   const eventTypesKey = eventTypes.join("|");
   useEffect(() => {

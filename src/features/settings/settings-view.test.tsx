@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证设置草稿、字段错误、保存/重启门禁与恢复默认值确认。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

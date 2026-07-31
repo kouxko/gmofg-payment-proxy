@@ -1,3 +1,8 @@
+//! 桌面进程的 Tauri 组合根。
+//!
+//! 这里创建唯一 `AppState`、注册 Command/插件并协调退出。窗口关闭不会直接杀进程：首个
+//! 退出请求启动异步优雅关闭，后续请求只等待同一流程，完成后才由应用显式退出。
+
 mod app_state;
 mod commands;
 mod native_dialog;
@@ -91,6 +96,8 @@ pub fn run() {
         .expect("error while building tauri application");
     app.run(|app_handle, event| {
         if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
+            // Tauri 可能因窗口、菜单或系统关机重复发出退出事件。所有事件先 prevent_exit，
+            // 只有抢到 begin_shutdown 门闩的调用者启动异步清理；清理完成后显式 exit。
             let state = app_handle.state::<AppState>();
             let shutdown_completed = state.shutdown_completed();
             let start_shutdown = !shutdown_completed && state.begin_shutdown();

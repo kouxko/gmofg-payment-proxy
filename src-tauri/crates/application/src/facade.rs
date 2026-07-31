@@ -1,3 +1,8 @@
+//! 与界面无关的应用用例门面。
+//!
+//! `Application` 是桌面 UI、未来 TUI/CLI 和无界面测试共同入口。它仅依赖端口 trait，
+//! 不知道 Tauri、WebView 或具体数据库；实现按规则、设置、流量、校验分在子模块中。
+
 use std::sync::Arc;
 
 use chrono::Utc;
@@ -19,6 +24,9 @@ mod validation;
 use validation::{normalize_sans, require_confirmation};
 
 #[derive(Debug)]
+/// 全部业务用例的统一入口。
+///
+/// 调用者应通过公开用例方法操作，不能绕过权限检查、事件发布和事务顺序直接使用端口。
 pub struct Application {
     product_name: String,
     proxy: Arc<dyn ProxySupervisorPort>,
@@ -35,11 +43,10 @@ pub struct Application {
     mutation_gate: tokio::sync::Mutex<()>,
 }
 
-/// All UI-neutral ports required by the application use-case facade.
+/// 应用门面所需的全部、与 UI 无关的依赖。
 ///
-/// Keeping the dependency graph in one named value makes host composition
-/// readable for desktop, TUI, CLI, and headless callers without weakening the
-/// individual port boundaries.
+/// 使用具名字段而不是十几个位置参数，使桌面、TUI、CLI 和无界面测试的装配代码容易
+/// 阅读，也避免交换两个同类型依赖。每个具体能力仍由独立端口约束。
 #[derive(Debug)]
 pub struct ApplicationDependencies {
     pub proxy: Arc<dyn ProxySupervisorPort>,

@@ -1,3 +1,5 @@
+/** HeroUI 日期值与 Rust 分钟精度筛选文本之间的转换测试。 */
+
 import { describe, expect, it } from "vitest";
 import {
   sessionFilterDateText,

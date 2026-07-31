@@ -1,10 +1,14 @@
+//! 会话和实时事件共用的内存容量账本。
+//!
+//! 两类数据存放在不同容器，却受同一个上限约束。本模块原子地预留和释放逻辑字节，
+//! 避免两个容器分别检查后同时写入而突破总容量。
+
 use parking_lot::Mutex;
 
-/// Shared byte-capacity authority for all in-memory application data.
+/// 所有应用内存数据共用的字节容量权威。
 ///
-/// Sessions and UI events must reserve their actual retained bytes here before
-/// committing them to their own containers. The ledger serializes admission,
-/// so neither side can pass a check using a stale snapshot of the other side.
+/// 会话和 UI 事件写入各自容器前必须先预留实际保留字节。账本串行化准入判断，避免任一方
+/// 使用另一方的旧快照通过检查。
 #[derive(Debug)]
 pub struct CapacityLedger {
     state: Mutex<CapacityState>,

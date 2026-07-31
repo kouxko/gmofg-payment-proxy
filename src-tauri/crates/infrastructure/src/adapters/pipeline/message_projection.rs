@@ -1,8 +1,8 @@
-//! Lossless projection between transport messages and application view models.
+//! 传输消息与应用视图模型之间的无损投影。
 //!
-//! Display headers are intentionally separated from canonical wire headers:
-//! the UI may edit normalized text, while unchanged fields must retain their
-//! original casing, order and optional whitespace on the HTTP/1.1 wire.
+//! 展示用 header 与线上原始 header 刻意分离：UI 可以编辑规范化文本，但未修改字段必须
+//! 保留 HTTP/1.1 原有大小写、顺序、重复项和可选空白。无法安全解码的正文按二进制呈现，
+//! 不猜测编码，也不为展示方便改写线上字节。
 
 use std::collections::{BTreeMap, BTreeSet};
 

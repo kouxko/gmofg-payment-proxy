@@ -1,3 +1,5 @@
+/** 抓包查询草稿和工作区跳转的纯函数合约测试。 */
+
 import { describe, expect, it } from "vitest";
 import {
   captureDetailTabLabels,

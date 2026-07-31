@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 持久桌面外壳中的页面选择器。
+ *
+ * 所有页面组件都运行在同一个 AppShell/BootstrapProvider 下面；这里只替换中央
+ * 内容，而不是重新加载 HTML。这能保留顶部状态、Tauri Channel 和当前页面外的
+ * 全局状态。页面自己的临时草稿仍由各自组件管理。
+ */
+
 import { BreakpointsView } from "@/features/breakpoints/breakpoints-view";
 import { CaptureRoute } from "@/features/capture/capture-route";
 import { CertificatesView } from "@/features/certificates/certificates-view";

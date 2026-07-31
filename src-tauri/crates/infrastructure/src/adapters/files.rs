@@ -1,3 +1,8 @@
+//! 原生文件选择与受控导入/导出的应用端口实现。
+//!
+//! `WebView` 只提交用途，不直接获得任意文件系统能力；取消选择是正常结果，读取超限、格式
+//! 错误和写入失败则保留为可诊断错误。
+
 use std::{fmt, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;

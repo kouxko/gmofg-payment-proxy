@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证规则列表、默认首选、启停/一次性开关、保存、复制与删除交互。 */
+
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

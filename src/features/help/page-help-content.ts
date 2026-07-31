@@ -1,6 +1,14 @@
 import type { WorkspacePath } from "@/features/shell/workspace-navigation";
 
+/**
+ * 八个页面的内置操作手册数据。
+ *
+ * 这里只保存面向用户的静态说明，不能复制 Rust 的状态机或校验逻辑。文字中的
+ * 默认值、动作语义和验收边界应与 docs/requirements.md 保持同步。
+ */
+
 export type PageHelpSection = {
+  /** Accordion 的稳定键，同时便于测试精确定位章节。 */
   id: string;
   title: string;
   description?: string;

@@ -1,4 +1,8 @@
-//! Byte-preserving HTTP message representation and reconstruction.
+//! 保留原始字节的 HTTP 消息模型与重建逻辑。
+//!
+//! `HeaderMap` 适合语义处理，却不能完整表达大小写、重复顺序和线上空白；因此本模块同时
+//! 保存 raw header。只有字段被规则实际修改时才重建对应字节，解析失败或超过限制会显式
+//! 报错，不退回可能篡改报文的“最佳猜测”。
 
 use bytes::Bytes;
 use http::header::{HeaderName, HeaderValue};

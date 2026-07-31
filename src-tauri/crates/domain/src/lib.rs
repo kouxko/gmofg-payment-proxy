@@ -1,7 +1,7 @@
-//! Pure domain types and business rules for the reusable interception proxy.
+//! 可复用拦截代理的纯领域类型和业务规则。
 //!
-//! This crate deliberately has no dependency on Tauri, storage, TLS, or async
-//! runtimes. It is the stable source for domain and IPC-facing data shapes.
+//! 本 crate 刻意不依赖 Tauri、存储、TLS 或异步运行时，是领域真相及 IPC 数据形状的
+//! 稳定来源。
 #![allow(clippy::missing_errors_doc)]
 
 pub mod breakpoint;

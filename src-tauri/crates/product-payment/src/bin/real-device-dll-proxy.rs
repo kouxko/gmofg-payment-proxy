@@ -1,3 +1,15 @@
+//! 真实设备 DLL 通道的“单场景连通性探针”。
+//!
+//! 这个程序故意很小：它只启动 DLL 端口，等待 Android Payment 发来一次请求，
+//! 再把请求转发到真实 GMO-FG Server，并输出可供脚本判断的结构化日志。
+//! 它适合回答“证书、mTLS、HTTP 转发这条最短链路是否能通”，不负责验证规则管理、
+//! 断点、弱网等完整功能。完整功能矩阵由 `test-support/headless-device-runner`
+//! 在不启动桌面 UI 的情况下，通过正式 `ApplicationHost` 执行。
+//!
+//! 证据边界也要特别注意：看到 `PROXY_RESPONSE_FORWARDED` 只证明代理收到了上游响应并
+//! 转发给客户端；HTTP 200、TLS 成功都不自动等于 GMO-FG 业务受理成功。业务结果仍要结合
+//! Payment JSON 中的 `ErrorCode`（例如实机基线期望的 D48）以及 Android 测试断言判断。
+
 use std::{
     env,
     fmt::Write as _,
@@ -34,6 +46,7 @@ const DEFAULT_PROXY_SAN_IP: Ipv4Addr = Ipv4Addr::new(10, 0, 34, 50);
 
 #[derive(Debug)]
 enum ProbeEvent {
+    /// 已观察到上游响应。这里只保存摘要，避免把支付报文正文写进测试日志。
     ResponseObserved {
         status_line: String,
         body_bytes: usize,
@@ -197,6 +210,7 @@ impl PipelinePorts for ProbePipelinePorts {
 }
 
 fn required_path(name: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    // 证书和输出路径必须由调用者显式提供，避免探针偷偷依赖开发机上的固定目录。
     let value = env::var_os(name).ok_or_else(|| format!("{name} is required"))?;
     Ok(PathBuf::from(value))
 }
@@ -205,6 +219,8 @@ fn parse_test_client_pkcs12(
     bytes: &[u8],
     password: &str,
 ) -> Result<TestClientIdentity, Box<dyn std::error::Error>> {
+    // Strict 模式会拒绝含糊的 PKCS12。实机探针必须恰好得到一个“证书 + 私钥”身份，
+    // 否则无法确定代理应当使用哪一个客户端证书与上游做 mTLS。
     let store = KeyStore::from_pkcs12(bytes, password, Pkcs12ImportPolicy::Strict)?;
     let identities = store
         .entries()
@@ -239,6 +255,8 @@ fn parse_test_client_pkcs12(
 async fn select_upstream_address(
     tls: &ClientTlsAdapter,
 ) -> Result<SocketAddr, Box<dyn std::error::Error>> {
+    // DNS 可能返回多个地址。启动监听前逐个做 TLS 预检，可以把“上游不可达”与
+    // “Android 没有请求代理”区分开，避免实机等待三分钟后才得到模糊超时。
     let addresses = tokio::net::lookup_host((UPSTREAM_HOST, UPSTREAM_PORT))
         .await?
         .filter(SocketAddr::is_ipv4)
@@ -300,6 +318,8 @@ fn sha256_hex(bytes: &[u8]) -> String {
 async fn wait_for_forwarded_response(
     events: &mut mpsc::Receiver<ProbeEvent>,
 ) -> Result<(String, usize, String, Option<bool>, Option<String>), Box<dyn std::error::Error>> {
+    // ResponseObserved 与 Completed 是两个事件：前者证明看到了响应，后者证明连接正常收尾。
+    // 必须同时满足，不能把“读到半个响应后连接失败”误判成成功。
     let mut response = None;
     loop {
         let event = events.recv().await.ok_or("proxy event channel closed")?;
@@ -328,6 +348,10 @@ async fn wait_for_forwarded_response(
 #[tokio::main]
 #[allow(clippy::too_many_lines)]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 调用方负责提供敏感材料。程序不内置生产私钥，也不猜测开发机目录：
+    // - GMOFG_CLIENT_P12：Payment/Proxy 访问真实上游时使用的客户端身份；
+    // - GMOFG_UPSTREAM_CA_DER：验证真实 GMO-FG Server 的信任锚；
+    // - GMOFG_PROXY_CA_OUTPUT：本次临时生成的测试 Root CA 输出位置，供 Android 测试导入。
     let client_p12_path = required_path("GMOFG_CLIENT_P12")?;
     let upstream_ca_path = required_path("GMOFG_UPSTREAM_CA_DER")?;
     let proxy_ca_output = required_path("GMOFG_PROXY_CA_OUTPUT")?;
@@ -335,9 +359,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let product = PaymentProductProfile::isolated_test_tool();
     let certificate_service = CertificateService;
-    // The real development identity uses a self-signed legacy CA without CA
-    // extensions. This test-only loader preserves the actual device identity;
-    // production certificate import remains strict.
+    // 真实开发身份使用缺少现代 CA 扩展的旧式自签 CA。这里只为实机测试保留该身份；
+    // 正式产品中的证书导入仍保持严格校验，不能因为测试兼容而放宽生产安全边界。
     let client_identity =
         parse_test_client_pkcs12(&fs::read(&client_p12_path)?, &client_p12_password)?;
     let client_ca_der = client_identity
@@ -349,6 +372,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let proxy_root =
         certificate_service.generate_root_ca("GMO-FG Real Device DLL Proxy Test Root")?;
+    // Android 连接的是局域网地址，因此叶子证书 SAN 必须包含 Android 实际访问的 Proxy IP。
+    // 只修改监听地址而不重新签发匹配 SAN 的证书，会在 HTTP 之前就因 TLS 主机名校验失败。
     let proxy_leaf = certificate_service.generate_leaf(
         &proxy_root.certificate_der,
         &proxy_root.private_key_pkcs8_der,
@@ -389,6 +414,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .map_err(proxy_error)?;
     let upstream_address = select_upstream_address(&upstream_tls).await?;
+    // 从这里开始使用的均是正式运行时组件。探针只替换 PipelinePorts 来观察摘要，
+    // 没有另写一套“看似能代理、实际与桌面应用不同”的网络实现。
     let limits = MessageLimits::default();
     let connector = HyperUpstreamConnector {
         address: upstream_address,
@@ -439,6 +466,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("PROXY_RUNTIME epoch={:?}", snapshot.runtime_epoch);
 
+    // 单场景探针只等待一次真实设备请求。超时是“本轮没有形成完整证据”，不是业务失败码。
     let event = tokio::time::timeout(
         Duration::from_mins(3),
         wait_for_forwarded_response(&mut events_rx),
