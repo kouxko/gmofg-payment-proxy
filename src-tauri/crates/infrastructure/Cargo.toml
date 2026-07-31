@@ -6,9 +6,11 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+bytes.workspace = true
 chrono.workspace = true
 gmofg-proxy-application = { path = "../application" }
 gmofg-proxy-domain = { path = "../domain" }
+gmofg-proxy-product-api = { path = "../product-api" }
 gmofg-proxy-runtime = { path = "../proxy" }
 p12-keystore.workspace = true
 parking_lot.workspace = true
@@ -32,6 +34,9 @@ windows-sys.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework.workspace = true
+
+[dev-dependencies]
+gmofg-proxy-product-payment = { path = "../product-payment" }
 
 [lints]
 workspace = true

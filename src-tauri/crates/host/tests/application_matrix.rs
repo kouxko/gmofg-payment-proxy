@@ -5,15 +5,22 @@ use chrono::Utc;
 use gmofg_proxy_application::{
     AppResult, BreakpointCoordinator, BreakpointDecision, BreakpointDecisionKind,
     BreakpointDetailViewModel, BreakpointDraft, BreakpointOutcome, BreakpointState,
-    BreakpointSummaryViewModel, CaptureQuery, CaptureSort, ChannelKind, ConnectionHealthState,
-    ConnectionHealthViewModel, FaultConfigurationDraft, MessageContentViewModel, MessageStage,
-    PageRequest, ProxyState, ProxyStatusViewModel, ProxySupervisorPort, RuleAction, SessionQuery,
-    SessionSort, SettingsDraft, SortDirection, UiTone,
+    BreakpointSummaryViewModel, CaptureQuery, CaptureSort, ChannelId, ChannelSettingsDraft,
+    ConnectionHealthState, ConnectionHealthViewModel, FaultConfigurationDraft,
+    MessageContentViewModel, MessageStage, PageRequest, ProxyState, ProxyStatusViewModel,
+    ProxySupervisorPort, RuleAction, SessionQuery, SessionSort, SettingsDraft, SortDirection,
+    UiTone,
 };
 use gmofg_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use gmofg_proxy_infrastructure::{
     InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
 };
+use gmofg_proxy_product_api::{
+    BodyCodec, CertificateLabels, ClassifiedRequest, ProductCertificatePolicy, ProductChannel,
+    ProductError, ProductFaultTemplate, ProductLabels, ProductMessageContext, ProductProfile,
+    ProductStorageNamespace, RequestClassifier,
+};
+use gmofg_proxy_product_payment::PaymentProductProfile;
 use parking_lot::Mutex;
 use uuid::Uuid;
 
@@ -40,6 +47,215 @@ impl SecretProtector for TestSecretProtector {
 
     fn unprotect(&self, ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
         self.protect(ciphertext)
+    }
+}
+
+#[derive(Debug, Default)]
+struct TestProfile;
+
+#[derive(Debug, Default)]
+struct Utf8Codec;
+
+#[derive(Debug, Default)]
+struct EmptyClassifier;
+
+#[derive(Debug, Default)]
+struct InvalidProfile(TestProfile);
+
+const TEST_CHANNELS: &[ProductChannel] = &[
+    ProductChannel {
+        id: "alpha",
+        display_name: "Alpha",
+        enabled_by_default: true,
+        listen_port: 21_001,
+        upstream_url: "https://alpha.example.test",
+    },
+    ProductChannel {
+        id: "beta",
+        display_name: "Beta",
+        enabled_by_default: true,
+        listen_port: 21_002,
+        upstream_url: "https://beta.example.test",
+    },
+    ProductChannel {
+        id: "gamma",
+        display_name: "Gamma",
+        enabled_by_default: false,
+        listen_port: 21_003,
+        upstream_url: "https://gamma.example.test",
+    },
+];
+
+const INVALID_CHANNELS: &[ProductChannel] = &[
+    ProductChannel {
+        id: "alpha",
+        display_name: "Alpha",
+        enabled_by_default: true,
+        listen_port: 22_001,
+        upstream_url: "https://alpha.example.test",
+    },
+    ProductChannel {
+        id: "alpha",
+        display_name: "Duplicate",
+        enabled_by_default: true,
+        listen_port: 22_002,
+        upstream_url: "https://duplicate.example.test",
+    },
+];
+
+const TEST_FAULTS: &[ProductFaultTemplate] = &[ProductFaultTemplate {
+    id: "request_delay",
+    name: "Test delay",
+    stage_text: "Request",
+    behavior_text: "Delay before forwarding",
+    affected_party_text: "Test client",
+    default_channel_id: "alpha",
+    risk_text: "Low",
+}];
+
+impl BodyCodec for Utf8Codec {
+    fn id(&self) -> &'static str {
+        "utf-8"
+    }
+
+    fn name(&self) -> &'static str {
+        "UTF-8"
+    }
+
+    fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
+        String::from_utf8(bytes.to_vec())
+            .map_err(|error| ProductError::new("BODY_DECODE_FAILED", error.to_string()))
+    }
+
+    fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
+        Ok(text.as_bytes().to_vec())
+    }
+}
+
+impl RequestClassifier for EmptyClassifier {
+    fn classify(&self, _: ProductMessageContext<'_>) -> ClassifiedRequest {
+        ClassifiedRequest::default()
+    }
+}
+
+impl ProductCertificatePolicy for TestProfile {
+    fn public_root_ca_pem(&self) -> &'static [u8] {
+        b""
+    }
+
+    fn embedded_test_authority(
+        &self,
+    ) -> Option<gmofg_proxy_product_api::EmbeddedTestCertificateAuthority> {
+        None
+    }
+
+    fn bundled_upstream_ca_pem(&self) -> Option<&'static [u8]> {
+        None
+    }
+
+    fn labels(&self) -> CertificateLabels {
+        CertificateLabels {
+            root_name: "Test root",
+            root_usage: "Test",
+            leaf_name: "Test leaf",
+            leaf_usage: "Test",
+            client_identity_name: "Test identity",
+            client_identity_usage: "Test",
+            upstream_name: "Test upstream",
+            upstream_bundled_usage: "Test",
+            upstream_override_usage: "Test",
+            ready_status: "Ready",
+            incomplete_status: "Incomplete",
+            already_exists_message: "Exists",
+            export_cancelled_message: "Cancelled",
+            export_success_message: "Exported",
+        }
+    }
+}
+
+impl ProductProfile for TestProfile {
+    fn id(&self) -> &'static str {
+        "generic-test"
+    }
+
+    fn name(&self) -> &'static str {
+        "Generic Test"
+    }
+
+    fn channels(&self) -> &'static [ProductChannel] {
+        TEST_CHANNELS
+    }
+
+    fn storage(&self) -> ProductStorageNamespace {
+        ProductStorageNamespace {
+            database_file_name: "generic-test.sqlite3",
+            secret_service: "com.example.generic-test",
+            secret_account: "master-key",
+            secret_envelope_magic: b"TSTK1",
+            secret_aad: b"generic-test/envelope/v1",
+        }
+    }
+
+    fn labels(&self) -> ProductLabels {
+        ProductLabels {
+            client_name: "Test Client",
+            upstream_name: "Test Upstream",
+            fault_rule_name_prefix: "Test fault · ",
+        }
+    }
+
+    fn fault_templates(&self) -> &'static [ProductFaultTemplate] {
+        TEST_FAULTS
+    }
+
+    fn request_classifier(&self) -> Arc<dyn RequestClassifier> {
+        Arc::new(EmptyClassifier)
+    }
+
+    fn certificates(&self) -> &dyn ProductCertificatePolicy {
+        self
+    }
+
+    fn body_codec(&self) -> Arc<dyn BodyCodec> {
+        Arc::new(Utf8Codec)
+    }
+}
+
+impl ProductProfile for InvalidProfile {
+    fn id(&self) -> &'static str {
+        "invalid-test"
+    }
+
+    fn name(&self) -> &'static str {
+        "Invalid Test"
+    }
+
+    fn channels(&self) -> &'static [ProductChannel] {
+        INVALID_CHANNELS
+    }
+
+    fn storage(&self) -> ProductStorageNamespace {
+        self.0.storage()
+    }
+
+    fn labels(&self) -> ProductLabels {
+        ProductProfile::labels(&self.0)
+    }
+
+    fn fault_templates(&self) -> &'static [ProductFaultTemplate] {
+        TEST_FAULTS
+    }
+
+    fn request_classifier(&self) -> Arc<dyn RequestClassifier> {
+        self.0.request_classifier()
+    }
+
+    fn certificates(&self) -> &dyn ProductCertificatePolicy {
+        &self.0
+    }
+
+    fn body_codec(&self) -> Arc<dyn BodyCodec> {
+        self.0.body_codec()
     }
 }
 
@@ -88,20 +304,31 @@ fn unused_local_port() -> u16 {
 }
 
 fn valid_settings() -> SettingsDraft {
-    let transaction_port = unused_local_port();
-    let mut dll_port = unused_local_port();
-    while dll_port == transaction_port {
-        dll_port = unused_local_port();
+    let mut ports = Vec::new();
+    while ports.len() < 3 {
+        let port = unused_local_port();
+        if !ports.contains(&port) {
+            ports.push(port);
+        }
     }
-    SettingsDraft {
+    let mut settings = SettingsDraft {
         bind_address: "127.0.0.1".into(),
-        transaction_port,
-        dll_port,
-        upstream_transaction_url: "https://https.gmo-fg.net:16627".into(),
-        upstream_dll_url: "https://https.gmo-fg.net:16127".into(),
+        channels: TEST_CHANNELS
+            .iter()
+            .zip(ports)
+            .map(|(channel, port)| ChannelSettingsDraft {
+                id: ChannelId::new(channel.id).unwrap(),
+                display_name: channel.display_name.into(),
+                enabled: true,
+                port,
+                upstream_url: channel.upstream_url.into(),
+            })
+            .collect(),
         leaf_sans: vec!["127.0.0.1".into()],
         ..SettingsDraft::default()
-    }
+    };
+    settings.channels[2].enabled = false;
+    settings
 }
 
 fn capture_query() -> CaptureQuery {
@@ -143,13 +370,58 @@ fn session_query() -> SessionQuery {
 // ARCH-007~009, SETTINGS-001~016, CAPTURE-001~010, SESSION-001~010, TEST-HOST:
 // real production adapters are driven exclusively through Application.
 #[tokio::test]
+async fn invalid_product_profile_fails_before_storage_is_opened() {
+    let temp = tempfile::tempdir().expect("temporary invalid product host");
+    let error = ApplicationHostBuilder::new(
+        temp.path(),
+        test_platform(),
+        Arc::new(InvalidProfile::default()),
+    )
+    .build()
+    .await
+    .expect_err("duplicate channel profile must fail");
+    assert!(matches!(
+        error,
+        gmofg_proxy_host::HostBuildError::InvalidProductProfile(_)
+    ));
+    assert!(!temp.path().join("generic-test.sqlite3").exists());
+}
+
+#[tokio::test]
 async fn production_host_covers_queries_and_settings_without_ui() {
+    gmofg_proxy_product_api::validate_product_profile(&TestProfile)
+        .expect("non-Payment three-channel profile");
     let temp = tempfile::tempdir().expect("temporary application host");
-    let host = ApplicationHostBuilder::new(temp.path(), test_platform())
+    let host = ApplicationHostBuilder::new(temp.path(), test_platform(), Arc::new(TestProfile))
         .build()
         .await
         .expect("build UI-neutral host");
     let application = host.application();
+    assert!(temp.path().join("generic-test.sqlite3").is_file());
+    let bootstrap = application
+        .app_bootstrap()
+        .await
+        .expect("generic three-channel bootstrap");
+    assert_eq!(
+        bootstrap
+            .channel_catalog
+            .iter()
+            .map(|channel| (channel.id.as_str(), channel.display_name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("alpha", "Alpha"), ("beta", "Beta"), ("gamma", "Gamma")]
+    );
+    let status = application
+        .proxy_get_status()
+        .await
+        .expect("three-channel status");
+    assert_eq!(
+        status
+            .channels
+            .iter()
+            .map(|channel| (channel.id.as_str(), channel.display_name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("alpha", "Alpha"), ("beta", "Beta"), ("gamma", "Gamma")]
+    );
 
     let capture = application
         .capture_query(capture_query())
@@ -194,8 +466,15 @@ async fn production_host_covers_queries_and_settings_without_ui() {
         .settings_reset_defaults(true)
         .await
         .expect("return Rust-owned defaults");
-    assert_eq!(defaults.transaction_port, 16_627);
-    assert_eq!(defaults.dll_port, 16_127);
+    assert_eq!(
+        defaults
+            .channels
+            .iter()
+            .map(|channel| channel.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alpha", "beta", "gamma"]
+    );
+    assert_eq!(defaults.channels[0].port, 21_001);
 
     host.shutdown().await.expect("shutdown UI-neutral host");
 }
@@ -205,7 +484,7 @@ async fn production_host_covers_queries_and_settings_without_ui() {
 #[tokio::test]
 async fn production_host_covers_rule_and_fault_lifecycle_without_ui() {
     let temp = tempfile::tempdir().expect("temporary rule host");
-    let host = ApplicationHostBuilder::new(temp.path(), test_platform())
+    let host = ApplicationHostBuilder::new(temp.path(), test_platform(), Arc::new(TestProfile))
         .build()
         .await
         .expect("build UI-neutral host");
@@ -248,6 +527,8 @@ async fn production_host_covers_rule_and_fault_lifecycle_without_ui() {
         .fault_template_list()
         .await
         .expect("list fault templates");
+    assert_eq!(templates.len(), 1, "product catalog filters capabilities");
+    assert_eq!(templates[0].name, "Test delay");
     let template = templates
         .iter()
         .find(|template| template.template_id == "request_delay")
@@ -257,7 +538,7 @@ async fn production_host_covers_rule_and_fault_lifecycle_without_ui() {
             template_id: template.template_id.clone(),
             existing_rule_id: None,
             expected_revision: None,
-            channel: Some(template.default_channel),
+            channel: Some(template.default_channel.clone()),
             terminal: Some("10.0.0.8".into()),
             target: Some("/".into()),
             nth_hit: Some(template.default_nth_hit),
@@ -290,11 +571,27 @@ async fn production_host_covers_rule_and_fault_lifecycle_without_ui() {
 #[tokio::test]
 async fn production_host_covers_certificate_overview_and_validation_without_ui() {
     let temp = tempfile::tempdir().expect("temporary certificate host");
-    let host = ApplicationHostBuilder::new(temp.path(), test_platform())
-        .build()
-        .await
-        .expect("build UI-neutral host");
+    let host = ApplicationHostBuilder::new(
+        temp.path(),
+        test_platform(),
+        Arc::new(PaymentProductProfile::isolated_test_tool()),
+    )
+    .build()
+    .await
+    .expect("build UI-neutral host");
     let application = host.application();
+    let bootstrap = application
+        .app_bootstrap()
+        .await
+        .expect("Payment two-channel bootstrap");
+    assert_eq!(
+        bootstrap
+            .channel_catalog
+            .iter()
+            .map(|channel| (channel.id.as_str(), channel.display_name.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("transaction", "交易"), ("dll", "DLL")]
+    );
 
     let empty_certificates = application
         .certificate_overview()
@@ -342,7 +639,7 @@ async fn injected_supervisor_exercises_lifecycle_and_breakpoint_state_without_ui
     let proxy = Arc::new(LifecycleProxy::new(epoch));
     let breakpoints = Arc::new(BreakpointCoordinator::default());
     let temp = tempfile::tempdir().expect("temporary lifecycle host");
-    let host = ApplicationHostBuilder::new(temp.path(), test_platform())
+    let host = ApplicationHostBuilder::new(temp.path(), test_platform(), Arc::new(TestProfile))
         .with_proxy_supervisor(proxy)
         .with_breakpoint_coordinator(Arc::clone(&breakpoints))
         .build()
@@ -422,6 +719,9 @@ async fn injected_supervisor_exercises_lifecycle_and_breakpoint_state_without_ui
 fn message_content() -> MessageContentViewModel {
     let body = br#"{"TransactionType":"0001","RequestID":"R"}"#.to_vec();
     MessageContentViewModel {
+        http_status: None,
+        start_line_bytes: b"POST / HTTP/1.1".to_vec(),
+        raw_headers: Vec::new(),
         headers: BTreeMap::from([
             ("content-type".into(), vec!["application/json".into()]),
             ("content-length".into(), vec![body.len().to_string()]),
@@ -442,7 +742,8 @@ fn breakpoint_detail(breakpoint_id: Uuid, epoch: Uuid) -> BreakpointDetailViewMo
             stage: MessageStage::Request,
             title: "请求断点".into(),
             terminal_ip: "10.0.34.94".into(),
-            channel: ChannelKind::Dll,
+            channel: ChannelId::new("beta").unwrap(),
+            channel_text: "Beta".into(),
             method: "POST".into(),
             target: "/".into(),
             waiting_since: Utc::now(),

@@ -82,6 +82,7 @@ pub trait CertificateServicePort: Send + Sync + std::fmt::Debug {
 
 #[async_trait]
 pub trait SettingsRepositoryPort: Send + Sync + std::fmt::Debug {
+    async fn defaults(&self) -> AppResult<SettingsDraft>;
     async fn get(&self) -> AppResult<SettingsViewModel>;
     async fn validate(&self, draft: &SettingsDraft) -> AppResult<SettingsValidationViewModel>;
     async fn save(&self, draft: SettingsDraft) -> AppResult<SettingsViewModel>;

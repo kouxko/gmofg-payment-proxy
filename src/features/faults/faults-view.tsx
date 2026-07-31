@@ -21,7 +21,7 @@ import {
 } from "@heroui/react";
 import type {
   ActiveFaultViewModel,
-  ChannelKind,
+  ChannelId,
   FaultConfigurationDraft,
   FaultParameterValue,
   FaultTemplateViewModel,
@@ -34,10 +34,15 @@ import {
 } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
-import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import {
+  useAppEventRefresh,
+  useBootstrap,
+} from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 
 export function FaultsView() {
+  const { bootstrap } = useBootstrap();
+  const channelCatalog = bootstrap?.channel_catalog ?? [];
   const { navigate } = useWorkspaceNavigation();
   const templates =
     useIpcQuery<FaultTemplateViewModel[]>("fault-template-list", () =>
@@ -60,7 +65,7 @@ export function FaultsView() {
   const [nthHit, setNthHit] = useState<number>();
   const [priority, setPriority] = useState<number>();
   const [oneShot, setOneShot] = useState<boolean>();
-  const [channel, setChannel] = useState<ChannelKind>();
+  const [channel, setChannel] = useState<ChannelId>();
   const [parameterOverrides, setParameterOverrides] = useState<
     Record<string, Record<string, FaultParameterValue>>
   >({});
@@ -565,7 +570,7 @@ export function FaultsView() {
                 aria-label="代理通道"
                 selectedKey={effectiveChannel}
                 onSelectionChange={(value) =>
-                  setChannel(value as ChannelKind)
+                  setChannel(value as ChannelId)
                 }
               >
                 <Select.Trigger>
@@ -574,8 +579,15 @@ export function FaultsView() {
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
-                    <ListBox.Item id="transaction">交易（16627）</ListBox.Item>
-                    <ListBox.Item id="dll">DLL（16127）</ListBox.Item>
+                    {channelCatalog.map((catalogItem) => (
+                      <ListBox.Item
+                        key={catalogItem.id}
+                        id={catalogItem.id}
+                        textValue={catalogItem.display_name}
+                      >
+                        {catalogItem.display_name}
+                      </ListBox.Item>
+                    ))}
                   </ListBox>
                 </Select.Popover>
               </Select>

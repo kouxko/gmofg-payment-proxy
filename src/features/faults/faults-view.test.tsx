@@ -49,6 +49,14 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
 
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
+  useBootstrap: () => ({
+    bootstrap: {
+      channel_catalog: [
+        { id: "transaction", display_name: "交易" },
+        { id: "dll", display_name: "Payment DLL" },
+      ],
+    },
+  }),
 }));
 
 const templates: FaultTemplateViewModel[] = [
@@ -120,6 +128,11 @@ describe("FaultsView", () => {
       screen.getByRole("textbox", { name: "Shift-JIS JSON Body" }),
     ).toHaveValue("{}");
     expect(screen.getByLabelText("代理通道")).toBeInTheDocument();
+    await user.click(screen.getByLabelText("代理通道"));
+    expect(
+      await screen.findByRole("option", { name: "Payment DLL" }),
+    ).toBeVisible();
+    await user.click(screen.getByRole("option", { name: "交易" }));
 
     await user.click(screen.getByRole("button", { name: "启用模拟" }));
 

@@ -9,6 +9,7 @@ const draft: BreakpointDraft = {
   breakpoint_id: "breakpoint-1",
   expected_revision: 7,
   message: {
+    http_status: null,
     headers: { "content-type": ["application/json"] },
     body_text: '{"amount":100}',
     body_bytes: [123, 125],

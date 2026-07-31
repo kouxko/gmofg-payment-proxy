@@ -3,10 +3,68 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub enum ChannelKind {
-    Transaction,
-    Dll,
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
+#[serde(try_from = "String", into = "String")]
+pub struct ChannelId(String);
+
+impl ChannelId {
+    pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
+        let value = value.into();
+        let valid = !value.is_empty()
+            && value.len() <= 64
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'))
+            && value
+                .as_bytes()
+                .first()
+                .is_some_and(u8::is_ascii_alphanumeric)
+            && value
+                .as_bytes()
+                .last()
+                .is_some_and(u8::is_ascii_alphanumeric);
+        if valid {
+            Ok(Self(value))
+        } else {
+            Err(DomainError::new(
+                ErrorCode::ConfigInvalid,
+                "通道 ID 必须为 1 到 64 个 ASCII 字母、数字、连字符、下划线或点，且首尾为字母或数字",
+            ))
+        }
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl TryFrom<String> for ChannelId {
+    type Error = DomainError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<ChannelId> for String {
+    fn from(value: ChannelId) -> Self {
+        value.0
+    }
+}
+
+impl std::str::FromStr for ChannelId {
+    type Err = DomainError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::new(value)
+    }
+}
+
+impl std::fmt::Display for ChannelId {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -154,6 +212,30 @@ mod tests {
             headers: Vec::new(),
             body: body.to_vec(),
             content_kind: ContentKind::Json,
+        }
+    }
+
+    #[test]
+    fn channel_id_rejects_invalid_deserialized_values() {
+        for invalid in ["", "-alpha", "alpha-", "with space", "under__"] {
+            assert!(
+                serde_json::from_value::<ChannelId>(serde_json::json!(invalid)).is_err(),
+                "{invalid:?} must be rejected"
+            );
+        }
+        assert_eq!(
+            serde_json::from_value::<ChannelId>(serde_json::json!("alpha-3"))
+                .unwrap()
+                .as_str(),
+            "alpha-3"
+        );
+        for valid in ["alpha_2.v1", "A-channel", "x"] {
+            assert_eq!(
+                serde_json::from_value::<ChannelId>(serde_json::json!(valid))
+                    .unwrap()
+                    .as_str(),
+                valid
+            );
         }
     }
 

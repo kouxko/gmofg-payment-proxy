@@ -46,7 +46,7 @@ const draft: RuleDraft = {
         type: "mock_response",
         status: 200,
         headers: [],
-        shift_jis_body: [123, 125],
+        body_bytes: [123, 125],
       },
     },
   ],
@@ -188,7 +188,7 @@ describe("RULE-016/RULE-017 production rule editor async safety", () => {
           type: "mock_response",
           status: 503,
           headers: [["x-latest", "2"]],
-          shift_jis_body: [65, 66],
+          body_bytes: [65, 66],
         },
       }),
     );

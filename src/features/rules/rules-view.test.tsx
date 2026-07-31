@@ -34,6 +34,15 @@ vi.mock("@/lib/ipc/client", () => ({
 
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
+  useBootstrap: () => ({
+    bootstrap: {
+      channel_catalog: [
+        { id: "alpha", display_name: "Alpha" },
+        { id: "beta", display_name: "Beta" },
+        { id: "gamma", display_name: "Gamma" },
+      ],
+    },
+  }),
 }));
 
 vi.mock("@/features/shell/workspace-navigation", () => ({
@@ -51,7 +60,7 @@ const summary: RuleSummaryViewModel = {
   enabled: true,
   priority: 10,
   creation_order: 1,
-  channel_text: "交易",
+  channel_text: "Alpha",
   stage_text: "请求",
   match_summary: "全部",
   action_summary: "Mock 响应",
@@ -67,7 +76,7 @@ const draft: RuleDraft = {
   description: "",
   enabled: true,
   priority: 10,
-  channel: "transaction",
+  channel: "alpha",
   stage: "request",
   conditions: [],
   actions: [
@@ -77,7 +86,7 @@ const draft: RuleDraft = {
         type: "mock_response",
         status: 200,
         headers: [],
-        shift_jis_body: [123, 125],
+        body_bytes: [123, 125],
       },
     },
   ],
@@ -111,6 +120,39 @@ describe("production RulesView async save guard", () => {
       bytes: [123, 125],
       normalized: "123, 125",
     });
+  });
+
+  it("toggles one-shot by clicking the HeroUI switch control", async () => {
+    commandMocks.ruleSave.mockImplementation(async (next: RuleDraft) => ({
+      summary,
+      draft: next,
+    }));
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    const oneShot = await screen.findByRole("switch", {
+      name: "仅命中一次",
+    });
+    expect(oneShot).not.toBeChecked();
+
+    await user.click(oneShot);
+
+    expect(oneShot).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "保存规则" }));
+    expect(commandMocks.ruleSave).toHaveBeenCalledWith(
+      expect.objectContaining({ one_shot: true }),
+    );
+  });
+
+  it("renders every generic product channel from the Rust bootstrap catalog", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByLabelText("规则通道"));
+
+    expect(await screen.findByRole("option", { name: "Alpha" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Beta" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Gamma" })).toBeVisible();
   });
 
   it("does not save an old draft while the latest Rust parser is pending", async () => {

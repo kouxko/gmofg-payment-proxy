@@ -7,7 +7,7 @@ use crate::{
     AppError, AppResult, BreakpointActionOptionViewModel, BreakpointDecision,
     BreakpointDecisionKind, BreakpointDetailViewModel, BreakpointId, BreakpointState,
     BreakpointSummaryViewModel, DisabledReason, Revision, RuntimeEpoch, UiTone,
-    breakpoint_validation::validate_breakpoint_decision,
+    breakpoint_validation::validate_breakpoint_decision_structure,
 };
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ pub struct BreakpointTicket {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BreakpointOutcome {
-    Decision(BreakpointDecision),
+    Decision(Box<BreakpointDecision>),
     ClientDisconnected,
     ProxyStopped,
 }
@@ -146,7 +146,10 @@ impl BreakpointCoordinator {
         let sender = item.sender.take().ok_or_else(|| {
             AppError::new("BREAKPOINT_ALREADY_RESOLVED", "断点已经处理。").entity(id.to_string())
         })?;
-        if sender.send(BreakpointOutcome::Decision(decision)).is_err() {
+        if sender
+            .send(BreakpointOutcome::Decision(Box::new(decision)))
+            .is_err()
+        {
             let mut summary = item.detail.summary.clone();
             summary.state = BreakpointState::ClientDisconnected;
             summary.revision = summary.revision.saturating_add(1);
@@ -155,7 +158,7 @@ impl BreakpointCoordinator {
             remember_terminal(&mut state, id, BreakpointState::ClientDisconnected);
             return Err(AppError::new(
                 "BREAKPOINT_CLIENT_DISCONNECTED",
-                "Payment App 已断开，不能继续处理该断点。",
+                "客户端已断开，不能继续处理该断点。",
             )
             .entity(id.to_string())
             .epoch(epoch));
@@ -239,7 +242,7 @@ fn not_found_or_terminal(state: &CoordinatorState, id: BreakpointId) -> AppError
         }
         Some(BreakpointState::ClientDisconnected) => AppError::new(
             "BREAKPOINT_CLIENT_DISCONNECTED",
-            "Payment App 已断开，不能继续处理该断点。",
+            "客户端已断开，不能继续处理该断点。",
         )
         .entity(id.to_string()),
         Some(BreakpointState::ProxyStopped) => AppError::new(
@@ -255,7 +258,7 @@ fn validate_decision(
     detail: &BreakpointDetailViewModel,
     decision: &BreakpointDecision,
 ) -> AppResult<()> {
-    let validation = validate_breakpoint_decision(detail, decision);
+    let validation = validate_breakpoint_decision_structure(detail, decision);
     if validation.valid {
         Ok(())
     } else {
@@ -334,10 +337,13 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::{ChannelKind, MessageContentViewModel, MessageStage};
+    use crate::{ChannelId, MessageContentViewModel, MessageStage};
 
     fn message(body: &[u8]) -> MessageContentViewModel {
         MessageContentViewModel {
+            http_status: None,
+            start_line_bytes: Vec::new(),
+            raw_headers: Vec::new(),
             headers: BTreeMap::new(),
             body_text: None,
             body_bytes: body.to_vec(),
@@ -356,7 +362,8 @@ mod tests {
                 stage,
                 title: String::new(),
                 terminal_ip: "127.0.0.1".into(),
-                channel: ChannelKind::Transaction,
+                channel: ChannelId::new("alpha").unwrap(),
+                channel_text: "Alpha".into(),
                 method: "POST".into(),
                 target: "/pay".into(),
                 waiting_since: Utc::now(),

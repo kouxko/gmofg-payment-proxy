@@ -126,7 +126,7 @@ export function ConsoleView({
           <Alert.Title>代理{status.state_text}</Alert.Title>
           <Alert.Description>
             {status.fault_reason ??
-              "交易通道与 DLL 通道由 Rust 统一管理，前端仅显示当前运行快照。"}
+              "所有产品通道均由 Rust 统一管理，前端仅显示当前运行快照。"}
           </Alert.Description>
         </Alert.Content>
       </Alert>
@@ -150,7 +150,7 @@ export function ConsoleView({
             </Table.Header>
             <Table.Body>
               {status.channels.map((channel) => (
-                <Table.Row key={channel.kind} id={channel.kind}>
+                <Table.Row key={channel.id} id={channel.id}>
                   <Table.Cell>
                     <div className="font-medium">{channel.display_name}</div>
                     <div className="text-xs text-[var(--telemetry-muted)]">

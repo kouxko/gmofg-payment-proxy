@@ -73,7 +73,9 @@ export type ActiveFaultViewModel = {
 };
 
 export type AppBootstrapViewModel = {
+	product_name: string,
 	proxy: ProxyStatusViewModel,
+	channel_catalog: ChannelPresentationViewModel[],
 	recent_capture: CapturePageViewModel,
 	pending_breakpoints: BreakpointSummaryViewModel[],
 	certificate: CertificateOverviewViewModel,
@@ -139,7 +141,8 @@ export type BreakpointSummaryViewModel = {
 	stage: MessageStage,
 	title: string,
 	terminal_ip: string,
-	channel: ChannelKind,
+	channel: ChannelId,
+	channel_text: string,
 	method: string,
 	target: string,
 	waiting_since: string,
@@ -180,7 +183,7 @@ export type CapturePageViewModel = {
 export type CaptureQuery = {
 	keyword: string | null,
 	terminal_ip: string | null,
-	channel: ChannelKind | null,
+	channel: ChannelId | null,
 	stage: MessageStage | null,
 	result: string | null,
 	rule_id: string | null,
@@ -197,12 +200,19 @@ export type CaptureRowViewModel = {
 	session_id: string,
 	occurred_at: string,
 	terminal_ip: string,
-	channel: ChannelKind,
+	channel: ChannelId,
 	channel_text: string,
 	stage: MessageStage,
 	stage_text: string,
 	method: string,
 	target: string,
+	/**
+	 *  HTTP response status known at the time this capture row was emitted.
+	 *  Request-stage rows are normally `None`; response and terminal rows
+	 *  expose the effective status without requiring the UI to fetch and
+	 *  inspect the complete payload first.
+	 */
+	http_status: number | null,
 	result: string,
 	ui_tone: UiTone,
 	duration_ms: number | null,
@@ -238,12 +248,25 @@ export type CertificateOverviewViewModel = {
 	disabled_reason: DisabledReason | null,
 };
 
-export type ChannelKind = "transaction" | "dll";
+export type ChannelId = string;
+
+export type ChannelPresentationViewModel = {
+	id: ChannelId,
+	display_name: string,
+};
+
+export type ChannelSettingsDraft = {
+	id: ChannelId,
+	display_name: string,
+	enabled: boolean,
+	port: number,
+	upstream_url: string,
+};
 
 export type ChannelState = "disabled" | "stopped" | "starting" | "listening" | "stopping" | "faulted";
 
 export type ChannelStatusViewModel = {
-	kind: ChannelKind,
+	id: ChannelId,
 	display_name: string,
 	state: ChannelState,
 	state_text: string,
@@ -277,7 +300,7 @@ export type FaultConfigurationDraft = {
 	template_id: string,
 	existing_rule_id: string | null,
 	expected_revision: number | null,
-	channel: ChannelKind | null,
+	channel: ChannelId | null,
 	terminal: string | null,
 	target: string | null,
 	nth_hit: number | null,
@@ -307,7 +330,7 @@ export type FaultTemplateViewModel = {
 	stage_text: string,
 	behavior_text: string,
 	affected_party_text: string,
-	default_channel: ChannelKind,
+	default_channel: ChannelId,
 	default_nth_hit: number,
 	default_one_shot: boolean,
 	default_priority: number,
@@ -324,6 +347,19 @@ export type FieldValidationViewModel = {
 };
 
 export type MessageContentViewModel = {
+	http_status: number | null,
+	/**
+	 *  Exact start-line bytes retained for round trips through breakpoint UI.
+	 *  HTTP/1 start lines are normally ASCII. Keeping bytes here prevents a
+	 *  display string from becoming the canonical source for reconstruction.
+	 */
+	start_line_bytes?: number[],
+	/**
+	 *  Exact, ordered HTTP/1 header fields. Names, values, casing, duplicates,
+	 *  and interleaving are retained.
+	 */
+	raw_headers?: RawHttpHeaderViewModel[],
+	/**  Lossy, grouped projection intended only for display and form editing. */
 	headers: { [key in string]: string[] },
 	body_text: string | null,
 	body_bytes: number[],
@@ -377,6 +413,22 @@ export type ProxyStatusViewModel = {
 	fault_reason: string | null,
 };
 
+export type RawHttpHeaderViewModel = {
+	/**
+	 *  Exact HTTP/1 wire bytes for the field name.
+	 *  This is the canonical representation used when a breakpoint forwards a
+	 *  message. `MessageContentViewModel::headers` is only a lossy display and
+	 *  editing projection.
+	 */
+	name_bytes: number[],
+	/**  Exact HTTP/1 wire bytes for the field value, excluding OWS and CRLF. */
+	value_bytes: number[],
+	/**  Original optional whitespace between `:` and the semantic field value. */
+	leading_ows_bytes?: number[],
+	/**  Original optional whitespace after the semantic field value. */
+	trailing_ows_bytes?: number[],
+};
+
 export type RuleAction = { type: "set_json_field"; path: string; value_json: string } | { type: "replace_body_text"; text: string } | { type: "set_header"; name: string; value: string } | { type: "delay"; milliseconds: number } | { type: "jitter"; minimum_milliseconds: number; maximum_milliseconds: number; scope: RuleJitterScope } | { type: "throttle"; bytes_per_second: number; chunk_bytes: number; direction: RuleTrafficDirection } | { type: "intermittent"; available_milliseconds: number; blocked_milliseconds: number; direction: RuleTrafficDirection } | { type: "pause" } | { type: "custom_http_status"; status: number } | { type: "terminal"; action: RuleTerminalAction };
 
 export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "pause" | "custom_http_status" | "reject_tls_handshake" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
@@ -397,7 +449,7 @@ export type RuleDraft = {
 	description: string,
 	enabled: boolean,
 	priority: number,
-	channel: ChannelKind | null,
+	channel: ChannelId | null,
 	stage: MessageStage | null,
 	conditions: RuleCondition[],
 	actions: RuleAction[],
@@ -437,7 +489,7 @@ export type RuleSummaryViewModel = {
 	ui_tone: UiTone,
 };
 
-export type RuleTerminalAction = { type: "reject_tls_handshake" } | { type: "disconnect_before_upstream" } | { type: "upstream_connect_timeout"; milliseconds: number } | { type: "upstream_write_timeout"; milliseconds: number } | { type: "upstream_read_timeout"; milliseconds: number } | { type: "drop_upstream_response"; mode: RuleDropResponseMode } | { type: "mock_response"; status: number; headers: ([string, string])[]; shift_jis_body: number[] } | { type: "invalid_json"; shift_jis_body: number[] } | { type: "incorrect_content_length"; delta: number } | { type: "truncate_response"; bytes: number } | { type: "disconnect_during_upstream_write"; after_bytes: number } | { type: "disconnect_during_downstream_write"; after_bytes: number };
+export type RuleTerminalAction = { type: "reject_tls_handshake" } | { type: "disconnect_before_upstream" } | { type: "upstream_connect_timeout"; milliseconds: number } | { type: "upstream_write_timeout"; milliseconds: number } | { type: "upstream_read_timeout"; milliseconds: number } | { type: "drop_upstream_response"; mode: RuleDropResponseMode } | { type: "mock_response"; status: number; headers: ([string, string])[]; body_bytes: number[] } | { type: "invalid_json"; body_bytes: number[] } | { type: "incorrect_content_length"; delta: number } | { type: "truncate_response"; bytes: number } | { type: "disconnect_during_upstream_write"; after_bytes: number } | { type: "disconnect_during_downstream_write"; after_bytes: number };
 
 export type RuleTrafficDirection = "upstream" | "downstream";
 
@@ -473,7 +525,7 @@ export type SessionPageViewModel = {
 export type SessionQuery = {
 	keyword: string | null,
 	terminal_ip: string | null,
-	channel: ChannelKind | null,
+	channel: ChannelId | null,
 	result: string | null,
 	rule_id: string | null,
 	started_from: string | null,
@@ -491,9 +543,11 @@ export type SessionSummaryViewModel = {
 	started_at: string,
 	completed_at: string | null,
 	terminal_ip: string,
-	channel: ChannelKind,
+	channel: ChannelId,
+	channel_text: string,
 	method: string,
 	target: string,
+	http_status: number | null,
 	result: string,
 	ui_tone: UiTone,
 	duration_ms: number | null,
@@ -507,12 +561,7 @@ export type SessionSummaryViewModel = {
 export type SettingsDraft = {
 	expected_revision: number | null,
 	bind_address: string,
-	transaction_enabled: boolean,
-	transaction_port: number,
-	dll_enabled: boolean,
-	dll_port: number,
-	upstream_transaction_url: string,
-	upstream_dll_url: string,
+	channels: ChannelSettingsDraft[],
 	connect_timeout_seconds: number,
 	write_timeout_seconds: number,
 	read_timeout_seconds: number,

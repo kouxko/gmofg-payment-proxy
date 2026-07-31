@@ -114,13 +114,13 @@ describe("CertificatesView settings freshness", () => {
     );
   });
 
-  it("exports the bundled public Root CA for a test Payment build", async () => {
+  it("exports the bundled public Root CA for a test client build", async () => {
     const user = userEvent.setup();
     render(<CertificatesView />);
 
     await user.click(
       screen.getByRole("button", {
-        name: "导出测试 Payment 编译用 Root CA",
+        name: "导出测试客户端编译用 Root CA",
       }),
     );
 
