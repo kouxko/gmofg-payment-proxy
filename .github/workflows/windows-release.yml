@@ -1,4 +1,4 @@
-name: Windows release artifacts
+name: Windows signed release and cache warmup
 
 on:
   workflow_dispatch:
@@ -15,21 +15,21 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11.13.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
       - name: Restore Rust and Tauri tool caches
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target
           shared-key: windows-release
@@ -39,26 +39,131 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Audit production frontend dependencies
+        run: pnpm audit --prod --audit-level high
+
+      - name: Configure Authenticode signing for tagged releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: windows_signing
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD) -or
+              [string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_URL)) {
+            throw "Tagged releases require WINDOWS_CERTIFICATE, WINDOWS_CERTIFICATE_PASSWORD and WINDOWS_TIMESTAMP_URL."
+          }
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP "windows-code-signing.pfx"
+          [IO.File]::WriteAllBytes(
+            $pfxPath,
+            [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
+          )
+          $password = ConvertTo-SecureString `
+            $env:WINDOWS_CERTIFICATE_PASSWORD `
+            -AsPlainText `
+            -Force
+          $certificate = Import-PfxCertificate `
+            -FilePath $pfxPath `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password $password `
+            -Exportable:$false
+          if ($null -eq $certificate -or -not $certificate.HasPrivateKey) {
+            throw "The Windows signing PFX did not import a private-key identity."
+          }
+          $codeSigningOid = "1.3.6.1.5.5.7.3.3"
+          if (-not ($certificate.EnhancedKeyUsageList.ObjectId.Value -contains $codeSigningOid)) {
+            throw "The imported certificate is not valid for code signing."
+          }
+
+          $signingConfig = @{
+            bundle = @{
+              windows = @{
+                certificateThumbprint = $certificate.Thumbprint
+                digestAlgorithm = "sha256"
+                timestampUrl = $env:WINDOWS_TIMESTAMP_URL
+              }
+            }
+          }
+          $configPath = Join-Path $env:GITHUB_WORKSPACE "src-tauri/tauri.signing.conf.json"
+          $signingConfig |
+            ConvertTo-Json -Depth 4 |
+            Set-Content -Path $configPath -Encoding UTF8
+          "thumbprint=$($certificate.Thumbprint)" >> $env:GITHUB_OUTPUT
+          "pfx_path=$pfxPath" >> $env:GITHUB_OUTPUT
+
       - name: Build MSI and NSIS installers
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         with:
-          args: --bundles msi,nsis
+          args: >-
+            --bundles msi,nsis
+            ${{ startsWith(github.ref, 'refs/tags/v') && '--config src-tauri/tauri.signing.conf.json' || '' }}
+
+      - name: Verify Authenticode signatures before release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          EXPECTED_THUMBPRINT: ${{ steps.windows_signing.outputs.thumbprint }}
+        run: |
+          $artifacts = @(
+            "src-tauri/target/release/gmofg-payment-proxy.exe"
+          )
+          $artifacts += Get-ChildItem `
+            "src-tauri/target/release/bundle/msi/*.msi",
+            "src-tauri/target/release/bundle/nsis/*.exe" |
+            Select-Object -ExpandProperty FullName
+          if ($artifacts.Count -lt 3) {
+            throw "Expected a signed app executable, MSI and NSIS installer."
+          }
+          foreach ($artifact in $artifacts) {
+            $signature = Get-AuthenticodeSignature -FilePath $artifact
+            if ($signature.Status -ne "Valid") {
+              throw "Invalid Authenticode signature for $artifact`: $($signature.StatusMessage)"
+            }
+            if ($signature.SignerCertificate.Thumbprint -ne $env:EXPECTED_THUMBPRINT) {
+              throw "Unexpected Authenticode signer for $artifact."
+            }
+            if ($null -eq $signature.TimeStamperCertificate) {
+              throw "Authenticode timestamp is missing for $artifact."
+            }
+          }
 
       - name: Upload MSI and NSIS installers
-        uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: GMO-FG-Payment-Proxy-installers-x64
+          name: GMO-FG-Payment-Proxy-signed-installers-x64
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
       - name: Package portable executable
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: ./scripts/package-portable.ps1 -SkipBuild
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: startsWith(github.ref, 'refs/tags/v')
         with:
-          name: GMO-FG-Payment-Proxy-portable-x64
+          name: GMO-FG-Payment-Proxy-signed-portable-x64
           path: dist/*.zip
           if-no-files-found: error
+
+      - name: Remove imported signing material
+        if: always() && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          SIGNING_THUMBPRINT: ${{ steps.windows_signing.outputs.thumbprint }}
+          SIGNING_PFX_PATH: ${{ steps.windows_signing.outputs.pfx_path }}
+        run: |
+          if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_THUMBPRINT)) {
+            Remove-Item "Cert:\CurrentUser\My\$env:SIGNING_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+          }
+          if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_PFX_PATH)) {
+            Remove-Item $env:SIGNING_PFX_PATH -Force -ErrorAction SilentlyContinue
+          }
+          Remove-Item "src-tauri/tauri.signing.conf.json" -Force -ErrorAction SilentlyContinue

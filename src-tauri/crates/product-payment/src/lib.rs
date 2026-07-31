@@ -2,6 +2,10 @@
 //!
 //! Product certificate assets live here so the generic proxy infrastructure
 //! can be reused without carrying Payment names or private test material.
+//! The default library dependency graph contains only product contracts and
+//! codecs. The standalone real-device proxy is deliberately isolated behind
+//! the `real-device-tool` Cargo feature because it composes runtime and
+//! infrastructure adapters rather than defining reusable product policy.
 
 use encoding_rs::SHIFT_JIS;
 use gmofg_proxy_product_api::{

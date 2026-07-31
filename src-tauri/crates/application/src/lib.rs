@@ -10,6 +10,7 @@
 
 mod breakpoint_validation;
 mod breakpoints;
+mod capacity;
 mod error;
 mod events;
 mod facade;
@@ -19,6 +20,7 @@ mod sessions;
 
 pub use breakpoint_validation::BreakpointValidator;
 pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket};
+pub use capacity::CapacityLedger;
 pub use error::{AppError, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
 pub use facade::Application;

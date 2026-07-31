@@ -78,6 +78,29 @@ fn generic_core_does_not_resolve_product_body_codecs() {
 }
 
 #[test]
+fn payment_product_library_does_not_pull_runtime_or_probe_dependencies() {
+    let packages = resolved_dependencies("gmofg-proxy-product-payment");
+    let forbidden = [
+        "async-trait",
+        "gmofg-proxy-infrastructure",
+        "gmofg-proxy-runtime",
+        "p12-keystore",
+        "ring",
+        "tokio",
+        "tokio-util",
+        "zeroize",
+    ];
+
+    for package in forbidden {
+        assert!(
+            !packages.iter().any(|resolved| resolved == package),
+            "the default Payment product library must stay limited to product policy and codecs; \
+             {package} belongs to the opt-in real-device probe: {packages:?}"
+        );
+    }
+}
+
+#[test]
 fn generic_production_sources_do_not_contain_payment_contracts() {
     let forbidden = [
         "GMO-FG",

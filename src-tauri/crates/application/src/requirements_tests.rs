@@ -52,14 +52,14 @@ fn valid_settings_draft() -> SettingsDraft {
                 display_name: "Alpha".into(),
                 enabled: true,
                 port: 20_001,
-                upstream_url: "https://alpha.example.test/api".into(),
+                upstream_url: "https://alpha.example.test".into(),
             },
             ChannelSettingsDraft {
                 id: test_channel("beta"),
                 display_name: "Beta".into(),
                 enabled: true,
                 port: 20_002,
-                upstream_url: "https://beta.example.test/api".into(),
+                upstream_url: "https://beta.example.test".into(),
             },
         ],
         ..SettingsDraft::default()
@@ -303,18 +303,37 @@ fn capacity_never_evicts_active_sessions_without_breakpoints() {
     );
 }
 
-// DATA-008~011, TEST-CAPACITY: pending UI-event bytes participate in the same byte limit.
+// DATA-008~011, TEST-CAPACITY: sessions and UI events share one admission ledger.
 #[test]
-fn pending_ui_event_bytes_trigger_capacity_eviction() {
-    let record = session(Uuid::from_u128(1), 1, false, b"body");
-    let record_bytes = record.logical_bytes();
-    let store = InMemorySessionStore::new(10, record_bytes + 10);
-    store.upsert(record).expect("insert session");
+fn shared_capacity_ledger_evicts_only_completed_sessions_without_snapshot_sync() {
+    let old = session(Uuid::from_u128(1), 1, false, b"body");
+    let replacement = session(Uuid::from_u128(2), 2, false, b"body");
+    let payload = UiEventPayload::ResourceWarning {
+        message: "共享容量".into(),
+    };
+    let event_bytes = UiEventEnvelope {
+        event_id: 1,
+        runtime_epoch: None,
+        occurred_at: timestamp(1),
+        entity_id: None,
+        entity_revision: None,
+        payload: payload.clone(),
+    }
+    .logical_bytes();
+    let ledger = Arc::new(CapacityLedger::new(
+        old.logical_bytes().saturating_add(event_bytes),
+    ));
+    let store = InMemorySessionStore::with_capacity_ledger(10, Arc::clone(&ledger));
+    let hub = EventHub::with_capacity_ledger(16, Arc::clone(&ledger));
+    store.upsert(old).expect("insert completed session");
+    hub.publish(None, timestamp(1), None, None, payload);
+
     let evicted = store
-        .set_pending_ui_event_bytes(11)
-        .expect("event bytes evict completed session");
+        .upsert(replacement)
+        .expect("event allocation makes the older completed session evictable");
     assert_eq!(evicted, vec![Uuid::from_u128(1)]);
-    assert_eq!(store.logical_bytes(), 11);
+    assert_eq!(store.logical_bytes(), ledger.logical_bytes());
+    assert!(ledger.logical_bytes() <= ledger.max_bytes());
 }
 
 // SESSION-002~003, CAPTURE-004: filtering, sorting, pagination and total are Rust deterministic.
@@ -576,17 +595,9 @@ async fn subscriber_overflow_is_non_blocking_and_replay_log_is_independent() {
         3,
         "subscriber overflow does not delete replay history"
     );
-    assert_eq!(
-        slow.live
-            .recv()
-            .await
-            .expect("first queued event remains")
-            .event_id,
-        1
-    );
     assert!(
         slow.live.recv().await.is_none(),
-        "overflow closes only slow queue"
+        "overflow cancels and releases the slow queue immediately"
     );
 }
 
@@ -1171,7 +1182,7 @@ async fn settings_use_case_rejects_locally_then_calls_fake_port_for_valid_draft(
     assert_eq!(ports.settings_validations.load(Ordering::SeqCst), 0);
 
     let mut valid = valid_settings_draft();
-    valid.channels[0].upstream_url = " https://alpha.example.test/api ".into();
+    valid.channels[0].upstream_url = " https://alpha.example.test ".into();
     assert!(
         application
             .settings_validate(valid)
@@ -1470,16 +1481,34 @@ fn rule_editor_primitives_and_byte_parser_are_owned_by_rust() {
     assert!(error.view_model.field_errors.contains_key("raw"));
 }
 
-#[test]
-fn rejected_ui_event_byte_sync_keeps_truthful_external_byte_count_atomically() {
-    let store = InMemorySessionStore::new(1, 10);
-    let error = store
-        .set_pending_ui_event_bytes(11)
-        .expect_err("external event bytes exceed capacity");
-    assert_eq!(error.view_model.code, "RESOURCE_EXHAUSTED");
-    assert_eq!(
-        store.logical_bytes(),
-        11,
-        "failed capacity admission still accounts the external queue exactly"
+#[tokio::test]
+async fn event_admission_reclaims_replay_and_slow_queues_without_overcommit() {
+    let payload = UiEventPayload::ResourceWarning {
+        message: "容量压力".into(),
+    };
+    let event_bytes = UiEventEnvelope {
+        event_id: 1,
+        runtime_epoch: None,
+        occurred_at: timestamp(1),
+        entity_id: None,
+        entity_revision: None,
+        payload: payload.clone(),
+    }
+    .logical_bytes();
+    let ledger = Arc::new(CapacityLedger::new(event_bytes.saturating_mul(2)));
+    let hub = EventHub::with_capacity_ledger(4_096, Arc::clone(&ledger));
+    let mut slow = hub.subscribe(0, 4).expect("subscribe");
+
+    hub.publish(None, timestamp(1), None, None, payload.clone());
+    hub.publish(None, timestamp(2), None, None, payload);
+
+    assert!(ledger.logical_bytes() <= ledger.max_bytes());
+    assert!(
+        slow.live.recv().await.is_none(),
+        "the slow subscriber is terminated when its queue cannot be reserved"
+    );
+    assert!(
+        hub.replay_after(0).events.len() <= 2,
+        "byte pressure shortens replay instead of overcommitting"
     );
 }

@@ -1,12 +1,12 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use parking_lot::RwLock;
 
 use crate::{
-    AppError, AppResult, PageRequest, SessionDetailViewModel, SessionId, SessionPageViewModel,
-    SessionQuery, SessionQueryPort, SessionRecord, SessionSort, SessionSummaryViewModel,
-    SortDirection,
+    AppError, AppResult, CapacityLedger, PageRequest, SessionDetailViewModel, SessionId,
+    SessionPageViewModel, SessionQuery, SessionQueryPort, SessionRecord, SessionSort,
+    SessionSummaryViewModel, SortDirection,
 };
 
 pub trait SessionStore: Send + Sync + std::fmt::Debug {
@@ -15,7 +15,6 @@ pub trait SessionStore: Send + Sync + std::fmt::Debug {
     fn query(&self, query: &SessionQuery) -> SessionPageViewModel;
     fn clear_completed(&self) -> usize;
     fn logical_bytes(&self) -> u64;
-    fn set_pending_ui_event_bytes(&self, bytes: u64) -> AppResult<Vec<SessionId>>;
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool {
         self.len() == 0
@@ -26,19 +25,18 @@ pub trait SessionStore: Send + Sync + std::fmt::Debug {
 pub struct InMemorySessionStore {
     limits: RwLock<CapacityLimits>,
     state: RwLock<StoreState>,
+    capacity: Arc<CapacityLedger>,
 }
 
 #[derive(Debug, Clone, Copy)]
 struct CapacityLimits {
     max_sessions: usize,
-    max_bytes: u64,
 }
 
 #[derive(Debug, Default)]
 struct StoreState {
     records: HashMap<SessionId, SessionRecord>,
     record_bytes: u64,
-    pending_ui_event_bytes: u64,
 }
 
 impl InMemorySessionStore {
@@ -46,12 +44,21 @@ impl InMemorySessionStore {
     pub const DEFAULT_MAX_BYTES: u64 = 256 * 1024 * 1024;
 
     pub fn new(max_sessions: usize, max_bytes: u64) -> Self {
+        Self::with_capacity_ledger(max_sessions, Arc::new(CapacityLedger::new(max_bytes)))
+    }
+
+    /// Creates a session store backed by the process-wide capacity authority.
+    ///
+    /// The same ledger must be passed to [`crate::EventHub`] by the composition
+    /// root so event and session admission are serialized against one limit.
+    #[must_use]
+    pub fn with_capacity_ledger(max_sessions: usize, capacity: Arc<CapacityLedger>) -> Self {
         Self {
             limits: RwLock::new(CapacityLimits {
                 max_sessions: max_sessions.max(1),
-                max_bytes: max_bytes.max(1),
             }),
             state: RwLock::new(StoreState::default()),
+            capacity,
         }
     }
 
@@ -62,11 +69,13 @@ impl InMemorySessionStore {
     pub fn set_limits(&self, max_sessions: usize, max_bytes: u64) -> AppResult<Vec<SessionId>> {
         let candidate = CapacityLimits {
             max_sessions: max_sessions.max(1),
-            max_bytes: max_bytes.max(1),
         };
         let mut limits = self.limits.write();
         let mut state = self.state.write();
-        let evicted = eviction_plan(&state, candidate, None)?;
+        let evicted = eviction_plan(&state, candidate, None, |bytes| {
+            self.capacity
+                .try_set_session_bytes_and_limit(bytes, max_bytes)
+        })?;
         apply_evictions(&mut state, &evicted);
         *limits = candidate;
         Ok(evicted)
@@ -91,6 +100,13 @@ impl Default for InMemorySessionStore {
     }
 }
 
+impl Drop for InMemorySessionStore {
+    fn drop(&mut self) {
+        let admitted = self.capacity.try_set_session_bytes(0);
+        debug_assert!(admitted, "releasing all sessions cannot exceed capacity");
+    }
+}
+
 impl SessionStore for InMemorySessionStore {
     fn upsert(&self, record: SessionRecord) -> AppResult<Vec<SessionId>> {
         let id = record.id();
@@ -103,7 +119,9 @@ impl SessionStore for InMemorySessionStore {
         state.record_bytes = state.record_bytes.saturating_add(record.logical_bytes());
         state.records.insert(id, record);
 
-        let evicted = match eviction_plan(&state, limits, Some(id)) {
+        let evicted = match eviction_plan(&state, limits, Some(id), |bytes| {
+            self.capacity.try_set_session_bytes(bytes)
+        }) {
             Ok(evicted) => evicted,
             Err(error) => {
                 if let Some(current) = state.records.remove(&id) {
@@ -228,27 +246,16 @@ impl SessionStore for InMemorySessionStore {
             .values()
             .map(SessionRecord::logical_bytes)
             .sum();
+        let admitted = self.capacity.try_set_session_bytes(state.record_bytes);
+        debug_assert!(
+            admitted,
+            "releasing completed sessions cannot exceed capacity"
+        );
         before - state.records.len()
     }
 
     fn logical_bytes(&self) -> u64 {
-        let state = self.state.read();
-        state
-            .record_bytes
-            .saturating_add(state.pending_ui_event_bytes)
-    }
-
-    fn set_pending_ui_event_bytes(&self, bytes: u64) -> AppResult<Vec<SessionId>> {
-        let limits = *self.limits.read();
-        let mut state = self.state.write();
-        // UI event queues live outside this store and cannot be rolled back
-        // here. Always commit their observed logical size so capacity
-        // accounting remains truthful even when the combined limit is
-        // exhausted. Record eviction itself remains all-or-nothing.
-        state.pending_ui_event_bytes = bytes;
-        let evicted = eviction_plan(&state, limits, None)?;
-        apply_evictions(&mut state, &evicted);
-        Ok(evicted)
+        self.capacity.logical_bytes()
     }
 
     fn len(&self) -> usize {
@@ -294,6 +301,7 @@ fn eviction_plan(
     state: &StoreState,
     limits: CapacityLimits,
     protected: Option<SessionId>,
+    mut admit: impl FnMut(u64) -> bool,
 ) -> AppResult<Vec<SessionId>> {
     let mut candidates = state
         .records
@@ -307,12 +315,13 @@ fn eviction_plan(
     candidates.sort_by(|left, right| eviction_order(left, right));
 
     let mut record_count = state.records.len();
-    let mut logical_bytes = state
-        .record_bytes
-        .saturating_add(state.pending_ui_event_bytes);
+    let mut record_bytes = state.record_bytes;
     let mut evicted = Vec::new();
     let mut candidate_index = 0;
-    while record_count > limits.max_sessions || logical_bytes > limits.max_bytes {
+    loop {
+        if record_count <= limits.max_sessions && admit(record_bytes) {
+            return Ok(evicted);
+        }
         let Some(candidate) = candidates.get(candidate_index) else {
             return Err(AppError::new(
                 "RESOURCE_EXHAUSTED",
@@ -322,10 +331,9 @@ fn eviction_plan(
         };
         candidate_index += 1;
         record_count = record_count.saturating_sub(1);
-        logical_bytes = logical_bytes.saturating_sub(candidate.logical_bytes());
+        record_bytes = record_bytes.saturating_sub(candidate.logical_bytes());
         evicted.push(candidate.id());
     }
-    Ok(evicted)
 }
 
 fn apply_evictions(state: &mut StoreState, evicted: &[SessionId]) {

@@ -6,7 +6,6 @@
 
 use std::{
     collections::{BTreeMap, HashMap},
-    hash::{DefaultHasher, Hash, Hasher},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -21,27 +20,36 @@ use gmofg_proxy_application::{
     AppError, AppResult, BreakpointCoordinator, BreakpointDecision, BreakpointDecisionKind,
     BreakpointDetailViewModel, BreakpointOutcome, BreakpointState, BreakpointSummaryViewModel,
     CaptureRowViewModel, ChannelId as AppChannelId, DisabledReason, EventHub, InMemorySessionStore,
-    MessageContentViewModel, MessageStage as AppMessageStage, RawHttpHeaderViewModel,
-    RuleSummaryViewModel, SessionDetailViewModel, SessionRecord, SessionStore,
-    SessionSummaryViewModel, UiEventPayload, UiTone,
+    MessageContentViewModel, MessageStage as AppMessageStage, RuleSummaryViewModel,
+    SessionDetailViewModel, SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload,
+    UiTone,
 };
 use gmofg_proxy_domain::{
-    ChannelId as DomainChannelId, DropResponseMode, JitterScope as DomainJitterScope, JsonPath,
-    MatchContext, MessageStage as DomainMessageStage, Rule, RuleAction, RuleEngine,
-    RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction, TerminalIdentity,
-    TrafficDirection as DomainTrafficDirection,
+    ChannelId as DomainChannelId, MatchContext, MessageStage as DomainMessageStage, Rule,
+    RuleAction, RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
 };
-use gmofg_proxy_product_api::{BodyCodec, ProductHeader, ProductMessageContext, RequestClassifier};
+use gmofg_proxy_product_api::{BodyCodec, RequestClassifier};
 use gmofg_proxy_runtime::{
     ChannelId, ChannelRuntimeMetrics, ConnectionContext, ErrorCode, FaultAction, HandshakePolicy,
-    JitterScope, Message, PipelinePorts, ProxyError, RawHeader, Result as ProxyResult,
-    RuntimeMetricsProvider, RuntimeMetricsSnapshot, TlsPeerIdentity, TrafficDirection,
+    Message, PipelinePorts, ProxyError, Result as ProxyResult, RuntimeMetricsProvider,
+    RuntimeMetricsSnapshot, TlsPeerIdentity,
 };
 use parking_lot::Mutex;
-use serde_json::Value;
 use uuid::Uuid;
 
 use super::{CaptureRepositoryAdapter, RuleRepositoryAdapter};
+use message_projection::{
+    classify_request, content_view, decode_json, encode_body, header_value, message_method,
+    message_target, proxy_message,
+};
+#[cfg(test)]
+use message_projection::{decode_body, display_headers, merge_edited_headers};
+#[cfg(test)]
+use rule_actions::map_terminal_action;
+use rule_actions::{apply_rule_actions, terminal_identity, weak_network_seed};
+
+mod message_projection;
+mod rule_actions;
 
 macro_rules! proxy_status {
     ($status:expr) => {
@@ -328,30 +336,6 @@ impl RuntimePipelineAdapter {
                 UiEventPayload::RuleHit(rule),
             );
         }
-        self.sync_event_capacity(epoch);
-    }
-
-    fn sync_event_capacity(&self, epoch: Uuid) {
-        let first = self
-            .sessions
-            .set_pending_ui_event_bytes(self.events.logical_bytes());
-        if let Err(error) = first {
-            self.events.publish(
-                Some(epoch),
-                Utc::now(),
-                None,
-                None,
-                UiEventPayload::ResourceWarning {
-                    message: error.view_model.message.clone(),
-                },
-            );
-            // The warning is itself retained UI-event data. Synchronize once
-            // more without publishing recursively so the logical byte count
-            // always equals the actual EventHub state.
-            let _ = self
-                .sessions
-                .set_pending_ui_event_bytes(self.events.logical_bytes());
-        }
     }
 
     fn begin_session(&self, context: &ConnectionContext, original: &Message) -> ProxyResult<Uuid> {
@@ -533,7 +517,6 @@ impl RuntimePipelineAdapter {
             Some(record.detail.summary.revision),
             UiEventPayload::SessionUpdated(record.detail.summary.clone()),
         );
-        self.sync_event_capacity(context.runtime_epoch);
         Ok(record)
     }
 
@@ -595,7 +578,6 @@ impl RuntimePipelineAdapter {
                 size_bytes: effective.body.len() as u64,
             },
         );
-        self.sync_event_capacity(context.runtime_epoch);
 
         let outcome = ticket
             .outcome
@@ -722,7 +704,6 @@ impl RuntimePipelineAdapter {
                     .saturating_add(summary.response_size_bytes),
             },
         );
-        self.sync_event_capacity(context.runtime_epoch);
     }
 
     fn publish_capture(
@@ -858,7 +839,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
         }
         self.state.lock().rule_runtime = None;
         *self.rule_epoch.lock() = None;
-        self.sync_event_capacity(epoch);
     }
 
     async fn connection_opened(&self, context: &ConnectionContext) {
@@ -1012,7 +992,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 AppError::new(error.code, error.message.clone()).into(),
             ),
         );
-        self.sync_event_capacity(epoch);
     }
 }
 
@@ -1063,6 +1042,7 @@ fn is_upstream_error(code: &str) -> bool {
 #[async_trait]
 impl RuntimeMetricsProvider for RuntimePipelineAdapter {
     async fn configure_capacity(&self, max_sessions: usize, max_bytes: u64) -> ProxyResult<()> {
+        self.events.reclaim_for_limit(max_bytes);
         self.sessions
             .set_limits(max_sessions, max_bytes)
             .map(|_| ())
@@ -1090,200 +1070,6 @@ impl RuntimeMetricsProvider for RuntimePipelineAdapter {
             logical_memory_bytes: self.sessions.logical_bytes(),
         })
     }
-}
-
-fn apply_rule_actions(
-    body_codec: &dyn BodyCodec,
-    message: &mut Message,
-    actions: &[RuleAction],
-    seed: u64,
-) -> ProxyResult<(Vec<FaultAction>, bool)> {
-    let mut faults = Vec::new();
-    let mut pause = false;
-    for action in actions {
-        match action {
-            RuleAction::SetJsonField { path, value } => {
-                let mut json = decode_json(body_codec, &message.body)?;
-                JsonPath::parse(path)
-                    .and_then(|path| path.set(&mut json, value.clone()))
-                    .map_err(|error| {
-                        ProxyError::new(
-                            ErrorCode::ConfigInvalid,
-                            format!("JSON path `{path}` is invalid: {error}"),
-                        )
-                    })?;
-                let text = serde_json::to_string(&json).map_err(|error| ProxyError {
-                    code: "BODY_ENCODE_FAILED",
-                    message: format!("failed to serialize structured body: {error}"),
-                })?;
-                message.replace_body(Bytes::from(encode_body(body_codec, &text)?));
-            }
-            RuleAction::ReplaceBodyText(text) => {
-                message.replace_body(Bytes::from(encode_body(body_codec, text)?));
-            }
-            RuleAction::SetHeader { name, value } => {
-                message.remove_header(name);
-                message.headers.push(RawHeader::new(
-                    name.as_bytes().to_vec(),
-                    value.as_bytes().to_vec(),
-                ));
-            }
-            RuleAction::Delay { milliseconds } => {
-                faults.push(FaultAction::Delay(Duration::from_millis(*milliseconds)));
-            }
-            RuleAction::Jitter {
-                minimum_milliseconds,
-                maximum_milliseconds,
-                scope,
-            } => faults.push(FaultAction::Jitter {
-                minimum: Duration::from_millis(*minimum_milliseconds),
-                maximum: Duration::from_millis(*maximum_milliseconds),
-                scope: match scope {
-                    DomainJitterScope::BeforeMessage => JitterScope::BeforeMessage,
-                    DomainJitterScope::PerChunk => JitterScope::PerChunk,
-                },
-                seed,
-            }),
-            RuleAction::Throttle {
-                bytes_per_second,
-                chunk_bytes,
-                direction,
-            } => faults.push(FaultAction::Throttle {
-                bytes_per_second: *bytes_per_second,
-                chunk_bytes: usize::try_from(*chunk_bytes).map_err(|_| {
-                    ProxyError::new(ErrorCode::ConfigInvalid, "traffic chunk exceeds platform")
-                })?,
-                direction: traffic_direction(*direction),
-            }),
-            RuleAction::Intermittent {
-                available_milliseconds,
-                blocked_milliseconds,
-                direction,
-            } => faults.push(FaultAction::Intermittent {
-                available: Duration::from_millis(*available_milliseconds),
-                blocked: Duration::from_millis(*blocked_milliseconds),
-                direction: traffic_direction(*direction),
-            }),
-            RuleAction::Pause => pause = true,
-            RuleAction::CustomHttpStatus { status } => {
-                faults.push(FaultAction::CustomStatus(proxy_status!(*status)?));
-            }
-            RuleAction::Terminal(terminal) => faults.push(map_terminal_action(terminal)?),
-        }
-    }
-    if message.body_modified {
-        message.set_content_length(message.body.len());
-    }
-    Ok((faults, pause))
-}
-
-fn weak_network_seed(
-    context: &ConnectionContext,
-    stage: DomainMessageStage,
-    hit_rules: &[RuleSummaryViewModel],
-) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    context.runtime_epoch.hash(&mut hasher);
-    context.connection_id.hash(&mut hasher);
-    std::mem::discriminant(&stage).hash(&mut hasher);
-    for rule in hit_rules {
-        rule.rule_id.hash(&mut hasher);
-        rule.revision.hash(&mut hasher);
-        rule.hit_count.hash(&mut hasher);
-    }
-    hasher.finish()
-}
-
-fn terminal_identity(context: &ConnectionContext) -> TerminalIdentity {
-    TerminalIdentity {
-        source_ip: context.peer_addr.ip().to_string(),
-        certificate_sha256: context
-            .tls_peer
-            .as_ref()
-            .map_or_else(String::new, |identity| identity.sha256_fingerprint.clone()),
-    }
-}
-
-const fn traffic_direction(direction: DomainTrafficDirection) -> TrafficDirection {
-    match direction {
-        DomainTrafficDirection::Upstream => TrafficDirection::Upstream,
-        DomainTrafficDirection::Downstream => TrafficDirection::Downstream,
-    }
-}
-
-fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultAction> {
-    Ok(match action {
-        TerminalAction::RejectTlsHandshake => FaultAction::RejectTls,
-        TerminalAction::DisconnectBeforeUpstream => FaultAction::DisconnectBeforeUpstream,
-        TerminalAction::UpstreamConnectTimeout { milliseconds } => {
-            FaultAction::UpstreamConnectTimeout(Duration::from_millis(*milliseconds))
-        }
-        TerminalAction::UpstreamWriteTimeout { milliseconds } => {
-            FaultAction::UpstreamWriteTimeout(Duration::from_millis(*milliseconds))
-        }
-        TerminalAction::UpstreamReadTimeout { milliseconds } => {
-            FaultAction::UpstreamReadTimeout(Duration::from_millis(*milliseconds))
-        }
-        TerminalAction::DropUpstreamResponse { mode } => FaultAction::DropResponse {
-            read_upstream: *mode == DropResponseMode::ReadCompleteResponse,
-        },
-        TerminalAction::MockResponse {
-            status,
-            headers,
-            body_bytes,
-        } => FaultAction::MockResponse {
-            status: proxy_status!(*status)?,
-            headers: Message {
-                start_line: String::new(),
-                headers: headers
-                    .iter()
-                    .map(|(name, value)| {
-                        RawHeader::new(name.as_bytes().to_vec(), value.as_bytes().to_vec())
-                    })
-                    .collect(),
-                body: Vec::new().into(),
-                body_modified: false,
-            }
-            .header_map()?,
-            body: Bytes::copy_from_slice(body_bytes),
-        },
-        TerminalAction::InvalidJson { body_bytes } => FaultAction::ReplaceBody {
-            body: Bytes::copy_from_slice(body_bytes),
-        },
-        TerminalAction::IncorrectContentLength { delta } => {
-            FaultAction::ContentLengthOffset(*delta)
-        }
-        TerminalAction::TruncateResponse { bytes } => {
-            FaultAction::TruncateResponse(usize::try_from(*bytes).map_err(|_| {
-                ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    "truncate size exceeds platform range",
-                )
-            })?)
-        }
-        TerminalAction::DisconnectDuringUpstreamWrite { after_bytes } => {
-            FaultAction::DisconnectDuringWrite {
-                after_bytes: usize::try_from(*after_bytes).map_err(|_| {
-                    ProxyError::new(
-                        ErrorCode::ConfigInvalid,
-                        "upstream disconnect offset exceeds platform range",
-                    )
-                })?,
-                direction: TrafficDirection::Upstream,
-            }
-        }
-        TerminalAction::DisconnectDuringDownstreamWrite { after_bytes } => {
-            FaultAction::DisconnectDuringWrite {
-                after_bytes: usize::try_from(*after_bytes).map_err(|_| {
-                    ProxyError::new(
-                        ErrorCode::ConfigInvalid,
-                        "downstream disconnect offset exceeds platform range",
-                    )
-                })?,
-                direction: TrafficDirection::Downstream,
-            }
-        }
-    })
 }
 
 fn apply_breakpoint_decision(
@@ -1489,179 +1275,6 @@ fn rule_summary(rule: &Rule, channel_labels: &BTreeMap<String, String>) -> RuleS
     }
 }
 
-fn content_view(body_codec: &dyn BodyCodec, message: &Message) -> MessageContentViewModel {
-    let raw_headers = message
-        .headers
-        .iter()
-        .map(|header| RawHttpHeaderViewModel {
-            name_bytes: header.name.to_vec(),
-            value_bytes: header.value.to_vec(),
-            leading_ows_bytes: header.leading_ows().to_vec(),
-            trailing_ows_bytes: header.trailing_ows().to_vec(),
-        })
-        .collect::<Vec<_>>();
-    let headers = display_headers(&raw_headers);
-    let body_text = decode_body(body_codec, &message.body).ok();
-    let json = body_text
-        .as_deref()
-        .and_then(|text| serde_json::from_str(text).ok());
-    MessageContentViewModel {
-        http_status: message.http_status(),
-        start_line_bytes: message.start_line.as_bytes().to_vec(),
-        raw_headers,
-        headers,
-        body_text,
-        body_bytes: message.body.to_vec(),
-        json,
-        content_length: message.body.len(),
-    }
-}
-
-fn display_headers(raw_headers: &[RawHttpHeaderViewModel]) -> BTreeMap<String, Vec<String>> {
-    let mut groups = BTreeMap::<String, (String, Vec<String>)>::new();
-    for header in raw_headers {
-        let display_name = String::from_utf8_lossy(&header.name_bytes).into_owned();
-        let normalized = display_name.to_ascii_lowercase();
-        let (_, values) = groups
-            .entry(normalized)
-            .or_insert_with(|| (display_name, Vec::new()));
-        values.push(String::from_utf8_lossy(&header.value_bytes).into_owned());
-    }
-    groups.into_values().collect()
-}
-
-fn group_edited_headers(
-    headers: &BTreeMap<String, Vec<String>>,
-) -> BTreeMap<String, (String, Vec<String>)> {
-    let mut groups = BTreeMap::<String, (String, Vec<String>)>::new();
-    for (name, values) in headers {
-        groups.insert(name.to_ascii_lowercase(), (name.clone(), values.clone()));
-    }
-    groups
-}
-
-fn proxy_message(
-    view: &MessageContentViewModel,
-    fallback_start_line: &str,
-) -> ProxyResult<Message> {
-    // The start-line is immutable transport metadata. Breakpoint IPC may
-    // display its exact bytes, but it can only change the response status
-    // through the separately validated `http_status` field.
-    let mut start_line = fallback_start_line.to_owned();
-    if let Some(status) = view.http_status {
-        let current = Message {
-            start_line: start_line.clone(),
-            headers: Vec::new(),
-            body: Bytes::new(),
-            body_modified: false,
-        }
-        .http_status();
-        if current != Some(status) {
-            if !(100..=599).contains(&status) {
-                return Err(ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    format!("invalid modified HTTP status: {status}"),
-                ));
-            }
-            let version = start_line
-                .split_ascii_whitespace()
-                .next()
-                .filter(|version| version.starts_with("HTTP/"))
-                .unwrap_or("HTTP/1.1");
-            let reason = start_line.splitn(3, ' ').nth(2).unwrap_or_default();
-            let modified = format!("{version} {status} {reason}");
-            start_line.clear();
-            start_line.push_str(modified.trim_end());
-        }
-    }
-    let headers = merge_edited_headers(&view.raw_headers, &view.headers)?;
-    Ok(Message {
-        start_line,
-        headers,
-        body: view.body_bytes.clone().into(),
-        body_modified: true,
-    })
-}
-
-fn merge_edited_headers(
-    raw_headers: &[RawHttpHeaderViewModel],
-    edited: &BTreeMap<String, Vec<String>>,
-) -> ProxyResult<Vec<RawHeader>> {
-    if raw_headers.is_empty() {
-        return Ok(edited
-            .iter()
-            .flat_map(|(name, values)| {
-                values.iter().map(|value| {
-                    RawHeader::new(
-                        Bytes::copy_from_slice(name.as_bytes()),
-                        Bytes::copy_from_slice(value.as_bytes()),
-                    )
-                })
-            })
-            .collect());
-    }
-
-    let original = group_edited_headers(&display_headers(raw_headers));
-    let edited = group_edited_headers(edited);
-    let mut emitted_edited_keys = std::collections::BTreeSet::<String>::new();
-    let mut headers = Vec::new();
-    for raw in raw_headers {
-        let key = String::from_utf8_lossy(&raw.name_bytes).to_ascii_lowercase();
-        let original_values = original.get(&key).map(|(_, values)| values);
-        let edited_values = edited.get(&key).map(|(_, values)| values);
-        if original_values == edited_values {
-            headers.push(RawHeader::with_wire_ows(
-                Bytes::copy_from_slice(&raw.name_bytes),
-                Bytes::copy_from_slice(&raw.value_bytes),
-                Bytes::copy_from_slice(&raw.leading_ows_bytes),
-                Bytes::copy_from_slice(&raw.trailing_ows_bytes),
-            )?);
-        } else if emitted_edited_keys.insert(key.clone())
-            && let Some((edited_name, values)) = edited.get(&key)
-        {
-            headers.extend(values.iter().map(|value| {
-                RawHeader::new(
-                    Bytes::copy_from_slice(edited_name.as_bytes()),
-                    Bytes::copy_from_slice(value.as_bytes()),
-                )
-            }));
-        }
-    }
-    for (normalized, (name, values)) in edited {
-        if !original.contains_key(&normalized) {
-            headers.extend(values.iter().map(|value| {
-                RawHeader::new(
-                    Bytes::copy_from_slice(name.as_bytes()),
-                    Bytes::copy_from_slice(value.as_bytes()),
-                )
-            }));
-        }
-    }
-    Ok(headers)
-}
-
-fn decode_body(body_codec: &dyn BodyCodec, bytes: &[u8]) -> ProxyResult<String> {
-    body_codec.decode(bytes).map_err(|error| ProxyError {
-        code: error.code,
-        message: error.message,
-    })
-}
-
-fn encode_body(body_codec: &dyn BodyCodec, text: &str) -> ProxyResult<Vec<u8>> {
-    body_codec.encode(text).map_err(|error| ProxyError {
-        code: error.code,
-        message: error.message,
-    })
-}
-
-fn decode_json(body_codec: &dyn BodyCodec, bytes: &[u8]) -> ProxyResult<Value> {
-    let text = decode_body(body_codec, bytes)?;
-    serde_json::from_str(&text).map_err(|error| ProxyError {
-        code: "JSON_INVALID",
-        message: format!("decoded body is not valid JSON: {error}"),
-    })
-}
-
 fn app_to_proxy(error: AppError) -> ProxyError {
     if matches!(
         error.view_model.code.as_str(),
@@ -1712,43 +1325,6 @@ fn domain_channel(channel: &ChannelId) -> ProxyResult<DomainChannelId> {
             ErrorCode::ConfigInvalid,
             format!("invalid domain channel `{channel}`: {error}"),
         )
-    })
-}
-
-fn message_method(start_line: &str) -> Option<&str> {
-    start_line.split_ascii_whitespace().next()
-}
-
-fn message_target(start_line: &str) -> Option<&str> {
-    start_line.split_ascii_whitespace().nth(1)
-}
-
-fn header_value(message: &Message, name: &str) -> Option<String> {
-    message
-        .headers
-        .iter()
-        .find(|header| header.name.eq_ignore_ascii_case(name.as_bytes()))
-        .map(|header| String::from_utf8_lossy(&header.value).into_owned())
-}
-
-fn classify_request(
-    classifier: &dyn RequestClassifier,
-    channel: &ChannelId,
-    message: &Message,
-) -> gmofg_proxy_product_api::ClassifiedRequest {
-    let headers = message
-        .headers
-        .iter()
-        .map(|header| ProductHeader {
-            name: &header.name,
-            value: &header.value,
-        })
-        .collect::<Vec<_>>();
-    classifier.classify(ProductMessageContext {
-        channel_id: channel.as_str(),
-        start_line: message.start_line.as_bytes(),
-        headers: &headers,
-        body: &message.body,
     })
 }
 
@@ -1807,8 +1383,12 @@ mod tests {
         time::SystemTime,
     };
 
-    use gmofg_proxy_application::{RuleDraft as AppRuleDraft, RuleViewModel};
-    use gmofg_proxy_runtime::TlsPeerIdentity;
+    use gmofg_proxy_application::{
+        RawHttpHeaderViewModel, RuleDraft as AppRuleDraft, RuleViewModel,
+    };
+    use gmofg_proxy_domain::DropResponseMode;
+    use gmofg_proxy_product_api::ProductMessageContext;
+    use gmofg_proxy_runtime::{RawHeader, TlsPeerIdentity};
     use serde_json::json;
 
     use super::*;

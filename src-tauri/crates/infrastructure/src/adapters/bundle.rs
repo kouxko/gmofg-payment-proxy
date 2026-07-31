@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use gmofg_proxy_application::InMemorySessionStore;
+use gmofg_proxy_application::{CapacityLedger, InMemorySessionStore};
 use gmofg_proxy_product_api::ProductProfile;
 
 use crate::{SecretProtector, SqliteStore};
@@ -19,6 +19,7 @@ pub struct InfrastructureServiceBundle {
     pub file_export: Arc<FileExportAdapter>,
     pub capture: Arc<CaptureRepositoryAdapter>,
     pub sessions: Arc<InMemorySessionStore>,
+    pub capacity: Arc<CapacityLedger>,
 }
 
 impl InfrastructureServiceBundle {
@@ -28,9 +29,13 @@ impl InfrastructureServiceBundle {
         protector: Arc<dyn SecretProtector>,
         dialog: Arc<dyn NativeFileDialog>,
         product: Arc<dyn ProductProfile>,
+        capacity: Arc<CapacityLedger>,
     ) -> Self {
         let body_codec = product.body_codec();
-        let sessions = Arc::new(InMemorySessionStore::default());
+        let sessions = Arc::new(InMemorySessionStore::with_capacity_ledger(
+            InMemorySessionStore::DEFAULT_MAX_SESSIONS,
+            Arc::clone(&capacity),
+        ));
         let capture = Arc::new(CaptureRepositoryAdapter::new(sessions.clone()));
         let rules = Arc::new(RuleRepositoryAdapter::new(
             Arc::clone(&store),
@@ -58,6 +63,7 @@ impl InfrastructureServiceBundle {
             file_export: Arc::new(FileExportAdapter::new(dialog)),
             capture,
             sessions,
+            capacity,
             rules,
         }
     }
