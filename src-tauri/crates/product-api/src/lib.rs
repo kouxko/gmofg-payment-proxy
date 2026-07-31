@@ -264,10 +264,13 @@ pub fn validate_product_profile(product: &dyn ProductProfile) -> Result<(), Prod
                 ),
             ));
         }
-        if !valid_https_url(channel.upstream_url) {
+        if !valid_https_origin(channel.upstream_url) {
             return Err(ProductError::new(
                 "PRODUCT_PROFILE_INVALID",
-                format!("channel {:?} has an invalid HTTPS upstream URL", channel.id),
+                format!(
+                    "channel {:?} upstream must be an HTTPS origin without path, query, fragment, or userinfo",
+                    channel.id
+                ),
             ));
         }
     }
@@ -416,17 +419,28 @@ fn valid_database_file_name(value: &str) -> bool {
             .any(|byte| matches!(byte, b'/' | b'\\' | b':' | 0))
 }
 
-fn valid_https_url(value: &str) -> bool {
+/// Validates the static upstream origin declared by a product profile.
+///
+/// Runtime forwarding preserves the downstream request-target, so a profile
+/// path or query cannot be composed safely and would otherwise be discarded.
+/// Keep this contract aligned with domain settings validation and the runtime
+/// endpoint parser; a single trailing slash denotes the canonical empty path.
+fn valid_https_origin(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("https://") else {
         return false;
     };
-    let authority = rest
-        .split_once(['/', '?', '#'])
-        .map_or(rest, |(authority, _)| authority);
-    if authority.is_empty() || authority.contains('@') || authority.chars().any(char::is_whitespace)
-    {
+    if rest.is_empty() || rest.chars().any(char::is_whitespace) {
         return false;
     }
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    if authority.is_empty() || authority.contains('@') {
+        return false;
+    }
+    if !matches!(&rest[authority_end..], "" | "/") {
+        return false;
+    }
+
     let host = if let Some(bracketed) = authority.strip_prefix('[') {
         let Some(end) = bracketed.find(']') else {
             return false;
@@ -449,8 +463,10 @@ fn valid_https_url(value: &str) -> bool {
     };
     host.parse::<IpAddr>().is_ok()
         || (!host.is_empty()
+            && host.len() <= 253
             && host.split('.').all(|label| {
                 !label.is_empty()
+                    && label.len() <= 63
                     && !label.starts_with('-')
                     && !label.ends_with('-')
                     && label
@@ -717,6 +733,34 @@ mod tests {
             })
             .expect_err("database path must remain inside the product data directory");
             assert_eq!(error.code, "PRODUCT_PROFILE_INVALID");
+        }
+    }
+
+    #[test]
+    fn product_channels_accept_only_https_origins() {
+        for invalid in [
+            "http://alpha.example.test",
+            "https://alpha.example.test/base",
+            "https://alpha.example.test?mode=test",
+            "https://alpha.example.test/#fragment",
+            "https://user@alpha.example.test",
+            " https://alpha.example.test ",
+        ] {
+            assert!(
+                !valid_https_origin(invalid),
+                "{invalid:?} must not pass the product profile boundary"
+            );
+        }
+        for valid in [
+            "https://alpha.example.test",
+            "https://alpha.example.test/",
+            "https://alpha.example.test:443",
+            "https://[2001:db8::1]:443",
+        ] {
+            assert!(
+                valid_https_origin(valid),
+                "{valid:?} is a valid HTTPS origin"
+            );
         }
     }
 }

@@ -249,6 +249,24 @@ fn logical_byte_accounting_is_exact_and_repeatable() {
     assert_eq!(record.logical_bytes(), expected);
 }
 
+#[test]
+fn event_capacity_replacement_is_atomic_on_success_and_failure() {
+    let ledger = CapacityLedger::new(100);
+    assert!(ledger.try_reserve_event_bytes(60));
+    assert!(ledger.try_set_session_bytes(40));
+
+    assert!(
+        !ledger.try_replace_event_bytes(60, 61),
+        "a larger replacement must fail without exposing the old reservation"
+    );
+    assert_eq!(ledger.event_bytes(), 60);
+    assert_eq!(ledger.logical_bytes(), 100);
+
+    assert!(ledger.try_replace_event_bytes(60, 50));
+    assert_eq!(ledger.event_bytes(), 50);
+    assert_eq!(ledger.logical_bytes(), 90);
+}
+
 // DATA-007~011, TEST-CAPACITY: dual limits evict oldest completed and protect pending sessions.
 #[test]
 fn capacity_evicts_completed_in_order_and_rejects_when_all_are_pending() {
@@ -666,11 +684,26 @@ async fn event_subscription_drop_and_explicit_cancel_release_all_live_state() {
 
     let mut cancelled = subscriptions.pop().expect("subscription");
     hub.unsubscribe(cancelled.subscription_id);
+    assert_eq!(
+        hub.logical_bytes(),
+        queued,
+        "cancellation must not release bytes while the receiver still owns its buffered event"
+    );
     assert!(
         cancelled.live.recv().await.is_none(),
-        "explicit cancellation ends the receiver"
+        "explicit cancellation ends the receiver without draining its queue"
+    );
+    assert_eq!(
+        hub.logical_bytes(),
+        queued,
+        "observing cancellation still leaves queue ownership with the live receiver"
     );
     drop(cancelled);
+    assert_eq!(
+        hub.logical_bytes(),
+        queued.saturating_sub(event.logical_bytes()),
+        "dropping the cancelled receiver releases its queued bytes exactly once"
+    );
     assert!(
         hub.subscribe_default(event.event_id).is_ok(),
         "explicit cancellation frees a subscriber slot"
@@ -1503,12 +1536,182 @@ async fn event_admission_reclaims_replay_and_slow_queues_without_overcommit() {
     hub.publish(None, timestamp(2), None, None, payload);
 
     assert!(ledger.logical_bytes() <= ledger.max_bytes());
+    assert!(matches!(
+        slow.live
+            .recv()
+            .await
+            .expect("capacity termination returns a control event")
+            .payload,
+        UiEventPayload::SnapshotRequired { .. }
+    ));
     assert!(
         slow.live.recv().await.is_none(),
-        "the slow subscriber is terminated when its queue cannot be reserved"
+        "the capacity control event is emitted exactly once"
     );
     assert!(
         hub.replay_after(0).events.len() <= 2,
         "byte pressure shortens replay instead of overcommitting"
     );
+}
+
+#[tokio::test]
+async fn capture_replacement_pressure_returns_snapshot_instead_of_silent_close() {
+    let row = capture_row(1);
+    let pending_bytes = serde_json::to_vec(&vec![row.clone()])
+        .expect("capture row serializes")
+        .len() as u64;
+    let ledger = Arc::new(CapacityLedger::new(pending_bytes));
+    let hub = EventHub::with_capacity_ledger(4_096, Arc::clone(&ledger));
+    let mut subscription = hub.subscribe(0, 4).expect("subscribe");
+
+    assert!(
+        hub.push_capture(Uuid::nil(), timestamp(1), row).is_none(),
+        "one row remains pending until explicit flush"
+    );
+    assert!(
+        hub.flush_capture(timestamp(2)).is_some(),
+        "flush constructs the replacement envelope"
+    );
+
+    assert!(matches!(
+        subscription
+            .live
+            .recv()
+            .await
+            .expect("replacement pressure returns a control event")
+            .payload,
+        UiEventPayload::SnapshotRequired { .. }
+    ));
+    assert!(subscription.live.recv().await.is_none());
+    assert!(ledger.logical_bytes() <= ledger.max_bytes());
+}
+
+#[tokio::test]
+async fn live_delivery_replay_eviction_records_one_resource_warning() {
+    let payload = UiEventPayload::ResourceWarning {
+        message: "x".repeat(2_048),
+    };
+    let event_bytes = UiEventEnvelope {
+        event_id: 1,
+        runtime_epoch: None,
+        occurred_at: timestamp(1),
+        entity_id: None,
+        entity_revision: None,
+        payload: payload.clone(),
+    }
+    .logical_bytes();
+    let compact_warning_bytes = UiEventEnvelope {
+        event_id: 2,
+        runtime_epoch: None,
+        occurred_at: timestamp(1),
+        entity_id: None,
+        entity_revision: None,
+        payload: UiEventPayload::ResourceWarning {
+            message: "UI 补发日志已淘汰旧事件；页面必须重新查询快照。".into(),
+        },
+    }
+    .logical_bytes();
+    let ledger = Arc::new(CapacityLedger::new(
+        event_bytes.saturating_add(compact_warning_bytes),
+    ));
+    let hub = EventHub::with_capacity_ledger(4_096, Arc::clone(&ledger));
+    let mut subscription = hub.subscribe(0, 4).expect("subscribe");
+
+    hub.publish(None, timestamp(1), None, None, payload);
+
+    assert_eq!(
+        subscription
+            .live
+            .recv()
+            .await
+            .expect("primary event remains live")
+            .event_id,
+        1
+    );
+    let warning = subscription
+        .live
+        .recv()
+        .await
+        .expect("dispatch-only replay eviction sends a warning");
+    assert!(matches!(
+        warning.payload,
+        UiEventPayload::ResourceWarning { ref message }
+            if message.contains("重新查询快照")
+    ));
+    assert!(ledger.logical_bytes() <= ledger.max_bytes());
+}
+
+#[tokio::test]
+async fn live_delivery_overflow_returns_snapshot_when_warning_cannot_be_reserved() {
+    let payload = UiEventPayload::ResourceWarning {
+        message: "x".repeat(2_048),
+    };
+    let event_bytes = UiEventEnvelope {
+        event_id: 1,
+        runtime_epoch: None,
+        occurred_at: timestamp(1),
+        entity_id: None,
+        entity_revision: None,
+        payload: payload.clone(),
+    }
+    .logical_bytes();
+    let ledger = Arc::new(CapacityLedger::new(event_bytes));
+    let hub = EventHub::with_capacity_ledger(4_096, Arc::clone(&ledger));
+    let mut subscription = hub.subscribe(0, 4).expect("subscribe");
+
+    hub.publish(None, timestamp(1), None, None, payload);
+
+    let terminal = subscription
+        .live
+        .recv()
+        .await
+        .expect("bounded control path returns a terminal event");
+    assert!(matches!(
+        terminal.payload,
+        UiEventPayload::SnapshotRequired { .. }
+    ));
+    assert!(
+        subscription.live.recv().await.is_none(),
+        "terminal notice is emitted exactly once"
+    );
+    assert!(ledger.logical_bytes() <= ledger.max_bytes());
+}
+
+#[tokio::test]
+async fn replay_clones_remain_accounted_until_consumed_or_dropped() {
+    let ledger = Arc::new(CapacityLedger::new(1024 * 1024));
+    let hub = EventHub::with_capacity_ledger(4_096, Arc::clone(&ledger));
+    let event = hub.publish(
+        None,
+        timestamp(1),
+        None,
+        None,
+        UiEventPayload::ResourceWarning {
+            message: "补发记账".into(),
+        },
+    );
+    let retained_bytes = ledger.event_bytes();
+
+    let mut consumed = hub.subscribe_default(0).expect("subscribe with replay");
+    assert_eq!(
+        ledger.event_bytes(),
+        retained_bytes.saturating_add(event.logical_bytes())
+    );
+    consumed
+        .replay
+        .drain_with(|received| {
+            assert_eq!(received.event_id, event.event_id);
+            Ok::<_, ()>(())
+        })
+        .expect("consume replay");
+    assert_eq!(ledger.event_bytes(), retained_bytes);
+    drop(consumed);
+
+    let unconsumed = hub.subscribe_default(0).expect("subscribe with replay");
+    assert_eq!(
+        ledger.event_bytes(),
+        retained_bytes.saturating_add(event.logical_bytes())
+    );
+    drop(unconsumed);
+    assert_eq!(ledger.event_bytes(), retained_bytes);
 }

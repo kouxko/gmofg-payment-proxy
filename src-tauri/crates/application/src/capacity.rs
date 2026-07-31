@@ -88,6 +88,29 @@ impl CapacityLedger {
         true
     }
 
+    /// Atomically transfers an existing event reservation to replacement data.
+    ///
+    /// Capture batching uses this when pending rows become one event envelope.
+    /// The old reservation remains intact if the larger replacement cannot be
+    /// admitted, so concurrent session admission can never consume a transient
+    /// release/re-reserve gap.
+    pub(crate) fn try_replace_event_bytes(&self, current: u64, replacement: u64) -> bool {
+        let mut state = self.state.lock();
+        if current > state.events {
+            return false;
+        }
+        let retained_events = state.events.saturating_sub(current);
+        let next = state
+            .sessions
+            .saturating_add(retained_events)
+            .saturating_add(replacement);
+        if next > state.limit {
+            return false;
+        }
+        state.events = retained_events.saturating_add(replacement);
+        true
+    }
+
     pub(crate) fn release_event_bytes(&self, bytes: u64) {
         let mut state = self.state.lock();
         state.events = state.events.saturating_sub(bytes);

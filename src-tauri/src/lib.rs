@@ -5,7 +5,6 @@ mod native_dialog;
 use std::{error::Error, path::PathBuf, sync::Arc};
 
 use gmofg_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
-use gmofg_proxy_product_api::ProductProfile;
 use gmofg_proxy_product_payment::PaymentProductProfile;
 use specta_typescript::Typescript;
 use tauri::Manager;
@@ -26,11 +25,17 @@ pub fn export_bindings() -> Result<PathBuf, String> {
 fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
     let app_data_dir = app.path().app_data_dir()?;
     let dialog = Arc::new(TauriNativeFileDialog::new(app.handle().clone()));
+    // This executable is the isolated diagnostic proxy defined by CERT-005,
+    // not a production payment client. It intentionally embeds the TEST ONLY
+    // authority so Rust can issue LAN-matching leaf certificates; only the
+    // public Root CA is exportable. Other hosts should use the fail-closed
+    // `PaymentProductProfile::default()` unless they make the same test-only
+    // packaging decision explicitly.
     let product = Arc::new(PaymentProductProfile::isolated_test_tool());
     let host = tauri::async_runtime::block_on(
         ApplicationHostBuilder::new(
             app_data_dir,
-            HostPlatformServices::production(dialog, product.storage()),
+            HostPlatformServices::production(dialog),
             product,
         )
         .build(),
