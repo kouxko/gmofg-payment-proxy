@@ -23,7 +23,7 @@ pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket
 pub use capacity::CapacityLedger;
 pub use error::{AppError, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
-pub use facade::Application;
+pub use facade::{Application, ApplicationDependencies};
 pub use models::*;
 pub use ports::*;
 pub use sessions::{InMemorySessionStore, SessionStore};

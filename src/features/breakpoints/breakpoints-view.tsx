@@ -63,6 +63,7 @@ export function buildBreakpointDecision(
 
 export function BreakpointsView() {
   const { searchParams } = useWorkspaceNavigation();
+  const requestedBreakpointId = searchParams.get("breakpointId") ?? undefined;
   const queue = useIpcQuery<BreakpointSummaryViewModel[]>(
     "breakpoint-query",
     () => callCommand(commands.breakpointQuery(null)),
@@ -71,10 +72,16 @@ export function BreakpointsView() {
     ["breakpoint_queued", "breakpoint_resolved", "snapshot_required"],
     queue.refresh,
   );
-  const [selectedId, setSelectedId] = useState<string | undefined>(() => {
-    const requested = searchParams.get("breakpointId");
-    return requested ?? undefined;
-  });
+  const [selection, setSelection] = useState(() => ({
+    routeBreakpointId: requestedBreakpointId,
+    selectedId: requestedBreakpointId,
+  }));
+  const selectedId =
+    selection.routeBreakpointId === requestedBreakpointId
+      ? selection.selectedId
+      : requestedBreakpointId;
+  const setSelectedId = (selectedId: string | undefined) =>
+    setSelection({ routeBreakpointId: requestedBreakpointId, selectedId });
   const [bodyEdits, setBodyEdits] = useState<Record<string, string>>({});
   const [validationState, setValidationState] = useState<{
     breakpointId: string;
@@ -444,6 +451,7 @@ export function BreakpointsView() {
                   </Tabs.ListContainer>
                   <Tabs.Panel id="json" className="pt-3">
                     <TextField
+                      aria-label="有效 JSON 字段"
                       isInvalid={Boolean(
                         validationError("message.body_text") ??
                           validationError("message"),

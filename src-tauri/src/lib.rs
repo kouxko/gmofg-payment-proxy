@@ -11,6 +11,30 @@ use tauri::Manager;
 
 use crate::{app_state::AppState, native_dialog::TauriNativeFileDialog};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ExitRequestPlan {
+    prevent_exit: bool,
+    start_shutdown: bool,
+    exit_code: i32,
+}
+
+/// Converts one Tauri exit request into a deterministic shutdown decision.
+///
+/// Every request must be prevented until the single graceful-shutdown owner
+/// explicitly exits the application. Repeated window-close or OS exit events
+/// therefore wait for the existing shutdown task instead of bypassing it.
+fn plan_exit_request(
+    shutdown_completed: bool,
+    start_shutdown: bool,
+    requested_code: Option<i32>,
+) -> ExitRequestPlan {
+    ExitRequestPlan {
+        prevent_exit: !shutdown_completed,
+        start_shutdown: !shutdown_completed && start_shutdown,
+        exit_code: requested_code.unwrap_or(0),
+    }
+}
+
 pub fn export_bindings() -> Result<PathBuf, String> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../src/generated/rust-types.ts");
     if let Some(parent) = path.parent() {
@@ -68,8 +92,13 @@ pub fn run() {
     app.run(|app_handle, event| {
         if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
             let state = app_handle.state::<AppState>();
-            if state.begin_shutdown() {
+            let shutdown_completed = state.shutdown_completed();
+            let start_shutdown = !shutdown_completed && state.begin_shutdown();
+            let plan = plan_exit_request(shutdown_completed, start_shutdown, code);
+            if plan.prevent_exit {
                 api.prevent_exit();
+            }
+            if plan.start_shutdown {
                 let host = state.host();
                 let app_handle = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
@@ -80,9 +109,61 @@ pub fn run() {
                             "graceful application shutdown failed"
                         );
                     }
-                    app_handle.exit(code.unwrap_or(0));
+                    app_handle.exit(plan.exit_code);
                 });
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ExitRequestPlan, plan_exit_request};
+
+    #[test]
+    fn repeated_exit_requests_are_prevented_but_start_shutdown_once() {
+        let first = plan_exit_request(false, true, Some(7));
+        let repeated = plan_exit_request(false, false, Some(9));
+
+        assert_eq!(
+            first,
+            ExitRequestPlan {
+                prevent_exit: true,
+                start_shutdown: true,
+                exit_code: 7,
+            }
+        );
+        assert_eq!(
+            repeated,
+            ExitRequestPlan {
+                prevent_exit: true,
+                start_shutdown: false,
+                exit_code: 9,
+            }
+        );
+    }
+
+    #[test]
+    fn missing_exit_code_defaults_to_success_after_shutdown() {
+        assert_eq!(
+            plan_exit_request(false, true, None),
+            ExitRequestPlan {
+                prevent_exit: true,
+                start_shutdown: true,
+                exit_code: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn completed_shutdown_allows_the_explicit_exit_request() {
+        assert_eq!(
+            plan_exit_request(true, false, Some(7)),
+            ExitRequestPlan {
+                prevent_exit: false,
+                start_shutdown: false,
+                exit_code: 7,
+            }
+        );
+    }
 }

@@ -26,6 +26,10 @@ impl AppState {
         self.host.begin_shutdown()
     }
 
+    pub fn shutdown_completed(&self) -> bool {
+        self.host.shutdown_completed()
+    }
+
     pub fn shutdown(&self) {
         self.host.cancel_background_tasks();
     }

@@ -225,6 +225,28 @@ struct Runtime {
     stopping_notified: Arc<StoppingNotification>,
 }
 
+struct BoundChannel {
+    channel: ChannelId,
+    listener: Arc<dyn BoundListener>,
+    local_addr: SocketAddr,
+}
+
+struct PreparedChannel {
+    channel: ChannelId,
+    listener: Arc<dyn BoundListener>,
+    local_addr: SocketAddr,
+    service: ConnectionService,
+}
+
+struct StartedTasks {
+    listener_tasks: Vec<JoinHandle<()>>,
+    watchdog: JoinHandle<()>,
+    listener_addresses: BTreeMap<ChannelId, SocketAddr>,
+    ports: Arc<dyn PipelinePorts>,
+    stopping_notified: Arc<StoppingNotification>,
+    listeners_ready: tokio::sync::watch::Sender<bool>,
+}
+
 #[derive(Debug)]
 struct PendingCleanup {
     epoch: Uuid,
@@ -435,11 +457,7 @@ impl SupervisorCore {
             | ProxyState::Faulted => {}
         }
         if let Err(error) = self.cleanup_runtime().await {
-            let mut lifecycle = self.lifecycle.write().await;
-            lifecycle.state = ProxyState::Faulted;
-            lifecycle.epoch = None;
-            lifecycle.listeners.clear();
-            lifecycle.fault = Some(error.to_string());
+            self.mark_start_fault(&error).await;
             return Err(error);
         }
         {
@@ -450,66 +468,13 @@ impl SupervisorCore {
             lifecycle.fault = None;
         }
 
-        // Pre-bind every enabled listener before spawning any task. Dropping this
-        // local vector rolls back all earlier binds if a later bind fails.
-        let mut bound = Vec::<(ChannelId, Arc<dyn BoundListener>, SocketAddr)>::new();
-        for channel in config.channels.iter().filter(|channel| channel.enabled) {
-            let listener = match self.binder.bind(channel.listen_addr).await {
-                Ok(listener) => listener,
-                Err(error) => {
-                    let code = if error.kind() == std::io::ErrorKind::AddrInUse {
-                        ErrorCode::PortInUse
-                    } else {
-                        ErrorCode::Io
-                    };
-                    let proxy_error = ProxyError::new(
-                        code,
-                        format!("failed to bind {}: {error}", channel.listen_addr),
-                    );
-                    let mut lifecycle = self.lifecycle.write().await;
-                    lifecycle.state = ProxyState::Faulted;
-                    lifecycle.fault = Some(proxy_error.to_string());
-                    return Err(proxy_error);
-                }
-            };
-            let local_addr = match listener.local_addr() {
-                Ok(address) => address,
-                Err(error) => {
-                    let proxy_error = ProxyError::io("read listener address", &error);
-                    let mut lifecycle = self.lifecycle.write().await;
-                    lifecycle.state = ProxyState::Faulted;
-                    lifecycle.fault = Some(proxy_error.to_string());
-                    return Err(proxy_error);
-                }
-            };
-            bound.push((channel.channel.clone(), listener, local_addr));
-        }
-
-        // Build every channel service before publishing a new epoch. Any
-        // certificate/upstream failure therefore rolls back all bound sockets.
-        let mut services = match self.service_factory.build(&config).await {
-            Ok(services) => services,
+        let prepared = match self.prepare_start(&config).await {
+            Ok(prepared) => prepared,
             Err(error) => {
-                let mut lifecycle = self.lifecycle.write().await;
-                lifecycle.state = ProxyState::Faulted;
-                lifecycle.fault = Some(error.to_string());
+                self.mark_start_fault(&error).await;
                 return Err(error);
             }
         };
-        let mut prepared = Vec::with_capacity(bound.len());
-        for (channel, listener, local_addr) in bound {
-            let Some(service) = services.remove(&channel) else {
-                let error = ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    format!("runtime factory omitted {channel} service"),
-                );
-                let mut lifecycle = self.lifecycle.write().await;
-                lifecycle.state = ProxyState::Faulted;
-                lifecycle.fault = Some(error.to_string());
-                return Err(error);
-            };
-            prepared.push((channel, listener, local_addr, service));
-        }
 
         let epoch = Uuid::new_v4();
         let cancellation = CancellationToken::new();
@@ -518,98 +483,17 @@ impl SupervisorCore {
             .active_cancellation
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(cancellation.clone());
-        let (fatal_tx, mut fatal_rx) = mpsc::channel::<(ChannelId, ProxyError)>(prepared.len());
-        let (listeners_ready_tx, listeners_ready_rx) = tokio::sync::watch::channel(false);
-        let mut listener_tasks = Vec::with_capacity(prepared.len());
-        let mut listener_addresses = BTreeMap::new();
-        let fault_ports = Arc::clone(&prepared.first().expect("validated enabled channel").3.ports);
-        let stopping_notified = Arc::new(StoppingNotification::default());
-        for (channel, listener, local_addr, service) in prepared {
-            listener_addresses.insert(channel.clone(), local_addr);
-            let child_cancel = cancellation.child_token();
-            let tx = fatal_tx.clone();
-            let mut listeners_ready = listeners_ready_rx.clone();
-            listener_tasks.push(tokio::spawn(async move {
-                if !*listeners_ready.borrow() && listeners_ready.changed().await.is_err() {
-                    return;
-                }
-                if child_cancel.is_cancelled() {
-                    return;
-                }
-                let outcome = AssertUnwindSafe(service.run_listener(
-                    listener,
-                    channel.clone(),
-                    epoch,
-                    child_cancel.clone(),
-                ))
-                .catch_unwind()
-                .await;
-                if child_cancel.is_cancelled() {
-                    return;
-                }
-                let error = match outcome {
-                    Ok(Err(error)) => error,
-                    Ok(Ok(())) => ProxyError::new(
-                        ErrorCode::Internal,
-                        format!("{channel} listener exited unexpectedly"),
-                    ),
-                    Err(payload) => ProxyError::new(
-                        ErrorCode::Internal,
-                        format!(
-                            "{channel} listener panicked: {}",
-                            panic_message(payload.as_ref())
-                        ),
-                    ),
-                };
-                if !child_cancel.is_cancelled() {
-                    let _ = tx.send((channel, error)).await;
-                }
-            }));
-        }
-        drop(fatal_tx);
-
-        let lifecycle = Arc::clone(&self.lifecycle);
-        let watchdog_cancel = cancellation.clone();
-        let watchdog_ports = Arc::clone(&fault_ports);
-        let watchdog_stopping_notified = Arc::clone(&stopping_notified);
-        let watchdog = tokio::spawn(async move {
-            tokio::select! {
-                () = watchdog_cancel.cancelled() => {}
-                fault = fatal_rx.recv() => {
-                    if let Some((channel, error)) = fault {
-                        if let Err(stopping_error) = notify_runtime_stopping(
-                            &watchdog_ports,
-                            &watchdog_stopping_notified,
-                            epoch,
-                        ).await {
-                            tracing::error!(
-                                runtime_epoch = %epoch,
-                                error = %stopping_error,
-                                "runtime fault cleanup callback failed"
-                            );
-                        }
-                        watchdog_cancel.cancel();
-                        let mut lifecycle = lifecycle.write().await;
-                        if lifecycle.epoch == Some(epoch) {
-                            lifecycle.state = ProxyState::Faulted;
-                            lifecycle.fault = Some(error.to_string());
-                        }
-                        drop(lifecycle);
-                        notify_runtime_fault(&watchdog_ports, epoch, channel, &error).await;
-                    }
-                }
-            }
-        });
+        let started = self.start_tasks(prepared, epoch, cancellation.clone());
 
         {
             let mut runtime = self.runtime.lock().await;
             *runtime = Some(Runtime {
                 epoch,
                 cancellation,
-                listener_tasks,
-                watchdog,
-                ports: fault_ports,
-                stopping_notified,
+                listener_tasks: started.listener_tasks,
+                watchdog: started.watchdog,
+                ports: started.ports,
+                stopping_notified: started.stopping_notified,
             });
         }
         start_guard.disarm();
@@ -617,10 +501,128 @@ impl SupervisorCore {
             let mut lifecycle = self.lifecycle.write().await;
             lifecycle.state = ProxyState::Running;
             lifecycle.epoch = Some(epoch);
-            lifecycle.listeners = listener_addresses;
+            lifecycle.listeners = started.listener_addresses;
         }
-        let _ = listeners_ready_tx.send(true);
+        let _ = started.listeners_ready.send(true);
         Ok(self.snapshot_inner().await)
+    }
+
+    async fn mark_start_fault(&self, error: &ProxyError) {
+        let mut lifecycle = self.lifecycle.write().await;
+        lifecycle.state = ProxyState::Faulted;
+        lifecycle.epoch = None;
+        lifecycle.listeners.clear();
+        lifecycle.fault = Some(error.to_string());
+    }
+
+    async fn prepare_start(&self, config: &ProxyConfig) -> Result<Vec<PreparedChannel>> {
+        // Dropping this vector rolls back earlier binds if a later step fails.
+        let bound = self.bind_enabled_channels(config).await?;
+        self.prepare_channel_services(config, bound).await
+    }
+
+    async fn bind_enabled_channels(&self, config: &ProxyConfig) -> Result<Vec<BoundChannel>> {
+        let mut bound = Vec::new();
+        for channel in config.channels.iter().filter(|channel| channel.enabled) {
+            let listener = self
+                .binder
+                .bind(channel.listen_addr)
+                .await
+                .map_err(|error| {
+                    let code = if error.kind() == std::io::ErrorKind::AddrInUse {
+                        ErrorCode::PortInUse
+                    } else {
+                        ErrorCode::Io
+                    };
+                    ProxyError::new(
+                        code,
+                        format!("failed to bind {}: {error}", channel.listen_addr),
+                    )
+                })?;
+            let local_addr = listener
+                .local_addr()
+                .map_err(|error| ProxyError::io("read listener address", &error))?;
+            bound.push(BoundChannel {
+                channel: channel.channel.clone(),
+                listener,
+                local_addr,
+            });
+        }
+        Ok(bound)
+    }
+
+    async fn prepare_channel_services(
+        &self,
+        config: &ProxyConfig,
+        bound: Vec<BoundChannel>,
+    ) -> Result<Vec<PreparedChannel>> {
+        // Build every service before publishing the epoch so certificate or
+        // upstream failures also release every bound socket.
+        let mut services = self.service_factory.build(config).await?;
+        bound
+            .into_iter()
+            .map(|bound| {
+                let service = services.remove(&bound.channel).ok_or_else(|| {
+                    ProxyError::new(
+                        ErrorCode::ConfigInvalid,
+                        format!("runtime factory omitted {} service", bound.channel),
+                    )
+                })?;
+                Ok(PreparedChannel {
+                    channel: bound.channel,
+                    listener: bound.listener,
+                    local_addr: bound.local_addr,
+                    service,
+                })
+            })
+            .collect()
+    }
+
+    fn start_tasks(
+        &self,
+        prepared: Vec<PreparedChannel>,
+        epoch: Uuid,
+        cancellation: CancellationToken,
+    ) -> StartedTasks {
+        let (fatal_tx, fatal_rx) = mpsc::channel(prepared.len());
+        let (listeners_ready, listeners_ready_rx) = tokio::sync::watch::channel(false);
+        let ports = Arc::clone(
+            &prepared
+                .first()
+                .expect("validated enabled channel")
+                .service
+                .ports,
+        );
+        let stopping_notified = Arc::new(StoppingNotification::default());
+        let mut listener_tasks = Vec::with_capacity(prepared.len());
+        let mut listener_addresses = BTreeMap::new();
+        for channel in prepared {
+            listener_addresses.insert(channel.channel.clone(), channel.local_addr);
+            listener_tasks.push(spawn_listener_task(
+                channel,
+                epoch,
+                cancellation.child_token(),
+                fatal_tx.clone(),
+                listeners_ready_rx.clone(),
+            ));
+        }
+        drop(fatal_tx);
+        let watchdog = spawn_watchdog(
+            Arc::clone(&self.lifecycle),
+            epoch,
+            cancellation,
+            Arc::clone(&ports),
+            Arc::clone(&stopping_notified),
+            fatal_rx,
+        );
+        StartedTasks {
+            listener_tasks,
+            watchdog,
+            listener_addresses,
+            ports,
+            stopping_notified,
+            listeners_ready,
+        }
     }
 
     async fn stop_inner(&self) -> Result<RuntimeSnapshot> {
@@ -721,6 +723,90 @@ impl Drop for SupervisorCore {
             cancellation.cancel();
         }
     }
+}
+
+fn spawn_listener_task(
+    prepared: PreparedChannel,
+    epoch: Uuid,
+    cancellation: CancellationToken,
+    fatal_tx: mpsc::Sender<(ChannelId, ProxyError)>,
+    mut listeners_ready: tokio::sync::watch::Receiver<bool>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        if !*listeners_ready.borrow() && listeners_ready.changed().await.is_err() {
+            return;
+        }
+        if cancellation.is_cancelled() {
+            return;
+        }
+        let outcome = AssertUnwindSafe(prepared.service.run_listener(
+            prepared.listener,
+            prepared.channel.clone(),
+            epoch,
+            cancellation.clone(),
+        ))
+        .catch_unwind()
+        .await;
+        if cancellation.is_cancelled() {
+            return;
+        }
+        let error = match outcome {
+            Ok(Err(error)) => error,
+            Ok(Ok(())) => ProxyError::new(
+                ErrorCode::Internal,
+                format!("{} listener exited unexpectedly", prepared.channel),
+            ),
+            Err(payload) => ProxyError::new(
+                ErrorCode::Internal,
+                format!(
+                    "{} listener panicked: {}",
+                    prepared.channel,
+                    panic_message(payload.as_ref())
+                ),
+            ),
+        };
+        if !cancellation.is_cancelled() {
+            let _ = fatal_tx.send((prepared.channel, error)).await;
+        }
+    })
+}
+
+fn spawn_watchdog(
+    lifecycle: Arc<RwLock<Lifecycle>>,
+    epoch: Uuid,
+    cancellation: CancellationToken,
+    ports: Arc<dyn PipelinePorts>,
+    stopping_notified: Arc<StoppingNotification>,
+    mut fatal_rx: mpsc::Receiver<(ChannelId, ProxyError)>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        tokio::select! {
+            () = cancellation.cancelled() => {}
+            fault = fatal_rx.recv() => {
+                if let Some((channel, error)) = fault {
+                    if let Err(stopping_error) = notify_runtime_stopping(
+                        &ports,
+                        &stopping_notified,
+                        epoch,
+                    ).await {
+                        tracing::error!(
+                            runtime_epoch = %epoch,
+                            error = %stopping_error,
+                            "runtime fault cleanup callback failed"
+                        );
+                    }
+                    cancellation.cancel();
+                    let mut lifecycle = lifecycle.write().await;
+                    if lifecycle.epoch == Some(epoch) {
+                        lifecycle.state = ProxyState::Faulted;
+                        lifecycle.fault = Some(error.to_string());
+                    }
+                    drop(lifecycle);
+                    notify_runtime_fault(&ports, epoch, channel, &error).await;
+                }
+            }
+        }
+    })
 }
 
 async fn shutdown_runtime(mut runtime: Runtime) -> Result<()> {

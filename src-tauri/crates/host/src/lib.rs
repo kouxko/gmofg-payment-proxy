@@ -16,8 +16,9 @@ use std::{
 };
 
 use gmofg_proxy_application::{
-    AppError, AppResult, Application, BreakpointCoordinator, BreakpointValidator, CapacityLedger,
-    EventHub, ProxyStatusViewModel, ProxySupervisorPort, SettingsRepositoryPort,
+    AppError, AppResult, Application, ApplicationDependencies, BreakpointCoordinator,
+    BreakpointValidator, CapacityLedger, EventHub, ProxyStatusViewModel, ProxySupervisorPort,
+    SettingsRepositoryPort,
 };
 #[cfg(not(target_os = "macos"))]
 use gmofg_proxy_infrastructure::DpapiProtector;
@@ -229,17 +230,21 @@ impl ApplicationHostBuilder {
         });
         let application = Arc::new(Application::new(
             self.product.name().to_owned(),
-            proxy,
-            services.capture,
-            services.sessions,
-            breakpoints,
-            Arc::new(BreakpointValidator::new(self.product.body_codec())),
-            services.rules,
-            services.faults,
-            services.certificates,
-            services.settings,
-            services.file_export,
-            events.clone(),
+            ApplicationDependencies {
+                proxy,
+                capture: services.capture,
+                sessions: services.sessions,
+                breakpoints,
+                breakpoint_validation: Arc::new(BreakpointValidator::new(
+                    self.product.body_codec(),
+                )),
+                rules: services.rules,
+                faults: services.faults,
+                certificates: services.certificates,
+                settings: services.settings,
+                file_export: services.file_export,
+                events: events.clone(),
+            },
         ));
         let background_cancellation = CancellationToken::new();
         let event_task = events.spawn_capture_flush_task(background_cancellation.child_token());
@@ -249,6 +254,7 @@ impl ApplicationHostBuilder {
             background_cancellation,
             event_task: Mutex::new(Some(event_task)),
             shutdown_started: AtomicBool::new(false),
+            shutdown_completed: AtomicBool::new(false),
         })
     }
 }
@@ -263,6 +269,7 @@ pub struct ApplicationHost {
     background_cancellation: CancellationToken,
     event_task: Mutex<Option<JoinHandle<()>>>,
     shutdown_started: AtomicBool,
+    shutdown_completed: AtomicBool,
 }
 
 impl ApplicationHost {
@@ -279,11 +286,19 @@ impl ApplicationHost {
         !self.shutdown_started.swap(true, Ordering::AcqRel)
     }
 
+    /// Reports whether the graceful shutdown attempt and background-task join
+    /// have completed, regardless of whether the application stop succeeded.
+    #[must_use]
+    pub fn shutdown_completed(&self) -> bool {
+        self.shutdown_completed.load(Ordering::Acquire)
+    }
+
     /// Stops network activity, resolves application shutdown state, and joins
     /// UI-independent background tasks.
     pub async fn shutdown(&self) -> AppResult<ProxyStatusViewModel> {
         let result = self.application.app_shutdown().await;
         self.stop_background_tasks().await;
+        self.shutdown_completed.store(true, Ordering::Release);
         result
     }
 
@@ -386,6 +401,13 @@ mod tests {
         .await
         .expect("build UI-neutral host");
 
+        assert!(host.begin_shutdown(), "first caller owns graceful shutdown");
+        assert!(
+            !host.begin_shutdown(),
+            "repeated callers must reuse the existing shutdown task"
+        );
+        assert!(!host.shutdown_completed());
+
         let application = host.application();
         let status = application
             .proxy_get_status()
@@ -403,5 +425,6 @@ mod tests {
         assert_eq!(draft.name, "新建规则");
 
         host.shutdown().await.expect("shutdown UI-neutral host");
+        assert!(host.shutdown_completed());
     }
 }
