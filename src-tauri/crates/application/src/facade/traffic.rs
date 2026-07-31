@@ -1,8 +1,7 @@
-//! Capture, session, and breakpoint use cases.
+//! 抓包、会话和断点用例。
 //!
-//! Query normalization, sensitive export confirmation, breakpoint validation,
-//! and runtime-epoch checks stay in Rust so desktop and future terminal UIs
-//! cannot diverge on behavior.
+//! 查询规范化、敏感导出确认、断点校验和运行周期检查全部留在 Rust，使桌面界面和未来
+//! 终端界面不会产生不同行为。
 
 use chrono::Utc;
 

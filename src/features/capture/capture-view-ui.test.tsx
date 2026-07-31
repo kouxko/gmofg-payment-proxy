@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证抓包暂停/恢复/清空/选择失效等 UI 意图会调用正确 Rust Command。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

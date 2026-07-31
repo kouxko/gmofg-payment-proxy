@@ -1,12 +1,10 @@
-//! Application use cases and frontend-neutral presentation models.
+//! 应用用例与前端无关的展示模型。
 //!
-//! Rust deliberately owns normalized values, Chinese status text, UI tone, permissions,
-//! pagination, validation, and stable errors so Tauri, a future TUI, and a future CLI can
-//! render one contract without reimplementing business decisions. These models are not
-//! coupled to Tauri or a specific widget toolkit.
+//! 规范化值、中文状态、色调语义、操作权限、分页、校验和稳定错误都由 Rust 负责，
+//! Tauri、未来 TUI/CLI 只渲染同一份协议，不重复作业务决定。这些模型不绑定具体组件库。
 //!
-//! This crate also owns the ports implemented by infrastructure adapters. It contains no
-//! Tauri, database, TLS, or filesystem implementation.
+//! 本 crate 还定义由 infrastructure 适配器实现的端口，但不包含 Tauri、数据库、TLS
+//! 或文件系统实现。
 
 mod breakpoint_validation;
 mod breakpoints;

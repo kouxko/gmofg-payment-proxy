@@ -1,3 +1,8 @@
+//! Tauri Command 的薄适配层与 TypeScript 绑定清单。
+//!
+//! 每个命令只做参数/错误映射并调用 `AppState.application`；业务规则、数据库和网络 I/O
+//! 不应写在这里。事件订阅先重放缺失事件再接实时通道，发送端关闭会返回可重试错误。
+
 use gmofg_proxy_application::{
     ActiveFaultViewModel, AppBootstrapViewModel, AppError, AppErrorViewModel, BreakpointDecision,
     BreakpointDetailViewModel, BreakpointDraft, BreakpointId, BreakpointSummaryViewModel,

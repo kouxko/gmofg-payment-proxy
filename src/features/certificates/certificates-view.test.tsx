@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证证书页面只提交用户意图、正确清除密码并显示 Rust 返回状态。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证会话详情按需读取、导出确认、清空确认和 Payload 释放。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

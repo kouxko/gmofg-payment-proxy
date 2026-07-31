@@ -1,4 +1,7 @@
-//! Application-port adapter. Business mapping stays out of the host shell.
+//! 应用代理端口到 Tokio supervisor 的转换层。
+//!
+//! 它把设置 DTO 组装成运行时配置，并把 epoch、监听地址与指标映射回界面模型；Tauri
+//! host 不参与业务转换。设置锁只保护当前快照，启动/停止由 supervisor 自己串行化。
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;

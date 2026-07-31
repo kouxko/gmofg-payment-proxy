@@ -1,3 +1,8 @@
+//! 故障动作对内存报文产生何种精确结果的集成测试。
+//!
+//! 这里验证错误长度、截断、丢弃等动作的字节/状态语义；不建立真实 TLS 连接，也不把
+//! Android 端最终出现的异常类型当作本测试已经证明的内容。
+
 use bytes::Bytes;
 use gmofg_proxy_runtime::fault::{FaultAction, ResponseDisposition, apply_response_actions};
 use gmofg_proxy_runtime::message::Message;

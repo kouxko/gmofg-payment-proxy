@@ -1,3 +1,8 @@
+//! 应用层输入模型、ViewModel 与实时事件 DTO。
+//!
+//! 输入模型表达“用户想做什么”，ViewModel 表达“界面应显示什么”。筛选、分页、中文
+//! 状态文案和可操作性都由 Rust 计算，TypeScript 只负责渲染。
+
 use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
@@ -8,14 +13,20 @@ use uuid::Uuid;
 
 pub use gmofg_proxy_domain::ChannelId;
 
+/// 标识一次代理启动周期。代理重启后旧周期的事件和断点不得继续操作。
 pub type RuntimeEpoch = Uuid;
+/// 应用 DTO 使用的乐观并发版本号。
 pub type Revision = u64;
+/// 应用层会话标识。
 pub type SessionId = Uuid;
+/// 应用层断点标识。
 pub type BreakpointId = Uuid;
+/// 应用层规则标识。
 pub type RuleId = Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
+/// 与具体组件库无关的视觉语义，前端只负责映射为 `HeroUI` 颜色。
 pub enum UiTone {
     Neutral,
     Info,
@@ -25,6 +36,7 @@ pub enum UiTone {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// Rust 判断某操作不可用时给出的稳定原因。
 pub struct DisabledReason {
     pub code: String,
     pub message: String,
@@ -119,6 +131,8 @@ pub struct ConnectionHealthViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 顶部状态栏和控制台所需的完整代理状态。
+/// `can_*` 与 `*_disabled_reason` 已包含业务权限判断，展示层不能自行推导。
 pub struct ProxyStatusViewModel {
     pub state: ProxyState,
     pub state_text: String,
@@ -154,6 +168,7 @@ pub enum SortDirection {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 通用分页请求；`normalized` 会把越界页码和页大小限制到安全范围。
 pub struct PageRequest {
     pub page: u32,
     pub page_size: u32,
@@ -190,6 +205,7 @@ impl MessageStage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 抓包页提交给 Rust 的筛选、增量游标、排序与分页条件。
 pub struct CaptureQuery {
     pub keyword: Option<String>,
     pub terminal_ip: Option<String>,
@@ -197,7 +213,7 @@ pub struct CaptureQuery {
     pub stage: Option<MessageStage>,
     pub result: Option<String>,
     pub rule_id: Option<RuleId>,
-    /// When present, returns only retained rows newer than this cursor.
+    /// 设置后只返回内存中仍保留、且比该游标新的记录。
     pub after_event_id: Option<u64>,
     pub sort: CaptureSort,
     pub direction: SortDirection,
@@ -214,6 +230,7 @@ pub enum CaptureSort {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 抓包表格中的轻量行，不包含完整 Payload。
 pub struct CaptureRowViewModel {
     pub event_id: u64,
     pub runtime_epoch: RuntimeEpoch,
@@ -226,10 +243,8 @@ pub struct CaptureRowViewModel {
     pub stage_text: String,
     pub method: String,
     pub target: String,
-    /// HTTP response status known at the time this capture row was emitted.
-    /// Request-stage rows are normally `None`; response and terminal rows
-    /// expose the effective status without requiring the UI to fetch and
-    /// inspect the complete payload first.
+    /// 生成此行时已知的 HTTP 响应码。请求阶段通常为空；响应/终态行可直接显示，
+    /// 无需界面先加载完整 Payload。
     pub http_status: Option<u16>,
     pub result: String,
     pub ui_tone: UiTone,
@@ -256,35 +271,32 @@ pub struct CapturePageViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 为无损 HTTP/1 往返保留的一条原始 Header。
+/// Header 可能重复、大小写不同或包含有意义的空白，因此不能只用 Map 保存。
 pub struct RawHttpHeaderViewModel {
-    /// Exact HTTP/1 wire bytes for the field name.
-    /// This is the canonical representation used when a breakpoint forwards a
-    /// message. `MessageContentViewModel::headers` is only a lossy display and
-    /// editing projection.
+    /// 字段名的精确线上字节，是断点转发时的权威表示；普通 `headers` 只是有损展示投影。
     pub name_bytes: Vec<u8>,
-    /// Exact HTTP/1 wire bytes for the field value, excluding OWS and CRLF.
+    /// 字段值的精确字节，不含可选空白和 CRLF。
     pub value_bytes: Vec<u8>,
-    /// Original optional whitespace between `:` and the semantic field value.
+    /// 冒号与实际字段值之间的原始可选空白。
     #[serde(default)]
     pub leading_ows_bytes: Vec<u8>,
-    /// Original optional whitespace after the semantic field value.
+    /// 实际字段值之后的原始可选空白。
     #[serde(default)]
     pub trailing_ows_bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 可供界面查看/编辑，同时可无损重建网络报文的内容模型。
 pub struct MessageContentViewModel {
     pub http_status: Option<u16>,
-    /// Exact start-line bytes retained for round trips through breakpoint UI.
-    /// HTTP/1 start lines are normally ASCII. Keeping bytes here prevents a
-    /// display string from becoming the canonical source for reconstruction.
+    /// 精确起始行字节，避免把展示字符串误作报文重建来源。
     #[serde(default)]
     pub start_line_bytes: Vec<u8>,
-    /// Exact, ordered HTTP/1 header fields. Names, values, casing, duplicates,
-    /// and interleaving are retained.
+    /// 保留名称、值、大小写、重复项和原始顺序的 Header。
     #[serde(default)]
     pub raw_headers: Vec<RawHttpHeaderViewModel>,
-    /// Lossy, grouped projection intended only for display and form editing.
+    /// 仅供展示和表单编辑的有损分组投影。
     pub headers: BTreeMap<String, Vec<String>>,
     pub body_text: Option<String>,
     pub body_bytes: Vec<u8>,
@@ -333,6 +345,7 @@ pub struct CaptureDetailViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 会话页提交给 Rust 的筛选、时间范围、排序和分页条件。
 pub struct SessionQuery {
     pub keyword: Option<String>,
     pub terminal_ip: Option<String>,
@@ -389,6 +402,7 @@ pub struct SessionPageViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 会话详情；完整请求/响应只在用户打开详情时返回。
 pub struct SessionDetailViewModel {
     pub summary: SessionSummaryViewModel,
     pub runtime_epoch: RuntimeEpoch,
@@ -405,6 +419,7 @@ pub struct SessionDetailViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 内存仓储实际保存的会话记录，并提供精确逻辑容量计算。
 pub struct SessionRecord {
     pub detail: SessionDetailViewModel,
     pub breakpoint_draft: Option<MessageContentViewModel>,
@@ -488,6 +503,7 @@ pub struct BreakpointSummaryViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 断点详情：原始报文用于恢复，有效报文用于当前编辑和最终转发。
 pub struct BreakpointDetailViewModel {
     pub summary: BreakpointSummaryViewModel,
     pub original: MessageContentViewModel,
@@ -532,6 +548,7 @@ pub struct BreakpointActionOptionViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 用户提交的断点决定。所有可选参数最终仍由 Rust 按 `kind` 校验。
 pub struct BreakpointDecision {
     pub breakpoint_id: BreakpointId,
     pub expected_revision: Revision,
@@ -544,6 +561,7 @@ pub struct BreakpointDecision {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 可复用于规则、设置、证书和断点的字段校验结果。
 pub struct FieldValidationViewModel {
     pub valid: bool,
     pub field_errors: BTreeMap<String, Vec<String>>,
@@ -748,6 +766,7 @@ pub struct RuleHeaderInputViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 新建或编辑规则时由展示层提交的输入模型。
 pub struct RuleDraft {
     pub rule_id: Option<RuleId>,
     pub expected_revision: Option<Revision>,
@@ -816,6 +835,7 @@ pub struct FaultParameterFieldViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 故障模拟页展示的产品化模板及参数 schema。
 pub struct FaultTemplateViewModel {
     pub template_id: String,
     pub name: String,
@@ -885,6 +905,7 @@ pub struct CertificateOverviewViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 设置页中的单个产品通道草稿。
 pub struct ChannelSettingsDraft {
     pub id: ChannelId,
     pub display_name: String,
@@ -894,6 +915,7 @@ pub struct ChannelSettingsDraft {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 设置页提交的前端友好草稿，端口会再转换并执行领域校验。
 pub struct SettingsDraft {
     pub expected_revision: Option<Revision>,
     pub bind_address: String,
@@ -928,6 +950,7 @@ impl Default for SettingsDraft {
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 设置页展示模型，同时区分已保存值、当前生效值和操作权限。
 pub struct SettingsViewModel {
     pub stored: SettingsDraft,
     pub effective: Option<SettingsDraft>,
@@ -969,6 +992,7 @@ impl OperationResultViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 应用启动时一次返回的首屏快照，避免界面自行拼接不一致状态。
 pub struct AppBootstrapViewModel {
     pub product_name: String,
     pub proxy: ProxyStatusViewModel,
@@ -990,6 +1014,7 @@ pub struct SubscriptionAckViewModel {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
+/// 所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。
 pub enum UiEventPayload {
     RuntimeStatusChanged(Box<ProxyStatusViewModel>),
     ChannelStatusChanged(ChannelStatusViewModel),
@@ -1006,6 +1031,7 @@ pub enum UiEventPayload {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+/// 带顺序、周期和实体版本的实时事件信封。
 pub struct UiEventEnvelope {
     pub event_id: u64,
     pub runtime_epoch: Option<RuntimeEpoch>,

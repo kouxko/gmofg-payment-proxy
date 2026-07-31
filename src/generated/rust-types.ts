@@ -72,6 +72,7 @@ export type ActiveFaultViewModel = {
 	revision: number,
 };
 
+/**  应用启动时一次返回的首屏快照，避免界面自行拼接不一致状态。 */
 export type AppBootstrapViewModel = {
 	product_name: string,
 	proxy: ProxyStatusViewModel,
@@ -104,6 +105,7 @@ export type BreakpointActionOptionViewModel = {
 	default_truncate_at: number | null,
 };
 
+/**  用户提交的断点决定。所有可选参数最终仍由 Rust 按 `kind` 校验。 */
 export type BreakpointDecision = {
 	breakpoint_id: string,
 	expected_revision: number,
@@ -117,6 +119,7 @@ export type BreakpointDecision = {
 
 export type BreakpointDecisionKind = "forward_original" | "forward_modified" | "mock_response" | "delay" | "disconnect_before_upstream" | "custom_http_status" | "invalid_json" | "wrong_content_length" | "truncate" | "drop_response";
 
+/**  断点详情：原始报文用于恢复，有效报文用于当前编辑和最终转发。 */
 export type BreakpointDetailViewModel = {
 	summary: BreakpointSummaryViewModel,
 	original: MessageContentViewModel,
@@ -180,6 +183,7 @@ export type CapturePageViewModel = {
 	empty_message: string,
 };
 
+/**  抓包页提交给 Rust 的筛选、增量游标、排序与分页条件。 */
 export type CaptureQuery = {
 	keyword: string | null,
 	terminal_ip: string | null,
@@ -187,13 +191,14 @@ export type CaptureQuery = {
 	stage: MessageStage | null,
 	result: string | null,
 	rule_id: string | null,
-	/**  When present, returns only retained rows newer than this cursor. */
+	/**  设置后只返回内存中仍保留、且比该游标新的记录。 */
 	after_event_id: number | null,
 	sort: CaptureSort,
 	direction: SortDirection,
 	page: PageRequest,
 };
 
+/**  抓包表格中的轻量行，不包含完整 Payload。 */
 export type CaptureRowViewModel = {
 	event_id: number,
 	runtime_epoch: string,
@@ -207,10 +212,8 @@ export type CaptureRowViewModel = {
 	method: string,
 	target: string,
 	/**
-	 *  HTTP response status known at the time this capture row was emitted.
-	 *  Request-stage rows are normally `None`; response and terminal rows
-	 *  expose the effective status without requiring the UI to fetch and
-	 *  inspect the complete payload first.
+	 *  生成此行时已知的 HTTP 响应码。请求阶段通常为空；响应/终态行可直接显示，
+	 *  无需界面先加载完整 Payload。
 	 */
 	http_status: number | null,
 	result: string,
@@ -248,6 +251,7 @@ export type CertificateOverviewViewModel = {
 	disabled_reason: DisabledReason | null,
 };
 
+/**  产品通道的受校验稳定 ID。 */
 export type ChannelId = string;
 
 export type ChannelPresentationViewModel = {
@@ -255,6 +259,7 @@ export type ChannelPresentationViewModel = {
 	display_name: string,
 };
 
+/**  设置页中的单个产品通道草稿。 */
 export type ChannelSettingsDraft = {
 	id: ChannelId,
 	display_name: string,
@@ -291,6 +296,7 @@ export type ConnectionHealthViewModel = {
 	ui_tone: UiTone,
 };
 
+/**  Rust 判断某操作不可用时给出的稳定原因。 */
 export type DisabledReason = {
 	code: string,
 	message: string,
@@ -324,6 +330,7 @@ export type FaultParameterKind = "boolean" | "integer" | "text" | "json";
 
 export type FaultParameterValue = { kind: "boolean"; value: boolean } | { kind: "integer"; value: number } | { kind: "text"; value: string } | { kind: "json"; value: string };
 
+/**  故障模拟页展示的产品化模板及参数 schema。 */
 export type FaultTemplateViewModel = {
 	template_id: string,
 	name: string,
@@ -340,26 +347,21 @@ export type FaultTemplateViewModel = {
 	ui_tone: UiTone,
 };
 
+/**  可复用于规则、设置、证书和断点的字段校验结果。 */
 export type FieldValidationViewModel = {
 	valid: boolean,
 	field_errors: { [key in string]: string[] },
 	warnings: string[],
 };
 
+/**  可供界面查看/编辑，同时可无损重建网络报文的内容模型。 */
 export type MessageContentViewModel = {
 	http_status: number | null,
-	/**
-	 *  Exact start-line bytes retained for round trips through breakpoint UI.
-	 *  HTTP/1 start lines are normally ASCII. Keeping bytes here prevents a
-	 *  display string from becoming the canonical source for reconstruction.
-	 */
+	/**  精确起始行字节，避免把展示字符串误作报文重建来源。 */
 	start_line_bytes?: number[],
-	/**
-	 *  Exact, ordered HTTP/1 header fields. Names, values, casing, duplicates,
-	 *  and interleaving are retained.
-	 */
+	/**  保留名称、值、大小写、重复项和原始顺序的 Header。 */
 	raw_headers?: RawHttpHeaderViewModel[],
-	/**  Lossy, grouped projection intended only for display and form editing. */
+	/**  仅供展示和表单编辑的有损分组投影。 */
 	headers: { [key in string]: string[] },
 	body_text: string | null,
 	body_bytes: number[],
@@ -379,6 +381,7 @@ export type OperationResultViewModel = {
 	requires_restart: boolean,
 };
 
+/**  通用分页请求；`normalized` 会把越界页码和页大小限制到安全范围。 */
 export type PageRequest = {
 	page: number,
 	page_size: number,
@@ -386,6 +389,10 @@ export type PageRequest = {
 
 export type ProxyState = "stopped" | "starting" | "running" | "stopping" | "faulted";
 
+/**
+ *  顶部状态栏和控制台所需的完整代理状态。
+ *  `can_*` 与 `*_disabled_reason` 已包含业务权限判断，展示层不能自行推导。
+ */
 export type ProxyStatusViewModel = {
 	state: ProxyState,
 	state_text: string,
@@ -413,19 +420,18 @@ export type ProxyStatusViewModel = {
 	fault_reason: string | null,
 };
 
+/**
+ *  为无损 HTTP/1 往返保留的一条原始 Header。
+ *  Header 可能重复、大小写不同或包含有意义的空白，因此不能只用 Map 保存。
+ */
 export type RawHttpHeaderViewModel = {
-	/**
-	 *  Exact HTTP/1 wire bytes for the field name.
-	 *  This is the canonical representation used when a breakpoint forwards a
-	 *  message. `MessageContentViewModel::headers` is only a lossy display and
-	 *  editing projection.
-	 */
+	/**  字段名的精确线上字节，是断点转发时的权威表示；普通 `headers` 只是有损展示投影。 */
 	name_bytes: number[],
-	/**  Exact HTTP/1 wire bytes for the field value, excluding OWS and CRLF. */
+	/**  字段值的精确字节，不含可选空白和 CRLF。 */
 	value_bytes: number[],
-	/**  Original optional whitespace between `:` and the semantic field value. */
+	/**  冒号与实际字段值之间的原始可选空白。 */
 	leading_ows_bytes?: number[],
-	/**  Original optional whitespace after the semantic field value. */
+	/**  实际字段值之后的原始可选空白。 */
 	trailing_ows_bytes?: number[],
 };
 
@@ -442,6 +448,7 @@ export type RuleCondition = { type: "field"; field: RuleMatchField; operator: Ru
 
 export type RuleConditionKind = "field" | "nth_hit";
 
+/**  新建或编辑规则时由展示层提交的输入模型。 */
 export type RuleDraft = {
 	rule_id: string | null,
 	expected_revision: number | null,
@@ -498,6 +505,7 @@ export type RuleViewModel = {
 	draft: RuleDraft,
 };
 
+/**  会话详情；完整请求/响应只在用户打开详情时返回。 */
 export type SessionDetailViewModel = {
 	summary: SessionSummaryViewModel,
 	runtime_epoch: string,
@@ -522,6 +530,7 @@ export type SessionPageViewModel = {
 	empty_message: string,
 };
 
+/**  会话页提交给 Rust 的筛选、时间范围、排序和分页条件。 */
 export type SessionQuery = {
 	keyword: string | null,
 	terminal_ip: string | null,
@@ -558,6 +567,7 @@ export type SessionSummaryViewModel = {
 	revision: number,
 };
 
+/**  设置页提交的前端友好草稿，端口会再转换并执行领域校验。 */
 export type SettingsDraft = {
 	expected_revision: number | null,
 	bind_address: string,
@@ -572,6 +582,7 @@ export type SettingsDraft = {
 	leaf_sans: string[],
 };
 
+/**  设置页展示模型，同时区分已保存值、当前生效值和操作权限。 */
 export type SettingsViewModel = {
 	stored: SettingsDraft,
 	effective: SettingsDraft | null,
@@ -596,6 +607,7 @@ export type SubscriptionAckViewModel = {
 	snapshot_required: boolean,
 };
 
+/**  带顺序、周期和实体版本的实时事件信封。 */
 export type UiEventEnvelope = {
 	event_id: number,
 	runtime_epoch: string | null,
@@ -605,12 +617,14 @@ export type UiEventEnvelope = {
 	payload: UiEventPayload,
 };
 
+/**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
 export type UiEventPayload = { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
 	message: string,
 } } | { type: "operation_failed"; data: AppErrorViewModel } | { type: "snapshot_required"; data: {
 	reason: string,
 } };
 
+/**  与具体组件库无关的视觉语义，前端只负责映射为 `HeroUI` 颜色。 */
 export type UiTone = "neutral" | "info" | "positive" | "warning" | "danger";
 
 /* Tauri Specta runtime */

@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "@heroui/styles";
 
+/*
+ * 全局视觉令牌只定义颜色、字体和系统可访问性，不自制 Button/Input 等组件。
+ * 所有交互控件必须继续使用 HeroUI；页面文件中的 Tailwind 只负责布局和间距。
+ */
 :root {
   color-scheme: light;
   --telemetry-ink: #16212b;
@@ -38,6 +42,7 @@ select {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /* 尊重系统“减少动态效果”设置，避免滚动和动画造成不适。 */
   *,
   *::before,
   *::after {

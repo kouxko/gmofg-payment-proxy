@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * 两段 mTLS 证书材料管理页面。
+ *
+ * 所有证书读取、生成、验证、文件对话框和密钥保护都由 Rust 执行。前端绝不接触
+ * 私钥字节，也不保存 PKCS12 密码；密码仅存在于当前弹窗状态，成功或关闭即清除。
+ */
+
 import { useState } from "react";
 import {
   Alert,
@@ -69,6 +76,7 @@ export function CertificatesView() {
     >,
     load: () => Promise<CertificateOverviewViewModel>,
   ) {
+    // 生成/重签/导入成功后统一重取 overview，页面不手工拼接证书状态。
     if (writePending) return;
     setPendingAction(action);
     try {
@@ -92,6 +100,7 @@ export function CertificatesView() {
       );
       toast(result.status_text, { variant: toneColor(result.ui_tone) });
       await overview.refresh();
+      // 密码没有持久化需求，导入成功后立即从 React state 清除。
       setPassword("");
       setPkcs12Open(false);
     } catch (reason) {
@@ -102,12 +111,14 @@ export function CertificatesView() {
   }
 
   async function currentLeafSans() {
+    // 签发前重新读取 Rust 设置，避免使用页面打开时已经过期的 SAN。
     const latest = await callCommand(commands.settingsGet());
     settings.setData(latest);
     return latest.stored.leaf_sans;
   }
 
   async function exportCa() {
+    // Rust 系统对话框只导出公开 Root CA；私钥没有任何 IPC 导出接口。
     if (writePending) return;
     setPendingAction("export");
     try {

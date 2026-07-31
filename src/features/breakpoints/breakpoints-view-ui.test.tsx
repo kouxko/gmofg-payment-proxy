@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证断点页面的真实用户路径：切换选择、编辑、Rust 校验、解决与队列刷新。 */
+
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

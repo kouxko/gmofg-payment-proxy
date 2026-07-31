@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 代理控制台的展示与用户操作组件。
+ *
+ * status 和 recentCapture 都是 Rust 已经整理好的 ViewModel。组件只决定如何用
+ * HeroUI 展示、何时调用启动/停止/重启命令，以及如何反馈执行结果；端口占用、
+ * 证书就绪、状态迁移和资源清理全部由 Rust 判断。
+ */
+
 import { useState } from "react";
 import {
   Alert,
@@ -58,10 +66,12 @@ export function ConsoleView({
       | typeof commands.proxyRestart
     >,
   ) {
+    // pendingOperation 既控制按钮文案，也阻止用户重复提交同一个生命周期操作。
     if (pendingOperation) return;
     setPendingOperation(operation);
     try {
       const result = await callCommand(command());
+      // 命令成功后重新取得全局快照，确保表格显示的是 Rust 的最终状态。
       toast(result.state_text, { variant: toneColor(result.ui_tone) });
       await onRefresh();
     } catch (reason) {

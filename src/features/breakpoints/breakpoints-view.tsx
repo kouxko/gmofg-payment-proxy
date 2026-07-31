@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 人工断点实验台。
+ *
+ * Rust 持有真正被暂停的网络任务和断点状态机；此组件只编辑 Rust 提供的有效
+ * 报文副本、选择允许的动作并提交带 revision 的决策。动作全集、阶段兼容性、
+ * Shift-JIS/JSON/Header 校验和最终放行都不在 TypeScript 中实现。
+ */
+
 import { useMemo, useState } from "react";
 import {
   Alert,
@@ -48,6 +56,7 @@ export function buildBreakpointDecision(
     truncateAt?: number;
   },
 ): BreakpointDecision {
+  // 默认参数由 Rust 随动作 ViewModel 给出，用户只覆盖实际修改过的值。
   return {
     breakpoint_id: draft.breakpoint_id,
     expected_revision: draft.expected_revision,
@@ -77,6 +86,8 @@ export function BreakpointsView() {
     selectedId: requestedBreakpointId,
   }));
   const selectedId =
+    // URL 可能从抓包页跳到另一断点。把路由 ID 与手工选择绑定，既支持同一路由
+    // A→B 切换，也能在路由真的变化时采用新目标，避免 render 中 setState。
     selection.routeBreakpointId === requestedBreakpointId
       ? selection.selectedId
       : requestedBreakpointId;
@@ -122,6 +133,7 @@ export function BreakpointsView() {
   const activeDecisionKind = selectedAction?.kind;
 
   function selectDecision(kind: BreakpointDecision["kind"]) {
+    // 只允许选择 Rust 当前阶段返回的 available_actions，前端不拼动作全集。
     const action = detail.data?.available_actions.find(
       (candidate) => candidate.kind === kind,
     );
@@ -159,6 +171,7 @@ export function BreakpointsView() {
   }
 
   const draft = useMemo<BreakpointDraft | undefined>(() => {
+    // 原始报文始终只读；draft 基于自动规则后的 effective 报文叠加当前人工编辑。
     if (!detail.data) return;
     return {
       breakpoint_id: detail.data.summary.breakpoint_id,
@@ -168,6 +181,7 @@ export function BreakpointsView() {
   }, [bodyText, detail.data]);
 
   async function formatJson() {
+    // 格式化也交给 Rust，以保持 Shift-JIS、JSON 与最终发送逻辑使用同一实现。
     if (!draft || editorPending || resolvePending) return;
     setEditorPending("format");
     try {

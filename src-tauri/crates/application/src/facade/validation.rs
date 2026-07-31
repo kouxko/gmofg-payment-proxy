@@ -1,7 +1,6 @@
-//! Shared normalization and validation helpers for application use cases.
+//! 应用用例共用的规范化和校验辅助函数。
 //!
-//! These functions return stable field errors and normalized values; no
-//! presentation adapter is allowed to reproduce this business logic.
+//! 这些函数返回稳定字段错误和规范化值，任何展示适配器都不应复制这部分业务逻辑。
 
 use std::collections::{BTreeMap, BTreeSet};
 

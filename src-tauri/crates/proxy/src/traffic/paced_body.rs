@@ -1,3 +1,8 @@
+//! 把完整 body 暴露成可延迟、分块或故意断开的 Hyper `Body`。
+//!
+//! 状态机在 `poll_frame` 中推进，等待 future 与字节偏移归本对象所有；每次等待都会监听
+//! 取消令牌。声明长度可故意与实际发送量不同，这是协议故障功能，不应被自动“修正”。
+
 use std::fmt::{Debug, Display, Formatter};
 use std::future::Future;
 use std::pin::Pin;

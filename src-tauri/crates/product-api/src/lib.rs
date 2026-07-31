@@ -1,15 +1,13 @@
-//! Product-specific policy boundary for the otherwise reusable proxy core.
+//! 可复用代理核心与具体产品之间的策略边界。
 //!
-//! This crate intentionally contains contracts only. Concrete products own
-//! their names, bundled trust anchors, and any explicitly enabled test-only
-//! signing material.
+//! 本 crate 刻意只放契约。产品名称、默认通道、内置信任锚，以及显式启用的测试签名材料
+//! 都由具体产品拥有，不能泄漏进通用领域层或代理运行时。
 
 use std::{collections::BTreeSet, error::Error, fmt, net::IpAddr, sync::Arc};
 
-/// Product-owned listener/upstream definition.
+/// 产品定义的监听器/上游信息。
 ///
-/// The reusable core treats channel identifiers as opaque values. A concrete
-/// product supplies the catalog, labels, ports, and upstream defaults.
+/// 通用核心只把通道 ID 当作不透明标识；具体产品提供通道目录、显示名、端口和上游默认值。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProductChannel {
     pub id: &'static str,
@@ -19,7 +17,7 @@ pub struct ProductChannel {
     pub upstream_url: &'static str,
 }
 
-/// Product-owned persistence and secret-protection namespace.
+/// 产品独占的持久化和秘密保护命名空间，避免多个产品互相读取数据库或密钥。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProductStorageNamespace {
     pub database_file_name: &'static str,
@@ -29,10 +27,9 @@ pub struct ProductStorageNamespace {
     pub secret_aad: &'static [u8],
 }
 
-/// Product-owned aliases for settings written by an older product release.
+/// 产品旧版本写入设置时使用的字段别名。
 ///
-/// Generic persistence code understands how to migrate a channel catalog, but
-/// it must not know the legacy field names chosen by a concrete product.
+/// 通用持久化代码知道如何迁移通道目录，但不应知道具体产品曾使用哪些旧字段名。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LegacySettingsChannelMapping {
     pub channel_id: &'static str,
@@ -41,14 +38,14 @@ pub struct LegacySettingsChannelMapping {
     pub upstream_url_field: &'static str,
 }
 
-/// Product-owned compatibility metadata for persisted data.
+/// 产品持久化数据的兼容迁移元数据。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ProductPersistenceMigrations {
     pub settings_channels: &'static [LegacySettingsChannelMapping],
     pub terminal_body_fields: &'static [&'static str],
 }
 
-/// Product-facing terminology consumed by generic adapters.
+/// 通用适配器展示时使用的产品术语。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProductLabels {
     pub client_name: &'static str,
@@ -56,10 +53,9 @@ pub struct ProductLabels {
     pub fault_rule_name_prefix: &'static str,
 }
 
-/// Product-selected presentation metadata for a generic fault capability.
+/// 产品为通用故障能力选择的展示元数据。
 ///
-/// The `id` names a capability implemented by the generic rule engine. The
-/// product decides which capabilities are exposed and how they are described.
+/// `id` 指向通用规则引擎实现的能力；产品决定暴露哪些能力以及如何描述。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProductFaultTemplate {
     pub id: &'static str,
@@ -97,18 +93,21 @@ pub const STANDARD_FAULT_CAPABILITY_IDS: &[&str] = &[
 ];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+/// 产品分类器从请求中提取、供列表和规则使用的少量元数据。
 pub struct ClassifiedRequest {
     pub request_id: Option<String>,
     pub request_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]
+/// 保留原始字节的只读 Header 视图。
 pub struct ProductHeader<'a> {
     pub name: &'a [u8],
     pub value: &'a [u8],
 }
 
 #[derive(Debug, Clone, Copy)]
+/// 产品分类器可读取的一条完整请求视图，所有借用仅在本次调用期间有效。
 pub struct ProductMessageContext<'a> {
     pub channel_id: &'a str,
     pub start_line: &'a [u8],
@@ -116,14 +115,14 @@ pub struct ProductMessageContext<'a> {
     pub body: &'a [u8],
 }
 
-/// Product-specific request metadata extraction.
+/// 从请求中提取产品特有元数据。
 ///
-/// Generic transport and storage code never knows product JSON field names.
+/// 通用传输和存储代码永远不需要知道产品 JSON 字段名。
 pub trait RequestClassifier: fmt::Debug + Send + Sync {
     fn classify(&self, message: ProductMessageContext<'_>) -> ClassifiedRequest;
 }
 
-/// Stable product-boundary error returned by codecs and future product hooks.
+/// 编解码器和产品扩展点返回的稳定产品边界错误。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProductError {
     pub code: &'static str,
@@ -148,19 +147,22 @@ impl fmt::Display for ProductError {
 
 impl Error for ProductError {}
 
-/// Product-selected body encoding contract.
+/// 产品选择的 Body 编解码契约，例如 Payment 使用 Shift-JIS。
 pub trait BodyCodec: fmt::Debug + Send + Sync {
+    /// 稳定编解码器 ID，便于日志和诊断识别。
     fn id(&self) -> &'static str;
 
+    /// 给人阅读的编码名称。
     fn name(&self) -> &'static str;
 
+    /// 将线上字节无损解码为可编辑文本；存在非法字节时必须失败。
     fn decode(&self, bytes: &[u8]) -> Result<String, ProductError>;
 
+    /// 将用户文本无损编码回产品字节；有不可表示字符时必须失败，不能替换为问号。
     fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError>;
 }
 
-/// Static certificate authority material used only by an explicitly enabled
-/// isolated-test product profile.
+/// 仅供显式启用的隔离测试产品配置使用的静态 CA 材料。
 #[derive(Debug, Clone, Copy)]
 pub struct EmbeddedTestCertificateAuthority {
     pub public_certificate_pem: &'static [u8],
@@ -168,7 +170,7 @@ pub struct EmbeddedTestCertificateAuthority {
     pub required_subject_marker: &'static str,
 }
 
-/// Product-owned text shown by the generic certificate adapter.
+/// 通用证书适配器展示的产品自定义文案。
 #[derive(Debug, Clone, Copy)]
 pub struct CertificateLabels {
     pub root_name: &'static str,
@@ -187,29 +189,35 @@ pub struct CertificateLabels {
     pub export_success_message: &'static str,
 }
 
-/// Certificate assets and behavior selected by the outer product composition.
+/// 外层产品装配选择的证书资源和行为。
 ///
-/// `embedded_test_authority` must return `None` unless the concrete product was
-/// constructed with an explicit test-only opt-in. This makes private signing
-/// material fail closed rather than silently becoming generic infrastructure.
+/// 除非具体产品通过测试专用开关显式选择，`embedded_test_authority` 必须返回 `None`。
+/// 这样私有签名材料默认关闭，不会悄悄变成通用基础设施的一部分。
 pub trait ProductCertificatePolicy: fmt::Debug + Send + Sync {
+    /// 客户端编译/安装时使用的公开 Root CA，不包含私钥。
     fn public_root_ca_pem(&self) -> &'static [u8];
 
+    /// 仅隔离测试允许返回的 Root CA 私钥材料。
     fn embedded_test_authority(&self) -> Option<EmbeddedTestCertificateAuthority>;
 
+    /// 产品随包携带的默认上游信任锚，可由用户导入文件替换。
     fn bundled_upstream_ca_pem(&self) -> Option<&'static [u8]>;
 
     fn labels(&self) -> CertificateLabels;
 }
 
-/// Product profile injected into the UI-neutral Rust host.
+/// 注入到 UI 无关 Rust Host 中的产品配置总契约。
 pub trait ProductProfile: fmt::Debug + Send + Sync {
+    /// 稳定、机器可读的产品 ID。
     fn id(&self) -> &'static str;
 
+    /// 界面显示的产品名称。
     fn name(&self) -> &'static str;
 
+    /// 产品支持的全部监听通道及默认上游。
     fn channels(&self) -> &'static [ProductChannel];
 
+    /// 数据库、Keychain/DPAPI 的隔离命名空间。
     fn storage(&self) -> ProductStorageNamespace;
 
     fn persistence_migrations(&self) -> ProductPersistenceMigrations {
@@ -218,6 +226,7 @@ pub trait ProductProfile: fmt::Debug + Send + Sync {
 
     fn labels(&self) -> ProductLabels;
 
+    /// 产品允许用户快速配置的故障能力。
     fn fault_templates(&self) -> &'static [ProductFaultTemplate];
 
     fn request_classifier(&self) -> Arc<dyn RequestClassifier>;
@@ -227,8 +236,7 @@ pub trait ProductProfile: fmt::Debug + Send + Sync {
     fn body_codec(&self) -> Arc<dyn BodyCodec>;
 }
 
-/// Validates the static product contract before the host opens storage or
-/// starts background tasks.
+/// 在 Host 打开存储或启动后台任务前验证静态产品契约。
 pub fn validate_product_profile(product: &dyn ProductProfile) -> Result<(), ProductError> {
     let channels = product.channels();
     if channels.is_empty() {
@@ -419,12 +427,10 @@ fn valid_database_file_name(value: &str) -> bool {
             .any(|byte| matches!(byte, b'/' | b'\\' | b':' | 0))
 }
 
-/// Validates the static upstream origin declared by a product profile.
+/// 校验产品配置声明的静态上游 origin。
 ///
-/// Runtime forwarding preserves the downstream request-target, so a profile
-/// path or query cannot be composed safely and would otherwise be discarded.
-/// Keep this contract aligned with domain settings validation and the runtime
-/// endpoint parser; a single trailing slash denotes the canonical empty path.
+/// runtime 会保留下游 request-target，产品配置中的 path/query 无法安全合并且会被丢弃。
+/// 此契约必须与领域设置校验和 runtime 端点解析器保持一致；单个结尾 `/` 代表空路径。
 fn valid_https_origin(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("https://") else {
         return false;

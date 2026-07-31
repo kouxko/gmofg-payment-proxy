@@ -1,8 +1,8 @@
-//! Operating-system and persistence adapters for the payment proxy.
+//! 支付代理的操作系统与持久化适配层。
 //!
-//! This crate never persists captured HTTP payloads. It only owns durable
-//! configuration, encrypted certificate material, certificate construction,
-//! and explicit user-requested exports.
+//! 本 crate 保存配置、规则和“已加密”的证书材料，并实现显式导入导出；抓到的 HTTP
+//! 请求/响应正文只属于内存会话，不在这里落盘。上层只依赖应用端口，因此 `SQLite`、
+//! DPAPI/Keychain 或证书库失败时可以被统一映射，而不会污染领域模型。
 
 pub mod adapters;
 pub mod certificates;

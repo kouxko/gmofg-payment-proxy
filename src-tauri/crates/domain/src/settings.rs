@@ -1,3 +1,8 @@
+//! 代理配置及其领域校验。
+//!
+//! 监听地址、通道、上游、TLS、超时和容量都在这里形成唯一业务真相。无论入口是桌面
+//! UI、未来 TUI/CLI 还是测试，都必须经过同一套 Rust 校验。
+
 use crate::{ChannelId, DomainError, ErrorCode, Revision};
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -10,19 +15,28 @@ pub const DEFAULT_MAX_MEMORY_BYTES: u64 = 256 * 1024 * 1024;
 pub const DEFAULT_UI_EVENT_CAPACITY: u32 = 4_096;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 当前产品允许选择的 TLS 协议版本。
+///
+/// 目前只允许 TLS 1.2，是明确的产品约束，不应由前端提供任意字符串。
 pub enum TlsVersion {
     Tls12,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 一个监听通道的配置，例如“交易”或“DLL”。
 pub struct ChannelSettings {
+    /// 产品定义的稳定通道 ID，不等同于界面显示名称。
     pub id: ChannelId,
+    /// 关闭后不创建监听器，但配置仍保留。
     pub enabled: bool,
+    /// Proxy 在本机监听客户端连接的端口。
     pub port: u16,
+    /// Proxy 转发到的 HTTPS 上游 origin，不允许携带业务路径或查询参数。
     pub upstream_url: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 网络三个阶段各自的超时，单位均为毫秒。
 pub struct TimeoutSettings {
     pub connect_ms: u64,
     pub write_ms: u64,
@@ -30,6 +44,7 @@ pub struct TimeoutSettings {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 防止内存或单条报文无限增长的容量上限。
 pub struct CapacitySettings {
     pub max_sessions: u32,
     pub max_memory_bytes: u64,
@@ -38,6 +53,7 @@ pub struct CapacitySettings {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 已保存且经过校验的完整代理设置。
 pub struct Settings {
     pub revision: Revision,
     pub bind_address: String,
@@ -78,12 +94,16 @@ impl Default for Settings {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 用户准备提交的设置及其基准版本。
 pub struct SettingsDraft {
     pub expected_revision: Revision,
     pub values: Settings,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// “磁盘已保存值”与“当前运行值”的并列快照。
+///
+/// 两者不同时 `restart_required` 为真，说明保存成功但必须重启代理才会生效。
 pub struct SettingsSnapshot {
     pub stored: Settings,
     pub effective: Option<Settings>,
@@ -91,6 +111,9 @@ pub struct SettingsSnapshot {
 }
 
 impl Settings {
+    /// 收集全部配置字段错误，而不是发现第一个错误就返回。
+    ///
+    /// 这样 UI/TUI 一次即可标出所有问题。此函数只验证，不修改原值。
     pub fn validate(&self) -> Result<(), DomainError> {
         let mut error = DomainError::new(ErrorCode::ConfigInvalid, "设置存在字段错误");
         let bind_ip = self.bind_address.parse::<IpAddr>();
@@ -158,6 +181,8 @@ impl Settings {
     }
 
     pub fn apply_draft(&mut self, draft: SettingsDraft) -> Result<Revision, DomainError> {
+        // 乐观锁保证调用方修改的是自己刚刚看到的版本；完整校验通过后才整体替换，
+        // 因而不会留下“只保存了一半字段”的中间状态。
         self.revision.verify(draft.expected_revision)?;
         draft.values.validate()?;
         let next = self.revision.next();
@@ -191,12 +216,10 @@ fn validate_channel(channel: &ChannelSettings, error: &mut DomainError) {
     }
 }
 
-/// Returns whether `value` is an HTTPS origin suitable for an upstream channel.
+/// 判断字符串是否是可用于上游通道的 HTTPS origin。
 ///
-/// The proxy forwards each downstream request-target unchanged. Accepting a
-/// configured path, query, or fragment would therefore be misleading because
-/// it could not be combined with that request-target and would be discarded.
-/// A single trailing slash is accepted because it is the canonical empty path.
+/// 代理会原样转发下游 request-target，因此配置中的 path、query 或 fragment 无法安全
+/// 合并，只会被丢弃，必须拒绝。单个结尾 `/` 表示规范化空路径，允许使用。
 #[must_use]
 pub fn is_valid_https_upstream_url(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("https://") else {

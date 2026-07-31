@@ -1,3 +1,8 @@
+//! 规则草稿的领域级非法输入测试。
+//!
+//! 这些用例只证明“保存前应拒绝什么”，不启动代理、不访问 SQLite，也不能替代
+//! 真实设备的规则命中证据。每个测试直接构造领域草稿，以便定位到最小规则语义。
+
 use gmofg_proxy_domain::{
     DropResponseMode, ErrorCode, MatchCondition, MatchField, MatchOperator, MessageStage,
     RuleAction, RuleDraft, TerminalAction, validate_rule_draft,

@@ -1,3 +1,8 @@
+//! Tauri 原生文件对话框到基础设施文件端口的适配器。
+//!
+//! `WebView` 只说明用途，操作系统负责路径选择和覆盖确认；用户取消不是错误，选中路径后的
+//! 大小限制、解析和原子写入仍由基础设施层负责。
+
 use std::path::PathBuf;
 
 use gmofg_proxy_application::{AppError, AppResult};

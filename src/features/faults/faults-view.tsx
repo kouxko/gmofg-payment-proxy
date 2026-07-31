@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 故障模拟模板页面。
+ *
+ * 模板只是创建普通拦截规则的快捷入口，不存在第二套故障引擎。Rust 返回模板、
+ * 默认参数和字段错误，并把“立即启用/保存为规则”统一转换为规则；前端只维护
+ * 当前表单覆盖值和危险操作确认。
+ */
+
 import { useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -71,6 +79,7 @@ export function FaultsView() {
   >({});
 
   const effectiveSelectedId =
+    // 用户尚未选择时默认使用第一项，点击页面即可直接配置第一个模板。
     selectedId ?? templates.data?.[0]?.template_id;
   const writePending = configurePending != null || stoppingRuleId != null;
   const fieldError = (field: string) => fieldErrors[field]?.join("；");
@@ -92,6 +101,7 @@ export function FaultsView() {
   const effectiveChannel = channel ?? selected?.default_channel;
 
   const draft = useMemo<FaultConfigurationDraft | undefined>(() => {
+    // 只在 Rust 给出的必需默认值齐全时组装提交 DTO，不在此判断动作语义。
     if (
       !selected ||
       effectiveChannel == null ||
@@ -149,6 +159,7 @@ export function FaultsView() {
   }
 
   function selectTemplate(templateId: string) {
+    // 切换模板时恢复该模板默认值；每个模板的临时参数覆盖相互隔离。
     setSelectedId(templateId);
     const template = templates.data?.find(
       (item) => item.template_id === templateId,
@@ -165,6 +176,7 @@ export function FaultsView() {
   }
 
   async function configure(openRules = false) {
+    // 两个入口共用同一 Rust Command；openRules 只决定成功后是否跳到规则页。
     if (!draft || writePending) return;
     setConfigurePending(openRules ? "save" : "enable");
     setFieldErrors({});

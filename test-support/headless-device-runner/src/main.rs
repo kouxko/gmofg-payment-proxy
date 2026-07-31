@@ -1,3 +1,14 @@
+//! 不启动 Tauri/Next.js UI 的真实设备验收 Host。
+//!
+//! 与 `real-device-dll-proxy` 的“单场景连通性探针”不同，本程序通过正式
+//! `ApplicationHostBuilder` 启动完整 Rust 应用层，然后按场景创建规则、启动代理、等待
+//! Android instrumentation 请求、读取抓包/会话/规则轨迹，最后删除测试规则并关闭 Host。
+//! 因此它用于验证“桌面应用背后的 Rust 功能是否可独立复用”，而不是验证 UI 像素或点击。
+//!
+//! 本程序只负责一个场景。批次选择、APK 安装、敏感文件下发、逐场景进程编排和证据归档
+//! 由同目录的 `run-real-device-scenarios.sh` 完成。拆成两层后，Rust runner 可以保持确定性，
+//! Shell harness 则专注处理 adb、环境变量和操作系统生命周期。
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     env,
@@ -41,6 +52,7 @@ fn dll_channel() -> ChannelId {
 struct NoFileDialog;
 
 impl NativeFileDialog for NoFileDialog {
+    // 无 UI 测试不得意外弹出系统文件选择器。返回 None 与用户取消选择的正式语义一致。
     fn choose_open_file(&self, _purpose: &str) -> AppResult<Option<PathBuf>> {
         Ok(None)
     }
@@ -50,13 +62,14 @@ impl NativeFileDialog for NoFileDialog {
     }
 }
 
-/// Non-interactive adapter for headless macOS validation.
+/// macOS 无界面验证使用的密钥保护适配器。
 ///
-/// The shell harness exports the existing login-Keychain master key into a
-/// mode-0600 temporary file via the trusted `security` process. The runner
-/// reads it once, zeroizes it on drop, and uses the exact production envelope
-/// format without opening a Keychain authorization dialog from an unsigned
-/// test binary.
+/// Shell harness 先通过系统自带且受信任的 `security` 命令，把当前登录用户 Keychain 中
+/// 已存在的主密钥写入权限为 0600 的临时文件。本 runner 只读取一次，内存由 `Zeroizing`
+/// 在释放时清零，并继续使用与生产一致的加密信封格式。这样既避免未签名测试二进制弹出
+/// Keychain 授权框，也不会为测试发明另一种密文格式。
+///
+/// 临时文件的创建、权限校验和删除属于 Shell harness 的职责；runner 不长期保存主密钥。
 struct HeadlessMasterKeyProtector {
     key: Zeroizing<[u8; KEY_BYTES]>,
 }
@@ -142,6 +155,8 @@ impl SecretProtector for HeadlessMasterKeyProtector {
 }
 
 fn write_control_file(variable: &str, content: &str) -> Result<(), Box<dyn Error>> {
+    // 控制文件是 Shell 与 Rust 进程之间的最小握手协议：phase 用于诊断卡在哪一步，
+    // ready 用于保证 Android 只在代理真正就绪后才发请求。未设置变量时便于单独调试 runner。
     if let Some(path) = env::var_os(variable).map(PathBuf::from) {
         fs::write(path, content)?;
     }
@@ -150,6 +165,9 @@ fn write_control_file(variable: &str, content: &str) -> Result<(), Box<dyn Error
 
 #[derive(Clone, Copy, Debug)]
 enum Scenario {
+    // 这里列的是“一个 runner 进程能够执行的原子场景”。哪些场景属于 A/B/... 批次，
+    // 以及 Android 应当观察到什么结果，由 scenarios.json 统一声明，避免 Rust 与脚本各写一套名单。
+    // 大致分组为：A 报文动作、B 连接破坏、C 断点、D 状态/组合、E 匹配、F 非法配置、G 弱网。
     Baseline,
     RequestSetJson,
     ResponseSetJson,
@@ -1370,6 +1388,7 @@ async fn wait_for_android_completion_signal() -> Result<(), String> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    // 每次只执行一个场景，便于做到：失败证据独立、规则必定清理、下一场景不继承运行时状态。
     let scenario = Scenario::parse(
         &env::args()
             .nth(1)
@@ -1384,6 +1403,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let secret_protector = Arc::new(HeadlessMasterKeyProtector::from_file(&master_key_file)?);
     write_control_file("GMOFG_HEADLESS_PHASE_FILE", "building-host\n")?;
 
+    // 这里构建的是桌面应用同款 Rust Host，而不是测试替身。差异只在平台服务：
+    // 文件对话框被禁用，Keychain 交互改为前述非交互适配器，产品配置仍是 Payment。
     let host = ApplicationHostBuilder::new(
         data_dir,
         HostPlatformServices::new(secret_protector, Arc::new(NoFileDialog)),
@@ -1395,6 +1416,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut acquired_rule_ids = Vec::new();
 
     let run_result = async {
+        // 第一阶段：先确认 scenarios.json 已覆盖 Rust 暴露的全部故障模板。
+        // 这项“闭包检查”防止产品新增模板后，实机矩阵悄悄漏测。
         let available_template_ids = application
         .fault_template_list()
         .await?
@@ -1417,6 +1440,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .into());
     }
 
+    // 第二阶段：隔离测试环境。普通用户规则只要仍启用就拒绝开始，因为它们会改变请求结果；
+    // 上次异常退出残留的 headless-device-* 规则则可以安全识别并清理。
     let existing_rules = application.rule_list().await?;
     let foreign_enabled = existing_rules
         .iter()
@@ -1448,6 +1473,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .map(|row| row.event_id)
         .max();
 
+    // 第三阶段：按场景建立规则。无效配置场景验证 Rust 校验错误；模板场景走故障模板 API；
+    // 其余场景走通用规则 API。三条路径都属于正式 Application 接口。
     let mut invalid_rejection = None;
     let mut created_rules = if matches!(scenario, Scenario::Baseline) {
         Vec::new()
@@ -1577,6 +1604,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Vec<_>>();
     let rule_id = rule_ids.first().copied();
 
+    // 只有规则已完整保存后才启动 Proxy；ready 文件写入后，Shell 才允许 instrumentation 发包。
     write_control_file("GMOFG_HEADLESS_PHASE_FILE", "starting-proxy\n")?;
     let status = match application.proxy_start().await {
         Ok(status) => status,
@@ -1620,6 +1648,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     );
     io::stdout().flush()?;
 
+    // 第四阶段：从 Rust 自己的事件、抓包详情、会话结果和规则轨迹建立证据。
+    // Android 断言证明客户端观察结果；这里的断言证明代理内部确实按预期规则执行。
+    // 两边都通过才算场景成功，不能只凭 HTTP 200 或一条日志下结论。
     let observation = async {
         if matches!(scenario, Scenario::RejectTlsHandshake) {
             let started = Instant::now();
@@ -1930,6 +1961,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }))
     };
     tokio::pin!(observation);
+    // Ctrl-C/终止信号也必须进入统一清理路径，防止测试规则留在用户数据库中。
     let observation_result = tokio::select! {
         result = &mut observation => result,
         signal = shutdown_signal() => match signal {
@@ -1938,6 +1970,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         },
     };
 
+    // 第五阶段：正常清理。先停止网络任务，再按创建方式停用/删除规则，最后输出机器可读结果。
+    // HEADLESS_CLEAN 是 Shell 进入下一场景前的硬门槛。
     let stop_error = application
         .proxy_stop()
         .await
@@ -2007,6 +2041,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     .await;
 
+    // `run_result` 内任何一步都可能提前返回，因此外层再做一次兜底清理。
+    // 清理失败不能覆盖原始错误；finish_run 会把“主失败、清理失败、Host 关闭失败”一起报告。
     let mut emergency_cleanup_errors = Vec::new();
     match application.rule_list().await {
         Ok(rules) => {

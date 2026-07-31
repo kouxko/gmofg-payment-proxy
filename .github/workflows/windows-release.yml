@@ -4,8 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches:
+      # 该分支只用于提前填充 Windows/Rust/Tauri 缓存并验证安装包能构建，不发布产物。
       - "codex/windows-ci-cache-warmup"
     tags:
+      # 只有 v* 标签进入签名、签名校验和 artifact 上传步骤。
       - "v*"
 
 jobs:
@@ -51,6 +53,7 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
         run: |
+          # 标签发布采用 fail-closed：任一密钥/密码/时间戳地址缺失就中止，绝不降级成未签名发布。
           if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -or
               [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD) -or
               [string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_URL)) {
@@ -58,6 +61,7 @@ jobs:
           }
 
           $pfxPath = Join-Path $env:RUNNER_TEMP "windows-code-signing.pfx"
+          # GitHub Secret 中保存 Base64 PFX，只在临时 runner 上还原；导入后禁止再次导出私钥。
           [IO.File]::WriteAllBytes(
             $pfxPath,
             [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE)
@@ -117,6 +121,7 @@ jobs:
         env:
           EXPECTED_THUMBPRINT: ${{ steps.windows_signing.outputs.thumbprint }}
         run: |
+          # “构建成功”不等于“签名成功”。主程序、MSI、NSIS 都必须签名有效、签发者一致且有时间戳。
           $app = Get-Item `
             "src-tauri/target/release/gmofg-payment-proxy.exe" `
             -ErrorAction Stop
@@ -179,6 +184,8 @@ jobs:
           SIGNING_THUMBPRINT: ${{ steps.windows_signing.outputs.thumbprint }}
           SIGNING_PFX_PATH: ${{ steps.windows_signing.outputs.pfx_path }}
         run: |
+          # always() 保证前面任何发布步骤失败时也会清理证书、PFX 和临时 Tauri 配置。
+          # 分支预热从未导入签名材料，因此该步骤只在 v* 标签运行。
           if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_THUMBPRINT)) {
             Remove-Item "Cert:\CurrentUser\My\$env:SIGNING_THUMBPRINT" -Force -ErrorAction SilentlyContinue
           }

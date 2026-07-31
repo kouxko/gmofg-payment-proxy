@@ -1,7 +1,7 @@
-//! Settings validation, persistence, restart, and rollback workflows.
+//! 设置校验、保存、重启与回滚用例。
 //!
-//! Restart is treated as a transaction: save the candidate, start it, record
-//! the effective snapshot, and restore the prior settings/runtime on failure.
+//! “保存并重启”按事务处理：先保存候选值，再启动并记录生效快照；任何一步失败都恢复
+//! 原设置和原运行状态，避免磁盘显示新配置、代理却运行旧配置的半成功状态。
 
 use super::{
     Application,

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证内存工作区路由解析、查询参数和未知路径回退。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

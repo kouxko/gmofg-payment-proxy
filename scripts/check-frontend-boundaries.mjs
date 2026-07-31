@@ -5,6 +5,9 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const sourceRoot = join(root, "src");
 
+// 这是一个轻量级架构门禁，不是 TypeScript linter 的替代品。
+// 它把项目最重要的约束变成 CI 可执行规则：前端只展示 Rust ViewModel、收集用户意图，
+// 不得自行联网、持久化业务数据、解析编码或硬编码 Payment 产品语义。
 function sourceFiles(directory) {
   return readdirSync(directory)
     .flatMap((name) => {
@@ -12,9 +15,13 @@ function sourceFiles(directory) {
       return statSync(path).isDirectory() ? sourceFiles(path) : [path];
     })
     .filter((path) => /\.(ts|tsx)$/.test(path))
+    // generated/rust-types.ts 由 Rust/Specta 生成，内容应由 bindings 差异检查负责；
+    // 在这里扫描会把合法的产品 DTO 字面量误判为前端手写业务逻辑。
     .filter((path) => !path.endsWith("generated/rust-types.ts"));
 }
 
+// 第一层是跨文件通用禁令。正则只识别明确的危险模式，命中后要求开发者把逻辑下沉到 Rust
+// 或改用 HeroUI；不要为了“绕过正则”改写同一段前端业务逻辑。
 const forbidden = [
   [/\bfetch\s*\(/, "前端不得直接发起网络请求"],
   [/\bWebSocket\b/, "前端不得创建 WebSocket"],
@@ -86,6 +93,8 @@ for (const file of sourceFiles(sourceRoot)) {
   }
 }
 
+// 第二层检查具体页面与 Rust 契约的对应关系。这些规则比通用正则更精确，用于防止以后重构
+// 页面时把规则默认值、断点动作、通道目录或 HTTP 报文解释偷偷搬回 TypeScript。
 const captureSource = readFileSync(
   join(sourceRoot, "features/capture/capture-view.tsx"),
   "utf8",
@@ -273,6 +282,7 @@ if (!bootstrapSource.includes("refreshGeneration")) {
 }
 
 if (failures.length > 0) {
+  // 一次输出全部问题，便于新手按文件逐项修复，而不是每修一个再重新跑 CI 才看到下一个。
   process.stderr.write(`${failures.join("\n")}\n`);
   process.exitCode = 1;
 } else {

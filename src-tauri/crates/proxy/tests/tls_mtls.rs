@@ -1,3 +1,8 @@
+//! TLS 1.2 双向认证和监听生命周期的集成测试。
+//!
+//! 测试使用临时证书与本机端口证明客户端/服务端身份校验、拒绝路径和取消清理；它不能
+//! 替代正式 macOS App 防火墙、Windows 安装包或真实 GMO-FG 证书链验收。
+
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::{

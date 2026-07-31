@@ -1,8 +1,8 @@
-//! Production bridge between the transport runtime and application/domain services.
+//! 代理传输运行时与应用/领域服务之间的生产桥接层。
 //!
-//! The adapter deliberately lives in infrastructure: it is the only layer that
-//! knows both the byte-preserving proxy message and the application/domain view
-//! models. Tauri only composes this adapter and never executes pipeline policy.
+//! 只有本模块同时理解“保留原始字节的代理消息”和应用/领域模型：请求按固定阶段经过抓包、
+//! 断点、规则匹配和动作执行。每个 epoch 使用快照隔离；锁只包围共享元数据，不跨网络
+//! `await` 长时间持有。Tauri 只装配本适配器，不执行 pipeline 策略。
 
 use std::{
     collections::{BTreeMap, HashMap},

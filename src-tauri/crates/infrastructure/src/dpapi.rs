@@ -1,3 +1,9 @@
+//! 跨平台的敏感数据保护接口，以及 Windows 当前用户级 DPAPI 实现。
+//!
+//! `SecretProtector` 只负责“把字节交给操作系统保护/恢复”，不负责持久化；非 Windows
+//! 平台会明确返回不支持，而不是退化为明文。Windows 返回的系统缓冲区由 RAII 包装，
+//! 离开作用域时先清零再释放，失败信息也不会包含密钥或证书内容。
+
 use crate::InfrastructureError;
 
 /// Current-user secret protection boundary.

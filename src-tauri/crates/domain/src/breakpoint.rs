@@ -1,3 +1,8 @@
+//! 断点领域模型。
+//!
+//! “断点”表示代理已截获报文，并暂停网络流程等待操作者决定放行、修改、Mock 或终止。
+//! 这里仅描述断点状态和合法变化；异步等待、事件通知等工作属于 application/runtime 层。
+
 use crate::{
     BreakpointId, DomainError, ErrorCode, MessageId, MessageStage, Revision, RuntimeEpoch,
     SessionId,
@@ -6,6 +11,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 断点生命周期。
+///
+/// 除 `Pending` 外均为终态；终态断点不能再次处理。
 pub enum BreakpointState {
     Pending,
     Resolved,
@@ -14,6 +22,10 @@ pub enum BreakpointState {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 操作者对暂停报文作出的决定。
+///
+/// 不是每个决定都适用于请求和响应，例如响应阶段不能再创建 Mock 响应，具体兼容性
+/// 由 `Breakpoint::resolve` 在领域层统一校验。
 pub enum BreakpointDecision {
     ForwardOriginal,
     ForwardModified,
@@ -28,6 +40,9 @@ pub enum BreakpointDecision {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 一个可被并发安全处理的领域断点。
+///
+/// `revision` 用于拒绝界面基于旧数据提交的决定，`decision` 只在成功解决后出现。
 pub struct Breakpoint {
     pub id: BreakpointId,
     pub runtime_epoch: RuntimeEpoch,
@@ -64,6 +79,8 @@ impl Breakpoint {
         expected_revision: Revision,
         decision: BreakpointDecision,
     ) -> Result<Revision, DomainError> {
+        // 先检查版本，再检查状态和动作兼容性。顺序很重要：旧界面提交必须得到版本冲突，
+        // 不能覆盖或模糊掉另一个操作者已经完成的处理结果。
         self.revision.verify(expected_revision)?;
         if self.state != BreakpointState::Pending {
             return Err(self.resolved_error());

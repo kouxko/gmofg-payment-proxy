@@ -1,4 +1,7 @@
-//! Translation from domain rule actions into transport-runtime fault actions.
+//! 将领域规则动作翻译为传输运行时可执行的故障动作。
+//!
+//! 翻译保持规则声明顺序，并明确区分终止动作与可组合动作；无法表示或违反阶段边界的动作
+//! 返回配置错误，不能静默忽略。真正的延迟、断开和字节改写由 proxy crate 执行。
 //!
 //! This module is intentionally stateless. Keeping mutation/encoding and fault
 //! mapping separate from the pipeline coordinator makes the product boundary

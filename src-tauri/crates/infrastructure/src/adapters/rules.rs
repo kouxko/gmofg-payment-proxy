@@ -1,3 +1,8 @@
+//! 规则仓库适配器：校验、版本控制、导入导出与运行时命中数据持久化。
+//!
+//! 规则集合通过 revision/CAS 更新，避免并发编辑丢失；运行时使用不可变快照执行，持久化
+//! 命中计数失败不会反向篡改已经匹配过的网络消息。
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;

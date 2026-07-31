@@ -1,8 +1,7 @@
-//! Rule editing, validation, persistence, and fault-template use cases.
+//! 规则编辑、校验、持久化与故障模板用例。
 //!
-//! This module keeps rule-specific input parsing and mutation guards away
-//! from lifecycle, traffic, and settings workflows while preserving the
-//! stable [`Application`] API used by every presentation adapter.
+//! 规则输入解析和修改保护集中在这里，与生命周期、流量和设置流程隔离；所有展示适配器
+//! 仍通过稳定的 [`Application`] API 调用。
 
 use std::collections::BTreeMap;
 

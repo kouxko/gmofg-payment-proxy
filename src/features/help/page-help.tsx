@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * 当前页面的内置中文使用说明 Drawer。
+ *
+ * 帮助内容是静态教学文本，不参与任何业务判断。打开和关闭 Drawer 不导航、不
+ * 重载 WebView，也不会改变当前页面的选中项、表单草稿或 Rust 订阅。
+ */
+
 import { Accordion, Alert, Button, Drawer } from "@heroui/react";
 import { BookOpen } from "@gravity-ui/icons";
 import type { WorkspacePath } from "@/features/shell/workspace-navigation";

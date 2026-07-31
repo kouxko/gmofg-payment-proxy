@@ -1,3 +1,8 @@
+//! 拦截规则、校验与执行引擎。
+//!
+//! 规则由匹配条件和动作组成：修改、延迟等普通动作可组合；Mock、拒绝、断开等终止
+//! 动作会结束后续评估。本模块只做确定性计算，不进行网络、数据库或 UI 操作。
+
 use crate::{
     ChannelId, DomainError, ErrorCode, JsonPath, MessageStage, Revision, RuleId, RuntimeEpoch,
     TerminalIdentity,
@@ -9,11 +14,15 @@ use serde_json::Value;
 use specta::Type;
 use std::collections::HashMap;
 
+/// 一条规则组合允许累积的最大延迟：10 分钟。
 pub const MAX_TOTAL_DELAY_MS: u64 = 600_000;
+/// 限速动作允许设置的最高速率，防止异常输入导致计算溢出或无意义配置。
 pub const MAX_THROTTLE_BYTES_PER_SECOND: u64 = 100 * 1024 * 1024;
+/// 弱网动作处理的最大分块大小。
 pub const MAX_TRAFFIC_CHUNK_BYTES: u64 = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 规则可以读取的报文字段。
 pub enum MatchField {
     TerminalIp,
     CertificateFingerprint,
@@ -22,6 +31,7 @@ pub enum MatchField {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 字段值的比较方式。
 pub enum MatchOperator {
     Equals(String),
     Contains(String),
@@ -29,6 +39,9 @@ pub enum MatchOperator {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 一条规则中的单个匹配条件。
+///
+/// `NthHit` 按“规则 + 终端 IP + 客户端证书指纹”独立计数，不是全局第 N 条请求。
 pub enum MatchCondition {
     Field {
         field: MatchField,
@@ -56,6 +69,9 @@ pub enum JitterScope {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 会立即结束正常转发流程的动作。
+///
+/// 与普通 `RuleAction` 分开建模后，规则引擎能保证遇到终止动作便停止后续动作和规则。
 pub enum TerminalAction {
     RejectTlsHandshake,
     DisconnectBeforeUpstream,
@@ -94,6 +110,9 @@ pub enum TerminalAction {
 }
 
 impl TerminalAction {
+    /// 校验依赖当前 Body 长度的动作参数。
+    ///
+    /// 截断点或断连偏移必须落在 Body 内部；等于 Body 长度并不能制造“中途断开”。
     pub fn validate_for_body(&self, body_len: usize) -> Result<(), DomainError> {
         let (bytes, field, message) = match self {
             Self::TruncateResponse { bytes } => (*bytes, "bytes", "截断长度"),
@@ -119,6 +138,9 @@ impl TerminalAction {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 规则命中后执行的动作。
+///
+/// 枚举让所有可能行为显式可穷举，避免用字符串动作名在运行时才发现拼写错误。
 pub enum RuleAction {
     SetJsonField {
         path: String,
@@ -162,6 +184,7 @@ impl RuleAction {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 新建或编辑规则时提交的可变表单数据。
 pub struct RuleDraft {
     pub expected_revision: Option<Revision>,
     pub name: String,
@@ -177,6 +200,7 @@ pub struct RuleDraft {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 已保存并可参与执行的规则实体。
 pub struct Rule {
     pub id: RuleId,
     pub revision: Revision,
@@ -221,6 +245,10 @@ impl RuleSetSignature {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// runtime 读取规则时得到的一致性快照。
+///
+/// `collection_revision` 检测集合增删，`signature` 检测单条规则版本变化；两者共同防止
+/// 规则执行结果错误覆盖数据库中的并发编辑。
 pub struct RuleRuntimeSnapshot {
     pub collection_revision: u64,
     pub signature: RuleSetSignature,
@@ -280,6 +308,7 @@ impl Rule {
 }
 
 #[derive(Clone, Debug)]
+/// 评估一条报文所需的只读上下文。
 pub struct MatchContext<'a> {
     pub runtime_epoch: RuntimeEpoch,
     pub channel: ChannelId,
@@ -290,6 +319,7 @@ pub struct MatchContext<'a> {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 单条规则的评估轨迹，供抓包详情解释“为什么命中/未命中”。
 pub struct RuleTrace {
     pub rule_id: RuleId,
     pub matched: bool,
@@ -298,6 +328,7 @@ pub struct RuleTrace {
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 一次报文评估的完整结果。
 pub struct RuleEvaluation {
     pub traces: Vec<RuleTrace>,
     pub composed_actions: Vec<RuleAction>,
@@ -320,6 +351,10 @@ struct CounterKey {
 }
 
 #[derive(Clone, Debug, Default)]
+/// 纯内存、确定性的规则执行器。
+///
+/// 它持有运行期间的命中次数与第 N 次计数。持久化和并发提交由外层端口负责，规则引擎
+/// 本身不访问数据库，所以可以直接进行快速单元测试。
 pub struct RuleEngine {
     runtime_epoch: Option<RuntimeEpoch>,
     rules: Vec<Rule>,
@@ -342,6 +377,8 @@ impl RuleEngine {
     }
 
     pub fn restart(&mut self, runtime_epoch: RuntimeEpoch) {
+        // 代理重新启动代表一个新的运行周期。按需求，第 N 次命中和显示用命中次数都从
+        // 零开始，不能把上一次运行的数据带进新的监听器。
         self.runtime_epoch = Some(runtime_epoch);
         self.counters.clear();
         for rule in &mut self.rules {
@@ -350,8 +387,10 @@ impl RuleEngine {
         }
     }
 
-    /// Applies a fresh persisted rule snapshot while retaining per-terminal
-    /// Nth-hit counters for rules whose matching semantics remain unchanged.
+    /// 用最新持久化快照替换规则，同时尽可能保留仍然有效的终端计数。
+    ///
+    /// 匹配条件改变，或规则从关闭变为开启时必须清零；仅修改名称、说明等不影响匹配的
+    /// 字段则保留计数，避免无关编辑改变运行语义。
     pub fn reconcile(&mut self, rules: Vec<Rule>) {
         let reset_ids = rules
             .iter()
@@ -424,7 +463,8 @@ impl RuleEngine {
             self.restart(context.runtime_epoch);
         }
 
-        // ENGINE-002: this clone is the immutable rule snapshot for one message.
+        // 一条报文必须基于同一个不可变规则快照完成评估。先克隆再排序可避免 one-shot
+        // 规则在本轮中途被关闭后影响同一轮迭代，也避免外层并发更新造成顺序漂移。
         let mut snapshot = self.rules.clone();
         snapshot.sort_by_key(|rule| (rule.priority, rule.created_order, rule.id));
         let mut evaluation = RuleEvaluation::default();
@@ -448,6 +488,8 @@ impl RuleEngine {
                         executed.push(action.clone());
                         evaluation.composed_actions.push(action.clone());
                         if let RuleAction::Terminal(terminal) = action {
+                            // 终止动作之后的动作无执行意义；同时外层会据此跳过正常上游
+                            // 流程，所以必须在领域结果中单独记录。
                             evaluation.terminal_action = Some(terminal.clone());
                             break;
                         }
@@ -478,6 +520,8 @@ impl RuleEngine {
         }
 
         for id in hit_ids {
+            // 先完成整轮评估，再集中更新实体命中信息，避免下面的排序快照与实体集合在
+            // 同一轮中出现一半新、一半旧的可观察状态。
             if let Some(rule) = self.rules.iter_mut().find(|rule| rule.id == id) {
                 rule.hit_count = rule.hit_count.saturating_add(1);
                 rule.last_hit_at = Some(now);
@@ -528,6 +572,8 @@ impl RuleEngine {
     }
 
     fn matches_rule(&mut self, rule: &Rule, context: &MatchContext<'_>) -> Result<bool, String> {
+        // 普通字段必须先全部匹配，只有候选请求才推进第 N 次计数。否则无关流量也会消耗
+        // 次数，用户配置“路径 X 的第 3 次”就会得到难以理解的结果。
         for condition in rule
             .conditions
             .iter()
@@ -551,6 +597,8 @@ impl RuleEngine {
         }
 
         let key = CounterKey {
+            // 同一 IP 上不同客户端证书视为不同终端，既符合需求，也避免共享设备之间互相
+            // 消耗第 N 次计数。
             rule_id: rule.id,
             source_ip: context.terminal.source_ip.clone(),
             certificate_sha256: context.terminal.certificate_sha256.clone(),
@@ -561,6 +609,7 @@ impl RuleEngine {
     }
 }
 
+/// 完整校验规则草稿，并一次返回所有可定位的字段错误。
 pub fn validate_rule_draft(draft: &RuleDraft) -> Result<(), DomainError> {
     let mut error = DomainError::new(ErrorCode::RuleInvalid, "规则配置非法");
     if draft.name.trim().is_empty() {

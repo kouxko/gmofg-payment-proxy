@@ -1,3 +1,8 @@
+//! 依赖方向的“防回退”测试。
+//!
+//! 这些测试扫描 Cargo 元数据和源码，防止 Tauri、Payment 产品词汇或产品编码重新渗入
+//! 通用核心。它们证明的是静态架构边界，不证明运行时网络行为。
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 

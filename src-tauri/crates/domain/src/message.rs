@@ -1,3 +1,8 @@
+//! 网络报文的领域表示。
+//!
+//! 报文同时保留原始字节、可读文本、JSON 和 HTTP 元数据。原始字节用于未修改时完整
+//! 透传，文本/JSON 用于规则和人工编辑；二者不可随意混用，否则 Shift-JIS 下会丢数据。
+
 use crate::{DomainError, ErrorCode, MessageId, MessageState, Revision, RuntimeEpoch, SessionId};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -5,6 +10,7 @@ use specta::Type;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
 #[serde(try_from = "String", into = "String")]
+/// 产品通道的受校验稳定 ID。
 pub struct ChannelId(String);
 
 impl ChannelId {
@@ -68,6 +74,7 @@ impl std::fmt::Display for ChannelId {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 报文在代理管线中的方向/阶段。
 pub enum MessageStage {
     Request,
     Response,
@@ -89,6 +96,7 @@ pub struct Header {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 一份报文数据快照；`body` 始终是权威原始字节。
 pub struct MessageData {
     pub start_line: String,
     pub headers: Vec<Header>,
@@ -103,6 +111,7 @@ pub enum MessageChangeSource {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 对原始报文的不可变修改版本，用父版本形成审计链。
 pub struct MessageVersion {
     pub revision: Revision,
     pub source: MessageChangeSource,
@@ -112,6 +121,7 @@ pub struct MessageVersion {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 报文聚合根，保存原件、修改历史、状态和 revision。
 pub struct Message {
     pub id: MessageId,
     pub session_id: SessionId,

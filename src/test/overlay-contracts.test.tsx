@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证 HeroUI Modal/Drawer/AlertDialog 的触发器、Footer 安全边距和关闭合同。 */
+
 import "@testing-library/jest-dom/vitest";
 import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";

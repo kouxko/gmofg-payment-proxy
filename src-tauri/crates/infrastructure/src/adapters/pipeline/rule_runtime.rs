@@ -1,4 +1,8 @@
-//! Serialized rule evaluation and durable runtime metadata coordination.
+//! 串行化规则求值，并协调内存快照与持久化运行元数据。
+//!
+//! 单个互斥操作保证“读取快照、匹配、增加命中信息、CAS 持久化”的次序可解释；revision
+//! 冲突会重新加载或显式失败，不会覆盖用户刚编辑的规则。持久化错误与消息动作结果分层
+//! 处理，避免数据库故障导致已处理网络消息被重复执行。
 
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -66,6 +70,8 @@ impl RuleRuntimeService {
         stage: MessageStage,
         message: Option<&Message>,
     ) -> ProxyResult<EvaluatedRules> {
+        // 重试只处理 CAS 冲突：每次都恢复引擎检查点并重新读取持久化快照，不能直接重放
+        // 上一次 actions，否则 NthHit/一次性规则可能被消费两次。
         self.evaluate_with_retries(context, stage, message, 3)
     }
 

@@ -1,8 +1,8 @@
-//! Tokio/Hyper/rustls runtime for a configurable interception proxy.
+//! 基于 Tokio、Hyper 与 rustls 的可配置拦截代理运行时。
 //!
-//! The traits exported by this crate are deliberately application-neutral:
-//! application use-cases implement [`PipelinePorts`], while transport and time
-//! are injectable for deterministic tests.
+//! 对外 trait 刻意保持应用无关：应用用例实现 [`PipelinePorts`]，运行时只负责监听、TLS、
+//! HTTP/1 字节传输、取消与故障动作。绑定器、连接器和时间相关行为可替换，以便测试能
+//! 确定性验证生命周期，而无需真实支付上游。
 
 #![allow(clippy::missing_errors_doc, clippy::too_many_lines)]
 

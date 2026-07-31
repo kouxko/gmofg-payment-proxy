@@ -1,3 +1,8 @@
+//! 轻量确定性伪随机数，用于让同一规则种子产生可复现的抖动序列。
+//!
+//! 它不是密码学随机数，不能用于密钥、nonce 或安全令牌；零种子会被规范化，范围退化时
+//! 直接返回下界，避免取模异常。
+
 #[derive(Clone, Copy, Debug)]
 pub struct DeterministicRng {
     state: u64,

@@ -1,3 +1,8 @@
+//! 故障模板与当前故障配置的应用适配器。
+//!
+//! 这里校验并转换用户草稿，真正的逐消息执行留给代理 pipeline；配置错误不会改变正在
+//! 使用的规则快照。
+
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;

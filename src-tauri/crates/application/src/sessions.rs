@@ -1,3 +1,8 @@
+//! 内存会话仓储及容量淘汰策略。
+//!
+//! Payload 按需求只保存在内存。达到数量或字节上限时优先淘汰最旧的已完成会话；仍被
+//! 断点占用的会话不能为了腾空间而丢失。
+
 use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
@@ -9,6 +14,10 @@ use crate::{
     SessionSummaryViewModel, SortDirection,
 };
 
+/// 会话存储的最小业务接口。
+///
+/// 网络适配器通过 `upsert` 写入，展示用例通过其余方法读取。接口不要求数据库，因为
+/// Payload 明确只允许驻留内存。
 pub trait SessionStore: Send + Sync + std::fmt::Debug {
     fn upsert(&self, record: SessionRecord) -> AppResult<Vec<SessionId>>;
     fn get(&self, session_id: SessionId) -> AppResult<SessionDetailViewModel>;
@@ -22,6 +31,7 @@ pub trait SessionStore: Send + Sync + std::fmt::Debug {
 }
 
 #[derive(Debug)]
+/// 同时受数量上限和共享字节账本约束的内存实现。
 pub struct InMemorySessionStore {
     limits: RwLock<CapacityLimits>,
     state: RwLock<StoreState>,

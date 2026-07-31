@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+/** 验证故障模板选择和参数提交，不在前端重复测试故障引擎本身。 */
+
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

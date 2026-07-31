@@ -645,17 +645,9 @@ version = "1.0.0"
 name = "gmofg-proxy-product-payment"
 version = "1.0.0"
 dependencies = [
- "async-trait",
  "encoding_rs",
- "gmofg-proxy-infrastructure",
  "gmofg-proxy-product-api",
- "gmofg-proxy-runtime",
- "p12-keystore",
- "ring",
  "serde_json",
- "tokio",
- "tokio-util",
- "zeroize",
 ]
 
 [[package]]

@@ -1,5 +1,13 @@
 "use client";
 
+/**
+ * 实时抓包页面。
+ *
+ * 页面保存的只是筛选表单、暂停显示和当前选中行。筛选、排序、分页、游标、
+ * 报文解析与规则轨迹均由 Rust 完成。完整报文只在选中行时按 session_id 获取，
+ * 选择失效或关闭详情后立即释放前端引用。
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
@@ -53,10 +61,12 @@ export const captureDetailTabLabels = {
 } as const;
 
 export function ruleEditorHref(sessionId: string): string {
+  // 仅传递会话 ID；真正的预填规则由 Rust ruleCreateFromSession 生成。
   return `/rules?sessionId=${encodeURIComponent(sessionId)}`;
 }
 
 export function resumeCaptureQuery(query: CaptureQuery): CaptureQuery {
+  // 恢复时清除暂停游标并回到第一页，让 Rust 返回当前条件的完整可见快照。
   return {
     ...query,
     after_event_id: null,
@@ -89,6 +99,7 @@ export function CaptureView({
     { paused },
   );
   useEffect(() => {
+    // Rust 告知暂停游标已无法连续恢复时，退回一次完整快照，而不是伪造缺失行。
     if (!page.data?.snapshot_required || query.after_event_id == null) return;
     const task = window.setTimeout(() => {
       setQuery((current) => ({
@@ -103,6 +114,7 @@ export function CaptureView({
     (row) => row.event_id === selectedEventId,
   );
   useEffect(() => {
+    // 翻页、筛选或容量淘汰可能让原选中行消失；此时必须释放旧详情。
     if (selectedEventId == null || !page.data || selected) return;
     const task = window.setTimeout(() => setSelectedEventId(undefined), 0);
     return () => window.clearTimeout(task);
@@ -133,6 +145,7 @@ export function CaptureView({
   ).reduce((count, values) => count + values.length, 0);
 
   async function clearCurrentView() {
+    // “清空当前显示”只推进抓包游标，不删除 Rust 中的会话记录。
     if (!page.data || clearPending) return;
     setClearPending(true);
     try {
@@ -153,6 +166,7 @@ export function CaptureView({
   }
 
   function togglePaused() {
+    // 暂停只关闭事件驱动的列表刷新，不影响代理转发、规则或会话记录。
     if (!paused) {
       setPaused(true);
       return;

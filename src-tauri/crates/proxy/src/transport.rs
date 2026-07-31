@@ -1,4 +1,8 @@
-//! Injectable TCP, HTTP/1.1 and pipeline transport.
+//! 可替换的 TCP、HTTP/1.1 与 pipeline 传输实现。
+//!
+//! Hyper 负责语义解析，旁路 I/O wrapper 保留线上原始 head 字节；每条连接由监听任务拥有，
+//! 并受容量许可和取消令牌约束。读写、TLS、上游连接与故障注入各自有明确失败阶段，stop
+//! 会取消连接树并等待子任务，不能让旧 epoch 的任务继续写入。
 
 use std::fmt::{Debug, Formatter};
 use std::future::{Future, poll_fn};
@@ -1097,6 +1101,7 @@ fn traffic_schedule(
 
 #[derive(Debug, Clone)]
 pub struct ConnectionService {
+    // 这些 Arc 是一个 epoch 的不可变服务快照；每个连接只克隆所有权，不在处理中热换实现。
     pub acceptor: Arc<dyn ConnectionAcceptor>,
     pub upstream: Arc<dyn UpstreamConnector>,
     pub ports: Arc<dyn PipelinePorts>,
@@ -1144,6 +1149,10 @@ impl ConnectionAdmission {
 }
 
 impl ConnectionService {
+    /// 接受一个通道的连接，直到根取消令牌触发或 listener 本身失败。
+    ///
+    /// 容量许可从 accept 后、TLS 前开始计数，并由连接任务持有到完全退出；这样沉默握手
+    /// 也受全局上限约束。退出循环后仍会取消并 join 全部子任务，防止旧 epoch 泄漏。
     pub async fn run_listener(
         &self,
         listener: Arc<dyn BoundListener>,
