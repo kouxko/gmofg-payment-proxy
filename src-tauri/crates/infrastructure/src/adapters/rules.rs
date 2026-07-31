@@ -1270,6 +1270,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn multiple_new_rules_and_toggle_are_persisted_independently() {
+        let adapter = adapter();
+        let first = adapter
+            .save(request_delay_draft("规则一", false))
+            .await
+            .expect("create first rule");
+        let second = adapter
+            .save(request_delay_draft("规则二", true))
+            .await
+            .expect("create second rule");
+
+        let listed = adapter.list().await.expect("list both rules");
+        assert_eq!(listed.len(), 2);
+        assert!(listed.iter().any(|rule| rule.name == "规则一"));
+        assert!(listed.iter().any(|rule| rule.name == "规则二"));
+
+        adapter
+            .toggle(first.summary.rule_id, first.summary.revision, false)
+            .await
+            .expect("disable first rule");
+
+        let listed = adapter.list().await.expect("list after toggle");
+        assert_eq!(listed.len(), 2);
+        assert!(
+            !listed
+                .iter()
+                .find(|rule| rule.rule_id == first.summary.rule_id)
+                .expect("first rule remains")
+                .enabled
+        );
+        assert!(
+            listed
+                .iter()
+                .find(|rule| rule.rule_id == second.summary.rule_id)
+                .expect("second rule remains")
+                .enabled
+        );
+    }
+
+    #[tokio::test]
     async fn concurrent_same_revision_save_has_exactly_one_winner() {
         let adapter = adapter();
         let created = adapter
