@@ -348,9 +348,14 @@ export function RulesView() {
                         isDisabled={writePending || editorBlocked}
                         onChange={(enabled) => void toggle(rule, enabled)}
                       >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                          <span className="sr-only">
+                            {rule.enabled ? "停用规则" : "启用规则"}
+                          </span>
+                        </Switch.Content>
                       </Switch>
                     </Table.Cell>
                     <Table.Cell>{rule.priority}</Table.Cell>
@@ -541,10 +546,12 @@ export function RulesView() {
                     isSelected={draft.enabled}
                     onChange={(enabled) => updateDraft({ ...draft, enabled })}
                   >
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
-                    <Switch.Content>启用规则</Switch.Content>
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      <span>启用规则</span>
+                    </Switch.Content>
                   </Switch>
                   <Switch
                     aria-label="仅命中一次"
@@ -553,10 +560,12 @@ export function RulesView() {
                       updateDraft({ ...draft, one_shot })
                     }
                   >
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
-                    <Switch.Content>仅命中一次</Switch.Content>
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                      <span>仅命中一次</span>
+                    </Switch.Content>
                   </Switch>
                 </div>
               </Tabs.Panel>

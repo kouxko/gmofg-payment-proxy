@@ -15,9 +15,10 @@ import {
   Tabs,
   TextArea,
   TextField,
+  Tooltip,
   toast,
 } from "@heroui/react";
-import { Copy, SlidersVertical } from "@gravity-ui/icons";
+import { ArrowRotateRight, Copy } from "@gravity-ui/icons";
 import type {
   BreakpointActionOptionViewModel,
   BreakpointDecision,
@@ -260,16 +261,19 @@ export function BreakpointsView() {
           <h1 className="text-lg font-semibold">
             暂停队列 ({queue.data?.length ?? 0})
           </h1>
-          <Button
-            className="ml-auto"
-            isIconOnly
-            size="sm"
-            variant="ghost"
-            aria-label="刷新断点队列"
-            onPress={() => void queue.refresh()}
-          >
-            <SlidersVertical className="size-4" />
-          </Button>
+          <Tooltip delay={0}>
+            <Button
+              className="ml-auto"
+              isIconOnly
+              size="sm"
+              variant="ghost"
+              aria-label="刷新断点队列"
+              onPress={() => void queue.refresh()}
+            >
+              <ArrowRotateRight className="size-4" />
+            </Button>
+            <Tooltip.Content>刷新断点队列</Tooltip.Content>
+          </Tooltip>
         </div>
         <div className="space-y-3">
           {queue.error && (

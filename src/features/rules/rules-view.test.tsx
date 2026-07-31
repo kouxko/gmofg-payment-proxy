@@ -15,6 +15,7 @@ const commandMocks = vi.hoisted(() => ({
   ruleParseByteInput: vi.fn(),
   ruleActionDraft: vi.fn(),
   ruleSave: vi.fn(),
+  ruleToggle: vi.fn(),
 }));
 const queryMocks = vi.hoisted(() => ({
   listRefresh: vi.fn(),
@@ -135,6 +136,12 @@ describe("production RulesView async save guard", () => {
     });
     expect(oneShot).not.toBeChecked();
 
+    const oneShotContent = oneShot.closest('[data-slot="switch-content"]');
+    const oneShotControl = oneShotContent?.querySelector<HTMLElement>(
+      '[data-slot="switch-control"]',
+    );
+    expect(oneShotControl).toBeTruthy();
+    expect(oneShotContent).toContainElement(oneShotControl!);
     await user.click(oneShot);
 
     expect(oneShot).toBeChecked();
@@ -142,6 +149,57 @@ describe("production RulesView async save guard", () => {
     expect(commandMocks.ruleSave).toHaveBeenCalledWith(
       expect.objectContaining({ one_shot: true }),
     );
+  });
+
+  it("toggles the draft enabled state by clicking its visible HeroUI control", async () => {
+    commandMocks.ruleSave.mockImplementation(async (next: RuleDraft) => ({
+      summary,
+      draft: next,
+    }));
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    const enabled = await screen.findByRole("switch", {
+      name: "启用规则",
+    });
+    expect(enabled).toBeChecked();
+
+    const enabledContent = enabled.closest('[data-slot="switch-content"]');
+    const enabledControl = enabledContent?.querySelector<HTMLElement>(
+      '[data-slot="switch-control"]',
+    );
+    expect(enabledControl).toBeTruthy();
+    expect(enabledContent).toContainElement(enabledControl!);
+    await user.click(enabled);
+
+    expect(enabled).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "保存规则" }));
+    expect(commandMocks.ruleSave).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    );
+  });
+
+  it("toggles a saved rule by clicking the table switch control", async () => {
+    commandMocks.ruleToggle.mockResolvedValue({
+      summary: { ...summary, enabled: false, revision: 2 },
+      draft: { ...draft, enabled: false, expected_revision: 2 },
+    });
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    const tableSwitch = await screen.findByRole("switch", {
+      name: "停用规则 Mock",
+    });
+    const tableContent = tableSwitch.closest('[data-slot="switch-content"]');
+    const tableControl = tableContent?.querySelector<HTMLElement>(
+      '[data-slot="switch-control"]',
+    );
+    expect(tableControl).toBeTruthy();
+    expect(tableContent).toContainElement(tableControl!);
+    await user.click(tableSwitch);
+
+    expect(commandMocks.ruleToggle).toHaveBeenCalledWith("rule-1", 1, false);
+    expect(queryMocks.listRefresh).toHaveBeenCalled();
   });
 
   it("renders every generic product channel from the Rust bootstrap catalog", async () => {
