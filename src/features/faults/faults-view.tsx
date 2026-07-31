@@ -236,7 +236,7 @@ export function FaultsView() {
             <Table.ScrollContainer>
               <Table.Content
                 aria-label="故障模板"
-                className="min-w-[900px]"
+                className="min-w-[820px]"
                 selectionMode="single"
                 selectedKeys={effectiveSelectedId ? [effectiveSelectedId] : []}
                 onSelectionChange={(keys) => {
@@ -251,7 +251,6 @@ export function FaultsView() {
                   <Table.Column>影响端</Table.Column>
                   <Table.Column>默认参数</Table.Column>
                   <Table.Column>风险</Table.Column>
-                  <Table.Column>操作</Table.Column>
                 </Table.Header>
                 <Table.Body
                   renderEmptyState={() => (
@@ -290,15 +289,6 @@ export function FaultsView() {
                         >
                           {template.risk_text}
                         </Chip>
-                      </Table.Cell>
-                      <Table.Cell>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onPress={() => selectTemplate(template.template_id)}
-                        >
-                          配置
-                        </Button>
                       </Table.Cell>
                     </Table.Row>
                   ))}
