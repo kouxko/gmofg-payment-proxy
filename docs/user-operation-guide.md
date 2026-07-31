@@ -135,7 +135,9 @@ Proxy 负责：
 
 - 必须填写真实 GMO-FG Server 地址。
 - 不要填写 Proxy 自己的地址。
-- 使用完整 `https://` URL 和正确端口。
+- 使用 `https://主机:端口` 形式；可以带一个尾 `/`。
+- 不要填写路径、查询参数、fragment 或用户名密码。Proxy 会原样保留终端请求的
+  HTTP request-target，不会把配置 URL 的路径拼接进去。
 - 主机名必须与 GMO-FG Server 证书匹配。
 
 #### Host 头重写

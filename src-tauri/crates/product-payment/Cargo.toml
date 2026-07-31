@@ -4,18 +4,39 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+# Keeps the reusable Payment profile library independent from the concrete
+# proxy/storage stack. Enable this only when building the standalone real-device
+# diagnostic binary.
+real-device-tool = [
+    "dep:async-trait",
+    "dep:gmofg-proxy-infrastructure",
+    "dep:gmofg-proxy-runtime",
+    "dep:p12-keystore",
+    "dep:ring",
+    "dep:tokio",
+    "dep:tokio-util",
+    "dep:zeroize",
+]
+
+[[bin]]
+name = "real-device-dll-proxy"
+path = "src/bin/real-device-dll-proxy.rs"
+required-features = ["real-device-tool"]
+
 [dependencies]
-async-trait.workspace = true
+async-trait = { workspace = true, optional = true }
 encoding_rs.workspace = true
-gmofg-proxy-infrastructure = { path = "../infrastructure" }
+gmofg-proxy-infrastructure = { path = "../infrastructure", optional = true }
 gmofg-proxy-product-api = { path = "../product-api" }
-gmofg-proxy-runtime = { path = "../proxy" }
-p12-keystore.workspace = true
-ring.workspace = true
+gmofg-proxy-runtime = { path = "../proxy", optional = true }
+p12-keystore = { workspace = true, optional = true }
+ring = { workspace = true, optional = true }
 serde_json.workspace = true
-tokio.workspace = true
-tokio-util.workspace = true
-zeroize.workspace = true
+tokio = { workspace = true, optional = true }
+tokio-util = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true }
 
 [lints]
 workspace = true

@@ -16,8 +16,8 @@ use std::{
 };
 
 use gmofg_proxy_application::{
-    AppError, AppResult, Application, BreakpointCoordinator, BreakpointValidator, EventHub,
-    ProxyStatusViewModel, ProxySupervisorPort, SettingsRepositoryPort,
+    AppError, AppResult, Application, BreakpointCoordinator, BreakpointValidator, CapacityLedger,
+    EventHub, ProxyStatusViewModel, ProxySupervisorPort, SettingsRepositoryPort,
 };
 #[cfg(not(target_os = "macos"))]
 use gmofg_proxy_infrastructure::DpapiProtector;
@@ -150,11 +150,13 @@ impl ApplicationHostBuilder {
                 .data_dir
                 .join(self.product.storage().database_file_name),
         )?);
+        let capacity = Arc::new(CapacityLedger::default());
         let services = InfrastructureServiceBundle::new(
             store,
             self.platform.secret_protector,
             self.platform.file_dialog,
             Arc::clone(&self.product),
+            Arc::clone(&capacity),
         );
         let settings = services.settings.get().await?;
         services.sessions.set_limits(
@@ -165,7 +167,10 @@ impl ApplicationHostBuilder {
         let breakpoints = self
             .breakpoint_coordinator
             .unwrap_or_else(|| Arc::new(BreakpointCoordinator::default()));
-        let events = Arc::new(EventHub::new(EventHub::DEFAULT_CAPACITY));
+        let events = Arc::new(EventHub::with_capacity_ledger(
+            EventHub::DEFAULT_CAPACITY,
+            Arc::clone(&services.capacity),
+        ));
         let channel_labels = self
             .product
             .channels()

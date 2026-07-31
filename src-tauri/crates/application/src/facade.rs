@@ -1219,7 +1219,7 @@ fn validate_settings_locally(draft: &SettingsDraft) -> SettingsValidationViewMod
                 push_error(
                     &mut field_errors,
                     &format!("{prefix}.upstream_url"),
-                    "上游 URL 必须是包含主机名的 HTTPS URL。",
+                    "上游 URL 必须是 HTTPS origin（仅主机和可选端口）。",
                 );
             }
         }

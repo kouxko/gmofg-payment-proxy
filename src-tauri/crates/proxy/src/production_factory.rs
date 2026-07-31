@@ -152,6 +152,21 @@ impl HttpsEndpoint {
                 "production upstream URL must use https",
             ));
         }
+        let has_userinfo = uri
+            .authority()
+            .is_some_and(|authority| authority.as_str().contains('@'));
+        let has_non_empty_request_target = uri
+            .path_and_query()
+            .is_some_and(|path_and_query| path_and_query.as_str() != "/");
+        // `http::Uri` does not retain a fragment, so inspect the original
+        // configuration string before accepting it as an origin.
+        let has_fragment = value.contains('#');
+        if has_userinfo || has_non_empty_request_target || has_fragment {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "production upstream URL must be an HTTPS origin without path, query, fragment, or userinfo",
+            ));
+        }
         let uri_host = uri.host().ok_or_else(|| {
             ProxyError::new(ErrorCode::ConfigInvalid, "upstream URL host is missing")
         })?;
@@ -230,12 +245,10 @@ mod tests {
 
     #[tokio::test]
     async fn endpoint_preserves_non_default_port_in_host_header() {
-        let endpoint = HttpsEndpoint::parse(
-            "https://127.0.0.1:18443/api",
-            std::time::Duration::from_secs(1),
-        )
-        .await
-        .unwrap();
+        let endpoint =
+            HttpsEndpoint::parse("https://127.0.0.1:18443", std::time::Duration::from_secs(1))
+                .await
+                .unwrap();
         assert_eq!(endpoint.server_name, "127.0.0.1");
         assert_eq!(endpoint.host_header, "127.0.0.1:18443");
         assert_eq!(endpoint.address.port(), 18_443);
@@ -244,12 +257,31 @@ mod tests {
     #[tokio::test]
     async fn endpoint_brackets_ipv6_host_header() {
         let endpoint =
-            HttpsEndpoint::parse("https://[::1]:18443/api", std::time::Duration::from_secs(1))
+            HttpsEndpoint::parse("https://[::1]:18443/", std::time::Duration::from_secs(1))
                 .await
                 .unwrap();
         assert_eq!(endpoint.server_name, "::1");
         assert_eq!(endpoint.host_header, "[::1]:18443");
         assert_eq!(endpoint.address.port(), 18_443);
+    }
+
+    #[tokio::test]
+    async fn production_endpoint_rejects_non_origin_urls_before_dns_resolution() {
+        for invalid in [
+            "https://127.0.0.1:18443/api",
+            "https://127.0.0.1:18443/?mode=test",
+            "https://127.0.0.1:18443?mode=test",
+            "https://127.0.0.1:18443/#fragment",
+            "https://user:secret@127.0.0.1:18443",
+        ] {
+            let result = HttpsEndpoint::parse(invalid, Duration::from_secs(1)).await;
+            assert!(
+                result.is_err(),
+                "runtime must reject upstream URL {invalid}, got {result:?}"
+            );
+            let error = result.unwrap_err();
+            assert_eq!(error.code, ErrorCode::ConfigInvalid.as_str(), "{invalid}");
+        }
     }
 
     #[tokio::test]

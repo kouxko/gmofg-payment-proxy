@@ -2,6 +2,11 @@ allowBuilds:
   esbuild: true
   sharp: false
   unrs-resolver: false
+overrides:
+  # Next 16.2.12 still pins vulnerable build-time versions. Keep these scoped
+  # to Next and remove them after a stable Next release adopts patched versions.
+  next>postcss: 8.5.23
+  next>sharp: 0.35.3
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver

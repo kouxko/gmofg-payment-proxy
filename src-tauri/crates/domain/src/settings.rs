@@ -179,16 +179,24 @@ fn validate_channel(channel: &ChannelSettings, error: &mut DomainError) {
         )
         .with_field_error(format!("{prefix}.port"), "端口必须大于 0");
     }
-    let url = channel.upstream_url.trim();
-    if !is_valid_https_upstream_url(url) {
+    if !is_valid_https_upstream_url(&channel.upstream_url) {
         *error = std::mem::replace(
             error,
             DomainError::new(ErrorCode::ConfigInvalid, "设置存在字段错误"),
         )
-        .with_field_error(format!("{prefix}.upstream_url"), "上游 URL 非法");
+        .with_field_error(
+            format!("{prefix}.upstream_url"),
+            "上游 URL 必须是 HTTPS origin（仅允许主机和可选端口）",
+        );
     }
 }
 
+/// Returns whether `value` is an HTTPS origin suitable for an upstream channel.
+///
+/// The proxy forwards each downstream request-target unchanged. Accepting a
+/// configured path, query, or fragment would therefore be misleading because
+/// it could not be combined with that request-target and would be discarded.
+/// A single trailing slash is accepted because it is the canonical empty path.
 #[must_use]
 pub fn is_valid_https_upstream_url(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("https://") else {
@@ -200,6 +208,9 @@ pub fn is_valid_https_upstream_url(value: &str) -> bool {
     let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = &rest[..authority_end];
     if authority.is_empty() || authority.contains('@') {
+        return false;
+    }
+    if !matches!(&rest[authority_end..], "" | "/") {
         return false;
     }
 
@@ -260,13 +271,13 @@ mod tests {
                     id: ChannelId::new("alpha").unwrap(),
                     enabled: true,
                     port: 20_001,
-                    upstream_url: "https://alpha.example.test/api".into(),
+                    upstream_url: "https://alpha.example.test".into(),
                 },
                 ChannelSettings {
                     id: ChannelId::new("beta").unwrap(),
                     enabled: true,
                     port: 20_002,
-                    upstream_url: "https://beta.example.test/api".into(),
+                    upstream_url: "https://beta.example.test/".into(),
                 },
             ],
             ..Settings::default()
@@ -302,7 +313,7 @@ mod tests {
     #[test]
     fn rejects_plain_http_upstream_urls() {
         let mut settings = valid_settings();
-        settings.channels[0].upstream_url = "http://alpha.example.test/api".into();
+        settings.channels[0].upstream_url = "http://alpha.example.test".into();
         let error = settings.validate().expect_err("http must be rejected");
         assert!(
             error
@@ -327,9 +338,58 @@ mod tests {
             );
         }
         assert!(is_valid_https_upstream_url(
-            "https://transaction.example.test:443/api?mode=test"
+            "https://transaction.example.test:443"
         ));
-        assert!(is_valid_https_upstream_url("https://[::1]:8443/api"));
+        assert!(is_valid_https_upstream_url("https://[::1]:8443/"));
+    }
+
+    #[test]
+    fn upstream_url_is_an_origin_and_cannot_discard_a_configured_request_target() {
+        for invalid in [
+            "https://example.test/api",
+            "https://example.test//",
+            "https://example.test/?mode=test",
+            "https://example.test?mode=test",
+            "https://example.test/#fragment",
+            "https://example.test#fragment",
+            "https://user:secret@example.test",
+            " https://example.test",
+            "https://example.test ",
+        ] {
+            assert!(
+                !is_valid_https_upstream_url(invalid),
+                "{invalid} must be rejected because downstream request-targets are preserved"
+            );
+        }
+
+        assert!(is_valid_https_upstream_url("https://example.test"));
+        assert!(is_valid_https_upstream_url("https://example.test/"));
+        assert!(is_valid_https_upstream_url("https://example.test:16627"));
+    }
+
+    #[test]
+    fn settings_save_rejects_non_origin_upstream_urls_without_mutating_stored_values() {
+        let mut stored = valid_settings();
+        let before = stored.clone();
+        let mut candidate = valid_settings();
+        candidate.channels[0].upstream_url = "https://alpha.example.test/base?mode=test".into();
+
+        let error = stored
+            .apply_draft(SettingsDraft {
+                expected_revision: Revision::INITIAL,
+                values: candidate,
+            })
+            .expect_err("a configured request target must not be silently discarded");
+
+        assert!(
+            error
+                .field_errors
+                .get("channels.alpha.upstream_url")
+                .is_some_and(|messages| messages.iter().any(|message| {
+                    message == "上游 URL 必须是 HTTPS origin（仅允许主机和可选端口）"
+                }))
+        );
+        assert_eq!(stored, before);
     }
 
     // ENGINE-008, SETTINGS-010

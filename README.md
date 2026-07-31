@@ -63,5 +63,13 @@ pnpm tauri build --bundles msi,nsis
 
 便携版依赖目标机器已有 Microsoft Edge WebView2 Runtime。证书密文使用
 DPAPI 当前用户范围保护，因此不能复制到另一 Windows 用户后继续解密。
-`.github/workflows/windows-release.yml` 会在 Windows runner 上生成 MSI、NSIS
-和便携 ZIP；正式分发前仍必须配置组织的 Windows 代码签名证书。
+`.github/workflows/windows-release.yml` 在分支构建时只编译并预热 Windows/Tauri
+缓存，不上传未签名二进制。只有 `v*` 标签构建才会上传 MSI、NSIS 和便携 ZIP；
+标签构建必须配置以下受保护的 GitHub Actions 值，否则 fail closed：
+
+- Secret `WINDOWS_CERTIFICATE`：组织 Authenticode PFX 的 Base64。
+- Secret `WINDOWS_CERTIFICATE_PASSWORD`：PFX 密码。
+- Variable `WINDOWS_TIMESTAMP_URL`：证书颁发机构提供的 RFC 3161 时间戳服务。
+
+Tauri 构建后，workflow 会在上传前验证应用 EXE、MSI 和 NSIS 的签名证书指纹及
+时间戳；便携 ZIP 只复制已验证签名的 EXE。

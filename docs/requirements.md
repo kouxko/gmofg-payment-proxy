@@ -330,6 +330,7 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | SETTINGS-015 | 网络设置包含“服务端证书 SAN”；首次配置时允许先保存合法网络/SAN 设置，再生成证书。尚无任何证书材料时 Rust 返回明确警告，但不得形成“必须先有证书才能保存 SAN、又必须先保存 SAN 才能生成证书”的循环依赖。 |
 | SETTINGS-016 | Rust 校验返回的绑定地址、SAN、端口、上游 URL、超时、Body 和容量错误显示在对应 HeroUI 字段下方，并标记字段无效。 |
 | SETTINGS-017 | Rust 在没有已保存 SAN 时根据操作系统路由选择探测首选本机 IPv4，并自动填入“服务端证书 SAN”。探测不得覆盖任何已保存的非空 SAN；离线、无可用路由或仅得到未指定、回环、链路本地、组播、广播地址时保持为空并允许用户手动填写。前端不得自行探测网卡或推断地址。 |
+| SETTINGS-018 | 上游 URL 是 HTTPS origin，只允许 scheme、主机和可选端口（可带单个尾 `/`）；不得包含 userinfo、路径、查询或 fragment。Proxy 保留下游 HTTP request-target，不得静默丢弃或拼接未建模的上游路径。 |
 
 ## 5. 跨页面状态与操作规则
 
@@ -544,7 +545,7 @@ ConnectionId
 | NFR-003 | 无规则、无断点时，Proxy 不得改变请求/响应 Body 字节。 |
 | NFR-004 | UI 批量推送周期为 100 毫秒或累计 200 条事件，以先到条件为准。 |
 | NFR-005 | Rust 使用独立关键事件队列和抓包批量队列；抓包队列溢出时允许合并已完成行，但不得丢失断点、状态和错误事件。 |
-| NFR-006 | UI 事件队列默认容量 4,096；发生溢出时发送 `ResourceWarning` 并要求页面重新查询快照。 |
+| NFR-006 | UI 补发日志默认最多保留 4,096 条；4,096 是计数上限而非无条件最小保留量。共享字节容量不足时 Rust 必须先缩短补发日志、再终止慢订阅，发送 `ResourceWarning` 并要求页面重新查询快照，且任何时刻不得超过总内存上限。 |
 | NFR-007 | Proxy 网络处理不得等待 WebView 完成渲染；UI 不在线时核心代理继续工作。 |
 | NFR-008 | Rust panic 不得跨越 Tauri Command 边界；可恢复错误统一转换为 `AppErrorViewModel`。 |
 | NFR-009 | 工具关闭时先停止新连接，再取消上游/延迟/断点任务，最后关闭数据库和窗口。 |
@@ -893,7 +894,7 @@ Result<ResponseViewModel, AppErrorViewModel>
 | `app_subscribe_events` | `after_event_id`、Tauri Channel | `SubscriptionAckViewModel` | 先补发游标后的事件，再发送增量事件；Ack 包含 `subscription_id`。 |
 | `app_unsubscribe_events` | `subscription_id` | `OperationResultViewModel` | 取消接收任务并通过 RAII 清理 subscriber、队列和逻辑字节计数。 |
 
-`UiEventHub` 的可补发事件日志保留最近 4,096 个事件。每个实时订阅者使用独立的有界发送队列，默认容量 512 个事件批次；订阅者队列溢出时只终止该订阅，在排空已经成功入队的事件后发送或记录 `SnapshotRequired`，不得阻塞网络管线，也不得删除 4,096 条补发日志。显式取消则立即结束接收。Channel 发送失败、Command 提前返回、任务取消和 receiver Drop 的所有路径均必须清理订阅槽位与等待事件逻辑字节。若 `after_event_id` 已过期，Rust 发送 `SnapshotRequired`，前端重新调用 `app_bootstrap`。
+`UiEventHub` 的可补发事件日志默认计数上限为最近 4,096 个事件；该数字不是必须保留的最低数量。`EventHub` 与 `InMemorySessionStore` 使用同一个 `CapacityLedger`，会话、补发日志、待批量抓包、实时订阅队列和订阅失败记录在实际保留前原子 reserve、删除或消费时 release，禁止通过周期性抽样副本同步容量。每个实时订阅者使用独立的有界发送队列，默认容量 512 个事件批次；队列或共享字节容量不足时立即终止并释放该慢订阅，发送或记录 `SnapshotRequired`，不得阻塞网络管线。共享容量不足时先淘汰最旧补发事件和失败记录，再终止慢订阅；不得淘汰活动会话或待处理断点，也不得在任何瞬间超过总字节上限。显式取消立即结束接收。Channel 发送失败、Command 提前返回、任务取消、receiver Drop 和应用关闭的所有路径均必须清理订阅槽位与逻辑字节。若 `after_event_id` 已过期，Rust 发送 `SnapshotRequired`，前端重新调用 `app_bootstrap`。
 
 ### 13.4 业务 Commands
 

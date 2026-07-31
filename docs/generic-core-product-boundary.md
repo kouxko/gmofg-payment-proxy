@@ -32,6 +32,9 @@ Tauri / future TUI / future CLI
 - `product-api` 只定义扩展契约。
 - `domain`、`application`、`runtime`、`infrastructure`、`host` 是通用 core。
 - `product-payment` 可以依赖 core 和 `product-api`。
+- `product-payment` 的默认库依赖仅允许产品契约、编解码和静态资产；需要
+  runtime、infrastructure、Tokio、PKCS12 的真机诊断入口必须放在显式
+  `real-device-tool` feature 后，不能污染其他产品复用的默认依赖图。
 - core 不得直接或间接依赖 `product-payment`。
 - Tauri 只选择并注入产品 Profile，不实现产品规则。
 
@@ -56,10 +59,20 @@ Tauri / future TUI / future CLI
 - 统一测试 Root CA、测试签名私钥、内置 Payment `server.crt`。
 - Payment 兼容 DTO 映射与真机 DLL 测试入口。
 
+真机入口属于产品验证工具，不属于产品 Profile 的库契约。构建方式：
+
+```bash
+cargo build \
+  -p gmofg-proxy-product-payment \
+  --features real-device-tool \
+  --bin real-device-dll-proxy
+```
+
 ## 强制架构测试
 
 - core crate 源码不得包含产品术语、固定端口或产品资产引用。
 - core 的 Cargo 依赖树不得包含 `product-payment`。
+- `product-payment` 默认依赖树不得包含 runtime、infrastructure 或真机探针依赖。
 - Runtime 使用 `alpha`、`beta`、`gamma` 三个任意通道完成启动和停止。
 - Host 使用不含 Payment 资产的 Test Profile 完成构建、查询和关闭。
 - Payment Profile 保持现有两个通道、端口、Shift-JIS 严格失败、Root CA 导出和默认上游 CA。
@@ -73,7 +86,8 @@ Tauri / future TUI / future CLI
 3. 将 Shift-JIS/JSON 解释迁出 domain/application/runtime。
 4. 将证书资产与产品证书文案迁入 `product-payment`。
 5. 将故障模板、请求分类和产品文案迁入 `product-payment`。
-6. 拆分 Runtime Pipeline 的通用桥接与产品解释职责。
+6. 拆分 Runtime Pipeline 的通用桥接与产品解释职责；规则动作转换和原始报文
+   投影分别放入无状态内部模块，协调器只编排连接、会话、断点和事件生命周期。
 7. 使用 Test Profile 证明 core 可独立运行。
 8. 使用 Payment Profile 黄金测试和真机矩阵证明兼容性。
 
