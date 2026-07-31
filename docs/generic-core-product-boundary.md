@@ -48,6 +48,32 @@ Tauri / future TUI / future CLI
 - 容量、分页、筛选、事件游标、SQLite、原子文件导出和平台密钥保护。
 - 证书生成、解析、PKCS12 解析和 X.509 校验 primitive；资产由产品层提供。
 
+## 可复用组合与内部职责
+
+所有展示层都从 `ApplicationHostBuilder` 进入。桌面 Tauri、未来 TUI/CLI
+或无 UI 测试只需要提供：
+
+1. 一个实现 `ProductProfile` 的产品配置；
+2. 文件选择和密钥保护等 `HostPlatformServices`；
+3. 可选的 `ProxySupervisorPort` 测试替身。
+
+Host 使用具名 `ApplicationDependencies` 注入代理、抓包、会话、断点、规则、
+故障、证书、设置、导出和事件端口。展示层只持有 `Application`，不直接获得
+数据库、TLS 私钥或 runtime 对象。
+
+`Application` 的公开命令契约保持为一个稳定 facade，内部按用例拆分：
+
+- `facade/traffic.rs`：抓包、会话和断点；
+- `facade/rules.rs`：规则编辑、校验、持久化和故障模板；
+- `facade/settings.rs`：设置校验、保存、重启和回滚事务；
+- `facade/validation.rs`：跨展示层一致的规范化值和字段错误；
+- `facade.rs`：应用启动/关闭、代理生命周期、证书和共享发布守卫。
+
+Runtime 侧的 `RuntimePipelineAdapter` 只保留 transport trait 适配和工作流编排。
+规则快照、命中计数、CAS 提交和冲突重试由内部 `RuleRuntimeService` 串行协调；
+HTTP/1 原始 Head 捕获和字节保持 I/O 位于 `transport/raw_http1.rs`。这些内部
+模块不改变公开 API，目的是让每个高风险状态机可以独立审查和测试。
+
 ## `product-payment` 所有权
 
 - `transaction` 与 `dll` 通道目录及中文显示名。

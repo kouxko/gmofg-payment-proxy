@@ -102,6 +102,11 @@ export function CaptureView({
   const selected = page.data?.rows.find(
     (row) => row.event_id === selectedEventId,
   );
+  useEffect(() => {
+    if (selectedEventId == null || !page.data || selected) return;
+    const task = window.setTimeout(() => setSelectedEventId(undefined), 0);
+    return () => window.clearTimeout(task);
+  }, [page.data, selected, selectedEventId]);
   const selectedId = selected?.session_id;
   const detail = useIpcQuery<CaptureDetailViewModel>(
     `capture-detail:${selectedId ?? "none"}`,

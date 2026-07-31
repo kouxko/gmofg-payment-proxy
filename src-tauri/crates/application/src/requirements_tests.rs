@@ -1118,17 +1118,19 @@ fn proxy_status(state: ProxyState) -> ProxyStatusViewModel {
 fn application_with_fake_ports(ports: Arc<FakePorts>) -> Application {
     Application::new(
         "Test Product".into(),
-        ports.clone(),
-        ports.clone(),
-        ports.clone(),
-        Arc::new(BreakpointCoordinator::default()),
-        ports.clone(),
-        ports.clone(),
-        ports.clone(),
-        ports.clone(),
-        ports.clone(),
-        ports,
-        Arc::new(EventHub::default()),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: Arc::new(BreakpointCoordinator::default()),
+            breakpoint_validation: ports.clone(),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            file_export: ports,
+            events: Arc::new(EventHub::default()),
+        },
     )
 }
 
@@ -1144,17 +1146,19 @@ async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
         .expect("register");
     let application = Application::new(
         "Test Product".into(),
-        ports.clone(),
-        ports.clone(),
-        ports.clone(),
-        coordinator,
-        Arc::new(breakpoint_validator()),
-        ports.clone(),
-        ports.clone(),
-        ports.clone(),
-        ports.clone(),
-        ports,
-        Arc::new(EventHub::default()),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: coordinator,
+            breakpoint_validation: Arc::new(breakpoint_validator()),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            file_export: ports,
+            events: Arc::new(EventHub::default()),
+        },
     );
 
     application
