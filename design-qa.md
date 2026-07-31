@@ -131,6 +131,37 @@
 
 final result: passed
 
+## 2026-07-31 故障模板整行选择配置
+
+### 对照证据
+
+- 源视觉真值：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-7e83febd-2e17-46ad-b0a8-c029fe43e410.png`
+- 最终打包应用：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/GMO-FG Payment Proxy Screenshot 2026-07-31 at 13.58.41.jpeg`
+- 并排比较输入：
+  `/tmp/gmofg-fault-row-selection-comparison.png`
+- 视口：macOS 打包应用窗口 1228×768。
+- 状态：Proxy 已停止，故障模拟页首次进入，第一条“自定义 HTTP 状态”已选中。
+
+### 调整与交互复验
+
+- 删除故障模板表格的“操作”列及每行“配置”按钮，减少重复操作入口。
+- 保留 HeroUI Table 单选行为，点击任意整行即可切换右侧配置面板。
+- 页面首次进入时默认选中第一条模板，并直接显示其配置表单。
+- 在打包应用中点击第二条“不连接上游并断开”，确认行选中状态和右侧标题同步切换；
+  随后恢复第一条选中，供用户直接检查。
+- 表格最小宽度由 900px 收紧至 820px，移除操作列后未出现额外空白或横向裁切。
+
+### 自动化与构建
+
+- 故障页定向测试：4 个全部通过。
+- TypeScript 与 ESLint 通过。
+- macOS `.app` 打包成功并已打开；完整 DMG 流程仍受既有
+  `bundle_dmg.sh` 打包阶段失败影响，不影响本次 `.app` 交互验收。
+
+final result: passed
+
 ## 2026-07-31 设置通道卡片二次修正
 
 ### 源视觉真值

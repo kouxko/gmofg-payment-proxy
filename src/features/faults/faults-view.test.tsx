@@ -117,6 +117,22 @@ describe("FaultsView", () => {
     });
   });
 
+  it("selects the first template by default and uses the row as the configuration action", () => {
+    render(<FaultsView />);
+
+    expect(
+      screen.getByRole("row", { name: /Mock Shift-JIS JSON/ }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("heading", {
+        name: "配置模板：Mock Shift-JIS JSON",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "配置" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("renders schema-driven fields and submits tagged typed defaults", async () => {
     const user = userEvent.setup();
     render(<FaultsView />);
