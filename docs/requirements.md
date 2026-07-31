@@ -187,13 +187,13 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | 编号 | 功能需求 |
 | --- | --- |
 | CAPTURE-001 | 页面实时显示经过 Proxy 的请求、响应和终态事件。 |
-| CAPTURE-002 | 表格显示毫秒时间、终端 IP、通道、方向、方法、路径/请求类型、结果、耗时、匹配规则和大小。 |
+| CAPTURE-002 | 表格显示毫秒时间、终端 IP、通道、方向、方法、路径/请求类型、已知的响应 HTTP 状态码、结果、耗时、匹配规则和大小；请求阶段尚无响应时显示空值。 |
 | CAPTURE-003 | 支持按关键字/请求 ID、终端 IP、通道、阶段、结果和规则筛选。 |
 | CAPTURE-004 | 筛选、排序和分页由 Rust 执行；前端不得在本地重新计算结果。 |
 | CAPTURE-005 | “暂停列表滚动”仅暂停 UI 更新，不暂停网络、规则、断点或会话记录。 |
 | CAPTURE-005A | 恢复列表滚动时由 Rust 返回当前筛选条件下的完整显示快照，不得把暂停游标永久写入查询而丢失暂停前仍可见的行。 |
 | CAPTURE-006 | 恢复滚动后，Rust 返回当前游标之后仍保留的事件；已淘汰事件不补发。 |
-| CAPTURE-007 | 选中一行后显示概览、请求、响应、TLS 状态、时间信息和规则轨迹；抓包详情不提供独立“原始字节”区域。 |
+| CAPTURE-007 | 选中一行后显示概览、完整请求 Header、完整响应 Header、响应 HTTP 状态码、请求/响应 Shift-JIS 解码 Body、TLS 状态、时间信息和规则轨迹；抓包详情不提供独立“原始字节”区域。 |
 | CAPTURE-008 | “转到断点”只对仍处于 `Pending` 的断点可用。 |
 | CAPTURE-009 | “基于此会话新建规则”由 Rust 生成预填的规则草稿，前端只负责打开规则编辑界面。 |
 | CAPTURE-010 | “清空当前显示”只重置抓包页面游标，不删除会话记录。 |
@@ -208,9 +208,9 @@ Proxy 作为测试环境中的双向 mTLS 中间代理，接收 Payment App 请�
 | SESSION-001 | 会话记录保存在 Rust 内存仓库，应用重启后清空。 |
 | SESSION-002 | 支持按关键字/请求 ID、终端 IP、通道、结果、规则和时间范围筛选。 |
 | SESSION-003 | Rust 执行筛选、排序、分页和总数计算，并返回分页 ViewModel。 |
-| SESSION-004 | 会话列表显示时间、终端、通道、方法、路径/请求类型、结果、耗时、规则和请求/响应大小。 |
+| SESSION-004 | 会话列表显示时间、终端、通道、方法、路径/请求类型、响应 HTTP 状态码、结果、耗时、规则和请求/响应大小。 |
 | SESSION-005 | 会话详情显示请求 ID、证书指纹、上游主机、双向 TLS、最终动作和分阶段耗时。 |
-| SESSION-006 | 请求、响应和规则轨迹按需获取；列表接口不得默认返回完整 Payload。 |
+| SESSION-006 | 完整请求 Header、完整响应 Header、响应 HTTP 状态码、请求/响应 Shift-JIS 解码 Body 和规则轨迹按需获取；列表接口不得默认返回完整 Payload。 |
 | SESSION-007 | 用户可以显式导出所选会话的原始 JSON 文件。 |
 | SESSION-008 | 导出前必须提示文件包含原始敏感数据，并由用户确认保存位置。 |
 | SESSION-009 | 用户可以清空全部已完成会话；待处理断点不得被清空。 |
@@ -565,6 +565,11 @@ ConnectionId
 | ARCH-007 | `host` crate 是唯一生产组合根，负责组装 `application`、`proxy`、`infrastructure`、后台事件任务和优雅关闭生命周期；不得依赖 Tauri、WebView 或 Next.js。 |
 | ARCH-008 | `domain`、`application`、`proxy`、`infrastructure` 和 `host` 必须能脱离 Tauri 独立构建及测试，并由自动化架构守卫禁止引入 Tauri 依赖。 |
 | ARCH-009 | Tauri、未来 TUI/CLI 和无 UI 集成测试必须调用同一个 `Arc<Application>` 用例门面；外层适配器仅注入应用数据目录、密钥保护和文件选择等平台端口。当前阶段只建立边界，不实现 TUI/CLI 产品入口。 |
+| ARCH-010 | Rust 后端分为通用代理核心与静态产品适配层。`domain`、`application`、`proxy`、`infrastructure` 和 `host` 不得固化 GMO-FG、Payment、DLL、D48、Shift-JIS、固定端口或产品证书资产；这些决策统一位于 `product-payment`。 |
+| ARCH-011 | 通用核心使用可序列化的 `ChannelId` 和数据驱动通道目录，不允许以枚举固定交易/DLL 两个通道；Runtime 必须能在测试中运行任意命名和任意数量的通道。 |
+| ARCH-012 | Body 文本编码、JSON 解释、请求分类、请求 ID 提取、产品文案、故障模板和证书资产通过 `ProductProfile` 注入；原始 HTTP 字节透传、HTTP Header/状态码、TLS、容量和弱网传输仍由通用核心负责。 |
+| ARCH-013 | `product-payment` 可以依赖通用核心扩展接口，通用核心不得直接或间接依赖 `product-payment`。Tauri、未来 TUI/CLI 和无 UI Payment 测试通过 `host` 注入同一个 Payment Profile。 |
+| ARCH-014 | 架构测试必须同时验证：core 无产品术语/资产、依赖方向、任意通道、无 Payment 资产的测试 Profile 可启动、Payment 默认值与 Shift-JIS 行为保持兼容。 |
 
 ### 11.2 项目结构
 
@@ -594,7 +599,9 @@ gmofg-payment-proxy/
         ├── application/
         ├── proxy/
         ├── infrastructure/
-        └── host/                     # UI 无关的生产组合根与生命周期
+        ├── product-api/               # 通用产品扩展接口，不含任何 Payment 实现
+        ├── product-payment/           # GMO-FG Payment 静态产品适配层
+        └── host/                      # UI 无关的生产组合根与生命周期
 ```
 
 ### 11.3 Rust crate 职责
@@ -619,7 +626,7 @@ gmofg-payment-proxy/
 - 使用 Tokio 管理异步监听、连接和取消。
 - 使用 Hyper 低层 HTTP/1.1 连接接口处理上下游 HTTP。
 - 使用 rustls / tokio-rustls 完成服务端和客户端 TLS 1.2 mTLS。
-- 使用 `encoding_rs::SHIFT_JIS` 完成严格解码和编码。
+- 保持 Body 原始字节并通过 `ProductProfile` 提供的 `BodyCodec` 执行可选文本/JSON 解释；不得内置任何产品编码。
 - 实现请求/响应处理管线、超时、断开检测和故障动作。
 - `traffic` 子模块实现确定性随机、调度配置和可取消的分块 `PacedBody`，供桌面 UI、未来 TUI/CLI 及无 UI 测试共同复用。
 - 不依赖 Tauri、Next.js 或 `application`；面向应用层的 Runtime 适配器位于 `infrastructure`，避免传输层向上依赖。
@@ -640,6 +647,20 @@ gmofg-payment-proxy/
 - 对外只暴露 `ApplicationHost` 生命周期以及 `Arc<Application>` 用例门面，不公开 SQLite、Listener、证书私钥或领域集合。
 - 不依赖 Tauri 或 Next.js，可由 Rust 单元/集成测试以及未来 TUI/CLI 直接构建。
 
+#### `product-api`
+
+- 定义 `ProductProfile`、`BodyCodec`、通道目录、证书资产策略、产品显示策略、请求分类和故障模板扩展接口。
+- 只定义通用契约和不可变配置数据，不包含 GMO-FG、Payment、DLL、D48、Shift-JIS、固定端口或嵌入式产品证书。
+- 不依赖 Tauri、SQLite、平台密钥库或具体产品实现。
+
+#### `product-payment`
+
+- 实现 GMO-FG Payment 的 `ProductProfile`。
+- 独占交易/DLL 通道 ID 与显示名、默认端口 `16627`/`16127`、Shift-JIS 严格编解码、Payment 请求分类、故障模板及产品中文文案。
+- 独占统一测试 Root CA、测试签名私钥和内置 Payment `server.crt` 资产；通用证书 primitive 只接收调用方提供的字节和策略。
+- 保留 Payment 兼容 DTO 映射和无 UI真机测试入口，但不实现 HTTP/TLS/SQLite/Tauri 基础能力。
+- 可以依赖通用核心提供的扩展接口；任何通用核心 crate 均不得反向依赖本 crate。
+
 #### `src-tauri`
 
 - 获取 Tauri 应用数据目录并实现原生文件选择端口，再调用 `host` 构建唯一 `ApplicationHost`。
@@ -658,7 +679,7 @@ gmofg-payment-proxy/
 | Hyper / hyper-util / http-body-util | HTTP/1.1 请求响应解析和低层连接控制。 |
 | rustls / tokio-rustls（ring） | TLS 1.2、双向 mTLS、WebPKI 信任链、SNI 与主机名校验。 |
 | rcgen / p12-keystore / x509-parser | P-256 CA/叶子证书、PKCS12 单身份提取、证书元数据及 KU/EKU/SAN 策略校验。 |
-| encoding_rs | Shift-JIS 严格解码与编码。 |
+| encoding_rs | 仅由 `product-payment` 用于 Shift-JIS 严格解码与编码。 |
 | serde / serde_json | 配置、规则、IPC 和 JSON 报文。 |
 | rusqlite | SQLite 事务、迁移和持久化。 |
 | windows | DPAPI 和 Windows 平台 API。 |
@@ -1158,7 +1179,7 @@ HeroUI v3 的实现约束：
 | DATA-001~012 | 会话与容量 | application repositories | session_*、ResourceWarning | TEST-CAPACITY、TEST-CONCURRENCY |
 | SECURITY-001~018 | 安全与文件 | infrastructure | certificate_*、session_export | TEST-STORAGE、TEST-EXPORT |
 | NFR-001~010 | 平台和性能 | 全体 | 全体 | Windows/macOS 验收、TEST-CONCURRENCY |
-| ARCH-001~009 | 架构边界 | workspace crates / host composition root | Tauri 仅调用 Application 门面；生成绑定 | TEST-HOST、TEST-BOUNDARY、TEST-BINDINGS |
+| ARCH-001~014 | 架构边界 | workspace crates / host composition root / product profile | Tauri 仅调用 Application 门面；生成绑定 | TEST-HOST、TEST-BOUNDARY、TEST-BINDINGS、TEST-PRODUCT-BOUNDARY |
 | FRONTEND-001~009 | Next.js 展示层 | frontend | ipc adapter；帮助无 IPC | TEST-UI、TEST-BOUNDARY、TEST-STATIC |
 | ACCEPT-001~013 | 桌面平台与 Payment 验收 | 全体 | 全体 | 安装、便携版、macOS、实机和安全验收记录 |
 
@@ -1182,7 +1203,7 @@ HeroUI v3 的实现约束：
 
 ### 18.2 变更控制
 
-- 本文档 v1.0.0 为首个实施基线；v1.0.1 修正 HeroUI v3 组件契约并明确容量与事件队列的可测试口径；v1.0.2 将 Windows 打包验收暂缓，并把真实设备 `2740072778` 的 DLL 代理单元测试设为新的第 8 步；v1.0.3 增加 macOS/Keychain 支持、首次设置与证书生成顺序、空密码 PKCS12、受限的旧式客户端信任锚兼容、正式 `.app` 防火墙验收以及紧凑应用壳和导航居中要求；v1.0.4 固化 Overlay Footer 安全边距、加载/失败/空状态、字段级错误、窄屏详情流程、宽表格滚动和缩放重排要求；v1.0.5 固化异步提交去重、详情请求竞态隔离、抓包暂停游标恢复、Rust 原子断点决策和 Rust Header 输入解析，并将 UI 合约、Rust fmt/clippy 纳入统一检查；v1.0.6 将断点可执行动作、规则字段/操作符默认值、故障默认值和设置 SAN 规范化收回 Rust，补充规则解析与 Bootstrap 迟到响应隔离，并改为抓包恢复时获取完整 Rust 显示快照；v1.0.7 将所有 Rust 规则草稿请求纳入统一保存门禁与代次淘汰，并要求异步字段结果函数式合并到最新动作，禁止回滚并发编辑；v1.0.8 增加八个业务页面的上下文使用说明 Drawer，固化详细操作范围、无刷新边界和静态展示职责；v1.0.9 禁止生产页面使用浏览器原生表单和日期时间控件，统一使用 HeroUI v3 compound 组件并加入静态边界扫描；v1.0.10 将完整 Rust 生产组装与后台生命周期移入无 Tauri 的 `host` crate，增加未来 TUI/CLI 和无 UI 实机测试可复用的 `Application` 门面边界及架构守卫，但暂不实现 TUI/CLI 入口；v1.0.11 固化 51 项无 UI 真机 DLL 规则矩阵、逐批 `D48` 恢复、证据哈希、安全清理和真实请求路径匹配边界。
+- 本文档 v1.0.0 为首个实施基线；v1.0.1 修正 HeroUI v3 组件契约并明确容量与事件队列的可测试口径；v1.0.2 将 Windows 打包验收暂缓，并把真实设备 `2740072778` 的 DLL 代理单元测试设为新的第 8 步；v1.0.3 增加 macOS/Keychain 支持、首次设置与证书生成顺序、空密码 PKCS12、受限的旧式客户端信任锚兼容、正式 `.app` 防火墙验收以及紧凑应用壳和导航居中要求；v1.0.4 固化 Overlay Footer 安全边距、加载/失败/空状态、字段级错误、窄屏详情流程、宽表格滚动和缩放重排要求；v1.0.5 固化异步提交去重、详情请求竞态隔离、抓包暂停游标恢复、Rust 原子断点决策和 Rust Header 输入解析，并将 UI 合约、Rust fmt/clippy 纳入统一检查；v1.0.6 将断点可执行动作、规则字段/操作符默认值、故障默认值和设置 SAN 规范化收回 Rust，补充规则解析与 Bootstrap 迟到响应隔离，并改为抓包恢复时获取完整 Rust 显示快照；v1.0.7 将所有 Rust 规则草稿请求纳入统一保存门禁与代次淘汰，并要求异步字段结果函数式合并到最新动作，禁止回滚并发编辑；v1.0.8 增加八个业务页面的上下文使用说明 Drawer，固化详细操作范围、无刷新边界和静态展示职责；v1.0.9 禁止生产页面使用浏览器原生表单和日期时间控件，统一使用 HeroUI v3 compound 组件并加入静态边界扫描；v1.0.10 将完整 Rust 生产组装与后台生命周期移入无 Tauri 的 `host` crate，增加未来 TUI/CLI 和无 UI 实机测试可复用的 `Application` 门面边界及架构守卫，但暂不实现 TUI/CLI 入口；v1.0.11 固化 51 项无 UI 真机 DLL 规则矩阵、逐批 `D48` 恢复、证据哈希、安全清理和真实请求路径匹配边界；v1.0.12 修正规则一次性开关的 HeroUI 点击区域，并要求抓包与会话详情完整显示请求/响应 Header 和响应 HTTP 状态码；v1.1.0 增加通用代理核心与 `product-payment` 静态产品适配层边界，要求通道、编码、证书资产、故障模板、请求分类和产品文案全部数据驱动，并由架构测试禁止 Payment 决策回流 core。
 - 需求变化必须新增或修改稳定需求 ID。
 - UI 变化必须同时更新对应图片、页面需求和追踪矩阵。
 - Rust Command/事件变化必须更新 IPC 章节和生成类型。

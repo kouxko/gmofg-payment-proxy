@@ -20,6 +20,7 @@ import {
 } from "@heroui/react";
 import { ArrowRotateLeft, FloppyDisk, Play } from "@gravity-ui/icons";
 import type {
+  ChannelSettingsDraft,
   FieldValidationViewModel,
   SettingsDraft,
   SettingsViewModel,
@@ -187,6 +188,19 @@ export function SettingsView() {
   }
 
   const effective = settings.data.effective;
+  function updateChannel(
+    currentDraft: SettingsDraft,
+    index: number,
+    update: Partial<ChannelSettingsDraft>,
+  ) {
+    setDraft({
+      ...currentDraft,
+      channels: currentDraft.channels.map((channel, channelIndex) =>
+        channelIndex === index ? { ...channel, ...update } : channel,
+      ),
+    });
+  }
+
   return (
     <section className="flex h-full flex-col">
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_440px] gap-4 overflow-hidden p-5 max-[1280px]:block max-[1280px]:overflow-auto">
@@ -245,94 +259,92 @@ export function SettingsView() {
                         }}
                       />
                       <p className="text-xs text-[var(--telemetry-muted)]">
-                        填写 Payment 实际连接 Proxy 使用的 LAN IP 或 DNS，多个值以逗号分隔。
+                        填写客户端实际连接 Proxy 使用的 LAN IP 或 DNS，多个值以逗号分隔。
                       </p>
                       {fieldError("leaf_sans") && (
                         <FieldError>{fieldError("leaf_sans")}</FieldError>
                       )}
                     </TextField>
-                    <div className="grid grid-cols-2 gap-4">
-                      <NumberField
-                        isInvalid={fieldError("transaction_port") != null}
-                        value={draft.transaction_port}
-                        minValue={1}
-                        maxValue={65535}
-                        onChange={(transaction_port) =>
-                          setDraft({ ...draft, transaction_port })
-                        }
-                      >
-                        <Label>交易端口</Label>
-                        <NumberField.Group className="w-full">
-                          <NumberField.DecrementButton />
-                          <NumberField.Input />
-                          <NumberField.IncrementButton />
-                        </NumberField.Group>
-                        {fieldError("transaction_port") && (
-                          <FieldError>
-                            {fieldError("transaction_port")}
-                          </FieldError>
-                        )}
-                      </NumberField>
-                      <NumberField
-                        isInvalid={fieldError("dll_port") != null}
-                        value={draft.dll_port}
-                        minValue={1}
-                        maxValue={65535}
-                        onChange={(dll_port) =>
-                          setDraft({ ...draft, dll_port })
-                        }
-                      >
-                        <Label>DLL 端口</Label>
-                        <NumberField.Group className="w-full">
-                          <NumberField.DecrementButton />
-                          <NumberField.Input />
-                          <NumberField.IncrementButton />
-                        </NumberField.Group>
-                        {fieldError("dll_port") && (
-                          <FieldError>{fieldError("dll_port")}</FieldError>
-                        )}
-                      </NumberField>
+                    <div className="space-y-3">
+                      {draft.channels.map((channel, index) => {
+                        const portField = `channels.${channel.id}.port`;
+                        const upstreamField =
+                          `channels.${channel.id}.upstream_url`;
+                        return (
+                          <Card
+                            key={channel.id}
+                            className="border border-[var(--telemetry-line)] shadow-sm"
+                          >
+                            <Card.Header className="flex items-center gap-3">
+                              <div>
+                                <Card.Title>{channel.display_name}</Card.Title>
+                                <Card.Description>
+                                  通道 ID：{channel.id}
+                                </Card.Description>
+                              </div>
+                              <Switch
+                                className="ml-auto"
+                                aria-label={`启用${channel.display_name}`}
+                                isSelected={channel.enabled}
+                                onChange={(enabled) =>
+                                  updateChannel(draft, index, { enabled })
+                                }
+                              >
+                                <Switch.Control>
+                                  <Switch.Thumb />
+                                </Switch.Control>
+                                <Switch.Content>
+                                  {channel.enabled ? "已启用" : "已禁用"}
+                                </Switch.Content>
+                              </Switch>
+                            </Card.Header>
+                            <Card.Content className="grid grid-cols-[minmax(180px,1fr)_minmax(0,2fr)] gap-4 max-[900px]:grid-cols-1">
+                              <NumberField
+                                isInvalid={fieldError(portField) != null}
+                                value={channel.port}
+                                minValue={1}
+                                maxValue={65535}
+                                onChange={(port) =>
+                                  updateChannel(draft, index, { port })
+                                }
+                              >
+                                <Label>监听端口</Label>
+                                <NumberField.Group className="w-full">
+                                  <NumberField.DecrementButton />
+                                  <NumberField.Input />
+                                  <NumberField.IncrementButton />
+                                </NumberField.Group>
+                                {fieldError(portField) && (
+                                  <FieldError>
+                                    {fieldError(portField)}
+                                  </FieldError>
+                                )}
+                              </NumberField>
+                              <TextField
+                                isInvalid={
+                                  fieldError(upstreamField) != null
+                                }
+                              >
+                                <Label>上游 URL</Label>
+                                <Input
+                                  value={channel.upstream_url}
+                                  onChange={(event) =>
+                                    updateChannel(draft, index, {
+                                      upstream_url: event.target.value,
+                                    })
+                                  }
+                                />
+                                {fieldError(upstreamField) && (
+                                  <FieldError>
+                                    {fieldError(upstreamField)}
+                                  </FieldError>
+                                )}
+                              </TextField>
+                            </Card.Content>
+                          </Card>
+                        );
+                      })}
                     </div>
-                    <TextField
-                      isInvalid={
-                        fieldError("upstream_transaction_url") != null
-                      }
-                    >
-                      <Label>上游交易 URL</Label>
-                      <Input
-                        value={draft.upstream_transaction_url}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            upstream_transaction_url: event.target.value,
-                          })
-                        }
-                      />
-                      {fieldError("upstream_transaction_url") && (
-                        <FieldError>
-                          {fieldError("upstream_transaction_url")}
-                        </FieldError>
-                      )}
-                    </TextField>
-                    <TextField
-                      isInvalid={fieldError("upstream_dll_url") != null}
-                    >
-                      <Label>上游 DLL URL</Label>
-                      <Input
-                        value={draft.upstream_dll_url}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            upstream_dll_url: event.target.value,
-                          })
-                        }
-                      />
-                      {fieldError("upstream_dll_url") && (
-                        <FieldError>
-                          {fieldError("upstream_dll_url")}
-                        </FieldError>
-                      )}
-                    </TextField>
                     <TextField>
                       <Label>TLS 版本</Label>
                       <Input value={settings.data.fixed_tls_version} readOnly />
@@ -516,14 +528,16 @@ export function SettingsView() {
                         <dl className="grid grid-cols-[120px_1fr] gap-y-2 text-sm">
                           <dt>绑定地址</dt>
                           <dd>{effective.bind_address}</dd>
-                          <dt>交易端口</dt>
-                          <dd>{effective.transaction_port}</dd>
-                          <dt>DLL 端口</dt>
-                          <dd>{effective.dll_port}</dd>
-                          <dt>上游交易 URL</dt>
-                          <dd className="break-all">
-                            {effective.upstream_transaction_url}
-                          </dd>
+                          {effective.channels.map((channel) => (
+                            <div key={channel.id} className="contents">
+                              <dt>{channel.display_name}</dt>
+                              <dd className="break-all">
+                                {channel.enabled
+                                  ? `${channel.port} · ${channel.upstream_url}`
+                                  : "已禁用"}
+                              </dd>
+                            </div>
+                          ))}
                           <dt>TLS 版本</dt>
                           <dd>{settings.data.fixed_tls_version}</dd>
                         </dl>

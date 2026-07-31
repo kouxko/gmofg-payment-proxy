@@ -5,6 +5,8 @@ mod native_dialog;
 use std::{error::Error, path::PathBuf, sync::Arc};
 
 use gmofg_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
+use gmofg_proxy_product_api::ProductProfile;
+use gmofg_proxy_product_payment::PaymentProductProfile;
 use specta_typescript::Typescript;
 use tauri::Manager;
 
@@ -24,8 +26,14 @@ pub fn export_bindings() -> Result<PathBuf, String> {
 fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
     let app_data_dir = app.path().app_data_dir()?;
     let dialog = Arc::new(TauriNativeFileDialog::new(app.handle().clone()));
+    let product = Arc::new(PaymentProductProfile::isolated_test_tool());
     let host = tauri::async_runtime::block_on(
-        ApplicationHostBuilder::new(app_data_dir, HostPlatformServices::production(dialog)).build(),
+        ApplicationHostBuilder::new(
+            app_data_dir,
+            HostPlatformServices::production(dialog, product.storage()),
+            product,
+        )
+        .build(),
     )?;
     Ok(AppState::new(host))
 }

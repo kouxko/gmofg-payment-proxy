@@ -1,7 +1,7 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
-use encoding_rs::SHIFT_JIS;
-use http::{HeaderName, HeaderValue, StatusCode};
+use gmofg_proxy_product_api::BodyCodec;
+use http::{HeaderName, HeaderValue};
 
 use crate::{
     AppError, AppResult, BreakpointDecision, BreakpointDecisionKind, BreakpointDetailViewModel,
@@ -10,27 +10,43 @@ use crate::{
 };
 
 /// Canonical Rust-side validator and normalizer for breakpoint edits.
-#[derive(Debug, Default)]
-pub struct BreakpointValidator;
+#[derive(Debug)]
+pub struct BreakpointValidator {
+    body_codec: Arc<dyn BodyCodec>,
+}
 
 impl BreakpointValidator {
+    #[must_use]
+    pub fn new(body_codec: Arc<dyn BodyCodec>) -> Self {
+        Self { body_codec }
+    }
+
     fn normalize_message(
+        &self,
         mut message: MessageContentViewModel,
     ) -> AppResult<MessageContentViewModel> {
+        if message
+            .http_status
+            .is_some_and(|status| !valid_http_status(status))
+        {
+            return Err(AppError::field(
+                "HTTP_STATUS_INVALID",
+                "HTTP 状态码无效。",
+                BTreeMap::from([(
+                    "message.http_status".into(),
+                    vec!["HTTP 状态码必须位于 100 到 599。".into()],
+                )]),
+            ));
+        }
         validate_headers(&message.headers)?;
         if let Some(text) = message.body_text.as_deref() {
-            let (encoded, _, had_errors) = SHIFT_JIS.encode(text);
-            if had_errors {
-                return Err(AppError::field(
-                    "SHIFT_JIS_ENCODE_FAILED",
-                    "报文包含 Shift-JIS 无法表示的字符。",
-                    BTreeMap::from([(
-                        "message.body_text".into(),
-                        vec!["包含无法使用 Shift-JIS 编码的字符。".into()],
-                    )]),
-                ));
-            }
-            message.body_bytes = encoded.into_owned();
+            message.body_bytes = self.body_codec.encode(text).map_err(|error| {
+                AppError::field(
+                    error.code,
+                    "报文正文无法使用当前产品编码器进行无损编码。",
+                    BTreeMap::from([("message.body_text".into(), vec![error.message])]),
+                )
+            })?;
         }
         message.content_length = message.body_bytes.len();
         set_content_length(&mut message.headers, message.content_length);
@@ -50,8 +66,8 @@ impl BreakpointValidator {
         Ok(message)
     }
 
-    fn validate_message(message: &MessageContentViewModel) -> BreakpointValidationViewModel {
-        match Self::normalize_message(message.clone()) {
+    fn validate_message(&self, message: &MessageContentViewModel) -> BreakpointValidationViewModel {
+        match self.normalize_message(message.clone()) {
             Ok(normalized)
                 if normalized.body_bytes == message.body_bytes
                     && normalized.content_length == message.content_length
@@ -90,7 +106,7 @@ impl BreakpointValidationPort for BreakpointValidator {
                 .map_err(|error| AppError::new("JSON_INVALID", error.to_string()))?,
         );
         draft.message.json = Some(json);
-        draft.message = Self::normalize_message(draft.message)?;
+        draft.message = self.normalize_message(draft.message)?;
         Ok(draft)
     }
 
@@ -116,7 +132,16 @@ impl BreakpointValidationPort for BreakpointValidator {
                 "断点已更新，请重新加载后再编辑。",
             ));
         }
-        Ok(Self::validate_message(&draft.message))
+        let mut validation = self.validate_message(&draft.message);
+        if draft.message.start_line_bytes != detail.effective.start_line_bytes {
+            push_error(
+                &mut validation.field_errors,
+                "message.start_line_bytes",
+                "HTTP start-line 由 Rust 管理，不能通过断点编辑。",
+            );
+            validation.valid = false;
+        }
+        Ok(validation)
     }
 
     fn validate_decision(
@@ -124,11 +149,35 @@ impl BreakpointValidationPort for BreakpointValidator {
         detail: &BreakpointDetailViewModel,
         decision: &BreakpointDecision,
     ) -> AppResult<BreakpointValidationViewModel> {
-        Ok(validate_breakpoint_decision(detail, decision))
+        let mut validation = validate_breakpoint_decision_structure(detail, decision);
+        if matches!(
+            decision.kind,
+            BreakpointDecisionKind::ForwardModified | BreakpointDecisionKind::MockResponse
+        ) && let Some(message) = decision.message.as_ref()
+        {
+            merge_errors(
+                &mut validation.field_errors,
+                self.validate_message(message).field_errors,
+            );
+            validation.valid = validation.field_errors.is_empty();
+        }
+        if decision.kind == BreakpointDecisionKind::ForwardModified
+            && decision.message.as_ref().is_some_and(|message| {
+                message.start_line_bytes != detail.effective.start_line_bytes
+            })
+        {
+            push_error(
+                &mut validation.field_errors,
+                "message.start_line_bytes",
+                "HTTP start-line 由 Rust 管理，不能通过断点编辑。",
+            );
+            validation.valid = false;
+        }
+        Ok(validation)
     }
 }
 
-pub(crate) fn validate_breakpoint_decision(
+pub(crate) fn validate_breakpoint_decision_structure(
     detail: &BreakpointDetailViewModel,
     decision: &BreakpointDecision,
 ) -> BreakpointValidationViewModel {
@@ -148,12 +197,8 @@ pub(crate) fn validate_breakpoint_decision(
     }
     match decision.kind {
         BreakpointDecisionKind::ForwardModified | BreakpointDecisionKind::MockResponse => {
-            match decision.message.as_ref() {
-                Some(message) => {
-                    let validation = BreakpointValidator::validate_message(message);
-                    merge_errors(&mut errors, validation.field_errors);
-                }
-                None => push_error(&mut errors, "message", "该操作必须提供报文。"),
+            if decision.message.is_none() {
+                push_error(&mut errors, "message", "该操作必须提供报文。");
             }
         }
         BreakpointDecisionKind::Delay => {
@@ -171,8 +216,7 @@ pub(crate) fn validate_breakpoint_decision(
         BreakpointDecisionKind::CustomHttpStatus => {
             if decision
                 .http_status
-                .and_then(|value| StatusCode::from_u16(value).ok())
-                .is_none()
+                .is_none_or(|value| !valid_http_status(value))
             {
                 push_error(
                     &mut errors,
@@ -213,6 +257,10 @@ pub(crate) fn validate_breakpoint_decision(
         field_errors: errors,
         warnings: Vec::new(),
     }
+}
+
+const fn valid_http_status(status: u16) -> bool {
+    status >= 100 && status <= 599
 }
 
 fn validate_headers(headers: &BTreeMap<String, Vec<String>>) -> AppResult<()> {
@@ -339,12 +387,51 @@ fn merge_errors(target: &mut BTreeMap<String, Vec<String>>, source: BTreeMap<Str
 mod tests {
     use super::*;
     use chrono::Utc;
+    use gmofg_proxy_product_api::ProductError;
     use uuid::Uuid;
 
-    use crate::{BreakpointState, BreakpointSummaryViewModel, ChannelKind, UiTone};
+    use crate::{BreakpointState, BreakpointSummaryViewModel, ChannelId, UiTone};
+
+    #[derive(Debug)]
+    struct TestBodyCodec;
+
+    impl BodyCodec for TestBodyCodec {
+        fn id(&self) -> &'static str {
+            "test-prefix"
+        }
+
+        fn name(&self) -> &'static str {
+            "Test Prefix"
+        }
+
+        fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
+            let body = bytes.strip_prefix(&[0xFF]).unwrap_or(bytes);
+            String::from_utf8(body.to_vec())
+                .map_err(|error| ProductError::new("BODY_DECODE_FAILED", error.to_string()))
+        }
+
+        fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
+            if text.contains('🧪') {
+                return Err(ProductError::new(
+                    "BODY_ENCODE_FAILED",
+                    "test codec rejects the marker character",
+                ));
+            }
+            let mut encoded = vec![0xFF];
+            encoded.extend_from_slice(text.as_bytes());
+            Ok(encoded)
+        }
+    }
+
+    fn validator() -> BreakpointValidator {
+        BreakpointValidator::new(Arc::new(TestBodyCodec))
+    }
 
     fn message(text: &str) -> MessageContentViewModel {
         MessageContentViewModel {
+            http_status: None,
+            start_line_bytes: Vec::new(),
+            raw_headers: Vec::new(),
             headers: BTreeMap::from([("content-type".into(), vec!["application/json".into()])]),
             body_text: Some(text.into()),
             body_bytes: text.as_bytes().to_vec(),
@@ -363,7 +450,8 @@ mod tests {
                 stage,
                 title: String::new(),
                 terminal_ip: "127.0.0.1".into(),
-                channel: ChannelKind::Transaction,
+                channel: ChannelId::new("alpha").unwrap(),
+                channel_text: "Alpha".into(),
                 method: "POST".into(),
                 target: "/pay".into(),
                 waiting_since: Utc::now(),
@@ -382,16 +470,14 @@ mod tests {
     }
 
     #[test]
-    fn format_json_reencodes_shift_jis_and_recalculates_length() {
+    fn format_json_uses_injected_product_codec_and_recalculates_length() {
         let detail = detail(MessageStage::Request);
         let draft = BreakpointDraft {
             breakpoint_id: detail.summary.breakpoint_id,
             expected_revision: 1,
             message: message(r#"{"result":"承認"}"#),
         };
-        let formatted = BreakpointValidator
-            .format_json(draft)
-            .expect("format succeeds");
+        let formatted = validator().format_json(draft).expect("format succeeds");
         assert_eq!(
             formatted.message.content_length,
             formatted.message.body_bytes.len()
@@ -411,7 +497,7 @@ mod tests {
             message: message(r#"{"value":"🧪"}"#),
         };
         assert!(
-            !BreakpointValidator
+            !validator()
                 .validate(&detail, &draft)
                 .expect("validation")
                 .valid
@@ -428,13 +514,13 @@ mod tests {
             truncate_at: None,
         };
         assert!(
-            !BreakpointValidator
+            !validator()
                 .validate_decision(&detail, &decision)
                 .expect("validation")
                 .valid
         );
         assert!(
-            BreakpointValidator
+            validator()
                 .validate_decision(
                     &detail,
                     &BreakpointDecision {
@@ -445,5 +531,47 @@ mod tests {
                 .expect("zero position is valid")
                 .valid
         );
+    }
+
+    #[test]
+    fn rejects_start_line_edits_and_status_codes_above_the_http_contract() {
+        let detail = detail(MessageStage::Response);
+        let mut edited = detail.effective.clone();
+        edited.start_line_bytes = b"HTTP/1.1 200 OK\r\nX-Injected: value".to_vec();
+        let decision = BreakpointDecision {
+            breakpoint_id: detail.summary.breakpoint_id,
+            expected_revision: detail.summary.revision,
+            kind: BreakpointDecisionKind::ForwardModified,
+            message: Some(edited),
+            delay_ms: None,
+            http_status: None,
+            content_length_delta: None,
+            truncate_at: None,
+        };
+        let validation = validator()
+            .validate_decision(&detail, &decision)
+            .expect("validation");
+        assert!(!validation.valid);
+        assert!(
+            validation
+                .field_errors
+                .contains_key("message.start_line_bytes")
+        );
+
+        for status in [600, 700, 999] {
+            let validation = validator()
+                .validate_decision(
+                    &detail,
+                    &BreakpointDecision {
+                        kind: BreakpointDecisionKind::CustomHttpStatus,
+                        message: None,
+                        http_status: Some(status),
+                        ..decision.clone()
+                    },
+                )
+                .expect("status validation");
+            assert!(!validation.valid, "{status} must be rejected");
+            assert!(validation.field_errors.contains_key("http_status"));
+        }
     }
 }

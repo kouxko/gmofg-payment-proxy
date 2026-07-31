@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use uuid::Uuid;
 
-use crate::{Channel, Result};
+use crate::{ChannelId, Result};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ChannelRuntimeMetrics {
@@ -18,7 +18,7 @@ pub struct ChannelRuntimeMetrics {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RuntimeMetricsSnapshot {
-    pub channels: BTreeMap<Channel, ChannelRuntimeMetrics>,
+    pub channels: BTreeMap<ChannelId, ChannelRuntimeMetrics>,
     pub active_sessions: usize,
     pub pending_breakpoints: usize,
     pub logical_memory_bytes: u64,

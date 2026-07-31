@@ -1,0 +1,21 @@
+[package]
+name = "gmofg-proxy-product-payment"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+encoding_rs.workspace = true
+gmofg-proxy-infrastructure = { path = "../infrastructure" }
+gmofg-proxy-product-api = { path = "../product-api" }
+gmofg-proxy-runtime = { path = "../proxy" }
+p12-keystore.workspace = true
+ring.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+zeroize.workspace = true
+
+[lints]
+workspace = true

@@ -48,7 +48,7 @@ describe("page-specific usage guides", () => {
       screen.getByRole("dialog", { name: "代理控制台使用说明" }),
     ).toBeVisible();
     expect(screen.getByText("首次运行前的准备")).toBeVisible();
-    expect(screen.getByText("真实设备 DLL 链路的成功判定")).toBeVisible();
+    expect(screen.getByText("真实设备链路的成功判定")).toBeVisible();
     expect(window.location.href).toBe(documentUrl);
   });
 

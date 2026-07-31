@@ -1,14 +1,17 @@
-//! Transactional two-listener Tokio supervisor (`STATE-001` through `STATE-009`).
+//! Transactional multi-listener Tokio supervisor (`STATE-001` through `STATE-009`).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::net::SocketAddr;
 use std::panic::AssertUnwindSafe;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
 use futures_util::FutureExt;
+use serde::{Deserialize, Deserializer, Serialize};
 use tokio::sync::{Mutex, RwLock, mpsc};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -27,15 +30,100 @@ const SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_secs(5);
 #[cfg(test)]
 const SHUTDOWN_GRACE_PERIOD: Duration = Duration::from_millis(100);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum Channel {
-    Transaction,
-    Dll,
+/// Stable, product-neutral identifier for one configured proxy channel.
+///
+/// IDs are intentionally safe for logs, configuration keys and command-line
+/// arguments: 1-64 ASCII characters, beginning and ending with an
+/// alphanumeric character, with `-`, `_` and `.` allowed internally.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[serde(transparent)]
+pub struct ChannelId(String);
+
+impl ChannelId {
+    pub const MAX_LEN: usize = 64;
+
+    pub fn new(value: impl Into<String>) -> Result<Self> {
+        let value = value.into();
+        Self::validate(&value)?;
+        Ok(Self(value))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    fn validate(value: &str) -> Result<()> {
+        let valid_length = !value.is_empty() && value.len() <= Self::MAX_LEN;
+        let mut chars = value.chars();
+        let first = chars.next();
+        let last = value.chars().next_back();
+        let valid_edges = first.is_some_and(|character| character.is_ascii_alphanumeric())
+            && last.is_some_and(|character| character.is_ascii_alphanumeric());
+        let valid_characters = value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
+        if valid_length && valid_edges && valid_characters {
+            return Ok(());
+        }
+        Err(ProxyError::new(
+            ErrorCode::ConfigInvalid,
+            format!(
+                "invalid channel ID {value:?}; expected 1-{} ASCII letters, digits, '-', '_' or '.', with alphanumeric edges",
+                Self::MAX_LEN
+            ),
+        ))
+    }
+}
+
+impl AsRef<str> for ChannelId {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl fmt::Display for ChannelId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+impl FromStr for ChannelId {
+    type Err = ProxyError;
+
+    fn from_str(value: &str) -> Result<Self> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<String> for ChannelId {
+    type Error = ProxyError;
+
+    fn try_from(value: String) -> Result<Self> {
+        Self::new(value)
+    }
+}
+
+impl TryFrom<&str> for ChannelId {
+    type Error = ProxyError;
+
+    fn try_from(value: &str) -> Result<Self> {
+        Self::new(value)
+    }
+}
+
+impl<'de> Deserialize<'de> for ChannelId {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        Self::new(value).map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct ChannelConfig {
-    pub channel: Channel,
+    pub channel: ChannelId,
     pub enabled: bool,
     pub listen_addr: SocketAddr,
     pub upstream_url: String,
@@ -86,26 +174,21 @@ impl ProxyConfig {
                 "timeouts, body limit, and connection limit must be greater than zero",
             ));
         }
-        let transaction_count = self
+        let mut channel_ids = BTreeSet::new();
+        if self
             .channels
             .iter()
-            .filter(|channel| channel.channel == Channel::Transaction)
-            .count();
-        let dll_count = self
-            .channels
-            .iter()
-            .filter(|channel| channel.channel == Channel::Dll)
-            .count();
-        if transaction_count > 1 || dll_count > 1 {
+            .any(|channel| !channel_ids.insert(&channel.channel))
+        {
             return Err(ProxyError::new(
                 ErrorCode::ConfigInvalid,
                 "each channel may appear at most once",
             ));
         }
-        if enabled.len() == 2
-            && enabled[0].listen_addr.port() != 0
-            && enabled[0].listen_addr == enabled[1].listen_addr
-        {
+        let mut listen_addresses = BTreeSet::new();
+        if enabled.iter().any(|channel| {
+            channel.listen_addr.port() != 0 && !listen_addresses.insert(channel.listen_addr)
+        }) {
             return Err(ProxyError::new(
                 ErrorCode::ConfigInvalid,
                 "enabled channels cannot use the same listen address",
@@ -128,7 +211,7 @@ pub enum ProxyState {
 pub struct RuntimeSnapshot {
     pub state: ProxyState,
     pub runtime_epoch: Option<Uuid>,
-    pub listeners: BTreeMap<Channel, SocketAddr>,
+    pub listeners: BTreeMap<ChannelId, SocketAddr>,
     pub fault: Option<String>,
 }
 
@@ -189,7 +272,7 @@ impl Drop for CancelOnDrop {
 struct Lifecycle {
     state: ProxyState,
     epoch: Option<Uuid>,
-    listeners: BTreeMap<Channel, SocketAddr>,
+    listeners: BTreeMap<ChannelId, SocketAddr>,
     fault: Option<String>,
 }
 
@@ -198,7 +281,7 @@ struct Lifecycle {
 /// before the epoch becomes visible.
 #[async_trait]
 pub trait RuntimeServiceFactory: std::fmt::Debug + Send + Sync {
-    async fn build(&self, config: &ProxyConfig) -> Result<BTreeMap<Channel, ConnectionService>>;
+    async fn build(&self, config: &ProxyConfig) -> Result<BTreeMap<ChannelId, ConnectionService>>;
 }
 
 #[derive(Debug, Clone)]
@@ -208,7 +291,7 @@ struct StaticRuntimeServiceFactory {
 
 #[async_trait]
 impl RuntimeServiceFactory for StaticRuntimeServiceFactory {
-    async fn build(&self, config: &ProxyConfig) -> Result<BTreeMap<Channel, ConnectionService>> {
+    async fn build(&self, config: &ProxyConfig) -> Result<BTreeMap<ChannelId, ConnectionService>> {
         let mut service = self.service.clone();
         service.limits = config.limits;
         service.write_timeout = config.write_timeout;
@@ -218,7 +301,7 @@ impl RuntimeServiceFactory for StaticRuntimeServiceFactory {
             .channels
             .iter()
             .filter(|channel| channel.enabled)
-            .map(|channel| (channel.channel, service.clone()))
+            .map(|channel| (channel.channel.clone(), service.clone()))
             .collect())
     }
 }
@@ -369,7 +452,7 @@ impl SupervisorCore {
 
         // Pre-bind every enabled listener before spawning any task. Dropping this
         // local vector rolls back all earlier binds if a later bind fails.
-        let mut bound = Vec::<(Channel, Arc<dyn BoundListener>, SocketAddr)>::new();
+        let mut bound = Vec::<(ChannelId, Arc<dyn BoundListener>, SocketAddr)>::new();
         for channel in config.channels.iter().filter(|channel| channel.enabled) {
             let listener = match self.binder.bind(channel.listen_addr).await {
                 Ok(listener) => listener,
@@ -399,10 +482,10 @@ impl SupervisorCore {
                     return Err(proxy_error);
                 }
             };
-            bound.push((channel.channel, listener, local_addr));
+            bound.push((channel.channel.clone(), listener, local_addr));
         }
 
-        // Build both channel services before publishing a new epoch. Any
+        // Build every channel service before publishing a new epoch. Any
         // certificate/upstream failure therefore rolls back all bound sockets.
         let mut services = match self.service_factory.build(&config).await {
             Ok(services) => services,
@@ -418,7 +501,7 @@ impl SupervisorCore {
             let Some(service) = services.remove(&channel) else {
                 let error = ProxyError::new(
                     ErrorCode::ConfigInvalid,
-                    format!("runtime factory omitted {channel:?} service"),
+                    format!("runtime factory omitted {channel} service"),
                 );
                 let mut lifecycle = self.lifecycle.write().await;
                 lifecycle.state = ProxyState::Faulted;
@@ -435,14 +518,14 @@ impl SupervisorCore {
             .active_cancellation
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(cancellation.clone());
-        let (fatal_tx, mut fatal_rx) = mpsc::channel::<(Channel, ProxyError)>(prepared.len());
+        let (fatal_tx, mut fatal_rx) = mpsc::channel::<(ChannelId, ProxyError)>(prepared.len());
         let (listeners_ready_tx, listeners_ready_rx) = tokio::sync::watch::channel(false);
         let mut listener_tasks = Vec::with_capacity(prepared.len());
         let mut listener_addresses = BTreeMap::new();
         let fault_ports = Arc::clone(&prepared.first().expect("validated enabled channel").3.ports);
         let stopping_notified = Arc::new(StoppingNotification::default());
         for (channel, listener, local_addr, service) in prepared {
-            listener_addresses.insert(channel, local_addr);
+            listener_addresses.insert(channel.clone(), local_addr);
             let child_cancel = cancellation.child_token();
             let tx = fatal_tx.clone();
             let mut listeners_ready = listeners_ready_rx.clone();
@@ -455,7 +538,7 @@ impl SupervisorCore {
                 }
                 let outcome = AssertUnwindSafe(service.run_listener(
                     listener,
-                    channel,
+                    channel.clone(),
                     epoch,
                     child_cancel.clone(),
                 ))
@@ -468,12 +551,12 @@ impl SupervisorCore {
                     Ok(Err(error)) => error,
                     Ok(Ok(())) => ProxyError::new(
                         ErrorCode::Internal,
-                        format!("{channel:?} listener exited unexpectedly"),
+                        format!("{channel} listener exited unexpectedly"),
                     ),
                     Err(payload) => ProxyError::new(
                         ErrorCode::Internal,
                         format!(
-                            "{channel:?} listener panicked: {}",
+                            "{channel} listener panicked: {}",
                             panic_message(payload.as_ref())
                         ),
                     ),
@@ -718,7 +801,7 @@ async fn notify_runtime_stopping(
 async fn notify_runtime_fault(
     ports: &Arc<dyn PipelinePorts>,
     epoch: Uuid,
-    channel: Channel,
+    channel: ChannelId,
     error: &ProxyError,
 ) {
     let outcome = tokio::time::timeout(
@@ -771,7 +854,6 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
 
     use crate::fault::FaultAction;
-    use crate::message::Message;
     use crate::transport::{
         AcceptedConnection, BoxIo, ConnectionAcceptor, ForwardRequest, HandshakePolicy,
         NoopPipelinePorts, SystemClock, TokioListenerBinder, UpstreamConnector,
@@ -802,8 +884,9 @@ mod tests {
             &self,
             _request: ForwardRequest,
             _actions: &[FaultAction],
+            _informational: Option<&crate::transport::InformationalResponseSink>,
             _cancellation: &CancellationToken,
-        ) -> Result<Message> {
+        ) -> Result<crate::transport::UpstreamExchange> {
             unreachable!("the synthetic listeners never accept a connection")
         }
     }
@@ -821,20 +904,24 @@ mod tests {
         }
     }
 
+    fn channel_id(value: &str) -> ChannelId {
+        ChannelId::new(value).expect("valid test channel ID")
+    }
+
     fn test_config() -> ProxyConfig {
         ProxyConfig {
             channels: vec![
                 ChannelConfig {
-                    channel: Channel::Transaction,
+                    channel: channel_id("alpha"),
                     enabled: true,
                     listen_addr: "127.0.0.1:0".parse().unwrap(),
-                    upstream_url: "http://transaction.test/".into(),
+                    upstream_url: "http://alpha.test/".into(),
                 },
                 ChannelConfig {
-                    channel: Channel::Dll,
+                    channel: channel_id("beta"),
                     enabled: true,
                     listen_addr: "127.0.0.1:0".parse().unwrap(),
-                    upstream_url: "http://dll.test/".into(),
+                    upstream_url: "http://beta.test/".into(),
                 },
             ],
             limits: MessageLimits::default(),
@@ -845,6 +932,93 @@ mod tests {
             rewrite_host: true,
             leaf_sans: vec!["localhost".into()],
         }
+    }
+
+    #[test]
+    fn channel_id_accepts_safe_product_neutral_values() {
+        for value in ["alpha", "beta-v2", "gamma_3", "region.eu"] {
+            assert_eq!(channel_id(value).as_str(), value);
+        }
+        for value in ["", "-alpha", "alpha-", "alpha/beta", "日本語"] {
+            let error = ChannelId::new(value).expect_err("unsafe channel ID is rejected");
+            assert_eq!(error.code, ErrorCode::ConfigInvalid.as_str());
+        }
+    }
+
+    #[test]
+    fn channel_id_serde_round_trip_preserves_validation() {
+        let original = channel_id("region.eu-2");
+        let json = serde_json::to_string(&original).expect("serialize channel ID");
+        assert_eq!(json, "\"region.eu-2\"");
+        assert_eq!(
+            serde_json::from_str::<ChannelId>(&json).expect("deserialize channel ID"),
+            original
+        );
+        assert!(serde_json::from_str::<ChannelId>("\"alpha/beta\"").is_err());
+    }
+
+    #[test]
+    fn config_rejects_duplicate_ids_and_nonzero_listen_addresses() {
+        let mut duplicate_id = test_config();
+        duplicate_id.channels.push(ChannelConfig {
+            channel: channel_id("alpha"),
+            enabled: false,
+            listen_addr: "127.0.0.1:0".parse().unwrap(),
+            upstream_url: String::new(),
+        });
+        assert_eq!(
+            duplicate_id.validate().unwrap_err().code,
+            ErrorCode::ConfigInvalid.as_str()
+        );
+
+        let mut duplicate_address = test_config();
+        duplicate_address.channels[0].listen_addr = "127.0.0.1:18080".parse().unwrap();
+        duplicate_address.channels.push(ChannelConfig {
+            channel: channel_id("gamma"),
+            enabled: true,
+            listen_addr: "127.0.0.1:18080".parse().unwrap(),
+            upstream_url: "http://gamma.test/".into(),
+        });
+        assert_eq!(
+            duplicate_address.validate().unwrap_err().code,
+            ErrorCode::ConfigInvalid.as_str()
+        );
+    }
+
+    #[tokio::test]
+    async fn starts_listens_and_stops_three_channels() {
+        let supervisor = ProxySupervisor::new(
+            Arc::new(TokioListenerBinder),
+            test_service(Arc::new(NoopPipelinePorts)),
+        );
+        let mut config = test_config();
+        config.channels.push(ChannelConfig {
+            channel: channel_id("gamma"),
+            enabled: true,
+            listen_addr: "127.0.0.1:0".parse().unwrap(),
+            upstream_url: "http://gamma.test/".into(),
+        });
+
+        let started = supervisor
+            .start(config)
+            .await
+            .expect("start three channels");
+        assert_eq!(started.state, ProxyState::Running);
+        assert_eq!(started.listeners.len(), 3);
+        for expected in ["alpha", "beta", "gamma"] {
+            let address = started
+                .listeners
+                .get(&channel_id(expected))
+                .expect("listener address exists");
+            assert_ne!(address.port(), 0);
+            tokio::net::TcpStream::connect(address)
+                .await
+                .expect("configured listener accepts connections");
+        }
+
+        let stopped = supervisor.stop().await.expect("stop three channels");
+        assert_eq!(stopped.state, ProxyState::Stopped);
+        assert!(stopped.listeners.is_empty());
     }
 
     #[derive(Debug)]
@@ -858,7 +1032,7 @@ mod tests {
         async fn build(
             &self,
             _config: &ProxyConfig,
-        ) -> Result<BTreeMap<Channel, ConnectionService>> {
+        ) -> Result<BTreeMap<ChannelId, ConnectionService>> {
             self.entered.notify_one();
             self.release.notified().await;
             Err(ProxyError::new(

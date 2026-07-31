@@ -1,7 +1,7 @@
 //! Injectable TCP, HTTP/1.1 and pipeline transport.
 
 use std::fmt::{Debug, Formatter};
-use std::future::Future;
+use std::future::{Future, poll_fn};
 use std::io;
 use std::net::SocketAddr;
 use std::pin::Pin;
@@ -20,16 +20,16 @@ use hyper::client::conn::http1 as client_http1;
 use hyper::server::conn::http1 as server_http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf, ReadHalf, WriteHalf};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, TryAcquireError};
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, TryAcquireError, mpsc};
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::fault::{self, FaultAction, ResponseDisposition};
-use crate::message::{self, Message, MessageLimits};
-use crate::supervisor::Channel;
+use crate::message::{Message, MessageLimits, RawHeader};
+use crate::supervisor::ChannelId;
 use crate::tls::ClientTlsAdapter;
 use crate::traffic::{
     IntermittentProfile, JitterProfile, PacedBody, PacedBodyError, ThrottleProfile,
@@ -40,6 +40,536 @@ use crate::{ErrorCode, ProxyError, Result};
 pub trait IoStream: AsyncRead + AsyncWrite + Unpin + Send {}
 impl<T> IoStream for T where T: AsyncRead + AsyncWrite + Unpin + Send {}
 pub type BoxIo = Box<dyn IoStream>;
+type SharedWriteHalf = Arc<StdMutex<WriteHalf<BoxIo>>>;
+
+struct SplitIo {
+    reader: ReadHalf<BoxIo>,
+    writer: SharedWriteHalf,
+}
+
+impl AsyncRead for SplitIo {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.reader).poll_read(context, buffer)
+    }
+}
+
+impl AsyncWrite for SplitIo {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let mut writer = self
+            .writer
+            .lock()
+            .expect("downstream HTTP writer mutex poisoned");
+        Pin::new(&mut *writer).poll_write(context, buffer)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let mut writer = self
+            .writer
+            .lock()
+            .expect("downstream HTTP writer mutex poisoned");
+        Pin::new(&mut *writer).poll_flush(context)
+    }
+
+    fn poll_shutdown(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let mut writer = self
+            .writer
+            .lock()
+            .expect("downstream HTTP writer mutex poisoned");
+        Pin::new(&mut *writer).poll_shutdown(context)
+    }
+}
+
+#[derive(Clone)]
+pub struct InformationalResponseSink {
+    writer: SharedWriteHalf,
+    write_timeout: Duration,
+}
+
+impl Debug for InformationalResponseSink {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("InformationalResponseSink")
+            .field("write_timeout", &self.write_timeout)
+            .finish_non_exhaustive()
+    }
+}
+
+impl InformationalResponseSink {
+    fn new(writer: SharedWriteHalf, write_timeout: Duration) -> Self {
+        Self {
+            writer,
+            write_timeout,
+        }
+    }
+
+    pub async fn publish(&self, head: Bytes, cancellation: &CancellationToken) -> Result<()> {
+        if informational_status(&head).is_none() {
+            return Err(ProxyError::new(
+                ErrorCode::Internal,
+                "only informational HTTP response heads may be published early",
+            ));
+        }
+        let writer = Arc::clone(&self.writer);
+        timeout_stage(
+            self.write_timeout,
+            cancellation,
+            async move {
+                let mut offset = 0usize;
+                while offset < head.len() {
+                    let written = poll_fn(|context| {
+                        let mut writer = writer
+                            .lock()
+                            .expect("downstream HTTP writer mutex poisoned");
+                        Pin::new(&mut *writer).poll_write(context, &head[offset..])
+                    })
+                    .await?;
+                    if written == 0 {
+                        return Err(io::Error::new(
+                            io::ErrorKind::WriteZero,
+                            "failed to write informational HTTP response head",
+                        ));
+                    }
+                    offset += written;
+                }
+                poll_fn(|context| {
+                    let mut writer = writer
+                        .lock()
+                        .expect("downstream HTTP writer mutex poisoned");
+                    Pin::new(&mut *writer).poll_flush(context)
+                })
+                .await
+            },
+            ErrorCode::Io,
+        )
+        .await?
+        .map_err(|error| ProxyError::io("write informational HTTP response downstream", &error))
+    }
+}
+
+#[derive(Debug, Default)]
+struct RawHttp1HeadCapture {
+    pending: Vec<u8>,
+    complete: Option<Bytes>,
+    informational: Vec<Bytes>,
+    skip_informational: bool,
+    limit_exceeded: bool,
+    captured_bytes: usize,
+}
+
+impl RawHttp1HeadCapture {
+    fn final_response() -> Self {
+        Self {
+            skip_informational: true,
+            ..Self::default()
+        }
+    }
+
+    fn record(&mut self, bytes: &[u8], max_bytes: usize) {
+        for byte in bytes {
+            if self.complete.is_some() || self.limit_exceeded {
+                return;
+            }
+            if self.captured_bytes == max_bytes {
+                self.limit_exceeded = true;
+                return;
+            }
+            self.pending.push(*byte);
+            self.captured_bytes += 1;
+            if self.pending.ends_with(b"\r\n\r\n") {
+                if self.skip_informational
+                    && captured_status(&self.pending).is_some_and(|status| {
+                        (100..200).contains(&status)
+                            && status != StatusCode::SWITCHING_PROTOCOLS.as_u16()
+                    })
+                {
+                    self.informational
+                        .push(Bytes::from(std::mem::take(&mut self.pending)));
+                } else {
+                    self.complete = Some(Bytes::from(std::mem::take(&mut self.pending)));
+                }
+            }
+        }
+    }
+
+    fn required_head(&self, direction: &str) -> Result<Bytes> {
+        if self.limit_exceeded {
+            return Err(ProxyError::new(
+                ErrorCode::HeaderLimitExceeded,
+                format!("{direction} HTTP/1 head exceeded the capture limit"),
+            ));
+        }
+        self.complete.clone().ok_or_else(|| {
+            ProxyError::new(
+                ErrorCode::HeaderLimitExceeded,
+                format!("{direction} HTTP/1 head was not captured completely"),
+            )
+        })
+    }
+
+    fn informational_heads(&self, direction: &str) -> Result<Vec<Bytes>> {
+        if self.limit_exceeded {
+            return Err(ProxyError::new(
+                ErrorCode::HeaderLimitExceeded,
+                format!("{direction} informational HTTP heads exceeded the capture limit"),
+            ));
+        }
+        Ok(self.informational.clone())
+    }
+}
+
+fn captured_status(head: &[u8]) -> Option<u16> {
+    let line_end = head.windows(2).position(|window| window == b"\r\n")?;
+    let start_line = std::str::from_utf8(&head[..line_end]).ok()?;
+    let mut parts = start_line.split_ascii_whitespace();
+    parts.next()?.starts_with("HTTP/").then_some(())?;
+    parts.next()?.parse().ok()
+}
+
+struct ReadRecordingIo {
+    inner: BoxIo,
+    capture: Arc<StdMutex<RawHttp1HeadCapture>>,
+    max_head_bytes: usize,
+}
+
+impl Debug for ReadRecordingIo {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ReadRecordingIo")
+            .field("inner", &"<IoStream>")
+            .field("max_head_bytes", &self.max_head_bytes)
+            .finish_non_exhaustive()
+    }
+}
+
+impl ReadRecordingIo {
+    fn new(
+        inner: BoxIo,
+        capture: Arc<StdMutex<RawHttp1HeadCapture>>,
+        max_head_bytes: usize,
+    ) -> Self {
+        Self {
+            inner,
+            capture,
+            max_head_bytes,
+        }
+    }
+
+    fn into_inner(self) -> BoxIo {
+        self.inner
+    }
+}
+
+impl AsyncRead for ReadRecordingIo {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let before = buffer.filled().len();
+        let result = Pin::new(&mut self.inner).poll_read(context, buffer);
+        if matches!(result, Poll::Ready(Ok(()))) {
+            let filled = buffer.filled();
+            if filled.len() > before {
+                self.capture
+                    .lock()
+                    .expect("raw HTTP head capture mutex poisoned")
+                    .record(&filled[before..], self.max_head_bytes);
+            }
+        }
+        result
+    }
+}
+
+impl AsyncWrite for ReadRecordingIo {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write(context, buffer)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush(context)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown(context)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored()
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffers: &[io::IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write_vectored(context, buffers)
+    }
+}
+
+struct RequestHeadPreservingIo {
+    inner: BoxIo,
+    generated_head: Vec<u8>,
+    canonical_head: Bytes,
+    canonical_offset: usize,
+    generated_head_complete: bool,
+}
+
+impl Debug for RequestHeadPreservingIo {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("RequestHeadPreservingIo")
+            .field("canonical_head_bytes", &self.canonical_head.len())
+            .field("canonical_offset", &self.canonical_offset)
+            .field("generated_head_complete", &self.generated_head_complete)
+            .finish_non_exhaustive()
+    }
+}
+
+impl RequestHeadPreservingIo {
+    fn new(inner: BoxIo, canonical_head: Bytes) -> Self {
+        Self {
+            inner,
+            generated_head: Vec::new(),
+            canonical_head,
+            canonical_offset: 0,
+            generated_head_complete: false,
+        }
+    }
+
+    fn poll_flush_canonical(&mut self, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        while self.canonical_offset < self.canonical_head.len() {
+            let written = match Pin::new(&mut self.inner)
+                .poll_write(context, &self.canonical_head[self.canonical_offset..])
+            {
+                Poll::Ready(Ok(written)) => written,
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            };
+            if written == 0 {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "failed to write canonical HTTP request head",
+                )));
+            }
+            self.canonical_offset += written;
+        }
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl AsyncRead for RequestHeadPreservingIo {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(context, buffer)
+    }
+}
+
+impl AsyncWrite for RequestHeadPreservingIo {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        if self.generated_head_complete {
+            match self.poll_flush_canonical(context) {
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            }
+            return Pin::new(&mut self.inner).poll_write(context, buffer);
+        }
+
+        let mut consumed = 0usize;
+        for byte in buffer {
+            self.generated_head.push(*byte);
+            consumed += 1;
+            if self.generated_head.ends_with(b"\r\n\r\n") {
+                self.generated_head_complete = true;
+                // Only the generated HTTP head is replaced. Returning the
+                // prefix count makes Hyper retry any body suffix unchanged.
+                break;
+            }
+        }
+        Poll::Ready(Ok(consumed))
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.generated_head_complete {
+            match self.poll_flush_canonical(context) {
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+        Pin::new(&mut self.inner).poll_flush(context)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.generated_head_complete {
+            match self.poll_flush_canonical(context) {
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+        Pin::new(&mut self.inner).poll_shutdown(context)
+    }
+}
+
+struct ResponseHeadPreservingIo {
+    inner: BoxIo,
+    generated_head: Vec<u8>,
+    canonical_head: Arc<StdMutex<Option<Bytes>>>,
+    pending_head: Option<Bytes>,
+    canonical_offset: usize,
+    generated_head_complete: bool,
+    reset_after_flush: bool,
+}
+
+impl Debug for ResponseHeadPreservingIo {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ResponseHeadPreservingIo")
+            .field("canonical_offset", &self.canonical_offset)
+            .field("generated_head_complete", &self.generated_head_complete)
+            .finish_non_exhaustive()
+    }
+}
+
+impl ResponseHeadPreservingIo {
+    fn new(inner: BoxIo, canonical_head: Arc<StdMutex<Option<Bytes>>>) -> Self {
+        Self {
+            inner,
+            generated_head: Vec::new(),
+            canonical_head,
+            pending_head: None,
+            canonical_offset: 0,
+            generated_head_complete: false,
+            reset_after_flush: false,
+        }
+    }
+
+    fn poll_flush_canonical(&mut self, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.pending_head.is_none() {
+            let published = self
+                .canonical_head
+                .lock()
+                .expect("canonical HTTP response head mutex poisoned")
+                .clone();
+            self.pending_head.clone_from(&published);
+        }
+        let Some(canonical) = self.pending_head.clone() else {
+            return Poll::Ready(Err(io::Error::other(
+                "canonical HTTP response head was not published before write",
+            )));
+        };
+        while self.canonical_offset < canonical.len() {
+            let written = match Pin::new(&mut self.inner)
+                .poll_write(context, &canonical[self.canonical_offset..])
+            {
+                Poll::Ready(Ok(written)) => written,
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            };
+            if written == 0 {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::WriteZero,
+                    "failed to write canonical HTTP response head",
+                )));
+            }
+            self.canonical_offset += written;
+        }
+        if self.reset_after_flush {
+            self.generated_head.clear();
+            self.pending_head = None;
+            self.canonical_offset = 0;
+            self.generated_head_complete = false;
+            self.reset_after_flush = false;
+        }
+        Poll::Ready(Ok(()))
+    }
+}
+
+impl AsyncRead for ResponseHeadPreservingIo {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(context, buffer)
+    }
+}
+
+impl AsyncWrite for ResponseHeadPreservingIo {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        if self.generated_head_complete {
+            match self.poll_flush_canonical(context) {
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            }
+            if self.generated_head_complete {
+                return Pin::new(&mut self.inner).poll_write(context, buffer);
+            }
+        }
+
+        let mut consumed = 0usize;
+        for byte in buffer {
+            self.generated_head.push(*byte);
+            consumed += 1;
+            if self.generated_head.ends_with(b"\r\n\r\n") {
+                self.generated_head_complete = true;
+                if informational_status(&self.generated_head).is_some() {
+                    self.pending_head = Some(Bytes::copy_from_slice(&self.generated_head));
+                    self.reset_after_flush = true;
+                }
+                break;
+            }
+        }
+        Poll::Ready(Ok(consumed))
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.generated_head_complete {
+            match self.poll_flush_canonical(context) {
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+        Pin::new(&mut self.inner).poll_flush(context)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<io::Result<()>> {
+        if self.generated_head_complete {
+            match self.poll_flush_canonical(context) {
+                Poll::Ready(Ok(())) => {}
+                Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
+                Poll::Pending => return Poll::Pending,
+            }
+        }
+        Pin::new(&mut self.inner).poll_shutdown(context)
+    }
+}
 
 #[derive(Debug, Default)]
 struct RequestWriteTracker {
@@ -149,6 +679,9 @@ impl Body for TrackedRequestBody {
 struct TrackedIo {
     inner: BoxIo,
     tracker: Arc<RequestWriteTracker>,
+    response_head: Arc<StdMutex<RawHttp1HeadCapture>>,
+    informational_ready: mpsc::UnboundedSender<()>,
+    max_head_bytes: usize,
 }
 
 impl Debug for TrackedIo {
@@ -157,13 +690,26 @@ impl Debug for TrackedIo {
             .debug_struct("TrackedIo")
             .field("inner", &"<IoStream>")
             .field("tracker", &self.tracker)
-            .finish()
+            .field("max_head_bytes", &self.max_head_bytes)
+            .finish_non_exhaustive()
     }
 }
 
 impl TrackedIo {
-    fn new(inner: BoxIo, tracker: Arc<RequestWriteTracker>) -> Self {
-        Self { inner, tracker }
+    fn new(
+        inner: BoxIo,
+        tracker: Arc<RequestWriteTracker>,
+        response_head: Arc<StdMutex<RawHttp1HeadCapture>>,
+        informational_ready: mpsc::UnboundedSender<()>,
+        max_head_bytes: usize,
+    ) -> Self {
+        Self {
+            inner,
+            tracker,
+            response_head,
+            informational_ready,
+            max_head_bytes,
+        }
     }
 }
 
@@ -173,7 +719,28 @@ impl AsyncRead for TrackedIo {
         context: &mut Context<'_>,
         buffer: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_read(context, buffer)
+        let before = buffer.filled().len();
+        let result = Pin::new(&mut self.inner).poll_read(context, buffer);
+        if matches!(result, Poll::Ready(Ok(()))) {
+            let filled = buffer.filled();
+            if filled.len() > before {
+                let informational_before;
+                let informational_after;
+                {
+                    let mut response_head = self
+                        .response_head
+                        .lock()
+                        .expect("raw HTTP head capture mutex poisoned");
+                    informational_before = response_head.informational.len();
+                    response_head.record(&filled[before..], self.max_head_bytes);
+                    informational_after = response_head.informational.len();
+                }
+                if informational_after > informational_before {
+                    let _ = self.informational_ready.send(());
+                }
+            }
+        }
+        result
     }
 }
 
@@ -401,7 +968,7 @@ impl Clock for SystemClock {
 pub struct ConnectionContext {
     pub runtime_epoch: Uuid,
     pub connection_id: Uuid,
-    pub channel: Channel,
+    pub channel: ChannelId,
     pub peer_addr: SocketAddr,
     pub accepted_at: SystemTime,
     pub tls_peer: Option<TlsPeerIdentity>,
@@ -439,7 +1006,7 @@ pub trait PipelinePorts: HandshakePolicy {
         Ok(Vec::new())
     }
     async fn connection_closed(&self, _context: &ConnectionContext, _result: &Result<()>) {}
-    async fn runtime_fault(&self, _epoch: Uuid, _channel: Channel, _error: &ProxyError) {}
+    async fn runtime_fault(&self, _epoch: Uuid, _channel: ChannelId, _error: &ProxyError) {}
 }
 
 #[derive(Debug, Default)]
@@ -454,14 +1021,30 @@ pub struct ForwardRequest {
     pub message: Message,
 }
 
+#[derive(Debug, Clone)]
+pub struct UpstreamExchange {
+    pub informational_heads: Vec<Bytes>,
+    pub final_response: Message,
+}
+
+impl From<Message> for UpstreamExchange {
+    fn from(final_response: Message) -> Self {
+        Self {
+            informational_heads: Vec::new(),
+            final_response,
+        }
+    }
+}
+
 #[async_trait]
 pub trait UpstreamConnector: Debug + Send + Sync {
     async fn send(
         &self,
         request: ForwardRequest,
         actions: &[FaultAction],
+        informational: Option<&InformationalResponseSink>,
         cancellation: &CancellationToken,
-    ) -> Result<Message>;
+    ) -> Result<UpstreamExchange>;
 }
 
 #[derive(Debug, Clone)]
@@ -485,8 +1068,9 @@ impl UpstreamConnector for HyperUpstreamConnector {
         &self,
         mut request: ForwardRequest,
         actions: &[FaultAction],
+        informational: Option<&InformationalResponseSink>,
         cancellation: &CancellationToken,
-    ) -> Result<Message> {
+    ) -> Result<UpstreamExchange> {
         wait_for_injected_timeout(actions, InjectedTimeoutStage::Connect, cancellation).await?;
 
         request
@@ -523,7 +1107,8 @@ impl UpstreamConnector for HyperUpstreamConnector {
                 self.write_timeout,
                 cancellation,
             )
-            .await;
+            .await
+            .map(UpstreamExchange::from);
         }
 
         let close_after_request_write = actions.iter().any(|action| {
@@ -536,7 +1121,7 @@ impl UpstreamConnector for HyperUpstreamConnector {
         });
         let inject_read_timeout = injected_timeout(actions, InjectedTimeoutStage::Read).is_some();
         if close_after_request_write || inject_read_timeout {
-            let wire_request = request.message.reconstruct_title_case_headers();
+            let wire_request = request.message.reconstruct();
             timeout_stage(
                 self.write_timeout,
                 cancellation,
@@ -579,10 +1164,13 @@ impl UpstreamConnector for HyperUpstreamConnector {
         send_http1_request(
             io,
             request,
-            schedule,
-            self.write_timeout,
-            self.read_timeout,
-            self.limits,
+            Http1ExchangeConfig {
+                schedule,
+                write_timeout: self.write_timeout,
+                read_timeout: self.read_timeout,
+                limits: self.limits,
+            },
+            informational,
             cancellation,
         )
         .await
@@ -594,19 +1182,61 @@ enum WriteStageOutcome {
     Response(hyper::Result<Response<Incoming>>),
 }
 
-async fn send_http1_request(
-    io: BoxIo,
-    request: ForwardRequest,
+#[derive(Debug, Clone)]
+struct Http1ExchangeConfig {
     schedule: TrafficSchedule,
     write_timeout: Duration,
     read_timeout: Duration,
     limits: MessageLimits,
+}
+
+async fn publish_new_informational_heads(
+    response_head: &StdMutex<RawHttp1HeadCapture>,
+    published_count: &mut usize,
+    informational: Option<&InformationalResponseSink>,
     cancellation: &CancellationToken,
-) -> Result<Message> {
+) -> Result<()> {
+    let Some(informational) = informational else {
+        return Ok(());
+    };
+    let heads = response_head
+        .lock()
+        .expect("raw HTTP response head capture mutex poisoned")
+        .informational_heads("upstream response")?;
+    for head in heads.iter().skip(*published_count) {
+        informational.publish(head.clone(), cancellation).await?;
+    }
+    *published_count = heads.len();
+    Ok(())
+}
+
+async fn send_http1_request(
+    io: BoxIo,
+    request: ForwardRequest,
+    config: Http1ExchangeConfig,
+    informational: Option<&InformationalResponseSink>,
+    cancellation: &CancellationToken,
+) -> Result<UpstreamExchange> {
+    let Http1ExchangeConfig {
+        schedule,
+        write_timeout,
+        read_timeout,
+        limits,
+    } = config;
     let effective_write_timeout =
         write_timeout.saturating_add(schedule.estimated_delay(request.message.body.len()));
+    let canonical_head = message_wire_head(&request.message)?;
+    let io: BoxIo = Box::new(RequestHeadPreservingIo::new(io, canonical_head));
     let tracker = Arc::new(RequestWriteTracker::default());
-    let tracked_io = TrackedIo::new(io, tracker.clone());
+    let response_head = Arc::new(StdMutex::new(RawHttp1HeadCapture::final_response()));
+    let (informational_ready, mut informational_events) = mpsc::unbounded_channel();
+    let tracked_io = TrackedIo::new(
+        io,
+        tracker.clone(),
+        Arc::clone(&response_head),
+        informational_ready,
+        raw_head_capture_limit(limits),
+    );
     let mut http1 = client_http1::Builder::new();
     http1.title_case_headers(true);
     let (mut sender, connection) = http1
@@ -640,31 +1270,67 @@ async fn send_http1_request(
         *outgoing.headers_mut() = headers;
 
         let mut response_future = Box::pin(sender.send_request(outgoing));
+        let mut published_informational = 0usize;
         let write_outcome = timeout_stage(
             effective_write_timeout,
             cancellation,
             async {
-                tokio::select! {
-                    response = &mut response_future => WriteStageOutcome::Response(response),
-                    () = tracker.wait_until_flushed() => WriteStageOutcome::Flushed,
+                loop {
+                    publish_new_informational_heads(
+                        &response_head,
+                        &mut published_informational,
+                        informational,
+                        cancellation,
+                    )
+                    .await?;
+                    tokio::select! {
+                        response = &mut response_future => {
+                            break Ok(WriteStageOutcome::Response(response));
+                        }
+                        () = tracker.wait_until_flushed() => {
+                            break Ok(WriteStageOutcome::Flushed);
+                        }
+                        Some(()) = informational_events.recv() => {}
+                    }
                 }
             },
             ErrorCode::UpstreamWriteTimeout,
         )
-        .await?;
+        .await??;
         let response = match write_outcome {
             WriteStageOutcome::Response(response) => response,
             WriteStageOutcome::Flushed => {
                 timeout_stage(
                     read_timeout,
                     cancellation,
-                    &mut response_future,
+                    async {
+                        loop {
+                            publish_new_informational_heads(
+                                &response_head,
+                                &mut published_informational,
+                                informational,
+                                cancellation,
+                            )
+                            .await?;
+                            tokio::select! {
+                                response = &mut response_future => break Ok(response),
+                                Some(()) = informational_events.recv() => {}
+                            }
+                        }
+                    },
                     ErrorCode::UpstreamReadTimeout,
                 )
-                .await?
+                .await??
             }
         }
         .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
+        publish_new_informational_heads(
+            &response_head,
+            &mut published_informational,
+            informational,
+            cancellation,
+        )
+        .await?;
 
         let (parts, body) = response.into_parts();
         let body = timeout_stage(
@@ -674,9 +1340,29 @@ async fn send_http1_request(
             ErrorCode::UpstreamReadTimeout,
         )
         .await??;
-        let message = Message::response(parts.status, &parts.headers, body);
+        let raw_head = response_head
+            .lock()
+            .expect("raw HTTP response head capture mutex poisoned")
+            .required_head("upstream response")?;
+        let message = Message::from_raw_http1_head(&raw_head, body)?;
+        if message.http_status() != Some(parts.status.as_u16()) {
+            return Err(ProxyError::new(
+                ErrorCode::Io,
+                "captured upstream HTTP status does not match Hyper's final response",
+            ));
+        }
         message.validate(limits)?;
-        Ok(message)
+        let informational_heads = response_head
+            .lock()
+            .expect("raw HTTP response head capture mutex poisoned")
+            .informational_heads("upstream response")?
+            .into_iter()
+            .skip(published_informational)
+            .collect();
+        Ok(UpstreamExchange {
+            informational_heads,
+            final_response: message,
+        })
     }
     .await;
 
@@ -700,7 +1386,7 @@ async fn send_scheduled_upstream_abort(
             "upstream disconnect offset must be smaller than request body",
         ));
     }
-    let wire = message.reconstruct_title_case_headers();
+    let wire = message.reconstruct();
     let header_end = wire
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
@@ -828,13 +1514,21 @@ pub struct ConnectionService {
     pub clock: Arc<dyn Clock>,
     pub admission: ConnectionAdmission,
     pub limits: MessageLimits,
-    /// Covers the inbound TLS handshake and the Payment App request body.
+    /// Covers the inbound TLS handshake and the downstream request body.
     pub read_timeout: Duration,
-    /// Covers each response write stage to the Payment App.
+    /// Covers each downstream response write stage.
     pub write_timeout: Duration,
 }
 
-/// Shared per-epoch admission control. Both channel listeners clone the same
+struct RequestWireState<'a> {
+    raw_request_head: &'a StdMutex<RawHttp1HeadCapture>,
+    canonical_response_head: &'a StdMutex<Option<Bytes>>,
+    informational_response_sink: &'a InformationalResponseSink,
+    raw_tail: &'a StdMutex<Option<Bytes>>,
+    intentional_wire_fault: &'a StdMutex<Option<IntentionalWireFault>>,
+}
+
+/// Shared per-epoch admission control. All channel listeners clone the same
 /// instance so their combined pre-handshake and active connection count stays
 /// within one configured capacity.
 #[derive(Debug, Clone)]
@@ -864,7 +1558,7 @@ impl ConnectionService {
     pub async fn run_listener(
         &self,
         listener: Arc<dyn BoundListener>,
-        channel: Channel,
+        channel: ChannelId,
         epoch: Uuid,
         cancellation: CancellationToken,
     ) -> Result<()> {
@@ -891,7 +1585,7 @@ impl ConnectionService {
                     let context = ConnectionContext {
                         runtime_epoch: epoch,
                         connection_id: Uuid::new_v4(),
-                        channel,
+                        channel: channel.clone(),
                         peer_addr,
                         accepted_at: self.clock.now(),
                         tls_peer: None,
@@ -952,6 +1646,19 @@ impl ConnectionService {
         let request_cancel = cancellation.clone();
         let raw_tail = Arc::new(StdMutex::new(None::<Bytes>));
         let handler_tail = Arc::clone(&raw_tail);
+        let raw_request_head = Arc::new(StdMutex::new(RawHttp1HeadCapture::default()));
+        let handler_request_head = Arc::clone(&raw_request_head);
+        let canonical_response_head = Arc::new(StdMutex::new(None::<Bytes>));
+        let handler_response_head = Arc::clone(&canonical_response_head);
+        let (reader, writer) = tokio::io::split(io);
+        let shared_writer = Arc::new(StdMutex::new(writer));
+        let split_io: BoxIo = Box::new(SplitIo {
+            reader,
+            writer: Arc::clone(&shared_writer),
+        });
+        let informational_response_sink =
+            InformationalResponseSink::new(shared_writer, self.write_timeout);
+        let handler_informational_sink = informational_response_sink.clone();
         let intentional_wire_fault = Arc::new(StdMutex::new(None::<IntentionalWireFault>));
         let handler_wire_fault = Arc::clone(&intentional_wire_fault);
         let handler_error = Arc::new(StdMutex::new(None::<ProxyError>));
@@ -963,18 +1670,22 @@ impl ConnectionService {
             let context = context.clone();
             let cancellation = request_cancel.clone();
             let raw_tail = Arc::clone(&handler_tail);
+            let raw_request_head = Arc::clone(&handler_request_head);
+            let canonical_response_head = Arc::clone(&handler_response_head);
+            let informational_response_sink = handler_informational_sink.clone();
             let intentional_wire_fault = Arc::clone(&handler_wire_fault);
             let service_error = Arc::clone(&service_error);
             let response_write = Arc::clone(&handler_response_write);
             async move {
+                let wire = RequestWireState {
+                    raw_request_head: &raw_request_head,
+                    canonical_response_head: &canonical_response_head,
+                    informational_response_sink: &informational_response_sink,
+                    raw_tail: &raw_tail,
+                    intentional_wire_fault: &intentional_wire_fault,
+                };
                 let result = service
-                    .handle_request(
-                        request,
-                        &context,
-                        &cancellation,
-                        &raw_tail,
-                        &intentional_wire_fault,
-                    )
+                    .handle_request(request, &context, &cancellation, &wire)
                     .await;
                 if result.is_ok() {
                     response_write.mark_response_ready();
@@ -986,11 +1697,20 @@ impl ConnectionService {
                 })
             }
         });
+        let response_preserving_io: BoxIo = Box::new(ResponseHeadPreservingIo::new(
+            split_io,
+            canonical_response_head,
+        ));
+        let recording_io = ReadRecordingIo::new(
+            response_preserving_io,
+            raw_request_head,
+            raw_head_capture_limit(self.limits),
+        );
         let mut connection = Box::pin(
             server_http1::Builder::new()
                 .keep_alive(false)
                 .max_headers(self.limits.max_headers)
-                .serve_connection(TokioIo::new(io), handler)
+                .serve_connection(TokioIo::new(recording_io), handler)
                 .without_shutdown(),
         );
         let initial = tokio::select! {
@@ -1037,7 +1757,7 @@ impl ConnectionService {
                 ));
             }
         };
-        let mut io = parts.io.into_inner();
+        let mut io = parts.io.into_inner().into_inner();
         let tail = raw_tail.lock().expect("raw tail mutex poisoned").take();
         finish_downstream_write(
             &mut io,
@@ -1054,8 +1774,7 @@ impl ConnectionService {
         request: Request<Incoming>,
         context: &ConnectionContext,
         cancellation: &CancellationToken,
-        raw_tail: &StdMutex<Option<Bytes>>,
-        intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
+        wire: &RequestWireState<'_>,
     ) -> Result<Response<WireBody>> {
         let (parts, body) = request.into_parts();
         validate_headers(&parts.headers, self.limits)?;
@@ -1066,7 +1785,12 @@ impl ConnectionService {
             ErrorCode::Io,
         )
         .await??;
-        let mut message = Message::request(&parts.method, &parts.uri, &parts.headers, body);
+        let raw_head = wire
+            .raw_request_head
+            .lock()
+            .expect("raw HTTP request head capture mutex poisoned")
+            .required_head("downstream request")?;
+        let mut message = Message::from_raw_http1_head(&raw_head, body)?;
         message.validate(self.limits)?;
         let request_actions = self.ports.request(context, &mut message).await?;
 
@@ -1090,16 +1814,17 @@ impl ConnectionService {
                 FaultAction::MockResponse {
                     status,
                     headers,
-                    shift_jis_body,
+                    body,
                 } => {
-                    let message = fault::mock_response(*status, headers, shift_jis_body)?;
+                    let message = fault::mock_response(*status, headers, body.clone());
                     return response_from_disposition(
                         ResponseDisposition::Send {
                             message,
                             schedule: TrafficSchedule::default(),
                         },
-                        raw_tail,
-                        intentional_wire_fault,
+                        wire.canonical_response_head,
+                        wire.raw_tail,
+                        wire.intentional_wire_fault,
                         cancellation,
                     );
                 }
@@ -1118,9 +1843,14 @@ impl ConnectionService {
             uri: parts.uri,
             message,
         };
-        let mut upstream_response = self
+        let upstream_exchange = self
             .upstream
-            .send(forward, &request_actions, cancellation)
+            .send(
+                forward,
+                &request_actions,
+                Some(wire.informational_response_sink),
+                cancellation,
+            )
             .await?;
         if request_actions.iter().any(|action| {
             matches!(
@@ -1135,11 +1865,23 @@ impl ConnectionService {
                 "upstream response intentionally dropped after complete read",
             ));
         }
+        for head in upstream_exchange.informational_heads {
+            wire.informational_response_sink
+                .publish(head, cancellation)
+                .await?;
+        }
+        let mut upstream_response = upstream_exchange.final_response;
         let response_actions = self.ports.response(context, &mut upstream_response).await?;
         let disposition =
             fault::apply_response_actions(upstream_response, &response_actions, cancellation)
                 .await?;
-        response_from_disposition(disposition, raw_tail, intentional_wire_fault, cancellation)
+        response_from_disposition(
+            disposition,
+            wire.canonical_response_head,
+            wire.raw_tail,
+            wire.intentional_wire_fault,
+            cancellation,
+        )
     }
 }
 
@@ -1204,11 +1946,12 @@ fn intentional_fault_or(
 
 fn response_from_disposition(
     disposition: ResponseDisposition,
+    canonical_response_head: &StdMutex<Option<Bytes>>,
     raw_tail: &StdMutex<Option<Bytes>>,
     intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
     cancellation: &CancellationToken,
 ) -> Result<Response<WireBody>> {
-    let (message, mut body, mut schedule, disposition_fault) = match disposition {
+    let (mut message, mut body, mut schedule, disposition_fault) = match disposition {
         ResponseDisposition::Send { message, schedule } => {
             let body = message.body.clone();
             (message, body, schedule, None)
@@ -1264,6 +2007,17 @@ fn response_from_disposition(
     } else {
         body
     };
+    message.remove_header("connection");
+    message.headers.push(RawHeader::new(
+        Bytes::from_static(b"Connection"),
+        Bytes::from_static(b"close"),
+    ));
+    if message.declared_content_length().is_none() {
+        message.set_content_length(message.body.len());
+    }
+    *canonical_response_head
+        .lock()
+        .expect("canonical HTTP response head mutex poisoned") = Some(message_wire_head(&message)?);
     let mut response = Response::builder()
         .status(status)
         .version(http::Version::HTTP_11)
@@ -1275,10 +2029,6 @@ fn response_from_disposition(
         ))
         .map_err(|error| ProxyError::new(ErrorCode::Internal, error.to_string()))?;
     *response.headers_mut() = message.header_map()?;
-    message::force_connection_close(response.headers_mut());
-    if message.declared_content_length().is_none() {
-        message::content_length(response.headers_mut(), message.body.len())?;
-    }
     Ok(response)
 }
 
@@ -1289,6 +2039,34 @@ fn parse_response_status(start_line: &str) -> Result<StatusCode> {
         .ok_or_else(|| ProxyError::new(ErrorCode::Internal, "response status is missing"))?;
     StatusCode::from_bytes(value.as_bytes())
         .map_err(|error| ProxyError::new(ErrorCode::Internal, error.to_string()))
+}
+
+fn informational_status(head: &[u8]) -> Option<u16> {
+    let line_end = head.windows(2).position(|window| window == b"\r\n")?;
+    let line = std::str::from_utf8(&head[..line_end]).ok()?;
+    let status = line.split_ascii_whitespace().nth(1)?.parse::<u16>().ok()?;
+    (100..200).contains(&status).then_some(status)
+}
+
+fn raw_head_capture_limit(limits: MessageLimits) -> usize {
+    // `max_total_header_bytes` counts only names and values. Reserve the
+    // delimiters plus a bounded start-line so the recorder can retain the
+    // complete head that Hyper has already accepted.
+    limits
+        .max_total_header_bytes
+        .saturating_add(limits.max_headers.saturating_mul(4))
+        .saturating_add(8 * 1024)
+        .saturating_add(4)
+}
+
+fn message_wire_head(message: &Message) -> Result<Bytes> {
+    let wire = message.reconstruct();
+    let end = wire
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|position| position + 4)
+        .ok_or_else(|| ProxyError::new(ErrorCode::Internal, "HTTP request head is incomplete"))?;
+    Ok(wire.slice(..end))
 }
 
 async fn collect_limited(mut body: Incoming, limit: usize) -> Result<Bytes> {
@@ -1410,6 +2188,33 @@ mod tests {
     use super::*;
     use std::net::{IpAddr, Ipv4Addr};
 
+    #[test]
+    fn response_head_capture_skips_informational_heads_and_keeps_the_final_head() {
+        let mut capture = RawHttp1HeadCapture::final_response();
+        capture.record(
+            b"HTTP/1.1 100 Continue\r\nX-Info:\t first \r\n\r\n\
+HTTP/1.1 103 Early Hints\r\nLink: </style.css>\r\n\r\n\
+HTTP/1.1 299 Vendor Final\r\nX-Final: yes\r\n\r\nbody",
+            1024,
+        );
+
+        assert_eq!(
+            capture.required_head("response").expect("final head"),
+            Bytes::from_static(b"HTTP/1.1 299 Vendor Final\r\nX-Final: yes\r\n\r\n")
+        );
+    }
+
+    #[test]
+    fn raw_head_capture_reports_limit_exhaustion_instead_of_falling_back() {
+        let mut capture = RawHttp1HeadCapture::default();
+        capture.record(b"GET / HTTP/1.1\r\nX-Test: value\r\n\r\n", 12);
+
+        let error = capture
+            .required_head("request")
+            .expect_err("truncated capture must fail closed");
+        assert_eq!(error.code, ErrorCode::HeaderLimitExceeded.as_str());
+    }
+
     #[derive(Debug)]
     struct FixedResponseConnector {
         body: Bytes,
@@ -1485,14 +2290,15 @@ mod tests {
             &self,
             _request: ForwardRequest,
             _actions: &[FaultAction],
+            _informational: Option<&InformationalResponseSink>,
             _cancellation: &CancellationToken,
-        ) -> Result<Message> {
+        ) -> Result<UpstreamExchange> {
             let mut message =
                 Message::response(StatusCode::OK, &HeaderMap::new(), self.body.clone());
             if let Some(length) = self.declared_content_length {
                 message.set_content_length(length);
             }
-            Ok(message)
+            Ok(message.into())
         }
     }
 
@@ -1520,7 +2326,7 @@ mod tests {
         ConnectionContext {
             runtime_epoch: Uuid::new_v4(),
             connection_id: Uuid::new_v4(),
-            channel: Channel::Dll,
+            channel: ChannelId::new("alpha").expect("valid test channel ID"),
             peer_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 12_345),
             accepted_at: SystemTime::now(),
             tls_peer: None,
@@ -1585,10 +2391,17 @@ mod tests {
         ];
 
         for (disposition, expected_fault, expected_code) in cases {
+            let canonical_head = StdMutex::new(None);
             let raw_tail = StdMutex::new(None);
             let fault = StdMutex::new(None);
-            response_from_disposition(disposition, &raw_tail, &fault, &CancellationToken::new())
-                .expect("intentional wire response should be constructed");
+            response_from_disposition(
+                disposition,
+                &canonical_head,
+                &raw_tail,
+                &fault,
+                &CancellationToken::new(),
+            )
+            .expect("intentional wire response should be constructed");
             let actual = fault
                 .lock()
                 .expect("intentional wire fault mutex poisoned")
@@ -1600,6 +2413,7 @@ mod tests {
 
     #[tokio::test]
     async fn downstream_mid_body_disconnect_sends_exact_prefix_and_keeps_declared_length() {
+        let canonical_head = StdMutex::new(None);
         let raw_tail = StdMutex::new(None);
         let fault = StdMutex::new(None);
         let response = response_from_disposition(
@@ -1614,6 +2428,7 @@ mod tests {
                     ..TrafficSchedule::default()
                 },
             },
+            &canonical_head,
             &raw_tail,
             &fault,
             &CancellationToken::new(),
@@ -1708,7 +2523,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn payment_app_response_write_respects_write_timeout() {
+    async fn downstream_response_write_respects_write_timeout() {
         let (mut client, server) = tokio::io::duplex(128);
         write_test_request(&mut client).await;
         let service = downstream_test_service(
@@ -1727,14 +2542,14 @@ mod tests {
         )
         .await
         .expect("downstream write must terminate within the configured timeout")
-        .expect_err("a Payment App that does not read must time out");
+        .expect_err("a downstream client that does not read must time out");
 
         assert_eq!(error.code, ErrorCode::Io.as_str());
         assert!(error.message.contains("timed out after 10 ms"));
     }
 
     #[tokio::test]
-    async fn payment_app_response_write_stops_when_supervisor_cancels() {
+    async fn downstream_response_write_stops_when_supervisor_cancels() {
         let (mut client, server) = tokio::io::duplex(128);
         write_test_request(&mut client).await;
         let service = downstream_test_service(
@@ -1809,7 +2624,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn payment_app_flush_and_shutdown_each_respect_write_timeout() {
+    async fn downstream_flush_and_shutdown_each_respect_write_timeout() {
         for stage in [PendingWriteStage::Flush, PendingWriteStage::Shutdown] {
             let mut io: BoxIo = Box::new(PendingWriteIo(stage));
             let error = finish_downstream_write(

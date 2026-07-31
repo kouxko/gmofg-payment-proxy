@@ -1,4 +1,4 @@
-//! Tokio/Hyper/rustls runtime for the GMO-FG interception proxy.
+//! Tokio/Hyper/rustls runtime for a configurable interception proxy.
 //!
 //! The traits exported by this crate are deliberately application-neutral:
 //! application use-cases implement [`PipelinePorts`], while transport and time
@@ -6,7 +6,6 @@
 
 #![allow(clippy::missing_errors_doc, clippy::too_many_lines)]
 
-pub mod codec;
 pub mod fault;
 pub mod message;
 pub mod metrics;
@@ -23,7 +22,7 @@ pub use production_factory::{
     RustlsRuntimeServiceFactory, TlsMaterialProvider, TlsMaterialSnapshot,
 };
 pub use supervisor::{
-    Channel, ChannelConfig, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,
+    ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,
     RuntimeServiceFactory, RuntimeSnapshot,
 };
 pub use traffic::{JitterScope, TrafficDirection};
@@ -55,9 +54,6 @@ pub enum ErrorCode {
     UpstreamReadTimeout,
     BodyTooLarge,
     HeaderLimitExceeded,
-    ShiftJisDecodeFailed,
-    ShiftJisEncodeFailed,
-    JsonInvalid,
     IncorrectContentLength,
     TruncatedResponse,
     FaultStreamAborted,
@@ -86,9 +82,6 @@ impl ErrorCode {
             Self::UpstreamReadTimeout => "UPSTREAM_READ_TIMEOUT",
             Self::BodyTooLarge => "BODY_TOO_LARGE",
             Self::HeaderLimitExceeded => "HEADER_LIMIT_EXCEEDED",
-            Self::ShiftJisDecodeFailed => "SHIFT_JIS_DECODE_FAILED",
-            Self::ShiftJisEncodeFailed => "SHIFT_JIS_ENCODE_FAILED",
-            Self::JsonInvalid => "JSON_INVALID",
             Self::IncorrectContentLength => "INCORRECT_CONTENT_LENGTH",
             Self::TruncatedResponse => "TRUNCATED_RESPONSE",
             Self::FaultStreamAborted => "FAULT_STREAM_ABORTED",

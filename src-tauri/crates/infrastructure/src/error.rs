@@ -16,6 +16,8 @@ pub enum InfrastructureErrorCode {
     CertificateInvalid,
     Pkcs12PasswordInvalid,
     ImportFailed,
+    ImportTooLarge,
+    PersistenceCorrupt,
     ExportFailed,
 }
 
@@ -48,6 +50,17 @@ pub enum InfrastructureError {
     CertificateInvalid { message: String },
     #[error("PKCS12 密码错误")]
     Pkcs12PasswordInvalid,
+    #[error("导入文件超过大小限制（最大 {max_bytes} 字节）：{path}")]
+    ImportTooLarge {
+        path: PathBuf,
+        max_bytes: u64,
+        actual_bytes: Option<u64>,
+    },
+    #[error("持久化数据损坏（{entity}）：{message}")]
+    PersistenceCorrupt {
+        entity: &'static str,
+        message: String,
+    },
     #[error("文件导入失败：{path}")]
     Import {
         path: PathBuf,
@@ -78,6 +91,8 @@ impl InfrastructureError {
             Self::KeychainUnprotect => InfrastructureErrorCode::KeychainUnprotectFailed,
             Self::CertificateInvalid { .. } => InfrastructureErrorCode::CertificateInvalid,
             Self::Pkcs12PasswordInvalid => InfrastructureErrorCode::Pkcs12PasswordInvalid,
+            Self::ImportTooLarge { .. } => InfrastructureErrorCode::ImportTooLarge,
+            Self::PersistenceCorrupt { .. } => InfrastructureErrorCode::PersistenceCorrupt,
             Self::Import { .. } => InfrastructureErrorCode::ImportFailed,
             Self::Export { .. } | Self::ExportTargetExists { .. } => {
                 InfrastructureErrorCode::ExportFailed

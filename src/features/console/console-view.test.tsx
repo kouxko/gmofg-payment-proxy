@@ -25,7 +25,7 @@ const status: ProxyStatusViewModel = {
   revision: 7,
   channels: [
     {
-      kind: "transaction",
+      id: "transaction",
       display_name: "交易通道",
       state: "listening",
       state_text: "正在监听",
@@ -41,7 +41,7 @@ const status: ProxyStatusViewModel = {
       upstream_ui_tone: "positive",
     },
     {
-      kind: "dll",
+      id: "dll",
       display_name: "DLL 通道",
       state: "listening",
       state_text: "正在监听",

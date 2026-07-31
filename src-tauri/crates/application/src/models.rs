@@ -6,6 +6,8 @@ use serde_json::Value;
 use specta::Type;
 use uuid::Uuid;
 
+pub use gmofg_proxy_domain::ChannelId;
+
 pub type RuntimeEpoch = Uuid;
 pub type Revision = u64;
 pub type SessionId = Uuid;
@@ -52,22 +54,6 @@ impl ProxyState {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
-pub enum ChannelKind {
-    Transaction,
-    Dll,
-}
-
-impl ChannelKind {
-    pub fn display_zh(self) -> &'static str {
-        match self {
-            Self::Transaction => "交易",
-            Self::Dll => "DLL",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
 pub enum ChannelState {
     Disabled,
     Stopped,
@@ -92,7 +78,7 @@ impl ChannelState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct ChannelStatusViewModel {
-    pub kind: ChannelKind,
+    pub id: ChannelId,
     pub display_name: String,
     pub state: ChannelState,
     pub state_text: String,
@@ -106,6 +92,12 @@ pub struct ChannelStatusViewModel {
     pub upstream_url: String,
     pub upstream_state_text: String,
     pub upstream_ui_tone: UiTone,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ChannelPresentationViewModel {
+    pub id: ChannelId,
+    pub display_name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -201,7 +193,7 @@ impl MessageStage {
 pub struct CaptureQuery {
     pub keyword: Option<String>,
     pub terminal_ip: Option<String>,
-    pub channel: Option<ChannelKind>,
+    pub channel: Option<ChannelId>,
     pub stage: Option<MessageStage>,
     pub result: Option<String>,
     pub rule_id: Option<RuleId>,
@@ -228,12 +220,17 @@ pub struct CaptureRowViewModel {
     pub session_id: SessionId,
     pub occurred_at: DateTime<Utc>,
     pub terminal_ip: String,
-    pub channel: ChannelKind,
+    pub channel: ChannelId,
     pub channel_text: String,
     pub stage: MessageStage,
     pub stage_text: String,
     pub method: String,
     pub target: String,
+    /// HTTP response status known at the time this capture row was emitted.
+    /// Request-stage rows are normally `None`; response and terminal rows
+    /// expose the effective status without requiring the UI to fetch and
+    /// inspect the complete payload first.
+    pub http_status: Option<u16>,
     pub result: String,
     pub ui_tone: UiTone,
     pub duration_ms: Option<u64>,
@@ -259,7 +256,35 @@ pub struct CapturePageViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+pub struct RawHttpHeaderViewModel {
+    /// Exact HTTP/1 wire bytes for the field name.
+    /// This is the canonical representation used when a breakpoint forwards a
+    /// message. `MessageContentViewModel::headers` is only a lossy display and
+    /// editing projection.
+    pub name_bytes: Vec<u8>,
+    /// Exact HTTP/1 wire bytes for the field value, excluding OWS and CRLF.
+    pub value_bytes: Vec<u8>,
+    /// Original optional whitespace between `:` and the semantic field value.
+    #[serde(default)]
+    pub leading_ows_bytes: Vec<u8>,
+    /// Original optional whitespace after the semantic field value.
+    #[serde(default)]
+    pub trailing_ows_bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 pub struct MessageContentViewModel {
+    pub http_status: Option<u16>,
+    /// Exact start-line bytes retained for round trips through breakpoint UI.
+    /// HTTP/1 start lines are normally ASCII. Keeping bytes here prevents a
+    /// display string from becoming the canonical source for reconstruction.
+    #[serde(default)]
+    pub start_line_bytes: Vec<u8>,
+    /// Exact, ordered HTTP/1 header fields. Names, values, casing, duplicates,
+    /// and interleaving are retained.
+    #[serde(default)]
+    pub raw_headers: Vec<RawHttpHeaderViewModel>,
+    /// Lossy, grouped projection intended only for display and form editing.
     pub headers: BTreeMap<String, Vec<String>>,
     pub body_text: Option<String>,
     pub body_bytes: Vec<u8>,
@@ -277,7 +302,18 @@ impl MessageContentViewModel {
             .iter()
             .map(|(name, values)| name.len() + values.iter().map(String::len).sum::<usize>())
             .sum::<usize>();
-        Self::ENTITY_FIXED_OVERHEAD_BYTES + (headers + self.body_bytes.len()) as u64
+        let raw_headers = self
+            .raw_headers
+            .iter()
+            .map(|header| {
+                header.name_bytes.len()
+                    + header.leading_ows_bytes.len()
+                    + header.value_bytes.len()
+                    + header.trailing_ows_bytes.len()
+            })
+            .sum::<usize>();
+        Self::ENTITY_FIXED_OVERHEAD_BYTES
+            + (self.start_line_bytes.len() + headers + raw_headers + self.body_bytes.len()) as u64
     }
 }
 
@@ -300,7 +336,7 @@ pub struct CaptureDetailViewModel {
 pub struct SessionQuery {
     pub keyword: Option<String>,
     pub terminal_ip: Option<String>,
-    pub channel: Option<ChannelKind>,
+    pub channel: Option<ChannelId>,
     pub result: Option<String>,
     pub rule_id: Option<RuleId>,
     pub started_from: Option<DateTime<Utc>>,
@@ -327,9 +363,11 @@ pub struct SessionSummaryViewModel {
     pub started_at: DateTime<Utc>,
     pub completed_at: Option<DateTime<Utc>>,
     pub terminal_ip: String,
-    pub channel: ChannelKind,
+    pub channel: ChannelId,
+    pub channel_text: String,
     pub method: String,
     pub target: String,
+    pub http_status: Option<u16>,
     pub result: String,
     pub ui_tone: UiTone,
     pub duration_ms: Option<u64>,
@@ -387,6 +425,7 @@ impl SessionRecord {
         let summary = &self.detail.summary;
         let fixed_strings = summary.request_id.len()
             + summary.terminal_ip.len()
+            + summary.channel_text.len()
             + summary.method.len()
             + summary.target.len()
             + summary.result.len()
@@ -436,7 +475,8 @@ pub struct BreakpointSummaryViewModel {
     pub stage: MessageStage,
     pub title: String,
     pub terminal_ip: String,
-    pub channel: ChannelKind,
+    pub channel: ChannelId,
+    pub channel_text: String,
     pub method: String,
     pub target: String,
     pub waiting_since: DateTime<Utc>,
@@ -609,10 +649,10 @@ pub enum RuleTerminalAction {
     MockResponse {
         status: u16,
         headers: Vec<(String, String)>,
-        shift_jis_body: Vec<u8>,
+        body_bytes: Vec<u8>,
     },
     InvalidJson {
-        shift_jis_body: Vec<u8>,
+        body_bytes: Vec<u8>,
     },
     IncorrectContentLength {
         delta: i64,
@@ -715,7 +755,7 @@ pub struct RuleDraft {
     pub description: String,
     pub enabled: bool,
     pub priority: i32,
-    pub channel: Option<ChannelKind>,
+    pub channel: Option<ChannelId>,
     pub stage: Option<MessageStage>,
     pub conditions: Vec<RuleCondition>,
     pub actions: Vec<RuleAction>,
@@ -782,7 +822,7 @@ pub struct FaultTemplateViewModel {
     pub stage_text: String,
     pub behavior_text: String,
     pub affected_party_text: String,
-    pub default_channel: ChannelKind,
+    pub default_channel: ChannelId,
     pub default_nth_hit: u32,
     pub default_one_shot: bool,
     pub default_priority: i32,
@@ -797,7 +837,7 @@ pub struct FaultConfigurationDraft {
     pub template_id: String,
     pub existing_rule_id: Option<RuleId>,
     pub expected_revision: Option<Revision>,
-    pub channel: Option<ChannelKind>,
+    pub channel: Option<ChannelId>,
     pub terminal: Option<String>,
     pub target: Option<String>,
     pub nth_hit: Option<u32>,
@@ -845,15 +885,19 @@ pub struct CertificateOverviewViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ChannelSettingsDraft {
+    pub id: ChannelId,
+    pub display_name: String,
+    pub enabled: bool,
+    pub port: u16,
+    pub upstream_url: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct SettingsDraft {
     pub expected_revision: Option<Revision>,
     pub bind_address: String,
-    pub transaction_enabled: bool,
-    pub transaction_port: u16,
-    pub dll_enabled: bool,
-    pub dll_port: u16,
-    pub upstream_transaction_url: String,
-    pub upstream_dll_url: String,
+    pub channels: Vec<ChannelSettingsDraft>,
     pub connect_timeout_seconds: u64,
     pub write_timeout_seconds: u64,
     pub read_timeout_seconds: u64,
@@ -869,12 +913,7 @@ impl Default for SettingsDraft {
         Self {
             expected_revision: None,
             bind_address: "0.0.0.0".into(),
-            transaction_enabled: true,
-            transaction_port: 16_627,
-            dll_enabled: true,
-            dll_port: 16_127,
-            upstream_transaction_url: String::new(),
-            upstream_dll_url: String::new(),
+            channels: Vec::new(),
             connect_timeout_seconds: 70,
             write_timeout_seconds: 70,
             read_timeout_seconds: 70,
@@ -931,7 +970,9 @@ impl OperationResultViewModel {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 pub struct AppBootstrapViewModel {
+    pub product_name: String,
     pub proxy: ProxyStatusViewModel,
+    pub channel_catalog: Vec<ChannelPresentationViewModel>,
     pub recent_capture: CapturePageViewModel,
     pub pending_breakpoints: Vec<BreakpointSummaryViewModel>,
     pub certificate: CertificateOverviewViewModel,

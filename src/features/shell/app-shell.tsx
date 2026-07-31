@@ -80,12 +80,9 @@ function CurrentTime() {
 
 function GlobalStatusBar() {
   const { proxy, bootstrap, isLoading } = useBootstrap();
+  const productName = bootstrap?.product_name ?? "网络代理工具";
   const { pathname, navigate } = useWorkspaceNavigation();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
-  const transaction = proxy?.channels.find(
-    (channel) => channel.kind === "transaction",
-  );
-  const dll = proxy?.channels.find((channel) => channel.kind === "dll");
 
   return (
     <header className="col-span-2 flex min-h-14 items-center overflow-x-auto border-b border-[var(--telemetry-line)] bg-white px-4 max-[1025px]:col-span-1 max-[1025px]:overflow-visible max-[1025px]:py-2">
@@ -107,7 +104,7 @@ function GlobalStatusBar() {
             <Drawer.Content placement="left">
               <Drawer.Dialog>
                 <Drawer.Header>
-                  <Drawer.Heading>GMO-FG Payment Proxy</Drawer.Heading>
+                  <Drawer.Heading>{productName}</Drawer.Heading>
                 </Drawer.Header>
                 <Drawer.Body className="space-y-2">
                   {navigation.map(({ href, title, icon: Icon }) => (
@@ -136,7 +133,7 @@ function GlobalStatusBar() {
         </Drawer>
         <div className="mr-2 flex min-w-56 items-center gap-2 font-semibold">
           <Lock className="size-4 text-[var(--telemetry-accent)]" />
-          GMO-FG Payment Proxy
+          {productName}
         </div>
         <Separator orientation="vertical" className="h-6" />
         {isLoading && !proxy ? (
@@ -150,15 +147,15 @@ function GlobalStatusBar() {
             >
               <Chip.Label>{proxy?.state_text ?? "未连接"}</Chip.Label>
             </Chip>
-            <span>
-              交易 {transaction?.state_text ?? "未知"} ·{" "}
-              {transaction?.listen_address ?? "—"}
-            </span>
-            <Separator orientation="vertical" className="h-5" />
-            <span>
-              DLL {dll?.state_text ?? "未知"} · {dll?.listen_address ?? "—"}
-            </span>
-            <Separator orientation="vertical" className="h-5" />
+            {proxy?.channels.map((channel) => (
+              <div key={channel.id} className="contents">
+                <span>
+                  {channel.display_name} {channel.state_text} ·{" "}
+                  {channel.listen_address}
+                </span>
+                <Separator orientation="vertical" className="h-5" />
+              </div>
+            ))}
             <Chip
               color={
                 proxy
@@ -210,6 +207,8 @@ function GlobalStatusBar() {
 }
 
 function SideNavigation() {
+  const { bootstrap } = useBootstrap();
+  const productName = bootstrap?.product_name ?? "网络代理工具";
   const { pathname, navigate } = useWorkspaceNavigation();
   return (
     <nav
@@ -251,10 +250,10 @@ function SideNavigation() {
             <Modal.Container size="sm">
               <Modal.Dialog>
                 <Modal.Header>
-                  <Modal.Heading>关于 GMO-FG Payment Proxy</Modal.Heading>
+                  <Modal.Heading>关于 {productName}</Modal.Heading>
                 </Modal.Header>
                 <Modal.Body className="space-y-3 text-sm">
-                  <p>面向支付联机测试的双向 mTLS 代理与故障注入工具。</p>
+                  <p>面向客户端联机测试的双向 mTLS 代理与故障注入工具。</p>
                   <p className="text-[var(--telemetry-muted)]">
                     网络、证书、规则、校验、存储和导出均由 Rust
                     核心执行；Next.js 仅负责显示状态和提交用户操作。
