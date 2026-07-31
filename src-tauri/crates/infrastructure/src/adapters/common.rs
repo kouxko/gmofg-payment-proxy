@@ -34,6 +34,14 @@ pub(crate) fn app_error(error: InfrastructureError) -> AppError {
         InfrastructureErrorCode::Pkcs12PasswordInvalid => {
             ("PKCS12_PASSWORD_INVALID", "PKCS12 密码错误。")
         }
+        InfrastructureErrorCode::ImportTooLarge => (
+            "IMPORT_TOO_LARGE",
+            "导入文件超过允许的大小限制，请选择更小的文件。",
+        ),
+        InfrastructureErrorCode::PersistenceCorrupt => (
+            "PERSISTENCE_CORRUPT",
+            "本地持久化数据已损坏，请修复或重置相关数据。",
+        ),
         InfrastructureErrorCode::ImportFailed => (
             "IMPORT_FAILED",
             "文件导入失败，请确认文件可读取且格式正确。",
@@ -53,4 +61,26 @@ pub(crate) fn infra<T>(result: Result<T, InfrastructureError>) -> AppResult<T> {
 
 pub(crate) fn json_error(context: &str, error: impl std::fmt::Display) -> AppError {
     AppError::new("INTERNAL_ERROR", format!("{context}：{error}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn import_size_and_persistence_corruption_have_stable_app_codes() {
+        let oversized = app_error(InfrastructureError::ImportTooLarge {
+            path: "oversized.bin".into(),
+            max_bytes: 16,
+            actual_bytes: Some(17),
+        });
+        assert_eq!(oversized.view_model.code, "IMPORT_TOO_LARGE");
+
+        let corrupt = app_error(InfrastructureError::PersistenceCorrupt {
+            entity: "rule",
+            message: "invalid JSON".into(),
+        });
+        assert_eq!(corrupt.view_model.code, "PERSISTENCE_CORRUPT");
+        assert_ne!(corrupt.view_model.code, "CERTIFICATE_INVALID");
+    }
 }

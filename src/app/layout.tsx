@@ -4,10 +4,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "GMO-FG Payment Proxy",
-    template: "%s · GMO-FG Payment Proxy",
+    default: "网络代理工具",
+    template: "%s · 网络代理工具",
   },
-  description: "GMO-FG 支付联机测试与协议故障注入工具",
+  description: "双向 mTLS 联机测试与协议故障注入工具",
 };
 
 export default function RootLayout({

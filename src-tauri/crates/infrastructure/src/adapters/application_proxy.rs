@@ -7,13 +7,15 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use gmofg_proxy_application::{
-    AppError, AppResult, ChannelKind, ChannelState, ChannelStatusViewModel, ConnectionHealthState,
+    AppError, AppResult, ChannelState, ChannelStatusViewModel, ConnectionHealthState,
     ConnectionHealthViewModel, DisabledReason, ProxyState as ApplicationProxyState,
     ProxyStatusViewModel, ProxySupervisorPort, SettingsDraft, UiTone,
 };
+use gmofg_proxy_product_api::ProductLabels;
 use gmofg_proxy_runtime::{
-    Channel, ChannelConfig, ChannelRuntimeMetrics, DEFAULT_MAX_CONNECTIONS, MessageLimits,
-    ProxyConfig, ProxyError, ProxyState, ProxySupervisor, RuntimeMetricsProvider, RuntimeSnapshot,
+    ChannelConfig, ChannelId as RuntimeChannelId, ChannelRuntimeMetrics, DEFAULT_MAX_CONNECTIONS,
+    MessageLimits, ProxyConfig, ProxyError, ProxyState, ProxySupervisor, RuntimeMetricsProvider,
+    RuntimeSnapshot,
 };
 use tokio::sync::RwLock;
 
@@ -24,6 +26,7 @@ pub struct ApplicationProxyAdapter {
     supervisor: Arc<ProxySupervisor>,
     metrics: Arc<dyn RuntimeMetricsProvider>,
     settings: RwLock<SettingsDraft>,
+    labels: ProductLabels,
     revision: AtomicU64,
 }
 
@@ -32,11 +35,13 @@ impl ApplicationProxyAdapter {
         supervisor: Arc<ProxySupervisor>,
         initial_settings: SettingsDraft,
         metrics: Arc<dyn RuntimeMetricsProvider>,
+        labels: ProductLabels,
     ) -> Self {
         Self {
             supervisor,
             metrics,
             settings: RwLock::new(initial_settings),
+            labels,
             revision: AtomicU64::new(0),
         }
     }
@@ -49,58 +54,45 @@ impl ApplicationProxyAdapter {
             .map_err(map_error)?;
         let settings = self.settings.read().await;
         let (state, state_text, ui_tone) = map_state(snapshot.state);
-        let channels = [
-            (
-                Channel::Transaction,
-                ChannelKind::Transaction,
-                settings.transaction_enabled,
-                settings.transaction_port,
-            ),
-            (
-                Channel::Dll,
-                ChannelKind::Dll,
-                settings.dll_enabled,
-                settings.dll_port,
-            ),
-        ]
-        .into_iter()
-        .map(|(runtime_kind, kind, enabled, configured_port)| {
-            let channel_metrics = metrics
-                .channels
-                .get(&runtime_kind)
-                .cloned()
-                .unwrap_or_default();
-            let listen_address = snapshot.listeners.get(&runtime_kind).map_or_else(
-                || format!("{}:{configured_port}", settings.bind_address),
-                ToString::to_string,
-            );
-            let channel_state = map_channel_state(snapshot.state, enabled);
-            let (channel_text, channel_tone) = channel_state.display_zh();
-            let (upstream_state_text, upstream_ui_tone) =
-                upstream_status(snapshot.state, enabled, &channel_metrics);
-            ChannelStatusViewModel {
-                kind,
-                display_name: kind.display_zh().to_owned(),
-                state: channel_state,
-                state_text: channel_text.to_owned(),
-                ui_tone: channel_tone,
-                listen_address,
-                mtls_enabled: true,
-                connected_clients: channel_metrics.connected_clients,
-                request_count: channel_metrics.request_count,
-                error_count: channel_metrics.error_count,
-                enabled,
-                upstream_url: match runtime_kind {
-                    Channel::Transaction => settings.upstream_transaction_url.clone(),
-                    Channel::Dll => settings.upstream_dll_url.clone(),
-                },
-                upstream_state_text,
-                upstream_ui_tone,
-            }
-        })
-        .collect::<Vec<_>>();
-        let app_to_proxy_health = inbound_health(snapshot.state, &channels);
-        let proxy_to_server_health = outbound_health(snapshot.state, &channels);
+        let channels = settings
+            .channels
+            .iter()
+            .map(|configured| -> AppResult<_> {
+                let runtime_channel =
+                    RuntimeChannelId::new(configured.id.as_str()).map_err(map_error)?;
+                let channel_metrics = metrics
+                    .channels
+                    .get(&runtime_channel)
+                    .cloned()
+                    .unwrap_or_default();
+                let listen_address = snapshot.listeners.get(&runtime_channel).map_or_else(
+                    || format!("{}:{}", settings.bind_address, configured.port),
+                    ToString::to_string,
+                );
+                let channel_state = map_channel_state(snapshot.state, configured.enabled);
+                let (channel_text, channel_tone) = channel_state.display_zh();
+                let (upstream_state_text, upstream_ui_tone) =
+                    upstream_status(snapshot.state, configured.enabled, &channel_metrics);
+                Ok(ChannelStatusViewModel {
+                    id: configured.id.clone(),
+                    display_name: configured.display_name.clone(),
+                    state: channel_state,
+                    state_text: channel_text.to_owned(),
+                    ui_tone: channel_tone,
+                    listen_address,
+                    mtls_enabled: true,
+                    connected_clients: channel_metrics.connected_clients,
+                    request_count: channel_metrics.request_count,
+                    error_count: channel_metrics.error_count,
+                    enabled: configured.enabled,
+                    upstream_url: configured.upstream_url.clone(),
+                    upstream_state_text,
+                    upstream_ui_tone,
+                })
+            })
+            .collect::<AppResult<Vec<_>>>()?;
+        let app_to_proxy_health = inbound_health(snapshot.state, &channels, self.labels);
+        let proxy_to_server_health = outbound_health(snapshot.state, &channels, self.labels);
         Ok(ProxyStatusViewModel {
             state,
             state_text,
@@ -145,6 +137,7 @@ impl ApplicationProxyAdapter {
 fn inbound_health(
     state: ProxyState,
     channels: &[ChannelStatusViewModel],
+    labels: ProductLabels,
 ) -> ConnectionHealthViewModel {
     match state {
         ProxyState::Running => {
@@ -156,14 +149,20 @@ fn inbound_health(
                 health(
                     ConnectionHealthState::Healthy,
                     "mTLS 监听正常",
-                    "所有已启用 App → Proxy 监听器均已启动并要求客户端证书。",
+                    &format!(
+                        "所有已启用 {} → Proxy 监听器均已启动并要求客户端证书。",
+                        labels.client_name
+                    ),
                     UiTone::Positive,
                 )
             } else {
                 health(
                     ConnectionHealthState::Degraded,
                     "监听状态不完整",
-                    "至少一个已启用 App → Proxy 监听器尚未就绪。",
+                    &format!(
+                        "至少一个已启用 {} → Proxy 监听器尚未就绪。",
+                        labels.client_name
+                    ),
                     UiTone::Warning,
                 )
             }
@@ -171,19 +170,22 @@ fn inbound_health(
         ProxyState::Starting => health(
             ConnectionHealthState::Waiting,
             "正在启动",
-            "正在建立 App → Proxy mTLS 监听器。",
+            &format!("正在建立 {} → Proxy mTLS 监听器。", labels.client_name),
             UiTone::Info,
         ),
         ProxyState::Faulted => health(
             ConnectionHealthState::Faulted,
             "监听故障",
-            "App → Proxy 监听器发生故障，请查看运行错误。",
+            &format!(
+                "{} → Proxy 监听器发生故障，请查看运行错误。",
+                labels.client_name
+            ),
             UiTone::Danger,
         ),
         ProxyState::Stopped | ProxyState::Stopping => health(
             ConnectionHealthState::Unavailable,
             "未监听",
-            "Proxy 当前未接收 Payment App 连接。",
+            &format!("Proxy 当前未接收 {} 连接。", labels.client_name),
             UiTone::Neutral,
         ),
     }
@@ -192,6 +194,7 @@ fn inbound_health(
 fn outbound_health(
     state: ProxyState,
     channels: &[ChannelStatusViewModel],
+    labels: ProductLabels,
 ) -> ConnectionHealthViewModel {
     if state != ProxyState::Running {
         return health(
@@ -205,7 +208,10 @@ fn outbound_health(
             } else {
                 "尚未连接"
             },
-            "Proxy → Server 连接按请求建立，当前没有可报告的运行中路径。",
+            &format!(
+                "Proxy → {} 连接按请求建立，当前没有可报告的运行中路径。",
+                labels.upstream_name
+            ),
             if state == ProxyState::Faulted {
                 UiTone::Danger
             } else {
@@ -224,7 +230,10 @@ fn outbound_health(
         health(
             ConnectionHealthState::Faulted,
             "最近上游连接失败",
-            "至少一个通道的最近一次 Proxy → Server 连接失败。",
+            &format!(
+                "至少一个通道的最近一次 Proxy → {} 连接失败。",
+                labels.upstream_name
+            ),
             UiTone::Danger,
         )
     } else if enabled
@@ -234,14 +243,20 @@ fn outbound_health(
         health(
             ConnectionHealthState::Healthy,
             "上游路径已验证",
-            "所有已启用通道均收到过有效的上游响应。",
+            &format!(
+                "所有已启用通道均收到过有效的 {} 响应。",
+                labels.upstream_name
+            ),
             UiTone::Positive,
         )
     } else {
         health(
             ConnectionHealthState::Waiting,
             "等待上游请求",
-            "Proxy → Server 按交易建立连接；尚未收到所有通道的首个上游响应。",
+            &format!(
+                "Proxy → {} 按请求建立连接；尚未收到所有通道的首个上游响应。",
+                labels.upstream_name
+            ),
             UiTone::Info,
         )
     }
@@ -351,20 +366,18 @@ fn proxy_config(settings: &SettingsDraft) -> AppResult<ProxyConfig> {
     let max_body_bytes = usize::try_from(settings.max_body_bytes)
         .map_err(|_| AppError::new("CONFIG_INVALID", "Body 上限超出平台范围"))?;
     Ok(ProxyConfig {
-        channels: vec![
-            ChannelConfig {
-                channel: Channel::Transaction,
-                enabled: settings.transaction_enabled,
-                listen_addr: SocketAddr::new(bind_address, settings.transaction_port),
-                upstream_url: settings.upstream_transaction_url.clone(),
-            },
-            ChannelConfig {
-                channel: Channel::Dll,
-                enabled: settings.dll_enabled,
-                listen_addr: SocketAddr::new(bind_address, settings.dll_port),
-                upstream_url: settings.upstream_dll_url.clone(),
-            },
-        ],
+        channels: settings
+            .channels
+            .iter()
+            .map(|channel| {
+                Ok(ChannelConfig {
+                    channel: RuntimeChannelId::new(channel.id.as_str()).map_err(map_error)?,
+                    enabled: channel.enabled,
+                    listen_addr: SocketAddr::new(bind_address, channel.port),
+                    upstream_url: channel.upstream_url.clone(),
+                })
+            })
+            .collect::<AppResult<Vec<_>>>()?,
         limits: MessageLimits {
             max_body_bytes,
             ..MessageLimits::default()
@@ -427,6 +440,31 @@ mod tests {
 
     use super::*;
 
+    const TEST_LABELS: ProductLabels = ProductLabels {
+        client_name: "Test Client",
+        upstream_name: "Test Upstream",
+        fault_rule_name_prefix: "Fault · ",
+    };
+
+    fn test_settings() -> SettingsDraft {
+        SettingsDraft {
+            channels: ["alpha", "beta", "gamma"]
+                .into_iter()
+                .enumerate()
+                .map(
+                    |(index, id)| gmofg_proxy_application::ChannelSettingsDraft {
+                        id: gmofg_proxy_domain::ChannelId::new(id).unwrap(),
+                        display_name: id.to_uppercase(),
+                        enabled: true,
+                        port: 20_001 + u16::try_from(index).unwrap(),
+                        upstream_url: format!("https://{id}.example.test"),
+                    },
+                )
+                .collect(),
+            ..SettingsDraft::default()
+        }
+    }
+
     #[derive(Debug)]
     struct StaticMetrics(RuntimeMetricsSnapshot);
 
@@ -445,7 +483,7 @@ mod tests {
         async fn build(
             &self,
             _config: &ProxyConfig,
-        ) -> Result<BTreeMap<Channel, ConnectionService>> {
+        ) -> Result<BTreeMap<RuntimeChannelId, ConnectionService>> {
             unreachable!("status does not build runtime services")
         }
     }
@@ -459,7 +497,7 @@ mod tests {
         let metrics = RuntimeMetricsSnapshot {
             channels: BTreeMap::from([
                 (
-                    Channel::Transaction,
+                    RuntimeChannelId::new("alpha").unwrap(),
                     ChannelRuntimeMetrics {
                         connected_clients: 3,
                         request_count: 17,
@@ -468,7 +506,7 @@ mod tests {
                     },
                 ),
                 (
-                    Channel::Dll,
+                    RuntimeChannelId::new("beta").unwrap(),
                     ChannelRuntimeMetrics {
                         connected_clients: 1,
                         request_count: 5,
@@ -483,8 +521,9 @@ mod tests {
         };
         let adapter = ApplicationProxyAdapter::new(
             supervisor,
-            SettingsDraft::default(),
+            test_settings(),
             Arc::new(StaticMetrics(metrics)),
+            TEST_LABELS,
         );
 
         let status = adapter.status().await.unwrap();
@@ -504,11 +543,20 @@ mod tests {
     fn retained_session_capacity_does_not_change_live_connection_admission() {
         let settings = SettingsDraft {
             max_sessions: 1,
-            ..SettingsDraft::default()
+            ..test_settings()
         };
 
         let config = proxy_config(&settings).expect("proxy config");
 
         assert_eq!(config.max_connections, DEFAULT_MAX_CONNECTIONS);
+    }
+
+    #[test]
+    fn arbitrary_channel_ids_flow_into_runtime_config() {
+        let config = proxy_config(&test_settings()).expect("proxy config");
+
+        assert_eq!(config.channels[0].channel.as_str(), "alpha");
+        assert_eq!(config.channels[1].channel.as_str(), "beta");
+        assert_eq!(config.channels[2].channel.as_str(), "gamma");
     }
 }

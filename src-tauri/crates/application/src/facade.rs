@@ -8,20 +8,21 @@ use crate::{
     BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft, BreakpointId,
     BreakpointSummaryViewModel, BreakpointValidationPort, BreakpointValidationViewModel,
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, CertificateOverviewViewModel,
-    CertificateServicePort, CertificateValidationViewModel, EventHub, EventSubscription,
-    FaultConfigurationDraft, FaultServicePort, FaultTemplateViewModel, FieldValidationViewModel,
-    FileExportPort, OperationResultViewModel, PageRequest, ProxyState, ProxyStatusViewModel,
-    ProxySupervisorPort, RuleAction, RuleActionKind, RuleByteInputViewModel, RuleCondition,
-    RuleConditionKind, RuleDraft, RuleDropResponseMode, RuleHeaderInputViewModel, RuleId,
-    RuleJitterScope, RuleMatchField, RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind,
-    RuleRepositoryPort, RuleSummaryViewModel, RuleTerminalAction, RuleTrafficDirection,
-    RuleViewModel, RuntimeEpoch, SessionDetailViewModel, SessionId, SessionPageViewModel,
-    SessionQuery, SessionQueryPort, SettingsDraft, SettingsRepositoryPort,
+    CertificateServicePort, CertificateValidationViewModel, ChannelPresentationViewModel, EventHub,
+    EventSubscription, FaultConfigurationDraft, FaultServicePort, FaultTemplateViewModel,
+    FieldValidationViewModel, FileExportPort, OperationResultViewModel, PageRequest, ProxyState,
+    ProxyStatusViewModel, ProxySupervisorPort, RuleAction, RuleActionKind, RuleByteInputViewModel,
+    RuleCondition, RuleConditionKind, RuleDraft, RuleDropResponseMode, RuleHeaderInputViewModel,
+    RuleId, RuleJitterScope, RuleMatchField, RuleMatchFieldKind, RuleMatchOperator,
+    RuleMatchOperatorKind, RuleRepositoryPort, RuleSummaryViewModel, RuleTerminalAction,
+    RuleTrafficDirection, RuleViewModel, RuntimeEpoch, SessionDetailViewModel, SessionId,
+    SessionPageViewModel, SessionQuery, SessionQueryPort, SettingsDraft, SettingsRepositoryPort,
     SettingsValidationViewModel, SettingsViewModel, UiEventEnvelope, UiEventPayload,
 };
 
 #[derive(Debug)]
 pub struct Application {
+    product_name: String,
     proxy: Arc<dyn ProxySupervisorPort>,
     capture: Arc<dyn crate::CaptureRepositoryPort>,
     sessions: Arc<dyn SessionQueryPort>,
@@ -39,6 +40,7 @@ pub struct Application {
 impl Application {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
+        product_name: String,
         proxy: Arc<dyn ProxySupervisorPort>,
         capture: Arc<dyn crate::CaptureRepositoryPort>,
         sessions: Arc<dyn SessionQueryPort>,
@@ -52,6 +54,7 @@ impl Application {
         events: Arc<EventHub>,
     ) -> Self {
         Self {
+            product_name,
             proxy,
             capture,
             sessions,
@@ -93,8 +96,19 @@ impl Application {
             .collect();
         let certificate = self.certificates.overview().await?;
         let settings = self.settings.get().await?;
+        let channel_catalog = settings
+            .stored
+            .channels
+            .iter()
+            .map(|channel| ChannelPresentationViewModel {
+                id: channel.id.clone(),
+                display_name: channel.display_name.clone(),
+            })
+            .collect();
         Ok(AppBootstrapViewModel {
+            product_name: self.product_name.clone(),
             proxy,
+            channel_catalog,
             recent_capture,
             pending_breakpoints,
             certificate,
@@ -471,7 +485,7 @@ impl Application {
                 text: String::new(),
             },
             RuleActionKind::SetHeader => RuleAction::SetHeader {
-                name: "x-gmofg-test".into(),
+                name: "x-proxy-test".into(),
                 value: String::new(),
             },
             RuleActionKind::Delay => RuleAction::Delay { milliseconds: 100 },
@@ -522,12 +536,12 @@ impl Application {
                 action: RuleTerminalAction::MockResponse {
                     status: 200,
                     headers: vec![("content-type".into(), "application/json".into())],
-                    shift_jis_body: b"{}".to_vec(),
+                    body_bytes: b"{}".to_vec(),
                 },
             },
             RuleActionKind::InvalidJson => RuleAction::Terminal {
                 action: RuleTerminalAction::InvalidJson {
-                    shift_jis_body: b"{".to_vec(),
+                    body_bytes: b"{".to_vec(),
                 },
             },
             RuleActionKind::IncorrectContentLength => RuleAction::Terminal {
@@ -948,7 +962,7 @@ impl Application {
     pub async fn settings_reset_defaults(&self, confirmed: bool) -> AppResult<SettingsDraft> {
         require_confirmation(confirmed, "恢复默认设置需要确认。")?;
         self.ensure_settings_write_allowed().await?;
-        Ok(SettingsDraft::default())
+        self.settings.defaults().await
     }
 
     async fn rollback_settings_and_recover(
@@ -1144,40 +1158,56 @@ fn parse_sans_raw(raw: &str) -> Vec<String> {
 
 fn normalize_settings(mut draft: SettingsDraft) -> SettingsDraft {
     draft.bind_address = draft.bind_address.trim().to_owned();
-    draft.upstream_transaction_url = draft.upstream_transaction_url.trim().to_owned();
-    draft.upstream_dll_url = draft.upstream_dll_url.trim().to_owned();
+    for channel in &mut draft.channels {
+        channel.display_name = channel.display_name.trim().to_owned();
+        channel.upstream_url = channel.upstream_url.trim().to_owned();
+    }
     draft.leaf_sans = normalize_sans(draft.leaf_sans);
     draft
 }
 
 fn validate_settings_locally(draft: &SettingsDraft) -> SettingsValidationViewModel {
     let mut field_errors = BTreeMap::new();
-    if !draft.transaction_enabled && !draft.dll_enabled {
+    if !draft.channels.iter().any(|channel| channel.enabled) {
         push_error(&mut field_errors, "channels", "至少启用一个代理通道。");
     }
-    if draft.transaction_enabled && draft.dll_enabled && draft.transaction_port == draft.dll_port {
-        push_error(
-            &mut field_errors,
-            "dll_port",
-            "交易端口和 DLL 端口不能相同。",
-        );
+    let mut ids = std::collections::BTreeSet::new();
+    let mut ports = BTreeMap::new();
+    for channel in &draft.channels {
+        let prefix = format!("channels.{}", channel.id.as_str());
+        if !ids.insert(channel.id.as_str()) {
+            push_error(
+                &mut field_errors,
+                &format!("{prefix}.id"),
+                "通道 ID 不能重复。",
+            );
+        }
+        if channel.display_name.is_empty() {
+            push_error(
+                &mut field_errors,
+                &format!("{prefix}.display_name"),
+                "通道显示名不能为空。",
+            );
+        }
+        if channel.enabled {
+            if let Some(existing) = ports.insert(channel.port, channel.id.as_str()) {
+                push_error(
+                    &mut field_errors,
+                    &format!("{prefix}.port"),
+                    &format!("监听端口与通道 {existing} 重复。"),
+                );
+            }
+            if !is_https_url_with_host(&channel.upstream_url) {
+                push_error(
+                    &mut field_errors,
+                    &format!("{prefix}.upstream_url"),
+                    "上游 URL 必须是包含主机名的 HTTPS URL。",
+                );
+            }
+        }
     }
     if draft.bind_address.is_empty() {
         push_error(&mut field_errors, "bind_address", "绑定地址不能为空。");
-    }
-    if draft.transaction_enabled && !is_https_url_with_host(&draft.upstream_transaction_url) {
-        push_error(
-            &mut field_errors,
-            "upstream_transaction_url",
-            "上游交易 URL 必须是包含主机名的 HTTPS URL。",
-        );
-    }
-    if draft.dll_enabled && !is_https_url_with_host(&draft.upstream_dll_url) {
-        push_error(
-            &mut field_errors,
-            "upstream_dll_url",
-            "上游 DLL URL 必须是包含主机名的 HTTPS URL。",
-        );
     }
     for (field, timeout) in [
         ("connect_timeout_seconds", draft.connect_timeout_seconds),

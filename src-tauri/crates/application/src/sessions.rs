@@ -159,7 +159,8 @@ impl SessionStore for InMemorySessionStore {
             .filter(|summary| {
                 query
                     .channel
-                    .is_none_or(|channel| summary.channel == channel)
+                    .as_ref()
+                    .is_none_or(|channel| &summary.channel == channel)
             })
             .filter(|summary| {
                 result

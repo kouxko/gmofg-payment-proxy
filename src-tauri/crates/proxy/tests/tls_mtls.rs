@@ -9,9 +9,9 @@ use std::{
 
 use async_trait::async_trait;
 use gmofg_proxy_runtime::{
-    Channel, ChannelConfig, ConnectionAdmission, ConnectionContext, FaultAction, HandshakePolicy,
-    Message, MessageLimits, ProxyConfig, ProxyError, ProxySupervisor, Result, SystemClock,
-    TlsPeerIdentity, TokioListenerBinder, UpstreamConnector,
+    ChannelConfig, ChannelId, ConnectionAdmission, ConnectionContext, FaultAction, HandshakePolicy,
+    MessageLimits, ProxyConfig, ProxyError, ProxySupervisor, Result, SystemClock, TlsPeerIdentity,
+    TokioListenerBinder, UpstreamConnector,
     tls::{ClientTlsAdapter, ServerTlsAdapter},
     transport::{
         AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionService, ForwardRequest,
@@ -40,6 +40,10 @@ struct Identity {
     cert: Vec<u8>,
     key: Vec<u8>,
     ca: Vec<u8>,
+}
+
+fn channel_id(value: &str) -> ChannelId {
+    ChannelId::new(value).expect("valid test channel ID")
 }
 
 fn ca(common_name: &str) -> (Vec<u8>, Vec<u8>) {
@@ -83,7 +87,7 @@ fn context() -> ConnectionContext {
     ConnectionContext {
         runtime_epoch: Uuid::new_v4(),
         connection_id: Uuid::new_v4(),
-        channel: Channel::Transaction,
+        channel: channel_id("alpha"),
         peer_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 45_000),
         accepted_at: SystemTime::now(),
         tls_peer: None,
@@ -119,8 +123,9 @@ impl UpstreamConnector for UnusedUpstream {
         &self,
         _request: ForwardRequest,
         _actions: &[FaultAction],
+        _informational: Option<&gmofg_proxy_runtime::transport::InformationalResponseSink>,
         _cancellation: &CancellationToken,
-    ) -> Result<Message> {
+    ) -> Result<gmofg_proxy_runtime::transport::UpstreamExchange> {
         unreachable!("silent TLS clients never reach the upstream connector")
     }
 }
@@ -128,7 +133,7 @@ impl UpstreamConnector for UnusedUpstream {
 #[tokio::test]
 async fn valid_mtls_negotiates_tls12_and_exposes_peer_identity() {
     let server = identity("proxy.local", "localhost", false);
-    let client = identity("payment-app", "payment-app", true);
+    let client = identity("alpha-client", "alpha-client", true);
     let server_tls = ServerTlsAdapter::build(
         vec![server.cert.clone(), server.ca.clone()],
         server.key,
@@ -155,14 +160,14 @@ async fn valid_mtls_negotiates_tls12_and_exposes_peer_identity() {
             .tls_peer
             .unwrap()
             .subject_summary
-            .contains("payment-app")
+            .contains("alpha-client")
     );
 }
 
 #[tokio::test]
 async fn wrong_ca_and_hostname_mismatch_are_rejected() {
     let server = identity("proxy.local", "localhost", false);
-    let client = identity("payment-app", "payment-app", true);
+    let client = identity("alpha-client", "alpha-client", true);
     let wrong_ca = ca("Wrong CA").0;
     for (trusted_ca, host) in [(wrong_ca, "localhost"), (server.ca.clone(), "wrong.local")] {
         let server_tls = ServerTlsAdapter::build(
@@ -193,7 +198,7 @@ async fn wrong_ca_and_hostname_mismatch_are_rejected() {
 #[tokio::test]
 async fn missing_client_certificate_and_tls13_only_client_are_rejected() {
     let server = identity("proxy.local", "localhost", false);
-    let client = identity("payment-app", "payment-app", true);
+    let client = identity("alpha-client", "alpha-client", true);
     for (version, with_client_auth) in [(&TLS12, false), (&TLS13, true)] {
         let server_tls = ServerTlsAdapter::build(
             vec![server.cert.clone(), server.ca.clone()],
@@ -255,7 +260,7 @@ impl HandshakePolicy for RejectPolicy {
 #[tokio::test]
 async fn fingerprint_and_policy_reject_before_http_handler_can_open() {
     let server = identity("proxy.local", "localhost", false);
-    let client = identity("payment-app", "payment-app", true);
+    let client = identity("alpha-client", "alpha-client", true);
     for (pin, reject_policy) in [
         (Some(vec![0; 32]), false),
         (Some(digest(&SHA256, &client.cert).as_ref().to_vec()), true),
@@ -311,7 +316,7 @@ async fn fingerprint_and_policy_reject_before_http_handler_can_open() {
 #[tokio::test]
 async fn stop_cancels_a_silent_inbound_tls_handshake() {
     let server = identity("proxy.local", "localhost", false);
-    let client = identity("payment-app", "payment-app", true);
+    let client = identity("alpha-client", "alpha-client", true);
     let entered = Arc::new(Notify::new());
     let acceptor = SignalingAcceptor {
         inner: ServerTlsAdapter::build(
@@ -338,7 +343,7 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
     let started = supervisor
         .start(ProxyConfig {
             channels: vec![ChannelConfig {
-                channel: Channel::Transaction,
+                channel: channel_id("alpha"),
                 enabled: true,
                 listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),
                 upstream_url: "https://upstream.test/".into(),
@@ -354,7 +359,7 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
         .await
         .unwrap();
 
-    let _silent = TcpStream::connect(started.listeners[&Channel::Transaction])
+    let _silent = TcpStream::connect(started.listeners[&channel_id("alpha")])
         .await
         .unwrap();
     tokio::time::timeout(Duration::from_secs(1), entered.notified())
@@ -371,7 +376,7 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
 #[tokio::test]
 async fn silent_inbound_tls_handshake_times_out_and_releases_its_permit() {
     let server = identity("proxy.local", "localhost", false);
-    let client = identity("payment-app", "payment-app", true);
+    let client = identity("alpha-client", "alpha-client", true);
     let client_tls = ClientTlsAdapter::build(
         vec![client.cert.clone(), client.ca.clone()],
         client.key.clone(),
@@ -404,7 +409,7 @@ async fn silent_inbound_tls_handshake_times_out_and_releases_its_permit() {
     let started = supervisor
         .start(ProxyConfig {
             channels: vec![ChannelConfig {
-                channel: Channel::Transaction,
+                channel: channel_id("alpha"),
                 enabled: true,
                 listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0),
                 upstream_url: "https://upstream.test/".into(),
@@ -419,7 +424,7 @@ async fn silent_inbound_tls_handshake_times_out_and_releases_its_permit() {
         })
         .await
         .unwrap();
-    let address = started.listeners[&Channel::Transaction];
+    let address = started.listeners[&channel_id("alpha")];
 
     let silent = TcpStream::connect(address).await.unwrap();
     tokio::time::timeout(Duration::from_secs(1), entered.notified())

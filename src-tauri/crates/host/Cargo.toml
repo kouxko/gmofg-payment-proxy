@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 gmofg-proxy-application = { path = "../application" }
 gmofg-proxy-infrastructure = { path = "../infrastructure" }
+gmofg-proxy-product-api = { path = "../product-api" }
 gmofg-proxy-runtime = { path = "../proxy" }
 parking_lot.workspace = true
 thiserror.workspace = true
@@ -19,6 +20,7 @@ async-trait.workspace = true
 chrono.workspace = true
 tempfile.workspace = true
 uuid.workspace = true
+gmofg-proxy-product-payment = { path = "../product-payment" }
 
 [lints]
 workspace = true

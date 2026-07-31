@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use http::Uri;
 use zeroize::Zeroizing;
 
-use crate::supervisor::{Channel, ProxyConfig, RuntimeServiceFactory};
+use crate::supervisor::{ChannelId, ProxyConfig, RuntimeServiceFactory};
 use crate::tls::{ClientTlsAdapter, ServerTlsAdapter};
 use crate::transport::{
     Clock, ConnectionAdmission, ConnectionService, HandshakePolicy, HyperUpstreamConnector,
@@ -78,7 +78,7 @@ impl RustlsRuntimeServiceFactory {
 
 #[async_trait]
 impl RuntimeServiceFactory for RustlsRuntimeServiceFactory {
-    async fn build(&self, config: &ProxyConfig) -> Result<BTreeMap<Channel, ConnectionService>> {
+    async fn build(&self, config: &ProxyConfig) -> Result<BTreeMap<ChannelId, ConnectionService>> {
         let materials = self
             .materials
             .load_epoch_snapshot(&config.leaf_sans)
@@ -114,7 +114,7 @@ impl RuntimeServiceFactory for RustlsRuntimeServiceFactory {
                 limits: config.limits,
             };
             services.insert(
-                channel.channel,
+                channel.channel.clone(),
                 ConnectionService {
                     acceptor: acceptor.clone(),
                     upstream: Arc::new(connector),

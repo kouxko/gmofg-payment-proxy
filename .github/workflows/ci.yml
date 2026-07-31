@@ -7,8 +7,15 @@ on:
 
 jobs:
   verify:
-    runs-on: windows-latest
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - macos-14
     steps:
       - uses: actions/checkout@v4
 
@@ -24,6 +31,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: ci-${{ matrix.os }}
+          cache-on-failure: true
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -46,7 +59,7 @@ jobs:
         run: cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check
 
       - name: Verify Rust lints
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets -- -D warnings
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
 
       - name: Verify Rust tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets

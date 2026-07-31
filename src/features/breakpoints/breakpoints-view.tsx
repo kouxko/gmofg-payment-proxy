@@ -310,7 +310,7 @@ export function BreakpointsView() {
                   </Chip>
                   <span>{item.terminal_ip}</span>
                   <span className="ml-auto">
-                    {item.channel === "transaction" ? "交易" : "DLL"}
+                    {item.channel_text}
                   </span>
                 </div>
                 <div className="truncate font-mono text-xs">
@@ -366,7 +366,7 @@ export function BreakpointsView() {
               </h2>
               <span>终端 IP {detail.data.summary.terminal_ip}</span>
               <span>
-                {detail.data.summary.channel === "transaction" ? "交易通道" : "DLL 通道"}
+                {detail.data.summary.channel_text}通道
               </span>
               <span className="ml-auto max-w-full truncate font-mono text-xs">
                 请求 ID {detail.data.summary.session_id}

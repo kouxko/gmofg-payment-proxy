@@ -36,7 +36,10 @@ import type {
 import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
-import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import {
+  useAppEventRefresh,
+  useBootstrap,
+} from "@/features/shell/bootstrap-context";
 import {
   formatBytes,
   formatDuration,
@@ -76,6 +79,8 @@ export function sessionFilterDateText(value: DateValue | null): string | null {
 }
 
 export function SessionsView() {
+  const { bootstrap } = useBootstrap();
+  const channelCatalog = bootstrap?.channel_catalog ?? [];
   const [selectedId, setSelectedId] = useState<string>();
   const [query, setQuery] = useState(defaultSessionQuery);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -95,6 +100,10 @@ export function SessionsView() {
     undefined,
     { enabled: Boolean(selectedId && detailRequested) },
   );
+  useAppEventRefresh(["session_updated"], detail.refresh, {
+    paused: !selectedId || !detailRequested,
+    entityId: selectedId,
+  });
   const selected = page.data?.items.find(
     (item) => item.session_id === selectedId,
   );
@@ -199,9 +208,18 @@ export function SessionsView() {
                 </Select.Trigger>
                 <Select.Popover>
                   <ListBox>
-                    <ListBox.Item id="all">全部通道</ListBox.Item>
-                    <ListBox.Item id="transaction">交易</ListBox.Item>
-                    <ListBox.Item id="dll">DLL</ListBox.Item>
+                    <ListBox.Item id="all" textValue="全部通道">
+                      全部通道
+                    </ListBox.Item>
+                    {channelCatalog.map((channel) => (
+                      <ListBox.Item
+                        key={channel.id}
+                        id={channel.id}
+                        textValue={channel.display_name}
+                      >
+                        {channel.display_name}
+                      </ListBox.Item>
+                    ))}
                   </ListBox>
                 </Select.Popover>
               </Select>
@@ -358,6 +376,7 @@ export function SessionsView() {
                 <Table.Column>通道</Table.Column>
                 <Table.Column>方法</Table.Column>
                 <Table.Column>路径 / 请求类型</Table.Column>
+                <Table.Column>HTTP 状态码</Table.Column>
                 <Table.Column>结果</Table.Column>
                 <Table.Column>耗时</Table.Column>
                 <Table.Column>匹配规则</Table.Column>
@@ -382,12 +401,21 @@ export function SessionsView() {
                     <Table.Cell>{session.terminal_ip}</Table.Cell>
                     <Table.Cell>
                       <Chip size="sm" color="accent" variant="soft">
-                        {session.channel === "transaction" ? "交易" : "DLL"}
+                        {session.channel_text}
                       </Chip>
                     </Table.Cell>
                     <Table.Cell>{session.method}</Table.Cell>
                     <Table.Cell className="max-w-64 truncate font-mono text-xs">
                       {session.target}
+                    </Table.Cell>
+                    <Table.Cell>
+                      {session.http_status == null ? (
+                        "—"
+                      ) : (
+                        <Chip size="sm" color="accent" variant="soft">
+                          {session.http_status}
+                        </Chip>
+                      )}
                     </Table.Cell>
                     <Table.Cell>
                       <Chip
@@ -501,14 +529,90 @@ export function SessionsView() {
                     )}
                     {detail.data && (
                       <>
+                        <div className="space-y-3">
+                          <h3 className="font-semibold">请求 Header</h3>
+                          <Table>
+                            <Table.ScrollContainer>
+                              <Table.Content aria-label="会话请求 HTTP Header">
+                                <Table.Header>
+                                  <Table.Column isRowHeader>名称</Table.Column>
+                                  <Table.Column>值</Table.Column>
+                                </Table.Header>
+                                <Table.Body
+                                  renderEmptyState={() => (
+                                    <div className="p-4 text-center text-sm text-[var(--telemetry-muted)]">
+                                      无请求 Header
+                                    </div>
+                                  )}
+                                >
+                                  {Object.entries(
+                                    detail.data.request?.headers ?? {},
+                                  ).flatMap(([name, values]) =>
+                                    values.map((value, index) => (
+                                      <Table.Row key={`${name}-${index}`}>
+                                        <Table.Cell className="font-mono text-xs">
+                                          {name}
+                                        </Table.Cell>
+                                        <Table.Cell className="break-all font-mono text-xs">
+                                          {value}
+                                        </Table.Cell>
+                                      </Table.Row>
+                                    )),
+                                  )}
+                                </Table.Body>
+                              </Table.Content>
+                            </Table.ScrollContainer>
+                          </Table>
+                        </div>
                         <div>
-                          <h3 className="mb-2 font-semibold">请求</h3>
+                          <h3 className="mb-2 font-semibold">请求 Body</h3>
                           <pre className="whitespace-pre-wrap break-all text-xs">
                             {detail.data.request?.body_text ?? "无请求正文"}
                           </pre>
                         </div>
                         <div>
-                          <h3 className="mb-2 font-semibold">响应</h3>
+                          <h3 className="mb-2 font-semibold">HTTP 状态码</h3>
+                          <Chip size="sm" color="accent" variant="soft">
+                            {detail.data.response?.http_status ?? "无响应"}
+                          </Chip>
+                        </div>
+                        <div className="space-y-3">
+                          <h3 className="font-semibold">响应 Header</h3>
+                          <Table>
+                            <Table.ScrollContainer>
+                              <Table.Content aria-label="会话响应 HTTP Header">
+                                <Table.Header>
+                                  <Table.Column isRowHeader>名称</Table.Column>
+                                  <Table.Column>值</Table.Column>
+                                </Table.Header>
+                                <Table.Body
+                                  renderEmptyState={() => (
+                                    <div className="p-4 text-center text-sm text-[var(--telemetry-muted)]">
+                                      无响应 Header
+                                    </div>
+                                  )}
+                                >
+                                  {Object.entries(
+                                    detail.data.response?.headers ?? {},
+                                  ).flatMap(([name, values]) =>
+                                    values.map((value, index) => (
+                                      <Table.Row key={`${name}-${index}`}>
+                                        <Table.Cell className="font-mono text-xs">
+                                          {name}
+                                        </Table.Cell>
+                                        <Table.Cell className="break-all font-mono text-xs">
+                                          {value}
+                                        </Table.Cell>
+                                      </Table.Row>
+                                    )),
+                                  )}
+                                </Table.Body>
+                              </Table.Content>
+                            </Table.ScrollContainer>
+                          </Table>
+                        </div>
+                        <div>
+                          <h3 className="mb-2 font-semibold">响应 Body</h3>
                           <pre className="whitespace-pre-wrap break-all text-xs">
                             {detail.data.response?.body_text ?? "无响应正文"}
                           </pre>
@@ -690,7 +794,7 @@ export function SessionsView() {
                 <dt>上游主机</dt>
                 <dd>{detail.data?.upstream_host ?? "—"}</dd>
                 <dt>通道</dt>
-                <dd>{selected.channel === "transaction" ? "交易" : "DLL"}</dd>
+                <dd>{selected.channel_text}</dd>
                 <dt>结果</dt>
                 <dd>{selected.result}</dd>
                 <dt>最终动作</dt>

@@ -76,17 +76,15 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-async-trait.workspace = true
 gmofg-proxy-application = { path = "crates/application" }
 gmofg-proxy-domain = { path = "crates/domain" }
 gmofg-proxy-host = { path = "crates/host" }
 gmofg-proxy-infrastructure = { path = "crates/infrastructure" }
+gmofg-proxy-product-api = { path = "crates/product-api" }
+gmofg-proxy-product-payment = { path = "crates/product-payment" }
 gmofg-proxy-runtime = { path = "crates/proxy" }
 log = "0.4"
-p12-keystore.workspace = true
-ring.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 specta.workspace = true
 specta-typescript.workspace = true
 tauri.workspace = true
@@ -94,9 +92,7 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2.7.2"
 tauri-specta.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
 tracing.workspace = true
-zeroize.workspace = true
 
 [lints]
 workspace = true

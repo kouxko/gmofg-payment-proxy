@@ -10,12 +10,17 @@ use std::{
 
 use async_trait::async_trait;
 use gmofg_proxy_infrastructure::{CertificateService, LeafCertificateRequest};
+use gmofg_proxy_product_api::{BodyCodec, ProductProfile};
+use gmofg_proxy_product_payment::PaymentProductProfile;
 use gmofg_proxy_runtime::{
-    Channel, ChannelConfig, ConnectionAdmission, ConnectionContext, DEFAULT_MAX_CONNECTIONS,
+    ChannelConfig, ChannelId, ConnectionAdmission, ConnectionContext, DEFAULT_MAX_CONNECTIONS,
     FaultAction, HandshakePolicy, Message, MessageLimits, PipelinePorts, ProxyConfig, ProxyError,
     ProxySupervisor, SystemClock, TokioListenerBinder,
     tls::{ClientTlsAdapter, ServerTlsAdapter},
-    transport::{ConnectionService, ForwardRequest, HyperUpstreamConnector, UpstreamConnector},
+    transport::{
+        ConnectionService, ForwardRequest, HyperUpstreamConnector, UpstreamConnector,
+        UpstreamExchange,
+    },
 };
 use p12_keystore::{KeyStore, KeyStoreEntry, Pkcs12ImportPolicy};
 use ring::digest::{SHA256, digest};
@@ -54,6 +59,7 @@ struct TestClientIdentity {
 #[derive(Debug, Clone)]
 struct ProbePipelinePorts {
     events: mpsc::Sender<ProbeEvent>,
+    body_codec: Arc<dyn BodyCodec>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,9 +74,13 @@ impl UpstreamConnector for ProbeUpstreamConnector {
         &self,
         request: ForwardRequest,
         actions: &[FaultAction],
+        informational: Option<&gmofg_proxy_runtime::transport::InformationalResponseSink>,
         cancellation: &tokio_util::sync::CancellationToken,
-    ) -> gmofg_proxy_runtime::Result<Message> {
-        let result = self.inner.send(request, actions, cancellation).await;
+    ) -> gmofg_proxy_runtime::Result<UpstreamExchange> {
+        let result = self
+            .inner
+            .send(request, actions, informational, cancellation)
+            .await;
         if let Err(error) = &result {
             println!(
                 "PROXY_UPSTREAM_FAILED code={} message={}",
@@ -116,7 +126,7 @@ impl PipelinePorts for ProbePipelinePorts {
         _context: &ConnectionContext,
         message: &mut Message,
     ) -> gmofg_proxy_runtime::Result<Vec<FaultAction>> {
-        let parsed = message.parse_shift_jis_json()?;
+        let parsed = decode_payment_json(self.body_codec.as_ref(), &message.body)?;
         let transaction_type = parsed
             .get("TransactionType")
             .and_then(serde_json::Value::as_str)
@@ -140,7 +150,7 @@ impl PipelinePorts for ProbePipelinePorts {
         _context: &ConnectionContext,
         message: &mut Message,
     ) -> gmofg_proxy_runtime::Result<Vec<FaultAction>> {
-        let parsed = message.parse_shift_jis_json().ok();
+        let parsed = decode_payment_json(self.body_codec.as_ref(), &message.body).ok();
         let error_code = parsed
             .as_ref()
             .and_then(|value| value.get("ErrorCode"))
@@ -263,6 +273,20 @@ fn proxy_error(error: ProxyError) -> Box<dyn std::error::Error> {
     Box::new(error)
 }
 
+fn decode_payment_json(
+    body_codec: &dyn BodyCodec,
+    bytes: &[u8],
+) -> gmofg_proxy_runtime::Result<serde_json::Value> {
+    let text = body_codec.decode(bytes).map_err(|error| ProxyError {
+        code: error.code,
+        message: error.message,
+    })?;
+    serde_json::from_str(&text).map_err(|error| ProxyError {
+        code: "BODY_DECODE_FAILED",
+        message: format!("decoded Payment body is not valid JSON: {error}"),
+    })
+}
+
 fn sha256_hex(bytes: &[u8]) -> String {
     digest(&SHA256, bytes)
         .as_ref()
@@ -309,6 +333,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let proxy_ca_output = required_path("GMOFG_PROXY_CA_OUTPUT")?;
     let client_p12_password = env::var("GMOFG_CLIENT_P12_PASSWORD").unwrap_or_default();
 
+    let product = PaymentProductProfile::isolated_test_tool();
     let certificate_service = CertificateService;
     // The real development identity uses a self-signed legacy CA without CA
     // extensions. This test-only loader preserves the actual device identity;
@@ -341,6 +366,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (events_tx, mut events_rx) = mpsc::channel(4);
     let ports = Arc::new(ProbePipelinePorts {
         events: events_tx.clone(),
+        body_codec: product.body_codec(),
     });
     let acceptor = ServerTlsAdapter::build(
         vec![
@@ -392,7 +418,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let snapshot = supervisor
         .start(ProxyConfig {
             channels: vec![ChannelConfig {
-                channel: Channel::Dll,
+                channel: ChannelId::new("dll").map_err(proxy_error)?,
                 enabled: true,
                 listen_addr: SocketAddr::new(IpAddr::V4(DEFAULT_LISTEN_IP), UPSTREAM_PORT),
                 upstream_url: format!("https://{UPSTREAM_HOST}:{UPSTREAM_PORT}"),

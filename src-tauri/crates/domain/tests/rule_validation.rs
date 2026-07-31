@@ -212,54 +212,29 @@ fn rejects_terminal_action_that_is_not_final() {
 }
 
 #[test]
-fn rejects_invalid_shift_jis_bytes_in_mock_response() {
-    let invalid = draft(
+fn domain_preserves_product_owned_mock_body_bytes_without_decoding() {
+    let valid = draft(
         MessageStage::Request,
         Vec::new(),
         vec![RuleAction::Terminal(TerminalAction::MockResponse {
             status: 200,
             headers: Vec::new(),
-            shift_jis_body: vec![0x82],
+            body_bytes: vec![0x00, 0x82, 0xFF],
         })],
     );
 
-    assert_invalid_field(&invalid, "actions.0.shift_jis_body");
+    assert!(validate_rule_draft(&valid).is_ok());
 }
 
 #[test]
-fn rejects_invalid_shift_jis_bytes_in_invalid_json_fault() {
-    let invalid = draft(
+fn domain_preserves_product_owned_invalid_body_bytes_without_decoding() {
+    let valid = draft(
         MessageStage::Response,
         Vec::new(),
         vec![RuleAction::Terminal(TerminalAction::InvalidJson {
-            shift_jis_body: vec![0x82],
+            body_bytes: vec![0x00, 0x82, 0xFF],
         })],
     );
 
-    assert_invalid_field(&invalid, "actions.0.shift_jis_body");
-}
-
-#[test]
-fn rejects_unencodable_shift_jis_replacement_text() {
-    let invalid = draft(
-        MessageStage::Response,
-        Vec::new(),
-        vec![RuleAction::ReplaceBodyText("emoji 🧪".into())],
-    );
-
-    assert_invalid_field(&invalid, "actions.0.text");
-}
-
-#[test]
-fn rejects_unencodable_shift_jis_json_value() {
-    let invalid = draft(
-        MessageStage::Response,
-        Vec::new(),
-        vec![RuleAction::SetJsonField {
-            path: "$.value".into(),
-            value: json!("🧪"),
-        }],
-    );
-
-    assert_invalid_field(&invalid, "actions.0.value_json");
+    assert!(validate_rule_draft(&valid).is_ok());
 }

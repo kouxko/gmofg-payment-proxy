@@ -35,7 +35,10 @@ import {
 } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { formatTimestamp, toneColor } from "@/lib/format";
-import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import {
+  useAppEventRefresh,
+  useBootstrap,
+} from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import {
   ActionsEditor,
@@ -44,6 +47,8 @@ import {
 } from "./rule-editor";
 
 export function RulesView() {
+  const { bootstrap } = useBootstrap();
+  const channelCatalog = bootstrap?.channel_catalog ?? [];
   const { navigate, searchParams } = useWorkspaceNavigation();
   const sourceSessionId = searchParams.get("sessionId");
   const rules = useIpcQuery<RuleSummaryViewModel[]>("rule-list", () =>
@@ -487,9 +492,18 @@ export function RulesView() {
                     </Select.Trigger>
                     <Select.Popover>
                       <ListBox>
-                        <ListBox.Item id="all">全部</ListBox.Item>
-                        <ListBox.Item id="transaction">交易</ListBox.Item>
-                        <ListBox.Item id="dll">DLL</ListBox.Item>
+                        <ListBox.Item id="all" textValue="全部">
+                          全部
+                        </ListBox.Item>
+                        {channelCatalog.map((channel) => (
+                          <ListBox.Item
+                            key={channel.id}
+                            id={channel.id}
+                            textValue={channel.display_name}
+                          >
+                            {channel.display_name}
+                          </ListBox.Item>
+                        ))}
                       </ListBox>
                     </Select.Popover>
                   </Select>
@@ -530,7 +544,7 @@ export function RulesView() {
                     <Switch.Control>
                       <Switch.Thumb />
                     </Switch.Control>
-                    启用规则
+                    <Switch.Content>启用规则</Switch.Content>
                   </Switch>
                   <Switch
                     aria-label="仅命中一次"
@@ -542,7 +556,7 @@ export function RulesView() {
                     <Switch.Control>
                       <Switch.Thumb />
                     </Switch.Control>
-                    仅命中一次
+                    <Switch.Content>仅命中一次</Switch.Content>
                   </Switch>
                 </div>
               </Tabs.Panel>

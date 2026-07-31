@@ -16,8 +16,8 @@ pub mod sqlite;
 pub use adapters::{
     ApplicationProxyAdapter, CaptureRepositoryAdapter, CertificateServiceAdapter,
     FaultServiceAdapter, FileExportAdapter, InfrastructureServiceBundle, NativeFileDialog,
-    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimeRuleRepository,
-    SettingsRepositoryAdapter,
+    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
+    RuntimeRuleRepository, SettingsRepositoryAdapter,
 };
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,

@@ -105,7 +105,7 @@ export function BootstrapProvider({
             ? {
                 ...current,
                 channels: current.channels.map((channel) =>
-                  channel.kind === channelStatus.kind ? channelStatus : channel,
+                  channel.id === channelStatus.id ? channelStatus : channel,
                 ),
               }
             : current,
@@ -182,7 +182,7 @@ export function BootstrapProvider({
 export function useAppEventRefresh(
   eventTypes: readonly UiEventEnvelope["payload"]["type"][],
   refresh: () => Promise<void>,
-  options?: { paused?: boolean },
+  options?: { paused?: boolean; entityId?: string },
 ) {
   const { subscribe } = useBootstrap();
   const eventTypesKey = eventTypes.join("|");
@@ -190,14 +190,34 @@ export function useAppEventRefresh(
     if (options?.paused) return;
     const acceptedTypes = new Set(eventTypesKey.split("|"));
     let refreshPending = false;
-    return subscribe((event) => {
-      if (!acceptedTypes.has(event.payload.type) || refreshPending) return;
+    let refreshAgain = false;
+    let active = true;
+    const drainRefreshes = async () => {
       refreshPending = true;
-      void refresh().finally(() => {
-        refreshPending = false;
-      });
+      do {
+        refreshAgain = false;
+        await refresh();
+      } while (active && refreshAgain);
+      refreshPending = false;
+    };
+    const unsubscribe = subscribe((event) => {
+      if (
+        !acceptedTypes.has(event.payload.type) ||
+        (options?.entityId != null && event.entity_id !== options.entityId)
+      ) {
+        return;
+      }
+      if (refreshPending) {
+        refreshAgain = true;
+        return;
+      }
+      void drainRefreshes();
     });
-  }, [eventTypesKey, options?.paused, refresh, subscribe]);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [eventTypesKey, options?.entityId, options?.paused, refresh, subscribe]);
 }
 
 export function useBootstrap() {

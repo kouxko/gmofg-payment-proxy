@@ -28,12 +28,22 @@ vi.mock("@/lib/ipc/client", () => ({
 const draft: SettingsDraft = {
   expected_revision: 1,
   bind_address: "0.0.0.0",
-  transaction_enabled: true,
-  transaction_port: 16627,
-  dll_enabled: true,
-  dll_port: 16127,
-  upstream_transaction_url: "https://transaction.example.test",
-  upstream_dll_url: "https://dll.example.test",
+  channels: [
+    {
+      id: "transaction",
+      display_name: "交易",
+      enabled: true,
+      port: 16627,
+      upstream_url: "https://transaction.example.test",
+    },
+    {
+      id: "dll",
+      display_name: "DLL",
+      enabled: true,
+      port: 16127,
+      upstream_url: "https://dll.example.test",
+    },
+  ],
   connect_timeout_seconds: 70,
   write_timeout_seconds: 70,
   read_timeout_seconds: 70,
@@ -135,6 +145,17 @@ describe("production SettingsView overlay", () => {
     },
     10_000,
   );
+
+  it("renders channel editors from the Rust settings catalog", () => {
+    render(<SettingsView />);
+
+    expect(screen.getByText("通道 ID：transaction")).toBeVisible();
+    expect(screen.getByText("通道 ID：dll")).toBeVisible();
+    expect(
+      screen.getByRole("switch", { name: "启用交易" }),
+    ).toBeChecked();
+    expect(screen.getByRole("switch", { name: "启用DLL" })).toBeChecked();
+  });
 
   it("switches setting tabs without replacing the page document", async () => {
     const user = userEvent.setup();

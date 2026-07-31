@@ -1,9 +1,8 @@
 use crate::{
-    ChannelKind, DomainError, ErrorCode, JsonPath, MessageStage, Revision, RuleId, RuntimeEpoch,
+    ChannelId, DomainError, ErrorCode, JsonPath, MessageStage, Revision, RuleId, RuntimeEpoch,
     TerminalIdentity,
 };
 use chrono::{DateTime, Utc};
-use encoding_rs::SHIFT_JIS;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -75,10 +74,10 @@ pub enum TerminalAction {
     MockResponse {
         status: u16,
         headers: Vec<(String, String)>,
-        shift_jis_body: Vec<u8>,
+        body_bytes: Vec<u8>,
     },
     InvalidJson {
-        shift_jis_body: Vec<u8>,
+        body_bytes: Vec<u8>,
     },
     IncorrectContentLength {
         delta: i64,
@@ -170,7 +169,7 @@ pub struct RuleDraft {
     pub enabled: bool,
     pub priority: u32,
     pub created_order: u64,
-    pub channel: Option<ChannelKind>,
+    pub channel: Option<ChannelId>,
     pub stage: MessageStage,
     pub conditions: Vec<MatchCondition>,
     pub actions: Vec<RuleAction>,
@@ -186,7 +185,7 @@ pub struct Rule {
     pub enabled: bool,
     pub priority: u32,
     pub created_order: u64,
-    pub channel: Option<ChannelKind>,
+    pub channel: Option<ChannelId>,
     pub stage: MessageStage,
     pub conditions: Vec<MatchCondition>,
     pub actions: Vec<RuleAction>,
@@ -283,7 +282,7 @@ impl Rule {
 #[derive(Clone, Debug)]
 pub struct MatchContext<'a> {
     pub runtime_epoch: RuntimeEpoch,
-    pub channel: ChannelKind,
+    pub channel: ChannelId,
     pub stage: MessageStage,
     pub terminal: &'a TerminalIdentity,
     pub path_or_request_type: Option<&'a str>,
@@ -434,7 +433,8 @@ impl RuleEngine {
         for rule in snapshot.iter().filter(|rule| rule.enabled) {
             if rule
                 .channel
-                .is_some_and(|channel| channel != context.channel)
+                .as_ref()
+                .is_some_and(|channel| channel != &context.channel)
                 || rule.stage != context.stage
             {
                 continue;
@@ -770,33 +770,15 @@ fn validate_actions(draft: &RuleDraft, error: &mut DomainError) {
 
 fn validate_action_content(error: &mut DomainError, index: usize, action: &RuleAction) {
     match action {
-        RuleAction::SetJsonField { path, value } => {
+        RuleAction::SetJsonField { path, .. } => {
             if JsonPath::parse(path).is_err() {
                 push_field_error(error, format!("actions.{index}.path"), "JSON 字段路径非法");
             }
-            if serde_json::to_string(value).is_ok_and(|text| !is_strict_shift_jis_text(&text)) {
-                push_field_error(
-                    error,
-                    format!("actions.{index}.value_json"),
-                    "JSON 值包含无法无损编码为 Shift-JIS 的字符",
-                );
-            }
-        }
-        RuleAction::ReplaceBodyText(text) if !is_strict_shift_jis_text(text) => {
-            push_field_error(
-                error,
-                format!("actions.{index}.text"),
-                "Body 文本包含无法无损编码为 Shift-JIS 的字符",
-            );
         }
         RuleAction::SetHeader { name, value } => {
             validate_header(error, &format!("actions.{index}"), name, value, false);
         }
-        RuleAction::Terminal(TerminalAction::MockResponse {
-            headers,
-            shift_jis_body,
-            ..
-        }) => {
+        RuleAction::Terminal(TerminalAction::MockResponse { headers, .. }) => {
             for (header_index, (name, value)) in headers.iter().enumerate() {
                 validate_header(
                     error,
@@ -806,44 +788,8 @@ fn validate_action_content(error: &mut DomainError, index: usize, action: &RuleA
                     false,
                 );
             }
-            validate_mock_json_body(error, index, shift_jis_body);
-        }
-        RuleAction::Terminal(TerminalAction::InvalidJson { shift_jis_body }) => {
-            validate_invalid_json_body(error, index, shift_jis_body);
         }
         _ => {}
-    }
-}
-
-fn validate_mock_json_body(error: &mut DomainError, index: usize, body: &[u8]) {
-    match decode_strict_shift_jis(body) {
-        Some(text) if serde_json::from_str::<Value>(&text).is_ok() => {}
-        Some(_) => push_field_error(
-            error,
-            format!("actions.{index}.shift_jis_body"),
-            "Mock Body 必须是有效的 Shift-JIS JSON",
-        ),
-        None => push_field_error(
-            error,
-            format!("actions.{index}.shift_jis_body"),
-            "Mock Body 包含非法 Shift-JIS 字节",
-        ),
-    }
-}
-
-fn validate_invalid_json_body(error: &mut DomainError, index: usize, body: &[u8]) {
-    match decode_strict_shift_jis(body) {
-        Some(text) if serde_json::from_str::<Value>(&text).is_err() => {}
-        Some(_) => push_field_error(
-            error,
-            format!("actions.{index}.shift_jis_body"),
-            "非法 JSON 故障的 Body 不能是有效 JSON",
-        ),
-        None => push_field_error(
-            error,
-            format!("actions.{index}.shift_jis_body"),
-            "非法 JSON 故障仍必须是有效 Shift-JIS 字节",
-        ),
     }
 }
 
@@ -917,16 +863,6 @@ fn is_valid_header_value(value: &str) -> bool {
     value
         .bytes()
         .all(|byte| byte == b'\t' || byte >= 0x20 && byte != 0x7f)
-}
-
-fn is_strict_shift_jis_text(text: &str) -> bool {
-    let (_, _, had_errors) = SHIFT_JIS.encode(text);
-    !had_errors
-}
-
-fn decode_strict_shift_jis(bytes: &[u8]) -> Option<String> {
-    let (decoded, had_errors) = SHIFT_JIS.decode_without_bom_handling(bytes);
-    (!had_errors).then(|| decoded.into_owned())
 }
 
 fn push_field_error(error: &mut DomainError, field: impl Into<String>, message: impl Into<String>) {
@@ -1047,7 +983,7 @@ mod tests {
     ) -> MatchContext<'a> {
         MatchContext {
             runtime_epoch: epoch,
-            channel: ChannelKind::Transaction,
+            channel: ChannelId::new("alpha").unwrap(),
             stage: MessageStage::Request,
             terminal,
             path_or_request_type: Some("/payment"),
@@ -1490,13 +1426,13 @@ mod tests {
                 RuleAction::Terminal(TerminalAction::MockResponse {
                     status: 200,
                     headers: vec![("x-mock".into(), "true".into())],
-                    shift_jis_body: b"{}".to_vec(),
+                    body_bytes: b"{}".to_vec(),
                 }),
                 vec![MessageStage::Request],
             ),
             (
                 RuleAction::Terminal(TerminalAction::InvalidJson {
-                    shift_jis_body: b"{".to_vec(),
+                    body_bytes: b"{".to_vec(),
                 }),
                 vec![MessageStage::Response],
             ),
@@ -1587,7 +1523,7 @@ mod tests {
         let mut engine = RuleEngine::new(epoch, vec![rule]);
         let tls_context = MatchContext {
             runtime_epoch: epoch,
-            channel: ChannelKind::Dll,
+            channel: ChannelId::new("beta").unwrap(),
             stage: MessageStage::TlsHandshake,
             terminal: &identity,
             path_or_request_type: None,
@@ -1645,7 +1581,7 @@ mod tests {
     }
 
     #[test]
-    fn validates_json_paths_headers_shift_jis_and_json_fault_bodies_before_save() {
+    fn validates_json_paths_and_headers_without_assuming_a_product_codec() {
         let invalid = draft(
             MessageStage::Response,
             vec![MatchCondition::Field {
@@ -1665,7 +1601,7 @@ mod tests {
                 RuleAction::Terminal(TerminalAction::MockResponse {
                     status: 200,
                     headers: vec![("bad header".into(), "value".into())],
-                    shift_jis_body: vec![0x82],
+                    body_bytes: vec![0x82],
                 }),
             ],
         );
@@ -1673,12 +1609,9 @@ mod tests {
         for field in [
             "conditions.0.path",
             "actions.0.path",
-            "actions.0.value_json",
-            "actions.1.text",
             "actions.2.name",
             "actions.2.value",
             "actions.3.headers.0.name",
-            "actions.3.shift_jis_body",
         ] {
             assert!(
                 error.field_errors.contains_key(field),
@@ -1687,23 +1620,17 @@ mod tests {
             );
         }
 
-        let valid_invalid_json = draft(
-            MessageStage::Response,
-            Vec::new(),
-            vec![RuleAction::Terminal(TerminalAction::InvalidJson {
-                shift_jis_body: b"{".to_vec(),
-            })],
+        assert!(
+            validate_rule_draft(&draft(
+                MessageStage::Response,
+                Vec::new(),
+                vec![RuleAction::Terminal(TerminalAction::InvalidJson {
+                    body_bytes: vec![0x00, 0xFF],
+                })],
+            ))
+            .is_ok(),
+            "body bytes are interpreted by the injected product codec outside the domain"
         );
-        assert!(validate_rule_draft(&valid_invalid_json).is_ok());
-
-        let accidentally_valid_json = draft(
-            MessageStage::Response,
-            Vec::new(),
-            vec![RuleAction::Terminal(TerminalAction::InvalidJson {
-                shift_jis_body: b"{}".to_vec(),
-            })],
-        );
-        assert!(validate_rule_draft(&accidentally_valid_json).is_err());
     }
 
     // RULE-012

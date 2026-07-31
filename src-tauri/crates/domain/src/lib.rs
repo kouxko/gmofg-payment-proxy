@@ -1,4 +1,4 @@
-//! Pure domain types and business rules for GMO-FG Payment Proxy.
+//! Pure domain types and business rules for the reusable interception proxy.
 //!
 //! This crate deliberately has no dependency on Tauri, storage, TLS, or async
 //! runtimes. It is the stable source for domain and IPC-facing data shapes.

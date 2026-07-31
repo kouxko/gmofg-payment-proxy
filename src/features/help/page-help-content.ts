@@ -19,7 +19,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
   "/console": {
     title: "代理控制台",
     summary:
-      "用于启动、停止和检查双端口代理。首次使用应先完成系统设置和证书配置，再从本页启动代理。",
+      "用于启动、停止和检查多通道代理。首次使用应先完成系统设置和证书配置，再从本页启动代理。",
     recommendedFor:
       "联机测试开始前确认监听地址、双向 mTLS、上游连接和最近事件是否正常。",
     sections: [
@@ -27,16 +27,16 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "console-first-run",
         title: "首次运行前的准备",
         steps: [
-          "打开“系统设置”，填写本机局域网绑定地址、服务端证书 SAN、交易端口、DLL 端口以及两个真实上游 URL。",
+          "打开“系统设置”，填写本机局域网绑定地址、服务端证书 SAN、各通道监听端口以及对应的真实上游 URL。",
           "保存设置。若代理正在运行，网络、端口、上游或 TLS 相关变更需要使用“保存并重启代理”后才会成为当前生效值。",
-          "首次构建测试版 Payment 前，在“证书管理”点击“导出测试 Payment 编译用 Root CA”，把导出的公开 .crt 加入受控的 Payment 测试构建；桌面工具永不导出 Root 私钥。",
+          "首次构建测试版客户端应用前，在“证书管理”点击“导出测试客户端应用编译用 Root CA”，把导出的公开 .crt 加入受控的客户端应用测试构建；桌面工具永不导出 Root 私钥。",
           "打开“证书管理”，由统一测试 Root CA 为本机生成 SAN 匹配的 Proxy 服务端叶子证书。",
-          "导入 Launcher 原有 client_real.p12/client.p12，供 Proxy 向 GMO-FG Server 证明客户端身份；上游信任默认使用 App 内置的 Payment 原始 server.crt，环境变化时再选择性替换。",
+          "导入产品集成层原有 客户端身份 PKCS12，供 Proxy 向上游服务器证明客户端身份；上游信任默认使用安装包内置的客户端应用原始 上游 CA 证书，环境变化时再选择性替换。",
           "在证书页执行“重新检查”，确认启动所需项目均通过后回到本页。",
-          "将 Payment 的目标地址配置为 Proxy 所在电脑的局域网 IP；交易和 DLL 分别使用本页显示的监听端口。",
+          "将客户端应用的目标地址配置为 Proxy 所在电脑的局域网 IP；各产品通道分别使用本页显示的监听端口。",
         ],
         notes: [
-          "Payment 连接的是 Proxy，不应直接连接 GMO-FG Server。",
+          "客户端应用 连接的是 Proxy，不应直接连接 上游服务器。",
           "Proxy 上游 URL 仍然填写真实 Server 地址，前后两段 TLS 身份互相独立。",
         ],
       },
@@ -44,10 +44,10 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "console-runtime",
         title: "启动、停止与重启",
         steps: [
-          "点击“启动代理”。Rust 会校验当前生效设置、解密证书、预占两个已启用端口，并以一次事务启动监听器。",
-          "等待顶部状态变为“运行中”，并确认交易与 DLL 通道显示“正在监听”。任一已启用通道失败时不会保留半启动状态。",
+          "点击“启动代理”。Rust 会校验当前生效设置、解密证书、预占所有已启用端口，并以一次事务启动监听器。",
+          "等待顶部状态变为“运行中”，并确认所有已启用通道显示“正在监听”。任一已启用通道失败时不会保留半启动状态。",
           "修改设置或证书后，使用“重启代理”让新的运行快照生效。重启会先完整停止旧运行实例，再启动新实例。",
-          "测试结束点击“停止代理”。停止会关闭两个监听器、上游任务和连接，并把仍在等待的断点转为“Proxy 已停止”。",
+          "测试结束点击“停止代理”。停止会关闭全部监听器、上游任务和连接，并把仍在等待的断点转为“Proxy 已停止”。",
           "按钮显示“正在启动/停止/重启”时不要重复操作；当前生命周期操作结束后页面会刷新 Rust 返回的状态。",
         ],
         notes: [
@@ -59,8 +59,8 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "console-status",
         title: "如何读取状态和统计",
         steps: [
-          "顶部状态栏先看全局状态，再分别看交易端口、DLL 端口、上游状态、证书状态、会话数和暂停数。",
-          "通道表中的“监听地址”是 Payment 应连接的本机地址；“上游地址”是 Proxy 实际转发的 Server 地址。",
+          "顶部状态栏先看全局状态，再分别看各通道监听端口、上游状态、证书状态、会话数和暂停数。",
+          "通道表中的“监听地址”是客户端应用应连接的本机地址；“上游地址”是 Proxy 实际转发的 Server 地址。",
           "“已连接终端”表示当前完成 App → Proxy 连接的终端数；请求数和错误数由 Rust 运行时累计。",
           "在“连接路径与最近事件”中分别查看 App → Proxy 和 Proxy → Server。前一段正常不代表后一段已经成功。",
           "查看最近事件的时间、终端、阶段、结果和耗时，定位证书验证、请求转发、断点等待或上游超时发生在哪一段。",
@@ -68,14 +68,14 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         ],
       },
       {
-        id: "console-dll-acceptance",
-        title: "真实设备 DLL 链路的成功判定",
+        id: "console-device-acceptance",
+        title: "真实设备链路的成功判定",
         steps: [
-          "确认设备只连接 Proxy 的 DLL 地址，例如 https://本机局域网IP:16127/。",
-          "在 Payment 上执行 DLL 测试，同时观察本页 DLL 请求数增加、App → Proxy 正常以及 Proxy → Server 收到真实响应。",
-          "到“实时抓包”或“会话记录”打开该 DLL 会话，确认请求类型、HTTP 状态、响应长度和响应内容来自真实上游。",
-          "当前 A920MAX 设备验收必须从真实 Server 响应中解析出 ErrorCode=D48；仅 TLS 成功、HTTP 200 或看到请求数增加均不能判定 DLL 代理链路成功。",
-          "D48 的业务含义是主文件未登记，因此它不是支付业务成功码；在本项目中它是请求确实经过 Proxy 到达真实 Server 并返回的验收信号。",
+          "确认设备只连接系统设置中目标通道显示的 Proxy 监听地址。",
+          "在客户端应用上执行目标功能，同时观察本页对应通道请求数增加、客户端 → Proxy 正常以及 Proxy → 上游服务器收到真实响应。",
+          "到“实时抓包”或“会话记录”打开该会话，确认请求类型、HTTP 状态、响应长度和响应内容来自真实上游。",
+          "按照当前产品的验收文档检查响应中的业务字段或错误码；仅 TLS 成功、HTTP 200 或看到请求数增加均不能判定业务链路成功。",
+          "报告结果时应分别记录传输/mTLS、HTTP 解析和产品业务验收，不能把三层结果合并成一个“成功”。",
         ],
       },
       {
@@ -84,7 +84,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "出现“端口已占用”时，到系统设置确认端口，并关闭占用进程或改用空闲端口后保存并重启。",
           "出现“证书未就绪/证书无效”时，到证书页重新检查 SAN、有效期、PKCS12、上游 CA 和客户端指纹。",
-          "App → Proxy 失败时优先检查设备访问的 IP/端口、测试版 Payment 是否内置统一测试 Root CA、叶子证书 SAN、终端客户端证书以及电脑防火墙。",
+          "App → Proxy 失败时优先检查设备访问的 IP/端口、测试版客户端应用是否内置统一测试 Root CA、叶子证书 SAN、终端客户端证书以及电脑防火墙。",
           "Proxy → Server 失败时检查上游 URL、DNS、网络、PKCS12 身份、上游 CA、TLS 主机名和超时设置。",
           "状态为“故障”时先阅读红色错误详情；修正原因后使用“重启代理”，不要只刷新页面。",
         ],
@@ -94,7 +94,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
   "/capture": {
     title: "实时抓包",
     summary:
-      "实时查看经过 Proxy 的请求、响应和终态事件，适合在操作 Payment 的同时观察链路和规则结果。",
+      "实时查看经过 Proxy 的请求、响应和终态事件，适合在操作客户端应用的同时观察链路和规则结果。",
     recommendedFor:
       "定位某次请求经过了哪个通道、命中了哪些规则、在哪个阶段失败，以及请求和响应的最终内容。",
     sections: [
@@ -103,7 +103,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "开始抓包与读取列表",
         steps: [
           "先在代理控制台启动代理，再进入本页；页面会订阅 Rust 批量发送的实时事件。",
-          "在 Payment 上执行操作后，表格会显示事件时间、终端 IP、通道、方向、方法、路径/请求类型、结果、耗时、匹配规则数量和大小。",
+          "在客户端应用上执行操作后，表格会显示事件时间、终端 IP、通道、方向、方法、路径/请求类型、结果、耗时、匹配规则数量和大小。",
           "默认按时间倒序显示。使用“上一页/下一页”查看 Rust 返回的分页结果。",
           "点击任意表格行，在右侧打开该事件详情；窄窗口会自动滚动到下方详情区域。",
           "如果列表显示读取失败，点击错误条中的“重试”；失败状态不等同于当前没有流量。",
@@ -115,7 +115,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "“关键字或请求 ID”可搜索请求 ID、路径和 Rust 支持的报文摘要关键字。",
           "“终端 IP”用于多设备同时测试时只查看指定终端。",
-          "“通道”选择交易、DLL 或全部通道；“阶段”选择请求、响应或终态。",
+          "“通道”选择 Rust 产品目录提供的目标通道或全部通道；“阶段”选择请求、响应或终态。",
           "“结果”可输入 success、timeout 等结果文本；“规则 ID”只看命中特定规则的事件。",
           "每次修改筛选条件都会回到第 1 页，并由 Rust 重新执行筛选、排序和总数计算。",
         ],
@@ -139,7 +139,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "查看事件详情",
         steps: [
           "“概览”查看请求 ID、终端、通道、TLS、时间、最终结果和规则执行轨迹。",
-          "“请求”查看 Rust 返回的请求头与 Shift-JIS 解码文本；“响应”查看响应头与解码文本。",
+          "“请求”查看 Rust 返回的完整请求 Header 与 Shift-JIS 解码 Body；“响应”查看 HTTP 状态码、完整响应 Header 与解码 Body。",
           "规则轨迹按 Rust 的真实执行顺序显示匹配、跳过、修改、终止或暂停结果。",
           "使用复制按钮复制当前 Rust 返回的文本；关闭详情后前端会释放完整报文引用。",
           "如果详情读取失败，点击详情错误条中的“重试”；切换到另一行时旧请求的迟到结果不会覆盖新详情。",
@@ -169,7 +169,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "查询和分页",
         steps: [
           "使用“关键字或请求 ID”搜索请求 ID、路径、主机或内容关键字。",
-          "按终端 IP、交易/DLL 通道、结果和规则 ID 缩小范围。",
+          "按终端 IP、产品通道、结果和规则 ID 缩小范围。",
           "设置开始时间和结束时间查询指定测试窗口；时间范围和字段合法性由 Rust 校验。",
           "点击表格行选择会话。列表显示时间、终端、通道、方法、路径/请求类型、结果、耗时、规则和报文大小。",
           "使用分页按钮查看下一批 Rust 查询结果；总数、页数、排序和筛选均由 Rust 计算。",
@@ -181,7 +181,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "宽屏选择会话后右侧直接读取详情；窄屏先选择会话，再点击“查看完整报文”打开 Drawer。",
           "“概览”查看请求 ID、证书指纹、上游主机、双向 TLS、最终动作以及分阶段耗时。",
-          "“请求”和“响应”分别显示按需取得的完整报文；列表查询本身不会预加载全部 Payload。",
+          "“请求”和“响应”分别显示按需取得的完整 Header 和 Shift-JIS 解码 Body，响应区同时显示 Rust 提取的 HTTP 状态码；列表查询本身不会预加载全部 Payload。",
           "“规则轨迹”查看每条规则的评估和动作结果，用于解释最终报文为何被修改、暂停或终止。",
           "关闭详情或完整报文 Drawer 后，前端释放 Payload 引用；会话仍由 Rust 容量策略保留。",
         ],
@@ -215,7 +215,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "找不到会话时",
         steps: [
           "先清除关键字、终端、结果、规则和时间范围，回到第 1 页重新查询。",
-          "确认抓包时代理确实在运行，并且 Payment 连接的是 Proxy 监听地址。",
+          "确认抓包时代理确实在运行，并且客户端应用连接的是 Proxy 监听地址。",
           "长时间高流量测试中，最旧的已完成会话可能已被 500 条/256 MiB 容量策略淘汰。",
           "待处理断点不会被容量淘汰；若容量全部被断点占用，Rust 会拒绝新连接并产生资源耗尽事件。",
           "读取失败时使用“重试”，不要把错误状态当成空列表。",
@@ -226,7 +226,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
   "/breakpoints": {
     title: "断点实验台",
     summary:
-      "处理规则暂停的请求或响应，在发送到 Server 前或返回 Payment 前查看、编辑、校验并决定最终网络动作。",
+      "处理规则暂停的请求或响应，在发送到 Server 前或返回客户端应用前查看、编辑、校验并决定最终网络动作。",
     recommendedFor:
       "人工修改 Shift-JIS JSON/Header、延迟、Mock、断开、错误长度、截断或丢弃响应等精确场景。",
     sections: [
@@ -235,10 +235,10 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "如何产生断点",
         steps: [
           "先在“拦截规则”创建包含“暂停/断点”动作的请求阶段或响应阶段规则，并启用该规则。",
-          "启动代理后在 Payment 执行满足匹配条件的操作。",
+          "启动代理后在客户端应用执行满足匹配条件的操作。",
           "命中后页面左侧队列会出现断点，顶部暂停数同步增加。",
           "选择队列项并确认标题是“请求断点·发送至服务器前”或“响应断点·返回 App 前”，两种阶段可用动作不同。",
-          "断点不会自动放行；只要保持 Pending，Payment 请求会继续等待，直到用户处理、App 断开或 Proxy 停止。",
+          "断点不会自动放行；只要保持 Pending，客户端应用 请求会继续等待，直到用户处理、App 断开或 Proxy 停止。",
         ],
       },
       {
@@ -276,18 +276,18 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
           "点击处理按钮后等待成功提示。Rust 原子解决断点，首次成功后该项从队列移除并自动选择下一项。",
         ],
         notes: [
-          "“不连接上游并断开”发生在上游连接前；“发送上游后丢弃响应”已经让 Server 处理请求，两者对 Payment 和 Server 的影响不同。",
+          "“不连接上游并断开”发生在上游连接前；“发送上游后丢弃响应”已经让 Server 处理请求，两者对客户端应用和 Server 的影响不同。",
         ],
       },
       {
         id: "breakpoints-terminal",
         title: "断点失效与风险",
         steps: [
-          "Payment 等待期间主动断开时，断点会变为 ClientDisconnected，不能再放行。",
+          "客户端应用 等待期间主动断开时，断点会变为 ClientDisconnected，不能再放行。",
           "停止 Proxy 时所有 Pending 断点会变为 ProxyStopped，不能在重新启动后继续处理旧断点。",
           "重复处理同一断点会返回已解决错误；这用于防止一条报文被发送两次。",
-          "延迟、丢弃、断开、错误长度和截断可能触发 Payment 的超时、自动取消或错误流程，实际结果必须在真机记录。",
-          "处理高风险响应前先确认测试环境和交易影响，必要时结合会话导出保留原始证据。",
+          "延迟、丢弃、断开、错误长度和截断可能触发客户端应用的超时、自动取消或错误流程，实际结果必须在真机记录。",
+          "处理高风险响应前先确认测试环境和业务影响，必要时结合会话导出保留原始证据。",
         ],
       },
     ],
@@ -316,7 +316,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "点击“新增规则”，等待 Rust 返回带默认值的新草稿。",
           "在“基本”Tab 填写规则名称、说明和优先级。",
-          "选择交易或 DLL 通道，再选择请求阶段或响应阶段；阶段会限制可添加的动作类型。",
+          "选择目标产品通道，再选择请求阶段或响应阶段；阶段会限制可添加的动作类型。",
           "决定保存后是否启用，以及是否“仅命中一次”。一次性规则命中后由 Rust 自动停用。",
           "从抓包页“基于此会话新建规则”进入时，先检查 Rust 预填的路径、通道和阶段，再补充动作。",
         ],
@@ -361,11 +361,11 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "rules-test",
         title: "验证规则是否生效",
         steps: [
-          "启用规则并启动代理，在 Payment 发起满足条件的请求。",
+          "启用规则并启动代理，在客户端应用发起满足条件的请求。",
           "到实时抓包查看“匹配规则”和规则轨迹，确认命中顺序、每个动作和最终结果。",
           "回到规则列表检查命中数和最后命中时间。",
           "终止动作未生效时检查是否选错通道/阶段、条件不匹配或被更高优先级规则提前终止。",
-          "涉及 Payment 超时、自动取消或错误码的场景必须在真实设备验证，规则命中本身不等同于业务结果符合预期。",
+          "涉及客户端应用超时、自动取消或错误码的场景必须在真实设备验证，规则命中本身不等同于业务结果符合预期。",
         ],
       },
     ],
@@ -384,7 +384,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
           "在左侧表格查看模板的发生阶段、精确行为、影响端、默认参数和风险等级。",
           "点击某行或“配置”，右侧显示该模板的网络语义和可调整参数。",
           "区分请求阶段和响应阶段：请求阶段可能阻止 Server 收到请求；响应阶段通常已经让 Server 处理请求。",
-          "高风险模板可能引起 Payment 超时、断开、自动取消或异常流程，使用前先确认测试环境。",
+          "高风险模板可能引起客户端应用超时、断开、自动取消或异常流程，使用前先确认测试环境。",
           "窄窗口中表格可横向滚动；选中模板后页面会自动把配置区域滚动到可见位置。",
         ],
       },
@@ -394,7 +394,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "先按模板填写 HTTP 状态、延迟、Body、长度差值、截断位置或其他专属参数。",
           "“终端过滤”留空表示所有终端；填写终端 ID 或 IP 可缩小作用范围。",
-          "“路径与请求类型”用于限制目标接口或 DLL 请求类型，避免故障影响无关流量。",
+          "“路径与请求类型”用于限制目标接口或产品请求类型，避免故障影响无关流量。",
           "“第 N 次命中”决定满足条件后的第几次才触发；默认按终端 IP 与证书指纹分别计数。",
           "启用“一次性生效”后，规则首次命中会由 Rust 自动停用。",
           "“规则优先级”越小越早执行。若前面已有终止规则，当前模板可能无法命中。",
@@ -416,7 +416,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "查看和停用活动模拟",
         steps: [
           "“当前生效的模拟”显示模板、目标摘要、优先级、命中次数和当前状态。",
-          "在 Payment 执行测试后检查命中次数，并在抓包或会话规则轨迹中确认精确动作。",
+          "在客户端应用执行测试后检查命中次数，并在抓包或会话规则轨迹中确认精确动作。",
           "点击“停用”并确认后，Rust 停用对应普通规则；已进入管线的报文仍按其当前状态完成。",
           "复杂修改请转到规则页编辑，不要再创建一个相同模板造成重复命中。",
         ],
@@ -426,11 +426,11 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "关键故障语义",
         steps: [
           "“不连接上游并断开”不会把请求发给 Server，直接关闭 App 连接。",
-          "“发送上游后丢弃响应”会先把请求交给 Server，再不向 Payment 返回响应并断开；Server 可能已经完成处理。",
+          "“发送上游后丢弃响应”会先把请求交给 Server，再不向客户端应用返回响应并断开；Server 可能已经完成处理。",
           "“Mock Shift-JIS JSON”绕过真实上游并返回由 Rust 编码的模拟响应。",
           "“非法 JSON”返回可编码但语法非法的 JSON；“错误 Content-Length”和“截断响应”用于测试不完整报文处理。",
           "“请求前延迟/超时”和“响应延迟”发生阶段不同，应结合最近事件和分阶段耗时确认。",
-          "任何模板都只保证产生定义的网络行为，不保证 Payment 一定显示某个固定 T02/T03/T04 或自动取消结果，必须实机记录。",
+          "任何模板都只保证产生定义的网络行为，不保证客户端应用一定显示某个固定 T02/T03/T04 或自动取消结果，必须实机记录。",
         ],
       },
     ],
@@ -438,7 +438,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
   "/certificates": {
     title: "证书管理",
     summary:
-      "配置 App → Proxy 和 Proxy → GMO-FG Server 两段双向 mTLS 所需的证书、信任锚和客户端身份。",
+      "配置 App → Proxy 和 Proxy →上游服务器两段双向 mTLS 所需的证书、信任锚和客户端身份。",
     recommendedFor:
       "首次部署、局域网 IP/DNS 变化、证书到期、PKCS12 更新或 TLS 握手失败时。",
     sections: [
@@ -446,48 +446,48 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "certificates-first-run",
         title: "首次配置推荐顺序",
         steps: [
-          "先到系统设置填写绑定地址和“服务端证书 SAN”，SAN 必须包含 Payment 实际连接 Proxy 使用的局域网 IP 或 DNS，然后保存。",
-          "确认使用的是已把证书页导出的统一测试 Proxy Root CA 公开证书加入 assets/server.crt 的测试版 Payment；桌面应用只导出公开 Root CA，不导出 Root 私钥或本机叶子私钥。",
+          "先到系统设置填写绑定地址和“服务端证书 SAN”，SAN 必须包含客户端应用实际连接 Proxy 使用的局域网 IP 或 DNS，然后保存。",
+          "确认使用的是已把证书页导出的统一测试 Proxy Root CA 公开证书加入 客户端信任资产 的测试版 客户端应用；桌面应用只导出公开 Root CA，不导出 Root 私钥或本机叶子私钥。",
           "回到本页点击“初始化本机测试证书”，由 Rust 使用统一测试 Root CA 创建本机私钥和 SAN 匹配的 Proxy 服务端叶子证书。",
-          "点击“导入/替换 PKCS12”，选择 Launcher 实际提供给 Payment 的 client_real.p12/client.p12；Proxy 使用同一身份访问 GMO-FG Server，密码允许为空字符串。",
-          "上游 CA 默认使用安装包内置的 Payment 原始 assets/server.crt；仅在测试环境证书变化时点击“选择性替换上游 CA”。",
+          "点击“导入/替换 PKCS12”，选择产品集成层实际提供给客户端应用的 客户端身份 PKCS12；Proxy 使用同一身份访问 上游服务器，密码允许为空字符串。",
+          "上游 CA 默认使用安装包内置的客户端应用原始 客户端信任资产；仅在测试环境证书变化时点击“选择性替换上游 CA”。",
           "执行“重新检查”，所有启动前置项通过后再到控制台启动代理。",
         ],
         notes: [
           "当前为简化测试模式，安装包具备统一测试 Root CA 的签发能力，凭据可能被提取；仅限隔离测试环境，不得用于生产、预生产或真实商户信任体系。",
-          "统一测试 Root CA 的首次集成、整体轮换和失效处理属于受控的测试 Payment 构建/发布流程。",
-          "从旧版每机独立 Root CA 升级时，应停止 Proxy 并重新初始化本机证书；同时确认使用的是已内置当前统一测试 Root CA 的测试版 Payment。",
+          "统一测试 Root CA 的首次集成、整体轮换和失效处理属于受控的测试客户端应用构建/发布流程。",
+          "从旧版每机独立 Root CA 升级时，应停止 Proxy 并重新初始化本机证书；同时确认使用的是已内置当前统一测试 Root CA 的测试版 客户端应用。",
         ],
       },
       {
         id: "certificates-file-map",
         title: "证书文件来源与导入位置",
         steps: [
-          "Launcher client_real.p12/client.p12：由 CooperationApi 动态提供给 Payment，作为 Payment 客户端身份；同一文件导入 Proxy 的“PKCS12”，用于 Proxy → GMO-FG Server 客户端身份。",
-          "Payment 原始 assets/server.crt：Payment 原本用它验证 GMO-FG Server；Proxy 安装包已内置同一固定文件并默认使用，证书变化时可以选择性替换。",
-          "统一测试 Proxy Root CA 公共证书：在证书页点击“导出测试 Payment 编译用 Root CA”，得到与 Rust 签发链完全一致的公开 PEM .crt，再在测试 Payment 构建/发布阶段加入 assets/server.crt。",
-          "Proxy 服务端叶子证书和私钥由 Rust 根据 SAN 生成并安全保存，不导入 Payment，也不得导出私钥。",
-          "Launcher 客户端 P12、上游 server.crt、统一测试 Root CA 和本机叶子证书是四种不同用途的材料，不能通过改扩展名相互替代。",
+          "产品集成层 客户端身份 PKCS12：由 CooperationApi 动态提供给 客户端应用，作为客户端应用客户端身份；同一文件导入 Proxy 的“PKCS12”，用于 Proxy →上游服务器客户端身份。",
+          "客户端应用原始 客户端信任资产：客户端应用 原本用它验证 上游服务器；Proxy 安装包已内置同一固定文件并默认使用，证书变化时可以选择性替换。",
+          "统一测试 Proxy Root CA 公共证书：在证书页点击“导出测试客户端应用编译用 Root CA”，得到与 Rust 签发链完全一致的公开 PEM .crt，再在测试客户端应用构建/发布阶段加入 客户端信任资产。",
+          "Proxy 服务端叶子证书和私钥由 Rust 根据 SAN 生成并安全保存，不导入 客户端应用，也不得导出私钥。",
+          "产品集成层 客户端 P12、上游 CA 证书、统一测试 Root CA 和本机叶子证书是四种不同用途的材料，不能通过改扩展名相互替代。",
         ],
       },
       {
         id: "certificates-app-proxy",
-        title: "A. Payment App → Proxy",
+        title: "A.客户端应用App → Proxy",
         steps: [
-          "统一测试 Root CA 用于签发每台 Proxy 的独立服务端叶子证书；测试版 Payment 在交付前已一次性内置该公共 CA。",
-          "叶子证书 SAN 必须匹配 Payment 实际连接的 Proxy IP/DNS，否则 App → Proxy TLS 会因主机名不匹配失败。",
+          "统一测试 Root CA 用于签发每台 Proxy 的独立服务端叶子证书；测试版客户端应用在交付前已一次性内置该公共 CA。",
+          "叶子证书 SAN 必须匹配客户端应用实际连接的 Proxy IP/DNS，否则 App → Proxy TLS 会因主机名不匹配失败。",
           "局域网 IP 或 DNS 变化后，先修改系统设置中的 SAN，再点击“重新签发服务端证书”。",
-          "重新签发叶子证书、更换 IP/DNS 或更换 Proxy 电脑时，只要签发者仍是同一统一测试 Root CA，Payment 就无需重新编译或导入证书。",
-          "Payment 通过 Launcher/CooperationApi 取得 client_real.p12/client.p12 并向 Proxy 出示；Proxy 校验该客户端证书。",
+          "重新签发叶子证书、更换 IP/DNS 或更换 Proxy 电脑时，只要签发者仍是同一统一测试 Root CA，客户端应用 就无需重新编译或导入证书。",
+          "客户端应用通过产品集成层取得客户端身份 PKCS12 并向 Proxy 出示；Proxy 校验该客户端证书。",
         ],
       },
       {
         id: "certificates-upstream",
-        title: "B. Proxy → GMO-FG Server",
+        title: "B. Proxy → 上游服务器",
         steps: [
-          "导入 Launcher 实际提供给 Payment 的 client_real.p12/client.p12，Proxy 使用同一客户端身份连接 GMO-FG Server。",
+          "导入产品集成层实际提供给客户端应用的 客户端身份 PKCS12，Proxy 使用同一客户端身份连接 上游服务器。",
           "导入时选择文件并输入密码；空密码就是有效输入，不等同于取消。",
-          "默认上游 CA 来自 App 内置的 Payment 原始 assets/server.crt；如环境变化可选择 GMO-FG 官方 CA Bundle 替换，不能用统一测试 Root CA 代替。",
+          "默认上游 CA 来自安装包内置的客户端应用原始 客户端信任资产；如环境变化可选择 上游官方 CA Bundle 替换，不能用统一测试 Root CA 代替。",
           "替换 PKCS12 或上游 CA 后重新检查，并重启代理让新的 TLS 上下文生效。",
           "不受支持或包含多个私钥身份的 PKCS12 会被 Rust 拒绝，不会部分写入。",
         ],
@@ -496,7 +496,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "certificates-validate",
         title: "检查证书状态",
         steps: [
-          "点击“重新检查”，查看统一测试 CA、本机叶子 SAN、Payment 客户端信任、PKCS12、上游 CA 和到期时间。",
+          "点击“重新检查”，查看统一测试 CA、本机叶子 SAN、客户端应用 客户端信任、PKCS12、上游 CA 和到期时间。",
           "逐项读取“状态”和“详情”，不要只看页面顶部总状态。",
           "叶子证书距离到期不足 60 天会显示警告，应在到期前重新签发。",
           "检查主题、用途、SAN、有效期和 SHA-256 指纹，确认导入的是测试环境预期材料。",
@@ -511,15 +511,15 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
           "保护或解密失败时 Proxy 会禁止启动，不提供明文回退。",
           "仅在本机服务端私钥或叶子证书损坏时使用“重新初始化本机证书”。",
           "操作前先停止 Proxy 并阅读危险操作确认；操作会使用同一统一测试 Root CA 重新生成本机私钥和叶子证书。",
-          "统一测试 Root CA 保持不变，因此已内置该公共 CA 的 Payment 无需重新编译或导入。",
+          "统一测试 Root CA 保持不变，因此已内置该公共 CA 的客户端应用无需重新编译或导入。",
         ],
       },
       {
         id: "certificates-troubleshooting",
         title: "TLS 失败快速定位",
         steps: [
-          "App → Proxy 失败：检查 Payment 目标 IP/DNS、叶子 SAN、测试 APK 的 assets/server.crt 是否包含统一测试 Root CA、Launcher P12 和电脑防火墙。",
-          "Proxy → Server 失败：检查上游 URL 主机名、导入的是否为 Launcher 真实 P12、当前生效的是内置 server.crt 还是用户替换 CA、系统时间和网络。",
+          "App → Proxy 失败：检查客户端应用目标 IP/DNS、叶子 SAN、测试 APK 的 客户端信任资产 是否包含统一测试 Root CA、产品集成层 P12 和电脑防火墙。",
+          "Proxy → Server 失败：检查上游 URL 主机名、导入的是否为产品集成层真实 P12、当前生效的是内置 上游 CA 证书 还是用户替换 CA、系统时间和网络。",
           "更换证书后状态未变化：执行重新检查，并重启代理创建新的 TLS 上下文。",
           "证书显示有效但仍握手失败：到实时抓包/控制台查看具体 TLS 错误码和发生方向。",
         ],
@@ -539,9 +539,9 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "“绑定地址”填写 Proxy 监听网卡地址。0.0.0.0 表示监听本机全部接口。",
           "没有已保存 SAN 时，Rust 会根据操作系统路由自动填入首选本机 IPv4；已有非空 SAN 不会被覆盖。多网卡、VPN 或离线环境下请在保存前核对，必要时手动修改。",
-          "“服务端证书 SAN”填写 Payment 实际连接 Proxy 的局域网 IP 或 DNS；多个值可用逗号分隔，Rust 会规范化、排序和去重。",
-          "交易端口默认 16627，DLL 端口默认 16127；至少启用一个通道，且两个已启用端口不能冲突。",
-          "上游交易 URL 和上游 DLL URL 填写真实 GMO-FG Server 地址，不要填写 Proxy 自己的监听地址。",
+          "“服务端证书 SAN”填写客户端应用实际连接 Proxy 的局域网 IP 或 DNS；多个值可用逗号分隔，Rust 会规范化、排序和去重。",
+          "各通道默认端口由 Rust 产品目录提供；至少启用一个通道，且所有已启用端口不能冲突。",
+          "各通道上游 URL 填写真实上游服务器地址，不要填写 Proxy 自己的监听地址。",
           "TLS 固定为 1.2，HTTP 重定向和自动重试固定关闭；这些只读值不能在前端切换。",
           "Host 重写启用时由 Rust 使用上游主机生成 Host Header。",
         ],
@@ -553,7 +553,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
           "先填写合法的绑定地址、SAN、端口和上游 URL。",
           "点击“校验设置”，修正每个字段下方的 Rust 错误。",
           "点击“保存设置”。首次还没有证书时可以先保存 SAN；Rust 只会给出证书未生成的警告，不会形成循环依赖。",
-          "确认测试版 Payment 已内置统一测试 Root CA；转到证书页初始化本机叶子证书并导入 Launcher 原有 PKCS12。上游 CA 默认来自 App 内置的 Payment 原始 server.crt。",
+          "确认测试版客户端应用已内置统一测试 Root CA；转到证书页初始化本机叶子证书并导入产品集成层原有 PKCS12。上游 CA 默认来自安装包内置的客户端应用原始 上游 CA 证书。",
           "证书检查通过后回到控制台启动代理。",
         ],
       },
@@ -596,7 +596,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "settings-troubleshooting",
         title: "配置保存失败时",
         steps: [
-          "端口错误：确认范围合法、交易与 DLL 不冲突，并检查系统是否已有进程占用。",
+          "端口错误：确认范围合法、各已启用通道之间不冲突，并检查系统是否已有进程占用。",
           "SAN 错误：填写合法 IP 或 DNS，不要包含 https://、端口或路径。",
           "上游 URL 错误：使用完整 https:// URL 和正确端口，主机名必须能被上游证书验证。",
           "保存成功但运行状态没变化：查看“待应用值”，然后执行保存并重启代理。",

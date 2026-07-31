@@ -7,6 +7,9 @@ use gmofg_proxy_application::{
     CertificateServicePort, CertificateValidationViewModel, FieldValidationViewModel,
     OperationResultViewModel, UiTone,
 };
+use gmofg_proxy_product_api::{
+    EmbeddedTestCertificateAuthority, ProductCertificatePolicy, ProductProfile,
+};
 use gmofg_proxy_runtime::{
     ErrorCode as ProxyErrorCode, ProxyError, TlsMaterialProvider, TlsMaterialSnapshot,
 };
@@ -14,6 +17,7 @@ use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, Zeroizing};
 
+use crate::files::{CA_IMPORT_MAX_BYTES, PKCS12_IMPORT_MAX_BYTES};
 use crate::{
     AtomicFileExporter, CertificateMaterialRecord, CertificateService, LeafCertificateRequest,
     SecretProtector, SqliteStore,
@@ -75,6 +79,7 @@ pub struct CertificateServiceAdapter {
     protector: Arc<dyn SecretProtector>,
     dialog: Arc<dyn NativeFileDialog>,
     certificates: CertificateService,
+    product: Arc<dyn ProductProfile>,
     exporter: AtomicFileExporter,
     material_lock: Mutex<()>,
 }
@@ -95,15 +100,32 @@ impl CertificateServiceAdapter {
         store: Arc<SqliteStore>,
         protector: Arc<dyn SecretProtector>,
         dialog: Arc<dyn NativeFileDialog>,
+        product: Arc<dyn ProductProfile>,
     ) -> Self {
         Self {
             store,
             protector,
             dialog,
             certificates: CertificateService,
+            product,
             exporter: AtomicFileExporter,
             material_lock: Mutex::new(()),
         }
+    }
+
+    fn certificate_policy(&self) -> &dyn ProductCertificatePolicy {
+        self.product.certificates()
+    }
+
+    fn embedded_test_authority(&self) -> AppResult<EmbeddedTestCertificateAuthority> {
+        self.certificate_policy()
+            .embedded_test_authority()
+            .ok_or_else(|| {
+                AppError::new(
+                    "CERTIFICATE_TEST_SIGNING_DISABLED",
+                    "当前产品配置未启用嵌入测试 Root CA 私钥，禁止生成或重签证书。",
+                )
+            })
     }
 
     fn load_snapshot(&self, kinds: &[&str]) -> AppResult<MaterialSnapshot> {
@@ -176,7 +198,10 @@ impl CertificateServiceAdapter {
     }
 
     fn generate_locked(&self, sans: &[String], mut snapshot: MaterialSnapshot) -> AppResult<u64> {
-        let root = self.certificates.load_test_root_ca().map_err(app_error)?;
+        let root = self
+            .certificates
+            .load_embedded_test_root(self.embedded_test_authority()?)
+            .map_err(app_error)?;
         let request = leaf_request(sans)?;
         let leaf = self
             .certificates
@@ -191,12 +216,15 @@ impl CertificateServiceAdapter {
         self.commit_snapshot(snapshot)
     }
 
-    fn bundled_upstream_material(&self, revision: u64) -> AppResult<ProtectedMaterial> {
+    fn bundled_upstream_material(&self, revision: u64) -> AppResult<Option<ProtectedMaterial>> {
+        let Some(certificates_pem) = self.certificate_policy().bundled_upstream_ca_pem() else {
+            return Ok(None);
+        };
         let bundled = self
             .certificates
-            .load_bundled_payment_server_ca()
+            .load_bundled_upstream_ca(certificates_pem)
             .map_err(app_error)?;
-        Ok(ProtectedMaterial {
+        Ok(Some(ProtectedMaterial {
             revision,
             certificate_der: bundled.certificate_der,
             private_key_der: Vec::new(),
@@ -206,43 +234,39 @@ impl CertificateServiceAdapter {
             sans: bundled.metadata.san,
             not_before: bundled.metadata.not_before,
             not_after: bundled.metadata.not_after,
-        })
+        }))
     }
 
     fn overview_locked(&self) -> AppResult<CertificateOverviewViewModel> {
+        let labels = self.certificate_policy().labels();
         let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
         let upstream_is_override = snapshot.materials.contains_key(UPSTREAM_CA);
-        let upstream = snapshot
-            .materials
-            .get(UPSTREAM_CA)
-            .cloned()
-            .map_or_else(|| self.bundled_upstream_material(snapshot.revision), Ok)?;
+        let upstream = match snapshot.materials.get(UPSTREAM_CA).cloned() {
+            Some(material) => Some(material),
+            None => self.bundled_upstream_material(snapshot.revision)?,
+        };
         let materials = [
-            (
-                ROOT,
-                "统一测试 Root CA",
-                "仅用于隔离测试环境签发 Proxy 服务端证书",
-            ),
-            (LEAF, "Proxy 叶子证书", "App → Proxy TLS 服务端身份"),
+            (ROOT, labels.root_name, labels.root_usage),
+            (LEAF, labels.leaf_name, labels.leaf_usage),
             (
                 PKCS12,
-                "共享 PKCS12",
-                "Proxy → Server 客户端身份及 App 指纹",
+                labels.client_identity_name,
+                labels.client_identity_usage,
             ),
             (
                 UPSTREAM_CA,
-                "上游 CA",
+                labels.upstream_name,
                 if upstream_is_override {
-                    "验证 GMO-FG Server（用户替换）"
+                    labels.upstream_override_usage
                 } else {
-                    "验证 GMO-FG Server（内置 Payment server.crt）"
+                    labels.upstream_bundled_usage
                 },
             ),
         ]
         .into_iter()
         .map(|(kind, display, usage)| {
             let material = if kind == UPSTREAM_CA {
-                Some(upstream.clone())
+                upstream.clone()
             } else {
                 snapshot.materials.get(kind).cloned()
             };
@@ -255,9 +279,9 @@ impl CertificateServiceAdapter {
             revision: snapshot.revision,
             ready,
             status_text: if ready {
-                "证书已就绪".into()
+                labels.ready_status.into()
             } else {
-                "证书配置不完整".into()
+                labels.incomplete_status.into()
             },
             ui_tone: if ready {
                 UiTone::Positive
@@ -296,10 +320,15 @@ impl CertificateServiceAdapter {
             }
         }
         let root_metadata = find(ROOT).and_then(|root| {
-            match self
-                .certificates
-                .validate_test_root(&root.certificate_der, &root.private_key_der)
-            {
+            let Ok(authority) = self.embedded_test_authority() else {
+                errors.insert(ROOT.into(), vec!["Root CA 校验失败。".into()]);
+                return None;
+            };
+            match self.certificates.validate_embedded_test_root(
+                &root.certificate_der,
+                &root.private_key_der,
+                authority,
+            ) {
                 Ok(metadata) if material_matches(root, &metadata) => Some(metadata),
                 Ok(_) | Err(_) => {
                     errors.insert(ROOT.into(), vec!["Root CA 校验失败。".into()]);
@@ -355,9 +384,10 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let _guard = self.material_lock.lock();
         let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
         if snapshot.materials.contains_key(ROOT) || snapshot.materials.contains_key(LEAF) {
+            let labels = self.certificate_policy().labels();
             return Err(AppError::new(
                 "CERTIFICATE_ALREADY_EXISTS",
-                "统一测试 Root CA 或 Proxy 叶子证书已存在，请使用“重签服务端证书”。",
+                labels.already_exists_message,
             ));
         }
         self.generate_locked(&sans, snapshot)?;
@@ -366,16 +396,17 @@ impl CertificateServicePort for CertificateServiceAdapter {
 
     async fn export_ca(&self) -> AppResult<OperationResultViewModel> {
         let _guard = self.material_lock.lock();
+        let labels = self.certificate_policy().labels();
         let Some(selection) = self.dialog.choose_save_file("root_ca")? else {
-            return Ok(cancelled("已取消统一测试 Root CA 导出。"));
+            return Ok(cancelled(labels.export_cancelled_message));
         };
         infra(self.exporter.write(
             &selection.path,
-            self.certificates.test_root_ca_certificate_pem(),
+            self.certificate_policy().public_root_ca_pem(),
             selection.overwrite_confirmed,
         ))?;
         Ok(OperationResultViewModel::success(
-            "统一测试 Root CA 公开证书已导出，未包含私钥；可用于测试版 Payment 构建。",
+            labels.export_success_message,
         ))
     }
 
@@ -387,7 +418,10 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let _guard = self.material_lock.lock();
         let mut snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
         verify_revision(snapshot.revision, expected_revision)?;
-        let root = self.certificates.load_test_root_ca().map_err(app_error)?;
+        let root = self
+            .certificates
+            .load_embedded_test_root(self.embedded_test_authority()?)
+            .map_err(app_error)?;
         let request = leaf_request(&sans)?;
         let leaf = self
             .certificates
@@ -411,7 +445,9 @@ impl CertificateServicePort for CertificateServiceAdapter {
             return self.overview_locked();
         };
         let password = Zeroizing::new(password);
-        let bytes = Zeroizing::new(infra(self.exporter.read(&path))?);
+        let bytes = Zeroizing::new(infra(
+            self.exporter.read_bounded(&path, PKCS12_IMPORT_MAX_BYTES),
+        )?);
         let parsed = self
             .certificates
             .parse_pkcs12(&bytes, &password)
@@ -440,7 +476,7 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let Some(path) = self.dialog.choose_open_file("upstream_ca")? else {
             return self.overview_locked();
         };
-        let bytes = infra(self.exporter.read(&path))?;
+        let bytes = infra(self.exporter.read_bounded(&path, CA_IMPORT_MAX_BYTES))?;
         let parsed = self
             .certificates
             .parse_upstream_ca(&bytes)
@@ -467,16 +503,15 @@ impl CertificateServicePort for CertificateServiceAdapter {
     async fn validate(&self) -> AppResult<CertificateValidationViewModel> {
         let _guard = self.material_lock.lock();
         let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
-        let upstream = snapshot
-            .materials
-            .get(UPSTREAM_CA)
-            .cloned()
-            .map_or_else(|| self.bundled_upstream_material(snapshot.revision), Ok)?;
+        let upstream = match snapshot.materials.get(UPSTREAM_CA).cloned() {
+            Some(material) => Some(material),
+            None => self.bundled_upstream_material(snapshot.revision)?,
+        };
         let materials = MATERIAL_KINDS
             .into_iter()
             .map(|kind| {
                 let material = if kind == UPSTREAM_CA {
-                    Some(upstream.clone())
+                    upstream.clone()
                 } else {
                     snapshot.materials.get(kind).cloned()
                 };
@@ -537,7 +572,11 @@ impl TlsMaterialProvider for CertificateServiceAdapter {
             )
         })?;
         self.certificates
-            .validate_test_root(&root.certificate_der, &root.private_key_der)
+            .validate_embedded_test_root(
+                &root.certificate_der,
+                &root.private_key_der,
+                self.embedded_test_authority().map_err(proxy_app_error)?,
+            )
             .and_then(|_| {
                 self.certificates.validate_leaf(
                     &root.certificate_der,
@@ -550,12 +589,15 @@ impl TlsMaterialProvider for CertificateServiceAdapter {
         let shared = snapshot.materials.get(PKCS12).ok_or_else(|| {
             ProxyError::new(ProxyErrorCode::CertificateNotReady, "shared PKCS12 missing")
         })?;
-        let upstream = snapshot
-            .materials
-            .get(UPSTREAM_CA)
-            .cloned()
-            .map_or_else(|| self.bundled_upstream_material(snapshot.revision), Ok)
-            .map_err(proxy_app_error)?;
+        let upstream = match snapshot.materials.get(UPSTREAM_CA).cloned() {
+            Some(material) => material,
+            None => self
+                .bundled_upstream_material(snapshot.revision)
+                .map_err(proxy_app_error)?
+                .ok_or_else(|| {
+                    ProxyError::new(ProxyErrorCode::CertificateNotReady, "upstream CA missing")
+                })?,
+        };
         let app_client_ca_der = shared
             .chain_der
             .last()
@@ -719,6 +761,11 @@ mod tests {
     use super::*;
     use crate::adapters::{FileSelection, NativeFileDialog};
     use crate::{InfrastructureError, SecretProtector};
+    use gmofg_proxy_product_payment::PaymentProductProfile;
+
+    fn payment_profile() -> Arc<dyn ProductProfile> {
+        Arc::new(PaymentProductProfile::isolated_test_tool())
+    }
 
     #[derive(Debug)]
     struct QueueDialog {
@@ -857,6 +904,7 @@ mod tests {
             Arc::new(QueueDialog {
                 open: ParkingMutex::new(VecDeque::new()),
             }),
+            payment_profile(),
         );
 
         let error = adapter
@@ -884,7 +932,12 @@ mod tests {
         let dialog = Arc::new(QueueDialog {
             open: ParkingMutex::new(VecDeque::new()),
         });
-        let corrupt = CertificateServiceAdapter::new(store, Arc::new(XorProtector), dialog.clone());
+        let corrupt = CertificateServiceAdapter::new(
+            store,
+            Arc::new(XorProtector),
+            dialog.clone(),
+            payment_profile(),
+        );
         let corrupt_error = corrupt
             .load_epoch_snapshot(&["127.0.0.1".into()])
             .await
@@ -895,12 +948,48 @@ mod tests {
             Arc::new(SqliteStore::in_memory().expect("store")),
             Arc::new(XorProtector),
             dialog,
+            payment_profile(),
         );
         let missing_error = missing
             .load_epoch_snapshot(&["127.0.0.1".into()])
             .await
             .expect_err("missing material must fail");
         assert_eq!(missing_error.code, "CERTIFICATE_NOT_READY");
+    }
+
+    #[tokio::test]
+    async fn certificate_imports_enforce_per_type_size_limits() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let pkcs12_path = directory.path().join("oversized.p12");
+        std::fs::File::create(&pkcs12_path)
+            .expect("create PKCS12")
+            .set_len(PKCS12_IMPORT_MAX_BYTES + 1)
+            .expect("size PKCS12");
+        let ca_path = directory.path().join("oversized-ca.crt");
+        std::fs::File::create(&ca_path)
+            .expect("create CA")
+            .set_len(CA_IMPORT_MAX_BYTES + 1)
+            .expect("size CA");
+        let adapter = CertificateServiceAdapter::new(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(XorProtector),
+            Arc::new(QueueDialog {
+                open: ParkingMutex::new(VecDeque::from([pkcs12_path, ca_path])),
+            }),
+            Arc::new(gmofg_proxy_product_payment::PaymentProductProfile::isolated_test_tool()),
+        );
+
+        let pkcs12_error = adapter
+            .import_pkcs12("password".into())
+            .await
+            .expect_err("oversized PKCS12");
+        assert_eq!(pkcs12_error.view_model.code, "IMPORT_TOO_LARGE");
+
+        let ca_error = adapter
+            .import_upstream_ca()
+            .await
+            .expect_err("oversized CA");
+        assert_eq!(ca_error.view_model.code, "IMPORT_TOO_LARGE");
     }
 
     #[tokio::test]
@@ -916,11 +1005,12 @@ mod tests {
                     overwrite_confirmed: false,
                 })),
             }),
+            payment_profile(),
         );
 
         let result = adapter.export_ca().await.expect("export public Root CA");
         let exported = std::fs::read(&export_path).expect("read exported certificate");
-        let expected = CertificateService.test_root_ca_certificate_pem();
+        let expected = payment_profile().certificates().public_root_ca_pem();
 
         assert!(result.success);
         assert!(!result.cancelled);
@@ -942,6 +1032,34 @@ mod tests {
                 .is_empty(),
             "export must not initialize or persist private material"
         );
+    }
+
+    #[tokio::test]
+    async fn disabled_embedded_signing_still_allows_public_export_but_blocks_generation() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let export_path = directory.path().join("public-root-ca.crt");
+        let adapter = CertificateServiceAdapter::new(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(XorProtector),
+            Arc::new(ExportDialog {
+                selection: ParkingMutex::new(Some(FileSelection {
+                    path: export_path.clone(),
+                    overwrite_confirmed: false,
+                })),
+            }),
+            Arc::new(PaymentProductProfile::default()),
+        );
+
+        adapter.export_ca().await.expect("public-only export");
+        let exported = std::fs::read(export_path).expect("exported public certificate");
+        assert!(exported.starts_with(b"-----BEGIN CERTIFICATE-----"));
+        assert!(!exported.windows(11).any(|window| window == b"PRIVATE KEY"));
+
+        let error = adapter
+            .generate_ca(vec!["127.0.0.1".into()])
+            .await
+            .expect_err("test signing must fail closed");
+        assert_eq!(error.view_model.code, "CERTIFICATE_TEST_SIGNING_DISABLED");
     }
 
     // CERT-005~017, SECURITY-006~009, TEST-TLS
@@ -966,6 +1084,7 @@ mod tests {
             Arc::new(QueueDialog {
                 open: ParkingMutex::new(VecDeque::from([pkcs12_path, upstream_path])),
             }),
+            payment_profile(),
         );
         let generated = adapter
             .generate_ca(vec!["127.0.0.1".into()])
@@ -1055,11 +1174,13 @@ mod tests {
             Arc::new(SqliteStore::in_memory().expect("first store")),
             Arc::new(XorProtector),
             dialog(),
+            payment_profile(),
         );
         let second = CertificateServiceAdapter::new(
             Arc::new(SqliteStore::in_memory().expect("second store")),
             Arc::new(XorProtector),
             dialog(),
+            payment_profile(),
         );
 
         first

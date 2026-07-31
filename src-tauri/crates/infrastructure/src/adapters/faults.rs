@@ -10,7 +10,7 @@ use gmofg_proxy_domain::{
     DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator, RuleAction,
     TerminalAction, TrafficDirection,
 };
-use gmofg_proxy_runtime::codec::encode_strict;
+use gmofg_proxy_product_api::{BodyCodec, ProductFaultTemplate, ProductLabels, ProductProfile};
 use serde_json::Value;
 
 use super::rules::{RuleRepositoryAdapter, action_to_app, condition_to_app};
@@ -18,19 +18,31 @@ use super::rules::{RuleRepositoryAdapter, action_to_app, condition_to_app};
 #[derive(Debug)]
 pub struct FaultServiceAdapter {
     rules: Arc<RuleRepositoryAdapter>,
+    body_codec: Arc<dyn BodyCodec>,
+    templates: &'static [ProductFaultTemplate],
+    labels: ProductLabels,
 }
 
 impl FaultServiceAdapter {
     #[must_use]
-    pub fn new(rules: Arc<RuleRepositoryAdapter>) -> Self {
-        Self { rules }
+    pub fn new(
+        rules: Arc<RuleRepositoryAdapter>,
+        body_codec: Arc<dyn BodyCodec>,
+        product: &dyn ProductProfile,
+    ) -> Self {
+        Self {
+            rules,
+            body_codec,
+            templates: product.fault_templates(),
+            labels: product.labels(),
+        }
     }
 }
 
 #[async_trait]
 impl FaultServicePort for FaultServiceAdapter {
     async fn templates(&self) -> AppResult<Vec<FaultTemplateViewModel>> {
-        Ok(template_definitions()
+        Ok(template_definitions(self.templates)?
             .into_iter()
             .map(|template| template.view)
             .collect())
@@ -40,18 +52,23 @@ impl FaultServicePort for FaultServiceAdapter {
         &self,
         configuration: FaultConfigurationDraft,
     ) -> AppResult<ActiveFaultViewModel> {
-        let definition = template_definitions()
+        let definition = template_definitions(self.templates)?
             .into_iter()
             .find(|template| template.view.template_id == configuration.template_id)
             .ok_or_else(|| AppError::new("RULE_INVALID", "故障模板不存在。"))?;
-        let (stage, action) = (definition.action)(&configuration.parameters)?;
+        let (stage, action) = definition
+            .action
+            .invoke(&configuration.parameters, self.body_codec.as_ref())?;
         let conditions = configuration_conditions(&configuration, stage)?;
         let rule = self
             .rules
             .save(RuleDraft {
                 rule_id: configuration.existing_rule_id,
                 expected_revision: configuration.expected_revision,
-                name: format!("故障模拟·{}", definition.view.name),
+                name: format!(
+                    "{}{}",
+                    self.labels.fault_rule_name_prefix, definition.view.name
+                ),
                 description: format!("fault:{}", definition.view.template_id),
                 enabled: true,
                 priority: configuration.priority,
@@ -72,10 +89,13 @@ impl FaultServicePort for FaultServiceAdapter {
         let rules = self.rules.list().await?;
         Ok(rules
             .into_iter()
-            .filter(|rule| rule.name.starts_with("故障模拟·"))
+            .filter(|rule| rule.name.starts_with(self.labels.fault_rule_name_prefix))
             .map(|rule| ActiveFaultViewModel {
                 rule_id: rule.rule_id,
-                template_name: rule.name.trim_start_matches("故障模拟·").into(),
+                template_name: rule
+                    .name
+                    .trim_start_matches(self.labels.fault_rule_name_prefix)
+                    .into(),
                 target_summary: rule.match_summary,
                 priority: rule.priority,
                 hit_count: rule.hit_count,
@@ -103,7 +123,9 @@ impl FaultServicePort for FaultServiceAdapter {
         let rule = self.rules.toggle(rule_id, expected_revision, false).await?;
         Ok(active_from_rule(
             &rule,
-            rule.summary.name.trim_start_matches("故障模拟·"),
+            rule.summary
+                .name
+                .trim_start_matches(self.labels.fault_rule_name_prefix),
         ))
     }
 }
@@ -180,17 +202,33 @@ struct TemplateDefinition {
 }
 
 type FaultParameters = BTreeMap<String, FaultParameterValue>;
-type TemplateAction = fn(&FaultParameters) -> AppResult<(MessageStage, RuleAction)>;
+enum TemplateAction {
+    Plain(fn(&FaultParameters) -> AppResult<(MessageStage, RuleAction)>),
+    Encoded(fn(&FaultParameters, &dyn BodyCodec) -> AppResult<(MessageStage, RuleAction)>),
+}
+
+impl TemplateAction {
+    fn invoke(
+        &self,
+        parameters: &FaultParameters,
+        body_codec: &dyn BodyCodec,
+    ) -> AppResult<(MessageStage, RuleAction)> {
+        match self {
+            Self::Plain(action) => action(parameters),
+            Self::Encoded(action) => action(parameters, body_codec),
+        }
+    }
+}
 
 #[allow(clippy::too_many_lines)]
-fn template_definitions() -> Vec<TemplateDefinition> {
+fn generic_template_definitions() -> Vec<TemplateDefinition> {
     vec![
         template(
             "reject_tls_handshake",
             "拒绝 TLS 握手",
             "TLS 握手阶段",
             "在 HTTP 消息进入规则管线前拒绝客户端握手",
-            "Payment App",
+            "客户端",
             "高",
             reject_tls,
         ),
@@ -199,7 +237,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "不连接上游并断开",
             "请求阶段",
             "不建立上游连接并关闭 App 连接",
-            "Payment App",
+            "客户端",
             "高",
             disconnect,
         ),
@@ -208,7 +246,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "请求前延迟/超时",
             "请求阶段",
             "转发前等待指定时间",
-            "Payment App 与 Server",
+            "客户端与上游服务",
             "中",
             request_delay,
         ),
@@ -217,7 +255,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "修改请求 JSON",
             "请求阶段",
             "修改指定 JSON 字段",
-            "GMO-FG Server",
+            "上游服务",
             "中",
             modify_json,
         ),
@@ -226,7 +264,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "发送上游后丢弃响应",
             "请求阶段",
             "读取响应后不返回 App 并断开",
-            "Payment App",
+            "客户端",
             "高",
             drop_response,
         ),
@@ -235,7 +273,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "上游连接超时",
             "请求阶段",
             "保持上游连接直至超时",
-            "Payment App",
+            "客户端",
             "高",
             connect_timeout,
         ),
@@ -244,7 +282,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "上游写入超时",
             "请求阶段",
             "连接上游后在写入请求时保持至超时",
-            "Payment App",
+            "客户端",
             "高",
             write_timeout,
         ),
@@ -253,7 +291,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "上游读取超时",
             "请求阶段",
             "写入请求后在读取上游响应时保持至超时",
-            "Payment App",
+            "客户端",
             "高",
             read_timeout,
         ),
@@ -262,7 +300,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "响应延迟",
             "响应阶段",
             "返回 App 前等待指定时间",
-            "Payment App",
+            "客户端",
             "中",
             response_delay,
         ),
@@ -271,25 +309,25 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "自定义 HTTP 状态",
             "响应阶段",
             "返回指定 HTTP 状态码",
-            "Payment App",
+            "客户端",
             "中",
             custom_status,
         ),
-        template(
-            "mock_shift_jis_json",
-            "Mock Shift-JIS JSON",
+        encoded_template(
+            "mock_json",
+            "Mock JSON",
             "请求阶段",
             "绕过上游并返回 Mock",
-            "Payment App",
+            "客户端",
             "高",
             mock_response,
         ),
-        template(
+        encoded_template(
             "invalid_json",
             "非法 JSON",
             "响应阶段",
             "返回可编码但语法非法的 JSON",
-            "Payment App",
+            "客户端",
             "高",
             invalid_json,
         ),
@@ -298,7 +336,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "错误 Content-Length",
             "响应阶段",
             "声明长度与真实 Body 不一致",
-            "Payment App",
+            "客户端",
             "高",
             wrong_length,
         ),
@@ -307,7 +345,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "截断响应",
             "响应阶段",
             "发送前 N 字节后断开",
-            "Payment App",
+            "客户端",
             "高",
             truncate,
         ),
@@ -316,7 +354,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "上行限速",
             "请求阶段",
             "按指定速率分块发送请求 Body",
-            "GMO-FG Server",
+            "上游服务",
             "中",
             throttle_upstream,
         ),
@@ -325,7 +363,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "下行限速",
             "响应阶段",
             "按指定速率分块返回响应 Body",
-            "Payment App",
+            "客户端",
             "中",
             throttle_downstream,
         ),
@@ -334,7 +372,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "上行抖动",
             "请求阶段",
             "请求 Body 每个分块发送前加入确定性随机抖动",
-            "GMO-FG Server",
+            "上游服务",
             "中",
             jitter_upstream,
         ),
@@ -343,7 +381,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "下行抖动",
             "响应阶段",
             "响应 Body 每个分块发送前加入确定性随机抖动",
-            "Payment App",
+            "客户端",
             "中",
             jitter_downstream,
         ),
@@ -352,7 +390,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "上行间歇通断",
             "请求阶段",
             "按可用窗口和阻断窗口循环发送请求 Body",
-            "GMO-FG Server",
+            "上游服务",
             "高",
             intermittent_upstream,
         ),
@@ -361,7 +399,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "下行间歇通断",
             "响应阶段",
             "按可用窗口和阻断窗口循环返回响应 Body",
-            "Payment App",
+            "客户端",
             "高",
             intermittent_downstream,
         ),
@@ -370,7 +408,7 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "上行 Body 中途断连",
             "请求阶段",
             "发送指定字节数后中止上游请求",
-            "GMO-FG Server",
+            "上游服务",
             "高",
             disconnect_upstream_mid_body,
         ),
@@ -379,11 +417,43 @@ fn template_definitions() -> Vec<TemplateDefinition> {
             "下行 Body 中途断连",
             "响应阶段",
             "返回指定字节数后中止 App 响应",
-            "Payment App",
+            "客户端",
             "高",
             disconnect_downstream_mid_body,
         ),
     ]
+}
+
+fn template_definitions(catalog: &[ProductFaultTemplate]) -> AppResult<Vec<TemplateDefinition>> {
+    let mut generic = generic_template_definitions()
+        .into_iter()
+        .map(|definition| (definition.view.template_id.clone(), definition))
+        .collect::<BTreeMap<_, _>>();
+    catalog
+        .iter()
+        .map(|metadata| {
+            let mut definition = generic.remove(metadata.id).ok_or_else(|| {
+                AppError::new(
+                    "PRODUCT_PROFILE_INVALID",
+                    format!("产品声明了未知故障能力：{}", metadata.id),
+                )
+            })?;
+            definition.view.name = metadata.name.into();
+            definition.view.stage_text = metadata.stage_text.into();
+            definition.view.behavior_text = metadata.behavior_text.into();
+            definition.view.affected_party_text = metadata.affected_party_text.into();
+            definition.view.default_channel =
+                gmofg_proxy_domain::ChannelId::new(metadata.default_channel_id)
+                    .map_err(AppError::from)?;
+            definition.view.risk_text = metadata.risk_text.into();
+            definition.view.ui_tone = if metadata.risk_text == "高" {
+                UiTone::Danger
+            } else {
+                UiTone::Warning
+            };
+            Ok(definition)
+        })
+        .collect()
 }
 
 #[allow(clippy::unnecessary_wraps)]
@@ -401,7 +471,7 @@ fn template(
     behavior: &str,
     affected: &str,
     risk: &str,
-    action: TemplateAction,
+    action: fn(&FaultParameters) -> AppResult<(MessageStage, RuleAction)>,
 ) -> TemplateDefinition {
     let (default_parameters, parameter_schema) = parameter_definitions(id);
     TemplateDefinition {
@@ -411,7 +481,8 @@ fn template(
             stage_text: stage.into(),
             behavior_text: behavior.into(),
             affected_party_text: affected.into(),
-            default_channel: gmofg_proxy_application::ChannelKind::Transaction,
+            default_channel: gmofg_proxy_domain::ChannelId::new("default")
+                .expect("generic placeholder channel"),
             default_nth_hit: 1,
             default_one_shot: false,
             default_priority: 100,
@@ -424,7 +495,42 @@ fn template(
                 UiTone::Warning
             },
         },
-        action,
+        action: TemplateAction::Plain(action),
+    }
+}
+
+fn encoded_template(
+    id: &str,
+    name: &str,
+    stage: &str,
+    behavior: &str,
+    affected: &str,
+    risk: &str,
+    action: fn(&FaultParameters, &dyn BodyCodec) -> AppResult<(MessageStage, RuleAction)>,
+) -> TemplateDefinition {
+    let (default_parameters, parameter_schema) = parameter_definitions(id);
+    TemplateDefinition {
+        view: FaultTemplateViewModel {
+            template_id: id.into(),
+            name: name.into(),
+            stage_text: stage.into(),
+            behavior_text: behavior.into(),
+            affected_party_text: affected.into(),
+            default_channel: gmofg_proxy_domain::ChannelId::new("default")
+                .expect("generic placeholder channel"),
+            default_nth_hit: 1,
+            default_one_shot: false,
+            default_priority: 100,
+            default_parameters,
+            parameter_schema,
+            risk_text: risk.into(),
+            ui_tone: if risk == "高" {
+                UiTone::Danger
+            } else {
+                UiTone::Warning
+            },
+        },
+        action: TemplateAction::Encoded(action),
     }
 }
 
@@ -478,12 +584,12 @@ fn parameter_definitions(
         "custom_http_status" => one_integer(
             "status",
             "HTTP 状态码",
-            "返回给 Payment App 的 HTTP 状态码。",
+            "返回给客户端的 HTTP 状态码。",
             500,
             100,
             599,
         ),
-        "mock_shift_jis_json" => (
+        "mock_json" => (
             BTreeMap::from([
                 ("status".into(), FaultParameterValue::Integer(200)),
                 ("body".into(), FaultParameterValue::Json("{}".into())),
@@ -498,8 +604,8 @@ fn parameter_definitions(
                 ),
                 json_field(
                     "body",
-                    "Shift-JIS JSON Body",
-                    "必须是合法 JSON，且所有字符必须可严格编码为 Shift-JIS。",
+                    "JSON Body",
+                    "必须是合法 JSON，且所有字符必须可由当前产品编解码器无损编码。",
                 ),
             ],
         ),
@@ -508,7 +614,7 @@ fn parameter_definitions(
             vec![multiline_text_field(
                 "body",
                 "非法 JSON Body",
-                "必须保持 JSON 语法非法，且所有字符必须可严格编码为 Shift-JIS。",
+                "必须保持 JSON 语法非法，且所有字符必须可由当前产品编解码器无损编码。",
             )],
         ),
         "wrong_content_length" => one_integer(
@@ -791,7 +897,10 @@ fn custom_status(values: &FaultParameters) -> AppResult<(MessageStage, RuleActio
     ))
 }
 
-fn mock_response(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+fn mock_response(
+    values: &FaultParameters,
+    body_codec: &dyn BodyCodec,
+) -> AppResult<(MessageStage, RuleAction)> {
     let status = status_parameter(values)?;
     let body = json_parameter(values, "body")?;
     serde_json::from_str::<Value>(body)
@@ -801,12 +910,15 @@ fn mock_response(values: &FaultParameters) -> AppResult<(MessageStage, RuleActio
         RuleAction::Terminal(TerminalAction::MockResponse {
             status,
             headers: Vec::new(),
-            shift_jis_body: strict_shift_jis(body)?,
+            body_bytes: encode_body(body_codec, body)?,
         }),
     ))
 }
 
-fn invalid_json(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+fn invalid_json(
+    values: &FaultParameters,
+    body_codec: &dyn BodyCodec,
+) -> AppResult<(MessageStage, RuleAction)> {
     let body = text_parameter(values, "body")?;
     if serde_json::from_str::<Value>(body).is_ok() {
         return Err(parameter_error(
@@ -817,7 +929,7 @@ fn invalid_json(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction
     Ok((
         MessageStage::Response,
         RuleAction::Terminal(TerminalAction::InvalidJson {
-            shift_jis_body: strict_shift_jis(body)?,
+            body_bytes: encode_body(body_codec, body)?,
         }),
     ))
 }
@@ -987,8 +1099,10 @@ fn parameter_error(name: &str, message: impl Into<String>) -> AppError {
     )
 }
 
-fn strict_shift_jis(text: &str) -> AppResult<Vec<u8>> {
-    encode_strict(text).map_err(|error| AppError::new(error.code, error.message))
+fn encode_body(body_codec: &dyn BodyCodec, text: &str) -> AppResult<Vec<u8>> {
+    body_codec
+        .encode(text)
+        .map_err(|error| AppError::new(error.code, error.message))
 }
 
 fn active_from_rule(
@@ -1018,17 +1132,59 @@ fn active_from_rule(
 
 #[cfg(test)]
 mod tests {
-    use gmofg_proxy_runtime::codec::decode_strict;
-
     use super::*;
+
+    #[derive(Debug)]
+    struct TestBodyCodec {
+        reject_marker: Option<&'static str>,
+    }
+
+    impl BodyCodec for TestBodyCodec {
+        fn id(&self) -> &'static str {
+            "test"
+        }
+
+        fn name(&self) -> &'static str {
+            "Test Codec"
+        }
+
+        fn decode(&self, bytes: &[u8]) -> Result<String, gmofg_proxy_product_api::ProductError> {
+            std::str::from_utf8(bytes)
+                .map(str::to_owned)
+                .map_err(|error| {
+                    gmofg_proxy_product_api::ProductError::new(
+                        "BODY_DECODE_FAILED",
+                        error.to_string(),
+                    )
+                })
+        }
+
+        fn encode(&self, text: &str) -> Result<Vec<u8>, gmofg_proxy_product_api::ProductError> {
+            if self
+                .reject_marker
+                .is_some_and(|marker| text.contains(marker))
+            {
+                return Err(gmofg_proxy_product_api::ProductError::new(
+                    "BODY_ENCODE_FAILED",
+                    "test codec rejected marker",
+                ));
+            }
+            Ok(text.as_bytes().to_vec())
+        }
+    }
 
     #[test]
     fn required_terminal_faults_use_domain_compatible_stages() {
-        let definitions = template_definitions();
+        let definitions = generic_template_definitions();
         let ids = definitions
             .iter()
             .map(|definition| definition.view.template_id.as_str())
             .collect::<Vec<_>>();
+        assert_eq!(
+            ids,
+            gmofg_proxy_product_api::STANDARD_FAULT_CAPABILITY_IDS,
+            "product-api capability contract and infrastructure actions must stay aligned"
+        );
         for required in [
             "reject_tls_handshake",
             "drop_upstream_response",
@@ -1080,7 +1236,10 @@ mod tests {
     }
 
     #[test]
-    fn mock_and_invalid_json_use_strict_shift_jis() {
+    fn mock_and_invalid_json_use_injected_codec() {
+        let codec = TestBodyCodec {
+            reject_marker: Some("🧪"),
+        };
         let mock_parameters = BTreeMap::from([
             ("status".into(), FaultParameterValue::Integer(200)),
             (
@@ -1088,12 +1247,12 @@ mod tests {
                 FaultParameterValue::Json("{\"結果\":\"成功\"}".into()),
             ),
         ]);
-        let (_, mock) = mock_response(&mock_parameters).expect("mock");
-        let RuleAction::Terminal(TerminalAction::MockResponse { shift_jis_body, .. }) = mock else {
+        let (_, mock) = mock_response(&mock_parameters, &codec).expect("mock");
+        let RuleAction::Terminal(TerminalAction::MockResponse { body_bytes, .. }) = mock else {
             panic!("mock response action");
         };
         assert_eq!(
-            decode_strict(&shift_jis_body).expect("decode"),
+            codec.decode(&body_bytes).expect("decode"),
             "{\"結果\":\"成功\"}"
         );
 
@@ -1101,14 +1260,11 @@ mod tests {
             "body".into(),
             FaultParameterValue::Text("{\"結果\":".into()),
         )]);
-        let (_, invalid) = invalid_json(&invalid_parameters).expect("invalid");
-        let RuleAction::Terminal(TerminalAction::InvalidJson { shift_jis_body }) = invalid else {
+        let (_, invalid) = invalid_json(&invalid_parameters, &codec).expect("invalid");
+        let RuleAction::Terminal(TerminalAction::InvalidJson { body_bytes }) = invalid else {
             panic!("invalid json action");
         };
-        assert_eq!(
-            decode_strict(&shift_jis_body).expect("decode"),
-            "{\"結果\":"
-        );
+        assert_eq!(codec.decode(&body_bytes).expect("decode"), "{\"結果\":");
 
         let unencodable = BTreeMap::from([
             ("status".into(), FaultParameterValue::Integer(200)),
@@ -1118,27 +1274,27 @@ mod tests {
             ),
         ]);
         assert_eq!(
-            mock_response(&unencodable)
+            mock_response(&unencodable, &codec)
                 .expect_err("strict encoding")
                 .view_model
                 .code,
-            "SHIFT_JIS_ENCODE_FAILED"
+            "BODY_ENCODE_FAILED"
         );
         assert_eq!(
-            invalid_json(&BTreeMap::from([(
-                "body".into(),
-                FaultParameterValue::Text("🧪{".into()),
-            )]))
+            invalid_json(
+                &BTreeMap::from([("body".into(), FaultParameterValue::Text("🧪{".into()),)]),
+                &codec
+            )
             .expect_err("strict encoding")
             .view_model
             .code,
-            "SHIFT_JIS_ENCODE_FAILED"
+            "BODY_ENCODE_FAILED"
         );
         assert_eq!(
-            invalid_json(&BTreeMap::from([(
-                "body".into(),
-                FaultParameterValue::Text("{}".into()),
-            )]))
+            invalid_json(
+                &BTreeMap::from([("body".into(), FaultParameterValue::Text("{}".into()),)]),
+                &codec
+            )
             .expect_err("must remain invalid")
             .view_model
             .code,
@@ -1148,10 +1304,10 @@ mod tests {
 
     #[test]
     fn every_template_exposes_matching_typed_defaults_and_schema() {
-        for definition in template_definitions() {
+        for definition in generic_template_definitions() {
             assert_eq!(
                 definition.view.default_channel,
-                gmofg_proxy_application::ChannelKind::Transaction
+                gmofg_proxy_domain::ChannelId::new("default").unwrap()
             );
             assert_eq!(definition.view.default_nth_hit, 1);
             assert!(!definition.view.default_one_shot);
@@ -1193,8 +1349,13 @@ mod tests {
     // every visible template default must compile into the shared domain rule engine.
     #[test]
     fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage() {
-        for definition in template_definitions() {
-            let (stage, action) = (definition.action)(&definition.view.default_parameters)
+        let codec = TestBodyCodec {
+            reject_marker: None,
+        };
+        for definition in generic_template_definitions() {
+            let (stage, action) = definition
+                .action
+                .invoke(&definition.view.default_parameters, &codec)
                 .unwrap_or_else(|error| {
                     panic!(
                         "{} default parameters failed: {error}",
@@ -1223,7 +1384,7 @@ mod tests {
                 priority: u32::try_from(definition.view.default_priority)
                     .expect("non-negative default priority"),
                 created_order: 1,
-                channel: Some(gmofg_proxy_domain::ChannelKind::Transaction),
+                channel: Some(gmofg_proxy_domain::ChannelId::new("alpha").unwrap()),
                 stage: domain_stage,
                 conditions,
                 actions: vec![action],
@@ -1246,7 +1407,7 @@ mod tests {
             template_id: "reject_tls_handshake".into(),
             existing_rule_id: None,
             expected_revision: None,
-            channel: Some(gmofg_proxy_application::ChannelKind::Dll),
+            channel: Some(gmofg_proxy_domain::ChannelId::new("beta").unwrap()),
             terminal: None,
             target: None,
             nth_hit: Some(1),
@@ -1277,6 +1438,9 @@ mod tests {
 
     #[test]
     fn wrong_boolean_number_and_body_types_return_stable_field_errors() {
+        let codec = TestBodyCodec {
+            reject_marker: None,
+        };
         let cases = [
             (
                 drop_response(&BTreeMap::from([(
@@ -1293,10 +1457,13 @@ mod tests {
                 "parameters.milliseconds",
             ),
             (
-                mock_response(&BTreeMap::from([
-                    ("status".into(), FaultParameterValue::Integer(200)),
-                    ("body".into(), FaultParameterValue::Boolean(false)),
-                ])),
+                mock_response(
+                    &BTreeMap::from([
+                        ("status".into(), FaultParameterValue::Integer(200)),
+                        ("body".into(), FaultParameterValue::Boolean(false)),
+                    ]),
+                    &codec,
+                ),
                 "parameters.body",
             ),
         ];

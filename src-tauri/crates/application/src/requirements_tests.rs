@@ -9,9 +9,62 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
+use gmofg_proxy_product_api::{BodyCodec, ProductError};
 use uuid::Uuid;
 
 use crate::*;
+
+#[derive(Debug)]
+struct Utf8TestCodec;
+
+impl BodyCodec for Utf8TestCodec {
+    fn id(&self) -> &'static str {
+        "utf-8-test"
+    }
+
+    fn name(&self) -> &'static str {
+        "UTF-8 Test"
+    }
+
+    fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
+        String::from_utf8(bytes.to_vec())
+            .map_err(|error| ProductError::new("BODY_DECODE_FAILED", error.to_string()))
+    }
+
+    fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
+        Ok(text.as_bytes().to_vec())
+    }
+}
+
+fn breakpoint_validator() -> BreakpointValidator {
+    BreakpointValidator::new(Arc::new(Utf8TestCodec))
+}
+
+fn test_channel(id: &str) -> ChannelId {
+    ChannelId::new(id).unwrap()
+}
+
+fn valid_settings_draft() -> SettingsDraft {
+    SettingsDraft {
+        channels: vec![
+            ChannelSettingsDraft {
+                id: test_channel("alpha"),
+                display_name: "Alpha".into(),
+                enabled: true,
+                port: 20_001,
+                upstream_url: "https://alpha.example.test/api".into(),
+            },
+            ChannelSettingsDraft {
+                id: test_channel("beta"),
+                display_name: "Beta".into(),
+                enabled: true,
+                port: 20_002,
+                upstream_url: "https://beta.example.test/api".into(),
+            },
+        ],
+        ..SettingsDraft::default()
+    }
+}
 
 fn timestamp(second: u32) -> DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 7, 28, 0, 0, second)
@@ -21,6 +74,9 @@ fn timestamp(second: u32) -> DateTime<Utc> {
 
 fn content(body: &[u8]) -> MessageContentViewModel {
     MessageContentViewModel {
+        http_status: None,
+        start_line_bytes: Vec::new(),
+        raw_headers: Vec::new(),
         headers: BTreeMap::from([("content-type".into(), vec!["application/json".into()])]),
         body_text: Some(String::from_utf8_lossy(body).into_owned()),
         body_bytes: body.to_vec(),
@@ -38,9 +94,11 @@ fn session(id: SessionId, second: u32, pending: bool, body: &[u8]) -> SessionRec
                 started_at: timestamp(second),
                 completed_at: (!pending).then(|| timestamp(second)),
                 terminal_ip: format!("10.0.0.{second}"),
-                channel: ChannelKind::Transaction,
+                channel: test_channel("alpha"),
+                channel_text: "Alpha".into(),
                 method: "POST".into(),
                 target: "/payment".into(),
+                http_status: None,
                 result: "成功".into(),
                 ui_tone: UiTone::Positive,
                 duration_ms: Some(u64::from(second)),
@@ -75,7 +133,8 @@ fn breakpoint(id: BreakpointId, epoch: RuntimeEpoch, second: u32) -> BreakpointD
             stage: MessageStage::Request,
             title: "请求断点·发送至服务器前".into(),
             terminal_ip: "10.0.0.1".into(),
-            channel: ChannelKind::Transaction,
+            channel: test_channel("alpha"),
+            channel_text: "Alpha".into(),
             method: "POST".into(),
             target: "/payment".into(),
             waiting_since: timestamp(second),
@@ -133,12 +192,13 @@ fn capture_row(event_id: u64) -> CaptureRowViewModel {
         session_id: Uuid::new_v4(),
         occurred_at: timestamp(0),
         terminal_ip: "10.0.0.1".into(),
-        channel: ChannelKind::Transaction,
+        channel: test_channel("alpha"),
         channel_text: "交易".into(),
         stage: MessageStage::Request,
         stage_text: "请求".into(),
         method: "POST".into(),
         target: "/payment".into(),
+        http_status: None,
         result: "成功".into(),
         ui_tone: UiTone::Positive,
         duration_ms: Some(1),
@@ -171,6 +231,7 @@ fn logical_byte_accounting_is_exact_and_repeatable() {
     let summary = &record.detail.summary;
     let strings = summary.request_id.len()
         + summary.terminal_ip.len()
+        + summary.channel_text.len()
         + summary.method.len()
         + summary.target.len()
         + summary.result.len()
@@ -275,7 +336,7 @@ fn session_query_is_deterministic() {
         &SessionQuery {
             keyword: Some("payment".into()),
             terminal_ip: Some("10.0.0".into()),
-            channel: Some(ChannelKind::Transaction),
+            channel: Some(test_channel("alpha")),
             result: Some("成功".into()),
             rule_id: None,
             started_from: None,
@@ -325,10 +386,8 @@ async fn breakpoint_resolution_is_atomic_and_epoch_scoped() {
     assert_eq!(summary.state, BreakpointState::Resolved);
     assert!(matches!(
         ticket.outcome.await.expect("outcome delivered"),
-        BreakpointOutcome::Decision(BreakpointDecision {
-            kind: BreakpointDecisionKind::ForwardOriginal,
-            ..
-        })
+        BreakpointOutcome::Decision(decision)
+            if decision.kind == BreakpointDecisionKind::ForwardOriginal
     ));
     assert_eq!(
         coordinator
@@ -653,9 +712,7 @@ fn app_error_view_model_preserves_stable_contract() {
 fn fake_settings_view() -> SettingsViewModel {
     let stored = SettingsDraft {
         expected_revision: Some(1),
-        upstream_transaction_url: "https://transaction.example.test/api".into(),
-        upstream_dll_url: "https://dll.example.test/api".into(),
-        ..SettingsDraft::default()
+        ..valid_settings_draft()
     };
     SettingsViewModel {
         stored: stored.clone(),
@@ -915,6 +972,10 @@ impl CertificateServicePort for FakePorts {
 
 #[async_trait]
 impl SettingsRepositoryPort for FakePorts {
+    async fn defaults(&self) -> AppResult<SettingsDraft> {
+        Ok(valid_settings_draft())
+    }
+
     async fn get(&self) -> AppResult<SettingsViewModel> {
         Ok(self.settings.lock().clone())
     }
@@ -1012,6 +1073,7 @@ fn proxy_status(state: ProxyState) -> ProxyStatusViewModel {
 
 fn application_with_fake_ports(ports: Arc<FakePorts>) -> Application {
     Application::new(
+        "Test Product".into(),
         ports.clone(),
         ports.clone(),
         ports.clone(),
@@ -1037,11 +1099,12 @@ async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
         .register(breakpoint(id, epoch, 1))
         .expect("register");
     let application = Application::new(
+        "Test Product".into(),
         ports.clone(),
         ports.clone(),
         ports.clone(),
         coordinator,
-        Arc::new(BreakpointValidator),
+        Arc::new(breakpoint_validator()),
         ports.clone(),
         ports.clone(),
         ports.clone(),
@@ -1058,6 +1121,9 @@ async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
                 expected_revision: 7,
                 kind: BreakpointDecisionKind::ForwardModified,
                 message: Some(MessageContentViewModel {
+                    http_status: None,
+                    start_line_bytes: Vec::new(),
+                    raw_headers: Vec::new(),
                     headers: BTreeMap::from([(
                         "content-type".into(),
                         vec!["application/json".into()],
@@ -1104,11 +1170,8 @@ async fn settings_use_case_rejects_locally_then_calls_fake_port_for_valid_draft(
     assert!(!validation.valid);
     assert_eq!(ports.settings_validations.load(Ordering::SeqCst), 0);
 
-    let valid = SettingsDraft {
-        upstream_transaction_url: " https://transaction.example.test/api ".into(),
-        upstream_dll_url: "https://dll.example.test/api".into(),
-        ..SettingsDraft::default()
-    };
+    let mut valid = valid_settings_draft();
+    valid.channels[0].upstream_url = " https://alpha.example.test/api ".into();
     assert!(
         application
             .settings_validate(valid)
@@ -1156,10 +1219,8 @@ async fn settings_can_be_saved_before_first_certificate_setup() {
     }
     let application = application_with_fake_ports(ports);
     let draft = SettingsDraft {
-        upstream_transaction_url: "https://transaction.example.test/api".into(),
-        upstream_dll_url: "https://dll.example.test/api".into(),
         leaf_sans: vec!["10.0.34.50".into()],
-        ..SettingsDraft::default()
+        ..valid_settings_draft()
     };
 
     let validation = application.settings_validate(draft).await.unwrap();
@@ -1193,10 +1254,8 @@ async fn settings_restart_preserves_candidate_error_after_successful_rollback() 
     ]);
     let original = ports.settings.lock().clone();
     let application = application_with_fake_ports(ports.clone());
-    let candidate = SettingsDraft {
-        transaction_port: 20_000,
-        ..original.stored.clone()
-    };
+    let mut candidate = original.stored.clone();
+    candidate.channels[0].port = 20_003;
 
     let error = application
         .settings_save_and_restart(candidate)
