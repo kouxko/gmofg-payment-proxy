@@ -128,4 +128,18 @@ describe("CertificatesView settings freshness", () => {
       expect(mocks.certificateExportCa).toHaveBeenCalledTimes(1),
     );
   });
+
+  it("uses a responsive full-width certificate overview layout", () => {
+    render(<CertificatesView />);
+
+    expect(screen.getByTestId("certificate-overview-grid")).toHaveClass(
+      "grid-cols-2",
+      "max-[960px]:grid-cols-1",
+    );
+    expect(screen.getByTestId("certificate-upstream-actions")).toHaveClass(
+      "grid-cols-[minmax(0,1fr)_auto]",
+      "items-center",
+      "max-[860px]:grid-cols-1",
+    );
+  });
 });

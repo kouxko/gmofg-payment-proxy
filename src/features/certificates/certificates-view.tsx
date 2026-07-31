@@ -206,44 +206,51 @@ export function CertificatesView() {
         </Alert>
       )}
 
-      <div className="grid grid-cols-2 items-start gap-4 max-[1180px]:grid-cols-1">
+      <div className="space-y-4">
         <Card>
           <Card.Header>
             <Card.Title>A. 统一测试 CA 与 App → Proxy 服务端身份</Card.Title>
           </Card.Header>
           <Card.Content className="space-y-4">
-            {(overview.data?.items ?? []).map((item) => (
-              <div
-                key={item.kind}
-                className="space-y-2 border-b border-[var(--telemetry-line)] pb-4 last:border-0"
-              >
-                <div className="flex items-center gap-2 font-semibold">
-                  {item.usage}
-                  <Chip
-                    size="sm"
-                    color={toneColor(item.ui_tone)}
-                    variant="soft"
-                  >
-                    {item.status_text}
-                  </Chip>
+            <div
+              data-testid="certificate-overview-grid"
+              className="grid grid-cols-2 gap-x-6 gap-y-4 max-[960px]:grid-cols-1"
+            >
+              {(overview.data?.items ?? []).map((item) => (
+                <div
+                  key={item.kind}
+                  className="min-w-0 space-y-2 border-b border-[var(--telemetry-line)] pb-4"
+                >
+                  <div className="flex flex-wrap items-center gap-2 font-semibold">
+                    <span className="min-w-0 break-words">{item.usage}</span>
+                    <Chip
+                      size="sm"
+                      color={toneColor(item.ui_tone)}
+                      variant="soft"
+                    >
+                      {item.status_text}
+                    </Chip>
+                  </div>
+                  <dl className="grid min-w-0 grid-cols-[112px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm max-[560px]:grid-cols-1 max-[560px]:gap-y-1">
+                    <dt>主题</dt>
+                    <dd className="min-w-0 break-words">{item.subject}</dd>
+                    <dt>SAN</dt>
+                    <dd className="min-w-0 break-words">
+                      {item.sans.join("、") || "—"}
+                    </dd>
+                    <dt>有效期</dt>
+                    <dd className="min-w-0 break-words">
+                      {formatTimestamp(item.valid_from)} ～{" "}
+                      {formatTimestamp(item.valid_until)}
+                    </dd>
+                    <dt>SHA-256 指纹</dt>
+                    <dd className="min-w-0 break-all font-mono text-xs">
+                      {item.sha256_fingerprint}
+                    </dd>
+                  </dl>
                 </div>
-                <dl className="grid grid-cols-[150px_1fr] gap-y-2 text-sm">
-                  <dt>主题</dt>
-                  <dd>{item.subject}</dd>
-                  <dt>SAN</dt>
-                  <dd>{item.sans.join("、") || "—"}</dd>
-                  <dt>有效期</dt>
-                  <dd>
-                    {formatTimestamp(item.valid_from)} ～{" "}
-                    {formatTimestamp(item.valid_until)}
-                  </dd>
-                  <dt>SHA-256 指纹</dt>
-                  <dd className="break-all font-mono text-xs">
-                    {item.sha256_fingerprint}
-                  </dd>
-                </dl>
-              </div>
-            ))}
+              ))}
+            </div>
             <div className="flex flex-wrap gap-3">
               {overview.data?.can_initialize && (
                 <Button
@@ -308,13 +315,16 @@ export function CertificatesView() {
           <Card.Header>
             <Card.Title>B. Proxy → 上游服务器客户端身份</Card.Title>
           </Card.Header>
-          <Card.Content className="space-y-4">
+          <Card.Content
+            data-testid="certificate-upstream-actions"
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 max-[860px]:grid-cols-1"
+          >
             <p className="text-sm text-[var(--telemetry-muted)]">
               导入产品原有客户端 P12 作为上游客户端身份。产品原始上游 CA
               已内置并默认作为上游服务器信任锚；环境证书变化时可以选择文件替换。
               上游信任与下游 Proxy 测试 CA 无关。
             </p>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap justify-end gap-3 max-[860px]:justify-start">
               <Modal
                 isOpen={pkcs12Open}
                 onOpenChange={(open) => {

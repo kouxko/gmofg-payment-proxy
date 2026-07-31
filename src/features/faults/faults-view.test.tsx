@@ -148,6 +148,24 @@ describe("FaultsView", () => {
     );
   });
 
+  it("submits the explicitly selected DLL channel", async () => {
+    const user = userEvent.setup();
+    render(<FaultsView />);
+
+    await user.click(screen.getByLabelText("代理通道"));
+    await user.click(
+      await screen.findByRole("option", { name: "Payment DLL" }),
+    );
+    await user.click(screen.getByRole("button", { name: "启用模拟" }));
+
+    expect(commandMocks.faultConfigure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        template_id: "mock_shift_jis_json",
+        channel: "dll",
+      }),
+    );
+  });
+
   it("opens the saved rule through client navigation", async () => {
     const user = userEvent.setup();
     render(<FaultsView />);

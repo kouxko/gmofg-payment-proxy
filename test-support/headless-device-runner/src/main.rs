@@ -11,7 +11,7 @@ use std::{
 
 use gmofg_proxy_application::{
     AppResult, BreakpointDecision, BreakpointDecisionKind, BreakpointState, CaptureQuery,
-    CaptureSort, ChannelKind, FaultConfigurationDraft, FaultParameterValue, MessageStage,
+    CaptureSort, ChannelId, FaultConfigurationDraft, FaultParameterValue, MessageStage,
     PageRequest, RuleAction, RuleCondition, RuleDraft, RuleId, RuleJitterScope, RuleMatchField,
     RuleMatchOperator, RuleTerminalAction, RuleTrafficDirection, SortDirection, UiEventPayload,
 };
@@ -19,6 +19,7 @@ use gmofg_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use gmofg_proxy_infrastructure::{
     InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
 };
+use gmofg_proxy_product_payment::PaymentProductProfile;
 use ring::{
     aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey},
     rand::{SecureRandom, SystemRandom},
@@ -31,6 +32,10 @@ const KEY_BYTES: usize = 32;
 const NONCE_BYTES: usize = 12;
 const TAG_BYTES: usize = 16;
 const AAD: &[u8] = b"gmofg-payment-proxy/keychain-envelope/v1";
+
+fn dll_channel() -> ChannelId {
+    ChannelId::new("dll").expect("Payment product declares the DLL channel")
+}
 
 #[derive(Debug)]
 struct NoFileDialog;
@@ -506,12 +511,12 @@ impl Scenario {
                 action: RuleTerminalAction::MockResponse {
                     status: 200,
                     headers: vec![("content-type".into(), "application/json".into())],
-                    shift_jis_body: br#"{"RuleMarker":"MOCK_RULE"}"#.to_vec(),
+                    body_bytes: br#"{"RuleMarker":"MOCK_RULE"}"#.to_vec(),
                 },
             },
             Self::InvalidJson => RuleAction::Terminal {
                 action: RuleTerminalAction::InvalidJson {
-                    shift_jis_body: b"{invalid".to_vec(),
+                    body_bytes: b"{invalid".to_vec(),
                 },
             },
             Self::RejectTlsHandshake => RuleAction::Terminal {
@@ -603,7 +608,7 @@ impl Scenario {
                 action: RuleTerminalAction::MockResponse {
                     status: 503,
                     headers: vec![("content-type".into(), "application/json".into())],
-                    shift_jis_body: b"{}".to_vec(),
+                    body_bytes: b"{}".to_vec(),
                 },
             },
             Self::PriorityOrder => RuleAction::SetJsonField {
@@ -1085,7 +1090,7 @@ impl Scenario {
                     action: RuleTerminalAction::MockResponse {
                         status: 200,
                         headers: vec![("content-type".into(), "application/json".into())],
-                        shift_jis_body: br#"{"RuleMarker":"DELAYED_MOCK"}"#.to_vec(),
+                        body_bytes: br#"{"RuleMarker":"DELAYED_MOCK"}"#.to_vec(),
                     },
                 },
             ],
@@ -1097,7 +1102,7 @@ impl Scenario {
         draft.name = format!("{TEST_RULE_PREFIX}{}", self.name());
         draft.description = "Expected rejection probe".into();
         draft.enabled = true;
-        draft.channel = Some(ChannelKind::Dll);
+        draft.channel = Some(dll_channel());
         draft.stage = Some(self.stage());
         match self {
             Self::InvalidStageAction => {
@@ -1150,7 +1155,7 @@ impl Scenario {
                         action: RuleTerminalAction::MockResponse {
                             status: 200,
                             headers: Vec::new(),
-                            shift_jis_body: b"{}".to_vec(),
+                            body_bytes: b"{}".to_vec(),
                         },
                     },
                     RuleAction::Delay { milliseconds: 1 },
@@ -1291,7 +1296,7 @@ fn capture_query(rule_id: Option<RuleId>, after_event_id: Option<u64>) -> Captur
     CaptureQuery {
         keyword: None,
         terminal_ip: Some("10.0.34.94".into()),
-        channel: Some(ChannelKind::Dll),
+        channel: Some(dll_channel()),
         stage: None,
         result: None,
         rule_id,
@@ -1382,6 +1387,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let host = ApplicationHostBuilder::new(
         data_dir,
         HostPlatformServices::new(secret_protector, Arc::new(NoFileDialog)),
+        Arc::new(PaymentProductProfile::isolated_test_tool()),
     )
     .build()
     .await?;
@@ -1491,7 +1497,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 template_id: template_id.into(),
                 existing_rule_id: None,
                 expected_revision: None,
-                channel: Some(ChannelKind::Dll),
+                channel: Some(dll_channel()),
                 terminal: if matches!(scenario, Scenario::RejectTlsHandshake) {
                     None
                 } else {
@@ -1534,7 +1540,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         } else {
             100
         };
-        draft.channel = Some(ChannelKind::Dll);
+        draft.channel = Some(dll_channel());
         draft.stage = Some(scenario.stage());
         draft.conditions = scenario.conditions();
         draft.actions = scenario.actions();
@@ -1552,7 +1558,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         draft.description = "Lower-priority companion rule".into();
         draft.enabled = true;
         draft.priority = 20;
-        draft.channel = Some(ChannelKind::Dll);
+        draft.channel = Some(dll_channel());
         draft.stage = Some(MessageStage::Response);
         draft.actions = vec![RuleAction::SetHeader {
             name: "x-gmofg-priority-second".into(),
@@ -2096,6 +2102,22 @@ mod tests {
                 "throttle-upstream",
             ]
         );
+    }
+
+    #[test]
+    fn tls_rejection_uses_the_android_platform_stable_io_contract() {
+        let matrix: serde_json::Value =
+            serde_json::from_str(include_str!("../scenarios.json")).expect("matrix JSON");
+        let scenario = matrix["scenarios"]
+            .as_array()
+            .expect("scenario array")
+            .iter()
+            .find(|scenario| scenario["id"] == "reject-tls-handshake")
+            .expect("TLS rejection scenario");
+
+        assert_eq!(scenario["android_expected_kind"], "io_failure");
+        assert_eq!(scenario["expected_exception"], "IOException");
+        assert_eq!(scenario["expected_rule_hits"], 1);
     }
 
     #[test]

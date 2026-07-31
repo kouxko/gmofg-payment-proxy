@@ -1,9 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  captureDetailTabLabels,
   defaultCaptureQuery,
   resumeCaptureQuery,
   ruleEditorHref,
 } from "./capture-view";
+
+describe("CAPTURE detail navigation", () => {
+  it("keeps HTTP status and Header metadata out of the compact tab labels", () => {
+    expect(Object.values(captureDetailTabLabels)).toEqual([
+      "概览",
+      "请求",
+      "响应",
+    ]);
+    expect(Object.values(captureDetailTabLabels).join(" ")).not.toMatch(
+      /Header|\d{3}/,
+    );
+  });
+});
 
 describe("CAPTURE-009 create rule navigation", () => {
   it("only carries the selected session ID to the Rust-backed rule editor", () => {

@@ -46,6 +46,12 @@ export const defaultCaptureQuery: CaptureQuery = {
   page: { page: 1, page_size: 50 },
 };
 
+export const captureDetailTabLabels = {
+  overview: "概览",
+  request: "请求",
+  response: "响应",
+} as const;
+
 export function ruleEditorHref(sessionId: string): string {
   return `/rules?sessionId=${encodeURIComponent(sessionId)}`;
 }
@@ -485,19 +491,16 @@ export function CaptureView({
         <Tabs defaultSelectedKey="overview">
           <Tabs.ListContainer>
             <Tabs.List aria-label="抓包详情">
-              <Tabs.Tab id="overview">
-                概览
+              <Tabs.Tab id="overview" className="whitespace-nowrap">
+                {captureDetailTabLabels.overview}
                 <Tabs.Indicator />
               </Tabs.Tab>
-              <Tabs.Tab id="request">
-                请求{detail.data ? ` · ${requestHeaderCount} Header` : ""}
+              <Tabs.Tab id="request" className="whitespace-nowrap">
+                {captureDetailTabLabels.request}
                 <Tabs.Indicator />
               </Tabs.Tab>
-              <Tabs.Tab id="response">
-                响应
-                {detail.data?.response
-                  ? ` · ${detail.data.response.http_status ?? "未知状态"} · ${responseHeaderCount} Header`
-                  : ""}
+              <Tabs.Tab id="response" className="whitespace-nowrap">
+                {captureDetailTabLabels.response}
                 <Tabs.Indicator />
               </Tabs.Tab>
             </Tabs.List>
@@ -529,7 +532,7 @@ export function CaptureView({
               </div>
             ) : (
               <>
-                <dl className="grid grid-cols-[110px_1fr] gap-y-3 text-sm">
+                <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
                   <dt>请求 ID</dt>
                   <dd className="break-all font-mono text-xs">
                     {detail.data?.request_id ?? "正在读取…"}
@@ -625,7 +628,7 @@ export function CaptureView({
               </p>
             ) : (
               <>
-                <dl className="grid grid-cols-[110px_1fr] gap-y-3 text-sm">
+                <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
                   <dt>请求行</dt>
                   <dd className="break-all font-mono text-xs">
                     {selected.method} {selected.target}
@@ -687,7 +690,7 @@ export function CaptureView({
               </p>
             ) : (
               <>
-                <dl className="grid grid-cols-[110px_1fr] gap-y-3 text-sm">
+                <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
                   <dt>HTTP 状态码</dt>
                   <dd>
                     <Chip size="sm" color="accent" variant="soft">

@@ -55,6 +55,10 @@ D48 baseline。
 除了绝对耗时外还校验差值。`ALL` 会在一个证据包中执行全部批次，并生成
 `batch_summaries`；模板清单必须与矩阵中的 22 个模板完全一致。
 
+TLS 拒绝场景以 Proxy 的 TLS 阶段 `RuleHit`、HTTP 处理器未进入和 Android
+连接失败共同验收。Android/OkHttp 在服务端拒绝客户端证书时会按平台 TLS
+实现暴露 `IOException`，矩阵不要求不稳定的 `SSLHandshakeException` 子类。
+
 每个场景保存 runner、instrumentation 与过滤后的设备日志，并生成
 `results.jsonl` 与 `report.json`。`security-checks.txt` 记录私有材料权限和
 instrumentation 参数安全检查，不包含秘密值。报告同时绑定设备序列号、
