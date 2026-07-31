@@ -275,71 +275,73 @@ export function SettingsView() {
                             key={channel.id}
                             className="border border-[var(--telemetry-line)] shadow-sm"
                           >
-                            <Card.Header className="flex items-center gap-3">
-                              <div>
-                                <Card.Title>{channel.display_name}</Card.Title>
-                                <Card.Description>
-                                  通道 ID：{channel.id}
-                                </Card.Description>
-                              </div>
-                              <Switch
-                                className="ml-auto"
-                                aria-label={`启用${channel.display_name}`}
-                                isSelected={channel.enabled}
-                                onChange={(enabled) =>
-                                  updateChannel(draft, index, { enabled })
-                                }
-                              >
-                                <Switch.Control>
-                                  <Switch.Thumb />
-                                </Switch.Control>
-                                <Switch.Content>
-                                  {channel.enabled ? "已启用" : "已禁用"}
-                                </Switch.Content>
-                              </Switch>
-                            </Card.Header>
-                            <Card.Content className="grid grid-cols-[minmax(180px,1fr)_minmax(0,2fr)] gap-4 max-[900px]:grid-cols-1">
-                              <NumberField
-                                isInvalid={fieldError(portField) != null}
-                                value={channel.port}
-                                minValue={1}
-                                maxValue={65535}
-                                onChange={(port) =>
-                                  updateChannel(draft, index, { port })
-                                }
-                              >
-                                <Label>监听端口</Label>
-                                <NumberField.Group className="w-full">
-                                  <NumberField.DecrementButton />
-                                  <NumberField.Input />
-                                  <NumberField.IncrementButton />
-                                </NumberField.Group>
-                                {fieldError(portField) && (
-                                  <FieldError>
-                                    {fieldError(portField)}
-                                  </FieldError>
-                                )}
-                              </NumberField>
-                              <TextField
-                                isInvalid={
-                                  fieldError(upstreamField) != null
-                                }
-                              >
-                                <Label>上游 URL</Label>
-                                <Input
-                                  value={channel.upstream_url}
-                                  onChange={(event) =>
-                                    updateChannel(draft, index, {
-                                      upstream_url: event.target.value,
-                                    })
+                            <Card.Content className="space-y-3 p-4">
+                              <div className="flex min-w-0 items-center justify-between gap-4">
+                                <div className="flex min-w-0 items-baseline gap-3">
+                                  <Card.Title>{channel.display_name}</Card.Title>
+                                  <Card.Description className="truncate">
+                                    通道 ID：{channel.id}
+                                  </Card.Description>
+                                </div>
+                                <Switch
+                                  className="shrink-0"
+                                  aria-label={`启用${channel.display_name}`}
+                                  isSelected={channel.enabled}
+                                  onChange={(enabled) =>
+                                    updateChannel(draft, index, { enabled })
                                   }
-                                />
-                                {fieldError(upstreamField) && (
-                                  <FieldError>
-                                    {fieldError(upstreamField)}
-                                  </FieldError>
-                                )}
-                              </TextField>
+                                >
+                                  <Switch.Control>
+                                    <Switch.Thumb />
+                                  </Switch.Control>
+                                  <Switch.Content className="sr-only">
+                                    {channel.enabled ? "已启用" : "已禁用"}
+                                  </Switch.Content>
+                                </Switch>
+                              </div>
+                              <div className="grid grid-cols-[minmax(180px,0.7fr)_minmax(320px,1.8fr)] items-start gap-4 max-[680px]:grid-cols-1">
+                                <NumberField
+                                  isInvalid={fieldError(portField) != null}
+                                  value={channel.port}
+                                  minValue={1}
+                                  maxValue={65535}
+                                  onChange={(port) =>
+                                    updateChannel(draft, index, { port })
+                                  }
+                                >
+                                  <Label>监听端口</Label>
+                                  <NumberField.Group className="w-full">
+                                    <NumberField.DecrementButton />
+                                    <NumberField.Input />
+                                    <NumberField.IncrementButton />
+                                  </NumberField.Group>
+                                  {fieldError(portField) && (
+                                    <FieldError>
+                                      {fieldError(portField)}
+                                    </FieldError>
+                                  )}
+                                </NumberField>
+                                <TextField
+                                  isInvalid={
+                                    fieldError(upstreamField) != null
+                                  }
+                                >
+                                  <Label>上游 URL</Label>
+                                  <Input
+                                    value={channel.upstream_url}
+                                    onChange={(event) =>
+                                      updateChannel(draft, index, {
+                                        upstream_url: event.target.value,
+                                      })
+                                    }
+                                  />
+                                  {fieldError(upstreamField) && (
+                                    <FieldError>
+                                      {fieldError(upstreamField)}
+                                    </FieldError>
+                                  )}
+                                </TextField>
+                              </div>
                             </Card.Content>
                           </Card>
                         );

@@ -569,9 +569,11 @@ export function FaultsView() {
               <Select
                 aria-label="代理通道"
                 selectedKey={effectiveChannel}
-                onSelectionChange={(value) =>
-                  setChannel(value as ChannelId)
-                }
+                onSelectionChange={(value) => {
+                  if (value != null) {
+                    setChannel(value as ChannelId);
+                  }
+                }}
               >
                 <Select.Trigger>
                   <Select.Value />

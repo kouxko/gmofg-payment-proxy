@@ -1235,6 +1235,23 @@ async fn settings_can_be_saved_before_first_certificate_setup() {
 }
 
 #[tokio::test]
+async fn settings_validation_matches_prefixed_certificate_sans() {
+    let ports = Arc::new(FakePorts::default());
+    ports.certificate_overview.lock().items[0].sans =
+        vec!["IP:10.0.34.50".into(), "DNS:Proxy.Local".into()];
+    let application = application_with_fake_ports(ports);
+    let draft = SettingsDraft {
+        leaf_sans: vec!["10.0.34.50".into(), "proxy.local".into()],
+        ..valid_settings_draft()
+    };
+
+    let validation = application.settings_validate(draft).await.unwrap();
+
+    assert!(validation.valid);
+    assert!(!validation.field_errors.contains_key("leaf_sans"));
+}
+
+#[tokio::test]
 async fn empty_pkcs12_password_is_forwarded_to_the_rust_certificate_parser() {
     let ports = Arc::new(FakePorts::default());
     let application = application_with_fake_ports(ports);

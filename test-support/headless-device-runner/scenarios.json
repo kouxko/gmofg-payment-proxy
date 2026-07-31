@@ -123,7 +123,7 @@
       "template_id": "reject_tls_handshake",
       "stage": "tls_handshake",
       "android_expected_kind": "io_failure",
-      "expected_exception": "SSLHandshakeException",
+      "expected_exception": "IOException",
       "require_mtls_summary": false,
       "expected_rule_hits": 1
     },

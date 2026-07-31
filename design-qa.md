@@ -131,6 +131,36 @@
 
 final result: passed
 
+## 2026-07-31 设置通道卡片二次修正
+
+### 源视觉真值
+
+- 用户否决的中间版本：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-2c09bddd-13d6-4db6-848f-cd5fd027e6f2.png`
+- 最终打包应用：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/GMO-FG Payment Proxy Screenshot 2026-07-31 at 12.39.41.jpeg`
+- 等高并排比较输入：
+  `/tmp/gmofg-settings-layout-final-comparison.png`
+
+### 修正与比较结论
+
+- 删除开关旁可见的“已启用/已禁用”文案，保留屏幕阅读器可访问文本。
+- 不再把开关夹在通道信息和端口字段之间，也不再为开关建立独立纵向信息列。
+- 卡片改为清晰的两层结构：标题行包含通道名称、通道 ID 和右对齐开关；字段行只
+  包含监听端口和上游 URL。
+- 交易与 DLL 卡片结构、边距、字段宽度和开关位置完全一致，卡片高度较中间版本
+  更紧凑。
+- 所有表单控件继续使用 HeroUI；未引入自定义控件或新依赖。
+
+### 自动化与构建
+
+- 设置页定向测试：4 个全部通过。
+- TypeScript 与 ESLint 通过。
+- macOS `.app` 与 `.dmg` 重新打包成功。
+- 最终打包应用已打开并停留在“系统设置 → 网络与上游”页面供人工验收。
+
+final result: passed
+
 ## 2026-07-30 删除实时抓包异常筛选
 
 ### 对照证据
@@ -163,3 +193,44 @@ final result: passed
   做额外视觉改动。
 
 final result: blocked
+
+## 2026-07-31 设置通道垂直居中与证书页密度复验
+
+### 源视觉真值
+
+- 设置通道垂直对齐：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-1699262e-3120-42f3-bd35-d83bb642eec3.png`
+- 证书页左右留白失衡：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-d93f2072-b506-4df5-987d-dbde1c265064.png`
+- 用户截图中的红色箭头用于标记问题，不作为最终界面的视觉元素。
+
+### 打包应用证据
+
+- macOS Tauri 设置页：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/GMO-FG Payment Proxy Screenshot 2026-07-31 at 12.23.26.jpeg`
+- macOS Tauri 证书页：
+  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/GMO-FG Payment Proxy Screenshot 2026-07-31 at 12.24.23.jpeg`
+- 并排比较输入：
+  - `/tmp/gmofg-settings-before-after.png`
+  - `/tmp/gmofg-cert-before-after.png`
+- 视口：macOS 打包应用窗口 1229×768。
+- 状态：Proxy 已停止，设置和证书数据均来自真实 Rust/Tauri 运行快照。
+
+### 比较结论
+
+- 设置页两个通道卡片统一使用 `items-center`，通道名称、端口字段、上游 URL
+  和 HeroUI Switch 以同一行的垂直中心对齐；卡片高度和上下留白保持一致。
+- 证书概览由左右等高双栏改为全宽卡片内部的响应式两列证书网格，四个证书条目
+  在宽屏形成 2×2 信息布局，消除了右侧大面积空白。
+- 证书主题、SAN、有效期与 SHA-256 指纹均可安全换行；960px 以下自动回到
+  单列，不引入横向溢出。
+- 上游 PKCS12/CA 操作区改为紧凑横向布局，并在窄屏自动堆叠。
+- 控件继续全部使用 HeroUI 组件；未新增自定义控件、颜色、图标或依赖。
+
+### 自动化与构建
+
+- 前端测试：16 个文件、53 个测试全部通过。
+- ESLint、TypeScript、Next.js production build 通过。
+- macOS `.app` 与 `.dmg` 重新打包成功并已启动新版应用。
+
+final result: passed

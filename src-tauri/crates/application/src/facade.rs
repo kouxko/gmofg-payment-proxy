@@ -840,7 +840,7 @@ impl Application {
             .items
             .iter()
             .find(|item| item.usage.contains("App → Proxy"))
-            .map(|item| &item.sans);
+            .map(|item| normalize_certificate_sans(&item.sans));
         if leaf_sans.is_none_or(|sans| {
             draft
                 .leaf_sans
@@ -1150,6 +1150,24 @@ fn normalize_sans(values: Vec<String>) -> Vec<String> {
     values.sort();
     values.dedup();
     values
+}
+
+fn normalize_certificate_sans(values: &[String]) -> Vec<String> {
+    normalize_sans(
+        values
+            .iter()
+            .map(|value| {
+                let value = value.trim();
+                value
+                    .split_once(':')
+                    .filter(|(kind, _)| {
+                        kind.eq_ignore_ascii_case("DNS") || kind.eq_ignore_ascii_case("IP")
+                    })
+                    .map_or(value, |(_, address)| address)
+                    .to_owned()
+            })
+            .collect(),
+    )
 }
 
 fn parse_sans_raw(raw: &str) -> Vec<String> {
