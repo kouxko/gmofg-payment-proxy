@@ -222,6 +222,9 @@ pub trait ProductProfile: fmt::Debug + Send + Sync {
     fn labels(&self) -> ProductLabels;
 
     /// 产品允许用户快速配置的故障能力。
+    ///
+    /// 返回空切片表示不做产品化裁剪，使用代理核心提供的完整通用故障目录。只有需要
+    /// 限制能力或替换展示文案的嵌入产品才需要显式列出模板。
     fn fault_templates(&self) -> &'static [ProductFaultTemplate];
 
     fn request_classifier(&self) -> Arc<dyn RequestClassifier>;

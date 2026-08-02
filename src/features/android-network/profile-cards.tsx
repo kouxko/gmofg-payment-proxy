@@ -84,8 +84,10 @@ export function ProfileBasicsCard({
               auto_resume_after_reboot: autoResume,
             })}
           >
-            <Switch.Control><Switch.Thumb /></Switch.Control>
-            <Switch.Content>解锁且网络可用后自动恢复</Switch.Content>
+            <Switch.Content>
+              <Switch.Control><Switch.Thumb /></Switch.Control>
+              <span>解锁且网络可用后自动恢复</span>
+            </Switch.Content>
           </Switch>
         </div>
       </Card.Content>
@@ -117,8 +119,10 @@ export function ProfileActions({
   return (
     <div className="flex flex-wrap items-center gap-2 pb-5">
       <Switch isSelected={dangerousConfirmed} onChange={onDangerousConfirmedChange}>
-        <Switch.Control><Switch.Thumb /></Switch.Control>
-        <Switch.Content>确认 100% 丢包或黑洞风险</Switch.Content>
+        <Switch.Content>
+          <Switch.Control><Switch.Thumb /></Switch.Control>
+          <span>确认 100% 丢包或黑洞风险</span>
+        </Switch.Content>
       </Switch>
       <Button variant="outline" isDisabled={busy} onPress={onSave}>保存方案</Button>
       <Button variant="primary" isDisabled={busy || !selectedSerial} onPress={onStart}>启动</Button>

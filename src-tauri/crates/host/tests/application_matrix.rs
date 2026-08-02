@@ -591,6 +591,19 @@ async fn production_host_covers_certificate_overview_and_validation_without_ui()
     assert_eq!(bootstrap.channel_catalog[0].display_name, "默认正向代理");
     assert!(uuid::Uuid::parse_str(bootstrap.channel_catalog[0].id.as_str()).is_ok());
 
+    let templates = application
+        .fault_template_list()
+        .await
+        .expect("generic fault templates");
+    assert_eq!(
+        templates.len(),
+        intercept_proxy_product_api::STANDARD_FAULT_CAPABILITY_IDS.len()
+    );
+    assert!(templates.iter().all(|template| {
+        template.default_channel == bootstrap.channel_catalog[0].id
+            && !template.name.trim().is_empty()
+    }));
+
     let generated = application
         .certificate_overview()
         .await

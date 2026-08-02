@@ -155,6 +155,34 @@ describe("Android targeted network page", () => {
     expect(mocks.deviceNetworkProfileSave.mock.calls[0][0].target_applications[0].package_name).toBe("example.target");
   });
 
+  it("keeps auto-resume track inside the clickable HeroUI switch hit area", async () => {
+    const user = userEvent.setup();
+    render(<AndroidNetworkView />);
+    await user.click(await screen.findByRole("button", { name: "新建" }));
+
+    const autoResume = screen.getByRole("switch", {
+      name: "解锁且网络可用后自动恢复",
+    });
+    const content = autoResume.closest('[data-slot="switch-content"]');
+    const control = content?.querySelector<HTMLElement>(
+      '[data-slot="switch-control"]',
+    );
+
+    expect(autoResume).not.toBeChecked();
+    expect(control).toBeTruthy();
+    expect(content).toContainElement(control!);
+    // jsdom 不执行 React Aria SwitchButton 的浏览器级 label 默认动作；结构断言负责
+    // 保证可视轨道位于该点击区，隐藏 input 的点击则验证受控状态和保存意图。
+    await user.click(autoResume);
+    await waitFor(() => expect(screen.getByRole("switch", {
+      name: "解锁且网络可用后自动恢复",
+    })).toBeChecked());
+
+    await user.click(screen.getByRole("button", { name: "保存方案" }));
+    await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
+    expect(mocks.deviceNetworkProfileSave.mock.calls[0][0].auto_resume_after_reboot).toBe(true);
+  });
+
   it("sends package-name filters to Rust instead of filtering the inventory in the page", async () => {
     const user = userEvent.setup();
     render(<AndroidNetworkView />);
