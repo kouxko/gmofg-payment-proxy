@@ -125,8 +125,10 @@ export function BasicNetworkParametersCard({
         <NumericField label="下行 B/s（0 为不限）" value={weak.download_bytes_per_second ?? 0} onChange={(value) => onUpdate({ download_bytes_per_second: nullableZero(value) })} />
         <div className="flex items-end">
           <Switch isSelected={weak.dns_blackhole} onChange={(dnsBlackhole) => onUpdate({ dns_blackhole: dnsBlackhole })}>
-            <Switch.Control><Switch.Thumb /></Switch.Control>
-            <Switch.Content>DNS 53/853 黑洞</Switch.Content>
+            <Switch.Content>
+              <Switch.Control><Switch.Thumb /></Switch.Control>
+              <span>DNS 53/853 黑洞</span>
+            </Switch.Content>
           </Switch>
         </div>
       </Card.Content>

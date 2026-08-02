@@ -54,8 +54,8 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
   useBootstrap: () => ({
     bootstrap: {
       channel_catalog: [
-        { id: "transaction", display_name: "交易" },
-        { id: "dll", display_name: "Payment DLL" },
+        { id: "api-primary", display_name: "主接口" },
+        { id: "api-secondary", display_name: "辅助接口" },
       ],
     },
   }),
@@ -63,12 +63,12 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
 
 const templates: FaultTemplateViewModel[] = [
   {
-    template_id: "mock_shift_jis_json",
-    name: "Mock Shift-JIS JSON",
+    template_id: "mock_json",
+    name: "Mock JSON",
     stage_text: "请求阶段",
     behavior_text: "绕过上游并返回 Mock",
-    affected_party_text: "Payment App",
-    default_channel: "transaction",
+    affected_party_text: "客户端",
+    default_channel: "api-primary",
     default_nth_hit: 1,
     default_one_shot: false,
     default_priority: 100,
@@ -89,7 +89,7 @@ const templates: FaultTemplateViewModel[] = [
       },
       {
         key: "body",
-        label: "Shift-JIS JSON Body",
+        label: "JSON Body",
         description: "必须是合法 JSON。",
         kind: "json",
         required: true,
@@ -108,7 +108,7 @@ describe("FaultsView", () => {
     vi.clearAllMocks();
     commandMocks.faultConfigure.mockResolvedValue({
       rule_id: "rule-1",
-      template_name: "Mock Shift-JIS JSON",
+      template_name: "Mock JSON",
       target_summary: "全部请求",
       priority: 100,
       hit_count: 0,
@@ -123,11 +123,11 @@ describe("FaultsView", () => {
     render(<FaultsView />);
 
     expect(
-      screen.getByRole("row", { name: /Mock Shift-JIS JSON/ }),
+      screen.getByRole("row", { name: /Mock JSON/ }),
     ).toHaveAttribute("aria-selected", "true");
     expect(
       screen.getByRole("heading", {
-        name: "配置模板：Mock Shift-JIS JSON",
+        name: "配置模板：Mock JSON",
       }),
     ).toBeVisible();
     expect(
@@ -143,21 +143,21 @@ describe("FaultsView", () => {
       screen.getByRole("textbox", { name: "HTTP 状态码" }),
     ).toHaveValue("200");
     expect(
-      screen.getByRole("textbox", { name: "Shift-JIS JSON Body" }),
+      screen.getByRole("textbox", { name: "JSON Body" }),
     ).toHaveValue("{}");
     expect(screen.getByLabelText("代理通道")).toBeInTheDocument();
     await user.click(screen.getByLabelText("代理通道"));
     expect(
-      await screen.findByRole("option", { name: "Payment DLL" }),
+      await screen.findByRole("option", { name: "辅助接口" }),
     ).toBeVisible();
-    await user.click(screen.getByRole("option", { name: "交易" }));
+    await user.click(screen.getByRole("option", { name: "主接口" }));
 
     await user.click(screen.getByRole("button", { name: "启用模拟" }));
 
     expect(commandMocks.faultConfigure).toHaveBeenCalledWith(
       expect.objectContaining({
-        template_id: "mock_shift_jis_json",
-        channel: "transaction",
+        template_id: "mock_json",
+        channel: "api-primary",
         parameters: {
           status: { kind: "integer", value: 200 },
           body: { kind: "json", value: "{}" },
@@ -166,20 +166,20 @@ describe("FaultsView", () => {
     );
   });
 
-  it("submits the explicitly selected DLL channel", async () => {
+  it("submits the explicitly selected secondary channel", async () => {
     const user = userEvent.setup();
     render(<FaultsView />);
 
     await user.click(screen.getByLabelText("代理通道"));
     await user.click(
-      await screen.findByRole("option", { name: "Payment DLL" }),
+      await screen.findByRole("option", { name: "辅助接口" }),
     );
     await user.click(screen.getByRole("button", { name: "启用模拟" }));
 
     expect(commandMocks.faultConfigure).toHaveBeenCalledWith(
       expect.objectContaining({
-        template_id: "mock_shift_jis_json",
-        channel: "dll",
+        template_id: "mock_json",
+        channel: "api-secondary",
       }),
     );
   });

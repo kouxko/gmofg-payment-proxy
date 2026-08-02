@@ -477,13 +477,15 @@ export function FaultsView() {
                         })
                       }
                     >
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
                       <Switch.Content>
-                        <span>{field.label}</span>
-                        <span className="block text-xs text-[var(--telemetry-muted)]">
-                          {field.description}
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                        <span>
+                          <span>{field.label}</span>
+                          <span className="block text-xs text-[var(--telemetry-muted)]">
+                            {field.description}
+                          </span>
                         </span>
                       </Switch.Content>
                     </Switch>
@@ -662,10 +664,12 @@ export function FaultsView() {
               isSelected={effectiveOneShot}
               onChange={setOneShot}
             >
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-              <Switch.Content>一次性生效（命中后自动停用）</Switch.Content>
+              <Switch.Content>
+                <Switch.Control>
+                  <Switch.Thumb />
+                </Switch.Control>
+                <span>一次性生效（命中后自动停用）</span>
+              </Switch.Content>
             </Switch>
             <NumberField
               isInvalid={Boolean(fieldError("priority"))}

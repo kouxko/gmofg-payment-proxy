@@ -430,7 +430,15 @@ fn generic_template_definitions() -> Vec<TemplateDefinition> {
 }
 
 fn template_definitions(catalog: &[ProductFaultTemplate]) -> AppResult<Vec<TemplateDefinition>> {
-    let mut generic = generic_template_definitions()
+    let definitions = generic_template_definitions();
+    // Intercept Proxy 没有静态产品通道，也不携带任何业务模板。空产品目录在这里表示
+    // “使用全部通用网络故障”，而不是让故障页面变成空白。Application 随后会把
+    // `default` 占位通道替换成当前 Workspace 中真实的 Listener ID。
+    if catalog.is_empty() {
+        return Ok(definitions);
+    }
+
+    let mut generic = definitions
         .into_iter()
         .map(|definition| (definition.view.template_id.clone(), definition))
         .collect::<BTreeMap<_, _>>();
@@ -1241,6 +1249,24 @@ mod tests {
             .0,
             MessageStage::Request
         );
+    }
+
+    #[test]
+    fn empty_product_catalog_exposes_the_complete_generic_catalog() {
+        let templates = template_definitions(&[]).expect("generic fault catalog");
+        let ids = templates
+            .iter()
+            .map(|definition| definition.view.template_id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            ids,
+            intercept_proxy_product_api::STANDARD_FAULT_CAPABILITY_IDS
+        );
+        assert!(templates.iter().all(|definition| {
+            definition.view.default_channel
+                == intercept_proxy_domain::ChannelId::new("default").unwrap()
+        }));
     }
 
     #[test]

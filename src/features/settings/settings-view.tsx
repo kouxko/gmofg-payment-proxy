@@ -302,10 +302,12 @@ export function SettingsView() {
                           setDraft({ ...draft, rewrite_host })
                         }
                       >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
-                        <Switch.Content>Host 头重写为目标主机</Switch.Content>
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                          <span>Host 头重写为目标主机</span>
+                        </Switch.Content>
                       </Switch>
                     </div>
                     <Alert status="accent">

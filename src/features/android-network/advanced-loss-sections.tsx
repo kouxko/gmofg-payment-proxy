@@ -31,8 +31,10 @@ export function BurstLossSection({
           isSelected={enabled}
           onChange={onEnabledChange}
         >
-          <Switch.Control><Switch.Thumb /></Switch.Control>
-          <Switch.Content>启用连续丢包</Switch.Content>
+          <Switch.Content>
+            <Switch.Control><Switch.Thumb /></Switch.Control>
+            <span>启用连续丢包</span>
+          </Switch.Content>
         </Switch>
       </div>
       {enabled && burstLoss && (
