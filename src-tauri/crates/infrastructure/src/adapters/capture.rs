@@ -12,7 +12,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, CaptureDetailViewModel, CapturePageViewModel, CaptureQuery,
     CaptureRepositoryPort, CaptureRowViewModel, CaptureSort, InMemorySessionStore, RuntimeEpoch,
     SessionId, SessionQueryPort, SortDirection,
@@ -198,6 +198,8 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
             ),
             timings_ms: session.timings_ms,
             rule_trace: session.rule_trace,
+            extracted_metadata: session.extracted_metadata,
+            response_assertions: session.response_assertions,
             revision: session.summary.revision,
         })
     }
@@ -244,7 +246,7 @@ fn compare(left: &CaptureRowViewModel, right: &CaptureRowViewModel, sort: Captur
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use gmofg_proxy_application::{
+    use intercept_proxy_application::{
         CaptureSort, ChannelId, MessageStage, PageRequest, SortDirection, UiTone,
     };
     use uuid::Uuid;

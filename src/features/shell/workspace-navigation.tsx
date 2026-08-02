@@ -18,6 +18,9 @@ import {
 } from "react";
 
 export type WorkspacePath =
+  | "/workspaces"
+  | "/listeners"
+  | "/android-network"
   | "/console"
   | "/capture"
   | "/sessions"
@@ -38,6 +41,9 @@ type WorkspaceNavigation = WorkspaceLocation & {
 
 const defaultPath: WorkspacePath = "/console";
 const workspacePaths = new Set<WorkspacePath>([
+  "/workspaces",
+  "/listeners",
+  "/android-network",
   "/console",
   "/capture",
   "/sessions",

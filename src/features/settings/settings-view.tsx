@@ -3,9 +3,9 @@
 /**
  * 系统设置的草稿编辑页面。
  *
- * stored 是已保存配置，effective 是当前运行实例正在使用的不可变快照，draft 是
- * 用户尚未保存的输入。Rust 负责规范化、字段校验、持久化以及是否需要重启；
- * 前端不能因输入“看起来正确”就自行判定可生效。
+ * 本页只管理与具体代理入口无关的全局超时、容量和应用策略。监听地址、端口、
+ * 上游、TLS 与入口启停统一由“入口配置”负责，避免同一网络参数出现两处入口。
+ * Rust 负责规范化、字段校验和持久化，前端只维护当前表单草稿。
  */
 
 import { useMemo, useState } from "react";
@@ -18,17 +18,14 @@ import {
   Chip,
   FieldError,
   Form,
-  Input,
   Label,
   NumberField,
   Switch,
   Tabs,
-  TextField,
   toast,
 } from "@heroui/react";
-import { ArrowRotateLeft, FloppyDisk, Play } from "@gravity-ui/icons";
+import { ArrowRotateLeft, FloppyDisk } from "@gravity-ui/icons";
 import type {
-  ChannelSettingsDraft,
   FieldValidationViewModel,
   SettingsDraft,
   SettingsViewModel,
@@ -52,15 +49,14 @@ export function SettingsView() {
     callCommand(commands.settingsGet()),
   );
   useAppEventRefresh(
-    ["runtime_status_changed", "settings_changed", "snapshot_required"],
+    ["settings_changed", "snapshot_required"],
     settings.refresh,
   );
   const [draftState, setDraftState] = useState<SettingsDraft>();
-  const [leafSansRaw, setLeafSansRaw] = useState<string>();
   const [validation, setValidation] =
     useState<FieldValidationViewModel>();
   const [pendingAction, setPendingAction] = useState<
-    "validate" | "save" | "save_restart"
+    "validate" | "save"
   >();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
@@ -78,26 +74,19 @@ export function SettingsView() {
       Boolean(
         draft &&
           settings.data &&
-          (JSON.stringify(draft) !== JSON.stringify(settings.data.stored) ||
-            (leafSansRaw != null &&
-              leafSansRaw !== settings.data.stored.leaf_sans.join(", "))),
+          JSON.stringify(draft) !== JSON.stringify(settings.data.stored),
       ),
-    [draft, leafSansRaw, settings.data],
+    [draft, settings.data],
   );
   const writePending = pendingAction != null || resetPending;
 
   async function validate(candidate = draft) {
-    // leafSansRaw 保留用户逗号输入；Rust 负责拆分、去重、IP/DNS 合法性和规范化。
+    // 通用产品不再从系统设置编辑证书 SAN；完整 Draft 直接交由 Rust 校验。
     if (!candidate || writePending) return;
     setPendingAction("validate");
     try {
       setValidation(
-        await callCommand(
-          commands.settingsValidate(
-            candidate,
-            leafSansRaw ?? candidate.leaf_sans.join(", "),
-          ),
-        ),
+        await callCommand(commands.settingsValidate(candidate)),
       );
     } catch (reason) {
       const appError = appErrorViewModel(reason);
@@ -114,31 +103,20 @@ export function SettingsView() {
     }
   }
 
-  async function save(restart: boolean) {
-    // 保存与保存并重启是两个明确用例，运行时配置不会由前端直接修改。
+  async function save() {
+    // 系统设置只保存全局容量与应用策略；代理入口在“入口配置”中独立启停。
     if (!draft || writePending) return;
-    setPendingAction(restart ? "save_restart" : "save");
+    setPendingAction("save");
     try {
-      const result = await callCommand(
-        restart
-          ? commands.settingsSaveAndRestart(
-              draft,
-              leafSansRaw ?? draft.leaf_sans.join(", "),
-            )
-          : commands.settingsSave(
-              draft,
-              leafSansRaw ?? draft.leaf_sans.join(", "),
-            ),
-      );
+      const result = await callCommand(commands.settingsSave(draft));
       toast(
         result.requires_restart
-          ? result.restart_reason ?? "设置已保存，需要重启代理后生效。"
+          ? result.restart_reason ?? "设置已保存，需要重新打开应用后生效。"
           : "设置已保存并生效。",
         { variant: result.requires_restart ? "warning" : "success" },
       );
       settings.setData(result);
       setDraft(result.stored);
-      setLeafSansRaw(undefined);
     } catch (reason) {
       const appError = appErrorViewModel(reason);
       if (appError) {
@@ -161,7 +139,6 @@ export function SettingsView() {
     try {
       const result = await callCommand(commands.settingsResetDefaults(true));
       setDraft(result);
-      setLeafSansRaw(undefined);
       setValidation(undefined);
       toast("已载入默认设置草稿，尚未保存。", { variant: "accent" });
       setResetDialogOpen(false);
@@ -201,20 +178,6 @@ export function SettingsView() {
     );
   }
 
-  const effective = settings.data.effective;
-  function updateChannel(
-    currentDraft: SettingsDraft,
-    index: number,
-    update: Partial<ChannelSettingsDraft>,
-  ) {
-    setDraft({
-      ...currentDraft,
-      channels: currentDraft.channels.map((channel, channelIndex) =>
-        channelIndex === index ? { ...channel, ...update } : channel,
-      ),
-    });
-  }
-
   return (
     <section className="flex h-full flex-col">
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_440px] gap-4 overflow-hidden p-5 max-[1280px]:block max-[1280px]:overflow-auto">
@@ -222,13 +185,9 @@ export function SettingsView() {
           <h1 className="mb-4 text-2xl font-semibold">系统设置</h1>
           <Card className="border border-[var(--telemetry-line)] shadow-sm">
             <Card.Content className="p-0">
-              <Tabs defaultSelectedKey="network">
+              <Tabs defaultSelectedKey="capacity">
                 <Tabs.ListContainer>
                   <Tabs.List aria-label="系统设置分类" className="px-3 pt-2">
-                    <Tabs.Tab id="network">
-                      网络与上游
-                      <Tabs.Indicator />
-                    </Tabs.Tab>
                     <Tabs.Tab id="capacity">
                       超时与容量
                       <Tabs.Indicator />
@@ -243,151 +202,12 @@ export function SettingsView() {
                     </Tabs.Tab>
                   </Tabs.List>
                 </Tabs.ListContainer>
-                <Tabs.Panel id="network" className="p-4">
-                  <Form className="space-y-4">
-                    <h2 className="text-lg font-semibold">网络与上游配置</h2>
-                    <TextField isInvalid={fieldError("bind_address") != null}>
-                      <Label>绑定地址</Label>
-                      <Input
-                        value={draft.bind_address}
-                        onChange={(event) =>
-                          setDraft({
-                            ...draft,
-                            bind_address: event.target.value,
-                          })
-                        }
-                      />
-                      {fieldError("bind_address") && (
-                        <FieldError>{fieldError("bind_address")}</FieldError>
-                      )}
-                    </TextField>
-                    <TextField isInvalid={fieldError("leaf_sans") != null}>
-                      <Label>服务端证书 SAN</Label>
-                      <Input
-                        aria-label="服务端证书 SAN"
-                        placeholder="例如：10.0.34.50, proxy.local"
-                        value={leafSansRaw ?? draft.leaf_sans.join(", ")}
-                        onChange={(event) => {
-                          setLeafSansRaw(event.target.value);
-                          setValidation(undefined);
-                        }}
-                      />
-                      <p className="text-xs text-[var(--telemetry-muted)]">
-                        填写客户端实际连接 Proxy 使用的 LAN IP 或 DNS，多个值以逗号分隔。
-                      </p>
-                      {fieldError("leaf_sans") && (
-                        <FieldError>{fieldError("leaf_sans")}</FieldError>
-                      )}
-                    </TextField>
-                    <div className="space-y-3">
-                      {draft.channels.map((channel, index) => {
-                        const portField = `channels.${channel.id}.port`;
-                        const upstreamField =
-                          `channels.${channel.id}.upstream_url`;
-                        return (
-                          <Card
-                            key={channel.id}
-                            className="border border-[var(--telemetry-line)] shadow-sm"
-                          >
-                            <Card.Content className="space-y-3 p-4">
-                              <div className="flex min-w-0 items-center justify-between gap-4">
-                                <div className="flex min-w-0 items-baseline gap-3">
-                                  <Card.Title>{channel.display_name}</Card.Title>
-                                  <Card.Description className="truncate">
-                                    通道 ID：{channel.id}
-                                  </Card.Description>
-                                </div>
-                                <Switch
-                                  className="shrink-0"
-                                  aria-label={`启用${channel.display_name}`}
-                                  isSelected={channel.enabled}
-                                  onChange={(enabled) =>
-                                    updateChannel(draft, index, { enabled })
-                                  }
-                                >
-                                  <Switch.Control>
-                                    <Switch.Thumb />
-                                  </Switch.Control>
-                                  <Switch.Content className="sr-only">
-                                    {channel.enabled ? "已启用" : "已禁用"}
-                                  </Switch.Content>
-                                </Switch>
-                              </div>
-                              <div className="grid grid-cols-[minmax(180px,0.7fr)_minmax(320px,1.8fr)] items-start gap-4 max-[680px]:grid-cols-1">
-                                <NumberField
-                                  isInvalid={fieldError(portField) != null}
-                                  value={channel.port}
-                                  minValue={1}
-                                  maxValue={65535}
-                                  onChange={(port) =>
-                                    updateChannel(draft, index, { port })
-                                  }
-                                >
-                                  <Label>监听端口</Label>
-                                  <NumberField.Group className="w-full">
-                                    <NumberField.DecrementButton />
-                                    <NumberField.Input />
-                                    <NumberField.IncrementButton />
-                                  </NumberField.Group>
-                                  {fieldError(portField) && (
-                                    <FieldError>
-                                      {fieldError(portField)}
-                                    </FieldError>
-                                  )}
-                                </NumberField>
-                                <TextField
-                                  isInvalid={
-                                    fieldError(upstreamField) != null
-                                  }
-                                >
-                                  <Label>上游 URL</Label>
-                                  <Input
-                                    value={channel.upstream_url}
-                                    onChange={(event) =>
-                                      updateChannel(draft, index, {
-                                        upstream_url: event.target.value,
-                                      })
-                                    }
-                                  />
-                                  {fieldError(upstreamField) && (
-                                    <FieldError>
-                                      {fieldError(upstreamField)}
-                                    </FieldError>
-                                  )}
-                                </TextField>
-                              </div>
-                            </Card.Content>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                    <TextField>
-                      <Label>TLS 版本</Label>
-                      <Input value={settings.data.fixed_tls_version} readOnly />
-                    </TextField>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Switch
-                        aria-label="HTTP 重定向（固定关闭）"
-                        isSelected={settings.data.redirects_enabled}
-                        isDisabled
-                      >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
-                        <Switch.Content>HTTP 重定向（固定关闭）</Switch.Content>
-                      </Switch>
-                      <Switch
-                        aria-label="自动重试（固定关闭）"
-                        isSelected={settings.data.retries_enabled}
-                        isDisabled
-                      >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
-                        <Switch.Content>自动重试（固定关闭）</Switch.Content>
-                      </Switch>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
+                <Tabs.Panel id="capacity" className="p-4">
+                  <Form className="space-y-5">
+                    <Alert status="accent">
+                      代理入口的监听地址、端口、上游和 TLS 请统一到“入口配置”中管理。
+                    </Alert>
+                    <div className="grid grid-cols-3 gap-4 max-[760px]:grid-cols-1">
                       {[
                         ["连接超时（秒）", "connect_timeout_seconds"],
                         ["写入超时（秒）", "write_timeout_seconds"],
@@ -414,19 +234,46 @@ export function SettingsView() {
                         </NumberField>
                       ))}
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <Switch
-                        aria-label="Host 头重写为上游主机"
-                        isSelected={draft.rewrite_host}
-                        onChange={(rewrite_host) =>
-                          setDraft({ ...draft, rewrite_host })
+                    <div className="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
+                      <NumberField
+                        isInvalid={fieldError("max_sessions") != null}
+                        value={draft.max_sessions}
+                        minValue={1}
+                        onChange={(max_sessions) =>
+                          setDraft({ ...draft, max_sessions })
                         }
                       >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
-                        <Switch.Content>Host 头重写为上游主机</Switch.Content>
-                      </Switch>
+                        <Label>最大会话数</Label>
+                        <NumberField.Group className="w-full">
+                          <NumberField.DecrementButton />
+                          <NumberField.Input />
+                          <NumberField.IncrementButton />
+                        </NumberField.Group>
+                        {fieldError("max_sessions") && (
+                          <FieldError>{fieldError("max_sessions")}</FieldError>
+                        )}
+                      </NumberField>
+                      <NumberField
+                        isInvalid={fieldError("max_memory_bytes") != null}
+                        value={mib(draft.max_memory_bytes)}
+                        minValue={1}
+                        onChange={(value) =>
+                          setDraft({
+                            ...draft,
+                            max_memory_bytes: value * 1024 * 1024,
+                          })
+                        }
+                      >
+                        <Label>最大内存 MiB</Label>
+                        <NumberField.Group className="w-full">
+                          <NumberField.DecrementButton />
+                          <NumberField.Input />
+                          <NumberField.IncrementButton />
+                        </NumberField.Group>
+                        {fieldError("max_memory_bytes") && (
+                          <FieldError>{fieldError("max_memory_bytes")}</FieldError>
+                        )}
+                      </NumberField>
                       <NumberField
                         isInvalid={fieldError("max_body_bytes") != null}
                         value={mib(draft.max_body_bytes)}
@@ -445,66 +292,26 @@ export function SettingsView() {
                           <NumberField.IncrementButton />
                         </NumberField.Group>
                         {fieldError("max_body_bytes") && (
-                          <FieldError>
-                            {fieldError("max_body_bytes")}
-                          </FieldError>
+                          <FieldError>{fieldError("max_body_bytes")}</FieldError>
                         )}
                       </NumberField>
+                      <Switch
+                        aria-label="Host 头重写为目标主机"
+                        isSelected={draft.rewrite_host}
+                        onChange={(rewrite_host) =>
+                          setDraft({ ...draft, rewrite_host })
+                        }
+                      >
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                        <Switch.Content>Host 头重写为目标主机</Switch.Content>
+                      </Switch>
                     </div>
-                    <Alert status="warning">
-                      监听地址、端口、上游地址或 TLS
-                      相关配置变更需要重启代理后生效。
+                    <Alert status="accent">
+                      待处理断点及其会话永不自动淘汰；容量判定使用 Rust 可重复计算的逻辑字节数。
                     </Alert>
                   </Form>
-                </Tabs.Panel>
-                <Tabs.Panel id="capacity" className="p-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <NumberField
-                      isInvalid={fieldError("max_sessions") != null}
-                      value={draft.max_sessions}
-                      minValue={1}
-                      onChange={(max_sessions) =>
-                        setDraft({ ...draft, max_sessions })
-                      }
-                    >
-                      <Label>最大会话数</Label>
-                      <NumberField.Group className="w-full">
-                        <NumberField.DecrementButton />
-                        <NumberField.Input />
-                        <NumberField.IncrementButton />
-                      </NumberField.Group>
-                      {fieldError("max_sessions") && (
-                        <FieldError>{fieldError("max_sessions")}</FieldError>
-                      )}
-                    </NumberField>
-                    <NumberField
-                      isInvalid={fieldError("max_memory_bytes") != null}
-                      value={mib(draft.max_memory_bytes)}
-                      minValue={1}
-                      onChange={(value) =>
-                        setDraft({
-                          ...draft,
-                          max_memory_bytes: value * 1024 * 1024,
-                        })
-                      }
-                    >
-                      <Label>最大内存 MiB</Label>
-                      <NumberField.Group className="w-full">
-                        <NumberField.DecrementButton />
-                        <NumberField.Input />
-                        <NumberField.IncrementButton />
-                      </NumberField.Group>
-                      {fieldError("max_memory_bytes") && (
-                        <FieldError>
-                          {fieldError("max_memory_bytes")}
-                        </FieldError>
-                      )}
-                    </NumberField>
-                  </div>
-                  <Alert status="accent" className="mt-4">
-                    待处理断点及其会话永不自动淘汰；容量判定使用 Rust
-                    可重复计算的逻辑字节数。
-                  </Alert>
                 </Tabs.Panel>
                 <Tabs.Panel id="data" className="space-y-4 p-4">
                   <Alert status="accent">{settings.data.payload_policy_text}</Alert>
@@ -513,10 +320,12 @@ export function SettingsView() {
                     Payload、密码、私钥或 PKCS12 原始数据。
                   </p>
                 </Tabs.Panel>
-                <Tabs.Panel id="app" className="p-4">
+                <Tabs.Panel id="app" className="space-y-4 p-4">
+                  <Alert status="accent">
+                    系统设置只管理全局行为；入口配置、证书和规则分别在对应页面管理。
+                  </Alert>
                   <p className="text-sm">
-                    应用启动、更新通道和诊断日志均由 Rust/Tauri
-                    桌面侧管理，前端不访问文件系统或浏览器持久化。
+                    应用启动和诊断日志由 Rust/Tauri 桌面侧管理，前端不访问文件系统或浏览器持久化。
                   </p>
                 </Tabs.Panel>
               </Tabs>
@@ -530,38 +339,31 @@ export function SettingsView() {
               <Card.Title>配置摘要与校验</Card.Title>
             </Card.Header>
             <Card.Content className="space-y-4">
-              <Accordion defaultExpandedKeys={["effective", "pending", "validation"]}>
-                <Accordion.Item id="effective">
+              <Accordion defaultExpandedKeys={["stored", "pending", "validation"]}>
+                <Accordion.Item id="stored">
                   <Accordion.Heading>
                     <Accordion.Trigger>
-                      生效值（当前运行配置）
+                      已保存的全局设置
                       <Accordion.Indicator />
                     </Accordion.Trigger>
                   </Accordion.Heading>
                   <Accordion.Panel>
                     <Accordion.Body>
-                      {effective ? (
-                        <dl className="grid grid-cols-[120px_1fr] gap-y-2 text-sm">
-                          <dt>绑定地址</dt>
-                          <dd>{effective.bind_address}</dd>
-                          {effective.channels.map((channel) => (
-                            <div key={channel.id} className="contents">
-                              <dt>{channel.display_name}</dt>
-                              <dd className="break-all">
-                                {channel.enabled
-                                  ? `${channel.port} · ${channel.upstream_url}`
-                                  : "已禁用"}
-                              </dd>
-                            </div>
-                          ))}
-                          <dt>TLS 版本</dt>
-                          <dd>{settings.data.fixed_tls_version}</dd>
-                        </dl>
-                      ) : (
-                        <p className="text-sm text-[var(--telemetry-muted)]">
-                          Proxy 尚未启动，没有生效运行快照。
-                        </p>
-                      )}
+                      <dl className="grid grid-cols-[120px_1fr] gap-y-2 text-sm">
+                        <dt>连接超时</dt>
+                        <dd>{settings.data.stored.connect_timeout_seconds} 秒</dd>
+                        <dt>写入超时</dt>
+                        <dd>{settings.data.stored.write_timeout_seconds} 秒</dd>
+                        <dt>读取超时</dt>
+                        <dd>{settings.data.stored.read_timeout_seconds} 秒</dd>
+                        <dt>最大会话数</dt>
+                        <dd>{settings.data.stored.max_sessions}</dd>
+                        <dt>最大内存</dt>
+                        <dd>{mib(settings.data.stored.max_memory_bytes)} MiB</dd>
+                      </dl>
+                      <p className="mt-3 text-xs text-[var(--telemetry-muted)]">
+                        监听端口、请求去向和入口启停不属于系统设置。
+                      </p>
                     </Accordion.Body>
                   </Accordion.Panel>
                 </Accordion.Item>
@@ -574,14 +376,6 @@ export function SettingsView() {
                   </Accordion.Heading>
                   <Accordion.Panel>
                     <Accordion.Body className="flex flex-wrap gap-2">
-                      <Chip
-                        color={settings.data.pending_changes ? "warning" : "success"}
-                        variant="soft"
-                      >
-                        {settings.data.pending_changes
-                          ? "已保存，待重启生效"
-                          : "当前保存设置已生效"}
-                      </Chip>
                       <Chip
                         color={draftDirty ? "warning" : "success"}
                         variant="soft"
@@ -651,7 +445,7 @@ export function SettingsView() {
                   <AlertDialog.Heading>恢复默认设置草稿？</AlertDialog.Heading>
                 </AlertDialog.Header>
                 <AlertDialog.Body>
-                  此操作只载入默认草稿，仍需保存或保存并重启。
+                  此操作只载入默认草稿，仍需点击“保存设置”才会写入。
                 </AlertDialog.Body>
                 <AlertDialog.Footer>
                   <Button
@@ -679,7 +473,6 @@ export function SettingsView() {
             isDisabled={writePending}
             onPress={() => {
               setDraft(settings.data?.stored);
-              setLeafSansRaw(undefined);
             }}
           >
             放弃更改
@@ -687,20 +480,10 @@ export function SettingsView() {
           <Button
             variant="outline"
             isDisabled={!settings.data.can_write || writePending}
-            onPress={() => void save(false)}
+            onPress={() => void save()}
           >
             <FloppyDisk className="size-4" />
             {pendingAction === "save" ? "正在保存…" : "保存设置"}
-          </Button>
-          <Button
-            variant="primary"
-            isDisabled={!settings.data.can_write || writePending}
-            onPress={() => void save(true)}
-          >
-            <Play className="size-4" />
-            {pendingAction === "save_restart"
-              ? "正在保存并重启…"
-              : "保存并重启代理"}
           </Button>
         </div>
       </footer>

@@ -13,14 +13,14 @@ use std::{
 };
 
 use bytes::Bytes;
-use gmofg_proxy_application::RuleSummaryViewModel;
-use gmofg_proxy_domain::{
+use intercept_proxy_application::RuleSummaryViewModel;
+use intercept_proxy_domain::{
     DropResponseMode, JitterScope as DomainJitterScope, JsonPath,
     MessageStage as DomainMessageStage, RuleAction, TerminalAction, TerminalIdentity,
     TrafficDirection as DomainTrafficDirection,
 };
-use gmofg_proxy_product_api::BodyCodec;
-use gmofg_proxy_runtime::{
+use intercept_proxy_product_api::BodyCodec;
+use intercept_proxy_runtime::{
     ConnectionContext, ErrorCode, FaultAction, JitterScope, Message, ProxyError, RawHeader,
     Result as ProxyResult, TrafficDirection,
 };

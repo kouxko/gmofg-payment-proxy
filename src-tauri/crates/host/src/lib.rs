@@ -13,24 +13,22 @@ use std::{
     },
 };
 
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, Application, ApplicationDependencies, BreakpointCoordinator,
-    BreakpointValidator, CapacityLedger, EventHub, ProxyStatusViewModel, ProxySupervisorPort,
-    SettingsRepositoryPort,
+    BreakpointValidator, CapacityLedger, CertificateServicePort, EventHub, ProxyStatusViewModel,
+    ProxySupervisorPort, SettingsDraft, SettingsRepositoryPort, WorkspaceRepositoryPort,
 };
 #[cfg(not(target_os = "macos"))]
-use gmofg_proxy_infrastructure::DpapiProtector;
+use intercept_proxy_infrastructure::DpapiProtector;
 #[cfg(target_os = "macos")]
-use gmofg_proxy_infrastructure::MacKeychainProtector;
-use gmofg_proxy_infrastructure::{
-    ApplicationProxyAdapter, InfrastructureError, InfrastructureServiceBundle, NativeFileDialog,
-    RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector, SqliteStore,
+use intercept_proxy_infrastructure::MacKeychainProtector;
+use intercept_proxy_infrastructure::{
+    AndroidAdbAdapter, InfrastructureError, InfrastructureServiceBundle, NativeFileDialog,
+    RetiredProxyAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector,
+    SqliteStore,
 };
-use gmofg_proxy_product_api::{
+use intercept_proxy_product_api::{
     ProductError, ProductProfile, ProductStorageNamespace, validate_product_profile,
-};
-use gmofg_proxy_runtime::{
-    ProxySupervisor, RustlsRuntimeServiceFactory, SystemClock, TokioListenerBinder,
 };
 use parking_lot::Mutex;
 use thiserror::Error;
@@ -174,13 +172,7 @@ impl ApplicationHostBuilder {
             Arc::clone(&self.product),
             Arc::clone(&capacity),
         );
-        let settings = services.settings.get().await?;
-        // 会话仓储必须在接收任何 runtime 数据前使用持久化配置的容量限制，不能短暂按
-        // 默认值运行后再缩小，否则启动阶段可能已经超额接纳。
-        services.sessions.set_limits(
-            settings.stored.max_sessions,
-            settings.stored.max_memory_bytes,
-        )?;
+        let stored_settings = initialize_installation_state(&services).await?;
 
         let breakpoints = self
             .breakpoint_coordinator
@@ -189,44 +181,22 @@ impl ApplicationHostBuilder {
             EventHub::DEFAULT_CAPACITY,
             Arc::clone(&services.capacity),
         ));
-        let channel_labels = self
-            .product
-            .channels()
-            .iter()
-            .map(|channel| (channel.id.to_owned(), channel.display_name.to_owned()))
-            .collect::<BTreeMap<_, _>>();
-        let pipeline = Arc::new(RuntimePipelineAdapter::new(
-            RuntimePipelineProductHooks {
-                body_codec: self.product.body_codec(),
-                request_classifier: self.product.request_classifier(),
-                channel_labels,
-            },
-            services.rules.clone(),
-            services.sessions.clone(),
+        let pipeline = build_runtime_pipeline(
+            self.product.as_ref(),
+            &services,
             breakpoints.clone(),
             events.clone(),
-            services.capture.clone(),
-        ));
-        let service_factory = Arc::new(RustlsRuntimeServiceFactory::new(
-            services.certificates.clone(),
-            pipeline.clone(),
-            Arc::new(SystemClock),
-        ));
-        let supervisor = Arc::new(ProxySupervisor::with_factory(
-            Arc::new(TokioListenerBinder),
-            service_factory,
-        ));
+        );
+        services
+            .listener_runtime
+            .set_pipeline_ports(pipeline.clone());
         let proxy: Arc<dyn ProxySupervisorPort> = self.proxy_override.unwrap_or_else(|| {
-            // 只有测试/嵌入方显式提供 override 时才跳过真实网络监督器；其余应用端口仍
-            // 使用相同真实实现，保证无 UI 测试能覆盖完整业务装配。
-            Arc::new(ApplicationProxyAdapter::new(
-                supervisor,
-                settings.stored,
-                pipeline,
-                self.product.labels(),
-            ))
+            // 生产环境只能由 ListenerRuntime 管理动态 Workspace 入口。旧端口注入一个
+            // 永远停止的兼容适配器，保证任何遗漏调用都不能偷偷启动第二套监听器。
+            Arc::new(RetiredProxyAdapter::new(stored_settings))
         });
-        let application = Arc::new(Application::new(
+        let android = Arc::new(AndroidAdbAdapter::new(&self.data_dir));
+        let application = Arc::new(Application::new_with_android_and_secrets(
             self.product.name().to_owned(),
             ApplicationDependencies {
                 proxy,
@@ -241,8 +211,13 @@ impl ApplicationHostBuilder {
                 certificates: services.certificates,
                 settings: services.settings,
                 file_export: services.file_export,
+                workspaces: services.workspaces,
+                workspace_documents: services.workspace_documents,
+                listener_runtime: services.listener_runtime,
                 events: events.clone(),
             },
+            android,
+            services.protected_secrets,
         ));
         let background_cancellation = CancellationToken::new();
         // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle
@@ -257,6 +232,83 @@ impl ApplicationHostBuilder {
             shutdown_completed: AtomicBool::new(false),
         })
     }
+}
+
+async fn initialize_installation_state(
+    services: &InfrastructureServiceBundle,
+) -> AppResult<SettingsDraft> {
+    // 首次启动仍自动创建每安装实例独立的 Root CA，但系统密钥库拒绝或用户取消授权
+    // 属于可恢复状态：Host 必须继续启动，让 UI/TUI/CLI 能显示状态并再次执行初始化。
+    // 数据库损坏、证书生成失败等其他错误继续封闭失败，不能被误当作普通取消。
+    let certificate_status = services.certificates.status().await?;
+    if certificate_status.can_initialize
+        && let Err(error) = services
+            .certificates
+            .generate_ca(vec!["localhost".into(), "127.0.0.1".into()])
+            .await
+    {
+        if is_recoverable_secret_store_error(&error) {
+            tracing::warn!(
+                code = %error.view_model.code,
+                message = %error.view_model.message,
+                "installation certificate initialization was deferred"
+            );
+        } else {
+            return Err(error);
+        }
+    }
+
+    // 全新命名空间第一次启动只创建一个通用 Workspace。它仅含禁用的
+    // 127.0.0.1:8080 正向代理草稿，不会自动监听端口或携带任何业务配置。
+    if services.workspaces.list().await?.is_empty() {
+        services.workspaces.create("默认 Workspace".into()).await?;
+    }
+    let stored = services.settings.get().await?.stored;
+    // 会话仓储必须在接收任何 runtime 数据前使用持久化配置的容量限制，不能短暂按
+    // 默认值运行后再缩小，否则启动阶段可能已经超额接纳。
+    services
+        .sessions
+        .set_limits(stored.max_sessions, stored.max_memory_bytes)?;
+    Ok(stored)
+}
+
+fn is_recoverable_secret_store_error(error: &AppError) -> bool {
+    matches!(
+        error.view_model.code.as_str(),
+        "KEYCHAIN_PROTECT_FAILED"
+            | "KEYCHAIN_UNPROTECT_FAILED"
+            | "DPAPI_PROTECT_FAILED"
+            | "DPAPI_UNPROTECT_FAILED"
+    )
+}
+
+fn build_runtime_pipeline(
+    product: &dyn ProductProfile,
+    services: &InfrastructureServiceBundle,
+    breakpoints: Arc<BreakpointCoordinator>,
+    events: Arc<EventHub>,
+) -> Arc<RuntimePipelineAdapter> {
+    let channel_labels = product
+        .channels()
+        .iter()
+        .map(|channel| (channel.id.to_owned(), channel.display_name.to_owned()))
+        .collect::<BTreeMap<_, _>>();
+    Arc::new(
+        RuntimePipelineAdapter::new(
+            RuntimePipelineProductHooks {
+                body_codec: product.body_codec(),
+                request_classifier: product.request_classifier(),
+                channel_labels,
+            },
+            services.rules.clone(),
+            services.sessions.clone(),
+            breakpoints,
+            events,
+            services.capture.clone(),
+        )
+        .with_body_codec_resolver(services.workspace_body_codecs.clone())
+        .with_workspace_policy_resolver(services.workspace_runtime_policies.clone()),
+    )
 }
 
 /// 持有与 UI 无关的应用门面及其后台任务生命周期。
@@ -352,11 +404,11 @@ fn platform_secret_protector(storage: ProductStorageNamespace) -> Arc<dyn Secret
 mod tests {
     use std::path::PathBuf;
 
-    use gmofg_proxy_application::{AppResult, ProxyState};
-    use gmofg_proxy_infrastructure::{
+    use intercept_proxy_application::{AppResult, ProxyState};
+    use intercept_proxy_infrastructure::{
         InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
     };
-    use gmofg_proxy_product_payment::PaymentProductProfile;
+    use intercept_proxy_product_api::InterceptProxyProfile;
 
     use super::*;
 
@@ -386,13 +438,26 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct RefusingSecretProtector;
+
+    impl SecretProtector for RefusingSecretProtector {
+        fn protect(&self, _: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
+            Err(InfrastructureError::KeychainProtect)
+        }
+
+        fn unprotect(&self, _: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
+            Err(InfrastructureError::KeychainUnprotect)
+        }
+    }
+
     #[tokio::test]
     async fn builds_and_invokes_application_without_tauri() {
         let temp = tempfile::tempdir().expect("temporary host directory");
         let host = ApplicationHostBuilder::new(
             temp.path(),
             HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
-            Arc::new(PaymentProductProfile::isolated_test_tool()),
+            Arc::new(InterceptProxyProfile),
         )
         .build()
         .await
@@ -423,5 +488,33 @@ mod tests {
 
         host.shutdown().await.expect("shutdown UI-neutral host");
         assert!(host.shutdown_completed());
+    }
+
+    #[tokio::test]
+    async fn keychain_refusal_does_not_prevent_host_or_bootstrap_startup() {
+        let temp = tempfile::tempdir().expect("temporary host directory");
+        let host = ApplicationHostBuilder::new(
+            temp.path(),
+            HostPlatformServices::new(Arc::new(RefusingSecretProtector), Arc::new(NoFileDialog)),
+            Arc::new(InterceptProxyProfile),
+        )
+        .build()
+        .await
+        .expect("host startup must not access the system secret store");
+        let application = host.application();
+
+        let bootstrap = application
+            .app_bootstrap()
+            .await
+            .expect("metadata-only bootstrap remains available");
+        assert!(bootstrap.certificate.can_initialize);
+
+        let error = application
+            .certificate_initialize_if_needed()
+            .await
+            .expect_err("explicit certificate initialization reports refusal");
+        assert_eq!(error.view_model.code, "KEYCHAIN_PROTECT_FAILED");
+
+        host.shutdown().await.expect("shutdown UI-neutral host");
     }
 }

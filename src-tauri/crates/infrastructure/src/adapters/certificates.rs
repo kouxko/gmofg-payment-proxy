@@ -6,17 +6,17 @@
 use std::{collections::BTreeMap, fmt, net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, CertificateItemViewModel, CertificateOverviewViewModel,
     CertificateServicePort, CertificateValidationViewModel, FieldValidationViewModel,
     OperationResultViewModel, UiTone,
 };
-use gmofg_proxy_product_api::{
-    EmbeddedTestCertificateAuthority, ProductCertificatePolicy, ProductProfile,
-};
-use gmofg_proxy_runtime::{
-    ErrorCode as ProxyErrorCode, ProxyError, TlsMaterialProvider, TlsMaterialSnapshot,
+use intercept_proxy_product_api::{ProductCertificatePolicy, ProductProfile};
+use intercept_proxy_runtime::{
+    ErrorCode as ProxyErrorCode, MitmCertificateAuthority, MitmServerIdentity, ProxyError,
+    TlsMaterialProvider, TlsMaterialSnapshot,
 };
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -55,6 +55,22 @@ struct ProtectedMaterial {
 struct MaterialSnapshot {
     revision: u64,
     materials: BTreeMap<String, ProtectedMaterial>,
+}
+
+/// 可直接用于状态栏和列表的非敏感证书元数据。
+///
+/// 它刻意不包含证书 DER、私钥或保护后的密文，因此读取该结构不需要访问系统密钥库。
+#[derive(Debug, Clone, Deserialize)]
+struct MaterialStatus {
+    revision: u64,
+    subject: String,
+    fingerprint: String,
+    #[serde(default)]
+    sans: Vec<String>,
+    #[serde(default)]
+    not_before: Option<String>,
+    #[serde(default)]
+    not_after: Option<String>,
 }
 
 impl fmt::Debug for ProtectedMaterial {
@@ -122,17 +138,6 @@ impl CertificateServiceAdapter {
         self.product.certificates()
     }
 
-    fn embedded_test_authority(&self) -> AppResult<EmbeddedTestCertificateAuthority> {
-        self.certificate_policy()
-            .embedded_test_authority()
-            .ok_or_else(|| {
-                AppError::new(
-                    "CERTIFICATE_TEST_SIGNING_DISABLED",
-                    "当前产品配置未启用嵌入测试 Root CA 私钥，禁止生成或重签证书。",
-                )
-            })
-    }
-
     fn load_snapshot(&self, kinds: &[&str]) -> AppResult<MaterialSnapshot> {
         let snapshot = infra(self.store.load_certificate_materials_snapshot(kinds))?;
         let mut materials = BTreeMap::new();
@@ -163,6 +168,94 @@ impl CertificateServiceAdapter {
         })
     }
 
+    /// 读取不会触发 Keychain/DPAPI 的证书状态快照。
+    ///
+    /// 完整证书校验仍由 `overview_locked`/`validate` 执行；启动快照只需要知道材料是否
+    /// 已配置以及它们公开的主题、指纹和 SAN。
+    fn status_locked(&self) -> AppResult<CertificateOverviewViewModel> {
+        let labels = self.certificate_policy().labels();
+        let snapshot = infra(
+            self.store
+                .load_certificate_materials_snapshot(&MATERIAL_KINDS),
+        )?;
+        let mut statuses = BTreeMap::new();
+        for record in snapshot.records {
+            let status: MaterialStatus = serde_json::from_value(record.metadata)
+                .map_err(|error| json_error("证书元数据无效", error))?;
+            if status.revision != snapshot.revision {
+                return Err(AppError::new(
+                    "CERTIFICATE_INVALID",
+                    "证书元数据修订号与聚合修订号不一致。",
+                ));
+            }
+            statuses.insert(record.kind, status);
+        }
+
+        let upstream_is_override = statuses.contains_key(UPSTREAM_CA);
+        let bundled_upstream = if upstream_is_override {
+            None
+        } else {
+            self.bundled_upstream_material(snapshot.revision)?
+        };
+        let configured = |kind: &str| {
+            statuses.contains_key(kind) || (kind == UPSTREAM_CA && bundled_upstream.is_some())
+        };
+        // 全局状态只表示当前安装实例的下游签发链是否可用。上游 PKCS12 和 CA
+        // 都是按入口选择的可选材料，不能因为某个未使用的可选槽位为空就把顶部栏
+        // 误报成“尚未初始化”。具体入口启动前仍会校验它实际引用的全部材料。
+        let policy = self.certificate_policy();
+        let ready = [ROOT, LEAF].into_iter().all(configured)
+            && (!policy.requires_global_client_identity() || configured(PKCS12))
+            && (!policy.requires_global_upstream_ca() || configured(UPSTREAM_CA));
+
+        let mut items = Vec::new();
+        for (kind, display, usage) in [
+            (ROOT, labels.root_name, labels.root_usage),
+            (LEAF, labels.leaf_name, labels.leaf_usage),
+            (
+                PKCS12,
+                labels.client_identity_name,
+                labels.client_identity_usage,
+            ),
+            (
+                UPSTREAM_CA,
+                labels.upstream_name,
+                if upstream_is_override {
+                    labels.upstream_override_usage
+                } else {
+                    labels.upstream_bundled_usage
+                },
+            ),
+        ] {
+            if let Some(status) = statuses.get(kind) {
+                items.push(status_item(display, usage, status));
+            } else if kind == UPSTREAM_CA
+                && let Some(material) = bundled_upstream.as_ref()
+            {
+                items.push(item(display, usage, material));
+            }
+        }
+
+        Ok(CertificateOverviewViewModel {
+            revision: snapshot.revision,
+            ready,
+            status_text: if ready {
+                labels.ready_status.into()
+            } else {
+                labels.incomplete_status.into()
+            },
+            ui_tone: if ready {
+                UiTone::Positive
+            } else {
+                UiTone::Warning
+            },
+            items,
+            can_initialize: !statuses.contains_key(ROOT) && !statuses.contains_key(LEAF),
+            can_change: true,
+            disabled_reason: None,
+        })
+    }
+
     fn record(
         &self,
         kind: &str,
@@ -181,6 +274,8 @@ impl CertificateServiceAdapter {
                 "subject": material.subject,
                 "fingerprint": material.fingerprint,
                 "sans": material.sans,
+                "not_before": material.not_before,
+                "not_after": material.not_after,
             }),
             updated_at: Utc::now(),
         })
@@ -205,7 +300,7 @@ impl CertificateServiceAdapter {
     fn generate_locked(&self, sans: &[String], mut snapshot: MaterialSnapshot) -> AppResult<u64> {
         let root = self
             .certificates
-            .load_embedded_test_root(self.embedded_test_authority()?)
+            .generate_root_ca(self.certificate_policy().labels().root_name)
             .map_err(app_error)?;
         let request = leaf_request(sans)?;
         let leaf = self
@@ -319,21 +414,28 @@ impl CertificateServiceAdapter {
                 .find(|(candidate, _, _, _)| *candidate == kind)
                 .and_then(|(_, _, _, material)| material.as_ref())
         };
-        for kind in [ROOT, LEAF, PKCS12, UPSTREAM_CA] {
+        // Root 与叶子证书组成当前安装实例的基础签发链。PKCS12 和上游 CA
+        // 只有在具体入口引用时才是必需项；这里仅在它们已导入时校验内容。
+        let policy = self.certificate_policy();
+        let required = [
+            (ROOT, true),
+            (LEAF, true),
+            (PKCS12, policy.requires_global_client_identity()),
+            (UPSTREAM_CA, policy.requires_global_upstream_ca()),
+        ];
+        for (kind, is_required) in required {
+            if !is_required {
+                continue;
+            }
             if find(kind).is_none() {
                 errors.insert(kind.into(), vec!["证书材料尚未配置。".into()]);
             }
         }
         let root_metadata = find(ROOT).and_then(|root| {
-            let Ok(authority) = self.embedded_test_authority() else {
-                errors.insert(ROOT.into(), vec!["Root CA 校验失败。".into()]);
-                return None;
-            };
-            match self.certificates.validate_embedded_test_root(
-                &root.certificate_der,
-                &root.private_key_der,
-                authority,
-            ) {
+            match self
+                .certificates
+                .validate_root(&root.certificate_der, &root.private_key_der)
+            {
                 Ok(metadata) if material_matches(root, &metadata) => Some(metadata),
                 Ok(_) | Err(_) => {
                     errors.insert(ROOT.into(), vec!["Root CA 校验失败。".into()]);
@@ -380,6 +482,11 @@ impl CertificateServiceAdapter {
 
 #[async_trait]
 impl CertificateServicePort for CertificateServiceAdapter {
+    async fn status(&self) -> AppResult<CertificateOverviewViewModel> {
+        let _guard = self.material_lock.lock();
+        self.status_locked()
+    }
+
     async fn overview(&self) -> AppResult<CertificateOverviewViewModel> {
         let _guard = self.material_lock.lock();
         self.overview_locked()
@@ -402,12 +509,19 @@ impl CertificateServicePort for CertificateServiceAdapter {
     async fn export_ca(&self) -> AppResult<OperationResultViewModel> {
         let _guard = self.material_lock.lock();
         let labels = self.certificate_policy().labels();
+        let snapshot = self.load_snapshot(&[ROOT])?;
+        let root = snapshot.materials.get(ROOT).ok_or_else(|| {
+            AppError::new(
+                "CERTIFICATE_NOT_INITIALIZED",
+                "当前安装实例尚未生成 Root CA，请先初始化证书。",
+            )
+        })?;
         let Some(selection) = self.dialog.choose_save_file("root_ca")? else {
             return Ok(cancelled(labels.export_cancelled_message));
         };
         infra(self.exporter.write(
             &selection.path,
-            self.certificate_policy().public_root_ca_pem(),
+            &certificate_der_to_pem(&root.certificate_der),
             selection.overwrite_confirmed,
         ))?;
         Ok(OperationResultViewModel::success(
@@ -423,19 +537,20 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let _guard = self.material_lock.lock();
         let mut snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
         verify_revision(snapshot.revision, expected_revision)?;
-        let root = self
-            .certificates
-            .load_embedded_test_root(self.embedded_test_authority()?)
+        let root = snapshot.materials.get(ROOT).cloned().ok_or_else(|| {
+            AppError::new(
+                "CERTIFICATE_NOT_INITIALIZED",
+                "当前安装实例尚未生成 Root CA。",
+            )
+        })?;
+        self.certificates
+            .validate_root(&root.certificate_der, &root.private_key_der)
             .map_err(app_error)?;
         let request = leaf_request(&sans)?;
         let leaf = self
             .certificates
-            .generate_leaf(&root.certificate_der, &root.private_key_pkcs8_der, &request)
+            .generate_leaf(&root.certificate_der, &root.private_key_der, &request)
             .map_err(app_error)?;
-        snapshot.materials.insert(
-            ROOT.into(),
-            from_bundle(snapshot.revision.saturating_add(1), &root),
-        );
         snapshot.materials.insert(
             LEAF.into(),
             from_bundle(snapshot.revision.saturating_add(1), &leaf),
@@ -554,12 +669,26 @@ impl CertificateServicePort for CertificateServiceAdapter {
     }
 }
 
+/// 将存储中的 DER Root CA 转为标准 PEM。每 64 个 Base64 字符换行，便于 Android、
+/// 浏览器和命令行工具直接导入；这里只编码公开证书，绝不会接触或导出私钥。
+fn certificate_der_to_pem(der: &[u8]) -> Vec<u8> {
+    let encoded = STANDARD.encode(der);
+    let mut pem = Vec::with_capacity(encoded.len() + 64);
+    pem.extend_from_slice(b"-----BEGIN CERTIFICATE-----\n");
+    for line in encoded.as_bytes().chunks(64) {
+        pem.extend_from_slice(line);
+        pem.push(b'\n');
+    }
+    pem.extend_from_slice(b"-----END CERTIFICATE-----\n");
+    pem
+}
+
 #[async_trait]
 impl TlsMaterialProvider for CertificateServiceAdapter {
     async fn load_epoch_snapshot(
         &self,
         leaf_sans: &[String],
-    ) -> gmofg_proxy_runtime::Result<TlsMaterialSnapshot> {
+    ) -> intercept_proxy_runtime::Result<TlsMaterialSnapshot> {
         let _guard = self.material_lock.lock();
         let snapshot = self
             .load_snapshot(&MATERIAL_KINDS)
@@ -573,15 +702,11 @@ impl TlsMaterialProvider for CertificateServiceAdapter {
         let root = snapshot.materials.get(ROOT).ok_or_else(|| {
             ProxyError::new(
                 ProxyErrorCode::CertificateNotReady,
-                "shared test Root CA missing",
+                "installation Root CA missing",
             )
         })?;
         self.certificates
-            .validate_embedded_test_root(
-                &root.certificate_der,
-                &root.private_key_der,
-                self.embedded_test_authority().map_err(proxy_app_error)?,
-            )
+            .validate_root(&root.certificate_der, &root.private_key_der)
             .and_then(|_| {
                 self.certificates.validate_leaf(
                     &root.certificate_der,
@@ -631,6 +756,43 @@ impl TlsMaterialProvider for CertificateServiceAdapter {
                 .collect(),
             upstream_client_private_key_pkcs8_der: Zeroizing::new(shared.private_key_der.clone()),
             upstream_ca_der: upstream.certificate_der.clone(),
+        })
+    }
+}
+
+impl MitmCertificateAuthority for CertificateServiceAdapter {
+    fn issue_server_identity(
+        &self,
+        authority_host: &str,
+    ) -> intercept_proxy_runtime::Result<MitmServerIdentity> {
+        let _guard = self.material_lock.lock();
+        let snapshot = self.load_snapshot(&[ROOT]).map_err(proxy_app_error)?;
+        let root = snapshot.materials.get(ROOT).ok_or_else(|| {
+            ProxyError::new(
+                ProxyErrorCode::CertificateNotReady,
+                "installation Root CA missing",
+            )
+        })?;
+        self.certificates
+            .validate_root(&root.certificate_der, &root.private_key_der)
+            .map_err(proxy_infra_error)?;
+        let parsed_ip = authority_host.parse::<IpAddr>().ok();
+        let request = LeafCertificateRequest {
+            common_name: authority_host.to_owned(),
+            dns_names: if parsed_ip.is_none() {
+                vec![authority_host.to_owned()]
+            } else {
+                Vec::new()
+            },
+            ip_addresses: parsed_ip.into_iter().collect(),
+        };
+        let leaf = self
+            .certificates
+            .generate_leaf(&root.certificate_der, &root.private_key_der, &request)
+            .map_err(proxy_infra_error)?;
+        Ok(MitmServerIdentity {
+            certificate_chain_der: vec![leaf.certificate_der.clone()],
+            private_key_pkcs8_der: leaf.private_key_pkcs8_der.clone(),
         })
     }
 }
@@ -699,6 +861,33 @@ fn item(name: &str, usage: &str, material: &ProtectedMaterial) -> CertificateIte
     }
 }
 
+fn status_item(name: &str, usage: &str, status: &MaterialStatus) -> CertificateItemViewModel {
+    let valid_from = status.not_before.as_deref().and_then(parse_validity_date);
+    let valid_until = status.not_after.as_deref().and_then(parse_validity_date);
+    let now = Utc::now();
+    let (status_text, ui_tone) = match (valid_from, valid_until) {
+        (Some(not_before), Some(not_after)) if now < not_before || now > not_after => {
+            ("证书无效或已过期".into(), UiTone::Danger)
+        }
+        (_, Some(not_after)) if not_after < now + chrono::Duration::days(60) => {
+            ("将在 60 天内到期".into(), UiTone::Warning)
+        }
+        (Some(_), Some(_)) => ("有效".into(), UiTone::Positive),
+        _ => ("已配置，需重新校验".into(), UiTone::Warning),
+    };
+    CertificateItemViewModel {
+        kind: name.into(),
+        subject: status.subject.clone(),
+        usage: usage.into(),
+        sans: status.sans.clone(),
+        valid_from,
+        valid_until,
+        sha256_fingerprint: status.fingerprint.clone(),
+        status_text,
+        ui_tone,
+    }
+}
+
 fn material_matches(material: &ProtectedMaterial, metadata: &crate::CertificateMetadata) -> bool {
     material.subject == metadata.subject
         && material.fingerprint == metadata.fingerprint_sha256
@@ -724,7 +913,7 @@ fn verify_revision(actual: u64, expected: u64) -> AppResult<()> {
     }
 }
 
-fn parse_fingerprint(value: &str) -> gmofg_proxy_runtime::Result<Vec<u8>> {
+fn parse_fingerprint(value: &str) -> intercept_proxy_runtime::Result<Vec<u8>> {
     value
         .split(':')
         .map(|part| {
@@ -766,10 +955,10 @@ mod tests {
     use super::*;
     use crate::adapters::{FileSelection, NativeFileDialog};
     use crate::{InfrastructureError, SecretProtector};
-    use gmofg_proxy_product_payment::PaymentProductProfile;
+    use intercept_proxy_product_api::InterceptProxyProfile;
 
-    fn payment_profile() -> Arc<dyn ProductProfile> {
-        Arc::new(PaymentProductProfile::isolated_test_tool())
+    fn test_profile() -> Arc<dyn ProductProfile> {
+        Arc::new(InterceptProxyProfile)
     }
 
     #[derive(Debug)]
@@ -909,7 +1098,7 @@ mod tests {
             Arc::new(QueueDialog {
                 open: ParkingMutex::new(VecDeque::new()),
             }),
-            payment_profile(),
+            test_profile(),
         );
 
         let error = adapter
@@ -918,6 +1107,66 @@ mod tests {
             .expect_err("snapshot must fail");
 
         assert_eq!(error.code, "KEYCHAIN_UNPROTECT_FAILED");
+    }
+
+    #[tokio::test]
+    async fn certificate_status_never_decrypts_private_material() {
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        let metadata = |revision: u64, subject: &str| {
+            serde_json::json!({
+                "revision": revision,
+                "subject": subject,
+                "fingerprint": "AA:BB:CC",
+                "sans": ["IP:127.0.0.1"],
+                "not_before": "Jan  1 00:00:00 2026 GMT",
+                "not_after": "Jan  1 00:00:00 2036 GMT"
+            })
+        };
+        store
+            .compare_and_swap_certificate_materials(
+                0,
+                &[
+                    CertificateMaterialRecord {
+                        kind: ROOT.into(),
+                        protected_blob: vec![1],
+                        metadata: metadata(1, "Test Root"),
+                        updated_at: Utc::now(),
+                    },
+                    CertificateMaterialRecord {
+                        kind: LEAF.into(),
+                        protected_blob: vec![2],
+                        metadata: metadata(1, "Test Leaf"),
+                        updated_at: Utc::now(),
+                    },
+                ],
+            )
+            .expect("seed protected material");
+        let adapter = CertificateServiceAdapter::new(
+            store,
+            Arc::new(FailingUnprotectProtector),
+            Arc::new(QueueDialog {
+                open: ParkingMutex::new(VecDeque::new()),
+            }),
+            Arc::new(InterceptProxyProfile),
+        );
+
+        let status = adapter.status().await.expect("metadata-only status");
+
+        assert!(!status.can_initialize);
+        assert!(status.ready);
+        assert_eq!(status.status_text, "证书已就绪");
+        assert_eq!(status.items.len(), 2);
+        assert_eq!(status.items[0].subject, "Test Root");
+        assert_eq!(status.items[1].subject, "Test Leaf");
+        assert_eq!(
+            adapter
+                .overview()
+                .await
+                .expect_err("full overview still decrypts")
+                .view_model
+                .code,
+            "KEYCHAIN_UNPROTECT_FAILED"
+        );
     }
 
     #[tokio::test]
@@ -941,7 +1190,7 @@ mod tests {
             store,
             Arc::new(XorProtector),
             dialog.clone(),
-            payment_profile(),
+            test_profile(),
         );
         let corrupt_error = corrupt
             .load_epoch_snapshot(&["127.0.0.1".into()])
@@ -953,7 +1202,7 @@ mod tests {
             Arc::new(SqliteStore::in_memory().expect("store")),
             Arc::new(XorProtector),
             dialog,
-            payment_profile(),
+            test_profile(),
         );
         let missing_error = missing
             .load_epoch_snapshot(&["127.0.0.1".into()])
@@ -981,7 +1230,7 @@ mod tests {
             Arc::new(QueueDialog {
                 open: ParkingMutex::new(VecDeque::from([pkcs12_path, ca_path])),
             }),
-            Arc::new(gmofg_proxy_product_payment::PaymentProductProfile::isolated_test_tool()),
+            Arc::new(InterceptProxyProfile),
         );
 
         let pkcs12_error = adapter
@@ -998,9 +1247,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn export_ca_writes_only_the_bundled_public_pem_before_initialization() {
+    async fn export_ca_writes_only_the_generated_public_pem() {
         let directory = tempfile::tempdir().expect("tempdir");
-        let export_path = directory.path().join("gmofg-test-proxy-root-ca.crt");
+        let export_path = directory.path().join("intercept-proxy-root-ca.crt");
         let adapter = CertificateServiceAdapter::new(
             Arc::new(SqliteStore::in_memory().expect("store")),
             Arc::new(XorProtector),
@@ -1010,16 +1259,18 @@ mod tests {
                     overwrite_confirmed: false,
                 })),
             }),
-            payment_profile(),
+            test_profile(),
         );
 
+        adapter
+            .generate_ca(vec!["127.0.0.1".into()])
+            .await
+            .expect("generate installation Root CA");
         let result = adapter.export_ca().await.expect("export public Root CA");
         let exported = std::fs::read(&export_path).expect("read exported certificate");
-        let expected = payment_profile().certificates().public_root_ca_pem();
 
         assert!(result.success);
         assert!(!result.cancelled);
-        assert_eq!(exported, expected);
         assert!(exported.starts_with(b"-----BEGIN CERTIFICATE-----"));
         assert!(
             !exported
@@ -1029,18 +1280,49 @@ mod tests {
         CertificateService
             .parse_ca(&exported)
             .expect("exported public certificate must parse as a CA");
-        assert!(
+        assert_eq!(
             adapter
                 .load_snapshot(&MATERIAL_KINDS)
                 .expect("certificate snapshot")
                 .materials
-                .is_empty(),
-            "export must not initialize or persist private material"
+                .len(),
+            2,
+            "export must not add material beyond the generated Root and leaf"
         );
     }
 
     #[tokio::test]
-    async fn disabled_embedded_signing_still_allows_public_export_but_blocks_generation() {
+    async fn mitm_signer_uses_the_protected_installation_root_for_each_authority() {
+        let adapter = CertificateServiceAdapter::new(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(XorProtector),
+            Arc::new(QueueDialog {
+                open: ParkingMutex::new(VecDeque::new()),
+            }),
+            Arc::new(InterceptProxyProfile),
+        );
+        adapter
+            .generate_ca(vec!["127.0.0.1".into()])
+            .await
+            .expect("generate installation Root CA");
+        let identity = adapter
+            .issue_server_identity("api.example.test")
+            .expect("issue dynamic MITM leaf");
+        let snapshot = adapter.load_snapshot(&[ROOT]).expect("load protected Root");
+        let root = snapshot.materials.get(ROOT).expect("Root material");
+        let metadata = CertificateService
+            .validate_leaf(
+                &root.certificate_der,
+                &identity.certificate_chain_der[0],
+                &identity.private_key_pkcs8_der,
+                &["api.example.test".into()],
+            )
+            .expect("dynamic leaf must chain to installation Root");
+        assert_eq!(metadata.san, vec!["DNS:api.example.test"]);
+    }
+
+    #[tokio::test]
+    async fn generic_profile_generates_and_exports_per_installation_root() {
         let directory = tempfile::tempdir().expect("tempdir");
         let export_path = directory.path().join("public-root-ca.crt");
         let adapter = CertificateServiceAdapter::new(
@@ -1052,19 +1334,17 @@ mod tests {
                     overwrite_confirmed: false,
                 })),
             }),
-            Arc::new(PaymentProductProfile::default()),
+            Arc::new(InterceptProxyProfile),
         );
 
+        adapter
+            .generate_ca(vec!["127.0.0.1".into()])
+            .await
+            .expect("generic signing is generated at runtime");
         adapter.export_ca().await.expect("public-only export");
         let exported = std::fs::read(export_path).expect("exported public certificate");
         assert!(exported.starts_with(b"-----BEGIN CERTIFICATE-----"));
         assert!(!exported.windows(11).any(|window| window == b"PRIVATE KEY"));
-
-        let error = adapter
-            .generate_ca(vec!["127.0.0.1".into()])
-            .await
-            .expect_err("test signing must fail closed");
-        assert_eq!(error.view_model.code, "CERTIFICATE_TEST_SIGNING_DISABLED");
     }
 
     // CERT-005~017, SECURITY-006~009, TEST-TLS
@@ -1089,7 +1369,7 @@ mod tests {
             Arc::new(QueueDialog {
                 open: ParkingMutex::new(VecDeque::from([pkcs12_path, upstream_path])),
             }),
-            payment_profile(),
+            test_profile(),
         );
         let generated = adapter
             .generate_ca(vec!["127.0.0.1".into()])
@@ -1100,26 +1380,21 @@ mod tests {
             .await
             .expect_err("duplicate generation must fail");
         assert_eq!(duplicate.view_model.code, "CERTIFICATE_ALREADY_EXISTS");
-        assert!(duplicate.view_model.message.contains("重签服务端证书"));
-        let bundled_overview = adapter
+        assert!(duplicate.view_model.message.contains("已经存在 Root CA"));
+        let identity_overview = adapter
             .import_pkcs12("password".into())
             .await
             .expect("import pkcs12");
         assert_raw_pkcs12_secrets_are_not_persisted(&store);
-        assert!(bundled_overview.ready);
-        assert!(
-            bundled_overview
-                .items
-                .iter()
-                .any(|item| { item.usage.contains("内置 Payment server.crt") })
-        );
+        assert!(identity_overview.ready);
+        assert_eq!(identity_overview.items.len(), 3);
         assert!(
             adapter
                 .load_snapshot(&[UPSTREAM_CA])
                 .expect("stored override snapshot")
                 .materials
                 .is_empty(),
-            "bundled upstream CA must be a fallback, not a persisted override"
+            "未配置的上游 CA 不应被伪造为持久化材料"
         );
 
         let overview = adapter.import_upstream_ca().await.expect("import upstream");
@@ -1139,7 +1414,7 @@ mod tests {
             overview
                 .items
                 .iter()
-                .any(|item| item.usage.contains("用户替换"))
+                .any(|item| item.usage.contains("反向监听器导入"))
         );
         assert!(adapter.validate().await.expect("validate").valid);
 
@@ -1169,7 +1444,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn separate_proxy_installations_share_only_the_test_root() {
+    async fn separate_proxy_installations_have_distinct_roots_and_leaves() {
         let dialog = || {
             Arc::new(QueueDialog {
                 open: ParkingMutex::new(VecDeque::new()),
@@ -1179,13 +1454,13 @@ mod tests {
             Arc::new(SqliteStore::in_memory().expect("first store")),
             Arc::new(XorProtector),
             dialog(),
-            payment_profile(),
+            test_profile(),
         );
         let second = CertificateServiceAdapter::new(
             Arc::new(SqliteStore::in_memory().expect("second store")),
             Arc::new(XorProtector),
             dialog(),
-            payment_profile(),
+            test_profile(),
         );
 
         first
@@ -1206,8 +1481,8 @@ mod tests {
         let first_leaf = first_materials.materials.get(LEAF).expect("first leaf");
         let second_leaf = second_materials.materials.get(LEAF).expect("second leaf");
 
-        assert_eq!(first_root.certificate_der, second_root.certificate_der);
-        assert_eq!(first_root.fingerprint, second_root.fingerprint);
+        assert_ne!(first_root.certificate_der, second_root.certificate_der);
+        assert_ne!(first_root.fingerprint, second_root.fingerprint);
         assert_ne!(first_leaf.certificate_der, second_leaf.certificate_der);
         assert_ne!(first_leaf.private_key_der, second_leaf.private_key_der);
         assert_eq!(first_leaf.sans, vec!["IP:10.0.34.50"]);

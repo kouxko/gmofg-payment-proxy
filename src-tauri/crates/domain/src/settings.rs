@@ -120,9 +120,6 @@ impl Settings {
         if bind_ip.is_err() {
             error = error.with_field_error("bind_address", "绑定地址必须是有效 IP 地址");
         }
-        if !self.channels.iter().any(|channel| channel.enabled) {
-            error = error.with_field_error("channels", "至少启用一个通道");
-        }
         let mut channel_ids = std::collections::BTreeSet::new();
         let mut ports = std::collections::BTreeMap::new();
         for channel in &self.channels {

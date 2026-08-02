@@ -7,19 +7,31 @@
 #![allow(clippy::missing_errors_doc, clippy::too_many_lines)]
 
 pub mod fault;
+pub mod forward;
 pub mod message;
 pub mod metrics;
 pub mod production_factory;
+pub mod reverse;
 pub mod supervisor;
 pub mod tls;
 pub mod traffic;
 pub mod transport;
 
 pub use fault::{FaultAction, ResponseDisposition};
+pub use forward::{
+    ForwardAuthenticationMode, ForwardMitmConfig, ForwardProxyAuthenticator, ForwardProxyConfig,
+    ForwardProxyService, MitmCertificateAuthority, MitmServerIdentity, MitmUpstreamConnector,
+    NativeRootMitmConnector, NoAuthentication, absolute_uri_to_origin_form,
+    strip_hop_by_hop_headers,
+};
 pub use message::{Message, MessageLimits, RawHeader};
 pub use metrics::{ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot};
 pub use production_factory::{
     RustlsRuntimeServiceFactory, TlsMaterialProvider, TlsMaterialSnapshot,
+};
+pub use reverse::{
+    ReverseClientIdentity, ReverseDownstreamTls, ReverseProxyConfig, ReverseProxyService,
+    ReverseUpstreamTls, UpstreamTlsHandshakeResult,
 };
 pub use supervisor::{
     ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,
@@ -28,7 +40,8 @@ pub use supervisor::{
 pub use traffic::{JitterScope, TrafficDirection};
 pub use transport::{
     AcceptedConnection, Clock, ConnectionAdmission, ConnectionContext, HandshakePolicy,
-    PipelinePorts, SystemClock, TlsPeerIdentity, TokioListenerBinder, UpstreamConnector,
+    NoopPipelinePorts, PipelinePorts, SystemClock, TlsPeerIdentity, TokioListenerBinder,
+    UpstreamConnector, UpstreamSecurityEvidence, UpstreamTransportSecurity,
 };
 
 use std::fmt::Debug;

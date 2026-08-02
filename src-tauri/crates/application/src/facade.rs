@@ -8,18 +8,24 @@ use std::sync::Arc;
 use chrono::Utc;
 
 use crate::{
-    AppBootstrapViewModel, AppError, AppResult, BreakpointCoordinator, BreakpointValidationPort,
-    CaptureQuery, CertificateOverviewViewModel, CertificateServicePort,
+    AndroidControlPort, AppBootstrapViewModel, AppError, AppResult, BreakpointCoordinator,
+    BreakpointValidationPort, CaptureQuery, CertificateOverviewViewModel, CertificateServicePort,
     CertificateValidationViewModel, ChannelPresentationViewModel, EventHub, EventSubscription,
-    FaultServicePort, FileExportPort, OperationResultViewModel, PageRequest, ProxyState,
+    FaultServicePort, FileExportPort, ListenerRuntimePort, ListenerRuntimeState,
+    OperationResultViewModel, PageRequest, ProtectedSecretPort, ProxyListener, ProxyState,
     ProxyStatusViewModel, ProxySupervisorPort, RuleRepositoryPort, SessionQueryPort,
     SettingsRepositoryPort, SettingsViewModel, UiEventEnvelope, UiEventPayload,
+    WorkspaceDocumentPort, WorkspaceRepositoryPort,
 };
 
+mod android;
+mod listeners;
 mod rules;
+mod secrets;
 mod settings;
 mod traffic;
 mod validation;
+mod workspaces;
 
 use validation::{normalize_sans, require_confirmation};
 
@@ -39,6 +45,17 @@ pub struct Application {
     certificates: Arc<dyn CertificateServicePort>,
     settings: Arc<dyn SettingsRepositoryPort>,
     file_export: Arc<dyn FileExportPort>,
+    workspaces: Arc<dyn WorkspaceRepositoryPort>,
+    workspace_documents: Arc<dyn WorkspaceDocumentPort>,
+    android: Arc<dyn AndroidControlPort>,
+    /// 当前已选择设备的完整应用清单。
+    ///
+    /// 读取 Android 包签名需要逐包执行 `dumpsys package`，成本远高于普通查询。
+    /// 因此首次读取后由 Rust 应用层缓存；切换（或重新选择）设备时立即失效。
+    /// UI、未来 CLI/TUI 都只能通过同一组用例读取和筛选，不能各自维护业务缓存。
+    android_package_cache: tokio::sync::Mutex<Option<Vec<crate::AndroidPackageViewModel>>>,
+    listener_runtime: Arc<dyn ListenerRuntimePort>,
+    protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
     mutation_gate: tokio::sync::Mutex<()>,
 }
@@ -59,11 +76,41 @@ pub struct ApplicationDependencies {
     pub certificates: Arc<dyn CertificateServicePort>,
     pub settings: Arc<dyn SettingsRepositoryPort>,
     pub file_export: Arc<dyn FileExportPort>,
+    pub workspaces: Arc<dyn WorkspaceRepositoryPort>,
+    pub workspace_documents: Arc<dyn WorkspaceDocumentPort>,
+    pub listener_runtime: Arc<dyn ListenerRuntimePort>,
     pub events: Arc<EventHub>,
 }
 
 impl Application {
     pub fn new(product_name: String, dependencies: ApplicationDependencies) -> Self {
+        Self::new_with_android(
+            product_name,
+            dependencies,
+            Arc::new(crate::UnavailableAndroidControlPort),
+        )
+    }
+
+    pub fn new_with_android(
+        product_name: String,
+        dependencies: ApplicationDependencies,
+        android: Arc<dyn AndroidControlPort>,
+    ) -> Self {
+        Self::new_with_android_and_secrets(
+            product_name,
+            dependencies,
+            android,
+            Arc::new(crate::UnavailableProtectedSecretPort),
+        )
+    }
+
+    /// 生产宿主使用的完整构造器；测试仍可沿用 `new_with_android` 获得显式不可用端口。
+    pub fn new_with_android_and_secrets(
+        product_name: String,
+        dependencies: ApplicationDependencies,
+        android: Arc<dyn AndroidControlPort>,
+        protected_secrets: Arc<dyn ProtectedSecretPort>,
+    ) -> Self {
         Self {
             product_name,
             proxy: dependencies.proxy,
@@ -76,6 +123,12 @@ impl Application {
             certificates: dependencies.certificates,
             settings: dependencies.settings,
             file_export: dependencies.file_export,
+            workspaces: dependencies.workspaces,
+            workspace_documents: dependencies.workspace_documents,
+            android,
+            android_package_cache: tokio::sync::Mutex::new(None),
+            listener_runtime: dependencies.listener_runtime,
+            protected_secrets,
             events: dependencies.events,
             mutation_gate: tokio::sync::Mutex::new(()),
         }
@@ -100,22 +153,17 @@ impl Application {
                 },
             })
             .await?;
-        let pending_breakpoints = self
-            .breakpoints
-            .query(proxy.runtime_epoch)
-            .into_iter()
-            .collect();
-        let certificate = self.certificates.overview().await?;
+        // 动态入口各自拥有运行 epoch；启动快照必须聚合全部待处理断点，不能再以已退役
+        // 的单实例代理 epoch 过滤，否则界面会漏掉真实入口产生的断点。
+        let pending_breakpoints = self.breakpoints.query(None).into_iter().collect();
+        // 启动快照只读取证书的非敏感元数据。不能为了画状态栏就解密私钥并触发
+        // Keychain/DPAPI 授权，否则用户取消系统提示会让整个展示层无法启动。
+        let certificate = self.certificates.status().await?;
         let settings = self.settings.get().await?;
-        let channel_catalog = settings
-            .stored
-            .channels
-            .iter()
-            .map(|channel| ChannelPresentationViewModel {
-                id: channel.id.clone(),
-                display_name: channel.display_name.clone(),
-            })
-            .collect();
+        // 规则和故障动作的通道必须引用当前 Workspace 的 Listener UUID。
+        // 旧产品设置中的静态通道只服务于兼容状态展示，不能再作为可提交的配置来源；
+        // 否则 UI 会生成领域层必然拒绝、且永远无法命中动态 Listener 的规则。
+        let channel_catalog = self.selected_workspace_channel_catalog().await?;
         Ok(AppBootstrapViewModel {
             product_name: self.product_name.clone(),
             proxy,
@@ -126,6 +174,40 @@ impl Application {
             settings,
             event_cursor: self.events.current_cursor(),
         })
+    }
+
+    /// 返回当前 Workspace 可供规则、故障和筛选使用的真实 Listener 目录。
+    ///
+    /// 这是动态代理配置与旧产品通道之间的唯一适配点。调用方不得从全局设置或模板
+    /// 占位值推断通道，否则会保存一条永远无法匹配运行时 Listener 的规则。
+    pub(crate) async fn selected_workspace_channel_catalog(
+        &self,
+    ) -> AppResult<Vec<ChannelPresentationViewModel>> {
+        let selected_workspace = self
+            .workspaces
+            .list()
+            .await?
+            .into_iter()
+            .find(|workspace| workspace.selected);
+        let Some(summary) = selected_workspace else {
+            return Ok(Vec::new());
+        };
+        self.workspaces
+            .get(summary.id)
+            .await?
+            .listeners
+            .into_iter()
+            .map(|listener| {
+                let (id, display_name) = match listener {
+                    ProxyListener::Forward(listener) => (listener.id, listener.name),
+                    ProxyListener::Reverse(listener) => (listener.id, listener.name),
+                };
+                Ok(ChannelPresentationViewModel {
+                    id: crate::ChannelId::new(id.to_string()).map_err(AppError::from)?,
+                    display_name,
+                })
+            })
+            .collect()
     }
 
     pub fn app_subscribe_events(&self, after_event_id: u64) -> AppResult<EventSubscription> {
@@ -147,6 +229,26 @@ impl Application {
     /// stop operation is awaited and then fully cleaned up by the supervisor.
     pub async fn app_shutdown(&self) -> AppResult<ProxyStatusViewModel> {
         let _gate = self.mutation_gate.lock().await;
+        let mut listener_cleanup_errors = Vec::new();
+        match self.listener_runtime.statuses().await {
+            Ok(statuses) => {
+                for status in statuses {
+                    if status.state == ListenerRuntimeState::Stopped {
+                        continue;
+                    }
+                    if let Err(error) = self.listener_runtime.stop(status.listener_id).await {
+                        listener_cleanup_errors.push(format!(
+                            "入口 {} 停止失败 [{}] {}",
+                            status.listener_id, error.view_model.code, error.view_model.message
+                        ));
+                    }
+                }
+            }
+            Err(error) => listener_cleanup_errors.push(format!(
+                "入口状态读取失败 [{}] {}",
+                error.view_model.code, error.view_model.message
+            )),
+        }
         let before = self.proxy.status().await?;
         let stop_result = if before.state == ProxyState::Stopped {
             Ok(before.clone())
@@ -165,7 +267,7 @@ impl Application {
             }
         }
         let clear_result = self.settings.clear_effective().await;
-        match (stop_result, clear_result) {
+        let legacy_result = match (stop_result, clear_result) {
             (Ok(status), Ok(_)) => {
                 self.publish_runtime(&status);
                 Ok(status)
@@ -185,6 +287,24 @@ impl Application {
                     clear_error.view_model.message
                 ),
             )),
+        };
+        if listener_cleanup_errors.is_empty() {
+            legacy_result
+        } else {
+            let listener_detail = listener_cleanup_errors.join("；");
+            match legacy_result {
+                Ok(_) => Err(AppError::new(
+                    "APP_SHUTDOWN_FAILED",
+                    format!("动态代理入口清理失败：{listener_detail}。"),
+                )),
+                Err(error) => Err(AppError::new(
+                    "APP_SHUTDOWN_FAILED",
+                    format!(
+                        "动态代理入口清理失败：{listener_detail}；其他退出清理失败 [{}] {}。",
+                        error.view_model.code, error.view_model.message
+                    ),
+                )),
+            }
         }
     }
 
@@ -286,6 +406,20 @@ impl Application {
 
     pub async fn certificate_overview(&self) -> AppResult<CertificateOverviewViewModel> {
         self.certificates.overview().await
+    }
+
+    /// 首次安装后异步创建独立 Root CA；该用例允许展示适配器在窗口建立后调用。
+    ///
+    /// 系统密钥库拒绝或用户取消授权时错误只返回给调用者，不得影响应用 Host 生命周期。
+    pub async fn certificate_initialize_if_needed(
+        &self,
+    ) -> AppResult<CertificateOverviewViewModel> {
+        let status = self.certificates.status().await?;
+        if !status.can_initialize {
+            return Ok(status);
+        }
+        self.certificate_generate_ca(vec!["localhost".into(), "127.0.0.1".into()])
+            .await
     }
 
     pub async fn certificate_generate_ca(
@@ -417,11 +551,14 @@ impl Application {
     }
 
     async fn ensure_proxy_stopped_for_write(&self) -> AppResult<()> {
-        let state = self.proxy.status().await?.state;
-        if state != ProxyState::Stopped {
+        let active_listeners = self.listener_runtime.statuses().await?;
+        // `proxy` 只剩测试/嵌入兼容端口；生产 Host 注入的退役适配器永远为 Stopped。
+        // 同时检查它可以保留旧嵌入方的安全契约，而真实桌面安全判断以动态入口为准。
+        let compatibility_state = self.proxy.status().await?.state;
+        if !active_listeners.is_empty() || compatibility_state != ProxyState::Stopped {
             return Err(AppError::new(
                 "OPERATION_IN_PROGRESS",
-                "只有 Proxy 已停止时才能变更证书。",
+                "只有全部 Workspace 代理入口停止后才能变更证书。",
             ));
         }
         Ok(())

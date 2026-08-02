@@ -21,6 +21,7 @@ function NavigationProbe() {
       <button onClick={() => navigate("/rules?sessionId=session-1")}>
         打开规则
       </button>
+      <button onClick={() => navigate("/listeners")}>打开监听器</button>
     </>
   );
 }
@@ -38,6 +39,10 @@ describe("persistent desktop workspace navigation", () => {
     await user.click(screen.getByRole("button", { name: "打开规则" }));
 
     expect(screen.getByText("/rules:session-1")).toBeInTheDocument();
+    expect(window.location.href).toBe(documentUrl);
+
+    await user.click(screen.getByRole("button", { name: "打开监听器" }));
+    expect(screen.getByText("/listeners:none")).toBeInTheDocument();
     expect(window.location.href).toBe(documentUrl);
   });
 });

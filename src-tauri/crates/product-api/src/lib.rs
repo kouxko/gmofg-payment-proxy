@@ -162,14 +162,6 @@ pub trait BodyCodec: fmt::Debug + Send + Sync {
     fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError>;
 }
 
-/// 仅供显式启用的隔离测试产品配置使用的静态 CA 材料。
-#[derive(Debug, Clone, Copy)]
-pub struct EmbeddedTestCertificateAuthority {
-    pub public_certificate_pem: &'static [u8],
-    pub signing_key_pem: &'static str,
-    pub required_subject_marker: &'static str,
-}
-
 /// 通用证书适配器展示的产品自定义文案。
 #[derive(Debug, Clone, Copy)]
 pub struct CertificateLabels {
@@ -189,19 +181,22 @@ pub struct CertificateLabels {
     pub export_success_message: &'static str,
 }
 
-/// 外层产品装配选择的证书资源和行为。
-///
-/// 除非具体产品通过测试专用开关显式选择，`embedded_test_authority` 必须返回 `None`。
-/// 这样私有签名材料默认关闭，不会悄悄变成通用基础设施的一部分。
+/// 外层装配选择的证书展示文案与可选上游信任锚。
 pub trait ProductCertificatePolicy: fmt::Debug + Send + Sync {
-    /// 客户端编译/安装时使用的公开 Root CA，不包含私钥。
-    fn public_root_ca_pem(&self) -> &'static [u8];
-
-    /// 仅隔离测试允许返回的 Root CA 私钥材料。
-    fn embedded_test_authority(&self) -> Option<EmbeddedTestCertificateAuthority>;
-
     /// 产品随包携带的默认上游信任锚，可由用户导入文件替换。
     fn bundled_upstream_ca_pem(&self) -> Option<&'static [u8]>;
+
+    /// 旧式、产品固定的运行模式可把共享上游客户端身份视为全局启动前置项。
+    /// 通用 Intercept Proxy 按入口引用身份，因此默认不要求这个可选材料。
+    fn requires_global_client_identity(&self) -> bool {
+        false
+    }
+
+    /// 旧式、产品固定的运行模式可把上游 CA 视为全局启动前置项。
+    /// 通用 Intercept Proxy 按入口选择系统信任或 CA 引用，因此默认不要求。
+    fn requires_global_upstream_ca(&self) -> bool {
+        false
+    }
 
     fn labels(&self) -> CertificateLabels;
 }
@@ -239,12 +234,6 @@ pub trait ProductProfile: fmt::Debug + Send + Sync {
 /// 在 Host 打开存储或启动后台任务前验证静态产品契约。
 pub fn validate_product_profile(product: &dyn ProductProfile) -> Result<(), ProductError> {
     let channels = product.channels();
-    if channels.is_empty() {
-        return Err(ProductError::new(
-            "PRODUCT_PROFILE_INVALID",
-            "product must declare at least one channel",
-        ));
-    }
     let mut ids = BTreeSet::new();
     let mut enabled_ports = BTreeSet::new();
     for channel in channels {
@@ -489,6 +478,119 @@ fn valid_port(value: &str) -> bool {
     value.parse::<u16>().is_ok_and(|port| port > 0)
 }
 
+/// Intercept Proxy 的无业务默认配置。
+///
+/// 这个配置只负责为仍在迁移期内的 Host 提供稳定的存储、安全命名空间和通用文案。
+/// 真正可编辑的监听器、编码器、提取器与断言由 `domain::ProxyWorkspace` 持有，不再由
+/// 编译期产品适配器决定。产品适配器不声明运行通道；首次启动的正向代理草稿由
+/// Workspace 创建，并且只在“入口配置”中编辑和启动。
+#[derive(Debug, Default, Clone, Copy)]
+pub struct InterceptProxyProfile;
+
+#[derive(Debug, Default)]
+struct StrictUtf8BodyCodec;
+
+#[derive(Debug, Default)]
+struct EmptyRequestClassifier;
+
+impl BodyCodec for StrictUtf8BodyCodec {
+    fn id(&self) -> &'static str {
+        "utf-8"
+    }
+
+    fn name(&self) -> &'static str {
+        "UTF-8"
+    }
+
+    fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
+        String::from_utf8(bytes.to_vec())
+            .map_err(|error| ProductError::new("BODY_DECODE_FAILED", error.to_string()))
+    }
+
+    fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
+        Ok(text.as_bytes().to_vec())
+    }
+}
+
+impl RequestClassifier for EmptyRequestClassifier {
+    fn classify(&self, _: ProductMessageContext<'_>) -> ClassifiedRequest {
+        ClassifiedRequest::default()
+    }
+}
+
+impl ProductCertificatePolicy for InterceptProxyProfile {
+    fn bundled_upstream_ca_pem(&self) -> Option<&'static [u8]> {
+        None
+    }
+
+    fn labels(&self) -> CertificateLabels {
+        CertificateLabels {
+            root_name: "Intercept Proxy Root CA",
+            root_usage: "仅用于用户显式允许的 HTTPS MITM 目标",
+            leaf_name: "动态代理服务端证书",
+            leaf_usage: "按监听地址或 CONNECT authority 动态签发",
+            client_identity_name: "上游客户端身份",
+            client_identity_usage: "可选的反向代理 mTLS PKCS12 身份",
+            upstream_name: "上游 CA",
+            upstream_bundled_usage: "未配置；使用系统信任或监听器显式 CA",
+            upstream_override_usage: "用户为反向监听器导入的上游 CA",
+            ready_status: "证书已就绪",
+            incomplete_status: "证书尚未初始化",
+            already_exists_message: "当前安装实例已经存在 Root CA。",
+            export_cancelled_message: "已取消导出 Root CA。",
+            export_success_message: "Root CA 已导出。",
+        }
+    }
+}
+
+impl ProductProfile for InterceptProxyProfile {
+    fn id(&self) -> &'static str {
+        "intercept-proxy"
+    }
+
+    fn name(&self) -> &'static str {
+        "Intercept Proxy"
+    }
+
+    fn channels(&self) -> &'static [ProductChannel] {
+        &[]
+    }
+
+    fn storage(&self) -> ProductStorageNamespace {
+        ProductStorageNamespace {
+            database_file_name: "intercept-proxy.sqlite3",
+            secret_service: "com.interceptproxy.desktop",
+            secret_account: "intercept-proxy-secrets",
+            secret_envelope_magic: b"IPX02",
+            secret_aad: b"com.interceptproxy.desktop/v2",
+        }
+    }
+
+    fn labels(&self) -> ProductLabels {
+        ProductLabels {
+            client_name: "客户端",
+            upstream_name: "上游服务",
+            fault_rule_name_prefix: "故障规则 · ",
+        }
+    }
+
+    fn fault_templates(&self) -> &'static [ProductFaultTemplate] {
+        &[]
+    }
+
+    fn request_classifier(&self) -> Arc<dyn RequestClassifier> {
+        Arc::new(EmptyRequestClassifier)
+    }
+
+    fn certificates(&self) -> &dyn ProductCertificatePolicy {
+        self
+    }
+
+    fn body_codec(&self) -> Arc<dyn BodyCodec> {
+        Arc::new(StrictUtf8BodyCodec)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -583,14 +685,6 @@ mod tests {
     }
 
     impl ProductCertificatePolicy for TestProfile {
-        fn public_root_ca_pem(&self) -> &'static [u8] {
-            b""
-        }
-
-        fn embedded_test_authority(&self) -> Option<EmbeddedTestCertificateAuthority> {
-            None
-        }
-
         fn bundled_upstream_ca_pem(&self) -> Option<&'static [u8]> {
             None
         }
@@ -673,11 +767,6 @@ mod tests {
         empty_storage.secret_service = "";
         for profile in [
             TestProfile {
-                channels: &[],
-                storage: storage(),
-                faults: &[],
-            },
-            TestProfile {
                 channels: INVALID_ID,
                 storage: storage(),
                 faults: &[],
@@ -718,6 +807,16 @@ mod tests {
                 "PRODUCT_PROFILE_INVALID"
             );
         }
+    }
+
+    #[test]
+    fn profile_validation_accepts_an_empty_compile_time_channel_catalog() {
+        validate_product_profile(&TestProfile {
+            channels: &[],
+            storage: storage(),
+            faults: &[],
+        })
+        .expect("dynamic Workspace listeners do not require product channels");
     }
 
     #[test]
@@ -768,5 +867,18 @@ mod tests {
                 "{valid:?} is a valid HTTPS origin"
             );
         }
+    }
+
+    #[test]
+    fn intercept_profile_is_clean_and_declares_no_product_channels() {
+        let profile = InterceptProxyProfile;
+        validate_product_profile(&profile).expect("generic profile must be valid");
+        assert_eq!(profile.name(), "Intercept Proxy");
+        assert_eq!(
+            profile.storage().database_file_name,
+            "intercept-proxy.sqlite3"
+        );
+        assert!(profile.channels().is_empty());
+        assert!(profile.certificates().bundled_upstream_ca_pem().is_none());
     }
 }

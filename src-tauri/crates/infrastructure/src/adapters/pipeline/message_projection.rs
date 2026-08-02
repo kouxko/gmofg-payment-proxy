@@ -7,9 +7,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use bytes::Bytes;
-use gmofg_proxy_application::{MessageContentViewModel, RawHttpHeaderViewModel};
-use gmofg_proxy_product_api::{BodyCodec, ProductHeader, ProductMessageContext, RequestClassifier};
-use gmofg_proxy_runtime::{
+use intercept_proxy_application::{MessageContentViewModel, RawHttpHeaderViewModel};
+use intercept_proxy_product_api::{
+    BodyCodec, ProductHeader, ProductMessageContext, RequestClassifier,
+};
+use intercept_proxy_runtime::{
     ChannelId, ErrorCode, Message, ProxyError, RawHeader, Result as ProxyResult,
 };
 use serde_json::Value;
@@ -212,7 +214,7 @@ pub(super) fn classify_request(
     classifier: &dyn RequestClassifier,
     channel: &ChannelId,
     message: &Message,
-) -> gmofg_proxy_product_api::ClassifiedRequest {
+) -> intercept_proxy_product_api::ClassifiedRequest {
     let headers = message
         .headers
         .iter()

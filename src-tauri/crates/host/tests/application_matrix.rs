@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, net::TcpListener, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
 use chrono::Utc;
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppResult, BreakpointCoordinator, BreakpointDecision, BreakpointDecisionKind,
     BreakpointDetailViewModel, BreakpointDraft, BreakpointOutcome, BreakpointState,
     BreakpointSummaryViewModel, CaptureQuery, CaptureSort, ChannelId, ChannelSettingsDraft,
@@ -17,16 +17,16 @@ use gmofg_proxy_application::{
     ProxySupervisorPort, RuleAction, SessionQuery, SessionSort, SettingsDraft, SortDirection,
     UiTone,
 };
-use gmofg_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
-use gmofg_proxy_infrastructure::{
+use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
+use intercept_proxy_infrastructure::{
     InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
 };
-use gmofg_proxy_product_api::{
+use intercept_proxy_product_api::InterceptProxyProfile;
+use intercept_proxy_product_api::{
     BodyCodec, CertificateLabels, ClassifiedRequest, ProductCertificatePolicy, ProductChannel,
     ProductError, ProductFaultTemplate, ProductLabels, ProductMessageContext, ProductProfile,
     ProductStorageNamespace, RequestClassifier,
 };
-use gmofg_proxy_product_payment::PaymentProductProfile;
 use parking_lot::Mutex;
 use uuid::Uuid;
 
@@ -145,16 +145,6 @@ impl RequestClassifier for EmptyClassifier {
 }
 
 impl ProductCertificatePolicy for TestProfile {
-    fn public_root_ca_pem(&self) -> &'static [u8] {
-        b""
-    }
-
-    fn embedded_test_authority(
-        &self,
-    ) -> Option<gmofg_proxy_product_api::EmbeddedTestCertificateAuthority> {
-        None
-    }
-
     fn bundled_upstream_ca_pem(&self) -> Option<&'static [u8]> {
         None
     }
@@ -388,15 +378,15 @@ async fn invalid_product_profile_fails_before_storage_is_opened() {
     .expect_err("duplicate channel profile must fail");
     assert!(matches!(
         error,
-        gmofg_proxy_host::HostBuildError::InvalidProductProfile(_)
+        intercept_proxy_host::HostBuildError::InvalidProductProfile(_)
     ));
     assert!(!temp.path().join("generic-test.sqlite3").exists());
 }
 
 #[tokio::test]
 async fn production_host_covers_queries_and_settings_without_ui() {
-    gmofg_proxy_product_api::validate_product_profile(&TestProfile)
-        .expect("non-Payment three-channel profile");
+    intercept_proxy_product_api::validate_product_profile(&TestProfile)
+        .expect("generic three-channel test profile");
     let temp = tempfile::tempdir().expect("temporary application host");
     let host = ApplicationHostBuilder::new(temp.path(), test_platform(), Arc::new(TestProfile))
         .build()
@@ -408,25 +398,18 @@ async fn production_host_covers_queries_and_settings_without_ui() {
         .app_bootstrap()
         .await
         .expect("generic three-channel bootstrap");
-    assert_eq!(
-        bootstrap
-            .channel_catalog
-            .iter()
-            .map(|channel| (channel.id.as_str(), channel.display_name.as_str()))
-            .collect::<Vec<_>>(),
-        vec![("alpha", "Alpha"), ("beta", "Beta"), ("gamma", "Gamma")]
-    );
+    assert_eq!(bootstrap.channel_catalog.len(), 1);
+    assert_eq!(bootstrap.channel_catalog[0].display_name, "默认正向代理");
+    assert!(uuid::Uuid::parse_str(bootstrap.channel_catalog[0].id.as_str()).is_ok());
     let status = application
         .proxy_get_status()
         .await
-        .expect("three-channel status");
+        .expect("retired compatibility status");
+    assert!(status.channels.is_empty());
+    assert!(!status.can_start);
     assert_eq!(
-        status
-            .channels
-            .iter()
-            .map(|channel| (channel.id.as_str(), channel.display_name.as_str()))
-            .collect::<Vec<_>>(),
-        vec![("alpha", "Alpha"), ("beta", "Beta"), ("gamma", "Gamma")]
+        status.start_disabled_reason.expect("retired reason").code,
+        "LEGACY_PROXY_RETIRED"
     );
 
     let capture = application
@@ -450,12 +433,15 @@ async fn production_host_covers_queries_and_settings_without_ui() {
         .settings_validate(settings.clone())
         .await
         .expect("validate settings before certificate setup");
-    assert!(validation.valid);
+    assert!(validation.valid, "{validation:#?}");
+    // 通用化后，证书是否就绪属于各 Listener/Workspace 的局部约束，
+    // 全局设置校验不应再用已删除的旧产品证书状态阻止保存。
     assert!(
         validation
             .warnings
             .iter()
-            .any(|warning| warning.contains("证书材料尚未配置"))
+            .all(|warning| !warning.contains("证书配置尚未就绪")),
+        "global settings unexpectedly retained the legacy certificate warning: {validation:#?}"
     );
     let saved_settings = application
         .settings_save(settings.clone())
@@ -495,6 +481,16 @@ async fn production_host_covers_rule_and_fault_lifecycle_without_ui() {
         .await
         .expect("build UI-neutral host");
     let application = host.application();
+    let bootstrap = application
+        .app_bootstrap()
+        .await
+        .expect("load selected Workspace listener catalog");
+    let workspace_channel = bootstrap
+        .channel_catalog
+        .first()
+        .expect("default Workspace listener")
+        .id
+        .clone();
 
     let mut rule = application
         .rule_new_draft()
@@ -539,6 +535,7 @@ async fn production_host_covers_rule_and_fault_lifecycle_without_ui() {
         .iter()
         .find(|template| template.template_id == "request_delay")
         .expect("request delay template");
+    assert_eq!(template.default_channel, workspace_channel);
     let active_fault = application
         .fault_configure(FaultConfigurationDraft {
             template_id: template.template_id.clone(),
@@ -580,7 +577,7 @@ async fn production_host_covers_certificate_overview_and_validation_without_ui()
     let host = ApplicationHostBuilder::new(
         temp.path(),
         test_platform(),
-        Arc::new(PaymentProductProfile::isolated_test_tool()),
+        Arc::new(InterceptProxyProfile),
     )
     .build()
     .await
@@ -589,50 +586,24 @@ async fn production_host_covers_certificate_overview_and_validation_without_ui()
     let bootstrap = application
         .app_bootstrap()
         .await
-        .expect("Payment two-channel bootstrap");
-    assert_eq!(
-        bootstrap
-            .channel_catalog
-            .iter()
-            .map(|channel| (channel.id.as_str(), channel.display_name.as_str()))
-            .collect::<Vec<_>>(),
-        vec![("transaction", "交易"), ("dll", "DLL")]
-    );
+        .expect("generic bootstrap");
+    assert_eq!(bootstrap.channel_catalog.len(), 1);
+    assert_eq!(bootstrap.channel_catalog[0].display_name, "默认正向代理");
+    assert!(uuid::Uuid::parse_str(bootstrap.channel_catalog[0].id.as_str()).is_ok());
 
-    let empty_certificates = application
+    let generated = application
         .certificate_overview()
         .await
         .expect("query initial certificate overview");
-    assert!(!empty_certificates.ready);
-    assert!(empty_certificates.can_initialize);
-    assert_eq!(empty_certificates.items.len(), 1);
-    assert!(
-        empty_certificates.items[0]
-            .usage
-            .contains("内置 Payment server.crt")
-    );
-
-    let generated = application
-        .certificate_generate_ca(vec![" 127.0.0.1 ".into(), "127.0.0.1".into()])
-        .await
-        .expect("generate CA and leaf through real certificate adapter");
+    assert!(generated.ready);
     assert!(!generated.can_initialize);
-    assert_eq!(generated.items.len(), 3);
+    assert_eq!(generated.items.len(), 2);
     let certificate_validation = application
         .certificate_validate()
         .await
-        .expect("validate incomplete certificate set");
-    assert!(!certificate_validation.valid);
-    assert!(
-        certificate_validation
-            .field_errors
-            .contains_key("shared_pkcs12")
-    );
-    assert!(
-        !certificate_validation
-            .field_errors
-            .contains_key("upstream_ca")
-    );
+        .expect("validate generated certificate set");
+    assert!(certificate_validation.valid);
+    assert!(certificate_validation.field_errors.is_empty());
 
     host.shutdown().await.expect("shutdown UI-neutral host");
 }

@@ -3,16 +3,54 @@
 //! 临时 TCP Server 会记录 Proxy 实际写出的请求并返回手工响应，从而验证请求目标、
 //! Header、Body 与连接关闭语义。该层不进行 TLS，也不解释 Payment 业务 JSON。
 
-use std::time::Duration;
+use std::{
+    net::SocketAddr,
+    sync::Mutex,
+    time::{Duration, SystemTime},
+};
 
+use async_trait::async_trait;
 use bytes::Bytes;
-use gmofg_proxy_runtime::message::{Message, MessageLimits};
-use gmofg_proxy_runtime::transport::{ForwardRequest, HyperUpstreamConnector, UpstreamConnector};
-use gmofg_proxy_runtime::{FaultAction, TrafficDirection};
 use http::{HeaderMap, HeaderValue, Method, Uri};
+use intercept_proxy_runtime::message::{Message, MessageLimits};
+use intercept_proxy_runtime::transport::{
+    ConnectionContext, ForwardRequest, HandshakePolicy, HyperUpstreamConnector, NoopPipelinePorts,
+    PipelinePorts, UpstreamConnector, UpstreamSecurityEvidence, UpstreamTransportSecurity,
+};
+use intercept_proxy_runtime::{ChannelId, FaultAction, TrafficDirection};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
+
+fn test_context(peer_addr: SocketAddr) -> ConnectionContext {
+    ConnectionContext {
+        runtime_epoch: Uuid::new_v4(),
+        connection_id: Uuid::new_v4(),
+        channel: ChannelId::new("test").unwrap(),
+        peer_addr,
+        accepted_at: SystemTime::now(),
+        tls_peer: None,
+    }
+}
+
+#[derive(Debug, Default)]
+struct SecurityPorts {
+    evidence: Mutex<Vec<UpstreamSecurityEvidence>>,
+}
+
+impl HandshakePolicy for SecurityPorts {}
+
+#[async_trait]
+impl PipelinePorts for SecurityPorts {
+    async fn upstream_security_established(
+        &self,
+        _context: &ConnectionContext,
+        evidence: &UpstreamSecurityEvidence,
+    ) {
+        self.evidence.lock().unwrap().push(evidence.clone());
+    }
+}
 
 async fn serve_fidelity_upstream(listener: TcpListener) {
     let (mut stream, _) = listener.accept().await.unwrap();
@@ -105,7 +143,7 @@ async fn upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed(
         ]
         .into_iter()
         .map(|(name, value)| {
-            gmofg_proxy_runtime::message::RawHeader::new(
+            intercept_proxy_runtime::message::RawHeader::new(
                 Bytes::copy_from_slice(name),
                 Bytes::copy_from_slice(value),
             )
@@ -116,11 +154,29 @@ async fn upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed(
         uri: Uri::from_static("/resource"),
         message,
     };
+    let ports = SecurityPorts::default();
     let response = connector
-        .send(request, &[], None, &CancellationToken::new())
+        .send(
+            &test_context(address),
+            &ports,
+            request,
+            &[],
+            None,
+            &CancellationToken::new(),
+        )
         .await
         .unwrap()
         .final_response;
+    {
+        let evidence = ports.evidence.lock().unwrap();
+        assert_eq!(evidence.len(), 1);
+        assert_eq!(
+            evidence[0].transport,
+            UpstreamTransportSecurity::PlaintextHttp
+        );
+        assert_eq!(evidence[0].resolved_address, address);
+        assert!(evidence[0].tls_version.is_none());
+    }
     assert_eq!(response.start_line, "HTTP/1.1 302 Vendor Redirect Result");
     assert_eq!(
         response
@@ -164,7 +220,14 @@ Content-Length: 2\r\nConnection: close\r\n\r\nOK",
     let connector = fault_test_connector(address);
 
     let exchange = connector
-        .send(fault_test_request(), &[], None, &CancellationToken::new())
+        .send(
+            &test_context(address),
+            &NoopPipelinePorts,
+            fault_test_request(),
+            &[],
+            None,
+            &CancellationToken::new(),
+        )
         .await
         .expect("final response");
     assert_eq!(
@@ -225,7 +288,14 @@ async fn oversized_upstream_body_is_classified() {
         ),
     };
     let error = connector
-        .send(request, &[], None, &CancellationToken::new())
+        .send(
+            &test_context(address),
+            &NoopPipelinePorts,
+            request,
+            &[],
+            None,
+            &CancellationToken::new(),
+        )
         .await
         .unwrap_err();
     assert_eq!(error.code, "BODY_TOO_LARGE");
@@ -280,7 +350,7 @@ async fn close_after_request_write_sends_the_complete_request_without_waiting_fo
     request
         .message
         .headers
-        .push(gmofg_proxy_runtime::message::RawHeader::new(
+        .push(intercept_proxy_runtime::message::RawHeader::new(
             Bytes::from_static(b"transfer-encoding"),
             Bytes::from_static(b"chunked"),
         ));
@@ -288,6 +358,8 @@ async fn close_after_request_write_sends_the_complete_request_without_waiting_fo
     let error = tokio::time::timeout(
         Duration::from_millis(500),
         connector.send(
+            &test_context(address),
+            &NoopPipelinePorts,
             request,
             &[FaultAction::DropResponse {
                 read_upstream: false,
@@ -335,6 +407,8 @@ async fn injected_read_timeout_starts_after_the_complete_request_write() {
     let error = tokio::time::timeout(
         Duration::from_millis(500),
         connector.send(
+            &test_context(address),
+            &NoopPipelinePorts,
             fault_test_request(),
             &[FaultAction::UpstreamReadTimeout(Duration::from_millis(40))],
             None,
@@ -404,7 +478,14 @@ async fn backpressured_request_body_uses_write_timeout_and_releases_connection()
     };
 
     let error = connector
-        .send(request, &[], None, &CancellationToken::new())
+        .send(
+            &test_context(address),
+            &NoopPipelinePorts,
+            request,
+            &[],
+            None,
+            &CancellationToken::new(),
+        )
         .await
         .expect_err("an upstream that does not read must hit the write-stage timeout");
     assert_eq!(error.code, "UPSTREAM_WRITE_TIMEOUT");
@@ -437,6 +518,8 @@ async fn upstream_mid_body_disconnect_writes_exact_prefix_and_is_classified() {
 
     let error = connector
         .send(
+            &test_context(address),
+            &NoopPipelinePorts,
             request,
             &[FaultAction::DisconnectDuringWrite {
                 after_bytes: 3,

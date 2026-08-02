@@ -11,14 +11,14 @@ use std::{
 };
 
 use async_trait::async_trait;
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, ChannelSettingsDraft, FieldValidationViewModel, SettingsDraft,
     SettingsRepositoryPort, SettingsValidationViewModel, SettingsViewModel,
 };
-use gmofg_proxy_domain::{
+use intercept_proxy_domain::{
     CapacitySettings, ChannelSettings, Revision, Settings, TimeoutSettings, TlsVersion,
 };
-use gmofg_proxy_product_api::{LegacySettingsChannelMapping, ProductProfile};
+use intercept_proxy_product_api::{LegacySettingsChannelMapping, ProductProfile};
 use parking_lot::RwLock;
 use serde_json::{Map, Value};
 
@@ -125,7 +125,7 @@ impl SettingsRepositoryAdapter {
             pending_changes,
             requires_restart: pending_changes,
             restart_reason: pending_changes
-                .then(|| "监听、上游或 TLS 配置变更需要重启 Proxy。".into()),
+                .then(|| "全局运行参数已变更，需要重新打开应用后生效。".into()),
             revision,
             can_write: true,
             disabled_reason: None,
@@ -231,6 +231,13 @@ impl SettingsRepositoryAdapter {
     }
 
     fn canonicalize_catalog(&self, draft: &mut SettingsDraft) -> AppResult<()> {
+        if self.defaults.channels.is_empty() {
+            // 通用 Intercept Proxy 的监听器已经迁移到 Workspace。旧安装快照中的产品
+            // 通道既不迁移也不继续运行，加载时直接丢弃，确保系统设置不会成为第二份
+            // 入口配置来源。
+            draft.channels.clear();
+            return Ok(());
+        }
         let mut validation = valid();
         self.validate_catalog(draft, &mut validation);
         if !validation.valid {
@@ -408,10 +415,12 @@ fn take_legacy_field(
     })
 }
 
-fn to_domain_settings(draft: &SettingsDraft) -> Result<Settings, gmofg_proxy_domain::DomainError> {
+fn to_domain_settings(
+    draft: &SettingsDraft,
+) -> Result<Settings, intercept_proxy_domain::DomainError> {
     let max_sessions = u32::try_from(draft.max_sessions).map_err(|_| {
-        gmofg_proxy_domain::DomainError::new(
-            gmofg_proxy_domain::ErrorCode::ConfigInvalid,
+        intercept_proxy_domain::DomainError::new(
+            intercept_proxy_domain::ErrorCode::ConfigInvalid,
             "会话容量超出支持范围",
         )
         .with_field_error("max_sessions", "数值过大")
@@ -454,7 +463,7 @@ fn default_settings(product: &dyn ProductProfile) -> SettingsDraft {
             .channels()
             .iter()
             .map(|channel| ChannelSettingsDraft {
-                id: gmofg_proxy_domain::ChannelId::new(channel.id)
+                id: intercept_proxy_domain::ChannelId::new(channel.id)
                     .expect("product channel IDs are compile-time validated"),
                 display_name: channel.display_name.into(),
                 enabled: channel.enabled_by_default,
@@ -469,9 +478,6 @@ fn default_settings(product: &dyn ProductProfile) -> SettingsDraft {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-    use gmofg_proxy_product_payment::PaymentProductProfile;
-    use rusqlite::params;
 
     #[derive(Debug)]
     struct FixedLocalAddressProvider(Option<Ipv4Addr>);
@@ -486,14 +492,14 @@ mod tests {
         SettingsDraft {
             channels: vec![
                 ChannelSettingsDraft {
-                    id: gmofg_proxy_domain::ChannelId::new("alpha").unwrap(),
+                    id: intercept_proxy_domain::ChannelId::new("alpha").unwrap(),
                     display_name: "Alpha".into(),
                     enabled: true,
                     port: 20_001,
                     upstream_url: "https://alpha.example.test".into(),
                 },
                 ChannelSettingsDraft {
-                    id: gmofg_proxy_domain::ChannelId::new("beta").unwrap(),
+                    id: intercept_proxy_domain::ChannelId::new("beta").unwrap(),
                     display_name: "Beta".into(),
                     enabled: true,
                     port: 20_002,
@@ -515,52 +521,6 @@ mod tests {
 
     fn valid_draft() -> SettingsDraft {
         test_defaults()
-    }
-
-    fn legacy_payment_settings_json() -> Value {
-        serde_json::json!({
-            "expected_revision": 2,
-            "bind_address": "10.0.34.50",
-            "transaction_enabled": true,
-            "transaction_port": 26627,
-            "dll_enabled": false,
-            "dll_port": 26127,
-            "upstream_transaction_url": "https://legacy-transaction.example.test",
-            "upstream_dll_url": "https://legacy-dll.example.test",
-            "connect_timeout_seconds": 11,
-            "write_timeout_seconds": 12,
-            "read_timeout_seconds": 13,
-            "rewrite_host": false,
-            "max_body_bytes": 1_048_576,
-            "max_sessions": 99,
-            "max_memory_bytes": 67_108_864,
-            "leaf_sans": ["10.0.34.50"]
-        })
-    }
-
-    fn create_legacy_settings_database(path: &std::path::Path, revision: u64, value: &Value) {
-        let connection = rusqlite::Connection::open(path).expect("legacy database");
-        connection
-            .execute_batch(
-                "CREATE TABLE settings (
-                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                    revision INTEGER NOT NULL,
-                    json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );",
-            )
-            .expect("legacy settings schema");
-        connection
-            .execute(
-                "INSERT INTO settings(singleton_id, revision, json, updated_at)
-                 VALUES (1, ?1, ?2, ?3)",
-                params![
-                    i64::try_from(revision).expect("test revision"),
-                    value.to_string(),
-                    Utc::now().to_rfc3339()
-                ],
-            )
-            .expect("legacy settings row");
     }
 
     #[tokio::test]
@@ -647,7 +607,7 @@ mod tests {
         let mut unknown = valid_draft();
         unknown.channels.pop();
         unknown.channels.push(ChannelSettingsDraft {
-            id: gmofg_proxy_domain::ChannelId::new("gamma").unwrap(),
+            id: intercept_proxy_domain::ChannelId::new("gamma").unwrap(),
             display_name: "Gamma".into(),
             enabled: false,
             port: 20_003,
@@ -656,77 +616,5 @@ mod tests {
         let validation = adapter.validate(&unknown).await.unwrap();
         assert!(validation.field_errors.contains_key("channels"));
         assert!(validation.field_errors.contains_key("channels.gamma.id"));
-    }
-
-    #[tokio::test]
-    async fn payment_profile_migrates_real_legacy_settings_sqlite_and_preserves_cas_revision() {
-        let directory = tempfile::tempdir().expect("temp directory");
-        let database = directory.path().join("legacy-payment.sqlite3");
-        create_legacy_settings_database(&database, 7, &legacy_payment_settings_json());
-        let store = Arc::new(SqliteStore::open(&database).expect("open legacy database"));
-        let adapter =
-            SettingsRepositoryAdapter::new(Arc::clone(&store), &PaymentProductProfile::default());
-
-        let loaded = adapter.get().await.expect("load migrated settings");
-        assert_eq!(loaded.revision, 7);
-        assert_eq!(loaded.stored.expected_revision, Some(7));
-        assert_eq!(
-            loaded
-                .stored
-                .channels
-                .iter()
-                .map(|channel| (
-                    channel.id.as_str(),
-                    channel.display_name.as_str(),
-                    channel.enabled,
-                    channel.port,
-                    channel.upstream_url.as_str()
-                ))
-                .collect::<Vec<_>>(),
-            vec![
-                (
-                    "transaction",
-                    "交易",
-                    true,
-                    26_627,
-                    "https://legacy-transaction.example.test"
-                ),
-                (
-                    "dll",
-                    "DLL",
-                    false,
-                    26_127,
-                    "https://legacy-dll.example.test"
-                )
-            ]
-        );
-
-        let saved = adapter
-            .save(loaded.stored.clone())
-            .await
-            .expect("save migrated settings");
-        assert_eq!(saved.revision, 8);
-        let persisted = store.load_settings().unwrap().unwrap();
-        assert_eq!(
-            persisted
-                .value
-                .get(PERSISTENCE_VERSION_FIELD)
-                .and_then(Value::as_u64),
-            Some(SETTINGS_PERSISTENCE_VERSION)
-        );
-        assert!(persisted.value.get("transaction_enabled").is_none());
-
-        let stale = adapter
-            .save(loaded.stored)
-            .await
-            .expect_err("legacy revision must still participate in CAS");
-        assert_eq!(stale.view_model.code, "REVISION_CONFLICT");
-    }
-
-    #[test]
-    fn non_payment_profile_rejects_legacy_payment_settings_instead_of_consuming_them() {
-        let error = deserialize_settings(legacy_payment_settings_json(), &test_defaults(), &[])
-            .expect_err("non-Payment profile must reject Payment persistence");
-        assert!(error.to_string().contains("missing field `channels`"));
     }
 }

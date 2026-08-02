@@ -6,16 +6,16 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     ActiveFaultViewModel, AppError, AppResult, FaultConfigurationDraft,
     FaultParameterFieldViewModel, FaultParameterKind, FaultParameterValue, FaultServicePort,
     FaultTemplateViewModel, MessageStage, RuleDraft, RuleRepositoryPort, UiTone,
 };
-use gmofg_proxy_domain::{
+use intercept_proxy_domain::{
     DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator, RuleAction,
     TerminalAction, TrafficDirection,
 };
-use gmofg_proxy_product_api::{BodyCodec, ProductFaultTemplate, ProductLabels, ProductProfile};
+use intercept_proxy_product_api::{BodyCodec, ProductFaultTemplate, ProductLabels, ProductProfile};
 use serde_json::Value;
 
 use super::rules::{RuleRepositoryAdapter, action_to_app, condition_to_app};
@@ -122,7 +122,7 @@ impl FaultServicePort for FaultServiceAdapter {
 
     async fn stop(
         &self,
-        rule_id: gmofg_proxy_application::RuleId,
+        rule_id: intercept_proxy_application::RuleId,
         expected_revision: u64,
     ) -> AppResult<ActiveFaultViewModel> {
         let rule = self.rules.toggle(rule_id, expected_revision, false).await?;
@@ -448,7 +448,7 @@ fn template_definitions(catalog: &[ProductFaultTemplate]) -> AppResult<Vec<Templ
             definition.view.behavior_text = metadata.behavior_text.into();
             definition.view.affected_party_text = metadata.affected_party_text.into();
             definition.view.default_channel =
-                gmofg_proxy_domain::ChannelId::new(metadata.default_channel_id)
+                intercept_proxy_domain::ChannelId::new(metadata.default_channel_id)
                     .map_err(AppError::from)?;
             definition.view.risk_text = metadata.risk_text.into();
             definition.view.ui_tone = if metadata.risk_text == "高" {
@@ -486,7 +486,7 @@ fn template(
             stage_text: stage.into(),
             behavior_text: behavior.into(),
             affected_party_text: affected.into(),
-            default_channel: gmofg_proxy_domain::ChannelId::new("default")
+            default_channel: intercept_proxy_domain::ChannelId::new("default")
                 .expect("generic placeholder channel"),
             default_nth_hit: 1,
             default_one_shot: false,
@@ -521,7 +521,7 @@ fn encoded_template(
             stage_text: stage.into(),
             behavior_text: behavior.into(),
             affected_party_text: affected.into(),
-            default_channel: gmofg_proxy_domain::ChannelId::new("default")
+            default_channel: intercept_proxy_domain::ChannelId::new("default")
                 .expect("generic placeholder channel"),
             default_nth_hit: 1,
             default_one_shot: false,
@@ -1111,7 +1111,7 @@ fn encode_body(body_codec: &dyn BodyCodec, text: &str) -> AppResult<Vec<u8>> {
 }
 
 fn active_from_rule(
-    rule: &gmofg_proxy_application::RuleViewModel,
+    rule: &intercept_proxy_application::RuleViewModel,
     template_name: &str,
 ) -> ActiveFaultViewModel {
     ActiveFaultViewModel {
@@ -1153,23 +1153,26 @@ mod tests {
             "Test Codec"
         }
 
-        fn decode(&self, bytes: &[u8]) -> Result<String, gmofg_proxy_product_api::ProductError> {
+        fn decode(
+            &self,
+            bytes: &[u8],
+        ) -> Result<String, intercept_proxy_product_api::ProductError> {
             std::str::from_utf8(bytes)
                 .map(str::to_owned)
                 .map_err(|error| {
-                    gmofg_proxy_product_api::ProductError::new(
+                    intercept_proxy_product_api::ProductError::new(
                         "BODY_DECODE_FAILED",
                         error.to_string(),
                     )
                 })
         }
 
-        fn encode(&self, text: &str) -> Result<Vec<u8>, gmofg_proxy_product_api::ProductError> {
+        fn encode(&self, text: &str) -> Result<Vec<u8>, intercept_proxy_product_api::ProductError> {
             if self
                 .reject_marker
                 .is_some_and(|marker| text.contains(marker))
             {
-                return Err(gmofg_proxy_product_api::ProductError::new(
+                return Err(intercept_proxy_product_api::ProductError::new(
                     "BODY_ENCODE_FAILED",
                     "test codec rejected marker",
                 ));
@@ -1187,7 +1190,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             ids,
-            gmofg_proxy_product_api::STANDARD_FAULT_CAPABILITY_IDS,
+            intercept_proxy_product_api::STANDARD_FAULT_CAPABILITY_IDS,
             "product-api capability contract and infrastructure actions must stay aligned"
         );
         for required in [
@@ -1312,7 +1315,7 @@ mod tests {
         for definition in generic_template_definitions() {
             assert_eq!(
                 definition.view.default_channel,
-                gmofg_proxy_domain::ChannelId::new("default").unwrap()
+                intercept_proxy_domain::ChannelId::new("default").unwrap()
             );
             assert_eq!(definition.view.default_nth_hit, 1);
             assert!(!definition.view.default_one_shot);
@@ -1368,9 +1371,9 @@ mod tests {
                     )
                 });
             let domain_stage = match stage {
-                MessageStage::TlsHandshake => gmofg_proxy_domain::MessageStage::TlsHandshake,
-                MessageStage::Request => gmofg_proxy_domain::MessageStage::Request,
-                MessageStage::Response => gmofg_proxy_domain::MessageStage::Response,
+                MessageStage::TlsHandshake => intercept_proxy_domain::MessageStage::TlsHandshake,
+                MessageStage::Request => intercept_proxy_domain::MessageStage::Request,
+                MessageStage::Response => intercept_proxy_domain::MessageStage::Response,
                 MessageStage::Terminal => {
                     panic!(
                         "{} default unexpectedly targets a terminal event",
@@ -1378,10 +1381,10 @@ mod tests {
                     )
                 }
             };
-            let conditions = vec![gmofg_proxy_domain::MatchCondition::NthHit(u64::from(
+            let conditions = vec![intercept_proxy_domain::MatchCondition::NthHit(u64::from(
                 definition.view.default_nth_hit,
             ))];
-            let draft = gmofg_proxy_domain::RuleDraft {
+            let draft = intercept_proxy_domain::RuleDraft {
                 expected_revision: None,
                 name: definition.view.name.clone(),
                 description: definition.view.behavior_text.clone(),
@@ -1389,13 +1392,13 @@ mod tests {
                 priority: u32::try_from(definition.view.default_priority)
                     .expect("non-negative default priority"),
                 created_order: 1,
-                channel: Some(gmofg_proxy_domain::ChannelId::new("alpha").unwrap()),
+                channel: Some(intercept_proxy_domain::ChannelId::new("alpha").unwrap()),
                 stage: domain_stage,
                 conditions,
                 actions: vec![action],
                 one_shot: definition.view.default_one_shot,
             };
-            gmofg_proxy_domain::validate_rule_draft(&draft).unwrap_or_else(|error| {
+            intercept_proxy_domain::validate_rule_draft(&draft).unwrap_or_else(|error| {
                 panic!(
                     "{} default does not produce a valid domain rule: {error}",
                     definition.view.template_id
@@ -1412,7 +1415,7 @@ mod tests {
             template_id: "reject_tls_handshake".into(),
             existing_rule_id: None,
             expected_revision: None,
-            channel: Some(gmofg_proxy_domain::ChannelId::new("beta").unwrap()),
+            channel: Some(intercept_proxy_domain::ChannelId::new("beta").unwrap()),
             terminal: None,
             target: None,
             nth_hit: Some(1),
@@ -1423,7 +1426,7 @@ mod tests {
         assert_eq!(
             configuration_conditions(&defaults, MessageStage::TlsHandshake)
                 .expect("default TLS configuration"),
-            vec![gmofg_proxy_domain::MatchCondition::NthHit(1)]
+            vec![intercept_proxy_domain::MatchCondition::NthHit(1)]
         );
 
         let invalid = FaultConfigurationDraft {

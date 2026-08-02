@@ -5,7 +5,7 @@
 //! `await` 长时间持有。Tauri 只装配本适配器，不执行 pipeline 策略。
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -16,22 +16,24 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, BreakpointCoordinator, BreakpointDecision, BreakpointDecisionKind,
     BreakpointDetailViewModel, BreakpointOutcome, BreakpointState, BreakpointSummaryViewModel,
     CaptureRowViewModel, ChannelId as AppChannelId, DisabledReason, EventHub, InMemorySessionStore,
-    MessageContentViewModel, MessageStage as AppMessageStage, SessionDetailViewModel,
-    SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone,
+    MessageContentViewModel, MessageStage as AppMessageStage, ResponseAssertionResultViewModel,
+    SessionDetailViewModel, SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload,
+    UiTone,
 };
-use gmofg_proxy_domain::{
+use intercept_proxy_domain::{
     ChannelId as DomainChannelId, MessageStage as DomainMessageStage, Rule, RuleAction,
-    RuleRuntimeSnapshot, TerminalAction,
+    RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
 };
-use gmofg_proxy_product_api::{BodyCodec, RequestClassifier};
-use gmofg_proxy_runtime::{
+use intercept_proxy_product_api::{BodyCodec, RequestClassifier};
+use intercept_proxy_runtime::{
     ChannelId, ChannelRuntimeMetrics, ConnectionContext, ErrorCode, FaultAction, HandshakePolicy,
     Message, PipelinePorts, ProxyError, Result as ProxyResult, RuntimeMetricsProvider,
-    RuntimeMetricsSnapshot, TlsPeerIdentity,
+    RuntimeMetricsSnapshot, TlsPeerIdentity, UpstreamSecurityEvidence,
+    fault::{mock_response, project_response_for_observation},
 };
 use parking_lot::Mutex;
 use uuid::Uuid;
@@ -51,6 +53,7 @@ use rule_runtime::{EvaluatedRules, RuleRuntimeService};
 mod message_projection;
 mod rule_actions;
 mod rule_runtime;
+mod upstream_security;
 
 macro_rules! proxy_status {
     ($status:expr) => {
@@ -65,18 +68,18 @@ macro_rules! proxy_status {
 
 /// One adapter instance is shared by both listeners for the lifetime of the app.
 pub trait RuntimeRuleRepository: std::fmt::Debug + Send + Sync {
-    fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot>;
+    fn runtime_snapshot(&self, channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot>;
     fn commit_runtime_snapshot(
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
     ) -> AppResult<u64>;
-    fn reset_runtime_hit_metadata(&self) -> AppResult<()>;
+    fn reset_runtime_hit_metadata(&self, collection_id: Uuid) -> AppResult<()>;
 }
 
 impl RuntimeRuleRepository for RuleRepositoryAdapter {
-    fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
-        RuleRepositoryAdapter::runtime_snapshot(self)
+    fn runtime_snapshot(&self, channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
+        RuleRepositoryAdapter::runtime_snapshot(self, channel.as_str())
     }
 
     fn commit_runtime_snapshot(
@@ -87,8 +90,8 @@ impl RuntimeRuleRepository for RuleRepositoryAdapter {
         RuleRepositoryAdapter::commit_runtime_snapshot(self, snapshot, evaluated_rules)
     }
 
-    fn reset_runtime_hit_metadata(&self) -> AppResult<()> {
-        RuleRepositoryAdapter::reset_runtime_hit_metadata(self)
+    fn reset_runtime_hit_metadata(&self, collection_id: Uuid) -> AppResult<()> {
+        RuleRepositoryAdapter::reset_runtime_hit_metadata(self, collection_id)
     }
 }
 
@@ -100,10 +103,43 @@ pub struct RuntimePipelineProductHooks {
     pub channel_labels: BTreeMap<String, String>,
 }
 
+/// 根据动态 Listener 和消息阶段选择 Body 编解码器。
+///
+/// 旧 supervisor 没有 Workspace Listener ID 时可以返回 `None`，运行时会使用通用产品
+/// fallback；动态 Reverse Listener 则由 `SQLite` Workspace 快照解析 Raw/UTF-8/Shift-JIS。
+pub trait RuntimeBodyCodecResolver: std::fmt::Debug + Send + Sync {
+    fn resolve(
+        &self,
+        context: &ConnectionContext,
+        stage: DomainMessageStage,
+    ) -> ProxyResult<Option<Arc<dyn BodyCodec>>>;
+}
+
+#[derive(Debug, Default)]
+pub struct RuntimeWorkspacePolicyEvaluation {
+    pub metadata: BTreeMap<String, String>,
+    pub assertions: Vec<ResponseAssertionResultViewModel>,
+}
+
+/// 动态 Workspace 中元数据提取器与响应断言的运行时边界。
+///
+/// 适配器只能读取当前选中 Workspace 的快照；网络管线不依赖 SQLite、Tauri 或前端。
+pub trait RuntimeWorkspacePolicyResolver: std::fmt::Debug + Send + Sync {
+    fn evaluate(
+        &self,
+        context: &ConnectionContext,
+        stage: DomainMessageStage,
+        message: &Message,
+        body_codec: &dyn BodyCodec,
+    ) -> ProxyResult<RuntimeWorkspacePolicyEvaluation>;
+}
+
 /// One adapter instance is shared by both listeners for the lifetime of the app.
 #[derive(Debug)]
 pub struct RuntimePipelineAdapter {
     body_codec: Arc<dyn BodyCodec>,
+    body_codec_resolver: Option<Arc<dyn RuntimeBodyCodecResolver>>,
+    workspace_policy_resolver: Option<Arc<dyn RuntimeWorkspacePolicyResolver>>,
     request_classifier: Arc<dyn RequestClassifier>,
     channel_labels: BTreeMap<String, String>,
     sessions: Arc<InMemorySessionStore>,
@@ -117,10 +153,44 @@ pub struct RuntimePipelineAdapter {
 
 #[derive(Debug, Default)]
 struct PipelineState {
-    connections: HashMap<Uuid, ConnectionRuntime>,
+    connections: HashMap<RuntimeEpoch, HashMap<Uuid, ConnectionRuntime>>,
     live_sessions: HashMap<Uuid, LiveSession>,
-    metrics_epoch: Option<Uuid>,
-    channels: BTreeMap<ChannelId, ChannelRuntimeMetrics>,
+    channels: HashMap<RuntimeEpoch, BTreeMap<ChannelId, ChannelRuntimeMetrics>>,
+    stopped_epochs: HashSet<RuntimeEpoch>,
+}
+
+impl PipelineState {
+    fn connection(&self, context: &ConnectionContext) -> Option<&ConnectionRuntime> {
+        self.connections
+            .get(&RuntimeEpoch::from_uuid(context.runtime_epoch))?
+            .get(&context.connection_id)
+    }
+
+    fn connection_mut(&mut self, context: &ConnectionContext) -> Option<&mut ConnectionRuntime> {
+        self.connections
+            .get_mut(&RuntimeEpoch::from_uuid(context.runtime_epoch))?
+            .get_mut(&context.connection_id)
+    }
+
+    fn channel_metrics_mut(
+        &mut self,
+        context: &ConnectionContext,
+    ) -> Option<&mut ChannelRuntimeMetrics> {
+        self.channels
+            .get_mut(&RuntimeEpoch::from_uuid(context.runtime_epoch))?
+            .get_mut(&context.channel)
+    }
+
+    fn remove_connection(&mut self, context: &ConnectionContext) {
+        let epoch = RuntimeEpoch::from_uuid(context.runtime_epoch);
+        let remove_epoch = self.connections.get_mut(&epoch).is_some_and(|connections| {
+            connections.remove(&context.connection_id);
+            connections.is_empty()
+        });
+        if remove_epoch {
+            self.connections.remove(&epoch);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -155,14 +225,12 @@ impl RuntimePipelineAdapter {
         events: Arc<EventHub>,
         captures: Arc<CaptureRepositoryAdapter>,
     ) -> Self {
-        let rule_runtime = RuleRuntimeService::new(
-            Arc::clone(&product.body_codec),
-            product.channel_labels.clone(),
-            rules,
-            Arc::clone(&events),
-        );
+        let rule_runtime =
+            RuleRuntimeService::new(product.channel_labels.clone(), rules, Arc::clone(&events));
         Self {
             body_codec: product.body_codec,
+            body_codec_resolver: None,
+            workspace_policy_resolver: None,
             request_classifier: product.request_classifier,
             channel_labels: product.channel_labels,
             sessions,
@@ -175,13 +243,57 @@ impl RuntimePipelineAdapter {
         }
     }
 
+    #[must_use]
+    pub fn with_body_codec_resolver(mut self, resolver: Arc<dyn RuntimeBodyCodecResolver>) -> Self {
+        self.body_codec_resolver = Some(resolver);
+        self
+    }
+
+    #[must_use]
+    pub fn with_workspace_policy_resolver(
+        mut self,
+        resolver: Arc<dyn RuntimeWorkspacePolicyResolver>,
+    ) -> Self {
+        self.workspace_policy_resolver = Some(resolver);
+        self
+    }
+
+    fn evaluate_workspace_policies(
+        &self,
+        context: &ConnectionContext,
+        stage: DomainMessageStage,
+        message: &Message,
+        body_codec: &dyn BodyCodec,
+    ) -> ProxyResult<RuntimeWorkspacePolicyEvaluation> {
+        self.workspace_policy_resolver.as_ref().map_or_else(
+            || Ok(RuntimeWorkspacePolicyEvaluation::default()),
+            |resolver| resolver.evaluate(context, stage, message, body_codec),
+        )
+    }
+
+    fn codec_for(
+        &self,
+        context: &ConnectionContext,
+        stage: DomainMessageStage,
+    ) -> ProxyResult<Arc<dyn BodyCodec>> {
+        let resolved = self
+            .body_codec_resolver
+            .as_ref()
+            .map(|resolver| resolver.resolve(context, stage))
+            .transpose()?
+            .flatten();
+        Ok(resolved.unwrap_or_else(|| Arc::clone(&self.body_codec)))
+    }
+
     fn evaluate(
         &self,
         context: &ConnectionContext,
         stage: DomainMessageStage,
         message: Option<&Message>,
+        body_codec: &dyn BodyCodec,
     ) -> ProxyResult<EvaluatedRules> {
-        self.rule_runtime.evaluate(context, stage, message)
+        self.rule_runtime
+            .evaluate(context, stage, message, body_codec)
     }
 
     fn channel_label(&self, channel_id: &str) -> String {
@@ -191,10 +303,31 @@ impl RuntimePipelineAdapter {
             .unwrap_or_else(|| channel_id.to_owned())
     }
 
-    fn begin_session(&self, context: &ConnectionContext, original: &Message) -> ProxyResult<Uuid> {
+    fn begin_session(
+        &self,
+        context: &ConnectionContext,
+        original: &Message,
+        body_codec: &dyn BodyCodec,
+    ) -> ProxyResult<Uuid> {
+        {
+            let state = self.state.lock();
+            let epoch = RuntimeEpoch::from_uuid(context.runtime_epoch);
+            if state.stopped_epochs.contains(&epoch) {
+                return Err(ProxyError::new(
+                    ErrorCode::ProxyStopped,
+                    "runtime epoch is already stopping",
+                ));
+            }
+            if state.connection(context).is_none() {
+                return Err(ProxyError::new(
+                    ErrorCode::Internal,
+                    "connection was not registered before request processing",
+                ));
+            }
+        }
         let now = Utc::now();
         let session_id = Uuid::new_v4();
-        let request = content_view(self.body_codec.as_ref(), original);
+        let request = content_view(body_codec, original);
         let classified =
             classify_request(self.request_classifier.as_ref(), &context.channel, original);
         let request_id = classified
@@ -237,12 +370,14 @@ impl RuntimePipelineAdapter {
             certificate_fingerprint: fingerprint.clone(),
             upstream_host: header_value(original, "host").unwrap_or_default(),
             app_to_proxy_tls: tls_summary(context),
-            proxy_to_server_tls: "TLS 1.2 mTLS（等待上游）".into(),
+            proxy_to_server_tls: "上游安全信息等待传输层上报".into(),
             final_action: "处理中".into(),
             timings_ms: BTreeMap::new(),
             request: Some(request),
             response: None,
             rule_trace: Vec::new(),
+            extracted_metadata: BTreeMap::new(),
+            response_assertions: Vec::new(),
         };
         let record = SessionRecord {
             detail,
@@ -261,11 +396,12 @@ impl RuntimePipelineAdapter {
                     runtime_epoch: context.runtime_epoch,
                 },
             );
-            if let Some(connection) = state.connections.get_mut(&context.connection_id) {
+            if let Some(connection) = state.connection_mut(context) {
                 connection.session_id = Some(session_id);
             }
-            let metrics = state.channels.entry(context.channel.clone()).or_default();
-            metrics.request_count = metrics.request_count.saturating_add(1);
+            if let Some(metrics) = state.channel_metrics_mut(context) {
+                metrics.request_count = metrics.request_count.saturating_add(1);
+            }
         }
         Ok(session_id)
     }
@@ -277,8 +413,15 @@ impl RuntimePipelineAdapter {
         rules: &EvaluatedRules,
         pending_breakpoint: bool,
         breakpoint_draft: Option<MessageContentViewModel>,
+        body_codec: &dyn BodyCodec,
     ) -> ProxyResult<SessionRecord> {
-        self.update_live_session(context, |record| {
+        let policy = self.evaluate_workspace_policies(
+            context,
+            DomainMessageStage::Request,
+            effective,
+            body_codec,
+        )?;
+        self.update_live_session(context, move |record| {
             let summary = &mut record.detail.summary;
             summary.matched_rule_ids.clone_from(&rules.matched_ids);
             summary.request_size_bytes = effective.body.len() as u64;
@@ -294,8 +437,9 @@ impl RuntimePipelineAdapter {
                 UiTone::Info
             };
             summary.revision = summary.revision.saturating_add(1);
-            record.detail.request = Some(content_view(self.body_codec.as_ref(), effective));
+            record.detail.request = Some(content_view(body_codec, effective));
             record.detail.rule_trace.clone_from(&rules.traces);
+            record.detail.extracted_metadata.extend(policy.metadata);
             record.breakpoint_draft = breakpoint_draft;
         })
     }
@@ -307,8 +451,15 @@ impl RuntimePipelineAdapter {
         rules: &EvaluatedRules,
         pending_breakpoint: bool,
         breakpoint_draft: Option<MessageContentViewModel>,
+        body_codec: &dyn BodyCodec,
     ) -> ProxyResult<SessionRecord> {
-        self.update_live_session(context, |record| {
+        let policy = self.evaluate_workspace_policies(
+            context,
+            DomainMessageStage::Response,
+            effective,
+            body_codec,
+        )?;
+        self.update_live_session(context, move |record| {
             let summary = &mut record.detail.summary;
             for id in &rules.matched_ids {
                 if !summary.matched_rule_ids.contains(id) {
@@ -329,9 +480,45 @@ impl RuntimePipelineAdapter {
                 UiTone::Info
             };
             summary.revision = summary.revision.saturating_add(1);
-            record.detail.response = Some(content_view(self.body_codec.as_ref(), effective));
+            record.detail.response = Some(content_view(body_codec, effective));
             record.detail.rule_trace.extend(rules.traces.clone());
+            record.detail.extracted_metadata.extend(policy.metadata);
+            record.detail.response_assertions = policy.assertions;
+            if record
+                .detail
+                .response_assertions
+                .iter()
+                .any(|assertion| !assertion.passed)
+            {
+                summary.result = "响应断言失败".into();
+                summary.ui_tone = UiTone::Danger;
+            }
             record.breakpoint_draft = breakpoint_draft;
+        })
+    }
+
+    fn update_dropped_response(
+        &self,
+        context: &ConnectionContext,
+        rules: &EvaluatedRules,
+    ) -> ProxyResult<SessionRecord> {
+        self.update_live_session(context, move |record| {
+            let summary = &mut record.detail.summary;
+            for id in &rules.matched_ids {
+                if !summary.matched_rule_ids.contains(id) {
+                    summary.matched_rule_ids.push(*id);
+                }
+            }
+            summary.response_size_bytes = 0;
+            summary.http_status = None;
+            summary.pending_breakpoint = false;
+            summary.result = "响应已丢弃".into();
+            summary.ui_tone = UiTone::Danger;
+            summary.revision = summary.revision.saturating_add(1);
+            record.detail.response = None;
+            record.detail.rule_trace.extend(rules.traces.clone());
+            record.detail.response_assertions.clear();
+            record.breakpoint_draft = None;
         })
     }
 
@@ -343,8 +530,7 @@ impl RuntimePipelineAdapter {
         let session_id = {
             let state = self.state.lock();
             let session_id = state
-                .connections
-                .get(&context.connection_id)
+                .connection(context)
                 .and_then(|connection| connection.session_id)
                 .ok_or_else(|| {
                     ProxyError::new(ErrorCode::Internal, "connection has no active session")
@@ -380,9 +566,10 @@ impl RuntimePipelineAdapter {
         original: &Message,
         effective: &mut Message,
         rules: &EvaluatedRules,
+        body_codec: &dyn BodyCodec,
     ) -> ProxyResult<Vec<FaultAction>> {
         let detail = breakpoint_detail(
-            self.body_codec.as_ref(),
+            body_codec,
             context,
             self.channel_label(context.channel.as_str()),
             stage,
@@ -395,17 +582,27 @@ impl RuntimePipelineAdapter {
         let ticket = self.breakpoints.register(detail).map_err(app_to_proxy)?;
         {
             let mut pipeline_state = self.state.lock();
-            if let Some(connection) = pipeline_state.connections.get_mut(&context.connection_id) {
+            if let Some(connection) = pipeline_state.connection_mut(context) {
                 connection.pending_breakpoints.push(breakpoint_id);
             }
         }
         let record = match stage {
-            AppMessageStage::Request => {
-                self.update_request(context, effective, rules, true, Some(effective_view))?
-            }
-            AppMessageStage::Response => {
-                self.update_response(context, effective, rules, true, Some(effective_view))?
-            }
+            AppMessageStage::Request => self.update_request(
+                context,
+                effective,
+                rules,
+                true,
+                Some(effective_view),
+                body_codec,
+            )?,
+            AppMessageStage::Response => self.update_response(
+                context,
+                effective,
+                rules,
+                true,
+                Some(effective_view),
+                body_codec,
+            )?,
             AppMessageStage::TlsHandshake | AppMessageStage::Terminal => {
                 return Err(ProxyError::new(
                     ErrorCode::Internal,
@@ -436,11 +633,11 @@ impl RuntimePipelineAdapter {
             .outcome
             .await
             .unwrap_or(BreakpointOutcome::ClientDisconnected);
-        self.remove_pending_breakpoint(context.connection_id, breakpoint_id);
+        self.remove_pending_breakpoint(context, breakpoint_id);
         match outcome {
             BreakpointOutcome::Decision(decision) => {
                 let actions = apply_breakpoint_decision(
-                    self.body_codec.as_ref(),
+                    body_codec,
                     stage,
                     original,
                     effective,
@@ -448,10 +645,10 @@ impl RuntimePipelineAdapter {
                 )?;
                 match stage {
                     AppMessageStage::Request => {
-                        self.update_request(context, effective, rules, false, None)?;
+                        self.update_request(context, effective, rules, false, None, body_codec)?;
                     }
                     AppMessageStage::Response => {
-                        self.update_response(context, effective, rules, false, None)?;
+                        self.update_response(context, effective, rules, false, None, body_codec)?;
                     }
                     AppMessageStage::TlsHandshake | AppMessageStage::Terminal => {}
                 }
@@ -468,8 +665,8 @@ impl RuntimePipelineAdapter {
         }
     }
 
-    fn remove_pending_breakpoint(&self, connection_id: Uuid, breakpoint_id: Uuid) {
-        if let Some(connection) = self.state.lock().connections.get_mut(&connection_id) {
+    fn remove_pending_breakpoint(&self, context: &ConnectionContext, breakpoint_id: Uuid) {
+        if let Some(connection) = self.state.lock().connection_mut(context) {
             connection
                 .pending_breakpoints
                 .retain(|id| *id != breakpoint_id);
@@ -479,8 +676,7 @@ impl RuntimePipelineAdapter {
     fn session_id(&self, context: &ConnectionContext) -> ProxyResult<Uuid> {
         self.state
             .lock()
-            .connections
-            .get(&context.connection_id)
+            .connection(context)
             .and_then(|connection| connection.session_id)
             .ok_or_else(|| ProxyError::new(ErrorCode::Internal, "connection has no active session"))
     }
@@ -489,8 +685,7 @@ impl RuntimePipelineAdapter {
         let (session_id, live) = {
             let mut state = self.state.lock();
             let Some(session_id) = state
-                .connections
-                .get(&context.connection_id)
+                .connection(context)
                 .and_then(|connection| connection.session_id)
             else {
                 return;
@@ -510,6 +705,11 @@ impl RuntimePipelineAdapter {
                 .max(0),
         )
         .unwrap_or(u64::MAX);
+        let assertion_failed = record
+            .detail
+            .response_assertions
+            .iter()
+            .any(|assertion| !assertion.passed);
         {
             let summary = &mut record.detail.summary;
             summary.completed_at = Some(now);
@@ -518,10 +718,16 @@ impl RuntimePipelineAdapter {
             summary.revision = summary.revision.saturating_add(1);
             match result {
                 Ok(()) => {
-                    summary.result = "成功".into();
-                    summary.ui_tone = UiTone::Positive;
-                    record.detail.final_action = "响应已返回客户端".into();
-                    record.detail.proxy_to_server_tls = "TLS 1.2 mTLS".into();
+                    if assertion_failed {
+                        summary.result = "响应断言失败".into();
+                        summary.ui_tone = UiTone::Danger;
+                        record.detail.final_action =
+                            "响应已原样返回客户端，但至少一个 Workspace 断言失败".into();
+                    } else {
+                        summary.result = "成功".into();
+                        summary.ui_tone = UiTone::Positive;
+                        record.detail.final_action = "响应已返回客户端".into();
+                    }
                 }
                 Err(error) => {
                     summary.result = result_text(error.code).into();
@@ -607,8 +813,9 @@ impl RuntimePipelineAdapter {
     fn resource_exhausted(&self, context: &ConnectionContext, error: &AppError) {
         {
             let mut state = self.state.lock();
-            let metrics = state.channels.entry(context.channel.clone()).or_default();
-            metrics.error_count = metrics.error_count.saturating_add(1);
+            if let Some(metrics) = state.channel_metrics_mut(context) {
+                metrics.error_count = metrics.error_count.saturating_add(1);
+            }
         }
         self.events.publish(
             Some(context.runtime_epoch),
@@ -628,6 +835,53 @@ impl RuntimePipelineAdapter {
         );
     }
 
+    /// 上报已建立的上游 TLS/mTLS 证据无法写入会话的故障。
+    ///
+    /// 调用此方法时传输层握手已经成功。即使会话已消失，或容量账本拒绝扩大的记录，也要把
+    /// 证据文本保留在操作失败事件中，确保诊断事实可观察，同时不触发 panic，也不伪装成写入
+    /// 成功。
+    fn upstream_security_persistence_failed(
+        &self,
+        context: &ConnectionContext,
+        entity_id: String,
+        error: AppError,
+        evidence_text: &str,
+    ) {
+        {
+            let mut state = self.state.lock();
+            if let Some(metrics) = state.channel_metrics_mut(context) {
+                metrics.error_count = metrics.error_count.saturating_add(1);
+            }
+        }
+
+        let mut failure = *error.view_model;
+        failure.entity_id = Some(entity_id);
+        failure.runtime_epoch = Some(context.runtime_epoch);
+        failure.message = format!(
+            "无法保存已建立的上游安全证据：{} 本次证据：{evidence_text}",
+            failure.message
+        );
+
+        if failure.code == "RESOURCE_EXHAUSTED" {
+            self.events.publish(
+                Some(context.runtime_epoch),
+                Utc::now(),
+                failure.entity_id.clone(),
+                None,
+                UiEventPayload::ResourceWarning {
+                    message: failure.message.clone(),
+                },
+            );
+        }
+        self.events.publish(
+            Some(context.runtime_epoch),
+            Utc::now(),
+            failure.entity_id.clone(),
+            None,
+            UiEventPayload::OperationFailed(failure),
+        );
+    }
+
     fn terminate_connection_breakpoints(
         &self,
         context: &ConnectionContext,
@@ -635,8 +889,7 @@ impl RuntimePipelineAdapter {
         let ids = self
             .state
             .lock()
-            .connections
-            .get(&context.connection_id)
+            .connection(context)
             .map_or_else(Vec::new, |connection| {
                 connection.pending_breakpoints.clone()
             });
@@ -657,7 +910,12 @@ impl HandshakePolicy for RuntimePipelineAdapter {
         // Evaluate against a temporary context containing the verified peer.
         let mut verified_context = context.clone();
         verified_context.tls_peer = Some(peer.clone());
-        let evaluated = self.evaluate(&verified_context, DomainMessageStage::TlsHandshake, None)?;
+        let evaluated = self.evaluate(
+            &verified_context,
+            DomainMessageStage::TlsHandshake,
+            None,
+            self.body_codec.as_ref(),
+        )?;
         self.rule_runtime
             .publish_rule_hits(verified_context.runtime_epoch, evaluated.hit_rules);
         Ok(evaluated.actions.into_iter().any(|action| {
@@ -683,15 +941,19 @@ impl PipelinePorts for RuntimePipelineAdapter {
             );
         }
         self.rule_runtime.runtime_stopping(epoch);
+        let epoch = RuntimeEpoch::from_uuid(epoch);
+        let mut state = self.state.lock();
+        state.channels.remove(&epoch);
+        state.stopped_epochs.insert(epoch);
     }
 
     async fn connection_opened(&self, context: &ConnectionContext) {
         let mut state = self.state.lock();
-        if state.metrics_epoch != Some(context.runtime_epoch) {
-            state.metrics_epoch = Some(context.runtime_epoch);
-            state.channels.clear();
+        let epoch = RuntimeEpoch::from_uuid(context.runtime_epoch);
+        if state.stopped_epochs.contains(&epoch) {
+            return;
         }
-        state.connections.insert(
+        state.connections.entry(epoch).or_default().insert(
             context.connection_id,
             ConnectionRuntime {
                 channel: context.channel.clone(),
@@ -699,8 +961,65 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 pending_breakpoints: Vec::new(),
             },
         );
-        let metrics = state.channels.entry(context.channel.clone()).or_default();
+        let metrics = state
+            .channels
+            .entry(epoch)
+            .or_default()
+            .entry(context.channel.clone())
+            .or_default();
         metrics.connected_clients = metrics.connected_clients.saturating_add(1);
+    }
+
+    async fn upstream_security_established(
+        &self,
+        context: &ConnectionContext,
+        evidence: &UpstreamSecurityEvidence,
+    ) {
+        let evidence_text = upstream_security::describe(evidence);
+        let session_id = {
+            let state = self.state.lock();
+            state
+                .connection(context)
+                .and_then(|connection| connection.session_id)
+        };
+        let Some(session_id) = session_id else {
+            self.upstream_security_persistence_failed(
+                context,
+                context.connection_id.to_string(),
+                AppError::new(
+                    "UPSTREAM_SECURITY_SESSION_MISSING",
+                    "当前连接尚未关联可写入的会话记录。",
+                )
+                .retryable("重新发起请求；若持续发生，请停止并重新启动该代理入口。"),
+                &evidence_text,
+            );
+            return;
+        };
+        let mut record = match self.sessions.get_record(session_id) {
+            Ok(record) => record,
+            Err(error) => {
+                self.upstream_security_persistence_failed(
+                    context,
+                    session_id.to_string(),
+                    AppError::new(
+                        "UPSTREAM_SECURITY_SESSION_MISSING",
+                        error.view_model.message,
+                    )
+                    .retryable("重新查询会话；若持续发生，请停止并重新启动该代理入口。"),
+                    &evidence_text,
+                );
+                return;
+            }
+        };
+        record.detail.proxy_to_server_tls.clone_from(&evidence_text);
+        if let Err(error) = self.sessions.upsert(record) {
+            self.upstream_security_persistence_failed(
+                context,
+                session_id.to_string(),
+                error,
+                &evidence_text,
+            );
+        }
     }
 
     async fn request(
@@ -708,12 +1027,18 @@ impl PipelinePorts for RuntimePipelineAdapter {
         context: &ConnectionContext,
         message: &mut Message,
     ) -> ProxyResult<Vec<FaultAction>> {
+        let body_codec = self.codec_for(context, DomainMessageStage::Request)?;
         let original = message.clone();
-        self.begin_session(context, &original)?;
-        let evaluated = self.evaluate(context, DomainMessageStage::Request, Some(message))?;
+        self.begin_session(context, &original, body_codec.as_ref())?;
+        let evaluated = self.evaluate(
+            context,
+            DomainMessageStage::Request,
+            Some(message),
+            body_codec.as_ref(),
+        )?;
         let seed = weak_network_seed(context, DomainMessageStage::Request, &evaluated.hit_rules);
         let (mut actions, pause) =
-            apply_rule_actions(self.body_codec.as_ref(), message, &evaluated.actions, seed)?;
+            apply_rule_actions(body_codec.as_ref(), message, &evaluated.actions, seed)?;
         self.rule_runtime
             .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if pause {
@@ -724,11 +1049,19 @@ impl PipelinePorts for RuntimePipelineAdapter {
                     &original,
                     message,
                     &evaluated,
+                    body_codec.as_ref(),
                 )
                 .await?,
             );
         } else {
-            let record = self.update_request(context, message, &evaluated, false, None)?;
+            let record = self.update_request(
+                context,
+                message,
+                &evaluated,
+                false,
+                None,
+                body_codec.as_ref(),
+            )?;
             self.publish_capture(
                 context,
                 &record,
@@ -741,6 +1074,36 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 },
             );
         }
+        if let Some(FaultAction::MockResponse {
+            status,
+            headers,
+            body,
+        }) = actions
+            .iter()
+            .find(|action| matches!(action, FaultAction::MockResponse { .. }))
+        {
+            let response_codec = self.codec_for(context, DomainMessageStage::Response)?;
+            let mock = mock_response(*status, headers, body.clone());
+            let record = self.update_response(
+                context,
+                &mock,
+                &evaluated,
+                false,
+                None,
+                response_codec.as_ref(),
+            )?;
+            self.publish_capture(
+                context,
+                &record,
+                CapturePublication {
+                    stage: AppMessageStage::Response,
+                    result: "Mock 响应",
+                    tone: UiTone::Warning,
+                    breakpoint_id: None,
+                    size_bytes: mock.body.len() as u64,
+                },
+            );
+        }
         Ok(actions)
     }
 
@@ -749,17 +1112,24 @@ impl PipelinePorts for RuntimePipelineAdapter {
         context: &ConnectionContext,
         message: &mut Message,
     ) -> ProxyResult<Vec<FaultAction>> {
+        let body_codec = self.codec_for(context, DomainMessageStage::Response)?;
         {
             let mut state = self.state.lock();
-            let metrics = state.channels.entry(context.channel.clone()).or_default();
-            metrics.upstream_response_count = metrics.upstream_response_count.saturating_add(1);
-            metrics.last_upstream_error = None;
+            if let Some(metrics) = state.channel_metrics_mut(context) {
+                metrics.upstream_response_count = metrics.upstream_response_count.saturating_add(1);
+                metrics.last_upstream_error = None;
+            }
         }
         let original = message.clone();
-        let evaluated = self.evaluate(context, DomainMessageStage::Response, Some(message))?;
+        let evaluated = self.evaluate(
+            context,
+            DomainMessageStage::Response,
+            Some(message),
+            body_codec.as_ref(),
+        )?;
         let seed = weak_network_seed(context, DomainMessageStage::Response, &evaluated.hit_rules);
         let (mut actions, pause) =
-            apply_rule_actions(self.body_codec.as_ref(), message, &evaluated.actions, seed)?;
+            apply_rule_actions(body_codec.as_ref(), message, &evaluated.actions, seed)?;
         self.rule_runtime
             .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if pause {
@@ -770,11 +1140,20 @@ impl PipelinePorts for RuntimePipelineAdapter {
                     &original,
                     message,
                     &evaluated,
+                    body_codec.as_ref(),
                 )
                 .await?,
             );
-        } else {
-            let record = self.update_response(context, message, &evaluated, false, None)?;
+        }
+        if let Some(observed) = project_response_for_observation(message.clone(), &actions)? {
+            let record = self.update_response(
+                context,
+                &observed,
+                &evaluated,
+                false,
+                None,
+                body_codec.as_ref(),
+            )?;
             self.publish_capture(
                 context,
                 &record,
@@ -783,7 +1162,20 @@ impl PipelinePorts for RuntimePipelineAdapter {
                     result: "响应",
                     tone: UiTone::Info,
                     breakpoint_id: None,
-                    size_bytes: message.body.len() as u64,
+                    size_bytes: observed.body.len() as u64,
+                },
+            );
+        } else {
+            let record = self.update_dropped_response(context, &evaluated)?;
+            self.publish_capture(
+                context,
+                &record,
+                CapturePublication {
+                    stage: AppMessageStage::Response,
+                    result: "响应已丢弃",
+                    tone: UiTone::Danger,
+                    breakpoint_id: None,
+                    size_bytes: 0,
                 },
             );
         }
@@ -804,12 +1196,15 @@ impl PipelinePorts for RuntimePipelineAdapter {
             // Update health metrics before SessionUpdated is published so a UI
             // refresh triggered by that event observes the new global state.
             let mut state = self.state.lock();
-            if let Some(channel) = state
-                .connections
-                .get(&context.connection_id)
-                .map(|connection| connection.channel.clone())
-            {
-                let metrics = state.channels.entry(channel).or_default();
+            let channel = state
+                .connection(context)
+                .map(|connection| connection.channel.clone());
+            if let Some(metrics) = channel.and_then(|channel| {
+                state
+                    .channels
+                    .get_mut(&RuntimeEpoch::from_uuid(context.runtime_epoch))?
+                    .get_mut(&channel)
+            }) {
                 metrics.connected_clients = metrics.connected_clients.saturating_sub(1);
                 if let Err(error) = result {
                     metrics.error_count = metrics.error_count.saturating_add(1);
@@ -820,14 +1215,19 @@ impl PipelinePorts for RuntimePipelineAdapter {
             }
         }
         self.finish_session(context, result);
-        self.state.lock().connections.remove(&context.connection_id);
+        self.state.lock().remove_connection(context);
     }
 
     async fn runtime_fault(&self, epoch: Uuid, channel: ChannelId, error: &ProxyError) {
         {
             let mut state = self.state.lock();
-            let metrics = state.channels.entry(channel).or_default();
-            metrics.error_count = metrics.error_count.saturating_add(1);
+            if let Some(metrics) = state
+                .channels
+                .get_mut(&RuntimeEpoch::from_uuid(epoch))
+                .and_then(|channels| channels.get_mut(&channel))
+            {
+                metrics.error_count = metrics.error_count.saturating_add(1);
+            }
         }
         self.events.publish(
             Some(epoch),
@@ -864,10 +1264,13 @@ impl RuntimeMetricsProvider for RuntimePipelineAdapter {
 
     async fn snapshot(&self, runtime_epoch: Option<Uuid>) -> ProxyResult<RuntimeMetricsSnapshot> {
         let state = self.state.lock();
-        let channels = if runtime_epoch.is_some() && runtime_epoch != state.metrics_epoch {
-            BTreeMap::new()
-        } else {
-            state.channels.clone()
+        let channels = match runtime_epoch {
+            Some(epoch) => state
+                .channels
+                .get(&RuntimeEpoch::from_uuid(epoch))
+                .cloned()
+                .unwrap_or_default(),
+            None => aggregate_channel_metrics(state.channels.values()),
         };
         let active_sessions = state
             .live_sessions
@@ -883,6 +1286,31 @@ impl RuntimeMetricsProvider for RuntimePipelineAdapter {
             logical_memory_bytes: self.sessions.logical_bytes(),
         })
     }
+}
+
+fn aggregate_channel_metrics<'a>(
+    epochs: impl Iterator<Item = &'a BTreeMap<ChannelId, ChannelRuntimeMetrics>>,
+) -> BTreeMap<ChannelId, ChannelRuntimeMetrics> {
+    let mut aggregate = BTreeMap::<ChannelId, ChannelRuntimeMetrics>::new();
+    for channels in epochs {
+        for (channel, metrics) in channels {
+            let total = aggregate.entry(channel.clone()).or_default();
+            total.connected_clients = total
+                .connected_clients
+                .saturating_add(metrics.connected_clients);
+            total.request_count = total.request_count.saturating_add(metrics.request_count);
+            total.error_count = total.error_count.saturating_add(metrics.error_count);
+            total.upstream_response_count = total
+                .upstream_response_count
+                .saturating_add(metrics.upstream_response_count);
+            if metrics.last_upstream_error.is_some() {
+                total
+                    .last_upstream_error
+                    .clone_from(&metrics.last_upstream_error);
+            }
+        }
+    }
+    aggregate
 }
 
 fn apply_breakpoint_decision(
@@ -964,7 +1392,7 @@ fn apply_breakpoint_decision(
 }
 
 #[cfg(test)]
-fn view_to_domain_rule(view: gmofg_proxy_application::RuleViewModel) -> ProxyResult<Rule> {
+fn view_to_domain_rule(view: intercept_proxy_application::RuleViewModel) -> ProxyResult<Rule> {
     let draft = view.draft;
     let stage = match draft.stage {
         Some(AppMessageStage::Request) => DomainMessageStage::Request,
@@ -989,8 +1417,8 @@ fn view_to_domain_rule(view: gmofg_proxy_application::RuleViewModel) -> ProxyRes
         .collect::<std::result::Result<Vec<_>, _>>()
         .map_err(|error| ProxyError::new(ErrorCode::ConfigInvalid, error.to_string()))?;
     Ok(Rule {
-        id: gmofg_proxy_domain::RuleId::from_uuid(view.summary.rule_id),
-        revision: gmofg_proxy_domain::Revision::new(view.summary.revision),
+        id: intercept_proxy_domain::RuleId::from_uuid(view.summary.rule_id),
+        revision: intercept_proxy_domain::Revision::new(view.summary.revision),
         name: draft.name,
         description: draft.description,
         enabled: draft.enabled,
@@ -1126,8 +1554,8 @@ fn fingerprint_suffix(fingerprint: &str) -> String {
 
 fn tls_summary(context: &ConnectionContext) -> String {
     context.tls_peer.as_ref().map_or_else(
-        || "TLS 1.2 mTLS（未取得客户端身份）".into(),
-        |identity| format!("TLS 1.2 mTLS / {}", identity.subject_summary),
+        || "未记录下游客户端证书（可能为明文或未启用 mTLS）".into(),
+        |identity| format!("已验证下游客户端证书 / {}", identity.subject_summary),
     )
 }
 
@@ -1161,12 +1589,12 @@ mod tests {
         time::SystemTime,
     };
 
-    use gmofg_proxy_application::{
+    use intercept_proxy_application::{
         RawHttpHeaderViewModel, RuleDraft as AppRuleDraft, RuleSummaryViewModel, RuleViewModel,
     };
-    use gmofg_proxy_domain::DropResponseMode;
-    use gmofg_proxy_product_api::ProductMessageContext;
-    use gmofg_proxy_runtime::{RawHeader, TlsPeerIdentity};
+    use intercept_proxy_domain::DropResponseMode;
+    use intercept_proxy_product_api::ProductMessageContext;
+    use intercept_proxy_runtime::{RawHeader, TlsPeerIdentity};
     use serde_json::json;
 
     use super::*;
@@ -1183,18 +1611,21 @@ mod tests {
             "Test UTF-8"
         }
 
-        fn decode(&self, bytes: &[u8]) -> Result<String, gmofg_proxy_product_api::ProductError> {
+        fn decode(
+            &self,
+            bytes: &[u8],
+        ) -> Result<String, intercept_proxy_product_api::ProductError> {
             std::str::from_utf8(bytes)
                 .map(str::to_owned)
                 .map_err(|error| {
-                    gmofg_proxy_product_api::ProductError::new(
+                    intercept_proxy_product_api::ProductError::new(
                         "BODY_DECODE_FAILED",
                         error.to_string(),
                     )
                 })
         }
 
-        fn encode(&self, text: &str) -> Result<Vec<u8>, gmofg_proxy_product_api::ProductError> {
+        fn encode(&self, text: &str) -> Result<Vec<u8>, intercept_proxy_product_api::ProductError> {
             Ok(text.as_bytes().to_vec())
         }
     }
@@ -1210,13 +1641,13 @@ mod tests {
         fn classify(
             &self,
             message: ProductMessageContext<'_>,
-        ) -> gmofg_proxy_product_api::ClassifiedRequest {
+        ) -> intercept_proxy_product_api::ClassifiedRequest {
             let request_id = message
                 .headers
                 .iter()
                 .find(|header| header.name.eq_ignore_ascii_case(b"x-test-request-id"))
                 .map(|header| String::from_utf8_lossy(header.value).into_owned());
-            gmofg_proxy_product_api::ClassifiedRequest {
+            intercept_proxy_product_api::ClassifiedRequest {
                 request_id,
                 request_type: None,
             }
@@ -1255,15 +1686,21 @@ mod tests {
             "Stable Error"
         }
 
-        fn decode(&self, _bytes: &[u8]) -> Result<String, gmofg_proxy_product_api::ProductError> {
-            Err(gmofg_proxy_product_api::ProductError::new(
+        fn decode(
+            &self,
+            _bytes: &[u8],
+        ) -> Result<String, intercept_proxy_product_api::ProductError> {
+            Err(intercept_proxy_product_api::ProductError::new(
                 "PRODUCT_DECODE_FAILED",
                 "decode failed",
             ))
         }
 
-        fn encode(&self, _text: &str) -> Result<Vec<u8>, gmofg_proxy_product_api::ProductError> {
-            Err(gmofg_proxy_product_api::ProductError::new(
+        fn encode(
+            &self,
+            _text: &str,
+        ) -> Result<Vec<u8>, intercept_proxy_product_api::ProductError> {
+            Err(intercept_proxy_product_api::ProductError::new(
                 "PRODUCT_ENCODE_FAILED",
                 "encode failed",
             ))
@@ -1294,7 +1731,7 @@ mod tests {
             fn classify(
                 &self,
                 message: ProductMessageContext<'_>,
-            ) -> gmofg_proxy_product_api::ClassifiedRequest {
+            ) -> intercept_proxy_product_api::ClassifiedRequest {
                 assert_eq!(message.channel_id, "alpha");
                 assert_eq!(message.start_line, b"POST /vendor HTTP/1.1");
                 assert_eq!(
@@ -1309,7 +1746,7 @@ mod tests {
                     ]
                 );
                 assert_eq!(message.body, b"opaque");
-                gmofg_proxy_product_api::ClassifiedRequest {
+                intercept_proxy_product_api::ClassifiedRequest {
                     request_id: Some("product-id".into()),
                     request_type: Some("product-type".into()),
                 }
@@ -1583,12 +2020,12 @@ X-Compact:value\r\n\r\n",
             "Rejecting Codec"
         }
 
-        fn decode(&self, _: &[u8]) -> Result<String, gmofg_proxy_product_api::ProductError> {
+        fn decode(&self, _: &[u8]) -> Result<String, intercept_proxy_product_api::ProductError> {
             Ok(String::new())
         }
 
-        fn encode(&self, _: &str) -> Result<Vec<u8>, gmofg_proxy_product_api::ProductError> {
-            Err(gmofg_proxy_product_api::ProductError::new(
+        fn encode(&self, _: &str) -> Result<Vec<u8>, intercept_proxy_product_api::ProductError> {
+            Err(intercept_proxy_product_api::ProductError::new(
                 "PRODUCT_SPECIFIC_CODE",
                 "rejected",
             ))
@@ -1624,7 +2061,7 @@ X-Compact:value\r\n\r\n",
     }
 
     impl RuntimeRuleRepository for RejectingCommitRules {
-        fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
+        fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
             Ok(self.snapshot.lock().clone())
         }
 
@@ -1639,13 +2076,13 @@ X-Compact:value\r\n\r\n",
             }
         }
 
-        fn reset_runtime_hit_metadata(&self) -> AppResult<()> {
+        fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
             Ok(())
         }
     }
 
     impl RuntimeRuleRepository for StaticRules {
-        fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
+        fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
             Ok(self.snapshot.lock().clone())
         }
 
@@ -1655,34 +2092,39 @@ X-Compact:value\r\n\r\n",
             evaluated_rules: &[Rule],
         ) -> AppResult<u64> {
             let mut current = self.snapshot.lock();
-            if current.signature != snapshot.signature
+            if current.collection_id != snapshot.collection_id
+                || current.signature != snapshot.signature
                 || current.collection_revision != snapshot.collection_revision
             {
                 return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
             }
             let next_revision = current.collection_revision.saturating_add(1);
-            *current = RuleRuntimeSnapshot::with_collection_revision(
+            *current = RuleRuntimeSnapshot::with_collection_identity(
+                snapshot.collection_id,
                 next_revision,
                 evaluated_rules.to_vec(),
             );
             Ok(next_revision)
         }
 
-        fn reset_runtime_hit_metadata(&self) -> AppResult<()> {
+        fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
             let mut current = self.snapshot.lock();
             for rule in &mut current.rules {
                 rule.hit_count = 0;
                 rule.last_hit_at = None;
             }
             let next_revision = current.collection_revision.saturating_add(1);
-            *current =
-                RuleRuntimeSnapshot::with_collection_revision(next_revision, current.rules.clone());
+            *current = RuleRuntimeSnapshot::with_collection_identity(
+                current.collection_id,
+                next_revision,
+                current.rules.clone(),
+            );
             Ok(())
         }
     }
 
     impl RuntimeRuleRepository for ConflictOnceRules {
-        fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
+        fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
             Ok(self.snapshot.lock().clone())
         }
 
@@ -1696,7 +2138,8 @@ X-Compact:value\r\n\r\n",
             if self.conflict_once.swap(false, AtomicOrdering::AcqRel) {
                 let externally_advanced_revision = current.collection_revision.saturating_add(1);
                 let externally_preserved_rules = current.rules.clone();
-                *current = RuleRuntimeSnapshot::with_collection_revision(
+                *current = RuleRuntimeSnapshot::with_collection_identity(
+                    current.collection_id,
                     externally_advanced_revision,
                     externally_preserved_rules,
                 );
@@ -1705,20 +2148,22 @@ X-Compact:value\r\n\r\n",
                     "模拟评估后发生外部规则集合更新。",
                 ));
             }
-            if current.signature != snapshot.signature
+            if current.collection_id != snapshot.collection_id
+                || current.signature != snapshot.signature
                 || current.collection_revision != snapshot.collection_revision
             {
                 return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
             }
             let next_revision = current.collection_revision.saturating_add(1);
-            *current = RuleRuntimeSnapshot::with_collection_revision(
+            *current = RuleRuntimeSnapshot::with_collection_identity(
+                snapshot.collection_id,
                 next_revision,
                 evaluated_rules.to_vec(),
             );
             Ok(next_revision)
         }
 
-        fn reset_runtime_hit_metadata(&self) -> AppResult<()> {
+        fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
             Ok(())
         }
     }
@@ -1751,7 +2196,7 @@ X-Compact:value\r\n\r\n",
                 channel: None,
                 stage: Some(AppMessageStage::Request),
                 conditions: Vec::new(),
-                actions: vec![gmofg_proxy_application::RuleAction::Pause],
+                actions: vec![intercept_proxy_application::RuleAction::Pause],
                 one_shot: false,
             },
         }
@@ -1761,8 +2206,20 @@ X-Compact:value\r\n\r\n",
         let mut rule = pause_rule();
         rule.summary.name = "一次性延迟".into();
         rule.draft.name = "一次性延迟".into();
-        rule.draft.actions = vec![gmofg_proxy_application::RuleAction::Delay { milliseconds: 25 }];
+        rule.draft.actions =
+            vec![intercept_proxy_application::RuleAction::Delay { milliseconds: 25 }];
         rule.draft.one_shot = true;
+        rule
+    }
+
+    fn response_status_rule(status: u16) -> RuleViewModel {
+        let mut rule = pause_rule();
+        rule.summary.name = "响应状态替换".into();
+        rule.summary.stage_text = "响应".into();
+        rule.draft.name = "响应状态替换".into();
+        rule.draft.stage = Some(AppMessageStage::Response);
+        rule.draft.actions =
+            vec![intercept_proxy_application::RuleAction::CustomHttpStatus { status }];
         rule
     }
 
@@ -1793,14 +2250,14 @@ X-Compact:value\r\n\r\n",
                 priority: 1,
                 channel: None,
                 stage: Some(AppMessageStage::TlsHandshake),
-                conditions: vec![gmofg_proxy_application::RuleCondition::Field {
-                    field: gmofg_proxy_application::RuleMatchField::CertificateFingerprint,
-                    operator: gmofg_proxy_application::RuleMatchOperator::Equals {
+                conditions: vec![intercept_proxy_application::RuleCondition::Field {
+                    field: intercept_proxy_application::RuleMatchField::CertificateFingerprint,
+                    operator: intercept_proxy_application::RuleMatchOperator::Equals {
                         value: fingerprint.into(),
                     },
                 }],
-                actions: vec![gmofg_proxy_application::RuleAction::Terminal {
-                    action: gmofg_proxy_application::RuleTerminalAction::RejectTlsHandshake,
+                actions: vec![intercept_proxy_application::RuleAction::Terminal {
+                    action: intercept_proxy_application::RuleTerminalAction::RejectTlsHandshake,
                 }],
                 one_shot: false,
             },
@@ -1844,6 +2301,20 @@ X-Compact:value\r\n\r\n",
                 sha256_fingerprint: "AA:BB:CC:DD:EE:FF".into(),
                 subject_summary: "CN=Test Client".into(),
             }),
+        }
+    }
+
+    fn upstream_tls_evidence(peer_subject: impl Into<String>) -> UpstreamSecurityEvidence {
+        UpstreamSecurityEvidence {
+            resolved_address: "127.0.0.1:16627".parse().unwrap(),
+            transport: intercept_proxy_runtime::UpstreamTransportSecurity::Tls,
+            tls_version: Some("TLS 1.2".into()),
+            cipher_suite: Some("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256".into()),
+            peer_subject: Some(peer_subject.into()),
+            peer_sha256_fingerprint: Some("AA:BB:CC".into()),
+            hostname_verification_enabled: Some(true),
+            client_identity_configured: true,
+            client_identity_submitted: true,
         }
     }
 
@@ -1901,8 +2372,7 @@ X-Compact:value\r\n\r\n",
         let session_id = pipeline
             .state
             .lock()
-            .connections
-            .get(&context.connection_id)
+            .connection(&context)
             .and_then(|connection| connection.session_id)
             .expect("active session");
         let recorded = pipeline
@@ -1955,8 +2425,7 @@ X-Compact:value\r\n\r\n",
         let session_id = pipeline
             .state
             .lock()
-            .connections
-            .get(&context.connection_id)
+            .connection(&context)
             .and_then(|connection| connection.session_id);
         assert!(session_id.is_none(), "closed connection state is removed");
 
@@ -1972,6 +2441,288 @@ X-Compact:value\r\n\r\n",
             "runtime counters reset for a new epoch"
         );
         pipeline.connection_closed(&next_context, &Ok(())).await;
+    }
+
+    #[tokio::test]
+    async fn stores_upstream_security_evidence_on_the_active_session() {
+        let pipeline = adapter(Vec::new(), 10);
+        let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
+        pipeline.connection_opened(&context).await;
+        pipeline
+            .request(&context, &mut request_message(r#"{"amount":100}"#))
+            .await
+            .unwrap();
+        let session_id = pipeline
+            .state
+            .lock()
+            .connection(&context)
+            .and_then(|connection| connection.session_id)
+            .unwrap();
+
+        pipeline
+            .upstream_security_established(&context, &upstream_tls_evidence("CN=upstream.test"))
+            .await;
+        pipeline.connection_closed(&context, &Ok(())).await;
+
+        let completed = pipeline.sessions.get_record(session_id).unwrap();
+        let text = &completed.detail.proxy_to_server_tls;
+        assert!(text.contains("TLS 1.2"));
+        assert!(text.contains("CN=upstream.test"));
+        assert!(text.contains("AA:BB:CC"));
+        assert!(text.contains("已配置、已提交"));
+    }
+
+    #[tokio::test]
+    async fn reports_upstream_security_evidence_when_connection_has_no_session() {
+        let pipeline = adapter(Vec::new(), 10);
+        let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
+        pipeline.connection_opened(&context).await;
+
+        pipeline
+            .upstream_security_established(
+                &context,
+                &upstream_tls_evidence("CN=orphan-upstream.test"),
+            )
+            .await;
+
+        let replay = pipeline.events.replay_after(0);
+        let failure = replay.events.iter().find_map(|event| match &event.payload {
+            UiEventPayload::OperationFailed(error)
+                if error.code == "UPSTREAM_SECURITY_SESSION_MISSING" =>
+            {
+                Some(error)
+            }
+            _ => None,
+        });
+        let failure = failure.expect("missing session must be reported to the UI event stream");
+        assert_eq!(
+            failure.entity_id.as_deref(),
+            Some(&*context.connection_id.to_string())
+        );
+        assert_eq!(failure.runtime_epoch, Some(context.runtime_epoch));
+        assert!(failure.message.contains("CN=orphan-upstream.test"));
+        assert!(failure.message.contains("TLS 1.2"));
+    }
+
+    #[tokio::test]
+    async fn reports_capacity_failure_and_keeps_previous_upstream_security_evidence() {
+        let pipeline = adapter(Vec::new(), 10);
+        let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
+        pipeline.connection_opened(&context).await;
+        pipeline
+            .request(&context, &mut request_message(r#"{"amount":100}"#))
+            .await
+            .unwrap();
+        let session_id = pipeline
+            .state
+            .lock()
+            .connection(&context)
+            .and_then(|connection| connection.session_id)
+            .unwrap();
+        let before = pipeline.sessions.get_record(session_id).unwrap();
+        pipeline
+            .sessions
+            .set_limits(10, pipeline.sessions.logical_bytes())
+            .expect("current session must fit the exact capacity limit");
+
+        let subject = format!("CN={}.test", "capacity".repeat(128));
+        pipeline
+            .upstream_security_established(&context, &upstream_tls_evidence(&subject))
+            .await;
+
+        let after = pipeline.sessions.get_record(session_id).unwrap();
+        assert_eq!(
+            after.detail.proxy_to_server_tls, before.detail.proxy_to_server_tls,
+            "failed upsert must roll the session record back"
+        );
+
+        let replay = pipeline.events.replay_after(0);
+        assert!(replay.events.iter().any(|event| {
+            matches!(
+                &event.payload,
+                UiEventPayload::ResourceWarning { message }
+                    if message.contains("无法保存已建立的上游安全证据")
+                        && message.contains(&subject)
+            )
+        }));
+        let failure = replay.events.iter().find_map(|event| match &event.payload {
+            UiEventPayload::OperationFailed(error) if error.code == "RESOURCE_EXHAUSTED" => {
+                Some(error)
+            }
+            _ => None,
+        });
+        let failure = failure.expect("capacity failure must be reported to the UI event stream");
+        assert_eq!(failure.entity_id.as_deref(), Some(&*session_id.to_string()));
+        assert_eq!(failure.runtime_epoch, Some(context.runtime_epoch));
+        assert!(failure.message.contains(&subject));
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn isolates_interleaved_workspace_metrics_and_ignores_late_stop_events() {
+        let pipeline = adapter(Vec::new(), 10);
+        let epoch_a = Uuid::new_v4();
+        let epoch_b = Uuid::new_v4();
+        let context_a = test_context(epoch_a, Uuid::new_v4(), transaction_channel());
+        let context_b = test_context(epoch_b, Uuid::new_v4(), dll_channel());
+
+        pipeline.connection_opened(&context_a).await;
+        pipeline.connection_opened(&context_b).await;
+
+        let mut request_a = request_message(r#"{"workspace":"a"}"#);
+        pipeline
+            .request(&context_a, &mut request_a)
+            .await
+            .expect("workspace A request");
+        let mut request_b = request_message(r#"{"workspace":"b"}"#);
+        pipeline
+            .request(&context_b, &mut request_b)
+            .await
+            .expect("workspace B request");
+        let mut response_b = response_message();
+        pipeline
+            .response(&context_b, &mut response_b)
+            .await
+            .expect("workspace B response");
+        pipeline
+            .runtime_fault(
+                epoch_a,
+                transaction_channel(),
+                &ProxyError::new(ErrorCode::Io, "workspace A fault"),
+            )
+            .await;
+
+        let metrics_a = pipeline.snapshot(Some(epoch_a)).await.expect("A metrics");
+        assert_eq!(metrics_a.channels.len(), 1);
+        assert_eq!(
+            metrics_a.channels[&transaction_channel()],
+            ChannelRuntimeMetrics {
+                connected_clients: 1,
+                request_count: 1,
+                error_count: 1,
+                upstream_response_count: 0,
+                last_upstream_error: None,
+            }
+        );
+        let metrics_b = pipeline.snapshot(Some(epoch_b)).await.expect("B metrics");
+        assert_eq!(metrics_b.channels.len(), 1);
+        assert_eq!(
+            metrics_b.channels[&dll_channel()],
+            ChannelRuntimeMetrics {
+                connected_clients: 1,
+                request_count: 1,
+                error_count: 0,
+                upstream_response_count: 1,
+                last_upstream_error: None,
+            }
+        );
+
+        pipeline.runtime_stopping(epoch_a).await;
+        assert!(
+            pipeline
+                .snapshot(Some(epoch_a))
+                .await
+                .expect("stopped A metrics")
+                .channels
+                .is_empty()
+        );
+        assert_eq!(
+            pipeline
+                .snapshot(Some(epoch_b))
+                .await
+                .expect("B survives A stop")
+                .channels[&dll_channel()]
+                .connected_clients,
+            1
+        );
+
+        pipeline
+            .connection_closed(
+                &context_a,
+                &Err(ProxyError::new(
+                    ErrorCode::UpstreamReadTimeout,
+                    "late workspace A close",
+                )),
+            )
+            .await;
+        pipeline
+            .runtime_fault(
+                epoch_a,
+                transaction_channel(),
+                &ProxyError::new(ErrorCode::Io, "late workspace A fault"),
+            )
+            .await;
+        let late_context_a = test_context(epoch_a, Uuid::new_v4(), transaction_channel());
+        pipeline.connection_opened(&late_context_a).await;
+        let mut late_request_a = request_message(r#"{"workspace":"late-a"}"#);
+        let late_request_error = pipeline
+            .request(&late_context_a, &mut late_request_a)
+            .await
+            .expect_err("stopped epoch must reject a late request");
+        assert_eq!(late_request_error.code, ErrorCode::ProxyStopped.as_str());
+        assert!(
+            pipeline
+                .snapshot(Some(epoch_a))
+                .await
+                .expect("late A events")
+                .channels
+                .is_empty(),
+            "late close, fault, or open must not recreate a stopped epoch"
+        );
+
+        let aggregate = pipeline.snapshot(None).await.expect("aggregate metrics");
+        assert_eq!(aggregate.channels.len(), 1);
+        assert_eq!(
+            aggregate.channels[&dll_channel()],
+            metrics_b.channels[&dll_channel()]
+        );
+
+        pipeline.connection_closed(&context_b, &Ok(())).await;
+        let closed_b = pipeline
+            .snapshot(Some(epoch_b))
+            .await
+            .expect("closed B metrics");
+        assert_eq!(closed_b.channels[&dll_channel()].connected_clients, 0);
+        assert_eq!(closed_b.channels[&dll_channel()].request_count, 1);
+        assert_eq!(closed_b.channels[&dll_channel()].upstream_response_count, 1);
+    }
+
+    #[tokio::test]
+    async fn records_the_effective_downstream_status_after_response_rules() {
+        let pipeline = adapter(vec![response_status_rule(503)], 10);
+        let epoch = Uuid::new_v4();
+        let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
+        pipeline.connection_opened(&context).await;
+
+        let mut request = request_message(r#"{"amount":100}"#);
+        pipeline
+            .request(&context, &mut request)
+            .await
+            .expect("request");
+        let mut response = response_message();
+        let actions = pipeline
+            .response(&context, &mut response)
+            .await
+            .expect("response");
+        assert!(matches!(
+            actions.as_slice(),
+            [FaultAction::CustomStatus(status)] if *status == http::StatusCode::SERVICE_UNAVAILABLE
+        ));
+
+        let session_id = pipeline
+            .state
+            .lock()
+            .connection(&context)
+            .and_then(|connection| connection.session_id)
+            .expect("active session");
+        let recorded = pipeline.sessions.get_record(session_id).unwrap();
+        let recorded_response = recorded.detail.response.expect("effective response");
+        assert_eq!(recorded.detail.summary.http_status, Some(503));
+        assert_eq!(recorded_response.http_status, Some(503));
+        assert_eq!(
+            recorded_response.start_line_bytes,
+            b"HTTP/1.1 503 Service Unavailable"
+        );
     }
 
     #[tokio::test]
@@ -2102,7 +2853,7 @@ X-Compact:value\r\n\r\n",
         let rule = view_to_domain_rule({
             let mut view = one_shot_delay_rule();
             view.draft.conditions =
-                vec![gmofg_proxy_application::RuleCondition::NthHit { count: 2 }];
+                vec![intercept_proxy_application::RuleCondition::NthHit { count: 2 }];
             view.draft.one_shot = false;
             view
         })
@@ -2123,9 +2874,15 @@ X-Compact:value\r\n\r\n",
         let epoch = Uuid::new_v4();
         let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
         let message = request_message(r#"{"amount":100}"#);
+        let body_codec = test_body_codec();
 
         let first = pipeline
-            .evaluate(&context, DomainMessageStage::Request, Some(&message))
+            .evaluate(
+                &context,
+                DomainMessageStage::Request,
+                Some(&message),
+                body_codec.as_ref(),
+            )
             .expect("first evaluation");
         assert!(
             first.actions.is_empty(),
@@ -2134,7 +2891,12 @@ X-Compact:value\r\n\r\n",
         assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 0);
 
         let second = pipeline
-            .evaluate(&context, DomainMessageStage::Request, Some(&message))
+            .evaluate(
+                &context,
+                DomainMessageStage::Request,
+                Some(&message),
+                body_codec.as_ref(),
+            )
             .expect("second evaluation retries after the injected conflict");
         assert_eq!(
             second.actions,
@@ -2156,7 +2918,12 @@ X-Compact:value\r\n\r\n",
         }
 
         let third = pipeline
-            .evaluate(&context, DomainMessageStage::Request, Some(&message))
+            .evaluate(
+                &context,
+                DomainMessageStage::Request,
+                Some(&message),
+                body_codec.as_ref(),
+            )
             .expect("third evaluation");
         assert!(
             third.actions.is_empty(),

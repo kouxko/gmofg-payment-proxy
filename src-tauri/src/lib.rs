@@ -9,8 +9,8 @@ mod native_dialog;
 
 use std::{error::Error, path::PathBuf, sync::Arc};
 
-use gmofg_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
-use gmofg_proxy_product_payment::PaymentProductProfile;
+use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
+use intercept_proxy_product_api::InterceptProxyProfile;
 use specta_typescript::Typescript;
 use tauri::Manager;
 
@@ -54,13 +54,9 @@ pub fn export_bindings() -> Result<PathBuf, String> {
 fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
     let app_data_dir = app.path().app_data_dir()?;
     let dialog = Arc::new(TauriNativeFileDialog::new(app.handle().clone()));
-    // This executable is the isolated diagnostic proxy defined by CERT-005,
-    // not a production payment client. It intentionally embeds the TEST ONLY
-    // authority so Rust can issue LAN-matching leaf certificates; only the
-    // public Root CA is exportable. Other hosts should use the fail-closed
-    // `PaymentProductProfile::default()` unless they make the same test-only
-    // packaging decision explicitly.
-    let product = Arc::new(PaymentProductProfile::isolated_test_tool());
+    // 新应用使用纯通用配置：不读取旧数据库、不加载业务模板，也不携带任何固定 CA、
+    // 上游地址或客户端身份。每安装实例的 Root CA 由基础设施层生成后交给系统密钥保护。
+    let product = Arc::new(InterceptProxyProfile);
     let host = tauri::async_runtime::block_on(
         ApplicationHostBuilder::new(
             app_data_dir,

@@ -92,6 +92,106 @@ pub fn mock_response(status: StatusCode, headers: &HeaderMap, body: Bytes) -> Me
     message
 }
 
+/// 生成规则执行后客户端最终可观察到的响应快照，但不执行延迟、限速或断开。
+///
+/// Pipeline 在把 [`FaultAction`] 交给网络传输层之前需要记录会话详情。若直接保存
+/// 上游 `Message`，客户端已经收到的自定义状态、Mock、截断或错误长度就会和详情页
+/// 不一致。该函数复用与 wire action 相同的顺序，返回 `None` 表示响应被丢弃。
+pub fn project_response_for_observation(
+    mut message: Message,
+    actions: &[FaultAction],
+) -> Result<Option<Message>> {
+    for action in actions {
+        match action {
+            FaultAction::DropResponse { .. } => return Ok(None),
+            FaultAction::ReplaceBody { body } => message.replace_body(body.clone()),
+            FaultAction::ContentLengthOffset(offset) => {
+                let actual = i64::try_from(message.body.len()).unwrap_or(i64::MAX);
+                let declared = actual.checked_add(*offset).ok_or_else(|| {
+                    ProxyError::new(ErrorCode::ConfigInvalid, "content-length offset overflow")
+                })?;
+                if declared < 0 {
+                    return Err(ProxyError::new(
+                        ErrorCode::ConfigInvalid,
+                        "content-length cannot be negative",
+                    ));
+                }
+                message.set_content_length(usize::try_from(declared).map_err(|_| {
+                    ProxyError::new(ErrorCode::ConfigInvalid, "invalid content-length")
+                })?);
+            }
+            FaultAction::TruncateResponse(bytes) => {
+                if *bytes >= message.body.len() {
+                    return Err(ProxyError::new(
+                        ErrorCode::ConfigInvalid,
+                        "truncate length must be in 0..body_len",
+                    ));
+                }
+                message.body = message.body.slice(..*bytes);
+                message.body_modified = true;
+                return Ok(Some(message));
+            }
+            FaultAction::DisconnectDuringWrite {
+                after_bytes,
+                direction: TrafficDirection::Downstream,
+            } => {
+                if *after_bytes >= message.body.len() {
+                    return Err(ProxyError::new(
+                        ErrorCode::ConfigInvalid,
+                        "downstream disconnect offset must be smaller than response body",
+                    ));
+                }
+                message.body = message.body.slice(..*after_bytes);
+                message.body_modified = true;
+            }
+            FaultAction::CustomStatus(status) => {
+                let headers = message.header_map()?;
+                message = Message::response(*status, &headers, message.body);
+                message.body_modified = true;
+                message.set_content_length(message.body.len());
+            }
+            FaultAction::MockResponse {
+                status,
+                headers,
+                body,
+            } => message = mock_response(*status, headers, body.clone()),
+            FaultAction::Delay(_)
+            | FaultAction::Jitter { .. }
+            | FaultAction::Throttle {
+                direction: TrafficDirection::Downstream,
+                ..
+            }
+            | FaultAction::Intermittent {
+                direction: TrafficDirection::Downstream,
+                ..
+            } => {}
+            FaultAction::RejectTls
+            | FaultAction::DisconnectBeforeUpstream
+            | FaultAction::UpstreamConnectTimeout(_)
+            | FaultAction::UpstreamWriteTimeout(_)
+            | FaultAction::UpstreamReadTimeout(_)
+            | FaultAction::Throttle {
+                direction: TrafficDirection::Upstream,
+                ..
+            }
+            | FaultAction::Intermittent {
+                direction: TrafficDirection::Upstream,
+                ..
+            }
+            | FaultAction::DisconnectDuringWrite {
+                direction: TrafficDirection::Upstream,
+                ..
+            } => {
+                return Err(ProxyError::new(
+                    ErrorCode::ConfigInvalid,
+                    "request-stage fault used during response observation",
+                ));
+            }
+        }
+    }
+    Ok(Some(message))
+}
+
 /// Applies response-stage wire faults in order.
 pub async fn apply_response_actions(
     mut message: Message,
@@ -233,6 +333,61 @@ mod tests {
         };
         assert_eq!(message.declared_content_length(), Some(3));
         assert_eq!(message.body, replacement);
+    }
+
+    #[test]
+    fn observation_projection_matches_effective_status_body_length_and_truncation() {
+        let source = Message::response(
+            StatusCode::OK,
+            &HeaderMap::new(),
+            Bytes::from_static(b"abcdef"),
+        );
+        let observed = project_response_for_observation(
+            source,
+            &[
+                FaultAction::CustomStatus(StatusCode::SERVICE_UNAVAILABLE),
+                FaultAction::ReplaceBody {
+                    body: Bytes::from_static(b"12345"),
+                },
+                FaultAction::ContentLengthOffset(2),
+                FaultAction::TruncateResponse(3),
+            ],
+        )
+        .expect("投影成功")
+        .expect("响应没有丢弃");
+        assert_eq!(
+            observed.http_status(),
+            Some(StatusCode::SERVICE_UNAVAILABLE.as_u16())
+        );
+        assert_eq!(observed.body, Bytes::from_static(b"123"));
+        assert_eq!(observed.declared_content_length(), Some(7));
+    }
+
+    #[test]
+    fn observation_projection_reports_drop_and_mock() {
+        let source = Message::response(StatusCode::OK, &HeaderMap::new(), Bytes::new());
+        assert!(
+            project_response_for_observation(
+                source.clone(),
+                &[FaultAction::DropResponse {
+                    read_upstream: true,
+                }],
+            )
+            .unwrap()
+            .is_none()
+        );
+        let observed = project_response_for_observation(
+            source,
+            &[FaultAction::MockResponse {
+                status: StatusCode::CREATED,
+                headers: HeaderMap::new(),
+                body: Bytes::from_static(b"mock"),
+            }],
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(observed.http_status(), Some(StatusCode::CREATED.as_u16()));
+        assert_eq!(observed.body, Bytes::from_static(b"mock"));
     }
 
     #[tokio::test]

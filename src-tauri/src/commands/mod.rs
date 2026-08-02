@@ -3,17 +3,22 @@
 //! 每个命令只做参数/错误映射并调用 `AppState.application`；业务规则、数据库和网络 I/O
 //! 不应写在这里。事件订阅先重放缺失事件再接实时通道，发送端关闭会返回可重试错误。
 
-use gmofg_proxy_application::{
-    ActiveFaultViewModel, AppBootstrapViewModel, AppError, AppErrorViewModel, BreakpointDecision,
+use intercept_proxy_application::{
+    ActiveFaultViewModel, AndroidAdbViewModel, AndroidCompanionInstallViewModel,
+    AndroidDeviceViewModel, AndroidNetworkProfile, AndroidNetworkProfileSummary,
+    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidProfileEditIntent,
+    AppBootstrapViewModel, AppError, AppErrorViewModel, BreakpointDecision,
     BreakpointDetailViewModel, BreakpointDraft, BreakpointId, BreakpointSummaryViewModel,
     BreakpointValidationViewModel, CaptureDetailViewModel, CapturePageViewModel, CaptureQuery,
     CertificateOverviewViewModel, CertificateValidationViewModel, FaultConfigurationDraft,
-    FaultTemplateViewModel, OperationResultViewModel, ProxyStatusViewModel, RuleAction,
-    RuleActionKind, RuleByteInputViewModel, RuleCondition, RuleConditionKind, RuleDraft,
-    RuleHeaderInputViewModel, RuleId, RuleMatchField, RuleMatchFieldKind, RuleMatchOperator,
-    RuleMatchOperatorKind, RuleSummaryViewModel, RuleViewModel, RuntimeEpoch,
-    SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery, SettingsDraft,
-    SettingsValidationViewModel, SettingsViewModel, SubscriptionAckViewModel, UiEventEnvelope,
+    FaultTemplateViewModel, ListenerId, ListenerOverviewViewModel, ListenerStatusViewModel,
+    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, ProxyListener, ProxyWorkspace,
+    RuleAction, RuleActionKind, RuleByteInputViewModel, RuleCondition, RuleConditionKind,
+    RuleDraft, RuleHeaderInputViewModel, RuleId, RuleMatchField, RuleMatchFieldKind,
+    RuleMatchOperator, RuleMatchOperatorKind, RuleSummaryViewModel, RuleViewModel, RuntimeEpoch,
+    SecretReference, SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery,
+    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, SubscriptionAckViewModel,
+    UiEventEnvelope, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 use tauri::{State, Wry, ipc::Channel};
 use tauri_specta::{Builder, collect_commands};
@@ -92,32 +97,582 @@ pub async fn app_unsubscribe_events(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn proxy_get_status(state: State<'_, AppState>) -> CommandResult<ProxyStatusViewModel> {
+pub async fn android_adb_get(state: State<'_, AppState>) -> CommandResult<AndroidAdbViewModel> {
     state
         .application
-        .proxy_get_status()
+        .android_adb_get()
         .await
         .map_err(command_error)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn proxy_start(state: State<'_, AppState>) -> CommandResult<ProxyStatusViewModel> {
-    state.application.proxy_start().await.map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn proxy_stop(state: State<'_, AppState>) -> CommandResult<ProxyStatusViewModel> {
-    state.application.proxy_stop().await.map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn proxy_restart(state: State<'_, AppState>) -> CommandResult<ProxyStatusViewModel> {
+pub async fn android_adb_select(
+    state: State<'_, AppState>,
+    serial: String,
+) -> CommandResult<AndroidAdbViewModel> {
     state
         .application
-        .proxy_restart()
+        .android_adb_select(serial)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn android_device_list(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<AndroidDeviceViewModel>> {
+    state
+        .application
+        .android_device_list()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn android_package_list(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<AndroidPackageViewModel>> {
+    state
+        .application
+        .android_package_list()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn android_package_query(
+    state: State<'_, AppState>,
+    query: String,
+) -> CommandResult<Vec<AndroidPackageViewModel>> {
+    state
+        .application
+        .android_package_query(query)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn android_package_get(
+    state: State<'_, AppState>,
+    package_name: String,
+) -> CommandResult<AndroidPackageViewModel> {
+    state
+        .application
+        .android_package_get(package_name)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn android_companion_install(
+    state: State<'_, AppState>,
+) -> CommandResult<AndroidCompanionInstallViewModel> {
+    state
+        .application
+        .android_companion_install()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn android_companion_update(
+    state: State<'_, AppState>,
+) -> CommandResult<AndroidCompanionInstallViewModel> {
+    state
+        .application
+        .android_companion_update()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn android_vpn_open_consent(
+    state: State<'_, AppState>,
+) -> CommandResult<AndroidNetworkStatusViewModel> {
+    state
+        .application
+        .android_vpn_open_consent()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_profile_list(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<AndroidNetworkProfileSummary>> {
+    state
+        .application
+        .device_network_profile_list()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+// Tauri owns extracted State/JSON arguments, and the IPC contract intentionally keeps the same
+// structured error envelope even for a Rust-owned default constructor.
+#[allow(
+    clippy::needless_pass_by_value,
+    clippy::result_large_err,
+    clippy::unnecessary_wraps
+)]
+pub fn device_network_profile_new(
+    state: State<'_, AppState>,
+) -> CommandResult<AndroidNetworkProfile> {
+    Ok(state.application.device_network_profile_new())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_profile_get(
+    state: State<'_, AppState>,
+    profile_id: String,
+) -> CommandResult<AndroidNetworkProfile> {
+    state
+        .application
+        .device_network_profile_get(profile_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_profile_apply_intent(
+    state: State<'_, AppState>,
+    profile: AndroidNetworkProfile,
+    intent: AndroidProfileEditIntent,
+) -> CommandResult<AndroidNetworkProfile> {
+    state
+        .application
+        .device_network_profile_apply_intent(profile, intent)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_profile_save(
+    state: State<'_, AppState>,
+    profile: AndroidNetworkProfile,
+) -> CommandResult<AndroidNetworkProfile> {
+    state
+        .application
+        .device_network_profile_save(profile)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_profile_delete(
+    state: State<'_, AppState>,
+    profile_id: String,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .device_network_profile_delete(profile_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_start(
+    state: State<'_, AppState>,
+    profile_id: String,
+    dangerous_confirmed: bool,
+) -> CommandResult<AndroidNetworkStatusViewModel> {
+    state
+        .application
+        .device_network_start(profile_id, dangerous_confirmed)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_apply(
+    state: State<'_, AppState>,
+    profile_id: String,
+    dangerous_confirmed: bool,
+) -> CommandResult<AndroidNetworkStatusViewModel> {
+    state
+        .application
+        .device_network_apply(profile_id, dangerous_confirmed)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_stop(
+    state: State<'_, AppState>,
+) -> CommandResult<AndroidNetworkStatusViewModel> {
+    state
+        .application
+        .device_network_stop()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_emergency_restore(
+    state: State<'_, AppState>,
+) -> CommandResult<AndroidNetworkStatusViewModel> {
+    state
+        .application
+        .device_network_emergency_restore()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_status(
+    state: State<'_, AppState>,
+) -> CommandResult<AndroidNetworkStatusViewModel> {
+    state
+        .application
+        .device_network_status()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_list(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<WorkspaceSummaryViewModel>> {
+    state
+        .application
+        .workspace_list()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_get(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+) -> CommandResult<ProxyWorkspace> {
+    state
+        .application
+        .workspace_get(workspace_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+// Tauri passes deserialized command values by ownership; changing these to references would make
+// the generated IPC command incompatible with its extractor.
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn workspace_component_new(
+    state: State<'_, AppState>,
+    workspace: ProxyWorkspace,
+    kind: String,
+) -> CommandResult<ProxyWorkspace> {
+    state
+        .application
+        .workspace_component_new(workspace, &kind)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn workspace_component_apply_intent(
+    state: State<'_, AppState>,
+    workspace: ProxyWorkspace,
+    component_kind: String,
+    component_id: String,
+    operation: String,
+    value: String,
+) -> CommandResult<ProxyWorkspace> {
+    state
+        .application
+        .workspace_component_apply_intent(
+            workspace,
+            &component_kind,
+            &component_id,
+            &operation,
+            &value,
+        )
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_secret_store_basic(
+    state: State<'_, AppState>,
+    username: String,
+    password: String,
+) -> CommandResult<SecretReference> {
+    state
+        .application
+        .workspace_secret_store_basic(username, password)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_create(
+    state: State<'_, AppState>,
+    name: String,
+) -> CommandResult<ProxyWorkspace> {
+    state
+        .application
+        .workspace_create(name)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_copy(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+) -> CommandResult<ProxyWorkspace> {
+    state
+        .application
+        .workspace_copy(workspace_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_select(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+) -> CommandResult<WorkspaceSummaryViewModel> {
+    state
+        .application
+        .workspace_select(workspace_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_validate(
+    state: State<'_, AppState>,
+    workspace: ProxyWorkspace,
+) -> CommandResult<WorkspaceValidationViewModel> {
+    state
+        .application
+        .workspace_validate(workspace)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_save(
+    state: State<'_, AppState>,
+    workspace: ProxyWorkspace,
+) -> CommandResult<ProxyWorkspace> {
+    state
+        .application
+        .workspace_save(workspace)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_delete(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    expected_revision: u64,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .workspace_delete(workspace_id, expected_revision)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_import(
+    state: State<'_, AppState>,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .workspace_import()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn workspace_export(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .workspace_export(workspace_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_list(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+) -> CommandResult<Vec<ProxyListener>> {
+    state
+        .application
+        .listener_list(workspace_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+// See `workspace_component_new`: owned command parameters are part of the Tauri adapter boundary.
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn listener_new(state: State<'_, AppState>, kind: String) -> CommandResult<ProxyListener> {
+    state.application.listener_new(&kind).map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn listener_copy(
+    state: State<'_, AppState>,
+    source: ProxyListener,
+) -> CommandResult<ProxyListener> {
+    state
+        .application
+        .listener_copy(source)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_get(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    listener_id: ListenerId,
+) -> CommandResult<ProxyListener> {
+    state
+        .application
+        .listener_get(workspace_id, listener_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_save(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    expected_workspace_revision: u64,
+    listener: ProxyListener,
+) -> CommandResult<ProxyListener> {
+    state
+        .application
+        .listener_save(workspace_id, expected_workspace_revision, listener)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_delete(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    expected_workspace_revision: u64,
+    listener_id: ListenerId,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .listener_delete(workspace_id, expected_workspace_revision, listener_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_statuses(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<ListenerStatusViewModel>> {
+    state
+        .application
+        .listener_statuses()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_overview(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+) -> CommandResult<ListenerOverviewViewModel> {
+    state
+        .application
+        .listener_overview(workspace_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_start(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    expected_workspace_revision: u64,
+    listener_id: ListenerId,
+) -> CommandResult<ListenerStatusViewModel> {
+    state
+        .application
+        .listener_start(workspace_id, expected_workspace_revision, listener_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_stop(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    expected_workspace_revision: u64,
+    listener_id: ListenerId,
+) -> CommandResult<ListenerStatusViewModel> {
+    state
+        .application
+        .listener_stop(workspace_id, expected_workspace_revision, listener_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_test_upstream_tls(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    listener_id: ListenerId,
+) -> CommandResult<ListenerUpstreamTlsTestViewModel> {
+    state
+        .application
+        .listener_test_upstream_tls(workspace_id, listener_id)
         .await
         .map_err(command_error)
 }
@@ -625,11 +1180,10 @@ pub async fn settings_get(state: State<'_, AppState>) -> CommandResult<SettingsV
 pub async fn settings_validate(
     state: State<'_, AppState>,
     draft: SettingsDraft,
-    leaf_sans_raw: String,
 ) -> CommandResult<SettingsValidationViewModel> {
     state
         .application
-        .settings_validate_input(draft, leaf_sans_raw)
+        .settings_validate(draft)
         .await
         .map_err(command_error)
 }
@@ -639,25 +1193,10 @@ pub async fn settings_validate(
 pub async fn settings_save(
     state: State<'_, AppState>,
     draft: SettingsDraft,
-    leaf_sans_raw: String,
 ) -> CommandResult<SettingsViewModel> {
     state
         .application
-        .settings_save_input(draft, leaf_sans_raw)
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn settings_save_and_restart(
-    state: State<'_, AppState>,
-    draft: SettingsDraft,
-    leaf_sans_raw: String,
-) -> CommandResult<SettingsViewModel> {
-    state
-        .application
-        .settings_save_and_restart_input(draft, leaf_sans_raw)
+        .settings_save(draft)
         .await
         .map_err(command_error)
 }
@@ -684,10 +1223,50 @@ pub fn builder() -> Builder<Wry> {
             app_bootstrap,
             app_subscribe_events,
             app_unsubscribe_events,
-            proxy_get_status,
-            proxy_start,
-            proxy_stop,
-            proxy_restart,
+            android_adb_get,
+            android_adb_select,
+            android_device_list,
+            android_package_list,
+            android_package_query,
+            android_package_get,
+            android_companion_install,
+            android_companion_update,
+            android_vpn_open_consent,
+            device_network_profile_list,
+            device_network_profile_new,
+            device_network_profile_get,
+            device_network_profile_apply_intent,
+            device_network_profile_save,
+            device_network_profile_delete,
+            device_network_start,
+            device_network_apply,
+            device_network_stop,
+            device_network_emergency_restore,
+            device_network_status,
+            workspace_list,
+            workspace_get,
+            workspace_component_new,
+            workspace_component_apply_intent,
+            workspace_secret_store_basic,
+            workspace_create,
+            workspace_copy,
+            workspace_select,
+            workspace_validate,
+            workspace_save,
+            workspace_delete,
+            workspace_import,
+            workspace_export,
+            listener_list,
+            listener_new,
+            listener_copy,
+            listener_get,
+            listener_save,
+            listener_delete,
+            listener_statuses,
+            listener_overview,
+            listener_start,
+            listener_stop,
+            listener_test_upstream_tls,
             capture_query,
             capture_get_detail,
             capture_clear_view,
@@ -732,7 +1311,6 @@ pub fn builder() -> Builder<Wry> {
             settings_get,
             settings_validate,
             settings_save,
-            settings_save_and_restart,
             settings_reset_defaults,
         ])
 }

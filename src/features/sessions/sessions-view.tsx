@@ -67,6 +67,12 @@ export const defaultSessionQuery: SessionQuery = {
   page: { page: 1, page_size: 10 },
 };
 
+export const sessionDetailTabLabels = {
+  overview: "概览",
+  request: "请求",
+  response: "响应",
+} as const;
+
 export function sessionFilterDateValue(value: string | null): DateValue | null {
   // 同时兼容带时区和不带时区的 Rust/旧草稿文本；解析失败显示为空，由 Rust
   // 在提交查询时继续承担最终合法性判断。
@@ -769,19 +775,15 @@ export function SessionsView() {
           <Tabs.ListContainer>
             <Tabs.List aria-label="会话详情">
               <Tabs.Tab id="overview">
-                概览
+                {sessionDetailTabLabels.overview}
                 <Tabs.Indicator />
               </Tabs.Tab>
               <Tabs.Tab id="request">
-                请求
+                {sessionDetailTabLabels.request}
                 <Tabs.Indicator />
               </Tabs.Tab>
               <Tabs.Tab id="response">
-                响应
-                <Tabs.Indicator />
-              </Tabs.Tab>
-              <Tabs.Tab id="trace">
-                规则轨迹
+                {sessionDetailTabLabels.response}
                 <Tabs.Indicator />
               </Tabs.Tab>
             </Tabs.List>
@@ -796,44 +798,112 @@ export function SessionsView() {
                 <Spinner aria-label="正在读取会话详情" />
               </div>
             ) : (
-              <dl className="grid grid-cols-[112px_1fr] gap-y-3 text-sm">
-                <dt>请求 ID</dt>
-                <dd className="break-all font-mono text-xs">
-                  {selected.request_id}
-                </dd>
-                <dt>终端证书指纹</dt>
-                <dd className="break-all">
-                  {detail.data?.certificate_fingerprint ?? "正在读取…"}
-                </dd>
-                <dt>上游主机</dt>
-                <dd>{detail.data?.upstream_host ?? "—"}</dd>
-                <dt>通道</dt>
-                <dd>{selected.channel_text}</dd>
-                <dt>结果</dt>
-                <dd>{selected.result}</dd>
-                <dt>最终动作</dt>
-                <dd>{detail.data?.final_action ?? "—"}</dd>
-                <dt>App → Proxy</dt>
-                <dd>{detail.data?.app_to_proxy_tls ?? "—"}</dd>
-                <dt>Proxy → Server</dt>
-                <dd>{detail.data?.proxy_to_server_tls ?? "—"}</dd>
-              </dl>
+              <div className="space-y-5">
+                <dl className="grid grid-cols-[112px_1fr] gap-y-3 text-sm">
+                  <dt>请求 ID</dt>
+                  <dd className="break-all font-mono text-xs">{selected.request_id}</dd>
+                  <dt>终端证书指纹</dt>
+                  <dd className="break-all">{detail.data?.certificate_fingerprint ?? "正在读取…"}</dd>
+                  <dt>上游主机</dt>
+                  <dd>{detail.data?.upstream_host ?? "—"}</dd>
+                  <dt>通道</dt>
+                  <dd>{selected.channel_text}</dd>
+                  <dt>结果</dt>
+                  <dd>{selected.result}</dd>
+                  <dt>最终动作</dt>
+                  <dd>{detail.data?.final_action ?? "—"}</dd>
+                  <dt>客户端 → 代理</dt>
+                  <dd>{detail.data?.app_to_proxy_tls ?? "—"}</dd>
+                  <dt>代理 → 上游</dt>
+                  <dd>{detail.data?.proxy_to_server_tls ?? "—"}</dd>
+                </dl>
+                {Object.keys(detail.data?.extracted_metadata ?? {}).length > 0 && (
+                  <div>
+                    <h2 className="mb-2 font-semibold">Workspace 提取结果</h2>
+                    <dl className="grid grid-cols-[112px_1fr] gap-y-2 text-sm">
+                      {Object.entries(detail.data?.extracted_metadata ?? {}).map(([name, value]) => (
+                        <div key={name} className="contents"><dt>{name}</dt><dd className="break-all font-mono text-xs">{value}</dd></div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
+                {(detail.data?.response_assertions?.length ?? 0) > 0 && (
+                  <div>
+                    <h2 className="mb-2 font-semibold">响应断言</h2>
+                    <ul className="space-y-2 text-sm">
+                      {(detail.data?.response_assertions ?? []).map((assertion) => (
+                        <li key={assertion.assertion_id} className="flex items-start gap-2">
+                          <Chip size="sm" color={assertion.passed ? "success" : "danger"} variant="soft">{assertion.passed ? "通过" : "失败"}</Chip>
+                          <span><strong>{assertion.name}</strong><br /><span className="text-xs text-[var(--telemetry-muted)]">{assertion.message}</span></span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div>
+                  <h2 className="mb-2 font-semibold">规则轨迹</h2>
+                  <div className="space-y-2 text-sm">
+                    {(detail.data?.rule_trace ?? []).map((entry, index) => (
+                      <div key={`${entry}-${index}`}>{entry}</div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
           </Tabs.Panel>
           <Tabs.Panel id="request" className="pt-4">
-            <pre className="whitespace-pre-wrap break-all text-xs">
-              {detail.data?.request?.body_text ?? "按需读取后显示请求报文"}
-            </pre>
+            <div className="space-y-4">
+              <h2 className="font-semibold">请求 Header</h2>
+              <Table>
+                <Table.ScrollContainer>
+                  <Table.Content aria-label="详情请求 HTTP Header">
+                    <Table.Header>
+                      <Table.Column isRowHeader>名称</Table.Column>
+                      <Table.Column>值</Table.Column>
+                    </Table.Header>
+                    <Table.Body renderEmptyState={() => <div className="p-4 text-center text-sm text-[var(--telemetry-muted)]">无请求 Header</div>}>
+                      {Object.entries(detail.data?.request?.headers ?? {}).flatMap(([name, values]) =>
+                        values.map((value, index) => (
+                          <Table.Row key={`${name}-${index}`}>
+                            <Table.Cell className="font-mono text-xs">{name}</Table.Cell>
+                            <Table.Cell className="break-all font-mono text-xs">{value}</Table.Cell>
+                          </Table.Row>
+                        )),
+                      )}
+                    </Table.Body>
+                  </Table.Content>
+                </Table.ScrollContainer>
+              </Table>
+              <h2 className="font-semibold">请求 Body</h2>
+              <pre className="whitespace-pre-wrap break-all text-xs">{detail.data?.request?.body_text ?? "按需读取后显示请求报文"}</pre>
+            </div>
           </Tabs.Panel>
           <Tabs.Panel id="response" className="pt-4">
-            <pre className="whitespace-pre-wrap break-all text-xs">
-              {detail.data?.response?.body_text ?? "按需读取后显示响应报文"}
-            </pre>
-          </Tabs.Panel>
-          <Tabs.Panel id="trace" className="space-y-2 pt-4 text-sm">
-            {(detail.data?.rule_trace ?? []).map((entry, index) => (
-              <div key={`${entry}-${index}`}>{entry}</div>
-            ))}
+            <div className="space-y-4">
+              <h2 className="font-semibold">响应 Header</h2>
+              <Table>
+                <Table.ScrollContainer>
+                  <Table.Content aria-label="详情响应 HTTP Header">
+                    <Table.Header>
+                      <Table.Column isRowHeader>名称</Table.Column>
+                      <Table.Column>值</Table.Column>
+                    </Table.Header>
+                    <Table.Body renderEmptyState={() => <div className="p-4 text-center text-sm text-[var(--telemetry-muted)]">无响应 Header</div>}>
+                      {Object.entries(detail.data?.response?.headers ?? {}).flatMap(([name, values]) =>
+                        values.map((value, index) => (
+                          <Table.Row key={`${name}-${index}`}>
+                            <Table.Cell className="font-mono text-xs">{name}</Table.Cell>
+                            <Table.Cell className="break-all font-mono text-xs">{value}</Table.Cell>
+                          </Table.Row>
+                        )),
+                      )}
+                    </Table.Body>
+                  </Table.Content>
+                </Table.ScrollContainer>
+              </Table>
+              <h2 className="font-semibold">响应 Body</h2>
+              <pre className="whitespace-pre-wrap break-all text-xs">{detail.data?.response?.body_text ?? "按需读取后显示响应报文"}</pre>
+            </div>
           </Tabs.Panel>
         </Tabs>
       </aside>

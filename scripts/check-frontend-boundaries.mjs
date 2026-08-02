@@ -253,11 +253,11 @@ const settingsSource = readFileSync(
   "utf8",
 );
 if (
-  /\.split\(\s*\/\[,，\]\//.test(settingsSource) ||
-  !settingsSource.includes("leafSansRaw")
+  /leaf_sans\s*\.\s*(?:split|join)\s*\(|leafSansRaw/.test(settingsSource) ||
+  !settingsSource.includes("commands.settingsValidate(candidate)")
 ) {
   failures.push(
-    "src/features/settings/settings-view.tsx: SAN 原始文本必须交由 Rust 原子规范化",
+    "src/features/settings/settings-view.tsx: 系统设置必须把完整 Draft 直接交给 Rust，禁止在前端拼装或解析 SAN",
   );
 }
 

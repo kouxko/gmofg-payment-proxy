@@ -3,8 +3,8 @@
 /**
  * 控制台的数据装配层。
  *
- * 全局代理状态来自 BootstrapContext，最近抓包则用独立 Rust 查询加载。将数据加载
- * 与 ConsoleView 的纯展示分开，便于测试加载、失败和成功三种状态。
+ * 当前工作区及其入口概览都由 Rust Command 读取，最近抓包使用独立查询加载。
+ * 页面不再读取旧的全局 ProxySupervisor 状态，避免和“入口配置”形成第二套目录。
  */
 
 import { Alert, Button, Spinner } from "@heroui/react";
@@ -16,10 +16,27 @@ import {
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { callCommand } from "@/lib/ipc/client";
 import { commands } from "@/generated/rust-types";
+import type {
+  ListenerOverviewViewModel,
+  WorkspaceSummaryViewModel,
+} from "@/generated/rust-types";
 import { defaultCaptureQuery } from "@/features/capture/capture-view";
 
 export function ConsoleRoute() {
-  const { bootstrap, proxy, refresh, error } = useBootstrap();
+  const { bootstrap } = useBootstrap();
+  const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>(
+    "console-workspaces",
+    () => callCommand(commands.workspaceList()),
+  );
+  const workspaceId =
+    workspaces.data?.find((workspace) => workspace.selected)?.id ??
+    workspaces.data?.[0]?.id;
+  const overview = useIpcQuery<ListenerOverviewViewModel>(
+    `console-listener-overview:${workspaceId ?? "none"}`,
+    () => callCommand(commands.listenerOverview(workspaceId!)),
+    undefined,
+    { enabled: Boolean(workspaceId) },
+  );
   const recentCapture = useIpcQuery(
     "console-recent-capture",
     () =>
@@ -36,20 +53,30 @@ export function ConsoleRoute() {
     ["capture_rows_added", "snapshot_required"],
     recentCapture.refresh,
   );
-  if (!proxy) {
+  useAppEventRefresh(["workspace_changed"], workspaces.refresh);
+  useAppEventRefresh(
+    ["workspace_changed", "listener_status_changed", "snapshot_required"],
+    overview.refresh,
+  );
+
+  if (!overview.data) {
+    const error = workspaces.error ?? overview.error;
     if (error) {
       return (
         <div className="grid h-full place-items-center p-5">
           <Alert status="danger" className="max-w-xl">
             <Alert.Indicator />
             <Alert.Content>
-              <Alert.Title>代理控制台加载失败</Alert.Title>
+              <Alert.Title>运行监控加载失败</Alert.Title>
               <Alert.Description>{error}</Alert.Description>
             </Alert.Content>
             <Button
               size="sm"
               variant="outline"
-              onPress={() => void refresh()}
+              onPress={() => {
+                void workspaces.refresh();
+                void overview.refresh();
+              }}
             >
               重试
             </Button>
@@ -59,18 +86,17 @@ export function ConsoleRoute() {
     }
     return (
       <div className="grid h-full place-items-center">
-        <Spinner aria-label="正在加载代理控制台" />
+        <Spinner aria-label="正在加载运行监控" />
       </div>
     );
   }
   return (
     <ConsoleView
-      status={proxy}
+      overview={overview.data}
       recentCapture={recentCapture.data}
       recentCaptureError={recentCapture.error}
       recentCaptureLoading={recentCapture.isLoading}
       onRecentCaptureRetry={recentCapture.refresh}
-      onRefresh={refresh}
     />
   );
 }

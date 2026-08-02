@@ -584,6 +584,16 @@ pub trait HandshakePolicy: Debug + Send + Sync {
 pub trait PipelinePorts: HandshakePolicy {
     async fn runtime_stopping(&self, _epoch: Uuid) {}
     async fn connection_opened(&self, _context: &ConnectionContext) {}
+    /// Reports the security properties of the concrete upstream connection used by this request.
+    ///
+    /// The callback runs immediately after TCP/TLS establishment, before request bytes are sent,
+    /// so a later HTTP failure still leaves truthful transport evidence on the active session.
+    async fn upstream_security_established(
+        &self,
+        _context: &ConnectionContext,
+        _evidence: &UpstreamSecurityEvidence,
+    ) {
+    }
     async fn request(
         &self,
         _context: &ConnectionContext,
@@ -614,6 +624,27 @@ pub struct ForwardRequest {
     pub message: Message,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpstreamTransportSecurity {
+    PlaintextHttp,
+    Tls,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Public metadata from the exact upstream socket used by one HTTP exchange.
+/// Certificate bytes and private identity material never cross this boundary.
+pub struct UpstreamSecurityEvidence {
+    pub resolved_address: SocketAddr,
+    pub transport: UpstreamTransportSecurity,
+    pub tls_version: Option<String>,
+    pub cipher_suite: Option<String>,
+    pub peer_subject: Option<String>,
+    pub peer_sha256_fingerprint: Option<String>,
+    pub hostname_verification_enabled: Option<bool>,
+    pub client_identity_configured: bool,
+    pub client_identity_submitted: bool,
+}
+
 #[derive(Debug, Clone)]
 pub struct UpstreamExchange {
     pub informational_heads: Vec<Bytes>,
@@ -633,6 +664,8 @@ impl From<Message> for UpstreamExchange {
 pub trait UpstreamConnector: Debug + Send + Sync {
     async fn send(
         &self,
+        context: &ConnectionContext,
+        ports: &dyn PipelinePorts,
         request: ForwardRequest,
         actions: &[FaultAction],
         informational: Option<&InformationalResponseSink>,
@@ -659,6 +692,8 @@ pub struct HyperUpstreamConnector {
 impl UpstreamConnector for HyperUpstreamConnector {
     async fn send(
         &self,
+        context: &ConnectionContext,
+        ports: &dyn PipelinePorts,
         mut request: ForwardRequest,
         actions: &[FaultAction],
         informational: Option<&InformationalResponseSink>,
@@ -681,13 +716,49 @@ impl UpstreamConnector for HyperUpstreamConnector {
             .map_err(|error| ProxyError::io("configure upstream", &error))?;
         let mut io: BoxIo = Box::new(tcp);
         if let Some(tls) = &self.tls {
-            io = timeout_stage(
+            let connected = timeout_stage(
                 self.connect_timeout,
                 cancellation,
-                tls.connect(&self.host, io),
+                tls.connect_with_evidence(&self.host, io),
                 ErrorCode::UpstreamConnectTimeout,
             )
             .await??;
+            io = connected.io;
+            ports
+                .upstream_security_established(
+                    context,
+                    &UpstreamSecurityEvidence {
+                        resolved_address: self.address,
+                        transport: UpstreamTransportSecurity::Tls,
+                        tls_version: Some(connected.evidence.tls_version),
+                        cipher_suite: Some(connected.evidence.cipher_suite),
+                        peer_subject: Some(connected.evidence.peer.subject_summary),
+                        peer_sha256_fingerprint: Some(connected.evidence.peer.sha256_fingerprint),
+                        hostname_verification_enabled: Some(
+                            connected.evidence.hostname_verification_enabled,
+                        ),
+                        client_identity_configured: connected.evidence.client_identity_configured,
+                        client_identity_submitted: connected.evidence.client_identity_submitted,
+                    },
+                )
+                .await;
+        } else {
+            ports
+                .upstream_security_established(
+                    context,
+                    &UpstreamSecurityEvidence {
+                        resolved_address: self.address,
+                        transport: UpstreamTransportSecurity::PlaintextHttp,
+                        tls_version: None,
+                        cipher_suite: None,
+                        peer_subject: None,
+                        peer_sha256_fingerprint: None,
+                        hostname_verification_enabled: None,
+                        client_identity_configured: false,
+                        client_identity_submitted: false,
+                    },
+                )
+                .await;
         }
 
         wait_for_injected_timeout(actions, InjectedTimeoutStage::Write, cancellation).await?;
@@ -1035,7 +1106,7 @@ async fn send_scheduled_upstream_abort(
     ))
 }
 
-fn traffic_schedule(
+pub(crate) fn traffic_schedule(
     actions: &[FaultAction],
     direction: TrafficDirection,
 ) -> Result<TrafficSchedule> {
@@ -1149,6 +1220,26 @@ impl ConnectionAdmission {
 }
 
 impl ConnectionService {
+    /// 在调用方已经绑定好 `TcpListener` 的场景运行完整 HTTP/规则管线。
+    ///
+    /// 动态 Workspace Listener 需要先完成持久化快照与端口冲突校验，再把同一个 socket
+    /// 交给运行时；这个入口避免它复制 supervisor 的连接管理、容量和取消语义。
+    pub async fn run_tcp_listener(
+        &self,
+        listener: TcpListener,
+        channel: ChannelId,
+        epoch: Uuid,
+        cancellation: CancellationToken,
+    ) -> Result<()> {
+        self.run_listener(
+            Arc::new(TokioBoundListener(listener)),
+            channel,
+            epoch,
+            cancellation,
+        )
+        .await
+    }
+
     /// 接受一个通道的连接，直到根取消令牌触发或 listener 本身失败。
     ///
     /// 容量许可从 accept 后、TLS 前开始计数，并由连接任务持有到完全退出；这样沉默握手
@@ -1444,6 +1535,8 @@ impl ConnectionService {
         let upstream_exchange = self
             .upstream
             .send(
+                context,
+                self.ports.as_ref(),
                 forward,
                 &request_actions,
                 Some(wire.informational_response_sink),
@@ -1886,6 +1979,8 @@ HTTP/1.1 299 Vendor Final\r\nX-Final: yes\r\n\r\nbody",
     impl UpstreamConnector for FixedResponseConnector {
         async fn send(
             &self,
+            _context: &ConnectionContext,
+            _ports: &dyn PipelinePorts,
             _request: ForwardRequest,
             _actions: &[FaultAction],
             _informational: Option<&InformationalResponseSink>,

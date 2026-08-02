@@ -181,10 +181,10 @@ export function CertificatesView() {
       <Alert status="danger">
         <Alert.Indicator />
         <Alert.Content>
-          <Alert.Title>统一测试 Root CA 仅限隔离测试环境</Alert.Title>
+          <Alert.Title>本机 Root CA 仅限受控调试环境</Alert.Title>
           <Alert.Description>
-            当前简化测试模式随安装包提供统一签发能力，凭据可能被提取；不得用于生产、预生产或真实商户信任体系。Root
-            CA 首次集成与轮换由受控的测试客户端构建/发布流程完成。
+            每个 Intercept Proxy 安装实例都会生成独立 Root CA，私钥仅保存在当前系统用户的受保护存储中且不可导出。
+            请勿把该 CA 用于生产、预生产或真实商户信任体系。
           </Alert.Description>
         </Alert.Content>
       </Alert>
@@ -220,7 +220,7 @@ export function CertificatesView() {
       <div className="space-y-4">
         <Card>
           <Card.Header>
-            <Card.Title>A. 统一测试 CA 与 App → Proxy 服务端身份</Card.Title>
+            <Card.Title>A. 本机 Root CA 与客户端 → Proxy 服务端身份</Card.Title>
           </Card.Header>
           <Card.Content className="space-y-4">
             <div
@@ -283,7 +283,7 @@ export function CertificatesView() {
                 >
                   {pendingAction === "generate"
                     ? "正在生成…"
-                    : "初始化本机测试证书"}
+                    : "初始化本机证书"}
                 </Button>
               )}
               <Button
@@ -294,7 +294,7 @@ export function CertificatesView() {
                 <ArrowDownToLine className="size-4" />
                 {pendingAction === "export"
                   ? "正在导出…"
-                  : "导出测试客户端编译用 Root CA"}
+                  : "导出公开 Root CA"}
               </Button>
               <Button
                 variant="outline"
@@ -324,16 +324,15 @@ export function CertificatesView() {
 
         <Card>
           <Card.Header>
-            <Card.Title>B. Proxy → 上游服务器客户端身份</Card.Title>
+            <Card.Title>B. 上游 TLS 信任与可选客户端身份</Card.Title>
           </Card.Header>
           <Card.Content
             data-testid="certificate-upstream-actions"
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 max-[860px]:grid-cols-1"
           >
             <p className="text-sm text-[var(--telemetry-muted)]">
-              导入产品原有客户端 P12 作为上游客户端身份。产品原始上游 CA
-              已内置并默认作为上游服务器信任锚；环境证书变化时可以选择文件替换。
-              上游信任与下游 Proxy 测试 CA 无关。
+              上游要求 mTLS 时才需要导入 PKCS12 客户端身份；普通 TLS 可以不配置。
+              上游 CA 可按入口通过安全引用选择，与下游使用的本机 Root CA 相互独立。
             </p>
             <div className="flex flex-wrap justify-end gap-3 max-[860px]:justify-start">
               <Modal
@@ -358,7 +357,7 @@ export function CertificatesView() {
                   <Modal.Container size="sm">
                     <Modal.Dialog>
                       <Modal.Header>
-                        <Modal.Heading>导入共享 PKCS12</Modal.Heading>
+                        <Modal.Heading>导入上游 PKCS12 客户端身份</Modal.Heading>
                       </Modal.Header>
                       <Modal.Body>
                         <TextField>
@@ -455,7 +454,7 @@ export function CertificatesView() {
                 <Alert.Content>
                   <Alert.Title>暂无证书检查结果</Alert.Title>
                   <Alert.Description>
-                    初始化本机测试证书或导入上游材料后，此处显示证书状态与校验详情。
+                    初始化本机证书或导入上游材料后，此处显示证书状态与校验详情。
                   </Alert.Description>
                 </Alert.Content>
               </Alert>
@@ -499,10 +498,10 @@ export function CertificatesView() {
           </Card.Header>
           <Card.Content className="space-y-3 text-sm">
             {[
-              "客户端应用 → Proxy（服务端证书）：测试版客户端在构建时已内置统一测试 Root CA。",
-              "Proxy（服务端）→ 客户端应用（客户端证书）：Proxy 验证终端客户端证书。",
-              "上游服务器 → Proxy（共享客户端证书）：上游验证 Proxy 身份。",
-              "Proxy（客户端）→ 上游服务器：Proxy 使用上游 CA 验证服务器。",
+              "客户端 → Proxy（服务端证书）：客户端信任本机导出的公开 Root CA，并校验叶子证书 SAN。",
+              "Proxy → 客户端（客户端证书）：仅当入口启用可选或必须客户端认证时，Proxy 才校验客户端证书。",
+              "上游服务器 → Proxy（客户端身份）：仅当上游要求 mTLS 时，Proxy 才提交所选 PKCS12 身份。",
+              "Proxy → 上游服务器：Proxy 按入口配置的 CA 与主机名策略校验上游服务器。",
             ].map((text, index) => (
               <div key={text} className="flex gap-3">
                 <Chip size="sm" variant="soft">
@@ -522,8 +521,8 @@ export function CertificatesView() {
         <Alert.Content>
           <Alert.Title>重新初始化本机服务端证书（危险操作）</Alert.Title>
           <Alert.Description>
-            将使用同一统一测试 Root CA 重新生成本机私钥和叶子证书；测试客户端
-            无需重新导入证书。仅 Proxy 已停止时可执行。
+            将替换本机 Root CA、Root 私钥、服务端私钥和叶子证书。此前信任旧 Root CA
+            的客户端必须重新导入新公开证书；仅所有代理入口均已停止时可执行。
           </Alert.Description>
         </Alert.Content>
         <AlertDialog
@@ -547,8 +546,8 @@ export function CertificatesView() {
                   <AlertDialog.Heading>确认重新初始化本机证书？</AlertDialog.Heading>
                 </AlertDialog.Header>
                 <AlertDialog.Body>
-                  本机服务端私钥和叶子证书将被替换；统一测试 Root CA
-                  保持不变，测试客户端无需重新编译或导入。
+                  本机 Root CA、Root 私钥、服务端私钥和叶子证书都会被替换。
+                  已信任旧 Root CA 的客户端将无法继续连接，必须重新导入新公开证书。
                 </AlertDialog.Body>
                 <AlertDialog.Footer>
                   <Button

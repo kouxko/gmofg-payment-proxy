@@ -1,19 +1,19 @@
 //! 依赖方向的“防回退”测试。
 //!
-//! 这些测试扫描 Cargo 元数据和源码，防止 Tauri、Payment 产品词汇或产品编码重新渗入
-//! 通用核心。它们证明的是静态架构边界，不证明运行时网络行为。
+//! 这些测试扫描 Cargo 元数据和源码，防止 Tauri 或已删除的旧产品契约重新渗入通用核心，
+//! 同时固定动态 Workspace 编解码器的依赖方向。它们不证明运行时网络行为。
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const CORE_CRATES: [(&str, &str); 7] = [
-    ("domain", "gmofg-proxy-domain"),
-    ("application", "gmofg-proxy-application"),
-    ("proxy", "gmofg-proxy-runtime"),
-    ("product-api", "gmofg-proxy-product-api"),
-    ("product-payment", "gmofg-proxy-product-payment"),
-    ("infrastructure", "gmofg-proxy-infrastructure"),
-    ("host", "gmofg-proxy-host"),
+    ("domain", "intercept-proxy-domain"),
+    ("application", "intercept-proxy-application"),
+    ("android-engine", "intercept-proxy-android-engine"),
+    ("proxy", "intercept-proxy-runtime"),
+    ("product-api", "intercept-proxy-product-api"),
+    ("infrastructure", "intercept-proxy-infrastructure"),
+    ("host", "intercept-proxy-host"),
 ];
 
 #[test]
@@ -36,82 +36,72 @@ fn reusable_rust_crates_do_not_depend_on_tauri() {
 
 #[test]
 fn runtime_crate_does_not_depend_on_application_layer() {
-    let packages = resolved_dependencies("gmofg-proxy-runtime");
+    let packages = resolved_dependencies("intercept-proxy-runtime");
     assert!(
         !packages
             .iter()
-            .any(|package| package == "gmofg-proxy-application"),
+            .any(|package| package == "intercept-proxy-application"),
         "proxy runtime must not depend upward on application: {packages:?}"
     );
 }
 
 #[test]
-fn generic_core_does_not_depend_on_concrete_payment_product() {
+fn generic_core_does_not_depend_on_removed_legacy_product_fixture() {
     for crate_name in [
-        "gmofg-proxy-domain",
-        "gmofg-proxy-application",
-        "gmofg-proxy-runtime",
-        "gmofg-proxy-product-api",
-        "gmofg-proxy-infrastructure",
-        "gmofg-proxy-host",
+        "intercept-proxy-domain",
+        "intercept-proxy-application",
+        "intercept-proxy-android-engine",
+        "intercept-proxy-runtime",
+        "intercept-proxy-product-api",
+        "intercept-proxy-infrastructure",
+        "intercept-proxy-host",
     ] {
         let packages = resolved_dependencies(crate_name);
         assert!(
             !packages
                 .iter()
-                .any(|package| package == "gmofg-proxy-product-payment"),
-            "{crate_name} must not depend on the concrete Payment product: {packages:?}"
+                .any(|package| package == "intercept-proxy-legacy-test-fixture"),
+            "{crate_name} must not depend on the removed legacy product fixture: {packages:?}"
         );
     }
 }
 
 #[test]
-fn generic_core_does_not_resolve_product_body_codecs() {
+fn dynamic_workspace_body_codecs_stay_in_infrastructure() {
     for crate_name in [
-        "gmofg-proxy-domain",
-        "gmofg-proxy-application",
-        "gmofg-proxy-runtime",
-        "gmofg-proxy-infrastructure",
-        "gmofg-proxy-host",
+        "intercept-proxy-domain",
+        "intercept-proxy-application",
+        "intercept-proxy-runtime",
     ] {
         let packages = resolved_dependencies(crate_name);
         assert!(
             !packages.iter().any(|package| package == "encoding_rs"),
-            "{crate_name} must receive body encoding through product-api, not resolve encoding_rs: {packages:?}"
+            "{crate_name} must remain independent of concrete text encodings: {packages:?}"
         );
     }
+    let infrastructure = resolved_dependencies("intercept-proxy-infrastructure");
+    assert!(
+        infrastructure
+            .iter()
+            .any(|package| package == "encoding_rs"),
+        "infrastructure must implement the Workspace-selectable Shift-JIS codec: {infrastructure:?}"
+    );
 }
 
 #[test]
-fn payment_product_library_does_not_pull_runtime_or_probe_dependencies() {
-    let packages = resolved_dependencies("gmofg-proxy-product-payment");
-    let forbidden = [
-        "async-trait",
-        "gmofg-proxy-infrastructure",
-        "gmofg-proxy-runtime",
-        "p12-keystore",
-        "ring",
-        "tokio",
-        "tokio-util",
-        "zeroize",
-    ];
-
-    for package in forbidden {
-        assert!(
-            !packages.iter().any(|resolved| resolved == package),
-            "the default Payment product library must stay limited to product policy and codecs; \
-             {package} belongs to the opt-in real-device probe: {packages:?}"
-        );
-    }
+fn removed_legacy_product_fixture_is_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(crates_dir().parent().unwrap().join("Cargo.toml"))
+        .expect("read workspace manifest");
+    assert!(!manifest.contains("product-payment"));
+    assert!(!crates_dir().join("product-payment").exists());
 }
 
 #[test]
-fn generic_production_sources_do_not_contain_payment_contracts() {
+fn generic_production_sources_do_not_contain_removed_product_contracts() {
     let forbidden = [
         "GMO-FG",
         "Payment App",
-        "SHIFT_JIS",
-        "shift_jis",
+        "D48",
         "ChannelKind::Transaction",
         "ChannelKind::Dll",
         "enum ChannelKind",
@@ -126,7 +116,14 @@ fn generic_production_sources_do_not_contain_payment_contracts() {
         "gmofg-payment-proxy/keychain",
     ];
 
-    for directory in ["domain", "application", "proxy", "infrastructure", "host"] {
+    for directory in [
+        "domain",
+        "application",
+        "android-engine",
+        "proxy",
+        "infrastructure",
+        "host",
+    ] {
         let source_dir = crates_dir().join(directory).join("src");
         for source in rust_sources(&source_dir) {
             let text = std::fs::read_to_string(&source)

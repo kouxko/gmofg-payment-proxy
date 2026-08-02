@@ -6,9 +6,9 @@ param(
 # CI 在完成 MSI/NSIS 构建后使用 -SkipBuild，避免重复编译；开发者本地省略该参数时会先构建。
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$Executable = Join-Path $ProjectRoot "src-tauri/target/release/gmofg-payment-proxy.exe"
+$Executable = Join-Path $ProjectRoot "src-tauri/target/release/intercept-proxy.exe"
 $DistDirectory = Join-Path $ProjectRoot "dist"
-$PortableDirectory = Join-Path $DistDirectory "GMO-FG-Payment-Proxy-portable-x64"
+$PortableDirectory = Join-Path $DistDirectory "Intercept-Proxy-portable-x64"
 $Archive = "$PortableDirectory.zip"
 
 if (-not $SkipBuild) {
@@ -34,11 +34,11 @@ if (Test-Path $Archive) {
 }
 
 New-Item $PortableDirectory -ItemType Directory -Force | Out-Null
-Copy-Item $Executable (Join-Path $PortableDirectory "GMO-FG-Payment-Proxy.exe")
+Copy-Item $Executable (Join-Path $PortableDirectory "Intercept-Proxy.exe")
 Copy-Item (Join-Path $ProjectRoot "README.md") (Join-Path $PortableDirectory "README.md")
 
 $PortableNotice = @"
-GMO-FG Payment Proxy portable build
+Intercept Proxy portable build
 
 - This package does not install or modify system-wide files.
 - Microsoft Edge WebView2 Runtime must already be available on the target Windows machine.

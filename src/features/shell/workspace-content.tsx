@@ -16,12 +16,21 @@ import { FaultsView } from "@/features/faults/faults-view";
 import { RulesView } from "@/features/rules/rules-view";
 import { SessionsView } from "@/features/sessions/sessions-view";
 import { SettingsView } from "@/features/settings/settings-view";
+import { AndroidNetworkView } from "@/features/android-network/android-network-view";
+import { ListenersView } from "@/features/listeners/listeners-view";
+import { WorkspacesView } from "@/features/workspaces/workspaces-view";
 import { useWorkspaceNavigation } from "./workspace-navigation";
 
 export function WorkspaceContent() {
   const { pathname } = useWorkspaceNavigation();
 
   switch (pathname) {
+    case "/workspaces":
+      return <WorkspacesView />;
+    case "/listeners":
+      return <ListenersView />;
+    case "/android-network":
+      return <AndroidNetworkView />;
     case "/capture":
       return <CaptureRoute />;
     case "/sessions":

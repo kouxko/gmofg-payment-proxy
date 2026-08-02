@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   sessionFilterDateText,
   sessionFilterDateValue,
+  sessionDetailTabLabels,
 } from "./sessions-view";
 
 describe("HeroUI session date filters", () => {
@@ -17,5 +18,11 @@ describe("HeroUI session date filters", () => {
   it("returns an empty filter for invalid or cleared values", () => {
     expect(sessionFilterDateValue("not-a-date")).toBeNull();
     expect(sessionFilterDateText(null)).toBeNull();
+  });
+});
+
+describe("session detail tabs", () => {
+  it("keeps headers inside the three content tabs", () => {
+    expect(Object.values(sessionDetailTabLabels)).toEqual(["概览", "请求", "响应"]);
   });
 });

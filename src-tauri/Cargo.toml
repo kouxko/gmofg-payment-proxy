@@ -1,9 +1,10 @@
 [package]
-name = "gmofg-payment-proxy"
-default-run = "gmofg-payment-proxy"
+name = "intercept-proxy"
+default-run = "intercept-proxy"
+autobins = false
 version.workspace = true
-description = "GMO-FG Payment mTLS interception proxy"
-authors = ["GMO-FG"]
+description = "Generic HTTP and HTTPS interception proxy"
+authors = ["Intercept Proxy contributors"]
 license = "Proprietary"
 edition.workspace = true
 rust-version.workspace = true
@@ -19,6 +20,7 @@ rust-version = "1.97"
 
 [workspace.dependencies]
 async-trait = "0.1.89"
+base64 = "0.22.1"
 bytes = "1.11"
 chrono = { version = "0.4.44", features = ["serde"] }
 encoding_rs = "0.8.35"
@@ -32,6 +34,8 @@ parking_lot = "0.12.5"
 rcgen = { version = "=0.14.8", default-features = false, features = ["crypto", "ring", "pem", "x509-parser"] }
 ring = "0.17.14"
 rustls = { version = "=0.23.42", default-features = false, features = ["ring", "tls12", "logging"] }
+rustls-native-certs = "=0.8.4"
+rustls-pemfile = "=2.2.0"
 rusqlite = { version = "0.39", features = ["bundled", "chrono", "uuid"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 security-framework = "=3.7.0"
@@ -69,20 +73,31 @@ missing_panics_doc = "allow"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "gmofg_payment_proxy"
+name = "intercept_proxy"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+export-bindings = []
+
+[[bin]]
+name = "intercept-proxy"
+path = "src/main.rs"
+
+[[bin]]
+name = "export-bindings"
+path = "src/bin/export-bindings.rs"
+required-features = ["export-bindings"]
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 
 [dependencies]
-gmofg-proxy-application = { path = "crates/application" }
-gmofg-proxy-domain = { path = "crates/domain" }
-gmofg-proxy-host = { path = "crates/host" }
-gmofg-proxy-infrastructure = { path = "crates/infrastructure" }
-gmofg-proxy-product-api = { path = "crates/product-api" }
-gmofg-proxy-product-payment = { path = "crates/product-payment" }
-gmofg-proxy-runtime = { path = "crates/proxy" }
+intercept-proxy-application = { path = "crates/application" }
+intercept-proxy-domain = { path = "crates/domain" }
+intercept-proxy-host = { path = "crates/host" }
+intercept-proxy-infrastructure = { path = "crates/infrastructure" }
+intercept-proxy-product-api = { path = "crates/product-api" }
+intercept-proxy-runtime = { path = "crates/proxy" }
 log = "0.4"
 serde.workspace = true
 specta.workspace = true

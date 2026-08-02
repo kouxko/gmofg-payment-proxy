@@ -9,13 +9,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, ChannelState, ChannelStatusViewModel, ConnectionHealthState,
     ConnectionHealthViewModel, DisabledReason, ProxyState as ApplicationProxyState,
     ProxyStatusViewModel, ProxySupervisorPort, SettingsDraft, UiTone,
 };
-use gmofg_proxy_product_api::ProductLabels;
-use gmofg_proxy_runtime::{
+use intercept_proxy_product_api::ProductLabels;
+use intercept_proxy_runtime::{
     ChannelConfig, ChannelId as RuntimeChannelId, ChannelRuntimeMetrics, DEFAULT_MAX_CONNECTIONS,
     MessageLimits, ProxyConfig, ProxyError, ProxyState, ProxySupervisor, RuntimeMetricsProvider,
     RuntimeSnapshot,
@@ -434,8 +434,8 @@ fn map_error(error: ProxyError) -> AppError {
 mod tests {
     use std::collections::BTreeMap;
 
-    use gmofg_proxy_runtime::transport::ConnectionService;
-    use gmofg_proxy_runtime::{
+    use intercept_proxy_runtime::transport::ConnectionService;
+    use intercept_proxy_runtime::{
         ChannelRuntimeMetrics, Result, RuntimeMetricsSnapshot, RuntimeServiceFactory,
         TokioListenerBinder,
     };
@@ -455,8 +455,8 @@ mod tests {
                 .into_iter()
                 .enumerate()
                 .map(
-                    |(index, id)| gmofg_proxy_application::ChannelSettingsDraft {
-                        id: gmofg_proxy_domain::ChannelId::new(id).unwrap(),
+                    |(index, id)| intercept_proxy_application::ChannelSettingsDraft {
+                        id: intercept_proxy_domain::ChannelId::new(id).unwrap(),
                         display_name: id.to_uppercase(),
                         enabled: true,
                         port: 20_001 + u16::try_from(index).unwrap(),

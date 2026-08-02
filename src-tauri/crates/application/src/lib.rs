@@ -6,25 +6,33 @@
 //! 本 crate 还定义由 infrastructure 适配器实现的端口，但不包含 Tauri、数据库、TLS
 //! 或文件系统实现。
 
+mod android;
 mod breakpoint_validation;
 mod breakpoints;
 mod capacity;
 mod error;
 mod events;
 mod facade;
+mod listeners;
 mod models;
 mod ports;
 mod sessions;
+mod workspaces;
 
+pub use android::*;
 pub use breakpoint_validation::BreakpointValidator;
 pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket};
 pub use capacity::CapacityLedger;
 pub use error::{AppError, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
 pub use facade::{Application, ApplicationDependencies};
+pub use listeners::InMemoryListenerRuntime;
 pub use models::*;
 pub use ports::*;
 pub use sessions::{InMemorySessionStore, SessionStore};
+pub use workspaces::{
+    InMemoryWorkspaceDocumentStore, InMemoryWorkspaceStore, remap_workspace_identity,
+};
 
 #[cfg(test)]
 mod requirements_tests;

@@ -1,267 +1,91 @@
-# GMO-FG Payment Proxy UI QA
+# Workspace 页面视觉验收
 
-## 验收环境
+- 参考截图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-97b5b831-e193-43b8-9f6e-6c139ed2b136.png`
+- 参考尺寸：3024 × 1898
+- 验收状态：Workspace 页面，默认 Workspace 已选中
 
-- 日期：2026-07-28
-- 浏览器：Microsoft Edge 150.0.4078.83
-- 视口：1440×1024、1024×900
-- 构建：Next.js 静态导出目录 `out/`，由本地静态服务加载
-- 数据来源：注入 Rust ViewModel/IPC 模拟响应，仅用于浏览器视觉与交互验收
-- 应用集成：Tauri/Rust 集成构建单独验证，不以浏览器模拟替代
+## 本次调整
 
-## 页面覆盖
+- 删除顶部占据大面积高度的“新建 Workspace”独立卡片。
+- 将页面标题、名称输入框、新建按钮和导入按钮合并为紧凑的横向工具栏。
+- Workspace 列表紧接工具栏显示，减少首屏无效留白。
+- 窄窗口下工具栏自动换行，继续使用现有 HeroUI `Input` 和 `Button`。
 
-以下 8 个页面均在两个视口下完成真实 Edge 截图、页面标题检查和横向溢出检查：
+## 自动化验证
 
-1. 代理控制台
-2. 实时抓包
-3. 会话记录
-4. 断点实验台
-5. 拦截规则
-6. 故障模拟
-7. 证书管理
-8. 系统设置
+- Workspace 交互测试通过。
+- ESLint 通过。
+- TypeScript 类型检查通过。
+- Tauri macOS release 构建通过。
 
-最终截图位于 `output/playwright/ui-audit-2026-07-28/production-final/`：
+## 视觉验证限制
 
-- `<viewport>-<route>.png`
-- `contact-1440.png`
-- `contact-1024.png`
-- `19-pkcs12-before-after.png`
-- `22-settings-reset-pending.png`
-- `23-breakpoint-rust-actions-1024.png`
-- `24-breakpoint-rust-action-list-1024.png`
-- `v106-1024-{rules,faults,settings,breakpoints}.png`
+已重新启动打包后的 macOS 应用，但应用窗口位于另一个 macOS Space；系统窗口截图返回全黑图像，因此无法生成可信的同尺寸前后对比图。自动化测试和构建结果不能替代视觉验收，最终布局由用户在当前已打开的应用中确认。
 
-## 交互覆盖
+**final result: blocked**
 
-- 1024 宽度主导航 Drawer 可打开，并显示全部 8 个页面入口。
-- 实时抓包可选择记录、加载 Rust 详情并切换请求详情 Tab。
-- 会话记录仅在用户点击“查看完整报文”后调用 `session_get`；仅选择行不会加载 Payload。
-- 断点实验台可切换有效报文 Tab，并调用 Rust 校验。
-- 拦截规则可切换基本信息、匹配条件、执行动作并提交保存意图。
-- 系统设置可切换分类、修改容量值并提交保存意图。
-- 代理控制台可提交重启代理意图。
-- AlertDialog 提交期间“取消”和确认按钮均禁用；按下 Escape 后弹窗仍保持，Rust
-  响应成功后才关闭。
-- PKCS12 Modal、设置 AlertDialog、会话 Drawer 的取消/关闭操作均位于 Footer
-  安全边距内。
-- 侧栏普通项、选中项及“关于”的图标、文字、背景共用同一水平中心轴。
-- `src/test/overlay-contracts.test.tsx` 使用真实 HeroUI v3 组件自动验证 Modal、
-  Drawer 的 Footer close slot，以及 AlertDialog 等待态、禁用态和 Escape 防误关。
-- 生产 `RulesView` 自动验证 Header 解析待定时“保存规则”不可执行、Rust 最新解析
-  返回后才保存新 Draft；动作类型草稿同样进入保存门禁，两次选择逆序完成时仅应用
-  最新 Rust 结果。Header、Body 与状态码并发编辑使用最新动作合并，互不回滚；条件
-  类型请求期间删除当前行或前置行后，迟到结果不会写入移位后的条件。
-- 生产 `SettingsView` 自动验证真实恢复默认 AlertDialog 的等待态，以及 SAN 原始
-  文本不经 TypeScript 拆分而直接提交 Rust。
-- `BootstrapProvider` 使用请求代次隔离，旧快照不得覆盖更新的 Rust Channel 事件。
-- 断点处理方式、标签和默认参数来自 Rust `available_actions`，请求与响应阶段动作集
-  由 Rust 测试分别覆盖。
+---
 
-## 验收结果
+# 2026-08-01 应用定向弱网双栏布局视觉验收
 
-- 16 个页面/视口组合均无横向溢出。
-- v1.0.7 变更涉及的规则、故障、设置和断点页在 1024×900 重新验证，4/4
-  页面标题存在且无横向溢出。
-- 最终稳定静态服务回归：0 个 Console Error、0 个 Console Warning、0 个 Page Error。
-- 1024 宽度使用紧凑顶栏、Drawer 导航及内部滚动；固定操作区保持可见。
-- HeroUI Tabs、Drawer、Table、Form 与 Dialog 交互均可用。
-- 页面底部不再展示无实际控制功能的内存占用状态条。
-- 统一门禁当前通过：12 个 UI contract 文件 / 35 个测试、12 个前端测试文件 /
-  35 个测试；Rust workspace 118 个测试沿用上一轮验证结果。
+- 问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-32213f0a-e2fa-4012-922c-e54bff3001f5.png`
+- 最终实现图：`/tmp/intercept-proxy-device-network-final.png`
+- 逻辑视口：macOS 打包应用窗口 1440 × 900
+- 图片尺寸：参考图 2880 × 1800（Retina）；自动化实现截图 1229 × 768（工具等比优化输出）
+- 验收状态：已选择安卓模拟设备、已新建弱网方案、已输入包名 `android` 并由 Rust 返回匹配结果
 
-## 证据边界
+## 可见问题与修复
 
-- 本轮 Edge 验收证明静态导出 UI 的视觉、响应式布局、DOM 语义和模拟 IPC
-  交互，不替代真实 Tauri 窗口、系统文件选择器、Keychain/DPAPI、证书链和网络代理验证。
-- 键盘操作覆盖了导航、Dialog 和 Escape 等主路径，不等同于完整 WCAG
-  辅助技术审计。
+- **P1 信息架构混杂**：原图把 ADB、设备、设备端控制和弱网参数横向铺开，用户难以判断操作顺序。已重排为左侧“连接与设备控制”、右侧“弱网方案与配置”的稳定双栏结构。
+- **P1 无法快速定位应用**：原图应用列表没有查询入口。已在目标应用区域加入 HeroUI 输入框与按钮，包名匹配、输入上限和结果返回均由 Rust 完成。
+- **P1 概念重复**：原导航中的代理入口与控制台不易区分。已改为“入口配置”和“运行监控”，入口页补充“入口只负责接收与转发流量”的说明及“去添加故障模拟 / 去配置拦截规则”直接入口。
+- **P2 加载状态误导**：首次筛选时短暂显示“没有匹配”。已改为“正在由 Rust 筛选包名…”，并在 Rust 应用层缓存当前设备完整包清单，切换或重新选择设备时失效。
+- **P2 非中文术语**：设备弱网页面的 `Companion`、`Profile` 等操作文案已改成设备端组件、弱网方案等中文表达。
 
-## 2026-07-29 侧栏与右侧安全边距复验
+## 对照结论
 
-### 对照目标
+- 全视图：导航、左右分栏、卡片边距和滚动区域没有贴边、裁切或大面积无意义留白。
+- 聚焦区域：右栏能看到方案基本信息、包名筛选、应用结果和后续 TCP/IP 弱网参数；左栏保持设备选择及网络接管控制，不与配置字段混排。
+- 核心路径：选择设备 → 新建弱网方案 → 按包名筛选 → 选择应用 → 配置弱网参数，控件均在打包应用中可达。
+- 视觉对比未发现新的 P0、P1 或 P2 阻断问题。
 
-- 源视觉真值：
-  - `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-58213799-dd86-465b-aed5-e247951fe155.png`
-  - `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-14002c3d-2b18-46b1-823c-ea66c77f96fb.png`
-- Edge 实现截图：
-  - `output/playwright/ui-spacing-2026-07-29/certificates-sidebar-hover-edge-1440.png`
-  - `output/playwright/ui-spacing-2026-07-29/faults-error-edge-1440.png`
-- 等尺寸完整页面对照：
-  `output/playwright/ui-spacing-2026-07-29/faults-error-source-vs-edge.png`
-- 等尺寸侧栏局部对照：
-  `output/playwright/ui-spacing-2026-07-29/certificates-sidebar-source-vs-edge.png`
-- 浏览器：Microsoft Edge；实现视口：1440×1024；完整页面对照按源图可见区域裁切为
-  1440×900 后等比例并排。
-- 状态：证书页选中“证书”并悬浮“模拟”；故障模拟页显示 Rust 核心不可用错误条。
-- 源图与实现中的故障模板数据不同；本轮对照只判断应用壳层、侧栏交互背景和错误条
-  边界，不把 Rust 模拟数据差异计为视觉偏差。
+**final result: passed**
 
-### 比较历史与修复
+---
 
-- 首轮 P2：侧栏按钮没有垂直间隔，悬浮态与选中态背景相接；全宽 Alert
-  叠加外边距后超出内容盒，导致“重试”贴近窗口右边。
-- 修复：
-  - 侧栏容器增加 `gap-2` 与 `px-2`，按钮统一使用容器内 `w-full`。
-  - 全局错误条改由 `px-5` 容器提供安全区，删除 Alert 自身外边距。
-- 修复后证据：
-  - Edge 几何测量显示每个侧栏按钮左右边界为 8px/87px，相邻按钮垂直间隔为
-    8px。
-  - 错误条相对主内容左右边距均为 20px。
-  - 两个验证页面均满足 `main.scrollWidth === main.clientWidth`。
-  - Edge 控制台为 0 Error、0 Warning。
+# 2026-08-01 应用定向弱网单列布局与包名列表验收
 
-### 必查视觉面
+- 问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-32213f0a-e2fa-4012-922c-e54bff3001f5.png`
+- 最终实现图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/Intercept Proxy Screenshot 2026-08-01 at 21.16.45.jpeg`
+- 验收对象：macOS release 打包应用中的“应用定向弱网”页面
 
-- 字体与层级：未修改，标题、正文、按钮字重及换行与现有 HeroUI 设计保持一致。
-- 间距与布局节奏：侧栏选中/悬浮背景已有明确分隔；错误条与右侧窗口边界保留
-  20px 安全距离。
-- 色彩与令牌：继续使用现有 `telemetry-*` 语义令牌，无新增颜色。
-- 图像与图标：继续使用 Gravity UI 图标，无替代图、手绘 SVG 或清晰度变化。
-- 文案与内容：未修改业务文案和 Rust ViewModel 内容。
+## 本次调整
 
-### 交互与回归
+- 取消左右双栏，将本机连接、目标设备、设备端控制、弱网方案及所有配置卡片改为全宽单列逐行排列。
+- 卡片边框恢复为项目其他页面统一使用的 `telemetry-line`，并保留相同的 `shadow-sm`，不再使用单页特有的深色边框。
+- 目标应用表格设置固定可视高度，并为 HeroUI `Table.ScrollContainer` 显式启用纵向滚动、滚动边界和稳定滚动条槽位。
+- 删除每行重复的“选择”按钮，改为点击整行切换应用；选中行使用统一浅色背景和“已选中”状态标记。
+- 删除表格内重复的“点击整行选择”状态列，将操作说明统一放在“目标应用”卡片标题下；表格仅保留包名、UID 和签名，选中状态由整行高亮表达。
+- 将“本机连接工具”“目标设备”“设备端控制”三个独立卡片合并为一个“设备连接与控制”卡片；目标设备改用 HeroUI 下拉选择，ADB 状态、刷新设备和设备端操作按使用顺序集中展示。
 
-- Edge 验证了侧栏悬浮态、选中态、错误状态与“重试”按钮可见性。
-- UI contracts：12 个文件、35 个测试全部通过。
-- 前端测试：12 个文件、35 个测试全部通过。
-- Next.js 生产静态导出成功。
-- 未发现剩余 P0、P1 或 P2 视觉问题；无需额外局部放大对照。
+## 功能与视觉证据
 
-final result: passed
+- 包名列表最初显示 `android`、`android.ext.services` 等靠前条目；滚动后显示 `com.genymotion.genyd`、`com.qwant.liberty`、`org.chromium.webview_shell` 等后续条目，证明列表可以独立查看后续包名。
+- 最终截图一次可见 6 行应用，不再只露出一行或少量内容。
+- 全宽单列卡片没有左右内容竞争，未发现重叠、横向溢出、贴边或异常留白。
+- 卡片圆角、浅灰边框和轻阴影与项目现有页面保持一致。
 
-## 2026-07-31 故障模板整行选择配置
+## 自动化验证
 
-### 对照证据
+- Android 弱网页面测试：8 项通过，包含 20 条应用清单、纵向滚动容器、单列布局、整行选择和设备下拉选择回归断言。
+- TypeScript 类型检查通过。
+- 相关 ESLint 检查通过。
+- Tauri macOS release 重新构建通过，并生成 `.app` 与 `.dmg`。
 
-- 源视觉真值：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-7e83febd-2e17-46ad-b0a8-c029fe43e410.png`
-- 最终打包应用：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/GMO-FG Payment Proxy Screenshot 2026-07-31 at 13.58.41.jpeg`
-- 并排比较输入：
-  `/tmp/gmofg-fault-row-selection-comparison.png`
-- 视口：macOS 打包应用窗口 1228×768。
-- 状态：Proxy 已停止，故障模拟页首次进入，第一条“自定义 HTTP 状态”已选中。
+## 本轮人工验收边界
 
-### 调整与交互复验
+- 最新问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-19490ef4-0f2c-488d-90d0-89dbfd3bc11d.png`。
+- 最新实现已合并三张设备卡片、改为 HeroUI 设备下拉框，并重新生成 macOS `.app` 与 `.dmg`。
+- 按用户要求，本轮只打开最新打包应用，不由 Codex 点击、切换页面或继续截图判断；最终视觉验收由用户完成，因此没有伪造最新实现截图或等尺寸对照结论。
 
-- 删除故障模板表格的“操作”列及每行“配置”按钮，减少重复操作入口。
-- 保留 HeroUI Table 单选行为，点击任意整行即可切换右侧配置面板。
-- 页面首次进入时默认选中第一条模板，并直接显示其配置表单。
-- 在打包应用中点击第二条“不连接上游并断开”，确认行选中状态和右侧标题同步切换；
-  随后恢复第一条选中，供用户直接检查。
-- 表格最小宽度由 900px 收紧至 820px，移除操作列后未出现额外空白或横向裁切。
-
-### 自动化与构建
-
-- 故障页定向测试：4 个全部通过。
-- TypeScript 与 ESLint 通过。
-- macOS `.app` 打包成功并已打开；完整 DMG 流程仍受既有
-  `bundle_dmg.sh` 打包阶段失败影响，不影响本次 `.app` 交互验收。
-
-final result: passed
-
-## 2026-07-31 设置通道卡片二次修正
-
-### 源视觉真值
-
-- 用户否决的中间版本：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-2c09bddd-13d6-4db6-848f-cd5fd027e6f2.png`
-- 最终打包应用：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/GMO-FG Payment Proxy Screenshot 2026-07-31 at 12.39.41.jpeg`
-- 等高并排比较输入：
-  `/tmp/gmofg-settings-layout-final-comparison.png`
-
-### 修正与比较结论
-
-- 删除开关旁可见的“已启用/已禁用”文案，保留屏幕阅读器可访问文本。
-- 不再把开关夹在通道信息和端口字段之间，也不再为开关建立独立纵向信息列。
-- 卡片改为清晰的两层结构：标题行包含通道名称、通道 ID 和右对齐开关；字段行只
-  包含监听端口和上游 URL。
-- 交易与 DLL 卡片结构、边距、字段宽度和开关位置完全一致，卡片高度较中间版本
-  更紧凑。
-- 所有表单控件继续使用 HeroUI；未引入自定义控件或新依赖。
-
-### 自动化与构建
-
-- 设置页定向测试：4 个全部通过。
-- TypeScript 与 ESLint 通过。
-- macOS `.app` 与 `.dmg` 重新打包成功。
-- 最终打包应用已打开并停留在“系统设置 → 网络与上游”页面供人工验收。
-
-final result: passed
-
-## 2026-07-30 删除实时抓包异常筛选
-
-### 对照证据
-
-- 源视觉真值：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-dbb182f7-5ef4-4362-b141-61b21018da26.png`
-- 实现：重新打包并打开的 macOS Tauri App。
-- 视口：当前 macOS 应用窗口。
-- 状态：实时抓包页、代理已停止、筛选条件为空。
-
-### 调整
-
-- 用户确认异常筛选控件与当前筛选区不协调，要求删除该功能。
-- 删除前端 Checkbox/Switch、帮助文案和对应 UI 测试。
-- 删除 Rust `CaptureQuery.exceptions_only` 字段及仓库异常过滤分支。
-- 更新需求 CAPTURE-003，只保留关键字/请求 ID、终端 IP、通道、阶段、结果和规则筛选。
-- 重新生成 Specta TypeScript 绑定，前端与 Rust 不再暴露该字段。
-
-### 自动化与构建
-
-- UI contracts：15 个文件、42 个测试全部通过。
-- ESLint、TypeScript 检查通过。
-- Rust 抓包仓库测试：2 个通过。
-- Specta 绑定已重新生成。
-
-### 视觉复验边界
-
-- 按用户要求，重新打开页面后不由 Codex继续做视觉判断，交由用户直接检查。
-- 当前验收目标是控件和功能完全消失；不对筛选区其余字体、间距、色彩、图像和文案
-  做额外视觉改动。
-
-final result: blocked
-
-## 2026-07-31 设置通道垂直居中与证书页密度复验
-
-### 源视觉真值
-
-- 设置通道垂直对齐：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-1699262e-3120-42f3-bd35-d83bb642eec3.png`
-- 证书页左右留白失衡：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-d93f2072-b506-4df5-987d-dbde1c265064.png`
-- 用户截图中的红色箭头用于标记问题，不作为最终界面的视觉元素。
-
-### 打包应用证据
-
-- macOS Tauri 设置页：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/GMO-FG Payment Proxy Screenshot 2026-07-31 at 12.23.26.jpeg`
-- macOS Tauri 证书页：
-  `/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/GMO-FG Payment Proxy Screenshot 2026-07-31 at 12.24.23.jpeg`
-- 并排比较输入：
-  - `/tmp/gmofg-settings-before-after.png`
-  - `/tmp/gmofg-cert-before-after.png`
-- 视口：macOS 打包应用窗口 1229×768。
-- 状态：Proxy 已停止，设置和证书数据均来自真实 Rust/Tauri 运行快照。
-
-### 比较结论
-
-- 设置页两个通道卡片统一使用 `items-center`，通道名称、端口字段、上游 URL
-  和 HeroUI Switch 以同一行的垂直中心对齐；卡片高度和上下留白保持一致。
-- 证书概览由左右等高双栏改为全宽卡片内部的响应式两列证书网格，四个证书条目
-  在宽屏形成 2×2 信息布局，消除了右侧大面积空白。
-- 证书主题、SAN、有效期与 SHA-256 指纹均可安全换行；960px 以下自动回到
-  单列，不引入横向溢出。
-- 上游 PKCS12/CA 操作区改为紧凑横向布局，并在窄屏自动堆叠。
-- 控件继续全部使用 HeroUI 组件；未新增自定义控件、颜色、图标或依赖。
-
-### 自动化与构建
-
-- 前端测试：16 个文件、53 个测试全部通过。
-- ESLint、TypeScript、Next.js production build 通过。
-- macOS `.app` 与 `.dmg` 重新打包成功并已启动新版应用。
-
-final result: passed
+**final result: blocked**
