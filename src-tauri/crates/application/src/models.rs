@@ -11,7 +11,13 @@ use serde_json::Value;
 use specta::Type;
 use uuid::Uuid;
 
-pub use gmofg_proxy_domain::ChannelId;
+pub use intercept_proxy_domain::{
+    BodyCodecKind, BodyCodecPolicy, BodyDirection, CertificateReference, CertificateReferenceId,
+    CertificateReferenceKind, ChannelId, CodecPolicyId, ConnectionFaultAction, FaultPreset,
+    FaultPresetId, ListenerId, MetadataExtractor, MetadataExtractorId, MetadataExtractorSource,
+    ProxyListener, ProxyWorkspace, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
+    ReverseProxyListener, SecretReference, WorkspaceId,
+};
 
 /// 标识一次代理启动周期。代理重启后旧周期的事件和断点不得继续操作。
 pub type RuntimeEpoch = Uuid;
@@ -341,6 +347,8 @@ pub struct CaptureDetailViewModel {
     pub tls_summary: String,
     pub timings_ms: BTreeMap<String, u64>,
     pub rule_trace: Vec<String>,
+    pub extracted_metadata: BTreeMap<String, String>,
+    pub response_assertions: Vec<ResponseAssertionResultViewModel>,
     pub revision: Revision,
 }
 
@@ -416,6 +424,20 @@ pub struct SessionDetailViewModel {
     pub request: Option<MessageContentViewModel>,
     pub response: Option<MessageContentViewModel>,
     pub rule_trace: Vec<String>,
+    /// Workspace 元数据提取器生成的少量文本，不包含额外 Payload 副本。
+    #[serde(default)]
+    pub extracted_metadata: BTreeMap<String, String>,
+    /// 对最终响应执行的通用断言结果；失败只影响会话结论，不篡改线上响应。
+    #[serde(default)]
+    pub response_assertions: Vec<ResponseAssertionResultViewModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ResponseAssertionResultViewModel {
+    pub assertion_id: ResponseAssertionId,
+    pub name: String,
+    pub passed: bool,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -452,6 +474,11 @@ impl SessionRecord {
             + self.detail.final_action.len();
         let rule_trace_bytes =
             serde_json::to_vec(&self.detail.rule_trace).map_or(0, |bytes| bytes.len());
+        let policy_result_bytes = serde_json::to_vec(&(
+            &self.detail.extracted_metadata,
+            &self.detail.response_assertions,
+        ))
+        .map_or(0, |bytes| bytes.len());
         let messages = self
             .detail
             .request
@@ -469,6 +496,7 @@ impl SessionRecord {
         Self::ENTITY_FIXED_OVERHEAD_BYTES
             + fixed_strings as u64
             + rule_trace_bytes as u64
+            + policy_result_bytes as u64
             + messages
     }
 }
@@ -977,6 +1005,149 @@ pub struct OperationResultViewModel {
     pub requires_restart: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// Workspace 列表只返回轻量摘要，完整配置仅在用户选择或编辑时加载。
+pub struct WorkspaceSummaryViewModel {
+    pub id: WorkspaceId,
+    pub name: String,
+    pub revision: Revision,
+    pub listener_count: usize,
+    pub enabled_listener_count: usize,
+    pub selected: bool,
+}
+
+impl WorkspaceSummaryViewModel {
+    #[must_use]
+    pub fn from_workspace(workspace: &ProxyWorkspace, selected: bool) -> Self {
+        Self {
+            id: workspace.id,
+            name: workspace.name.clone(),
+            revision: workspace.revision.get(),
+            listener_count: workspace.listeners.len(),
+            enabled_listener_count: workspace
+                .listeners
+                .iter()
+                .filter(|listener| listener.enabled())
+                .count(),
+            selected,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// Rust Workspace 校验的完整结果。前端不得重复推导安全策略。
+pub struct WorkspaceValidationViewModel {
+    pub valid: bool,
+    pub normalized: ProxyWorkspace,
+    pub field_errors: BTreeMap<String, Vec<String>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceChangeKind {
+    Created,
+    Updated,
+    Selected,
+    Deleted,
+    Imported,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// Workspace 集合变化事件；删除时 `summary` 为空，其余操作携带最新 Rust 摘要。
+pub struct WorkspaceChangedViewModel {
+    pub workspace_id: WorkspaceId,
+    pub kind: WorkspaceChangeKind,
+    pub summary: Option<WorkspaceSummaryViewModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ListenerRuntimeState {
+    Stopped,
+    Starting,
+    Running,
+    Stopping,
+    Faulted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 单个 Workspace Listener 的运行快照。所有文案与状态均由 Rust 提供。
+pub struct ListenerStatusViewModel {
+    pub listener_id: ListenerId,
+    pub state: ListenerRuntimeState,
+    pub state_text: String,
+    pub ui_tone: UiTone,
+    pub listen_address: String,
+    pub fault_reason: Option<String>,
+    pub can_start: bool,
+    pub can_stop: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 对单个固定上游入口执行真实 TCP + TLS 握手后的只读结果。
+/// 该模型只包含公开的对端证书元数据，不返回证书字节、客户端私钥或安全引用内容。
+/// `client_identity_configured` 只表示本次握手加载了客户端身份；Server 是否强制要求
+/// 客户端证书，由握手成功或失败共同判断，前端不能自行推断。
+pub struct ListenerUpstreamTlsTestViewModel {
+    pub listener_id: ListenerId,
+    pub upstream_origin: String,
+    pub resolved_address: String,
+    pub tls_version: String,
+    pub cipher_suite: String,
+    pub peer_subject: String,
+    pub peer_sha256_fingerprint: String,
+    pub hostname_verification_enabled: bool,
+    pub client_identity_configured: bool,
+    pub elapsed_millis: u64,
+    pub message: String,
+    pub ui_tone: UiTone,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 运行监控中的单个入口行。配置与运行状态由 Rust 合并，前端不推断“缺少状态即停止”。
+pub struct ListenerMonitorRowViewModel {
+    pub listener_id: ListenerId,
+    pub name: String,
+    pub kind_text: String,
+    pub listen_address: String,
+    pub request_destination: String,
+    pub state: ListenerRuntimeState,
+    pub state_text: String,
+    pub ui_tone: UiTone,
+    pub fault_reason: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 当前 Workspace 的入口运行概览，供顶部状态栏与运行监控复用。
+pub struct ListenerOverviewViewModel {
+    pub workspace_id: WorkspaceId,
+    pub workspace_name: String,
+    pub state_text: String,
+    pub ui_tone: UiTone,
+    pub total_count: usize,
+    pub active_count: usize,
+    pub faulted_count: usize,
+    pub rows: Vec<ListenerMonitorRowViewModel>,
+}
+
+impl WorkspaceValidationViewModel {
+    #[must_use]
+    pub fn validate(workspace: ProxyWorkspace) -> Self {
+        match workspace.validate() {
+            Ok(()) => Self {
+                valid: true,
+                normalized: workspace,
+                field_errors: BTreeMap::new(),
+            },
+            Err(error) => Self {
+                valid: false,
+                normalized: workspace,
+                field_errors: *error.field_errors,
+            },
+        }
+    }
+}
+
 impl OperationResultViewModel {
     pub fn success(message: impl Into<String>) -> Self {
         Self {
@@ -1016,6 +1187,8 @@ pub struct SubscriptionAckViewModel {
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 /// 所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。
 pub enum UiEventPayload {
+    WorkspaceChanged(WorkspaceChangedViewModel),
+    ListenerStatusChanged(ListenerStatusViewModel),
     RuntimeStatusChanged(Box<ProxyStatusViewModel>),
     ChannelStatusChanged(ChannelStatusViewModel),
     CaptureRowsAdded(Vec<CaptureRowViewModel>),
@@ -1044,5 +1217,29 @@ pub struct UiEventEnvelope {
 impl UiEventEnvelope {
     pub fn logical_bytes(&self) -> u64 {
         serde_json::to_vec(self).map_or(0, |bytes| bytes.len() as u64)
+    }
+}
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::*;
+
+    #[test]
+    fn workspace_summary_is_computed_by_rust() {
+        let workspace = ProxyWorkspace::default();
+        let summary = WorkspaceSummaryViewModel::from_workspace(&workspace, true);
+        assert_eq!(summary.id, workspace.id);
+        assert_eq!(summary.listener_count, 1);
+        assert_eq!(summary.enabled_listener_count, 0);
+        assert!(summary.selected);
+    }
+
+    #[test]
+    fn workspace_validation_returns_rust_field_errors() {
+        let mut workspace = ProxyWorkspace::default();
+        workspace.name.clear();
+        let validation = WorkspaceValidationViewModel::validate(workspace);
+        assert!(!validation.valid);
+        assert!(validation.field_errors.contains_key("name"));
     }
 }

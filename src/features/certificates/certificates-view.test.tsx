@@ -88,7 +88,7 @@ describe("CertificatesView settings freshness", () => {
     mocks.certificateExportCa.mockResolvedValue({
       success: true,
       cancelled: false,
-      message: "统一测试 Root CA 公开证书已导出，未包含私钥。",
+      message: "本机公开 Root CA 已导出，未包含私钥。",
       ui_tone: "positive",
       entity_id: null,
       revision: null,
@@ -101,7 +101,7 @@ describe("CertificatesView settings freshness", () => {
     render(<CertificatesView />);
 
     await user.click(
-      screen.getByRole("button", { name: "初始化本机测试证书" }),
+      screen.getByRole("button", { name: "初始化本机证书" }),
     );
 
     await waitFor(() =>
@@ -116,13 +116,13 @@ describe("CertificatesView settings freshness", () => {
     );
   });
 
-  it("exports the bundled public Root CA for a test client build", async () => {
+  it("exports only the installation public Root CA", async () => {
     const user = userEvent.setup();
     render(<CertificatesView />);
 
     await user.click(
       screen.getByRole("button", {
-        name: "导出测试客户端编译用 Root CA",
+        name: "导出公开 Root CA",
       }),
     );
 
@@ -143,5 +143,14 @@ describe("CertificatesView settings freshness", () => {
       "items-center",
       "max-[860px]:grid-cols-1",
     );
+  });
+
+  it("warns that reinitialization replaces the installation Root CA", () => {
+    render(<CertificatesView />);
+
+    expect(
+      screen.getByText(/将替换本机 Root CA、Root 私钥、服务端私钥和叶子证书/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Root CA 保持不变/)).not.toBeInTheDocument();
   });
 });

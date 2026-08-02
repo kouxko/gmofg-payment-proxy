@@ -12,19 +12,19 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use gmofg_proxy_runtime::RuntimeServiceFactory;
-use gmofg_proxy_runtime::message::{Message, MessageLimits};
-use gmofg_proxy_runtime::supervisor::{ChannelConfig, ChannelId, ProxyConfig, ProxyState};
-use gmofg_proxy_runtime::transport::{
+use http::{HeaderMap, StatusCode};
+use intercept_proxy_runtime::RuntimeServiceFactory;
+use intercept_proxy_runtime::message::{Message, MessageLimits};
+use intercept_proxy_runtime::supervisor::{ChannelConfig, ChannelId, ProxyConfig, ProxyState};
+use intercept_proxy_runtime::transport::{
     AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionContext, ConnectionService,
     ForwardRequest, HandshakePolicy, HyperUpstreamConnector, NoopPipelinePorts, PipelinePorts,
     UpstreamExchange,
 };
-use gmofg_proxy_runtime::{
+use intercept_proxy_runtime::{
     ConnectionAdmission, ErrorCode, FaultAction, ProxyError, ProxySupervisor, Result, SystemClock,
     TokioListenerBinder, UpstreamConnector,
 };
-use http::{HeaderMap, StatusCode};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Notify, oneshot};
@@ -115,9 +115,11 @@ struct EchoConnector;
 impl UpstreamConnector for EchoConnector {
     async fn send(
         &self,
+        _context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
         request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&gmofg_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::transport::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
         Ok(Message::response(
@@ -136,9 +138,11 @@ struct RawResponseConnector;
 impl UpstreamConnector for RawResponseConnector {
     async fn send(
         &self,
+        _context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&gmofg_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::transport::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
         Message::from_raw_http1_head(
@@ -209,9 +213,11 @@ struct FailingConnector(ErrorCode);
 impl UpstreamConnector for FailingConnector {
     async fn send(
         &self,
+        _context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&gmofg_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::transport::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
         Err(ProxyError::new(self.0, "injected connector failure"))

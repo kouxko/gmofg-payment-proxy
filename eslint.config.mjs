@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "src/generated/**",
     "src-tauri/target/**",
+    "android-companion/**/build/**",
+    "android-companion/.gradle/**",
+    "android-companion/.kotlin/**",
   ]),
 ]);
 

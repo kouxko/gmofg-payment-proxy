@@ -80,7 +80,7 @@ export function CaptureView({
   initialPage?: CapturePageViewModel;
 }) {
   const { navigate } = useWorkspaceNavigation();
-  const { bootstrap, proxy } = useBootstrap();
+  const { bootstrap } = useBootstrap();
   const channelCatalog = bootstrap?.channel_catalog ?? [];
   const [paused, setPaused] = useState(false);
   const [clearPending, setClearPending] = useState(false);
@@ -191,13 +191,6 @@ export function CaptureView({
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-semibold">实时抓包</h1>
-              <Chip
-                color={proxy ? toneColor(proxy.ui_tone) : "default"}
-                size="sm"
-                variant="soft"
-              >
-                {proxy?.state_text ?? "正在读取代理状态"}
-              </Chip>
             </div>
             <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
               暂停列表滚动不会影响网络转发、规则或会话记录
@@ -583,6 +576,29 @@ export function CaptureView({
                       : "等待响应"}
                   </dd>
                 </dl>
+                {Object.keys(detail.data?.extracted_metadata ?? {}).length > 0 && (
+                  <div>
+                    <h2 className="mb-2 font-semibold">Workspace 提取结果</h2>
+                    <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+                      {Object.entries(detail.data?.extracted_metadata ?? {}).map(([name, value]) => (
+                        <div key={name} className="contents"><dt>{name}</dt><dd className="break-all font-mono text-xs">{value}</dd></div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
+                {(detail.data?.response_assertions.length ?? 0) > 0 && (
+                  <div>
+                    <h2 className="mb-2 font-semibold">响应断言</h2>
+                    <ul className="space-y-2 text-sm">
+                      {(detail.data?.response_assertions ?? []).map((assertion) => (
+                        <li key={assertion.assertion_id} className="flex items-start gap-2">
+                          <Chip size="sm" color={assertion.passed ? "success" : "danger"} variant="soft">{assertion.passed ? "通过" : "失败"}</Chip>
+                          <span><strong>{assertion.name}</strong><br /><span className="text-xs text-[var(--telemetry-muted)]">{assertion.message}</span></span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div>
                   <h2 className="mb-2 font-semibold">规则执行轨迹</h2>
                   <ol className="space-y-2 text-sm">

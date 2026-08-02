@@ -3,6 +3,6 @@
 //! 该工具只写生成文件，不启动桌面窗口；失败立即退出，防止前端继续使用过期类型。
 
 fn main() {
-    let path = gmofg_payment_proxy::export_bindings().expect("failed to export bindings");
+    let path = intercept_proxy::export_bindings().expect("failed to export bindings");
     println!("{}", path.display());
 }

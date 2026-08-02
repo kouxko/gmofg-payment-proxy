@@ -6,8 +6,8 @@
 use super::{
     Application,
     validation::{
-        ensure_valid, normalize_certificate_sans, normalize_settings, parse_sans_raw, push_error,
-        require_confirmation, validate_settings_locally,
+        ensure_valid, normalize_settings, parse_sans_raw, require_confirmation,
+        validate_settings_locally,
     },
 };
 use crate::{
@@ -33,38 +33,8 @@ impl Application {
             return Ok(validation);
         }
 
-        let certificate_overview = self.certificates.overview().await?;
-        if certificate_overview.can_initialize {
-            validation
-                .warnings
-                .push("证书材料尚未配置；保存设置后请先完成证书配置再启动 Proxy。".into());
-            return Ok(validation);
-        }
-
-        let certificate_validation = self.certificates.validate().await?;
-        for (field, messages) in certificate_validation.field_errors {
-            validation
-                .field_errors
-                .insert(format!("certificates.{field}"), messages);
-        }
-        let leaf_sans = certificate_overview
-            .items
-            .iter()
-            .find(|item| item.usage.contains("App → Proxy"))
-            .map(|item| normalize_certificate_sans(&item.sans));
-        if leaf_sans.is_none_or(|sans| {
-            draft
-                .leaf_sans
-                .iter()
-                .any(|required| !sans.contains(required))
-        }) {
-            push_error(
-                &mut validation.field_errors,
-                "leaf_sans",
-                "当前 Proxy 叶子证书 SAN 未覆盖设置中要求的全部地址。",
-            );
-        }
-        validation.valid = validation.field_errors.is_empty();
+        // 证书和监听地址已经属于 Workspace Listener。系统设置校验只处理全局容量、
+        // 超时与应用行为，避免用户修改内存上限时被无关的入口证书状态阻断。
         Ok(validation)
     }
 

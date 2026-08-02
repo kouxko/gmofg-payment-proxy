@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 /// 一条规则组合允许累积的最大延迟：10 分钟。
 pub const MAX_TOTAL_DELAY_MS: u64 = 600_000;
@@ -250,6 +251,8 @@ impl RuleSetSignature {
 /// `collection_revision` 检测集合增删，`signature` 检测单条规则版本变化；两者共同防止
 /// 规则执行结果错误覆盖数据库中的并发编辑。
 pub struct RuleRuntimeSnapshot {
+    /// 规则集合所属聚合的稳定身份。独立/内存规则集合可为 `None`，Workspace 规则为其 ID。
+    pub collection_id: Option<Uuid>,
     pub collection_revision: u64,
     pub signature: RuleSetSignature,
     pub rules: Vec<Rule>,
@@ -263,7 +266,17 @@ impl RuleRuntimeSnapshot {
 
     #[must_use]
     pub fn with_collection_revision(collection_revision: u64, rules: Vec<Rule>) -> Self {
+        Self::with_collection_identity(None, collection_revision, rules)
+    }
+
+    #[must_use]
+    pub fn with_collection_identity(
+        collection_id: Option<Uuid>,
+        collection_revision: u64,
+        rules: Vec<Rule>,
+    ) -> Self {
         Self {
+            collection_id,
             collection_revision,
             signature: RuleSetSignature::from_rules(&rules),
             rules,

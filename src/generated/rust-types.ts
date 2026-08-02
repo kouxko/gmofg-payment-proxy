@@ -7,10 +7,50 @@ export const commands = {
 	appBootstrap: () => typedError<AppBootstrapViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_bootstrap")),
 	appSubscribeEvents: (afterEventId: number, onEvent: Channel<UiEventEnvelope>) => typedError<SubscriptionAckViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_subscribe_events", { afterEventId, onEvent })),
 	appUnsubscribeEvents: (subscriptionId: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_unsubscribe_events", { subscriptionId })),
-	proxyGetStatus: () => typedError<ProxyStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("proxy_get_status")),
-	proxyStart: () => typedError<ProxyStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("proxy_start")),
-	proxyStop: () => typedError<ProxyStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("proxy_stop")),
-	proxyRestart: () => typedError<ProxyStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("proxy_restart")),
+	androidAdbGet: () => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_get")),
+	androidAdbSelect: (serial: string) => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_select", { serial })),
+	androidDeviceList: () => typedError<AndroidDeviceViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_device_list")),
+	androidPackageList: () => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_list")),
+	androidPackageQuery: (query: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_query", { query })),
+	androidPackageGet: (packageName: string) => typedError<AndroidPackageViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_package_get", { packageName })),
+	androidCompanionInstall: () => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_install")),
+	androidCompanionUpdate: () => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_update")),
+	androidVpnOpenConsent: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_vpn_open_consent")),
+	deviceNetworkProfileList: () => typedError<AndroidNetworkProfileSummary[], AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_list")),
+	deviceNetworkProfileNew: () => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_new")),
+	deviceNetworkProfileGet: (profileId: string) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_get", { profileId })),
+	deviceNetworkProfileApplyIntent: (profile: AndroidNetworkProfile, intent: AndroidProfileEditIntent) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_apply_intent", { profile, intent })),
+	deviceNetworkProfileSave: (profile: AndroidNetworkProfile) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_save", { profile })),
+	deviceNetworkProfileDelete: (profileId: string) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_delete", { profileId })),
+	deviceNetworkStart: (profileId: string, dangerousConfirmed: boolean) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_start", { profileId, dangerousConfirmed })),
+	deviceNetworkApply: (profileId: string, dangerousConfirmed: boolean) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_apply", { profileId, dangerousConfirmed })),
+	deviceNetworkStop: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_stop")),
+	deviceNetworkEmergencyRestore: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_emergency_restore")),
+	deviceNetworkStatus: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_status")),
+	workspaceList: () => typedError<WorkspaceSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("workspace_list")),
+	workspaceGet: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_get", { workspaceId })),
+	workspaceComponentNew: (workspace: ProxyWorkspace, kind: string) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_component_new", { workspace, kind })),
+	workspaceComponentApplyIntent: (workspace: ProxyWorkspace, componentKind: string, componentId: string, operation: string, value: string) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_component_apply_intent", { workspace, componentKind, componentId, operation, value })),
+	workspaceSecretStoreBasic: (username: string, password: string) => typedError<SecretReference, AppErrorViewModel>(__TAURI_INVOKE("workspace_secret_store_basic", { username, password })),
+	workspaceCreate: (name: string) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_create", { name })),
+	workspaceCopy: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_copy", { workspaceId })),
+	workspaceSelect: (workspaceId: WorkspaceId) => typedError<WorkspaceSummaryViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_select", { workspaceId })),
+	workspaceValidate: (workspace: ProxyWorkspace) => typedError<WorkspaceValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_validate", { workspace })),
+	workspaceSave: (workspace: ProxyWorkspace) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_save", { workspace })),
+	workspaceDelete: (workspaceId: WorkspaceId, expectedRevision: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_delete", { workspaceId, expectedRevision })),
+	workspaceImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_import")),
+	workspaceExport: (workspaceId: WorkspaceId) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_export", { workspaceId })),
+	listenerList: (workspaceId: WorkspaceId) => typedError<ProxyListener[], AppErrorViewModel>(__TAURI_INVOKE("listener_list", { workspaceId })),
+	listenerNew: (kind: string) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_new", { kind })),
+	listenerCopy: (source: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_copy", { source })),
+	listenerGet: (workspaceId: WorkspaceId, listenerId: ListenerId) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_get", { workspaceId, listenerId })),
+	listenerSave: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_save", { workspaceId, expectedWorkspaceRevision, listener })),
+	listenerDelete: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_delete", { workspaceId, expectedWorkspaceRevision, listenerId })),
+	listenerStatuses: () => typedError<ListenerStatusViewModel[], AppErrorViewModel>(__TAURI_INVOKE("listener_statuses")),
+	listenerOverview: (workspaceId: WorkspaceId) => typedError<ListenerOverviewViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_overview", { workspaceId })),
+	listenerStart: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_start", { workspaceId, expectedWorkspaceRevision, listenerId })),
+	listenerStop: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_stop", { workspaceId, expectedWorkspaceRevision, listenerId })),
+	listenerTestUpstreamTls: (workspaceId: WorkspaceId, listenerId: ListenerId) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, listenerId })),
 	captureQuery: (query: CaptureQuery) => typedError<CapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_query", { query })),
 	captureGetDetail: (sessionId: string, runtimeEpoch: string) => typedError<CaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_get_detail", { sessionId, runtimeEpoch })),
 	captureClearView: (currentCursor: number) => typedError<number, AppErrorViewModel>(__TAURI_INVOKE("capture_clear_view", { currentCursor })),
@@ -53,9 +93,8 @@ export const commands = {
 	certificateValidate: () => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("certificate_validate")),
 	certificateResetCa: (expectedRevision: number, confirmed: boolean) => typedError<CertificateOverviewViewModel, AppErrorViewModel>(__TAURI_INVOKE("certificate_reset_ca", { expectedRevision, confirmed })),
 	settingsGet: () => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_get")),
-	settingsValidate: (draft: SettingsDraft, leafSansRaw: string) => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_validate", { draft, leafSansRaw })),
-	settingsSave: (draft: SettingsDraft, leafSansRaw: string) => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_save", { draft, leafSansRaw })),
-	settingsSaveAndRestart: (draft: SettingsDraft, leafSansRaw: string) => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_save_and_restart", { draft, leafSansRaw })),
+	settingsValidate: (draft: SettingsDraft) => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_validate", { draft })),
+	settingsSave: (draft: SettingsDraft) => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_save", { draft })),
 	settingsResetDefaults: (confirmed: boolean) => typedError<SettingsDraft, AppErrorViewModel>(__TAURI_INVOKE("settings_reset_defaults", { confirmed })),
 };
 
@@ -70,6 +109,110 @@ export type ActiveFaultViewModel = {
 	status_text: string,
 	ui_tone: UiTone,
 	revision: number,
+};
+
+export type AndroidAdbViewModel = {
+	available: boolean,
+	executable: string | null,
+	version: string | null,
+	selected_serial: string | null,
+};
+
+export type AndroidCompanionInstallViewModel = {
+	serial: string,
+	package_name: string,
+	installed: boolean,
+	version_name: string | null,
+	version_code: string | null,
+};
+
+export type AndroidControlTransport = "local_abstract_socket" | "rescue_activity" | "adb_force_stop" | "unavailable";
+
+/**
+ *  Android 弱网 Profile 需要处理的一段远端地址范围。
+ *  一个 Profile 可以保存任意多个目标；`cidr` 同时接受单个 IPv4/IPv6 地址和
+ *  CIDR（例如 `10.0.34.20`、`10.0.34.0/24`、`2001:db8::/32`）。`ports`
+ *  为空表示该地址范围的全部端口。这里刻意不接受域名：TUN 数据面只能可靠观察
+ *  IP 包，不能把 DNS 名称伪装成每条连接都稳定存在的属性。
+ */
+export type AndroidDestinationTarget = {
+	cidr: string,
+	ports: number[],
+};
+
+export type AndroidDeviceState = "device" | "offline" | "unauthorized" | "other";
+
+export type AndroidDeviceViewModel = {
+	serial: string,
+	state: AndroidDeviceState,
+	product: string | null,
+	model: string | null,
+	device: string | null,
+	transport_id: string | null,
+	selected: boolean,
+};
+
+export type AndroidNetworkProfile = {
+	id: string,
+	name: string,
+	target_applications: AndroidTargetApplication[],
+	/**
+	 *  需要实施弱网的远端地址列表。空列表表示保留原行为：目标应用访问的全部
+	 *  原始地址都进入弱网引擎，因此不会把一个应用错误限制为单一 Server。
+	 */
+	destination_targets?: AndroidDestinationTarget[],
+	confirmed_shared_uids: number[],
+	auto_resume_after_reboot: boolean,
+	/**  弱网字段由 Rust 领域模型统一定义，并生成前端只读 TypeScript 类型。 */
+	weak_network: WeakNetworkProfile,
+};
+
+export type AndroidNetworkProfileSummary = {
+	id: string,
+	name: string,
+	target_count: number,
+	auto_resume_after_reboot: boolean,
+};
+
+export type AndroidNetworkState = "unknown" | "start_requested" | "running" | "stop_requested" | "stopped" | "faulted";
+
+export type AndroidNetworkStatusViewModel = {
+	serial: string,
+	state: AndroidNetworkState,
+	/**  Rust 根据状态机生成的稳定中文文案，展示层不得重复维护状态映射。 */
+	state_text?: string,
+	/**  Rust 生成的视觉语义；HeroUI 只负责把语义映射到组件颜色。 */
+	ui_tone?: UiTone,
+	/**  True only when the Companion protocol or a process-level emergency restore proved state. */
+	verified: boolean,
+	transport: AndroidControlTransport,
+	active_profile_id: string | null,
+	companion_process_running: boolean | null,
+	message: string,
+	unsupported_fields: string[],
+	stats: unknown | null,
+};
+
+export type AndroidPackageViewModel = {
+	package_name: string,
+	uid: number,
+	signing_sha256: string | null,
+	/**  Set only when more than one installed package has the same Linux UID. */
+	shared_uid: number | null,
+};
+
+/**
+ *  Android 弱网页面的编辑意图。
+ *  TypeScript 只描述用户做了什么；共享 UID 扩选、签名快照和嵌套故障项默认值均由
+ *  Rust 生成，避免展示层手写第二套领域规则。
+ */
+export type AndroidProfileEditIntent = { kind: "toggle_package"; package_name: string; selected: boolean } | { kind: "set_burst_loss_enabled"; enabled: boolean } | { kind: "add_blackout_window" } | { kind: "add_tcp_flag_drop" };
+
+export type AndroidTargetApplication = {
+	package_name: string,
+	signing_sha256: string,
+	uid: number,
+	display_name: string | null,
 };
 
 /**  应用启动时一次返回的首屏快照，避免界面自行拼接不一致状态。 */
@@ -93,6 +236,31 @@ export type AppErrorViewModel = {
 	entity_id: string | null,
 	runtime_epoch: string | null,
 };
+
+/**  TCP/UDP Payload 位翻转配置。 */
+export type BitCorruptionProfile = {
+	probability_basis_points: number,
+	bits_per_packet: number,
+};
+
+/**  一段相对于弱网引擎启动时刻的断网窗口。 */
+export type BlackoutWindow = {
+	start_after_millis: number,
+	duration_millis: number,
+};
+
+export type BodyCodecKind = "raw" | "utf8" | "shift_jis";
+
+/**  将指定监听器、方向与 Body 编解码方式关联起来。 */
+export type BodyCodecPolicy = {
+	id: CodecPolicyId,
+	name: string,
+	listener_ids: ListenerId[],
+	direction: BodyDirection,
+	codec: BodyCodecKind,
+};
+
+export type BodyDirection = "request" | "response" | "both";
 
 export type BreakpointActionOptionViewModel = {
 	kind: BreakpointDecisionKind,
@@ -156,6 +324,14 @@ export type BreakpointSummaryViewModel = {
 	revision: number,
 };
 
+/**  Gilbert-Elliott 两状态突发丢包模型，概率统一使用 0..=10000 基点。 */
+export type BurstLossProfile = {
+	enter_bad_state_basis_points: number,
+	leave_bad_state_basis_points: number,
+	good_state_loss_basis_points: number,
+	bad_state_loss_basis_points: number,
+};
+
 export type CaptureDetailViewModel = {
 	session_id: string,
 	request_id: string,
@@ -167,6 +343,8 @@ export type CaptureDetailViewModel = {
 	tls_summary: string,
 	timings_ms: { [key in string]: number },
 	rule_trace: string[],
+	extracted_metadata: { [key in string]: string },
+	response_assertions: ResponseAssertionResultViewModel[],
 	revision: number,
 };
 
@@ -251,6 +429,18 @@ export type CertificateOverviewViewModel = {
 	disabled_reason: DisabledReason | null,
 };
 
+/**  证书材料的非敏感引用。实际证书链和私钥由 infrastructure 解析。 */
+export type CertificateReference = {
+	id: CertificateReferenceId,
+	label: string,
+	kind: CertificateReferenceKind,
+	reference: string,
+};
+
+export type CertificateReferenceId = string;
+
+export type CertificateReferenceKind = "mitm_root_ca" | "reverse_server_identity" | "downstream_client_trust" | "upstream_client_identity" | "upstream_server_trust";
+
 /**  产品通道的受校验稳定 ID。 */
 export type ChannelId = string;
 
@@ -287,6 +477,10 @@ export type ChannelStatusViewModel = {
 	upstream_ui_tone: UiTone,
 };
 
+export type CodecPolicyId = string;
+
+export type ConnectionFaultAction = { kind: "delay"; milliseconds: number } | { kind: "reject" } | { kind: "rate_limit"; bytes_per_second: number } | { kind: "close_after_bytes"; bytes: number } | { kind: "half_close_after_bytes"; bytes: number } | { kind: "idle_timeout"; milliseconds: number };
+
 export type ConnectionHealthState = "unavailable" | "waiting" | "healthy" | "degraded" | "faulted";
 
 export type ConnectionHealthViewModel = {
@@ -300,6 +494,14 @@ export type ConnectionHealthViewModel = {
 export type DisabledReason = {
 	code: string,
 	message: string,
+};
+
+export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "optional"; trust: CertificateReferenceId } | { mode: "required"; trust: CertificateReferenceId };
+
+export type DownstreamTlsSettings = {
+	enabled: boolean,
+	server_identity: CertificateReferenceId | null,
+	client_authentication: DownstreamClientAuthentication,
 };
 
 export type FaultConfigurationDraft = {
@@ -330,6 +532,15 @@ export type FaultParameterKind = "boolean" | "integer" | "text" | "json";
 
 export type FaultParameterValue = { kind: "boolean"; value: boolean } | { kind: "integer"; value: number } | { kind: "text"; value: string } | { kind: "json"; value: string };
 
+export type FaultPreset = {
+	id: FaultPresetId,
+	name: string,
+	description: string,
+	connection_actions: ConnectionFaultAction[],
+};
+
+export type FaultPresetId = string;
+
 /**  故障模拟页展示的产品化模板及参数 schema。 */
 export type FaultTemplateViewModel = {
 	template_id: string,
@@ -354,6 +565,84 @@ export type FieldValidationViewModel = {
 	warnings: string[],
 };
 
+export type ForwardProxyAuthentication = { mode: "none" } | { mode: "basic"; credential: SecretReference };
+
+export type ForwardProxyListener = {
+	id: ListenerId,
+	name: string,
+	enabled: boolean,
+	bind_address: string,
+	port: number,
+	authentication: ForwardProxyAuthentication,
+	allowed_client_cidrs: string[],
+	mitm: MitmSettings,
+	connect_timeout_ms: number,
+	read_timeout_ms: number,
+	write_timeout_ms: number,
+};
+
+export type ListenerId = string;
+
+/**  运行监控中的单个入口行。配置与运行状态由 Rust 合并，前端不推断“缺少状态即停止”。 */
+export type ListenerMonitorRowViewModel = {
+	listener_id: ListenerId,
+	name: string,
+	kind_text: string,
+	listen_address: string,
+	request_destination: string,
+	state: ListenerRuntimeState,
+	state_text: string,
+	ui_tone: UiTone,
+	fault_reason: string | null,
+};
+
+/**  当前 Workspace 的入口运行概览，供顶部状态栏与运行监控复用。 */
+export type ListenerOverviewViewModel = {
+	workspace_id: WorkspaceId,
+	workspace_name: string,
+	state_text: string,
+	ui_tone: UiTone,
+	total_count: number,
+	active_count: number,
+	faulted_count: number,
+	rows: ListenerMonitorRowViewModel[],
+};
+
+export type ListenerRuntimeState = "stopped" | "starting" | "running" | "stopping" | "faulted";
+
+/**  单个 Workspace Listener 的运行快照。所有文案与状态均由 Rust 提供。 */
+export type ListenerStatusViewModel = {
+	listener_id: ListenerId,
+	state: ListenerRuntimeState,
+	state_text: string,
+	ui_tone: UiTone,
+	listen_address: string,
+	fault_reason: string | null,
+	can_start: boolean,
+	can_stop: boolean,
+};
+
+/**
+ *  对单个固定上游入口执行真实 TCP + TLS 握手后的只读结果。
+ *  该模型只包含公开的对端证书元数据，不返回证书字节、客户端私钥或安全引用内容。
+ *  `client_identity_configured` 只表示本次握手加载了客户端身份；Server 是否强制要求
+ *  客户端证书，由握手成功或失败共同判断，前端不能自行推断。
+ */
+export type ListenerUpstreamTlsTestViewModel = {
+	listener_id: ListenerId,
+	upstream_origin: string,
+	resolved_address: string,
+	tls_version: string,
+	cipher_suite: string,
+	peer_subject: string,
+	peer_sha256_fingerprint: string,
+	hostname_verification_enabled: boolean,
+	client_identity_configured: boolean,
+	elapsed_millis: number,
+	message: string,
+	ui_tone: UiTone,
+};
+
 /**  可供界面查看/编辑，同时可无损重建网络报文的内容模型。 */
 export type MessageContentViewModel = {
 	http_status: number | null,
@@ -371,6 +660,33 @@ export type MessageContentViewModel = {
 
 export type MessageStage = "tls_handshake" | "request" | "response" | "terminal";
 
+/**  从通用 HTTP 报文提取列表/规则所需的少量元数据。 */
+export type MetadataExtractor = {
+	id: MetadataExtractorId,
+	name: string,
+	listener_ids: ListenerId[],
+	source: MetadataExtractorSource,
+};
+
+export type MetadataExtractorId = string;
+
+export type MetadataExtractorSource = { kind: "header"; name: string } | { kind: "json_path"; path: string } | { kind: "body_text" } | { kind: "fixed_value"; value: string };
+
+export type MitmSettings = {
+	enabled: boolean,
+	/**  精确主机名或 `*.example.test` 形式的单层/多层子域后缀。 */
+	authority_allowlist: string[],
+	root_ca: CertificateReferenceId | null,
+	maximum_cached_leaf_certificates: number,
+};
+
+/**  丢弃某个方向上的第 N 个指定 TCP 标志包。 */
+export type NthTcpFlagDrop = {
+	direction: PacketDirection,
+	flag: TcpFlag,
+	nth: number,
+};
+
 export type OperationResultViewModel = {
 	success: boolean,
 	cancelled: boolean,
@@ -381,11 +697,30 @@ export type OperationResultViewModel = {
 	requires_restart: boolean,
 };
 
+/**  包在 TUN 中的移动方向。 */
+export type PacketDirection = "upload" | "download";
+
 /**  通用分页请求；`normalized` 会把越界页码和页大小限制到安全范围。 */
 export type PageRequest = {
 	page: number,
 	page_size: number,
 };
+
+/**  路径 MTU 与 TCP MSS 故障配置。 */
+export type PathMtuProfile = {
+	mtu: number | null,
+	mss_clamp: number | null,
+	mode: PmtuMode,
+};
+
+/**  超过路径 MTU 时的处理语义。 */
+export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
+
+export type ProxyListener = {
+	kind: "forward",
+} & ForwardProxyListener | {
+	kind: "reverse",
+} & ReverseProxyListener;
 
 export type ProxyState = "stopped" | "starting" | "running" | "stopping" | "faulted";
 
@@ -420,6 +755,18 @@ export type ProxyStatusViewModel = {
 	fault_reason: string | null,
 };
 
+export type ProxyWorkspace = {
+	id: WorkspaceId,
+	name: string,
+	revision: Revision,
+	listeners: ProxyListener[],
+	body_codec_policies: BodyCodecPolicy[],
+	metadata_extractors: MetadataExtractor[],
+	response_assertions: ResponseAssertion[],
+	fault_presets: FaultPreset[],
+	certificate_references: CertificateReference[],
+};
+
 /**
  *  为无损 HTTP/1 往返保留的一条原始 Header。
  *  Header 可能重复、大小写不同或包含有意义的空白，因此不能只用 Map 保存。
@@ -434,6 +781,42 @@ export type RawHttpHeaderViewModel = {
 	/**  实际字段值之后的原始可选空白。 */
 	trailing_ows_bytes?: number[],
 };
+
+/**  用户可配置的响应断言。核心只比较通用 HTTP 数据，不包含任何业务返回码。 */
+export type ResponseAssertion = {
+	id: ResponseAssertionId,
+	name: string,
+	listener_ids: ListenerId[],
+	enabled: boolean,
+	assertion: ResponseAssertionKind,
+};
+
+export type ResponseAssertionId = string;
+
+export type ResponseAssertionKind = { kind: "http_status_equals"; expected: number } | { kind: "header_equals"; name: string; expected: string } | { kind: "json_path_equals"; path: string; expected: unknown } | { kind: "body_text_contains"; expected: string } | { kind: "body_length_equals"; expected: number } | { kind: "body_sha256_equals"; expected_hex: string };
+
+export type ResponseAssertionResultViewModel = {
+	assertion_id: ResponseAssertionId,
+	name: string,
+	passed: boolean,
+	message: string,
+};
+
+export type ReverseProxyListener = {
+	id: ListenerId,
+	name: string,
+	enabled: boolean,
+	bind_address: string,
+	port: number,
+	/**  固定上游 origin，只允许 `http`/`https`、主机和可选端口。 */
+	upstream_url: string,
+	downstream_tls: DownstreamTlsSettings,
+	upstream_tls: UpstreamTlsSettings,
+	request_codec_policy: CodecPolicyId | null,
+	response_codec_policy: CodecPolicyId | null,
+};
+
+export type Revision = number;
 
 export type RuleAction = { type: "set_json_field"; path: string; value_json: string } | { type: "replace_body_text"; text: string } | { type: "set_header"; name: string; value: string } | { type: "delay"; milliseconds: number } | { type: "jitter"; minimum_milliseconds: number; maximum_milliseconds: number; scope: RuleJitterScope } | { type: "throttle"; bytes_per_second: number; chunk_bytes: number; direction: RuleTrafficDirection } | { type: "intermittent"; available_milliseconds: number; blocked_milliseconds: number; direction: RuleTrafficDirection } | { type: "pause" } | { type: "custom_http_status"; status: number } | { type: "terminal"; action: RuleTerminalAction };
 
@@ -505,6 +888,16 @@ export type RuleViewModel = {
 	draft: RuleDraft,
 };
 
+/**
+ *  系统密钥库中一项秘密的稳定引用。
+ *  `provider` 例如 `keychain`、`dpapi` 或测试内存实现；`key` 是该 provider 内的标识。
+ *  结构中刻意没有 `value`、`password` 或私钥字节字段。
+ */
+export type SecretReference = {
+	provider: string,
+	key: string,
+};
+
 /**  会话详情；完整请求/响应只在用户打开详情时返回。 */
 export type SessionDetailViewModel = {
 	summary: SessionSummaryViewModel,
@@ -519,6 +912,10 @@ export type SessionDetailViewModel = {
 	request: MessageContentViewModel | null,
 	response: MessageContentViewModel | null,
 	rule_trace: string[],
+	/**  Workspace 元数据提取器生成的少量文本，不包含额外 Payload 副本。 */
+	extracted_metadata?: { [key in string]: string },
+	/**  对最终响应执行的通用断言结果；失败只影响会话结论，不篡改线上响应。 */
+	response_assertions?: ResponseAssertionResultViewModel[],
 };
 
 export type SessionPageViewModel = {
@@ -607,6 +1004,9 @@ export type SubscriptionAckViewModel = {
 	snapshot_required: boolean,
 };
 
+/**  需要精确计数的 TCP 标志位。 */
+export type TcpFlag = "syn" | "syn_ack" | "ack" | "fin" | "rst";
+
 /**  带顺序、周期和实体版本的实时事件信封。 */
 export type UiEventEnvelope = {
 	event_id: number,
@@ -618,7 +1018,7 @@ export type UiEventEnvelope = {
 };
 
 /**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
-export type UiEventPayload = { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
+export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
 	message: string,
 } } | { type: "operation_failed"; data: AppErrorViewModel } | { type: "snapshot_required"; data: {
 	reason: string,
@@ -626,6 +1026,60 @@ export type UiEventPayload = { type: "runtime_status_changed"; data: ProxyStatus
 
 /**  与具体组件库无关的视觉语义，前端只负责映射为 `HeroUI` 颜色。 */
 export type UiTone = "neutral" | "info" | "positive" | "warning" | "danger";
+
+export type UpstreamTlsSettings = {
+	verify_hostname: boolean,
+	/**  `None` 表示使用操作系统信任根。 */
+	server_trust: CertificateReferenceId | null,
+	client_identity: CertificateReferenceId | null,
+};
+
+/**  纯 Rust 弱网配置，也是桌面端、Companion 与数据面的唯一字段契约。 */
+export type WeakNetworkProfile = {
+	seed: number,
+	fixed_delay_millis: number,
+	uniform_jitter_millis: number,
+	upload_bytes_per_second: number | null,
+	download_bytes_per_second: number | null,
+	random_loss_basis_points: number,
+	burst_loss: BurstLossProfile | null,
+	duplicate_basis_points: number,
+	reorder_basis_points: number,
+	maximum_reorder_hold_millis: number,
+	blackout_windows: BlackoutWindow[],
+	dns_blackhole: boolean,
+	nth_tcp_flag_drops: NthTcpFlagDrop[],
+	path_mtu: PathMtuProfile,
+	corruption: BitCorruptionProfile,
+};
+
+export type WorkspaceChangeKind = "created" | "updated" | "selected" | "deleted" | "imported";
+
+/**  Workspace 集合变化事件；删除时 `summary` 为空，其余操作携带最新 Rust 摘要。 */
+export type WorkspaceChangedViewModel = {
+	workspace_id: WorkspaceId,
+	kind: WorkspaceChangeKind,
+	summary: WorkspaceSummaryViewModel | null,
+};
+
+export type WorkspaceId = string;
+
+/**  Workspace 列表只返回轻量摘要，完整配置仅在用户选择或编辑时加载。 */
+export type WorkspaceSummaryViewModel = {
+	id: WorkspaceId,
+	name: string,
+	revision: number,
+	listener_count: number,
+	enabled_listener_count: number,
+	selected: boolean,
+};
+
+/**  Rust Workspace 校验的完整结果。前端不得重复推导安全策略。 */
+export type WorkspaceValidationViewModel = {
+	valid: boolean,
+	normalized: ProxyWorkspace,
+	field_errors: { [key in string]: string[] },
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {

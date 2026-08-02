@@ -13,14 +13,14 @@ use std::{
 };
 
 use async_trait::async_trait;
-use gmofg_proxy_runtime::{
+use intercept_proxy_runtime::{
     ChannelConfig, ChannelId, ConnectionAdmission, ConnectionContext, FaultAction, HandshakePolicy,
     MessageLimits, ProxyConfig, ProxyError, ProxySupervisor, Result, SystemClock, TlsPeerIdentity,
     TokioListenerBinder, UpstreamConnector,
     tls::{ClientTlsAdapter, ServerTlsAdapter},
     transport::{
         AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionService, ForwardRequest,
-        NoopPipelinePorts,
+        NoopPipelinePorts, PipelinePorts,
     },
 };
 use rcgen::{
@@ -126,11 +126,13 @@ struct UnusedUpstream;
 impl UpstreamConnector for UnusedUpstream {
     async fn send(
         &self,
+        _context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&gmofg_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::transport::InformationalResponseSink>,
         _cancellation: &CancellationToken,
-    ) -> Result<gmofg_proxy_runtime::transport::UpstreamExchange> {
+    ) -> Result<intercept_proxy_runtime::transport::UpstreamExchange> {
         unreachable!("silent TLS clients never reach the upstream connector")
     }
 }
@@ -155,10 +157,22 @@ async fn valid_mtls_negotiates_tls12_and_exposes_peer_identity() {
         server_tls.accept(Box::new(tcp) as BoxIo, &context()).await
     });
     let tcp = TcpStream::connect(address).await.unwrap();
-    client_tls
-        .connect("localhost", Box::new(tcp))
+    let connected = client_tls
+        .connect_with_evidence("localhost", Box::new(tcp))
         .await
         .unwrap();
+    assert_eq!(connected.evidence.tls_version, "TLS 1.2");
+    assert!(connected.evidence.cipher_suite.starts_with("TLS_"));
+    assert!(
+        connected
+            .evidence
+            .peer
+            .subject_summary
+            .contains("proxy.local")
+    );
+    assert!(connected.evidence.hostname_verification_enabled);
+    assert!(connected.evidence.client_identity_configured);
+    assert!(connected.evidence.client_identity_submitted);
     let accepted = server_task.await.unwrap().unwrap();
     assert!(
         accepted
@@ -375,7 +389,7 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
         .await
         .expect("stop cancels the silent TLS handshake")
         .unwrap();
-    assert_eq!(stopped.state, gmofg_proxy_runtime::ProxyState::Stopped);
+    assert_eq!(stopped.state, intercept_proxy_runtime::ProxyState::Stopped);
 }
 
 #[tokio::test]

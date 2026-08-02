@@ -7,31 +7,30 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use async_trait::async_trait;
 use chrono::Utc;
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, FieldValidationViewModel, MessageStage as AppMessageStage,
-    OperationResultViewModel, RuleAction as AppRuleAction, RuleCondition as AppRuleCondition,
-    RuleDraft as AppRuleDraft, RuleDropResponseMode as AppRuleDropResponseMode,
-    RuleId as AppRuleId, RuleJitterScope as AppRuleJitterScope,
-    RuleMatchField as AppRuleMatchField, RuleMatchOperator as AppRuleMatchOperator,
-    RuleRepositoryPort, RuleSummaryViewModel, RuleTerminalAction as AppRuleTerminalAction,
-    RuleTrafficDirection as AppRuleTrafficDirection, RuleValidationViewModel, RuleViewModel,
-    SessionId, SessionQueryPort, UiTone,
+    OperationResultViewModel, ProxyWorkspace, RuleAction as AppRuleAction,
+    RuleCondition as AppRuleCondition, RuleDraft as AppRuleDraft,
+    RuleDropResponseMode as AppRuleDropResponseMode, RuleId as AppRuleId,
+    RuleJitterScope as AppRuleJitterScope, RuleMatchField as AppRuleMatchField,
+    RuleMatchOperator as AppRuleMatchOperator, RuleRepositoryPort, RuleSummaryViewModel,
+    RuleTerminalAction as AppRuleTerminalAction, RuleTrafficDirection as AppRuleTrafficDirection,
+    RuleValidationViewModel, RuleViewModel, SessionId, SessionQueryPort, UiTone,
 };
-use gmofg_proxy_domain::{
+use intercept_proxy_domain::{
     ChannelId, DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator,
     MessageStage, Revision, Rule, RuleAction, RuleDraft, RuleEngine, RuleId, RuleRuntimeSnapshot,
     RuleSetSignature, RuntimeEpoch, TerminalAction, TrafficDirection, validate_rule_draft,
 };
-use gmofg_proxy_product_api::ProductChannel;
+use intercept_proxy_product_api::ProductChannel;
 use parking_lot::Mutex;
 use serde_json::{Map, Value};
 
 use crate::files::RULE_IMPORT_MAX_BYTES;
-use crate::sqlite::RuleRuntimeUpdate;
-use crate::{AtomicFileExporter, InfrastructureError, RuleRecord, SqliteStore};
+use crate::{AtomicFileExporter, InfrastructureError, SqliteStore, WorkspaceRecord};
 
 use super::{
-    common::{app_error, infra, json_error},
+    common::{app_error, decode_workspace_record, infra, json_error},
     files::{NativeFileDialog, cancelled},
 };
 
@@ -78,58 +77,95 @@ impl RuleRepositoryAdapter {
         }
     }
 
-    fn load(&self) -> AppResult<Vec<Rule>> {
-        let snapshot = infra(self.store.load_rules_snapshot())?;
-        self.parse_records(snapshot.records)
-    }
-
-    fn parse_records(&self, records: Vec<RuleRecord>) -> AppResult<Vec<Rule>> {
-        records
+    /// 规则属于当前选中的 Workspace 聚合；独立 `rules` 表只保留旧 schema，不再读取。
+    fn load_selected_workspace(&self) -> AppResult<ProxyWorkspace> {
+        let snapshot = infra(self.store.load_workspaces())?;
+        let selected_id = snapshot
+            .selected_id
+            .ok_or_else(|| AppError::new("WORKSPACE_NOT_FOUND", "当前没有选中的 Workspace。"))?;
+        let record = snapshot
+            .records
             .into_iter()
-            .map(|record| {
-                let rule =
-                    deserialize_persisted_rule(record.value, self.legacy_terminal_body_fields)
-                        .map_err(|error| persisted_rule_error(format!("规则结构无效：{error}")))?;
-                validate_persisted_rule(&rule)
-                    .map_err(|error| persisted_rule_error(format!("规则语义无效：{error}")))?;
-                Ok(rule)
-            })
-            .collect()
+            .find(|record| record.id == selected_id)
+            .ok_or_else(|| persisted_rule_error("选中的 Workspace 记录不存在。".into()))?;
+        decode_workspace_record(record).map_err(persisted_rule_error)
     }
 
-    fn record(rule: &Rule) -> AppResult<RuleRecord> {
-        let mut value =
-            serde_json::to_value(rule).map_err(|error| json_error("规则序列化失败", error))?;
-        value
-            .as_object_mut()
-            .expect("Rule always serializes as an object")
-            .insert(
-                PERSISTENCE_VERSION_FIELD.into(),
-                Value::from(RULE_PERSISTENCE_VERSION),
-            );
-        Ok(RuleRecord {
-            id: rule.id.as_uuid(),
-            revision: rule.revision.get(),
-            enabled: rule.enabled,
-            value,
+    fn load(&self) -> AppResult<Vec<Rule>> {
+        Ok(self.load_selected_workspace()?.rules)
+    }
+
+    fn load_workspace_for_channel(&self, channel: &str) -> AppResult<ProxyWorkspace> {
+        let snapshot = infra(self.store.load_workspaces())?;
+        let mut matches = Vec::new();
+        for record in snapshot.records {
+            let workspace = decode_workspace_record(record).map_err(persisted_rule_error)?;
+            if workspace
+                .listeners
+                .iter()
+                .any(|listener| listener.id().to_string() == channel)
+            {
+                matches.push(workspace);
+            }
+        }
+        let mut matches = matches.into_iter();
+        let workspace = matches.next().ok_or_else(|| {
+            AppError::new(
+                "WORKSPACE_NOT_FOUND",
+                "找不到运行中代理入口所属的 Workspace。",
+            )
+            .entity(channel.to_owned())
+        })?;
+        if matches.next().is_some() {
+            return Err(persisted_rule_error(format!(
+                "代理入口 {channel} 同时属于多个 Workspace。"
+            )));
+        }
+        workspace.validate().map_err(AppError::from)?;
+        Ok(workspace)
+    }
+
+    fn load_workspace_by_id(&self, id: uuid::Uuid) -> AppResult<ProxyWorkspace> {
+        let snapshot = infra(self.store.load_workspaces())?;
+        let record = snapshot
+            .records
+            .into_iter()
+            .find(|record| record.id == id)
+            .ok_or_else(|| {
+                AppError::new("WORKSPACE_NOT_FOUND", "运行规则所属 Workspace 不存在。")
+            })?;
+        decode_workspace_record(record).map_err(persisted_rule_error)
+    }
+
+    fn workspace_record(workspace: &ProxyWorkspace) -> AppResult<WorkspaceRecord> {
+        Ok(WorkspaceRecord {
+            id: workspace.id.as_uuid(),
+            revision: workspace.revision.get(),
+            value: serde_json::to_value(workspace)
+                .map_err(|error| json_error("Workspace 序列化失败", error))?,
             updated_at: Utc::now(),
         })
     }
 
-    fn replace_all(&self, expected_collection_revision: u64, rules: &[Rule]) -> AppResult<()> {
-        let records = rules
-            .iter()
-            .map(Self::record)
-            .collect::<AppResult<Vec<_>>>()?;
+    fn save_selected_workspace(
+        &self,
+        mut workspace: ProxyWorkspace,
+        expected_revision: u64,
+    ) -> AppResult<ProxyWorkspace> {
+        workspace.revision = Revision::new(expected_revision).next();
+        workspace.validate().map_err(AppError::from)?;
         infra(
-            self.store
-                .replace_rules_atomically(expected_collection_revision, &records),
-        )
-        .map(|_| ())
+            self.store.compare_and_swap_workspace(
+                expected_revision,
+                &Self::workspace_record(&workspace)?,
+            ),
+        )?;
+        Ok(workspace)
     }
 
     fn save_locked(&self, draft: &AppRuleDraft) -> AppResult<Rule> {
-        let mut rules = self.load()?;
+        let mut workspace = self.load_selected_workspace()?;
+        let mut rules = workspace.rules.clone();
         let creation_order = draft
             .rule_id
             .and_then(|id| {
@@ -162,15 +198,13 @@ impl RuleRepositoryAdapter {
         } else {
             Rule::create(domain_draft).map_err(AppError::from)?
         };
-        let record = Self::record(&changed)?;
-        if draft.rule_id.is_some() {
-            let expected_revision = draft.expected_revision.ok_or_else(|| {
-                AppError::new("REVISION_CONFLICT", "修改规则必须提供当前 revision。")
-            })?;
-            infra(self.store.compare_and_swap_rule(expected_revision, &record))?;
-        } else {
-            infra(self.store.insert_rule(&record))?;
+        if draft.rule_id.is_none() {
+            rules.push(changed.clone());
+            rules = RuleEngine::new(RuntimeEpoch::new(), rules).rules().to_vec();
         }
+        let expected_workspace_revision = workspace.revision.get();
+        workspace.rules = rules;
+        self.save_selected_workspace(workspace, expected_workspace_revision)?;
         Ok(changed)
     }
 
@@ -188,7 +222,8 @@ impl RuleRepositoryAdapter {
         enabled: bool,
     ) -> AppResult<Rule> {
         let _operation = self.operations.lock();
-        let mut rules = self.load()?;
+        let mut workspace = self.load_selected_workspace()?;
+        let mut rules = workspace.rules.clone();
         let domain_id = RuleId::from_uuid(id);
         let mut engine = RuleEngine::new(RuntimeEpoch::new(), rules);
         engine
@@ -200,20 +235,19 @@ impl RuleRepositoryAdapter {
             .find(|rule| rule.id == domain_id)
             .cloned()
             .expect("domain engine retained toggled rule");
-        infra(
-            self.store
-                .compare_and_swap_rule(expected_revision, &Self::record(&changed)?),
-        )?;
+        let expected_workspace_revision = workspace.revision.get();
+        workspace.rules = rules;
+        self.save_selected_workspace(workspace, expected_workspace_revision)?;
         Ok(changed)
     }
 
-    pub fn runtime_snapshot(&self) -> AppResult<RuleRuntimeSnapshot> {
+    pub fn runtime_snapshot(&self, channel: &str) -> AppResult<RuleRuntimeSnapshot> {
         let _operation = self.operations.lock();
-        let snapshot = infra(self.store.load_rules_snapshot())?;
-        let rules = self.parse_records(snapshot.records)?;
-        Ok(RuleRuntimeSnapshot::with_collection_revision(
-            snapshot.revision,
-            rules,
+        let workspace = self.load_workspace_for_channel(channel)?;
+        Ok(RuleRuntimeSnapshot::with_collection_identity(
+            Some(workspace.id.as_uuid()),
+            workspace.revision.get(),
+            workspace.rules,
         ))
     }
 
@@ -229,47 +263,37 @@ impl RuleRepositoryAdapter {
                 "规则运行快照签名与内容不一致。",
             ));
         }
-        let updates = runtime_updates(snapshot, evaluated_rules)?;
-        let signature = snapshot
-            .signature
-            .entries
-            .iter()
-            .map(|entry| (entry.rule_id.as_uuid(), entry.revision.get()))
-            .collect::<Vec<_>>();
-        infra(self.store.compare_and_swap_rule_runtime(
-            snapshot.collection_revision,
-            &signature,
-            &updates,
-        ))
+        let collection_id = snapshot.collection_id.ok_or_else(|| {
+            AppError::new("REVISION_CONFLICT", "规则运行快照缺少 Workspace 标识。")
+        })?;
+        let mut workspace = self.load_workspace_by_id(collection_id)?;
+        if snapshot.collection_id != Some(workspace.id.as_uuid())
+            || workspace.revision.get() != snapshot.collection_revision
+            || RuleSetSignature::from_rules(&workspace.rules) != snapshot.signature
+        {
+            return Err(AppError::new(
+                "REVISION_CONFLICT",
+                "Workspace 或规则集合已在运行快照之后发生变化。",
+            ));
+        }
+        workspace.rules = runtime_rules(snapshot, evaluated_rules)?;
+        let expected_revision = workspace.revision.get();
+        Ok(self
+            .save_selected_workspace(workspace, expected_revision)?
+            .revision
+            .get())
     }
 
-    pub fn reset_runtime_hit_metadata(&self) -> AppResult<()> {
+    pub fn reset_runtime_hit_metadata(&self, collection_id: uuid::Uuid) -> AppResult<()> {
         let _operation = self.operations.lock();
-        let stored = infra(self.store.load_rules_snapshot())?;
-        let collection_revision = stored.revision;
-        let rules = self.parse_records(stored.records)?;
-        let signature = RuleSetSignature::from_rules(&rules);
-        let updates = rules
-            .iter()
-            .map(|rule| RuleRuntimeUpdate {
-                id: rule.id.as_uuid(),
-                expected_revision: rule.revision.get(),
-                revision: rule.revision.get(),
-                enabled: rule.enabled,
-                hit_count: 0,
-                last_hit_at: None,
-            })
-            .collect::<Vec<_>>();
-        let signature = signature
-            .entries
-            .iter()
-            .map(|entry| (entry.rule_id.as_uuid(), entry.revision.get()))
-            .collect::<Vec<_>>();
-        infra(
-            self.store
-                .compare_and_swap_rule_runtime(collection_revision, &signature, &updates),
-        )
-        .map(|_| ())
+        let mut workspace = self.load_workspace_by_id(collection_id)?;
+        let expected_revision = workspace.revision.get();
+        for rule in &mut workspace.rules {
+            rule.hit_count = 0;
+            rule.last_hit_at = None;
+        }
+        self.save_selected_workspace(workspace, expected_revision)
+            .map(|_| ())
     }
 }
 
@@ -379,7 +403,7 @@ fn terminal_action_objects_mut(
         .filter_map(Value::as_object_mut)
 }
 
-fn validate_persisted_rule(rule: &Rule) -> Result<(), gmofg_proxy_domain::DomainError> {
+fn validate_persisted_rule(rule: &Rule) -> Result<(), intercept_proxy_domain::DomainError> {
     validate_rule_draft(&RuleDraft {
         expected_revision: Some(rule.revision),
         name: rule.name.clone(),
@@ -429,8 +453,8 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
     async fn create_from_session(&self, session_id: SessionId) -> AppResult<AppRuleDraft> {
         let session = self.sessions.get(session_id).await?;
         let condition = MatchCondition::Field {
-            field: gmofg_proxy_domain::MatchField::PathOrRequestType,
-            operator: gmofg_proxy_domain::MatchOperator::Equals(session.summary.target.clone()),
+            field: intercept_proxy_domain::MatchField::PathOrRequestType,
+            operator: intercept_proxy_domain::MatchOperator::Equals(session.summary.target.clone()),
         };
         Ok(AppRuleDraft {
             rule_id: None,
@@ -511,15 +535,18 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         expected_revision: u64,
     ) -> AppResult<OperationResultViewModel> {
         let _operation = self.operations.lock();
-        let rule = self
-            .load()?
-            .into_iter()
+        let mut workspace = self.load_selected_workspace()?;
+        let rule = workspace
+            .rules
+            .iter()
             .find(|rule| rule.id.as_uuid() == rule_id)
             .ok_or_else(|| AppError::new("RULE_INVALID", "规则不存在。"))?;
         if rule.revision.get() != expected_revision {
             return Err(AppError::new("REVISION_CONFLICT", "规则已被其他操作更新。"));
         }
-        infra(self.store.delete_rule(rule_id, expected_revision))?;
+        let expected_workspace_revision = workspace.revision.get();
+        workspace.rules.retain(|rule| rule.id.as_uuid() != rule_id);
+        self.save_selected_workspace(workspace, expected_workspace_revision)?;
         Ok(OperationResultViewModel::success("规则已删除。"))
     }
 
@@ -536,7 +563,9 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
     }
 
     async fn import(&self) -> AppResult<OperationResultViewModel> {
-        let expected_collection_revision = infra(self.store.load_rules_snapshot())?.revision;
+        let selected = self.load_selected_workspace()?;
+        let expected_workspace_id = selected.id;
+        let expected_workspace_revision = selected.revision.get();
         let Some(path) = self.dialog.choose_open_file("rules_json")? else {
             return Ok(cancelled("已取消规则导入。"));
         };
@@ -551,11 +580,21 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         for rule in &rules {
             validate_persisted_rule(rule).map_err(AppError::from)?;
         }
+        let imported_count = rules.len();
         let _operation = self.operations.lock();
-        self.replace_all(expected_collection_revision, &rules)?;
+        let mut current = self.load_selected_workspace()?;
+        if current.id != expected_workspace_id
+            || current.revision.get() != expected_workspace_revision
+        {
+            return Err(AppError::new(
+                "REVISION_CONFLICT",
+                "导入期间当前 Workspace 已切换或被更新。",
+            ));
+        }
+        current.rules = RuleEngine::new(RuntimeEpoch::new(), rules).rules().to_vec();
+        self.save_selected_workspace(current, expected_workspace_revision)?;
         Ok(OperationResultViewModel::success(format!(
-            "已导入 {} 条规则。",
-            rules.len()
+            "已导入 {imported_count} 条规则。"
         )))
     }
 
@@ -573,10 +612,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
     }
 }
 
-fn runtime_updates(
-    snapshot: &RuleRuntimeSnapshot,
-    evaluated_rules: &[Rule],
-) -> AppResult<Vec<RuleRuntimeUpdate>> {
+fn runtime_rules(snapshot: &RuleRuntimeSnapshot, evaluated_rules: &[Rule]) -> AppResult<Vec<Rule>> {
     let mut expected_ids = snapshot
         .rules
         .iter()
@@ -620,14 +656,7 @@ fn runtime_updates(
                 )
                 .entity(original.id.to_string()));
             }
-            Ok(RuleRuntimeUpdate {
-                id: original.id.as_uuid(),
-                expected_revision: original.revision.get(),
-                revision: evaluated.revision.get(),
-                enabled: evaluated.enabled,
-                hit_count: evaluated.hit_count,
-                last_hit_at: evaluated.last_hit_at,
-            })
+            Ok(evaluated.clone())
         })
         .collect()
 }
@@ -635,22 +664,22 @@ fn runtime_updates(
 fn to_domain_draft(
     draft: &AppRuleDraft,
     creation_order: u64,
-) -> Result<RuleDraft, gmofg_proxy_domain::DomainError> {
+) -> Result<RuleDraft, intercept_proxy_domain::DomainError> {
     let stage = match draft.stage {
         Some(AppMessageStage::Request) => MessageStage::Request,
         Some(AppMessageStage::Response) => MessageStage::Response,
         Some(AppMessageStage::TlsHandshake) => MessageStage::TlsHandshake,
         _ => {
-            return Err(gmofg_proxy_domain::DomainError::new(
-                gmofg_proxy_domain::ErrorCode::RuleInvalid,
+            return Err(intercept_proxy_domain::DomainError::new(
+                intercept_proxy_domain::ErrorCode::RuleInvalid,
                 "规则必须指定 TLS 握手、请求或响应阶段",
             )
             .with_field_error("stage", "阶段无效"));
         }
     };
     let priority = u32::try_from(draft.priority).map_err(|_| {
-        gmofg_proxy_domain::DomainError::new(
-            gmofg_proxy_domain::ErrorCode::RuleInvalid,
+        intercept_proxy_domain::DomainError::new(
+            intercept_proxy_domain::ErrorCode::RuleInvalid,
             "规则优先级不能为负数",
         )
         .with_field_error("priority", "必须大于等于 0")
@@ -667,8 +696,8 @@ fn to_domain_draft(
                 } else {
                     format!("actions.{index}")
                 };
-                gmofg_proxy_domain::DomainError::new(
-                    gmofg_proxy_domain::ErrorCode::RuleInvalid,
+                intercept_proxy_domain::DomainError::new(
+                    intercept_proxy_domain::ErrorCode::RuleInvalid,
                     "规则动作无效",
                 )
                 .with_field_error(field, error.to_string())
@@ -1051,7 +1080,7 @@ fn view(rule: &Rule, channel_names: &BTreeMap<ChannelId, String>) -> AppResult<R
     })
 }
 
-fn validation_from_domain(error: &gmofg_proxy_domain::DomainError) -> RuleValidationViewModel {
+fn validation_from_domain(error: &intercept_proxy_domain::DomainError) -> RuleValidationViewModel {
     FieldValidationViewModel {
         valid: false,
         field_errors: error
@@ -1067,12 +1096,10 @@ fn validation_from_domain(error: &gmofg_proxy_domain::DomainError) -> RuleValida
 mod tests {
     use std::{path::PathBuf, sync::Arc};
 
-    use chrono::TimeZone;
-    use gmofg_proxy_domain::{MatchContext, TerminalIdentity};
-    use rusqlite::params;
-
     use super::*;
     use crate::adapters::{FileSelection, NativeFileDialog};
+    use chrono::TimeZone;
+    use intercept_proxy_domain::{MatchContext, TerminalIdentity};
 
     #[derive(Debug)]
     struct NoDialog;
@@ -1106,12 +1133,27 @@ mod tests {
     struct MutatingOpenDialog {
         path: PathBuf,
         store: Arc<SqliteStore>,
-        concurrent_rule: RuleRecord,
+        concurrent_rule: Rule,
     }
 
     impl NativeFileDialog for MutatingOpenDialog {
         fn choose_open_file(&self, _: &str) -> AppResult<Option<PathBuf>> {
-            infra(self.store.insert_rule(&self.concurrent_rule))?;
+            let snapshot = infra(self.store.load_workspaces())?;
+            let selected_id = snapshot.selected_id.expect("selected workspace");
+            let record = snapshot
+                .records
+                .into_iter()
+                .find(|record| record.id == selected_id)
+                .expect("selected record");
+            let mut workspace: ProxyWorkspace =
+                serde_json::from_value(record.value).expect("workspace");
+            workspace.rules.push(self.concurrent_rule.clone());
+            workspace.revision = workspace.revision.next();
+            infra(self.store.compare_and_swap_selected_workspace(
+                selected_id,
+                record.revision,
+                &RuleRepositoryAdapter::workspace_record(&workspace)?,
+            ))?;
             Ok(Some(self.path.clone()))
         }
 
@@ -1128,7 +1170,7 @@ mod tests {
             description: String::new(),
             enabled: true,
             priority: 10,
-            channel: Some(ChannelId::new("alpha").unwrap()),
+            channel: None,
             stage: Some(AppMessageStage::Request),
             conditions: Vec::new(),
             actions: vec![AppRuleAction::Delay { milliseconds: 10 }],
@@ -1136,14 +1178,53 @@ mod tests {
         }
     }
 
-    fn adapter() -> Arc<RuleRepositoryAdapter> {
+    fn seed_workspace(store: &Arc<SqliteStore>, rules: Vec<Rule>) -> ProxyWorkspace {
+        let workspace = ProxyWorkspace {
+            rules,
+            ..ProxyWorkspace::default()
+        };
+        store
+            .insert_workspace(&RuleRepositoryAdapter::workspace_record(&workspace).expect("record"))
+            .expect("seed workspace");
+        workspace
+    }
+
+    fn adapter_with(
+        store: Arc<SqliteStore>,
+        dialog: Arc<dyn NativeFileDialog>,
+    ) -> Arc<RuleRepositoryAdapter> {
+        if store
+            .load_workspaces()
+            .expect("workspaces")
+            .records
+            .is_empty()
+        {
+            seed_workspace(&store, Vec::new());
+        }
         Arc::new(RuleRepositoryAdapter::new(
-            Arc::new(SqliteStore::in_memory().expect("store")),
-            Arc::new(NoDialog),
-            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            store,
+            dialog,
+            Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
             &[],
             &[],
         ))
+    }
+
+    fn adapter() -> Arc<RuleRepositoryAdapter> {
+        adapter_with(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(NoDialog),
+        )
+    }
+
+    fn runtime_snapshot(adapter: &RuleRepositoryAdapter) -> RuleRuntimeSnapshot {
+        let workspace = adapter
+            .load_selected_workspace()
+            .expect("selected workspace");
+        let channel = workspace.listeners[0].id().to_string();
+        adapter
+            .runtime_snapshot(&channel)
+            .expect("runtime snapshot")
     }
 
     fn legacy_rule_json(rule_id: uuid::Uuid, terminal_action: &Value) -> Value {
@@ -1163,28 +1244,6 @@ mod tests {
             "hit_count": 0,
             "last_hit_at": null
         })
-    }
-
-    fn create_legacy_rule_database(path: &std::path::Path, id: uuid::Uuid, rule: &Value) {
-        let connection = rusqlite::Connection::open(path).expect("legacy database");
-        connection
-            .execute_batch(
-                "CREATE TABLE rules (
-                    id TEXT PRIMARY KEY,
-                    revision INTEGER NOT NULL,
-                    enabled INTEGER NOT NULL,
-                    json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );",
-            )
-            .expect("legacy rule schema");
-        connection
-            .execute(
-                "INSERT INTO rules(id, revision, enabled, json, updated_at)
-                 VALUES (?1, 3, 1, ?2, ?3)",
-                params![id.to_string(), rule.to_string(), Utc::now().to_rfc3339()],
-            )
-            .expect("legacy rule row");
     }
 
     #[test]
@@ -1315,6 +1374,93 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn selected_workspace_owns_rule_list_runtime_snapshot_and_revision() {
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        let first_workspace = seed_workspace(&store, Vec::new());
+        let adapter = adapter_with(Arc::clone(&store), Arc::new(NoDialog));
+        adapter
+            .save(request_delay_draft("first workspace rule", false))
+            .await
+            .expect("save first rule");
+        let first_after_save = store
+            .load_workspaces()
+            .expect("workspaces")
+            .records
+            .into_iter()
+            .find(|record| record.id == first_workspace.id.as_uuid())
+            .expect("first workspace");
+        assert_eq!(
+            first_after_save.revision,
+            first_workspace.revision.get() + 1
+        );
+
+        let second_rule = Rule::create(
+            to_domain_draft(&request_delay_draft("second workspace rule", false), 1)
+                .expect("second draft"),
+        )
+        .expect("second rule");
+        let second_workspace = seed_workspace(&store, vec![second_rule.clone()]);
+        store
+            .select_workspace(second_workspace.id.as_uuid())
+            .expect("select second workspace");
+
+        let listed = adapter.list().await.expect("selected rules");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].name, "second workspace rule");
+        let runtime = runtime_snapshot(&adapter);
+        assert_eq!(runtime.collection_revision, second_workspace.revision.get());
+        assert_eq!(runtime.rules, vec![second_rule]);
+
+        store
+            .select_workspace(first_workspace.id.as_uuid())
+            .expect("reselect first workspace");
+        assert_eq!(
+            adapter.list().await.expect("first rules")[0].name,
+            "first workspace rule"
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_snapshot_commit_stays_bound_to_owning_workspace_after_ui_switch() {
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        let first = seed_workspace(&store, Vec::new());
+        let adapter = adapter_with(Arc::clone(&store), Arc::new(NoDialog));
+        adapter
+            .save(request_delay_draft("shared rule", false))
+            .await
+            .expect("save rule");
+        let stale = runtime_snapshot(&adapter);
+
+        let second = ProxyWorkspace {
+            revision: Revision::new(stale.collection_revision),
+            rules: stale.rules.clone(),
+            ..ProxyWorkspace::default()
+        };
+        store
+            .insert_workspace(&RuleRepositoryAdapter::workspace_record(&second).expect("record"))
+            .expect("insert identical workspace");
+        store
+            .select_workspace(second.id.as_uuid())
+            .expect("switch workspace");
+
+        let revision = adapter
+            .commit_runtime_snapshot(&stale, &stale.rules)
+            .expect("runtime commit remains on first workspace");
+        assert_eq!(revision, stale.collection_revision + 1);
+        let snapshot = store.load_workspaces().expect("workspaces");
+        assert_eq!(snapshot.selected_id, Some(second.id.as_uuid()));
+        assert_eq!(
+            snapshot
+                .records
+                .iter()
+                .find(|record| record.id == first.id.as_uuid())
+                .expect("first workspace")
+                .revision,
+            revision
+        );
+    }
+
+    #[tokio::test]
     async fn concurrent_same_revision_save_has_exactly_one_winner() {
         let adapter = adapter();
         let created = adapter
@@ -1350,9 +1496,7 @@ mod tests {
             to_domain_draft(&request_delay_draft("existing", false), 1).expect("existing draft"),
         )
         .expect("existing rule");
-        primary_store
-            .insert_rule(&RuleRepositoryAdapter::record(&existing).expect("existing record"))
-            .expect("seed existing");
+        seed_workspace(&primary_store, vec![existing.clone()]);
         let concurrent = Rule::create(
             to_domain_draft(&request_delay_draft("concurrent", false), 2)
                 .expect("concurrent draft"),
@@ -1363,28 +1507,27 @@ mod tests {
             Arc::new(MutatingOpenDialog {
                 path: import,
                 store: secondary_store,
-                concurrent_rule: RuleRepositoryAdapter::record(&concurrent)
-                    .expect("concurrent record"),
+                concurrent_rule: concurrent.clone(),
             }),
-            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
             &[],
             &[],
         );
 
         let error = adapter.import().await.expect_err("stale import");
         assert_eq!(error.view_model.code, "REVISION_CONFLICT");
-        let stored = primary_store.list_rules().expect("stored rules");
+        let stored = RuleRepositoryAdapter::new(
+            primary_store,
+            Arc::new(NoDialog),
+            Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
+            &[],
+            &[],
+        )
+        .load()
+        .expect("stored rules");
         assert_eq!(stored.len(), 2);
-        assert!(
-            stored
-                .iter()
-                .any(|record| record.id == existing.id.as_uuid())
-        );
-        assert!(
-            stored
-                .iter()
-                .any(|record| record.id == concurrent.id.as_uuid())
-        );
+        assert!(stored.iter().any(|rule| rule.id == existing.id));
+        assert!(stored.iter().any(|rule| rule.id == concurrent.id));
     }
 
     #[tokio::test]
@@ -1395,12 +1538,9 @@ mod tests {
             .expect("create import")
             .set_len(RULE_IMPORT_MAX_BYTES + 1)
             .expect("size import");
-        let adapter = RuleRepositoryAdapter::new(
+        let adapter = adapter_with(
             Arc::new(SqliteStore::in_memory().expect("store")),
             Arc::new(StaticOpenDialog { path: import }),
-            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
-            &[],
-            &[],
         );
 
         let error = adapter.import().await.expect_err("oversized import");
@@ -1410,19 +1550,21 @@ mod tests {
     #[tokio::test]
     async fn malformed_persisted_rule_maps_to_persistence_corrupt() {
         let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        let workspace = ProxyWorkspace::default();
+        let mut value = serde_json::to_value(&workspace).expect("workspace value");
+        value["rules"] = serde_json::json!([{"not": "a rule"}]);
         store
-            .insert_rule(&RuleRecord {
-                id: uuid::Uuid::new_v4(),
-                revision: 1,
-                enabled: true,
-                value: serde_json::json!({"not": "a rule"}),
+            .insert_workspace(&WorkspaceRecord {
+                id: workspace.id.as_uuid(),
+                revision: workspace.revision.get(),
+                value,
                 updated_at: Utc::now(),
             })
-            .expect("seed malformed rule");
+            .expect("seed malformed workspace");
         let adapter = RuleRepositoryAdapter::new(
             store,
             Arc::new(NoDialog),
-            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
             &[],
             &[],
         );
@@ -1433,66 +1575,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn real_legacy_rule_sqlite_migrates_shift_jis_body_and_preserves_cas_revision() {
-        let directory = tempfile::tempdir().expect("temp directory");
-        let database = directory.path().join("legacy-rules.sqlite3");
-        let id = uuid::Uuid::new_v4();
-        create_legacy_rule_database(
-            &database,
-            id,
-            &legacy_rule_json(
-                id,
-                &serde_json::json!({
-                    "MockResponse": {
-                        "status": 200,
-                        "headers": [["content-type", "application/json"]],
-                        "shift_jis_body": [130, 160]
-                    }
-                }),
-            ),
+    async fn legacy_global_rule_table_is_not_a_runtime_or_crud_source() {
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        seed_workspace(&store, Vec::new());
+        let legacy = Rule::create(
+            to_domain_draft(&request_delay_draft("legacy global row", false), 1)
+                .expect("legacy draft"),
+        )
+        .expect("legacy rule");
+        let mut value = serde_json::to_value(&legacy).expect("legacy value");
+        value.as_object_mut().expect("rule object").insert(
+            PERSISTENCE_VERSION_FIELD.into(),
+            Value::from(RULE_PERSISTENCE_VERSION),
         );
-        let store = Arc::new(SqliteStore::open(&database).expect("open legacy database"));
-        let adapter = RuleRepositoryAdapter::new(
-            Arc::clone(&store),
-            Arc::new(NoDialog),
-            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
-            &[],
-            &["shift_jis_body"],
-        );
+        store
+            .insert_rule(&crate::RuleRecord {
+                id: legacy.id.as_uuid(),
+                revision: legacy.revision.get(),
+                enabled: legacy.enabled,
+                value,
+                updated_at: Utc::now(),
+            })
+            .expect("seed legacy global row");
 
-        let loaded = adapter.get(id).await.expect("load migrated legacy rule");
-        assert_eq!(loaded.summary.revision, 3);
-        assert!(matches!(
-            loaded.draft.actions.as_slice(),
-            [AppRuleAction::Terminal {
-                action: AppRuleTerminalAction::MockResponse { body_bytes, .. }
-            }] if body_bytes == &[0x82, 0xa0]
-        ));
-
-        let mut update = loaded.draft.clone();
-        update.name = "migrated".into();
-        let saved = adapter.save(update).await.expect("save migrated rule");
-        assert_eq!(saved.summary.revision, 4);
-        let persisted = store
-            .list_rules()
-            .expect("persisted rules")
-            .into_iter()
-            .next()
-            .expect("persisted rule");
-        assert_eq!(
-            persisted
-                .value
-                .get(PERSISTENCE_VERSION_FIELD)
-                .and_then(Value::as_u64),
-            Some(RULE_PERSISTENCE_VERSION)
-        );
-        assert!(!persisted.value.to_string().contains("shift_jis_body"));
-
-        let stale = adapter
-            .save(loaded.draft)
-            .await
-            .expect_err("legacy revision must still participate in CAS");
-        assert_eq!(stale.view_model.code, "REVISION_CONFLICT");
+        let adapter = adapter_with(store, Arc::new(NoDialog));
+        assert!(adapter.list().await.expect("workspace rules").is_empty());
+        assert!(runtime_snapshot(&adapter).rules.is_empty());
     }
 
     #[tokio::test]
@@ -1515,10 +1623,12 @@ mod tests {
             serde_json::to_vec_pretty(&vec![legacy]).expect("legacy JSON"),
         )
         .expect("write legacy JSON");
+        let store = Arc::new(SqliteStore::in_memory().expect("store"));
+        seed_workspace(&store, Vec::new());
         let adapter = RuleRepositoryAdapter::new(
-            Arc::new(SqliteStore::in_memory().expect("store")),
+            store,
             Arc::new(StaticOpenDialog { path: import }),
-            Arc::new(gmofg_proxy_application::InMemorySessionStore::default()),
+            Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
             &[],
             &["shift_jis_body"],
         );
@@ -1559,7 +1669,7 @@ mod tests {
             .save(request_delay_draft("one-shot", true))
             .await
             .expect("create");
-        let snapshot = adapter.runtime_snapshot().expect("snapshot");
+        let snapshot = runtime_snapshot(&adapter);
         let epoch = RuntimeEpoch::new();
         let terminal = TerminalIdentity {
             source_ip: "127.0.0.1".into(),
@@ -1590,7 +1700,7 @@ mod tests {
         assert!(fired.last_hit_at.is_some());
 
         adapter
-            .reset_runtime_hit_metadata()
+            .reset_runtime_hit_metadata(snapshot.collection_id.expect("workspace id"))
             .expect("explicit reset");
         let reset = adapter
             .get_domain(created.summary.rule_id)
@@ -1600,7 +1710,7 @@ mod tests {
         assert_eq!(reset.hit_count, 0);
         assert_eq!(reset.last_hit_at, None);
 
-        let stale = adapter.runtime_snapshot().expect("stale snapshot");
+        let stale = runtime_snapshot(&adapter);
         adapter
             .toggle_domain(created.summary.rule_id, 2, true)
             .expect("concurrent config update");

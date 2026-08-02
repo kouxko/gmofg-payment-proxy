@@ -30,6 +30,7 @@ vi.mock("./workspace-navigation", () => ({
 
 vi.mock("./bootstrap-context", () => ({
   BootstrapProvider: ({ children }: { children: React.ReactNode }) => children,
+  useAppEventRefresh: vi.fn(),
   useBootstrap: () => ({
     bootstrap: undefined,
     proxy: undefined,
@@ -39,9 +40,45 @@ vi.mock("./bootstrap-context", () => ({
   }),
 }));
 
+vi.mock("@/lib/ipc/use-ipc-query", () => ({
+  useIpcQuery: (queryKey: string) =>
+    queryKey === "shell-workspaces"
+      ? {
+          data: [
+            {
+              id: "workspace-1",
+              name: "测试工作区",
+              selected: true,
+              listener_count: 1,
+              enabled_listener_count: 0,
+              revision: 1,
+            },
+          ],
+          isLoading: false,
+          refresh: vi.fn(),
+        }
+      : {
+          data: {
+            workspace_id: "workspace-1",
+            workspace_name: "测试工作区",
+            state_text: "全部入口已停止",
+            ui_tone: "neutral",
+            total_count: 1,
+            active_count: 0,
+            faulted_count: 0,
+            rows: [],
+          },
+          isLoading: false,
+          refresh: vi.fn(),
+        },
+}));
+
 describe("UI-001 fixed navigation order", () => {
   it("matches the frozen requirement document", () => {
     expect(navigation.map((item) => item.href)).toEqual([
+      "/workspaces",
+      "/listeners",
+      "/android-network",
       "/console",
       "/capture",
       "/sessions",
@@ -124,11 +161,11 @@ describe("desktop client navigation", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "打开代理控制台使用说明" }),
+      screen.getByRole("button", { name: "打开运行监控使用说明" }),
     );
 
     expect(
-      screen.getByRole("dialog", { name: "代理控制台使用说明" }),
+      screen.getByRole("dialog", { name: "运行监控使用说明" }),
     ).toBeVisible();
     expect(workspaceNavigationMocks.navigate).not.toHaveBeenCalled();
     expect(window.location.href).toBe(documentUrl);

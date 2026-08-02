@@ -25,24 +25,6 @@ pub(super) fn normalize_sans(values: Vec<String>) -> Vec<String> {
     values
 }
 
-pub(super) fn normalize_certificate_sans(values: &[String]) -> Vec<String> {
-    normalize_sans(
-        values
-            .iter()
-            .map(|value| {
-                let value = value.trim();
-                value
-                    .split_once(':')
-                    .filter(|(kind, _)| {
-                        kind.eq_ignore_ascii_case("DNS") || kind.eq_ignore_ascii_case("IP")
-                    })
-                    .map_or(value, |(_, address)| address)
-                    .to_owned()
-            })
-            .collect(),
-    )
-}
-
 pub(super) fn parse_sans_raw(raw: &str) -> Vec<String> {
     normalize_sans(raw.split([',', '，']).map(ToOwned::to_owned).collect())
 }
@@ -59,9 +41,6 @@ pub(super) fn normalize_settings(mut draft: SettingsDraft) -> SettingsDraft {
 
 pub(super) fn validate_settings_locally(draft: &SettingsDraft) -> SettingsValidationViewModel {
     let mut field_errors = BTreeMap::new();
-    if !draft.channels.iter().any(|channel| channel.enabled) {
-        push_error(&mut field_errors, "channels", "至少启用一个代理通道。");
-    }
     let mut ids = BTreeSet::new();
     let mut ports = BTreeMap::new();
     for channel in &draft.channels {
@@ -88,7 +67,7 @@ pub(super) fn validate_settings_locally(draft: &SettingsDraft) -> SettingsValida
                     &format!("监听端口与通道 {existing} 重复。"),
                 );
             }
-            if !gmofg_proxy_domain::is_valid_https_upstream_url(&channel.upstream_url) {
+            if !intercept_proxy_domain::is_valid_https_upstream_url(&channel.upstream_url) {
                 push_error(
                     &mut field_errors,
                     &format!("{prefix}.upstream_url"),

@@ -167,6 +167,7 @@ export function FaultsView() {
     setNthHit(template?.default_nth_hit);
     setPriority(template?.default_priority);
     setOneShot(template?.default_one_shot);
+    // Rust 已把模板默认值规范化为当前 Workspace 的真实 Listener UUID。
     setChannel(template?.default_channel);
     if (window.matchMedia("(max-width: 1280px)").matches) {
       requestAnimationFrame(() => {
@@ -223,6 +224,17 @@ export function FaultsView() {
             </Alert.Description>
           </Alert.Content>
         </Alert>
+        {channelCatalog.length === 0 && (
+          <Alert status="warning">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Title>当前 Workspace 没有代理入口</Alert.Title>
+              <Alert.Description>
+                请先在“代理入口配置”中新增入口，故障模拟才能绑定到实际流量通道。
+              </Alert.Description>
+            </Alert.Content>
+          </Alert>
+        )}
 
         <div>
           <h2 className="mb-3 text-lg font-semibold">
@@ -616,7 +628,7 @@ export function FaultsView() {
               <Input
                 aria-label="路径与请求类型"
                 value={target}
-                placeholder="/v1/payments/authorize"
+                placeholder="/v1/resources/example"
                 onChange={(event) => {
                   clearFieldError("target");
                   setTarget(event.target.value);
@@ -676,7 +688,7 @@ export function FaultsView() {
             <div className="flex gap-3">
               <Button
                 variant="primary"
-                isDisabled={writePending}
+                isDisabled={writePending || !draft}
                 onPress={() => void configure(false)}
               >
                 {configurePending === "enable"
@@ -685,7 +697,7 @@ export function FaultsView() {
               </Button>
               <Button
                 variant="outline"
-                isDisabled={writePending}
+                isDisabled={writePending || !draft}
                 onPress={() => void configure(true)}
               >
                 {configurePending === "save"

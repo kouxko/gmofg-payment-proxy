@@ -123,40 +123,15 @@ describe("production SettingsView overlay", () => {
     );
   });
 
-  it(
-    "sends raw SAN text to Rust without TypeScript normalization",
-    async () => {
-      commandMocks.settingsSave.mockResolvedValue(settings);
-      const user = userEvent.setup();
-      render(<SettingsView />);
-
-      const raw = " Proxy.Local，10.0.34.50, proxy.local ";
-      await user.clear(
-        screen.getByRole("textbox", { name: "服务端证书 SAN" }),
-      );
-      await user.type(
-        screen.getByRole("textbox", { name: "服务端证书 SAN" }),
-        raw,
-      );
-      await user.click(screen.getByRole("button", { name: "保存设置" }));
-
-      expect(commandMocks.settingsSave).toHaveBeenCalledWith(
-        expect.any(Object),
-        raw,
-      );
-    },
-    10_000,
-  );
-
-  it("renders channel editors from the Rust settings catalog", () => {
+  it("keeps listener addresses, upstream targets and lifecycle out of system settings", () => {
     render(<SettingsView />);
 
-    expect(screen.getByText("通道 ID：transaction")).toBeVisible();
-    expect(screen.getByText("通道 ID：dll")).toBeVisible();
-    expect(
-      screen.getByRole("switch", { name: "启用交易" }),
-    ).toBeChecked();
-    expect(screen.getByRole("switch", { name: "启用DLL" })).toBeChecked();
+    expect(screen.queryByText("通道 ID：transaction")).not.toBeInTheDocument();
+    expect(screen.queryByText("通道 ID：dll")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("服务端证书 SAN")).not.toBeInTheDocument();
+    expect(screen.queryByText("上游 URL")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存并重启代理" })).not.toBeInTheDocument();
+    expect(screen.getByText(/代理入口的监听地址、端口、上游和 TLS/)).toBeVisible();
   });
 
   it("switches setting tabs without replacing the page document", async () => {
@@ -165,9 +140,9 @@ describe("production SettingsView overlay", () => {
     const viewRoot = container.firstElementChild;
     const locationBefore = window.location.href;
 
-    await user.click(screen.getByRole("tab", { name: "超时与容量" }));
+    await user.click(screen.getByRole("tab", { name: "数据与导出" }));
 
-    expect(screen.getByRole("textbox", { name: "最大会话数" })).toBeVisible();
+    expect(screen.getByText(settings.payload_policy_text)).toBeVisible();
     expect(container.firstElementChild).toBe(viewRoot);
     expect(window.location.href).toBe(locationBefore);
   });

@@ -11,6 +11,9 @@ import { PageHelp } from "./page-help";
 import { pageHelpGuides } from "./page-help-content";
 
 const workspacePaths: WorkspacePath[] = [
+  "/workspaces",
+  "/listeners",
+  "/android-network",
   "/console",
   "/capture",
   "/sessions",
@@ -43,11 +46,11 @@ describe("page-specific usage guides", () => {
     render(<PageHelp pathname="/console" />);
 
     await user.click(
-      screen.getByRole("button", { name: "打开代理控制台使用说明" }),
+      screen.getByRole("button", { name: "打开运行监控使用说明" }),
     );
 
     expect(
-      screen.getByRole("dialog", { name: "代理控制台使用说明" }),
+      screen.getByRole("dialog", { name: "运行监控使用说明" }),
     ).toBeVisible();
     expect(screen.getByText("首次运行前的准备")).toBeVisible();
     expect(screen.getByText("真实设备链路的成功判定")).toBeVisible();

@@ -55,6 +55,13 @@ uuid_id!(BreakpointId);
 uuid_id!(RuleId);
 uuid_id!(CertificateId);
 uuid_id!(EventId);
+uuid_id!(WorkspaceId);
+uuid_id!(ListenerId);
+uuid_id!(CodecPolicyId);
+uuid_id!(MetadataExtractorId);
+uuid_id!(ResponseAssertionId);
+uuid_id!(FaultPresetId);
+uuid_id!(CertificateReferenceId);
 
 #[cfg(test)]
 mod tests {

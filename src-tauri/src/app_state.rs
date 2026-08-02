@@ -5,8 +5,8 @@
 
 use std::sync::Arc;
 
-use gmofg_proxy_application::Application;
-use gmofg_proxy_host::ApplicationHost;
+use intercept_proxy_application::Application;
+use intercept_proxy_host::ApplicationHost;
 
 /// Tauri exposes only the application facade to commands.
 ///

@@ -7,7 +7,6 @@
 use std::{fmt, net::IpAddr};
 
 use chrono::{TimeZone, Utc};
-use gmofg_proxy_product_api::EmbeddedTestCertificateAuthority;
 use p12_keystore::{KeyStore, KeyStoreEntry, Pkcs12ImportPolicy};
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
@@ -91,46 +90,11 @@ impl fmt::Debug for ParsedPkcs12 {
 pub struct CertificateService;
 
 impl CertificateService {
-    pub fn load_embedded_test_root(
-        &self,
-        authority: EmbeddedTestCertificateAuthority,
-    ) -> Result<CertificateBundle, InfrastructureError> {
-        let (_, pem) = parse_x509_pem(authority.public_certificate_pem).map_err(x509_error)?;
-        let key = KeyPair::from_pem(authority.signing_key_pem).map_err(rcgen_error)?;
-        let bundle = bundle(pem.contents, key.serialize_der())?;
-        self.validate_root(&bundle.certificate_der, &bundle.private_key_pkcs8_der)?;
-        if !bundle
-            .metadata
-            .subject
-            .contains(authority.required_subject_marker)
-        {
-            return Err(invalid(format!(
-                "嵌入测试 Root CA 主题必须包含标记 {}",
-                authority.required_subject_marker
-            )));
-        }
-        Ok(bundle)
-    }
-
     pub fn load_bundled_upstream_ca(
         &self,
         certificates_pem: &[u8],
     ) -> Result<TrustedCa, InfrastructureError> {
         self.parse_upstream_ca(certificates_pem)
-    }
-
-    pub fn validate_embedded_test_root(
-        &self,
-        certificate_der: &[u8],
-        private_key_der: &[u8],
-        authority: EmbeddedTestCertificateAuthority,
-    ) -> Result<CertificateMetadata, InfrastructureError> {
-        let metadata = self.validate_root(certificate_der, private_key_der)?;
-        let expected = self.load_embedded_test_root(authority)?;
-        if certificate_der != expected.certificate_der {
-            return Err(invalid("Root CA 与当前产品固定测试 Root CA 不一致"));
-        }
-        Ok(metadata)
     }
 
     pub fn generate_root_ca(
@@ -311,7 +275,7 @@ impl CertificateService {
                 .verify_signature(Some(root.public_key()))
                 .is_err()
         {
-            return Err(invalid("Proxy 叶子证书不是由统一测试 Root CA 签发"));
+            return Err(invalid("Proxy 叶子证书不是由当前安装实例的 Root CA 签发"));
         }
         let eku = certificate
             .extended_key_usage()
@@ -616,19 +580,13 @@ impl Drop for ParsedPkcs12 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gmofg_proxy_product_api::ProductCertificatePolicy;
-    use gmofg_proxy_product_payment::PaymentProductProfile;
     use p12_keystore::{Certificate, KeyStoreEntry, PrivateKey, PrivateKeyChain};
-
-    fn payment_profile() -> PaymentProductProfile {
-        PaymentProductProfile::isolated_test_tool()
-    }
 
     #[test]
     fn generates_root_and_leaf_with_expected_policies() {
         let service = CertificateService;
         let root = service
-            .generate_root_ca("GMO-FG Payment Proxy Root")
+            .generate_root_ca("Intercept Proxy Test Root")
             .expect("root");
         let leaf = service
             .generate_leaf(
@@ -655,69 +613,6 @@ mod tests {
                 &["proxy.local".into(), "192.168.10.20".into()],
             )
             .expect("validate generated leaf");
-    }
-
-    #[test]
-    fn embedded_test_root_is_stable_and_explicitly_test_only() {
-        let service = CertificateService;
-        let authority = payment_profile()
-            .embedded_test_authority()
-            .expect("test authority");
-        let first = service
-            .load_embedded_test_root(authority)
-            .expect("test root");
-        let second = service
-            .load_embedded_test_root(authority)
-            .expect("same test root");
-
-        assert_eq!(first.certificate_der, second.certificate_der);
-        assert_eq!(
-            first.metadata.fingerprint_sha256,
-            "E6:0C:7C:71:6A:1A:E9:08:F8:87:8E:4E:98:27:FC:B1:9C:3B:2D:B8:CA:36:15:09:2C:E6:3F:32:94:A1:2B:66"
-        );
-        assert!(first.metadata.subject.contains("TEST ONLY"));
-    }
-
-    #[test]
-    fn bundled_payment_server_crt_selects_the_final_valid_ca_trust_anchor() {
-        let service = CertificateService;
-        let profile = payment_profile();
-        let bundled = profile
-            .bundled_upstream_ca_pem()
-            .expect("bundled Payment server.crt");
-        let trusted = service
-            .load_bundled_upstream_ca(bundled)
-            .expect("bundled Payment server.crt");
-
-        assert_eq!(
-            fingerprint(bundled),
-            "9D:73:2D:2D:8B:F2:9C:97:83:88:ED:99:35:65:9C:39:BA:2E:E9:17:C2:6E:69:7E:44:1D:02:30:7C:F2:17:28"
-        );
-        assert!(trusted.metadata.is_ca);
-        assert!(trusted.metadata.subject.contains("GlobalSign Root CA - R3"));
-        service
-            .validate_ca_der(&trusted.certificate_der)
-            .expect("selected trust anchor");
-    }
-
-    #[test]
-    fn another_local_root_is_not_accepted_as_the_unified_test_root() {
-        let service = CertificateService;
-        let local = service
-            .generate_root_ca("Old Local Root")
-            .expect("local root");
-
-        assert!(
-            service
-                .validate_embedded_test_root(
-                    &local.certificate_der,
-                    &local.private_key_pkcs8_der,
-                    payment_profile()
-                        .embedded_test_authority()
-                        .expect("test authority"),
-                )
-                .is_err()
-        );
     }
 
     #[test]

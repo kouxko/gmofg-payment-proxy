@@ -14,7 +14,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use gmofg_proxy_product_api::{BodyCodec, ProductError};
+use intercept_proxy_product_api::{BodyCodec, ProductError};
 use uuid::Uuid;
 
 use crate::*;
@@ -124,6 +124,8 @@ fn session(id: SessionId, second: u32, pending: bool, body: &[u8]) -> SessionRec
             request: Some(content(body)),
             response: None,
             rule_trace: vec!["规则轨迹".into()],
+            extracted_metadata: BTreeMap::new(),
+            response_assertions: Vec::new(),
         },
         breakpoint_draft: pending.then(|| content(b"draft")),
     }
@@ -233,6 +235,12 @@ fn logical_byte_accounting_is_exact_and_repeatable() {
     let trace_bytes = serde_json::to_vec(&record.detail.rule_trace)
         .expect("serializable trace")
         .len() as u64;
+    let policy_result_bytes = serde_json::to_vec(&(
+        &record.detail.extracted_metadata,
+        &record.detail.response_assertions,
+    ))
+    .expect("serializable workspace policy results")
+    .len() as u64;
     let summary = &record.detail.summary;
     let strings = summary.request_id.len()
         + summary.terminal_ip.len()
@@ -249,6 +257,7 @@ fn logical_byte_accounting_is_exact_and_repeatable() {
     let expected = SessionRecord::ENTITY_FIXED_OVERHEAD_BYTES
         + strings as u64
         + trace_bytes
+        + policy_result_bytes
         + expected_message
         + content(b"draft").logical_bytes();
     assert_eq!(record.logical_bytes(), expected);
@@ -814,6 +823,8 @@ struct FakePorts {
     continue_start: tokio::sync::Notify,
     settings_save_calls: AtomicUsize,
     certificate_import_calls: AtomicUsize,
+    certificate_status_calls: AtomicUsize,
+    certificate_overview_calls: AtomicUsize,
     settings: parking_lot::Mutex<SettingsViewModel>,
     certificate_overview: parking_lot::Mutex<CertificateOverviewViewModel>,
 }
@@ -831,6 +842,8 @@ impl Default for FakePorts {
             continue_start: tokio::sync::Notify::new(),
             settings_save_calls: AtomicUsize::new(0),
             certificate_import_calls: AtomicUsize::new(0),
+            certificate_status_calls: AtomicUsize::new(0),
+            certificate_overview_calls: AtomicUsize::new(0),
             settings: parking_lot::Mutex::new(fake_settings_view()),
             certificate_overview: parking_lot::Mutex::new(fake_certificate_overview()),
         }
@@ -871,7 +884,18 @@ impl ProxySupervisorPort for FakePorts {
 #[async_trait]
 impl CaptureRepositoryPort for FakePorts {
     async fn query(&self, _: CaptureQuery) -> AppResult<CapturePageViewModel> {
-        unused()
+        Ok(CapturePageViewModel {
+            rows: Vec::new(),
+            total: 0,
+            page: 1,
+            page_size: 5,
+            total_pages: 0,
+            event_cursor: 0,
+            oldest_event_id: None,
+            runtime_epoch: None,
+            snapshot_required: false,
+            empty_message: "暂无抓包记录。".into(),
+        })
     }
     async fn get_detail(&self, _: SessionId, _: RuntimeEpoch) -> AppResult<CaptureDetailViewModel> {
         unused()
@@ -984,7 +1008,14 @@ impl FaultServicePort for FakePorts {
 
 #[async_trait]
 impl CertificateServicePort for FakePorts {
+    async fn status(&self) -> AppResult<CertificateOverviewViewModel> {
+        self.certificate_status_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(self.certificate_overview.lock().clone())
+    }
+
     async fn overview(&self) -> AppResult<CertificateOverviewViewModel> {
+        self.certificate_overview_calls
+            .fetch_add(1, Ordering::SeqCst);
         Ok(self.certificate_overview.lock().clone())
     }
     async fn generate_ca(&self, _: Vec<String>) -> AppResult<CertificateOverviewViewModel> {
@@ -1121,6 +1152,18 @@ fn proxy_status(state: ProxyState) -> ProxyStatusViewModel {
 }
 
 fn application_with_fake_ports(ports: Arc<FakePorts>) -> Application {
+    application_with_workspace_ports(
+        ports,
+        Arc::new(InMemoryWorkspaceStore::default()),
+        Arc::new(InMemoryWorkspaceDocumentStore::default()),
+    )
+}
+
+fn application_with_workspace_ports(
+    ports: Arc<FakePorts>,
+    workspaces: Arc<InMemoryWorkspaceStore>,
+    workspace_documents: Arc<InMemoryWorkspaceDocumentStore>,
+) -> Application {
     Application::new(
         "Test Product".into(),
         ApplicationDependencies {
@@ -1134,9 +1177,136 @@ fn application_with_fake_ports(ports: Arc<FakePorts>) -> Application {
             certificates: ports.clone(),
             settings: ports.clone(),
             file_export: ports,
+            workspaces,
+            workspace_documents,
+            listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
             events: Arc::new(EventHub::default()),
         },
     )
+}
+
+#[tokio::test]
+async fn bootstrap_uses_non_secret_certificate_status_instead_of_full_overview() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports.clone());
+
+    application
+        .app_bootstrap()
+        .await
+        .expect("bootstrap snapshot");
+
+    assert_eq!(ports.certificate_status_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(ports.certificate_overview_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn workspace_facade_exposes_complete_headless_crud_document_and_event_flow() {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(InMemoryWorkspaceStore::new_empty());
+    let documents = Arc::new(InMemoryWorkspaceDocumentStore::default());
+    let application =
+        application_with_workspace_ports(ports, Arc::clone(&workspaces), Arc::clone(&documents));
+    let mut events = application.app_subscribe_events(0).unwrap();
+
+    let created = application.workspace_create("Lab".into()).await.unwrap();
+    assert_eq!(application.workspace_list().await.unwrap().len(), 1);
+    assert_eq!(
+        application.workspace_get(created.id).await.unwrap(),
+        created
+    );
+    let created_event = events.live.recv().await.unwrap();
+    assert!(matches!(
+        created_event.payload,
+        UiEventPayload::WorkspaceChanged(WorkspaceChangedViewModel {
+            kind: WorkspaceChangeKind::Created,
+            ..
+        })
+    ));
+
+    let mut invalid = created.clone();
+    invalid.name.clear();
+    assert!(!application.workspace_validate(invalid).await.unwrap().valid);
+    let mut edited = created.clone();
+    edited.name = "Lab Updated".into();
+    let saved = application.workspace_save(edited).await.unwrap();
+    assert_eq!(saved.revision.get(), 2);
+    let copied = application.workspace_copy(saved.id).await.unwrap();
+    application.workspace_select(copied.id).await.unwrap();
+
+    application.workspace_export(saved.id).await.unwrap();
+    let (file_name, exported) = documents.take_last_export().unwrap();
+    assert_eq!(file_name, "Lab_Updated.intercept-workspace");
+    documents.set_next_import(exported);
+    let imported = application.workspace_import().await.unwrap();
+    assert!(imported.success);
+    assert_eq!(application.workspace_list().await.unwrap().len(), 3);
+
+    application
+        .workspace_delete(copied.id, copied.revision.get())
+        .await
+        .unwrap();
+    assert!(application.workspace_get(copied.id).await.is_err());
+}
+
+#[tokio::test]
+async fn running_workspace_listener_blocks_configuration_save_and_delete() {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(InMemoryWorkspaceStore::new_empty());
+    let listener_runtime = Arc::new(InMemoryListenerRuntime::default());
+    let application = Application::new(
+        "Test Product".into(),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: Arc::new(BreakpointCoordinator::default()),
+            breakpoint_validation: ports.clone(),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            file_export: ports,
+            workspaces,
+            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
+            listener_runtime: listener_runtime.clone(),
+            events: Arc::new(EventHub::default()),
+        },
+    );
+    let workspace = application.workspace_create("Live".into()).await.unwrap();
+    let listener = workspace.listeners[0].clone();
+    listener_runtime
+        .start(workspace.clone(), listener.clone())
+        .await
+        .unwrap();
+
+    let mut edited = workspace.clone();
+    edited.name = "Must stop first".into();
+    let save_error = application
+        .workspace_save(edited)
+        .await
+        .expect_err("live workspace save rejected");
+    assert_eq!(save_error.view_model.code, "WORKSPACE_RUNTIME_ACTIVE");
+    let delete_error = application
+        .workspace_delete(workspace.id, workspace.revision.get())
+        .await
+        .expect_err("live workspace delete rejected");
+    assert_eq!(delete_error.view_model.code, "WORKSPACE_RUNTIME_ACTIVE");
+    let listener_save_error = application
+        .listener_save(workspace.id, workspace.revision.get(), listener.clone())
+        .await
+        .expect_err("live listener save rejected");
+    assert_eq!(
+        listener_save_error.view_model.code,
+        "LISTENER_RUNTIME_ACTIVE"
+    );
+    let listener_delete_error = application
+        .listener_delete(workspace.id, workspace.revision.get(), listener.id())
+        .await
+        .expect_err("live listener delete rejected");
+    assert_eq!(
+        listener_delete_error.view_model.code,
+        "LISTENER_RUNTIME_ACTIVE"
+    );
 }
 
 #[tokio::test]
@@ -1162,6 +1332,9 @@ async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
             certificates: ports.clone(),
             settings: ports.clone(),
             file_export: ports,
+            workspaces: Arc::new(InMemoryWorkspaceStore::default()),
+            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
+            listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
             events: Arc::new(EventHub::default()),
         },
     );
@@ -1212,16 +1385,18 @@ async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
 
 // SETTINGS-001~012, TEST-SETTINGS, TEST-IPC: facade normalizes and validates before fake storage.
 #[tokio::test]
-async fn settings_use_case_rejects_locally_then_calls_fake_port_for_valid_draft() {
+async fn settings_use_case_accepts_safe_defaults_and_normalizes_before_port_validation() {
     let ports = Arc::new(FakePorts::default());
     let application = application_with_fake_ports(ports.clone());
-    let invalid = SettingsDraft::default();
+    // 通用化以后，首次启动的系统设置必须可以独立保存；代理入口、上游地址和证书
+    // 已经属于 Workspace Listener，不能再用旧 Payment 固定通道约束把默认值判无效。
+    let safe_defaults = SettingsDraft::default();
     let validation = application
-        .settings_validate(invalid)
+        .settings_validate(safe_defaults)
         .await
         .expect("validation result");
-    assert!(!validation.valid);
-    assert_eq!(ports.settings_validations.load(Ordering::SeqCst), 0);
+    assert!(validation.valid);
+    assert_eq!(ports.settings_validations.load(Ordering::SeqCst), 1);
 
     let mut valid = valid_settings_draft();
     valid.channels[0].upstream_url = " https://alpha.example.test ".into();
@@ -1232,7 +1407,7 @@ async fn settings_use_case_rejects_locally_then_calls_fake_port_for_valid_draft(
             .expect("fake validation result")
             .valid
     );
-    assert_eq!(ports.settings_validations.load(Ordering::SeqCst), 1);
+    assert_eq!(ports.settings_validations.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
@@ -1260,7 +1435,7 @@ async fn settings_san_raw_input_is_normalized_atomically_in_rust() {
 }
 
 #[tokio::test]
-async fn settings_can_be_saved_before_first_certificate_setup() {
+async fn settings_can_be_saved_without_listener_certificate_warnings() {
     let ports = Arc::new(FakePorts::default());
     {
         let mut overview = ports.certificate_overview.lock();
@@ -1279,12 +1454,9 @@ async fn settings_can_be_saved_before_first_certificate_setup() {
     let validation = application.settings_validate(draft).await.unwrap();
 
     assert!(validation.valid);
-    assert!(
-        validation
-            .warnings
-            .iter()
-            .any(|warning| warning.contains("证书"))
-    );
+    // Listener 在各自的 Workspace 中校验 TLS 身份。系统设置不能重复推断证书状态，
+    // 否则一个无关 Listener 尚未配置也会污染全局容量或超时设置的保存结果。
+    assert!(validation.warnings.is_empty());
 }
 
 #[tokio::test]
@@ -1463,6 +1635,49 @@ async fn application_shutdown_stops_runtime_clears_effective_settings_and_is_ide
         .expect("idempotent shutdown");
     assert_eq!(stopped_again.state, ProxyState::Stopped);
     assert_eq!(ports.stop_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn application_shutdown_stops_every_dynamic_workspace_listener() {
+    let ports = Arc::new(FakePorts::default());
+    let listener_runtime = Arc::new(InMemoryListenerRuntime::default());
+    let workspace = ProxyWorkspace::default();
+    let listener = workspace
+        .listeners
+        .clone()
+        .into_iter()
+        .next()
+        .expect("default forward listener");
+    listener_runtime
+        .start(workspace, listener)
+        .await
+        .expect("listener starts before shutdown");
+    let application = Application::new(
+        "Test Product".into(),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: Arc::new(BreakpointCoordinator::default()),
+            breakpoint_validation: ports.clone(),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            file_export: ports,
+            workspaces: Arc::new(InMemoryWorkspaceStore::default()),
+            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
+            listener_runtime: listener_runtime.clone(),
+            events: Arc::new(EventHub::default()),
+        },
+    );
+
+    application.app_shutdown().await.expect("shutdown");
+
+    assert!(
+        listener_runtime.statuses().await.unwrap().is_empty(),
+        "application shutdown must not leave dynamic listener tasks running"
+    );
 }
 
 #[test]

@@ -980,6 +980,8 @@ mod tests {
     impl UpstreamConnector for UnusedUpstream {
         async fn send(
             &self,
+            _context: &crate::transport::ConnectionContext,
+            _ports: &dyn PipelinePorts,
             _request: ForwardRequest,
             _actions: &[FaultAction],
             _informational: Option<&crate::transport::InformationalResponseSink>,

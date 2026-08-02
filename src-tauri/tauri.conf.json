@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "GMO-FG Payment Proxy",
+  "productName": "Intercept Proxy",
   "version": "1.0.0",
-  "identifier": "com.gmofg.paymentproxy",
+  "identifier": "com.interceptproxy.desktop",
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "GMO-FG Payment Proxy",
+        "title": "Intercept Proxy",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
@@ -30,6 +30,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "resources/android-companion.apk"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

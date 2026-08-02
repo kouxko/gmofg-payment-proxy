@@ -1,5 +1,5 @@
 [package]
-name = "gmofg-proxy-application"
+name = "intercept-proxy-application"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,8 +7,8 @@ rust-version.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
-gmofg-proxy-domain = { path = "../domain" }
-gmofg-proxy-product-api = { path = "../product-api" }
+intercept-proxy-domain = { path = "../domain" }
+intercept-proxy-product-api = { path = "../product-api" }
 http.workspace = true
 parking_lot.workspace = true
 serde.workspace = true

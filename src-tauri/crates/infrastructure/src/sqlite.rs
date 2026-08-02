@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::InfrastructureError;
 
-const LATEST_SCHEMA_VERSION: i64 = 3;
+const LATEST_SCHEMA_VERSION: i64 = 5;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredSettings {
@@ -63,6 +63,32 @@ pub struct CertificateMaterialSnapshot {
     pub records: Vec<CertificateMaterialRecord>,
 }
 
+/// Workspace 的持久化快照。
+///
+/// `value` 保存完整但不含秘密明文的领域文档；`revision` 单独列出，便于 `SQLite` 在
+/// 不解析 JSON 的情况下执行乐观锁。真正的私钥和口令只会以安全引用出现在文档中。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkspaceRecord {
+    pub id: Uuid,
+    pub revision: u64,
+    pub value: Value,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkspaceCollectionSnapshot {
+    pub selected_id: Option<Uuid>,
+    pub records: Vec<WorkspaceRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProtectedSecretRecord {
+    pub provider: String,
+    pub key: String,
+    pub protected_blob: Vec<u8>,
+    pub updated_at: DateTime<Utc>,
+}
+
 #[derive(Debug)]
 pub struct SqliteStore {
     // rusqlite 的 Connection 不是并发事务池；单锁明确规定本进程内只有一个事务所有者。
@@ -103,81 +129,10 @@ impl SqliteStore {
         let transaction = connection
             .transaction()
             .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-        transaction
-            .execute_batch(
-                "
-                CREATE TABLE IF NOT EXISTS schema_migrations (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS settings (
-                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                    revision INTEGER NOT NULL,
-                    json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS rules (
-                    id TEXT PRIMARY KEY,
-                    revision INTEGER NOT NULL,
-                    enabled INTEGER NOT NULL,
-                    json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS rule_state (
-                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                    revision INTEGER NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS certificate_material (
-                    kind TEXT PRIMARY KEY,
-                    protected_blob BLOB NOT NULL,
-                    metadata_json TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS certificate_state (
-                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                    revision INTEGER NOT NULL
-                );
-                ",
-            )
-            .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-        transaction
-            .execute(
-                "INSERT OR IGNORE INTO rule_state(singleton_id, revision) VALUES (1, 0)",
-                [],
-            )
-            .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-        let certificate_revision = {
-            let mut statement = transaction
-                .prepare("SELECT metadata_json FROM certificate_material")
-                .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-            let metadata = statement
-                .query_map([], |row| row.get::<_, String>(0))
-                .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-            let mut revision = 0;
-            for value in metadata {
-                let value =
-                    value.map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-                let candidate = serde_json::from_str::<Value>(&value)
-                    .ok()
-                    .and_then(|value| value.get("revision").and_then(Value::as_u64))
-                    .unwrap_or(0);
-                revision = revision.max(candidate);
-            }
-            revision
-        };
-        transaction
-            .execute(
-                "INSERT OR IGNORE INTO certificate_state(singleton_id, revision)
-                 VALUES (1, ?1)",
-                [revision_to_i64(certificate_revision)?],
-            )
-            .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-        transaction
-            .execute(
-                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
-                params![LATEST_SCHEMA_VERSION, Utc::now().to_rfc3339()],
-            )
-            .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+        create_schema(&transaction)?;
+        let certificate_revision = stored_certificate_revision(&transaction)?;
+        initialize_singleton_state(&transaction, certificate_revision)?;
+        record_schema_migration(&transaction)?;
         transaction
             .commit()
             .map_err(|source| InfrastructureError::DatabaseMigration { source })
@@ -200,6 +155,247 @@ impl SqliteStore {
             .map_err(|source| InfrastructureError::Database { source })?
             .map(parse_settings_row)
             .transpose()
+    }
+
+    pub fn save_protected_secret(
+        &self,
+        record: &ProtectedSecretRecord,
+    ) -> Result<(), InfrastructureError> {
+        let connection = self.connection.lock();
+        connection
+            .execute(
+                "INSERT INTO protected_secrets(provider, secret_key, protected_blob, updated_at)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(provider, secret_key) DO UPDATE SET
+                   protected_blob = excluded.protected_blob,
+                   updated_at = excluded.updated_at",
+                params![
+                    record.provider,
+                    record.key,
+                    record.protected_blob,
+                    record.updated_at.to_rfc3339(),
+                ],
+            )
+            .map(|_| ())
+            .map_err(|source| InfrastructureError::Database { source })
+    }
+
+    pub fn load_protected_secret(
+        &self,
+        provider: &str,
+        key: &str,
+    ) -> Result<Option<ProtectedSecretRecord>, InfrastructureError> {
+        let connection = self.connection.lock();
+        connection
+            .query_row(
+                "SELECT protected_blob, updated_at FROM protected_secrets
+                 WHERE provider = ?1 AND secret_key = ?2",
+                params![provider, key],
+                |row| {
+                    let protected_blob = row.get(0)?;
+                    let updated_at: String = row.get(1)?;
+                    Ok((protected_blob, updated_at))
+                },
+            )
+            .optional()
+            .map_err(|source| InfrastructureError::Database { source })?
+            .map(|(protected_blob, updated_at)| {
+                Ok(ProtectedSecretRecord {
+                    provider: provider.to_owned(),
+                    key: key.to_owned(),
+                    protected_blob,
+                    updated_at: DateTime::parse_from_rfc3339(&updated_at)
+                        .map(|value| value.with_timezone(&Utc))
+                        .map_err(|error| InfrastructureError::PersistenceCorrupt {
+                            entity: "protected_secrets",
+                            message: format!("updated_at 无效：{error}"),
+                        })?,
+                })
+            })
+            .transpose()
+    }
+
+    /// 在一个读事务内返回 Workspace 列表和当前选中项，避免 UI 看到不一致快照。
+    pub fn load_workspaces(&self) -> Result<WorkspaceCollectionSnapshot, InfrastructureError> {
+        let mut connection = self.connection.lock();
+        let transaction = connection
+            .transaction()
+            .map_err(|source| InfrastructureError::Database { source })?;
+        let selected_id = transaction
+            .query_row(
+                "SELECT selected_id FROM workspace_state WHERE singleton_id = 1",
+                [],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map_err(|source| InfrastructureError::Database { source })?
+            .flatten()
+            .map(|value| {
+                Uuid::parse_str(&value).map_err(|error| InfrastructureError::PersistenceCorrupt {
+                    entity: "workspace_state",
+                    message: format!("selected_id 无效：{error}"),
+                })
+            })
+            .transpose()?;
+        let records = load_workspace_records(&transaction)?;
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::Database { source })?;
+        Ok(WorkspaceCollectionSnapshot {
+            selected_id,
+            records,
+        })
+    }
+
+    /// 插入一个全新的 Workspace。若当前没有选中项，则原子地选中新 Workspace。
+    pub fn insert_workspace(&self, record: &WorkspaceRecord) -> Result<(), InfrastructureError> {
+        let mut connection = self.connection.lock();
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|source| InfrastructureError::Database { source })?;
+        let inserted = transaction
+            .execute(
+                "INSERT OR IGNORE INTO workspaces(id, revision, json, updated_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    record.id.to_string(),
+                    revision_to_i64(record.revision)?,
+                    record.value.to_string(),
+                    record.updated_at.to_rfc3339(),
+                ],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        if inserted != 1 {
+            return Err(InfrastructureError::RevisionConflict);
+        }
+        transaction
+            .execute(
+                "UPDATE workspace_state SET selected_id = ?1
+                 WHERE singleton_id = 1 AND selected_id IS NULL",
+                [record.id.to_string()],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::Database { source })
+    }
+
+    /// 仅当数据库中的 revision 与调用者编辑起点一致时更新。
+    pub fn compare_and_swap_workspace(
+        &self,
+        expected_revision: u64,
+        record: &WorkspaceRecord,
+    ) -> Result<(), InfrastructureError> {
+        let connection = self.connection.lock();
+        let changed = connection
+            .execute(
+                "UPDATE workspaces SET revision = ?1, json = ?2, updated_at = ?3
+                 WHERE id = ?4 AND revision = ?5",
+                params![
+                    revision_to_i64(record.revision)?,
+                    record.value.to_string(),
+                    record.updated_at.to_rfc3339(),
+                    record.id.to_string(),
+                    revision_to_i64(expected_revision)?,
+                ],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        if changed == 1 {
+            Ok(())
+        } else {
+            Err(InfrastructureError::RevisionConflict)
+        }
+    }
+
+    /// 仅更新当前选中的 Workspace，并把“仍然选中”与 revision 比较放在同一写事务中。
+    ///
+    /// 规则编辑器没有单独的规则集合：它编辑的是当前 Workspace 聚合内的 `rules` 字段。
+    /// 因此，仅按 Workspace ID 做 CAS 还不够——用户切换 Workspace 的同时，旧页面不得把
+    /// 修改写回已经取消选中的 Workspace。这个方法把选中项校验和聚合更新合并成一个原子操作。
+    pub fn compare_and_swap_selected_workspace(
+        &self,
+        expected_selected_id: Uuid,
+        expected_revision: u64,
+        record: &WorkspaceRecord,
+    ) -> Result<(), InfrastructureError> {
+        if record.id != expected_selected_id {
+            return Err(InfrastructureError::RevisionConflict);
+        }
+        let mut connection = self.connection.lock();
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|source| InfrastructureError::Database { source })?;
+        let changed = transaction
+            .execute(
+                "UPDATE workspaces SET revision = ?1, json = ?2, updated_at = ?3
+                 WHERE id = ?4 AND revision = ?5
+                   AND EXISTS (
+                     SELECT 1 FROM workspace_state
+                     WHERE singleton_id = 1 AND selected_id = ?4
+                   )",
+                params![
+                    revision_to_i64(record.revision)?,
+                    record.value.to_string(),
+                    record.updated_at.to_rfc3339(),
+                    record.id.to_string(),
+                    revision_to_i64(expected_revision)?,
+                ],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        if changed != 1 {
+            return Err(InfrastructureError::RevisionConflict);
+        }
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::Database { source })
+    }
+
+    pub fn select_workspace(&self, id: Uuid) -> Result<(), InfrastructureError> {
+        let connection = self.connection.lock();
+        let changed = connection
+            .execute(
+                "UPDATE workspace_state SET selected_id = ?1
+                 WHERE singleton_id = 1 AND EXISTS (SELECT 1 FROM workspaces WHERE id = ?1)",
+                [id.to_string()],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        if changed == 1 {
+            Ok(())
+        } else {
+            Err(InfrastructureError::RevisionConflict)
+        }
+    }
+
+    /// 删除 Workspace 后选中最早创建的剩余项；全部删除时选中项为 NULL。
+    pub fn delete_workspace(
+        &self,
+        id: Uuid,
+        expected_revision: u64,
+    ) -> Result<(), InfrastructureError> {
+        let mut connection = self.connection.lock();
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|source| InfrastructureError::Database { source })?;
+        let deleted = transaction
+            .execute(
+                "DELETE FROM workspaces WHERE id = ?1 AND revision = ?2",
+                params![id.to_string(), revision_to_i64(expected_revision)?],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        if deleted != 1 {
+            return Err(InfrastructureError::RevisionConflict);
+        }
+        transaction
+            .execute(
+                "UPDATE workspace_state SET selected_id = (
+                    SELECT id FROM workspaces ORDER BY updated_at ASC, id ASC LIMIT 1
+                 ) WHERE singleton_id = 1 AND selected_id IS NULL",
+                [],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::Database { source })
     }
 
     pub fn save_settings(
@@ -548,6 +744,119 @@ impl SqliteStore {
     }
 }
 
+fn create_schema(transaction: &Transaction<'_>) -> Result<(), InfrastructureError> {
+    transaction
+        .execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS settings (
+                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+                revision INTEGER NOT NULL,
+                json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS rules (
+                id TEXT PRIMARY KEY,
+                revision INTEGER NOT NULL,
+                enabled INTEGER NOT NULL,
+                json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS rule_state (
+                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+                revision INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS certificate_material (
+                kind TEXT PRIMARY KEY,
+                protected_blob BLOB NOT NULL,
+                metadata_json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS certificate_state (
+                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+                revision INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS workspaces (
+                id TEXT PRIMARY KEY,
+                revision INTEGER NOT NULL,
+                json TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS workspace_state (
+                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+                selected_id TEXT NULL,
+                FOREIGN KEY(selected_id) REFERENCES workspaces(id) ON DELETE SET NULL
+            );
+            CREATE TABLE IF NOT EXISTS protected_secrets (
+                provider TEXT NOT NULL,
+                secret_key TEXT NOT NULL,
+                protected_blob BLOB NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY(provider, secret_key)
+            );
+            ",
+        )
+        .map_err(|source| InfrastructureError::DatabaseMigration { source })
+}
+
+fn stored_certificate_revision(transaction: &Transaction<'_>) -> Result<u64, InfrastructureError> {
+    let mut statement = transaction
+        .prepare("SELECT metadata_json FROM certificate_material")
+        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+    let metadata = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+    let mut revision = 0;
+    for value in metadata {
+        let value = value.map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+        let candidate = serde_json::from_str::<Value>(&value)
+            .ok()
+            .and_then(|value| value.get("revision").and_then(Value::as_u64))
+            .unwrap_or(0);
+        revision = revision.max(candidate);
+    }
+    Ok(revision)
+}
+
+fn initialize_singleton_state(
+    transaction: &Transaction<'_>,
+    certificate_revision: u64,
+) -> Result<(), InfrastructureError> {
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO rule_state(singleton_id, revision) VALUES (1, 0)",
+            [],
+        )
+        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO certificate_state(singleton_id, revision) VALUES (1, ?1)",
+            [revision_to_i64(certificate_revision)?],
+        )
+        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO workspace_state(singleton_id, selected_id)
+             VALUES (1, NULL)",
+            [],
+        )
+        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+    Ok(())
+}
+
+fn record_schema_migration(transaction: &Transaction<'_>) -> Result<(), InfrastructureError> {
+    transaction
+        .execute(
+            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
+            params![LATEST_SCHEMA_VERSION, Utc::now().to_rfc3339()],
+        )
+        .map(|_| ())
+        .map_err(|source| InfrastructureError::DatabaseMigration { source })
+}
+
 fn put_certificate_material(
     connection: &Connection,
     record: &CertificateMaterialRecord,
@@ -751,6 +1060,53 @@ fn settings_record_corrupt(message: impl Into<String>) -> InfrastructureError {
     }
 }
 
+fn load_workspace_records(
+    transaction: &Transaction<'_>,
+) -> Result<Vec<WorkspaceRecord>, InfrastructureError> {
+    let mut statement = transaction
+        .prepare("SELECT id, revision, json, updated_at FROM workspaces ORDER BY updated_at, id")
+        .map_err(|source| InfrastructureError::Database { source })?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })
+        .map_err(|source| InfrastructureError::Database { source })?;
+    rows.map(|row| {
+        let (id, revision, json, updated_at) =
+            row.map_err(|source| InfrastructureError::Database { source })?;
+        Ok(WorkspaceRecord {
+            id: Uuid::parse_str(&id).map_err(|error| InfrastructureError::PersistenceCorrupt {
+                entity: "workspace",
+                message: format!("id 无效：{error}"),
+            })?,
+            revision: u64::try_from(revision).map_err(|_| {
+                InfrastructureError::PersistenceCorrupt {
+                    entity: "workspace",
+                    message: "revision 不能为负数".into(),
+                }
+            })?,
+            value: serde_json::from_str(&json).map_err(|error| {
+                InfrastructureError::PersistenceCorrupt {
+                    entity: "workspace",
+                    message: format!("JSON 无效：{error}"),
+                }
+            })?,
+            updated_at: DateTime::parse_from_rfc3339(&updated_at)
+                .map_err(|error| InfrastructureError::PersistenceCorrupt {
+                    entity: "workspace",
+                    message: format!("updated_at 无效：{error}"),
+                })?
+                .with_timezone(&Utc),
+        })
+    })
+    .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{Arc, Barrier};
@@ -770,15 +1126,98 @@ mod tests {
             vec![
                 "certificate_material",
                 "certificate_state",
+                "protected_secrets",
                 "rule_state",
                 "rules",
                 "schema_migrations",
-                "settings"
+                "settings",
+                "workspace_state",
+                "workspaces"
             ]
         );
         assert!(!tables.iter().any(|name| {
             name.contains("payload") || name.contains("session") || name.contains("breakpoint")
         }));
+        let secret_columns = store
+            .connection
+            .lock()
+            .prepare("PRAGMA table_info(protected_secrets)")
+            .and_then(|mut statement| {
+                statement
+                    .query_map([], |row| row.get::<_, String>(1))?
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .expect("protected secret columns");
+        assert!(secret_columns.contains(&"protected_blob".to_owned()));
+        assert!(!secret_columns.iter().any(|column| {
+            column.contains("password") || column.contains("username") || column == "plaintext"
+        }));
+    }
+
+    #[test]
+    fn workspaces_persist_selection_and_use_optimistic_revisions() {
+        let store = SqliteStore::in_memory().expect("store");
+        let first_id = Uuid::new_v4();
+        let first = WorkspaceRecord {
+            id: first_id,
+            revision: 1,
+            value: json!({"id": first_id, "name": "first", "revision": 1}),
+            updated_at: Utc::now(),
+        };
+        store.insert_workspace(&first).expect("insert first");
+        let snapshot = store.load_workspaces().expect("snapshot");
+        assert_eq!(snapshot.selected_id, Some(first_id));
+        assert_eq!(snapshot.records, vec![first.clone()]);
+
+        let mut updated = first.clone();
+        updated.revision = 2;
+        updated.value["revision"] = json!(2);
+        store
+            .compare_and_swap_workspace(1, &updated)
+            .expect("advance revision");
+        assert!(matches!(
+            store.compare_and_swap_workspace(1, &updated),
+            Err(InfrastructureError::RevisionConflict)
+        ));
+
+        let second_id = Uuid::new_v4();
+        store
+            .insert_workspace(&WorkspaceRecord {
+                id: second_id,
+                revision: 1,
+                value: json!({"id": second_id, "name": "second", "revision": 1}),
+                updated_at: Utc::now(),
+            })
+            .expect("insert second");
+        store.select_workspace(second_id).expect("select second");
+        assert!(matches!(
+            store.compare_and_swap_selected_workspace(first_id, 2, &updated),
+            Err(InfrastructureError::RevisionConflict)
+        ));
+        let second_updated = WorkspaceRecord {
+            id: second_id,
+            revision: 2,
+            value: json!({"id": second_id, "name": "second updated", "revision": 2}),
+            updated_at: Utc::now(),
+        };
+        store
+            .compare_and_swap_selected_workspace(second_id, 1, &second_updated)
+            .expect("update selected workspace");
+        assert_eq!(
+            store
+                .load_workspaces()
+                .expect("selected snapshot")
+                .selected_id,
+            Some(second_id)
+        );
+        store.delete_workspace(second_id, 2).expect("delete second");
+        assert_eq!(
+            store
+                .load_workspaces()
+                .expect("fallback selection")
+                .selected_id,
+            Some(first_id)
+        );
     }
 
     /// ENGINE-008, SECURITY-004: stale settings writes fail atomically.

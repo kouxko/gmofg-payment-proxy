@@ -5,15 +5,110 @@
 
 use async_trait::async_trait;
 
+mod android;
+pub use android::AndroidControlPort;
+pub(crate) use android::UnavailableAndroidControlPort;
+
 use crate::{
     ActiveFaultViewModel, AppResult, BreakpointDecision, BreakpointDetailViewModel,
     BreakpointDraft, BreakpointValidationViewModel, CaptureDetailViewModel, CapturePageViewModel,
     CaptureQuery, CertificateOverviewViewModel, CertificateValidationViewModel,
-    FaultConfigurationDraft, FaultTemplateViewModel, OperationResultViewModel,
-    ProxyStatusViewModel, RuleDraft, RuleId, RuleSummaryViewModel, RuleValidationViewModel,
-    RuleViewModel, RuntimeEpoch, SessionDetailViewModel, SessionId, SessionPageViewModel,
-    SessionQuery, SettingsDraft, SettingsValidationViewModel, SettingsViewModel,
+    FaultConfigurationDraft, FaultTemplateViewModel, ListenerId, ListenerStatusViewModel,
+    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, ProxyListener,
+    ProxyStatusViewModel, ProxyWorkspace, ReverseProxyListener, RuleDraft, RuleId,
+    RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference,
+    SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery, SettingsDraft,
+    SettingsValidationViewModel, SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel,
+    WorkspaceValidationViewModel,
 };
+
+#[async_trait]
+/// 系统密钥保护下的秘密写入边界。
+///
+/// 展示层只提交本次输入的用户名和密码，并只拿回不可逆的安全引用。明文不会进入
+/// Workspace、SQLite、事件、日志或返回 DTO；未来 CLI/TUI 复用同一用例即可。
+pub trait ProtectedSecretPort: Send + Sync + std::fmt::Debug {
+    async fn store_basic_auth(
+        &self,
+        username: String,
+        password: String,
+    ) -> AppResult<SecretReference>;
+}
+
+#[derive(Debug)]
+pub(crate) struct UnavailableProtectedSecretPort;
+
+#[async_trait]
+impl ProtectedSecretPort for UnavailableProtectedSecretPort {
+    async fn store_basic_auth(
+        &self,
+        _username: String,
+        _password: String,
+    ) -> AppResult<SecretReference> {
+        Err(crate::AppError::new(
+            "SECRET_PROTECTOR_UNAVAILABLE",
+            "当前宿主没有提供系统密钥保护能力。",
+        ))
+    }
+}
+
+#[async_trait]
+/// Workspace 的应用层持久化边界。
+///
+/// 导入导出实现必须只处理领域模型中的安全引用，不能自行附加证书私钥、PKCS#12 密码
+/// 或代理认证明文。文件选择仍由 Tauri/Dialog 或未来 CLI 适配器负责。
+pub trait WorkspaceRepositoryPort: Send + Sync + std::fmt::Debug {
+    async fn list(&self) -> AppResult<Vec<WorkspaceSummaryViewModel>>;
+    async fn get(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace>;
+    async fn create(&self, name: String) -> AppResult<ProxyWorkspace>;
+    async fn copy(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace>;
+    async fn select(&self, workspace_id: WorkspaceId) -> AppResult<WorkspaceSummaryViewModel>;
+    async fn validate(&self, workspace: ProxyWorkspace) -> AppResult<WorkspaceValidationViewModel>;
+    async fn save(&self, workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace>;
+    async fn delete(
+        &self,
+        workspace_id: WorkspaceId,
+        expected_revision: u64,
+    ) -> AppResult<OperationResultViewModel>;
+    /// 解析并保存由文档端口读取的内容。
+    async fn import_document(&self, document: Vec<u8>) -> AppResult<ProxyWorkspace>;
+    /// 序列化不含秘密材料的 `.intercept-workspace` 文档。
+    async fn export_document(&self, workspace_id: WorkspaceId) -> AppResult<Vec<u8>>;
+}
+
+#[async_trait]
+/// Workspace 文件选择与字节 I/O 的平台边界。
+///
+/// Tauri 实现可使用系统 Dialog，CLI 实现可使用命令行路径；前端既不接触路径，也不接触
+/// 文件字节。`None`/`false` 表示用户取消，不是失败。
+pub trait WorkspaceDocumentPort: Send + Sync + std::fmt::Debug {
+    async fn pick_import_document(&self) -> AppResult<Option<Vec<u8>>>;
+    async fn save_export_document(
+        &self,
+        suggested_file_name: String,
+        document: Vec<u8>,
+    ) -> AppResult<bool>;
+}
+
+#[async_trait]
+/// 每个动态 Listener 的网络生命周期边界。
+pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
+    async fn statuses(&self) -> AppResult<Vec<ListenerStatusViewModel>>;
+    /// 以 application 已校验的不可变 Workspace 快照启动入口。运行时不得再反查 `SQLite`
+    /// 或依赖 UI 当前选择状态，这也是未来 CLI/TUI 使用同一核心的稳定边界。
+    async fn start(
+        &self,
+        workspace: ProxyWorkspace,
+        listener: ProxyListener,
+    ) -> AppResult<ListenerStatusViewModel>;
+    async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel>;
+    /// 使用该入口持久化的上游地址、CA、主机名校验和可选客户端身份执行真实握手。
+    async fn test_upstream_tls(
+        &self,
+        workspace: ProxyWorkspace,
+        listener: ReverseProxyListener,
+    ) -> AppResult<ListenerUpstreamTlsTestViewModel>;
+}
 
 #[async_trait]
 /// 启停和查询代理运行时的端口。
@@ -82,6 +177,11 @@ pub trait FaultServicePort: Send + Sync + std::fmt::Debug {
 ///
 /// application 只处理用例顺序和错误，不接触私钥字节或平台密钥库。
 pub trait CertificateServicePort: Send + Sync + std::fmt::Debug {
+    /// 只读取非敏感元数据，用于应用启动状态栏和列表渲染。
+    ///
+    /// 这个调用不得解密私钥，也不得触发系统钥匙串授权；需要验证证书与私钥是否匹配时
+    /// 必须显式调用 [`Self::overview`] 或 [`Self::validate`]。
+    async fn status(&self) -> AppResult<CertificateOverviewViewModel>;
     async fn overview(&self) -> AppResult<CertificateOverviewViewModel>;
     async fn generate_ca(&self, sans: Vec<String>) -> AppResult<CertificateOverviewViewModel>;
     async fn export_ca(&self) -> AppResult<OperationResultViewModel>;

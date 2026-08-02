@@ -5,8 +5,8 @@
 
 use std::{collections::BTreeMap, sync::Arc};
 
-use gmofg_proxy_product_api::BodyCodec;
 use http::{HeaderName, HeaderValue};
+use intercept_proxy_product_api::BodyCodec;
 
 use crate::{
     AppError, AppResult, BreakpointDecision, BreakpointDecisionKind, BreakpointDetailViewModel,
@@ -392,7 +392,7 @@ fn merge_errors(target: &mut BTreeMap<String, Vec<String>>, source: BTreeMap<Str
 mod tests {
     use super::*;
     use chrono::Utc;
-    use gmofg_proxy_product_api::ProductError;
+    use intercept_proxy_product_api::ProductError;
     use uuid::Uuid;
 
     use crate::{BreakpointState, BreakpointSummaryViewModel, ChannelId, UiTone};

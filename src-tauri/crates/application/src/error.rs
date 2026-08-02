@@ -81,8 +81,8 @@ impl From<AppError> for AppErrorViewModel {
     }
 }
 
-impl From<gmofg_proxy_domain::DomainError> for AppError {
-    fn from(value: gmofg_proxy_domain::DomainError) -> Self {
+impl From<intercept_proxy_domain::DomainError> for AppError {
+    fn from(value: intercept_proxy_domain::DomainError) -> Self {
         Self {
             view_model: Box::new(AppErrorViewModel {
                 code: value.code.as_str().to_owned(),
@@ -93,7 +93,7 @@ impl From<gmofg_proxy_domain::DomainError> for AppError {
                 entity_id: value.entity_id,
                 runtime_epoch: value
                     .runtime_epoch
-                    .map(gmofg_proxy_domain::RuntimeEpoch::as_uuid),
+                    .map(intercept_proxy_domain::RuntimeEpoch::as_uuid),
             }),
         }
     }

@@ -6,7 +6,7 @@
 use std::{fmt, path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, FileExportPort, OperationResultViewModel, SessionDetailViewModel, UiTone,
 };
 use zeroize::Zeroizing;

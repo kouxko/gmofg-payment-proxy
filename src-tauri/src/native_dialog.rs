@@ -5,8 +5,8 @@
 
 use std::path::PathBuf;
 
-use gmofg_proxy_application::{AppError, AppResult};
-use gmofg_proxy_infrastructure::{NativeFileDialog, adapters::FileSelection};
+use intercept_proxy_application::{AppError, AppResult};
+use intercept_proxy_infrastructure::{NativeFileDialog, adapters::FileSelection};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
@@ -29,6 +29,9 @@ impl TauriNativeFileDialog {
     fn open_builder(&self, purpose: &str) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
         let builder = self.app.dialog().file();
         match purpose {
+            "intercept_workspace" => builder
+                .set_title("导入 Intercept Proxy Workspace")
+                .add_filter("Intercept Workspace", &["intercept-workspace"]),
             "rules_json" => builder
                 .set_title("导入规则")
                 .add_filter("JSON 规则", &["json"]),
@@ -45,6 +48,10 @@ impl TauriNativeFileDialog {
     fn save_builder(&self, purpose: &str) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
         let builder = self.app.dialog().file();
         match purpose {
+            "intercept_workspace" => builder
+                .set_title("导出 Intercept Proxy Workspace")
+                .set_file_name("workspace.intercept-workspace")
+                .add_filter("Intercept Workspace", &["intercept-workspace"]),
             "session_json" => builder
                 .set_title("导出会话")
                 .set_file_name("session.json")
@@ -54,8 +61,8 @@ impl TauriNativeFileDialog {
                 .set_file_name("rules.json")
                 .add_filter("JSON", &["json"]),
             "root_ca" => builder
-                .set_title("导出统一测试 Root CA 公开证书")
-                .set_file_name("gmofg-test-proxy-root-ca.crt")
+                .set_title("导出 Intercept Proxy Root CA 公开证书")
+                .set_file_name("intercept-proxy-root-ca.crt")
                 .add_filter("X.509 证书", &["crt", "cer", "pem"]),
             _ => builder.set_title("保存文件"),
         }

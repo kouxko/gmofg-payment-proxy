@@ -25,24 +25,56 @@ import {
   CircleInfo,
   DatabaseMagnifier,
   File,
+  FolderOpen,
   Gear,
   ListCheck,
   Lock,
   Pulse,
   Shield,
   SlidersVertical,
+  Smartphone,
+  Server,
 } from "@gravity-ui/icons";
 import { useEffect, useState } from "react";
-import { BootstrapProvider, useBootstrap } from "./bootstrap-context";
+import {
+  BootstrapProvider,
+  useAppEventRefresh,
+  useBootstrap,
+} from "./bootstrap-context";
 import { useWorkspaceNavigation } from "./workspace-navigation";
 import { toneColor } from "@/lib/format";
 import { PageHelp } from "@/features/help/page-help";
+import { commands } from "@/generated/rust-types";
+import type {
+  ListenerOverviewViewModel,
+  WorkspaceSummaryViewModel,
+} from "@/generated/rust-types";
+import { callCommand } from "@/lib/ipc/client";
+import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 
 export const navigation = [
   {
+    href: "/workspaces",
+    label: "工作区",
+    title: "Workspace 管理",
+    icon: FolderOpen,
+  },
+  {
+    href: "/listeners",
+    label: "入口配置",
+    title: "代理入口配置",
+    icon: Server,
+  },
+  {
+    href: "/android-network",
+    label: "设备弱网",
+    title: "应用定向弱网",
+    icon: Smartphone,
+  },
+  {
     href: "/console",
-    label: "控制台",
-    title: "代理控制台",
+    label: "运行监控",
+    title: "代理运行监控",
     icon: SlidersVertical,
   },
   { href: "/capture", label: "抓包", title: "实时抓包", icon: File },
@@ -88,10 +120,28 @@ function CurrentTime() {
 }
 
 function GlobalStatusBar() {
-  const { proxy, bootstrap, isLoading } = useBootstrap();
+  const { bootstrap, isLoading } = useBootstrap();
   const productName = bootstrap?.product_name ?? "网络代理工具";
   const { pathname, navigate } = useWorkspaceNavigation();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>(
+    "shell-workspaces",
+    () => callCommand(commands.workspaceList()),
+  );
+  const workspaceId =
+    workspaces.data?.find((workspace) => workspace.selected)?.id ??
+    workspaces.data?.[0]?.id;
+  const listenerOverview = useIpcQuery<ListenerOverviewViewModel>(
+    `shell-listener-overview:${workspaceId ?? "none"}`,
+    () => callCommand(commands.listenerOverview(workspaceId!)),
+    undefined,
+    { enabled: Boolean(workspaceId) },
+  );
+  useAppEventRefresh(["workspace_changed"], workspaces.refresh);
+  useAppEventRefresh(
+    ["workspace_changed", "listener_status_changed", "snapshot_required"],
+    listenerOverview.refresh,
+  );
 
   return (
     <header className="col-span-2 flex min-h-14 items-center overflow-x-auto border-b border-[var(--telemetry-line)] bg-white px-4 max-[1025px]:col-span-1 max-[1025px]:overflow-visible max-[1025px]:py-2">
@@ -145,37 +195,27 @@ function GlobalStatusBar() {
           {productName}
         </div>
         <Separator orientation="vertical" className="h-6" />
-        {isLoading && !proxy ? (
-          <Spinner size="sm" aria-label="正在加载代理状态" />
+        {(isLoading || listenerOverview.isLoading) && !listenerOverview.data ? (
+          <Spinner size="sm" aria-label="正在加载代理入口状态" />
         ) : (
           <>
             <Chip
-              color={proxy ? toneColor(proxy.ui_tone) : "default"}
-              variant="soft"
-              size="sm"
-            >
-              <Chip.Label>{proxy?.state_text ?? "未连接"}</Chip.Label>
-            </Chip>
-            {proxy?.channels.map((channel) => (
-              <div key={channel.id} className="contents">
-                <span>
-                  {channel.display_name} {channel.state_text} ·{" "}
-                  {channel.listen_address}
-                </span>
-                <Separator orientation="vertical" className="h-5" />
-              </div>
-            ))}
-            <Chip
               color={
-                proxy
-                  ? toneColor(proxy.proxy_to_server_health.ui_tone)
+                listenerOverview.data
+                  ? toneColor(listenerOverview.data.ui_tone)
                   : "default"
               }
               variant="soft"
               size="sm"
             >
-              上游 {proxy?.proxy_to_server_health.state_text ?? "状态未知"}
+              <Chip.Label>
+                {listenerOverview.data?.state_text ?? "未选择工作区"}
+              </Chip.Label>
             </Chip>
+            <span>
+              入口 {listenerOverview.data?.total_count ?? 0} · 活动{" "}
+              {listenerOverview.data?.active_count ?? 0}
+            </span>
             <Separator orientation="vertical" className="h-5" />
             <Chip
               color={
@@ -188,10 +228,6 @@ function GlobalStatusBar() {
             >
               {bootstrap?.certificate.status_text ?? "证书状态未知"}
             </Chip>
-            <Separator orientation="vertical" className="h-5" />
-            <span>会话数 {proxy?.active_sessions ?? 0}</span>
-            <Separator orientation="vertical" className="h-5" />
-            <span>暂停数 {proxy?.pending_breakpoints ?? 0}</span>
           </>
         )}
         <CurrentTime />
@@ -262,7 +298,7 @@ function SideNavigation() {
                   <Modal.Heading>关于 {productName}</Modal.Heading>
                 </Modal.Header>
                 <Modal.Body className="space-y-3 text-sm">
-                  <p>面向客户端联机测试的双向 mTLS 代理与故障注入工具。</p>
+                  <p>面向通用 HTTP 联机测试的拦截代理与故障注入工具。</p>
                   <p className="text-[var(--telemetry-muted)]">
                     网络、证书、规则、校验、存储和导出均由 Rust
                     核心执行；Next.js 仅负责显示状态和提交用户操作。

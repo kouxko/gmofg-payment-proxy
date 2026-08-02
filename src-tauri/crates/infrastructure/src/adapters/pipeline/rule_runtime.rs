@@ -7,12 +7,12 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use chrono::Utc;
-use gmofg_proxy_application::{EventHub, RuleSummaryViewModel, UiEventPayload, UiTone};
-use gmofg_proxy_domain::{
+use intercept_proxy_application::{EventHub, RuleSummaryViewModel, UiEventPayload, UiTone};
+use intercept_proxy_domain::{
     MatchContext, MessageStage, Rule, RuleAction, RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch,
 };
-use gmofg_proxy_product_api::BodyCodec;
-use gmofg_proxy_runtime::{ConnectionContext, Message, Result as ProxyResult};
+use intercept_proxy_product_api::BodyCodec;
+use intercept_proxy_runtime::{ConnectionContext, Message, Result as ProxyResult};
 use parking_lot::Mutex;
 use uuid::Uuid;
 
@@ -24,17 +24,14 @@ use super::{
 
 #[derive(Debug)]
 pub(super) struct RuleRuntimeService {
-    body_codec: Arc<dyn BodyCodec>,
     channel_labels: BTreeMap<String, String>,
     rules: Arc<dyn RuntimeRuleRepository>,
     events: Arc<EventHub>,
-    epoch: Mutex<Option<Uuid>>,
-    runtime: Mutex<Option<RuleRuntime>>,
+    runtimes: Mutex<BTreeMap<Uuid, RuleRuntime>>,
 }
 
 #[derive(Debug)]
 struct RuleRuntime {
-    epoch: Uuid,
     snapshot: RuleRuntimeSnapshot,
     engine: RuleEngine,
 }
@@ -49,18 +46,15 @@ pub(super) struct EvaluatedRules {
 
 impl RuleRuntimeService {
     pub(super) fn new(
-        body_codec: Arc<dyn BodyCodec>,
         channel_labels: BTreeMap<String, String>,
         rules: Arc<dyn RuntimeRuleRepository>,
         events: Arc<EventHub>,
     ) -> Self {
         Self {
-            body_codec,
             channel_labels,
             rules,
             events,
-            epoch: Mutex::new(None),
-            runtime: Mutex::new(None),
+            runtimes: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -69,10 +63,11 @@ impl RuleRuntimeService {
         context: &ConnectionContext,
         stage: MessageStage,
         message: Option<&Message>,
+        body_codec: &dyn BodyCodec,
     ) -> ProxyResult<EvaluatedRules> {
         // 重试只处理 CAS 冲突：每次都恢复引擎检查点并重新读取持久化快照，不能直接重放
         // 上一次 actions，否则 NthHit/一次性规则可能被消费两次。
-        self.evaluate_with_retries(context, stage, message, 3)
+        self.evaluate_with_retries(context, stage, message, body_codec, 3)
     }
 
     fn evaluate_with_retries(
@@ -80,38 +75,21 @@ impl RuleRuntimeService {
         context: &ConnectionContext,
         stage: MessageStage,
         message: Option<&Message>,
+        body_codec: &dyn BodyCodec,
         remaining_retries: usize,
     ) -> ProxyResult<EvaluatedRules> {
-        self.ensure_epoch(context.runtime_epoch)?;
         let terminal = terminal_identity(context);
-        let json =
-            message.and_then(|message| decode_json(self.body_codec.as_ref(), &message.body).ok());
+        let json = message.and_then(|message| decode_json(body_codec, &message.body).ok());
         let target = message.and_then(|message| message_target(&message.start_line));
         let runtime_epoch = RuntimeEpoch::from_uuid(context.runtime_epoch);
 
         // Evaluation and its durable runtime metadata commit are one serialized
         // operation. Actions are never returned to the transport until the
         // corresponding hit count / one-shot disable transaction commits.
-        let mut runtime_state = self.runtime.lock();
-        let snapshot = self.rules.runtime_snapshot().map_err(app_to_proxy)?;
-        if runtime_state
-            .as_ref()
-            .is_none_or(|runtime| runtime.epoch != context.runtime_epoch)
-        {
-            *runtime_state = Some(RuleRuntime {
-                epoch: context.runtime_epoch,
-                engine: RuleEngine::new(runtime_epoch, snapshot.rules.clone()),
-                snapshot,
-            });
-        } else if let Some(runtime) = runtime_state.as_mut()
-            && (runtime.snapshot.collection_revision != snapshot.collection_revision
-                || runtime.snapshot.signature != snapshot.signature)
-        {
-            runtime.engine.reconcile(snapshot.rules.clone());
-            runtime.snapshot = snapshot;
-        }
+        let mut runtime_state = self.runtimes.lock();
+        self.prepare_runtime(&mut runtime_state, context, runtime_epoch)?;
         let runtime = runtime_state
-            .as_mut()
+            .get_mut(&context.runtime_epoch)
             .expect("rule runtime was initialized");
 
         // A failed durable commit must not consume this message's transient
@@ -149,11 +127,12 @@ impl RuleRuntimeService {
                         context,
                         stage,
                         message,
+                        body_codec,
                         remaining_retries - 1,
                     );
                 }
                 Err(error) => {
-                    *runtime_state = None;
+                    runtime_state.remove(&context.runtime_epoch);
                     drop(runtime_state);
                     self.events.publish(
                         Some(context.runtime_epoch),
@@ -165,7 +144,8 @@ impl RuleRuntimeService {
                     return Err(app_to_proxy(error));
                 }
             };
-            runtime.snapshot = RuleRuntimeSnapshot::with_collection_revision(
+            runtime.snapshot = RuleRuntimeSnapshot::with_collection_identity(
+                base_snapshot.collection_id,
                 next_collection_revision,
                 evaluated_rules,
             );
@@ -187,6 +167,46 @@ impl RuleRuntimeService {
         })
     }
 
+    fn prepare_runtime(
+        &self,
+        runtimes: &mut BTreeMap<Uuid, RuleRuntime>,
+        context: &ConnectionContext,
+        runtime_epoch: RuntimeEpoch,
+    ) -> ProxyResult<()> {
+        let mut snapshot = self
+            .rules
+            .runtime_snapshot(&context.channel)
+            .map_err(app_to_proxy)?;
+        match runtimes.entry(context.runtime_epoch) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                if let Some(collection_id) = snapshot.collection_id {
+                    self.rules
+                        .reset_runtime_hit_metadata(collection_id)
+                        .map_err(app_to_proxy)?;
+                    snapshot = self
+                        .rules
+                        .runtime_snapshot(&context.channel)
+                        .map_err(app_to_proxy)?;
+                }
+                entry.insert(RuleRuntime {
+                    engine: RuleEngine::new(runtime_epoch, snapshot.rules.clone()),
+                    snapshot,
+                });
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                let runtime = entry.get_mut();
+                if runtime.snapshot.collection_id != snapshot.collection_id
+                    || runtime.snapshot.collection_revision != snapshot.collection_revision
+                    || runtime.snapshot.signature != snapshot.signature
+                {
+                    runtime.engine.reconcile(snapshot.rules.clone());
+                    runtime.snapshot = snapshot;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn publish_rule_hits(&self, epoch: Uuid, rules: Vec<RuleSummaryViewModel>) {
         for rule in rules {
             self.events.publish(
@@ -200,7 +220,10 @@ impl RuleRuntimeService {
     }
 
     pub(super) fn runtime_stopping(&self, epoch: Uuid) {
-        if let Err(error) = self.rules.reset_runtime_hit_metadata() {
+        let runtime = self.runtimes.lock().remove(&epoch);
+        if let Some(collection_id) = runtime.and_then(|item| item.snapshot.collection_id)
+            && let Err(error) = self.rules.reset_runtime_hit_metadata(collection_id)
+        {
             self.events.publish(
                 Some(epoch),
                 Utc::now(),
@@ -209,25 +232,11 @@ impl RuleRuntimeService {
                 UiEventPayload::OperationFailed((*error.view_model).clone()),
             );
         }
-        *self.runtime.lock() = None;
-        *self.epoch.lock() = None;
-    }
-
-    fn ensure_epoch(&self, epoch: Uuid) -> ProxyResult<()> {
-        let mut current = self.epoch.lock();
-        if *current != Some(epoch) {
-            self.rules
-                .reset_runtime_hit_metadata()
-                .map_err(app_to_proxy)?;
-            *self.runtime.lock() = None;
-            *current = Some(epoch);
-        }
-        Ok(())
     }
 }
 
 fn matched_rule_summaries(
-    evaluation: &gmofg_proxy_domain::RuleEvaluation,
+    evaluation: &intercept_proxy_domain::RuleEvaluation,
     rules: &[Rule],
     channel_labels: &BTreeMap<String, String>,
 ) -> Vec<RuleSummaryViewModel> {
@@ -244,7 +253,7 @@ fn matched_rule_summaries(
         .collect()
 }
 
-fn rule_trace_text(evaluation: &gmofg_proxy_domain::RuleEvaluation) -> Vec<String> {
+fn rule_trace_text(evaluation: &intercept_proxy_domain::RuleEvaluation) -> Vec<String> {
     evaluation
         .traces
         .iter()

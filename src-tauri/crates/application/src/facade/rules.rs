@@ -299,6 +299,21 @@ impl Application {
 
     pub async fn fault_template_list(&self) -> AppResult<Vec<FaultTemplateViewModel>> {
         let mut templates = self.faults.templates().await?;
+        let channel = self
+            .selected_workspace_channel_catalog()
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| {
+                AppError::new(
+                    "LISTENER_REQUIRED",
+                    "当前 Workspace 没有代理入口；请先新增入口再配置故障模拟。",
+                )
+            })?
+            .id;
+        for template in &mut templates {
+            template.default_channel = channel.clone();
+        }
         templates.sort_by(|left, right| left.template_id.cmp(&right.template_id));
         Ok(templates)
     }
