@@ -1,8 +1,9 @@
 use crate::{
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidDeviceViewModel,
-    AndroidNetworkProfile, AndroidNetworkProfileSummary, AndroidNetworkStatusViewModel,
-    AndroidPackageViewModel, AndroidProfileEditIntent, AndroidTargetApplication, AppError,
-    AppResult, OperationResultViewModel,
+    AndroidNetworkActivation, AndroidNetworkProfile, AndroidNetworkProfileSummary,
+    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidProfileEditIntent,
+    AndroidProxyRouteActivation, AndroidTargetApplication, AppError, AppResult,
+    OperationResultViewModel,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
@@ -71,16 +72,22 @@ impl Application {
     pub async fn device_network_profile_list(
         &self,
     ) -> AppResult<Vec<AndroidNetworkProfileSummary>> {
-        self.android.profile_list().await
+        let workspace = self.selected_workspace().await?;
+        Ok(workspace
+            .android_network_profiles
+            .iter()
+            .map(AndroidNetworkProfileSummary::from)
+            .collect())
     }
 
-    /// 由 Rust 生成稳定方案 ID 和完整弱网默认值；展示层不得自行构造领域对象。
+    /// 由 Rust 生成稳定方案 ID 和完整网络默认值；展示层不得自行构造领域对象。
     pub fn device_network_profile_new(&self) -> AndroidNetworkProfile {
         AndroidNetworkProfile {
             id: Uuid::new_v4().to_string(),
-            name: "新建弱网方案".into(),
+            name: "新建设备网络方案".into(),
             target_applications: Vec::new(),
             destination_targets: Vec::new(),
+            proxy_routes: Vec::new(),
             confirmed_shared_uids: BTreeSet::default(),
             auto_resume_after_reboot: false,
             weak_network: intercept_proxy_domain::WeakNetworkProfile::default(),
@@ -92,7 +99,18 @@ impl Application {
         profile_id: String,
     ) -> AppResult<AndroidNetworkProfile> {
         validate_profile_id(&profile_id)?;
-        self.android.profile_get(profile_id).await
+        self.selected_workspace()
+            .await?
+            .android_network_profiles
+            .into_iter()
+            .find(|profile| profile.id == profile_id)
+            .ok_or_else(|| {
+                AppError::new(
+                    "ANDROID_PROFILE_NOT_FOUND",
+                    "当前 Workspace 中不存在该设备网络方案。",
+                )
+                .entity(profile_id)
+            })
     }
 
     /// 将页面编辑意图规范化为完整 Profile。
@@ -122,9 +140,24 @@ impl Application {
         &self,
         profile: AndroidNetworkProfile,
     ) -> AppResult<AndroidNetworkProfile> {
-        profile.validate()?;
+        profile.validate().map_err(AppError::from)?;
         self.validate_profile_against_device(&profile).await?;
-        self.android.profile_save(profile).await
+        let _gate = self.mutation_gate.lock().await;
+        let mut workspace = self.selected_workspace().await?;
+        self.ensure_workspace_not_running(&workspace).await?;
+        if let Some(stored) = workspace
+            .android_network_profiles
+            .iter_mut()
+            .find(|stored| stored.id == profile.id)
+        {
+            *stored = profile.clone();
+        } else {
+            workspace.android_network_profiles.push(profile.clone());
+        }
+        workspace.validate().map_err(AppError::from)?;
+        let workspace = self.workspaces.save(workspace).await?;
+        self.publish_workspace(&workspace, true, crate::WorkspaceChangeKind::Updated);
+        Ok(profile)
     }
 
     pub async fn device_network_profile_delete(
@@ -132,7 +165,31 @@ impl Application {
         profile_id: String,
     ) -> AppResult<OperationResultViewModel> {
         validate_profile_id(&profile_id)?;
-        self.android.profile_delete(profile_id).await
+        let _gate = self.mutation_gate.lock().await;
+        let mut workspace = self.selected_workspace().await?;
+        self.ensure_workspace_not_running(&workspace).await?;
+        let before = workspace.android_network_profiles.len();
+        workspace
+            .android_network_profiles
+            .retain(|profile| profile.id != profile_id);
+        if workspace.android_network_profiles.len() == before {
+            return Err(AppError::new(
+                "ANDROID_PROFILE_NOT_FOUND",
+                "当前 Workspace 中不存在该设备网络方案。",
+            )
+            .entity(profile_id));
+        }
+        let workspace = self.workspaces.save(workspace).await?;
+        self.publish_workspace(&workspace, true, crate::WorkspaceChangeKind::Updated);
+        Ok(OperationResultViewModel {
+            success: true,
+            cancelled: false,
+            message: "设备网络方案已从当前 Workspace 删除。".into(),
+            ui_tone: crate::UiTone::Positive,
+            entity_id: Some(profile_id),
+            revision: Some(workspace.revision.get()),
+            requires_restart: false,
+        })
     }
 
     pub async fn device_network_start(
@@ -140,9 +197,11 @@ impl Application {
         profile_id: String,
         dangerous_confirmed: bool,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
-        self.validate_network_activation(&profile_id, dangerous_confirmed)
+        let profile = self
+            .validate_network_activation(&profile_id, dangerous_confirmed)
             .await?;
-        self.android.network_start(profile_id).await
+        let activation = self.android_activation(profile).await?;
+        self.android.network_start(activation).await
     }
 
     pub async fn device_network_apply(
@@ -150,9 +209,11 @@ impl Application {
         profile_id: String,
         dangerous_confirmed: bool,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
-        self.validate_network_activation(&profile_id, dangerous_confirmed)
+        let profile = self
+            .validate_network_activation(&profile_id, dangerous_confirmed)
             .await?;
-        self.android.network_apply(profile_id).await
+        let activation = self.android_activation(profile).await?;
+        self.android.network_apply(activation).await
     }
 
     pub async fn device_network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
@@ -173,10 +234,12 @@ impl Application {
         &self,
         profile_id: &str,
         confirmed: bool,
-    ) -> AppResult<()> {
+    ) -> AppResult<AndroidNetworkProfile> {
         validate_profile_id(profile_id)?;
-        let profile = self.android.profile_get(profile_id.to_owned()).await?;
-        profile.validate()?;
+        let profile = self
+            .device_network_profile_get(profile_id.to_owned())
+            .await?;
+        profile.validate().map_err(AppError::from)?;
         self.validate_profile_against_device(&profile).await?;
         if profile.requires_dangerous_confirmation() && !confirmed {
             return Err(AppError::new(
@@ -184,7 +247,56 @@ impl Application {
                 "100% 丢包或黑洞窗口需要显式二次确认。",
             ));
         }
-        Ok(())
+        Ok(profile)
+    }
+
+    async fn android_activation(
+        &self,
+        profile: AndroidNetworkProfile,
+    ) -> AppResult<AndroidNetworkActivation> {
+        let workspace = self.selected_workspace().await?;
+        let mut proxy_routes = Vec::with_capacity(profile.proxy_routes.len());
+        for route in &profile.proxy_routes {
+            let listener = workspace
+                .listeners
+                .iter()
+                .find(|listener| listener.id == route.listener_id)
+                .ok_or_else(|| {
+                    AppError::new(
+                        "ANDROID_PROXY_LISTENER_NOT_FOUND",
+                        "设备网络方案引用的代理入口已不存在。",
+                    )
+                    .entity(route.listener_id.to_string())
+                })?;
+            if !listener.enabled {
+                return Err(AppError::new(
+                    "ANDROID_PROXY_LISTENER_DISABLED",
+                    format!("代理入口“{}”尚未启用。", listener.name),
+                )
+                .entity(listener.id.to_string()));
+            }
+            proxy_routes.push(AndroidProxyRouteActivation {
+                listener_id: listener.id.to_string(),
+                original_destination: route.destination.clone(),
+                original_ports: route.ports.clone(),
+                desktop_listener_port: listener.port,
+            });
+        }
+        Ok(AndroidNetworkActivation {
+            profile,
+            proxy_routes,
+        })
+    }
+
+    async fn selected_workspace(&self) -> AppResult<crate::ProxyWorkspace> {
+        let selected = self
+            .workspaces
+            .list()
+            .await?
+            .into_iter()
+            .find(|summary| summary.selected)
+            .ok_or_else(|| AppError::new("WORKSPACE_NOT_SELECTED", "请先选择一个 Workspace。"))?;
+        self.workspaces.get(selected.id).await
     }
 
     async fn validate_profile_against_device(
@@ -358,7 +470,7 @@ fn validate_profile_id(value: &str) -> AppResult<()> {
     {
         return Err(AppError::new(
             "ANDROID_PROFILE_ID_INVALID",
-            "弱网方案 ID 格式无效。",
+            "设备网络方案 ID 格式无效。",
         ));
     }
     Ok(())
@@ -424,6 +536,7 @@ mod tests {
             name: "Shared".into(),
             target_applications: Vec::new(),
             destination_targets: Vec::new(),
+            proxy_routes: Vec::new(),
             confirmed_shared_uids: BTreeSet::new(),
             auto_resume_after_reboot: false,
             weak_network: intercept_proxy_domain::WeakNetworkProfile::default(),

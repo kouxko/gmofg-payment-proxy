@@ -15,14 +15,17 @@ const mocks = vi.hoisted(() => ({
   settingsGet: vi.fn(),
   settingsSetData: vi.fn(),
   overviewRefresh: vi.fn().mockResolvedValue(undefined),
+  navigate: vi.fn(),
+}));
+
+vi.mock("@/features/shell/workspace-navigation", () => ({
+  useWorkspaceNavigation: () => ({ navigate: mocks.navigate }),
 }));
 
 vi.mock("@/generated/rust-types", () => ({
   commands: {
     certificateExportCa: mocks.certificateExportCa,
     certificateGenerateCa: mocks.certificateGenerateCa,
-    certificateImportPkcs12: vi.fn(),
-    certificateImportUpstreamCa: vi.fn(),
     certificateOverview: mocks.certificateOverview,
     certificateReissueLeaf: vi.fn(),
     certificateResetCa: vi.fn(),
@@ -49,7 +52,30 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
             ready: false,
             status_text: "证书配置不完整",
             ui_tone: "warning",
-            items: [],
+            items: [
+              {
+                kind: "local_root_ca",
+                subject: "CN=Intercept Proxy Root CA",
+                usage: "签发本机代理服务端证书",
+                sans: [],
+                valid_from: "2026-08-01T00:00:00Z",
+                valid_until: "2036-08-01T00:00:00Z",
+                sha256_fingerprint: "AA:BB:CC:DD",
+                status_text: "有效",
+                ui_tone: "positive",
+              },
+              {
+                kind: "proxy_leaf",
+                subject: "CN=10.0.34.50",
+                usage: "客户端连接本机代理时使用的服务端身份",
+                sans: ["IP:10.0.34.50", "DNS:proxy.test"],
+                valid_from: "2026-08-01T00:00:00Z",
+                valid_until: "2028-08-01T00:00:00Z",
+                sha256_fingerprint: "11:22:33:44",
+                status_text: "有效",
+                ui_tone: "positive",
+              },
+            ],
             can_initialize: true,
             can_change: true,
             disabled_reason: null,
@@ -131,18 +157,28 @@ describe("CertificatesView settings freshness", () => {
     );
   });
 
-  it("uses a responsive full-width certificate overview layout", () => {
+  it("keeps the certificate page focused on local Root CA and leaf material", async () => {
+    const user = userEvent.setup();
     render(<CertificatesView />);
 
     expect(screen.getByTestId("certificate-overview-grid")).toHaveClass(
       "grid-cols-2",
       "max-[960px]:grid-cols-1",
     );
-    expect(screen.getByTestId("certificate-upstream-actions")).toHaveClass(
-      "grid-cols-[minmax(0,1fr)_auto]",
-      "items-center",
-      "max-[860px]:grid-cols-1",
-    );
+    expect(screen.queryByText("导入 / 替换 PKCS12")).not.toBeInTheDocument();
+    expect(screen.queryByText("选择性替换上游 CA")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "去配置代理入口" }));
+    expect(mocks.navigate).toHaveBeenCalledWith("/listeners");
+  });
+
+  it("shows the Root CA and local server leaf public metadata", () => {
+    render(<CertificatesView />);
+
+    expect(screen.getAllByText("CN=Intercept Proxy Root CA")).not.toHaveLength(0);
+    expect(screen.getAllByText("CN=10.0.34.50")).not.toHaveLength(0);
+    expect(screen.getByText("IP:10.0.34.50、DNS:proxy.test")).toBeVisible();
+    expect(screen.getByText("AA:BB:CC:DD")).toBeVisible();
+    expect(screen.getByText("11:22:33:44")).toBeVisible();
   });
 
   it("warns that reinitialization replaces the installation Root CA", () => {

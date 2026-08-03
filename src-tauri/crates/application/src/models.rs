@@ -12,11 +12,10 @@ use specta::Type;
 use uuid::Uuid;
 
 pub use intercept_proxy_domain::{
-    BodyCodecKind, BodyCodecPolicy, BodyDirection, CertificateReference, CertificateReferenceId,
-    CertificateReferenceKind, ChannelId, CodecPolicyId, ConnectionFaultAction, FaultPreset,
-    FaultPresetId, ListenerId, MetadataExtractor, MetadataExtractorId, MetadataExtractorSource,
-    ProxyListener, ProxyWorkspace, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
-    ReverseProxyListener, SecretReference, WorkspaceId,
+    BodyCodecKind, CertificateReference, CertificateReferenceId, CertificateReferenceKind,
+    ChannelId, ConnectionFaultAction, FaultPreset, FaultPresetId, ListenerId, MetadataExtractor,
+    MetadataExtractorId, MetadataExtractorSource, ProxyListener, ProxyWorkspace, ResponseAssertion,
+    ResponseAssertionId, ResponseAssertionKind, SecretReference, WorkspaceId,
 };
 
 /// 标识一次代理启动周期。代理重启后旧周期的事件和断点不得继续操作。
@@ -920,6 +919,25 @@ pub struct CertificateItemViewModel {
     pub ui_tone: UiTone,
 }
 
+/// 代理监听页面使用的证书引用详情。
+/// Workspace 只保存安全引用；证书的主题、SAN、有效期和指纹必须由 Rust 重新解析。
+/// 单个引用失效时保留该行并返回 `error_message`，避免一份坏证书阻塞其他证书展示。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ListenerCertificateDetailViewModel {
+    pub reference_id: CertificateReferenceId,
+    pub label: String,
+    pub certificate: Option<CertificateItemViewModel>,
+    pub error_message: Option<String>,
+}
+
+/// 原生导入成功后的安全引用与已解析详情。
+/// 导入文件内容、私钥和密码都不会进入 IPC；前端只获得可持久化引用及公开证书元数据。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ListenerCertificateImportViewModel {
+    pub reference: CertificateReference,
+    pub detail: ListenerCertificateDetailViewModel,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct CertificateOverviewViewModel {
     pub revision: Revision,
@@ -1027,7 +1045,7 @@ impl WorkspaceSummaryViewModel {
             enabled_listener_count: workspace
                 .listeners
                 .iter()
-                .filter(|listener| listener.enabled())
+                .filter(|listener| listener.enabled)
                 .count(),
             selected,
         }
@@ -1084,7 +1102,7 @@ pub struct ListenerStatusViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 对单个固定上游入口执行真实 TCP + TLS 握手后的只读结果。
+/// 对单条已启用 HTTPS 固定 Server 的代理监听执行真实 TCP + TLS 握手后的只读结果。
 /// 该模型只包含公开的对端证书元数据，不返回证书字节、客户端私钥或安全引用内容。
 /// `client_identity_configured` 只表示本次握手加载了客户端身份；Server 是否强制要求
 /// 客户端证书，由握手成功或失败共同判断，前端不能自行推断。

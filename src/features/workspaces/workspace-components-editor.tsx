@@ -21,8 +21,6 @@ import {
 } from "@heroui/react";
 import { Plus, TrashBin } from "@gravity-ui/icons";
 import type {
-  BodyCodecKind,
-  BodyDirection,
   CertificateReferenceKind,
   ConnectionFaultAction,
   ProxyWorkspace,
@@ -30,17 +28,10 @@ import type {
 } from "@/generated/rust-types";
 
 type ComponentKind =
-  | "body_codec"
   | "metadata_extractor"
   | "response_assertion"
   | "fault_preset"
   | "certificate_reference";
-
-const codecLabels: Record<BodyCodecKind, string> = {
-  raw: "Raw（原始字节）",
-  utf8: "UTF-8",
-  shift_jis: "Shift-JIS",
-};
 
 const certificateKindLabels: Record<CertificateReferenceKind, string> = {
   mitm_root_ca: "MITM Root CA",
@@ -64,27 +55,13 @@ export function WorkspaceComponentsEditor({
   disabled: boolean;
 }) {
   return (
-    <Tabs aria-label="Workspace 策略配置" defaultSelectedKey="codecs">
+    <Tabs aria-label="Workspace 策略配置" defaultSelectedKey="extractors">
       <Tabs.ListContainer><Tabs.List>
-        <Tabs.Tab id="codecs">Body Codec</Tabs.Tab>
         <Tabs.Tab id="extractors">元数据提取</Tabs.Tab>
         <Tabs.Tab id="assertions">响应断言</Tabs.Tab>
         <Tabs.Tab id="certificates">证书引用</Tabs.Tab>
         <Tabs.Tab id="faults">连接故障预设</Tabs.Tab>
       </Tabs.List></Tabs.ListContainer>
-
-      <Tabs.Panel id="codecs" className="space-y-3 pt-4">
-        <Button variant="outline" isDisabled={disabled} onPress={() => onAdd("body_codec")}><Plus className="size-4" />新增 Body Codec</Button>
-        {workspace.body_codec_policies.map((policy, index) => (
-          <Card key={policy.id}><Card.Content className="grid grid-cols-2 gap-3 p-4 max-[700px]:grid-cols-1">
-            <div className="col-span-2 flex items-center gap-3 max-[700px]:col-span-1"><strong>Body Codec {index + 1}</strong><code className="text-xs text-[var(--telemetry-muted)]">{policy.id}</code><Button className="ml-auto" isIconOnly aria-label={`删除 Body Codec ${index + 1}`} variant="danger-soft" onPress={() => onIntent("body_codec", policy.id, "delete", "")}><TrashBin className="size-4" /></Button></div>
-            <div className="grid gap-1"><Label>名称</Label><Input value={policy.name} onChange={(event) => onChange({ ...workspace, body_codec_policies: workspace.body_codec_policies.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} /></div>
-            <div className="grid gap-1"><Label>代理入口 ID（逗号分隔；留空表示未绑定）</Label><Input key={`${policy.id}:${policy.listener_ids.join(",")}`} defaultValue={policy.listener_ids.join(", ")} onBlur={(event) => onIntent("body_codec", policy.id, "listener_ids", event.target.value)} /></div>
-            <Select aria-label={`Body Codec ${index + 1} 编码`} selectedKey={policy.codec} onSelectionChange={(key) => onChange({ ...workspace, body_codec_policies: workspace.body_codec_policies.map((item, itemIndex) => itemIndex === index ? { ...item, codec: key as BodyCodecKind } : item) })}><Label>编码</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{Object.entries(codecLabels).map(([id, label]) => <ListBox.Item key={id} id={id}>{label}</ListBox.Item>)}</ListBox></Select.Popover></Select>
-            <Select aria-label={`Body Codec ${index + 1} 方向`} selectedKey={policy.direction} onSelectionChange={(key) => onChange({ ...workspace, body_codec_policies: workspace.body_codec_policies.map((item, itemIndex) => itemIndex === index ? { ...item, direction: key as BodyDirection } : item) })}><Label>方向</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="request">请求</ListBox.Item><ListBox.Item id="response">响应</ListBox.Item><ListBox.Item id="both">请求与响应</ListBox.Item></ListBox></Select.Popover></Select>
-          </Card.Content></Card>
-        ))}
-      </Tabs.Panel>
 
       <Tabs.Panel id="extractors" className="space-y-3 pt-4">
         <Button variant="outline" isDisabled={disabled} onPress={() => onAdd("metadata_extractor")}><Plus className="size-4" />新增提取器</Button>

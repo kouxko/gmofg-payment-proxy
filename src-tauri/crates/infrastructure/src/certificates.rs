@@ -210,12 +210,50 @@ impl CertificateService {
         metadata(&certificate)
     }
 
+    /// 读取 DER 或 PEM 中第一张证书的公开元数据。
+    ///
+    /// 该方法只用于详情展示，不替代具体用途的 CA、客户端身份或服务端身份校验。
+    /// 调用方仍必须在真正建立 TLS 前走对应的严格校验路径。
+    pub fn inspect_certificate(
+        &self,
+        bytes: &[u8],
+    ) -> Result<CertificateMetadata, InfrastructureError> {
+        let der = match Pem::iter_from_buffer(bytes)
+            .filter_map(Result::ok)
+            .find(|pem| pem.label == "CERTIFICATE")
+        {
+            Some(pem) => pem.contents,
+            None => bytes.to_vec(),
+        };
+        metadata(&parse_der(&der)?)
+    }
+
     pub fn parse_upstream_ca(&self, bytes: &[u8]) -> Result<TrustedCa, InfrastructureError> {
+        self.parse_trust_anchor(bytes, Self::validate_ca_der)
+    }
+
+    /// 解析用于验证下游客户端证书的信任锚。
+    ///
+    /// 部分既有终端证书链的自签名根 CA 只有 `BasicConstraints CA:TRUE`，没有
+    /// `KeyUsage` 扩展。它们可以作为显式配置的信任锚，但不能按现代上游服务器
+    /// CA 的严格策略校验，因此必须走专用兼容入口。
+    pub fn parse_client_trust_anchor(
+        &self,
+        bytes: &[u8],
+    ) -> Result<TrustedCa, InfrastructureError> {
+        self.parse_trust_anchor(bytes, Self::validate_client_trust_anchor_der)
+    }
+
+    fn parse_trust_anchor(
+        self,
+        bytes: &[u8],
+        validate: fn(&Self, &[u8]) -> Result<CertificateMetadata, InfrastructureError>,
+    ) -> Result<TrustedCa, InfrastructureError> {
         let pem_entries = Pem::iter_from_buffer(bytes)
             .collect::<Result<Vec<_>, _>>()
             .map_err(x509_error)?;
         if pem_entries.is_empty() {
-            let metadata = self.validate_ca_der(bytes)?;
+            let metadata = validate(&self, bytes)?;
             return Ok(TrustedCa {
                 certificate_der: bytes.to_vec(),
                 metadata,
@@ -226,16 +264,14 @@ impl CertificateService {
             if pem.label != "CERTIFICATE" {
                 continue;
             }
-            if let Ok(metadata) = self.validate_ca_der(&pem.contents) {
+            if let Ok(metadata) = validate(&self, &pem.contents) {
                 return Ok(TrustedCa {
                     certificate_der: pem.contents,
                     metadata,
                 });
             }
         }
-        Err(invalid(
-            "上游证书文件不包含当前有效且具备证书签发用途的 CA 信任锚",
-        ))
+        Err(invalid("证书文件不包含当前有效且受支持的 CA 信任锚"))
     }
 
     pub fn validate_root(
@@ -311,7 +347,8 @@ impl CertificateService {
         certificate_der: &[u8],
     ) -> Result<CertificateMetadata, InfrastructureError> {
         let certificate = parse_der(certificate_der)?;
-        if validate_ca(&certificate).is_err() && !is_legacy_self_signed_trust_anchor(&certificate)?
+        if validate_ca(&certificate).is_err()
+            && !is_explicit_legacy_client_trust_anchor(&certificate)?
         {
             return Err(invalid("客户端信任锚必须是有效 CA 或受支持的旧式自签名 CA"));
         }
@@ -481,6 +518,23 @@ fn is_legacy_self_signed_trust_anchor(
     Ok(certificate
         .verify_signature(Some(certificate.public_key()))
         .is_ok())
+}
+
+/// 判断用户显式选择的旧式客户端信任锚。
+///
+/// 信任锚的自签名只用于封装公钥，并不参与到终端证书的信任计算；因此这里不要求
+/// 当前密码学提供方能够验证历史 SHA-1 自签名。客户端终端证书到该根的签名仍由
+/// rustls/webpki 在实际握手时校验。
+fn is_explicit_legacy_client_trust_anchor(
+    certificate: &X509Certificate<'_>,
+) -> Result<bool, InfrastructureError> {
+    validate_validity(certificate)?;
+    let basic_constraints = certificate.basic_constraints().map_err(x509_error)?;
+    Ok(
+        basic_constraints.is_some_and(|constraints| constraints.value.ca)
+            && certificate.key_usage().map_err(x509_error)?.is_none()
+            && certificate.subject() == certificate.issuer(),
+    )
 }
 
 fn validate_client_end_entity(
@@ -869,6 +923,24 @@ mod tests {
             "secret",
         );
         assert!(service.parse_pkcs12(&invalid, "secret").is_err());
+    }
+
+    #[test]
+    fn downstream_client_trust_accepts_legacy_root_without_key_usage() {
+        let service = CertificateService;
+        let (_, legacy_root) = identity_with_legacy_self_signed_root("Legacy Downstream Client");
+        let mut explicit_trust_anchor = legacy_root.certificate_der.clone();
+        let final_byte = explicit_trust_anchor
+            .last_mut()
+            .expect("certificate has signature bytes");
+        *final_byte ^= 1;
+
+        let parsed = service
+            .parse_client_trust_anchor(&explicit_trust_anchor)
+            .expect("legacy self-signed client trust anchor");
+
+        assert_eq!(parsed.certificate_der, explicit_trust_anchor);
+        assert!(service.parse_upstream_ca(&parsed.certificate_der).is_err());
     }
 
     #[test]

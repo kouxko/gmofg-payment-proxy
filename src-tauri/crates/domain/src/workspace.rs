@@ -8,13 +8,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::IpAddr;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use specta::Type;
 
 use crate::{
-    CertificateReferenceId, CodecPolicyId, DomainError, ErrorCode, FaultPresetId, ListenerId,
-    MetadataExtractorId, ResponseAssertionId, Revision, Rule, RuleAction, WorkspaceId,
+    AndroidNetworkProfile, CertificateReferenceId, DomainError, ErrorCode, FaultPresetId,
+    ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, Rule, RuleAction, WorkspaceId,
 };
 
 /// 首次启动创建的正向代理草稿端口。监听器默认禁用，因此不会在用户确认前打开端口。
@@ -37,22 +37,10 @@ pub enum BodyCodecKind {
     ShiftJis,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum BodyDirection {
-    Request,
-    Response,
-    Both,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-/// 将指定监听器、方向与 Body 编解码方式关联起来。
-pub struct BodyCodecPolicy {
-    pub id: CodecPolicyId,
-    pub name: String,
-    pub listener_ids: Vec<ListenerId>,
-    pub direction: BodyDirection,
-    pub codec: BodyCodecKind,
+impl Default for BodyCodecKind {
+    fn default() -> Self {
+        Self::Raw
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -156,39 +144,6 @@ impl Default for MitmSettings {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub struct ForwardProxyListener {
-    pub id: ListenerId,
-    pub name: String,
-    pub enabled: bool,
-    pub bind_address: String,
-    pub port: u16,
-    pub authentication: ForwardProxyAuthentication,
-    pub allowed_client_cidrs: Vec<String>,
-    pub mitm: MitmSettings,
-    pub connect_timeout_ms: u64,
-    pub read_timeout_ms: u64,
-    pub write_timeout_ms: u64,
-}
-
-impl Default for ForwardProxyListener {
-    fn default() -> Self {
-        Self {
-            id: ListenerId::new(),
-            name: "默认正向代理".into(),
-            enabled: false,
-            bind_address: "127.0.0.1".into(),
-            port: DEFAULT_FORWARD_PROXY_PORT,
-            authentication: ForwardProxyAuthentication::None,
-            allowed_client_cidrs: Vec::new(),
-            mitm: MitmSettings::default(),
-            connect_timeout_ms: 30_000,
-            read_timeout_ms: 70_000,
-            write_timeout_ms: 70_000,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum DownstreamClientAuthentication {
     Disabled,
@@ -232,50 +187,123 @@ impl Default for UpstreamTlsSettings {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub struct ReverseProxyListener {
+/// 将该监听器收到的全部 HTTP 请求转发到一个固定 Server。
+/// `None` 表示普通正向代理：每个请求使用自己的目标地址。`Some` 表示固定 Server
+/// 模式：监听器仍是同一条代理入口，只是目的地改由这里统一指定。上游 CA 和可选的
+/// mTLS 客户端身份属于这条固定转发配置，不能放在全局证书页或另一条“上游入口”中。
+pub struct FixedServerSettings {
+    /// 固定上游 origin，只允许 `http`/`https`、主机和可选端口。
+    pub upstream_url: String,
+    pub upstream_tls: UpstreamTlsSettings,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
+/// 用户面对的唯一代理监听配置。
+/// 不再用 `Forward`/`Reverse` 两种公开类型割裂配置流程。监听地址、访问控制、下游
+/// TLS 和超时始终属于监听器；是否固定转发到 Server 只由 [`Self::fixed_server`] 决定。
+pub struct ProxyListener {
     pub id: ListenerId,
     pub name: String,
     pub enabled: bool,
     pub bind_address: String,
     pub port: u16,
-    /// 固定上游 origin，只允许 `http`/`https`、主机和可选端口。
-    pub upstream_url: String,
+    pub authentication: ForwardProxyAuthentication,
+    pub allowed_client_cidrs: Vec<String>,
+    pub mitm: MitmSettings,
+    pub connect_timeout_ms: u64,
+    pub read_timeout_ms: u64,
+    pub write_timeout_ms: u64,
     pub downstream_tls: DownstreamTlsSettings,
-    pub upstream_tls: UpstreamTlsSettings,
-    pub request_codec_policy: Option<CodecPolicyId>,
-    pub response_codec_policy: Option<CodecPolicyId>,
+    /// 当前监听处理请求正文时采用的字符编码。Raw 表示不执行文本/JSON解码。
+    pub request_body_codec: BodyCodecKind,
+    /// 当前监听处理响应正文时采用的字符编码。Raw 表示不执行文本/JSON解码。
+    pub response_body_codec: BodyCodecKind,
+    pub fixed_server: Option<FixedServerSettings>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ProxyListener {
-    Forward(ForwardProxyListener),
-    Reverse(ReverseProxyListener),
+#[derive(Deserialize)]
+struct ProxyListenerDocument {
+    id: ListenerId,
+    name: String,
+    enabled: bool,
+    bind_address: String,
+    port: u16,
+    authentication: ForwardProxyAuthentication,
+    allowed_client_cidrs: Vec<String>,
+    mitm: MitmSettings,
+    connect_timeout_ms: u64,
+    read_timeout_ms: u64,
+    write_timeout_ms: u64,
+    downstream_tls: Option<DownstreamTlsSettings>,
+    #[serde(default)]
+    request_body_codec: BodyCodecKind,
+    #[serde(default)]
+    response_body_codec: BodyCodecKind,
+    fixed_server: Option<FixedServerSettings>,
+}
+
+impl<'de> Deserialize<'de> for ProxyListener {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let document = ProxyListenerDocument::deserialize(deserializer)?;
+        Ok(Self {
+            id: document.id,
+            name: document.name,
+            enabled: document.enabled,
+            bind_address: document.bind_address,
+            port: document.port,
+            authentication: document.authentication,
+            allowed_client_cidrs: document.allowed_client_cidrs,
+            mitm: document.mitm,
+            connect_timeout_ms: document.connect_timeout_ms,
+            read_timeout_ms: document.read_timeout_ms,
+            write_timeout_ms: document.write_timeout_ms,
+            downstream_tls: document.downstream_tls.unwrap_or_default(),
+            request_body_codec: document.request_body_codec,
+            response_body_codec: document.response_body_codec,
+            fixed_server: document.fixed_server,
+        })
+    }
+}
+
+impl Default for ProxyListener {
+    fn default() -> Self {
+        Self {
+            id: ListenerId::new(),
+            name: "默认代理监听".into(),
+            enabled: false,
+            bind_address: "127.0.0.1".into(),
+            port: DEFAULT_FORWARD_PROXY_PORT,
+            authentication: ForwardProxyAuthentication::None,
+            allowed_client_cidrs: Vec::new(),
+            mitm: MitmSettings::default(),
+            connect_timeout_ms: 30_000,
+            read_timeout_ms: 70_000,
+            write_timeout_ms: 70_000,
+            downstream_tls: DownstreamTlsSettings::default(),
+            request_body_codec: BodyCodecKind::Raw,
+            response_body_codec: BodyCodecKind::Raw,
+            fixed_server: None,
+        }
+    }
 }
 
 impl ProxyListener {
     #[must_use]
     pub const fn id(&self) -> ListenerId {
-        match self {
-            Self::Forward(listener) => listener.id,
-            Self::Reverse(listener) => listener.id,
-        }
+        self.id
     }
 
     #[must_use]
     pub const fn enabled(&self) -> bool {
-        match self {
-            Self::Forward(listener) => listener.enabled,
-            Self::Reverse(listener) => listener.enabled,
-        }
+        self.enabled
     }
 
     #[must_use]
     pub fn bind_endpoint(&self) -> (&str, u16) {
-        match self {
-            Self::Forward(listener) => (&listener.bind_address, listener.port),
-            Self::Reverse(listener) => (&listener.bind_address, listener.port),
-        }
+        (&self.bind_address, self.port)
     }
 }
 
@@ -308,7 +336,6 @@ pub struct ProxyWorkspace {
     pub name: String,
     pub revision: Revision,
     pub listeners: Vec<ProxyListener>,
-    pub body_codec_policies: Vec<BodyCodecPolicy>,
     pub metadata_extractors: Vec<MetadataExtractor>,
     pub response_assertions: Vec<ResponseAssertion>,
     /// 规则通过 rule_* 用例维护，避免前端在 Workspace 表单中复制第二套规则编辑器。
@@ -317,6 +344,10 @@ pub struct ProxyWorkspace {
     pub rules: Vec<Rule>,
     pub fault_presets: Vec<FaultPreset>,
     pub certificate_references: Vec<CertificateReference>,
+    /// 与该 Workspace 一起迁移的 Android 设备网络方案。
+    /// 设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，不属于此字段。
+    #[serde(default)]
+    pub android_network_profiles: Vec<AndroidNetworkProfile>,
 }
 
 impl Default for ProxyWorkspace {
@@ -325,13 +356,13 @@ impl Default for ProxyWorkspace {
             id: WorkspaceId::new(),
             name: "Untitled Workspace".into(),
             revision: Revision::INITIAL,
-            listeners: vec![ProxyListener::Forward(ForwardProxyListener::default())],
-            body_codec_policies: Vec::new(),
+            listeners: vec![ProxyListener::default()],
             metadata_extractors: Vec::new(),
             response_assertions: Vec::new(),
             rules: Vec::new(),
             fault_presets: Vec::new(),
             certificate_references: Vec::new(),
+            android_network_profiles: Vec::new(),
         }
     }
 }
@@ -360,14 +391,14 @@ impl ProxyWorkspace {
         }
 
         let listener_ids = unique_ids(
-            self.listeners.iter().map(ProxyListener::id),
+            self.listeners.iter().map(|listener| listener.id),
             "listeners",
             &mut error,
         );
         let mut enabled_endpoints = BTreeMap::new();
         for (index, listener) in self.listeners.iter().enumerate() {
             validate_listener(listener, index, &certificate_ids, &mut error);
-            if listener.enabled() {
+            if listener.enabled {
                 let endpoint = listener.bind_endpoint();
                 if let Some(existing) = enabled_endpoints.insert(endpoint, index) {
                     push_field_error(
@@ -409,37 +440,6 @@ fn validate_workspace_references(
     listener_ids: &BTreeSet<ListenerId>,
     error: &mut DomainError,
 ) {
-    let codec_ids = unique_ids(
-        workspace.body_codec_policies.iter().map(|item| item.id),
-        "body_codec_policies",
-        error,
-    );
-    for (index, policy) in workspace.body_codec_policies.iter().enumerate() {
-        validate_named_listener_refs(
-            &policy.name,
-            &policy.listener_ids,
-            listener_ids,
-            &format!("body_codec_policies.{index}"),
-            error,
-        );
-    }
-    for (index, listener) in workspace.listeners.iter().enumerate() {
-        if let ProxyListener::Reverse(listener) = listener {
-            for (field, policy) in [
-                ("request_codec_policy", listener.request_codec_policy),
-                ("response_codec_policy", listener.response_codec_policy),
-            ] {
-                if policy.is_some_and(|id| !codec_ids.contains(&id)) {
-                    push_field_error(
-                        error,
-                        format!("listeners.{index}.{field}"),
-                        "引用的 Body 编解码策略不存在",
-                    );
-                }
-            }
-        }
-    }
-
     unique_ids(
         workspace.metadata_extractors.iter().map(|item| item.id),
         "metadata_extractors",
@@ -490,6 +490,47 @@ fn validate_workspace_references(
             );
         }
     }
+
+    validate_android_profiles(workspace, listener_ids, error);
+}
+
+fn validate_android_profiles(
+    workspace: &ProxyWorkspace,
+    listener_ids: &BTreeSet<ListenerId>,
+    error: &mut DomainError,
+) {
+    let mut profile_ids = BTreeSet::new();
+    for (index, profile) in workspace.android_network_profiles.iter().enumerate() {
+        if !profile_ids.insert(profile.id.as_str()) {
+            push_field_error(
+                error,
+                format!("android_network_profiles.{index}.id"),
+                "设备网络方案 ID 不能重复",
+            );
+        }
+        if let Err(profile_error) = profile.validate() {
+            for (field, messages) in profile_error.field_errors.iter() {
+                for message in messages {
+                    push_field_error(
+                        error,
+                        format!("android_network_profiles.{index}.{field}"),
+                        message.clone(),
+                    );
+                }
+            }
+        }
+        for (route_index, route) in profile.proxy_routes.iter().enumerate() {
+            if !listener_ids.contains(&route.listener_id) {
+                push_field_error(
+                    error,
+                    format!(
+                        "android_network_profiles.{index}.proxy_routes.{route_index}.listener_id"
+                    ),
+                    "透明代理路由必须引用当前 Workspace 中存在的代理入口",
+                );
+            }
+        }
+    }
 }
 
 fn validate_listener(
@@ -499,14 +540,10 @@ fn validate_listener(
     error: &mut DomainError,
 ) {
     let prefix = format!("listeners.{index}");
-    let (name, bind_address, port) = match listener {
-        ProxyListener::Forward(value) => (&value.name, &value.bind_address, value.port),
-        ProxyListener::Reverse(value) => (&value.name, &value.bind_address, value.port),
-    };
-    if name.trim().is_empty() {
+    if listener.name.trim().is_empty() {
         push_field_error(error, format!("{prefix}.name"), "监听器名称不能为空");
     }
-    let bind_ip = bind_address.parse::<IpAddr>();
+    let bind_ip = listener.bind_address.parse::<IpAddr>();
     if bind_ip.is_err() {
         push_field_error(
             error,
@@ -514,22 +551,19 @@ fn validate_listener(
             "绑定地址必须是有效 IP",
         );
     }
-    if port == 0 {
+    if listener.port == 0 {
         push_field_error(error, format!("{prefix}.port"), "监听端口必须大于 0");
     }
 
-    match listener {
-        ProxyListener::Forward(value) => {
-            validate_forward_listener(value, bind_ip.ok(), certificate_ids, &prefix, error);
-        }
-        ProxyListener::Reverse(value) => {
-            validate_reverse_listener(value, certificate_ids, &prefix, error);
-        }
+    validate_listener_access(listener, bind_ip.ok(), certificate_ids, &prefix, error);
+    validate_downstream_tls(listener, certificate_ids, &prefix, error);
+    if let Some(fixed_server) = &listener.fixed_server {
+        validate_fixed_server(fixed_server, certificate_ids, &prefix, error);
     }
 }
 
-fn validate_forward_listener(
-    value: &ForwardProxyListener,
+fn validate_listener_access(
+    value: &ProxyListener,
     bind_ip: Option<IpAddr>,
     certificate_ids: &BTreeSet<CertificateReferenceId>,
     prefix: &str,
@@ -547,7 +581,10 @@ fn validate_forward_listener(
             );
         }
     }
-    if bind_ip.is_some_and(|ip| !ip.is_loopback()) {
+    // 固定 Server 入口常用于 App -> 本机代理的受控测试链路，并可通过下游 TLS/mTLS
+    // 验证客户端。动态正向代理若暴露到非回环网络则必须额外配置认证与 CIDR 白名单，
+    // 防止默认配置意外成为开放代理。
+    if value.fixed_server.is_none() && bind_ip.is_some_and(|ip| !ip.is_loopback()) {
         if matches!(value.authentication, ForwardProxyAuthentication::None) {
             push_field_error(
                 error,
@@ -615,19 +652,12 @@ fn validate_forward_listener(
     }
 }
 
-fn validate_reverse_listener(
-    value: &ReverseProxyListener,
+fn validate_downstream_tls(
+    value: &ProxyListener,
     certificate_ids: &BTreeSet<CertificateReferenceId>,
     prefix: &str,
     error: &mut DomainError,
 ) {
-    if !is_valid_upstream_origin(&value.upstream_url) {
-        push_field_error(
-            error,
-            format!("{prefix}.upstream_url"),
-            "固定上游必须是 HTTP/HTTPS origin，不能包含路径、查询、片段或用户信息",
-        );
-    }
     if value.downstream_tls.enabled
         && value
             .downstream_tls
@@ -652,6 +682,36 @@ fn validate_reverse_listener(
             "下游客户端信任引用不存在",
         );
     }
+}
+
+fn validate_fixed_server(
+    value: &FixedServerSettings,
+    certificate_ids: &BTreeSet<CertificateReferenceId>,
+    prefix: &str,
+    error: &mut DomainError,
+) {
+    let fixed_prefix = format!("{prefix}.fixed_server");
+    if !is_valid_upstream_origin(&value.upstream_url) {
+        push_field_error(
+            error,
+            format!("{fixed_prefix}.upstream_url"),
+            "固定 Server 必须是 HTTP/HTTPS origin，不能包含路径、查询、片段或用户信息",
+        );
+    }
+    let uses_https = value
+        .upstream_url
+        .get(..8)
+        .is_some_and(|scheme| scheme.eq_ignore_ascii_case("https://"));
+    if !uses_https
+        && (value.upstream_tls.server_trust.is_some()
+            || value.upstream_tls.client_identity.is_some())
+    {
+        push_field_error(
+            error,
+            format!("{fixed_prefix}.upstream_tls"),
+            "Server CA 和 mTLS 客户端身份只能用于 HTTPS Server",
+        );
+    }
     for (field, reference) in [
         ("server_trust", value.upstream_tls.server_trust),
         ("client_identity", value.upstream_tls.client_identity),
@@ -659,8 +719,8 @@ fn validate_reverse_listener(
         if reference.is_some_and(|id| !certificate_ids.contains(&id)) {
             push_field_error(
                 error,
-                format!("{prefix}.upstream_tls.{field}"),
-                "上游 TLS 证书引用不存在",
+                format!("{fixed_prefix}.upstream_tls.{field}"),
+                "Server TLS 证书引用不存在",
             );
         }
     }
@@ -807,17 +867,17 @@ fn valid_host(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{AndroidProxyRoute, AndroidTargetApplication, WeakNetworkProfile};
 
     #[test]
     fn default_workspace_is_empty_safe_and_serializable() {
         let workspace = ProxyWorkspace::default();
         assert_eq!(workspace.listeners.len(), 1);
-        let ProxyListener::Forward(listener) = &workspace.listeners[0] else {
-            panic!("forward draft expected")
-        };
+        let listener = &workspace.listeners[0];
         assert!(!listener.enabled);
         assert_eq!(listener.bind_address, "127.0.0.1");
         assert_eq!(listener.port, 8080);
+        assert!(listener.fixed_server.is_none());
         assert!(workspace.rules.is_empty());
         assert!(workspace.fault_presets.is_empty());
         workspace.validate().expect("safe draft must validate");
@@ -828,11 +888,24 @@ mod tests {
     }
 
     #[test]
+    fn dynamic_listener_without_new_optional_downstream_tls_still_loads() {
+        let mut document = serde_json::to_value(ProxyWorkspace::default()).unwrap();
+        document["listeners"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("downstream_tls");
+
+        let workspace: ProxyWorkspace = serde_json::from_value(document).unwrap();
+
+        assert!(!workspace.listeners[0].downstream_tls.enabled);
+        assert!(workspace.listeners[0].fixed_server.is_none());
+        workspace.validate().unwrap();
+    }
+
+    #[test]
     fn non_loopback_forward_listener_requires_authentication_and_cidr() {
         let mut workspace = ProxyWorkspace::default();
-        let ProxyListener::Forward(listener) = &mut workspace.listeners[0] else {
-            unreachable!()
-        };
+        let listener = &mut workspace.listeners[0];
         listener.enabled = true;
         listener.bind_address = "0.0.0.0".into();
         let error = workspace.validate().unwrap_err();
@@ -849,7 +922,7 @@ mod tests {
     }
 
     #[test]
-    fn reverse_listener_accepts_generic_http_and_https_origins() {
+    fn fixed_server_accepts_generic_http_and_https_origins() {
         assert!(is_valid_upstream_origin("http://127.0.0.1:8081"));
         assert!(is_valid_upstream_origin("https://example.test:443/"));
         for invalid in [
@@ -863,29 +936,29 @@ mod tests {
     }
 
     #[test]
-    fn workspace_accepts_multiple_reverse_listener_mappings() {
-        let reverse = |name: &str, port: u16, upstream_url: &str| {
-            ProxyListener::Reverse(ReverseProxyListener {
-                id: ListenerId::new(),
-                name: name.into(),
-                enabled: true,
-                bind_address: "127.0.0.1".into(),
-                port,
+    fn workspace_accepts_multiple_fixed_server_listener_mappings() {
+        let fixed = |name: &str, port: u16, upstream_url: &str| ProxyListener {
+            id: ListenerId::new(),
+            name: name.into(),
+            enabled: true,
+            bind_address: "127.0.0.1".into(),
+            port,
+            request_body_codec: BodyCodecKind::Raw,
+            response_body_codec: BodyCodecKind::Raw,
+            fixed_server: Some(FixedServerSettings {
                 upstream_url: upstream_url.into(),
-                downstream_tls: DownstreamTlsSettings::default(),
                 upstream_tls: UpstreamTlsSettings::default(),
-                request_codec_policy: None,
-                response_codec_policy: None,
-            })
+            }),
+            ..ProxyListener::default()
         };
         let workspace = ProxyWorkspace {
             listeners: vec![
-                reverse(
+                fixed(
                     "Transaction",
                     16_627,
                     "https://transaction.example.test:16627",
                 ),
-                reverse("DLL", 16_127, "https://dll.example.test:16127"),
+                fixed("DLL", 16_127, "https://dll.example.test:16127"),
             ],
             ..ProxyWorkspace::default()
         };
@@ -898,9 +971,7 @@ mod tests {
     #[test]
     fn mitm_is_fail_closed_without_allowlist_but_can_use_installation_root() {
         let mut workspace = ProxyWorkspace::default();
-        let ProxyListener::Forward(listener) = &mut workspace.listeners[0] else {
-            unreachable!()
-        };
+        let listener = &mut workspace.listeners[0];
         listener.mitm.enabled = true;
         let error = workspace.validate().unwrap_err();
         assert!(
@@ -912,20 +983,85 @@ mod tests {
     }
 
     #[test]
-    fn rejects_dangling_listener_and_certificate_references() {
+    fn fixed_http_server_rejects_tls_certificate_configuration() {
         let mut workspace = ProxyWorkspace::default();
-        workspace.body_codec_policies.push(BodyCodecPolicy {
-            id: CodecPolicyId::new(),
-            name: "text".into(),
-            listener_ids: vec![ListenerId::new()],
-            direction: BodyDirection::Both,
-            codec: BodyCodecKind::Utf8,
+        let trust_id = CertificateReferenceId::new();
+        workspace.certificate_references.push(CertificateReference {
+            id: trust_id,
+            label: "测试 Server CA".into(),
+            kind: CertificateReferenceKind::UpstreamServerTrust,
+            reference: "managed:test-ca".into(),
         });
+        workspace.listeners[0].fixed_server = Some(FixedServerSettings {
+            upstream_url: "http://server.example.test:8080".into(),
+            upstream_tls: UpstreamTlsSettings {
+                server_trust: Some(trust_id),
+                ..UpstreamTlsSettings::default()
+            },
+        });
+
         let error = workspace.validate().unwrap_err();
         assert!(
             error
                 .field_errors
-                .contains_key("body_codec_policies.0.listener_ids.0")
+                .contains_key("listeners.0.fixed_server.upstream_tls")
+        );
+    }
+
+    #[test]
+    fn fixed_server_stores_body_encoding_on_the_listener() {
+        let mut workspace = ProxyWorkspace::default();
+        workspace.listeners[0].request_body_codec = BodyCodecKind::Utf8;
+        workspace.listeners[0].response_body_codec = BodyCodecKind::ShiftJis;
+        workspace.listeners[0].fixed_server = Some(FixedServerSettings {
+            upstream_url: "https://example.test".into(),
+            upstream_tls: UpstreamTlsSettings::default(),
+        });
+
+        workspace
+            .validate()
+            .expect("listener body codecs are self-contained");
+        assert_eq!(
+            workspace.listeners[0].request_body_codec,
+            BodyCodecKind::Utf8
+        );
+        assert_eq!(
+            workspace.listeners[0].response_body_codec,
+            BodyCodecKind::ShiftJis
+        );
+    }
+
+    #[test]
+    fn android_proxy_routes_must_reference_a_listener_in_the_same_workspace() {
+        let mut workspace = ProxyWorkspace::default();
+        let profile = AndroidNetworkProfile {
+            id: "android-route".into(),
+            name: "Android route".into(),
+            target_applications: vec![AndroidTargetApplication {
+                package_name: "com.example.client".into(),
+                signing_sha256: "AA".repeat(32),
+                uid: 10_001,
+                display_name: None,
+            }],
+            destination_targets: Vec::new(),
+            proxy_routes: vec![AndroidProxyRoute {
+                destination: "api.example.test".into(),
+                ports: vec![443],
+                listener_id: workspace.listeners[0].id,
+            }],
+            confirmed_shared_uids: BTreeSet::new(),
+            auto_resume_after_reboot: false,
+            weak_network: WeakNetworkProfile::default(),
+        };
+        workspace.android_network_profiles.push(profile);
+        workspace.validate().expect("same-workspace listener route");
+
+        workspace.android_network_profiles[0].proxy_routes[0].listener_id = ListenerId::new();
+        let error = workspace.validate().expect_err("dangling listener route");
+        assert!(
+            error
+                .field_errors
+                .contains_key("android_network_profiles.0.proxy_routes.0.listener_id")
         );
     }
 

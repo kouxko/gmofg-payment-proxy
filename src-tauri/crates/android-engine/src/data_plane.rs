@@ -39,8 +39,8 @@ use tokio::{
 use tun2proxy::{ArgDns, ArgProxy, Args, CancellationToken};
 
 use crate::{
-    Direction, FailOpenEngine, IpVersion, PacketContext, PathMtuAction, TcpFlag, TransportProtocol,
-    ValidatedProfile,
+    Direction, FailOpenEngine, IpVersion, PacketContext, PathMtuAction, ProxyRuntimeConfiguration,
+    TcpFlag, TransportProtocol, ValidatedProfile, routing::ProxyRouteTable,
 };
 
 const MAX_IP_PACKET_SIZE: usize = 65_535;
@@ -351,6 +351,7 @@ impl DataPlaneHandle {
     pub(crate) fn start(
         tun_fd: OwnedFd,
         profile: ValidatedProfile,
+        proxy_runtime: ProxyRuntimeConfiguration,
         protector: SocketProtector,
     ) -> Result<Self, String> {
         let runtime_epoch = reset_runtime_stats();
@@ -382,6 +383,7 @@ impl DataPlaneHandle {
                 let result = runtime.block_on(run_data_plane(
                     tun_file,
                     profile,
+                    proxy_runtime,
                     protector.clone(),
                     thread_cancellation.clone(),
                     ready_tx,
@@ -535,11 +537,17 @@ impl SocketProtection for SocketProtector {
 async fn run_data_plane(
     tun_file: ManagedTunFile,
     profile: ValidatedProfile,
+    proxy_runtime: ProxyRuntimeConfiguration,
     protector: SocketProtector,
     cancellation: CancellationToken,
     ready_tx: sync_mpsc::SyncSender<Result<(), String>>,
     runtime_epoch: u64,
 ) -> Result<(), String> {
+    let proxy_routes = Arc::new(
+        ProxyRouteTable::compile(&profile, &proxy_runtime)
+            .await
+            .map_err(|error| format!("编译 Android 透明代理路由失败：{error}"))?,
+    );
     let tun_file = Arc::new(
         tokio::io::unix::AsyncFd::new(tun_file)
             .map_err(|error| format!("注册 Android TUN 失败：{error}"))?,
@@ -599,6 +607,7 @@ async fn run_data_plane(
     let mut socks = tokio::spawn(run_socks_server(
         socks_listener,
         protector,
+        proxy_routes,
         cancellation.child_token(),
         runtime_epoch,
     ));
@@ -1605,6 +1614,7 @@ fn checksum(bytes: &[u8]) -> u16 {
 async fn run_socks_server<P>(
     listener: TcpListener,
     protector: P,
+    proxy_routes: Arc<ProxyRouteTable>,
     cancellation: CancellationToken,
     runtime_epoch: u64,
 ) -> io::Result<()>
@@ -1618,11 +1628,12 @@ where
         };
         increment_for_epoch(runtime_epoch, &RUNTIME_STATS.socks_clients);
         let protector = protector.clone();
+        let proxy_routes = proxy_routes.clone();
         tokio::spawn(async move {
             // 单个目标不可达、远端拒绝连接或客户端主动断开只是该 SOCKS 会话的结果，
             // 不能标记成整个 VPN 数据面故障。CONNECT 会向客户端返回失败状态；运行
             // 统计仍可通过 attempts 与 successes 的差值观察失败会话。
-            let _ = handle_socks_client(stream, protector, runtime_epoch).await;
+            let _ = handle_socks_client(stream, protector, proxy_routes, runtime_epoch).await;
         });
     }
 }
@@ -1630,6 +1641,7 @@ where
 async fn handle_socks_client<P>(
     mut client: TcpStream,
     protector: P,
+    proxy_routes: Arc<ProxyRouteTable>,
     runtime_epoch: u64,
 ) -> io::Result<()>
 where
@@ -1659,7 +1671,7 @@ where
     }
     let target = read_socks_target(&mut client, request[3]).await?;
     match request[1] {
-        1 => handle_socks_connect(client, target, protector, runtime_epoch).await,
+        1 => handle_socks_connect(client, target, protector, &proxy_routes, runtime_epoch).await,
         3 => handle_socks_udp_associate(client, protector).await,
         _ => {
             write_socks_reply(&mut client, SOCKS_COMMAND_NOT_SUPPORTED, None).await?;
@@ -1672,12 +1684,17 @@ async fn handle_socks_connect<P>(
     mut client: TcpStream,
     target: SocksTarget,
     protector: P,
+    proxy_routes: &ProxyRouteTable,
     runtime_epoch: u64,
 ) -> io::Result<()>
 where
     P: SocketProtection,
 {
-    let addresses = target.resolve().await?;
+    let addresses = if let Some(addresses) = target.proxy_addresses(proxy_routes) {
+        addresses.to_vec()
+    } else {
+        target.resolve().await?
+    };
     let mut last_error = None;
     for address in addresses {
         increment_for_epoch(runtime_epoch, &RUNTIME_STATS.socks_connect_attempts);
@@ -1781,6 +1798,13 @@ enum SocksTarget {
 }
 
 impl SocksTarget {
+    fn proxy_addresses<'a>(&self, routes: &'a ProxyRouteTable) -> Option<&'a [SocketAddr]> {
+        match self {
+            Self::Address(address) => routes.for_ip(address.ip(), address.port()),
+            Self::Domain(domain, port) => routes.for_domain(domain, *port),
+        }
+    }
+
     async fn resolve(&self) -> io::Result<Vec<SocketAddr>> {
         match self {
             Self::Address(address) => Ok(vec![*address]),
@@ -1935,6 +1959,11 @@ fn read_u16(bytes: &[u8], offset: usize) -> Option<u16> {
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+    use crate::{
+        DestinationTarget, InstalledApplication, NetworkProfile, ProxyRoute,
+        ProxyRuntimeConfiguration, ResolvedProxyRoute, TargetApplication, WeakNetworkProfile,
+    };
 
     use super::*;
 
@@ -2252,7 +2281,7 @@ mod tests {
         let address = listener.local_addr().expect("读取 SOCKS5 地址");
         let server_task = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("接收 SOCKS5");
-            handle_socks_client(stream, protector, 0)
+            handle_socks_client(stream, protector, Arc::new(ProxyRouteTable::default()), 0)
                 .await
                 .expect("SOCKS5 CONNECT 成功");
         });
@@ -2280,6 +2309,147 @@ mod tests {
         drop(client);
         upstream_task.await.expect("TCP echo 任务结束");
         server_task.await.expect("SOCKS CONNECT 任务结束");
+    }
+
+    async fn route_table(
+        original: SocketAddr,
+        proxy: SocketAddr,
+        destination_targets: Vec<DestinationTarget>,
+    ) -> Arc<ProxyRouteTable> {
+        let installed = InstalledApplication {
+            package_name: "com.example.target".into(),
+            signing_sha256: "AA".into(),
+            uid: 10_001,
+        };
+        let profile = NetworkProfile {
+            id: "transparent-route-test".into(),
+            name: "透明路由".into(),
+            target_applications: vec![TargetApplication {
+                package_name: installed.package_name.clone(),
+                signing_sha256: installed.signing_sha256.clone(),
+                uid: installed.uid,
+            }],
+            destination_targets,
+            proxy_routes: vec![ProxyRoute {
+                listener_id: "fixture-listener".into(),
+                destination: original.ip().to_string(),
+                ports: vec![original.port()],
+            }],
+            confirmed_shared_uids: BTreeSet::new(),
+            auto_resume_after_reboot: false,
+            weak_network: WeakNetworkProfile::default(),
+        }
+        .validate_for_start(&[installed])
+        .unwrap();
+        let runtime = ProxyRuntimeConfiguration {
+            routes: vec![ResolvedProxyRoute {
+                listener_id: "fixture-listener".into(),
+                original_destination: original.ip().to_string(),
+                original_ports: vec![original.port()],
+                resolved_original_ips: Vec::new(),
+                proxy_host: proxy.ip().to_string(),
+                proxy_port: proxy.port(),
+            }],
+        };
+        Arc::new(ProxyRouteTable::compile(&profile, &runtime).await.unwrap())
+    }
+
+    #[tokio::test]
+    async fn matched_original_target_uses_listener_when_original_is_unreachable() {
+        let listener_fixture = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let listener_address = listener_fixture.local_addr().unwrap();
+        let fixture_task = tokio::spawn(async move {
+            let (mut stream, _) = listener_fixture.accept().await.unwrap();
+            let mut payload = [0_u8; 4];
+            stream.read_exact(&mut payload).await.unwrap();
+            assert_eq!(&payload, b"D48?");
+            stream.write_all(b"D48!").await.unwrap();
+        });
+        // 该原始地址没有服务；成功响应只能来自透明映射后的 Listener fixture。
+        let original = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)), 61_627);
+        let routes = route_table(
+            original,
+            listener_address,
+            // 与原始地址不匹配，证明 destination_targets 不参与透明路由选择。
+            vec![DestinationTarget {
+                cidr: "192.0.2.0/24".into(),
+                ports: vec![443],
+            }],
+        )
+        .await;
+
+        let protector = RecordingProtection::default();
+        let socks_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let socks_address = socks_listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            let (stream, _) = socks_listener.accept().await.unwrap();
+            handle_socks_client(stream, protector, routes, 0)
+                .await
+                .unwrap();
+        });
+        let mut client = TcpStream::connect(socks_address).await.unwrap();
+        socks_no_auth(&mut client).await;
+        let mut request = vec![5, 1, 0, 1];
+        let IpAddr::V4(original_ip) = original.ip() else {
+            unreachable!()
+        };
+        request.extend_from_slice(&original_ip.octets());
+        request.extend_from_slice(&original.port().to_be_bytes());
+        client.write_all(&request).await.unwrap();
+        let mut reply = [0_u8; 10];
+        client.read_exact(&mut reply).await.unwrap();
+        assert_eq!(reply[1], SOCKS_SUCCEEDED);
+        client.write_all(b"D48?").await.unwrap();
+        let mut response = [0_u8; 4];
+        client.read_exact(&mut response).await.unwrap();
+        assert_eq!(&response, b"D48!");
+        drop(client);
+        fixture_task.await.unwrap();
+        server_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn unmatched_target_still_connects_original_directly() {
+        let original_fixture = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let original = original_fixture.local_addr().unwrap();
+        let original_task = tokio::spawn(async move {
+            let (mut stream, _) = original_fixture.accept().await.unwrap();
+            let mut payload = [0_u8; 4];
+            stream.read_exact(&mut payload).await.unwrap();
+            stream.write_all(&payload).await.unwrap();
+        });
+        let unrelated_original = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2)), 61_627);
+        let routes = route_table(unrelated_original, original, Vec::new()).await;
+        let protector = RecordingProtection::default();
+        let protection_calls = protector.calls.clone();
+        let socks_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+        let socks_address = socks_listener.local_addr().unwrap();
+        let server_task = tokio::spawn(async move {
+            let (stream, _) = socks_listener.accept().await.unwrap();
+            handle_socks_client(stream, protector, routes, 0)
+                .await
+                .unwrap();
+        });
+        let mut client = TcpStream::connect(socks_address).await.unwrap();
+        socks_no_auth(&mut client).await;
+        let SocketAddr::V4(original_v4) = original else {
+            unreachable!()
+        };
+        let mut request = vec![5, 1, 0, 1];
+        request.extend_from_slice(&original_v4.ip().octets());
+        request.extend_from_slice(&original_v4.port().to_be_bytes());
+        client.write_all(&request).await.unwrap();
+        let mut reply = [0_u8; 10];
+        client.read_exact(&mut reply).await.unwrap();
+        assert_eq!(reply[1], SOCKS_SUCCEEDED);
+        client.write_all(b"pass").await.unwrap();
+        let mut echoed = [0_u8; 4];
+        client.read_exact(&mut echoed).await.unwrap();
+        assert_eq!(&echoed, b"pass");
+        assert_eq!(protection_calls.load(AtomicOrdering::SeqCst), 1);
+        drop(client);
+        original_task.await.unwrap();
+        server_task.await.unwrap();
     }
 
     #[allow(clippy::too_many_lines)]
@@ -2320,7 +2490,7 @@ mod tests {
         let socks_address = listener.local_addr().expect("读取 SOCKS5 地址");
         let server_task = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("接收 SOCKS5");
-            handle_socks_client(stream, protector, 0)
+            handle_socks_client(stream, protector, Arc::new(ProxyRouteTable::default()), 0)
                 .await
                 .expect("SOCKS5 UDP ASSOCIATE 成功");
         });

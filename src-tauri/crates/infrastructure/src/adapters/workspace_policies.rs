@@ -50,7 +50,7 @@ impl WorkspaceRuntimePolicyResolver {
             if workspace
                 .listeners
                 .iter()
-                .any(|listener| listener.id().to_string() == channel)
+                .any(|listener| listener.id.to_string() == channel)
             {
                 matches.push(workspace);
             }
@@ -242,8 +242,8 @@ mod tests {
     use bytes::Bytes;
     use chrono::Utc;
     use intercept_proxy_domain::{
-        DownstreamTlsSettings, ListenerId, MetadataExtractor, MetadataExtractorId, ProxyListener,
-        ResponseAssertion, ResponseAssertionId, ReverseProxyListener, UpstreamTlsSettings,
+        FixedServerSettings, ListenerId, MetadataExtractor, MetadataExtractorId, ProxyListener,
+        ResponseAssertion, ResponseAssertionId, UpstreamTlsSettings,
     };
     use intercept_proxy_product_api::ProductError;
     use intercept_proxy_runtime::{ChannelId, RawHeader};
@@ -275,18 +275,18 @@ mod tests {
     fn selected_workspace_extracts_metadata_and_asserts_final_response_without_mutation() {
         let listener_id = ListenerId::new();
         let workspace = ProxyWorkspace {
-            listeners: vec![ProxyListener::Reverse(ReverseProxyListener {
+            listeners: vec![ProxyListener {
                 id: listener_id,
                 name: "test".into(),
                 enabled: false,
                 bind_address: "127.0.0.1".into(),
                 port: 18_443,
-                upstream_url: "https://example.test".into(),
-                downstream_tls: DownstreamTlsSettings::default(),
-                upstream_tls: UpstreamTlsSettings::default(),
-                request_codec_policy: None,
-                response_codec_policy: None,
-            })],
+                fixed_server: Some(FixedServerSettings {
+                    upstream_url: "https://example.test".into(),
+                    upstream_tls: UpstreamTlsSettings::default(),
+                }),
+                ..ProxyListener::default()
+            }],
             metadata_extractors: vec![MetadataExtractor {
                 id: MetadataExtractorId::new(),
                 name: "business_result".into(),

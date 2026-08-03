@@ -437,6 +437,73 @@ impl SqliteStore {
         })
     }
 
+    /// 在单个 IMMEDIATE 事务中替换全部可移植配置。
+    ///
+    /// 文档解析和领域校验在 application 完成；这里仍验证选中项确实存在。任一 SQL
+    /// 失败都会回滚 Workspace、选择状态和 Settings，禁止产生半导入状态。
+    pub fn replace_application_configuration(
+        &self,
+        selected_id: Uuid,
+        records: &[WorkspaceRecord],
+        settings: &Value,
+    ) -> Result<(), InfrastructureError> {
+        if records.is_empty() || !records.iter().any(|record| record.id == selected_id) {
+            return Err(InfrastructureError::RevisionConflict);
+        }
+        let mut connection = self.connection.lock();
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|source| InfrastructureError::Database { source })?;
+
+        transaction
+            .execute("DELETE FROM workspaces", [])
+            .map_err(|source| InfrastructureError::Database { source })?;
+        for record in records {
+            transaction
+                .execute(
+                    "INSERT INTO workspaces(id, revision, json, updated_at)
+                     VALUES (?1, ?2, ?3, ?4)",
+                    params![
+                        record.id.to_string(),
+                        revision_to_i64(record.revision)?,
+                        record.value.to_string(),
+                        record.updated_at.to_rfc3339(),
+                    ],
+                )
+                .map_err(|source| InfrastructureError::Database { source })?;
+        }
+        transaction
+            .execute(
+                "UPDATE workspace_state SET selected_id = ?1 WHERE singleton_id = 1",
+                [selected_id.to_string()],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+
+        let current_settings_revision =
+            current_revision(&transaction, "settings", "singleton_id = 1")?.unwrap_or(0);
+        let next_settings_revision = current_settings_revision.saturating_add(1);
+        let now = Utc::now();
+        transaction
+            .execute(
+                "INSERT INTO settings(singleton_id, revision, json, updated_at)
+                 VALUES (1, ?1, ?2, ?3)
+                 ON CONFLICT(singleton_id) DO UPDATE SET
+                    revision = excluded.revision,
+                    json = excluded.json,
+                    updated_at = excluded.updated_at",
+                params![
+                    revision_to_i64(next_settings_revision)?,
+                    settings.to_string(),
+                    now.to_rfc3339(),
+                ],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::Database { source })
+    }
+
     pub fn list_rules(&self) -> Result<Vec<RuleRecord>, InfrastructureError> {
         Ok(self.load_rules_snapshot()?.records)
     }
@@ -1217,6 +1284,50 @@ mod tests {
                 .expect("fallback selection")
                 .selected_id,
             Some(first_id)
+        );
+    }
+
+    #[test]
+    fn full_configuration_replace_rolls_back_all_tables_on_failure() {
+        let store = SqliteStore::in_memory().expect("store");
+        let original_id = Uuid::new_v4();
+        let original = WorkspaceRecord {
+            id: original_id,
+            revision: 1,
+            value: json!({"id": original_id, "name": "original", "revision": 1}),
+            updated_at: Utc::now(),
+        };
+        store.insert_workspace(&original).expect("seed workspace");
+        store
+            .save_settings(0, &json!({"name": "original settings"}))
+            .expect("seed settings");
+
+        let duplicate_id = Uuid::new_v4();
+        let duplicate = WorkspaceRecord {
+            id: duplicate_id,
+            revision: 1,
+            value: json!({"id": duplicate_id, "name": "replacement", "revision": 1}),
+            updated_at: Utc::now(),
+        };
+        let error = store
+            .replace_application_configuration(
+                duplicate_id,
+                &[duplicate.clone(), duplicate],
+                &json!({"name": "replacement settings"}),
+            )
+            .expect_err("duplicate insert must fail inside transaction");
+        assert!(matches!(error, InfrastructureError::Database { .. }));
+
+        let snapshot = store.load_workspaces().expect("workspace snapshot");
+        assert_eq!(snapshot.selected_id, Some(original_id));
+        assert_eq!(snapshot.records, vec![original]);
+        assert_eq!(
+            store
+                .load_settings()
+                .expect("settings")
+                .expect("stored")
+                .value,
+            json!({"name": "original settings"})
         );
     }
 

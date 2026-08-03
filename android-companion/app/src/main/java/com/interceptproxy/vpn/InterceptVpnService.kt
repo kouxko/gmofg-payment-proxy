@@ -32,6 +32,8 @@ class InterceptVpnService : VpnService() {
     private var tun: ParcelFileDescriptor? = null
     private var tunConfiguration: TunConfiguration? = null
     private var packageChangeReceiver: TargetPackageChangeReceiver? = null
+    /** 只存在于当前 Service 生命周期；USB/LAN 地址绝不写入本地 Profile。 */
+    private var activeProxyRuntimeJson: String = EMPTY_PROXY_RUNTIME_JSON
 
     override fun onCreate() {
         super.onCreate()
@@ -43,7 +45,10 @@ class InterceptVpnService : VpnService() {
         when (intent?.action) {
             ACTION_STOP -> stopVpn(manual = true)
             ACTION_REVALIDATE -> restartSavedProfile()
-            ACTION_START -> startProfile(intent.getStringExtra(EXTRA_PROFILE_JSON))
+            ACTION_START -> startProfile(
+                intent.getStringExtra(EXTRA_PROFILE_JSON),
+                intent.getStringExtra(EXTRA_PROXY_RUNTIME_JSON) ?: EMPTY_PROXY_RUNTIME_JSON,
+            )
             else -> restartSavedProfile()
         }
         return START_NOT_STICKY
@@ -65,7 +70,7 @@ class InterceptVpnService : VpnService() {
 
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
-    private fun startProfile(rawJson: String?) {
+    private fun startProfile(rawJson: String?, proxyRuntimeJson: String = EMPTY_PROXY_RUNTIME_JSON) {
         if (rawJson.isNullOrBlank()) return failOpen("没有可启动的 Profile")
         if (prepare(this) != null) return failOpen("VPN 授权已失效，需要重新确认")
 
@@ -111,6 +116,7 @@ class InterceptVpnService : VpnService() {
             tunFd = nativeTunFd,
             profileJson = profile.rawJson,
             inventoryJson = inventoryJson,
+            proxyRuntimeJson = proxyRuntimeJson,
             protector = NativeSocketProtector(this),
         )
         if (!started) {
@@ -120,6 +126,7 @@ class InterceptVpnService : VpnService() {
 
         tun = newTun
         tunConfiguration = desiredTunConfiguration
+        activeProxyRuntimeJson = proxyRuntimeJson
         stateStore.profileJson = rawJson
         stateStore.autoResumeEnabled = profile.autoResumeAfterReboot
         stateStore.clearFailures()
@@ -151,7 +158,7 @@ class InterceptVpnService : VpnService() {
     }
 
     private fun restartSavedProfile() {
-        startProfile(stateStore.profileJson)
+        startProfile(stateStore.profileJson, activeProxyRuntimeJson)
     }
 
     /** JNI 从后台线程通知故障；真正的 Service/TUN 操作统一回到 Android 主线程。 */
@@ -260,13 +267,20 @@ class InterceptVpnService : VpnService() {
         private const val ACTION_STOP = "com.interceptproxy.vpn.action.STOP"
         internal const val ACTION_REVALIDATE = "com.interceptproxy.vpn.action.REVALIDATE"
         private const val EXTRA_PROFILE_JSON = "profile_json"
+        private const val EXTRA_PROXY_RUNTIME_JSON = "proxy_runtime_json"
+        private const val EMPTY_PROXY_RUNTIME_JSON = "{\"routes\":[]}"
         private const val NOTIFICATION_CHANNEL = "intercept_proxy_vpn"
         private const val NOTIFICATION_ID = 41001
 
-        fun startIntent(context: Context, profileJson: String): Intent =
+        fun startIntent(
+            context: Context,
+            profileJson: String,
+            proxyRuntimeJson: String = EMPTY_PROXY_RUNTIME_JSON,
+        ): Intent =
             Intent(context, InterceptVpnService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_PROFILE_JSON, profileJson)
+                .putExtra(EXTRA_PROXY_RUNTIME_JSON, proxyRuntimeJson)
 
         fun stopIntent(context: Context): Intent =
             Intent(context, InterceptVpnService::class.java).setAction(ACTION_STOP)

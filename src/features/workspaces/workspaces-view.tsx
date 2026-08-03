@@ -29,6 +29,7 @@ export function WorkspacesView() {
   const [newName, setNewName] = useState("");
   const [pendingAction, setPendingAction] = useState<string>();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [fullImportOpen, setFullImportOpen] = useState(false);
   const effectiveSelectedId = selectedId ?? list.data?.find((item) => item.selected)?.id ?? list.data?.[0]?.id;
   const selectedSummary = list.data?.find((item) => item.id === effectiveSelectedId);
   const detail = useIpcQuery<ProxyWorkspace>(
@@ -127,10 +128,31 @@ export function WorkspacesView() {
               toast(result.message, { variant: result.cancelled ? "default" : "success" });
               await list.refresh();
             })}>
-              <ArrowUpFromLine className="size-4" />导入
+              <ArrowUpFromLine className="size-4" />导入单个 Workspace
             </Button>
+            <Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("full-export", async () => {
+              const result = await callCommand(commands.applicationConfigurationExport());
+              toast(result.message, { variant: result.cancelled ? "default" : "success" });
+            })}><ArrowDownToLine className="size-4" />导出完整应用配置</Button>
+            <AlertDialog isOpen={fullImportOpen} onOpenChange={setFullImportOpen}>
+              <Button variant="danger-soft" isDisabled={Boolean(pendingAction)}><ArrowUpFromLine className="size-4" />导入完整应用配置</Button>
+              <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>
+                <AlertDialog.Header><AlertDialog.Heading>替换全部应用配置？</AlertDialog.Heading></AlertDialog.Header>
+                <AlertDialog.Body>导入会原子替换全部 Workspace、Android 设备网络方案、当前选择和可移植全局设置。请先导出备份。</AlertDialog.Body>
+                <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("full-import", async () => { const result = await callCommand(commands.applicationConfigurationImport()); toast(result.message, { variant: result.cancelled ? "default" : "success" }); setFullImportOpen(false); setSelectedId(undefined); setDraft(undefined); await list.refresh(); })}>确认选择文件并替换</Button></AlertDialog.Footer>
+              </AlertDialog.Dialog></AlertDialog.Container></AlertDialog.Backdrop>
+            </AlertDialog>
           </div>
         </div>
+        <Alert status="accent">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>两种可移植配置文件</Alert.Title>
+            <Alert.Description>
+              单个 Workspace 文件包含该工作区的入口、规则、策略与 Android 设备网络方案；完整应用配置还包含全部 Workspace、当前选择和可移植全局设置。私钥与密码都不会写入文件。
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
         {list.error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>读取 Workspace 失败</Alert.Title><Alert.Description>{list.error}</Alert.Description></Alert.Content><Button size="sm" variant="outline" onPress={() => void list.refresh()}>重试</Button></Alert>}
         <Table>
           <Table.ScrollContainer>
@@ -182,7 +204,7 @@ export function WorkspacesView() {
             <Button fullWidth variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("save", saveWorkspace)}>保存</Button>
             <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("select", async () => { await callCommand(commands.workspaceSelect(effectiveDraft.id)); toast("已切换当前 Workspace。", { variant: "success" }); await list.refresh(); })}>设为当前 Workspace</Button>
             <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("copy", async () => { const copied = await callCommand(commands.workspaceCopy(effectiveDraft.id)); setSelectedId(copied.id); setDraft(copied); await list.refresh(); })}><Copy className="size-4" />复制</Button>
-            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("export", async () => { const result = await callCommand(commands.workspaceExport(effectiveDraft.id)); toast(result.message, { variant: result.cancelled ? "default" : "success" }); })}><ArrowDownToLine className="size-4" />导出</Button>
+            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("export", async () => { const result = await callCommand(commands.workspaceExport(effectiveDraft.id)); toast(result.message, { variant: result.cancelled ? "default" : "success" }); })}><ArrowDownToLine className="size-4" />导出当前 Workspace</Button>
             <AlertDialog isOpen={deleteOpen} onOpenChange={setDeleteOpen}>
               <Button fullWidth variant="danger-soft"><TrashBin className="size-4" />删除</Button>
               <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>

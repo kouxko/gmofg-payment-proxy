@@ -11,7 +11,8 @@ use intercept_proxy_application::{
     BreakpointDetailViewModel, BreakpointDraft, BreakpointId, BreakpointSummaryViewModel,
     BreakpointValidationViewModel, CaptureDetailViewModel, CapturePageViewModel, CaptureQuery,
     CertificateOverviewViewModel, CertificateValidationViewModel, FaultConfigurationDraft,
-    FaultTemplateViewModel, ListenerId, ListenerOverviewViewModel, ListenerStatusViewModel,
+    FaultTemplateViewModel, ListenerCertificateDetailViewModel, ListenerCertificateImportViewModel,
+    ListenerId, ListenerOverviewViewModel, ListenerStatusViewModel,
     ListenerUpstreamTlsTestViewModel, OperationResultViewModel, ProxyListener, ProxyWorkspace,
     RuleAction, RuleActionKind, RuleByteInputViewModel, RuleCondition, RuleConditionKind,
     RuleDraft, RuleHeaderInputViewModel, RuleId, RuleMatchField, RuleMatchFieldKind,
@@ -532,6 +533,30 @@ pub async fn workspace_export(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn application_configuration_import(
+    state: State<'_, AppState>,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .application_configuration_import()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn application_configuration_export(
+    state: State<'_, AppState>,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .application_configuration_export()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn listener_list(
     state: State<'_, AppState>,
     workspace_id: WorkspaceId,
@@ -545,10 +570,9 @@ pub async fn listener_list(
 
 #[tauri::command]
 #[specta::specta]
-// See `workspace_component_new`: owned command parameters are part of the Tauri adapter boundary.
 #[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
-pub fn listener_new(state: State<'_, AppState>, kind: String) -> CommandResult<ProxyListener> {
-    state.application.listener_new(&kind).map_err(command_error)
+pub fn listener_new(state: State<'_, AppState>) -> CommandResult<ProxyListener> {
+    state.application.listener_new().map_err(command_error)
 }
 
 #[tauri::command]
@@ -673,6 +697,46 @@ pub async fn listener_test_upstream_tls(
     state
         .application
         .listener_test_upstream_tls(workspace_id, listener_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_import_upstream_client_identity(
+    state: State<'_, AppState>,
+    label: String,
+    password: String,
+) -> CommandResult<Option<ListenerCertificateImportViewModel>> {
+    state
+        .application
+        .listener_import_upstream_client_identity(label, password)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_import_upstream_server_trust(
+    state: State<'_, AppState>,
+    label: String,
+) -> CommandResult<Option<ListenerCertificateImportViewModel>> {
+    state
+        .application
+        .listener_import_upstream_server_trust(label)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_certificate_overview(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+) -> CommandResult<Vec<ListenerCertificateDetailViewModel>> {
+    state
+        .application
+        .listener_certificate_overview(workspace_id)
         .await
         .map_err(command_error)
 }
@@ -1214,6 +1278,8 @@ pub async fn settings_reset_defaults(
         .map_err(command_error)
 }
 
+// 命令注册表刻意集中，便于核对 Rust IPC 的完整公开面；这里没有业务分支。
+#[allow(clippy::too_many_lines)]
 pub fn builder() -> Builder<Wry> {
     // Revisions, cursors and logical byte counters are bounded well below
     // JavaScript's safe integer ceiling by product capacity limits.
@@ -1256,6 +1322,8 @@ pub fn builder() -> Builder<Wry> {
             workspace_delete,
             workspace_import,
             workspace_export,
+            application_configuration_import,
+            application_configuration_export,
             listener_list,
             listener_new,
             listener_copy,
@@ -1267,6 +1335,9 @@ pub fn builder() -> Builder<Wry> {
             listener_start,
             listener_stop,
             listener_test_upstream_tls,
+            listener_import_upstream_client_identity,
+            listener_import_upstream_server_trust,
+            listener_certificate_overview,
             capture_query,
             capture_get_detail,
             capture_clear_view,

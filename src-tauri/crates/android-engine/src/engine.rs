@@ -417,6 +417,7 @@ mod tests {
                 uid: 10001,
             }],
             destination_targets: Vec::new(),
+            proxy_routes: Vec::new(),
             confirmed_shared_uids: BTreeSet::new(),
             auto_resume_after_reboot: false,
             weak_network: weak,
@@ -489,6 +490,7 @@ mod tests {
                     ports: Vec::new(),
                 },
             ],
+            proxy_routes: Vec::new(),
             confirmed_shared_uids: BTreeSet::new(),
             auto_resume_after_reboot: false,
             weak_network: WeakNetworkProfile {

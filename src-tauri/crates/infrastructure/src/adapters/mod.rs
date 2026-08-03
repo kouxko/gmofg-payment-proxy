@@ -12,6 +12,9 @@ mod certificates;
 mod common;
 mod faults;
 mod files;
+mod listener_certificate_metadata;
+mod listener_certificate_store;
+mod listener_certificates;
 mod listener_runtime;
 mod pipeline;
 mod protected_secrets;
@@ -29,6 +32,7 @@ pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;
 pub use faults::FaultServiceAdapter;
 pub use files::{FileExportAdapter, FileSelection, NativeFileDialog};
+pub use listener_certificates::ManagedListenerCertificateAdapter;
 pub use listener_runtime::ListenerRuntimeAdapter;
 pub use pipeline::{
     RuntimeBodyCodecResolver, RuntimePipelineAdapter, RuntimePipelineProductHooks,

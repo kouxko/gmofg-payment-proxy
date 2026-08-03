@@ -67,8 +67,8 @@ export const navigation = [
   },
   {
     href: "/android-network",
-    label: "设备弱网",
-    title: "应用定向弱网",
+    label: "设备网络",
+    title: "应用网络接管",
     icon: Smartphone,
   },
   {

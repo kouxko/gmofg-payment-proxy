@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * 两段 mTLS 证书材料管理页面。
+ * 本机调试 Root CA 与代理服务端证书管理页面。
  *
  * 所有证书读取、生成、验证、文件对话框和密钥保护都由 Rust 执行。前端绝不接触
- * 私钥字节，也不保存 PKCS12 密码；密码仅存在于当前弹窗状态，成功或关闭即清除。
+ * 私钥字节。某条监听启用固定 Server 后使用的 Server CA 与可选 mTLS 客户端身份，统一在
+ * “代理入口”页面按监听导入、选择并测试，避免全局证书误用于其他 Server。
  */
 
 import { useState } from "react";
@@ -14,17 +15,12 @@ import {
   Button,
   Card,
   Chip,
-  Input,
-  Label,
-  Modal,
   Spinner,
   Table,
-  TextField,
   toast,
 } from "@heroui/react";
 import {
   ArrowDownToLine,
-  FileArrowUp,
   Shield,
   TrashBin,
 } from "@gravity-ui/icons";
@@ -37,8 +33,10 @@ import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { formatTimestamp, toneColor } from "@/lib/format";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 
 export function CertificatesView() {
+  const { navigate } = useWorkspaceNavigation();
   const overview =
     useIpcQuery<CertificateOverviewViewModel>("certificate-overview", () =>
       callCommand(commands.certificateOverview()),
@@ -54,20 +52,18 @@ export function CertificatesView() {
     ["settings_changed", "snapshot_required"],
     settings.refresh,
   );
-  const [password, setPassword] = useState("");
-  const [pkcs12Open, setPkcs12Open] = useState(false);
-  const [pkcs12Pending, setPkcs12Pending] = useState(false);
-  const [pkcs12Error, setPkcs12Error] = useState<string>();
   const [pendingAction, setPendingAction] = useState<
-    "generate" | "reissue" | "import_upstream" | "export" | "validate"
+    "generate" | "reissue" | "export" | "validate"
   >();
   const [resetCaOpen, setResetCaOpen] = useState(false);
   const [resetCaPending, setResetCaPending] = useState(false);
   const [validation, setValidation] =
     useState<FieldValidationViewModel>();
   const leafSans = settings.data?.stored.leaf_sans;
-  const writePending =
-    pendingAction != null || pkcs12Pending || resetCaPending;
+  const writePending = pendingAction != null || resetCaPending;
+  const localItems = (overview.data?.items ?? []).filter(
+    (item) => item.kind === "local_root_ca" || item.kind === "proxy_leaf",
+  );
 
   async function refreshAfter(
     action: Exclude<
@@ -87,26 +83,6 @@ export function CertificatesView() {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
       setPendingAction(undefined);
-    }
-  }
-
-  async function importPkcs12() {
-    if (writePending) return;
-    setPkcs12Pending(true);
-    setPkcs12Error(undefined);
-    try {
-      const result = await callCommand(
-        commands.certificateImportPkcs12(password),
-      );
-      toast(result.status_text, { variant: toneColor(result.ui_tone) });
-      await overview.refresh();
-      // 密码没有持久化需求，导入成功后立即从 React state 清除。
-      setPassword("");
-      setPkcs12Open(false);
-    } catch (reason) {
-      setPkcs12Error(errorMessage(reason));
-    } finally {
-      setPkcs12Pending(false);
     }
   }
 
@@ -227,7 +203,7 @@ export function CertificatesView() {
               data-testid="certificate-overview-grid"
               className="grid grid-cols-2 gap-x-6 gap-y-4 max-[960px]:grid-cols-1"
             >
-              {(overview.data?.items ?? []).map((item) => (
+              {localItems.map((item) => (
                 <div
                   key={item.kind}
                   className="min-w-0 space-y-2 border-b border-[var(--telemetry-line)] pb-4"
@@ -322,105 +298,17 @@ export function CertificatesView() {
           </Card.Content>
         </Card>
 
-        <Card>
-          <Card.Header>
-            <Card.Title>B. 上游 TLS 信任与可选客户端身份</Card.Title>
-          </Card.Header>
-          <Card.Content
-            data-testid="certificate-upstream-actions"
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 max-[860px]:grid-cols-1"
-          >
-            <p className="text-sm text-[var(--telemetry-muted)]">
-              上游要求 mTLS 时才需要导入 PKCS12 客户端身份；普通 TLS 可以不配置。
-              上游 CA 可按入口通过安全引用选择，与下游使用的本机 Root CA 相互独立。
-            </p>
-            <div className="flex flex-wrap justify-end gap-3 max-[860px]:justify-start">
-              <Modal
-                isOpen={pkcs12Open}
-                onOpenChange={(open) => {
-                  if (!open && pkcs12Pending) return;
-                  setPkcs12Open(open);
-                  if (!open) {
-                    setPassword("");
-                    setPkcs12Error(undefined);
-                  }
-                }}
-              >
-                <Button
-                  variant="outline"
-                  isDisabled={!overview.data?.can_change || writePending}
-                >
-                  <FileArrowUp className="size-4" />
-                  导入 / 替换 PKCS12
-                </Button>
-                <Modal.Backdrop isDismissable={!pkcs12Pending}>
-                  <Modal.Container size="sm">
-                    <Modal.Dialog>
-                      <Modal.Header>
-                        <Modal.Heading>导入上游 PKCS12 客户端身份</Modal.Heading>
-                      </Modal.Header>
-                      <Modal.Body>
-                        <TextField>
-                          <Label>PKCS12 密码</Label>
-                          <Input
-                            type="password"
-                            value={password}
-                            onChange={(event) => setPassword(event.target.value)}
-                          />
-                        </TextField>
-                        <p className="mt-2 text-sm text-[var(--telemetry-muted)]">
-                          文件选择和原始字节读取由 Rust 原生侧完成。
-                        </p>
-                        {pkcs12Error && (
-                          <Alert status="danger" className="mt-3">
-                            <Alert.Indicator />
-                            <Alert.Content>
-                              <Alert.Title>PKCS12 导入失败</Alert.Title>
-                              <Alert.Description>
-                                {pkcs12Error}
-                              </Alert.Description>
-                            </Alert.Content>
-                          </Alert>
-                        )}
-                      </Modal.Body>
-                      <Modal.Footer>
-                        <Button
-                          slot="close"
-                          variant="outline"
-                          isDisabled={pkcs12Pending}
-                        >
-                          取消
-                        </Button>
-                        <Button
-                          variant="primary"
-                          isDisabled={pkcs12Pending}
-                          onPress={() => void importPkcs12()}
-                        >
-                          {pkcs12Pending ? "正在导入…" : "选择文件并导入"}
-                        </Button>
-                      </Modal.Footer>
-                    </Modal.Dialog>
-                  </Modal.Container>
-                </Modal.Backdrop>
-              </Modal>
-              <Button
-                variant="outline"
-                isDisabled={!overview.data?.can_change || writePending}
-                onPress={() =>
-                  void refreshAfter(
-                    "import_upstream",
-                    () => callCommand(commands.certificateImportUpstreamCa()),
-                  )
-                }
-              >
-                <FileArrowUp className="size-4" />
-                {pendingAction === "import_upstream"
-                  ? "正在导入…"
-                  : "选择性替换上游 CA"}
-              </Button>
-            </div>
-          </Card.Content>
-        </Card>
+        <Alert status="accent">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>Server TLS/mTLS 按代理监听配置</Alert.Title>
+            <Alert.Description>
+              每条启用固定 Server 的监听可以分别使用不同的 Server CA、主机名校验策略和可选
+              PKCS12 客户端身份。请在对应监听中导入并执行真实握手测试。
+            </Alert.Description>
+          </Alert.Content>
+          <Button variant="outline" onPress={() => navigate("/listeners")}>去配置代理入口</Button>
+        </Alert>
       </div>
 
       <div className="grid grid-cols-[1fr_1.2fr] items-start gap-4 max-[1180px]:grid-cols-1">
@@ -449,12 +337,12 @@ export function CertificatesView() {
                   <Alert.Description>{overview.error}</Alert.Description>
                 </Alert.Content>
               </Alert>
-            ) : (overview.data?.items.length ?? 0) === 0 ? (
+            ) : localItems.length === 0 ? (
               <Alert status="default">
                 <Alert.Content>
                   <Alert.Title>暂无证书检查结果</Alert.Title>
                   <Alert.Description>
-                    初始化本机证书或导入上游材料后，此处显示证书状态与校验详情。
+                    初始化本机证书后，此处显示 Root CA 与服务端证书状态。
                   </Alert.Description>
                 </Alert.Content>
               </Alert>
@@ -468,7 +356,7 @@ export function CertificatesView() {
                       <Table.Column>详情</Table.Column>
                     </Table.Header>
                     <Table.Body>
-                      {(overview.data?.items ?? []).map((item) => (
+                      {localItems.map((item) => (
                         <Table.Row key={item.kind} id={item.kind}>
                           <Table.Cell>{item.usage}</Table.Cell>
                           <Table.Cell>{item.status_text}</Table.Cell>

@@ -11,7 +11,6 @@
 import {
   useCallback,
   useEffect,
-  useEffectEvent,
   useLayoutEffect,
   useRef,
   useState,
@@ -32,16 +31,18 @@ export function useIpcQuery<T>(
   const { enabled = true, clearOnDisable = true } = options;
   const [data, setData] = useState<T | undefined>(initialData);
   const [error, setError] = useState<string>();
-  const [isLoading, setIsLoading] = useState(initialData === undefined);
+  const [isLoading, setIsLoading] = useState(
+    enabled && initialData === undefined,
+  );
+  const [activeQueryKey, setActiveQueryKey] = useState(queryKey);
   const requestGeneration = useRef(0);
+  const startedQueryKey = useRef(queryKey);
   const loadRef = useRef(load);
   useLayoutEffect(() => {
     // load 通常是组件内联函数。保存最新引用，可以让 refresh 保持稳定，避免
     // 仅因函数身份变化而产生重复请求。
     loadRef.current = load;
   }, [load]);
-  const loadLatest = useEffectEvent(load);
-
   const invalidate = useCallback(
     (clearData = true) => {
       requestGeneration.current += 1;
@@ -76,38 +77,67 @@ export function useIpcQuery<T>(
     // 条件再次变化会推进 generation，从而让旧 Promise 失效。
     const generation = requestGeneration.current + 1;
     requestGeneration.current = generation;
-    Promise.resolve()
-      .then(() => {
-        if (!enabled) {
-          setIsLoading(false);
-          setError(undefined);
-          if (clearOnDisable) setData(undefined);
-          return undefined;
-        }
-        if (generation === requestGeneration.current) {
-          setIsLoading(true);
-          setError(undefined);
-        }
-        return loadLatest();
-      })
-      .then((next) => {
+    let disposed = false;
+
+    async function loadQuery() {
+      const queryChanged = startedQueryKey.current !== queryKey;
+      startedQueryKey.current = queryKey;
+      if (!enabled) {
+        if (disposed || generation !== requestGeneration.current) return;
+        setActiveQueryKey(queryKey);
+        setIsLoading(false);
+        setError(undefined);
+        if (clearOnDisable) setData(undefined);
+        return;
+      }
+      if (!disposed && generation === requestGeneration.current) {
+        setActiveQueryKey(queryKey);
+        if (queryChanged) setData(undefined);
+        setIsLoading(true);
+        setError(undefined);
+      }
+      try {
+        // 通过 ref 读取本次渲染的最新 loader。这里不能使用 useEffectEvent：
+        // 部分 WebView/React 组合会把异步 effect 中的调用判定为非法副作用，
+        // 查询既不报错也不写回数据，证书卡片就会永久停在“正在读取”。
+        const next = await loadRef.current();
         if (
-          enabled &&
-          next !== undefined &&
-          generation === requestGeneration.current
+          !disposed
+          && next !== undefined
+          && generation === requestGeneration.current
         ) {
           setData(next);
         }
-      })
-      .catch((reason) => {
-        if (enabled && generation === requestGeneration.current) {
+      } catch (reason) {
+        if (!disposed && generation === requestGeneration.current) {
           setError(errorMessage(reason));
         }
-      })
-      .finally(() => {
-        if (generation === requestGeneration.current) setIsLoading(false);
-      });
+      } finally {
+        if (!disposed && generation === requestGeneration.current) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadQuery();
+    return () => {
+      disposed = true;
+      // 无条件推进代次，同时使 effect 请求和用户主动 refresh 的请求全部失效。
+      // 否则 refresh 比本 effect 更新时，卸载清理会漏掉它，仍可能写入已卸载组件。
+      requestGeneration.current += 1;
+    };
   }, [clearOnDisable, enabled, queryKey]);
 
-  return { data, error, isLoading, refresh, setData, invalidate };
+  // queryKey 在渲染阶段已经变化，而 effect 尚未开始时，也必须立即隐藏旧数据并
+  // 显示加载态。这样列表选中态可以先完成绘制，完整 Payload 再异步读取；旧会话
+  // 的详情不会在新会话标题下短暂闪现。
+  const isCurrentQuery = activeQueryKey === queryKey;
+  return {
+    data: isCurrentQuery ? data : undefined,
+    error: isCurrentQuery ? error : undefined,
+    isLoading: enabled && (!isCurrentQuery || isLoading),
+    refresh,
+    setData,
+    invalidate,
+  };
 }

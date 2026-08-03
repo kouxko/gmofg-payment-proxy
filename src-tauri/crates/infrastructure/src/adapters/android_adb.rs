@@ -2,6 +2,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     env,
     fmt::Write as _,
+    net::TcpListener as StdTcpListener,
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
     time::Duration,
@@ -12,9 +13,10 @@ use intercept_proxy_application::{
     ANDROID_COMPANION_PACKAGE, ANDROID_CONTROL_MAX_FRAME_BYTES, ANDROID_CONTROL_PROTOCOL_VERSION,
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidControlPort,
     AndroidControlRequest, AndroidControlResponse, AndroidControlTransport, AndroidDeviceState,
-    AndroidDeviceViewModel, AndroidNetworkProfile, AndroidNetworkProfileSummary,
-    AndroidNetworkState, AndroidNetworkStatusViewModel, AndroidPackageViewModel, AppError,
-    AppResult, OperationResultViewModel, encode_android_control_frame,
+    AndroidDeviceViewModel, AndroidNetworkActivation, AndroidNetworkProfile,
+    AndroidNetworkProfileSummary, AndroidNetworkState, AndroidNetworkStatusViewModel,
+    AndroidPackageViewModel, AppError, AppResult, OperationResultViewModel,
+    encode_android_control_frame,
 };
 use ring::digest::{SHA256, digest};
 use serde_json::{Value, json};
@@ -37,6 +39,7 @@ pub struct AndroidAdbAdapter {
     selected_serial: RwLock<Option<String>>,
     profiles_path: PathBuf,
     profile_io: Mutex<()>,
+    active_reverse_ports: Mutex<Vec<u16>>,
     runner: Arc<dyn AdbCommandRunner>,
 }
 
@@ -49,6 +52,7 @@ impl AndroidAdbAdapter {
             selected_serial: RwLock::new(None),
             profiles_path: data_dir.as_ref().join("android-network-profiles.json"),
             profile_io: Mutex::new(()),
+            active_reverse_ports: Mutex::new(Vec::new()),
             runner: Arc::new(SystemAdbCommandRunner),
         }
     }
@@ -61,6 +65,7 @@ impl AndroidAdbAdapter {
             selected_serial: RwLock::new(None),
             profiles_path: data_dir.join("android-network-profiles.json"),
             profile_io: Mutex::new(()),
+            active_reverse_ports: Mutex::new(Vec::new()),
             runner,
         }
     }
@@ -133,20 +138,20 @@ impl AndroidAdbAdapter {
         let bytes = std::fs::read(&self.profiles_path).map_err(|error| {
             AppError::new(
                 "ANDROID_PROFILE_READ_FAILED",
-                format!("无法读取弱网方案：{error}"),
+                format!("无法读取设备网络方案：{error}"),
             )
         })?;
         if bytes.len() > 4 * 1024 * 1024 {
             return Err(AppError::new(
                 "ANDROID_PROFILE_STORE_TOO_LARGE",
-                "弱网方案文件超过 4 MiB 安全上限。",
+                "设备网络方案文件超过 4 MiB 安全上限。",
             ));
         }
         let profiles: Vec<AndroidNetworkProfile> =
             serde_json::from_slice(&bytes).map_err(|error| {
                 AppError::new(
                     "ANDROID_PROFILE_STORE_INVALID",
-                    format!("弱网方案文件损坏：{error}"),
+                    format!("设备网络方案文件损坏：{error}"),
                 )
             })?;
         let mut by_id = BTreeMap::new();
@@ -155,7 +160,7 @@ impl AndroidAdbAdapter {
             if by_id.insert(profile.id.clone(), profile).is_some() {
                 return Err(AppError::new(
                     "ANDROID_PROFILE_STORE_INVALID",
-                    "弱网方案文件包含重复 ID。",
+                    "设备网络方案文件包含重复 ID。",
                 ));
             }
         }
@@ -170,15 +175,133 @@ impl AndroidAdbAdapter {
             serde_json::to_vec_pretty(&profiles.values().collect::<Vec<_>>()).map_err(|error| {
                 AppError::new(
                     "ANDROID_PROFILE_WRITE_FAILED",
-                    format!("无法序列化弱网方案：{error}"),
+                    format!("无法序列化设备网络方案：{error}"),
                 )
             })?;
         std::fs::write(&self.profiles_path, bytes).map_err(|error| {
             AppError::new(
                 "ANDROID_PROFILE_WRITE_FAILED",
-                format!("无法保存弱网方案：{error}"),
+                format!("无法保存设备网络方案：{error}"),
             )
         })
+    }
+
+    async fn remove_reverse_ports(&self, serial: &str, ports: Vec<u16>) -> AppResult<()> {
+        let mut first_error = None;
+        for port in ports {
+            let result = self
+                .run_for_serial(
+                    serial,
+                    &["reverse", "--remove", &format!("tcp:{port}")],
+                    COMMAND_TIMEOUT,
+                )
+                .await;
+            if let Err(error) = result
+                && first_error.is_none()
+            {
+                first_error = Some(error);
+            }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
+    async fn clear_active_reverse_ports(&self, serial: &str) -> AppResult<()> {
+        let ports = {
+            let mut active = self.active_reverse_ports.lock().await;
+            std::mem::take(&mut *active)
+        };
+        self.remove_reverse_ports(serial, ports).await
+    }
+
+    async fn prepare_usb_proxy_runtime(
+        &self,
+        activation: &AndroidNetworkActivation,
+    ) -> AppResult<Value> {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+            net::IpAddr,
+        };
+
+        let serial = self.selected_serial()?;
+        self.clear_active_reverse_ports(&serial).await?;
+        if activation.proxy_routes.is_empty() {
+            return Ok(json!({"routes": []}));
+        }
+
+        let mut listener_ports = BTreeMap::<String, u16>::new();
+        let mut used_device_ports = std::collections::BTreeSet::new();
+        let mut created = Vec::new();
+        for route in &activation.proxy_routes {
+            if listener_ports.contains_key(&route.listener_id) {
+                continue;
+            }
+            let mut hasher = DefaultHasher::new();
+            route.listener_id.hash(&mut hasher);
+            let mut device_port = 40_000 + u16::try_from(hasher.finish() % 20_000).unwrap_or(0);
+            while !used_device_ports.insert(device_port) {
+                device_port = if device_port == 59_999 {
+                    40_000
+                } else {
+                    device_port + 1
+                };
+            }
+            let result = self
+                .run_for_serial(
+                    &serial,
+                    &[
+                        "reverse",
+                        &format!("tcp:{device_port}"),
+                        &format!("tcp:{}", route.desktop_listener_port),
+                    ],
+                    COMMAND_TIMEOUT,
+                )
+                .await;
+            if let Err(error) = result {
+                let _ = self.remove_reverse_ports(&serial, created).await;
+                return Err(error);
+            }
+            created.push(device_port);
+            listener_ports.insert(route.listener_id.clone(), device_port);
+        }
+
+        let mut routes = Vec::with_capacity(activation.proxy_routes.len());
+        for route in &activation.proxy_routes {
+            let destination = route.original_destination.trim();
+            let resolved_original_ips =
+                if destination.parse::<IpAddr>().is_ok() || destination.contains('/') {
+                    Vec::new()
+                } else {
+                    let addresses = tokio::net::lookup_host((destination, 0))
+                        .await
+                        .map_err(|error| {
+                            AppError::new(
+                                "ANDROID_PROXY_DESTINATION_RESOLVE_FAILED",
+                                format!("透明代理原始域名 {destination} 无法解析：{error}"),
+                            )
+                        })?
+                        .map(|address| address.ip())
+                        .collect::<std::collections::BTreeSet<_>>();
+                    if addresses.is_empty() {
+                        let _ = self.remove_reverse_ports(&serial, created).await;
+                        return Err(AppError::new(
+                            "ANDROID_PROXY_DESTINATION_RESOLVE_FAILED",
+                            format!("透明代理原始域名 {destination} 没有 A/AAAA 记录。"),
+                        ));
+                    }
+                    addresses.into_iter().collect()
+                };
+            routes.push(json!({
+                "listener_id": route.listener_id,
+                "original_destination": route.original_destination,
+                "original_ports": route.original_ports,
+                "resolved_original_ips": resolved_original_ips,
+                "proxy_host": "127.0.0.1",
+                "proxy_port": listener_ports[&route.listener_id],
+            }));
+        }
+        *self.active_reverse_ports.lock().await = created;
+        Ok(json!({"routes": routes}))
     }
 
     async fn protocol_request(
@@ -188,24 +311,18 @@ impl AndroidAdbAdapter {
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         let serial = self.selected_serial()?;
         let request = AndroidControlRequest::new(operation, payload)?;
-        let output = self
-            .run(
-                vec![
-                    "-s".into(),
-                    serial.clone(),
-                    "forward".into(),
-                    "tcp:0".into(),
-                    format!("localabstract:{CONTROL_SOCKET}"),
-                ],
-                COMMAND_TIMEOUT,
-            )
-            .await?;
-        let port = output.stdout.trim().parse::<u16>().map_err(|_| {
-            AppError::new(
-                "ANDROID_ADB_FORWARD_INVALID",
-                "adb forward 未返回有效本地端口。",
-            )
-        })?;
+        let port = reserve_loopback_port()?;
+        self.run(
+            vec![
+                "-s".into(),
+                serial.clone(),
+                "forward".into(),
+                format!("tcp:{port}"),
+                format!("localabstract:{CONTROL_SOCKET}"),
+            ],
+            COMMAND_TIMEOUT,
+        )
+        .await?;
         let response_serial = serial.clone();
         let result = self.exchange_frame(port, request).await.map(|mut status| {
             // Android 公共 API 无法知道 adb serial；该值属于桌面选择上下文，必须在
@@ -363,6 +480,27 @@ impl AndroidAdbAdapter {
         }
         unreachable!("bounded control retry always returns on its final attempt")
     }
+}
+
+/// 旧版 ADB 在同时连接多台设备时，即使给出 `-s`，`forward tcp:0` 仍可能错误报告
+/// “more than one device/emulator”。先让操作系统分配明确端口，再把该端口交给精确
+/// serial 的 `adb forward`，可避开这个 ADB server 兼容性问题。
+fn reserve_loopback_port() -> AppResult<u16> {
+    let listener = StdTcpListener::bind(("127.0.0.1", 0)).map_err(|error| {
+        AppError::new(
+            "ANDROID_ADB_FORWARD_INVALID",
+            format!("无法分配 Android 控制通道本地端口：{error}"),
+        )
+    })?;
+    listener
+        .local_addr()
+        .map(|address| address.port())
+        .map_err(|error| {
+            AppError::new(
+                "ANDROID_ADB_FORWARD_INVALID",
+                format!("无法读取 Android 控制通道本地端口：{error}"),
+            )
+        })
 }
 
 #[async_trait]
@@ -556,7 +694,7 @@ impl AndroidControlPort for AndroidAdbAdapter {
             .await?
             .remove(&profile_id)
             .ok_or_else(|| {
-                AppError::new("ANDROID_PROFILE_NOT_FOUND", "未找到指定弱网方案。")
+                AppError::new("ANDROID_PROFILE_NOT_FOUND", "未找到指定设备网络方案。")
                     .entity(profile_id)
             })
     }
@@ -578,44 +716,66 @@ impl AndroidControlPort for AndroidAdbAdapter {
         let mut profiles = self.read_profiles_unlocked()?;
         if profiles.remove(&profile_id).is_none() {
             return Err(
-                AppError::new("ANDROID_PROFILE_NOT_FOUND", "未找到指定弱网方案。")
+                AppError::new("ANDROID_PROFILE_NOT_FOUND", "未找到指定设备网络方案。")
                     .entity(profile_id),
             );
         }
         self.write_profiles_unlocked(&profiles)?;
-        Ok(OperationResultViewModel::success("弱网方案已删除。"))
+        Ok(OperationResultViewModel::success("设备网络方案已删除。"))
     }
 
-    async fn network_start(&self, profile_id: String) -> AppResult<AndroidNetworkStatusViewModel> {
-        let profile = self.profile_get(profile_id).await?;
-        let payload = json!({"profile": profile});
-        match self.protocol_request("start", payload.clone()).await {
+    async fn network_start(
+        &self,
+        activation: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        let proxy_runtime = self.prepare_usb_proxy_runtime(&activation).await?;
+        let payload = json!({"profile": activation.profile, "proxy_runtime": proxy_runtime});
+        let result = match self.protocol_request("start", payload.clone()).await {
             Ok(status) => Ok(status),
             Err(error) if is_socket_unavailable(&error) => {
                 self.protocol_request_after_wake("start", payload).await
             }
             Err(error) => Err(error),
+        };
+        if result.is_err() {
+            let serial = self.selected_serial()?;
+            let _ = self.clear_active_reverse_ports(&serial).await;
         }
+        result
     }
 
-    async fn network_apply(&self, profile_id: String) -> AppResult<AndroidNetworkStatusViewModel> {
-        let profile = self.profile_get(profile_id).await?;
-        let payload = json!({"profile": profile});
-        match self.protocol_request("apply", payload.clone()).await {
+    async fn network_apply(
+        &self,
+        activation: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        let proxy_runtime = self.prepare_usb_proxy_runtime(&activation).await?;
+        let payload = json!({"profile": activation.profile, "proxy_runtime": proxy_runtime});
+        let result = match self.protocol_request("apply", payload.clone()).await {
             Ok(status) => Ok(status),
             Err(error) if is_socket_unavailable(&error) => {
                 self.protocol_request_after_wake("apply", payload).await
             }
             Err(error) => Err(error),
+        };
+        if result.is_err() {
+            let serial = self.selected_serial()?;
+            let _ = self.clear_active_reverse_ports(&serial).await;
         }
+        result
     }
 
     async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
-        match self.protocol_request("stop", json!({})).await {
+        let result = match self.protocol_request("stop", json!({})).await {
             Ok(status) => Ok(status),
             Err(error) if is_socket_unavailable(&error) => {
                 self.protocol_request_after_wake("stop", json!({})).await
             }
+            Err(error) => Err(error),
+        };
+        let serial = self.selected_serial()?;
+        let cleanup = self.clear_active_reverse_ports(&serial).await;
+        match result {
+            Ok(status) => cleanup.map(|()| status),
             Err(error) => Err(error),
         }
     }
@@ -628,6 +788,7 @@ impl AndroidControlPort for AndroidAdbAdapter {
             COMMAND_TIMEOUT,
         )
         .await?;
+        let _ = self.clear_active_reverse_ports(&serial).await;
         Ok(AndroidNetworkStatusViewModel {
             serial,
             state: AndroidNetworkState::Stopped,
@@ -734,12 +895,8 @@ fn discover_companion_apk() -> Option<PathBuf> {
     if let Some(path) = env::var_os("INTERCEPT_PROXY_ANDROID_COMPANION_APK") {
         candidates.push(PathBuf::from(path));
     }
-    if let Ok(executable) = env::current_exe()
-        && let Some(directory) = executable.parent()
-    {
-        candidates.push(directory.join("resources/android-companion.apk"));
-        candidates.push(directory.join("../Resources/android-companion.apk"));
-        candidates.push(directory.join("android-companion.apk"));
+    if let Ok(executable) = env::current_exe() {
+        candidates.extend(bundled_companion_apk_candidates(&executable));
     }
     candidates.push(PathBuf::from(
         "android-companion/app/build/outputs/apk/release/app-release.apk",
@@ -748,6 +905,24 @@ fn discover_companion_apk() -> Option<PathBuf> {
         "android-companion/app/build/outputs/apk/debug/app-debug.apk",
     ));
     candidates.into_iter().find(|path| path.is_file())
+}
+
+/// 返回桌面安装包中 Companion APK 的平台候选位置。
+///
+/// Tauri 在 Windows/Linux 中把资源放在可执行文件旁的 `resources` 目录；macOS
+/// `.app` 会保留配置中的 `resources/` 前缀，因此实际位置是
+/// `Contents/Resources/resources/android-companion.apk`。路径解析留在基础设施层，
+/// Android 业务用例不需要了解桌面安装包结构。
+fn bundled_companion_apk_candidates(executable: &Path) -> Vec<PathBuf> {
+    let Some(directory) = executable.parent() else {
+        return Vec::new();
+    };
+    vec![
+        directory.join("resources/android-companion.apk"),
+        directory.join("../Resources/resources/android-companion.apk"),
+        directory.join("../Resources/android-companion.apk"),
+        directory.join("android-companion.apk"),
+    ]
 }
 
 fn parse_devices(output: &str, selected: Option<&str>) -> Vec<AndroidDeviceViewModel> {
@@ -907,6 +1082,10 @@ fn reconcile_forward_cleanup<T>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use intercept_proxy_application::{
+        AndroidProxyRouteActivation, AndroidTargetApplication, WeakNetworkProfile,
+    };
+    use intercept_proxy_domain::ListenerId;
 
     #[test]
     fn parses_devices_packages_shared_uid_inputs_and_certificate_digest() {
@@ -937,6 +1116,17 @@ mod tests {
         );
     }
 
+    #[test]
+    fn packaged_apk_candidates_include_the_tauri_macos_resource_layout() {
+        let executable =
+            Path::new("/Applications/Intercept Proxy.app/Contents/MacOS/intercept-proxy");
+        let candidates = bundled_companion_apk_candidates(executable);
+
+        assert!(candidates.contains(&PathBuf::from(
+            "/Applications/Intercept Proxy.app/Contents/MacOS/../Resources/resources/android-companion.apk",
+        )));
+    }
+
     #[derive(Debug)]
     struct FakeRunner;
 
@@ -949,6 +1139,81 @@ mod tests {
                 stderr: String::new(),
             })
         }
+    }
+
+    #[derive(Debug, Default)]
+    struct RecordingRunner {
+        calls: std::sync::Mutex<Vec<Vec<String>>>,
+    }
+
+    #[async_trait]
+    impl AdbCommandRunner for RecordingRunner {
+        async fn run(&self, _: &Path, args: &[String]) -> std::io::Result<AdbOutput> {
+            self.calls.lock().unwrap().push(args.to_vec());
+            Ok(AdbOutput {
+                success: true,
+                stdout: String::new(),
+                stderr: String::new(),
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn usb_runtime_creates_reverse_and_keeps_endpoint_out_of_profile() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(RecordingRunner::default());
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+        *adapter.selected_serial.write().unwrap() = Some("SER123".into());
+        let listener_id = ListenerId::new();
+        let profile = AndroidNetworkProfile {
+            id: "route-profile".into(),
+            name: "路由".into(),
+            target_applications: vec![AndroidTargetApplication {
+                package_name: "com.example.target".into(),
+                signing_sha256: "AA".into(),
+                uid: 10_001,
+                display_name: None,
+            }],
+            destination_targets: Vec::new(),
+            proxy_routes: vec![intercept_proxy_domain::AndroidProxyRoute {
+                destination: "203.0.113.10".into(),
+                ports: vec![16_127],
+                listener_id,
+            }],
+            confirmed_shared_uids: std::collections::BTreeSet::default(),
+            auto_resume_after_reboot: false,
+            weak_network: WeakNetworkProfile::default(),
+        };
+        let activation = AndroidNetworkActivation {
+            profile: profile.clone(),
+            proxy_routes: vec![AndroidProxyRouteActivation {
+                listener_id: listener_id.to_string(),
+                original_destination: "203.0.113.10".into(),
+                original_ports: vec![16_127],
+                desktop_listener_port: 26_127,
+            }],
+        };
+
+        let runtime = adapter
+            .prepare_usb_proxy_runtime(&activation)
+            .await
+            .unwrap();
+        let route = &runtime["routes"][0];
+        assert_eq!(route["proxy_host"], "127.0.0.1");
+        assert_eq!(route["original_destination"], "203.0.113.10");
+        assert!(route["proxy_port"].as_u64().is_some());
+        assert!(
+            !serde_json::to_value(profile)
+                .unwrap()
+                .to_string()
+                .contains("proxy_host")
+        );
+        let calls = runner.calls.lock().unwrap();
+        assert!(calls.iter().any(|args| {
+            args.windows(2)
+                .any(|pair| pair[0] == "reverse" && pair[1].starts_with("tcp:"))
+                && args.last() == Some(&"tcp:26127".to_owned())
+        }));
     }
 
     #[test]

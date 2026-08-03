@@ -10,9 +10,9 @@
 
 Intercept Proxy 是与具体业务应用无关的 HTTP/HTTPS 测试代理。它同时提供：
 
-1. 标准 HTTP 正向代理和 HTTPS CONNECT 隧道。
+1. 统一代理监听；默认按请求目标转发 HTTP，并支持 HTTPS CONNECT 隧道。
 2. 用户显式允许目标的 HTTPS MITM。
-3. 固定上游的反向代理、TLS/mTLS、抓包、断点、规则和故障注入。
+3. 每条监听可选固定 Server、TLS/mTLS、抓包、断点、规则和故障注入。
 4. Android Companion，通过 `VpnService` 只接管指定包名，在 TCP/IP 包层实施弱网。
 5. UI 无关的 Rust Host，可被桌面、自动化测试以及未来 TUI/CLI 复用。
 
@@ -31,8 +31,9 @@ Intercept Proxy 可以并存。
 | Secret namespace | `com.interceptproxy.desktop` |
 | Android package | `com.interceptproxy.vpn` |
 
-首次启动创建空 Workspace，以及一个关闭的 `127.0.0.1:8080` 正向代理草稿。不得创建反向
-监听器、业务规则、故障模板、Shift-JIS 策略或业务断言。安装包不得携带固定业务 URL、端口、
+首次启动创建空 Workspace，以及一个关闭的 `127.0.0.1:8080` 代理监听草稿；该草稿默认按请求
+目标转发且不配置固定 Server。不得创建其他监听器、业务规则、故障模板、Shift-JIS 编码配置或
+业务断言。安装包不得携带固定业务 URL、端口、
 客户端 P12、业务 CA、业务返回码或测试私钥。
 
 ## 3. 架构边界
@@ -87,12 +88,12 @@ domain（Workspace、规则、状态机）
 ProxyWorkspace
 ├── id / name / revision
 ├── listeners[]
-├── body_codec_policies[]
 ├── metadata_extractors[]
 ├── response_assertions[]
 ├── rules[]
 ├── fault_presets[]
-└── certificate_references[]
+├── certificate_references[]
+└── android_network_profiles[]
 ```
 
 ### 4.1 代理入口（代码模型名：Listener）
@@ -100,9 +101,19 @@ ProxyWorkspace
 用户界面统一使用“代理入口”，不得直接把英文 `Listener` 作为页面名称或主要操作文案。
 “代理入口”表示 Proxy 在本机开放给客户端连接的地址和端口，以及该入口采用的转发方式。
 
-`ForwardProxyListener`：
+所有入口使用同一个 `ProxyListener` 模型，不再把“正向代理”和“固定上游入口”作为两种
+需要用户理解的入口类型。每个入口都包含监听地址、端口和一个可选的固定 Server 配置：
 
-- 监听地址、认证策略、客户端 CIDR、CONNECT 策略和 MITM allowlist。
+- 未启用“转发到固定 Server”时，Rust 根据 HTTP absolute-form 或 CONNECT authority
+  动态确定请求目标。
+- 启用“转发到固定 Server”时，该入口的全部 HTTP 请求只允许转发到本入口配置的唯一
+  HTTP/HTTPS origin。不同 Server、端口或证书策略必须使用不同入口，入口数量不受产品模板限制。
+- 固定 Server 是入口的可选路由策略，不是另一种“上游入口”，UI、IPC、Workspace 和运行状态
+  均不得再暴露 Forward/Reverse 两套入口概念。
+
+按请求目标转发时：
+
+- 支持认证策略、客户端 CIDR、CONNECT 策略和 MITM allowlist。
 - HTTP Basic 用户名/密码只通过 `workspace_secret_store_basic` 交给 Rust；Rust 使用当前用户
   Keychain/DPAPI 保护完整认证值，Workspace 只保存 `SecretReference`。
 - 运行时仅在 Listener 启动时解密到自动清零内存，并以常量时间 MAC 校验请求凭据；错误、
@@ -113,22 +124,30 @@ ProxyWorkspace
 - 删除 Proxy-Authorization 和 hop-by-hop Header。
 - CONNECT 默认为 Tunnel；只有 allowlist 命中才进入 MITM。
 
-`ReverseProxyListener`：
+启用固定 Server 时：
 
-- 任意数量；每一条都是独立的“本地监听地址/端口 -> 固定上游 HTTP/HTTPS origin”映射。
+- 每一条都是独立的“本地监听地址/端口 -> 固定 Server HTTP/HTTPS origin”映射。
 - 同一 Workspace 可同时配置不同端口、不同主机的多个上游，例如 Transaction 与 DLL
   分别使用各自的本地端口和上游 URL；不得把多个 origin 塞入同一 Listener 后由前端猜测路由。
 - 可选下游 TLS/mTLS。
 - 可选上游 P12 客户端身份、显式 CA 和主机名校验。
 - 下游客户端认证必须按入口支持 `disabled`、`optional`、`required`，不得假设 Android
   或其他客户端一定持有客户端证书；上游客户端身份同样可为空，以支持普通单向 TLS。
-- 每条 Reverse Listener 独立引用证书材料。不同入口可以使用完全不同的下游服务端身份、
+- 每条 Listener 独立引用证书材料。不同入口可以使用完全不同的下游服务端身份、
   下游客户端信任、上游客户端身份和上游 CA，禁止使用一套全局证书覆盖全部入口。
-- 入口页面必须提供“测试上游 TLS 握手”。Rust 使用当前入口已保存的上游 origin、CA、
+- Server CA 与可选 P12 客户端身份必须在目标 Listener 的“固定 Server”编辑区导入和选择；
+  导入后 Rust 只把受保护材料的安全引用写入 Workspace。证书管理页不得提供全局上游
+  CA/P12 配置，以免用户误认为所有入口共享一套上游 TLS 身份。
+- 入口页面必须提供“测试 Server TLS 握手”。Rust 使用当前入口已保存的固定 Server origin、CA、
   主机名策略和可选客户端身份执行真实 TCP + TLS 握手，但不发送 HTTP 业务请求；成功结果
   返回解析地址、耗时、TLS 版本、密码套件、Server 证书主题和 SHA-256 指纹，失败返回稳定
   中文错误和建议操作。证书文件格式校验不能替代该测试。
 - 独立 Body codec、提取器和响应断言。
+- 固定 Server 未启用或 origin 不是 HTTPS 时，不显示 CA、客户端身份和 TLS 握手测试。
+- 固定 Server 的 mTLS 是可选能力：普通 HTTPS 不选择客户端身份；只有 Server 明确要求
+  客户端证书时才选择受保护的 P12 引用。
+- 固定 Server 模式不得通过 CONNECT authority 绕过配置目标。CONNECT 无论被本地拒绝还是作为
+  HTTP 方法交给固定 Server，都不得连接请求中携带的其他地址，并必须留下可追踪结果。
 
 #### 4.1.1 UI 与运行时唯一来源
 
@@ -144,7 +163,8 @@ ProxyWorkspace
 
 ### 4.2 编码、提取和断言
 
-- Codec：Raw、严格 UTF-8、严格 Shift-JIS。
+- 每个代理入口分别配置请求正文编码和响应正文编码，不通过 Workspace 级策略间接引用。
+- 可选编码：Raw、严格 UTF-8、严格 Shift-JIS。
 - Extractor：Header、JSONPath、文本、固定值。
 - Assertion：HTTP 状态、Header、JSONPath、文本、长度、SHA-256。
 - 未修改 Body 使用原始字节透传。
@@ -153,12 +173,28 @@ ProxyWorkspace
 
 ### 4.3 导入导出
 
-Workspace 文件扩展名为 `.intercept-workspace`。导出只能包含配置和秘密引用，不得包含：
+Workspace 文件扩展名为 `.intercept-workspace`。它必须完整包含当前 Workspace
+的入口（含请求和响应正文编码）、元数据提取、响应断言、规则、故障预设、证书安全引用以及
+Android 设备网络方案及其透明代理路由与弱网参数。
+
+整个应用的备份文件扩展名为 `.intercept-config`，包含：
+
+- 全部 Workspaces（每个 Workspace 包含上述全量可移植配置）。
+- 当前选中的 Workspace ID。
+- 全局 Settings：超时、Body/会话/内存容量、数据导出策略和 Host 重写等可移植值。
+
+两类导出都只能包含可移植配置和秘密引用，不得包含：
 
 - 私钥。
 - P12 原文或密码。
 - 系统密钥密文。
 - 完整抓包 Payload。
+- Android 设备 serial、ADB 转发端口、VPN 授权或运行状态。
+- 抓包、会话、断点、统计、运行任务或临时桌面/Android 网络端点。
+
+导入必须先完成 schema、版本、结构引用完整性和敏感字段扫描，
+全部通过后才原子替换。任何导入失败都不得部分修改当前 Workspace、全局 Settings 或当前选择。
+跨机导入时系统密钥不会随文档迁移；可以保留安全引用元数据，但启动引用它的入口前必须在新机器重新导入或选择实际秘密材料。
 
 ## 5. HTTP、CONNECT 与 MITM
 
@@ -198,10 +234,11 @@ HTTP 动作：Header 增删改、文本替换、JSONPath 修改、Mock、状态�
 - SQLite 只保存元数据和受保护密文。
 - macOS 使用当前用户 Keychain；Windows 使用当前用户范围 DPAPI。
 - 不使用 LOCAL_MACHINE 范围。
-- Reverse Listener 可以分别引用下游服务端身份、客户端信任、上游 P12 和上游 CA。
+- 每条启用固定 Server 的 Listener 可以分别引用下游服务端身份、客户端信任、Server mTLS
+  客户端 P12 和 Server CA。
 - 普通 TLS 与 mTLS 均为按入口选择：客户端或 Server 未要求双向认证时，不得强制配置
   客户端证书；真实握手测试必须使用该入口的实际选择验证 Server 兼容性。
-- Forward MITM 只引用安装实例 Root CA。
+- 按请求目标转发的 MITM 只引用安装实例 Root CA。
 - 重置 Root CA 是危险操作，代理必须停止且用户确认。
 
 ## 8. Android Companion
@@ -227,15 +264,29 @@ Kotlin 只负责授权 Activity、VpnService、通知、BootReceiver、TUN、all
 
 ### 8.2 定向应用范围
 
-- 桌面“设备弱网”页面固定使用左右两栏：左侧展示本机连接工具、目标设备与设备端控制；
-  右侧展示弱网方案、目标应用、目标地址和全部弱网参数。
+- 桌面“设备网络”页面按从上到下的单列操作流组织：设备与控制、方案基本信息、
+  目标应用、透明代理路由、弱网覆盖范围、弱网参数与运行状态；页面与导航统一使用
+  “设备网络 / 应用网络接管 / 设备网络方案”，避免把透明代理能力误称为弱网；不得用左右分栏造成大片留白。
 - 目标应用支持按包名筛选。前端只提交关键字，筛选、长度限制和结果排序由 Rust 完成。
 - Profile 最多选择 64 个包。
 - 一个 Profile 可配置 0 到 128 个远端 IP/CIDR 目标，每个目标可指定端口集合；空列表
   表示所选应用访问的全部原始目标，绝不能把应用限制为单一 Server。
-- 多个目标按“任一命中”执行弱网；未命中的连接仍经过 fail-open 转发但不实施故障。
+- 这些 `destination_targets` 只决定哪些连接实施弱网，不改变请求去向。多个目标按
+  “任一命中”执行弱网；未命中的连接仍 fail-open 直连且不实施故障。
 - TUN 包不携带可靠域名，因此首版地址范围只接受 IPv4/IPv6 或 CIDR；HTTP 域名级
   选择继续由 Forward Proxy/MITM allowlist 和 HTTP 规则负责。
+- 每个 Profile 可配置 0 到 128 条 `proxy_routes`，每条用“原始目标域名/IP/CIDR +
+  一个或多个端口”引用当前 Workspace 中的一条 Listener。
+- `proxy_routes.ports` 必须至少包含一个明确端口；透明代理路由不支持空端口集合或
+  “全部端口”匹配。弱网覆盖范围的空端口集合仍表示全部端口，两者语义不得混用。
+- 业务 App 仍保留原始 Server URL，不填写电脑 IP 或代理端口。Rust 数据面在 TUN 中匹配
+  原始目标；命中后才把 TCP 连接透明改送到引用的桌面 Listener。
+- 原始域名在每次启动/应用 Profile 时由 Rust 解析 A/AAAA；无法解析时禁止启动，
+  不允许悄然绕过。IP/CIDR 直接匹配。
+- `proxy_routes` 与 `destination_targets` 独立：前者决定 TCP 是否经桌面代理，后者决定是否
+  对该连接注入弱网。不得为了代理而隐式扩大弱网范围。
+- 未命中 `proxy_routes` 的所选应用流量使用 `protect(fd)` 连接原始目标；非目标
+  应用根本不进入 VPN。Companion 自身和 ADB 不得进入路由表。
 - 只对选中包调用 `addAllowedApplication`。
 - Companion 自身禁止选择。
 - 未选择应用、系统网络和 ADB 不进入 VPN。
@@ -249,11 +300,15 @@ Kotlin 只负责授权 Activity、VpnService、通知、BootReceiver、TUN、all
 ```text
 Selected App → VpnService TUN → Rust ImpairedTun
              → tun2proxy 0.8.3 → local Rust SOCKS5
-             → protect(fd) → original destination
+             → proxy route 命中 → 桌面 Listener → 该 Listener 配置的 Server/请求目标
+             → proxy route 未命中 → protect(fd) → original destination
 ```
 
 - 固定 `tun2proxy = "=0.8.3"`。
 - 支持 IPv4/IPv6、TCP、UDP、SOCKS5 CONNECT 和 UDP ASSOCIATE。
+- 透明桌面代理首版只改送 TCP；UDP 保持原目标直连，不得把 UDP 误送到 HTTP Listener。
+- USB 链路优先由桌面 Rust 创建 `adb reverse tcp:0 tcp:<listener-port>` 的临时运行端点；
+  LAN 链路可使用电脑可达地址。这些端点只在启动时下发，不写入 Workspace。
 - 上行使用原始 destination、下行使用原始 source 作为远端地址，保证同一目标的
   双向流量命中同一组多地址规则。
 - 不持久化 Payload。
@@ -288,6 +343,7 @@ Command：
 
 ```text
 workspace_list/get/create/copy/select/validate/save/delete/import/export
+application_configuration_import/export
 workspace_component_new
 workspace_secret_store_basic
 listener_list/get/save/delete/start/stop
@@ -328,12 +384,15 @@ OperationFailed
 ### 10.1 自动化
 
 - Workspace 任意监听器、敏感字段排除和 revision 冲突。
+- 完整应用配置的全量 roundtrip、敏感/运行字段拒绝和导入失败原子性。
 - HTTP absolute-form 与 CONNECT 各连续 100 次。
 - MITM allowlist 命中/未命中。
 - 非 loopback 无认证配置拒绝。
 - Reverse TLS/mTLS、Raw/UTF-8/Shift-JIS。
 - 全部规则和终止动作。
 - Android IPv4/IPv6、TCP/UDP 和全部弱网动作。
+- Android 目标应用保持原始 URL 时，多条原始地址/端口可分别透明命中对应 Listener；
+  未命中路由直连，弱网范围不得改变路由决策。
 - 目标应用 100% 丢包时，两款非目标应用和 ADB 正常。
 - shared UID、卸载、签名变化、同签升级、重启和 fail-open。
 - Windows/macOS 构建；Android ABI、签名和 16 KiB page size。
@@ -345,7 +404,8 @@ OperationFailed
 
 ### 10.3 真实上游兼容验收
 
-具体业务测试不得进入产品默认模板。测试人员从空 Workspace 手工配置两个 Reverse Listener、
+具体业务测试不得进入产品默认模板。测试人员从空 Workspace 手工配置两个代理 Listener，分别
+启用各自的固定 Server，继续配置
 TLS/mTLS、P12、CA、Shift-JIS 和通用响应断言。测试配置与报告不得被桌面安装包打包。
 
 在 A920MAX `2740072778` 上，DLL 请求必须经过 Intercept Proxy 到达真实上游，并将真实响应
@@ -362,7 +422,7 @@ Mock、固定返回、仅 HTTP 200 或仅抓到报文不能代替该验收。
 ### 10.4 Android 模拟器代理回归
 
 CI/开发机必须提供一个只存在于 `test-support` 和 `androidTest` 的类 DLL 场景：模拟器客户端
-经 `adb reverse` 进入正式 `ApplicationHost`、空 Workspace 中临时创建的 Reverse Listener，
+经 `adb reverse` 进入正式 `ApplicationHost`、空 Workspace 中临时创建并启用固定 Server 的 Listener，
 再到本地独立 upstream fixture。fixture 可以返回测试期望 `D48`，但必须同时验证：
 
 1. Android 客户端观察到 HTTP 状态、完整 Header 和 Shift-JIS 解码后的 `D48`。
@@ -370,7 +430,7 @@ CI/开发机必须提供一个只存在于 `test-support` 和 `androidTest` 的�
 3. 未修改响应 Body 与上游 fixture 的字节完全一致。
 4. 配置和结果只写测试临时目录，不进入安装包或首次启动数据。
 
-该回归证明“Android 客户端 → 动态 Reverse Listener → 上游 → 原样返回”的通用能力，
+该回归证明“Android 客户端 → 动态 Listener（固定 Server）→ 上游 → 原样返回”的通用能力，
 不能替代 10.3 的 A920MAX、真实证书、真实上游和真实业务响应。
 
 ## 11. 需求追踪矩阵
@@ -379,16 +439,16 @@ CI/开发机必须提供一个只存在于 `test-support` 和 `androidTest` 的�
 | --- | --- | --- | --- | --- |
 | Workspace | Workspace/Listener 页面 | application + domain | `workspace_*`, `listener_*` | workspace roundtrip |
 | 入口配置唯一来源 | 入口配置/运行监控/顶部状态栏 | application listener overview | `listener_overview`, listener events | overview + UI boundary |
-| Forward/CONNECT | Listener 状态与抓包 | proxy | listener/status events | 100× HTTP/CONNECT |
+| 请求目标/CONNECT | Listener 状态与抓包 | proxy | listener/status events | 100× HTTP/CONNECT |
 | MITM | 证书与 allowlist | proxy + infrastructure | `certificate_*` | tunnel/MITM split |
-| Reverse TLS/mTLS | Listener/证书 | proxy + infrastructure | listener/certificate | TLS matrix |
+| 固定 Server TLS/mTLS | 同一入口配置（Server 材料按入口导入） | proxy + infrastructure | `listener_*` | TLS matrix |
 | 规则与断点 | 规则/断点/详情 | application + proxy | rule/breakpoint | rule semantics |
 | Android 定向 VPN | Android 弱网页 | application + android-engine | `android_*`, `device_network_*` | scope gate |
 | 弱网 | Profile/实时统计 | android-engine | profile/status events | deterministic vectors |
-| 真实上游兼容 | 无默认业务 UI | generic reverse stack | existing generic IPC | real-device report |
+| 真实上游兼容 | 无默认业务 UI | generic fixed-server route | existing generic IPC | real-device report |
 
 ## 12. 实施和停止条件
 
 按身份与存储、Workspace、Forward/CONNECT、MITM、通用 UI、Android 架构门禁、完整弱网、
-真实设备兼容、跨平台 CI 的顺序实施。只有通用代理、Android 定向弱网和真实设备兼容三类
+真实设备兼容、跨平台 CI 的顺序实施。只有通用代理、Android 应用网络接管和真实设备兼容三类
 验收全部通过，版本才可以发布。

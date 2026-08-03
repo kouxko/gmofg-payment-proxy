@@ -26,6 +26,8 @@ import {
   ProfileSelectorCard,
 } from "./profile-cards";
 import { TargetApplicationsCard } from "./target-applications-card";
+import { ProxyRoutesCard } from "./proxy-routes-card";
+import { useCurrentWorkspaceListeners } from "./use-current-workspace-listeners";
 
 /**
  * 页面只展示 Rust ViewModel、收集表单输入并发送用户意图。
@@ -39,6 +41,7 @@ export function AndroidNetworkView(): ReactElement {
     () => callCommand(commands.deviceNetworkProfileList()),
     [],
   );
+  const workspaceListeners = useCurrentWorkspaceListeners();
   const selectedSerial = adb.data?.selected_serial;
   const packages = useIpcQuery(
     `android-packages:${selectedSerial ?? "none"}`,
@@ -122,7 +125,7 @@ export function AndroidNetworkView(): ReactElement {
   }
 
   async function saveProfile(): Promise<AndroidNetworkProfile> {
-    if (!draft) throw new Error("请先新建或选择弱网方案。");
+    if (!draft) throw new Error("请先新建或选择设备网络方案。");
     const saved = await callCommand(commands.deviceNetworkProfileSave(draft));
     setDraft(saved);
     await profiles.refresh();
@@ -155,9 +158,9 @@ export function AndroidNetworkView(): ReactElement {
     <section className="h-full min-h-0 overflow-hidden p-5">
       <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">应用定向弱网</h1>
+          <h1 className="text-2xl font-semibold">应用网络接管</h1>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
-            只接管弱网方案中明确选择的应用，其他应用保持正常联网。
+            设备端 VPN 只接管所选应用，可将指定目标透明转交代理入口，并按需实施 TCP/IP 弱网。
           </p>
         </div>
 
@@ -226,6 +229,13 @@ export function AndroidNetworkView(): ReactElement {
                 onClearFilter={clearPackageFilter}
                 onTogglePackage={togglePackage}
               />
+              <ProxyRoutesCard
+                draft={draft}
+                listeners={workspaceListeners.listeners}
+                loading={workspaceListeners.loading}
+                error={workspaceListeners.error}
+                onChange={setDraft}
+              />
               <DestinationTargetsCard draft={draft} onChange={setDraft} />
               <BasicNetworkParametersCard weak={draft.weak_network} onUpdate={updateWeak} />
               <AdvancedNetworkCard
@@ -273,7 +283,7 @@ export function AndroidNetworkView(): ReactElement {
 
   async function saveAndNotify(): Promise<void> {
     await saveProfile();
-    toast("弱网方案已由 Rust 校验并保存。", { variant: "success" });
+    toast("设备网络方案已由 Rust 校验并保存。", { variant: "success" });
   }
 
   async function stopNetwork(): Promise<void> {

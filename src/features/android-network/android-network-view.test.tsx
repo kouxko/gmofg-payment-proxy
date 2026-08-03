@@ -13,13 +13,14 @@ const mocks = vi.hoisted(() => ({
   androidCompanionInstall: vi.fn(), androidCompanionUpdate: vi.fn(), androidVpnOpenConsent: vi.fn(),
   deviceNetworkStart: vi.fn(), deviceNetworkApply: vi.fn(), deviceNetworkStop: vi.fn(),
   deviceNetworkEmergencyRestore: vi.fn(),
+  workspaceList: vi.fn(), workspaceGet: vi.fn(),
 }));
 
 vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
 function ok<T>(data: T) { return Promise.resolve({ status: "ok" as const, data }); }
 
 const profile = {
-  id: "profile-1", name: "移动网络丢包", target_applications: [], destination_targets: [], confirmed_shared_uids: [], auto_resume_after_reboot: false,
+  id: "profile-1", name: "移动网络丢包", target_applications: [], destination_targets: [], proxy_routes: [], confirmed_shared_uids: [], auto_resume_after_reboot: false,
   weak_network: {
     seed: 1,
     fixed_delay_millis: 0,
@@ -47,6 +48,15 @@ describe("Android targeted network page", () => {
     mocks.androidPackageList.mockReturnValue(ok([{ package_name: "example.target", uid: 10001, signing_sha256: "AA", shared_uid: null }]));
     mocks.androidPackageQuery.mockReturnValue(ok([{ package_name: "example.target", uid: 10001, signing_sha256: "AA", shared_uid: null }]));
     mocks.deviceNetworkProfileList.mockReturnValue(ok([]));
+    mocks.workspaceList.mockReturnValue(ok([{ id: "workspace-1", name: "当前工作区", revision: 1, listener_count: 2, enabled_listener_count: 2, selected: true }]));
+    mocks.workspaceGet.mockReturnValue(ok({
+      id: "workspace-1", name: "当前工作区", revision: 1,
+      listeners: [
+        { id: "listener-1", name: "交易入口", bind_address: "0.0.0.0", port: 16627 },
+        { id: "listener-2", name: "DLL 入口", bind_address: "0.0.0.0", port: 16127 },
+      ],
+      metadata_extractors: [], response_assertions: [], fault_presets: [], certificate_references: [], android_network_profiles: [],
+    }));
     mocks.deviceNetworkStatus.mockReturnValue(ok({ serial: "device-1", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null }));
     mocks.deviceNetworkProfileNew.mockReturnValue(ok(profile));
     mocks.deviceNetworkProfileApplyIntent.mockImplementation((value, intent) => {
@@ -87,13 +97,15 @@ describe("Android targeted network page", () => {
   it("uses compact Chinese labels for the initial operation flow", async () => {
     render(<AndroidNetworkView />);
 
-    expect(await screen.findByRole("heading", { name: "应用定向弱网" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "应用网络接管" })).toBeVisible();
+    expect(screen.getByText(/可将指定目标透明转交代理入口/)).toBeVisible();
+    expect(screen.queryByText(/填写.*Proxy IP/i)).not.toBeInTheDocument();
     expect(screen.getByText("设备连接与控制")).toBeVisible();
     expect(screen.getByLabelText("目标设备")).toBeVisible();
     expect(screen.queryByRole("heading", { name: "本机连接工具" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "设备端控制" })).not.toBeInTheDocument();
-    expect(screen.getByText("弱网方案")).toBeVisible();
-    expect(screen.getByRole("button", { name: "新建弱网方案" })).toBeVisible();
+    expect(screen.getByText("设备网络方案")).toBeVisible();
+    expect(screen.getByRole("button", { name: "新建设备网络方案" })).toBeVisible();
     expect(screen.queryByText("Profiles")).not.toBeInTheDocument();
     expect(screen.queryByText("Companion 与 VPN")).not.toBeInTheDocument();
   });
@@ -149,7 +161,8 @@ describe("Android targeted network page", () => {
       profile,
       { kind: "toggle_package", package_name: "example.target", selected: true },
     ));
-    expect(await screen.findByRole("row", { name: "example.target，已选中" })).toBeVisible();
+    expect(await screen.findByLabelText("已选中")).toBeVisible();
+    expect(screen.getByRole("row", { name: /example\.target/ })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "保存方案" }));
     await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
     expect(mocks.deviceNetworkProfileSave.mock.calls[0][0].target_applications[0].package_name).toBe("example.target");
@@ -227,13 +240,49 @@ describe("Android targeted network page", () => {
     expect(mocks.deviceNetworkProfileSave.mock.invocationCallOrder[0]).toBeLessThan(mocks.deviceNetworkStart.mock.invocationCallOrder[0]);
   });
 
-  it("collects multiple destination addresses and submits them to Rust", async () => {
+  it("collects multiple transparent proxy routes using current Workspace listeners", async () => {
     const user = userEvent.setup();
     render(<AndroidNetworkView />);
     await user.click(await screen.findByRole("button", { name: "新建" }));
 
-    await user.click(screen.getByRole("button", { name: "添加目标地址" }));
-    await user.click(screen.getByRole("button", { name: "添加目标地址" }));
+    expect(screen.getByText(/业务 App 仍访问原始 Server/)).toBeVisible();
+    expect(screen.queryByLabelText(/Proxy IP/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "添加透明代理路由" }));
+    await user.click(screen.getByRole("button", { name: "添加透明代理路由" }));
+    expect(screen.getAllByText(/必须至少添加一个原始端口/)).toHaveLength(2);
+    await user.type(screen.getByLabelText("原始目标 1"), "api.example.test");
+    await user.type(screen.getByLabelText("原始目标 2"), "10.0.34.50");
+
+    await user.click(screen.getAllByRole("button", { name: "添加端口" })[0]);
+    await user.click(screen.getAllByRole("button", { name: "添加端口" })[0]);
+    const firstPort = screen.getByLabelText("原始目标 1 端口 1", { selector: "input" });
+    const secondPort = screen.getByLabelText("原始目标 1 端口 2", { selector: "input" });
+    await user.clear(firstPort);
+    await user.type(firstPort, "443");
+    await user.clear(secondPort);
+    await user.type(secondPort, "8443");
+
+    await user.click(screen.getByLabelText("原始目标 2 代理入口"));
+    await user.click(await screen.findByRole("option", { name: /DLL 入口/ }));
+    await user.click(screen.getByRole("button", { name: "保存方案" }));
+
+    await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
+    expect(mocks.deviceNetworkProfileSave.mock.calls[0][0].proxy_routes).toEqual([
+      { destination: "api.example.test", ports: [443, 8443], listener_id: "listener-1" },
+      { destination: "10.0.34.50", ports: [], listener_id: "listener-2" },
+    ]);
+  }, 20_000);
+
+  it("collects multiple weak-network coverage addresses without treating them as proxy routes", async () => {
+    const user = userEvent.setup();
+    render(<AndroidNetworkView />);
+    await user.click(await screen.findByRole("button", { name: "新建" }));
+
+    expect(screen.getByText("弱网覆盖范围（可选）")).toBeVisible();
+    expect(screen.getByText(/这里只限制哪些连接实施弱网，不改变请求去向/)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "添加弱网覆盖地址" }));
+    await user.click(screen.getByRole("button", { name: "添加弱网覆盖地址" }));
     fireEvent.change(screen.getByLabelText("目标地址 1"), { target: { value: "10.0.34.50" } });
     fireEvent.change(screen.getByLabelText("目标地址 2"), { target: { value: "2001:db8::/32" } });
     const firstPort = screen.getByLabelText("目标地址 1 端口", { selector: "input" });

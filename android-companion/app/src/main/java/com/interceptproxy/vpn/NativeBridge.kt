@@ -23,8 +23,15 @@ object NativeBridge {
         tunFd: Int,
         profileJson: String,
         inventoryJson: String,
+        proxyRuntimeJson: String,
         protector: NativeSocketProtector,
-    ): Boolean = libraryLoaded && nativeStart(tunFd, profileJson, inventoryJson, protector)
+    ): Boolean = libraryLoaded && nativeStart(
+        tunFd,
+        profileJson,
+        inventoryJson,
+        proxyRuntimeJson,
+        protector,
+    )
 
     fun stop() {
         if (libraryLoaded) nativeStop()
@@ -38,6 +45,7 @@ object NativeBridge {
         tunFd: Int,
         profileJson: String,
         inventoryJson: String,
+        proxyRuntimeJson: String,
         socketProtector: NativeSocketProtector,
     ): Boolean
     private external fun nativeStop()

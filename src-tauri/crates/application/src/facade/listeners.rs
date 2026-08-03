@@ -3,10 +3,7 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
-use intercept_proxy_domain::{
-    DownstreamTlsSettings, ForwardProxyListener, ReverseProxyListener, Revision as DomainRevision,
-    UpstreamTlsSettings,
-};
+use intercept_proxy_domain::Revision as DomainRevision;
 
 use super::Application;
 use crate::{
@@ -16,29 +13,12 @@ use crate::{
 };
 
 impl Application {
-    /// 由 Rust 创建带稳定 ID 的未保存 Listener 草稿。
+    /// 由 Rust 创建带稳定 ID 的未保存代理监听草稿。
     ///
-    /// Reverse 草稿故意保留空上游并在保存时失败校验，避免产品包携带任何默认目标。
-    pub fn listener_new(&self, kind: &str) -> AppResult<ProxyListener> {
-        match kind {
-            "forward" => Ok(ProxyListener::Forward(ForwardProxyListener::default())),
-            "reverse" => Ok(ProxyListener::Reverse(ReverseProxyListener {
-                id: ListenerId::new(),
-                name: "固定上游入口".into(),
-                enabled: false,
-                bind_address: "127.0.0.1".into(),
-                port: 8443,
-                upstream_url: String::new(),
-                downstream_tls: DownstreamTlsSettings::default(),
-                upstream_tls: UpstreamTlsSettings::default(),
-                request_codec_policy: None,
-                response_codec_policy: None,
-            })),
-            _ => Err(AppError::new(
-                "LISTENER_KIND_INVALID",
-                "Listener 类型必须是 forward 或 reverse。",
-            )),
-        }
+    /// 草稿默认按请求目标动态转发；用户可在同一配置中开启 `fixed_server`，不需要先
+    /// 选择“正向/反向”类型，也不会因为切换路由方式而丢失监听器 ID 与公共配置。
+    pub fn listener_new(&self) -> AppResult<ProxyListener> {
+        Ok(ProxyListener::default())
     }
 
     /// 复制一条尚未保存或已经保存的 Listener 草稿。
@@ -73,12 +53,12 @@ impl Application {
     ) -> AppResult<ProxyListener> {
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.workspaces.get(workspace_id).await?;
-        ensure_listener_not_running(&*self.listener_runtime, listener.id()).await?;
+        ensure_listener_not_running(&*self.listener_runtime, listener.id).await?;
         workspace.revision = DomainRevision::new(expected_workspace_revision);
         if let Some(current) = workspace
             .listeners
             .iter_mut()
-            .find(|current| current.id() == listener.id())
+            .find(|current| current.id == listener.id)
         {
             *current = listener.clone();
         } else {
@@ -102,7 +82,7 @@ impl Application {
         let before = workspace.listeners.len();
         workspace
             .listeners
-            .retain(|listener| listener.id() != listener_id);
+            .retain(|listener| listener.id != listener_id);
         if before == workspace.listeners.len() {
             return Err(listener_not_found(listener_id));
         }
@@ -125,7 +105,7 @@ impl Application {
 
     /// 使用已经持久化的入口配置测试真实上游 TLS 握手。
     ///
-    /// 只允许固定上游入口调用。证书材料由 infrastructure 根据安全引用读取，应用层与
+    /// 只允许已配置 HTTPS 固定 Server 的监听器调用。证书材料由 infrastructure 根据安全引用读取，应用层与
     /// 前端都不会接触客户端私钥或 PKCS#12 密码。
     pub async fn listener_test_upstream_tls(
         &self,
@@ -134,13 +114,24 @@ impl Application {
     ) -> AppResult<crate::ListenerUpstreamTlsTestViewModel> {
         let workspace = self.workspaces.get(workspace_id).await?;
         let listener = find_listener(&workspace.listeners, listener_id)?;
-        let ProxyListener::Reverse(listener) = listener else {
+        let Some(fixed_server) = &listener.fixed_server else {
             return Err(AppError::new(
                 "LISTENER_TLS_TEST_UNSUPPORTED",
-                "正向代理的目标由每个请求决定，不能按入口测试固定上游 TLS。",
+                "该监听器未开启固定 Server，无法测试单一 Server TLS。",
             )
             .entity(listener_id.to_string()));
         };
+        if !fixed_server
+            .upstream_url
+            .to_ascii_lowercase()
+            .starts_with("https://")
+        {
+            return Err(AppError::new(
+                "UPSTREAM_TLS_NOT_ENABLED",
+                "固定 Server 使用 HTTP，没有 TLS 握手可测试。",
+            )
+            .entity(listener_id.to_string()));
+        }
         self.listener_runtime
             .test_upstream_tls(workspace, listener)
             .await
@@ -256,7 +247,7 @@ fn build_listener_overview(
         .listeners
         .iter()
         .map(|listener| {
-            let id = listener.id();
+            let id = listener.id;
             let (address, port) = listener.bind_endpoint();
             let status = statuses.remove(&id).unwrap_or(ListenerStatusViewModel {
                 listener_id: id,
@@ -268,21 +259,13 @@ fn build_listener_overview(
                 can_start: true,
                 can_stop: false,
             });
-            let (name, kind_text, request_destination) = match listener {
-                ProxyListener::Forward(listener) => (
-                    listener.name.clone(),
-                    "正向代理".to_owned(),
-                    "请求中的目标地址".to_owned(),
-                ),
-                ProxyListener::Reverse(listener) => (
-                    listener.name.clone(),
-                    "固定上游".to_owned(),
-                    listener.upstream_url.clone(),
-                ),
-            };
+            let (kind_text, request_destination) = listener.fixed_server.as_ref().map_or_else(
+                || ("动态目标".to_owned(), "请求中的目标地址".to_owned()),
+                |fixed| ("固定 Server".to_owned(), fixed.upstream_url.clone()),
+            );
             ListenerMonitorRowViewModel {
                 listener_id: id,
-                name,
+                name: listener.name.clone(),
                 kind_text,
                 listen_address: status.listen_address,
                 request_destination,
@@ -333,25 +316,16 @@ fn build_listener_overview(
 }
 
 fn copy_listener_draft(mut source: ProxyListener) -> ProxyListener {
-    match &mut source {
-        ProxyListener::Forward(listener) => {
-            listener.id = ListenerId::new();
-            listener.name = format!("{} 副本", listener.name.trim());
-            listener.enabled = false;
-        }
-        ProxyListener::Reverse(listener) => {
-            listener.id = ListenerId::new();
-            listener.name = format!("{} 副本", listener.name.trim());
-            listener.enabled = false;
-        }
-    }
+    source.id = ListenerId::new();
+    source.name = format!("{} 副本", source.name.trim());
+    source.enabled = false;
     source
 }
 
 fn find_listener(listeners: &[ProxyListener], listener_id: ListenerId) -> AppResult<ProxyListener> {
     listeners
         .iter()
-        .find(|listener| listener.id() == listener_id)
+        .find(|listener| listener.id == listener_id)
         .cloned()
         .ok_or_else(|| listener_not_found(listener_id))
 }
@@ -363,12 +337,9 @@ fn set_listener_enabled(
 ) -> AppResult<()> {
     let listener = listeners
         .iter_mut()
-        .find(|listener| listener.id() == listener_id)
+        .find(|listener| listener.id == listener_id)
         .ok_or_else(|| listener_not_found(listener_id))?;
-    match listener {
-        ProxyListener::Forward(listener) => listener.enabled = enabled,
-        ProxyListener::Reverse(listener) => listener.enabled = enabled,
-    }
+    listener.enabled = enabled;
     Ok(())
 }
 
@@ -379,54 +350,53 @@ fn listener_not_found(listener_id: ListenerId) -> AppError {
 
 #[cfg(test)]
 mod tests {
-    use intercept_proxy_domain::{DownstreamTlsSettings, UpstreamTlsSettings};
+    use intercept_proxy_domain::{FixedServerSettings, UpstreamTlsSettings};
 
     use super::*;
 
     #[test]
-    fn copied_reverse_listener_gets_independent_identity_and_stops_by_default() {
+    fn copied_listener_preserves_fixed_server_and_stops_by_default() {
         let original_id = ListenerId::new();
-        let source = ProxyListener::Reverse(ReverseProxyListener {
+        let source = ProxyListener {
             id: original_id,
             name: "Transaction".into(),
             enabled: true,
             bind_address: "0.0.0.0".into(),
             port: 16_627,
-            upstream_url: "https://transaction.example.test:16627".into(),
-            downstream_tls: DownstreamTlsSettings::default(),
-            upstream_tls: UpstreamTlsSettings::default(),
-            request_codec_policy: None,
-            response_codec_policy: None,
-        });
-
-        let ProxyListener::Reverse(copy) = copy_listener_draft(source) else {
-            panic!("reverse copy expected")
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: "https://transaction.example.test:16627".into(),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..ProxyListener::default()
         };
+
+        let copy = copy_listener_draft(source);
         assert_ne!(copy.id, original_id);
         assert_eq!(copy.name, "Transaction 副本");
         assert!(!copy.enabled);
         assert_eq!(copy.port, 16_627);
-        assert_eq!(copy.upstream_url, "https://transaction.example.test:16627");
+        assert_eq!(
+            copy.fixed_server.unwrap().upstream_url,
+            "https://transaction.example.test:16627"
+        );
     }
 
     #[test]
     fn overview_uses_workspace_as_the_only_listener_catalog() {
         let mut workspace = ProxyWorkspace::default();
-        let forward_id = workspace.listeners[0].id();
-        workspace
-            .listeners
-            .push(ProxyListener::Reverse(ReverseProxyListener {
-                id: ListenerId::new(),
-                name: "API 固定上游".into(),
-                enabled: false,
-                bind_address: "127.0.0.1".into(),
-                port: 9_001,
+        let forward_id = workspace.listeners[0].id;
+        workspace.listeners.push(ProxyListener {
+            id: ListenerId::new(),
+            name: "API 固定上游".into(),
+            enabled: false,
+            bind_address: "127.0.0.1".into(),
+            port: 9_001,
+            fixed_server: Some(FixedServerSettings {
                 upstream_url: "https://api.example.test:9443".into(),
-                downstream_tls: DownstreamTlsSettings::default(),
                 upstream_tls: UpstreamTlsSettings::default(),
-                request_codec_policy: None,
-                response_codec_policy: None,
-            }));
+            }),
+            ..ProxyListener::default()
+        });
         let overview = build_listener_overview(
             workspace,
             vec![ListenerStatusViewModel {

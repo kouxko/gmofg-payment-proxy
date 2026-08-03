@@ -40,8 +40,10 @@ export const commands = {
 	workspaceDelete: (workspaceId: WorkspaceId, expectedRevision: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_delete", { workspaceId, expectedRevision })),
 	workspaceImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_import")),
 	workspaceExport: (workspaceId: WorkspaceId) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_export", { workspaceId })),
+	applicationConfigurationImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_configuration_import")),
+	applicationConfigurationExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_configuration_export")),
 	listenerList: (workspaceId: WorkspaceId) => typedError<ProxyListener[], AppErrorViewModel>(__TAURI_INVOKE("listener_list", { workspaceId })),
-	listenerNew: (kind: string) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_new", { kind })),
+	listenerNew: () => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_new")),
 	listenerCopy: (source: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_copy", { source })),
 	listenerGet: (workspaceId: WorkspaceId, listenerId: ListenerId) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_get", { workspaceId, listenerId })),
 	listenerSave: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_save", { workspaceId, expectedWorkspaceRevision, listener })),
@@ -51,6 +53,15 @@ export const commands = {
 	listenerStart: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_start", { workspaceId, expectedWorkspaceRevision, listenerId })),
 	listenerStop: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_stop", { workspaceId, expectedWorkspaceRevision, listenerId })),
 	listenerTestUpstreamTls: (workspaceId: WorkspaceId, listenerId: ListenerId) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, listenerId })),
+	listenerImportUpstreamClientIdentity: (label: string, password: string) => typedError<{
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_upstream_client_identity", { label, password })),
+	listenerImportUpstreamServerTrust: (label: string) => typedError<{
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_upstream_server_trust", { label })),
+	listenerCertificateOverview: (workspaceId: WorkspaceId) => typedError<ListenerCertificateDetailViewModel[], AppErrorViewModel>(__TAURI_INVOKE("listener_certificate_overview", { workspaceId })),
 	captureQuery: (query: CaptureQuery) => typedError<CapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_query", { query })),
 	captureGetDetail: (sessionId: string, runtimeEpoch: string) => typedError<CaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_get_detail", { sessionId, runtimeEpoch })),
 	captureClearView: (currentCursor: number) => typedError<number, AppErrorViewModel>(__TAURI_INVOKE("capture_clear_view", { currentCursor })),
@@ -128,13 +139,7 @@ export type AndroidCompanionInstallViewModel = {
 
 export type AndroidControlTransport = "local_abstract_socket" | "rescue_activity" | "adb_force_stop" | "unavailable";
 
-/**
- *  Android 弱网 Profile 需要处理的一段远端地址范围。
- *  一个 Profile 可以保存任意多个目标；`cidr` 同时接受单个 IPv4/IPv6 地址和
- *  CIDR（例如 `10.0.34.20`、`10.0.34.0/24`、`2001:db8::/32`）。`ports`
- *  为空表示该地址范围的全部端口。这里刻意不接受域名：TUN 数据面只能可靠观察
- *  IP 包，不能把 DNS 名称伪装成每条连接都稳定存在的属性。
- */
+/**  弱网只作用于指定远端地址/端口时使用的过滤条件。 */
 export type AndroidDestinationTarget = {
 	cidr: string,
 	ports: number[],
@@ -152,18 +157,17 @@ export type AndroidDeviceViewModel = {
 	selected: boolean,
 };
 
+/**  可随 Workspace 导入导出的 Android 设备网络方案。 */
 export type AndroidNetworkProfile = {
 	id: string,
 	name: string,
 	target_applications: AndroidTargetApplication[],
-	/**
-	 *  需要实施弱网的远端地址列表。空列表表示保留原行为：目标应用访问的全部
-	 *  原始地址都进入弱网引擎，因此不会把一个应用错误限制为单一 Server。
-	 */
+	/**  空列表表示目标应用的全部远端地址都进入弱网引擎。 */
 	destination_targets?: AndroidDestinationTarget[],
+	/**  空列表表示不将流量透明转交桌面代理，只执行设备端弱网。 */
+	proxy_routes?: AndroidProxyRoute[],
 	confirmed_shared_uids: number[],
 	auto_resume_after_reboot: boolean,
-	/**  弱网字段由 Rust 领域模型统一定义，并生成前端只读 TypeScript 类型。 */
 	weak_network: WeakNetworkProfile,
 };
 
@@ -208,6 +212,22 @@ export type AndroidPackageViewModel = {
  */
 export type AndroidProfileEditIntent = { kind: "toggle_package"; package_name: string; selected: boolean } | { kind: "set_burst_loss_enabled"; enabled: boolean } | { kind: "add_blackout_window" } | { kind: "add_tcp_flag_drop" };
 
+/**
+ *  将指定原始目标透明转交给 Workspace 中的一条桌面代理监听。
+ *  这里只保存用户输入的目标和稳定 Listener 引用。桌面 IP、ADB reverse 端口、SOCKS
+ *  地址和设备端 transport 均是启动时解析的运行态，禁止进入 Workspace 文档。
+ */
+export type AndroidProxyRoute = {
+	destination: string,
+	ports: number[],
+	listener_id: ListenerId,
+};
+
+/**
+ *  Android 设备网络方案锁定的目标应用身份快照。
+ *  包名、UID 与签名用于每次启动前重新校验。它们是可移植的安全元数据，不包含 APK、
+ *  设备序列号或运行态。
+ */
 export type AndroidTargetApplication = {
 	package_name: string,
 	signing_sha256: string,
@@ -250,17 +270,6 @@ export type BlackoutWindow = {
 };
 
 export type BodyCodecKind = "raw" | "utf8" | "shift_jis";
-
-/**  将指定监听器、方向与 Body 编解码方式关联起来。 */
-export type BodyCodecPolicy = {
-	id: CodecPolicyId,
-	name: string,
-	listener_ids: ListenerId[],
-	direction: BodyDirection,
-	codec: BodyCodecKind,
-};
-
-export type BodyDirection = "request" | "response" | "both";
 
 export type BreakpointActionOptionViewModel = {
 	kind: BreakpointDecisionKind,
@@ -477,8 +486,6 @@ export type ChannelStatusViewModel = {
 	upstream_ui_tone: UiTone,
 };
 
-export type CodecPolicyId = string;
-
 export type ConnectionFaultAction = { kind: "delay"; milliseconds: number } | { kind: "reject" } | { kind: "rate_limit"; bytes_per_second: number } | { kind: "close_after_bytes"; bytes: number } | { kind: "half_close_after_bytes"; bytes: number } | { kind: "idle_timeout"; milliseconds: number };
 
 export type ConnectionHealthState = "unavailable" | "waiting" | "healthy" | "degraded" | "faulted";
@@ -565,20 +572,39 @@ export type FieldValidationViewModel = {
 	warnings: string[],
 };
 
+/**
+ *  将该监听器收到的全部 HTTP 请求转发到一个固定 Server。
+ *  `None` 表示普通正向代理：每个请求使用自己的目标地址。`Some` 表示固定 Server
+ *  模式：监听器仍是同一条代理入口，只是目的地改由这里统一指定。上游 CA 和可选的
+ *  mTLS 客户端身份属于这条固定转发配置，不能放在全局证书页或另一条“上游入口”中。
+ */
+export type FixedServerSettings = {
+	/**  固定上游 origin，只允许 `http`/`https`、主机和可选端口。 */
+	upstream_url: string,
+	upstream_tls: UpstreamTlsSettings,
+};
+
 export type ForwardProxyAuthentication = { mode: "none" } | { mode: "basic"; credential: SecretReference };
 
-export type ForwardProxyListener = {
-	id: ListenerId,
-	name: string,
-	enabled: boolean,
-	bind_address: string,
-	port: number,
-	authentication: ForwardProxyAuthentication,
-	allowed_client_cidrs: string[],
-	mitm: MitmSettings,
-	connect_timeout_ms: number,
-	read_timeout_ms: number,
-	write_timeout_ms: number,
+/**
+ *  代理监听页面使用的证书引用详情。
+ *  Workspace 只保存安全引用；证书的主题、SAN、有效期和指纹必须由 Rust 重新解析。
+ *  单个引用失效时保留该行并返回 `error_message`，避免一份坏证书阻塞其他证书展示。
+ */
+export type ListenerCertificateDetailViewModel = {
+	reference_id: CertificateReferenceId,
+	label: string,
+	certificate: CertificateItemViewModel | null,
+	error_message: string | null,
+};
+
+/**
+ *  原生导入成功后的安全引用与已解析详情。
+ *  导入文件内容、私钥和密码都不会进入 IPC；前端只获得可持久化引用及公开证书元数据。
+ */
+export type ListenerCertificateImportViewModel = {
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
 };
 
 export type ListenerId = string;
@@ -623,7 +649,7 @@ export type ListenerStatusViewModel = {
 };
 
 /**
- *  对单个固定上游入口执行真实 TCP + TLS 握手后的只读结果。
+ *  对单条已启用 HTTPS 固定 Server 的代理监听执行真实 TCP + TLS 握手后的只读结果。
  *  该模型只包含公开的对端证书元数据，不返回证书字节、客户端私钥或安全引用内容。
  *  `client_identity_configured` 只表示本次握手加载了客户端身份；Server 是否强制要求
  *  客户端证书，由握手成功或失败共同判断，前端不能自行推断。
@@ -716,11 +742,30 @@ export type PathMtuProfile = {
 /**  超过路径 MTU 时的处理语义。 */
 export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
 
+/**
+ *  用户面对的唯一代理监听配置。
+ *  不再用 `Forward`/`Reverse` 两种公开类型割裂配置流程。监听地址、访问控制、下游
+ *  TLS 和超时始终属于监听器；是否固定转发到 Server 只由 [`Self::fixed_server`] 决定。
+ */
 export type ProxyListener = {
-	kind: "forward",
-} & ForwardProxyListener | {
-	kind: "reverse",
-} & ReverseProxyListener;
+	id: ListenerId,
+	name: string,
+	enabled: boolean,
+	bind_address: string,
+	port: number,
+	authentication: ForwardProxyAuthentication,
+	allowed_client_cidrs: string[],
+	mitm: MitmSettings,
+	connect_timeout_ms: number,
+	read_timeout_ms: number,
+	write_timeout_ms: number,
+	downstream_tls: DownstreamTlsSettings,
+	/**  当前监听处理请求正文时采用的字符编码。Raw 表示不执行文本/JSON解码。 */
+	request_body_codec: BodyCodecKind,
+	/**  当前监听处理响应正文时采用的字符编码。Raw 表示不执行文本/JSON解码。 */
+	response_body_codec: BodyCodecKind,
+	fixed_server: FixedServerSettings | null,
+};
 
 export type ProxyState = "stopped" | "starting" | "running" | "stopping" | "faulted";
 
@@ -760,11 +805,15 @@ export type ProxyWorkspace = {
 	name: string,
 	revision: Revision,
 	listeners: ProxyListener[],
-	body_codec_policies: BodyCodecPolicy[],
 	metadata_extractors: MetadataExtractor[],
 	response_assertions: ResponseAssertion[],
 	fault_presets: FaultPreset[],
 	certificate_references: CertificateReference[],
+	/**
+	 *  与该 Workspace 一起迁移的 Android 设备网络方案。
+	 *  设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，不属于此字段。
+	 */
+	android_network_profiles?: AndroidNetworkProfile[],
 };
 
 /**
@@ -800,20 +849,6 @@ export type ResponseAssertionResultViewModel = {
 	name: string,
 	passed: boolean,
 	message: string,
-};
-
-export type ReverseProxyListener = {
-	id: ListenerId,
-	name: string,
-	enabled: boolean,
-	bind_address: string,
-	port: number,
-	/**  固定上游 origin，只允许 `http`/`https`、主机和可选端口。 */
-	upstream_url: string,
-	downstream_tls: DownstreamTlsSettings,
-	upstream_tls: UpstreamTlsSettings,
-	request_codec_policy: CodecPolicyId | null,
-	response_codec_policy: CodecPolicyId | null,
 };
 
 export type Revision = number;

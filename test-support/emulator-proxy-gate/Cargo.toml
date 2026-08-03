@@ -10,6 +10,7 @@ publish = false
 [dependencies]
 encoding_rs = "0.8.35"
 intercept-proxy-application = { path = "../../src-tauri/crates/application" }
+intercept-proxy-domain = { path = "../../src-tauri/crates/domain" }
 intercept-proxy-host = { path = "../../src-tauri/crates/host" }
 intercept-proxy-infrastructure = { path = "../../src-tauri/crates/infrastructure" }
 intercept-proxy-product-api = { path = "../../src-tauri/crates/product-api" }

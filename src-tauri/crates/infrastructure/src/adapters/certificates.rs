@@ -209,7 +209,7 @@ impl CertificateServiceAdapter {
             && (!policy.requires_global_upstream_ca() || configured(UPSTREAM_CA));
 
         let mut items = Vec::new();
-        for (kind, display, usage) in [
+        for (kind, _display, usage) in [
             (ROOT, labels.root_name, labels.root_usage),
             (LEAF, labels.leaf_name, labels.leaf_usage),
             (
@@ -228,11 +228,11 @@ impl CertificateServiceAdapter {
             ),
         ] {
             if let Some(status) = statuses.get(kind) {
-                items.push(status_item(display, usage, status));
+                items.push(status_item(kind, usage, status));
             } else if kind == UPSTREAM_CA
                 && let Some(material) = bundled_upstream.as_ref()
             {
-                items.push(item(display, usage, material));
+                items.push(item(kind, usage, material));
             }
         }
 
@@ -390,10 +390,10 @@ impl CertificateServiceAdapter {
             },
             items: materials
                 .iter()
-                .filter_map(|(_, display, usage, material)| {
+                .filter_map(|(kind, _, usage, material)| {
                     material
                         .as_ref()
-                        .map(|material| item(display, usage, material))
+                        .map(|material| item(kind, usage, material))
                 })
                 .collect(),
             can_initialize: !snapshot.materials.contains_key(ROOT)
@@ -833,7 +833,7 @@ fn leaf_request(sans: &[String]) -> AppResult<LeafCertificateRequest> {
     })
 }
 
-fn item(name: &str, usage: &str, material: &ProtectedMaterial) -> CertificateItemViewModel {
+fn item(kind: &str, usage: &str, material: &ProtectedMaterial) -> CertificateItemViewModel {
     let now = Utc::now();
     let (status_text, ui_tone) = match (
         parse_validity_date(&material.not_before),
@@ -849,7 +849,9 @@ fn item(name: &str, usage: &str, material: &ProtectedMaterial) -> CertificateIte
         _ => ("证书无效".into(), UiTone::Danger),
     };
     CertificateItemViewModel {
-        kind: name.into(),
+        // `kind` 是前端筛选与未来 TUI/CLI 共用的稳定标识，不能写入会变化的中文
+        // 显示名称。用户可见文案由 `usage` 承载。
+        kind: kind.into(),
         subject: material.subject.clone(),
         usage: usage.into(),
         sans: material.sans.clone(),
@@ -861,7 +863,7 @@ fn item(name: &str, usage: &str, material: &ProtectedMaterial) -> CertificateIte
     }
 }
 
-fn status_item(name: &str, usage: &str, status: &MaterialStatus) -> CertificateItemViewModel {
+fn status_item(kind: &str, usage: &str, status: &MaterialStatus) -> CertificateItemViewModel {
     let valid_from = status.not_before.as_deref().and_then(parse_validity_date);
     let valid_until = status.not_after.as_deref().and_then(parse_validity_date);
     let now = Utc::now();
@@ -876,7 +878,7 @@ fn status_item(name: &str, usage: &str, status: &MaterialStatus) -> CertificateI
         _ => ("已配置，需重新校验".into(), UiTone::Warning),
     };
     CertificateItemViewModel {
-        kind: name.into(),
+        kind: kind.into(),
         subject: status.subject.clone(),
         usage: usage.into(),
         sans: status.sans.clone(),
@@ -1156,6 +1158,8 @@ mod tests {
         assert!(status.ready);
         assert_eq!(status.status_text, "证书已就绪");
         assert_eq!(status.items.len(), 2);
+        assert_eq!(status.items[0].kind, ROOT);
+        assert_eq!(status.items[1].kind, LEAF);
         assert_eq!(status.items[0].subject, "Test Root");
         assert_eq!(status.items[1].subject, "Test Leaf");
         assert_eq!(
@@ -1262,10 +1266,19 @@ mod tests {
             test_profile(),
         );
 
-        adapter
+        let overview = adapter
             .generate_ca(vec!["127.0.0.1".into()])
             .await
             .expect("generate installation Root CA");
+        assert_eq!(overview.items.len(), 2);
+        assert_eq!(overview.items[0].kind, ROOT);
+        assert_eq!(overview.items[1].kind, LEAF);
+        assert!(overview.items.iter().all(|item| {
+            !item.subject.is_empty()
+                && !item.sha256_fingerprint.is_empty()
+                && item.valid_from.is_some()
+                && item.valid_until.is_some()
+        }));
         let result = adapter.export_ca().await.expect("export public Root CA");
         let exported = std::fs::read(&export_path).expect("read exported certificate");
 

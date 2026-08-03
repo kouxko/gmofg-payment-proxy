@@ -40,6 +40,16 @@ describe("page-specific usage guides", () => {
     }
   });
 
+  it("distinguishes Android transparent routing from an ordinary client proxy", () => {
+    const consoleGuide = pageHelpGuides["/console"].sections
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(consoleGuide).toContain("Android 应用网络接管不修改业务 App 的 URL 或 Proxy IP");
+    expect(consoleGuide).toContain("非 VPN 客户端则按自身能力配置标准代理或直接连接入口");
+    expect(consoleGuide).not.toContain("将客户端应用的目标地址配置为代理电脑");
+  });
+
   it("opens the current page guide in a Drawer without document navigation", async () => {
     const user = userEvent.setup();
     const documentUrl = window.location.href;

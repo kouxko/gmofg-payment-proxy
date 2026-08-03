@@ -18,7 +18,7 @@ use jni::{
 };
 
 use crate::{
-    InstalledApplication, NetworkProfile,
+    InstalledApplication, NetworkProfile, ProxyRuntimeConfiguration,
     data_plane::{DataPlaneHandle, SocketProtector, runtime_stats_json},
 };
 
@@ -93,6 +93,7 @@ pub extern "system" fn Java_com_interceptproxy_vpn_NativeBridge_nativeStart<'loc
     tun_fd: jint,
     profile_json: JString<'local>,
     inventory_json: JString<'local>,
+    proxy_runtime_json: JString<'local>,
     socket_protector: JObject<'local>,
 ) -> jboolean {
     let Ok(owned_tun_fd) = take_owned_tun_fd(tun_fd) else {
@@ -103,6 +104,7 @@ pub extern "system" fn Java_com_interceptproxy_vpn_NativeBridge_nativeStart<'loc
             let result = (|| {
                 let profile: NetworkProfile = read_json(env, &profile_json)?;
                 let installed: Vec<InstalledApplication> = read_json(env, &inventory_json)?;
+                let proxy_runtime: ProxyRuntimeConfiguration = read_json(env, &proxy_runtime_json)?;
                 let profile = profile
                     .validate_for_start(&installed)
                     .map_err(|error| error.to_string())?;
@@ -116,6 +118,7 @@ pub extern "system" fn Java_com_interceptproxy_vpn_NativeBridge_nativeStart<'loc
                 let handle = DataPlaneHandle::start(
                     owned_tun_fd,
                     profile,
+                    proxy_runtime,
                     SocketProtector::new(vm, protector),
                 )?;
                 let mut slot = DATA_PLANE

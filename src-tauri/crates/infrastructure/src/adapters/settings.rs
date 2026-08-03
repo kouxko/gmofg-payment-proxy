@@ -327,7 +327,7 @@ fn valid() -> SettingsValidationViewModel {
     }
 }
 
-fn serialize_settings(draft: &SettingsDraft) -> Result<Value, serde_json::Error> {
+pub(crate) fn serialize_settings(draft: &SettingsDraft) -> Result<Value, serde_json::Error> {
     let mut value = serde_json::to_value(draft)?;
     value
         .as_object_mut()

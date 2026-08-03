@@ -399,7 +399,7 @@ async fn production_host_covers_queries_and_settings_without_ui() {
         .await
         .expect("generic three-channel bootstrap");
     assert_eq!(bootstrap.channel_catalog.len(), 1);
-    assert_eq!(bootstrap.channel_catalog[0].display_name, "默认正向代理");
+    assert_eq!(bootstrap.channel_catalog[0].display_name, "默认代理监听");
     assert!(uuid::Uuid::parse_str(bootstrap.channel_catalog[0].id.as_str()).is_ok());
     let status = application
         .proxy_get_status()
@@ -588,7 +588,7 @@ async fn production_host_covers_certificate_overview_and_validation_without_ui()
         .await
         .expect("generic bootstrap");
     assert_eq!(bootstrap.channel_catalog.len(), 1);
-    assert_eq!(bootstrap.channel_catalog[0].display_name, "默认正向代理");
+    assert_eq!(bootstrap.channel_catalog[0].display_name, "默认代理监听");
     assert!(uuid::Uuid::parse_str(bootstrap.channel_catalog[0].id.as_str()).is_ok());
 
     let templates = application

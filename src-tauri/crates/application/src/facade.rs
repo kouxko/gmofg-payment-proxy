@@ -8,17 +8,20 @@ use std::sync::Arc;
 use chrono::Utc;
 
 use crate::{
-    AndroidControlPort, AppBootstrapViewModel, AppError, AppResult, BreakpointCoordinator,
-    BreakpointValidationPort, CaptureQuery, CertificateOverviewViewModel, CertificateServicePort,
+    AndroidControlPort, AppBootstrapViewModel, AppError, AppResult,
+    ApplicationConfigurationStorePort, BreakpointCoordinator, BreakpointValidationPort,
+    CaptureQuery, CertificateOverviewViewModel, CertificateServicePort,
     CertificateValidationViewModel, ChannelPresentationViewModel, EventHub, EventSubscription,
-    FaultServicePort, FileExportPort, ListenerRuntimePort, ListenerRuntimeState,
-    OperationResultViewModel, PageRequest, ProtectedSecretPort, ProxyListener, ProxyState,
+    FaultServicePort, FileExportPort, ListenerCertificateImportPort, ListenerRuntimePort,
+    ListenerRuntimeState, OperationResultViewModel, PageRequest, ProtectedSecretPort, ProxyState,
     ProxyStatusViewModel, ProxySupervisorPort, RuleRepositoryPort, SessionQueryPort,
     SettingsRepositoryPort, SettingsViewModel, UiEventEnvelope, UiEventPayload,
-    WorkspaceDocumentPort, WorkspaceRepositoryPort,
+    UnavailableApplicationConfigurationStore, WorkspaceDocumentPort, WorkspaceRepositoryPort,
 };
 
 mod android;
+mod configuration;
+mod listener_certificates;
 mod listeners;
 mod rules;
 mod secrets;
@@ -47,6 +50,7 @@ pub struct Application {
     file_export: Arc<dyn FileExportPort>,
     workspaces: Arc<dyn WorkspaceRepositoryPort>,
     workspace_documents: Arc<dyn WorkspaceDocumentPort>,
+    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
     android: Arc<dyn AndroidControlPort>,
     /// 当前已选择设备的完整应用清单。
     ///
@@ -55,6 +59,7 @@ pub struct Application {
     /// UI、未来 CLI/TUI 都只能通过同一组用例读取和筛选，不能各自维护业务缓存。
     android_package_cache: tokio::sync::Mutex<Option<Vec<crate::AndroidPackageViewModel>>>,
     listener_runtime: Arc<dyn ListenerRuntimePort>,
+    listener_certificates: Arc<dyn ListenerCertificateImportPort>,
     protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
     mutation_gate: tokio::sync::Mutex<()>,
@@ -79,6 +84,7 @@ pub struct ApplicationDependencies {
     pub workspaces: Arc<dyn WorkspaceRepositoryPort>,
     pub workspace_documents: Arc<dyn WorkspaceDocumentPort>,
     pub listener_runtime: Arc<dyn ListenerRuntimePort>,
+    pub listener_certificates: Arc<dyn ListenerCertificateImportPort>,
     pub events: Arc<EventHub>,
 }
 
@@ -111,6 +117,22 @@ impl Application {
         android: Arc<dyn AndroidControlPort>,
         protected_secrets: Arc<dyn ProtectedSecretPort>,
     ) -> Self {
+        Self::new_with_platform_services(
+            product_name,
+            dependencies,
+            android,
+            protected_secrets,
+            Arc::new(UnavailableApplicationConfigurationStore),
+        )
+    }
+
+    pub fn new_with_platform_services(
+        product_name: String,
+        dependencies: ApplicationDependencies,
+        android: Arc<dyn AndroidControlPort>,
+        protected_secrets: Arc<dyn ProtectedSecretPort>,
+        configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+    ) -> Self {
         Self {
             product_name,
             proxy: dependencies.proxy,
@@ -125,9 +147,11 @@ impl Application {
             file_export: dependencies.file_export,
             workspaces: dependencies.workspaces,
             workspace_documents: dependencies.workspace_documents,
+            configuration_store,
             android,
             android_package_cache: tokio::sync::Mutex::new(None),
             listener_runtime: dependencies.listener_runtime,
+            listener_certificates: dependencies.listener_certificates,
             protected_secrets,
             events: dependencies.events,
             mutation_gate: tokio::sync::Mutex::new(()),
@@ -198,10 +222,8 @@ impl Application {
             .listeners
             .into_iter()
             .map(|listener| {
-                let (id, display_name) = match listener {
-                    ProxyListener::Forward(listener) => (listener.id, listener.name),
-                    ProxyListener::Reverse(listener) => (listener.id, listener.name),
-                };
+                let id = listener.id;
+                let display_name = listener.name;
                 Ok(ChannelPresentationViewModel {
                     id: crate::ChannelId::new(id.to_string()).map_err(AppError::from)?,
                     display_name,

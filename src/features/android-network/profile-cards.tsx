@@ -26,8 +26,8 @@ export function ProfileSelectorCard({
     <Card className="h-fit border border-[var(--telemetry-line)] shadow-sm">
       <Card.Header className="flex-row items-center justify-between gap-3">
         <div>
-          <Card.Title>弱网方案</Card.Title>
-          <Card.Description>保存目标应用与弱网参数。</Card.Description>
+          <Card.Title>设备网络方案</Card.Title>
+          <Card.Description>保存目标应用、透明代理路由与可选弱网参数。</Card.Description>
         </div>
         <Button size="sm" variant="primary" isDisabled={busy} onPress={onNew}>
           新建
@@ -45,7 +45,7 @@ export function ProfileSelectorCard({
           </Button>
         ))}
         {!loading && profiles.length === 0 && (
-          <p className="py-2 text-sm text-[var(--telemetry-muted)]">还没有保存的弱网方案。</p>
+          <p className="py-2 text-sm text-[var(--telemetry-muted)]">还没有保存的设备网络方案。</p>
         )}
       </Card.Content>
     </Card>
@@ -71,7 +71,7 @@ export function ProfileBasicsCard({
         <div className="grid gap-1">
           <Label>方案名称</Label>
           <Input
-            aria-label="弱网方案名称"
+            aria-label="设备网络方案名称"
             value={draft.name}
             onChange={(event) => onChange({ ...draft, name: event.target.value })}
           />
@@ -142,13 +142,13 @@ export function EmptyProfileState({ busy, onNew }: EmptyProfileStateProps): Reac
     <Alert status="accent">
       <Alert.Indicator />
       <Alert.Content>
-        <Alert.Title>尚未选择弱网方案</Alert.Title>
+        <Alert.Title>尚未选择设备网络方案</Alert.Title>
         <Alert.Description>
-          新建或选择方案后，即可配置目标应用、目标地址和 TCP/IP 弱网参数。
+          新建或选择方案后，即可配置目标应用、代理路由、弱网覆盖范围和 TCP/IP 参数。
         </Alert.Description>
         <div className="mt-3">
           <Button size="sm" variant="primary" isDisabled={busy} onPress={onNew}>
-            新建弱网方案
+            新建设备网络方案
           </Button>
         </div>
       </Alert.Content>
