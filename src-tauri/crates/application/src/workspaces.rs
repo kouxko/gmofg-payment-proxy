@@ -8,11 +8,12 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    CertificateReferenceId, ChannelId, CodecPolicyId, DownstreamClientAuthentication,
-    FaultPresetId, ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, RuleId,
+    CertificateReferenceId, ChannelId, DownstreamClientAuthentication, FaultPresetId, ListenerId,
+    MetadataExtractorId, ResponseAssertionId, Revision, RuleId,
 };
 use parking_lot::RwLock;
 use serde_json::Value;
+use uuid::Uuid;
 
 use crate::{
     AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceDocumentPort,
@@ -31,12 +32,7 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
     let listener_ids = workspace
         .listeners
         .iter()
-        .map(|listener| (listener.id(), ListenerId::new()))
-        .collect::<BTreeMap<_, _>>();
-    let codec_ids = workspace
-        .body_codec_policies
-        .iter()
-        .map(|policy| (policy.id, CodecPolicyId::new()))
+        .map(|listener| (listener.id, ListenerId::new()))
         .collect::<BTreeMap<_, _>>();
     let certificate_ids = workspace
         .certificate_references
@@ -45,64 +41,47 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
         .collect::<BTreeMap<_, _>>();
 
     for listener in &mut workspace.listeners {
-        match listener {
-            intercept_proxy_domain::ProxyListener::Forward(listener) => {
-                listener.id = mapped(&listener_ids, listener.id, "Listener")?;
-                listener.mitm.root_ca = listener
-                    .mitm
-                    .root_ca
-                    .map(|id| mapped(&certificate_ids, id, "MITM Root CA"))
-                    .transpose()?;
-            }
-            intercept_proxy_domain::ProxyListener::Reverse(listener) => {
-                listener.id = mapped(&listener_ids, listener.id, "Listener")?;
-                listener.request_codec_policy = listener
-                    .request_codec_policy
-                    .map(|id| mapped(&codec_ids, id, "request codec"))
-                    .transpose()?;
-                listener.response_codec_policy = listener
-                    .response_codec_policy
-                    .map(|id| mapped(&codec_ids, id, "response codec"))
-                    .transpose()?;
-                listener.downstream_tls.server_identity = listener
-                    .downstream_tls
-                    .server_identity
-                    .map(|id| mapped(&certificate_ids, id, "server identity"))
-                    .transpose()?;
-                listener.downstream_tls.client_authentication =
-                    match listener.downstream_tls.client_authentication {
-                        DownstreamClientAuthentication::Disabled => {
-                            DownstreamClientAuthentication::Disabled
-                        }
-                        DownstreamClientAuthentication::Optional { trust } => {
-                            DownstreamClientAuthentication::Optional {
-                                trust: mapped(&certificate_ids, trust, "client trust")?,
-                            }
-                        }
-                        DownstreamClientAuthentication::Required { trust } => {
-                            DownstreamClientAuthentication::Required {
-                                trust: mapped(&certificate_ids, trust, "client trust")?,
-                            }
-                        }
-                    };
-                listener.upstream_tls.server_trust = listener
-                    .upstream_tls
-                    .server_trust
-                    .map(|id| mapped(&certificate_ids, id, "upstream trust"))
-                    .transpose()?;
-                listener.upstream_tls.client_identity = listener
-                    .upstream_tls
-                    .client_identity
-                    .map(|id| mapped(&certificate_ids, id, "upstream identity"))
-                    .transpose()?;
-            }
+        listener.id = mapped(&listener_ids, listener.id, "Listener")?;
+        listener.mitm.root_ca = listener
+            .mitm
+            .root_ca
+            .map(|id| mapped(&certificate_ids, id, "MITM Root CA"))
+            .transpose()?;
+        if let Some(fixed_server) = &mut listener.fixed_server {
+            fixed_server.upstream_tls.server_trust = fixed_server
+                .upstream_tls
+                .server_trust
+                .map(|id| mapped(&certificate_ids, id, "upstream trust"))
+                .transpose()?;
+            fixed_server.upstream_tls.client_identity = fixed_server
+                .upstream_tls
+                .client_identity
+                .map(|id| mapped(&certificate_ids, id, "upstream identity"))
+                .transpose()?;
         }
+        listener.downstream_tls.server_identity = listener
+            .downstream_tls
+            .server_identity
+            .map(|id| mapped(&certificate_ids, id, "server identity"))
+            .transpose()?;
+        listener.downstream_tls.client_authentication = match listener
+            .downstream_tls
+            .client_authentication
+        {
+            DownstreamClientAuthentication::Disabled => DownstreamClientAuthentication::Disabled,
+            DownstreamClientAuthentication::Optional { trust } => {
+                DownstreamClientAuthentication::Optional {
+                    trust: mapped(&certificate_ids, trust, "client trust")?,
+                }
+            }
+            DownstreamClientAuthentication::Required { trust } => {
+                DownstreamClientAuthentication::Required {
+                    trust: mapped(&certificate_ids, trust, "client trust")?,
+                }
+            }
+        };
     }
 
-    for policy in &mut workspace.body_codec_policies {
-        policy.id = mapped(&codec_ids, policy.id, "codec policy")?;
-        remap_listener_references(&mut policy.listener_ids, &listener_ids)?;
-    }
     for extractor in &mut workspace.metadata_extractors {
         extractor.id = MetadataExtractorId::new();
         remap_listener_references(&mut extractor.listener_ids, &listener_ids)?;
@@ -126,6 +105,16 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
     }
     for reference in &mut workspace.certificate_references {
         reference.id = mapped(&certificate_ids, reference.id, "certificate reference")?;
+    }
+    for profile in &mut workspace.android_network_profiles {
+        profile.id = Uuid::new_v4().to_string();
+        for route in &mut profile.proxy_routes {
+            route.listener_id = mapped(
+                &listener_ids,
+                route.listener_id,
+                "Android transparent proxy route",
+            )?;
+        }
     }
     workspace.id = WorkspaceId::new();
     workspace.revision = Revision::INITIAL;
@@ -367,6 +356,19 @@ impl WorkspaceDocumentPort for InMemoryWorkspaceDocumentStore {
     }
 
     async fn save_export_document(
+        &self,
+        suggested_file_name: String,
+        document: Vec<u8>,
+    ) -> AppResult<bool> {
+        *self.last_export.write() = Some((suggested_file_name, document));
+        Ok(true)
+    }
+
+    async fn pick_import_application_configuration(&self) -> AppResult<Option<Vec<u8>>> {
+        Ok(self.next_import.write().take())
+    }
+
+    async fn save_export_application_configuration(
         &self,
         suggested_file_name: String,
         document: Vec<u8>,

@@ -9,8 +9,9 @@ use std::{fs, sync::Arc};
 use async_trait::async_trait;
 use chrono::Utc;
 use intercept_proxy_application::{
-    AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceDocumentPort,
-    WorkspaceId, WorkspaceRepositoryPort, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    AppError, AppResult, ApplicationConfigurationDocument, ApplicationConfigurationStorePort,
+    OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceDocumentPort, WorkspaceId,
+    WorkspaceRepositoryPort, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
     remap_workspace_identity,
 };
 use serde_json::Value;
@@ -20,6 +21,7 @@ use crate::{AtomicFileExporter, SqliteStore, WorkspaceRecord};
 use super::{
     NativeFileDialog,
     common::{app_error, infra},
+    settings::serialize_settings,
 };
 
 const MAX_WORKSPACE_DOCUMENT_BYTES: usize = 8 * 1024 * 1024;
@@ -75,6 +77,43 @@ impl WorkspaceDocumentPort for WorkspaceDocumentAdapter {
         document: Vec<u8>,
     ) -> AppResult<bool> {
         let Some(selection) = self.dialog.choose_save_file("intercept_workspace")? else {
+            return Ok(false);
+        };
+        infra(
+            self.exporter
+                .write(&selection.path, &document, selection.overwrite_confirmed),
+        )?;
+        Ok(true)
+    }
+
+    async fn pick_import_application_configuration(&self) -> AppResult<Option<Vec<u8>>> {
+        let Some(path) = self.dialog.choose_open_file("intercept_configuration")? else {
+            return Ok(None);
+        };
+        let metadata = fs::metadata(&path).map_err(|error| {
+            AppError::new(
+                "IMPORT_FAILED",
+                format!("无法读取完整配置文件信息：{error}"),
+            )
+        })?;
+        if metadata.len() > intercept_proxy_application::MAX_APPLICATION_CONFIGURATION_BYTES as u64
+        {
+            return Err(AppError::new(
+                "IMPORT_FAILED",
+                "完整配置文档超过 32 MiB 安全上限。",
+            ));
+        }
+        fs::read(&path)
+            .map(Some)
+            .map_err(|error| AppError::new("IMPORT_FAILED", format!("读取完整配置失败：{error}")))
+    }
+
+    async fn save_export_application_configuration(
+        &self,
+        _suggested_file_name: String,
+        document: Vec<u8>,
+    ) -> AppResult<bool> {
+        let Some(selection) = self.dialog.choose_save_file("intercept_configuration")? else {
             return Ok(false);
         };
         infra(
@@ -174,6 +213,29 @@ impl WorkspaceRepositoryAdapter {
         reject_sensitive_fields(&value, "$")
             .map_err(|_| AppError::new("EXPORT_FAILED", "Workspace 包含禁止导出的敏感字段。"))?;
         Ok(document)
+    }
+}
+
+#[async_trait]
+impl ApplicationConfigurationStorePort for WorkspaceRepositoryAdapter {
+    async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
+        document.validate()?;
+        let records = document
+            .workspaces
+            .iter()
+            .map(Self::record)
+            .collect::<AppResult<Vec<_>>>()?;
+        let settings = serialize_settings(&document.settings.to_draft(None)).map_err(|error| {
+            AppError::new(
+                "APPLICATION_CONFIGURATION_INVALID",
+                format!("完整配置中的 Settings 无法持久化：{error}"),
+            )
+        })?;
+        infra(self.store.replace_application_configuration(
+            document.selected_workspace_id.as_uuid(),
+            &records,
+            &settings,
+        ))
     }
 }
 
@@ -307,15 +369,19 @@ fn reject_sensitive_fields(value: &Value, path: &str) -> AppResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use intercept_proxy_domain::{
-        BodyCodecKind, BodyCodecPolicy, BodyDirection, CertificateReference,
-        CertificateReferenceId, CertificateReferenceKind, ChannelId, CodecPolicyId,
-        ConnectionFaultAction, DownstreamClientAuthentication, DownstreamTlsSettings, FaultPreset,
-        FaultPresetId, ListenerId, MatchCondition, MessageStage, MetadataExtractor,
-        MetadataExtractorId, MetadataExtractorSource, ProxyListener, ResponseAssertion,
-        ResponseAssertionId, ResponseAssertionKind, ReverseProxyListener,
-        Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings,
+    use intercept_proxy_application::{
+        APPLICATION_CONFIGURATION_FORMAT_VERSION, PortableSettings, SettingsDraft,
     };
+    use intercept_proxy_domain::{
+        AndroidNetworkProfile, AndroidProxyRoute, AndroidTargetApplication, BodyCodecKind,
+        CertificateReference, CertificateReferenceId, CertificateReferenceKind, ChannelId,
+        ConnectionFaultAction, DownstreamClientAuthentication, DownstreamTlsSettings, FaultPreset,
+        FaultPresetId, FixedServerSettings, ListenerId, MatchCondition, MessageStage,
+        MetadataExtractor, MetadataExtractorId, MetadataExtractorSource, ProxyListener,
+        ResponseAssertion, ResponseAssertionId, ResponseAssertionKind, Revision as DomainRevision,
+        Rule, RuleId, UpstreamTlsSettings, WeakNetworkProfile,
+    };
+    use std::collections::BTreeSet;
 
     #[tokio::test]
     async fn sqlite_store_round_trips_and_rejects_stale_workspace_writes() {
@@ -354,6 +420,44 @@ mod tests {
         assert_eq!(error.view_model.code, "IMPORT_FAILED");
     }
 
+    #[tokio::test]
+    async fn full_configuration_replaces_workspaces_selection_and_settings_together() {
+        let store = Arc::new(SqliteStore::in_memory().expect("in-memory store"));
+        let repository = WorkspaceRepositoryAdapter::new(store.clone());
+        let first = ProxyWorkspace {
+            name: "First".into(),
+            ..ProxyWorkspace::default()
+        };
+        let second = ProxyWorkspace {
+            name: "Second".into(),
+            ..ProxyWorkspace::default()
+        };
+        let settings = SettingsDraft {
+            max_sessions: 777,
+            ..SettingsDraft::default()
+        };
+        let document = ApplicationConfigurationDocument {
+            format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
+            selected_workspace_id: second.id,
+            workspaces: vec![first.clone(), second.clone()],
+            settings: PortableSettings::from(&settings),
+        };
+
+        repository
+            .replace_all(document)
+            .await
+            .expect("atomic replace");
+
+        let snapshot = store.load_workspaces().expect("workspaces");
+        assert_eq!(snapshot.selected_id, Some(second.id.as_uuid()));
+        assert_eq!(snapshot.records.len(), 2);
+        let stored_settings = store.load_settings().expect("settings").expect("stored");
+        assert_eq!(
+            stored_settings.value["max_sessions"],
+            serde_json::json!(777)
+        );
+    }
+
     #[test]
     fn copy_identity_remaps_nested_ids_and_references() {
         let mut workspace = referenced_workspace();
@@ -363,11 +467,7 @@ mod tests {
 
         assert_ne!(workspace.id, original.id);
         assert_eq!(workspace.revision, DomainRevision::INITIAL);
-        assert_ne!(workspace.listeners[0].id(), original.listeners[0].id());
-        assert_ne!(
-            workspace.body_codec_policies[0].id,
-            original.body_codec_policies[0].id
-        );
+        assert_ne!(workspace.listeners[0].id, original.listeners[0].id);
         assert_ne!(
             workspace.metadata_extractors[0].id,
             original.metadata_extractors[0].id
@@ -379,35 +479,34 @@ mod tests {
         assert_ne!(workspace.rules[0].id, original.rules[0].id);
         assert_ne!(workspace.fault_presets[0].id, original.fault_presets[0].id);
         assert_ne!(
+            workspace.android_network_profiles[0].id,
+            original.android_network_profiles[0].id
+        );
+        assert_ne!(
             workspace.certificate_references[0].id,
             original.certificate_references[0].id
         );
 
-        let ProxyListener::Reverse(listener) = &workspace.listeners[0] else {
-            panic!("reverse listener")
-        };
-        assert_eq!(
-            listener.request_codec_policy,
-            Some(workspace.body_codec_policies[0].id)
-        );
+        let listener = &workspace.listeners[0];
+        assert_eq!(listener.request_body_codec, BodyCodecKind::Utf8);
+        assert_eq!(listener.response_body_codec, BodyCodecKind::ShiftJis);
         assert_eq!(
             listener.downstream_tls.server_identity,
             Some(workspace.certificate_references[0].id)
         );
         assert_eq!(
-            workspace.body_codec_policies[0].listener_ids,
-            vec![listener.id]
-        );
-        assert_eq!(
             workspace.rules[0].channel.as_ref().map(ChannelId::as_str),
             Some(listener.id.to_string().as_str())
+        );
+        assert_eq!(
+            workspace.android_network_profiles[0].proxy_routes[0].listener_id,
+            listener.id
         );
     }
 
     #[allow(clippy::too_many_lines)]
     fn referenced_workspace() -> ProxyWorkspace {
         let listener_id = ListenerId::new();
-        let codec_id = CodecPolicyId::new();
         let server_identity = CertificateReferenceId::new();
         let downstream_trust = CertificateReferenceId::new();
         let upstream_identity = CertificateReferenceId::new();
@@ -443,13 +542,12 @@ mod tests {
             id: WorkspaceId::new(),
             name: "Referenced".into(),
             revision: DomainRevision::new(9),
-            listeners: vec![ProxyListener::Reverse(ReverseProxyListener {
+            listeners: vec![ProxyListener {
                 id: listener_id,
                 name: "Reverse".into(),
                 enabled: false,
                 bind_address: "127.0.0.1".into(),
                 port: 18443,
-                upstream_url: "https://example.test".into(),
                 downstream_tls: DownstreamTlsSettings {
                     enabled: true,
                     server_identity: Some(server_identity),
@@ -457,20 +555,17 @@ mod tests {
                         trust: downstream_trust,
                     },
                 },
-                upstream_tls: UpstreamTlsSettings {
-                    verify_hostname: true,
-                    server_trust: Some(upstream_trust),
-                    client_identity: Some(upstream_identity),
-                },
-                request_codec_policy: Some(codec_id),
-                response_codec_policy: Some(codec_id),
-            })],
-            body_codec_policies: vec![BodyCodecPolicy {
-                id: codec_id,
-                name: "Codec".into(),
-                listener_ids: vec![listener_id],
-                direction: BodyDirection::Both,
-                codec: BodyCodecKind::Utf8,
+                request_body_codec: BodyCodecKind::Utf8,
+                response_body_codec: BodyCodecKind::ShiftJis,
+                fixed_server: Some(FixedServerSettings {
+                    upstream_url: "https://example.test".into(),
+                    upstream_tls: UpstreamTlsSettings {
+                        verify_hostname: true,
+                        server_trust: Some(upstream_trust),
+                        client_identity: Some(upstream_identity),
+                    },
+                }),
+                ..ProxyListener::default()
             }],
             metadata_extractors: vec![MetadataExtractor {
                 id: MetadataExtractorId::new(),
@@ -509,6 +604,25 @@ mod tests {
                 http_actions: Vec::new(),
             }],
             certificate_references: certificates,
+            android_network_profiles: vec![AndroidNetworkProfile {
+                id: "android-profile".into(),
+                name: "Android Profile".into(),
+                target_applications: vec![AndroidTargetApplication {
+                    package_name: "com.example.client".into(),
+                    signing_sha256: "AA".repeat(32),
+                    uid: 10_001,
+                    display_name: None,
+                }],
+                destination_targets: Vec::new(),
+                proxy_routes: vec![AndroidProxyRoute {
+                    destination: "example.test".into(),
+                    ports: vec![443],
+                    listener_id,
+                }],
+                confirmed_shared_uids: BTreeSet::new(),
+                auto_resume_after_reboot: false,
+                weak_network: WeakNetworkProfile::default(),
+            }],
         };
         workspace.validate().expect("valid referenced workspace");
         workspace

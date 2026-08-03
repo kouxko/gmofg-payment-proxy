@@ -31,9 +31,9 @@ export function DestinationTargetsCard({
   return (
     <Card className="border border-[var(--telemetry-line)] shadow-sm">
       <Card.Header>
-        <Card.Title>目标地址（可多个）</Card.Title>
+        <Card.Title>弱网覆盖范围（可选）</Card.Title>
         <Card.Description>
-          留空表示覆盖所选应用访问的全部原始地址；添加后仅对匹配的 IP/CIDR 与端口实施弱网。
+          这里只限制哪些连接实施弱网，不改变请求去向。留空表示覆盖所选应用访问的全部原始地址。
         </Card.Description>
       </Card.Header>
       <Card.Content className="space-y-3 p-4">
@@ -41,7 +41,7 @@ export function DestinationTargetsCard({
           <Alert status="accent">
             <Alert.Indicator />
             <Alert.Content>
-              <Alert.Title>当前覆盖全部地址</Alert.Title>
+              <Alert.Title>当前对全部地址实施弱网</Alert.Title>
               <Alert.Description>
                 应用访问多个 HTTP/HTTPS 地址时无需逐个添加，代理会保留每条连接的原始目标。
               </Alert.Description>
@@ -88,7 +88,7 @@ export function DestinationTargetsCard({
             destination_targets: [...targets, { cidr: "", ports: [] }],
           })}
         >
-          添加目标地址
+          添加弱网覆盖地址
         </Button>
         <p className="text-xs text-[var(--telemetry-muted)]">
           TUN 只能稳定识别 IP/CIDR；合法性、重复项和范围由 Rust 保存时统一校验。

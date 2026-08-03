@@ -103,7 +103,7 @@ impl RuleRepositoryAdapter {
             if workspace
                 .listeners
                 .iter()
-                .any(|listener| listener.id().to_string() == channel)
+                .any(|listener| listener.id.to_string() == channel)
             {
                 matches.push(workspace);
             }

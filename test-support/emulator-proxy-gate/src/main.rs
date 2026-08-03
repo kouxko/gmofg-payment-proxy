@@ -7,11 +7,12 @@ use std::{env, error::Error, fs, path::PathBuf, sync::Arc, time::Duration};
 
 use encoding_rs::SHIFT_JIS;
 use intercept_proxy_application::{
-    AppResult, BodyCodecKind, BodyDirection, CaptureQuery, CaptureSort, MessageStage, PageRequest,
-    ProxyListener, ResponseAssertionKind, RuleAction, RuleCondition, RuleDraft,
-    RuleDropResponseMode, RuleMatchField, RuleMatchOperator, RuleTerminalAction,
-    SessionDetailViewModel, SessionQuery, SessionSort, SortDirection,
+    AppResult, BodyCodecKind, CaptureQuery, CaptureSort, MessageStage, PageRequest,
+    ResponseAssertionKind, RuleAction, RuleCondition, RuleDraft, RuleDropResponseMode,
+    RuleMatchField, RuleMatchOperator, RuleTerminalAction, SessionDetailViewModel, SessionQuery,
+    SessionSort, SortDirection,
 };
+use intercept_proxy_domain::{FixedServerSettings, UpstreamTlsSettings};
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::{
     InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
@@ -321,81 +322,40 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     workspace = application.workspace_save(workspace).await?;
     application.workspace_select(workspace.id).await?;
 
-    let mut dll_listener = application.listener_new("reverse")?;
+    let mut dll_listener = application.listener_new()?;
     let dll_listener_id = dll_listener.id();
-    let ProxyListener::Reverse(reverse) = &mut dll_listener else {
-        unreachable!("listener_new(reverse) returned a non-reverse listener")
-    };
-    reverse.name = "TEST ONLY - Payment DLL channel".into();
+    dll_listener.name = "TEST ONLY - DLL channel".into();
     // Android 的联合 VPN 探针通过模拟器宿主网关 10.0.3.2 访问这两个端口，因此测试
     // Listener 必须监听所有本机地址。它只存在于 mktemp 数据目录和本次门禁进程中。
-    reverse.bind_address = "0.0.0.0".into();
-    reverse.port = host_listener_port;
-    reverse.upstream_url = format!("http://{dll_upstream_address}");
+    dll_listener.bind_address = "0.0.0.0".into();
+    dll_listener.port = host_listener_port;
+    dll_listener.request_body_codec = BodyCodecKind::Utf8;
+    dll_listener.response_body_codec = BodyCodecKind::ShiftJis;
+    dll_listener.fixed_server = Some(FixedServerSettings {
+        upstream_url: format!("http://{dll_upstream_address}"),
+        upstream_tls: UpstreamTlsSettings::default(),
+    });
     application
         .listener_save(workspace.id, workspace.revision.get(), dll_listener)
         .await?;
 
     workspace = application.workspace_get(workspace.id).await?;
-    let mut transaction_listener = application.listener_new("reverse")?;
+    let mut transaction_listener = application.listener_new()?;
     let transaction_listener_id = transaction_listener.id();
-    let ProxyListener::Reverse(reverse) = &mut transaction_listener else {
-        unreachable!("listener_new(reverse) returned a non-reverse listener")
-    };
-    reverse.name = "TEST ONLY - Payment Transaction channel".into();
-    reverse.bind_address = "0.0.0.0".into();
-    reverse.port = host_listener_port + 1;
-    reverse.upstream_url = format!("http://{transaction_upstream_address}");
+    transaction_listener.name = "TEST ONLY - Transaction channel".into();
+    transaction_listener.bind_address = "0.0.0.0".into();
+    transaction_listener.port = host_listener_port + 1;
+    transaction_listener.request_body_codec = BodyCodecKind::Utf8;
+    transaction_listener.response_body_codec = BodyCodecKind::ShiftJis;
+    transaction_listener.fixed_server = Some(FixedServerSettings {
+        upstream_url: format!("http://{transaction_upstream_address}"),
+        upstream_tls: UpstreamTlsSettings::default(),
+    });
     application
         .listener_save(workspace.id, workspace.revision.get(), transaction_listener)
         .await?;
 
     workspace = application.workspace_get(workspace.id).await?;
-    for (name, direction, codec_kind) in [
-        ("UTF-8 request", BodyDirection::Request, BodyCodecKind::Utf8),
-        (
-            "Shift-JIS response",
-            BodyDirection::Response,
-            BodyCodecKind::ShiftJis,
-        ),
-    ] {
-        workspace = application.workspace_component_new(workspace, "body_codec")?;
-        let codec = workspace
-            .body_codec_policies
-            .last_mut()
-            .expect("new body codec");
-        codec.name = format!("TEST ONLY - {name}");
-        codec.listener_ids = vec![dll_listener_id, transaction_listener_id];
-        codec.direction = direction;
-        codec.codec = codec_kind;
-        let codec_id = codec.id;
-        let ProxyListener::Reverse(reverse) = workspace
-            .listeners
-            .iter_mut()
-            .find(|item| item.id() == dll_listener_id)
-            .expect("saved reverse listener")
-        else {
-            unreachable!()
-        };
-        match direction {
-            BodyDirection::Request => reverse.request_codec_policy = Some(codec_id),
-            BodyDirection::Response => reverse.response_codec_policy = Some(codec_id),
-            BodyDirection::Both => unreachable!("matrix creates directional codecs only"),
-        }
-        let ProxyListener::Reverse(transaction_reverse) = workspace
-            .listeners
-            .iter_mut()
-            .find(|item| item.id() == transaction_listener_id)
-            .expect("saved transaction reverse listener")
-        else {
-            unreachable!()
-        };
-        match direction {
-            BodyDirection::Request => transaction_reverse.request_codec_policy = Some(codec_id),
-            BodyDirection::Response => transaction_reverse.response_codec_policy = Some(codec_id),
-            BodyDirection::Both => unreachable!("matrix creates directional codecs only"),
-        }
-    }
 
     for (name, assertion) in [
         (
@@ -564,7 +524,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     fs::write(
         &ready_file,
         format!(
-            "dll_device_port={DLL_DEVICE_PORT}\ndll_host_port={host_listener_port}\ntransaction_device_port={TRANSACTION_DEVICE_PORT}\ntransaction_host_port={}\n",
+            "dll_device_port={DLL_DEVICE_PORT}\ndll_host_port={host_listener_port}\ndll_listener_id={dll_listener_id}\ntransaction_device_port={TRANSACTION_DEVICE_PORT}\ntransaction_host_port={}\ntransaction_listener_id={transaction_listener_id}\n",
             host_listener_port + 1,
         ),
     )?;

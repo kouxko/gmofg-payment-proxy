@@ -6,6 +6,7 @@ import {
   Label,
   Table,
 } from "@heroui/react";
+import { CircleCheckFill } from "@gravity-ui/icons";
 import type { AndroidPackageViewModel } from "@/generated/rust-types";
 
 interface TargetApplicationsCardProps {
@@ -120,8 +121,17 @@ function PackageRow({ item, selected, onToggle }: PackageRowProps): ReactElement
       onAction={() => onToggle(item, !selected)}
     >
       <Table.Cell className={`${selectedCellClass ?? ""} font-mono text-xs`}>
-        {item.package_name}
-        {selected && <span className="sr-only">，已选中</span>}
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="grid size-5 shrink-0 place-items-center" aria-hidden={!selected}>
+            {selected && (
+              <CircleCheckFill
+                aria-label="已选中"
+                className="size-5 text-[var(--telemetry-accent)]"
+              />
+            )}
+          </span>
+          <span className="truncate">{item.package_name}</span>
+        </span>
       </Table.Cell>
       <Table.Cell className={selectedCellClass}>
         {item.uid}{item.shared_uid !== null ? "（共享）" : ""}

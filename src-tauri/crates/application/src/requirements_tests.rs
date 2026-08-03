@@ -850,6 +850,31 @@ impl Default for FakePorts {
     }
 }
 
+#[async_trait]
+impl ListenerCertificateImportPort for FakePorts {
+    async fn import_upstream_client_identity(
+        &self,
+        _label: String,
+        _password: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
+        Ok(None)
+    }
+
+    async fn import_upstream_server_trust(
+        &self,
+        _label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
+        Ok(None)
+    }
+
+    async fn inspect(
+        &self,
+        _reference: CertificateReference,
+    ) -> AppResult<CertificateItemViewModel> {
+        Ok(fake_certificate_overview().items.remove(0))
+    }
+}
+
 fn unused<T>() -> AppResult<T> {
     Err(AppError::new("UNUSED_FAKE_PORT", "测试未使用此端口。"))
 }
@@ -1176,6 +1201,7 @@ fn application_with_workspace_ports(
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
+            listener_certificates: ports.clone(),
             file_export: ports,
             workspaces,
             workspace_documents,
@@ -1265,6 +1291,7 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
+            listener_certificates: ports.clone(),
             file_export: ports,
             workspaces,
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
@@ -1331,6 +1358,7 @@ async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
+            listener_certificates: ports.clone(),
             file_export: ports,
             workspaces: Arc::new(InMemoryWorkspaceStore::default()),
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
@@ -1664,6 +1692,7 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
+            listener_certificates: ports.clone(),
             file_export: ports,
             workspaces: Arc::new(InMemoryWorkspaceStore::default()),
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),

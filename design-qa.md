@@ -26,6 +26,34 @@
 
 ---
 
+# 2026-08-03 代理监听 TLS 与证书详情验收
+
+- 问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-c4e0afba-3991-4b05-a3c0-68ab0bd72411.png`
+- 验收对象：入口配置中的客户端侧 TLS、上游 Server TLS/mTLS 与证书详情。
+
+## 本次调整
+
+- 将原先并排且含义相近的证书选择器拆为“客户端 → 本机代理”和“本机代理 → 固定 Server”两张连续卡片，明确两次独立 TLS 握手。
+- 下游区按“启用 TLS → 代理服务端身份 → 可选客户端证书验证”排列；普通 HTTPS 默认不要求客户端证书。
+- 上游区按“主机名校验 → Server CA → 可选 mTLS 客户端身份 → 真实握手测试”排列。
+- 每个已选证书后直接显示 Rust 解析的用途、主题、SAN、有效期、SHA-256 指纹和有效状态；单份证书损坏只影响对应详情，不阻塞其他证书。
+- 导入 CA 或 P12 后立即返回已解析公开元数据；私钥、密码、原始证书和文件路径不进入前端或 Workspace。
+
+## 自动化验证
+
+- Listener 前端测试：15 项通过，覆盖导入后立即展示详情、持久化引用详情和密码不进入 Workspace。
+- Infrastructure 证书测试：3 项通过，覆盖受保护导入、文件引用解析和不回传文件路径。
+- Application 测试：63 项通过。
+- TypeScript 类型检查、相关 ESLint、Rust Clippy 与 `git diff --check` 均通过。
+
+## 视觉验证限制
+
+运行中的 macOS 应用在验收时处于锁屏状态，Computer Use 无法取得可信的最新应用截图，因此未伪造同尺寸视觉对比结论。代码继续使用现有 HeroUI、卡片边框和间距体系；最终视觉状态需要在解锁后的应用窗口中确认。
+
+**final result: blocked**
+
+---
+
 # 2026-08-01 应用定向弱网双栏布局视觉验收
 
 - 问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-32213f0a-e2fa-4012-922c-e54bff3001f5.png`
@@ -50,6 +78,33 @@
 - 视觉对比未发现新的 P0、P1 或 P2 阻断问题。
 
 **final result: passed**
+
+---
+
+# 2026-08-03 设备网络命名与透明代理路由验收
+
+- 问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-4276ce8f-c475-41c3-b0da-2a0ee012098c.png`
+- 验收对象：Android 设备网络页面的功能命名、透明代理路由端口说明和目标应用选中反馈。
+
+## 本次调整
+
+- 导航统一为“设备网络”，页面统一为“应用网络接管”，持久化配置统一为“设备网络方案”，避免把 VPN 的透明代理路由能力误称为单一弱网功能。
+- 透明代理路由与“弱网覆盖范围”拆分展示：前者决定连接去向，后者只决定哪些连接实施弱网。
+- 透明代理路由必须明确配置至少一个原始端口；页面不再提示端口留空可以匹配全部端口。
+- 目标应用仍通过点击整行切换；选中行增加固定占位的勾选图标，不因选中状态改变列布局。
+
+## 自动化与运行态验证
+
+- 前端完整测试 23 个文件、99 项通过；覆盖明确端口、多路由、包名筛选、整行选择和选中图标。
+- Rust Domain 49 项、规则 14 项、Android 应用层 8 项、Android 路由 3 项、证书相关 22 项通过。
+- TypeScript、ESLint、前端 Rust-only 边界扫描、Rust fmt 与 macOS debug `.app` 构建通过。
+- 最新打包应用已重新启动，进程持续运行且未发现 macOS error/fault 日志。
+
+## 视觉验收边界
+
+按既有约定，本轮只打开最新打包应用，不由 Codex 在应用中切换页面或修改配置。最终页面视觉由用户在已打开的应用中确认。
+
+**final result: blocked**
 
 ---
 
@@ -89,3 +144,27 @@
 - 按用户要求，本轮只打开最新打包应用，不由 Codex 点击、切换页面或继续截图判断；最终视觉验收由用户完成，因此没有伪造最新实现截图或等尺寸对照结论。
 
 **final result: blocked**
+
+---
+
+# 2026-08-03 代理入口正文编码与 TLS 客观文案验收
+
+- 问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-d3c1227d-95c3-441d-a948-7e851bf9827a.png`
+- 最终实现图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/Intercept Proxy Screenshot 2026-08-03 at 15.29.25.jpeg`
+- 对比图：`/tmp/intercept-codec-comparison.png`
+
+## 本次调整
+
+- 删除 Workspace 级 Body Codec 策略、方向和引用 ID；请求/响应正文编码直接属于每个代理入口。
+- 代理入口可分别选择原始字节、UTF-8 或 Shift-JIS；动态目标和固定 Server 使用相同模型。
+- 删除 Workspace 页面中的 Body Codec 编辑入口和代理入口中的“管理编码策略”按钮。
+- TLS 说明统一改为协议职责描述：普通 TLS 不请求客户端证书；可选/必需模式验证客户端证书链；上游 Server 证书链验证与代理 mTLS 客户端身份分开配置。
+
+## 视觉与功能证据
+
+- 新界面仅显示“HTTP 正文编码”及请求/响应两个直接选择器，不再显示 Workspace 策略 ID 或管理入口。
+- 代理入口页继续使用现有 HeroUI Card、Select、Switch 和项目统一边框、间距；未发现新增贴边、溢出或异常留白。
+- Rust Workspace 测试 11 项通过；基础设施正文编码测试通过；前端相关回归 34 项通过。
+- TypeScript、ESLint、Rust workspace check、模拟器门禁程序 check、`git diff --check` 和 macOS debug 应用构建通过。
+
+**final result: passed**

@@ -35,6 +35,40 @@ pub struct DestinationTarget {
     pub ports: Vec<u16>,
 }
 
+/// Android 原始目的地址到 Workspace Listener 的可移植映射。
+///
+/// 这里只保存用户意图，不保存桌面 IP、ADB reverse 端口或 LAN 端口。那些值由桌面
+/// 应用在每次启动时从当前 Workspace 与当前设备链路解析为 [`ProxyRuntimeConfiguration`]。
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProxyRoute {
+    pub listener_id: String,
+    pub destination: String,
+    pub ports: Vec<u16>,
+}
+
+/// 单条透明代理路由在本次启动中的已解析结果。
+///
+/// `resolved_original_ips` 是桌面端解析得到的证据快照；Android 引擎启动时还会使用
+/// 设备 DNS 重新解析域名并合并结果，确保 TUN 只提供目的 IP 时仍能命中。该结构只在
+/// start/apply 控制消息和 JNI 内存中存在，不得写入 Workspace 或 Companion 本地存储。
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ResolvedProxyRoute {
+    pub listener_id: String,
+    pub original_destination: String,
+    pub original_ports: Vec<u16>,
+    #[serde(default)]
+    pub resolved_original_ips: Vec<std::net::IpAddr>,
+    pub proxy_host: String,
+    pub proxy_port: u16,
+}
+
+/// 一次 Android 数据面启动所需的临时透明代理配置。
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ProxyRuntimeConfiguration {
+    #[serde(default)]
+    pub routes: Vec<ResolvedProxyRoute>,
+}
+
 /// Android Companion 的完整可持久化 Profile。
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NetworkProfile {
@@ -43,6 +77,9 @@ pub struct NetworkProfile {
     pub target_applications: Vec<TargetApplication>,
     #[serde(default)]
     pub destination_targets: Vec<DestinationTarget>,
+    /// 为空表示只做弱网、不透明转发到桌面代理。
+    #[serde(default)]
+    pub proxy_routes: Vec<ProxyRoute>,
     /// shared UID 组必须整体选中，并由用户显式确认后把 UID 写入此集合。
     pub confirmed_shared_uids: BTreeSet<u32>,
     pub auto_resume_after_reboot: bool,

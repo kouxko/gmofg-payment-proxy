@@ -196,7 +196,8 @@ impl ApplicationHostBuilder {
             Arc::new(RetiredProxyAdapter::new(stored_settings))
         });
         let android = Arc::new(AndroidAdbAdapter::new(&self.data_dir));
-        let application = Arc::new(Application::new_with_android_and_secrets(
+        let application_configuration = services.workspaces.clone();
+        let application = Arc::new(Application::new_with_platform_services(
             self.product.name().to_owned(),
             ApplicationDependencies {
                 proxy,
@@ -214,10 +215,12 @@ impl ApplicationHostBuilder {
                 workspaces: services.workspaces,
                 workspace_documents: services.workspace_documents,
                 listener_runtime: services.listener_runtime,
+                listener_certificates: services.listener_certificates,
                 events: events.clone(),
             },
             android,
             services.protected_secrets,
+            application_configuration,
         ));
         let background_cancellation = CancellationToken::new();
         // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle

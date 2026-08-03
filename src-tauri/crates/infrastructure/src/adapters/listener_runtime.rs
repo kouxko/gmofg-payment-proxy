@@ -16,8 +16,9 @@ use intercept_proxy_application::{
     ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener, UiTone, WorkspaceId,
 };
 use intercept_proxy_domain::{
-    CertificateReference, CertificateReferenceId, DownstreamClientAuthentication,
-    ForwardProxyAuthentication, ProxyWorkspace, ReverseProxyListener,
+    CertificateReference, CertificateReferenceId, CertificateReferenceKind,
+    DownstreamClientAuthentication, FixedServerSettings, ForwardProxyAuthentication,
+    ProxyWorkspace,
 };
 use intercept_proxy_runtime::{
     ChannelId as RuntimeChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode,
@@ -34,7 +35,7 @@ use zeroize::Zeroizing;
 
 use crate::{CertificateService, SqliteStore};
 
-use super::{ProtectedSecretAdapter, common::app_error};
+use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter, common::app_error};
 
 #[derive(Debug)]
 struct RunningListener {
@@ -55,6 +56,7 @@ pub struct ListenerRuntimeAdapter {
     _store: Arc<SqliteStore>,
     mitm_certificate_authority: Option<Arc<dyn MitmCertificateAuthority>>,
     protected_secrets: Option<Arc<ProtectedSecretAdapter>>,
+    managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
     pipeline_ports: RwLock<Option<Arc<dyn PipelinePorts>>>,
 }
 
@@ -67,8 +69,18 @@ impl ListenerRuntimeAdapter {
             _store: store,
             mitm_certificate_authority: None,
             protected_secrets: None,
+            managed_listener_certificates: None,
             pipeline_ports: RwLock::new(None),
         }
+    }
+
+    #[must_use]
+    pub fn with_managed_listener_certificates(
+        mut self,
+        certificates: Arc<ManagedListenerCertificateAdapter>,
+    ) -> Self {
+        self.managed_listener_certificates = Some(certificates);
+        self
     }
 
     #[must_use]
@@ -119,21 +131,20 @@ impl ListenerRuntimeAdapter {
         }
     }
 
-    async fn start_reverse(
+    async fn start_fixed_server(
         &self,
         workspace: &ProxyWorkspace,
-        listener: ReverseProxyListener,
+        listener: &ProxyListener,
     ) -> AppResult<(TcpListener, ReverseProxyService, String)> {
-        let requested = ProxyListener::Reverse(listener.clone());
         let persisted = workspace
             .listeners
             .iter()
-            .find(|candidate| candidate.id() == listener.id)
+            .find(|candidate| candidate.id == listener.id)
             .ok_or_else(|| {
                 AppError::new("LISTENER_NOT_FOUND", "Workspace 中不存在该 Listener。")
                     .entity(listener.id.to_string())
             })?;
-        if persisted != &requested {
+        if persisted != listener {
             return Err(AppError::new(
                 "REVISION_CONFLICT",
                 "Listener 配置与当前 Workspace 快照不一致，请重新加载。",
@@ -142,17 +153,24 @@ impl ListenerRuntimeAdapter {
         }
 
         let bind_addr = parse_bind_address(&listener.bind_address, listener.port, listener.id)?;
-        let downstream_tls = reverse_downstream_tls(workspace, &listener)?;
-        let upstream_tls = reverse_upstream_tls(workspace, &listener)?;
+        let fixed_server = listener.fixed_server.as_ref().ok_or_else(|| {
+            AppError::new(
+                "FIXED_SERVER_NOT_CONFIGURED",
+                "该代理监听未配置固定 Server。",
+            )
+            .entity(listener.id.to_string())
+        })?;
+        let downstream_tls = self.downstream_tls(workspace, listener)?;
+        let upstream_tls = self.upstream_tls(workspace, fixed_server)?;
 
         let mut service = ReverseProxyService::build(ReverseProxyConfig {
             bind_addr,
-            upstream_origin: listener.upstream_url,
+            upstream_origin: fixed_server.upstream_url.clone(),
             downstream_tls,
             upstream_tls,
-            connect_timeout: Duration::from_secs(30),
-            read_timeout: Duration::from_secs(70),
-            write_timeout: Duration::from_secs(70),
+            connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
+            read_timeout: Duration::from_millis(listener.read_timeout_ms),
+            write_timeout: Duration::from_millis(listener.write_timeout_ms),
         })
         .await
         .map_err(|error| {
@@ -180,6 +198,91 @@ impl ListenerRuntimeAdapter {
         let tcp_listener = bind_tcp_listener(bind_addr, listener.id).await?;
         Ok((tcp_listener, service, bind_addr.to_string()))
     }
+    fn downstream_tls(
+        &self,
+        workspace: &ProxyWorkspace,
+        listener: &ProxyListener,
+    ) -> AppResult<Option<ReverseDownstreamTls>> {
+        if !listener.downstream_tls.enabled {
+            return Ok(None);
+        }
+
+        let identity_id = listener
+            .downstream_tls
+            .server_identity
+            .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "下游 TLS 服务端身份未配置。"))?;
+        let server_identity = self.load_identity(certificate_reference(workspace, identity_id)?)?;
+        let (client_trust_der, client_authentication_required) =
+            match listener.downstream_tls.client_authentication {
+                DownstreamClientAuthentication::Disabled => (Vec::new(), false),
+                DownstreamClientAuthentication::Optional { trust } => (
+                    self.load_trust(certificate_reference(workspace, trust)?)?,
+                    false,
+                ),
+                DownstreamClientAuthentication::Required { trust } => (
+                    self.load_trust(certificate_reference(workspace, trust)?)?,
+                    true,
+                ),
+            };
+        Ok(Some(ReverseDownstreamTls {
+            server_identity,
+            client_trust_der,
+            client_authentication_required,
+        }))
+    }
+
+    fn upstream_tls(
+        &self,
+        workspace: &ProxyWorkspace,
+        fixed_server: &FixedServerSettings,
+    ) -> AppResult<Option<ReverseUpstreamTls>> {
+        if !fixed_server.upstream_url.starts_with("https://") {
+            return Ok(None);
+        }
+
+        let server_trust_der = fixed_server
+            .upstream_tls
+            .server_trust
+            .map(|id| certificate_reference(workspace, id))
+            .transpose()?
+            .map(|reference| self.load_trust(reference))
+            .transpose()?
+            .unwrap_or_default();
+        let client_identity = fixed_server
+            .upstream_tls
+            .client_identity
+            .map(|id| certificate_reference(workspace, id))
+            .transpose()?
+            .map(|reference| self.load_identity(reference))
+            .transpose()?;
+        Ok(Some(ReverseUpstreamTls {
+            server_trust_der,
+            client_identity,
+            verify_hostname: fixed_server.upstream_tls.verify_hostname,
+        }))
+    }
+
+    fn load_trust(&self, reference: &CertificateReference) -> AppResult<Vec<Vec<u8>>> {
+        if let Some(result) = self
+            .managed_listener_certificates
+            .as_ref()
+            .and_then(|resolver| resolver.resolve_trust(reference))
+        {
+            return result;
+        }
+        load_file_trust(reference)
+    }
+
+    fn load_identity(&self, reference: &CertificateReference) -> AppResult<ReverseClientIdentity> {
+        if let Some(result) = self
+            .managed_listener_certificates
+            .as_ref()
+            .and_then(|resolver| resolver.resolve_identity(reference))
+        {
+            return result;
+        }
+        load_file_identity(reference)
+    }
 }
 
 fn certificate_reference(
@@ -193,66 +296,6 @@ fn certificate_reference(
         .ok_or_else(|| {
             AppError::new("CERTIFICATE_NOT_READY", "证书安全引用不存在。").entity(id.to_string())
         })
-}
-
-fn reverse_downstream_tls(
-    workspace: &ProxyWorkspace,
-    listener: &ReverseProxyListener,
-) -> AppResult<Option<ReverseDownstreamTls>> {
-    if !listener.downstream_tls.enabled {
-        return Ok(None);
-    }
-
-    let identity_id = listener
-        .downstream_tls
-        .server_identity
-        .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "下游 TLS 服务端身份未配置。"))?;
-    let server_identity = load_identity(certificate_reference(workspace, identity_id)?)?;
-    let (client_trust_der, client_authentication_required) =
-        match listener.downstream_tls.client_authentication {
-            DownstreamClientAuthentication::Disabled => (Vec::new(), false),
-            DownstreamClientAuthentication::Optional { trust } => {
-                (load_trust(certificate_reference(workspace, trust)?)?, false)
-            }
-            DownstreamClientAuthentication::Required { trust } => {
-                (load_trust(certificate_reference(workspace, trust)?)?, true)
-            }
-        };
-    Ok(Some(ReverseDownstreamTls {
-        server_identity,
-        client_trust_der,
-        client_authentication_required,
-    }))
-}
-
-fn reverse_upstream_tls(
-    workspace: &ProxyWorkspace,
-    listener: &ReverseProxyListener,
-) -> AppResult<Option<ReverseUpstreamTls>> {
-    if !listener.upstream_url.starts_with("https://") {
-        return Ok(None);
-    }
-
-    let server_trust_der = listener
-        .upstream_tls
-        .server_trust
-        .map(|id| certificate_reference(workspace, id))
-        .transpose()?
-        .map(load_trust)
-        .transpose()?
-        .unwrap_or_default();
-    let client_identity = listener
-        .upstream_tls
-        .client_identity
-        .map(|id| certificate_reference(workspace, id))
-        .transpose()?
-        .map(load_identity)
-        .transpose()?;
-    Ok(Some(ReverseUpstreamTls {
-        server_trust_der,
-        client_identity,
-        verify_hostname: listener.upstream_tls.verify_hostname,
-    }))
 }
 
 impl Drop for ListenerRuntimeAdapter {
@@ -307,7 +350,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         workspace: ProxyWorkspace,
         listener: ProxyListener,
     ) -> AppResult<ListenerStatusViewModel> {
-        let listener_id = listener.id();
+        let listener_id = listener.id;
         if self.running.lock().await.contains_key(&listener_id) {
             return Err(
                 AppError::new("LISTENER_ALREADY_RUNNING", "Listener 已在运行。")
@@ -327,9 +370,9 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             .entity(listener_id.to_string()));
         }
         let workspace_id = workspace.id;
-        if let ProxyListener::Reverse(listener) = listener {
+        if listener.fixed_server.is_some() {
             let (tcp_listener, service, listen_address) =
-                self.start_reverse(&workspace, listener).await?;
+                self.start_fixed_server(&workspace, &listener).await?;
             let runtime_epoch = self.runtime_epoch_for_start(workspace_id);
             let cancellation = CancellationToken::new();
             let task_cancellation = cancellation.clone();
@@ -356,9 +399,6 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             );
             return Ok(running_status(listener_id, listen_address));
         }
-        let ProxyListener::Forward(listener) = listener else {
-            unreachable!("all listener variants handled")
-        };
         let (authentication, authenticator): (
             ForwardAuthenticationMode,
             Arc<dyn ForwardProxyAuthenticator>,
@@ -506,21 +546,28 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
     async fn test_upstream_tls(
         &self,
         workspace: ProxyWorkspace,
-        listener: ReverseProxyListener,
+        listener: ProxyListener,
     ) -> AppResult<ListenerUpstreamTlsTestViewModel> {
-        if !listener.upstream_url.starts_with("https://") {
+        let fixed_server = listener.fixed_server.as_ref().ok_or_else(|| {
+            AppError::new(
+                "FIXED_SERVER_NOT_CONFIGURED",
+                "该代理监听未配置固定 Server，没有上游 TLS 可测试。",
+            )
+            .entity(listener.id.to_string())
+        })?;
+        if !fixed_server.upstream_url.starts_with("https://") {
             return Err(AppError::new(
                 "UPSTREAM_TLS_NOT_ENABLED",
                 "该入口使用 HTTP 上游，没有 TLS 握手可测试。",
             )
             .entity(listener.id.to_string()));
         }
-        let upstream_tls = reverse_upstream_tls(&workspace, &listener)?;
+        let upstream_tls = self.upstream_tls(&workspace, fixed_server)?;
         let service = ReverseProxyService::build(ReverseProxyConfig {
             bind_addr: "127.0.0.1:0"
                 .parse()
                 .expect("loopback probe address is valid"),
-            upstream_origin: listener.upstream_url.clone(),
+            upstream_origin: fixed_server.upstream_url.clone(),
             downstream_tls: None,
             upstream_tls,
             connect_timeout: Duration::from_secs(10),
@@ -535,7 +582,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             .map_err(|error| upstream_tls_test_error(listener.id, &error))?;
         Ok(ListenerUpstreamTlsTestViewModel {
             listener_id: listener.id,
-            upstream_origin: listener.upstream_url,
+            upstream_origin: fixed_server.upstream_url.clone(),
             resolved_address: result.resolved_address.to_string(),
             tls_version: result.tls_version,
             cipher_suite: result.cipher_suite,
@@ -554,6 +601,19 @@ fn upstream_tls_test_error(
     listener_id: ListenerId,
     error: &intercept_proxy_runtime::ProxyError,
 ) -> AppError {
+    // rustls 会把“当前信任库里没有签发者”作为 UnknownIssuer 返回。这里不能自动
+    // 回退到系统信任根，否则用户显式选择的私有 CA 会被静默绕过；应当把根因和
+    // 两种正确处理方式明确交给 UI。
+    if error.code == "TLS_HANDSHAKE_FAILED" && error.message.contains("UnknownIssuer") {
+        return AppError::new(
+            error.code,
+            "上游 Server 证书不受当前 CA 信任。当前选择的 CA 不是该 Server 证书链的签发者。",
+        )
+        .entity(listener_id.to_string())
+        .retryable(
+            "公开 HTTPS 请选择“使用操作系统信任根”；私有 Server 请导入其真实签发 CA 后重试。",
+        );
+    }
     let message = match error.code {
         "CONFIG_INVALID" => format!("上游地址配置无效：{}", error.message),
         "CERTIFICATE_NOT_READY" | "CERTIFICATE_INVALID" => {
@@ -611,15 +671,20 @@ async fn bind_tcp_listener(address: SocketAddr, id: ListenerId) -> AppResult<Tcp
     })
 }
 
-fn load_trust(reference: &CertificateReference) -> AppResult<Vec<Vec<u8>>> {
+fn load_file_trust(reference: &CertificateReference) -> AppResult<Vec<Vec<u8>>> {
     let path = reference_path(&reference.reference)?;
     let bytes = read_reference_file(&path)?;
     let service = CertificateService;
-    let trusted = service.parse_upstream_ca(&bytes).map_err(app_error)?;
+    let trusted = if reference.kind == CertificateReferenceKind::DownstreamClientTrust {
+        service.parse_client_trust_anchor(&bytes)
+    } else {
+        service.parse_upstream_ca(&bytes)
+    }
+    .map_err(app_error)?;
     Ok(vec![trusted.certificate_der])
 }
 
-fn load_identity(reference: &CertificateReference) -> AppResult<ReverseClientIdentity> {
+fn load_file_identity(reference: &CertificateReference) -> AppResult<ReverseClientIdentity> {
     let (path, password_environment) = identity_reference(&reference.reference)?;
     // 身份文件可能同时包含私钥；从文件读取开始就使用可清零缓冲，避免 PEM/P12
     // 原始材料先落入普通 Vec 再被包装。
@@ -727,17 +792,42 @@ mod tests {
     use chrono::Utc;
     use intercept_proxy_application::ListenerRuntimePort;
     use intercept_proxy_domain::{
-        DownstreamTlsSettings, ForwardProxyListener, ListenerId, ProxyListener, ProxyWorkspace,
-        ReverseProxyListener, Revision, UpstreamTlsSettings,
+        FixedServerSettings, ListenerId, ProxyListener, ProxyWorkspace, Revision,
+        UpstreamTlsSettings,
     };
     use intercept_proxy_runtime::{
-        ConnectionContext, FaultAction, HandshakePolicy, Message, NoopPipelinePorts, PipelinePorts,
+        ConnectionContext, ErrorCode, FaultAction, HandshakePolicy, Message, NoopPipelinePorts,
+        PipelinePorts, ProxyError,
     };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpStream;
 
     use super::*;
     use crate::WorkspaceRecord;
+
+    #[test]
+    fn unknown_issuer_explains_system_roots_without_weakening_explicit_trust() {
+        let listener_id = ListenerId::new();
+        let runtime_error = ProxyError::new(
+            ErrorCode::TlsHandshakeFailed,
+            "invalid peer certificate: UnknownIssuer",
+        );
+
+        let error = upstream_tls_test_error(listener_id, &runtime_error);
+
+        assert_eq!(error.view_model.code, "TLS_HANDSHAKE_FAILED");
+        assert_eq!(error.view_model.entity_id, Some(listener_id.to_string()));
+        assert!(
+            error
+                .view_model
+                .message
+                .contains("不是该 Server 证书链的签发者")
+        );
+        assert_eq!(
+            error.view_model.suggested_action.as_deref(),
+            Some("公开 HTTPS 请选择“使用操作系统信任根”；私有 Server 请导入其真实签发 CA 后重试。")
+        );
+    }
 
     #[derive(Debug, Default)]
     struct CountingPipeline {
@@ -762,7 +852,7 @@ mod tests {
             kind: intercept_proxy_domain::CertificateReferenceKind::UpstreamClientIdentity,
             reference: format!("file:{}", path.display()),
         };
-        let error = load_identity(&reference).unwrap_err();
+        let error = load_file_identity(&reference).unwrap_err();
         assert!(!error.view_model.message.contains(marker));
         let _ = fs::remove_file(path);
     }
@@ -812,16 +902,16 @@ mod tests {
         let reservation = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bind_address = reservation.local_addr().unwrap();
         drop(reservation);
-        let listener = ForwardProxyListener {
+        let listener = ProxyListener {
             id: ListenerId::new(),
             name: "forward".into(),
             enabled: false,
             bind_address: bind_address.ip().to_string(),
             port: bind_address.port(),
-            ..ForwardProxyListener::default()
+            ..ProxyListener::default()
         };
         let workspace = ProxyWorkspace {
-            listeners: vec![ProxyListener::Forward(listener.clone())],
+            listeners: vec![listener.clone()],
             ..ProxyWorkspace::default()
         };
         workspace.validate().unwrap();
@@ -838,7 +928,7 @@ mod tests {
         let runtime = ListenerRuntimeAdapter::new(store);
         runtime.set_pipeline_ports(pipeline.clone());
         runtime
-            .start(workspace.clone(), ProxyListener::Forward(listener.clone()))
+            .start(workspace.clone(), listener.clone())
             .await
             .unwrap();
 
@@ -872,7 +962,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dynamic_reverse_listener_uses_selected_workspace_pipeline_and_preserves_body_bytes() {
+    async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_body_bytes() {
         let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let upstream_address = upstream.local_addr().unwrap();
         let upstream_task = tokio::spawn(async move {
@@ -901,29 +991,29 @@ mod tests {
         let reservation = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bind_address = reservation.local_addr().unwrap();
         drop(reservation);
-        let listener = ReverseProxyListener {
+        let listener = ProxyListener {
             id: ListenerId::new(),
-            name: "generic reverse".into(),
+            name: "fixed server".into(),
             enabled: false,
             bind_address: bind_address.ip().to_string(),
             port: bind_address.port(),
-            upstream_url: format!("http://{upstream_address}"),
-            downstream_tls: DownstreamTlsSettings::default(),
-            upstream_tls: UpstreamTlsSettings::default(),
-            request_codec_policy: None,
-            response_codec_policy: None,
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: format!("http://{upstream_address}"),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..ProxyListener::default()
         };
         let workspace = ProxyWorkspace {
             id: intercept_proxy_domain::WorkspaceId::new(),
             name: "test".into(),
             revision: Revision::INITIAL,
-            listeners: vec![ProxyListener::Reverse(listener.clone())],
-            body_codec_policies: Vec::new(),
+            listeners: vec![listener.clone()],
             metadata_extractors: Vec::new(),
             response_assertions: Vec::new(),
             rules: Vec::new(),
             fault_presets: Vec::new(),
             certificate_references: Vec::new(),
+            android_network_profiles: Vec::new(),
         };
         workspace.validate().unwrap();
         let store = Arc::new(SqliteStore::in_memory().unwrap());
@@ -938,7 +1028,7 @@ mod tests {
         let runtime = ListenerRuntimeAdapter::new(store);
         runtime.set_pipeline_ports(Arc::new(NoopPipelinePorts));
         let status = runtime
-            .start(workspace.clone(), ProxyListener::Reverse(listener.clone()))
+            .start(workspace.clone(), listener.clone())
             .await
             .unwrap();
         assert_eq!(status.state, ListenerRuntimeState::Running);
@@ -959,7 +1049,75 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn multiple_reverse_listeners_route_to_their_own_upstream_origins() {
+    async fn fixed_server_connect_cannot_escape_to_request_authority() {
+        let fixed_upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let fixed_upstream_address = fixed_upstream.local_addr().unwrap();
+        let fixed_upstream_task = tokio::spawn(async move {
+            if let Ok(Ok((mut stream, _))) =
+                tokio::time::timeout(Duration::from_secs(2), fixed_upstream.accept()).await
+            {
+                let mut request = [0_u8; 512];
+                let _ = stream.read(&mut request).await;
+                let _ = stream
+                    .write_all(
+                        b"HTTP/1.1 405 Method Not Allowed\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                    )
+                    .await;
+            }
+        });
+        let forbidden_target = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let forbidden_address = forbidden_target.local_addr().unwrap();
+
+        let reservation = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bind_address = reservation.local_addr().unwrap();
+        drop(reservation);
+        let listener = ProxyListener {
+            id: ListenerId::new(),
+            name: "fixed CONNECT isolation".into(),
+            bind_address: bind_address.ip().to_string(),
+            port: bind_address.port(),
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: format!("http://{fixed_upstream_address}"),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..ProxyListener::default()
+        };
+        let workspace = ProxyWorkspace {
+            listeners: vec![listener.clone()],
+            ..ProxyWorkspace::default()
+        };
+        let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+        runtime.set_pipeline_ports(Arc::new(NoopPipelinePorts));
+        runtime
+            .start(workspace.clone(), listener.clone())
+            .await
+            .unwrap();
+
+        let mut client = TcpStream::connect(bind_address).await.unwrap();
+        client
+            .write_all(
+                format!(
+                    "CONNECT {forbidden_address} HTTP/1.1\r\nHost: {forbidden_address}\r\n\r\n"
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+        let mut response = [0_u8; 256];
+        let _ = tokio::time::timeout(Duration::from_secs(2), client.read(&mut response)).await;
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(300), forbidden_target.accept())
+                .await
+                .is_err(),
+            "固定 Server 模式不得按 CONNECT authority 建立旁路隧道"
+        );
+        runtime.stop(listener.id).await.unwrap();
+        fixed_upstream_task.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn multiple_fixed_server_listeners_route_to_their_own_upstream_origins() {
         async fn upstream(response_body: &'static [u8]) -> (SocketAddr, JoinHandle<()>) {
             let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
             let address = listener.local_addr().unwrap();
@@ -1004,34 +1162,31 @@ mod tests {
         let (dll_upstream, dll_task) = upstream(b"dll-response").await;
         let transaction_bind = reserve_local_address().await;
         let dll_bind = reserve_local_address().await;
-        let reverse = |name: &str, bind: SocketAddr, upstream: SocketAddr| ReverseProxyListener {
+        let fixed = |name: &str, bind: SocketAddr, upstream: SocketAddr| ProxyListener {
             id: ListenerId::new(),
             name: name.into(),
             enabled: false,
             bind_address: bind.ip().to_string(),
             port: bind.port(),
-            upstream_url: format!("http://{upstream}"),
-            downstream_tls: DownstreamTlsSettings::default(),
-            upstream_tls: UpstreamTlsSettings::default(),
-            request_codec_policy: None,
-            response_codec_policy: None,
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: format!("http://{upstream}"),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..ProxyListener::default()
         };
-        let transaction = reverse("Transaction", transaction_bind, transaction_upstream);
-        let dll = reverse("DLL", dll_bind, dll_upstream);
+        let transaction = fixed("Transaction", transaction_bind, transaction_upstream);
+        let dll = fixed("DLL", dll_bind, dll_upstream);
         let workspace = ProxyWorkspace {
             id: intercept_proxy_domain::WorkspaceId::new(),
             name: "multiple mappings".into(),
             revision: Revision::INITIAL,
-            listeners: vec![
-                ProxyListener::Reverse(transaction.clone()),
-                ProxyListener::Reverse(dll.clone()),
-            ],
-            body_codec_policies: Vec::new(),
+            listeners: vec![transaction.clone(), dll.clone()],
             metadata_extractors: Vec::new(),
             response_assertions: Vec::new(),
             rules: Vec::new(),
             fault_presets: Vec::new(),
             certificate_references: Vec::new(),
+            android_network_profiles: Vec::new(),
         };
         workspace.validate().unwrap();
         let store = Arc::new(SqliteStore::in_memory().unwrap());
@@ -1047,10 +1202,7 @@ mod tests {
         runtime.set_pipeline_ports(Arc::new(NoopPipelinePorts));
 
         for listener in [transaction.clone(), dll.clone()] {
-            runtime
-                .start(workspace.clone(), ProxyListener::Reverse(listener))
-                .await
-                .unwrap();
+            runtime.start(workspace.clone(), listener).await.unwrap();
         }
         assert_eq!(runtime.statuses().await.unwrap().len(), 2);
 
@@ -1063,6 +1215,38 @@ mod tests {
         dll_task.await.unwrap();
         runtime.stop(transaction.id).await.unwrap();
         runtime.stop(dll.id).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn upstream_tls_probe_requires_a_fixed_https_server() {
+        let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+        let dynamic = ProxyListener::default();
+        let dynamic_workspace = ProxyWorkspace {
+            listeners: vec![dynamic.clone()],
+            ..ProxyWorkspace::default()
+        };
+        let error = runtime
+            .test_upstream_tls(dynamic_workspace, dynamic)
+            .await
+            .unwrap_err();
+        assert_eq!(error.view_model.code, "FIXED_SERVER_NOT_CONFIGURED");
+
+        let http = ProxyListener {
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: "http://127.0.0.1:8080".into(),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..ProxyListener::default()
+        };
+        let http_workspace = ProxyWorkspace {
+            listeners: vec![http.clone()],
+            ..ProxyWorkspace::default()
+        };
+        let error = runtime
+            .test_upstream_tls(http_workspace, http)
+            .await
+            .unwrap_err();
+        assert_eq!(error.view_model.code, "UPSTREAM_TLS_NOT_ENABLED");
     }
 
     #[test]

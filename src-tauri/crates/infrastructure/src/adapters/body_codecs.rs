@@ -1,12 +1,12 @@
-//! 动态 Workspace Body Codec 解析器。
+//! 监听器级 Body 编码解析器。
 //!
-//! Listener 只保存非敏感 Codec 引用；实际 Raw、UTF-8、Shift-JIS 行为由 Rust 在每个
-//! 请求/响应阶段根据持久化 Workspace 快照决定。前端不解码、不猜测，也不重建长度。
+//! 每个 Listener 直接保存请求和响应的 Raw、UTF-8 或 Shift-JIS 选择。Rust 在每个
+//! 请求/响应阶段读取持久化监听器快照；前端不解码、不猜测，也不重建长度。
 
 use std::sync::Arc;
 
 use encoding_rs::SHIFT_JIS;
-use intercept_proxy_domain::{BodyCodecKind, MessageStage, ProxyListener};
+use intercept_proxy_domain::{BodyCodecKind, MessageStage};
 use intercept_proxy_product_api::{BodyCodec, ProductError};
 use intercept_proxy_runtime::{ConnectionContext, ErrorCode, ProxyError, Result as ProxyResult};
 
@@ -56,7 +56,7 @@ impl RuntimeBodyCodecResolver for WorkspaceBodyCodecResolver {
             if workspace
                 .listeners
                 .iter()
-                .any(|listener| listener.id().to_string() == context.channel.as_str())
+                .any(|listener| listener.id.to_string() == context.channel.as_str())
             {
                 matches.push(workspace);
             }
@@ -74,33 +74,20 @@ impl RuntimeBodyCodecResolver for WorkspaceBodyCodecResolver {
         let Some(workspace) = workspace else {
             return Ok(None);
         };
-        let Some(ProxyListener::Reverse(listener)) = workspace
+        let Some(listener) = workspace
             .listeners
             .iter()
-            .find(|listener| listener.id().to_string() == context.channel.as_str())
+            .find(|listener| listener.id.to_string() == context.channel.as_str())
         else {
-            // 旧 supervisor 通道或 Forward CONNECT 当前没有方向独立 Codec 引用。
+            // 旧 supervisor 通道当前没有 Listener 级 Codec 引用。
             return Ok(None);
         };
-        let policy_id = match stage {
-            MessageStage::Request => listener.request_codec_policy,
-            MessageStage::Response => listener.response_codec_policy,
-            MessageStage::TlsHandshake => None,
+        let selected = match stage {
+            MessageStage::Request => listener.request_body_codec,
+            MessageStage::Response => listener.response_body_codec,
+            MessageStage::TlsHandshake => return Ok(None),
         };
-        let Some(policy_id) = policy_id else {
-            return Ok(None);
-        };
-        let policy = workspace
-            .body_codec_policies
-            .iter()
-            .find(|policy| policy.id == policy_id)
-            .ok_or_else(|| {
-                ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    format!("Workspace Body Codec reference {policy_id} does not exist"),
-                )
-            })?;
-        let codec: Arc<dyn BodyCodec> = match policy.codec {
+        let codec: Arc<dyn BodyCodec> = match selected {
             BodyCodecKind::Raw => Arc::new(RawBodyCodec),
             BodyCodecKind::Utf8 => Arc::new(Utf8BodyCodec),
             BodyCodecKind::ShiftJis => Arc::new(ShiftJisBodyCodec),
@@ -198,10 +185,7 @@ mod tests {
     use std::{net::SocketAddr, time::SystemTime};
 
     use chrono::Utc;
-    use intercept_proxy_domain::{
-        BodyCodecPolicy, BodyDirection, CodecPolicyId, DownstreamTlsSettings, ListenerId,
-        ProxyListener, ProxyWorkspace, ReverseProxyListener, UpstreamTlsSettings,
-    };
+    use intercept_proxy_domain::{ListenerId, ProxyListener, ProxyWorkspace};
     use intercept_proxy_runtime::ChannelId;
     use uuid::Uuid;
 
@@ -211,26 +195,16 @@ mod tests {
     #[test]
     fn selected_workspace_resolves_shift_jis_per_listener_and_stage() {
         let listener_id = ListenerId::new();
-        let codec_id = CodecPolicyId::new();
         let workspace = ProxyWorkspace {
-            listeners: vec![ProxyListener::Reverse(ReverseProxyListener {
+            listeners: vec![ProxyListener {
                 id: listener_id,
                 name: "Shift-JIS API".into(),
                 enabled: false,
                 bind_address: "127.0.0.1".into(),
                 port: 18_443,
-                upstream_url: "https://example.test".into(),
-                downstream_tls: DownstreamTlsSettings::default(),
-                upstream_tls: UpstreamTlsSettings::default(),
-                request_codec_policy: None,
-                response_codec_policy: Some(codec_id),
-            })],
-            body_codec_policies: vec![BodyCodecPolicy {
-                id: codec_id,
-                name: "SJIS response".into(),
-                listener_ids: vec![listener_id],
-                direction: BodyDirection::Response,
-                codec: BodyCodecKind::ShiftJis,
+                request_body_codec: BodyCodecKind::Raw,
+                response_body_codec: BodyCodecKind::ShiftJis,
+                ..ProxyListener::default()
             }],
             ..ProxyWorkspace::default()
         };
@@ -254,12 +228,11 @@ mod tests {
             tls_peer: None,
         };
 
-        assert!(
-            resolver
-                .resolve(&context, MessageStage::Request)
-                .unwrap()
-                .is_none()
-        );
+        let request_codec = resolver
+            .resolve(&context, MessageStage::Request)
+            .unwrap()
+            .expect("request Raw codec");
+        assert_eq!(request_codec.id(), "raw");
         let codec = resolver
             .resolve(&context, MessageStage::Response)
             .unwrap()

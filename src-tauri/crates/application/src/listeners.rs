@@ -8,7 +8,7 @@ use parking_lot::RwLock;
 use crate::{
     AppError, AppResult, ListenerId, ListenerRuntimePort, ListenerRuntimeState,
     ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener, ProxyWorkspace,
-    ReverseProxyListener, UiTone,
+    UiTone,
 };
 
 #[derive(Debug, Default)]
@@ -27,7 +27,7 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
         workspace: ProxyWorkspace,
         listener: ProxyListener,
     ) -> AppResult<ListenerStatusViewModel> {
-        let id = listener.id();
+        let id = listener.id;
         if !workspace.listeners.iter().any(|item| item == &listener) {
             return Err(
                 AppError::new("LISTENER_NOT_FOUND", "启动快照中不存在该代理入口。")
@@ -75,9 +75,16 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
     async fn test_upstream_tls(
         &self,
         _workspace: ProxyWorkspace,
-        listener: ReverseProxyListener,
+        listener: ProxyListener,
     ) -> AppResult<ListenerUpstreamTlsTestViewModel> {
-        if !listener.upstream_url.starts_with("https://") {
+        let fixed_server = listener.fixed_server.as_ref().ok_or_else(|| {
+            AppError::new(
+                "LISTENER_TLS_TEST_UNSUPPORTED",
+                "该监听器未开启固定 Server，无法测试单一 Server TLS。",
+            )
+            .entity(listener.id.to_string())
+        })?;
+        if !fixed_server.upstream_url.starts_with("https://") {
             return Err(AppError::new(
                 "UPSTREAM_TLS_NOT_ENABLED",
                 "该入口使用 HTTP 上游，没有 TLS 握手可测试。",
@@ -86,14 +93,14 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
         }
         Ok(ListenerUpstreamTlsTestViewModel {
             listener_id: listener.id,
-            upstream_origin: listener.upstream_url,
+            upstream_origin: fixed_server.upstream_url.clone(),
             resolved_address: "127.0.0.1:443".into(),
             tls_version: "TLS 1.2".into(),
             cipher_suite: "测试密码套件".into(),
             peer_subject: "CN=测试上游".into(),
             peer_sha256_fingerprint: "00:11:22".into(),
-            hostname_verification_enabled: listener.upstream_tls.verify_hostname,
-            client_identity_configured: listener.upstream_tls.client_identity.is_some(),
+            hostname_verification_enabled: fixed_server.upstream_tls.verify_hostname,
+            client_identity_configured: fixed_server.upstream_tls.client_identity.is_some(),
             elapsed_millis: 1,
             message: "上游 Server TLS 握手成功。".into(),
             ui_tone: UiTone::Positive,

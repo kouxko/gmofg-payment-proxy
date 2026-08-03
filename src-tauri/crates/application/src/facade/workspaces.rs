@@ -5,10 +5,9 @@
 
 use chrono::Utc;
 use intercept_proxy_domain::{
-    BodyCodecKind, BodyCodecPolicy, BodyDirection, CertificateReference, CertificateReferenceId,
-    CertificateReferenceKind, CodecPolicyId, ConnectionFaultAction, FaultPreset, FaultPresetId,
-    ListenerId, MetadataExtractor, MetadataExtractorId, MetadataExtractorSource, ResponseAssertion,
-    ResponseAssertionId, ResponseAssertionKind,
+    CertificateReference, CertificateReferenceId, CertificateReferenceKind, ConnectionFaultAction,
+    FaultPreset, FaultPresetId, ListenerId, MetadataExtractor, MetadataExtractorId,
+    MetadataExtractorSource, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
 };
 use uuid::Uuid;
 
@@ -31,13 +30,6 @@ impl Application {
         kind: &str,
     ) -> AppResult<ProxyWorkspace> {
         match kind {
-            "body_codec" => workspace.body_codec_policies.push(BodyCodecPolicy {
-                id: CodecPolicyId::new(),
-                name: "Body Codec".into(),
-                listener_ids: Vec::new(),
-                direction: BodyDirection::Both,
-                codec: BodyCodecKind::Raw,
-            }),
             "metadata_extractor" => workspace.metadata_extractors.push(MetadataExtractor {
                 id: MetadataExtractorId::new(),
                 name: "Metadata Extractor".into(),
@@ -93,13 +85,6 @@ impl Application {
             return Ok(workspace);
         }
         match (component_kind, operation) {
-            ("body_codec", "listener_ids") => {
-                let ids = parse_listener_ids(value)?;
-                find_mut(&mut workspace.body_codec_policies, component_id, |item| {
-                    item.id.to_string()
-                })?
-                .listener_ids = ids;
-            }
             ("metadata_extractor", "listener_ids") => {
                 let ids = parse_listener_ids(value)?;
                 find_mut(&mut workspace.metadata_extractors, component_id, |item| {
@@ -234,7 +219,7 @@ impl Application {
             workspace
                 .listeners
                 .iter()
-                .any(|listener| listener.id() == status.listener_id)
+                .any(|listener| listener.id == status.listener_id)
         }) {
             return Err(AppError::new(
                 "WORKSPACE_RUNTIME_ACTIVE",
@@ -429,9 +414,6 @@ fn delete_component(
     component_id: &str,
 ) -> AppResult<()> {
     let removed = match component_kind {
-        "body_codec" => retain_removed(&mut workspace.body_codec_policies, component_id, |item| {
-            item.id.to_string()
-        }),
         "metadata_extractor" => {
             retain_removed(&mut workspace.metadata_extractors, component_id, |item| {
                 item.id.to_string()

@@ -41,6 +41,16 @@ pub enum ProfileValidationError {
     InvalidDestinationPorts { cidr: String },
     #[error("目标地址范围与端口组合重复：{0}")]
     DuplicateDestinationTarget(String),
+    #[error("一个 Profile 最多配置 {maximum} 条透明代理映射，当前为 {actual} 条")]
+    TooManyProxyRoutes { maximum: usize, actual: usize },
+    #[error("透明代理映射的 Listener ID 无效")]
+    InvalidProxyListenerId,
+    #[error("透明代理原始 host/IP/CIDR 无效：{0}")]
+    InvalidProxyOriginalHost(String),
+    #[error("透明代理映射必须配置不重复的原始端口：{0}")]
+    InvalidProxyOriginalPorts(String),
+    #[error("透明代理映射重复：{0}")]
+    DuplicateProxyRoute(String),
     #[error("shared UID {uid} 必须整体选择，缺少：{missing_packages:?}")]
     PartialSharedUidSelection {
         uid: u32,
@@ -86,9 +96,73 @@ impl NetworkProfile {
     ) -> Result<ValidatedProfile, ProfileValidationError> {
         validate_targets(self, installed)?;
         validate_destinations(self)?;
+        validate_proxy_routes(self)?;
         validate_faults(self)?;
         Ok(ValidatedProfile(self.clone()))
     }
+}
+
+fn validate_proxy_routes(profile: &NetworkProfile) -> Result<(), ProfileValidationError> {
+    const MAXIMUM: usize = 128;
+    if profile.proxy_routes.is_empty() {
+        return Ok(());
+    }
+    if profile.proxy_routes.len() > MAXIMUM {
+        return Err(ProfileValidationError::TooManyProxyRoutes {
+            maximum: MAXIMUM,
+            actual: profile.proxy_routes.len(),
+        });
+    }
+    let mut seen = BTreeSet::new();
+    for route in &profile.proxy_routes {
+        if route.listener_id.trim().is_empty() || route.listener_id.len() > 128 {
+            return Err(ProfileValidationError::InvalidProxyListenerId);
+        }
+        if !is_valid_host_ip_or_cidr(&route.destination) {
+            return Err(ProfileValidationError::InvalidProxyOriginalHost(
+                route.destination.clone(),
+            ));
+        }
+        let mut ports = BTreeSet::new();
+        if route.ports.is_empty()
+            || route
+                .ports
+                .iter()
+                .any(|port| *port == 0 || !ports.insert(*port))
+        {
+            return Err(ProfileValidationError::InvalidProxyOriginalPorts(
+                route.destination.clone(),
+            ));
+        }
+        for port in ports {
+            let key = (route.destination.trim().to_ascii_lowercase(), port);
+            if !seen.insert(key) {
+                return Err(ProfileValidationError::DuplicateProxyRoute(
+                    route.destination.clone(),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_valid_host_ip_or_cidr(value: &str) -> bool {
+    parse_ip_cidr(value).is_some() || is_valid_hostname(value)
+}
+
+fn is_valid_hostname(value: &str) -> bool {
+    let value = value.trim().trim_end_matches('.');
+    !value.is_empty()
+        && value.len() <= 253
+        && value.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
 }
 
 fn validate_destinations(profile: &NetworkProfile) -> Result<(), ProfileValidationError> {
@@ -363,6 +437,7 @@ mod tests {
                 })
                 .collect(),
             destination_targets: Vec::new(),
+            proxy_routes: Vec::new(),
             confirmed_shared_uids: BTreeSet::new(),
             auto_resume_after_reboot: false,
             weak_network: WeakNetworkProfile::default(),

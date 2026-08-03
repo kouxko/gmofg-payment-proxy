@@ -50,6 +50,9 @@ for (const file of sourceFiles(sourceRoot)) {
   const content = readFileSync(file, "utf8");
   const isTestFile = /\.(?:test|spec)\.(?:ts|tsx)$/.test(file);
   for (const [pattern, message] of forbidden) {
+    // 架构测试需要读取源码来验证 HeroUI 组合方式；Node.js API 禁令只约束会进入
+    // WebView 的生产展示代码，不能反过来禁止测试工具检查这些代码。
+    if (isTestFile && message === "展示层不得引入 Node.js 系统 API") continue;
     if (pattern.test(content)) {
       failures.push(`${relative(root, file)}: ${message}`);
     }

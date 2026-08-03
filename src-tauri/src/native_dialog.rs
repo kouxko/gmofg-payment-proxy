@@ -32,6 +32,9 @@ impl TauriNativeFileDialog {
             "intercept_workspace" => builder
                 .set_title("导入 Intercept Proxy Workspace")
                 .add_filter("Intercept Workspace", &["intercept-workspace"]),
+            "intercept_configuration" => builder
+                .set_title("导入 Intercept Proxy 完整配置")
+                .add_filter("Intercept Config", &["intercept-config"]),
             "rules_json" => builder
                 .set_title("导入规则")
                 .add_filter("JSON 规则", &["json"]),
@@ -52,6 +55,10 @@ impl TauriNativeFileDialog {
                 .set_title("导出 Intercept Proxy Workspace")
                 .set_file_name("workspace.intercept-workspace")
                 .add_filter("Intercept Workspace", &["intercept-workspace"]),
+            "intercept_configuration" => builder
+                .set_title("导出 Intercept Proxy 完整配置")
+                .set_file_name("intercept-proxy.intercept-config")
+                .add_filter("Intercept Config", &["intercept-config"]),
             "session_json" => builder
                 .set_title("导出会话")
                 .set_file_name("session.json")

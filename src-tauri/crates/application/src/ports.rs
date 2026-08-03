@@ -10,17 +10,40 @@ pub use android::AndroidControlPort;
 pub(crate) use android::UnavailableAndroidControlPort;
 
 use crate::{
-    ActiveFaultViewModel, AppResult, BreakpointDecision, BreakpointDetailViewModel,
-    BreakpointDraft, BreakpointValidationViewModel, CaptureDetailViewModel, CapturePageViewModel,
-    CaptureQuery, CertificateOverviewViewModel, CertificateValidationViewModel,
-    FaultConfigurationDraft, FaultTemplateViewModel, ListenerId, ListenerStatusViewModel,
-    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, ProxyListener,
-    ProxyStatusViewModel, ProxyWorkspace, ReverseProxyListener, RuleDraft, RuleId,
-    RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference,
-    SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery, SettingsDraft,
-    SettingsValidationViewModel, SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel,
-    WorkspaceValidationViewModel,
+    ActiveFaultViewModel, AppError, AppResult, ApplicationConfigurationDocument,
+    BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft, BreakpointValidationViewModel,
+    CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, CertificateItemViewModel,
+    CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
+    FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
+    ListenerId, ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel,
+    OperationResultViewModel, ProxyListener, ProxyStatusViewModel, ProxyWorkspace, RuleDraft,
+    RuleId, RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, RuntimeEpoch,
+    SecretReference, SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery,
+    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, WorkspaceId,
+    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
+
+#[async_trait]
+/// Listener 上游 TLS 材料的原生导入边界。
+///
+/// 实现负责文件选择、格式校验与系统级保护；应用层和展示层只获得可安全写入
+/// Workspace 的引用。`None` 表示用户取消选择。
+pub trait ListenerCertificateImportPort: Send + Sync + std::fmt::Debug {
+    async fn import_upstream_client_identity(
+        &self,
+        label: String,
+        password: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
+
+    async fn import_upstream_server_trust(
+        &self,
+        label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
+
+    /// 读取安全引用并只返回证书的公开元数据，不返回路径、密码、私钥或证书原始字节。
+    async fn inspect(&self, reference: CertificateReference)
+    -> AppResult<CertificateItemViewModel>;
+}
 
 #[async_trait]
 /// 系统密钥保护下的秘密写入边界。
@@ -88,6 +111,34 @@ pub trait WorkspaceDocumentPort: Send + Sync + std::fmt::Debug {
         suggested_file_name: String,
         document: Vec<u8>,
     ) -> AppResult<bool>;
+    async fn pick_import_application_configuration(&self) -> AppResult<Option<Vec<u8>>>;
+    async fn save_export_application_configuration(
+        &self,
+        suggested_file_name: String,
+        document: Vec<u8>,
+    ) -> AppResult<bool>;
+}
+
+#[async_trait]
+/// 完整应用配置的原子持久化边界。
+///
+/// 实现必须在同一事务中替换全部 Workspace、当前选择和全局 Settings。调用前文档已由
+/// application 全量校验；实现失败时不得留下任何部分写入。
+pub trait ApplicationConfigurationStorePort: Send + Sync + std::fmt::Debug {
+    async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()>;
+}
+
+#[derive(Debug, Default)]
+pub struct UnavailableApplicationConfigurationStore;
+
+#[async_trait]
+impl ApplicationConfigurationStorePort for UnavailableApplicationConfigurationStore {
+    async fn replace_all(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
+        Err(AppError::new(
+            "APPLICATION_CONFIGURATION_STORE_UNAVAILABLE",
+            "当前 Host 未提供完整配置原子存储能力。",
+        ))
+    }
 }
 
 #[async_trait]
@@ -106,7 +157,7 @@ pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
     async fn test_upstream_tls(
         &self,
         workspace: ProxyWorkspace,
-        listener: ReverseProxyListener,
+        listener: ProxyListener,
     ) -> AppResult<ListenerUpstreamTlsTestViewModel>;
 }
 

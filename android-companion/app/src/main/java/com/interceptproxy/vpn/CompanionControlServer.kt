@@ -115,6 +115,9 @@ class CompanionControlServer(private val context: Context) {
                 "ANDROID_PROFILE_MISSING",
                 "start/apply 缺少 profile。",
             )
+        val proxyRuntimeJson = request.payload.optJSONObject("proxy_runtime")
+            ?.toString()
+            ?: "{\"routes\":[]}"
         val profile = runCatching { CompanionProfileParser.parse(profileJson) }.getOrElse { error ->
             return ControlProtocol.failure(
                 request.requestId,
@@ -140,7 +143,9 @@ class CompanionControlServer(private val context: Context) {
         RuntimeStateStore(context).profileJson = profileJson
         VpnRuntimeRegistry.startRequested(JSONObject(profileJson).getString("id"))
         return runCatching {
-            context.startForegroundService(InterceptVpnService.startIntent(context, profileJson))
+            context.startForegroundService(
+                InterceptVpnService.startIntent(context, profileJson, proxyRuntimeJson),
+            )
             ControlProtocol.success(request.requestId, statusJson())
         }.getOrElse { error ->
             VpnRuntimeRegistry.faulted("启动 VpnService 失败：${error.message}")

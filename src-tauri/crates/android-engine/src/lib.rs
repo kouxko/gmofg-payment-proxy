@@ -1,4 +1,4 @@
-//! Android 定向弱网的数据面核心。
+//! Android 应用网络接管的数据面核心。
 //!
 //! 本 crate 不依赖 Android Framework 或 Tauri。Android/Kotlin 只负责取得 TUN、
 //! 验证系统授权及维护服务生命周期；包选择规则、弱网决策和统计都可以在桌面主机上
@@ -8,6 +8,8 @@
 mod engine;
 mod model;
 mod rng;
+#[cfg(any(target_os = "android", all(test, unix)))]
+mod routing;
 mod validation;
 
 #[cfg(any(target_os = "android", all(test, unix)))]

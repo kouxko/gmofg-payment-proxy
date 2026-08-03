@@ -12,9 +12,10 @@ use crate::{SecretProtector, SqliteStore};
 
 use super::{
     CaptureRepositoryAdapter, CertificateServiceAdapter, FaultServiceAdapter, FileExportAdapter,
-    ListenerRuntimeAdapter, NativeFileDialog, ProtectedSecretAdapter, RuleRepositoryAdapter,
-    SettingsRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter,
-    WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
+    ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
+    ProtectedSecretAdapter, RuleRepositoryAdapter, SettingsRepositoryAdapter,
+    WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
+    WorkspaceRuntimePolicyResolver,
 };
 
 #[derive(Debug)]
@@ -25,6 +26,7 @@ pub struct InfrastructureServiceBundle {
     pub workspace_body_codecs: Arc<WorkspaceBodyCodecResolver>,
     pub workspace_runtime_policies: Arc<WorkspaceRuntimePolicyResolver>,
     pub listener_runtime: Arc<ListenerRuntimeAdapter>,
+    pub listener_certificates: Arc<ManagedListenerCertificateAdapter>,
     pub protected_secrets: Arc<ProtectedSecretAdapter>,
     pub rules: Arc<RuleRepositoryAdapter>,
     pub faults: Arc<FaultServiceAdapter>,
@@ -72,15 +74,23 @@ impl InfrastructureServiceBundle {
             Arc::clone(&dialog),
             product,
         ));
-        let protected_secrets =
-            Arc::new(ProtectedSecretAdapter::new(Arc::clone(&store), protector));
+        let protected_secrets = Arc::new(ProtectedSecretAdapter::new(
+            Arc::clone(&store),
+            Arc::clone(&protector),
+        ));
+        let listener_certificates = Arc::new(ManagedListenerCertificateAdapter::new(
+            Arc::clone(&store),
+            protector,
+            Arc::clone(&dialog),
+        ));
         let workspace_body_codecs = Arc::new(WorkspaceBodyCodecResolver::new(Arc::clone(&store)));
         let workspace_runtime_policies =
             Arc::new(WorkspaceRuntimePolicyResolver::new(Arc::clone(&store)));
         let listener_runtime = Arc::new(
             ListenerRuntimeAdapter::new(Arc::clone(&store))
                 .with_mitm_certificate_authority(certificates.clone())
-                .with_protected_secrets(protected_secrets.clone()),
+                .with_protected_secrets(protected_secrets.clone())
+                .with_managed_listener_certificates(listener_certificates.clone()),
         );
         Self {
             workspaces: Arc::new(WorkspaceRepositoryAdapter::new(store)),
@@ -88,6 +98,7 @@ impl InfrastructureServiceBundle {
             workspace_body_codecs,
             workspace_runtime_policies,
             listener_runtime,
+            listener_certificates,
             protected_secrets,
             settings,
             faults,

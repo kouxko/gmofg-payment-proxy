@@ -16,7 +16,7 @@ module AndroidControlClient
   MAX_ATTEMPTS = 3
   module_function
 
-  def request(serial:, operation:, profile: nil)
+  def request(serial:, operation:, profile: nil, proxy_runtime: nil)
     last_error = nil
     MAX_ATTEMPTS.times do |attempt|
       # PackageManager 与 Activity 启动在 APK 覆盖安装或进程重建窗口内可能短暂返回
@@ -24,7 +24,12 @@ module AndroidControlClient
       # 在下面 fail-closed，并且最多尝试三次。
       wake(serial) if attempt.positive?
       begin
-        return request_once(serial: serial, operation: operation, profile: profile)
+        return request_once(
+          serial: serial,
+          operation: operation,
+          profile: profile,
+          proxy_runtime: proxy_runtime
+        )
       rescue EOFError, IOError, SystemCallError, Timeout::Error, RuntimeError => error
         raise unless transient?(error) && attempt + 1 < MAX_ATTEMPTS
 
@@ -35,13 +40,17 @@ module AndroidControlClient
     raise last_error || "设备端控制通道重试耗尽"
   end
 
-  def request_once(serial:, operation:, profile:)
-    port = adb(serial, "forward", "tcp:0", "localabstract:#{SOCKET_NAME}").strip
+  def request_once(serial:, operation:, profile:, proxy_runtime:)
+    port = available_loopback_port
+    adb(serial, "forward", "tcp:#{port}", "localabstract:#{SOCKET_NAME}")
+    payload = {}
+    payload[:profile] = profile unless profile.nil?
+    payload[:proxy_runtime] = proxy_runtime unless proxy_runtime.nil?
     request = {
       version: 1,
       request_id: "gate-#{operation}-#{Process.clock_gettime(Process::CLOCK_MONOTONIC, :millisecond)}",
       operation: operation,
-      payload: profile.nil? ? {} : { profile: profile }
+      payload: payload
     }.to_json
     socket = TCPSocket.new("127.0.0.1", Integer(port))
     response = Timeout.timeout(8) do
@@ -86,6 +95,13 @@ module AndroidControlClient
     return stdout if status.success? || allow_failure
 
     raise "adb command failed (#{status.exitstatus}): #{stderr.empty? ? stdout : stderr}"
+  end
+
+  def available_loopback_port
+    server = TCPServer.new("127.0.0.1", 0)
+    server.local_address.ip_port
+  ensure
+    server&.close
   end
 
   def transient?(error)

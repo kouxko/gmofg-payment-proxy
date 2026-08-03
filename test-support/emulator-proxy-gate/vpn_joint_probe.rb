@@ -1,9 +1,10 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Android 模拟器上的联合门禁：让被定向接管的 shell UID 在固定延迟生效时，分别访问
-# DLL 与 Transaction 两个 Reverse Listener。这里只验证“VPN 数据面 + 通用代理 + D48
-# 字节透传”的组合链路；真实 GMO-FG 业务验收仍必须使用 A920MAX 和真实上游。
+# Android 模拟器上的联合门禁：目标 App 仍连接测试中的“原始 Server”地址和
+# DLL/Transaction 端口。该地址本身不存在可达 Server，只有 VpnService 命中
+# proxy_routes 并分别改送到两条桌面 Listener 时才能获得 D48。这证明 App 不需要填
+# 代理 IP；真实 GMO-FG 验收仍必须使用 A920MAX 和真实上游。
 
 require "json"
 require "open3"
@@ -15,13 +16,17 @@ require_relative "../android-control-client"
 serial = ENV.fetch("ANDROID_SERIAL")
 host_port = Integer(ENV.fetch("EMULATOR_PROXY_GATE_HOST_PORT"))
 report_file = ENV.fetch("EMULATOR_PROXY_GATE_VPN_REPORT_FILE")
-host = ENV.fetch("EMULATOR_PROXY_GATE_ANDROID_HOST", "10.0.3.2")
-relay_dll_port = host_port + 2_000
-relay_transaction_port = host_port + 2_001
+original_host = ENV.fetch("EMULATOR_PROXY_GATE_ORIGINAL_HOST", "203.0.113.48")
+original_dll_port = 16_127
+original_transaction_port = 16_627
+dll_device_proxy_port = 6_555
+transaction_device_proxy_port = 6_556
 target_package = ENV.fetch("EMULATOR_PROXY_GATE_TARGET_PACKAGE")
 target_activity = ENV.fetch("EMULATOR_PROXY_GATE_TARGET_ACTIVITY")
 target_uid = Integer(ENV.fetch("EMULATOR_PROXY_GATE_TARGET_UID"))
 target_signature = ENV.fetch("EMULATOR_PROXY_GATE_TARGET_SIGNING_SHA256")
+dll_listener_id = ENV.fetch("EMULATOR_PROXY_GATE_DLL_LISTENER_ID")
+transaction_listener_id = ENV.fetch("EMULATOR_PROXY_GATE_TRANSACTION_LISTENER_ID")
 
 def run(*command, allow_failure: false)
   stdout, stderr, status = Open3.capture3(*command)
@@ -30,8 +35,13 @@ def run(*command, allow_failure: false)
   raise "command failed (#{status.exitstatus}): #{command.join(' ')}\n#{stdout}\n#{stderr}"
 end
 
-def control(serial, operation, profile = nil)
-  AndroidControlClient.request(serial: serial, operation: operation, profile: profile)
+def control(serial, operation, profile = nil, proxy_runtime = nil)
+  AndroidControlClient.request(
+    serial: serial,
+    operation: operation,
+    profile: profile,
+    proxy_runtime: proxy_runtime
+  )
 end
 
 def wait_for_vpn_running(serial, timeout_seconds: 8)
@@ -126,42 +136,6 @@ def response_evidence(result)
   }
 end
 
-def start_transparent_relay(label, listen_port, target_port)
-  server = TCPServer.new("0.0.0.0", listen_port)
-  thread = Thread.new do
-    loop do
-      client = server.accept
-      Thread.new(client) do |downstream|
-        upstream = TCPSocket.new("127.0.0.1", target_port)
-        upload = Thread.new do
-          # 必须边读边转发，不能等设备端 EOF 后再一次性写入。HTTP 客户端会保持写方向
-          # 打开并等待响应；若 relay 等 EOF，客户端与代理就会互相等待。
-          uploaded = IO.copy_stream(downstream, upstream)
-          warn "#{label} relay uploaded #{uploaded} bytes"
-          upstream.close_write
-        rescue IOError, SystemCallError => error
-          warn "#{label} upload relay stopped: #{error.class}: #{error.message}"
-        end
-        download = Thread.new do
-          downloaded = IO.copy_stream(upstream, downstream)
-          warn "#{label} relay downloaded #{downloaded} bytes"
-          downstream.close_write
-        rescue IOError, SystemCallError => error
-          warn "#{label} download relay stopped: #{error.class}: #{error.message}"
-        end
-        upload.join
-        download.join
-      ensure
-        upstream&.close
-        downstream.close
-      end
-    end
-  rescue IOError, SystemCallError => error
-    warn "#{label} accept relay stopped: #{error.class}: #{error.message}"
-  end
-  [server, thread]
-end
-
 weak_network = {
   seed: 48,
   fixed_delay_millis: 120,
@@ -187,33 +161,63 @@ profile = {
     signing_sha256: target_signature,
     uid: target_uid
   }],
-  destination_targets: [{ cidr: host, ports: [relay_dll_port, relay_transaction_port] }],
+  # 只对 DLL 原始目标注入弱网，但 DLL 和 Transaction 都必须命中透明代理。
+  # 由此证明 destination_targets 不决定路由去向。
+  destination_targets: [{ cidr: original_host, ports: [original_dll_port] }],
+  proxy_routes: [
+    {
+      destination: original_host,
+      ports: [original_dll_port],
+      listener_id: dll_listener_id
+    },
+    {
+      destination: original_host,
+      ports: [original_transaction_port],
+      listener_id: transaction_listener_id
+    }
+  ],
   confirmed_shared_uids: [],
   auto_resume_after_reboot: false,
   weak_network: weak_network
+}
+proxy_runtime = {
+  routes: [
+    {
+      listener_id: dll_listener_id,
+      original_destination: original_host,
+      original_ports: [original_dll_port],
+      resolved_original_ips: [original_host],
+      proxy_host: "127.0.0.1",
+      proxy_port: dll_device_proxy_port
+    },
+    {
+      listener_id: transaction_listener_id,
+      original_destination: original_host,
+      original_ports: [original_transaction_port],
+      resolved_original_ips: [original_host],
+      proxy_host: "127.0.0.1",
+      proxy_port: transaction_device_proxy_port
+    }
+  ]
 }
 
 report = {
   scope: "TEST ONLY Android emulator VPN plus simulated DLL and Transaction upstreams",
   serial: serial,
   target_package: target_package,
-  destination: host,
+  original_destination: original_host,
   ports: {
     dll_listener: host_port,
     transaction_listener: host_port + 1,
-    dll_relay: relay_dll_port,
-    transaction_relay: relay_transaction_port
+    original_dll: original_dll_port,
+    original_transaction: original_transaction_port,
+    dll_device_proxy: dll_device_proxy_port,
+    transaction_device_proxy: transaction_device_proxy_port
   },
   started_at: Time.now.iso8601
 }
 
 begin
-  dll_relay, dll_relay_thread = start_transparent_relay("DLL", relay_dll_port, host_port)
-  transaction_relay, transaction_relay_thread = start_transparent_relay(
-    "Transaction",
-    relay_transaction_port,
-    host_port + 1
-  )
   # run.sh 已通过 appops 完成模拟器测试授权。这里不能再次打开授权 Activity：已授权时
   # Activity 会自动启动磁盘中上次保存的 Profile，与随后 apply 的本轮 Profile 并发。
   control(serial, "emergency_restore")
@@ -221,11 +225,11 @@ begin
 
   # 基线使用未被 Profile 选中的 shell UID。若先让目标 Probe 建立直连，再为同一 UID 建立
   # TUN，旧 TCP 流的收尾包也会进入新 TUN，制造与本轮请求无关的 SOCKS 重连噪声。
-  direct_dll = request_direct(serial, host, relay_dll_port, "/direct/dll")
+  direct_dll = request_direct(serial, "127.0.0.1", dll_device_proxy_port, "/direct/dll")
   direct_transaction = request_direct(
     serial,
-    host,
-    relay_transaction_port,
+    "127.0.0.1",
+    transaction_device_proxy_port,
     "/direct/transaction"
   )
   unless direct_dll[:stdout].include?("HTTP/1.1 200") && direct_dll[:stdout].include?("D48")
@@ -235,7 +239,7 @@ begin
     raise "direct Transaction baseline did not return D48: #{direct_transaction}"
   end
 
-  control(serial, "apply", profile)
+  control(serial, "apply", profile, proxy_runtime)
   # apply 只确认 startForegroundService 请求已经发出；VpnService 建立 TUN 和启动 Rust
   # 数据面是异步的。必须等到 Companion 明确报告 running，避免首个请求绕过尚未生效的
   # allowlist，同时旧连接的 SYN 又在 TUN 建立后被重复接管。
@@ -245,8 +249,8 @@ begin
     serial,
     target_package,
     target_activity,
-    host,
-    relay_dll_port,
+    original_host,
+    original_dll_port,
     "/vpn/dll"
   )
   report[:vpn_status_after_dll] = control(serial, "status")
@@ -254,8 +258,8 @@ begin
     serial,
     target_package,
     target_activity,
-    host,
-    relay_transaction_port,
+    original_host,
+    original_transaction_port,
     "/vpn/transaction"
   )
   status = control(serial, "status")
@@ -275,6 +279,9 @@ begin
   end
 
   report[:result] = "PASS"
+  report[:application_used_original_destination] = true
+  report[:manual_proxy_address_in_application] = false
+  report[:transparent_proxy_routes] = profile.fetch(:proxy_routes)
   report[:direct_dll] = response_evidence(direct_dll)
   report[:direct_transaction] = response_evidence(direct_transaction)
   report[:dll] = response_evidence(dll)
@@ -288,10 +295,6 @@ rescue StandardError => error
   )
 ensure
   control(serial, "emergency_restore") rescue nil
-  dll_relay&.close
-  transaction_relay&.close
-  dll_relay_thread&.join(1)
-  transaction_relay_thread&.join(1)
   report[:finished_at] = Time.now.iso8601
   File.write(report_file, JSON.pretty_generate(report))
 end
