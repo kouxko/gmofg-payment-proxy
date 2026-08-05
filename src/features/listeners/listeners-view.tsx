@@ -81,8 +81,8 @@ export function ListenersView() {
     certificateDetails.data ?? [],
     importedCertificateDetails,
   );
-  const installationLeaf = bootstrap?.certificate.items.find(
-    (item): item is CertificateItemViewModel => item.kind === "proxy_leaf",
+  const installationRoot = bootstrap?.certificate.items.find(
+    (item): item is CertificateItemViewModel => item.kind === "local_root_ca",
   );
 
   function clearDerivedResults() {
@@ -441,7 +441,7 @@ export function ListenersView() {
         </div>
         {validation && (validation.valid ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验通过</Alert.Title><Alert.Description>当前监听可保存、启动或执行上游 TLS 测试。</Alert.Description></Alert.Content></Alert> : <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验未通过</Alert.Title><Alert.Description>{errors.map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description></Alert.Content></Alert>)}
         {certificateDetails.error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>证书详情读取失败</Alert.Title><Alert.Description>{certificateDetails.error}</Alert.Description></Alert.Content></Alert>}
-        {!selected ? <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">选择一个代理监听进行编辑。</p> : <><ListenerRuntimeCard status={selectedStatus} isLoading={listenerOverview.isLoading} error={listenerOverview.error} pending={pending} onToggle={toggleListenerRuntime} onRetry={listenerOverview.refresh} /><ListenerEditor listener={selected} certificateReferences={effectiveWorkspace.certificate_references} certificateDetails={effectiveCertificateDetails} installationLeaf={installationLeaf} pending={pending} tlsTest={tlsTest} tlsTestError={tlsTestError} basicUsername={basicUsername} basicPassword={basicPassword} onBasicUsernameChange={setBasicUsername} onBasicPasswordChange={setBasicPassword} onChange={replaceSelected} onStoreBasicCredential={storeBasicCredential} onImportDownstreamServerIdentity={importDownstreamIdentity} onImportDownstreamClientTrust={importDownstreamTrust} onImportClientIdentity={importIdentity} onImportServerTrust={importTrust} onTestUpstreamTls={testUpstreamTls} /></>}
+        {!selected ? <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">选择一个代理监听进行编辑。</p> : <><ListenerRuntimeCard status={selectedStatus} isLoading={listenerOverview.isLoading} error={listenerOverview.error} pending={pending} onToggle={toggleListenerRuntime} onRetry={listenerOverview.refresh} /><ListenerEditor listener={selected} certificateReferences={effectiveWorkspace.certificate_references} certificateDetails={effectiveCertificateDetails} installationRoot={installationRoot} pending={pending} tlsTest={tlsTest} tlsTestError={tlsTestError} basicUsername={basicUsername} basicPassword={basicPassword} onBasicUsernameChange={setBasicUsername} onBasicPasswordChange={setBasicPassword} onChange={replaceSelected} onStoreBasicCredential={storeBasicCredential} onImportDownstreamServerIdentity={importDownstreamIdentity} onImportDownstreamClientTrust={importDownstreamTrust} onImportClientIdentity={importIdentity} onImportServerTrust={importTrust} onTestUpstreamTls={testUpstreamTls} /></>}
       </main>
     </section>
   );

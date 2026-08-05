@@ -1964,7 +1964,7 @@ fn authority_host(authority: &str) -> Result<String> {
 
 /// 精确主机/IP 或 `*.example.test` 后缀匹配。通配符不匹配裸根域，且边界必须是 `.`，
 /// 因而 `badexample.test` 不会误命中 `*.example.test`。
-fn authority_is_allowed(host: &str, patterns: &[String]) -> bool {
+pub(crate) fn authority_is_allowed(host: &str, patterns: &[String]) -> bool {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
     patterns.iter().any(|pattern| {
         let pattern = pattern.trim_end_matches('.').to_ascii_lowercase();

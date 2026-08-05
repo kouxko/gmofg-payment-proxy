@@ -14,6 +14,16 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
     bootstrap: {
       certificate: {
         items: [{
+          kind: "local_root_ca",
+          subject: "CN=Intercept Proxy Root CA",
+          usage: "动态签发代理服务端证书",
+          sans: [],
+          valid_from: "2026-01-01T00:00:00Z",
+          valid_until: "2036-01-01T00:00:00Z",
+          sha256_fingerprint: "55:66:77:88",
+          status_text: "有效",
+          ui_tone: "positive",
+        }, {
           kind: "proxy_leaf",
           subject: "CN=10.0.0.8",
           usage: "本机代理服务端身份",
@@ -47,7 +57,12 @@ function dynamicListener(id = "listener-1", name = "默认代理监听", port = 
     authentication: { mode: "none" as const }, allowed_client_cidrs: [],
     mitm: { enabled: false, authority_allowlist: [], root_ca: null, maximum_cached_leaf_certificates: 256 },
     connect_timeout_ms: 30000, read_timeout_ms: 70000, write_timeout_ms: 70000,
-    downstream_tls: { enabled: false, server_identity: null, client_authentication: { mode: "disabled" as const } },
+    downstream_tls: {
+      enabled: false,
+      server_identity: null,
+      dynamic_sni_allowlist: [],
+      client_authentication: { mode: "disabled" as const },
+    },
     request_body_codec: "raw" as const,
     response_body_codec: "raw" as const,
     fixed_server: null,
@@ -625,6 +640,7 @@ describe("统一代理监听编辑器", () => {
       downstream_tls: {
         enabled: true,
         server_identity: serverIdentity.id,
+        dynamic_sni_allowlist: [],
         client_authentication: { mode: "required" as const, trust: clientTrust.id },
       },
     };
@@ -646,7 +662,7 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getAllByText("AA:BB:CC:DD")).toHaveLength(2);
   });
 
-  it("下游 TLS 留空时明确使用证书管理页签发的本机叶子证书", async () => {
+  it("下游 TLS 留空时按允许的客户端 SNI 动态签发证书", async () => {
     mocks.workspaceGet.mockReturnValue(ok({
       ...workspace,
       listeners: [{
@@ -654,6 +670,7 @@ describe("统一代理监听编辑器", () => {
         downstream_tls: {
           enabled: true,
           server_identity: null,
+          dynamic_sni_allowlist: ["api.example.test"],
           client_authentication: { mode: "disabled" as const },
         },
       }],
@@ -661,11 +678,11 @@ describe("统一代理监听编辑器", () => {
 
     render(<ListenersView />);
 
-    expect((await screen.findAllByText(/证书管理页本机叶子证书/))[0]).toBeVisible();
-    expect(screen.getByText(/使用已签发的固定 SAN/)).toBeVisible();
-    expect(screen.queryByText(/按客户端访问域名自动签发/)).not.toBeInTheDocument();
-    expect(screen.getByText("CN=10.0.0.8")).toBeVisible();
-    expect(screen.getByText("11:22:33:44")).toBeVisible();
+    expect((await screen.findAllByText(/证书管理页 Root CA/))[0]).toBeVisible();
+    expect(screen.getByText(/按允许的客户端 SNI 动态签发/)).toBeVisible();
+    expect(screen.getByLabelText("动态 SNI 允许域名")).toHaveValue("api.example.test");
+    expect(screen.getByText("CN=Intercept Proxy Root CA")).toBeVisible();
+    expect(screen.getByText("55:66:77:88")).toBeVisible();
   });
 
   it("失效的外部服务端身份可一键恢复为证书页叶子证书", async () => {
@@ -677,6 +694,7 @@ describe("统一代理监听编辑器", () => {
         downstream_tls: {
           enabled: true,
           server_identity: staleIdentity.id,
+          dynamic_sni_allowlist: [],
           client_authentication: { mode: "disabled" as const },
         },
       }],

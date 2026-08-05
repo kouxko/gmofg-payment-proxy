@@ -1,7 +1,7 @@
 //! 动态 Workspace Listener 的网络运行时适配器。
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::{Cursor, Read},
     net::SocketAddr,
@@ -18,7 +18,7 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, CertificateReferenceKind,
     DownstreamClientAuthentication, FixedServerSettings, ForwardProxyAuthentication,
-    ProxyWorkspace,
+    ProxyWorkspace, normalize_android_network_destination,
 };
 use intercept_proxy_runtime::{
     ChannelId as RuntimeChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode,
@@ -226,6 +226,7 @@ impl ListenerRuntimeAdapter {
             return Ok(None);
         }
 
+        let dynamic_sni = listener.downstream_tls.server_identity.is_none();
         let server_identity = match listener.downstream_tls.server_identity {
             Some(identity_id) => {
                 self.load_identity(certificate_reference(workspace, identity_id)?)?
@@ -250,11 +251,30 @@ impl ListenerRuntimeAdapter {
                     true,
                 ),
             };
+        let (dynamic_server_identity, dynamic_server_name_allowlist) = if dynamic_sni {
+            let allowlist = downstream_sni_allowlist(workspace, listener);
+            if allowlist.is_empty() {
+                return Err(AppError::new(
+                    "DYNAMIC_SNI_ALLOWLIST_EMPTY",
+                    "动态 SNI 服务端证书已启用，但当前监听没有可签发的允许域名。",
+                )
+                .entity(listener.id.to_string()));
+            }
+            let authority = self.mitm_certificate_authority.clone().ok_or_else(|| {
+                AppError::new(
+                    "CERTIFICATE_NOT_READY",
+                    "动态 SNI 服务端证书已启用，但安装级 Root CA 签发能力尚未就绪。",
+                )
+                .entity(listener.id.to_string())
+            })?;
+            (Some(authority), allowlist)
+        } else {
+            (None, Vec::new())
+        };
         Ok(Some(ReverseDownstreamTls {
             server_identity,
-            // `None` 的产品语义是使用证书管理页已经签发的安装级叶子证书，而不是
-            // 根据客户端 SNI 临时签发另一张证书。显式外部身份同样保持单一证书。
-            dynamic_server_identity: None,
+            dynamic_server_identity,
+            dynamic_server_name_allowlist,
             client_trust_der,
             client_authentication_required,
         }))
@@ -312,6 +332,45 @@ impl ListenerRuntimeAdapter {
         }
         load_file_identity(reference)
     }
+}
+
+/// 汇总当前监听允许动态签发的 SNI。
+///
+/// 显式配置用于普通客户端；固定 Server 主机名和 Android 透明路由目标用于让常见
+/// 反向代理场景无需重复录入。CIDR 不是合法 SNI，因而不会进入允许列表。
+fn downstream_sni_allowlist(workspace: &ProxyWorkspace, listener: &ProxyListener) -> Vec<String> {
+    let mut names = BTreeSet::new();
+    names.extend(
+        listener
+            .downstream_tls
+            .dynamic_sni_allowlist
+            .iter()
+            .filter_map(|name| normalize_sni_pattern(name)),
+    );
+    if let Some(fixed_server) = &listener.fixed_server
+        && let Ok(uri) = fixed_server.upstream_url.parse::<http::Uri>()
+        && let Some(host) = uri.host()
+    {
+        names.insert(host.trim_matches(['[', ']']).to_ascii_lowercase());
+    }
+    for route in workspace
+        .android_network_profiles
+        .iter()
+        .flat_map(|profile| &profile.proxy_routes)
+        .filter(|route| route.listener_id == listener.id)
+    {
+        if let Some(destination) = normalize_android_network_destination(&route.destination)
+            && !destination.contains('/')
+        {
+            names.insert(destination);
+        }
+    }
+    names.into_iter().collect()
+}
+
+fn normalize_sni_pattern(value: &str) -> Option<String> {
+    let value = value.trim().trim_end_matches('.').to_ascii_lowercase();
+    (!value.is_empty()).then_some(value)
 }
 
 fn certificate_reference(
@@ -846,12 +905,28 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct StaticDynamicAuthority;
+
+    impl MitmCertificateAuthority for StaticDynamicAuthority {
+        fn issue_server_identity(
+            &self,
+            _authority_host: &str,
+        ) -> intercept_proxy_runtime::Result<intercept_proxy_runtime::MitmServerIdentity> {
+            Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "test authority does not issue certificates",
+            ))
+        }
+    }
+
     #[test]
-    fn installation_leaf_identity_never_enables_sni_dynamic_signing() {
+    fn installation_root_enables_allowlisted_sni_dynamic_signing() {
         let listener = ProxyListener {
             downstream_tls: intercept_proxy_domain::DownstreamTlsSettings {
                 enabled: true,
                 server_identity: None,
+                dynamic_sni_allowlist: vec!["https.gmo-fg.net".into()],
                 client_authentication: DownstreamClientAuthentication::Disabled,
             },
             ..ProxyListener::default()
@@ -861,14 +936,15 @@ mod tests {
             ..ProxyWorkspace::default()
         };
         let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()))
-            .with_installation_server_identity(Arc::new(StaticInstallationIdentity));
+            .with_installation_server_identity(Arc::new(StaticInstallationIdentity))
+            .with_mitm_certificate_authority(Arc::new(StaticDynamicAuthority));
 
         let tls = runtime
             .downstream_tls(&workspace, &listener)
             .unwrap()
             .expect("downstream TLS");
-
-        assert!(tls.dynamic_server_identity.is_none());
+        assert!(tls.dynamic_server_identity.is_some());
+        assert_eq!(tls.dynamic_server_name_allowlist, vec!["https.gmo-fg.net"]);
         assert_eq!(
             tls.server_identity.certificate_chain_der,
             vec![vec![1, 2, 3]]

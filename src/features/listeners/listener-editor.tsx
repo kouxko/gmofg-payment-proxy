@@ -23,7 +23,7 @@ type Props = {
   listener: ProxyListener;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
-  installationLeaf?: CertificateItemViewModel;
+  installationRoot?: CertificateItemViewModel;
   pending?: string;
   tlsTest?: ListenerUpstreamTlsTestViewModel;
   tlsTestError?: string;
@@ -44,7 +44,7 @@ export function ListenerEditor({
   listener,
   certificateReferences,
   certificateDetails,
-  installationLeaf,
+  installationRoot,
   pending,
   tlsTest,
   tlsTestError,
@@ -125,7 +125,7 @@ export function ListenerEditor({
           listener={listener}
           certificateReferences={certificateReferences}
           certificateDetails={certificateDetails}
-          installationLeaf={installationLeaf}
+          installationRoot={installationRoot}
           busy={Boolean(pending)}
           testing={pending === "tls-test"}
           testResult={tlsTest}
@@ -153,7 +153,7 @@ function CommonListenerSettings({
   onBasicPasswordChange,
   onChange,
   onStoreBasicCredential,
-}: Omit<Props, "certificateReferences" | "certificateDetails" | "installationLeaf" | "tlsTest" | "tlsTestError" | "onImportDownstreamServerIdentity" | "onImportDownstreamClientTrust" | "onImportClientIdentity" | "onImportServerTrust" | "onTestUpstreamTls"> & {
+}: Omit<Props, "certificateReferences" | "certificateDetails" | "installationRoot" | "tlsTest" | "tlsTestError" | "onImportDownstreamServerIdentity" | "onImportDownstreamClientTrust" | "onImportClientIdentity" | "onImportServerTrust" | "onTestUpstreamTls"> & {
   basicCredentialKey?: string;
   basicCredentialProvider?: string;
 }) {
