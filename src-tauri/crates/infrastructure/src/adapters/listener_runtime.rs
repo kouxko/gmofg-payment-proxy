@@ -37,6 +37,14 @@ use crate::{CertificateService, SqliteStore};
 
 use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter, common::app_error};
 
+/// 读取当前安装实例在证书管理页签发的服务端叶子证书。
+///
+/// 该端口只在 infrastructure 内部流转 TLS 私钥，Workspace 与 IPC 只用 `None` 表示
+/// “使用本机叶子证书”，不会接触或复制私钥字节。
+pub(crate) trait InstallationServerIdentityProvider: std::fmt::Debug + Send + Sync {
+    fn load_installation_server_identity(&self) -> AppResult<ReverseClientIdentity>;
+}
+
 #[derive(Debug)]
 struct RunningListener {
     cancellation: CancellationToken,
@@ -55,6 +63,7 @@ pub struct ListenerRuntimeAdapter {
     runtime_epochs: RwLock<BTreeMap<WorkspaceId, Uuid>>,
     _store: Arc<SqliteStore>,
     mitm_certificate_authority: Option<Arc<dyn MitmCertificateAuthority>>,
+    installation_server_identity: Option<Arc<dyn InstallationServerIdentityProvider>>,
     protected_secrets: Option<Arc<ProtectedSecretAdapter>>,
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
     pipeline_ports: RwLock<Option<Arc<dyn PipelinePorts>>>,
@@ -68,6 +77,7 @@ impl ListenerRuntimeAdapter {
             runtime_epochs: RwLock::new(BTreeMap::new()),
             _store: store,
             mitm_certificate_authority: None,
+            installation_server_identity: None,
             protected_secrets: None,
             managed_listener_certificates: None,
             pipeline_ports: RwLock::new(None),
@@ -80,6 +90,15 @@ impl ListenerRuntimeAdapter {
         certificates: Arc<ManagedListenerCertificateAdapter>,
     ) -> Self {
         self.managed_listener_certificates = Some(certificates);
+        self
+    }
+
+    #[must_use]
+    pub(crate) fn with_installation_server_identity(
+        mut self,
+        provider: Arc<dyn InstallationServerIdentityProvider>,
+    ) -> Self {
+        self.installation_server_identity = Some(provider);
         self
     }
 
@@ -207,11 +226,18 @@ impl ListenerRuntimeAdapter {
             return Ok(None);
         }
 
-        let identity_id = listener
-            .downstream_tls
-            .server_identity
-            .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "下游 TLS 服务端身份未配置。"))?;
-        let server_identity = self.load_identity(certificate_reference(workspace, identity_id)?)?;
+        let server_identity = match listener.downstream_tls.server_identity {
+            Some(identity_id) => {
+                self.load_identity(certificate_reference(workspace, identity_id)?)?
+            }
+            None => self
+                .installation_server_identity
+                .as_ref()
+                .ok_or_else(|| {
+                    AppError::new("CERTIFICATE_NOT_READY", "本机叶子证书服务尚未装配。")
+                })?
+                .load_installation_server_identity()?,
+        };
         let (client_trust_der, client_authentication_required) =
             match listener.downstream_tls.client_authentication {
                 DownstreamClientAuthentication::Disabled => (Vec::new(), false),
@@ -226,6 +252,9 @@ impl ListenerRuntimeAdapter {
             };
         Ok(Some(ReverseDownstreamTls {
             server_identity,
+            // `None` 的产品语义是使用证书管理页已经签发的安装级叶子证书，而不是
+            // 根据客户端 SNI 临时签发另一张证书。显式外部身份同样保持单一证书。
+            dynamic_server_identity: None,
             client_trust_der,
             client_authentication_required,
         }))
@@ -804,6 +833,47 @@ mod tests {
 
     use super::*;
     use crate::WorkspaceRecord;
+
+    #[derive(Debug)]
+    struct StaticInstallationIdentity;
+
+    impl InstallationServerIdentityProvider for StaticInstallationIdentity {
+        fn load_installation_server_identity(&self) -> AppResult<ReverseClientIdentity> {
+            Ok(ReverseClientIdentity {
+                certificate_chain_der: vec![vec![1, 2, 3]],
+                private_key_pkcs8_der: Zeroizing::new(vec![4, 5, 6]),
+            })
+        }
+    }
+
+    #[test]
+    fn installation_leaf_identity_never_enables_sni_dynamic_signing() {
+        let listener = ProxyListener {
+            downstream_tls: intercept_proxy_domain::DownstreamTlsSettings {
+                enabled: true,
+                server_identity: None,
+                client_authentication: DownstreamClientAuthentication::Disabled,
+            },
+            ..ProxyListener::default()
+        };
+        let workspace = ProxyWorkspace {
+            listeners: vec![listener.clone()],
+            ..ProxyWorkspace::default()
+        };
+        let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()))
+            .with_installation_server_identity(Arc::new(StaticInstallationIdentity));
+
+        let tls = runtime
+            .downstream_tls(&workspace, &listener)
+            .unwrap()
+            .expect("downstream TLS");
+
+        assert!(tls.dynamic_server_identity.is_none());
+        assert_eq!(
+            tls.server_identity.certificate_chain_der,
+            vec![vec![1, 2, 3]]
+        );
+    }
 
     #[test]
     fn unknown_issuer_explains_system_roots_without_weakening_explicit_trust() {

@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import type {
+  CertificateItemViewModel,
   CertificateReference,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamTlsTestViewModel,
@@ -17,6 +18,7 @@ import type {
 import { DownstreamTlsCard } from "./downstream-tls-card";
 import {
   ImportIdentityModal,
+  ImportPemModal,
   ImportTrustModal,
 } from "./fixed-server-tls-import-modals";
 import { UpstreamTlsCard } from "./upstream-tls-card";
@@ -25,17 +27,24 @@ type Props = {
   listener: ProxyListener;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
+  installationLeaf?: CertificateItemViewModel;
   busy: boolean;
   testing: boolean;
   testResult?: ListenerUpstreamTlsTestViewModel;
   testError?: string;
   onChange: (changes: Partial<ProxyListener>) => void;
+  onImportDownstreamServerIdentity: (label: string) => Promise<boolean>;
+  onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
   onImportServerTrust: (label: string) => Promise<boolean>;
   onTest: () => Promise<void>;
 };
 
 export function FixedServerTlsSettings(props: Props) {
+  const [downstreamIdentityOpen, setDownstreamIdentityOpen] = useState(false);
+  const [downstreamIdentityLabel, setDownstreamIdentityLabel] = useState("本监听独立服务端身份");
+  const [downstreamTrustOpen, setDownstreamTrustOpen] = useState(false);
+  const [downstreamTrustLabel, setDownstreamTrustLabel] = useState("客户端证书 CA");
   const [identityOpen, setIdentityOpen] = useState(false);
   const [identityLabel, setIdentityLabel] = useState("上游 mTLS 客户端身份");
   const [identityPassword, setIdentityPassword] = useState("");
@@ -53,13 +62,27 @@ export function FixedServerTlsSettings(props: Props) {
     setTrustOpen(false);
   }
 
+  async function importDownstreamIdentity() {
+    if (!(await props.onImportDownstreamServerIdentity(downstreamIdentityLabel))) return;
+    setDownstreamIdentityOpen(false);
+  }
+
+  async function importDownstreamTrust() {
+    if (!(await props.onImportDownstreamClientTrust(downstreamTrustLabel))) return;
+    setDownstreamTrustOpen(false);
+  }
+
   return (
     <div className="col-span-2 space-y-4 max-[700px]:col-span-1">
       <DownstreamTlsCard
         listener={props.listener}
         certificateReferences={props.certificateReferences}
         certificateDetails={props.certificateDetails}
+        installationLeaf={props.installationLeaf}
+        busy={props.busy}
         onChange={props.onChange}
+        onOpenIdentityImport={() => setDownstreamIdentityOpen(true)}
+        onOpenTrustImport={() => setDownstreamTrustOpen(true)}
       />
       <UpstreamTlsCard
         listener={props.listener}
@@ -74,24 +97,56 @@ export function FixedServerTlsSettings(props: Props) {
         onOpenTrustImport={() => setTrustOpen(true)}
         onTest={props.onTest}
       />
-      <ImportIdentityModal
-        open={identityOpen}
-        busy={props.busy}
-        label={identityLabel}
-        password={identityPassword}
-        onOpenChange={setIdentityOpen}
-        onLabelChange={setIdentityLabel}
-        onPasswordChange={setIdentityPassword}
-        onImport={importIdentity}
-      />
-      <ImportTrustModal
-        open={trustOpen}
-        busy={props.busy}
-        label={trustLabel}
-        onOpenChange={setTrustOpen}
-        onLabelChange={setTrustLabel}
-        onImport={importTrust}
-      />
+      {identityOpen && (
+        <ImportIdentityModal
+          open
+          busy={props.busy}
+          label={identityLabel}
+          password={identityPassword}
+          onOpenChange={setIdentityOpen}
+          onLabelChange={setIdentityLabel}
+          onPasswordChange={setIdentityPassword}
+          onImport={importIdentity}
+        />
+      )}
+      {trustOpen && (
+        <ImportTrustModal
+          open
+          busy={props.busy}
+          label={trustLabel}
+          onOpenChange={setTrustOpen}
+          onLabelChange={setTrustLabel}
+          onImport={importTrust}
+        />
+      )}
+      {downstreamIdentityOpen && (
+        <ImportPemModal
+          open
+          busy={props.busy}
+          label={downstreamIdentityLabel}
+          title="导入本监听独立服务端身份"
+          description="选择同时包含服务端证书链与对应私钥的 PEM 文件。本机代理接受客户端 TLS 连接时会出示该身份。一般监听直接使用证书管理页签发的本机叶子证书，无需重复导入。"
+          detail="Rust 会校验证书与私钥匹配、有效期、DigitalSignature 和 serverAuth，并将材料保存为受系统密钥保护的引用；原文件路径不会写入 Workspace。"
+          buttonLabel="选择服务端身份 PEM"
+          onOpenChange={setDownstreamIdentityOpen}
+          onLabelChange={setDownstreamIdentityLabel}
+          onImport={importDownstreamIdentity}
+        />
+      )}
+      {downstreamTrustOpen && (
+        <ImportPemModal
+          open
+          busy={props.busy}
+          label={downstreamTrustLabel}
+          title="导入用于验证客户端证书的 CA"
+          description="仅在客户端证书模式为“可选”或“必须”时使用。请选择签发客户端证书的 CA，不要选择客户端自身的 client.p12 或本机代理服务端证书。"
+          detail="Rust 会校验 CA 能力并保存受保护引用；导入后会在当前页面显示主题、SAN、有效期和 SHA-256。"
+          buttonLabel="选择客户端 CA（.crt / .pem）"
+          onOpenChange={setDownstreamTrustOpen}
+          onLabelChange={setDownstreamTrustLabel}
+          onImport={importDownstreamTrust}
+        />
+      )}
     </div>
   );
 }

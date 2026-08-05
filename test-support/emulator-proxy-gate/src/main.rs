@@ -336,7 +336,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         upstream_tls: UpstreamTlsSettings::default(),
     });
     application
-        .listener_save(workspace.id, workspace.revision.get(), dll_listener)
+        .listener_save(
+            workspace.id,
+            workspace.revision.get(),
+            dll_listener,
+            workspace.certificate_references.clone(),
+        )
         .await?;
 
     workspace = application.workspace_get(workspace.id).await?;
@@ -352,7 +357,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         upstream_tls: UpstreamTlsSettings::default(),
     });
     application
-        .listener_save(workspace.id, workspace.revision.get(), transaction_listener)
+        .listener_save(
+            workspace.id,
+            workspace.revision.get(),
+            transaction_listener,
+            workspace.certificate_references.clone(),
+        )
         .await?;
 
     workspace = application.workspace_get(workspace.id).await?;

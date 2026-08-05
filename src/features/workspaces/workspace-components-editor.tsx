@@ -90,16 +90,16 @@ export function WorkspaceComponentsEditor({
       </Tabs.Panel>
 
       <Tabs.Panel id="certificates" className="space-y-3 pt-4">
-        <p className="text-sm text-[var(--telemetry-muted)]">Workspace 只保存安全引用。PEM 可使用 file:/path；PKCS#12 身份使用 pkcs12:/path?password_env=变量名，密码不会进入文档。</p>
-        <Button variant="outline" isDisabled={disabled} onPress={() => onAdd("certificate_reference")}><Plus className="size-4" />新增证书引用</Button>
+        <p className="text-sm text-[var(--telemetry-muted)]">证书材料必须在“入口配置”中按具体用途导入。Rust 会解析证书并保存受系统密钥保护的引用；Workspace 页面不创建或编辑外部文件路径。</p>
         {workspace.certificate_references.map((reference, index) => (
           <Card key={reference.id}><Card.Content className="grid grid-cols-2 gap-3 p-4 max-[700px]:grid-cols-1">
             <div className="col-span-2 flex items-center gap-3 max-[700px]:col-span-1"><strong>证书引用 {index + 1}</strong><code className="text-xs text-[var(--telemetry-muted)]">{reference.id}</code><Button className="ml-auto" isIconOnly aria-label={`删除证书引用 ${index + 1}`} variant="danger-soft" onPress={() => onIntent("certificate_reference", reference.id, "delete", "")}><TrashBin className="size-4" /></Button></div>
-            <div className="grid gap-1"><Label>名称</Label><Input value={reference.label} onChange={(event) => onChange({ ...workspace, certificate_references: workspace.certificate_references.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item) })} /></div>
-            <Select aria-label={`证书引用 ${index + 1} 类型`} selectedKey={reference.kind} onSelectionChange={(key) => onChange({ ...workspace, certificate_references: workspace.certificate_references.map((item, itemIndex) => itemIndex === index ? { ...item, kind: key as CertificateReferenceKind } : item) })}><Label>用途</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{Object.entries(certificateKindLabels).map(([id, label]) => <ListBox.Item key={id} id={id}>{label}</ListBox.Item>)}</ListBox></Select.Popover></Select>
-            <div className="col-span-2 grid gap-1 max-[700px]:col-span-1"><Label>安全引用</Label><Input value={reference.reference} onChange={(event) => onChange({ ...workspace, certificate_references: workspace.certificate_references.map((item, itemIndex) => itemIndex === index ? { ...item, reference: event.target.value } : item) })} placeholder="file:/path/to/chain-and-key.pem" /></div>
+            <div><p className="text-xs text-[var(--telemetry-muted)]">名称</p><p>{reference.label}</p></div>
+            <div><p className="text-xs text-[var(--telemetry-muted)]">用途</p><p>{certificateKindLabels[reference.kind]}</p></div>
+            <div className="col-span-2 max-[700px]:col-span-1"><p className="text-xs text-[var(--telemetry-muted)]">保存方式</p><p>{reference.reference.startsWith("managed:listener-tls:") ? "系统密钥保护的 Listener TLS 引用" : "外部文件引用（建议在入口配置中重新导入）"}</p></div>
           </Card.Content></Card>
         ))}
+        {workspace.certificate_references.length === 0 && <p className="rounded-xl bg-[var(--telemetry-table-head)] px-4 py-3 text-sm text-[var(--telemetry-muted)]">当前 Workspace 尚未导入独立监听证书。</p>}
       </Tabs.Panel>
 
       <Tabs.Panel id="faults" className="space-y-3 pt-4">

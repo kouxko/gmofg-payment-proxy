@@ -9,6 +9,7 @@ import {
   Switch,
 } from "@heroui/react";
 import type {
+  CertificateItemViewModel,
   CertificateReference,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamTlsTestViewModel,
@@ -22,6 +23,7 @@ type Props = {
   listener: ProxyListener;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
+  installationLeaf?: CertificateItemViewModel;
   pending?: string;
   tlsTest?: ListenerUpstreamTlsTestViewModel;
   tlsTestError?: string;
@@ -31,6 +33,8 @@ type Props = {
   onBasicPasswordChange: (value: string) => void;
   onChange: (changes: Partial<ProxyListener>) => void;
   onStoreBasicCredential: () => Promise<void>;
+  onImportDownstreamServerIdentity: (label: string) => Promise<boolean>;
+  onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
   onImportServerTrust: (label: string) => Promise<boolean>;
   onTestUpstreamTls: () => Promise<void>;
@@ -40,6 +44,7 @@ export function ListenerEditor({
   listener,
   certificateReferences,
   certificateDetails,
+  installationLeaf,
   pending,
   tlsTest,
   tlsTestError,
@@ -49,6 +54,8 @@ export function ListenerEditor({
   onBasicPasswordChange,
   onChange,
   onStoreBasicCredential,
+  onImportDownstreamServerIdentity,
+  onImportDownstreamClientTrust,
   onImportClientIdentity,
   onImportServerTrust,
   onTestUpstreamTls,
@@ -118,11 +125,14 @@ export function ListenerEditor({
           listener={listener}
           certificateReferences={certificateReferences}
           certificateDetails={certificateDetails}
+          installationLeaf={installationLeaf}
           busy={Boolean(pending)}
           testing={pending === "tls-test"}
           testResult={tlsTest}
           testError={tlsTestError}
           onChange={onChange}
+          onImportDownstreamServerIdentity={onImportDownstreamServerIdentity}
+          onImportDownstreamClientTrust={onImportDownstreamClientTrust}
           onImportClientIdentity={onImportClientIdentity}
           onImportServerTrust={onImportServerTrust}
           onTest={onTestUpstreamTls}
@@ -143,7 +153,7 @@ function CommonListenerSettings({
   onBasicPasswordChange,
   onChange,
   onStoreBasicCredential,
-}: Omit<Props, "certificateReferences" | "certificateDetails" | "tlsTest" | "tlsTestError" | "onImportClientIdentity" | "onImportServerTrust" | "onTestUpstreamTls"> & {
+}: Omit<Props, "certificateReferences" | "certificateDetails" | "installationLeaf" | "tlsTest" | "tlsTestError" | "onImportDownstreamServerIdentity" | "onImportDownstreamClientTrust" | "onImportClientIdentity" | "onImportServerTrust" | "onTestUpstreamTls"> & {
   basicCredentialKey?: string;
   basicCredentialProvider?: string;
 }) {

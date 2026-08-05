@@ -4,7 +4,7 @@
 //! 私钥字节尽量由 `Zeroizing` 持有，解析或密码错误以稳定错误返回；调用方仍必须限制
 //! 明文材料的存活时间，并区分“测试代理 CA”与生产支付信任链。
 
-use std::{fmt, net::IpAddr};
+use std::{fmt, io::Cursor, net::IpAddr};
 
 use chrono::{TimeZone, Utc};
 use p12_keystore::{KeyStore, KeyStoreEntry, Pkcs12ImportPolicy};
@@ -25,6 +25,9 @@ use crate::InfrastructureError;
 
 const ROOT_VALIDITY_DAYS: i64 = 3650;
 const LEAF_VALIDITY_DAYS: i64 = 825;
+// 终端与桌面时钟可能存在数秒偏差。签发时间向前回退五分钟，避免刚生成的
+// 动态叶子证书在终端侧被判定为“尚未生效”。
+const CERTIFICATE_CLOCK_SKEW_MINUTES: i64 = 5;
 pub struct CertificateBundle {
     pub certificate_der: Vec<u8>,
     pub private_key_pkcs8_der: Zeroizing<Vec<u8>>,
@@ -57,6 +60,16 @@ pub struct ParsedPkcs12 {
     pub metadata: CertificateMetadata,
 }
 
+/// 已校验并转换为 PKCS#8 的 PEM 服务端身份。
+///
+/// Listener 运行时统一按 PKCS#8 向 rustls 提交私钥，因此导入阶段即完成格式归一化，
+/// 避免把只能在当前临时文件存在时才能解析的外部路径保存进 Workspace。
+pub struct ParsedPemServerIdentity {
+    pub certificate_chain_der: Vec<Vec<u8>>,
+    pub private_key_pkcs8_der: Zeroizing<Vec<u8>>,
+    pub metadata: CertificateMetadata,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrustedCa {
     pub certificate_der: Vec<u8>,
@@ -86,6 +99,17 @@ impl fmt::Debug for ParsedPkcs12 {
     }
 }
 
+impl fmt::Debug for ParsedPemServerIdentity {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ParsedPemServerIdentity")
+            .field("certificate_chain_len", &self.certificate_chain_der.len())
+            .field("private_key_pkcs8_der", &"<redacted>")
+            .field("metadata", &self.metadata)
+            .finish()
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CertificateService;
 
@@ -107,7 +131,8 @@ impl CertificateService {
         let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).map_err(rcgen_error)?;
         let mut params = CertificateParams::default();
         params.distinguished_name = common_name_dn(common_name);
-        params.not_before = ::time::OffsetDateTime::now_utc();
+        params.not_before = ::time::OffsetDateTime::now_utc()
+            - ::time::Duration::minutes(CERTIFICATE_CLOCK_SKEW_MINUTES);
         params.not_after = params.not_before + ::time::Duration::days(ROOT_VALIDITY_DAYS);
         params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
         params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
@@ -138,7 +163,8 @@ impl CertificateService {
         let leaf_key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).map_err(rcgen_error)?;
         let mut params = CertificateParams::default();
         params.distinguished_name = common_name_dn(&request.common_name);
-        params.not_before = ::time::OffsetDateTime::now_utc();
+        params.not_before = ::time::OffsetDateTime::now_utc()
+            - ::time::Duration::minutes(CERTIFICATE_CLOCK_SKEW_MINUTES);
         params.not_after = params.not_before + ::time::Duration::days(LEAF_VALIDITY_DAYS);
         params.is_ca = IsCa::ExplicitNoCa;
         params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
@@ -197,6 +223,36 @@ impl CertificateService {
             private_key_pkcs8_der: Zeroizing::new(identity.key().as_der().to_vec()),
             chain_der: chain.iter().map(|cert| cert.as_der().to_vec()).collect(),
             metadata: metadata(&parse_der(certificate.as_der())?)?,
+        })
+    }
+
+    /// 解析包含服务端证书链与私钥的 PEM，并把私钥归一化为 PKCS#8。
+    pub fn parse_server_identity_pem(
+        &self,
+        bytes: &[u8],
+    ) -> Result<ParsedPemServerIdentity, InfrastructureError> {
+        let mut certificates = Cursor::new(bytes);
+        let certificate_chain_der = rustls_pemfile::certs(&mut certificates)
+            .map(|entry| {
+                entry
+                    .map(|certificate| certificate.as_ref().to_vec())
+                    .map_err(x509_error)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let leaf = certificate_chain_der
+            .first()
+            .ok_or_else(|| invalid("PEM 服务端身份缺少证书链"))?;
+        let mut private_key = Cursor::new(bytes);
+        let private_key = rustls_pemfile::private_key(&mut private_key)
+            .map_err(x509_error)?
+            .ok_or_else(|| invalid("PEM 服务端身份缺少私钥"))?;
+        let key_pair = KeyPair::try_from(&private_key).map_err(rcgen_error)?;
+        let private_key_pkcs8_der = Zeroizing::new(key_pair.serialize_der());
+        validate_server_chain(&certificate_chain_der, &private_key_pkcs8_der)?;
+        Ok(ParsedPemServerIdentity {
+            metadata: metadata(&parse_der(leaf)?)?,
+            certificate_chain_der,
+            private_key_pkcs8_der,
         })
     }
 
@@ -555,6 +611,61 @@ fn validate_client_end_entity(
     Ok(())
 }
 
+fn validate_server_end_entity(
+    certificate_der: &[u8],
+    private_key_der: &[u8],
+) -> Result<(), InfrastructureError> {
+    let certificate = parse_der(certificate_der)?;
+    validate_key_match(certificate_der, private_key_der)?;
+    validate_validity(&certificate)?;
+    if certificate_is_ca(&certificate)? {
+        return Err(invalid("PEM 服务端身份必须是非 CA 终端证书"));
+    }
+    validate_digital_signature_usage(&certificate, "PEM 服务端证书")?;
+    let eku = certificate
+        .extended_key_usage()
+        .map_err(x509_error)?
+        .ok_or_else(|| invalid("PEM 服务端证书缺少 serverAuth EKU"))?;
+    if !eku.value.server_auth {
+        return Err(invalid("PEM 服务端证书缺少 serverAuth EKU"));
+    }
+    Ok(())
+}
+
+fn validate_server_chain(
+    certificate_chain_der: &[Vec<u8>],
+    private_key_der: &[u8],
+) -> Result<(), InfrastructureError> {
+    let leaf = certificate_chain_der
+        .first()
+        .ok_or_else(|| invalid("PEM 服务端身份缺少证书链"))?;
+    validate_server_end_entity(leaf, private_key_der)?;
+
+    for pair in certificate_chain_der.windows(2) {
+        let certificate = parse_der(&pair[0])?;
+        let issuer = parse_der(&pair[1])?;
+        validate_ca(&issuer)?;
+        if certificate.issuer() != issuer.subject()
+            || certificate
+                .verify_signature(Some(issuer.public_key()))
+                .is_err()
+        {
+            return Err(invalid("PEM 服务端证书链签发关系或顺序无效"));
+        }
+    }
+
+    if let Some(last) = certificate_chain_der.last() {
+        let trust_anchor = parse_der(last)?;
+        validate_validity(&trust_anchor)?;
+        if trust_anchor.subject() == trust_anchor.issuer()
+            && trust_anchor.verify_signature(None).is_err()
+        {
+            return Err(invalid("PEM 服务端证书链包含无效的自签名根证书"));
+        }
+    }
+    Ok(())
+}
+
 fn validate_digital_signature_usage(
     certificate: &X509Certificate<'_>,
     label: &str,
@@ -631,9 +742,18 @@ impl Drop for ParsedPkcs12 {
     }
 }
 
+impl Drop for ParsedPemServerIdentity {
+    fn drop(&mut self) {
+        for certificate in &mut self.certificate_chain_der {
+            certificate.zeroize();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
     use p12_keystore::{Certificate, KeyStoreEntry, PrivateKey, PrivateKeyChain};
 
     #[test]
@@ -667,6 +787,32 @@ mod tests {
                 &["proxy.local".into(), "192.168.10.20".into()],
             )
             .expect("validate generated leaf");
+    }
+
+    #[test]
+    fn generated_leaf_allows_small_client_clock_skew() {
+        let service = CertificateService;
+        let root = service.generate_root_ca("Root").expect("root");
+        let issued_at = ::time::OffsetDateTime::now_utc();
+        let leaf = service
+            .generate_leaf(
+                &root.certificate_der,
+                &root.private_key_pkcs8_der,
+                &LeafCertificateRequest {
+                    common_name: "proxy.local".into(),
+                    dns_names: vec!["proxy.local".into()],
+                    ip_addresses: Vec::new(),
+                },
+            )
+            .expect("leaf");
+        let certificate = parse_der(&leaf.certificate_der).expect("parse leaf");
+        let not_before = ::time::OffsetDateTime::from_unix_timestamp(
+            certificate.validity().not_before.timestamp(),
+        )
+        .expect("valid timestamp");
+
+        assert!(not_before <= issued_at - ::time::Duration::minutes(4));
+        assert!(not_before >= issued_at - ::time::Duration::minutes(6));
     }
 
     #[test]
@@ -802,6 +948,165 @@ mod tests {
             bundle(certificate.der().to_vec(), key.serialize_der()).unwrap(),
             root,
         )
+    }
+
+    fn server_chain_with_intermediate(
+        intermediate_is_ca: bool,
+        intermediate_not_before: ::time::OffsetDateTime,
+        intermediate_not_after: ::time::OffsetDateTime,
+    ) -> (CertificateBundle, CertificateBundle, CertificateBundle) {
+        let service = CertificateService;
+        let root = service.generate_root_ca("Server Chain Root").unwrap();
+        let root_key = KeyPair::from_pkcs8_der_and_sign_algo(
+            &root.private_key_pkcs8_der.as_slice().into(),
+            &PKCS_ECDSA_P256_SHA256,
+        )
+        .unwrap();
+        let root_issuer =
+            Issuer::from_ca_cert_der(&root.certificate_der.as_slice().into(), root_key).unwrap();
+
+        let intermediate_key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
+        let mut intermediate_params = CertificateParams::default();
+        intermediate_params.distinguished_name = common_name_dn("Server Chain Intermediate");
+        intermediate_params.not_before = intermediate_not_before;
+        intermediate_params.not_after = intermediate_not_after;
+        if intermediate_is_ca {
+            intermediate_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+            intermediate_params.key_usages =
+                vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+        } else {
+            intermediate_params.is_ca = IsCa::ExplicitNoCa;
+            intermediate_params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        }
+        let intermediate_certificate = intermediate_params
+            .signed_by(&intermediate_key, &root_issuer)
+            .unwrap();
+        let intermediate_issuer = Issuer::from_params(&intermediate_params, &intermediate_key);
+
+        let leaf_key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
+        let now = ::time::OffsetDateTime::now_utc();
+        let mut leaf_params = CertificateParams::default();
+        leaf_params.distinguished_name = common_name_dn("Server Leaf");
+        leaf_params.not_before = now - ::time::Duration::minutes(1);
+        leaf_params.not_after = now + ::time::Duration::days(1);
+        leaf_params.is_ca = IsCa::ExplicitNoCa;
+        leaf_params.key_usages = vec![KeyUsagePurpose::DigitalSignature];
+        leaf_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+        let leaf_certificate = leaf_params
+            .signed_by(&leaf_key, &intermediate_issuer)
+            .unwrap();
+
+        (
+            bundle(leaf_certificate.der().to_vec(), leaf_key.serialize_der()).unwrap(),
+            bundle(
+                intermediate_certificate.der().to_vec(),
+                intermediate_key.serialize_der(),
+            )
+            .unwrap(),
+            root,
+        )
+    }
+
+    fn pem_server_identity(
+        certificate_chain: &[&CertificateBundle],
+        private_key_pkcs8_der: &[u8],
+    ) -> Vec<u8> {
+        let mut pem = String::new();
+        for certificate in certificate_chain {
+            pem.push_str("-----BEGIN CERTIFICATE-----\n");
+            pem.push_str(&STANDARD.encode(&certificate.certificate_der));
+            pem.push_str("\n-----END CERTIFICATE-----\n");
+        }
+        pem.push_str("-----BEGIN PRIVATE KEY-----\n");
+        pem.push_str(&STANDARD.encode(private_key_pkcs8_der));
+        pem.push_str("\n-----END PRIVATE KEY-----\n");
+        pem.into_bytes()
+    }
+
+    #[test]
+    fn pem_server_identity_accepts_valid_ordered_chain() {
+        let now = ::time::OffsetDateTime::now_utc();
+        let (leaf, intermediate, root) = server_chain_with_intermediate(
+            true,
+            now - ::time::Duration::minutes(1),
+            now + ::time::Duration::days(1),
+        );
+        let pem = pem_server_identity(&[&leaf, &intermediate, &root], &leaf.private_key_pkcs8_der);
+
+        let parsed = CertificateService.parse_server_identity_pem(&pem).unwrap();
+
+        assert_eq!(parsed.certificate_chain_der.len(), 3);
+    }
+
+    #[test]
+    fn pem_server_identity_rejects_broken_chain() {
+        let now = ::time::OffsetDateTime::now_utc();
+        let (leaf, _, _) = server_chain_with_intermediate(
+            true,
+            now - ::time::Duration::minutes(1),
+            now + ::time::Duration::days(1),
+        );
+        let unrelated_root = CertificateService
+            .generate_root_ca("Unrelated Root")
+            .unwrap();
+        let pem = pem_server_identity(&[&leaf, &unrelated_root], &leaf.private_key_pkcs8_der);
+
+        let error = CertificateService
+            .parse_server_identity_pem(&pem)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("签发关系或顺序无效"));
+    }
+
+    #[test]
+    fn pem_server_identity_rejects_reversed_chain_order() {
+        let now = ::time::OffsetDateTime::now_utc();
+        let (leaf, intermediate, root) = server_chain_with_intermediate(
+            true,
+            now - ::time::Duration::minutes(1),
+            now + ::time::Duration::days(1),
+        );
+        let pem = pem_server_identity(&[&leaf, &root, &intermediate], &leaf.private_key_pkcs8_der);
+
+        let error = CertificateService
+            .parse_server_identity_pem(&pem)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("签发关系或顺序无效"));
+    }
+
+    #[test]
+    fn pem_server_identity_rejects_non_ca_intermediate() {
+        let now = ::time::OffsetDateTime::now_utc();
+        let (leaf, intermediate, root) = server_chain_with_intermediate(
+            false,
+            now - ::time::Duration::minutes(1),
+            now + ::time::Duration::days(1),
+        );
+        let pem = pem_server_identity(&[&leaf, &intermediate, &root], &leaf.private_key_pkcs8_der);
+
+        let error = CertificateService
+            .parse_server_identity_pem(&pem)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("CA Basic Constraints"));
+    }
+
+    #[test]
+    fn pem_server_identity_rejects_expired_intermediate() {
+        let now = ::time::OffsetDateTime::now_utc();
+        let (leaf, intermediate, root) = server_chain_with_intermediate(
+            true,
+            now - ::time::Duration::days(2),
+            now - ::time::Duration::days(1),
+        );
+        let pem = pem_server_identity(&[&leaf, &intermediate, &root], &leaf.private_key_pkcs8_der);
+
+        let error = CertificateService
+            .parse_server_identity_pem(&pem)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("有效期"));
     }
 
     fn pfx(

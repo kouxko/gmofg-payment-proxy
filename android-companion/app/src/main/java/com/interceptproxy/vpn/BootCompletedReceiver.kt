@@ -17,7 +17,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
             return
         }
         val state = RuntimeStateStore(context)
-        if (!state.autoResumeEnabled || state.profileJson == null) return
+        if (!state.autoResumeEnabled || state.activation == null) return
         val job = JobInfo.Builder(JOB_ID, ComponentName(context, ResumeVpnJobService::class.java))
             .setMinimumLatency(30_000)
             .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)

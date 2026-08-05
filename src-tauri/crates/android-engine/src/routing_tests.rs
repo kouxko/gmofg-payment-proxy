@@ -10,7 +10,6 @@ use super::ProxyRouteTable;
 fn profile(routes: Vec<ProxyRoute>) -> ValidatedProfile {
     let installed = InstalledApplication {
         package_name: "com.example.target".into(),
-        signing_sha256: "AA".into(),
         uid: 10_001,
     };
     NetworkProfile {
@@ -18,7 +17,6 @@ fn profile(routes: Vec<ProxyRoute>) -> ValidatedProfile {
         name: "路由".into(),
         target_applications: vec![TargetApplication {
             package_name: installed.package_name.clone(),
-            signing_sha256: installed.signing_sha256.clone(),
             uid: installed.uid,
         }],
         destination_targets: Vec::new(),
@@ -113,4 +111,60 @@ async fn missing_runtime_route_blocks_start_instead_of_bypassing_proxy() {
         .unwrap_err();
     assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     assert!(error.to_string().contains("不一致"));
+}
+
+#[test]
+fn runtime_shape_uses_the_same_destination_normalization_as_profile_validation() {
+    for (configured, resolved) in [
+        ("Example.COM.", "example.com"),
+        ("127.0.0.1.", "127.0.0.1"),
+        ("2001:0db8::1", "2001:db8::1/128"),
+        ("2001:db8:0:1::abcd/64", "2001:db8:0:1::/64"),
+    ] {
+        let profile = profile(vec![ProxyRoute {
+            listener_id: "normalized".into(),
+            destination: configured.into(),
+            ports: vec![8_443],
+        }]);
+        let runtime = ProxyRuntimeConfiguration {
+            routes: vec![ResolvedProxyRoute {
+                listener_id: "normalized".into(),
+                original_destination: resolved.into(),
+                original_ports: vec![8_443],
+                resolved_original_ips: Vec::new(),
+                proxy_host: "127.0.0.1".into(),
+                proxy_port: 18_080,
+            }],
+        };
+
+        super::validate_runtime_shape(&profile, &runtime)
+            .expect("运行态路由应接受语义等价的规范化目标地址");
+    }
+}
+
+#[tokio::test]
+async fn trailing_dot_ipv4_route_compiles_as_an_ip_network() {
+    let profile = profile(vec![ProxyRoute {
+        listener_id: "ipv4-root-dot".into(),
+        destination: "127.0.0.1.".into(),
+        ports: vec![8_443],
+    }]);
+    let runtime = ProxyRuntimeConfiguration {
+        routes: vec![ResolvedProxyRoute {
+            listener_id: "ipv4-root-dot".into(),
+            original_destination: "127.0.0.1.".into(),
+            original_ports: vec![8_443],
+            resolved_original_ips: Vec::new(),
+            proxy_host: "127.0.0.1".into(),
+            proxy_port: 18_080,
+        }],
+    };
+
+    let table = ProxyRouteTable::compile(&profile, &runtime)
+        .await
+        .expect("末尾根域点的 IPv4 应按 /32 路由编译");
+    assert_eq!(
+        table.for_ip("127.0.0.1".parse().unwrap(), 8_443),
+        Some(&["127.0.0.1:18080".parse().unwrap()][..])
+    );
 }

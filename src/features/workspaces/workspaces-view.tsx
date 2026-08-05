@@ -153,6 +153,15 @@ export function WorkspacesView() {
             </Alert.Description>
           </Alert.Content>
         </Alert>
+        <Alert status="accent">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>切换只改变编辑上下文</Alert.Title>
+            <Alert.Description>
+              已运行的代理入口和设备网络接管不会自动停止，并继续使用启动时所属 Workspace 的配置。
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
         {list.error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>读取 Workspace 失败</Alert.Title><Alert.Description>{list.error}</Alert.Description></Alert.Content><Button size="sm" variant="outline" onPress={() => void list.refresh()}>重试</Button></Alert>}
         <Table>
           <Table.ScrollContainer>
@@ -202,7 +211,7 @@ export function WorkspacesView() {
             <div className="grid gap-1"><Label>名称</Label><Input aria-label="Workspace 名称" value={effectiveDraft.name} onChange={(event) => setDraft({ ...effectiveDraft, name: event.target.value })} /></div>
             <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm"><dt>ID</dt><dd className="break-all font-mono text-xs">{effectiveDraft.id}</dd><dt>代理入口</dt><dd>{effectiveDraft.listeners.length}</dd><dt>版本</dt><dd>{effectiveDraft.revision}</dd></dl>
             <Button fullWidth variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("save", saveWorkspace)}>保存</Button>
-            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("select", async () => { await callCommand(commands.workspaceSelect(effectiveDraft.id)); toast("已切换当前 Workspace。", { variant: "success" }); await list.refresh(); })}>设为当前 Workspace</Button>
+            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("select", async () => { await callCommand(commands.workspaceSelect(effectiveDraft.id)); toast("已切换当前 Workspace；运行中的代理入口和设备网络接管保持不变。", { variant: "success" }); await list.refresh(); })}>设为当前 Workspace</Button>
             <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("copy", async () => { const copied = await callCommand(commands.workspaceCopy(effectiveDraft.id)); setSelectedId(copied.id); setDraft(copied); await list.refresh(); })}><Copy className="size-4" />复制</Button>
             <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("export", async () => { const result = await callCommand(commands.workspaceExport(effectiveDraft.id)); toast(result.message, { variant: result.cancelled ? "default" : "success" }); })}><ArrowDownToLine className="size-4" />导出当前 Workspace</Button>
             <AlertDialog isOpen={deleteOpen} onOpenChange={setDeleteOpen}>

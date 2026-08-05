@@ -79,7 +79,6 @@ module AndroidControlClient
       "shell",
       "am",
       "start",
-      "-W",
       "-n",
       "com.interceptproxy.vpn/.AdbControlActivity",
       "--es",

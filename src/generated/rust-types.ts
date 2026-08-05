@@ -11,6 +11,7 @@ export const commands = {
 	androidAdbSelect: (serial: string) => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_select", { serial })),
 	androidDeviceList: () => typedError<AndroidDeviceViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_device_list")),
 	androidPackageList: () => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_list")),
+	androidPackageRefresh: () => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_refresh")),
 	androidPackageQuery: (query: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_query", { query })),
 	androidPackageGet: (packageName: string) => typedError<AndroidPackageViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_package_get", { packageName })),
 	androidCompanionInstall: () => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_install")),
@@ -46,13 +47,22 @@ export const commands = {
 	listenerNew: () => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_new")),
 	listenerCopy: (source: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_copy", { source })),
 	listenerGet: (workspaceId: WorkspaceId, listenerId: ListenerId) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_get", { workspaceId, listenerId })),
-	listenerSave: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_save", { workspaceId, expectedWorkspaceRevision, listener })),
+	listenerValidate: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<WorkspaceValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_validate", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
+	listenerSave: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("listener_save", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	listenerDelete: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_delete", { workspaceId, expectedWorkspaceRevision, listenerId })),
 	listenerStatuses: () => typedError<ListenerStatusViewModel[], AppErrorViewModel>(__TAURI_INVOKE("listener_statuses")),
 	listenerOverview: (workspaceId: WorkspaceId) => typedError<ListenerOverviewViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_overview", { workspaceId })),
 	listenerStart: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_start", { workspaceId, expectedWorkspaceRevision, listenerId })),
 	listenerStop: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_stop", { workspaceId, expectedWorkspaceRevision, listenerId })),
-	listenerTestUpstreamTls: (workspaceId: WorkspaceId, listenerId: ListenerId) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, listenerId })),
+	listenerTestUpstreamTls: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
+	listenerImportDownstreamServerIdentity: (label: string) => typedError<{
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_downstream_server_identity", { label })),
+	listenerImportDownstreamClientTrust: (label: string) => typedError<{
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_downstream_client_trust", { label })),
 	listenerImportUpstreamClientIdentity: (label: string, password: string) => typedError<{
 	reference: CertificateReference,
 	detail: ListenerCertificateDetailViewModel,
@@ -62,6 +72,7 @@ export const commands = {
 	detail: ListenerCertificateDetailViewModel,
 } | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_upstream_server_trust", { label })),
 	listenerCertificateOverview: (workspaceId: WorkspaceId) => typedError<ListenerCertificateDetailViewModel[], AppErrorViewModel>(__TAURI_INVOKE("listener_certificate_overview", { workspaceId })),
+	listenerCertificateDiscard: (reference: CertificateReference) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_certificate_discard", { reference })),
 	captureQuery: (query: CaptureQuery) => typedError<CapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_query", { query })),
 	captureGetDetail: (sessionId: string, runtimeEpoch: string) => typedError<CaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_get_detail", { sessionId, runtimeEpoch })),
 	captureClearView: (currentCursor: number) => typedError<number, AppErrorViewModel>(__TAURI_INVOKE("capture_clear_view", { currentCursor })),
@@ -191,6 +202,12 @@ export type AndroidNetworkStatusViewModel = {
 	verified: boolean,
 	transport: AndroidControlTransport,
 	active_profile_id: string | null,
+	/**  Companion 当前实际运行的 Profile 内容指纹；用于识别 Service 重启后的陈旧状态。 */
+	active_profile_fingerprint?: string | null,
+	/**  Companion 当前实际装载的透明代理路由指纹。 */
+	active_route_fingerprint?: string | null,
+	/**  Companion 当前实际装载的透明代理路由数量。 */
+	active_route_count?: number,
 	companion_process_running: boolean | null,
 	message: string,
 	unsupported_fields: string[],
@@ -200,14 +217,13 @@ export type AndroidNetworkStatusViewModel = {
 export type AndroidPackageViewModel = {
 	package_name: string,
 	uid: number,
-	signing_sha256: string | null,
 	/**  Set only when more than one installed package has the same Linux UID. */
 	shared_uid: number | null,
 };
 
 /**
  *  Android 弱网页面的编辑意图。
- *  TypeScript 只描述用户做了什么；共享 UID 扩选、签名快照和嵌套故障项默认值均由
+ *  TypeScript 只描述用户做了什么；共享 UID 扩选和嵌套故障项默认值均由
  *  Rust 生成，避免展示层手写第二套领域规则。
  */
 export type AndroidProfileEditIntent = { kind: "toggle_package"; package_name: string; selected: boolean } | { kind: "set_burst_loss_enabled"; enabled: boolean } | { kind: "add_blackout_window" } | { kind: "add_tcp_flag_drop" };
@@ -224,13 +240,11 @@ export type AndroidProxyRoute = {
 };
 
 /**
- *  Android 设备网络方案锁定的目标应用身份快照。
- *  包名、UID 与签名用于每次启动前重新校验。它们是可移植的安全元数据，不包含 APK、
- *  设备序列号或运行态。
+ *  Android 设备网络方案锁定的目标应用快照。
+ *  包名用于建立 `VpnService` allowlist，UID 用于 shared UID 整组校验；不检查 APK 签名。
  */
 export type AndroidTargetApplication = {
 	package_name: string,
-	signing_sha256: string,
 	uid: number,
 	display_name: string | null,
 };
@@ -507,6 +521,10 @@ export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "opt
 
 export type DownstreamTlsSettings = {
 	enabled: boolean,
+	/**
+	 *  `None` 表示使用证书管理页签发并由系统密钥保护的本机叶子证书。
+	 *  `Some` 仅用于显式选择 Workspace 内的独立服务端身份引用。
+	 */
 	server_identity: CertificateReferenceId | null,
 	client_authentication: DownstreamClientAuthentication,
 };
@@ -620,6 +638,13 @@ export type ListenerMonitorRowViewModel = {
 	state_text: string,
 	ui_tone: UiTone,
 	fault_reason: string | null,
+	/**  Rust runtime 是否允许当前 Listener 执行启动。 */
+	can_start: boolean,
+	/**
+	 *  Rust runtime 是否允许当前 Listener 执行停止。
+	 *  `Faulted` 仍可能为 `true`，用于释放 runtime ownership。
+	 */
+	can_stop: boolean,
 };
 
 /**  当前 Workspace 的入口运行概览，供顶部状态栏与运行监控复用。 */
@@ -1053,7 +1078,7 @@ export type UiEventEnvelope = {
 };
 
 /**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
-export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
+export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
 	message: string,
 } } | { type: "operation_failed"; data: AppErrorViewModel } | { type: "snapshot_required"; data: {
 	reason: string,

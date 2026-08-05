@@ -10,16 +10,17 @@ use intercept_proxy_application::{
     AppBootstrapViewModel, AppError, AppErrorViewModel, BreakpointDecision,
     BreakpointDetailViewModel, BreakpointDraft, BreakpointId, BreakpointSummaryViewModel,
     BreakpointValidationViewModel, CaptureDetailViewModel, CapturePageViewModel, CaptureQuery,
-    CertificateOverviewViewModel, CertificateValidationViewModel, FaultConfigurationDraft,
-    FaultTemplateViewModel, ListenerCertificateDetailViewModel, ListenerCertificateImportViewModel,
-    ListenerId, ListenerOverviewViewModel, ListenerStatusViewModel,
-    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, ProxyListener, ProxyWorkspace,
-    RuleAction, RuleActionKind, RuleByteInputViewModel, RuleCondition, RuleConditionKind,
-    RuleDraft, RuleHeaderInputViewModel, RuleId, RuleMatchField, RuleMatchFieldKind,
-    RuleMatchOperator, RuleMatchOperatorKind, RuleSummaryViewModel, RuleViewModel, RuntimeEpoch,
-    SecretReference, SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery,
-    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, SubscriptionAckViewModel,
-    UiEventEnvelope, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
+    FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateDetailViewModel,
+    ListenerCertificateImportViewModel, ListenerId, ListenerOverviewViewModel,
+    ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel, OperationResultViewModel,
+    ProxyListener, ProxyWorkspace, RuleAction, RuleActionKind, RuleByteInputViewModel,
+    RuleCondition, RuleConditionKind, RuleDraft, RuleHeaderInputViewModel, RuleId, RuleMatchField,
+    RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind, RuleSummaryViewModel,
+    RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel, SessionId,
+    SessionPageViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
+    SettingsViewModel, SubscriptionAckViewModel, UiEventEnvelope, WorkspaceId,
+    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 use tauri::{State, Wry, ipc::Channel};
 use tauri_specta::{Builder, collect_commands};
@@ -139,6 +140,18 @@ pub async fn android_package_list(
     state
         .application
         .android_package_list()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn android_package_refresh(
+    state: State<'_, AppState>,
+) -> CommandResult<Vec<AndroidPackageViewModel>> {
+    state
+        .application
+        .android_package_refresh()
         .await
         .map_err(command_error)
 }
@@ -609,10 +622,37 @@ pub async fn listener_save(
     workspace_id: WorkspaceId,
     expected_workspace_revision: u64,
     listener: ProxyListener,
-) -> CommandResult<ProxyListener> {
+    certificate_references: Vec<CertificateReference>,
+) -> CommandResult<ProxyWorkspace> {
     state
         .application
-        .listener_save(workspace_id, expected_workspace_revision, listener)
+        .listener_save(
+            workspace_id,
+            expected_workspace_revision,
+            listener,
+            certificate_references,
+        )
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_validate(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    expected_workspace_revision: u64,
+    listener: ProxyListener,
+    certificate_references: Vec<CertificateReference>,
+) -> CommandResult<WorkspaceValidationViewModel> {
+    state
+        .application
+        .listener_validate(
+            workspace_id,
+            expected_workspace_revision,
+            listener,
+            certificate_references,
+        )
         .await
         .map_err(command_error)
 }
@@ -692,11 +732,44 @@ pub async fn listener_stop(
 pub async fn listener_test_upstream_tls(
     state: State<'_, AppState>,
     workspace_id: WorkspaceId,
-    listener_id: ListenerId,
+    expected_workspace_revision: u64,
+    listener: ProxyListener,
+    certificate_references: Vec<CertificateReference>,
 ) -> CommandResult<ListenerUpstreamTlsTestViewModel> {
     state
         .application
-        .listener_test_upstream_tls(workspace_id, listener_id)
+        .listener_test_upstream_tls(
+            workspace_id,
+            expected_workspace_revision,
+            listener,
+            certificate_references,
+        )
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_import_downstream_server_identity(
+    state: State<'_, AppState>,
+    label: String,
+) -> CommandResult<Option<ListenerCertificateImportViewModel>> {
+    state
+        .application
+        .listener_import_downstream_server_identity(label)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_import_downstream_client_trust(
+    state: State<'_, AppState>,
+    label: String,
+) -> CommandResult<Option<ListenerCertificateImportViewModel>> {
+    state
+        .application
+        .listener_import_downstream_client_trust(label)
         .await
         .map_err(command_error)
 }
@@ -737,6 +810,19 @@ pub async fn listener_certificate_overview(
     state
         .application
         .listener_certificate_overview(workspace_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_certificate_discard(
+    state: State<'_, AppState>,
+    reference: CertificateReference,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .listener_certificate_discard(reference)
         .await
         .map_err(command_error)
 }
@@ -1293,6 +1379,7 @@ pub fn builder() -> Builder<Wry> {
             android_adb_select,
             android_device_list,
             android_package_list,
+            android_package_refresh,
             android_package_query,
             android_package_get,
             android_companion_install,
@@ -1328,6 +1415,7 @@ pub fn builder() -> Builder<Wry> {
             listener_new,
             listener_copy,
             listener_get,
+            listener_validate,
             listener_save,
             listener_delete,
             listener_statuses,
@@ -1335,9 +1423,12 @@ pub fn builder() -> Builder<Wry> {
             listener_start,
             listener_stop,
             listener_test_upstream_tls,
+            listener_import_downstream_server_identity,
+            listener_import_downstream_client_trust,
             listener_import_upstream_client_identity,
             listener_import_upstream_server_trust,
             listener_certificate_overview,
+            listener_certificate_discard,
             capture_query,
             capture_get_detail,
             capture_clear_view,

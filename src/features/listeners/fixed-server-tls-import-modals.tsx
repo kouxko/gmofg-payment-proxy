@@ -10,6 +10,63 @@ type CommonProps = {
   onLabelChange: (value: string) => void;
 };
 
+type PemModalProps = CommonProps & {
+  title: string;
+  description: string;
+  detail: string;
+  buttonLabel: string;
+  onImport: () => Promise<void>;
+};
+
+export function ImportPemModal({
+  open,
+  busy,
+  label,
+  title,
+  description,
+  detail,
+  buttonLabel,
+  onOpenChange,
+  onLabelChange,
+  onImport,
+}: PemModalProps) {
+  return (
+    <Modal isOpen={open} onOpenChange={onOpenChange}>
+      <Button className="hidden" aria-hidden="true">
+        打开证书导入对话框
+      </Button>
+      <Modal.Backdrop isDismissable={!busy}>
+        <Modal.Container size="sm">
+          <Modal.Dialog>
+            <Modal.Header><Modal.Heading>{title}</Modal.Heading></Modal.Header>
+            <Modal.Body className="space-y-3">
+              <TextField>
+                <Label>显示名称</Label>
+                <Input
+                  value={label}
+                  onChange={(event) => onLabelChange(event.target.value)}
+                />
+              </TextField>
+              <p className="text-sm text-[var(--telemetry-muted)]">{description}</p>
+              <p className="text-xs text-[var(--telemetry-muted)]">{detail}</p>
+            </Modal.Body>
+            <Modal.Footer>
+              <Button slot="close" variant="outline" isDisabled={busy}>取消</Button>
+              <Button
+                variant="primary"
+                isDisabled={busy || !label.trim()}
+                onPress={() => void onImport()}
+              >
+                {buttonLabel}
+              </Button>
+            </Modal.Footer>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
+  );
+}
+
 export function ImportIdentityModal({
   open,
   busy,
@@ -26,6 +83,9 @@ export function ImportIdentityModal({
 }) {
   return (
     <Modal isOpen={open} onOpenChange={onOpenChange}>
+      <Button className="hidden" aria-hidden="true">
+        打开客户端身份导入对话框
+      </Button>
       <Modal.Backdrop isDismissable={!busy}>
         <Modal.Container size="sm">
           <Modal.Dialog>
@@ -82,6 +142,9 @@ export function ImportTrustModal({
 }: CommonProps & { onImport: () => Promise<void> }) {
   return (
     <Modal isOpen={open} onOpenChange={onOpenChange}>
+      <Button className="hidden" aria-hidden="true">
+        打开上游 CA 导入对话框
+      </Button>
       <Modal.Backdrop isDismissable={!busy}>
         <Modal.Container size="sm">
           <Modal.Dialog>

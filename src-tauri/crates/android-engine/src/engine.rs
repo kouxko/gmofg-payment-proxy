@@ -405,7 +405,6 @@ mod tests {
         }
         let installed = vec![InstalledApplication {
             package_name: "com.example.target".to_owned(),
-            signing_sha256: "AA".to_owned(),
             uid: 10001,
         }];
         NetworkProfile {
@@ -413,7 +412,6 @@ mod tests {
             name: "测试".to_owned(),
             target_applications: vec![TargetApplication {
                 package_name: "com.example.target".to_owned(),
-                signing_sha256: "AA".to_owned(),
                 uid: 10001,
             }],
             destination_targets: Vec::new(),
@@ -469,7 +467,6 @@ mod tests {
     fn multiple_destination_targets_apply_faults_only_to_matching_remote_addresses() {
         let installed = vec![InstalledApplication {
             package_name: "com.example.target".to_owned(),
-            signing_sha256: "AA".to_owned(),
             uid: 10001,
         }];
         let profile = NetworkProfile {
@@ -477,7 +474,6 @@ mod tests {
             name: "多个地址".to_owned(),
             target_applications: vec![TargetApplication {
                 package_name: "com.example.target".to_owned(),
-                signing_sha256: "AA".to_owned(),
                 uid: 10001,
             }],
             destination_targets: vec![

@@ -89,15 +89,14 @@ class CompanionControlServer(private val context: Context) {
     private fun dispatch(request: ControlProtocol.Request): ByteArray = when (request.operation) {
         "start", "apply" -> startOrApply(request)
         "stop" -> {
-            VpnRuntimeRegistry.stopRequested()
-            context.startService(InterceptVpnService.stopIntent(context))
+            InterceptVpnService.stopFromExternalControl(context, "VPN 已停止。")
             ControlProtocol.success(request.requestId, statusJson())
         }
         "emergency_restore" -> {
-            RuntimeStateStore(context).autoResumeEnabled = false
-            VpnRuntimeRegistry.stopRequested()
-            context.stopService(android.content.Intent(context, InterceptVpnService::class.java))
-            VpnRuntimeRegistry.stopped("已执行紧急恢复并关闭自动重启。")
+            InterceptVpnService.stopFromExternalControl(
+                context,
+                "已执行紧急恢复并关闭自动重启。",
+            )
             ControlProtocol.success(request.requestId, statusJson())
         }
         "status" -> ControlProtocol.success(request.requestId, statusJson())
@@ -117,7 +116,11 @@ class CompanionControlServer(private val context: Context) {
             )
         val proxyRuntimeJson = request.payload.optJSONObject("proxy_runtime")
             ?.toString()
-            ?: "{\"routes\":[]}"
+            ?: return ControlProtocol.failure(
+                request.requestId,
+                "ANDROID_PROXY_RUNTIME_MISSING",
+                "start/apply 缺少 proxy_runtime。",
+            )
         val profile = runCatching { CompanionProfileParser.parse(profileJson) }.getOrElse { error ->
             return ControlProtocol.failure(
                 request.requestId,
@@ -125,9 +128,18 @@ class CompanionControlServer(private val context: Context) {
                 "Profile JSON 无效：${error.message}",
             )
         }
+        val runtime = runCatching {
+            ProxyRuntimeParser.parse(profileJson, proxyRuntimeJson)
+        }.getOrElse { error ->
+            return ControlProtocol.failure(
+                request.requestId,
+                "ANDROID_PROXY_RUNTIME_INVALID",
+                "代理路由运行配置无效：${error.message}",
+            )
+        }
         val inventory = PackageInventory.collect(context.packageManager)
         // start/apply 与 Service 启动共用 Rust 的唯一业务校验实现。Kotlin 不判断
-        // 包签名、UID、shared UID 或弱网参数，只采集系统安装清单并管理生命周期。
+        // UID、shared UID 或弱网参数，只采集系统安装清单并管理生命周期。
         val rustError = NativeBridge.validateProfile(profile.rawJson, inventory.toInventoryJson())
         if (rustError.isNotEmpty()) {
             return ControlProtocol.failure(request.requestId, "ANDROID_PROFILE_INVALID", rustError)
@@ -140,11 +152,21 @@ class CompanionControlServer(private val context: Context) {
             )
         }
 
-        RuntimeStateStore(context).profileJson = profileJson
-        VpnRuntimeRegistry.startRequested(JSONObject(profileJson).getString("id"))
+        // 新激活必须先撤销旧的恢复快照。含 ADB reverse/临时桌面端点的路由仅供
+        // 本次 start/apply 使用，绝不能在设备重启后沿用。
+        RuntimeStateStore(context).clearRecovery()
+        val generation = VpnRuntimeRegistry.startRequested(
+            JSONObject(profileJson).getString("id"),
+            runtime,
+        )
         return runCatching {
             context.startForegroundService(
-                InterceptVpnService.startIntent(context, profileJson, proxyRuntimeJson),
+                InterceptVpnService.startIntent(
+                    context,
+                    profileJson,
+                    proxyRuntimeJson,
+                    generation,
+                ),
             )
             ControlProtocol.success(request.requestId, statusJson())
         }.getOrElse { error ->
@@ -163,9 +185,12 @@ class CompanionControlServer(private val context: Context) {
             // Android 公共 API 无法可靠读取 adb 选择的设备 serial；桌面已有该上下文。
             .put("serial", "")
             .put("state", snapshot.state)
-            .put("verified", true)
+            .put("verified", snapshot.verified)
             .put("transport", "local_abstract_socket")
             .put("active_profile_id", snapshot.activeProfileId ?: JSONObject.NULL)
+            .put("active_profile_fingerprint", snapshot.activeProfileFingerprint ?: JSONObject.NULL)
+            .put("active_route_fingerprint", snapshot.activeRouteFingerprint ?: JSONObject.NULL)
+            .put("active_route_count", snapshot.activeRouteCount)
             .put("companion_process_running", true)
             .put("message", snapshot.message)
             .put("unsupported_fields", JSONArray().put("serial"))

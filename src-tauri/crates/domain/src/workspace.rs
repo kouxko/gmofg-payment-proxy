@@ -29,18 +29,13 @@ pub struct SecretReference {
     pub key: String,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum BodyCodecKind {
+    #[default]
     Raw,
     Utf8,
     ShiftJis,
-}
-
-impl Default for BodyCodecKind {
-    fn default() -> Self {
-        Self::Raw
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -154,6 +149,8 @@ pub enum DownstreamClientAuthentication {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub struct DownstreamTlsSettings {
     pub enabled: bool,
+    /// `None` 表示使用证书管理页签发并由系统密钥保护的本机叶子证书。
+    /// `Some` 仅用于显式选择 Workspace 内的独立服务端身份引用。
     pub server_identity: Option<CertificateReferenceId>,
     pub client_authentication: DownstreamClientAuthentication,
 }
@@ -380,6 +377,11 @@ impl ProxyWorkspace {
             "certificate_references",
             &mut error,
         );
+        let certificate_kinds = self
+            .certificate_references
+            .iter()
+            .map(|item| (item.id, item.kind))
+            .collect::<BTreeMap<_, _>>();
         for (index, reference) in self.certificate_references.iter().enumerate() {
             if reference.label.trim().is_empty() || reference.reference.trim().is_empty() {
                 push_field_error(
@@ -397,7 +399,13 @@ impl ProxyWorkspace {
         );
         let mut enabled_endpoints = BTreeMap::new();
         for (index, listener) in self.listeners.iter().enumerate() {
-            validate_listener(listener, index, &certificate_ids, &mut error);
+            validate_listener(
+                listener,
+                index,
+                &certificate_ids,
+                &certificate_kinds,
+                &mut error,
+            );
             if listener.enabled {
                 let endpoint = listener.bind_endpoint();
                 if let Some(existing) = enabled_endpoints.insert(endpoint, index) {
@@ -537,6 +545,7 @@ fn validate_listener(
     listener: &ProxyListener,
     index: usize,
     certificate_ids: &BTreeSet<CertificateReferenceId>,
+    certificate_kinds: &BTreeMap<CertificateReferenceId, CertificateReferenceKind>,
     error: &mut DomainError,
 ) {
     let prefix = format!("listeners.{index}");
@@ -555,10 +564,23 @@ fn validate_listener(
         push_field_error(error, format!("{prefix}.port"), "监听端口必须大于 0");
     }
 
-    validate_listener_access(listener, bind_ip.ok(), certificate_ids, &prefix, error);
-    validate_downstream_tls(listener, certificate_ids, &prefix, error);
+    validate_listener_access(
+        listener,
+        bind_ip.ok(),
+        certificate_ids,
+        certificate_kinds,
+        &prefix,
+        error,
+    );
+    validate_downstream_tls(listener, certificate_ids, certificate_kinds, &prefix, error);
     if let Some(fixed_server) = &listener.fixed_server {
-        validate_fixed_server(fixed_server, certificate_ids, &prefix, error);
+        validate_fixed_server(
+            fixed_server,
+            certificate_ids,
+            certificate_kinds,
+            &prefix,
+            error,
+        );
     }
 }
 
@@ -566,6 +588,7 @@ fn validate_listener_access(
     value: &ProxyListener,
     bind_ip: Option<IpAddr>,
     certificate_ids: &BTreeSet<CertificateReferenceId>,
+    certificate_kinds: &BTreeMap<CertificateReferenceId, CertificateReferenceKind>,
     prefix: &str,
     error: &mut DomainError,
 ) {
@@ -639,6 +662,15 @@ fn validate_listener_access(
                 format!("{prefix}.mitm.root_ca"),
                 "MITM Root CA 引用不存在；留空可使用当前安装实例 Root CA",
             );
+        } else {
+            validate_certificate_role(
+                value.mitm.root_ca,
+                CertificateReferenceKind::MitmRootCa,
+                certificate_kinds,
+                format!("{prefix}.mitm.root_ca"),
+                "MITM Root CA 引用类型不匹配",
+                error,
+            );
         }
         for (allow_index, authority) in value.mitm.authority_allowlist.iter().enumerate() {
             if !is_valid_authority_pattern(authority) {
@@ -655,19 +687,32 @@ fn validate_listener_access(
 fn validate_downstream_tls(
     value: &ProxyListener,
     certificate_ids: &BTreeSet<CertificateReferenceId>,
+    certificate_kinds: &BTreeMap<CertificateReferenceId, CertificateReferenceKind>,
     prefix: &str,
     error: &mut DomainError,
 ) {
+    // `None` 明确表示使用当前安装实例在“证书管理”页签发并受系统密钥保护的叶子证书。
+    // 只有用户改选 Workspace 证书引用时才要求该引用存在，避免把安装级私钥复制到
+    // Workspace，或用会被系统清理的临时文件路径冒充持久身份。
     if value.downstream_tls.enabled
         && value
             .downstream_tls
             .server_identity
-            .is_none_or(|id| !certificate_ids.contains(&id))
+            .is_some_and(|id| !certificate_ids.contains(&id))
     {
         push_field_error(
             error,
             format!("{prefix}.downstream_tls.server_identity"),
-            "启用下游 TLS 时必须引用服务端身份",
+            "下游 TLS 服务端身份引用不存在；留空可使用证书管理页签发的本机叶子证书",
+        );
+    } else {
+        validate_certificate_role(
+            value.downstream_tls.server_identity,
+            CertificateReferenceKind::ReverseServerIdentity,
+            certificate_kinds,
+            format!("{prefix}.downstream_tls.server_identity"),
+            "下游 TLS 服务端身份引用类型不匹配",
+            error,
         );
     }
     let downstream_trust = match value.downstream_tls.client_authentication {
@@ -681,12 +726,22 @@ fn validate_downstream_tls(
             format!("{prefix}.downstream_tls.client_authentication"),
             "下游客户端信任引用不存在",
         );
+    } else {
+        validate_certificate_role(
+            downstream_trust,
+            CertificateReferenceKind::DownstreamClientTrust,
+            certificate_kinds,
+            format!("{prefix}.downstream_tls.client_authentication"),
+            "下游客户端信任引用类型不匹配",
+            error,
+        );
     }
 }
 
 fn validate_fixed_server(
     value: &FixedServerSettings,
     certificate_ids: &BTreeSet<CertificateReferenceId>,
+    certificate_kinds: &BTreeMap<CertificateReferenceId, CertificateReferenceKind>,
     prefix: &str,
     error: &mut DomainError,
 ) {
@@ -723,6 +778,39 @@ fn validate_fixed_server(
                 "Server TLS 证书引用不存在",
             );
         }
+    }
+    validate_certificate_role(
+        value.upstream_tls.server_trust,
+        CertificateReferenceKind::UpstreamServerTrust,
+        certificate_kinds,
+        format!("{fixed_prefix}.upstream_tls.server_trust"),
+        "上游 Server CA 引用类型不匹配",
+        error,
+    );
+    validate_certificate_role(
+        value.upstream_tls.client_identity,
+        CertificateReferenceKind::UpstreamClientIdentity,
+        certificate_kinds,
+        format!("{fixed_prefix}.upstream_tls.client_identity"),
+        "上游 mTLS 客户端身份引用类型不匹配",
+        error,
+    );
+}
+
+fn validate_certificate_role(
+    reference: Option<CertificateReferenceId>,
+    expected: CertificateReferenceKind,
+    certificate_kinds: &BTreeMap<CertificateReferenceId, CertificateReferenceKind>,
+    field: String,
+    message: &str,
+    error: &mut DomainError,
+) {
+    if reference.is_some_and(|id| {
+        certificate_kinds
+            .get(&id)
+            .is_some_and(|kind| *kind != expected)
+    }) {
+        push_field_error(error, field, message);
     }
 }
 
@@ -983,6 +1071,17 @@ mod tests {
     }
 
     #[test]
+    fn downstream_tls_can_use_installation_leaf_without_workspace_reference() {
+        let mut workspace = ProxyWorkspace::default();
+        workspace.listeners[0].downstream_tls.enabled = true;
+        workspace.listeners[0].downstream_tls.server_identity = None;
+
+        workspace
+            .validate()
+            .expect("installation leaf is an explicit built-in identity");
+    }
+
+    #[test]
     fn fixed_http_server_rejects_tls_certificate_configuration() {
         let mut workspace = ProxyWorkspace::default();
         let trust_id = CertificateReferenceId::new();
@@ -1005,6 +1104,33 @@ mod tests {
             error
                 .field_errors
                 .contains_key("listeners.0.fixed_server.upstream_tls")
+        );
+    }
+
+    #[test]
+    fn listener_tls_rejects_certificate_references_used_in_the_wrong_role() {
+        let mut workspace = ProxyWorkspace::default();
+        let trust_id = CertificateReferenceId::new();
+        workspace.certificate_references.push(CertificateReference {
+            id: trust_id,
+            label: "客户端证书 CA".into(),
+            kind: CertificateReferenceKind::DownstreamClientTrust,
+            reference: "managed:listener-tls:test-client-ca".into(),
+        });
+        workspace.listeners[0].fixed_server = Some(FixedServerSettings {
+            upstream_url: "https://server.example.test:443".into(),
+            upstream_tls: UpstreamTlsSettings {
+                server_trust: Some(trust_id),
+                ..UpstreamTlsSettings::default()
+            },
+        });
+
+        let error = workspace.validate().unwrap_err();
+
+        assert!(
+            error
+                .field_errors
+                .contains_key("listeners.0.fixed_server.upstream_tls.server_trust")
         );
     }
 
@@ -1039,7 +1165,6 @@ mod tests {
             name: "Android route".into(),
             target_applications: vec![AndroidTargetApplication {
                 package_name: "com.example.client".into(),
-                signing_sha256: "AA".repeat(32),
                 uid: 10_001,
                 display_name: None,
             }],

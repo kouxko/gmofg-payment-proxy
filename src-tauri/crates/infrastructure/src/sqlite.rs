@@ -215,6 +215,21 @@ impl SqliteStore {
             .transpose()
     }
 
+    pub fn delete_protected_secret(
+        &self,
+        provider: &str,
+        key: &str,
+    ) -> Result<bool, InfrastructureError> {
+        let connection = self.connection.lock();
+        connection
+            .execute(
+                "DELETE FROM protected_secrets WHERE provider = ?1 AND secret_key = ?2",
+                params![provider, key],
+            )
+            .map(|deleted| deleted > 0)
+            .map_err(|source| InfrastructureError::Database { source })
+    }
+
     /// 在一个读事务内返回 Workspace 列表和当前选中项，避免 UI 看到不一致快照。
     pub fn load_workspaces(&self) -> Result<WorkspaceCollectionSnapshot, InfrastructureError> {
         let mut connection = self.connection.lock();

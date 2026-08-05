@@ -15,7 +15,6 @@ NON_TARGET_PACKAGES = [
   "com.interceptproxy.vpn",
   "com.interceptproxy.vpn.isolationprobe"
 ].freeze
-TARGET_SIGNING_SHA256 = ENV.fetch("ANDROID_VPN_GATE_TARGET_SIGNING_SHA256")
 HOST = "10.0.3.2"
 TCP_PORT = 18_080
 UDP_PORT = 18_081
@@ -69,7 +68,6 @@ def profile(name, overrides = nil, destinations: [], **override_keywords)
     name: "VPN gate #{name}",
     target_applications: [{
       package_name: TARGET_PACKAGE,
-      signing_sha256: TARGET_SIGNING_SHA256,
       uid: TARGET_UID
     }],
     destination_targets: destinations,

@@ -17,7 +17,7 @@
     "build:android-companion": "bash scripts/build-android-companion.sh",
     "check:rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
     "check:rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
-    "bindings": "cargo run --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings",
+    "bindings": "cargo run --release --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "pnpm build:android-companion && tauri build",

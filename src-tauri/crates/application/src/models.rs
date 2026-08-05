@@ -1133,6 +1133,11 @@ pub struct ListenerMonitorRowViewModel {
     pub state_text: String,
     pub ui_tone: UiTone,
     pub fault_reason: Option<String>,
+    /// Rust runtime 是否允许当前 Listener 执行启动。
+    pub can_start: bool,
+    /// Rust runtime 是否允许当前 Listener 执行停止。
+    /// `Faulted` 仍可能为 `true`，用于释放 runtime ownership。
+    pub can_stop: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -1214,6 +1219,7 @@ pub enum UiEventPayload {
     BreakpointQueued(BreakpointSummaryViewModel),
     BreakpointResolved(BreakpointSummaryViewModel),
     RuleHit(RuleSummaryViewModel),
+    AndroidVpnStatusChanged(crate::AndroidNetworkStatusViewModel),
     CertificateStatusChanged(CertificateOverviewViewModel),
     SettingsChanged(Box<SettingsViewModel>),
     ResourceWarning { message: String },

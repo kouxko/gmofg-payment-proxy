@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactElement } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement } from "react";
 import { Alert, toast } from "@heroui/react";
 import type {
   AndroidNetworkProfile,
@@ -20,14 +20,15 @@ import {
   DestinationTargetsCard,
 } from "./network-parameter-cards";
 import {
-  EmptyProfileState,
   ProfileActions,
   ProfileBasicsCard,
   ProfileSelectorCard,
+  UnselectedProfileState,
 } from "./profile-cards";
 import { TargetApplicationsCard } from "./target-applications-card";
 import { ProxyRoutesCard } from "./proxy-routes-card";
 import { useCurrentWorkspaceListeners } from "./use-current-workspace-listeners";
+import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 
 /**
  * 页面只展示 Rust ViewModel、收集表单输入并发送用户意图。
@@ -63,6 +64,67 @@ export function AndroidNetworkView(): ReactElement {
     undefined,
     { enabled: Boolean(selectedSerial) },
   );
+  const runtimeData = runtime.data;
+  const refreshRuntime = runtime.refresh;
+  const runtimeRefreshInFlight = useRef<Promise<void> | null>(null);
+  const runtimeRefreshQueued = useRef(false);
+  const refreshRuntimeSerially = useCallback((): Promise<void> => {
+    runtimeRefreshQueued.current = true;
+    if (runtimeRefreshInFlight.current) return runtimeRefreshInFlight.current;
+
+    const task = (async () => {
+      while (runtimeRefreshQueued.current) {
+        runtimeRefreshQueued.current = false;
+        await refreshRuntime();
+      }
+    })().finally(() => {
+      if (runtimeRefreshInFlight.current === task) {
+        runtimeRefreshInFlight.current = null;
+      }
+    });
+    runtimeRefreshInFlight.current = task;
+    return task;
+  }, [refreshRuntime]);
+  useAppEventRefresh(
+    ["android_vpn_status_changed"],
+    refreshRuntimeSerially,
+    { paused: !selectedSerial, entityId: selectedSerial ?? undefined },
+  );
+  // 设备切换时查询结果会短暂保留上一台设备的数据。活动方案缓存必须按 serial 隔离，
+  // 否则新设备会错误显示上一台设备正在运行的方案。
+  const lastActiveProfileIds = useRef(new Map<string, string>());
+  const selectedRuntime = runtimeData?.serial === selectedSerial ? runtimeData : undefined;
+  const activeProfileId = selectedRuntime?.active_profile_id
+    ?? (selectedRuntime?.state === "running" && selectedSerial
+      ? lastActiveProfileIds.current.get(selectedSerial)
+      : undefined);
+  useEffect(() => {
+    if (!selectedSerial) return;
+    // Companion 也可能从 Android 通知栏或系统 VPN 设置改变状态。桌面端每秒只向
+    // Rust 查询一次只读 ViewModel，保证这类外部变化也能在页面上及时反映。
+    let disposed = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      await refreshRuntimeSerially();
+      if (!disposed) timer = window.setTimeout(() => void poll(), 1_000);
+    };
+    timer = window.setTimeout(() => void poll(), 1_000);
+    return () => {
+      disposed = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [refreshRuntimeSerially, selectedSerial]);
+
+  useEffect(() => {
+    if (!runtimeData || !selectedSerial || runtimeData.serial !== selectedSerial) return;
+    if (runtimeData.state === "stopped" || runtimeData.state === "faulted") {
+      lastActiveProfileIds.current.delete(selectedSerial);
+      return;
+    }
+    if (runtimeData.active_profile_id) {
+      lastActiveProfileIds.current.set(selectedSerial, runtimeData.active_profile_id);
+    }
+  }, [runtimeData, selectedSerial]);
   const [draft, setDraft] = useState<AndroidNetworkProfile>();
   const [pending, setPending] = useState<string>();
   const [dangerousConfirmed, setDangerousConfirmed] = useState(false);
@@ -187,18 +249,18 @@ export function AndroidNetworkView(): ReactElement {
             onInstall={() => void run("install", installCompanion)}
             onUpdate={() => void run("update", updateCompanion)}
             onConsent={() => void run("consent", requestVpnConsent)}
-            onRefreshStatus={() => void run("status", async () => { await runtime.refresh(); })}
+            onRefreshStatus={() => void run("status", refreshRuntimeSerially)}
             onEmergencyRestore={() => void run("emergency", emergencyRestore)}
           />
 
-          {runtime.data && (
-            <Alert status={runtimeAlertStatus(runtime.data.ui_tone!)}>
+          {selectedRuntime && (
+            <Alert status={runtimeAlertStatus(selectedRuntime.ui_tone!)}>
               <Alert.Indicator />
               <Alert.Content>
                 <Alert.Title>
-                  {runtime.data.state_text} · {runtime.data.verified ? "已验证" : "未验证"}
+                  {selectedRuntime.state_text} · {selectedRuntime.verified ? "已验证" : "未验证"}
                 </Alert.Title>
-                <Alert.Description>{runtime.data.message}</Alert.Description>
+                <Alert.Description>{selectedRuntime.message}</Alert.Description>
               </Alert.Content>
             </Alert>
           )}
@@ -206,6 +268,8 @@ export function AndroidNetworkView(): ReactElement {
           <ProfileSelectorCard
             profiles={profiles.data ?? []}
             selectedProfileId={draft?.id}
+            activeProfileId={activeProfileId}
+            vpnStateText={selectedRuntime?.state_text}
             loading={profiles.isLoading}
             busy={busy}
             onNew={() => void run("new", newProfile)}
@@ -213,7 +277,7 @@ export function AndroidNetworkView(): ReactElement {
           />
 
           {!draft ? (
-            <EmptyProfileState busy={busy} onNew={() => void run("new-empty", newProfile)} />
+            profiles.data?.length ? <UnselectedProfileState /> : null
           ) : (
             <>
               <ProfileBasicsCard draft={draft} onChange={setDraft} />
@@ -224,9 +288,11 @@ export function AndroidNetworkView(): ReactElement {
                 activeFilter={packageFilter}
                 selectedSerial={selectedSerial}
                 filtering={filteredPackages.isLoading}
+                refreshing={pending === "refresh-packages"}
                 onFilterDraftChange={setPackageFilterDraft}
                 onApplyFilter={() => setPackageFilter(packageFilterDraft.trim())}
                 onClearFilter={clearPackageFilter}
+                onRefresh={() => void run("refresh-packages", refreshPackages)}
                 onTogglePackage={togglePackage}
               />
               <ProxyRoutesCard
@@ -266,6 +332,15 @@ export function AndroidNetworkView(): ReactElement {
   async function installCompanion(): Promise<void> {
     await callCommand(commands.androidCompanionInstall());
     toast("设备端组件安装成功。", { variant: "success" });
+  }
+
+  async function refreshPackages(): Promise<void> {
+    const refreshed = await callCommand(commands.androidPackageRefresh());
+    packages.setData(refreshed);
+    if (packageFilter) {
+      filteredPackages.setData(await callCommand(commands.androidPackageQuery(packageFilter)));
+    }
+    toast(`已从设备重新读取 ${refreshed.length} 个应用。`, { variant: "success" });
   }
 
   async function updateCompanion(): Promise<void> {

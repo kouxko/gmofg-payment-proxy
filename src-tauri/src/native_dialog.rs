@@ -41,6 +41,12 @@ impl TauriNativeFileDialog {
             "pkcs12" => builder
                 .set_title("导入上游 PKCS12")
                 .add_filter("PKCS12", &["p12", "pfx"]),
+            "server_identity_pem" => builder
+                .set_title("导入本监听服务端身份（证书链 + 私钥）")
+                .add_filter("PEM 服务端身份", &["pem"]),
+            "downstream_client_ca" => builder
+                .set_title("导入用于验证客户端证书的 CA")
+                .add_filter("客户端证书 CA", &["cer", "crt", "pem", "der"]),
             "upstream_ca" => builder
                 .set_title("选择替换用上游 CA")
                 .add_filter("证书", &["cer", "crt", "pem", "der"]),

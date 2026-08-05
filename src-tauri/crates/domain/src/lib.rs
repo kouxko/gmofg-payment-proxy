@@ -18,6 +18,9 @@ pub mod settings;
 pub mod state;
 pub mod workspace;
 
+#[cfg(test)]
+mod android_network_tests;
+
 pub use android_network::*;
 pub use breakpoint::*;
 pub use certificate::*;

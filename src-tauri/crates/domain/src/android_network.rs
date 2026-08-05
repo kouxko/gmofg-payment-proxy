@@ -6,7 +6,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
 use serde::{Deserialize, Serialize};
@@ -137,13 +137,11 @@ impl Default for WeakNetworkProfile {
     }
 }
 
-/// Android 设备网络方案锁定的目标应用身份快照。
-/// 包名、UID 与签名用于每次启动前重新校验。它们是可移植的安全元数据，不包含 APK、
-/// 设备序列号或运行态。
+/// Android 设备网络方案锁定的目标应用快照。
+/// 包名用于建立 `VpnService` allowlist，UID 用于 shared UID 整组校验；不检查 APK 签名。
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub struct AndroidTargetApplication {
     pub package_name: String,
-    pub signing_sha256: String,
     pub uid: u32,
     pub display_name: Option<String>,
 }
@@ -257,12 +255,6 @@ fn validate_target_applications(
                 .or_default()
                 .push("UID 必须大于 0。".into());
         }
-        if !is_sha256_set(&target.signing_sha256) {
-            fields
-                .entry(format!("{prefix}.signing_sha256"))
-                .or_default()
-                .push("签名必须是一个或多个以 + 连接的 SHA-256 指纹。".into());
-        }
     }
 }
 
@@ -279,16 +271,19 @@ fn validate_destination_targets(
     let mut unique = BTreeSet::new();
     for (index, target) in profile.destination_targets.iter().enumerate() {
         let prefix = format!("destination_targets.{index}");
-        if !is_valid_ip_or_cidr(&target.cidr) {
+        let normalized_destination = normalize_android_ip_cidr(&target.cidr);
+        if normalized_destination.is_none() {
             fields
                 .entry(format!("{prefix}.cidr"))
                 .or_default()
                 .push("请输入单个 IP 或合法 IPv4/IPv6 CIDR。".into());
         }
         validate_ports(&target.ports, &prefix, fields);
+        let mut ports = target.ports.clone();
+        ports.sort_unstable();
         if !unique.insert((
-            target.cidr.trim().to_ascii_lowercase(),
-            target.ports.clone(),
+            normalized_destination.unwrap_or_else(|| target.cidr.trim().to_owned()),
+            ports,
         )) {
             fields
                 .entry(prefix)
@@ -311,22 +306,24 @@ fn validate_proxy_routes(
     let mut unique = BTreeSet::new();
     for (index, route) in profile.proxy_routes.iter().enumerate() {
         let prefix = format!("proxy_routes.{index}");
-        if !is_valid_route_destination(&route.destination) {
+        let normalized_destination = normalize_android_network_destination(&route.destination);
+        if normalized_destination.is_none() {
             fields
                 .entry(format!("{prefix}.destination"))
                 .or_default()
                 .push("请输入主机名、单个 IP 或合法 IPv4/IPv6 CIDR。".into());
         }
         validate_ports(&route.ports, &prefix, fields);
-        if !unique.insert((
-            route.destination.trim().to_ascii_lowercase(),
-            route.ports.clone(),
-            route.listener_id,
-        )) {
-            fields
-                .entry(prefix)
-                .or_default()
-                .push("目标、端口与代理监听组合不能重复。".into());
+        let destination =
+            normalized_destination.unwrap_or_else(|| route.destination.trim().to_owned());
+        for port in &route.ports {
+            if !unique.insert((destination.clone(), *port)) {
+                fields
+                    .entry(prefix.clone())
+                    .or_default()
+                    .push("同一目标地址与端口只能配置一条透明代理路由。".into());
+                break;
+            }
         }
     }
 }
@@ -358,43 +355,67 @@ fn is_android_package_name(value: &str) -> bool {
         })
 }
 
-fn is_sha256_set(value: &str) -> bool {
-    !value.is_empty()
-        && value.split('+').all(|digest| {
-            let compact = digest.replace(':', "");
-            compact.len() == 64 && compact.bytes().all(|byte| byte.is_ascii_hexdigit())
-        })
-}
-
-fn is_valid_ip_or_cidr(value: &str) -> bool {
+/// 将 Android 路由中的单个 IP 或 CIDR 转换为唯一、稳定的文本形式。
+///
+/// IPv6 会压缩为标准写法；CIDR 的主机位会被清零，确保等价网段无法绕过重复校验。
+#[must_use]
+pub fn normalize_android_ip_cidr(value: &str) -> Option<String> {
     let value = value.trim();
-    let Some((address, prefix)) = value.split_once('/') else {
-        return value.parse::<IpAddr>().is_ok();
-    };
-    let Ok(address) = address.parse::<IpAddr>() else {
-        return false;
-    };
-    let Ok(prefix) = prefix.parse::<u8>() else {
-        return false;
-    };
+    let (address, prefix) = value
+        .split_once('/')
+        .map_or((value, None), |(address, prefix)| (address, Some(prefix)));
+    let address = address.parse::<IpAddr>().ok()?;
+    let maximum = if address.is_ipv4() { 32 } else { 128 };
+    let prefix = prefix.map_or(Some(maximum), |prefix| prefix.parse::<u8>().ok())?;
+    if prefix > maximum {
+        return None;
+    }
+
     match address {
-        IpAddr::V4(_) => prefix <= 32,
-        IpAddr::V6(_) => prefix <= 128,
+        IpAddr::V4(address) => {
+            let mask = u32::MAX.checked_shl(32 - u32::from(prefix)).unwrap_or(0);
+            Some(format!(
+                "{}/{}",
+                Ipv4Addr::from(u32::from(address) & mask),
+                prefix
+            ))
+        }
+        IpAddr::V6(address) => {
+            let mask = u128::MAX.checked_shl(128 - u32::from(prefix)).unwrap_or(0);
+            Some(format!(
+                "{}/{}",
+                Ipv6Addr::from(u128::from(address) & mask),
+                prefix
+            ))
+        }
     }
 }
 
-fn is_valid_route_destination(value: &str) -> bool {
+/// 将透明代理原始目标规范化为唯一键。
+///
+/// 主机名会去掉末尾根域点并转为小写；IP/CIDR 使用
+/// [`normalize_android_ip_cidr`] 的标准形式。
+#[must_use]
+pub fn normalize_android_network_destination(value: &str) -> Option<String> {
     let value = value.trim();
-    is_valid_ip_or_cidr(value)
-        || (!value.is_empty()
-            && value.len() <= 253
-            && value.split('.').all(|label| {
-                !label.is_empty()
-                    && label.len() <= 63
-                    && !label.starts_with('-')
-                    && !label.ends_with('-')
-                    && label
-                        .bytes()
-                        .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-            }))
+    let value = value.strip_suffix('.').unwrap_or(value);
+    if value.ends_with('.') {
+        return None;
+    }
+    if let Some(normalized) = normalize_android_ip_cidr(value) {
+        return Some(normalized);
+    }
+    let value = value.to_ascii_lowercase();
+    (!value.is_empty()
+        && value.len() <= 253
+        && value.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        }))
+    .then_some(value)
 }

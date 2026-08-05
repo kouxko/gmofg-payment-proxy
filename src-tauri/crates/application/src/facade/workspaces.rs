@@ -5,25 +5,25 @@
 
 use chrono::Utc;
 use intercept_proxy_domain::{
-    CertificateReference, CertificateReferenceId, CertificateReferenceKind, ConnectionFaultAction,
-    FaultPreset, FaultPresetId, ListenerId, MetadataExtractor, MetadataExtractorId,
-    MetadataExtractorSource, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
+    ConnectionFaultAction, FaultPreset, FaultPresetId, ListenerId, MetadataExtractor,
+    MetadataExtractorId, MetadataExtractorSource, ResponseAssertion, ResponseAssertionId,
+    ResponseAssertionKind,
 };
 use uuid::Uuid;
 
 use super::Application;
 use crate::{
-    AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiEventPayload, UiTone,
-    WorkspaceChangeKind, WorkspaceChangedViewModel, WorkspaceId, WorkspaceSummaryViewModel,
-    WorkspaceValidationViewModel,
+    AndroidNetworkState, AppError, AppResult, OperationResultViewModel, ProxyWorkspace,
+    UiEventPayload, UiTone, WorkspaceChangeKind, WorkspaceChangedViewModel, WorkspaceId,
+    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
 impl Application {
     /// 在未保存的 Workspace 草稿中追加一个由 Rust 生成稳定 ID 的通用组件。
     ///
     /// 前端不得自行生成领域 ID；同时该命令不持久化草稿，调用者仍需执行
-    /// `workspace_validate` 与 `workspace_save`。证书引用故意以空引用开始，确保用户
-    /// 明确选择安全材料后才能通过最终校验。
+    /// `workspace_validate` 与 `workspace_save`。证书引用只能通过 Listener 证书导入端口
+    /// 创建，不能用任意路径文本构造。
     pub fn workspace_component_new(
         &self,
         mut workspace: ProxyWorkspace,
@@ -51,12 +51,10 @@ impl Application {
                 http_actions: Vec::new(),
             }),
             "certificate_reference" => {
-                workspace.certificate_references.push(CertificateReference {
-                    id: CertificateReferenceId::new(),
-                    label: "Certificate Reference".into(),
-                    kind: CertificateReferenceKind::ReverseServerIdentity,
-                    reference: String::new(),
-                });
+                return Err(AppError::new(
+                    "WORKSPACE_CERTIFICATE_IMPORT_REQUIRED",
+                    "证书材料必须在代理入口中按用途导入。",
+                ));
             }
             _ => {
                 return Err(AppError::new(
@@ -169,7 +167,8 @@ impl Application {
     pub async fn workspace_save(&self, workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace> {
         let _gate = self.mutation_gate.lock().await;
         let current = self.workspaces.get(workspace.id).await?;
-        self.ensure_workspace_not_running(&current).await?;
+        self.ensure_workspace_update_allowed(&current, &workspace)
+            .await?;
         let workspace = self.workspaces.save(workspace).await?;
         let selected = self
             .workspaces
@@ -189,6 +188,8 @@ impl Application {
         let _gate = self.mutation_gate.lock().await;
         let workspace = self.workspaces.get(workspace_id).await?;
         self.ensure_workspace_not_running(&workspace).await?;
+        self.ensure_workspace_android_network_not_running(&workspace)
+            .await?;
         let result = self
             .workspaces
             .delete(workspace_id, expected_revision)
@@ -205,6 +206,48 @@ impl Application {
             }),
         );
         Ok(result)
+    }
+
+    /// 设备网络接管与桌面 Listener 是两个独立运行时。删除 Workspace 前必须分别确认
+    /// 两者均未引用该 Workspace，避免设备继续运行一个已经无法编辑或停止的方案。
+    async fn ensure_workspace_android_network_not_running(
+        &self,
+        workspace: &ProxyWorkspace,
+    ) -> AppResult<()> {
+        if workspace.android_network_profiles.is_empty() {
+            return Ok(());
+        }
+
+        let status = self.android.network_status().await.map_err(|error| {
+            AppError::new(
+                "WORKSPACE_ANDROID_STATUS_UNAVAILABLE",
+                format!(
+                    "无法确认 Workspace 的设备网络方案是否仍在运行：{}",
+                    error.view_model.message
+                ),
+            )
+            .retryable("请连接目标设备并刷新 VPN 状态，或先执行紧急恢复网络。")
+        })?;
+        let active = matches!(
+            status.state,
+            AndroidNetworkState::StartRequested
+                | AndroidNetworkState::Running
+                | AndroidNetworkState::StopRequested
+        ) && status.active_profile_id.as_ref().is_some_and(|active_id| {
+            workspace
+                .android_network_profiles
+                .iter()
+                .any(|profile| profile.id == *active_id)
+        });
+        if active {
+            return Err(AppError::new(
+                "WORKSPACE_ANDROID_NETWORK_ACTIVE",
+                "Workspace 的设备网络方案仍在运行，不能删除。",
+            )
+            .retryable("请先停止设备网络接管，再删除 Workspace。")
+            .entity(workspace.id.to_string()));
+        }
+        Ok(())
     }
 
     /// Live listeners execute an immutable Workspace snapshot. Reject aggregate mutation while
@@ -228,6 +271,30 @@ impl Application {
             .entity(status.listener_id.to_string()));
         }
         Ok(())
+    }
+
+    /// 运行中的入口只锁定会参与代理运行快照的 Workspace 配置。
+    ///
+    /// Android 设备网络方案虽然随 Workspace 导入导出，但由独立的 `VpnService` 运行；
+    /// 保存方案不会改变任何已启动 Listener 的监听地址、证书、规则或转发行为。因此仅
+    /// 修改 `android_network_profiles` 时允许继续持久化，其余聚合字段仍执行运行态保护。
+    pub(crate) async fn ensure_workspace_update_allowed(
+        &self,
+        current: &ProxyWorkspace,
+        proposed: &ProxyWorkspace,
+    ) -> AppResult<()> {
+        let mut current_runtime_configuration = current.clone();
+        let mut proposed_runtime_configuration = proposed.clone();
+        current_runtime_configuration
+            .android_network_profiles
+            .clear();
+        proposed_runtime_configuration
+            .android_network_profiles
+            .clear();
+        if current_runtime_configuration == proposed_runtime_configuration {
+            return Ok(());
+        }
+        self.ensure_workspace_not_running(current).await
     }
 
     /// 打开系统文件选择器并导入 Workspace；路径和文档字节不会进入前端。

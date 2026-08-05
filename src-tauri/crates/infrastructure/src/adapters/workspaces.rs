@@ -609,7 +609,6 @@ mod tests {
                 name: "Android Profile".into(),
                 target_applications: vec![AndroidTargetApplication {
                     package_name: "com.example.client".into(),
-                    signing_sha256: "AA".repeat(32),
                     uid: 10_001,
                     display_name: None,
                 }],
