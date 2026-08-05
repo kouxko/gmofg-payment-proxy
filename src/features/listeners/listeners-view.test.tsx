@@ -1,19 +1,42 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ListenersView } from "./listeners-view";
 
 const navigationMocks = vi.hoisted(() => ({ navigate: vi.fn() }));
 vi.mock("@/features/shell/workspace-navigation", () => ({ useWorkspaceNavigation: () => navigationMocks }));
+vi.mock("@/features/shell/bootstrap-context", () => ({
+  useAppEventRefresh: () => undefined,
+  useBootstrap: () => ({
+    bootstrap: {
+      certificate: {
+        items: [{
+          kind: "proxy_leaf",
+          subject: "CN=10.0.0.8",
+          usage: "本机代理服务端身份",
+          sans: ["IP:10.0.0.8"],
+          valid_from: "2026-01-01T00:00:00Z",
+          valid_until: "2028-01-01T00:00:00Z",
+          sha256_fingerprint: "11:22:33:44",
+          status_text: "有效",
+          ui_tone: "positive",
+        }],
+      },
+    },
+  }),
+}));
 
 const mocks = vi.hoisted(() => ({
   workspaceList: vi.fn(), workspaceGet: vi.fn(), workspaceValidate: vi.fn(), workspaceSave: vi.fn(),
-  listenerNew: vi.fn(), listenerCopy: vi.fn(), listenerStatuses: vi.fn(), listenerStart: vi.fn(), listenerStop: vi.fn(),
+  listenerValidate: vi.fn(),
+  listenerNew: vi.fn(), listenerCopy: vi.fn(), listenerSave: vi.fn(), listenerDelete: vi.fn(),
+  listenerOverview: vi.fn(), listenerStart: vi.fn(), listenerStop: vi.fn(),
   listenerTestUpstreamTls: vi.fn(), listenerImportUpstreamClientIdentity: vi.fn(), listenerImportUpstreamServerTrust: vi.fn(),
-  listenerCertificateOverview: vi.fn(),
+  listenerImportDownstreamServerIdentity: vi.fn(), listenerImportDownstreamClientTrust: vi.fn(),
+  listenerCertificateOverview: vi.fn(), listenerCertificateDiscard: vi.fn(),
   workspaceSecretStoreBasic: vi.fn(),
 }));
 vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
@@ -72,16 +95,67 @@ function certificateDetail(reference: ReturnType<typeof certificateReference>, s
 
 function ok<T>(data: T) { return Promise.resolve({ status: "ok" as const, data }); }
 
-function listenerStatus(listenerId: string, state: "stopped" | "running" | "starting" = "stopped") {
+function commandError(message: string) {
+  return Promise.resolve({
+    status: "error" as const,
+    error: {
+      code: "LISTENER_OVERVIEW_FAILED",
+      message,
+      field_errors: {},
+      retryable: true,
+      suggested_action: "请重试。",
+    },
+  });
+}
+
+function listenerStatus(
+  listenerId: string,
+  state: "stopped" | "running" | "starting" | "stopping" | "faulted" = "stopped",
+  capabilities?: { canStart: boolean; canStop: boolean },
+) {
+  const canStart = capabilities?.canStart ?? state === "stopped";
+  const canStop = capabilities?.canStop ?? state !== "stopped";
   return {
     listener_id: listenerId,
+    name: listenerId,
+    kind_text: "正向代理",
     state,
-    state_text: state === "running" ? "运行中" : state === "starting" ? "启动中" : "已停止",
-    ui_tone: state === "running" ? "positive" : "neutral",
+    state_text: state === "running"
+      ? "运行中"
+      : state === "starting"
+        ? "启动中"
+        : state === "stopping"
+          ? "停止中"
+          : state === "faulted"
+            ? "故障"
+            : "已停止",
+    ui_tone: state === "faulted" ? "danger" : state === "running" ? "positive" : "neutral",
     listen_address: "127.0.0.1:8080",
-    fault_reason: null,
-    can_start: state === "stopped",
-    can_stop: state !== "stopped",
+    request_destination: "请求中的目标地址",
+    fault_reason: state === "faulted" ? "Listener 任务已意外结束。" : null,
+    can_start: canStart,
+    can_stop: canStop,
+  };
+}
+
+function listenerOverview(rows = [listenerStatus("listener-1")]) {
+  return {
+    workspace_id: "workspace-1",
+    workspace_name: "API Lab",
+    state_text: rows.some((row) => row.state === "faulted")
+      ? "部分入口故障"
+      : rows.some((row) => row.state === "running")
+        ? "部分入口运行中"
+        : "全部入口已停止",
+    ui_tone: rows.some((row) => row.state === "faulted")
+      ? "danger" as const
+      : rows.some((row) => row.state === "running")
+        ? "warning" as const
+        : "neutral" as const,
+    total_count: rows.length,
+    active_count: rows.filter((row) => row.state === "running").length,
+    faulted_count: rows.filter((row) => row.state === "faulted").length,
+    rows,
   };
 }
 
@@ -91,10 +165,28 @@ describe("统一代理监听编辑器", () => {
     mocks.workspaceList.mockReturnValue(ok([{ id: "workspace-1", name: "API Lab", revision: 1, listener_count: 1, enabled_listener_count: 0, selected: true }]));
     mocks.workspaceGet.mockReturnValue(ok(workspace));
     mocks.workspaceValidate.mockImplementation((draft) => ok({ valid: true, normalized: draft, field_errors: {} }));
+    mocks.listenerValidate.mockImplementation((workspaceId, revision, listener, certificateReferences) => ok({
+      valid: true,
+      normalized: {
+        ...workspace,
+        id: workspaceId,
+        revision,
+        listeners: [...workspace.listeners.filter((item) => item.id !== listener.id), listener],
+        certificate_references: certificateReferences,
+      },
+      field_errors: {},
+    }));
     mocks.workspaceSave.mockImplementation((draft) => ok({ ...draft, revision: 2 }));
+    mocks.listenerSave.mockImplementation((_workspaceId, _revision, listener, certificateReferences) => ok({
+      ...workspace,
+      revision: 2,
+      listeners: [...workspace.listeners.filter((item) => item.id !== listener.id), listener],
+      certificate_references: certificateReferences,
+    }));
+    mocks.listenerDelete.mockReturnValue(ok({ success: true, cancelled: false, message: "Listener 已删除。", ui_tone: "positive", entity_id: null, revision: 2, requires_restart: false }));
     mocks.listenerNew.mockReturnValue(ok(dynamicListener("listener-new", "新建代理监听", 8081)));
     mocks.listenerCopy.mockImplementation((source) => ok({ ...source, id: "listener-copy", name: `${source.name} 副本`, enabled: false }));
-    mocks.listenerStatuses.mockReturnValue(ok([]));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview()));
     mocks.listenerStart.mockImplementation((_workspaceId, _revision, listenerId) => ok(listenerStatus(listenerId, "running")));
     mocks.listenerStop.mockImplementation((_workspaceId, _revision, listenerId) => ok(listenerStatus(listenerId, "stopped")));
     mocks.listenerTestUpstreamTls.mockReturnValue(ok({
@@ -105,9 +197,22 @@ describe("统一代理监听编辑器", () => {
     }));
     const identity = certificateReference("identity-ref-1", "测试身份", "upstream_client_identity");
     const trust = certificateReference("ca-ref-1", "测试 CA", "upstream_server_trust");
+    const downstreamIdentity = certificateReference("downstream-identity-ref-1", "入口服务端身份", "reverse_server_identity");
+    const downstreamTrust = certificateReference("downstream-ca-ref-1", "终端客户端 CA", "downstream_client_trust");
     mocks.listenerImportUpstreamClientIdentity.mockReturnValue(ok({ reference: identity, detail: certificateDetail(identity, "CN=测试客户端身份") }));
     mocks.listenerImportUpstreamServerTrust.mockReturnValue(ok({ reference: trust, detail: certificateDetail(trust, "CN=测试上游 CA") }));
+    mocks.listenerImportDownstreamServerIdentity.mockReturnValue(ok({ reference: downstreamIdentity, detail: certificateDetail(downstreamIdentity, "CN=proxy.test") }));
+    mocks.listenerImportDownstreamClientTrust.mockReturnValue(ok({ reference: downstreamTrust, detail: certificateDetail(downstreamTrust, "CN=终端客户端 CA") }));
     mocks.listenerCertificateOverview.mockReturnValue(ok([]));
+    mocks.listenerCertificateDiscard.mockReturnValue(ok({
+      success: true,
+      cancelled: false,
+      message: "已清理未保存的证书材料。",
+      ui_tone: "positive",
+      entity_id: null,
+      revision: null,
+      requires_restart: false,
+    }));
     mocks.workspaceSecretStoreBasic.mockReturnValue(ok({ provider: "system", key: "secret-ref-1" }));
   });
 
@@ -160,9 +265,9 @@ describe("统一代理监听编辑器", () => {
     render(<ListenersView />);
     const name = await screen.findByRole("textbox", { name: "代理监听名称" });
     await user.clear(name); await user.type(name, "本地代理");
-    await user.click(screen.getByRole("button", { name: "校验并保存" }));
-    await waitFor(() => expect(mocks.workspaceSave).toHaveBeenCalledTimes(1));
-    expect(mocks.workspaceSave.mock.calls[0][0].listeners[0].name).toBe("本地代理");
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerSave.mock.calls[0][2].name).toBe("本地代理");
   });
 
   it("配置未修改时可在其他监听运行中直接启动第二个监听", async () => {
@@ -171,24 +276,24 @@ describe("统一代理监听编辑器", () => {
       dynamicListener("stopped-2", "待启动监听", 8081),
     ] };
     mocks.workspaceGet.mockReturnValue(ok(multiple));
-    mocks.listenerStatuses.mockReturnValue(ok([listenerStatus("running-1", "running"), listenerStatus("stopped-2")]));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("running-1", "running"), listenerStatus("stopped-2")])));
     const user = userEvent.setup(); render(<ListenersView />);
 
     await user.click(await screen.findByText("待启动监听"));
     await user.click(screen.getByRole("button", { name: "启动监听" }));
 
     await waitFor(() => expect(mocks.listenerStart).toHaveBeenCalledWith("workspace-1", 1, "stopped-2"));
-    expect(mocks.workspaceValidate).not.toHaveBeenCalled();
-    expect(mocks.workspaceSave).not.toHaveBeenCalled();
+    expect(mocks.listenerValidate).not.toHaveBeenCalled();
+    expect(mocks.listenerSave).not.toHaveBeenCalled();
   });
 
-  it("其他监听运行时阻止保存脏草稿并明确提示", async () => {
+  it("其他监听运行时仍保存当前脏草稿并启动", async () => {
     const multiple = { ...workspace, listeners: [
       dynamicListener("running-1", "已运行监听", 8080),
       dynamicListener("stopped-2", "待启动监听", 8081),
     ] };
     mocks.workspaceGet.mockReturnValue(ok(multiple));
-    mocks.listenerStatuses.mockReturnValue(ok([listenerStatus("running-1", "running"), listenerStatus("stopped-2")]));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("running-1", "running"), listenerStatus("stopped-2")])));
     const user = userEvent.setup(); render(<ListenersView />);
 
     await user.click(await screen.findByText("待启动监听"));
@@ -196,9 +301,196 @@ describe("统一代理监听编辑器", () => {
     await user.clear(name); await user.type(name, "修改后的监听");
     await user.click(screen.getByRole("button", { name: "启动监听" }));
 
-    expect(await screen.findByText(/已有其他监听正在运行/)).toBeVisible();
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerSave.mock.calls[0][2].name).toBe("修改后的监听");
+    expect(mocks.listenerStart).toHaveBeenCalledWith("workspace-1", 2, "stopped-2");
+  });
+
+  it("启动 B 时保留 A 的未保存草稿", async () => {
+    const listenerA = dynamicListener("listener-a", "监听 A", 8080);
+    const listenerB = dynamicListener("listener-b", "监听 B", 8081);
+    const multiple = { ...workspace, listeners: [listenerA, listenerB] };
+    const afterSave = { ...multiple, revision: 2 };
+    const afterStart = {
+      ...multiple,
+      revision: 3,
+      listeners: [listenerA, { ...listenerB, enabled: true }],
+    };
+    mocks.workspaceGet
+      .mockReturnValueOnce(ok(multiple))
+      .mockReturnValue(ok(afterStart));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
+      listenerStatus("listener-a"),
+      listenerStatus("listener-b"),
+    ])));
+    mocks.listenerValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
+      valid: true,
+      normalized: {
+        ...multiple,
+        revision,
+        listeners: multiple.listeners.map((item) => item.id === listener.id ? listener : item),
+        certificate_references: certificateReferences,
+      },
+      field_errors: {},
+    }));
+    mocks.listenerSave.mockReturnValue(ok(afterSave));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    const name = await screen.findByRole("textbox", { name: "代理监听名称" });
+    await user.clear(name);
+    await user.type(name, "监听 A 未保存名称");
+    await user.click(screen.getByText("监听 B"));
+    await user.click(screen.getByRole("button", { name: "启动监听" }));
+
+    await waitFor(() => expect(mocks.listenerStart).toHaveBeenCalledWith(
+      "workspace-1",
+      2,
+      "listener-b",
+    ));
+    await user.click(screen.getByText("监听 A 未保存名称"));
+    expect(screen.getByRole("textbox", { name: "代理监听名称" })).toHaveValue("监听 A 未保存名称");
+  });
+
+  it("保存 B 时保留新建 A 及其未保存托管证书引用", async () => {
+    const listenerB = dynamicListener("listener-b", "监听 B", 8080);
+    const persisted = { ...workspace, listeners: [listenerB] };
+    mocks.workspaceGet.mockReturnValue(ok(persisted));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("listener-b")] )));
+    mocks.listenerValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
+      valid: true,
+      normalized: {
+        ...persisted,
+        revision,
+        listeners: persisted.listeners.map((item) => item.id === listener.id ? listener : item),
+        certificate_references: certificateReferences,
+      },
+      field_errors: {},
+    }));
+    mocks.listenerSave.mockImplementation((_workspaceId, _revision, listener, certificateReferences) => ok({
+      ...persisted,
+      revision: 2,
+      listeners: [listener],
+      certificate_references: certificateReferences,
+    }));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "新建代理监听" }));
+    await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
+    await user.click(screen.getByRole("button", { name: "导入 Server CA" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByText("监听 B"));
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    await user.click(screen.getByRole("row", { name: /新建代理监听/ }));
+    expect(await screen.findByText("CN=测试上游 CA")).toBeVisible();
+    expect(mocks.listenerCertificateDiscard).not.toHaveBeenCalled();
+  });
+
+  it("其他监听运行时仍可删除当前已停止监听", async () => {
+    const multiple = { ...workspace, listeners: [
+      dynamicListener("running-1", "已运行监听", 8080),
+      dynamicListener("stopped-2", "待删除监听", 8081),
+    ] };
+    const afterDelete = { ...multiple, revision: 2, listeners: [multiple.listeners[0]] };
+    mocks.workspaceGet
+      .mockReturnValueOnce(ok(multiple))
+      .mockReturnValue(ok(afterDelete));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
+      listenerStatus("running-1", "running"),
+      listenerStatus("stopped-2"),
+    ])));
+    const user = userEvent.setup(); render(<ListenersView />);
+
+    await user.click(await screen.findByText("待删除监听"));
+    await user.click(screen.getByRole("button", { name: "删除监听" }));
+
+    await waitFor(() => expect(mocks.listenerDelete).toHaveBeenCalledWith(
+      "workspace-1",
+      1,
+      "stopped-2",
+    ));
     expect(mocks.workspaceSave).not.toHaveBeenCalled();
+  });
+
+  it("删除 B 时保留 A 的脏草稿和未保存托管证书引用", async () => {
+    const listenerA = fixedListener("listener-a", "监听 A", 16627, "https://a.test:16627");
+    const listenerB = dynamicListener("listener-b", "监听 B", 16127);
+    const multiple = { ...workspace, listeners: [listenerA, listenerB] };
+    const afterDelete = { ...multiple, revision: 2, listeners: [listenerA] };
+    mocks.workspaceGet
+      .mockReturnValueOnce(ok(multiple))
+      .mockReturnValue(ok(afterDelete));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
+      listenerStatus("listener-a"),
+      listenerStatus("listener-b"),
+    ])));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    const name = await screen.findByRole("textbox", { name: "代理监听名称" });
+    await user.clear(name);
+    await user.type(name, "监听 A 未保存名称");
+    await user.click(screen.getByRole("button", { name: "导入 Server CA" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByText("监听 B"));
+    await user.click(screen.getByRole("button", { name: "删除监听" }));
+
+    expect(await screen.findByRole("textbox", { name: "代理监听名称" })).toHaveValue("监听 A 未保存名称");
+    expect(screen.getByText("CN=测试上游 CA")).toBeVisible();
+    expect(mocks.listenerCertificateDiscard).not.toHaveBeenCalled();
+  });
+
+  it("运行概览查询失败时显式报错且禁止启动", async () => {
+    mocks.listenerOverview.mockReturnValue(commandError("无法读取 Listener 运行概览。"));
+    render(<ListenersView />);
+
+    expect(await screen.findByText("运行状态：查询失败")).toBeVisible();
+    expect(screen.getByText("无法读取 Listener 运行概览。")).toBeVisible();
+    expect(screen.getByRole("button", { name: "状态不可用" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "重试状态查询" })).toBeVisible();
+  });
+
+  it("Rust 概览缺少当前 Listener 行时显示未知且禁止启动", async () => {
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([])));
+    render(<ListenersView />);
+
+    expect(await screen.findByText("运行状态：未知（Rust 未返回当前监听状态）")).toBeVisible();
+    expect(screen.getByRole("button", { name: "状态不可用" })).toBeDisabled();
     expect(mocks.listenerStart).not.toHaveBeenCalled();
+  });
+
+  it("故障 Listener 按 Rust capability 执行停止以释放 runtime ownership", async () => {
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
+      listenerStatus("listener-1", "faulted", { canStart: false, canStop: true }),
+    ])));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    expect(await screen.findByText("运行状态：故障")).toBeVisible();
+    expect(screen.getByRole("button", { name: "删除监听" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "停止监听" }));
+
+    await waitFor(() => expect(mocks.listenerStop).toHaveBeenCalledWith(
+      "workspace-1",
+      1,
+      "listener-1",
+    ));
+    expect(mocks.listenerStart).not.toHaveBeenCalled();
+  });
+
+  it("Rust 未授予启停 capability 时不从 stopped 状态自行推断启动", async () => {
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
+      listenerStatus("listener-1", "stopped", { canStart: false, canStop: false }),
+    ])));
+    render(<ListenersView />);
+
+    expect(await screen.findByRole("button", { name: "无可用操作" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "删除监听" })).toBeDisabled();
+    expect(mocks.listenerStart).not.toHaveBeenCalled();
+    expect(mocks.listenerStop).not.toHaveBeenCalled();
   });
 
   it("修改后恢复为持久化值时视为无未保存差异", async () => {
@@ -207,7 +499,7 @@ describe("统一代理监听编辑器", () => {
       dynamicListener("stopped-2", "待启动监听", 8081),
     ] };
     mocks.workspaceGet.mockReturnValue(ok(multiple));
-    mocks.listenerStatuses.mockReturnValue(ok([listenerStatus("running-1", "running"), listenerStatus("stopped-2")]));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("running-1", "running"), listenerStatus("stopped-2")])));
     const user = userEvent.setup(); render(<ListenersView />);
 
     await user.click(await screen.findByText("待启动监听"));
@@ -217,7 +509,7 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "启动监听" }));
 
     await waitFor(() => expect(mocks.listenerStart).toHaveBeenCalledWith("workspace-1", 1, "stopped-2"));
-    expect(mocks.workspaceSave).not.toHaveBeenCalled();
+    expect(mocks.listenerSave).not.toHaveBeenCalled();
   });
 
   it("没有其他运行监听时仍先保存脏草稿再启动", async () => {
@@ -226,17 +518,47 @@ describe("统一代理监听编辑器", () => {
     await user.clear(name); await user.type(name, "修改后的监听");
     await user.click(screen.getByRole("button", { name: "启动监听" }));
 
-    await waitFor(() => expect(mocks.workspaceSave).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     expect(mocks.listenerStart).toHaveBeenCalledWith("workspace-1", 2, "listener-1");
   });
 
-  it("固定 Server 的 TLS 测试先保存同一监听快照", async () => {
-    const fixedWorkspace = { ...workspace, listeners: [fixedListener("fixed-1", "交易", 16627, "https://127.0.0.1:9443")] };
+  it("其他监听运行时仍可使用当前草稿测试固定 Server TLS", async () => {
+    const fixedWorkspace = {
+      ...workspace,
+      listeners: [
+        dynamicListener("running-1", "运行中的 DLL", 16127),
+        fixedListener("fixed-1", "交易", 16627, "https://127.0.0.1:9443"),
+      ],
+    };
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
+    mocks.listenerOverview.mockReturnValue(
+      ok(listenerOverview([listenerStatus("running-1", "running"), listenerStatus("fixed-1")])),
+    );
+    mocks.listenerValidate.mockImplementation((_workspaceId, _revision, listener, certificateReferences) => ok({
+      valid: true,
+      normalized: {
+        ...fixedWorkspace,
+        listeners: fixedWorkspace.listeners.map((item) => item.id === listener.id ? listener : item),
+        certificate_references: certificateReferences,
+      },
+      field_errors: {},
+    }));
     const user = userEvent.setup(); render(<ListenersView />);
+    await user.click(await screen.findByText("交易"));
     await user.click(await screen.findByRole("button", { name: "测试上游 TLS / mTLS 握手" }));
-    await waitFor(() => expect(mocks.workspaceValidate).toHaveBeenCalledWith(fixedWorkspace));
-    expect(mocks.listenerTestUpstreamTls).toHaveBeenCalledWith("workspace-1", "fixed-1");
+    await waitFor(() => expect(mocks.listenerValidate).toHaveBeenCalledWith(
+      fixedWorkspace.id,
+      fixedWorkspace.revision,
+      fixedWorkspace.listeners[1],
+      fixedWorkspace.certificate_references,
+    ));
+    expect(mocks.listenerSave).not.toHaveBeenCalled();
+    expect(mocks.listenerTestUpstreamTls).toHaveBeenCalledWith(
+      fixedWorkspace.id,
+      fixedWorkspace.revision,
+      fixedWorkspace.listeners[1],
+      [],
+    );
     expect(await screen.findByText(/127.0.0.1:9443 · 12 ms/)).toBeVisible();
   });
 
@@ -247,11 +569,52 @@ describe("统一代理监听编辑器", () => {
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     expect(screen.getByText(/签发上游 Server 证书的 ca\.crt/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
-    await user.click(screen.getByRole("button", { name: "校验并保存" }));
-    await waitFor(() => expect(mocks.workspaceSave).toHaveBeenCalledTimes(1));
-    expect(mocks.workspaceSave.mock.calls[0][0].listeners[0].fixed_server.upstream_tls.server_trust).toBe("ca-ref-1");
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerSave.mock.calls[0][2].fixed_server.upstream_tls.server_trust).toBe("ca-ref-1");
     expect(await screen.findByText("CN=测试上游 CA")).toBeVisible();
     expect(screen.getByText("AA:BB:CC:DD")).toBeVisible();
+  });
+
+  it("替换未保存的导入证书时清理 Rust 安全存储材料", async () => {
+    const fixedWorkspace = {
+      ...workspace,
+      listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")],
+    };
+    mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
+
+    await waitFor(() => expect(mocks.listenerCertificateDiscard).toHaveBeenCalledWith(
+      certificateReference("ca-ref-1", "测试 CA", "upstream_server_trust"),
+    ));
+  });
+
+  it("解除持久化证书绑定时不删除 Rust 安全存储材料", async () => {
+    const trust = certificateReference("persisted-ca", "持久化 CA", "upstream_server_trust");
+    const base = fixedListener("fixed-1", "交易", 16627, "https://server.test:443");
+    const listener = {
+      ...base,
+      fixed_server: {
+        ...base.fixed_server,
+        upstream_tls: { ...base.fixed_server.upstream_tls, server_trust: trust.id },
+      },
+    };
+    mocks.workspaceGet.mockReturnValue(ok({
+      ...workspace,
+      listeners: [listener],
+      certificate_references: [trust],
+    }));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("switch", { name: "转发到固定 Server" }));
+
+    expect(mocks.listenerCertificateDiscard).not.toHaveBeenCalled();
   });
 
   it("在当前监听内展示 Rust 解析的证书主题、SAN、有效期和指纹", async () => {
@@ -283,6 +646,84 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getAllByText("AA:BB:CC:DD")).toHaveLength(2);
   });
 
+  it("下游 TLS 留空时明确使用证书管理页签发的本机叶子证书", async () => {
+    mocks.workspaceGet.mockReturnValue(ok({
+      ...workspace,
+      listeners: [{
+        ...fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+        downstream_tls: {
+          enabled: true,
+          server_identity: null,
+          client_authentication: { mode: "disabled" as const },
+        },
+      }],
+    }));
+
+    render(<ListenersView />);
+
+    expect((await screen.findAllByText(/证书管理页本机叶子证书/))[0]).toBeVisible();
+    expect(screen.getByText(/使用已签发的固定 SAN/)).toBeVisible();
+    expect(screen.queryByText(/按客户端访问域名自动签发/)).not.toBeInTheDocument();
+    expect(screen.getByText("CN=10.0.0.8")).toBeVisible();
+    expect(screen.getByText("11:22:33:44")).toBeVisible();
+  });
+
+  it("失效的外部服务端身份可一键恢复为证书页叶子证书", async () => {
+    const staleIdentity = certificateReference("stale-server-ref", "已失效的服务端身份", "reverse_server_identity");
+    mocks.workspaceGet.mockReturnValue(ok({
+      ...workspace,
+      listeners: [{
+        ...fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+        downstream_tls: {
+          enabled: true,
+          server_identity: staleIdentity.id,
+          client_authentication: { mode: "disabled" as const },
+        },
+      }],
+      certificate_references: [staleIdentity],
+    }));
+    mocks.listenerCertificateOverview.mockReturnValue(ok([{
+      reference_id: staleIdentity.id,
+      label: staleIdentity.label,
+      certificate: null,
+      error_message: "无法读取导入文件：No such file or directory",
+    }]));
+
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "改用本机叶子证书" }));
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerSave.mock.calls[0][2].downstream_tls.server_identity).toBeNull();
+  });
+
+  it("导入独立下游身份后只保存受保护引用并显示解析详情", async () => {
+    mocks.workspaceGet.mockReturnValue(ok({
+      ...workspace,
+      listeners: [{
+        ...fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+        downstream_tls: {
+          enabled: true,
+          server_identity: null,
+          client_authentication: { mode: "disabled" as const },
+        },
+      }],
+    }));
+
+    const user = userEvent.setup();
+    render(<ListenersView />);
+    await user.click(await screen.findByRole("button", { name: "导入独立服务端身份" }));
+    await user.click(screen.getByRole("button", { name: "选择服务端身份 PEM" }));
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerSave.mock.calls[0][2].downstream_tls.server_identity).toBe("downstream-identity-ref-1");
+    expect(mocks.listenerSave.mock.calls[0][3][0].reference).toBe("managed:downstream-identity-ref-1");
+    expect(await screen.findByText("CN=proxy.test")).toBeVisible();
+  });
+
   it("导入 mTLS 身份时密码不进入 Workspace", async () => {
     mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")] }));
     const user = userEvent.setup(); render(<ListenersView />);
@@ -290,12 +731,11 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getByText(/包含“客户端证书 \+ 私钥”的 client\.p12/)).toBeVisible();
     await user.type(await screen.findByLabelText("client.p12 / client.pfx 密码（允许为空）"), "p12-secret");
     await user.click(screen.getByRole("button", { name: "选择 client.p12 / .pfx" }));
-    await user.click(screen.getByRole("button", { name: "校验并保存" }));
-    await waitFor(() => expect(mocks.workspaceSave).toHaveBeenCalledTimes(1));
-    const saved = mocks.workspaceSave.mock.calls[0][0];
-    expect(saved.listeners[0].fixed_server.upstream_tls.client_identity).toBe("identity-ref-1");
-    expect(JSON.stringify(saved)).not.toContain("p12-secret");
-  });
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerSave.mock.calls[0][2].fixed_server.upstream_tls.client_identity).toBe("identity-ref-1");
+    expect(JSON.stringify(mocks.listenerSave.mock.calls[0])).not.toContain("p12-secret");
+  }, 15_000);
 
   it("多个监听的固定 Server 与证书配置互不覆盖", async () => {
     const multiple = { ...workspace, listeners: [
@@ -305,13 +745,62 @@ describe("统一代理监听编辑器", () => {
     mocks.workspaceGet.mockReturnValue(ok(multiple));
     const user = userEvent.setup(); render(<ListenersView />);
     const firstUrl = await screen.findByRole("textbox", { name: "固定 Server URL" });
-    await user.clear(firstUrl); await user.type(firstUrl, "https://transaction-v2.test:16627");
+    fireEvent.change(firstUrl, { target: { value: "https://transaction-v2.test:16627" } });
     await user.click(screen.getByText("DLL"));
     expect(await screen.findByRole("textbox", { name: "固定 Server URL" })).toHaveValue("https://dll.test:16127");
-    await user.click(screen.getByRole("button", { name: "校验并保存" }));
-    const saved = mocks.workspaceSave.mock.calls[0][0];
-    expect(saved.listeners[0].fixed_server.upstream_url).toBe("https://transaction-v2.test:16627");
-    expect(saved.listeners[1].fixed_server.upstream_url).toBe("https://dll.test:16127");
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerSave.mock.calls[0][2].fixed_server.upstream_url).toBe("https://dll.test:16127");
+    expect(mocks.listenerSave.mock.calls[0][2].id).toBe("dll");
+  });
+
+  it("保存监听时只提交该监听实际引用的证书材料", async () => {
+    const downstreamIdentity = certificateReference("transaction-downstream", "交易入口服务端身份", "reverse_server_identity");
+    const upstreamTrust = certificateReference("transaction-upstream-ca", "交易上游 CA", "upstream_server_trust");
+    const otherIdentity = certificateReference("dll-downstream", "DLL 入口服务端身份", "reverse_server_identity");
+    const transaction = {
+      ...fixedListener("transaction", "Transaction", 16627, "https://transaction.test:16627"),
+      downstream_tls: {
+        enabled: true,
+        server_identity: downstreamIdentity.id,
+        client_authentication: { mode: "disabled" as const },
+      },
+      fixed_server: {
+        upstream_url: "https://transaction.test:16627",
+        upstream_tls: {
+          verify_hostname: true,
+          server_trust: upstreamTrust.id,
+          client_identity: null,
+        },
+      },
+    };
+    const dll = {
+      ...fixedListener("dll", "DLL", 16127, "https://dll.test:16127"),
+      downstream_tls: {
+        enabled: true,
+        server_identity: otherIdentity.id,
+        client_authentication: { mode: "disabled" as const },
+      },
+    };
+    mocks.workspaceGet.mockReturnValue(ok({
+      ...workspace,
+      listeners: [transaction, dll],
+      certificate_references: [downstreamIdentity, upstreamTrust, otherIdentity],
+    }));
+
+    const user = userEvent.setup();
+    render(<ListenersView />);
+    await user.click(await screen.findByRole("button", { name: "保存当前监听" }));
+
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerValidate.mock.calls[0][3].map((item: { id: string }) => item.id)).toEqual([
+      downstreamIdentity.id,
+      upstreamTrust.id,
+    ]);
+    expect(mocks.listenerSave.mock.calls[0][3].map((item: { id: string }) => item.id)).toEqual([
+      downstreamIdentity.id,
+      upstreamTrust.id,
+    ]);
   });
 
   it("直接为当前监听选择请求和响应正文编码", async () => {
@@ -327,10 +816,10 @@ describe("统一代理监听编辑器", () => {
     await user.click(await screen.findByRole("option", { name: "Shift-JIS" }));
     await user.click(screen.getByRole("button", { name: /响应正文编码/ }));
     await user.click(await screen.findByRole("option", { name: "UTF-8" }));
-    await user.click(screen.getByRole("button", { name: "校验并保存" }));
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
 
-    await waitFor(() => expect(mocks.workspaceSave).toHaveBeenCalledTimes(1));
-    const savedListener = mocks.workspaceSave.mock.calls[0][0].listeners[0];
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    const savedListener = mocks.listenerSave.mock.calls[0][2];
     expect(savedListener.request_body_codec).toBe("shift_jis");
     expect(savedListener.response_body_codec).toBe("utf8");
   });

@@ -135,11 +135,17 @@ ProxyWorkspace
   或其他客户端一定持有客户端证书；上游客户端身份同样可为空，以支持普通单向 TLS。
 - 每条 Listener 独立引用证书材料。不同入口可以使用完全不同的下游服务端身份、
   下游客户端信任、上游客户端身份和上游 CA，禁止使用一套全局证书覆盖全部入口。
+- 下游服务端身份留空时必须使用证书管理页签发并受系统密钥保护的本机叶子证书；仅在当前
+  Listener 确实需要另一套 Server 身份时，才导入包含证书链与私钥的独立 PEM。
+- 下游独立服务端 PEM、下游客户端 CA、上游客户端 P12 与上游 Server CA 都必须通过 Rust
+  原生文件对话框导入受保护存储。UI 不得创建或编辑裸文件路径引用；已有外部引用失效时必须
+  显示明确错误，并允许恢复为本机叶子证书或重新导入对应材料。
 - Server CA 与可选 P12 客户端身份必须在目标 Listener 的“固定 Server”编辑区导入和选择；
   导入后 Rust 只把受保护材料的安全引用写入 Workspace。证书管理页不得提供全局上游
   CA/P12 配置，以免用户误认为所有入口共享一套上游 TLS 身份。
-- 入口页面必须提供“测试 Server TLS 握手”。Rust 使用当前入口已保存的固定 Server origin、CA、
-  主机名策略和可选客户端身份执行真实 TCP + TLS 握手，但不发送 HTTP 业务请求；成功结果
+- 入口页面必须提供“测试 Server TLS 握手”。Rust 校验当前入口草稿，并使用草稿中的固定 Server
+  origin、CA、主机名策略和可选客户端身份执行一次临时 TCP + TLS 握手，但不保存 Workspace、
+  不启停任何 Listener，也不发送 HTTP 业务请求；成功结果
   返回解析地址、耗时、TLS 版本、密码套件、Server 证书主题和 SHA-256 指纹，失败返回稳定
   中文错误和建议操作。证书文件格式校验不能替代该测试。
 - 独立 Body codec、提取器和响应断言。
@@ -152,6 +158,9 @@ ProxyWorkspace
 #### 4.1.1 UI 与运行时唯一来源
 
 - “入口配置”是监听地址、端口、请求去向、下游 TLS、上游 TLS、保存和启停的唯一 UI。
+- Listener 的保存、删除、启动、停止和 TLS 测试均以单条 Listener 为边界。A 运行时必须允许
+  保存、删除或启动已停止的 B，也必须允许使用 B 的未保存草稿执行 TLS 测试；只禁止修改或
+  删除正在运行的目标 Listener。聚合 `workspace_save` 不得作为入口页面的保存路径。
 - “系统设置”只包含全局超时、Body 上限、会话容量、内存容量、数据和应用策略；不得重复
   展示或保存入口字段，也不得提供“保存并重启全部代理”。
 - “运行监控”和顶部状态栏只展示 Rust 将当前 Workspace 与实际 Listener 运行状态合并后的
@@ -290,10 +299,10 @@ Kotlin 只负责授权 Activity、VpnService、通知、BootReceiver、TUN、all
 - 只对选中包调用 `addAllowedApplication`。
 - Companion 自身禁止选择。
 - 未选择应用、系统网络和 ADB 不进入 VPN。
-- 保存包名、签名 SHA-256、shared UID 和显示名快照。
+- 保存包名、UID、shared UID 和显示名快照，不读取 APK 签名。
 - shared UID 只选部分包时拒绝启动；选中整组并确认后才允许。
 - shared UID 组只提供聚合统计。
-- 包卸载或签名变化立即停止；同签名升级重新构建 allowlist。
+- 目标应用只校验包名、UID 与 shared UID 完整性，不读取或比较 APK 签名。包卸载或 UID 归属变化时立即停止，并在应用升级后重新构建 allowlist。
 
 ### 8.3 Rust 数据面
 
@@ -394,7 +403,7 @@ OperationFailed
 - Android 目标应用保持原始 URL 时，多条原始地址/端口可分别透明命中对应 Listener；
   未命中路由直连，弱网范围不得改变路由决策。
 - 目标应用 100% 丢包时，两款非目标应用和 ADB 正常。
-- shared UID、卸载、签名变化、同签升级、重启和 fail-open。
+- shared UID、卸载、UID 归属变化、应用升级、重启和 fail-open。
 - Windows/macOS 构建；Android ABI、签名和 16 KiB page size。
 
 ### 10.2 Android 架构门禁

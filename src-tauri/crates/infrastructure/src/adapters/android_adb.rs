@@ -13,12 +13,11 @@ use intercept_proxy_application::{
     ANDROID_COMPANION_PACKAGE, ANDROID_CONTROL_MAX_FRAME_BYTES, ANDROID_CONTROL_PROTOCOL_VERSION,
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidControlPort,
     AndroidControlRequest, AndroidControlResponse, AndroidControlTransport, AndroidDeviceState,
-    AndroidDeviceViewModel, AndroidNetworkActivation, AndroidNetworkProfile,
-    AndroidNetworkProfileSummary, AndroidNetworkState, AndroidNetworkStatusViewModel,
-    AndroidPackageViewModel, AppError, AppResult, OperationResultViewModel,
-    encode_android_control_frame,
+    AndroidDeviceViewModel, AndroidNetworkActivation, AndroidNetworkState,
+    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidProxyRouteActivation, AppError,
+    AppResult, encode_android_control_frame,
 };
-use ring::digest::{SHA256, digest};
+use serde::Serialize;
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -32,27 +31,108 @@ const CONTROL_SOCKET: &str = "intercept_proxy_vpn";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const INSTALL_TIMEOUT: Duration = Duration::from_mins(2);
 
+fn sha256_json(value: &impl Serialize) -> AppResult<String> {
+    let value = serde_json::to_value(value).map_err(|error| {
+        AppError::new(
+            "ANDROID_RUNTIME_FINGERPRINT_FAILED",
+            format!("无法生成设备网络运行指纹：{error}"),
+        )
+    })?;
+    let bytes = canonical_json(&value).into_bytes();
+    let digest = ring::digest::digest(&ring::digest::SHA256, &bytes);
+    let mut encoded = String::with_capacity(digest.as_ref().len() * 2);
+    for byte in digest.as_ref() {
+        write!(&mut encoded, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    Ok(encoded)
+}
+
+/// 生成跨 Rust/Android 稳定的 JSON 表示，用于证明 Profile 与运行路由属于同一次激活。
+///
+/// 不能直接比较两端 JSON writer 的输出：Android 会把 `/` 写成 `\/`，而
+/// `serde_json` 保留 `/`。这里明确排序对象键，并只使用 JSON 标准要求的字符串转义；
+/// Android Companion 实现同一规则，因此 CIDR、URL 等合法字符串不会产生假冲突。
+fn canonical_json(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::Null => "null".into(),
+        serde_json::Value::Bool(value) => value.to_string(),
+        serde_json::Value::Number(value) => value.to_string(),
+        serde_json::Value::String(value) => canonical_json_string(value),
+        serde_json::Value::Array(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(canonical_json)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        serde_json::Value::Object(values) => {
+            let mut entries = values.iter().collect::<Vec<_>>();
+            entries.sort_unstable_by_key(|(key, _)| *key);
+            format!(
+                "{{{}}}",
+                entries
+                    .into_iter()
+                    .map(|(key, value)| {
+                        format!("{}:{}", canonical_json_string(key), canonical_json(value))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
+    }
+}
+
+fn canonical_json_string(value: &str) -> String {
+    serde_json::to_string(value).expect("serializing a string cannot fail")
+}
+
 #[derive(Debug)]
 pub struct AndroidAdbAdapter {
     adb_path: Option<PathBuf>,
     companion_apk: Option<PathBuf>,
     selected_serial: RwLock<Option<String>>,
-    profiles_path: PathBuf,
-    profile_io: Mutex<()>,
-    active_reverse_ports: Mutex<Vec<u16>>,
+    active_reverse: Mutex<Option<ActiveReverseOwnership>>,
+    active_runtime: Mutex<Option<ActiveRuntimeFacts>>,
     runner: Arc<dyn AdbCommandRunner>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActiveReverseOwnership {
+    serial: String,
+    profile_id: String,
+    ports: Vec<u16>,
+}
+
+/// 桌面端为当前 Android start/apply 解析出的运行事实。
+///
+/// 不能从可持久化 Profile 重新推导该值，因为实际端点包含本次 ADB reverse 端口与
+/// DNS 解析结果。桌面进程重启后该事实自然丢失，状态核对会 fail-closed，要求重新
+/// apply，而不是假定设备仍连接旧端点。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActiveRuntimeFacts {
+    serial: String,
+    profile_id: String,
+    profile_fingerprint: String,
+    route_fingerprint: String,
+    route_count: usize,
+}
+
+#[derive(Debug)]
+struct ReverseCleanupOutcome {
+    remaining_ports: Vec<u16>,
+    error: Option<AppError>,
 }
 
 impl AndroidAdbAdapter {
     #[must_use]
-    pub fn new(data_dir: impl AsRef<Path>) -> Self {
+    pub fn new(_data_dir: impl AsRef<Path>) -> Self {
         Self {
             adb_path: discover_adb(),
             companion_apk: discover_companion_apk(),
             selected_serial: RwLock::new(None),
-            profiles_path: data_dir.as_ref().join("android-network-profiles.json"),
-            profile_io: Mutex::new(()),
-            active_reverse_ports: Mutex::new(Vec::new()),
+            active_reverse: Mutex::new(None),
+            active_runtime: Mutex::new(None),
             runner: Arc::new(SystemAdbCommandRunner),
         }
     }
@@ -63,9 +143,8 @@ impl AndroidAdbAdapter {
             adb_path: Some(PathBuf::from("adb")),
             companion_apk: Some(data_dir.join("android-companion.apk")),
             selected_serial: RwLock::new(None),
-            profiles_path: data_dir.join("android-network-profiles.json"),
-            profile_io: Mutex::new(()),
-            active_reverse_ports: Mutex::new(Vec::new()),
+            active_reverse: Mutex::new(None),
+            active_runtime: Mutex::new(None),
             runner,
         }
     }
@@ -126,68 +205,24 @@ impl AndroidAdbAdapter {
         self.run(owned, duration).await
     }
 
-    async fn read_profiles(&self) -> AppResult<BTreeMap<String, AndroidNetworkProfile>> {
-        let _guard = self.profile_io.lock().await;
-        self.read_profiles_unlocked()
-    }
-
-    fn read_profiles_unlocked(&self) -> AppResult<BTreeMap<String, AndroidNetworkProfile>> {
-        if !self.profiles_path.exists() {
-            return Ok(BTreeMap::new());
-        }
-        let bytes = std::fs::read(&self.profiles_path).map_err(|error| {
-            AppError::new(
-                "ANDROID_PROFILE_READ_FAILED",
-                format!("无法读取设备网络方案：{error}"),
+    /// 建立或清理 `adb forward` 时始终只操作用户明确选择的 serial。
+    ///
+    /// `adb reconnect offline` 会修改 ADB server 中所有离线 transport，可能影响另一个
+    /// 正在调试的设备。遇到陈旧 transport 时返回可观察错误，由显式的设备刷新流程恢复。
+    async fn run_forward_for_serial(&self, serial: &str, args: &[&str]) -> AppResult<AdbOutput> {
+        match self.run_for_serial(serial, args, COMMAND_TIMEOUT).await {
+            Err(error) if is_stale_adb_transport_error(&error) => Err(AppError::new(
+                "ANDROID_ADB_SELECTED_TRANSPORT_STALE",
+                format!("选中设备 {serial} 的 ADB 转发被陈旧 transport 干扰；未修改其他设备连接。"),
             )
-        })?;
-        if bytes.len() > 4 * 1024 * 1024 {
-            return Err(AppError::new(
-                "ANDROID_PROFILE_STORE_TOO_LARGE",
-                "设备网络方案文件超过 4 MiB 安全上限。",
-            ));
+            .retryable("请刷新设备列表或显式清理离线 ADB 连接后重试。")),
+            result => result,
         }
-        let profiles: Vec<AndroidNetworkProfile> =
-            serde_json::from_slice(&bytes).map_err(|error| {
-                AppError::new(
-                    "ANDROID_PROFILE_STORE_INVALID",
-                    format!("设备网络方案文件损坏：{error}"),
-                )
-            })?;
-        let mut by_id = BTreeMap::new();
-        for profile in profiles {
-            profile.validate()?;
-            if by_id.insert(profile.id.clone(), profile).is_some() {
-                return Err(AppError::new(
-                    "ANDROID_PROFILE_STORE_INVALID",
-                    "设备网络方案文件包含重复 ID。",
-                ));
-            }
-        }
-        Ok(by_id)
     }
 
-    fn write_profiles_unlocked(
-        &self,
-        profiles: &BTreeMap<String, AndroidNetworkProfile>,
-    ) -> AppResult<()> {
-        let bytes =
-            serde_json::to_vec_pretty(&profiles.values().collect::<Vec<_>>()).map_err(|error| {
-                AppError::new(
-                    "ANDROID_PROFILE_WRITE_FAILED",
-                    format!("无法序列化设备网络方案：{error}"),
-                )
-            })?;
-        std::fs::write(&self.profiles_path, bytes).map_err(|error| {
-            AppError::new(
-                "ANDROID_PROFILE_WRITE_FAILED",
-                format!("无法保存设备网络方案：{error}"),
-            )
-        })
-    }
-
-    async fn remove_reverse_ports(&self, serial: &str, ports: Vec<u16>) -> AppResult<()> {
+    async fn remove_reverse_ports(&self, serial: &str, ports: Vec<u16>) -> ReverseCleanupOutcome {
         let mut first_error = None;
+        let mut remaining_ports = Vec::new();
         for port in ports {
             let result = self
                 .run_for_serial(
@@ -196,76 +231,118 @@ impl AndroidAdbAdapter {
                     COMMAND_TIMEOUT,
                 )
                 .await;
-            if let Err(error) = result
-                && first_error.is_none()
-            {
-                first_error = Some(error);
+            if let Err(error) = result {
+                remaining_ports.push(port);
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
             }
         }
-        first_error.map_or(Ok(()), Err)
+        ReverseCleanupOutcome {
+            remaining_ports,
+            error: first_error,
+        }
     }
 
-    async fn clear_active_reverse_ports(&self, serial: &str) -> AppResult<()> {
-        let ports = {
-            let mut active = self.active_reverse_ports.lock().await;
-            std::mem::take(&mut *active)
+    async fn clear_active_reverse_ports(&self) -> AppResult<()> {
+        // 清理成功前保留所有权；失败端口继续登记，后续 stop/紧急恢复可以重试。
+        // 锁跨越 adb 调用，避免另一次 start 在清理期间覆盖所有权。
+        let mut active = self.active_reverse.lock().await;
+        let Some(ownership) = active.clone() else {
+            *self.active_runtime.lock().await = None;
+            return Ok(());
         };
-        self.remove_reverse_ports(serial, ports).await
+        let outcome = self
+            .remove_reverse_ports(&ownership.serial, ownership.ports)
+            .await;
+        if outcome.remaining_ports.is_empty() {
+            *active = None;
+            *self.active_runtime.lock().await = None;
+        } else {
+            *active = Some(ActiveReverseOwnership {
+                ports: outcome.remaining_ports,
+                ..ownership
+            });
+        }
+        outcome.error.map_or(Ok(()), Err)
+    }
+
+    async fn create_reverse_mappings(
+        &self,
+        serial: &str,
+        activation: &AndroidNetworkActivation,
+        listener_ports: &BTreeMap<String, u16>,
+    ) -> AppResult<Vec<u16>> {
+        let mut created = Vec::new();
+        for (listener_id, device_port) in listener_ports {
+            let desktop_listener_port = activation
+                .proxy_routes
+                .iter()
+                .find(|route| route.listener_id == *listener_id)
+                .map(|route| route.desktop_listener_port)
+                .expect("allocated listener comes from activation route");
+            let result = self
+                .run_for_serial(
+                    serial,
+                    &[
+                        "reverse",
+                        &format!("tcp:{device_port}"),
+                        &format!("tcp:{desktop_listener_port}"),
+                    ],
+                    COMMAND_TIMEOUT,
+                )
+                .await;
+            if let Err(error) = result {
+                let cleanup = self.remove_reverse_ports(serial, created).await;
+                if !cleanup.remaining_ports.is_empty() {
+                    *self.active_reverse.lock().await = Some(ActiveReverseOwnership {
+                        serial: serial.to_owned(),
+                        profile_id: activation.profile.id.clone(),
+                        ports: cleanup.remaining_ports,
+                    });
+                }
+                return Err(cleanup.error.map_or(error.clone(), |cleanup_error| {
+                    combine_operation_and_cleanup(error, &cleanup_error)
+                }));
+            }
+            created.push(*device_port);
+        }
+        Ok(created)
     }
 
     async fn prepare_usb_proxy_runtime(
         &self,
         activation: &AndroidNetworkActivation,
     ) -> AppResult<Value> {
-        use std::{
-            collections::hash_map::DefaultHasher,
-            hash::{Hash, Hasher},
-            net::IpAddr,
-        };
+        use std::net::IpAddr;
 
         let serial = self.selected_serial()?;
-        self.clear_active_reverse_ports(&serial).await?;
+        let profile_fingerprint = sha256_json(&activation.profile)?;
+        let route_count = activation.proxy_routes.len();
+        self.clear_active_reverse_ports().await?;
         if activation.proxy_routes.is_empty() {
-            return Ok(json!({"routes": []}));
+            let routes = Vec::<Value>::new();
+            let route_fingerprint = sha256_json(&routes)?;
+            *self.active_runtime.lock().await = Some(ActiveRuntimeFacts {
+                serial,
+                profile_id: activation.profile.id.clone(),
+                profile_fingerprint: profile_fingerprint.clone(),
+                route_fingerprint: route_fingerprint.clone(),
+                route_count,
+            });
+            return Ok(json!({
+                "routes": [],
+                "route_source": activation.proxy_routes,
+                "profile_fingerprint": profile_fingerprint,
+                "route_fingerprint": route_fingerprint,
+                "route_count": route_count,
+            }));
         }
 
-        let mut listener_ports = BTreeMap::<String, u16>::new();
-        let mut used_device_ports = std::collections::BTreeSet::new();
-        let mut created = Vec::new();
-        for route in &activation.proxy_routes {
-            if listener_ports.contains_key(&route.listener_id) {
-                continue;
-            }
-            let mut hasher = DefaultHasher::new();
-            route.listener_id.hash(&mut hasher);
-            let mut device_port = 40_000 + u16::try_from(hasher.finish() % 20_000).unwrap_or(0);
-            while !used_device_ports.insert(device_port) {
-                device_port = if device_port == 59_999 {
-                    40_000
-                } else {
-                    device_port + 1
-                };
-            }
-            let result = self
-                .run_for_serial(
-                    &serial,
-                    &[
-                        "reverse",
-                        &format!("tcp:{device_port}"),
-                        &format!("tcp:{}", route.desktop_listener_port),
-                    ],
-                    COMMAND_TIMEOUT,
-                )
-                .await;
-            if let Err(error) = result {
-                let _ = self.remove_reverse_ports(&serial, created).await;
-                return Err(error);
-            }
-            created.push(device_port);
-            listener_ports.insert(route.listener_id.clone(), device_port);
-        }
-
-        let mut routes = Vec::with_capacity(activation.proxy_routes.len());
+        let listener_ports = allocated_reverse_ports(&activation.proxy_routes);
+        // 先完成所有可能失败的 DNS 解析，再创建 `adb reverse`。
+        // 这样解析错误不会留下尚未登记所有权、也无法由 stop 清理的设备端映射。
+        let mut resolved_routes = Vec::with_capacity(activation.proxy_routes.len());
         for route in &activation.proxy_routes {
             let destination = route.original_destination.trim();
             let resolved_original_ips =
@@ -283,7 +360,6 @@ impl AndroidAdbAdapter {
                         .map(|address| address.ip())
                         .collect::<std::collections::BTreeSet<_>>();
                     if addresses.is_empty() {
-                        let _ = self.remove_reverse_ports(&serial, created).await;
                         return Err(AppError::new(
                             "ANDROID_PROXY_DESTINATION_RESOLVE_FAILED",
                             format!("透明代理原始域名 {destination} 没有 A/AAAA 记录。"),
@@ -291,6 +367,15 @@ impl AndroidAdbAdapter {
                     }
                     addresses.into_iter().collect()
                 };
+            resolved_routes.push((route, resolved_original_ips));
+        }
+
+        let created = self
+            .create_reverse_mappings(&serial, activation, &listener_ports)
+            .await?;
+
+        let mut routes = Vec::with_capacity(resolved_routes.len());
+        for (route, resolved_original_ips) in resolved_routes {
             routes.push(json!({
                 "listener_id": route.listener_id,
                 "original_destination": route.original_destination,
@@ -300,8 +385,26 @@ impl AndroidAdbAdapter {
                 "proxy_port": listener_ports[&route.listener_id],
             }));
         }
-        *self.active_reverse_ports.lock().await = created;
-        Ok(json!({"routes": routes}))
+        let route_fingerprint = sha256_json(&routes)?;
+        *self.active_reverse.lock().await = Some(ActiveReverseOwnership {
+            serial: serial.clone(),
+            profile_id: activation.profile.id.clone(),
+            ports: created,
+        });
+        *self.active_runtime.lock().await = Some(ActiveRuntimeFacts {
+            serial,
+            profile_id: activation.profile.id.clone(),
+            profile_fingerprint: profile_fingerprint.clone(),
+            route_fingerprint: route_fingerprint.clone(),
+            route_count,
+        });
+        Ok(json!({
+            "routes": routes,
+            "route_source": activation.proxy_routes,
+            "profile_fingerprint": profile_fingerprint,
+            "route_fingerprint": route_fingerprint,
+            "route_count": route_count,
+        }))
     }
 
     async fn protocol_request(
@@ -312,15 +415,13 @@ impl AndroidAdbAdapter {
         let serial = self.selected_serial()?;
         let request = AndroidControlRequest::new(operation, payload)?;
         let port = reserve_loopback_port()?;
-        self.run(
-            vec![
-                "-s".into(),
-                serial.clone(),
-                "forward".into(),
-                format!("tcp:{port}"),
-                format!("localabstract:{CONTROL_SOCKET}"),
+        self.run_forward_for_serial(
+            &serial,
+            &[
+                "forward",
+                &format!("tcp:{port}"),
+                &format!("localabstract:{CONTROL_SOCKET}"),
             ],
-            COMMAND_TIMEOUT,
         )
         .await?;
         let response_serial = serial.clone();
@@ -331,11 +432,7 @@ impl AndroidAdbAdapter {
             status
         });
         let cleanup = self
-            .run_for_serial(
-                &serial,
-                &["forward", "--remove", &format!("tcp:{port}")],
-                COMMAND_TIMEOUT,
-            )
+            .run_forward_for_serial(&serial, &["forward", "--remove", &format!("tcp:{port}")])
             .await;
         reconcile_forward_cleanup(result, cleanup)
     }
@@ -447,7 +544,6 @@ impl AndroidAdbAdapter {
                 "shell",
                 "am",
                 "start",
-                "-W",
                 "-n",
                 "com.interceptproxy.vpn/.AdbControlActivity",
                 "--es",
@@ -482,9 +578,8 @@ impl AndroidAdbAdapter {
     }
 }
 
-/// 旧版 ADB 在同时连接多台设备时，即使给出 `-s`，`forward tcp:0` 仍可能错误报告
-/// “more than one device/emulator”。先让操作系统分配明确端口，再把该端口交给精确
-/// serial 的 `adb forward`，可避开这个 ADB server 兼容性问题。
+/// 先让操作系统分配明确端口，避免 `adb forward tcp:0` 在多设备环境中自行选错
+/// transport。ADB server 的陈旧离线 transport 由 `run_forward_for_serial` 另行恢复。
 fn reserve_loopback_port() -> AppResult<u16> {
     let listener = StdTcpListener::bind(("127.0.0.1", 0)).map_err(|error| {
         AppError::new(
@@ -501,6 +596,48 @@ fn reserve_loopback_port() -> AppResult<u16> {
                 format!("无法读取 Android 控制通道本地端口：{error}"),
             )
         })
+}
+
+/// 依据入口 ID 推导稳定的设备侧端口。
+///
+/// ADB 或桌面进程重启后，内存中的端口记录会丢失；稳定映射使 Rust 可以检查
+/// 运行中的 VPN 是否仍有到桌面代理的 `adb reverse` 通道。
+fn allocated_reverse_ports(routes: &[AndroidProxyRouteActivation]) -> BTreeMap<String, u16> {
+    use std::{
+        collections::{BTreeSet, hash_map::DefaultHasher},
+        hash::{Hash, Hasher},
+    };
+
+    let mut listener_ports = BTreeMap::new();
+    let mut used_device_ports = BTreeSet::new();
+    for route in routes {
+        if listener_ports.contains_key(&route.listener_id) {
+            continue;
+        }
+        let mut hasher = DefaultHasher::new();
+        route.listener_id.hash(&mut hasher);
+        let mut device_port = 40_000 + u16::try_from(hasher.finish() % 20_000).unwrap_or(0);
+        while !used_device_ports.insert(device_port) {
+            device_port = if device_port == 59_999 {
+                40_000
+            } else {
+                device_port + 1
+            };
+        }
+        listener_ports.insert(route.listener_id.clone(), device_port);
+    }
+    listener_ports
+}
+
+fn reverse_mapping_present(listing: &str, device_port: u16, desktop_port: u16) -> bool {
+    let device = format!("tcp:{device_port}");
+    let desktop = format!("tcp:{desktop_port}");
+    listing.lines().any(|line| {
+        let fields = line.split_whitespace().collect::<Vec<_>>();
+        fields
+            .windows(2)
+            .any(|pair| pair[0] == device && pair[1] == desktop)
+    })
 }
 
 #[async_trait]
@@ -535,6 +672,18 @@ impl AndroidControlPort for AndroidAdbAdapter {
     }
 
     async fn adb_select(&self, serial: String) -> AppResult<AndroidAdbViewModel> {
+        if let Some(ownership) = self.active_reverse.lock().await.as_ref()
+            && ownership.serial != serial
+        {
+            return Err(AppError::new(
+                "ANDROID_DEVICE_SWITCH_REQUIRES_STOP",
+                format!(
+                    "设备 {} 的方案 {} 仍持有透明代理转发；切换设备前必须先停止设备网络接管。",
+                    ownership.serial, ownership.profile_id
+                ),
+            )
+            .retryable("请先停止当前设备网络方案，再选择其他设备。"));
+        }
         let devices = self.device_list().await?;
         let device = devices
             .iter()
@@ -586,14 +735,6 @@ impl AndroidControlPort for AndroidAdbAdapter {
         for package in &mut packages {
             package.shared_uid =
                 (counts.get(&package.uid).copied().unwrap_or_default() > 1).then_some(package.uid);
-            let dump = self
-                .run_for_serial(
-                    &serial,
-                    &["shell", "dumpsys", "package", &package.package_name],
-                    COMMAND_TIMEOUT,
-                )
-                .await?;
-            package.signing_sha256 = parse_signing_sha256(&dump.stdout);
         }
         packages.sort_by(|left, right| left.package_name.cmp(&right.package_name));
         Ok(packages)
@@ -673,55 +814,14 @@ impl AndroidControlPort for AndroidAdbAdapter {
             verified: false,
             transport: AndroidControlTransport::RescueActivity,
             active_profile_id: None,
+            active_profile_fingerprint: None,
+            active_route_fingerprint: None,
+            active_route_count: 0,
             companion_process_running: None,
             message: "已打开 Android 系统 VPN consent 页面；用户授权结果仅能在设备上确认。".into(),
             unsupported_fields: vec!["vpn_consent_granted".into()],
             stats: None,
         })
-    }
-
-    async fn profile_list(&self) -> AppResult<Vec<AndroidNetworkProfileSummary>> {
-        Ok(self
-            .read_profiles()
-            .await?
-            .values()
-            .map(AndroidNetworkProfileSummary::from)
-            .collect())
-    }
-
-    async fn profile_get(&self, profile_id: String) -> AppResult<AndroidNetworkProfile> {
-        self.read_profiles()
-            .await?
-            .remove(&profile_id)
-            .ok_or_else(|| {
-                AppError::new("ANDROID_PROFILE_NOT_FOUND", "未找到指定设备网络方案。")
-                    .entity(profile_id)
-            })
-    }
-
-    async fn profile_save(
-        &self,
-        profile: AndroidNetworkProfile,
-    ) -> AppResult<AndroidNetworkProfile> {
-        profile.validate()?;
-        let _guard = self.profile_io.lock().await;
-        let mut profiles = self.read_profiles_unlocked()?;
-        profiles.insert(profile.id.clone(), profile.clone());
-        self.write_profiles_unlocked(&profiles)?;
-        Ok(profile)
-    }
-
-    async fn profile_delete(&self, profile_id: String) -> AppResult<OperationResultViewModel> {
-        let _guard = self.profile_io.lock().await;
-        let mut profiles = self.read_profiles_unlocked()?;
-        if profiles.remove(&profile_id).is_none() {
-            return Err(
-                AppError::new("ANDROID_PROFILE_NOT_FOUND", "未找到指定设备网络方案。")
-                    .entity(profile_id),
-            );
-        }
-        self.write_profiles_unlocked(&profiles)?;
-        Ok(OperationResultViewModel::success("设备网络方案已删除。"))
     }
 
     async fn network_start(
@@ -738,8 +838,8 @@ impl AndroidControlPort for AndroidAdbAdapter {
             Err(error) => Err(error),
         };
         if result.is_err() {
-            let serial = self.selected_serial()?;
-            let _ = self.clear_active_reverse_ports(&serial).await;
+            let cleanup = self.clear_active_reverse_ports().await;
+            return reconcile_operation_cleanup(result, cleanup);
         }
         result
     }
@@ -758,10 +858,49 @@ impl AndroidControlPort for AndroidAdbAdapter {
             Err(error) => Err(error),
         };
         if result.is_err() {
-            let serial = self.selected_serial()?;
-            let _ = self.clear_active_reverse_ports(&serial).await;
+            let cleanup = self.clear_active_reverse_ports().await;
+            return reconcile_operation_cleanup(result, cleanup);
         }
         result
+    }
+
+    async fn network_runtime_ready(
+        &self,
+        activation: &AndroidNetworkActivation,
+        status: &AndroidNetworkStatusViewModel,
+    ) -> AppResult<bool> {
+        let serial = self.selected_serial()?;
+        let active_runtime = self.active_runtime.lock().await.clone();
+        let Some(active_runtime) = active_runtime.filter(|runtime| {
+            runtime.serial == serial && runtime.profile_id == activation.profile.id
+        }) else {
+            return Ok(false);
+        };
+        if status.active_profile_fingerprint.as_deref()
+            != Some(active_runtime.profile_fingerprint.as_str())
+            || status.active_route_fingerprint.as_deref()
+                != Some(active_runtime.route_fingerprint.as_str())
+            || status.active_route_count != active_runtime.route_count
+        {
+            return Ok(false);
+        }
+        if activation.proxy_routes.is_empty() {
+            return Ok(true);
+        }
+        let listing = self
+            .run_for_serial(&serial, &["reverse", "--list"], COMMAND_TIMEOUT)
+            .await?
+            .stdout;
+        let listener_ports = allocated_reverse_ports(&activation.proxy_routes);
+        Ok(listener_ports.iter().all(|(listener_id, device_port)| {
+            activation
+                .proxy_routes
+                .iter()
+                .find(|route| route.listener_id == *listener_id)
+                .is_some_and(|route| {
+                    reverse_mapping_present(&listing, *device_port, route.desktop_listener_port)
+                })
+        }))
     }
 
     async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
@@ -772,11 +911,12 @@ impl AndroidControlPort for AndroidAdbAdapter {
             }
             Err(error) => Err(error),
         };
-        let serial = self.selected_serial()?;
-        let cleanup = self.clear_active_reverse_ports(&serial).await;
+        let cleanup = self.clear_active_reverse_ports().await;
         match result {
             Ok(status) => cleanup.map(|()| status),
-            Err(error) => Err(error),
+            Err(error) => Err(cleanup.err().map_or(error.clone(), |cleanup_error| {
+                combine_operation_and_cleanup(error, &cleanup_error)
+            })),
         }
     }
 
@@ -788,7 +928,7 @@ impl AndroidControlPort for AndroidAdbAdapter {
             COMMAND_TIMEOUT,
         )
         .await?;
-        let _ = self.clear_active_reverse_ports(&serial).await;
+        self.clear_active_reverse_ports().await?;
         Ok(AndroidNetworkStatusViewModel {
             serial,
             state: AndroidNetworkState::Stopped,
@@ -797,6 +937,9 @@ impl AndroidControlPort for AndroidAdbAdapter {
             verified: true,
             transport: AndroidControlTransport::AdbForceStop,
             active_profile_id: None,
+            active_profile_fingerprint: None,
+            active_route_fingerprint: None,
+            active_route_count: 0,
             companion_process_running: Some(false),
             message: "设备端组件进程已被系统强制停止；TUN 文件描述符随进程关闭，设备网络已恢复为故障放行。".into(),
             unsupported_fields: vec!["last_profile_id".into(), "packet_stats".into()],
@@ -827,6 +970,9 @@ impl AndroidControlPort for AndroidAdbAdapter {
                     verified: false,
                     transport: AndroidControlTransport::Unavailable,
                     active_profile_id: None,
+                    active_profile_fingerprint: None,
+                    active_route_fingerprint: None,
+                    active_route_count: 0,
                     companion_process_running: Some(running),
                     message:
                         "设备端组件未提供控制通道；仅凭进程是否存在无法证明网络接管或弱网数据面状态。"
@@ -968,50 +1114,10 @@ fn parse_packages(output: &str) -> Vec<AndroidPackageViewModel> {
             Some(AndroidPackageViewModel {
                 package_name: package_name.to_owned(),
                 uid: uid.trim().parse().ok()?,
-                signing_sha256: None,
                 shared_uid: None,
             })
         })
         .collect()
-}
-
-fn parse_signing_sha256(output: &str) -> Option<String> {
-    if let Some(digest) = output
-        .lines()
-        .find_map(|line| line.trim().strip_prefix("SHA-256 digest:"))
-    {
-        let value = digest.trim();
-        if !value.is_empty() {
-            return Some(value.to_owned());
-        }
-    }
-    let start = output.find("signatures:[")? + "signatures:[".len();
-    let end = output[start..].find(']')? + start;
-    let fingerprints = output[start..end]
-        .split(',')
-        .filter_map(|value| decode_hex(value.trim()))
-        .map(|certificate| format_digest(digest(&SHA256, &certificate).as_ref()))
-        .collect::<Vec<_>>();
-    (!fingerprints.is_empty()).then(|| fingerprints.join("+"))
-}
-
-fn decode_hex(value: &str) -> Option<Vec<u8>> {
-    let compact = value.replace(':', "");
-    if !compact.len().is_multiple_of(2) || !compact.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return None;
-    }
-    (0..compact.len())
-        .step_by(2)
-        .map(|index| u8::from_str_radix(&compact[index..index + 2], 16).ok())
-        .collect()
-}
-
-fn format_digest(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .map(|byte| format!("{byte:02X}"))
-        .collect::<Vec<_>>()
-        .join(":")
 }
 
 fn parse_package_version(output: &str) -> (Option<String>, Option<String>) {
@@ -1034,6 +1140,12 @@ fn is_socket_unavailable(error: &AppError) -> bool {
             | "ANDROID_CONTROL_SOCKET_TIMEOUT"
             | "ANDROID_CONTROL_SOCKET_FAILED"
     )
+}
+
+fn is_stale_adb_transport_error(error: &AppError) -> bool {
+    let message = error.view_model.message.to_ascii_lowercase();
+    message.contains("more than one device/emulator")
+        || message.contains("more than one device or emulator")
 }
 
 fn fallback_unsupported_fields() -> Vec<String> {
@@ -1079,16 +1191,61 @@ fn reconcile_forward_cleanup<T>(
     }
 }
 
+fn combine_operation_and_cleanup(mut operation: AppError, cleanup: &AppError) -> AppError {
+    let _ = write!(
+        operation.view_model.message,
+        "；同时 adb reverse 清理失败：{}",
+        cleanup.view_model.message
+    );
+    operation.view_model.retryable = true;
+    operation.view_model.suggested_action =
+        Some("请保持设备在线并再次停止设备网络接管或执行紧急恢复，以重试清理残留映射。".into());
+    operation
+}
+
+fn reconcile_operation_cleanup<T>(operation: AppResult<T>, cleanup: AppResult<()>) -> AppResult<T> {
+    match (operation, cleanup) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Ok(_), Err(cleanup_error)) => Err(cleanup_error),
+        (Err(operation_error), Ok(())) => Err(operation_error),
+        (Err(operation_error), Err(cleanup_error)) => Err(combine_operation_and_cleanup(
+            operation_error,
+            &cleanup_error,
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use intercept_proxy_application::{
-        AndroidProxyRouteActivation, AndroidTargetApplication, WeakNetworkProfile,
+        AndroidNetworkProfile, AndroidProxyRouteActivation, AndroidTargetApplication,
+        WeakNetworkProfile,
     };
     use intercept_proxy_domain::ListenerId;
 
     #[test]
-    fn parses_devices_packages_shared_uid_inputs_and_certificate_digest() {
+    fn canonical_fingerprint_matches_android_for_cidr_and_url() {
+        let value = serde_json::json!({
+            "destination_targets": [{
+                "address": "10.0.0.0/8",
+                "ports": [16_127]
+            }],
+            "server_url": "https://example.test:16127/path"
+        });
+
+        assert_eq!(
+            canonical_json(&value),
+            r#"{"destination_targets":[{"address":"10.0.0.0/8","ports":[16127]}],"server_url":"https://example.test:16127/path"}"#
+        );
+        assert_eq!(
+            sha256_json(&value).unwrap(),
+            "1b9889227509e4d1dca893ffc0d023e82e96258b84c34f03f4d550361a47db1a"
+        );
+    }
+
+    #[test]
+    fn parses_devices_and_packages_with_shared_uid_inputs() {
         let devices = parse_devices(
             "List of devices attached\nSER123 device product:a920 model:A920MAX device:a920 transport_id:7\nOFF offline\n",
             Some("SER123"),
@@ -1101,9 +1258,28 @@ mod tests {
             "package:com.example.one uid:10123\npackage:com.example.two uid:10123\n",
         );
         assert_eq!(packages[0].uid, 10_123);
-        let certificate_hex = "00".repeat(32);
-        let dump = format!("signatures=PackageSignatures{{ signatures:[{certificate_hex}] }}");
-        assert_eq!(parse_signing_sha256(&dump).unwrap().split(':').count(), 32);
+    }
+
+    #[test]
+    fn reverse_runtime_mapping_accepts_adb_serial_prefix() {
+        let routes = vec![AndroidProxyRouteActivation {
+            listener_id: "listener-a".into(),
+            original_destination: "203.0.113.10".into(),
+            original_ports: vec![16_127],
+            desktop_listener_port: 26_127,
+        }];
+        let device_port = allocated_reverse_ports(&routes)["listener-a"];
+
+        assert!(reverse_mapping_present(
+            &format!("SER123 tcp:{device_port} tcp:26127\n"),
+            device_port,
+            26_127,
+        ));
+        assert!(!reverse_mapping_present(
+            &format!("SER123 tcp:{device_port} tcp:16627\n"),
+            device_port,
+            26_127,
+        ));
     }
 
     #[test]
@@ -1158,6 +1334,120 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct SequenceRunner {
+        calls: std::sync::Mutex<Vec<Vec<String>>>,
+        outputs: std::sync::Mutex<std::collections::VecDeque<AdbOutput>>,
+    }
+
+    #[async_trait]
+    impl AdbCommandRunner for SequenceRunner {
+        async fn run(&self, _: &Path, args: &[String]) -> std::io::Result<AdbOutput> {
+            self.calls.lock().unwrap().push(args.to_vec());
+            Ok(self
+                .outputs
+                .lock()
+                .unwrap()
+                .pop_front()
+                .expect("测试必须为每次 adb 调用提供结果"))
+        }
+    }
+
+    #[tokio::test]
+    async fn wake_control_server_does_not_wait_for_activity_completion() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(RecordingRunner::default());
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+        *adapter.selected_serial.write().unwrap() = Some("2740072778".into());
+
+        adapter.wake_control_server().await.unwrap();
+
+        assert_eq!(
+            *runner.calls.lock().unwrap(),
+            vec![vec![
+                "-s",
+                "2740072778",
+                "shell",
+                "am",
+                "start",
+                "-n",
+                "com.interceptproxy.vpn/.AdbControlActivity",
+                "--es",
+                "command",
+                "wake_control_server",
+            ]]
+        );
+    }
+
+    #[tokio::test]
+    async fn package_inventory_does_not_read_apk_signatures() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(SequenceRunner {
+            calls: std::sync::Mutex::new(Vec::new()),
+            outputs: std::sync::Mutex::new(std::collections::VecDeque::from([AdbOutput {
+                success: true,
+                stdout: "package:com.example.client uid:10001\n".into(),
+                stderr: String::new(),
+            }])),
+        });
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+        *adapter.selected_serial.write().unwrap() = Some("2740072778".into());
+
+        let packages = adapter.package_list().await.unwrap();
+
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0].package_name, "com.example.client");
+        assert_eq!(
+            *runner.calls.lock().unwrap(),
+            vec![vec![
+                "-s",
+                "2740072778",
+                "shell",
+                "pm",
+                "list",
+                "packages",
+                "-U",
+            ]]
+        );
+    }
+
+    #[tokio::test]
+    async fn stale_multi_device_forward_fails_without_mutating_other_transports() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(SequenceRunner {
+            calls: std::sync::Mutex::new(Vec::new()),
+            outputs: std::sync::Mutex::new(std::collections::VecDeque::from([AdbOutput {
+                success: false,
+                stdout: String::new(),
+                stderr: "adb: error: more than one device/emulator".into(),
+            }])),
+        });
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+
+        let error = adapter
+            .run_forward_for_serial(
+                "2740072778",
+                &["forward", "tcp:47123", "localabstract:intercept_proxy_vpn"],
+            )
+            .await
+            .expect_err("陈旧 transport 必须由显式设备刷新恢复");
+
+        assert_eq!(
+            error.view_model.code,
+            "ANDROID_ADB_SELECTED_TRANSPORT_STALE"
+        );
+        assert_eq!(
+            *runner.calls.lock().unwrap(),
+            vec![vec![
+                "-s",
+                "2740072778",
+                "forward",
+                "tcp:47123",
+                "localabstract:intercept_proxy_vpn",
+            ]]
+        );
+    }
+
     #[tokio::test]
     async fn usb_runtime_creates_reverse_and_keeps_endpoint_out_of_profile() {
         let temp = tempfile::tempdir().unwrap();
@@ -1170,7 +1460,6 @@ mod tests {
             name: "路由".into(),
             target_applications: vec![AndroidTargetApplication {
                 package_name: "com.example.target".into(),
-                signing_sha256: "AA".into(),
                 uid: 10_001,
                 display_name: None,
             }],
@@ -1198,6 +1487,21 @@ mod tests {
             .prepare_usb_proxy_runtime(&activation)
             .await
             .unwrap();
+        assert_eq!(runtime["route_count"], 1);
+        assert_eq!(
+            runtime["route_source"][0]["listener_id"],
+            listener_id.to_string()
+        );
+        assert!(runtime["profile_fingerprint"].as_str().is_some());
+        assert!(runtime["route_fingerprint"].as_str().is_some());
+        assert_eq!(
+            runtime["route_fingerprint"],
+            sha256_json(&runtime["routes"]).unwrap()
+        );
+        assert_ne!(
+            runtime["route_fingerprint"],
+            sha256_json(&runtime["route_source"]).unwrap()
+        );
         let route = &runtime["routes"][0];
         assert_eq!(route["proxy_host"], "127.0.0.1");
         assert_eq!(route["original_destination"], "203.0.113.10");
@@ -1214,6 +1518,181 @@ mod tests {
                 .any(|pair| pair[0] == "reverse" && pair[1].starts_with("tcp:"))
                 && args.last() == Some(&"tcp:26127".to_owned())
         }));
+    }
+
+    #[tokio::test]
+    async fn normalized_route_fingerprint_changes_when_runtime_endpoint_changes() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(RecordingRunner::default());
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner);
+        *adapter.selected_serial.write().unwrap() = Some("SER123".into());
+        let listener_id = ListenerId::new();
+        let activation = AndroidNetworkActivation {
+            profile: AndroidNetworkProfile {
+                id: "endpoint-fingerprint".into(),
+                name: "endpoint-fingerprint".into(),
+                target_applications: Vec::new(),
+                destination_targets: Vec::new(),
+                proxy_routes: vec![intercept_proxy_domain::AndroidProxyRoute {
+                    destination: "203.0.113.10".into(),
+                    ports: vec![16_127],
+                    listener_id,
+                }],
+                confirmed_shared_uids: std::collections::BTreeSet::default(),
+                auto_resume_after_reboot: false,
+                weak_network: WeakNetworkProfile::default(),
+            },
+            proxy_routes: vec![AndroidProxyRouteActivation {
+                listener_id: listener_id.to_string(),
+                original_destination: "203.0.113.10".into(),
+                original_ports: vec![16_127],
+                desktop_listener_port: 26_127,
+            }],
+        };
+
+        let runtime = adapter
+            .prepare_usb_proxy_runtime(&activation)
+            .await
+            .unwrap();
+        let declared = runtime["route_fingerprint"].as_str().unwrap();
+        let mut wrong_routes = runtime["routes"].clone();
+        wrong_routes[0]["proxy_port"] = json!(49_999);
+
+        assert_ne!(declared, sha256_json(&wrong_routes).unwrap());
+    }
+
+    #[tokio::test]
+    async fn reverse_cleanup_uses_the_device_that_created_the_mapping() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(RecordingRunner::default());
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+        *adapter.selected_serial.write().unwrap() = Some("DEVICE-B".into());
+        *adapter.active_reverse.lock().await = Some(ActiveReverseOwnership {
+            serial: "DEVICE-A".into(),
+            profile_id: "profile-a".into(),
+            ports: vec![31_627],
+        });
+
+        adapter.clear_active_reverse_ports().await.unwrap();
+
+        assert_eq!(
+            *runner.calls.lock().unwrap(),
+            vec![vec!["-s", "DEVICE-A", "reverse", "--remove", "tcp:31627",]]
+        );
+        assert!(adapter.active_reverse.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn failed_reverse_cleanup_retains_only_failed_ports_for_retry() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(SequenceRunner {
+            calls: std::sync::Mutex::new(Vec::new()),
+            outputs: std::sync::Mutex::new(std::collections::VecDeque::from([
+                AdbOutput {
+                    success: true,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
+                AdbOutput {
+                    success: false,
+                    stdout: String::new(),
+                    stderr: "cannot remove tcp:31628".into(),
+                },
+                AdbOutput {
+                    success: true,
+                    stdout: String::new(),
+                    stderr: String::new(),
+                },
+            ])),
+        });
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+        *adapter.active_reverse.lock().await = Some(ActiveReverseOwnership {
+            serial: "DEVICE-A".into(),
+            profile_id: "profile-a".into(),
+            ports: vec![31_627, 31_628],
+        });
+
+        let error = adapter
+            .clear_active_reverse_ports()
+            .await
+            .expect_err("部分删除失败必须可观察");
+        assert_eq!(error.view_model.code, "ANDROID_ADB_COMMAND_FAILED");
+        assert_eq!(
+            adapter.active_reverse.lock().await.as_ref().unwrap().ports,
+            vec![31_628]
+        );
+
+        adapter
+            .clear_active_reverse_ports()
+            .await
+            .expect("重试仅删除仍归属当前运行态的端口");
+        assert!(adapter.active_reverse.lock().await.is_none());
+        assert_eq!(
+            *runner.calls.lock().unwrap(),
+            vec![
+                vec!["-s", "DEVICE-A", "reverse", "--remove", "tcp:31627"],
+                vec!["-s", "DEVICE-A", "reverse", "--remove", "tcp:31628"],
+                vec!["-s", "DEVICE-A", "reverse", "--remove", "tcp:31628"],
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn device_switch_is_rejected_while_reverse_mapping_is_active() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(RecordingRunner::default());
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+        *adapter.active_reverse.lock().await = Some(ActiveReverseOwnership {
+            serial: "DEVICE-A".into(),
+            profile_id: "profile-a".into(),
+            ports: vec![31_627],
+        });
+
+        let error = adapter
+            .adb_select("DEVICE-B".into())
+            .await
+            .expect_err("活动映射期间不能切换设备");
+
+        assert_eq!(error.view_model.code, "ANDROID_DEVICE_SWITCH_REQUIRES_STOP");
+        assert!(runner.calls.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn destination_resolution_failure_does_not_create_reverse_mapping() {
+        let temp = tempfile::tempdir().unwrap();
+        let runner = Arc::new(RecordingRunner::default());
+        let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+        *adapter.selected_serial.write().unwrap() = Some("SER123".into());
+        let activation = AndroidNetworkActivation {
+            profile: AndroidNetworkProfile {
+                id: "invalid-dns".into(),
+                name: "invalid-dns".into(),
+                target_applications: Vec::new(),
+                destination_targets: Vec::new(),
+                proxy_routes: Vec::new(),
+                confirmed_shared_uids: std::collections::BTreeSet::default(),
+                auto_resume_after_reboot: false,
+                weak_network: WeakNetworkProfile::default(),
+            },
+            proxy_routes: vec![AndroidProxyRouteActivation {
+                listener_id: "listener-invalid".into(),
+                original_destination: "invalid destination".into(),
+                original_ports: vec![443],
+                desktop_listener_port: 8_443,
+            }],
+        };
+
+        let error = adapter
+            .prepare_usb_proxy_runtime(&activation)
+            .await
+            .expect_err("非法域名必须解析失败");
+
+        assert_eq!(
+            error.view_model.code,
+            "ANDROID_PROXY_DESTINATION_RESOLVE_FAILED"
+        );
+        assert!(runner.calls.lock().unwrap().is_empty());
+        assert!(adapter.active_reverse.lock().await.is_none());
     }
 
     #[test]

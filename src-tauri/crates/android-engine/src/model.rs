@@ -6,14 +6,11 @@ pub use intercept_proxy_domain::{
 };
 use serde::{Deserialize, Serialize};
 
-/// Android 上已安装应用的可信快照。
-///
-/// 该信息必须由 Companion 在每次启动前重新从 `PackageManager` 获取，不能相信桌面端
-/// 缓存，因为 APK 可能已经升级、卸载或被不同签名的包替换。
+/// Android 上已安装应用的当前包名与 UID 快照。
+/// 该信息由 Companion 在每次启动前重新从 `PackageManager` 获取。
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct InstalledApplication {
     pub package_name: String,
-    pub signing_sha256: String,
     pub uid: u32,
 }
 
@@ -21,7 +18,6 @@ pub struct InstalledApplication {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct TargetApplication {
     pub package_name: String,
-    pub signing_sha256: String,
     pub uid: u32,
 }
 

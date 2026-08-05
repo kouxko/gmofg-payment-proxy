@@ -16,7 +16,7 @@ use intercept_proxy_application::{
 use intercept_proxy_product_api::{ProductCertificatePolicy, ProductProfile};
 use intercept_proxy_runtime::{
     ErrorCode as ProxyErrorCode, MitmCertificateAuthority, MitmServerIdentity, ProxyError,
-    TlsMaterialProvider, TlsMaterialSnapshot,
+    ReverseClientIdentity, TlsMaterialProvider, TlsMaterialSnapshot,
 };
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -31,6 +31,7 @@ use crate::{
 use super::{
     common::{app_error, infra, json_error},
     files::{NativeFileDialog, cancelled},
+    listener_runtime::InstallationServerIdentityProvider,
 };
 
 const ROOT: &str = "local_root_ca";
@@ -477,6 +478,45 @@ impl CertificateServiceAdapter {
             }
         }
         errors
+    }
+}
+
+impl InstallationServerIdentityProvider for CertificateServiceAdapter {
+    fn load_installation_server_identity(&self) -> AppResult<ReverseClientIdentity> {
+        let _guard = self.material_lock.lock();
+        let snapshot = self.load_snapshot(&[ROOT, LEAF])?;
+        let root = snapshot
+            .materials
+            .get(ROOT)
+            .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "本机 Root CA 尚未初始化。"))?;
+        let leaf = snapshot
+            .materials
+            .get(LEAF)
+            .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "本机叶子证书尚未签发。"))?;
+        let expected_sans = leaf
+            .sans
+            .iter()
+            .map(|san| {
+                san.trim_start_matches("DNS:")
+                    .trim_start_matches("IP:")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        self.certificates
+            .validate_root(&root.certificate_der, &root.private_key_der)
+            .and_then(|_| {
+                self.certificates.validate_leaf(
+                    &root.certificate_der,
+                    &leaf.certificate_der,
+                    &leaf.private_key_der,
+                    &expected_sans,
+                )
+            })
+            .map_err(app_error)?;
+        Ok(ReverseClientIdentity {
+            certificate_chain_der: vec![leaf.certificate_der.clone()],
+            private_key_pkcs8_der: Zeroizing::new(leaf.private_key_der.clone()),
+        })
     }
 }
 
@@ -1302,6 +1342,30 @@ mod tests {
             2,
             "export must not add material beyond the generated Root and leaf"
         );
+    }
+
+    #[tokio::test]
+    async fn listener_can_load_certificate_page_leaf_as_server_identity() {
+        let adapter = CertificateServiceAdapter::new(
+            Arc::new(SqliteStore::in_memory().expect("store")),
+            Arc::new(XorProtector),
+            Arc::new(QueueDialog {
+                open: ParkingMutex::new(VecDeque::new()),
+            }),
+            test_profile(),
+        );
+        adapter
+            .generate_ca(vec!["10.0.34.50".into()])
+            .await
+            .expect("generate certificate page materials");
+
+        let identity = adapter
+            .load_installation_server_identity()
+            .expect("load installation leaf");
+
+        assert_eq!(identity.certificate_chain_der.len(), 1);
+        assert!(!identity.certificate_chain_der[0].is_empty());
+        assert!(!identity.private_key_pkcs8_der.is_empty());
     }
 
     #[tokio::test]

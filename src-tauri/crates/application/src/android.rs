@@ -47,7 +47,6 @@ pub struct AndroidDeviceViewModel {
 pub struct AndroidPackageViewModel {
     pub package_name: String,
     pub uid: u32,
-    pub signing_sha256: Option<String>,
     /// Set only when more than one installed package has the same Linux UID.
     pub shared_uid: Option<u32>,
 }
@@ -62,7 +61,7 @@ pub struct AndroidCompanionInstallViewModel {
 }
 
 /// Android 弱网页面的编辑意图。
-/// TypeScript 只描述用户做了什么；共享 UID 扩选、签名快照和嵌套故障项默认值均由
+/// TypeScript 只描述用户做了什么；共享 UID 扩选和嵌套故障项默认值均由
 /// Rust 生成，避免展示层手写第二套领域规则。
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case", tag = "kind")]
@@ -170,6 +169,15 @@ pub struct AndroidNetworkStatusViewModel {
     pub verified: bool,
     pub transport: AndroidControlTransport,
     pub active_profile_id: Option<String>,
+    /// Companion 当前实际运行的 Profile 内容指纹；用于识别 Service 重启后的陈旧状态。
+    #[serde(default)]
+    pub active_profile_fingerprint: Option<String>,
+    /// Companion 当前实际装载的透明代理路由指纹。
+    #[serde(default)]
+    pub active_route_fingerprint: Option<String>,
+    /// Companion 当前实际装载的透明代理路由数量。
+    #[serde(default)]
+    pub active_route_count: usize,
     pub companion_process_running: Option<bool>,
     pub message: String,
     pub unsupported_fields: Vec<String>,
@@ -336,7 +344,6 @@ mod tests {
             name: "Danger".into(),
             target_applications: vec![AndroidTargetApplication {
                 package_name: ANDROID_COMPANION_PACKAGE.into(),
-                signing_sha256: "AA:".repeat(31) + "AA",
                 uid: 10_000,
                 display_name: None,
             }],
@@ -363,7 +370,6 @@ mod tests {
             name: "Multiple addresses".into(),
             target_applications: vec![AndroidTargetApplication {
                 package_name: "com.example.client".into(),
-                signing_sha256: "AA".repeat(32),
                 uid: 10_001,
                 display_name: None,
             }],

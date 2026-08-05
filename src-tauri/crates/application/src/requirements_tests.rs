@@ -4,7 +4,7 @@
 //! 追踪 UI、Rust 用例和验收条件，修改业务语义时必须同步更新需求文档和对应测试。
 
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::{
         Arc,
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -14,6 +14,7 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
+use intercept_proxy_domain::{FixedServerSettings, UpstreamTlsSettings};
 use intercept_proxy_product_api::{BodyCodec, ProductError};
 use uuid::Uuid;
 
@@ -825,6 +826,11 @@ struct FakePorts {
     certificate_import_calls: AtomicUsize,
     certificate_status_calls: AtomicUsize,
     certificate_overview_calls: AtomicUsize,
+    certificate_discard_calls: AtomicUsize,
+    block_certificate_discard: AtomicBool,
+    certificate_discard_entered: tokio::sync::Notify,
+    continue_certificate_discard: tokio::sync::Notify,
+    discarded_certificate_references: parking_lot::Mutex<BTreeSet<String>>,
     settings: parking_lot::Mutex<SettingsViewModel>,
     certificate_overview: parking_lot::Mutex<CertificateOverviewViewModel>,
 }
@@ -844,6 +850,11 @@ impl Default for FakePorts {
             certificate_import_calls: AtomicUsize::new(0),
             certificate_status_calls: AtomicUsize::new(0),
             certificate_overview_calls: AtomicUsize::new(0),
+            certificate_discard_calls: AtomicUsize::new(0),
+            block_certificate_discard: AtomicBool::new(false),
+            certificate_discard_entered: tokio::sync::Notify::new(),
+            continue_certificate_discard: tokio::sync::Notify::new(),
+            discarded_certificate_references: parking_lot::Mutex::new(BTreeSet::new()),
             settings: parking_lot::Mutex::new(fake_settings_view()),
             certificate_overview: parking_lot::Mutex::new(fake_certificate_overview()),
         }
@@ -852,6 +863,20 @@ impl Default for FakePorts {
 
 #[async_trait]
 impl ListenerCertificateImportPort for FakePorts {
+    async fn import_downstream_server_identity(
+        &self,
+        _label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
+        Ok(None)
+    }
+
+    async fn import_downstream_client_trust(
+        &self,
+        _label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
+        Ok(None)
+    }
+
     async fn import_upstream_client_identity(
         &self,
         _label: String,
@@ -869,9 +894,32 @@ impl ListenerCertificateImportPort for FakePorts {
 
     async fn inspect(
         &self,
-        _reference: CertificateReference,
+        reference: CertificateReference,
     ) -> AppResult<CertificateItemViewModel> {
+        if self
+            .discarded_certificate_references
+            .lock()
+            .contains(&reference.reference)
+        {
+            return Err(AppError::new(
+                "LISTENER_CERTIFICATE_MATERIAL_UNAVAILABLE",
+                "托管证书材料已被清理。",
+            ));
+        }
         Ok(fake_certificate_overview().items.remove(0))
+    }
+
+    async fn discard(&self, reference: CertificateReference) -> AppResult<()> {
+        self.certificate_discard_calls
+            .fetch_add(1, Ordering::SeqCst);
+        if self.block_certificate_discard.load(Ordering::SeqCst) {
+            self.certificate_discard_entered.notify_one();
+            self.continue_certificate_discard.notified().await;
+        }
+        self.discarded_certificate_references
+            .lock()
+            .insert(reference.reference);
+        Ok(())
     }
 }
 
@@ -1211,6 +1259,80 @@ fn application_with_workspace_ports(
     )
 }
 
+#[derive(Debug)]
+struct RunningAndroidControl {
+    status: AndroidNetworkStatusViewModel,
+    observed_activation: parking_lot::Mutex<Option<AndroidNetworkActivation>>,
+    runtime_ready: AtomicBool,
+    network_apply_calls: AtomicUsize,
+    block_start: AtomicBool,
+    start_entered: tokio::sync::Notify,
+    start_release: tokio::sync::Notify,
+}
+
+#[async_trait]
+impl AndroidControlPort for RunningAndroidControl {
+    async fn adb_get(&self) -> AppResult<AndroidAdbViewModel> {
+        unused()
+    }
+    async fn adb_select(&self, _: String) -> AppResult<AndroidAdbViewModel> {
+        unused()
+    }
+    async fn device_list(&self) -> AppResult<Vec<AndroidDeviceViewModel>> {
+        unused()
+    }
+    async fn package_list(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
+        Ok(vec![AndroidPackageViewModel {
+            package_name: "example.target".into(),
+            uid: 10_001,
+            shared_uid: None,
+        }])
+    }
+    async fn package_get(&self, _: String) -> AppResult<AndroidPackageViewModel> {
+        unused()
+    }
+    async fn companion_install(&self, _: bool) -> AppResult<AndroidCompanionInstallViewModel> {
+        unused()
+    }
+    async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_start(
+        &self,
+        _: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        self.start_entered.notify_one();
+        if self.block_start.load(Ordering::SeqCst) {
+            self.start_release.notified().await;
+        }
+        Ok(self.status.clone())
+    }
+    async fn network_apply(
+        &self,
+        _: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        self.network_apply_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(self.status.clone())
+    }
+    async fn network_runtime_ready(
+        &self,
+        activation: &AndroidNetworkActivation,
+        _: &AndroidNetworkStatusViewModel,
+    ) -> AppResult<bool> {
+        *self.observed_activation.lock() = Some(activation.clone());
+        Ok(self.runtime_ready.load(Ordering::SeqCst))
+    }
+    async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        Ok(self.status.clone())
+    }
+}
+
 #[tokio::test]
 async fn bootstrap_uses_non_secret_certificate_status_instead_of_full_overview() {
     let ports = Arc::new(FakePorts::default());
@@ -1274,6 +1396,554 @@ async fn workspace_facade_exposes_complete_headless_crud_document_and_event_flow
     assert!(application.workspace_get(copied.id).await.is_err());
 }
 
+struct RunningVpnFixture {
+    application: Application,
+    android: Arc<RunningAndroidControl>,
+    workspaces: Arc<InMemoryWorkspaceStore>,
+    original_id: WorkspaceId,
+    profile_id: String,
+    listener_id: ListenerId,
+}
+
+async fn running_vpn_fixture() -> RunningVpnFixture {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(InMemoryWorkspaceStore::default());
+    let original_id = workspaces
+        .list()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|summary| summary.selected)
+        .expect("selected default workspace")
+        .id;
+    let mut original = workspaces
+        .get(original_id)
+        .await
+        .expect("default workspace");
+    let listener_id = original.listeners[0].id;
+    original.listeners[0].enabled = true;
+    original.listeners[0].port = 41_273;
+    let profile_id = Uuid::new_v4().to_string();
+    original
+        .android_network_profiles
+        .push(AndroidNetworkProfile {
+            id: profile_id.clone(),
+            name: "运行中的方案".into(),
+            target_applications: vec![AndroidTargetApplication {
+                package_name: "example.target".into(),
+                uid: 10_001,
+                display_name: Some("测试应用".into()),
+            }],
+            destination_targets: Vec::new(),
+            proxy_routes: vec![intercept_proxy_domain::AndroidProxyRoute {
+                destination: "service.example.test".into(),
+                ports: vec![41_273],
+                listener_id,
+            }],
+            confirmed_shared_uids: BTreeSet::default(),
+            auto_resume_after_reboot: false,
+            weak_network: WeakNetworkProfile::default(),
+        });
+    workspaces.save(original.clone()).await.unwrap();
+    let other = workspaces.create("其他 Workspace".into()).await.unwrap();
+    workspaces.select(other.id).await.unwrap();
+
+    let android = Arc::new(RunningAndroidControl {
+        status: AndroidNetworkStatusViewModel {
+            serial: "device-1".into(),
+            state: AndroidNetworkState::Running,
+            state_text: "运行中".into(),
+            ui_tone: UiTone::Positive,
+            verified: true,
+            transport: AndroidControlTransport::LocalAbstractSocket,
+            active_profile_id: Some(profile_id.clone()),
+            active_profile_fingerprint: Some("profile-fingerprint".into()),
+            active_route_fingerprint: Some("route-fingerprint".into()),
+            active_route_count: 1,
+            companion_process_running: Some(true),
+            message: "运行中".into(),
+            unsupported_fields: Vec::new(),
+            stats: None,
+        },
+        observed_activation: parking_lot::Mutex::new(None),
+        runtime_ready: AtomicBool::new(true),
+        network_apply_calls: AtomicUsize::new(0),
+        block_start: AtomicBool::new(false),
+        start_entered: tokio::sync::Notify::new(),
+        start_release: tokio::sync::Notify::new(),
+    });
+    let application = Application::new_with_android(
+        "Test Product".into(),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: Arc::new(BreakpointCoordinator::default()),
+            breakpoint_validation: ports.clone(),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            listener_certificates: ports.clone(),
+            file_export: ports,
+            workspaces: workspaces.clone(),
+            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
+            listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
+            events: Arc::new(EventHub::default()),
+        },
+        android.clone(),
+    );
+
+    RunningVpnFixture {
+        application,
+        android,
+        workspaces,
+        original_id,
+        profile_id,
+        listener_id,
+    }
+}
+
+#[tokio::test]
+async fn workspace_switch_keeps_running_vpn_bound_to_its_original_workspace() {
+    let fixture = running_vpn_fixture().await;
+
+    let status = fixture.application.device_network_status().await.unwrap();
+
+    assert_eq!(
+        status.active_profile_id.as_deref(),
+        Some(fixture.profile_id.as_str())
+    );
+    let activation = fixture
+        .android
+        .observed_activation
+        .lock()
+        .clone()
+        .expect("runtime readiness uses the active profile");
+    assert_eq!(activation.profile.id, fixture.profile_id);
+    assert_eq!(
+        activation.proxy_routes[0].listener_id,
+        fixture.listener_id.to_string()
+    );
+    assert_eq!(activation.proxy_routes[0].desktop_listener_port, 41_273);
+}
+
+#[tokio::test]
+async fn device_network_status_does_not_reapply_a_stale_runtime() {
+    let fixture = running_vpn_fixture().await;
+
+    fixture.android.runtime_ready.store(false, Ordering::SeqCst);
+    let degraded = fixture.application.device_network_status().await.unwrap();
+    assert_eq!(degraded.state, AndroidNetworkState::Faulted);
+    assert!(degraded.message.contains("应用修改"));
+    assert_eq!(
+        fixture.android.network_apply_calls.load(Ordering::SeqCst),
+        0
+    );
+}
+
+#[tokio::test]
+async fn workspace_and_device_selection_wait_for_device_network_start_to_finish() {
+    let fixture = running_vpn_fixture().await;
+    fixture
+        .workspaces
+        .select(fixture.original_id)
+        .await
+        .unwrap();
+    fixture.android.block_start.store(true, Ordering::SeqCst);
+    let application = Arc::new(fixture.application);
+
+    let start_application = Arc::clone(&application);
+    let profile_id = fixture.profile_id.clone();
+    let start = tokio::spawn(async move {
+        start_application
+            .device_network_start(profile_id, false)
+            .await
+    });
+    fixture.android.start_entered.notified().await;
+
+    let other_workspace = fixture
+        .workspaces
+        .list()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|summary| summary.id != fixture.original_id)
+        .unwrap();
+    let select_application = Arc::clone(&application);
+    let mut select = tokio::spawn(async move {
+        select_application
+            .workspace_select(other_workspace.id)
+            .await
+    });
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), &mut select)
+            .await
+            .is_err(),
+        "Workspace 切换必须等待设备网络启动释放统一变更锁"
+    );
+    let adb_application = Arc::clone(&application);
+    let mut adb_select =
+        tokio::spawn(async move { adb_application.android_adb_select("device-2".into()).await });
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), &mut adb_select)
+            .await
+            .is_err(),
+        "设备切换必须等待设备网络启动释放统一变更锁"
+    );
+
+    fixture.android.start_release.notify_one();
+    start.await.unwrap().unwrap();
+    select.await.unwrap().unwrap();
+    assert!(adb_select.await.unwrap().is_err());
+}
+
+#[tokio::test]
+async fn profile_delete_checks_runtime_only_after_inflight_start_finishes() {
+    let fixture = running_vpn_fixture().await;
+    fixture
+        .workspaces
+        .select(fixture.original_id)
+        .await
+        .unwrap();
+    fixture.android.block_start.store(true, Ordering::SeqCst);
+    let application = Arc::new(fixture.application);
+
+    let start_application = Arc::clone(&application);
+    let profile_id = fixture.profile_id.clone();
+    let start = tokio::spawn(async move {
+        start_application
+            .device_network_start(profile_id, false)
+            .await
+    });
+    fixture.android.start_entered.notified().await;
+
+    let delete_application = Arc::clone(&application);
+    let profile_id = fixture.profile_id.clone();
+    let mut delete = tokio::spawn(async move {
+        delete_application
+            .device_network_profile_delete(profile_id)
+            .await
+    });
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), &mut delete)
+            .await
+            .is_err(),
+        "方案删除必须等待设备网络启动结束后再检查运行状态"
+    );
+
+    fixture.android.start_release.notify_one();
+    start.await.unwrap().unwrap();
+    let error = delete.await.unwrap().expect_err("活动方案不能被删除");
+    assert_eq!(error.view_model.code, "ANDROID_PROFILE_ACTIVE");
+}
+
+#[tokio::test]
+async fn workspace_delete_rejects_an_active_android_network_profile() {
+    let fixture = running_vpn_fixture().await;
+
+    let current = fixture.workspaces.get(fixture.original_id).await.unwrap();
+    let delete_error = fixture
+        .application
+        .workspace_delete(current.id, current.revision.get())
+        .await
+        .expect_err("活动 VPN 方案所属 Workspace 不能删除");
+    assert_eq!(
+        delete_error.view_model.code,
+        "WORKSPACE_ANDROID_NETWORK_ACTIVE"
+    );
+}
+
+#[tokio::test]
+async fn profile_delete_rejects_the_active_android_network_profile() {
+    let fixture = running_vpn_fixture().await;
+    fixture
+        .workspaces
+        .select(fixture.original_id)
+        .await
+        .unwrap();
+
+    let error = fixture
+        .application
+        .device_network_profile_delete(fixture.profile_id.clone())
+        .await
+        .expect_err("活动设备网络方案不能删除");
+
+    assert_eq!(error.view_model.code, "ANDROID_PROFILE_ACTIVE");
+    assert!(
+        fixture
+            .application
+            .device_network_profile_get(fixture.profile_id)
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn workspace_rejects_arbitrary_certificate_path_reference_creation() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports);
+    let workspace = application.workspace_create("Lab".into()).await.unwrap();
+
+    let error = application
+        .workspace_component_new(workspace, "certificate_reference")
+        .expect_err("certificate references must be created by a managed import");
+
+    assert_eq!(
+        error.view_model.code,
+        "WORKSPACE_CERTIFICATE_IMPORT_REQUIRED"
+    );
+}
+
+#[tokio::test]
+async fn listener_save_rejects_unmanaged_file_and_pkcs12_references() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports);
+    let workspace = application.workspace_create("Lab".into()).await.unwrap();
+    let listener = workspace.listeners[0].clone();
+
+    for value in [
+        "file:/tmp/untrusted-server.pem",
+        "pkcs12:/tmp/untrusted-client.p12?password_env=PASSWORD",
+    ] {
+        let reference = CertificateReference {
+            id: CertificateReferenceId::new(),
+            label: "不得持久化的外部引用".into(),
+            kind: CertificateReferenceKind::UpstreamClientIdentity,
+            reference: value.into(),
+        };
+        let error = application
+            .listener_save(
+                workspace.id,
+                workspace.revision.get(),
+                listener.clone(),
+                vec![reference],
+            )
+            .await
+            .expect_err("listener save must reject certificate paths from IPC");
+
+        assert_eq!(
+            error.view_model.code,
+            "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED"
+        );
+    }
+}
+
+#[tokio::test]
+async fn listener_certificate_discard_rejects_references_used_by_any_workspace() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports.clone());
+    let workspace = application.workspace_create("Lab".into()).await.unwrap();
+    let mut listener = workspace.listeners[0].clone();
+    let reference = CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "正在使用的上游身份".into(),
+        kind: CertificateReferenceKind::UpstreamClientIdentity,
+        reference: "managed:listener-tls:in-use".into(),
+    };
+    listener.fixed_server = Some(FixedServerSettings {
+        upstream_url: "https://upstream.example.test:443".into(),
+        upstream_tls: UpstreamTlsSettings {
+            client_identity: Some(reference.id),
+            ..UpstreamTlsSettings::default()
+        },
+    });
+    application
+        .listener_save(
+            workspace.id,
+            workspace.revision.get(),
+            listener,
+            vec![reference.clone()],
+        )
+        .await
+        .unwrap();
+
+    let error = application
+        .listener_certificate_discard(reference)
+        .await
+        .expect_err("a persisted reference must never be discarded");
+
+    assert_eq!(error.view_model.code, "CERTIFICATE_REFERENCE_IN_USE");
+    assert_eq!(ports.certificate_discard_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn listener_certificate_discard_cleans_an_unreferenced_import() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports.clone());
+    application.workspace_create("Lab".into()).await.unwrap();
+    let reference = CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "已放弃的上游身份".into(),
+        kind: CertificateReferenceKind::UpstreamClientIdentity,
+        reference: "managed:listener-tls:abandoned".into(),
+    };
+
+    let result = application
+        .listener_certificate_discard(reference)
+        .await
+        .unwrap();
+
+    assert!(result.success);
+    assert_eq!(ports.certificate_discard_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn listener_certificate_discard_is_atomic_with_listener_save() {
+    let ports = Arc::new(FakePorts::default());
+    ports
+        .block_certificate_discard
+        .store(true, Ordering::SeqCst);
+    let application = Arc::new(application_with_fake_ports(ports.clone()));
+    let workspace = application.workspace_create("Lab".into()).await.unwrap();
+    let mut listener = workspace.listeners[0].clone();
+    let reference = CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "并发保存的上游身份".into(),
+        kind: CertificateReferenceKind::UpstreamClientIdentity,
+        reference: "managed:listener-tls:concurrent-save".into(),
+    };
+    listener.fixed_server = Some(FixedServerSettings {
+        upstream_url: "https://upstream.example.test:443".into(),
+        upstream_tls: UpstreamTlsSettings {
+            client_identity: Some(reference.id),
+            ..UpstreamTlsSettings::default()
+        },
+    });
+
+    let discard = {
+        let application = application.clone();
+        let reference = reference.clone();
+        tokio::spawn(async move { application.listener_certificate_discard(reference).await })
+    };
+    ports.certificate_discard_entered.notified().await;
+
+    let mut save = {
+        let application = application.clone();
+        let reference = reference.clone();
+        tokio::spawn(async move {
+            application
+                .listener_save(
+                    workspace.id,
+                    workspace.revision.get(),
+                    listener,
+                    vec![reference],
+                )
+                .await
+        })
+    };
+
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), &mut save)
+            .await
+            .is_err(),
+        "listener save must wait until reference check and secret deletion finish"
+    );
+
+    ports.continue_certificate_discard.notify_one();
+    discard.await.unwrap().unwrap();
+    let error = save
+        .await
+        .unwrap()
+        .expect_err("saving a discarded managed reference must fail inspection");
+
+    assert_eq!(
+        error.view_model.code,
+        "LISTENER_CERTIFICATE_MATERIAL_UNAVAILABLE"
+    );
+    assert!(
+        application
+            .workspace_get(workspace.id)
+            .await
+            .unwrap()
+            .certificate_references
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn listener_tls_test_rejects_unmanaged_file_and_pkcs12_references() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports);
+    let workspace = application.workspace_create("Lab".into()).await.unwrap();
+    let mut listener = workspace.listeners[0].clone();
+    listener.fixed_server = Some(FixedServerSettings {
+        upstream_url: "https://upstream.example.test:443".into(),
+        upstream_tls: UpstreamTlsSettings::default(),
+    });
+
+    for value in [
+        "file:/tmp/untrusted-server.pem",
+        "pkcs12:/tmp/untrusted-client.p12?password_env=PASSWORD",
+    ] {
+        let reference = CertificateReference {
+            id: CertificateReferenceId::new(),
+            label: "不得用于握手测试的外部引用".into(),
+            kind: CertificateReferenceKind::UpstreamClientIdentity,
+            reference: value.into(),
+        };
+        let error = application
+            .listener_test_upstream_tls(
+                workspace.id,
+                workspace.revision.get(),
+                listener.clone(),
+                vec![reference],
+            )
+            .await
+            .expect_err("TLS test must reject certificate paths from IPC");
+
+        assert_eq!(
+            error.view_model.code,
+            "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED"
+        );
+    }
+}
+
+#[tokio::test]
+async fn listener_tls_test_validates_the_persisted_workspace_candidate() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports);
+    let workspace = application.workspace_create("Lab".into()).await.unwrap();
+    let mut listener = workspace.listeners[0].clone();
+    listener.fixed_server = Some(FixedServerSettings {
+        upstream_url: "https://".into(),
+        upstream_tls: UpstreamTlsSettings::default(),
+    });
+
+    let error = application
+        .listener_test_upstream_tls(workspace.id, workspace.revision.get(), listener, Vec::new())
+        .await
+        .expect_err("invalid listener drafts must fail before the runtime handshake");
+
+    assert!(
+        !error.view_model.field_errors.is_empty(),
+        "domain validation must expose the invalid fixed Server URL"
+    );
+}
+
+#[tokio::test]
+async fn listener_validation_uses_persisted_other_listeners_not_unrelated_ui_drafts() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports);
+    let workspace = application.workspace_create("Lab".into()).await.unwrap();
+    let mut listener = workspace.listeners[0].clone();
+    listener.name = "当前有效监听草稿".into();
+
+    let validation = application
+        .listener_validate(
+            workspace.id,
+            workspace.revision.get(),
+            listener.clone(),
+            workspace.certificate_references.clone(),
+        )
+        .await
+        .expect("target listener validation should be available independently");
+
+    assert!(validation.valid);
+    assert_eq!(validation.normalized.listeners.len(), 1);
+    assert_eq!(validation.normalized.listeners[0], listener);
+}
+
 #[tokio::test]
 async fn running_workspace_listener_blocks_configuration_save_and_delete() {
     let ports = Arc::new(FakePorts::default());
@@ -1307,7 +1977,7 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
         .unwrap();
 
     let mut edited = workspace.clone();
-    edited.name = "Must stop first".into();
+    edited.listeners[0].port = edited.listeners[0].port.saturating_add(1);
     let save_error = application
         .workspace_save(edited)
         .await
@@ -1319,7 +1989,12 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
         .expect_err("live workspace delete rejected");
     assert_eq!(delete_error.view_model.code, "WORKSPACE_RUNTIME_ACTIVE");
     let listener_save_error = application
-        .listener_save(workspace.id, workspace.revision.get(), listener.clone())
+        .listener_save(
+            workspace.id,
+            workspace.revision.get(),
+            listener.clone(),
+            workspace.certificate_references.clone(),
+        )
         .await
         .expect_err("live listener save rejected");
     assert_eq!(
@@ -1333,6 +2008,149 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
     assert_eq!(
         listener_delete_error.view_model.code,
         "LISTENER_RUNTIME_ACTIVE"
+    );
+}
+
+#[tokio::test]
+async fn running_workspace_listener_allows_saving_and_starting_a_stopped_listener() {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(InMemoryWorkspaceStore::new_empty());
+    let listener_runtime = Arc::new(InMemoryListenerRuntime::default());
+    let application = Application::new(
+        "Test Product".into(),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: Arc::new(BreakpointCoordinator::default()),
+            breakpoint_validation: ports.clone(),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            listener_certificates: ports.clone(),
+            file_export: ports,
+            workspaces,
+            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
+            listener_runtime: listener_runtime.clone(),
+            events: Arc::new(EventHub::default()),
+        },
+    );
+    let mut workspace = application.workspace_create("Live".into()).await.unwrap();
+    let running_listener = workspace.listeners[0].clone();
+    let mut stopped_listener = application.listener_copy(running_listener.clone()).unwrap();
+    stopped_listener.name = "Second listener".into();
+    // 使用与产品无关的测试端口偏移，避免回归测试重新引入已删除的业务端口契约。
+    stopped_listener.port = running_listener.port.saturating_add(173);
+    workspace.listeners.push(stopped_listener.clone());
+    workspace = application.workspace_save(workspace).await.unwrap();
+
+    application
+        .listener_start(
+            workspace.id,
+            workspace.revision.get(),
+            running_listener.id(),
+        )
+        .await
+        .unwrap();
+    workspace = application.workspace_get(workspace.id).await.unwrap();
+
+    workspace.listeners[1].name = "Second listener edited while first runs".into();
+    let edited_listener = workspace.listeners[1].clone();
+    let saved = application
+        .listener_save(
+            workspace.id,
+            workspace.revision.get(),
+            edited_listener,
+            workspace.certificate_references.clone(),
+        )
+        .await
+        .expect("stopped listener can be saved while another listener runs");
+    let second_status = application
+        .listener_start(saved.id, saved.revision.get(), stopped_listener.id())
+        .await
+        .expect("saved stopped listener can start while first listener remains running");
+
+    assert_eq!(second_status.state, ListenerRuntimeState::Running);
+    let statuses = application.listener_statuses().await.unwrap();
+    assert_eq!(statuses.len(), 2);
+
+    application
+        .listener_stop(saved.id, saved.revision.get(), running_listener.id())
+        .await
+        .expect("stale aggregate revision must not block stopping a listener");
+    let statuses = application.listener_statuses().await.unwrap();
+    assert_eq!(statuses.len(), 1);
+    assert_eq!(statuses[0].listener_id, stopped_listener.id());
+
+    let latest = application.workspace_get(saved.id).await.unwrap();
+    application
+        .listener_delete(latest.id, latest.revision.get(), running_listener.id())
+        .await
+        .expect("a stopped listener can be deleted while another listener remains running");
+    let latest = application.workspace_get(saved.id).await.unwrap();
+    assert_eq!(latest.listeners.len(), 1);
+    assert_eq!(latest.listeners[0].id, stopped_listener.id());
+}
+
+#[tokio::test]
+async fn running_workspace_listener_allows_device_network_profile_persistence() {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(InMemoryWorkspaceStore::new_empty());
+    let listener_runtime = Arc::new(InMemoryListenerRuntime::default());
+    let application = Application::new(
+        "Test Product".into(),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: Arc::new(BreakpointCoordinator::default()),
+            breakpoint_validation: ports.clone(),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            listener_certificates: ports.clone(),
+            file_export: ports,
+            workspaces,
+            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
+            listener_runtime: listener_runtime.clone(),
+            events: Arc::new(EventHub::default()),
+        },
+    );
+    let mut workspace = application.workspace_create("Live".into()).await.unwrap();
+    let listener = workspace.listeners[0].clone();
+    listener_runtime
+        .start(workspace.clone(), listener.clone())
+        .await
+        .unwrap();
+
+    workspace
+        .android_network_profiles
+        .push(AndroidNetworkProfile {
+            id: "vpn-profile".into(),
+            name: "运行时可保存的设备网络方案".into(),
+            target_applications: vec![AndroidTargetApplication {
+                package_name: "com.example.client".into(),
+                display_name: None,
+                uid: 10_001,
+            }],
+            destination_targets: Vec::new(),
+            proxy_routes: Vec::new(),
+            confirmed_shared_uids: BTreeSet::default(),
+            auto_resume_after_reboot: false,
+            weak_network: WeakNetworkProfile::default(),
+        });
+
+    let saved = application
+        .workspace_save(workspace)
+        .await
+        .expect("VPN profile persistence must remain available while a listener runs");
+    assert_eq!(saved.android_network_profiles.len(), 1);
+    assert_eq!(
+        listener_runtime.statuses().await.unwrap()[0].state,
+        ListenerRuntimeState::Running,
+        "saving an independent VPN profile must not restart the listener"
     );
 }
 

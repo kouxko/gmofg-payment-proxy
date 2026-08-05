@@ -2318,7 +2318,6 @@ mod tests {
     ) -> Arc<ProxyRouteTable> {
         let installed = InstalledApplication {
             package_name: "com.example.target".into(),
-            signing_sha256: "AA".into(),
             uid: 10_001,
         };
         let profile = NetworkProfile {
@@ -2326,7 +2325,6 @@ mod tests {
             name: "透明路由".into(),
             target_applications: vec![TargetApplication {
                 package_name: installed.package_name.clone(),
-                signing_sha256: installed.signing_sha256.clone(),
                 uid: installed.uid,
             }],
             destination_targets,

@@ -2,9 +2,8 @@ use async_trait::async_trait;
 
 use crate::{
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidDeviceViewModel,
-    AndroidNetworkActivation, AndroidNetworkProfile, AndroidNetworkProfileSummary,
-    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AppError, AppResult,
-    OperationResultViewModel,
+    AndroidNetworkActivation, AndroidNetworkStatusViewModel, AndroidPackageViewModel, AppError,
+    AppResult,
 };
 
 #[async_trait]
@@ -16,13 +15,6 @@ pub trait AndroidControlPort: Send + Sync + std::fmt::Debug {
     async fn package_get(&self, package_name: String) -> AppResult<AndroidPackageViewModel>;
     async fn companion_install(&self, update: bool) -> AppResult<AndroidCompanionInstallViewModel>;
     async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel>;
-    async fn profile_list(&self) -> AppResult<Vec<AndroidNetworkProfileSummary>>;
-    async fn profile_get(&self, profile_id: String) -> AppResult<AndroidNetworkProfile>;
-    async fn profile_save(
-        &self,
-        profile: AndroidNetworkProfile,
-    ) -> AppResult<AndroidNetworkProfile>;
-    async fn profile_delete(&self, profile_id: String) -> AppResult<OperationResultViewModel>;
     async fn network_start(
         &self,
         activation: AndroidNetworkActivation,
@@ -31,6 +23,11 @@ pub trait AndroidControlPort: Send + Sync + std::fmt::Debug {
         &self,
         activation: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel>;
+    async fn network_runtime_ready(
+        &self,
+        activation: &AndroidNetworkActivation,
+        status: &AndroidNetworkStatusViewModel,
+    ) -> AppResult<bool>;
     async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel>;
     async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel>;
     async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel>;
@@ -71,18 +68,6 @@ impl AndroidControlPort for UnavailableAndroidControlPort {
     async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         Self::unavailable()
     }
-    async fn profile_list(&self) -> AppResult<Vec<AndroidNetworkProfileSummary>> {
-        Self::unavailable()
-    }
-    async fn profile_get(&self, _: String) -> AppResult<AndroidNetworkProfile> {
-        Self::unavailable()
-    }
-    async fn profile_save(&self, _: AndroidNetworkProfile) -> AppResult<AndroidNetworkProfile> {
-        Self::unavailable()
-    }
-    async fn profile_delete(&self, _: String) -> AppResult<OperationResultViewModel> {
-        Self::unavailable()
-    }
     async fn network_start(
         &self,
         _: AndroidNetworkActivation,
@@ -93,6 +78,13 @@ impl AndroidControlPort for UnavailableAndroidControlPort {
         &self,
         _: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
+        Self::unavailable()
+    }
+    async fn network_runtime_ready(
+        &self,
+        _: &AndroidNetworkActivation,
+        _: &AndroidNetworkStatusViewModel,
+    ) -> AppResult<bool> {
         Self::unavailable()
     }
     async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {

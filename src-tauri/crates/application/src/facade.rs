@@ -54,7 +54,7 @@ pub struct Application {
     android: Arc<dyn AndroidControlPort>,
     /// 当前已选择设备的完整应用清单。
     ///
-    /// 读取 Android 包签名需要逐包执行 `dumpsys package`，成本远高于普通查询。
+    /// Android 包清单按设备选择缓存；显式刷新与启动校验会重新读取。
     /// 因此首次读取后由 Rust 应用层缓存；切换（或重新选择）设备时立即失效。
     /// UI、未来 CLI/TUI 都只能通过同一组用例读取和筛选，不能各自维护业务缓存。
     android_package_cache: tokio::sync::Mutex<Option<Vec<crate::AndroidPackageViewModel>>>,

@@ -6,6 +6,8 @@
 
 use std::{collections::BTreeSet, io, net::IpAddr};
 
+use intercept_proxy_domain::normalize_android_network_destination;
+
 use crate::{
     ProxyRuntimeConfiguration, ResolvedProxyRoute, ValidatedProfile, validation::parse_ip_cidr,
 };
@@ -65,7 +67,7 @@ impl ProxyRouteTable {
     }
 
     pub(crate) fn for_domain(&self, domain: &str, port: u16) -> Option<&[std::net::SocketAddr]> {
-        let normalized = normalize_host(domain);
+        let normalized = normalize_android_network_destination(domain)?;
         self.routes
             .iter()
             .find(|route| route.ports.contains(&port) && route.original_destination == normalized)
@@ -88,7 +90,7 @@ impl ProxyRouteTable {
 }
 
 async fn compile_route(route: &ResolvedProxyRoute) -> io::Result<CompiledRoute> {
-    let destination = normalize_host(&route.original_destination);
+    let destination = normalize_destination(&route.original_destination)?;
     let network =
         parse_ip_cidr(&destination).map(|(address, prefix)| NetworkMatcher { address, prefix });
     let mut resolved_ips = route
@@ -148,13 +150,13 @@ fn validate_runtime_shape(
         .proxy_routes
         .iter()
         .map(|route| {
-            (
+            Ok((
                 route.listener_id.as_str(),
-                normalize_host(&route.destination),
+                normalize_destination(&route.destination)?,
                 normalized_ports(&route.ports),
-            )
+            ))
         })
-        .collect::<BTreeSet<_>>();
+        .collect::<io::Result<BTreeSet<_>>>()?;
     let actual = runtime
         .routes
         .iter()
@@ -173,7 +175,7 @@ fn validate_runtime_shape(
             }
             Ok((
                 route.listener_id.as_str(),
-                normalize_host(&route.original_destination),
+                normalize_destination(&route.original_destination)?,
                 normalized_ports(&route.original_ports),
             ))
         })
@@ -186,8 +188,9 @@ fn validate_runtime_shape(
     Ok(())
 }
 
-fn normalize_host(value: &str) -> String {
-    value.trim().trim_end_matches('.').to_ascii_lowercase()
+fn normalize_destination(value: &str) -> io::Result<String> {
+    normalize_android_network_destination(value)
+        .ok_or_else(|| invalid_input(format!("透明代理原始 host/IP/CIDR 无效：{}", value.trim())))
 }
 
 fn normalized_ports(ports: &[u16]) -> Vec<u16> {

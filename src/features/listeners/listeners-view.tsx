@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Button, Chip, Spinner, Table, toast } from "@heroui/react";
 import type {
+  CertificateItemViewModel,
+  CertificateReference,
   ListenerCertificateDetailViewModel,
   ListenerCertificateImportViewModel,
-  ListenerStatusViewModel,
+  ListenerMonitorRowViewModel,
+  ListenerOverviewViewModel,
   ListenerUpstreamTlsTestViewModel,
   ProxyListener,
   ProxyWorkspace,
@@ -13,15 +16,19 @@ import type {
   WorkspaceValidationViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
+import { useAppEventRefresh, useBootstrap } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { ListenerEditor } from "./listener-editor";
 
-type Pending = "validate" | "save" | "start" | "stop" | "secret" | "tls-test" | "import-identity" | "import-trust";
+type Pending = "validate" | "save" | "delete" | "start" | "stop" | "secret" | "tls-test"
+  | "import-downstream-identity" | "import-downstream-trust"
+  | "import-upstream-identity" | "import-upstream-trust";
 
 export function ListenersView() {
   const { navigate } = useWorkspaceNavigation();
+  const { bootstrap } = useBootstrap();
   const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>("listener-workspaces", () => callCommand(commands.workspaceList()));
   const currentId = workspaces.data?.find((item) => item.selected)?.id ?? workspaces.data?.[0]?.id;
   const workspaceQuery = useIpcQuery<ProxyWorkspace>(
@@ -30,7 +37,12 @@ export function ListenersView() {
     undefined,
     { enabled: Boolean(currentId) },
   );
-  const statuses = useIpcQuery<ListenerStatusViewModel[]>("listener-statuses", () => callCommand(commands.listenerStatuses()), []);
+  const listenerOverview = useIpcQuery<ListenerOverviewViewModel>(
+    `listener-overview:${currentId ?? "none"}`,
+    () => callCommand(commands.listenerOverview(currentId!)),
+    undefined,
+    { enabled: Boolean(currentId) },
+  );
   const certificateDetails = useIpcQuery<ListenerCertificateDetailViewModel[]>(
     `listener-certificate-overview:${currentId ?? "none"}`,
     () => callCommand(commands.listenerCertificateOverview(currentId!)),
@@ -46,13 +58,21 @@ export function ListenersView() {
   const [tlsTestError, setTlsTestError] = useState<string>();
   const [basicUsername, setBasicUsername] = useState("");
   const [basicPassword, setBasicPassword] = useState("");
-  const [startBlockedMessage, setStartBlockedMessage] = useState<string>();
+  const certificateDiscardsInFlight = useRef(new Set<string>());
+
+  useAppEventRefresh(
+    ["workspace_changed", "listener_status_changed", "snapshot_required"],
+    listenerOverview.refresh,
+  );
 
   const effectiveWorkspace = workspace?.id === currentId ? workspace : workspaceQuery.data;
   const effectiveIndex = Math.min(selectedIndex, Math.max(0, (effectiveWorkspace?.listeners.length ?? 1) - 1));
   const selected = effectiveWorkspace?.listeners[effectiveIndex];
-  const selectedStatus = statuses.data?.find((status) => status.listener_id === selected?.id);
-  const selectedIsRunning = selectedStatus?.state === "running" || selectedStatus?.state === "starting";
+  const selectedStatus = listenerOverview.data?.rows.find((row) => row.listener_id === selected?.id);
+  const selectedStatusKnown = Boolean(selectedStatus) && !listenerOverview.error;
+  const selectedCanDelete = selectedStatusKnown
+    && selectedStatus?.can_start === true
+    && selectedStatus?.can_stop === false;
   const hasUnsavedChanges = workspace !== undefined
     && workspace.id === currentId
     && workspaceQuery.data !== undefined
@@ -61,81 +81,149 @@ export function ListenersView() {
     certificateDetails.data ?? [],
     importedCertificateDetails,
   );
+  const installationLeaf = bootstrap?.certificate.items.find(
+    (item): item is CertificateItemViewModel => item.kind === "proxy_leaf",
+  );
 
   function clearDerivedResults() {
     setValidation(undefined);
     setTlsTest(undefined);
     setTlsTestError(undefined);
-    setStartBlockedMessage(undefined);
   }
 
   function replaceSelected(changes: Partial<ProxyListener>) {
     if (!effectiveWorkspace || !selected) return;
-    setWorkspace({
+    applyDraftWorkspace({
       ...effectiveWorkspace,
       listeners: effectiveWorkspace.listeners.map((listener, index) =>
         index === effectiveIndex ? { ...listener, ...changes } : listener,
       ),
-    });
+    }, effectiveWorkspace);
     clearDerivedResults();
   }
 
-  async function validateWorkspace() {
-    if (!effectiveWorkspace || pending) return;
+  function applyDraftWorkspace(next: ProxyWorkspace, previous: ProxyWorkspace) {
+    const { workspace: pruned, detached } = pruneDetachedDraftCertificates(
+      previous,
+      next,
+      workspaceQuery.data?.certificate_references ?? [],
+    );
+    setWorkspace(pruned);
+    if (detached.length === 0) return;
+    const detachedIds = new Set(detached.map((reference) => reference.id));
+    setImportedCertificateDetails((current) =>
+      current.filter((detail) => !detachedIds.has(detail.reference_id)),
+    );
+    for (const reference of detached) {
+      discardDraftCertificate(reference);
+    }
+  }
+
+  function discardDraftCertificate(reference: CertificateReference) {
+    if (certificateDiscardsInFlight.current.has(reference.reference)) return;
+    certificateDiscardsInFlight.current.add(reference.reference);
+    void callCommand(commands.listenerCertificateDiscard(reference))
+      .catch((reason) => toast(errorMessage(reason), { variant: "danger" }))
+      .finally(() => certificateDiscardsInFlight.current.delete(reference.reference));
+  }
+
+  async function validateSelectedListener() {
+    if (!effectiveWorkspace || !selected || pending) return;
     await withPending("validate", async () => {
-      const result = await callCommand(commands.workspaceValidate(effectiveWorkspace));
+      const certificateReferences = listenerCertificateReferences(
+        selected,
+        effectiveWorkspace.certificate_references,
+      );
+      const result = await callCommand(commands.listenerValidate(
+        effectiveWorkspace.id,
+        effectiveWorkspace.revision,
+        selected,
+        certificateReferences,
+      ));
       setValidation(result);
-      if (result.valid) toast("Rust 校验通过。", { variant: "success" });
+      if (result.valid) toast("当前监听校验通过。", { variant: "success" });
     });
   }
 
-  async function saveWorkspace() {
-    if (!effectiveWorkspace || pending) return;
+  async function saveSelectedListener() {
+    if (!effectiveWorkspace || !selected || pending) return;
     await withPending("save", async () => {
-      const result = await callCommand(commands.workspaceValidate(effectiveWorkspace));
+      const certificateReferences = listenerCertificateReferences(
+        selected,
+        effectiveWorkspace.certificate_references,
+      );
+      const result = await callCommand(commands.listenerValidate(
+        effectiveWorkspace.id,
+        effectiveWorkspace.revision,
+        selected,
+        certificateReferences,
+      ));
       setValidation(result);
       if (!result.valid) return;
-      const saved = await callCommand(commands.workspaceSave(result.normalized));
-      setWorkspace(saved);
-      workspaceQuery.setData(saved);
-      toast("代理监听已保存。", { variant: "success" });
+      await persistSelectedListener(result.normalized, effectiveWorkspace, selected.id);
+      toast("当前代理监听已保存。", { variant: "success" });
       await workspaces.refresh();
     });
   }
 
+  async function persistSelectedListener(
+    normalized: ProxyWorkspace,
+    localDraft: ProxyWorkspace,
+    listenerId: string,
+  ) {
+    const listener = normalized.listeners.find((item) => item.id === listenerId);
+    if (!listener) throw new Error("当前代理监听已被删除，请刷新后重试。");
+    const saved = await callCommand(commands.listenerSave(
+      normalized.id,
+      normalized.revision,
+      listener,
+      normalized.certificate_references,
+    ));
+    const merged = mergePersistedListener(localDraft, saved, listenerId);
+    setWorkspace(merged);
+    workspaceQuery.setData(saved);
+    return merged;
+  }
+
   async function toggleListenerRuntime() {
-    if (!effectiveWorkspace || !selected || pending) return;
-    const operation = selectedIsRunning ? "stop" : "start";
+    if (!effectiveWorkspace || !selected || !selectedStatusKnown || pending) return;
+    const operation = selectedStatus?.can_stop
+      ? "stop"
+      : selectedStatus?.can_start
+        ? "start"
+        : undefined;
+    if (!operation) return;
     await withPending(operation, async () => {
       let revision = effectiveWorkspace.revision;
-      if (!selectedIsRunning && hasUnsavedChanges) {
-        const otherListenerIsActive = statuses.data?.some((status) =>
-          status.listener_id !== selected.id
-          && (status.state === "running" || status.state === "starting"),
+      let draftSnapshot = effectiveWorkspace;
+      if (operation === "start" && hasUnsavedChanges) {
+        const certificateReferences = listenerCertificateReferences(
+          selected,
+          effectiveWorkspace.certificate_references,
         );
-        if (otherListenerIsActive) {
-          const message = "当前监听配置尚未保存，且已有其他监听正在运行。请先停止运行中的监听，再保存当前修改后启动。";
-          setStartBlockedMessage(message);
-          toast(message, { variant: "danger" });
-          return;
-        }
-        const result = await callCommand(commands.workspaceValidate(effectiveWorkspace));
+        const result = await callCommand(commands.listenerValidate(
+          effectiveWorkspace.id,
+          effectiveWorkspace.revision,
+          selected,
+          certificateReferences,
+        ));
         setValidation(result);
         if (!result.valid) return;
-        const saved = await callCommand(commands.workspaceSave(result.normalized));
-        revision = saved.revision;
-        setWorkspace(saved);
-        workspaceQuery.setData(saved);
+        draftSnapshot = await persistSelectedListener(
+          result.normalized,
+          effectiveWorkspace,
+          selected.id,
+        );
+        revision = draftSnapshot.revision;
       }
-      const status = selectedIsRunning
+      const status = operation === "stop"
         ? await callCommand(commands.listenerStop(effectiveWorkspace.id, revision, selected.id))
         : await callCommand(commands.listenerStart(effectiveWorkspace.id, revision, selected.id));
       toast(`代理监听${status.state_text}。`, { variant: status.state === "faulted" ? "danger" : "success" });
       const refreshed = await callCommand(commands.workspaceGet(effectiveWorkspace.id));
-      setWorkspace(refreshed);
+      setWorkspace(mergePersistedListener(draftSnapshot, refreshed, selected.id));
       workspaceQuery.setData(refreshed);
-      setStartBlockedMessage(undefined);
-      statuses.setData((current) => [...(current ?? []).filter((item) => item.listener_id !== status.listener_id), status]);
+      await listenerOverview.refresh();
       await workspaces.refresh();
     });
   }
@@ -161,11 +249,32 @@ export function ListenersView() {
     });
   }
 
-  function removeSelectedListener() {
-    if (!effectiveWorkspace || !selected || selectedIsRunning || pending) return;
-    setWorkspace({ ...effectiveWorkspace, listeners: effectiveWorkspace.listeners.filter((_, index) => index !== effectiveIndex) });
-    setSelectedIndex(Math.max(0, effectiveIndex - 1));
-    clearDerivedResults();
+  async function removeSelectedListener() {
+    if (!effectiveWorkspace || !selected || !selectedCanDelete || pending) return;
+    const persisted = workspaceQuery.data?.listeners.some((listener) => listener.id === selected.id);
+    if (!persisted) {
+      applyDraftWorkspace({
+        ...effectiveWorkspace,
+        listeners: effectiveWorkspace.listeners.filter((_, index) => index !== effectiveIndex),
+      }, effectiveWorkspace);
+      setSelectedIndex(Math.max(0, effectiveIndex - 1));
+      clearDerivedResults();
+      return;
+    }
+    await withPending("delete", async () => {
+      await callCommand(commands.listenerDelete(effectiveWorkspace.id, effectiveWorkspace.revision, selected.id));
+      const refreshed = await callCommand(commands.workspaceGet(effectiveWorkspace.id));
+      applyDraftWorkspace(
+        mergePersistedListenerDeletion(effectiveWorkspace, refreshed, selected.id),
+        effectiveWorkspace,
+      );
+      workspaceQuery.setData(refreshed);
+      setSelectedIndex(Math.min(effectiveIndex, Math.max(0, refreshed.listeners.length - 1)));
+      clearDerivedResults();
+      toast("代理监听已删除。", { variant: "success" });
+      await listenerOverview.refresh();
+      await workspaces.refresh();
+    });
   }
 
   async function storeBasicCredential() {
@@ -183,44 +292,120 @@ export function ListenersView() {
     setTlsTest(undefined);
     setTlsTestError(undefined);
     await withPending("tls-test", async () => {
-      const result = await callCommand(commands.workspaceValidate(effectiveWorkspace));
+      const certificateReferences = listenerCertificateReferences(
+        selected,
+        effectiveWorkspace.certificate_references,
+      );
+      const result = await callCommand(commands.listenerValidate(
+        effectiveWorkspace.id,
+        effectiveWorkspace.revision,
+        selected,
+        certificateReferences,
+      ));
       setValidation(result);
       if (!result.valid) return;
-      const saved = await callCommand(commands.workspaceSave(result.normalized));
-      setWorkspace(saved);
-      workspaceQuery.setData(saved);
-      const test = await callCommand(commands.listenerTestUpstreamTls(saved.id, selected.id));
+      // TLS 测试只读取当前草稿并建立一次临时上游连接，不持久化 Workspace。
+      // 因此其他 Listener 正在运行时也可以安全测试当前 Listener 的证书配置。
+      const normalizedListener = result.normalized.listeners.find(
+        (listener) => listener.id === selected.id,
+      );
+      if (!normalizedListener) throw new Error("当前代理监听已被删除，请刷新后重试。");
+      const test = await callCommand(
+        commands.listenerTestUpstreamTls(
+          result.normalized.id,
+          result.normalized.revision,
+          normalizedListener,
+          listenerCertificateReferences(
+            normalizedListener,
+            result.normalized.certificate_references,
+          ),
+        ),
+      );
       setTlsTest(test);
       toast(test.message, { variant: "success" });
-      await workspaces.refresh();
     }, (reason) => setTlsTestError(errorMessage(reason)));
   }
 
+  async function importDownstreamIdentity(label: string) {
+    return importCertificate(
+      "import-downstream-identity",
+      () => callCommand(commands.listenerImportDownstreamServerIdentity(label)),
+      (listener, referenceId) => ({
+        ...listener,
+        downstream_tls: { ...listener.downstream_tls, server_identity: referenceId },
+      }),
+    );
+  }
+
+  async function importDownstreamTrust(label: string) {
+    return importCertificate(
+      "import-downstream-trust",
+      () => callCommand(commands.listenerImportDownstreamClientTrust(label)),
+      (listener, referenceId) => {
+        const mode = listener.downstream_tls.client_authentication.mode;
+        return {
+          ...listener,
+          downstream_tls: {
+            ...listener.downstream_tls,
+            client_authentication: mode === "required"
+              ? { mode: "required", trust: referenceId }
+              : { mode: "optional", trust: referenceId },
+          },
+        };
+      },
+    );
+  }
+
   async function importIdentity(label: string, password: string) {
-    return importCertificate("import-identity", async () => callCommand(commands.listenerImportUpstreamClientIdentity(label, password)), "client_identity");
+    return importCertificate(
+      "import-upstream-identity",
+      () => callCommand(commands.listenerImportUpstreamClientIdentity(label, password)),
+      (listener, referenceId) => listener.fixed_server ? {
+        ...listener,
+        fixed_server: {
+          ...listener.fixed_server,
+          upstream_tls: { ...listener.fixed_server.upstream_tls, client_identity: referenceId },
+        },
+      } : listener,
+    );
   }
 
   async function importTrust(label: string) {
-    return importCertificate("import-trust", async () => callCommand(commands.listenerImportUpstreamServerTrust(label)), "server_trust");
+    return importCertificate(
+      "import-upstream-trust",
+      () => callCommand(commands.listenerImportUpstreamServerTrust(label)),
+      (listener, referenceId) => listener.fixed_server ? {
+        ...listener,
+        fixed_server: {
+          ...listener.fixed_server,
+          upstream_tls: { ...listener.fixed_server.upstream_tls, server_trust: referenceId },
+        },
+      } : listener,
+    );
   }
 
-  async function importCertificate(kind: "import-identity" | "import-trust", load: () => Promise<ListenerCertificateImportViewModel | null>, field: "client_identity" | "server_trust") {
-    if (!effectiveWorkspace || !selected?.fixed_server || pending) return false;
+  async function importCertificate(
+    kind: Extract<Pending, `import-${string}`>,
+    load: () => Promise<ListenerCertificateImportViewModel | null>,
+    bind: (listener: ProxyListener, referenceId: string) => ProxyListener,
+  ) {
+    if (!effectiveWorkspace || !selected || pending) return false;
     let importedSuccessfully = false;
     await withPending(kind, async () => {
       const result = await load();
-      if (!result || !selected.fixed_server) return;
+      if (!result) return;
       const { reference, detail } = result;
-      replaceSelected({
-        fixed_server: {
-          ...selected.fixed_server,
-          upstream_tls: { ...selected.fixed_server.upstream_tls, [field]: reference.id },
-        },
-      });
-      setWorkspace((current) => current ? {
-        ...current,
-        certificate_references: [...current.certificate_references.filter((item) => item.id !== reference.id), reference],
-      } : current);
+      applyDraftWorkspace({
+        ...effectiveWorkspace,
+        listeners: effectiveWorkspace.listeners.map((listener, index) =>
+          index === effectiveIndex ? bind(listener, reference.id) : listener,
+        ),
+        certificate_references: [
+          ...effectiveWorkspace.certificate_references.filter((item) => item.id !== reference.id),
+          reference,
+        ],
+      }, effectiveWorkspace);
+      clearDerivedResults();
       setImportedCertificateDetails((current) => mergeCertificateDetails(current, [detail]));
       importedSuccessfully = true;
       toast("证书材料已安全导入并绑定到当前监听。", { variant: "success" });
@@ -252,14 +437,67 @@ export function ListenersView() {
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-xl font-semibold">监听配置</h2>
           {selected && <Chip color="accent" variant="soft">{selected.fixed_server ? "固定 Server" : "按请求目标"}</Chip>}
-          <div className="ml-auto flex flex-wrap gap-2"><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void copySelectedListener()}>复制监听</Button><Button variant="danger-soft" isDisabled={!selected || selectedIsRunning || Boolean(pending)} onPress={removeSelectedListener}>删除监听</Button><Button variant="outline" isDisabled={!effectiveWorkspace || Boolean(pending)} onPress={() => void validateWorkspace()}>{pending === "validate" ? "校验中…" : "Rust 校验"}</Button><Button variant="primary" isDisabled={!effectiveWorkspace || Boolean(pending)} onPress={() => void saveWorkspace()}>{pending === "save" ? "保存中…" : "校验并保存"}</Button></div>
+          <div className="ml-auto flex flex-wrap gap-2"><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void copySelectedListener()}>复制监听</Button><Button variant="danger-soft" isDisabled={!selected || !selectedCanDelete || Boolean(pending)} onPress={() => void removeSelectedListener()}>{pending === "delete" ? "删除中…" : "删除监听"}</Button><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void validateSelectedListener()}>{pending === "validate" ? "校验中…" : "校验当前监听"}</Button><Button variant="primary" isDisabled={!selected || Boolean(pending)} onPress={() => void saveSelectedListener()}>{pending === "save" ? "保存中…" : "保存当前监听"}</Button></div>
         </div>
-        {validation && (validation.valid ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>Rust 校验通过</Alert.Title><Alert.Description>当前 Workspace 可保存。</Alert.Description></Alert.Content></Alert> : <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>Rust 校验未通过</Alert.Title><Alert.Description>{errors.map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description></Alert.Content></Alert>)}
+        {validation && (validation.valid ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验通过</Alert.Title><Alert.Description>当前监听可保存、启动或执行上游 TLS 测试。</Alert.Description></Alert.Content></Alert> : <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验未通过</Alert.Title><Alert.Description>{errors.map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description></Alert.Content></Alert>)}
         {certificateDetails.error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>证书详情读取失败</Alert.Title><Alert.Description>{certificateDetails.error}</Alert.Description></Alert.Content></Alert>}
-        {startBlockedMessage && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>无法启动当前监听</Alert.Title><Alert.Description>{startBlockedMessage}</Alert.Description></Alert.Content></Alert>}
-        {!selected ? <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">选择一个代理监听进行编辑。</p> : <><div className="flex items-center justify-between rounded-2xl border border-[var(--telemetry-line)] p-3"><span className="text-sm">运行状态：{selectedStatus?.state_text ?? "已停止"}</span><Button variant={selectedIsRunning ? "danger-soft" : "primary"} isDisabled={Boolean(pending) || selectedStatus?.state === "starting" || selectedStatus?.state === "stopping"} onPress={() => void toggleListenerRuntime()}>{pending === "start" ? "启动中…" : pending === "stop" ? "停止中…" : selectedIsRunning ? "停止监听" : "启动监听"}</Button></div><ListenerEditor listener={selected} certificateReferences={effectiveWorkspace.certificate_references} certificateDetails={effectiveCertificateDetails} pending={pending} tlsTest={tlsTest} tlsTestError={tlsTestError} basicUsername={basicUsername} basicPassword={basicPassword} onBasicUsernameChange={setBasicUsername} onBasicPasswordChange={setBasicPassword} onChange={replaceSelected} onStoreBasicCredential={storeBasicCredential} onImportClientIdentity={importIdentity} onImportServerTrust={importTrust} onTestUpstreamTls={testUpstreamTls} /></>}
+        {!selected ? <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">选择一个代理监听进行编辑。</p> : <><ListenerRuntimeCard status={selectedStatus} isLoading={listenerOverview.isLoading} error={listenerOverview.error} pending={pending} onToggle={toggleListenerRuntime} onRetry={listenerOverview.refresh} /><ListenerEditor listener={selected} certificateReferences={effectiveWorkspace.certificate_references} certificateDetails={effectiveCertificateDetails} installationLeaf={installationLeaf} pending={pending} tlsTest={tlsTest} tlsTestError={tlsTestError} basicUsername={basicUsername} basicPassword={basicPassword} onBasicUsernameChange={setBasicUsername} onBasicPasswordChange={setBasicPassword} onChange={replaceSelected} onStoreBasicCredential={storeBasicCredential} onImportDownstreamServerIdentity={importDownstreamIdentity} onImportDownstreamClientTrust={importDownstreamTrust} onImportClientIdentity={importIdentity} onImportServerTrust={importTrust} onTestUpstreamTls={testUpstreamTls} /></>}
       </main>
     </section>
+  );
+}
+
+function ListenerRuntimeCard({
+  status,
+  isLoading,
+  error,
+  pending,
+  onToggle,
+  onRetry,
+}: {
+  status?: ListenerMonitorRowViewModel;
+  isLoading: boolean;
+  error?: string;
+  pending?: Pending;
+  onToggle: () => Promise<void>;
+  onRetry: () => Promise<void>;
+}) {
+  const unavailable = isLoading || Boolean(error) || !status;
+  const operation = status?.can_stop ? "stop" : status?.can_start ? "start" : undefined;
+  const stateText = isLoading
+    ? "正在读取…"
+    : error
+      ? "查询失败"
+      : status?.state_text ?? "未知（Rust 未返回当前监听状态）";
+  const actionText = pending === "start"
+    ? "启动中…"
+    : pending === "stop"
+      ? "停止中…"
+      : unavailable
+        ? "状态不可用"
+        : operation === "stop"
+          ? "停止监听"
+          : operation === "start"
+            ? "启动监听"
+            : "无可用操作";
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--telemetry-line)] p-3">
+      <div className="min-w-0">
+        <p className="text-sm">运行状态：{stateText}</p>
+        {error && <p className="mt-1 text-xs text-[var(--telemetry-danger)]">{error}</p>}
+      </div>
+      <div className="flex items-center gap-2">
+        {error && <Button size="sm" variant="outline" onPress={() => void onRetry()}>重试状态查询</Button>}
+        <Button
+          variant={operation === "stop" ? "danger-soft" : "primary"}
+          isDisabled={Boolean(pending) || unavailable || !operation}
+          onPress={() => void onToggle()}
+        >
+          {actionText}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -271,6 +509,68 @@ function sameWorkspace(left: ProxyWorkspace, right: ProxyWorkspace) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+/// Rust 只持久化当前监听；其他监听仍可能包含用户尚未保存的草稿。
+/// 用新的 revision、证书引用和当前监听覆盖本地草稿，避免保存 B 时丢失 A 的未保存输入。
+function mergePersistedListener(
+  draft: ProxyWorkspace,
+  persisted: ProxyWorkspace,
+  listenerId: string,
+) {
+  const persistedListener = persisted.listeners.find((listener) => listener.id === listenerId);
+  const draftIds = new Set(draft.listeners.map((listener) => listener.id));
+  const listeners = draft.listeners
+    .map((listener) => listener.id === listenerId && persistedListener ? persistedListener : listener);
+  for (const listener of persisted.listeners) {
+    if (!draftIds.has(listener.id)) listeners.push(listener);
+  }
+  const reachableIds = listenerCertificateReferenceIds(listeners);
+  const persistedReferences = new Map(
+    persisted.certificate_references.map((reference) => [reference.id, reference]),
+  );
+  for (const reference of draft.certificate_references) {
+    if (reachableIds.has(reference.id) && !persistedReferences.has(reference.id)) {
+      persistedReferences.set(reference.id, reference);
+    }
+  }
+  return {
+    ...draft,
+    revision: persisted.revision,
+    certificate_references: [...persistedReferences.values()],
+    listeners,
+  };
+}
+
+/**
+ * Rust 删除命令只改变被删除的 Listener 及 Workspace revision。
+ * 其他 Listener 的本地草稿必须继续保留，包括它们刚导入但尚未保存的托管证书引用。
+ */
+function mergePersistedListenerDeletion(
+  draft: ProxyWorkspace,
+  persisted: ProxyWorkspace,
+  deletedListenerId: string,
+) {
+  const draftIds = new Set(draft.listeners.map((listener) => listener.id));
+  const listeners = draft.listeners.filter((listener) => listener.id !== deletedListenerId);
+  for (const listener of persisted.listeners) {
+    if (!draftIds.has(listener.id)) listeners.push(listener);
+  }
+  const reachableIds = listenerCertificateReferenceIds(listeners);
+  const references = new Map(
+    persisted.certificate_references.map((reference) => [reference.id, reference]),
+  );
+  for (const reference of draft.certificate_references) {
+    if (reachableIds.has(reference.id) && !references.has(reference.id)) {
+      references.set(reference.id, reference);
+    }
+  }
+  return {
+    ...draft,
+    revision: persisted.revision,
+    listeners,
+    certificate_references: [...references.values()],
+  };
+}
+
 function mergeCertificateDetails(
   first: ListenerCertificateDetailViewModel[],
   second: ListenerCertificateDetailViewModel[],
@@ -278,4 +578,66 @@ function mergeCertificateDetails(
   const details = new Map(first.map((detail) => [detail.reference_id, detail]));
   for (const detail of second) details.set(detail.reference_id, detail);
   return [...details.values()];
+}
+
+/**
+ * Listener 级命令只携带当前监听实际可达的安全引用。
+ *
+ * Workspace 中可能还有其他监听尚未保存的证书草稿；把整表交给 listener_save
+ * 会把无关材料误判为当前监听的变更，也会扩大单监听命令的写入边界。
+ */
+function listenerCertificateReferences(
+  listener: ProxyListener,
+  references: ProxyWorkspace["certificate_references"],
+) {
+  const referencedIds = listenerCertificateReferenceIds([listener]);
+  return references.filter((reference) => referencedIds.has(reference.id));
+}
+
+function listenerCertificateReferenceIds(listeners: ProxyListener[]) {
+  const referencedIds = new Set<string>();
+  for (const listener of listeners) {
+    if (listener.downstream_tls.server_identity) {
+      referencedIds.add(listener.downstream_tls.server_identity);
+    }
+    const clientAuthentication = listener.downstream_tls.client_authentication;
+    if (clientAuthentication.mode !== "disabled" && clientAuthentication.trust) {
+      referencedIds.add(clientAuthentication.trust);
+    }
+    const upstreamTls = listener.fixed_server?.upstream_tls;
+    if (upstreamTls?.server_trust) referencedIds.add(upstreamTls.server_trust);
+    if (upstreamTls?.client_identity) referencedIds.add(upstreamTls.client_identity);
+  }
+  return referencedIds;
+}
+
+/**
+ * 导入命令会先把证书写入系统安全存储，再把非敏感引用交给页面草稿。
+ * 当用户在保存前替换、清空或删除该草稿时，只清理不再被任何草稿监听使用、
+ * 且尚未出现在持久化 Workspace 中的材料。
+ */
+function pruneDetachedDraftCertificates(
+  previous: ProxyWorkspace,
+  next: ProxyWorkspace,
+  persistedReferences: CertificateReference[],
+) {
+  const reachableIds = listenerCertificateReferenceIds(next.listeners);
+  const persistedIds = new Set(persistedReferences.map((reference) => reference.id));
+  const persistedHandles = new Set(persistedReferences.map((reference) => reference.reference));
+  const detached = previous.certificate_references.filter((reference) =>
+    !reachableIds.has(reference.id)
+    && !persistedIds.has(reference.id)
+    && !persistedHandles.has(reference.reference),
+  );
+  if (detached.length === 0) return { workspace: next, detached };
+  const detachedIds = new Set(detached.map((reference) => reference.id));
+  return {
+    workspace: {
+      ...next,
+      certificate_references: next.certificate_references.filter(
+        (reference) => !detachedIds.has(reference.id),
+      ),
+    },
+    detached,
+  };
 }

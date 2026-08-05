@@ -5,8 +5,9 @@
 //! HTTP 字节流（包括 Header 与 Body）在未进入规则修改管线时逐字节转发。
 
 use std::{
+    collections::BTreeMap,
     net::SocketAddr,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
@@ -20,7 +21,8 @@ use rustls::{
         danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     },
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName, UnixTime},
-    server::WebPkiClientVerifier,
+    server::{ClientHello, ResolvesServerCert, WebPkiClientVerifier},
+    sign::CertifiedKey,
     version::TLS12,
 };
 use tokio::{
@@ -32,7 +34,7 @@ use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 use x509_parser::{extensions::GeneralName, parse_x509_certificate};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::message::MessageLimits;
 use crate::supervisor::ChannelId;
@@ -41,7 +43,7 @@ use crate::transport::{
     AcceptedConnection, BoxIo as TransportBoxIo, ConnectionAcceptor, ConnectionAdmission,
     ConnectionContext, ConnectionService, HyperUpstreamConnector, PipelinePorts, SystemClock,
 };
-use crate::{ErrorCode, ProxyError, Result};
+use crate::{ErrorCode, MitmCertificateAuthority, ProxyError, Result};
 
 #[derive(Clone)]
 pub struct ReverseClientIdentity {
@@ -62,6 +64,11 @@ impl std::fmt::Debug for ReverseClientIdentity {
 #[derive(Clone, Debug)]
 pub struct ReverseDownstreamTls {
     pub server_identity: ReverseClientIdentity,
+    /// 当监听未绑定独立服务端身份时，按客户端 TLS SNI 动态签发匹配的叶子证书。
+    ///
+    /// 无 SNI 的客户端仍使用 `server_identity` 作为回退。显式导入独立身份时该字段为
+    /// `None`，确保 Workspace 选择的证书不会被动态签发覆盖。
+    pub dynamic_server_identity: Option<Arc<dyn MitmCertificateAuthority>>,
     pub client_trust_der: Vec<Vec<u8>>,
     pub client_authentication_required: bool,
 }
@@ -543,13 +550,75 @@ fn build_server_acceptor(settings: &ReverseDownstreamTls) -> Result<TlsAcceptor>
         .map_err(config_error)?;
         builder.with_client_cert_verifier(verifier)
     };
-    let config = config
-        .with_single_cert(
-            certificate_chain(&settings.server_identity.certificate_chain_der),
-            private_key(&settings.server_identity.private_key_pkcs8_der),
-        )
-        .map_err(config_error)?;
+    let fallback = certified_key(&settings.server_identity)?;
+    let config = match &settings.dynamic_server_identity {
+        Some(authority) => config.with_cert_resolver(Arc::new(DynamicServerIdentityResolver {
+            authority: Arc::clone(authority),
+            fallback,
+            cache: Mutex::new(BTreeMap::new()),
+        })),
+        None => config.with_cert_resolver(Arc::new(rustls::sign::SingleCertAndKey::from(fallback))),
+    };
     Ok(TlsAcceptor::from(Arc::new(config)))
+}
+
+#[derive(Debug)]
+struct DynamicServerIdentityResolver {
+    authority: Arc<dyn MitmCertificateAuthority>,
+    fallback: Arc<CertifiedKey>,
+    cache: Mutex<BTreeMap<String, Arc<CertifiedKey>>>,
+}
+
+impl ResolvesServerCert for DynamicServerIdentityResolver {
+    fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
+        let Some(server_name) = client_hello.server_name() else {
+            return Some(Arc::clone(&self.fallback));
+        };
+        let cache_key = server_name.to_ascii_lowercase();
+        if let Some(cached) = self.cache.lock().ok()?.get(&cache_key) {
+            return Some(Arc::clone(cached));
+        }
+
+        let identity = self.authority.issue_server_identity(server_name).ok()?;
+        let certified = certified_key_from_parts(
+            &identity.certificate_chain_der,
+            identity.private_key_pkcs8_der.to_vec(),
+        )
+        .ok()?;
+        let certified = Arc::new(certified);
+        let mut cache = self.cache.lock().ok()?;
+        if let Some(cached) = cache.get(&cache_key) {
+            return Some(Arc::clone(cached));
+        }
+        if cache.len() >= 256
+            && let Some(oldest_key) = cache.keys().next().cloned()
+        {
+            cache.remove(&oldest_key);
+        }
+        cache.insert(cache_key, Arc::clone(&certified));
+        Some(certified)
+    }
+}
+
+fn certified_key(identity: &ReverseClientIdentity) -> Result<Arc<CertifiedKey>> {
+    certified_key_from_parts(
+        &identity.certificate_chain_der,
+        identity.private_key_pkcs8_der.to_vec(),
+    )
+    .map(Arc::new)
+}
+
+fn certified_key_from_parts(
+    certificate_chain_der: &[Vec<u8>],
+    private_key_pkcs8_der: Vec<u8>,
+) -> Result<CertifiedKey> {
+    let mut private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(private_key_pkcs8_der));
+    let signing_key =
+        rustls::crypto::ring::sign::any_supported_type(&private_key).map_err(config_error)?;
+    private_key.zeroize();
+    let certified = CertifiedKey::new(certificate_chain(certificate_chain_der), signing_key);
+    certified.keys_match().map_err(config_error)?;
+    Ok(certified)
 }
 
 fn build_client_connector(settings: &ReverseUpstreamTls) -> Result<ClientTlsAdapter> {

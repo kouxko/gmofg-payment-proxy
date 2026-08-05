@@ -66,7 +66,13 @@ export async function subscribeToAppEvents(
 
 export function errorMessage(error: unknown): string {
   const appError = appErrorViewModel(error);
-  if (appError) return appError.message;
+  if (appError) {
+    const details = Array.from(new Set(Object.values(appError.field_errors).flat()))
+      .filter((message) => message.trim().length > 0);
+    return details.length > 0
+      ? `${appError.message}：${details.join("；")}`
+      : appError.message;
+  }
   return "无法连接 Rust 核心，请确认桌面应用已完成初始化。";
 }
 

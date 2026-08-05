@@ -7,6 +7,7 @@
 # 代理 IP；真实 GMO-FG 验收仍必须使用 A920MAX 和真实上游。
 
 require "json"
+require "digest"
 require "open3"
 require "socket"
 require "time"
@@ -24,7 +25,6 @@ transaction_device_proxy_port = 6_556
 target_package = ENV.fetch("EMULATOR_PROXY_GATE_TARGET_PACKAGE")
 target_activity = ENV.fetch("EMULATOR_PROXY_GATE_TARGET_ACTIVITY")
 target_uid = Integer(ENV.fetch("EMULATOR_PROXY_GATE_TARGET_UID"))
-target_signature = ENV.fetch("EMULATOR_PROXY_GATE_TARGET_SIGNING_SHA256")
 dll_listener_id = ENV.fetch("EMULATOR_PROXY_GATE_DLL_LISTENER_ID")
 transaction_listener_id = ENV.fetch("EMULATOR_PROXY_GATE_TRANSACTION_LISTENER_ID")
 
@@ -42,6 +42,22 @@ def control(serial, operation, profile = nil, proxy_runtime = nil)
     profile: profile,
     proxy_runtime: proxy_runtime
   )
+end
+
+# 与 Rust/Android 使用相同的稳定 JSON 表示生成激活指纹。对象键排序，数组顺序保留；
+# 不能直接依赖 Hash 插入顺序，否则测试脚本可能构造出内容相同但指纹不同的运行配置。
+def canonical_json(value)
+  case value
+  when Hash
+    "{" + value.keys.map(&:to_s).sort.map do |key|
+      raw_key = value.key?(key) ? key : key.to_sym
+      JSON.generate(key) + ":" + canonical_json(value.fetch(raw_key))
+    end.join(",") + "}"
+  when Array
+    "[" + value.map { |item| canonical_json(item) }.join(",") + "]"
+  else
+    JSON.generate(value)
+  end
 end
 
 def wait_for_vpn_running(serial, timeout_seconds: 8)
@@ -158,7 +174,6 @@ profile = {
   name: "Proxy VPN joint D48 gate",
   target_applications: [{
     package_name: target_package,
-    signing_sha256: target_signature,
     uid: target_uid
   }],
   # 只对 DLL 原始目标注入弱网，但 DLL 和 Transaction 都必须命中透明代理。
@@ -180,13 +195,12 @@ profile = {
   auto_resume_after_reboot: false,
   weak_network: weak_network
 }
-proxy_runtime = {
-  routes: [
+runtime_routes = [
     {
       listener_id: dll_listener_id,
       original_destination: original_host,
       original_ports: [original_dll_port],
-      resolved_original_ips: [original_host],
+      resolved_original_ips: [],
       proxy_host: "127.0.0.1",
       proxy_port: dll_device_proxy_port
     },
@@ -194,11 +208,17 @@ proxy_runtime = {
       listener_id: transaction_listener_id,
       original_destination: original_host,
       original_ports: [original_transaction_port],
-      resolved_original_ips: [original_host],
+      resolved_original_ips: [],
       proxy_host: "127.0.0.1",
       proxy_port: transaction_device_proxy_port
     }
   ]
+proxy_runtime = {
+  routes: runtime_routes,
+  route_source: profile.fetch(:proxy_routes),
+  profile_fingerprint: Digest::SHA256.hexdigest(canonical_json(profile)),
+  route_fingerprint: Digest::SHA256.hexdigest(canonical_json(runtime_routes)),
+  route_count: runtime_routes.length
 }
 
 report = {
@@ -218,8 +238,8 @@ report = {
 }
 
 begin
-  # run.sh 已通过 appops 完成模拟器测试授权。这里不能再次打开授权 Activity：已授权时
-  # Activity 会自动启动磁盘中上次保存的 Profile，与随后 apply 的本轮 Profile 并发。
+  # run.sh 已通过 appops 完成模拟器测试授权。VpnConsentActivity 只处理系统授权，
+  # 不启动 VPN；本轮 Profile 始终由下方 apply 明确启动。
   control(serial, "emergency_restore")
   sleep 1
 

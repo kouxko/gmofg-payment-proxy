@@ -33,6 +33,7 @@ import type {
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { formatBytes, formatDuration, formatTimestamp, toneColor } from "@/lib/format";
+import { formatMessageBody } from "@/lib/message-content";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import {
@@ -707,8 +708,8 @@ export function CaptureView({
                 </div>
                 <div>
                   <h2 className="mb-2 font-semibold">请求 Body</h2>
-                  <pre className="whitespace-pre-wrap break-all text-xs">
-                    {detail.data?.request.body_text ?? "无请求正文"}
+                  <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">
+                    {formatMessageBody(detail.data?.request, "无请求正文")}
                   </pre>
                 </div>
               </>
@@ -771,8 +772,8 @@ export function CaptureView({
                 </div>
                 <div>
                   <h2 className="mb-2 font-semibold">响应 Body</h2>
-                  <pre className="whitespace-pre-wrap break-all text-xs">
-                    {detail.data.response.body_text ?? "无响应正文"}
+                  <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">
+                    {formatMessageBody(detail.data.response, "无响应正文")}
                   </pre>
                 </div>
               </>

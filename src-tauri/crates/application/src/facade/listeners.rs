@@ -7,10 +7,13 @@ use intercept_proxy_domain::Revision as DomainRevision;
 
 use super::Application;
 use crate::{
-    AppError, AppResult, ListenerId, ListenerMonitorRowViewModel, ListenerOverviewViewModel,
-    ListenerRuntimeState, ListenerStatusViewModel, OperationResultViewModel, ProxyListener,
-    ProxyWorkspace, UiEventPayload, UiTone, WorkspaceChangeKind, WorkspaceId,
+    AppError, AppResult, CertificateReference, ListenerId, ListenerMonitorRowViewModel,
+    ListenerOverviewViewModel, ListenerRuntimeState, ListenerStatusViewModel,
+    OperationResultViewModel, ProxyListener, ProxyWorkspace, UiEventPayload, UiTone,
+    WorkspaceChangeKind, WorkspaceId, WorkspaceValidationViewModel,
 };
+
+const MANAGED_LISTENER_CERTIFICATE_PREFIX: &str = "managed:listener-tls:";
 
 impl Application {
     /// 由 Rust 创建带稳定 ID 的未保存代理监听草稿。
@@ -50,23 +53,46 @@ impl Application {
         workspace_id: WorkspaceId,
         expected_workspace_revision: u64,
         listener: ProxyListener,
-    ) -> AppResult<ProxyListener> {
+        certificate_references: Vec<CertificateReference>,
+    ) -> AppResult<ProxyWorkspace> {
         let _gate = self.mutation_gate.lock().await;
-        let mut workspace = self.workspaces.get(workspace_id).await?;
+        let workspace = self.workspaces.get(workspace_id).await?;
         ensure_listener_not_running(&*self.listener_runtime, listener.id).await?;
-        workspace.revision = DomainRevision::new(expected_workspace_revision);
-        if let Some(current) = workspace
-            .listeners
-            .iter_mut()
-            .find(|current| current.id == listener.id)
-        {
-            *current = listener.clone();
-        } else {
-            workspace.listeners.push(listener.clone());
-        }
+        let workspace = self
+            .listener_draft_workspace(
+                workspace,
+                expected_workspace_revision,
+                listener,
+                certificate_references,
+            )
+            .await?;
         let saved = self.workspaces.save(workspace).await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
-        Ok(listener)
+        Ok(saved)
+    }
+
+    /// 仅校验当前监听草稿及已持久化的其他监听。
+    ///
+    /// 前端可能同时保留多个未保存草稿；保存、启动或测试某一监听时，不应被另一个
+    /// 未保存草稿阻断。Rust 会从仓储读取当前 Workspace，只替换目标监听和本次原生
+    /// 导入的托管证书引用，再执行完整领域校验。
+    pub async fn listener_validate(
+        &self,
+        workspace_id: WorkspaceId,
+        expected_workspace_revision: u64,
+        listener: ProxyListener,
+        certificate_references: Vec<CertificateReference>,
+    ) -> AppResult<WorkspaceValidationViewModel> {
+        let workspace = self.workspaces.get(workspace_id).await?;
+        let candidate = self
+            .listener_draft_workspace(
+                workspace,
+                expected_workspace_revision,
+                listener,
+                certificate_references,
+            )
+            .await?;
+        Ok(WorkspaceValidationViewModel::validate(candidate))
     }
 
     pub async fn listener_delete(
@@ -103,23 +129,34 @@ impl Application {
         self.listener_runtime.statuses().await
     }
 
-    /// 使用已经持久化的入口配置测试真实上游 TLS 握手。
+    /// 使用经 Rust 校验的当前监听草稿测试真实上游 TLS 握手。
     ///
     /// 只允许已配置 HTTPS 固定 Server 的监听器调用。证书材料由 infrastructure 根据安全引用读取，应用层与
     /// 前端都不会接触客户端私钥或 PKCS#12 密码。
     pub async fn listener_test_upstream_tls(
         &self,
         workspace_id: WorkspaceId,
-        listener_id: ListenerId,
+        expected_workspace_revision: u64,
+        listener: ProxyListener,
+        certificate_references: Vec<CertificateReference>,
     ) -> AppResult<crate::ListenerUpstreamTlsTestViewModel> {
         let workspace = self.workspaces.get(workspace_id).await?;
-        let listener = find_listener(&workspace.listeners, listener_id)?;
+        let candidate = self
+            .listener_draft_workspace(
+                workspace,
+                expected_workspace_revision,
+                listener.clone(),
+                certificate_references,
+            )
+            .await?;
+        candidate.validate().map_err(AppError::from)?;
+
         let Some(fixed_server) = &listener.fixed_server else {
             return Err(AppError::new(
                 "LISTENER_TLS_TEST_UNSUPPORTED",
                 "该监听器未开启固定 Server，无法测试单一 Server TLS。",
             )
-            .entity(listener_id.to_string()));
+            .entity(listener.id.to_string()));
         };
         if !fixed_server
             .upstream_url
@@ -130,10 +167,10 @@ impl Application {
                 "UPSTREAM_TLS_NOT_ENABLED",
                 "固定 Server 使用 HTTP，没有 TLS 握手可测试。",
             )
-            .entity(listener_id.to_string()));
+            .entity(listener.id.to_string()));
         }
         self.listener_runtime
-            .test_upstream_tls(workspace, listener)
+            .test_upstream_tls(candidate, listener)
             .await
     }
 
@@ -176,32 +213,21 @@ impl Application {
     pub async fn listener_stop(
         &self,
         workspace_id: WorkspaceId,
-        expected_workspace_revision: u64,
+        _expected_workspace_revision: u64,
         listener_id: ListenerId,
     ) -> AppResult<ListenerStatusViewModel> {
         let _gate = self.mutation_gate.lock().await;
         let workspace = self.workspaces.get(workspace_id).await?;
-        workspace
-            .revision
-            .verify(DomainRevision::new(expected_workspace_revision))?;
-        let original = find_listener(&workspace.listeners, listener_id)?;
+        find_listener(&workspace.listeners, listener_id)?;
         let status = self.listener_runtime.stop(listener_id).await?;
 
-        // 停止最后一个 Listener 时，运行时会重置一次性规则和命中计数；该操作会推进
-        // Workspace revision。因此必须在网络运行时完全停止后重新读取最新 Workspace，
-        // 再持久化 Listener 的 disabled 状态。继续保存停止前的快照会把合法的运行时更新
-        // 误判为 REVISION_CONFLICT，也可能在错误恢复路径中重新启动已经停止的 Listener。
+        // “停止网络入口”是安全优先的运行时操作，不应被其他监听或设备方案推进的
+        // Workspace revision 阻断。停止后读取最新聚合并仅写回当前监听状态。
         let mut workspace = self.workspaces.get(workspace_id).await?;
         set_listener_enabled(&mut workspace.listeners, listener_id, false)?;
-        let restart_snapshot = workspace.clone();
-        if let Err(error) = self.workspaces.save(workspace).await {
-            let _ = self
-                .listener_runtime
-                .start(restart_snapshot, original)
-                .await;
-            return Err(error);
-        }
+        // 即使持久化层失败，也保持端口关闭；绝不能使用旧快照自动重新开放监听。
         self.publish_listener_status(status.clone());
+        self.workspaces.save(workspace).await?;
         Ok(status)
     }
 
@@ -214,6 +240,75 @@ impl Application {
             UiEventPayload::ListenerStatusChanged(status),
         );
     }
+
+    async fn listener_draft_workspace(
+        &self,
+        mut workspace: ProxyWorkspace,
+        expected_workspace_revision: u64,
+        listener: ProxyListener,
+        certificate_references: Vec<CertificateReference>,
+    ) -> AppResult<ProxyWorkspace> {
+        validate_new_certificate_references(
+            &*self.listener_certificates,
+            &workspace.certificate_references,
+            &certificate_references,
+        )
+        .await?;
+        workspace.revision = DomainRevision::new(expected_workspace_revision);
+        if let Some(current) = workspace
+            .listeners
+            .iter_mut()
+            .find(|current| current.id == listener.id)
+        {
+            *current = listener;
+        } else {
+            workspace.listeners.push(listener);
+        }
+        merge_new_certificate_references(
+            &mut workspace.certificate_references,
+            certificate_references,
+        );
+        Ok(workspace)
+    }
+}
+
+/// 证书导入会先产生受基础设施管理的不可变引用，再由当前监听保存动作把引用并入
+/// Workspace。已有同 ID 引用始终以持久化值为准，避免前端借保存监听修改证书来源。
+fn merge_new_certificate_references(
+    current: &mut Vec<CertificateReference>,
+    imported: Vec<CertificateReference>,
+) {
+    for reference in imported {
+        if current.iter().all(|item| item.id != reference.id) {
+            current.push(reference);
+        }
+    }
+}
+
+async fn validate_new_certificate_references(
+    certificates: &dyn crate::ListenerCertificateImportPort,
+    current: &[CertificateReference],
+    imported: &[CertificateReference],
+) -> AppResult<()> {
+    for reference in imported {
+        if current.iter().any(|item| item.id == reference.id) {
+            continue;
+        }
+        if !reference
+            .reference
+            .starts_with(MANAGED_LISTENER_CERTIFICATE_PREFIX)
+        {
+            return Err(AppError::new(
+                "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED",
+                "监听证书必须通过应用内的原生导入功能创建，不能保存文件路径或外部密码引用。",
+            )
+            .entity(reference.id.to_string()));
+        }
+        // `inspect` 同时证明受保护材料仍然存在且可以按其证书角色解析。普通保存命令
+        // 不能仅凭前端提交的字符串把一个不存在的托管引用写入 Workspace。
+        certificates.inspect(reference.clone()).await?;
+    }
+    Ok(())
 }
 
 async fn ensure_listener_not_running(
@@ -273,6 +368,8 @@ fn build_listener_overview(
                 state_text: status.state_text,
                 ui_tone: status.ui_tone,
                 fault_reason: status.fault_reason,
+                can_start: status.can_start,
+                can_stop: status.can_stop,
             }
         })
         .collect::<Vec<_>>();
@@ -415,10 +512,38 @@ mod tests {
         assert_eq!(overview.active_count, 1);
         assert_eq!(overview.state_text, "部分入口运行中");
         assert_eq!(overview.rows[0].request_destination, "请求中的目标地址");
+        assert!(!overview.rows[0].can_start);
+        assert!(overview.rows[0].can_stop);
         assert_eq!(overview.rows[1].state_text, "已停止");
+        assert!(overview.rows[1].can_start);
+        assert!(!overview.rows[1].can_stop);
         assert_eq!(
             overview.rows[1].request_destination,
             "https://api.example.test:9443"
         );
+    }
+
+    #[test]
+    fn overview_preserves_faulted_listener_stop_capability() {
+        let workspace = ProxyWorkspace::default();
+        let listener_id = workspace.listeners[0].id;
+        let overview = build_listener_overview(
+            workspace,
+            vec![ListenerStatusViewModel {
+                listener_id,
+                state: ListenerRuntimeState::Faulted,
+                state_text: "故障".into(),
+                ui_tone: UiTone::Danger,
+                listen_address: "127.0.0.1:8080".into(),
+                fault_reason: Some("Listener 任务已意外结束。".into()),
+                can_start: false,
+                can_stop: true,
+            }],
+        );
+
+        assert_eq!(overview.faulted_count, 1);
+        assert_eq!(overview.rows[0].state, ListenerRuntimeState::Faulted);
+        assert!(!overview.rows[0].can_start);
+        assert!(overview.rows[0].can_stop);
     }
 }

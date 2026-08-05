@@ -8,9 +8,13 @@ import android.net.VpnService
 class ResumeVpnJobService : JobService() {
     override fun onStartJob(params: JobParameters?): Boolean {
         val state = RuntimeStateStore(this)
-        val profile = state.profileJson
-        if (state.autoResumeEnabled && profile != null && VpnService.prepare(this) == null) {
-            startForegroundService(InterceptVpnService.startIntent(this, profile))
+        val activation = state.activation
+        if (
+            state.autoResumeEnabled &&
+            activation != null &&
+            VpnService.prepare(this) == null
+        ) {
+            startForegroundService(InterceptVpnService.startActivationIntent(this, activation))
         }
         jobFinished(params, false)
         return false

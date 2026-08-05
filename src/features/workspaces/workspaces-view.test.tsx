@@ -24,6 +24,7 @@ describe("Workspace CRUD surface", () => {
     mocks.workspaceCreate.mockImplementation((name) => ok({ ...workspace, id: "workspace-2", name }));
     mocks.workspaceValidate.mockImplementation((draft) => ok({ valid: true, normalized: draft, field_errors: {} }));
     mocks.workspaceSave.mockImplementation((draft) => ok({ ...draft, revision: 2 }));
+    mocks.workspaceSelect.mockReturnValue(ok({ id: "workspace-1", name: "API Lab", revision: 1, listener_count: 0, enabled_listener_count: 0, selected: true }));
     mocks.workspaceImport.mockReturnValue(ok({ message: "完整 Workspace 已导入", cancelled: false }));
     mocks.workspaceExport.mockReturnValue(ok({ message: "完整 Workspace 已导出", cancelled: false }));
     mocks.applicationConfigurationImport.mockReturnValue(ok({ message: "完整应用配置已导入", cancelled: false }));
@@ -48,6 +49,16 @@ describe("Workspace CRUD surface", () => {
     await user.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(mocks.workspaceValidate).toHaveBeenCalledTimes(1));
     expect(mocks.workspaceSave.mock.calls[0][0].name).toBe("Renamed Lab");
+  });
+
+  it("explains that switching Workspace keeps running resources alive", async () => {
+    const user = userEvent.setup();
+    render(<WorkspacesView />);
+
+    expect(await screen.findByText("切换只改变编辑上下文")).toBeVisible();
+    expect(screen.getByText(/已运行的代理入口和设备网络接管不会自动停止/)).toBeVisible();
+    await user.click(await screen.findByRole("button", { name: "设为当前 Workspace" }));
+    await waitFor(() => expect(mocks.workspaceSelect).toHaveBeenCalledWith("workspace-1"));
   });
 
   it("明确完整 Workspace 导入导出及敏感材料边界", async () => {

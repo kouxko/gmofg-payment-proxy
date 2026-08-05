@@ -110,18 +110,13 @@ adb -s "$SERIAL" install -r "$TARGET_APK" >/dev/null
 # Instrumentation 可能在同一个 Companion 进程里留下尚在收尾的原生会话。联合门禁从
 # 一个明确的新进程开始，避免上一测试周期的异步 SOCKS 任务污染本轮 last_error。
 adb -s "$SERIAL" shell am force-stop com.interceptproxy.vpn
-adb -s "$SERIAL" shell am start -W -n com.interceptproxy.vpn/.AdbControlActivity \
+adb -s "$SERIAL" shell am start -n com.interceptproxy.vpn/.AdbControlActivity \
   --es command wake_control_server >/dev/null
 adb -s "$SERIAL" shell appops set com.interceptproxy.vpn ACTIVATE_VPN allow
 TARGET_UID="$(adb -s "$SERIAL" shell cmd package list packages -U "$TARGET_PACKAGE" \
   | tr -d '\r' | sed -n 's/.*uid:\([0-9][0-9]*\).*/\1/p')"
-SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
-APKSIGNER="$(find "$SDK_ROOT/build-tools" -name apksigner -type f | sort | tail -1)"
-TARGET_SIGNATURE_HEX="$($APKSIGNER verify --print-certs "$TARGET_APK" \
-  | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
-TARGET_SIGNATURE="$(ruby -e 'puts ARGV.fetch(0).scan(/../).join(":").upcase' "$TARGET_SIGNATURE_HEX")"
-if [[ -z "$TARGET_UID" || -z "$TARGET_SIGNATURE" ]]; then
-  echo "Could not resolve target probe UID/signature" >&2
+if [[ -z "$TARGET_UID" ]]; then
+  echo "Could not resolve target probe UID" >&2
   exit 1
 fi
 set +e
@@ -131,7 +126,6 @@ EMULATOR_PROXY_GATE_VPN_REPORT_FILE="$VPN_REPORT_FILE" \
 EMULATOR_PROXY_GATE_TARGET_PACKAGE="$TARGET_PACKAGE" \
 EMULATOR_PROXY_GATE_TARGET_ACTIVITY="$TARGET_ACTIVITY" \
 EMULATOR_PROXY_GATE_TARGET_UID="$TARGET_UID" \
-EMULATOR_PROXY_GATE_TARGET_SIGNING_SHA256="$TARGET_SIGNATURE" \
 EMULATOR_PROXY_GATE_DLL_LISTENER_ID="$DLL_LISTENER_ID" \
 EMULATOR_PROXY_GATE_TRANSACTION_LISTENER_ID="$TRANSACTION_LISTENER_ID" \
   ruby "$GATE_DIR/vpn_joint_probe.rb"

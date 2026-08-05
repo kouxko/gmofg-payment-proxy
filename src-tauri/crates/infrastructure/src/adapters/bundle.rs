@@ -89,6 +89,7 @@ impl InfrastructureServiceBundle {
         let listener_runtime = Arc::new(
             ListenerRuntimeAdapter::new(Arc::clone(&store))
                 .with_mitm_certificate_authority(certificates.clone())
+                .with_installation_server_identity(certificates.clone())
                 .with_protected_secrets(protected_secrets.clone())
                 .with_managed_listener_certificates(listener_certificates.clone()),
         );

@@ -16,6 +16,7 @@ import android.util.Log
  */
 class AdbControlActivity : Activity() {
     private var pendingProfileJson: String? = null
+    private var pendingProxyRuntimeJson: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -23,7 +24,7 @@ class AdbControlActivity : Activity() {
             COMMAND_WAKE_CONTROL_SERVER -> finish()
             COMMAND_CONFIGURE_AND_START -> configureAndStart()
             COMMAND_STOP -> {
-                startService(InterceptVpnService.stopIntent(this))
+                InterceptVpnService.stopFromExternalControl(this, "VPN 已停止。")
                 finish()
             }
             else -> {
@@ -40,16 +41,28 @@ class AdbControlActivity : Activity() {
             finish()
             return
         }
-        // 这里只做 JSON 形状检查；包签名、shared UID 与全部弱网字段由启动时 Rust 校验。
+        val proxyRuntimeJson = intent.getStringExtra(EXTRA_PROXY_RUNTIME_JSON)
+        if (proxyRuntimeJson.isNullOrBlank()) {
+            Log.e(TAG, "configure_and_start 缺少 proxy_runtime_json")
+            finish()
+            return
+        }
+        // 这里只做 JSON 形状检查；shared UID 与全部弱网字段由启动时 Rust 校验。
         runCatching { CompanionProfileParser.parse(rawJson) }.onFailure { error ->
             Log.e(TAG, "Profile JSON 无效", error)
             finish()
             return
         }
+        runCatching { ProxyRuntimeParser.parse(rawJson, proxyRuntimeJson) }.onFailure { error ->
+            Log.e(TAG, "代理路由运行配置无效", error)
+            finish()
+            return
+        }
         pendingProfileJson = rawJson
+        pendingProxyRuntimeJson = proxyRuntimeJson
         val permissionIntent = VpnService.prepare(this)
         if (permissionIntent == null) {
-            persistAndStart(rawJson)
+            persistAndStart(rawJson, proxyRuntimeJson)
         } else {
             @Suppress("DEPRECATION")
             startActivityForResult(permissionIntent, REQUEST_VPN_PERMISSION)
@@ -60,17 +73,31 @@ class AdbControlActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         val profile = pendingProfileJson
-        if (requestCode == REQUEST_VPN_PERMISSION && resultCode == RESULT_OK && profile != null) {
-            persistAndStart(profile)
+        val proxyRuntime = pendingProxyRuntimeJson
+        if (
+            requestCode == REQUEST_VPN_PERMISSION &&
+            resultCode == RESULT_OK &&
+            profile != null &&
+            proxyRuntime != null
+        ) {
+            persistAndStart(profile, proxyRuntime)
         } else {
             Log.e(TAG, "用户拒绝或取消 VPN 授权")
             finish()
         }
     }
 
-    private fun persistAndStart(rawJson: String) {
-        RuntimeStateStore(this).profileJson = rawJson
-        startForegroundService(InterceptVpnService.startIntent(this, rawJson))
+    private fun persistAndStart(rawJson: String, proxyRuntimeJson: String) {
+        val profile = CompanionProfileParser.parse(rawJson)
+        val runtime = ProxyRuntimeParser.parse(rawJson, proxyRuntimeJson)
+        RuntimeStateStore(this).clearRecovery()
+        val generation = VpnRuntimeRegistry.startRequested(
+            org.json.JSONObject(profile.rawJson).getString("id"),
+            runtime,
+        )
+        startForegroundService(
+            InterceptVpnService.startIntent(this, rawJson, proxyRuntimeJson, generation),
+        )
         finish()
     }
 
@@ -79,8 +106,10 @@ class AdbControlActivity : Activity() {
         private const val REQUEST_VPN_PERMISSION = 101
         const val EXTRA_COMMAND = "command"
         const val EXTRA_PROFILE_JSON = "profile_json"
+        const val EXTRA_PROXY_RUNTIME_JSON = "proxy_runtime_json"
         const val COMMAND_CONFIGURE_AND_START = "configure_and_start"
         const val COMMAND_STOP = "stop"
         const val COMMAND_WAKE_CONTROL_SERVER = "wake_control_server"
     }
+
 }

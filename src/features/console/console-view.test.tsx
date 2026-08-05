@@ -33,6 +33,8 @@ const overview: ListenerOverviewViewModel = {
       state_text: "运行中",
       ui_tone: "positive",
       fault_reason: null,
+      can_start: false,
+      can_stop: true,
     },
     {
       listener_id: "dll",
@@ -44,6 +46,8 @@ const overview: ListenerOverviewViewModel = {
       state_text: "已停止",
       ui_tone: "neutral",
       fault_reason: null,
+      can_start: true,
+      can_stop: false,
     },
   ],
 };

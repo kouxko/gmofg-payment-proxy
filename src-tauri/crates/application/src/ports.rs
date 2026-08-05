@@ -24,11 +24,21 @@ use crate::{
 };
 
 #[async_trait]
-/// Listener 上游 TLS 材料的原生导入边界。
+/// Listener TLS 材料的原生导入边界。
 ///
 /// 实现负责文件选择、格式校验与系统级保护；应用层和展示层只获得可安全写入
 /// Workspace 的引用。`None` 表示用户取消选择。
 pub trait ListenerCertificateImportPort: Send + Sync + std::fmt::Debug {
+    async fn import_downstream_server_identity(
+        &self,
+        label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
+
+    async fn import_downstream_client_trust(
+        &self,
+        label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
+
     async fn import_upstream_client_identity(
         &self,
         label: String,
@@ -43,6 +53,12 @@ pub trait ListenerCertificateImportPort: Send + Sync + std::fmt::Debug {
     /// 读取安全引用并只返回证书的公开元数据，不返回路径、密码、私钥或证书原始字节。
     async fn inspect(&self, reference: CertificateReference)
     -> AppResult<CertificateItemViewModel>;
+
+    /// 删除尚未被任何 Workspace 引用的受保护证书材料。
+    ///
+    /// 应用层必须先完成全局引用检查；基础设施层仍需拒绝非托管引用并校验材料类型，
+    /// 防止把该接口扩展成任意文件或任意密钥删除能力。
+    async fn discard(&self, reference: CertificateReference) -> AppResult<()>;
 }
 
 #[async_trait]

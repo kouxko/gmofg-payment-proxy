@@ -23,16 +23,10 @@ adb -s "$ANDROID_SERIAL" shell appops set com.interceptproxy.vpn ACTIVATE_VPN al
 
 TARGET_UID="$(adb -s "$ANDROID_SERIAL" shell cmd package list packages -U com.interceptproxy.vpn.targetprobe \
   | tr -d '\r' | sed -n 's/.*uid:\([0-9][0-9]*\).*/\1/p')"
-SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
-APKSIGNER="$(find "$SDK_ROOT/build-tools" -name apksigner -type f | sort | tail -1)"
-TARGET_SIGNATURE_HEX="$($APKSIGNER verify --print-certs "$TARGET_APK" \
-  | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
-TARGET_SIGNATURE="$(ruby -e 'puts ARGV.fetch(0).scan(/../).join(":").upcase' "$TARGET_SIGNATURE_HEX")"
-if [[ -z "$TARGET_UID" || -z "$TARGET_SIGNATURE" ]]; then
-  echo "Could not resolve target probe UID/signature" >&2
+if [[ -z "$TARGET_UID" ]]; then
+  echo "Could not resolve target probe UID" >&2
   exit 1
 fi
 
 ANDROID_VPN_GATE_TARGET_UID="$TARGET_UID" \
-ANDROID_VPN_GATE_TARGET_SIGNING_SHA256="$TARGET_SIGNATURE" \
   exec ruby "$SCRIPT_DIR/run.rb"

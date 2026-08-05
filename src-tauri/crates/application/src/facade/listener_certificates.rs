@@ -4,11 +4,29 @@ use std::collections::BTreeMap;
 
 use super::Application;
 use crate::{
-    AppError, AppResult, ListenerCertificateDetailViewModel, ListenerCertificateImportViewModel,
-    WorkspaceId,
+    AppError, AppResult, CertificateReference, ListenerCertificateDetailViewModel,
+    ListenerCertificateImportViewModel, OperationResultViewModel, WorkspaceId,
 };
 
 impl Application {
+    pub async fn listener_import_downstream_server_identity(
+        &self,
+        label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
+        self.listener_certificates
+            .import_downstream_server_identity(require_label(&label)?)
+            .await
+    }
+
+    pub async fn listener_import_downstream_client_trust(
+        &self,
+        label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
+        self.listener_certificates
+            .import_downstream_client_trust(require_label(&label)?)
+            .await
+    }
+
     pub async fn listener_import_upstream_client_identity(
         &self,
         label: String,
@@ -57,6 +75,34 @@ impl Application {
             });
         }
         Ok(details)
+    }
+
+    /// 清理用户已放弃、且没有被任何 Workspace 引用的托管证书材料。
+    pub async fn listener_certificate_discard(
+        &self,
+        reference: CertificateReference,
+    ) -> AppResult<OperationResultViewModel> {
+        // 引用检查与密钥删除必须和 Listener / Workspace 保存共用同一写入门锁。
+        // 否则保存流程可能在检查完成后、密钥删除前通过材料校验，最终持久化一个已经
+        // 被删除的托管引用。
+        let _gate = self.mutation_gate.lock().await;
+        for summary in self.workspaces.list().await? {
+            let workspace = self.workspaces.get(summary.id).await?;
+            if workspace
+                .certificate_references
+                .iter()
+                .any(|saved| saved.reference == reference.reference)
+            {
+                return Err(AppError::new(
+                    "CERTIFICATE_REFERENCE_IN_USE",
+                    "该证书材料仍被 Workspace 引用，不能清理。",
+                ));
+            }
+        }
+        self.listener_certificates.discard(reference).await?;
+        Ok(OperationResultViewModel::success(
+            "已清理未保存的证书材料。",
+        ))
     }
 }
 

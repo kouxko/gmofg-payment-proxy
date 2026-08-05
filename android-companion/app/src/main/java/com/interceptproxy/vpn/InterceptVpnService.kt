@@ -14,6 +14,10 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.util.Log
+import java.lang.ref.WeakReference
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import org.json.JSONObject
 
 /**
@@ -31,12 +35,12 @@ class InterceptVpnService : VpnService() {
     private val stateStore by lazy { RuntimeStateStore(this) }
     private var tun: ParcelFileDescriptor? = null
     private var tunConfiguration: TunConfiguration? = null
+    private var activeGeneration: Long? = null
     private var packageChangeReceiver: TargetPackageChangeReceiver? = null
-    /** 只存在于当前 Service 生命周期；USB/LAN 地址绝不写入本地 Profile。 */
-    private var activeProxyRuntimeJson: String = EMPTY_PROXY_RUNTIME_JSON
 
     override fun onCreate() {
         super.onCreate()
+        activeService.set(WeakReference(this))
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, createNotification())
     }
@@ -47,7 +51,8 @@ class InterceptVpnService : VpnService() {
             ACTION_REVALIDATE -> restartSavedProfile()
             ACTION_START -> startProfile(
                 intent.getStringExtra(EXTRA_PROFILE_JSON),
-                intent.getStringExtra(EXTRA_PROXY_RUNTIME_JSON) ?: EMPTY_PROXY_RUNTIME_JSON,
+                intent.getStringExtra(EXTRA_PROXY_RUNTIME_JSON),
+                intent.getLongExtra(EXTRA_GENERATION, INVALID_GENERATION),
             )
             else -> restartSavedProfile()
         }
@@ -61,30 +66,55 @@ class InterceptVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        activeService.get()?.get()?.let { current ->
+            if (current === this) activeService.set(null)
+        }
         unregisterPackageReceiver()
         tun?.close()
         tun = null
         NativeBridge.stop()
+        activeGeneration = null
+        val snapshot = VpnRuntimeRegistry.snapshot()
+        if (snapshot.state == "stop_requested") {
+            VpnRuntimeRegistry.confirmStopped(snapshot.generation)
+        } else if (snapshot.state == "running" || snapshot.state == "start_requested") {
+            VpnRuntimeRegistry.faulted("VpnService 已销毁，TUN 已关闭并恢复系统网络。")
+        }
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
-    private fun startProfile(rawJson: String?, proxyRuntimeJson: String = EMPTY_PROXY_RUNTIME_JSON) {
-        if (rawJson.isNullOrBlank()) return failOpen("没有可启动的 Profile")
-        if (prepare(this) != null) return failOpen("VPN 授权已失效，需要重新确认")
+    private fun startProfile(rawJson: String?, proxyRuntimeJson: String?, generation: Long) {
+        if (!continueStart(generation)) return
+        if (rawJson.isNullOrBlank()) return failOpen("没有可启动的 Profile", generation)
+        if (proxyRuntimeJson.isNullOrBlank()) {
+            return failOpen("没有可启动的代理路由运行配置", generation)
+        }
+        if (prepare(this) != null) return failOpen("VPN 授权已失效，需要重新确认", generation)
 
         val profile = runCatching { CompanionProfileParser.parse(rawJson) }
-            .getOrElse { return failOpen("Profile JSON 无效：${it.message}") }
+            .getOrElse { return failOpen("Profile JSON 无效：${it.message}", generation) }
         val inventory = PackageInventory.collect(packageManager)
         val inventoryJson = inventory.toInventoryJson()
-        // 包签名、UID、共享 UID 整组选择、最大应用数以及弱网参数只由 Rust 校验。
+        // UID、共享 UID 整组选择、最大应用数以及弱网参数只由 Rust 校验。
         // Kotlin 仅提供 PackageManager 的事实快照，避免维护第二套业务规则。
         val rustError = NativeBridge.validateProfile(profile.rawJson, inventoryJson)
-        if (rustError.isNotEmpty()) return failOpen(rustError)
-        if (!NativeBridge.isDataPlaneAvailable()) {
-            return failOpen("Rust TUN 数据面尚不可用，已保持系统网络直连")
+        if (rustError.isNotEmpty()) return failOpen(rustError, generation)
+        val runtime = runCatching { ProxyRuntimeParser.parse(rawJson, proxyRuntimeJson) }
+            .getOrElse {
+                return failOpen("代理路由运行配置无效：${it.message}", generation)
+            }
+        if (runtime.routeCount != profile.expectedProxyRouteCount) {
+            return failOpen(
+                "代理路由运行配置不完整：方案需要 ${profile.expectedProxyRouteCount} 条，实际装载 ${runtime.routeCount} 条",
+                generation,
+            )
         }
+        if (!NativeBridge.isDataPlaneAvailable()) {
+            return failOpen("Rust TUN 数据面尚不可用，已保持系统网络直连", generation)
+        }
+        if (!continueStart(generation)) return
 
         val desiredTunConfiguration = TunConfiguration(
             targetPackages = profile.targetPackages.map(TargetPackage::packageName).toSet(),
@@ -102,7 +132,7 @@ class InterceptVpnService : VpnService() {
             // 目标应用或 TUN MTU 改变时必须重建 allowlist。先撤销旧路由，再建立新
             // 接口，不能让两个 TUN 同时争用同一个 IPv6 /128 地址。
             closeCurrentDataPlane()
-            establishTun(profile) ?: return failOpen("Android 未能建立 TUN")
+            establishTun(profile) ?: return failOpen("Android 未能建立 TUN", generation)
         }
         // Rust 必须独立持有一个 fd。detachFd 后该副本只能由 Rust 关闭；Java 端仍保留
         // newTun，以便 stop/fail-open 时立即撤销 VPN 路由。
@@ -110,7 +140,7 @@ class InterceptVpnService : VpnService() {
             ParcelFileDescriptor.dup(newTun.fileDescriptor).detachFd()
         }.getOrElse {
             newTun.close()
-            return failOpen("复制 Android TUN 文件描述符失败：${it.message}")
+            return failOpen("复制 Android TUN 文件描述符失败：${it.message}", generation)
         }
         val started = NativeBridge.start(
             tunFd = nativeTunFd,
@@ -121,16 +151,31 @@ class InterceptVpnService : VpnService() {
         )
         if (!started) {
             if (!canReuseTun) newTun.close()
-            return failOpen("Rust 数据面启动失败，TUN 已关闭")
+            return failOpen("Rust 数据面启动失败，TUN 已关闭", generation)
         }
 
         tun = newTun
         tunConfiguration = desiredTunConfiguration
-        activeProxyRuntimeJson = proxyRuntimeJson
-        stateStore.profileJson = rawJson
-        stateStore.autoResumeEnabled = profile.autoResumeAfterReboot
+        if (!VpnRuntimeRegistry.running(
+                JSONObject(rawJson).getString("id"),
+                runtime,
+                generation,
+            )
+        ) {
+            discardStaleStart(generation, ownsNewDataPlane = true)
+            return
+        }
+        activeGeneration = generation
+        val recoverable = runtime.routeCount == 0 && profile.expectedProxyRouteCount == 0
+        if (recoverable) {
+            stateStore.activation = StoredActivation(rawJson, proxyRuntimeJson)
+            stateStore.autoResumeEnabled = profile.autoResumeAfterReboot
+        } else {
+            // 透明代理运行端点来自本次 ADB reverse/LAN 链路。即使 Profile 请求自动
+            // 恢复，也必须 fail-open，等待桌面端重新解析路由并显式 start/apply。
+            stateStore.clearRecovery()
+        }
         stateStore.clearFailures()
-        VpnRuntimeRegistry.running(JSONObject(rawJson).getString("id"))
         registerPackageReceiver(profile.targetPackages.map(TargetPackage::packageName).toSet())
     }
 
@@ -158,7 +203,17 @@ class InterceptVpnService : VpnService() {
     }
 
     private fun restartSavedProfile() {
-        startProfile(stateStore.profileJson, activeProxyRuntimeJson)
+        val activation = stateStore.activation ?: return failOpen("没有可恢复的 VPN activation")
+        val profile = runCatching { CompanionProfileParser.parse(activation.profileJson) }
+            .getOrElse { return failOpen("Profile JSON 无效：${it.message}") }
+        val runtime = runCatching {
+            ProxyRuntimeParser.parse(activation.profileJson, activation.proxyRuntimeJson)
+        }.getOrElse { return failOpen("代理路由运行配置无效：${it.message}") }
+        val generation = VpnRuntimeRegistry.startRequested(
+            JSONObject(profile.rawJson).getString("id"),
+            runtime,
+        )
+        startProfile(activation.profileJson, activation.proxyRuntimeJson, generation)
     }
 
     /** JNI 从后台线程通知故障；真正的 Service/TUN 操作统一回到 Android 主线程。 */
@@ -168,9 +223,14 @@ class InterceptVpnService : VpnService() {
         }
     }
 
-    private fun failOpen(reason: String) {
+    private fun failOpen(reason: String, generation: Long? = null) {
         Log.e(TAG, reason)
-        VpnRuntimeRegistry.faulted(reason)
+        if (generation == null) {
+            VpnRuntimeRegistry.faulted(reason)
+        } else if (!VpnRuntimeRegistry.faultedIfCurrent(generation, reason)) {
+            discardStaleStart(generation)
+            return
+        }
         stateStore.recordFailure()
         closeCurrentDataPlane()
         unregisterPackageReceiver()
@@ -178,13 +238,45 @@ class InterceptVpnService : VpnService() {
         stopSelf()
     }
 
-    private fun stopVpn(manual: Boolean) {
+    private fun stopVpn(
+        manual: Boolean,
+        message: String = "VPN 已停止。",
+        stopGeneration: Long? = null,
+    ) {
         if (manual) stateStore.autoResumeEnabled = false
+        val generation = stopGeneration ?: VpnRuntimeRegistry.stopRequested().generation
         closeCurrentDataPlane()
         unregisterPackageReceiver()
-        VpnRuntimeRegistry.stopped()
+        VpnRuntimeRegistry.confirmStopped(generation, message)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    /** 忽略过期 start；若 stop 正在等待，则完成真实数据面清理后再确认停止。 */
+    private fun continueStart(generation: Long): Boolean {
+        if (generation != INVALID_GENERATION && VpnRuntimeRegistry.canStart(generation)) return true
+        discardStaleStart(generation)
+        return false
+    }
+
+    private fun discardStaleStart(generation: Long, ownsNewDataPlane: Boolean = false) {
+        val snapshot = VpnRuntimeRegistry.snapshot()
+        val stopPending = snapshot.state == "stop_requested"
+        if (ownsNewDataPlane || activeGeneration == generation || stopPending) {
+            closeCurrentDataPlane()
+            unregisterPackageReceiver()
+            activeGeneration = null
+        }
+        if (stopPending) {
+            VpnRuntimeRegistry.confirmStopped(snapshot.generation)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        } else if (snapshot.state == "stopped" && activeGeneration == null) {
+            // queued start 可能已被外部 stopService 取消并确认停止，但 Service 与旧 Intent
+            // 仍可能在竞态窗口内到达。generation 已失效，此实例不得继续留在前台。
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     /**
@@ -196,6 +288,7 @@ class InterceptVpnService : VpnService() {
         tun?.close()
         tun = null
         tunConfiguration = null
+        activeGeneration = null
         NativeBridge.stop()
     }
 
@@ -268,21 +361,93 @@ class InterceptVpnService : VpnService() {
         internal const val ACTION_REVALIDATE = "com.interceptproxy.vpn.action.REVALIDATE"
         private const val EXTRA_PROFILE_JSON = "profile_json"
         private const val EXTRA_PROXY_RUNTIME_JSON = "proxy_runtime_json"
-        private const val EMPTY_PROXY_RUNTIME_JSON = "{\"routes\":[]}"
+        private const val EXTRA_GENERATION = "generation"
+        private const val INVALID_GENERATION = -1L
         private const val NOTIFICATION_CHANNEL = "intercept_proxy_vpn"
         private const val NOTIFICATION_ID = 41001
+        private const val EXTERNAL_STOP_TIMEOUT_SECONDS = 3L
+        private val activeService = AtomicReference<WeakReference<InterceptVpnService>?>(null)
 
         fun startIntent(
             context: Context,
             profileJson: String,
-            proxyRuntimeJson: String = EMPTY_PROXY_RUNTIME_JSON,
+            proxyRuntimeJson: String,
+            generation: Long,
         ): Intent =
             Intent(context, InterceptVpnService::class.java)
                 .setAction(ACTION_START)
                 .putExtra(EXTRA_PROFILE_JSON, profileJson)
                 .putExtra(EXTRA_PROXY_RUNTIME_JSON, proxyRuntimeJson)
+                .putExtra(EXTRA_GENERATION, generation)
+
+        fun startActivationIntent(context: Context, activation: StoredActivation): Intent {
+            val profile = CompanionProfileParser.parse(activation.profileJson)
+            val runtime = ProxyRuntimeParser.parse(
+                activation.profileJson,
+                activation.proxyRuntimeJson,
+            )
+            val generation = VpnRuntimeRegistry.startRequested(
+                JSONObject(profile.rawJson).getString("id"),
+                runtime,
+            )
+            return startIntent(
+                context,
+                activation.profileJson,
+                activation.proxyRuntimeJson,
+                generation,
+            )
+        }
 
         fun stopIntent(context: Context): Intent =
             Intent(context, InterceptVpnService::class.java).setAction(ACTION_STOP)
+
+        /**
+         * 桌面控制 socket 和受 DUMP 权限保护的救援 Activity 可能在应用后台运行。
+         * 这类调用不能用 `startService(ACTION_STOP)`，否则旧版 Android 会以后台服务
+         * 限制拒绝请求。直接通知当前 Service 实例关闭 TUN；只有实例已经不存在时才
+         * 使用 `stopService` 清理残留启动状态。
+         */
+        fun stopFromExternalControl(context: Context, message: String) {
+            RuntimeStateStore(context).autoResumeEnabled = false
+            val stopRequest = VpnRuntimeRegistry.stopRequested()
+            val service = activeService.get()?.get()
+            if (service == null) {
+                VpnExternalStopCoordinator.completeWithoutActiveService(
+                    stopRequest = stopRequest,
+                    message = message,
+                    stopNativeDataPlane = NativeBridge::stop,
+                    stopQueuedService = {
+                        context.stopService(Intent(context, InterceptVpnService::class.java))
+                        Unit
+                    },
+                )
+                return
+            }
+
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                service.stopVpn(
+                    manual = true,
+                    message = message,
+                    stopGeneration = stopRequest.generation,
+                )
+                return
+            }
+
+            val completed = CountDownLatch(1)
+            Handler(Looper.getMainLooper()).post {
+                try {
+                    service.stopVpn(
+                        manual = true,
+                        message = message,
+                        stopGeneration = stopRequest.generation,
+                    )
+                } finally {
+                    completed.countDown()
+                }
+            }
+            if (!completed.await(EXTERNAL_STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                VpnRuntimeRegistry.faulted("等待 Android 主线程关闭 VPN 超时。")
+            }
+        }
     }
 }

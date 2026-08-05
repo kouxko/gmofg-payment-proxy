@@ -1,10 +1,11 @@
 use crate::{
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidDeviceViewModel,
     AndroidNetworkActivation, AndroidNetworkProfile, AndroidNetworkProfileSummary,
-    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidProfileEditIntent,
-    AndroidProxyRouteActivation, AndroidTargetApplication, AppError, AppResult,
-    OperationResultViewModel,
+    AndroidNetworkState, AndroidNetworkStatusViewModel, AndroidPackageViewModel,
+    AndroidProfileEditIntent, AndroidProxyRouteActivation, AndroidTargetApplication, AppError,
+    AppResult, OperationResultViewModel, UiEventPayload,
 };
+use chrono::Utc;
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
@@ -17,9 +18,10 @@ impl Application {
 
     pub async fn android_adb_select(&self, serial: String) -> AppResult<AndroidAdbViewModel> {
         validate_serial(&serial)?;
+        let _gate = self.mutation_gate.lock().await;
         let selected = self.android.adb_select(serial).await?;
         // 即便用户重新选择同一设备，也视为显式刷新包清单。这样安装、卸载或升级
-        // 应用后不需要重启桌面端，同时包名筛选仍可复用昂贵的签名读取结果。
+        // 应用后不需要重启桌面端，同时包名筛选仍可复用包清单结果。
         *self.android_package_cache.lock().await = None;
         Ok(selected)
     }
@@ -37,6 +39,14 @@ impl Application {
         packages.retain(|package| package.package_name != crate::ANDROID_COMPANION_PACKAGE);
         *cache = Some(packages.clone());
         Ok(packages)
+    }
+
+    /// 丢弃当前设备的包清单缓存并重新读取设备。
+    ///
+    /// APK 安装、卸载或升级不会主动通知桌面进程，因此所有宿主（桌面 UI、未来
+    /// CLI/TUI 和无界面测试）都通过该用例获得一致的显式刷新语义。
+    pub async fn android_package_refresh(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
+        self.refresh_android_package_inventory().await
     }
 
     /// 包名筛选由 Rust 完成，前端只提交用户输入并渲染返回结果。
@@ -66,7 +76,9 @@ impl Application {
     }
 
     pub async fn android_vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
-        self.android.vpn_open_consent().await
+        let status = self.android.vpn_open_consent().await?;
+        self.publish_android_vpn_status(&status);
+        Ok(status)
     }
 
     pub async fn device_network_profile_list(
@@ -116,7 +128,7 @@ impl Application {
     /// 将页面编辑意图规范化为完整 Profile。
     ///
     /// 选择共享 UID 应用时，Rust 自动选择整个 UID 组，并把这次明确点击记录为整组确认；
-    /// 取消时整组移除。前端不接触签名快照、UID 分组或嵌套默认值。
+    /// 取消时整组移除。前端不接触 UID 分组或嵌套默认值。
     pub async fn device_network_profile_apply_intent(
         &self,
         mut profile: AndroidNetworkProfile,
@@ -144,7 +156,7 @@ impl Application {
         self.validate_profile_against_device(&profile).await?;
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.selected_workspace().await?;
-        self.ensure_workspace_not_running(&workspace).await?;
+        let current = workspace.clone();
         if let Some(stored) = workspace
             .android_network_profiles
             .iter_mut()
@@ -155,6 +167,8 @@ impl Application {
             workspace.android_network_profiles.push(profile.clone());
         }
         workspace.validate().map_err(AppError::from)?;
+        self.ensure_workspace_update_allowed(&current, &workspace)
+            .await?;
         let workspace = self.workspaces.save(workspace).await?;
         self.publish_workspace(&workspace, true, crate::WorkspaceChangeKind::Updated);
         Ok(profile)
@@ -165,9 +179,35 @@ impl Application {
         profile_id: String,
     ) -> AppResult<OperationResultViewModel> {
         validate_profile_id(&profile_id)?;
+        // 状态检查与持久化删除必须属于同一个原子边界；否则 start 可在两者之间完成，
+        // 导致刚进入运行态的方案仍被删除。
         let _gate = self.mutation_gate.lock().await;
+        let status = self.android.network_status().await.map_err(|error| {
+            AppError::new(
+                "ANDROID_PROFILE_DELETE_STATUS_UNAVAILABLE",
+                format!(
+                    "删除前无法确认设备网络运行状态：{}",
+                    error.view_model.message
+                ),
+            )
+            .retryable("请连接目标设备并刷新运行状态，或先执行紧急恢复网络。")
+        })?;
+        if matches!(
+            status.state,
+            AndroidNetworkState::StartRequested
+                | AndroidNetworkState::Running
+                | AndroidNetworkState::StopRequested
+        ) && status.active_profile_id.as_deref() == Some(profile_id.as_str())
+        {
+            return Err(AppError::new(
+                "ANDROID_PROFILE_ACTIVE",
+                "设备网络方案仍在运行，不能删除。",
+            )
+            .retryable("请先停止设备网络接管，再删除方案。")
+            .entity(profile_id));
+        }
         let mut workspace = self.selected_workspace().await?;
-        self.ensure_workspace_not_running(&workspace).await?;
+        let current = workspace.clone();
         let before = workspace.android_network_profiles.len();
         workspace
             .android_network_profiles
@@ -179,6 +219,8 @@ impl Application {
             )
             .entity(profile_id));
         }
+        self.ensure_workspace_update_allowed(&current, &workspace)
+            .await?;
         let workspace = self.workspaces.save(workspace).await?;
         self.publish_workspace(&workspace, true, crate::WorkspaceChangeKind::Updated);
         Ok(OperationResultViewModel {
@@ -197,11 +239,17 @@ impl Application {
         profile_id: String,
         dangerous_confirmed: bool,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
+        // 设备网络运行态、Workspace、监听和方案持久化共享同一组引用关系。
+        // 启动期间必须阻止方案删除、Workspace 切换及监听变更，避免校验完成后引用被并发修改。
+        let _gate = self.mutation_gate.lock().await;
         let profile = self
             .validate_network_activation(&profile_id, dangerous_confirmed)
             .await?;
-        let activation = self.android_activation(profile).await?;
-        self.android.network_start(activation).await
+        let workspace = self.selected_workspace().await?;
+        let activation = Self::android_activation(&workspace, profile)?;
+        let status = self.android.network_start(activation).await?;
+        self.publish_android_vpn_status(&status);
+        Ok(status)
     }
 
     pub async fn device_network_apply(
@@ -209,25 +257,96 @@ impl Application {
         profile_id: String,
         dangerous_confirmed: bool,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
+        let _gate = self.mutation_gate.lock().await;
         let profile = self
             .validate_network_activation(&profile_id, dangerous_confirmed)
             .await?;
-        let activation = self.android_activation(profile).await?;
-        self.android.network_apply(activation).await
+        let workspace = self.selected_workspace().await?;
+        let activation = Self::android_activation(&workspace, profile)?;
+        let status = self.android.network_apply(activation).await?;
+        self.publish_android_vpn_status(&status);
+        Ok(status)
     }
 
     pub async fn device_network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
-        self.android.network_stop().await
+        let _gate = self.mutation_gate.lock().await;
+        let status = self.android.network_stop().await?;
+        self.publish_android_vpn_status(&status);
+        Ok(status)
     }
 
     pub async fn device_network_emergency_restore(
         &self,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
-        self.android.emergency_restore().await
+        let _gate = self.mutation_gate.lock().await;
+        let status = self.android.emergency_restore().await?;
+        self.publish_android_vpn_status(&status);
+        Ok(status)
     }
 
     pub async fn device_network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
-        self.android.network_status().await
+        let status = self.android.network_status().await?;
+        if status.state != AndroidNetworkState::Running {
+            return Ok(status);
+        }
+        let Some(profile_id) = status.active_profile_id.as_deref() else {
+            return Ok(Self::faulted_runtime_status(
+                status,
+                "设备报告 VPN 正在运行，但未报告活动方案。请停止后重新启动设备网络接管。",
+            ));
+        };
+
+        // 切换 Workspace 只改变后续编辑上下文，不会停止设备上已经运行的 VPN。
+        // 因此状态恢复必须按 active_profile_id 找到其所属 Workspace，不能误用当前
+        // 选中的 Workspace，否则会把仍在运行的方案误报为不存在，或引用错误的入口。
+        let Ok((workspace, profile)) = self.running_profile_with_workspace(profile_id).await else {
+            return Ok(Self::faulted_runtime_status(
+                status,
+                "设备正在运行的方案不属于任何现有 Workspace。请显式停止设备网络接管后重新配置。",
+            ));
+        };
+        let activation = Self::android_activation(&workspace, profile)?;
+        match self
+            .android
+            .network_runtime_ready(&activation, &status)
+            .await
+        {
+            Ok(true) => Ok(status),
+            Ok(false) => Ok(Self::faulted_runtime_status(
+                status,
+                "VPN 进程仍在运行，但代理路由运行状态与当前方案不一致。请点击“应用修改”显式恢复。",
+            )),
+            Err(error) => Ok(Self::faulted_runtime_status(
+                status,
+                format!(
+                    "无法核对 VPN 代理路由运行状态：{}。请点击“应用修改”显式恢复。",
+                    error.view_model.message
+                ),
+            )),
+        }
+    }
+
+    fn faulted_runtime_status(
+        mut status: AndroidNetworkStatusViewModel,
+        message: impl Into<String>,
+    ) -> AndroidNetworkStatusViewModel {
+        status.state = AndroidNetworkState::Faulted;
+        status.message = message.into();
+        status.with_rust_state_text()
+    }
+
+    /// 把由桌面端触发的 VPN 状态变更推入统一有序事件流。
+    ///
+    /// 设备也可能通过通知栏或系统设置改变 VPN，因此页面仍会定时向 Rust 读取状态；
+    /// 查询本身不发布事件，避免“查询 -> 事件 -> 再查询”的反馈循环。
+    fn publish_android_vpn_status(&self, status: &AndroidNetworkStatusViewModel) {
+        self.events.publish(
+            None,
+            Utc::now(),
+            Some(status.serial.clone()),
+            None,
+            UiEventPayload::AndroidVpnStatusChanged(status.clone()),
+        );
     }
 
     async fn validate_network_activation(
@@ -250,11 +369,10 @@ impl Application {
         Ok(profile)
     }
 
-    async fn android_activation(
-        &self,
+    fn android_activation(
+        workspace: &crate::ProxyWorkspace,
         profile: AndroidNetworkProfile,
     ) -> AppResult<AndroidNetworkActivation> {
-        let workspace = self.selected_workspace().await?;
         let mut proxy_routes = Vec::with_capacity(profile.proxy_routes.len());
         for route in &profile.proxy_routes {
             let listener = workspace
@@ -288,6 +406,44 @@ impl Application {
         })
     }
 
+    /// 按运行时返回的方案 ID 解析其所属 Workspace。
+    ///
+    /// Workspace 复制和导入会重新生成方案 ID，因此正常数据中只能命中一次。这里仍然
+    /// 显式拒绝重复 ID，避免损坏数据时静默选择错误的代理入口。
+    async fn running_profile_with_workspace(
+        &self,
+        profile_id: &str,
+    ) -> AppResult<(crate::ProxyWorkspace, AndroidNetworkProfile)> {
+        validate_profile_id(profile_id)?;
+        let mut found = None;
+        for summary in self.workspaces.list().await? {
+            let workspace = self.workspaces.get(summary.id).await?;
+            let Some(profile) = workspace
+                .android_network_profiles
+                .iter()
+                .find(|profile| profile.id == profile_id)
+                .cloned()
+            else {
+                continue;
+            };
+            if found.is_some() {
+                return Err(AppError::new(
+                    "ANDROID_ACTIVE_PROFILE_AMBIGUOUS",
+                    "运行中的设备网络方案 ID 在多个 Workspace 中重复，无法确定其代理入口。",
+                )
+                .entity(profile_id));
+            }
+            found = Some((workspace, profile));
+        }
+        found.ok_or_else(|| {
+            AppError::new(
+                "ANDROID_ACTIVE_PROFILE_NOT_FOUND",
+                "运行中的设备网络方案所属 Workspace 已不存在；请停止设备网络接管后重新启动。",
+            )
+            .entity(profile_id)
+        })
+    }
+
     async fn selected_workspace(&self) -> AppResult<crate::ProxyWorkspace> {
         let selected = self
             .workspaces
@@ -303,7 +459,9 @@ impl Application {
         &self,
         profile: &AndroidNetworkProfile,
     ) -> AppResult<()> {
-        let packages = self.android_package_list().await?;
+        // 启动和应用方案不能复用页面浏览时的包清单缓存。应用可能在页面打开后被
+        // ADB 安装、升级或卸载；这里必须重新读取包名、UID 与 shared UID 分组。
+        let packages = self.refresh_android_package_inventory().await?;
         let inventory = packages
             .iter()
             .map(|package| (package.package_name.as_str(), package))
@@ -321,13 +479,15 @@ impl Application {
                     format!("目标应用 {} 已卸载。", target.package_name),
                 )
             })?;
-            if installed.uid != target.uid
-                || installed.signing_sha256.as_deref() != Some(target.signing_sha256.as_str())
-            {
+            if installed.uid != target.uid {
                 return Err(AppError::new(
                     "ANDROID_TARGET_PACKAGE_CHANGED",
-                    format!("目标应用 {} 的 UID 或签名已变化。", target.package_name),
-                ));
+                    format!(
+                        "目标应用 {} 的 UID 已变化。请在“目标应用”中取消后重新选择该应用，再保存方案。",
+                        target.package_name
+                    ),
+                )
+                .retryable("重新确认目标应用身份后保存方案"));
             }
             if let Some(shared_uid) = installed.shared_uid {
                 let complete_group = packages
@@ -350,6 +510,14 @@ impl Application {
             }
         }
         Ok(())
+    }
+
+    /// 强制从当前设备读取包身份，并用最新结果替换页面查询缓存。
+    async fn refresh_android_package_inventory(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
+        let mut packages = self.android.package_list().await?;
+        packages.retain(|package| package.package_name != crate::ANDROID_COMPANION_PACKAGE);
+        *self.android_package_cache.lock().await = Some(packages.clone());
+        Ok(packages)
     }
 }
 
@@ -420,7 +588,7 @@ fn apply_package_toggle(
         let targets = group
             .into_iter()
             .map(target_from_installed_package)
-            .collect::<AppResult<Vec<_>>>()?;
+            .collect::<Vec<_>>();
         profile.target_applications.extend(targets);
     }
     profile
@@ -429,21 +597,12 @@ fn apply_package_toggle(
     Ok(())
 }
 
-fn target_from_installed_package(
-    package: &AndroidPackageViewModel,
-) -> AppResult<AndroidTargetApplication> {
-    let signing_sha256 = package.signing_sha256.clone().ok_or_else(|| {
-        AppError::new(
-            "ANDROID_TARGET_SIGNATURE_UNAVAILABLE",
-            format!("无法读取目标应用 {} 的签名。", package.package_name),
-        )
-    })?;
-    Ok(AndroidTargetApplication {
+fn target_from_installed_package(package: &AndroidPackageViewModel) -> AndroidTargetApplication {
+    AndroidTargetApplication {
         package_name: package.package_name.clone(),
-        signing_sha256,
         uid: package.uid,
         display_name: Some(package.package_name.clone()),
-    })
+    }
 }
 
 fn validate_serial(serial: &str) -> AppResult<()> {
@@ -502,7 +661,6 @@ mod tests {
         AndroidPackageViewModel {
             package_name: name.into(),
             uid: 10_001,
-            signing_sha256: Some("AA".into()),
             shared_uid: None,
         }
     }
@@ -545,13 +703,11 @@ mod tests {
             AndroidPackageViewModel {
                 package_name: "com.example.one".into(),
                 uid: 10_042,
-                signing_sha256: Some("AA".repeat(32)),
                 shared_uid: Some(10_042),
             },
             AndroidPackageViewModel {
                 package_name: "com.example.two".into(),
                 uid: 10_042,
-                signing_sha256: Some("BB".repeat(32)),
                 shared_uid: Some(10_042),
             },
         ];

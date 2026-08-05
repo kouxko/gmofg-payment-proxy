@@ -43,6 +43,7 @@ import type {
 import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
+import { formatMessageBody } from "@/lib/message-content";
 import {
   useAppEventRefresh,
   useBootstrap,
@@ -586,8 +587,8 @@ export function SessionsView() {
                         </div>
                         <div>
                           <h3 className="mb-2 font-semibold">请求 Body</h3>
-                          <pre className="whitespace-pre-wrap break-all text-xs">
-                            {detail.data.request?.body_text ?? "无请求正文"}
+                          <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">
+                            {formatMessageBody(detail.data.request, "无请求正文")}
                           </pre>
                         </div>
                         <div>
@@ -633,8 +634,8 @@ export function SessionsView() {
                         </div>
                         <div>
                           <h3 className="mb-2 font-semibold">响应 Body</h3>
-                          <pre className="whitespace-pre-wrap break-all text-xs">
-                            {detail.data.response?.body_text ?? "无响应正文"}
+                          <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">
+                            {formatMessageBody(detail.data.response, "无响应正文")}
                           </pre>
                         </div>
                       </>
@@ -875,7 +876,7 @@ export function SessionsView() {
                 </Table.ScrollContainer>
               </Table>
               <h2 className="font-semibold">请求 Body</h2>
-              <pre className="whitespace-pre-wrap break-all text-xs">{detail.data?.request?.body_text ?? "按需读取后显示请求报文"}</pre>
+              <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">{formatMessageBody(detail.data?.request, "按需读取后显示请求报文")}</pre>
             </div>
           </Tabs.Panel>
           <Tabs.Panel id="response" className="pt-4">
@@ -902,7 +903,7 @@ export function SessionsView() {
                 </Table.ScrollContainer>
               </Table>
               <h2 className="font-semibold">响应 Body</h2>
-              <pre className="whitespace-pre-wrap break-all text-xs">{detail.data?.response?.body_text ?? "按需读取后显示响应报文"}</pre>
+              <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">{formatMessageBody(detail.data?.response, "按需读取后显示响应报文")}</pre>
             </div>
           </Tabs.Panel>
         </Tabs>

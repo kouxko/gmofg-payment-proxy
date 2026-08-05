@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::IpAddr;
 
+use intercept_proxy_domain::{normalize_android_ip_cidr, normalize_android_network_destination};
 use thiserror::Error;
 
 use crate::{
@@ -23,10 +24,6 @@ pub enum ProfileValidationError {
     DuplicatePackage(String),
     #[error("目标应用未安装：{0}")]
     PackageNotInstalled(String),
-    #[error("应用签名已经变化：{0}")]
-    SignatureChanged(String),
-    #[error("无法验证应用签名：{0}")]
-    SignatureUnavailable(String),
     #[error("应用 UID 已变化：{package_name}，保存值 {saved_uid}，当前值 {actual_uid}")]
     UidChanged {
         package_name: String,
@@ -118,11 +115,11 @@ fn validate_proxy_routes(profile: &NetworkProfile) -> Result<(), ProfileValidati
         if route.listener_id.trim().is_empty() || route.listener_id.len() > 128 {
             return Err(ProfileValidationError::InvalidProxyListenerId);
         }
-        if !is_valid_host_ip_or_cidr(&route.destination) {
+        let Some(destination) = normalize_android_network_destination(&route.destination) else {
             return Err(ProfileValidationError::InvalidProxyOriginalHost(
                 route.destination.clone(),
             ));
-        }
+        };
         let mut ports = BTreeSet::new();
         if route.ports.is_empty()
             || route
@@ -135,7 +132,7 @@ fn validate_proxy_routes(profile: &NetworkProfile) -> Result<(), ProfileValidati
             ));
         }
         for port in ports {
-            let key = (route.destination.trim().to_ascii_lowercase(), port);
+            let key = (destination.clone(), port);
             if !seen.insert(key) {
                 return Err(ProfileValidationError::DuplicateProxyRoute(
                     route.destination.clone(),
@@ -144,25 +141,6 @@ fn validate_proxy_routes(profile: &NetworkProfile) -> Result<(), ProfileValidati
         }
     }
     Ok(())
-}
-
-fn is_valid_host_ip_or_cidr(value: &str) -> bool {
-    parse_ip_cidr(value).is_some() || is_valid_hostname(value)
-}
-
-fn is_valid_hostname(value: &str) -> bool {
-    let value = value.trim().trim_end_matches('.');
-    !value.is_empty()
-        && value.len() <= 253
-        && value.split('.').all(|label| {
-            !label.is_empty()
-                && label.len() <= 63
-                && !label.starts_with('-')
-                && !label.ends_with('-')
-                && label
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-        })
 }
 
 fn validate_destinations(profile: &NetworkProfile) -> Result<(), ProfileValidationError> {
@@ -175,11 +153,11 @@ fn validate_destinations(profile: &NetworkProfile) -> Result<(), ProfileValidati
     }
     let mut seen = BTreeSet::new();
     for target in &profile.destination_targets {
-        if parse_ip_cidr(&target.cidr).is_none() {
+        let Some(destination) = normalize_android_ip_cidr(&target.cidr) else {
             return Err(ProfileValidationError::InvalidDestinationCidr(
                 target.cidr.clone(),
             ));
-        }
+        };
         let mut ports = BTreeSet::new();
         if target
             .ports
@@ -190,10 +168,7 @@ fn validate_destinations(profile: &NetworkProfile) -> Result<(), ProfileValidati
                 cidr: target.cidr.clone(),
             });
         }
-        let key = (
-            target.cidr.trim().to_ascii_lowercase(),
-            target.ports.clone(),
-        );
+        let key = (destination, ports.into_iter().collect::<Vec<_>>());
         if !seen.insert(key) {
             return Err(ProfileValidationError::DuplicateDestinationTarget(
                 target.cidr.clone(),
@@ -255,18 +230,6 @@ fn validate_targets(
                 target.package_name.clone(),
             ));
         };
-        let actual_signature = normalize_sha256(&actual.signing_sha256);
-        let saved_signature = normalize_sha256(&target.signing_sha256);
-        if actual_signature.is_empty() || saved_signature.is_empty() {
-            return Err(ProfileValidationError::SignatureUnavailable(
-                target.package_name.clone(),
-            ));
-        }
-        if actual_signature != saved_signature {
-            return Err(ProfileValidationError::SignatureChanged(
-                target.package_name.clone(),
-            ));
-        }
         if actual.uid != target.uid {
             return Err(ProfileValidationError::UidChanged {
                 package_name: target.package_name.clone(),
@@ -388,14 +351,6 @@ fn validate_probability(field: &'static str, value: u16) -> Result<(), ProfileVa
     Ok(())
 }
 
-fn normalize_sha256(value: &str) -> String {
-    value
-        .chars()
-        .filter(char::is_ascii_hexdigit)
-        .flat_map(char::to_uppercase)
-        .collect()
-}
-
 fn is_valid_package_name(value: &str) -> bool {
     let parts = value.split('.').collect::<Vec<_>>();
     parts.len() >= 2
@@ -414,12 +369,11 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
-    use crate::{DestinationTarget, NetworkProfile, WeakNetworkProfile};
+    use crate::{DestinationTarget, NetworkProfile, ProxyRoute, WeakNetworkProfile};
 
     fn app(package_name: &str, uid: u32) -> InstalledApplication {
         InstalledApplication {
             package_name: package_name.to_owned(),
-            signing_sha256: "AA:BB".to_owned(),
             uid,
         }
     }
@@ -432,7 +386,6 @@ mod tests {
                 .iter()
                 .map(|target| TargetApplication {
                     package_name: target.package_name.clone(),
-                    signing_sha256: "aabb".to_owned(),
                     uid: target.uid,
                 })
                 .collect(),
@@ -480,42 +433,6 @@ mod tests {
         ));
         candidate.confirmed_shared_uids.insert(10001);
         assert!(candidate.validate_for_start(&installed).is_ok());
-    }
-
-    #[test]
-    fn changed_signature_is_rejected() {
-        let installed = vec![app("com.example.target", 10001)];
-        let mut candidate = profile(&installed);
-        candidate.target_applications[0].signing_sha256 = "FF".to_owned();
-        assert_eq!(
-            candidate.validate_for_start(&installed),
-            Err(ProfileValidationError::SignatureChanged(
-                "com.example.target".to_owned()
-            ))
-        );
-    }
-
-    #[test]
-    fn missing_signature_is_rejected() {
-        let installed = vec![app("com.example.target", 10001)];
-        let mut candidate = profile(&installed);
-        candidate.target_applications[0].signing_sha256.clear();
-        assert_eq!(
-            candidate.validate_for_start(&installed),
-            Err(ProfileValidationError::SignatureUnavailable(
-                "com.example.target".to_owned()
-            ))
-        );
-
-        let mut installed_without_signature = installed;
-        installed_without_signature[0].signing_sha256.clear();
-        let candidate = profile(&installed_without_signature);
-        assert_eq!(
-            candidate.validate_for_start(&installed_without_signature),
-            Err(ProfileValidationError::SignatureUnavailable(
-                "com.example.target".to_owned()
-            ))
-        );
     }
 
     #[test]
@@ -607,5 +524,32 @@ mod tests {
                 actual: 129,
             })
         ));
+    }
+
+    #[test]
+    fn proxy_routes_reject_equivalent_destination_spellings() {
+        let installed = vec![app("com.example.target", 10001)];
+        for destinations in [
+            ["2001:0db8::1", "2001:db8::1"],
+            ["2001:db8:0:1::1/64", "2001:db8:0:1::abcd/64"],
+            ["127.0.0.1", "127.0.0.1."],
+            ["Example.COM.", "example.com"],
+        ] {
+            let mut candidate = profile(&installed);
+            candidate.proxy_routes = destinations
+                .into_iter()
+                .enumerate()
+                .map(|(index, destination)| ProxyRoute {
+                    destination: destination.to_owned(),
+                    ports: vec![8_443],
+                    listener_id: format!("listener-{index}"),
+                })
+                .collect();
+
+            assert!(matches!(
+                candidate.validate_for_start(&installed),
+                Err(ProfileValidationError::DuplicateProxyRoute(_))
+            ));
+        }
     }
 }

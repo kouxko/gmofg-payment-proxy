@@ -691,16 +691,37 @@ fn to_domain_draft(
         .enumerate()
         .map(|(index, action)| {
             action_to_domain(action).map_err(|error| {
-                let field = if matches!(action, AppRuleAction::SetJsonField { .. }) {
-                    format!("actions.{index}.value_json")
-                } else {
-                    format!("actions.{index}")
+                let (field, message) = match action {
+                    AppRuleAction::SetJsonField { value_json, .. }
+                        if value_json.trim().is_empty() =>
+                    {
+                        (
+                            format!("actions.{index}.value_json"),
+                            format!(
+                                "动作 {} 的 JSON 值不能为空；请输入 null、字符串、数字、对象或数组",
+                                index + 1
+                            ),
+                        )
+                    }
+                    AppRuleAction::SetJsonField { .. } => (
+                        format!("actions.{index}.value_json"),
+                        format!(
+                            "动作 {} 的 JSON 值格式无效；第 {} 行第 {} 列附近存在错误",
+                            index + 1,
+                            error.line(),
+                            error.column()
+                        ),
+                    ),
+                    _ => (
+                        format!("actions.{index}"),
+                        format!("动作 {} 的参数格式无效", index + 1),
+                    ),
                 };
                 intercept_proxy_domain::DomainError::new(
                     intercept_proxy_domain::ErrorCode::RuleInvalid,
                     "规则动作无效",
                 )
-                .with_field_error(field, error.to_string())
+                .with_field_error(field, message)
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -1307,6 +1328,35 @@ mod tests {
         assert!(draft.expected_revision.is_none());
         assert!(draft.conditions.is_empty());
         assert!(draft.actions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn json_action_validation_returns_a_chinese_field_error() {
+        let adapter = adapter();
+        let mut empty = request_delay_draft("设置 JSON 字段", false);
+        empty.actions = vec![AppRuleAction::SetJsonField {
+            path: "$.result".into(),
+            value_json: String::new(),
+        }];
+
+        let empty_validation = adapter.validate(&empty).await.expect("validate empty JSON");
+        assert!(!empty_validation.valid);
+        assert_eq!(
+            empty_validation.field_errors["actions.0.value_json"],
+            vec!["动作 1 的 JSON 值不能为空；请输入 null、字符串、数字、对象或数组"]
+        );
+
+        empty.actions = vec![AppRuleAction::SetJsonField {
+            path: "$.result".into(),
+            value_json: "{".into(),
+        }];
+        let malformed_validation = adapter
+            .validate(&empty)
+            .await
+            .expect("validate malformed JSON");
+        let message = &malformed_validation.field_errors["actions.0.value_json"][0];
+        assert!(message.starts_with("动作 1 的 JSON 值格式无效；"));
+        assert!(!message.contains("expected value"));
     }
 
     // RULE-003, RULE-011, ENGINE-008, TEST-RULE
