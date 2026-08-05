@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Card, Label, ListBox, Select, Switch } from "@heroui/react";
+import { Button, Card, Input, Label, ListBox, Select, Switch } from "@heroui/react";
 import type {
   CertificateItemViewModel,
   CertificateReference,
@@ -16,7 +16,7 @@ type Props = {
   listener: ProxyListener;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
-  installationLeaf?: CertificateItemViewModel;
+  installationRoot?: CertificateItemViewModel;
   busy: boolean;
   onChange: (changes: Partial<ProxyListener>) => void;
   onOpenIdentityImport: () => void;
@@ -27,7 +27,7 @@ export function DownstreamTlsCard({
   listener,
   certificateReferences,
   certificateDetails,
-  installationLeaf,
+  installationRoot,
   busy,
   onChange,
   onOpenIdentityImport,
@@ -42,14 +42,14 @@ export function DownstreamTlsCard({
   const tls = listener.downstream_tls;
   const authentication = tls.client_authentication;
   const identity = findReference(identities, tls.server_identity);
-  const effectiveIdentity = identity ?? INSTALLATION_LEAF_REFERENCE;
+  const effectiveIdentity = identity ?? INSTALLATION_ROOT_REFERENCE;
   const identityDetail = identity
     ? findDetail(certificateDetails, identity.id)
-    : installationLeaf
+    : installationRoot
       ? {
-          reference_id: INSTALLATION_LEAF_REFERENCE.id,
-          label: INSTALLATION_LEAF_REFERENCE.label,
-          certificate: installationLeaf,
+          reference_id: INSTALLATION_ROOT_REFERENCE.id,
+          label: INSTALLATION_ROOT_REFERENCE.label,
+          certificate: installationRoot,
           error_message: null,
         }
       : undefined;
@@ -91,13 +91,13 @@ export function DownstreamTlsCard({
             <section className="space-y-3 border-t border-[var(--telemetry-line)] pt-4">
               <SectionHeading
                 title="代理向客户端证明身份"
-                description="选择本机代理在握手中出示的 Server 身份（服务端证书 + 私钥）。未单独选择时使用证书管理页现有的本机叶子证书；其 SAN 必须覆盖客户端实际访问的 IP 或域名。"
+                description="未选择固定身份时，代理使用本机 Root CA 按客户端 SNI 动态签发匹配证书；固定 Server 主机名和 Android 透明路由目标会自动加入允许列表。选择独立身份后改为始终出示该固定证书。"
               />
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 max-[620px]:grid-cols-1">
                 <CertificateReferenceSelect
                   label="本监听服务端证书身份"
                   value={tls.server_identity}
-                  emptyLabel="使用证书管理页的本机叶子证书（推荐）"
+                  emptyLabel="按客户端 SNI 动态签发（推荐）"
                   references={identities}
                   onChange={(serverIdentity) => onChange({
                     downstream_tls: { ...tls, server_identity: serverIdentity },
@@ -107,6 +107,25 @@ export function DownstreamTlsCard({
                   导入独立服务端身份
                 </Button>
               </div>
+              {!identity && (
+                <div className="grid gap-1">
+                  <Label>额外允许的动态 SNI 域名</Label>
+                  <Input
+                    aria-label="动态 SNI 允许域名"
+                    value={(tls.dynamic_sni_allowlist ?? []).join(", ")}
+                    onChange={(event) => onChange({
+                      downstream_tls: {
+                        ...tls,
+                        dynamic_sni_allowlist: splitValues(event.target.value),
+                      },
+                    })}
+                    placeholder="api.example.test, *.example.test"
+                  />
+                  <p className="text-xs text-[var(--telemetry-muted)]">
+                    固定 Server 主机名和 Android 透明代理路由目标会自动加入允许列表，此处仅填写额外域名。
+                  </p>
+                </div>
+              )}
               <CertificateDetailPanel
                 reference={effectiveIdentity}
                 detail={identityDetail}
@@ -183,11 +202,11 @@ export function DownstreamTlsCard({
   );
 }
 
-const INSTALLATION_LEAF_REFERENCE: CertificateReference = {
-  id: "installation-proxy-leaf",
-  label: "证书管理页本机叶子证书（使用已签发的固定 SAN）",
-  kind: "reverse_server_identity",
-  reference: "installation:proxy-leaf",
+const INSTALLATION_ROOT_REFERENCE: CertificateReference = {
+  id: "installation-root-ca",
+  label: "证书管理页 Root CA（按允许的客户端 SNI 动态签发）",
+  kind: "mitm_root_ca",
+  reference: "installation:root-ca",
 };
 
 function SettingSwitch({ selected, title, description, onChange }: {
@@ -218,4 +237,8 @@ function findReference(references: CertificateReference[], id?: string | null) {
 
 function findDetail(details: ListenerCertificateDetailViewModel[], id?: string) {
   return details.find((detail) => detail.reference_id === id);
+}
+
+function splitValues(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }

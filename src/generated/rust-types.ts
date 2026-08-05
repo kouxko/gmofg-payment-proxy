@@ -522,10 +522,16 @@ export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "opt
 export type DownstreamTlsSettings = {
 	enabled: boolean,
 	/**
-	 *  `None` 表示使用证书管理页签发并由系统密钥保护的本机叶子证书。
-	 *  `Some` 仅用于显式选择 Workspace 内的独立服务端身份引用。
+	 *  `None` 表示使用证书管理页的 Root CA，按客户端 SNI 动态签发服务端证书。
+	 *  `Some` 仅用于显式选择 Workspace 内的固定服务端身份引用。
 	 */
 	server_identity: CertificateReferenceId | null,
+	/**
+	 *  允许动态签发的精确 DNS/IP 或 `*.example.test` 域名模式。Android 透明代理路由
+	 *  目标与固定 Server 主机名会在运行时自动合并到此列表，
+	 *  因此这里只需填写额外允许的客户端访问域名。
+	 */
+	dynamic_sni_allowlist?: string[],
 	client_authentication: DownstreamClientAuthentication,
 };
 

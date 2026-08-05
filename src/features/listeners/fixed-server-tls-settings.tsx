@@ -27,7 +27,7 @@ type Props = {
   listener: ProxyListener;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
-  installationLeaf?: CertificateItemViewModel;
+  installationRoot?: CertificateItemViewModel;
   busy: boolean;
   testing: boolean;
   testResult?: ListenerUpstreamTlsTestViewModel;
@@ -78,7 +78,7 @@ export function FixedServerTlsSettings(props: Props) {
         listener={props.listener}
         certificateReferences={props.certificateReferences}
         certificateDetails={props.certificateDetails}
-        installationLeaf={props.installationLeaf}
+        installationRoot={props.installationRoot}
         busy={props.busy}
         onChange={props.onChange}
         onOpenIdentityImport={() => setDownstreamIdentityOpen(true)}

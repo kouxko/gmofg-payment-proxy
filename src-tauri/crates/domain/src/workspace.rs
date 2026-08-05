@@ -149,9 +149,14 @@ pub enum DownstreamClientAuthentication {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub struct DownstreamTlsSettings {
     pub enabled: bool,
-    /// `None` 表示使用证书管理页签发并由系统密钥保护的本机叶子证书。
-    /// `Some` 仅用于显式选择 Workspace 内的独立服务端身份引用。
+    /// `None` 表示使用证书管理页的 Root CA，按客户端 SNI 动态签发服务端证书。
+    /// `Some` 仅用于显式选择 Workspace 内的固定服务端身份引用。
     pub server_identity: Option<CertificateReferenceId>,
+    /// 允许动态签发的精确 DNS/IP 或 `*.example.test` 域名模式。Android 透明代理路由
+    /// 目标与固定 Server 主机名会在运行时自动合并到此列表，
+    /// 因此这里只需填写额外允许的客户端访问域名。
+    #[serde(default)]
+    pub dynamic_sni_allowlist: Vec<String>,
     pub client_authentication: DownstreamClientAuthentication,
 }
 
@@ -160,6 +165,7 @@ impl Default for DownstreamTlsSettings {
         Self {
             enabled: false,
             server_identity: None,
+            dynamic_sni_allowlist: Vec::new(),
             client_authentication: DownstreamClientAuthentication::Disabled,
         }
     }
@@ -691,9 +697,8 @@ fn validate_downstream_tls(
     prefix: &str,
     error: &mut DomainError,
 ) {
-    // `None` 明确表示使用当前安装实例在“证书管理”页签发并受系统密钥保护的叶子证书。
-    // 只有用户改选 Workspace 证书引用时才要求该引用存在，避免把安装级私钥复制到
-    // Workspace，或用会被系统清理的临时文件路径冒充持久身份。
+    // `None` 明确表示使用当前安装实例的 Root CA 按客户端 SNI 动态签发叶子证书。
+    // 只有用户改选固定 Workspace 身份时才要求该引用存在。
     if value.downstream_tls.enabled
         && value
             .downstream_tls
@@ -714,6 +719,20 @@ fn validate_downstream_tls(
             "下游 TLS 服务端身份引用类型不匹配",
             error,
         );
+    }
+    for (allow_index, authority) in value
+        .downstream_tls
+        .dynamic_sni_allowlist
+        .iter()
+        .enumerate()
+    {
+        if !is_valid_authority_pattern(authority) {
+            push_field_error(
+                error,
+                format!("{prefix}.downstream_tls.dynamic_sni_allowlist.{allow_index}"),
+                "必须是精确 DNS/IP 或 *.example.test 形式",
+            );
+        }
     }
     let downstream_trust = match value.downstream_tls.client_authentication {
         DownstreamClientAuthentication::Disabled => None,
@@ -1071,14 +1090,31 @@ mod tests {
     }
 
     #[test]
-    fn downstream_tls_can_use_installation_leaf_without_workspace_reference() {
+    fn downstream_tls_can_use_installation_root_for_dynamic_sni() {
         let mut workspace = ProxyWorkspace::default();
         workspace.listeners[0].downstream_tls.enabled = true;
         workspace.listeners[0].downstream_tls.server_identity = None;
+        workspace.listeners[0].downstream_tls.dynamic_sni_allowlist =
+            vec!["api.example.test".into(), "*.service.test".into()];
 
         workspace
             .validate()
-            .expect("installation leaf is an explicit built-in identity");
+            .expect("installation root supports validated dynamic SNI patterns");
+    }
+
+    #[test]
+    fn downstream_tls_rejects_invalid_dynamic_sni_pattern() {
+        let mut workspace = ProxyWorkspace::default();
+        workspace.listeners[0].downstream_tls.enabled = true;
+        workspace.listeners[0].downstream_tls.dynamic_sni_allowlist =
+            vec!["https://api.example.test/path".into()];
+
+        let error = workspace.validate().expect_err("invalid SNI pattern");
+        assert!(
+            error
+                .field_errors
+                .contains_key("listeners.0.downstream_tls.dynamic_sni_allowlist.0")
+        );
     }
 
     #[test]

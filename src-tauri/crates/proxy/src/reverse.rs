@@ -36,6 +36,7 @@ use uuid::Uuid;
 use x509_parser::{extensions::GeneralName, parse_x509_certificate};
 use zeroize::{Zeroize, Zeroizing};
 
+use crate::forward::authority_is_allowed;
 use crate::message::MessageLimits;
 use crate::supervisor::ChannelId;
 use crate::tls::ClientTlsAdapter;
@@ -69,6 +70,8 @@ pub struct ReverseDownstreamTls {
     /// 无 SNI 的客户端仍使用 `server_identity` 作为回退。显式导入独立身份时该字段为
     /// `None`，确保 Workspace 选择的证书不会被动态签发覆盖。
     pub dynamic_server_identity: Option<Arc<dyn MitmCertificateAuthority>>,
+    /// 动态签发只允许命中此列表的 SNI，避免代理为任意主机名签发证书。
+    pub dynamic_server_name_allowlist: Vec<String>,
     pub client_trust_der: Vec<Vec<u8>>,
     pub client_authentication_required: bool,
 }
@@ -554,6 +557,7 @@ fn build_server_acceptor(settings: &ReverseDownstreamTls) -> Result<TlsAcceptor>
     let config = match &settings.dynamic_server_identity {
         Some(authority) => config.with_cert_resolver(Arc::new(DynamicServerIdentityResolver {
             authority: Arc::clone(authority),
+            allowlist: settings.dynamic_server_name_allowlist.clone(),
             fallback,
             cache: Mutex::new(BTreeMap::new()),
         })),
@@ -565,6 +569,7 @@ fn build_server_acceptor(settings: &ReverseDownstreamTls) -> Result<TlsAcceptor>
 #[derive(Debug)]
 struct DynamicServerIdentityResolver {
     authority: Arc<dyn MitmCertificateAuthority>,
+    allowlist: Vec<String>,
     fallback: Arc<CertifiedKey>,
     cache: Mutex<BTreeMap<String, Arc<CertifiedKey>>>,
 }
@@ -574,6 +579,9 @@ impl ResolvesServerCert for DynamicServerIdentityResolver {
         let Some(server_name) = client_hello.server_name() else {
             return Some(Arc::clone(&self.fallback));
         };
+        if !authority_is_allowed(server_name, &self.allowlist) {
+            return None;
+        }
         let cache_key = server_name.to_ascii_lowercase();
         if let Some(cached) = self.cache.lock().ok()?.get(&cache_key) {
             return Some(Arc::clone(cached));

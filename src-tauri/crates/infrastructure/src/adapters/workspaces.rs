@@ -551,6 +551,7 @@ mod tests {
                 downstream_tls: DownstreamTlsSettings {
                     enabled: true,
                     server_identity: Some(server_identity),
+                    dynamic_sni_allowlist: Vec::new(),
                     client_authentication: DownstreamClientAuthentication::Required {
                         trust: downstream_trust,
                     },
