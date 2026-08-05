@@ -4,17 +4,29 @@
 //! 同时不会为了测试拆分而扩大任何运行时 API 的可见性。
 
 use super::*;
+use http::HeaderMap;
+use http::header::{CONNECTION, UPGRADE};
 use http_body_util::BodyExt;
 use rcgen::{
     BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair, KeyUsagePurpose,
     PKCS_ECDSA_P256_SHA256, SanType,
 };
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
+use rustls::{ClientConfig, RootCertStore, ServerConfig};
+use std::net::IpAddr;
 use std::sync::Mutex as StdMutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
+use tokio::sync::{Mutex, oneshot};
+use tokio_rustls::TlsConnector;
 
+use super::config::MitmLeafCache;
+use super::pipeline::response_from_pipeline_disposition;
+use crate::fault::{FaultAction, ResponseDisposition};
+use crate::message::Message;
 use crate::message::RawHeader;
+use crate::traffic::TrafficSchedule;
 use crate::transport::HandshakePolicy;
 
 fn loopback_config() -> ForwardProxyConfig {

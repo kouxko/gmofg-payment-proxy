@@ -5,6 +5,13 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	appBootstrap: () => typedError<AppBootstrapViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_bootstrap")),
+	/**
+	 *  建立“先回放、后实时”的有序 UI 事件通道。
+	 *  application 在同一临界区内确定回放边界并注册实时队列，因此同步发送 replay 时新事件
+	 *  只会排入 live，不会插到回放中间。回放全部成功后才启动异步转发任务，保证前端看到的
+	 *  `event_id` 单调递增。Channel 关闭、实时队列终止或任务自然结束时，尾部清理都会读取终止
+	 *  原因并注销订阅，释放队列记账；显式取消命令只是同一清理路径的主动入口。
+	 */
 	appSubscribeEvents: (afterEventId: number, onEvent: Channel<UiEventEnvelope>) => typedError<SubscriptionAckViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_subscribe_events", { afterEventId, onEvent })),
 	appUnsubscribeEvents: (subscriptionId: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_unsubscribe_events", { subscriptionId })),
 	androidAdbGet: () => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_get")),
@@ -527,7 +534,8 @@ export type DownstreamTlsSettings = {
 	 */
 	server_identity: CertificateReferenceId | null,
 	/**
-	 *  允许动态签发的精确 DNS/IP 或 `*.example.test` 域名模式。Android 透明代理路由
+	 *  允许动态签发的精确 DNS 或 `*.example.test` 域名模式。IP 字面量
+	 *  必须由固定服务端身份的 SAN 覆盖，不参与基于 SNI 的动态签发。Android 透明代理路由
 	 *  目标与固定 Server 主机名会在运行时自动合并到此列表，
 	 *  因此这里只需填写额外允许的客户端访问域名。
 	 */

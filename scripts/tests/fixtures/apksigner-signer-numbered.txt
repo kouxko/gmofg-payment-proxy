@@ -1,0 +1,5 @@
+Verifies
+Number of signers: 1
+Signer #1 certificate DN: CN=Intercept Proxy Companion
+Signer #1 certificate SHA-256 digest: c92ff3da8cb6520775e028abfc1d57d746949e7d83a038ec7626c99b67544db2
+Signer #1 public key SHA-256 digest: 65f01bb8632eec0b5f85fb463109be6a53b39b0bf54f7b0a8a7b0a072413de1f

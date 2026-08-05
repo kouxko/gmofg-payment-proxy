@@ -1,0 +1,364 @@
+use regex::Regex;
+
+use crate::{DomainError, ErrorCode, JsonPath, MessageStage};
+
+use super::{
+    MAX_THROTTLE_BYTES_PER_SECOND, MAX_TOTAL_DELAY_MS, MAX_TRAFFIC_CHUNK_BYTES, MatchCondition,
+    MatchField, MatchOperator, RuleAction, RuleDraft, TerminalAction, TrafficDirection,
+};
+
+/// 完整校验规则草稿，并一次返回所有可定位的字段错误。
+pub fn validate_rule_draft(draft: &RuleDraft) -> Result<(), DomainError> {
+    let mut error = DomainError::new(ErrorCode::RuleInvalid, "规则配置非法");
+    if draft.name.trim().is_empty() {
+        error = error.with_field_error("name", "规则名称不能为空");
+    }
+    if draft.actions.is_empty() {
+        error = error.with_field_error("actions", "至少配置一个动作");
+    }
+    validate_conditions(draft, &mut error);
+    validate_total_delay(draft, &mut error);
+    validate_actions(draft, &mut error);
+    validate_tls_conditions(draft, &mut error);
+
+    if error.field_errors.is_empty() {
+        Ok(())
+    } else {
+        Err(error)
+    }
+}
+
+fn validate_conditions(draft: &RuleDraft, error: &mut DomainError) {
+    for (index, condition) in draft.conditions.iter().enumerate() {
+        match condition {
+            MatchCondition::Field {
+                field: MatchField::JsonPath(path),
+                ..
+            } if JsonPath::parse(path).is_err() => push_field_error(
+                error,
+                format!("conditions.{index}.path"),
+                "JSON 字段路径非法",
+            ),
+            MatchCondition::Field {
+                operator: MatchOperator::Regex(pattern),
+                ..
+            } if Regex::new(pattern).is_err() => {
+                push_field_error(error, format!("conditions.{index}.regex"), "正则表达式非法");
+            }
+            MatchCondition::NthHit(0) => push_field_error(
+                error,
+                format!("conditions.{index}.nth_hit"),
+                "第 N 次命中必须大于 0",
+            ),
+            MatchCondition::Field { .. } | MatchCondition::NthHit(_) => {}
+        }
+    }
+}
+
+fn validate_total_delay(draft: &RuleDraft, error: &mut DomainError) {
+    let total_delay = draft.actions.iter().fold(0_u64, |total, action| {
+        total.saturating_add(match action {
+            RuleAction::Delay { milliseconds } => *milliseconds,
+            RuleAction::Jitter {
+                maximum_milliseconds,
+                ..
+            } => *maximum_milliseconds,
+            _ => 0,
+        })
+    });
+    if total_delay > MAX_TOTAL_DELAY_MS {
+        push_field_error(error, "actions", "累计延迟不得超过 600000 毫秒");
+    }
+}
+
+fn validate_tls_conditions(draft: &RuleDraft, error: &mut DomainError) {
+    if draft.stage == MessageStage::TlsHandshake
+        && draft.conditions.iter().any(|condition| {
+            !matches!(
+                condition,
+                MatchCondition::Field {
+                    field: MatchField::CertificateFingerprint,
+                    ..
+                } | MatchCondition::NthHit(_)
+            )
+        })
+    {
+        push_field_error(
+            error,
+            "conditions",
+            "TLS 握手拒绝只允许通道、客户端证书和第 N 次命中条件",
+        );
+    }
+}
+
+fn validate_actions(draft: &RuleDraft, error: &mut DomainError) {
+    let terminal_positions = draft
+        .actions
+        .iter()
+        .enumerate()
+        .filter_map(|(index, action)| action.is_terminal().then_some(index))
+        .collect::<Vec<_>>();
+    if terminal_positions.len() > 1
+        || terminal_positions
+            .first()
+            .is_some_and(|&index| index + 1 != draft.actions.len())
+    {
+        push_field_error(error, "actions", "终止动作必须唯一且位于动作列表末尾");
+    }
+
+    for (index, action) in draft.actions.iter().enumerate() {
+        validate_action_compatibility(draft.stage, error, index, action);
+        validate_action_limits(error, index, action);
+        validate_action_content(error, index, action);
+    }
+}
+
+fn validate_action_compatibility(
+    stage: MessageStage,
+    error: &mut DomainError,
+    index: usize,
+    action: &RuleAction,
+) {
+    if !action_compatible(stage, action) {
+        push_field_error(error, format!("actions.{index}"), "动作与规则阶段不兼容");
+    }
+    if let RuleAction::CustomHttpStatus { status } = action
+        && !(100..=599).contains(status)
+    {
+        push_field_error(
+            error,
+            format!("actions.{index}.status"),
+            "HTTP 状态码必须位于 100..599",
+        );
+    }
+}
+
+fn validate_action_limits(error: &mut DomainError, index: usize, action: &RuleAction) {
+    match action {
+        RuleAction::Jitter {
+            minimum_milliseconds,
+            maximum_milliseconds,
+            ..
+        } => {
+            if minimum_milliseconds > maximum_milliseconds {
+                push_field_error(
+                    error,
+                    format!("actions.{index}.minimum_milliseconds"),
+                    "最小抖动不得大于最大抖动",
+                );
+            }
+            if *maximum_milliseconds > MAX_TOTAL_DELAY_MS {
+                push_field_error(
+                    error,
+                    format!("actions.{index}.maximum_milliseconds"),
+                    "单次抖动不得超过 600000 毫秒",
+                );
+            }
+        }
+        RuleAction::Throttle {
+            bytes_per_second,
+            chunk_bytes,
+            ..
+        } => {
+            if !(1..=MAX_THROTTLE_BYTES_PER_SECOND).contains(bytes_per_second) {
+                push_field_error(
+                    error,
+                    format!("actions.{index}.bytes_per_second"),
+                    "限速必须位于 1..104857600 B/s",
+                );
+            }
+            if !(1..=MAX_TRAFFIC_CHUNK_BYTES).contains(chunk_bytes) {
+                push_field_error(
+                    error,
+                    format!("actions.{index}.chunk_bytes"),
+                    "分块大小必须位于 1..1048576 字节",
+                );
+            }
+        }
+        RuleAction::Intermittent {
+            available_milliseconds,
+            blocked_milliseconds,
+            ..
+        } => {
+            validate_window(
+                error,
+                index,
+                "available_milliseconds",
+                *available_milliseconds,
+            );
+            validate_window(error, index, "blocked_milliseconds", *blocked_milliseconds);
+        }
+        _ => {}
+    }
+
+    match action {
+        RuleAction::Terminal(TerminalAction::IncorrectContentLength { delta }) if *delta == 0 => {
+            push_field_error(
+                error,
+                format!("actions.{index}.delta"),
+                "错误长度差值不能为 0",
+            );
+        }
+        RuleAction::Terminal(
+            TerminalAction::UpstreamConnectTimeout { milliseconds }
+            | TerminalAction::UpstreamWriteTimeout { milliseconds }
+            | TerminalAction::UpstreamReadTimeout { milliseconds },
+        ) if *milliseconds == 0 => push_field_error(
+            error,
+            format!("actions.{index}.milliseconds"),
+            "故障超时必须大于 0 毫秒",
+        ),
+        RuleAction::Terminal(TerminalAction::MockResponse { status, .. })
+            if !(100..=599).contains(status) =>
+        {
+            push_field_error(
+                error,
+                format!("actions.{index}.status"),
+                "Mock HTTP 状态码必须位于 100..599",
+            );
+        }
+        _ => {}
+    }
+}
+
+fn validate_window(error: &mut DomainError, index: usize, field: &str, value: u64) {
+    if !(1..=MAX_TOTAL_DELAY_MS).contains(&value) {
+        let message = if field == "available_milliseconds" {
+            "可用窗口必须位于 1..600000 毫秒"
+        } else {
+            "阻断窗口必须位于 1..600000 毫秒"
+        };
+        push_field_error(error, format!("actions.{index}.{field}"), message);
+    }
+}
+
+fn validate_action_content(error: &mut DomainError, index: usize, action: &RuleAction) {
+    match action {
+        RuleAction::SetJsonField { path, .. } if JsonPath::parse(path).is_err() => {
+            push_field_error(error, format!("actions.{index}.path"), "JSON 字段路径非法");
+        }
+        RuleAction::SetHeader { name, value } => {
+            validate_header(error, &format!("actions.{index}"), name, value);
+        }
+        RuleAction::Terminal(TerminalAction::MockResponse { headers, .. }) => {
+            for (header_index, (name, value)) in headers.iter().enumerate() {
+                validate_header(
+                    error,
+                    &format!("actions.{index}.headers.{header_index}"),
+                    name,
+                    value,
+                );
+            }
+        }
+        _ => {}
+    }
+}
+
+fn validate_header(error: &mut DomainError, field_prefix: &str, name: &str, value: &str) {
+    if !is_valid_header_name(name) {
+        push_field_error(
+            error,
+            format!("{field_prefix}.name"),
+            "Header 名称必须是非空 ASCII token",
+        );
+    }
+    if !is_valid_header_value(value) {
+        push_field_error(
+            error,
+            format!("{field_prefix}.value"),
+            "Header 值不能包含换行、NUL 或其他非法控制字符",
+        );
+    }
+    if matches!(
+        name.trim().to_ascii_lowercase().as_str(),
+        "content-length"
+            | "transfer-encoding"
+            | "connection"
+            | "proxy-connection"
+            | "keep-alive"
+            | "upgrade"
+            | "te"
+            | "trailer"
+    ) {
+        push_field_error(
+            error,
+            format!("{field_prefix}.name"),
+            "该 Header 由 Rust 转发管线统一管理，规则不得直接设置",
+        );
+    }
+}
+
+fn is_valid_header_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#'
+                        | b'$'
+                        | b'%'
+                        | b'&'
+                        | b'\''
+                        | b'*'
+                        | b'+'
+                        | b'-'
+                        | b'.'
+                        | b'^'
+                        | b'_'
+                        | b'`'
+                        | b'|'
+                        | b'~'
+                )
+        })
+}
+
+fn is_valid_header_value(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| byte == b'\t' || byte >= 0x20 && byte != 0x7f)
+}
+
+fn push_field_error(error: &mut DomainError, field: impl Into<String>, message: impl Into<String>) {
+    error
+        .field_errors
+        .entry(field.into())
+        .or_default()
+        .push(message.into());
+}
+
+fn action_compatible(stage: MessageStage, action: &RuleAction) -> bool {
+    match action {
+        RuleAction::SetJsonField { .. }
+        | RuleAction::ReplaceBodyText(_)
+        | RuleAction::SetHeader { .. }
+        | RuleAction::Delay { .. }
+        | RuleAction::Jitter { .. }
+        | RuleAction::Pause => stage != MessageStage::TlsHandshake,
+        RuleAction::Throttle { direction, .. } | RuleAction::Intermittent { direction, .. } => {
+            matches!(
+                (stage, direction),
+                (MessageStage::Request, TrafficDirection::Upstream)
+                    | (MessageStage::Response, TrafficDirection::Downstream)
+            )
+        }
+        RuleAction::CustomHttpStatus { .. } => stage == MessageStage::Response,
+        RuleAction::Terminal(terminal) => terminal_compatible(stage, terminal),
+    }
+}
+
+fn terminal_compatible(stage: MessageStage, terminal: &TerminalAction) -> bool {
+    match terminal {
+        TerminalAction::RejectTlsHandshake => stage == MessageStage::TlsHandshake,
+        TerminalAction::DisconnectBeforeUpstream
+        | TerminalAction::UpstreamConnectTimeout { .. }
+        | TerminalAction::UpstreamWriteTimeout { .. }
+        | TerminalAction::UpstreamReadTimeout { .. }
+        | TerminalAction::DropUpstreamResponse { .. }
+        | TerminalAction::MockResponse { .. }
+        | TerminalAction::DisconnectDuringUpstreamWrite { .. } => stage == MessageStage::Request,
+        TerminalAction::InvalidJson { .. }
+        | TerminalAction::IncorrectContentLength { .. }
+        | TerminalAction::TruncateResponse { .. }
+        | TerminalAction::DisconnectDuringDownstreamWrite { .. } => stage == MessageStage::Response,
+    }
+}

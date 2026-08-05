@@ -12,15 +12,13 @@ use intercept_proxy_domain::{
     MetadataExtractorId, ResponseAssertionId, Revision, RuleId,
 };
 use parking_lot::RwLock;
-use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
     AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceDocumentPort,
     WorkspaceId, WorkspaceRepositoryPort, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    parse_workspace_document, serialize_workspace_document,
 };
-
-const MAX_WORKSPACE_DOCUMENT_BYTES: usize = 8 * 1024 * 1024;
 
 /// 为复制或导入的 Workspace 生成完全独立的聚合身份。
 ///
@@ -191,38 +189,6 @@ impl InMemoryWorkspaceStore {
                 .entity(id.to_string())
         })
     }
-
-    fn import_document(document: &[u8]) -> AppResult<ProxyWorkspace> {
-        if document.len() > MAX_WORKSPACE_DOCUMENT_BYTES {
-            return Err(AppError::new(
-                "IMPORT_FAILED",
-                "Workspace 文档超过 8 MiB 安全上限。",
-            ));
-        }
-        let value = serde_json::from_slice::<Value>(document).map_err(|error| {
-            AppError::new("IMPORT_FAILED", format!("Workspace JSON 无效：{error}"))
-        })?;
-        reject_sensitive_fields(&value, "$")?;
-        let workspace = serde_json::from_value::<ProxyWorkspace>(value).map_err(|error| {
-            AppError::new("IMPORT_FAILED", format!("Workspace 结构无效：{error}"))
-        })?;
-        workspace.validate().map_err(AppError::from)?;
-        Ok(workspace)
-    }
-
-    fn export_document(workspace: &ProxyWorkspace) -> AppResult<Vec<u8>> {
-        workspace.validate().map_err(AppError::from)?;
-        let document = serde_json::to_vec_pretty(workspace).map_err(|error| {
-            AppError::new("EXPORT_FAILED", format!("Workspace 序列化失败：{error}"))
-        })?;
-        // 领域模型本身没有秘密值；再次扫描输出可阻止未来新增字段时意外扩大导出面。
-        let value = serde_json::from_slice::<Value>(&document).map_err(|error| {
-            AppError::new("EXPORT_FAILED", format!("Workspace 导出自检失败：{error}"))
-        })?;
-        reject_sensitive_fields(&value, "$")
-            .map_err(|_| AppError::new("EXPORT_FAILED", "Workspace 包含禁止导出的敏感字段。"))?;
-        Ok(document)
-    }
 }
 
 #[async_trait]
@@ -316,7 +282,7 @@ impl WorkspaceRepositoryPort for InMemoryWorkspaceStore {
     }
 
     async fn import_document(&self, document: Vec<u8>) -> AppResult<ProxyWorkspace> {
-        let mut workspace = Self::import_document(&document)?;
+        let mut workspace = parse_workspace_document(&document)?;
         remap_workspace_identity(&mut workspace)?;
         let mut state = self.state.write();
         state.workspaces.insert(workspace.id, workspace.clone());
@@ -328,7 +294,7 @@ impl WorkspaceRepositoryPort for InMemoryWorkspaceStore {
 
     async fn export_document(&self, workspace_id: WorkspaceId) -> AppResult<Vec<u8>> {
         let workspace = Self::get_stored(&self.state.read(), workspace_id)?;
-        Self::export_document(&workspace)
+        serialize_workspace_document(&workspace)
     }
 }
 
@@ -378,43 +344,10 @@ impl WorkspaceDocumentPort for InMemoryWorkspaceDocumentStore {
     }
 }
 
-fn reject_sensitive_fields(value: &Value, path: &str) -> AppResult<()> {
-    match value {
-        Value::Object(map) => {
-            for (key, value) in map {
-                let normalized = key.to_ascii_lowercase().replace('-', "_");
-                if matches!(
-                    normalized.as_str(),
-                    "password"
-                        | "password_bytes"
-                        | "private_key"
-                        | "private_key_pem"
-                        | "private_key_der"
-                        | "pkcs12"
-                        | "p12"
-                        | "secret_value"
-                ) {
-                    return Err(AppError::new(
-                        "IMPORT_FAILED",
-                        format!("Workspace 文档包含禁止的敏感字段：{path}.{key}"),
-                    ));
-                }
-                reject_sensitive_fields(value, &format!("{path}.{key}"))?;
-            }
-        }
-        Value::Array(values) => {
-            for (index, value) in values.iter().enumerate() {
-                reject_sensitive_fields(value, &format!("{path}[{index}]"))?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
 
     #[tokio::test]
     async fn default_store_contains_selected_safe_workspace() {
@@ -473,17 +406,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn export_rejects_unmanaged_certificate_references() {
+        let mut workspace = ProxyWorkspace::default();
+        workspace
+            .certificate_references
+            .push(intercept_proxy_domain::CertificateReference {
+                id: CertificateReferenceId::new(),
+                label: "旧文件引用".into(),
+                kind: intercept_proxy_domain::CertificateReferenceKind::UpstreamServerTrust,
+                reference: "file:/tmp/server-ca.pem".into(),
+            });
+
+        let error = serialize_workspace_document(&workspace)
+            .expect_err("portable export must reject unmanaged references");
+
+        assert_eq!(error.view_model.code, "EXPORT_FAILED");
+    }
+
+    #[tokio::test]
     async fn import_rejects_unknown_sensitive_fields_before_serde_discards_them() {
-        let workspace = ProxyWorkspace::default();
-        let mut value = serde_json::to_value(workspace).unwrap();
-        value.as_object_mut().unwrap().insert(
-            "password".into(),
-            Value::String("must-not-enter-core".into()),
-        );
-        let document = serde_json::to_vec(&value).unwrap();
+        for forbidden in ["password", "basic_auth_password", "pkcs12_password"] {
+            let workspace = ProxyWorkspace::default();
+            let mut value = serde_json::to_value(workspace).unwrap();
+            value.as_object_mut().unwrap().insert(
+                forbidden.into(),
+                Value::String("must-not-enter-core".into()),
+            );
+            let document = serde_json::to_vec(&value).unwrap();
+            let store = InMemoryWorkspaceStore::new_empty();
+            let error = store.import_document(document).await.unwrap_err();
+            assert_eq!(error.view_model.code, "IMPORT_FAILED");
+            assert!(store.list().await.unwrap().is_empty());
+        }
+    }
+
+    #[tokio::test]
+    async fn import_rejects_unmanaged_certificate_references() {
+        let mut workspace = ProxyWorkspace::default();
+        workspace
+            .certificate_references
+            .push(intercept_proxy_domain::CertificateReference {
+                id: CertificateReferenceId::new(),
+                label: "外部证书".into(),
+                kind: intercept_proxy_domain::CertificateReferenceKind::UpstreamServerTrust,
+                reference: "pkcs12:/tmp/client.p12?password_env=P12_PASSWORD".into(),
+            });
         let store = InMemoryWorkspaceStore::new_empty();
-        let error = store.import_document(document).await.unwrap_err();
-        assert_eq!(error.view_model.code, "IMPORT_FAILED");
+
+        let error = store
+            .import_document(serde_json::to_vec(&workspace).unwrap())
+            .await
+            .expect_err("unmanaged reference rejected");
+
+        assert_eq!(
+            error.view_model.code,
+            "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED"
+        );
         assert!(store.list().await.unwrap().is_empty());
     }
 

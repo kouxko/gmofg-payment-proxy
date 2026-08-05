@@ -33,9 +33,13 @@ class InterceptVpnService : VpnService() {
     )
 
     private val stateStore by lazy { RuntimeStateStore(this) }
-    private var tun: ParcelFileDescriptor? = null
-    private var tunConfiguration: TunConfiguration? = null
-    private var activeGeneration: Long? = null
+    /**
+     * TUN 所有权不能依赖 Service 实例锁。外部控制线程在主线程/JNI 卡住时，必须仍能
+     * 原子取得并关闭 fd，才能兑现三秒超时后的 fail-open 契约。
+     */
+    private val tun = AtomicReference<ParcelFileDescriptor?>(null)
+    @Volatile private var tunConfiguration: TunConfiguration? = null
+    @Volatile private var activeGeneration: Long? = null
     private var packageChangeReceiver: TargetPackageChangeReceiver? = null
 
     override fun onCreate() {
@@ -70,8 +74,7 @@ class InterceptVpnService : VpnService() {
             if (current === this) activeService.set(null)
         }
         unregisterPackageReceiver()
-        tun?.close()
-        tun = null
+        tun.getAndSet(null)?.close()
         NativeBridge.stop()
         activeGeneration = null
         val snapshot = VpnRuntimeRegistry.snapshot()
@@ -85,6 +88,15 @@ class InterceptVpnService : VpnService() {
 
     override fun onBind(intent: Intent?): IBinder? = super.onBind(intent)
 
+    /**
+     * 按 generation 启动一代完整数据面：解析输入 -> Rust 领域校验 -> 建立/复用 TUN -> JNI。
+     *
+     * generation 是桌面端配置事务的防旧写屏障；每个可能耗时的阶段后都重新确认，过期启动
+     * 不得覆盖较新的 stop/apply。Kotlin 只负责 Android 权限、包清单与 fd 生命周期，规则和
+     * 路由完整性统一交给 Rust。TUN 在进入 JNI 前公开到 AtomicReference，使外部超时清理可以
+     * 立即关闭系统路由。只有 JNI 成功且 registry 接受同一 generation 后才发布 running；任一
+     * 失败都走 failOpen，关闭 TUN 并让目标应用恢复系统直连。
+     */
     private fun startProfile(rawJson: String?, proxyRuntimeJson: String?, generation: Long) {
         if (!continueStart(generation)) return
         if (rawJson.isNullOrBlank()) return failOpen("没有可启动的 Profile", generation)
@@ -120,7 +132,7 @@ class InterceptVpnService : VpnService() {
             targetPackages = profile.targetPackages.map(TargetPackage::packageName).toSet(),
             mtu = profile.mtu,
         )
-        val currentTun = tun
+        val currentTun = tun.get()
         val canReuseTun = currentTun != null && tunConfiguration == desiredTunConfiguration
         val newTun = if (canReuseTun) {
             // 仅修改延迟、丢包、限速等弱网参数时，目标 UID 路由与 TUN MTU 都没有
@@ -134,12 +146,19 @@ class InterceptVpnService : VpnService() {
             closeCurrentDataPlane()
             establishTun(profile) ?: return failOpen("Android 未能建立 TUN", generation)
         }
+        if (!canReuseTun) {
+            // 在进入可能阻塞的 JNI 前公开 TUN 所有权。外部 stop 超时线程随后可以
+            // getAndSet(null) 并立即撤销 Android 路由，不必等待主线程返回。
+            tun.set(newTun)
+            tunConfiguration = desiredTunConfiguration
+            activeGeneration = generation
+        }
         // Rust 必须独立持有一个 fd。detachFd 后该副本只能由 Rust 关闭；Java 端仍保留
         // newTun，以便 stop/fail-open 时立即撤销 VPN 路由。
         val nativeTunFd = runCatching {
             ParcelFileDescriptor.dup(newTun.fileDescriptor).detachFd()
         }.getOrElse {
-            newTun.close()
+            closeCurrentDataPlane()
             return failOpen("复制 Android TUN 文件描述符失败：${it.message}", generation)
         }
         val started = NativeBridge.start(
@@ -150,11 +169,10 @@ class InterceptVpnService : VpnService() {
             protector = NativeSocketProtector(this),
         )
         if (!started) {
-            if (!canReuseTun) newTun.close()
             return failOpen("Rust 数据面启动失败，TUN 已关闭", generation)
         }
+        if (!continueStart(generation)) return
 
-        tun = newTun
         tunConfiguration = desiredTunConfiguration
         if (!VpnRuntimeRegistry.running(
                 JSONObject(rawJson).getString("id"),
@@ -187,8 +205,7 @@ class InterceptVpnService : VpnService() {
             .addAddress("fd00:6970:7670::2", 128)
             .addRoute("0.0.0.0", 0)
             .addRoute("::", 0)
-            .addDnsServer("1.1.1.1")
-            .addDnsServer("2606:4700:4700::1111")
+            .let { PhysicalNetworkDns.addTo(it, this) }
 
         for (target in profile.targetPackages) {
             // 非空 allowlist 的语义是：只有这些包进 VPN，系统和其他应用继续直连。
@@ -219,7 +236,7 @@ class InterceptVpnService : VpnService() {
     /** JNI 从后台线程通知故障；真正的 Service/TUN 操作统一回到 Android 主线程。 */
     internal fun onNativeDataPlaneFailure(reason: String) {
         Handler(Looper.getMainLooper()).post {
-            if (tun != null) failOpen("Rust 数据面异常退出：$reason")
+            if (tun.get() != null) failOpen("Rust 数据面异常退出：$reason")
         }
     }
 
@@ -244,13 +261,30 @@ class InterceptVpnService : VpnService() {
         stopGeneration: Long? = null,
     ) {
         if (manual) stateStore.autoResumeEnabled = false
-        val generation = stopGeneration ?: VpnRuntimeRegistry.stopRequested().generation
-        closeCurrentDataPlane()
-        unregisterPackageReceiver()
-        VpnRuntimeRegistry.confirmStopped(generation, message)
+        val stopRequest = stopGeneration?.let {
+            VpnRuntimeRegistry.StopRequest(it, requiresTeardownConfirmation = true)
+        } ?: VpnRuntimeRegistry.stopRequested()
+        val completed = VpnExternalStopCoordinator.completeActiveServiceStop(
+            stopRequest = stopRequest,
+            message = message,
+            releaseTun = {
+                closeCurrentDataPlane()
+                unregisterPackageReceiver()
+            },
+        )
+        if (!completed && !VpnRuntimeRegistry.isStopped(stopRequest.generation)) return
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
+
+    /** 后台控制线程等待主线程超时时，立即释放 TUN；Service 生命周期仍由主线程收尾。 */
+    private fun releaseTunAfterExternalStopTimeout(
+        stopRequest: VpnRuntimeRegistry.StopRequest,
+    ): Boolean = VpnExternalStopCoordinator.completeActiveServiceStop(
+        stopRequest = stopRequest,
+        message = "等待 Android 主线程关闭 VPN 超时；TUN 已由控制线程强制关闭。",
+        releaseTun = ::closeCurrentDataPlane,
+    )
 
     /** 忽略过期 start；若 stop 正在等待，则完成真实数据面清理后再确认停止。 */
     private fun continueStart(generation: Long): Boolean {
@@ -285,8 +319,7 @@ class InterceptVpnService : VpnService() {
      * Profile 热切换不会因为旧接口地址残留而失败。
      */
     private fun closeCurrentDataPlane() {
-        tun?.close()
-        tun = null
+        tun.getAndSet(null)?.close()
         tunConfiguration = null
         activeGeneration = null
         NativeBridge.stop()
@@ -446,7 +479,7 @@ class InterceptVpnService : VpnService() {
                 }
             }
             if (!completed.await(EXTERNAL_STOP_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                VpnRuntimeRegistry.faulted("等待 Android 主线程关闭 VPN 超时。")
+                service.releaseTunAfterExternalStopTimeout(stopRequest)
             }
         }
     }

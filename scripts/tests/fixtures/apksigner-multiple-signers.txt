@@ -1,0 +1,4 @@
+Verifies
+Number of signers: 2
+Signer #1 certificate SHA-256 digest: c92ff3da8cb6520775e028abfc1d57d746949e7d83a038ec7626c99b67544db2
+Signer #2 certificate SHA-256 digest: 71b665b9986d88cc4da189d8ce6590c2493ec5d1cc927c9d2748786011077062

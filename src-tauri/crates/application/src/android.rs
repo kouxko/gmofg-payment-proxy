@@ -297,7 +297,7 @@ pub fn decode_android_control_frame<T: for<'de> Deserialize<'de>>(frame: &[u8]) 
             "Android 控制帧缺少长度前缀。",
         ));
     }
-    let declared = u32::from_be_bytes(frame[..4].try_into().expect("four-byte prefix")) as usize;
+    let declared = u32::from_be_bytes([frame[0], frame[1], frame[2], frame[3]]) as usize;
     if declared > ANDROID_CONTROL_MAX_FRAME_BYTES || declared != frame.len() - 4 {
         return Err(AppError::new(
             "ANDROID_PROTOCOL_FRAME_INVALID",

@@ -54,31 +54,27 @@ impl TauriNativeFileDialog {
         }
     }
 
-    fn save_builder(&self, purpose: &str) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
+    fn save_builder(
+        &self,
+        purpose: &str,
+        suggested_file_name: &str,
+    ) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
         let builder = self.app.dialog().file();
-        match purpose {
+        let builder = match purpose {
             "intercept_workspace" => builder
                 .set_title("导出 Intercept Proxy Workspace")
-                .set_file_name("workspace.intercept-workspace")
                 .add_filter("Intercept Workspace", &["intercept-workspace"]),
             "intercept_configuration" => builder
                 .set_title("导出 Intercept Proxy 完整配置")
-                .set_file_name("intercept-proxy.intercept-config")
                 .add_filter("Intercept Config", &["intercept-config"]),
-            "session_json" => builder
-                .set_title("导出会话")
-                .set_file_name("session.json")
-                .add_filter("JSON", &["json"]),
-            "rules_json" => builder
-                .set_title("导出规则")
-                .set_file_name("rules.json")
-                .add_filter("JSON", &["json"]),
+            "session_json" => builder.set_title("导出会话").add_filter("JSON", &["json"]),
+            "rules_json" => builder.set_title("导出规则").add_filter("JSON", &["json"]),
             "root_ca" => builder
                 .set_title("导出 Intercept Proxy Root CA 公开证书")
-                .set_file_name("intercept-proxy-root-ca.crt")
                 .add_filter("X.509 证书", &["crt", "cer", "pem"]),
             _ => builder.set_title("保存文件"),
-        }
+        };
+        builder.set_file_name(safe_suggested_file_name(purpose, suggested_file_name))
     }
 
     fn into_path(path: tauri_plugin_dialog::FilePath) -> AppResult<PathBuf> {
@@ -99,8 +95,12 @@ impl NativeFileDialog for TauriNativeFileDialog {
             .transpose()
     }
 
-    fn choose_save_file(&self, purpose: &str) -> AppResult<Option<FileSelection>> {
-        self.save_builder(purpose)
+    fn choose_save_file(
+        &self,
+        purpose: &str,
+        suggested_file_name: &str,
+    ) -> AppResult<Option<FileSelection>> {
+        self.save_builder(purpose, suggested_file_name)
             .blocking_save_file()
             .map(|path| {
                 Ok(FileSelection {
@@ -109,5 +109,51 @@ impl NativeFileDialog for TauriNativeFileDialog {
                 })
             })
             .transpose()
+    }
+}
+
+fn safe_suggested_file_name<'a>(purpose: &str, suggested_file_name: &'a str) -> &'a str {
+    let valid = !suggested_file_name.is_empty()
+        && suggested_file_name != "."
+        && suggested_file_name != ".."
+        && !suggested_file_name
+            .chars()
+            .any(|character| character.is_control() || matches!(character, '/' | '\\'));
+    if valid {
+        suggested_file_name
+    } else {
+        default_file_name(purpose)
+    }
+}
+
+fn default_file_name(purpose: &str) -> &'static str {
+    match purpose {
+        "intercept_workspace" => "workspace.intercept-workspace",
+        "intercept_configuration" => "intercept-proxy.intercept-config",
+        "session_json" => "session.json",
+        "rules_json" => "rules.json",
+        "root_ca" => "intercept-proxy-root-ca.crt",
+        _ => "export",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe_suggested_file_name;
+
+    #[test]
+    fn save_dialog_uses_safe_suggestion_and_rejects_path_components() {
+        assert_eq!(
+            safe_suggested_file_name("intercept_workspace", "Lab_Updated.intercept-workspace"),
+            "Lab_Updated.intercept-workspace"
+        );
+        assert_eq!(
+            safe_suggested_file_name("intercept_workspace", "../escaped.intercept-workspace"),
+            "workspace.intercept-workspace"
+        );
+        assert_eq!(
+            safe_suggested_file_name("intercept_workspace", "..\\escaped.intercept-workspace"),
+            "workspace.intercept-workspace"
+        );
     }
 }

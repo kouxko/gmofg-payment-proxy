@@ -10,6 +10,8 @@ mod model;
 mod rng;
 #[cfg(any(target_os = "android", all(test, unix)))]
 mod routing;
+#[cfg(any(target_os = "android", all(test, unix)))]
+mod socks5;
 mod validation;
 
 #[cfg(any(target_os = "android", all(test, unix)))]
