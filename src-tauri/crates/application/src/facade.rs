@@ -20,6 +20,8 @@ use crate::{
 };
 
 mod android;
+mod bootstrap;
+mod certificates;
 mod configuration;
 mod listener_certificates;
 mod listeners;
@@ -198,38 +200,6 @@ impl Application {
             settings,
             event_cursor: self.events.current_cursor(),
         })
-    }
-
-    /// 返回当前 Workspace 可供规则、故障和筛选使用的真实 Listener 目录。
-    ///
-    /// 这是动态代理配置与旧产品通道之间的唯一适配点。调用方不得从全局设置或模板
-    /// 占位值推断通道，否则会保存一条永远无法匹配运行时 Listener 的规则。
-    pub(crate) async fn selected_workspace_channel_catalog(
-        &self,
-    ) -> AppResult<Vec<ChannelPresentationViewModel>> {
-        let selected_workspace = self
-            .workspaces
-            .list()
-            .await?
-            .into_iter()
-            .find(|workspace| workspace.selected);
-        let Some(summary) = selected_workspace else {
-            return Ok(Vec::new());
-        };
-        self.workspaces
-            .get(summary.id)
-            .await?
-            .listeners
-            .into_iter()
-            .map(|listener| {
-                let id = listener.id;
-                let display_name = listener.name;
-                Ok(ChannelPresentationViewModel {
-                    id: crate::ChannelId::new(id.to_string()).map_err(AppError::from)?,
-                    display_name,
-                })
-            })
-            .collect()
     }
 
     pub fn app_subscribe_events(&self, after_event_id: u64) -> AppResult<EventSubscription> {
@@ -424,90 +394,6 @@ impl Application {
         }
         self.publish_runtime(&status);
         Ok(status)
-    }
-
-    pub async fn certificate_overview(&self) -> AppResult<CertificateOverviewViewModel> {
-        self.certificates.overview().await
-    }
-
-    /// 首次安装后异步创建独立 Root CA；该用例允许展示适配器在窗口建立后调用。
-    ///
-    /// 系统密钥库拒绝或用户取消授权时错误只返回给调用者，不得影响应用 Host 生命周期。
-    pub async fn certificate_initialize_if_needed(
-        &self,
-    ) -> AppResult<CertificateOverviewViewModel> {
-        let status = self.certificates.status().await?;
-        if !status.can_initialize {
-            return Ok(status);
-        }
-        self.certificate_generate_ca(vec!["localhost".into(), "127.0.0.1".into()])
-            .await
-    }
-
-    pub async fn certificate_generate_ca(
-        &self,
-        sans: Vec<String>,
-    ) -> AppResult<CertificateOverviewViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        self.ensure_proxy_stopped_for_write().await?;
-        let overview = self.certificates.generate_ca(normalize_sans(sans)).await?;
-        self.publish_certificate(&overview);
-        Ok(overview)
-    }
-
-    pub async fn certificate_export_ca(&self) -> AppResult<OperationResultViewModel> {
-        self.certificates.export_ca().await
-    }
-
-    pub async fn certificate_reissue_leaf(
-        &self,
-        expected_revision: u64,
-        sans: Vec<String>,
-    ) -> AppResult<CertificateOverviewViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        self.ensure_proxy_stopped_for_write().await?;
-        let overview = self
-            .certificates
-            .reissue_leaf(expected_revision, normalize_sans(sans))
-            .await?;
-        self.publish_certificate(&overview);
-        Ok(overview)
-    }
-
-    pub async fn certificate_import_pkcs12(
-        &self,
-        password: String,
-    ) -> AppResult<CertificateOverviewViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        self.ensure_proxy_stopped_for_write().await?;
-        let overview = self.certificates.import_pkcs12(password).await?;
-        self.publish_certificate(&overview);
-        Ok(overview)
-    }
-
-    pub async fn certificate_import_upstream_ca(&self) -> AppResult<CertificateOverviewViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        self.ensure_proxy_stopped_for_write().await?;
-        let overview = self.certificates.import_upstream_ca().await?;
-        self.publish_certificate(&overview);
-        Ok(overview)
-    }
-
-    pub async fn certificate_validate(&self) -> AppResult<CertificateValidationViewModel> {
-        self.certificates.validate().await
-    }
-
-    pub async fn certificate_reset_ca(
-        &self,
-        expected_revision: u64,
-        confirmed: bool,
-    ) -> AppResult<CertificateOverviewViewModel> {
-        require_confirmation(confirmed, "重新初始化会替换本机服务端私钥和叶子证书。")?;
-        let _gate = self.mutation_gate.lock().await;
-        self.ensure_proxy_stopped_for_write().await?;
-        let overview = self.certificates.reset_ca(expected_revision).await?;
-        self.publish_certificate(&overview);
-        Ok(overview)
     }
 
     fn publish_runtime(&self, status: &ProxyStatusViewModel) {

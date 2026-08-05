@@ -77,10 +77,17 @@ impl Application {
                 settings_validation.field_errors,
             ));
         }
+        let mut has_android_network_profiles = false;
         for summary in self.workspaces.list().await? {
             let current = self.workspaces.get(summary.id).await?;
             self.ensure_workspace_not_running(&current).await?;
+            has_android_network_profiles |= !current.android_network_profiles.is_empty();
         }
+        // 完整替换会移除所有本地 Profile 元数据。即使本地存储已经为空，设备端仍可能
+        // 残留一个无法映射回 Workspace 的运行态，因此在控制适配器可用时仍主动确认；
+        // 只有旧配置确实包含 Profile 时，离线或未选设备才必须阻止替换。
+        self.ensure_android_network_replacement_safe(has_android_network_profiles)
+            .await?;
         self.configuration_store.replace_all(document).await?;
         Ok(OperationResultViewModel {
             success: true,

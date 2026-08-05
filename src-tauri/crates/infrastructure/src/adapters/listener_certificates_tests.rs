@@ -18,7 +18,7 @@ impl NativeFileDialog for QueueDialog {
         Ok(self.0.lock().pop_front())
     }
 
-    fn choose_save_file(&self, _: &str) -> AppResult<Option<FileSelection>> {
+    fn choose_save_file(&self, _: &str, _: &str) -> AppResult<Option<FileSelection>> {
         Ok(None)
     }
 }

@@ -126,6 +126,11 @@ fn generic_production_sources_do_not_contain_removed_product_contracts() {
     ] {
         let source_dir = crates_dir().join(directory).join("src");
         for source in rust_sources(&source_dir) {
+            // `tests/` 与 `*_tests.rs` 只会由父模块的 `#[cfg(test)]` 声明引入。
+            // 外部模块文件本身看不到父文件上的属性，因此不能仅靠文本剥离识别它们。
+            if is_test_source(&source) {
+                continue;
+            }
             let text = std::fs::read_to_string(&source)
                 .unwrap_or_else(|error| panic!("read {}: {error}", source.display()));
             let production = remove_cfg_test_items(&text);
@@ -168,6 +173,18 @@ const AFTER_MODULE: &str = "production-after-module";
     assert!(production.contains("production-after-module"));
 }
 
+#[test]
+fn product_contract_scan_recognizes_split_test_modules() {
+    assert!(is_test_source(Path::new("src/facade/listeners_tests.rs")));
+    assert!(is_test_source(Path::new(
+        "src/adapters/android_adb/tests.rs"
+    )));
+    assert!(is_test_source(Path::new(
+        "src/adapters/android_adb/tests/reverse.rs"
+    )));
+    assert!(!is_test_source(Path::new("src/facade/listeners.rs")));
+}
+
 fn crates_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -192,6 +209,15 @@ fn rust_sources(root: &Path) -> Vec<PathBuf> {
     }
     sources.sort();
     sources
+}
+
+fn is_test_source(path: &Path) -> bool {
+    path.components()
+        .any(|component| component.as_os_str() == "tests")
+        || path.file_stem().is_some_and(|stem| {
+            let stem = stem.to_string_lossy();
+            stem == "tests" || stem.ends_with("_tests")
+        })
 }
 
 /// Removes items guarded by an exact `#[cfg(test)]` attribute while retaining

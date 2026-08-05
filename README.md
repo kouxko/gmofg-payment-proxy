@@ -11,7 +11,9 @@ Intercept Proxy 是 Rust 驱动的通用 HTTP/HTTPS 测试代理：支持标准�
 - `host` 不依赖 Tauri，可被测试和未来 TUI/CLI 复用。
 - 默认应用不携带具体业务模板、地址、证书或返回码。
 
-详细设计见 [需求文档](docs/requirements.md)，操作说明见
+维护代码前建议先阅读 [系统设计与原理](docs/architecture/README.md)，其中按端到端链路说明了
+模块职责、HTTP/TLS 转发、规则管线、证书与秘密、Android VPN 透明路由、状态机和失败恢复。
+产品验收基线见 [需求文档](docs/requirements.md)，实际操作见
 [用户使用说明](docs/user-operation-guide.md)。
 
 ## 开发

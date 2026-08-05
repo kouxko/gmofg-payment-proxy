@@ -131,10 +131,14 @@ impl BreakpointCoordinator {
         if !state.pending.contains_key(&id) {
             return Err(not_found_or_terminal(&state, id));
         }
-        let item = state
-            .pending
-            .get_mut(&id)
-            .expect("presence was checked while holding the coordinator lock");
+        let item = state.pending.get_mut(&id).ok_or_else(|| {
+            AppError::new(
+                "BREAKPOINT_STATE_INCONSISTENT",
+                "断点协调器状态不一致，请重新加载断点列表后重试。",
+            )
+            .entity(id.to_string())
+            .retryable("如果问题持续出现，请停止并重新启动对应代理入口。")
+        })?;
         if item.detail.summary.runtime_epoch != epoch {
             return Err(
                 AppError::new("BREAKPOINT_NOT_FOUND", "断点不存在于当前运行周期。")

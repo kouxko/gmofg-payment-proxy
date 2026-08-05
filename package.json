@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "scan:frontend-boundaries": "node scripts/check-frontend-boundaries.mjs",
     "scan:bundle-branding": "node scripts/check-bundle-branding.mjs",
+    "scan:source-size": "node scripts/check-source-file-sizes.mjs",
     "verify:android-companion": "bash scripts/verify-android-companion.sh src-tauri/resources/android-companion.apk",
     "build:android-companion": "bash scripts/build-android-companion.sh",
     "check:rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
@@ -21,7 +22,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "pnpm build:android-companion && tauri build",
-    "check": "pnpm bindings && pnpm scan:frontend-boundaries && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm scan:bundle-branding && pnpm check:rust:fmt && pnpm check:rust:clippy && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
+    "check": "pnpm bindings && pnpm scan:frontend-boundaries && pnpm scan:source-size && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm scan:bundle-branding && pnpm check:rust:fmt && pnpm check:rust:clippy && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
   },
   "dependencies": {
     "@gravity-ui/icons": "2.21.0",

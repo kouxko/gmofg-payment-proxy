@@ -7,6 +7,8 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+use crate::document_security::{canonical_field_name, is_secret_field};
 use specta::Type;
 
 use crate::{
@@ -15,6 +17,27 @@ use crate::{
 
 pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 1;
 pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 32 * 1024 * 1024;
+/// 监听证书只能引用应用受保护存储中的材料，不能携带文件路径或环境变量密码。
+pub const MANAGED_LISTENER_CERTIFICATE_PREFIX: &str = "managed:listener-tls:";
+
+/// 校验可移植文档中的证书引用边界。
+///
+/// Workspace 与完整配置导入都会调用此函数，因此 Tauri、未来 CLI/TUI 和测试夹具
+/// 共享同一安全语义，不会出现“界面保存拒绝、文件导入却允许”的旁路。
+pub fn validate_portable_certificate_references(workspace: &ProxyWorkspace) -> AppResult<()> {
+    if let Some(reference) = workspace.certificate_references.iter().find(|reference| {
+        !reference
+            .reference
+            .starts_with(MANAGED_LISTENER_CERTIFICATE_PREFIX)
+    }) {
+        return Err(AppError::new(
+            "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED",
+            "证书引用必须由应用内的原生导入功能创建，配置文档不能包含文件路径或外部密码引用。",
+        )
+        .entity(reference.id.to_string()));
+    }
+    Ok(())
+}
 
 /// 不含乐观锁 revision 的全局设置值。
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize, Type)]
@@ -104,6 +127,7 @@ impl ApplicationConfigurationDocument {
                 .entity(workspace.id.to_string()));
             }
             workspace.validate().map_err(AppError::from)?;
+            validate_portable_certificate_references(workspace)?;
         }
         if !ids.contains(&self.selected_workspace_id) {
             return Err(AppError::new(
@@ -153,8 +177,7 @@ pub fn reject_sensitive_configuration_fields(value: &Value, path: &str) -> AppRe
     match value {
         Value::Object(object) => {
             for (key, child) in object {
-                let normalized = key.to_ascii_lowercase().replace('-', "_");
-                if is_forbidden_field(&normalized) {
+                if is_forbidden_field(key) {
                     return Err(AppError::new(
                         "IMPORT_CONTAINS_SENSITIVE_DATA",
                         format!("配置文档禁止包含字段 {path}.{key}。"),
@@ -174,37 +197,32 @@ pub fn reject_sensitive_configuration_fields(value: &Value, path: &str) -> AppRe
 }
 
 fn is_forbidden_field(field: &str) -> bool {
+    if is_secret_field(field) {
+        return true;
+    }
     matches!(
-        field,
-        "password"
-            | "password_bytes"
-            | "private_key"
-            | "private_key_pem"
-            | "private_key_der"
-            | "pkcs12"
-            | "p12"
-            | "secret_value"
-            | "protected_blob"
-            | "payload"
-            | "request_payload"
-            | "response_payload"
-            | "selected_serial"
-            | "device_serial"
-            | "transport_id"
-            | "runtime_state"
-            | "active_profile_id"
+        canonical_field_name(field).as_str(),
+        "payload"
+            | "requestpayload"
+            | "responsepayload"
+            | "selectedserial"
+            | "deviceserial"
+            | "transportid"
+            | "runtimestate"
+            | "activeprofileid"
             | "stats"
-            | "resolved_address"
-            | "resolved_routes"
-            | "desktop_ip"
-            | "adb_reverse_port"
-            | "usb_device_port"
-            | "control_socket"
+            | "resolvedaddress"
+            | "resolvedroutes"
+            | "desktopip"
+            | "adbreverseport"
+            | "usbdeviceport"
+            | "controlsocket"
     )
 }
 
 #[cfg(test)]
 mod tests {
+    use intercept_proxy_domain::{CertificateReference, CertificateReferenceKind};
     use serde_json::json;
 
     use super::*;
@@ -233,7 +251,11 @@ mod tests {
     fn sensitive_and_runtime_fields_are_rejected_before_deserialization() {
         for forbidden in [
             "private_key_pem",
+            "privateKey",
             "password",
+            "basic_auth_password",
+            "basicAuthPassword",
+            "pkcs12_password",
             "protected_blob",
             "selected_serial",
             "resolved_routes",
@@ -257,5 +279,24 @@ mod tests {
         let mut value = document();
         value.selected_workspace_id = WorkspaceId::new();
         assert!(value.validate().is_err());
+    }
+
+    #[test]
+    fn unmanaged_certificate_reference_is_rejected() {
+        let mut value = document();
+        value.workspaces[0]
+            .certificate_references
+            .push(CertificateReference {
+                id: intercept_proxy_domain::CertificateReferenceId::new(),
+                label: "外部文件".into(),
+                kind: CertificateReferenceKind::UpstreamServerTrust,
+                reference: "file:/tmp/server-ca.pem".into(),
+            });
+
+        let error = value.validate().expect_err("unmanaged reference must fail");
+        assert_eq!(
+            error.view_model.code,
+            "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED"
+        );
     }
 }

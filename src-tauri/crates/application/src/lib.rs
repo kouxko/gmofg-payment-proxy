@@ -11,6 +11,7 @@ mod breakpoint_validation;
 mod breakpoints;
 mod capacity;
 mod configuration;
+mod document_security;
 mod error;
 mod events;
 mod facade;
@@ -18,6 +19,7 @@ mod listeners;
 mod models;
 mod ports;
 mod sessions;
+mod workspace_documents;
 mod workspaces;
 
 pub use android::*;
@@ -32,6 +34,9 @@ pub use listeners::InMemoryListenerRuntime;
 pub use models::*;
 pub use ports::*;
 pub use sessions::{InMemorySessionStore, SessionStore};
+pub use workspace_documents::{
+    MAX_WORKSPACE_DOCUMENT_BYTES, parse_workspace_document, serialize_workspace_document,
+};
 pub use workspaces::{
     InMemoryWorkspaceDocumentStore, InMemoryWorkspaceStore, remap_workspace_identity,
 };

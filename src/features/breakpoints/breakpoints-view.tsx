@@ -1,32 +1,8 @@
 "use client";
 
-/**
- * 人工断点实验台。
- *
- * Rust 持有真正被暂停的网络任务和断点状态机；此组件只编辑 Rust 提供的有效
- * 报文副本、选择允许的动作并提交带 revision 的决策。动作全集、阶段兼容性、
- * Shift-JIS/JSON/Header 校验和最终放行都不在 TypeScript 中实现。
- */
-
+/** 人工断点容器：Rust 持有暂停任务；此处只管理草稿、校验和决策 IPC。 */
 import { useMemo, useState } from "react";
-import {
-  Alert,
-  Button,
-  Chip,
-  Drawer,
-  FieldError,
-  Label,
-  NumberField,
-  Select,
-  ListBox,
-  Spinner,
-  Tabs,
-  TextArea,
-  TextField,
-  Tooltip,
-  toast,
-} from "@heroui/react";
-import { ArrowRotateRight, Copy } from "@gravity-ui/icons";
+import { toast } from "@heroui/react";
 import type {
   BreakpointActionOptionViewModel,
   BreakpointDecision,
@@ -36,15 +12,14 @@ import type {
   FieldValidationViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
-import {
-  appErrorViewModel,
-  callCommand,
-  errorMessage,
-} from "@/lib/ipc/client";
+import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
-import { formatTimestamp, toneColor } from "@/lib/format";
+import { toneColor } from "@/lib/format";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
+import { BreakpointActionPanel } from "./breakpoint-action-panel";
+import { BreakpointEditorPanel } from "./breakpoint-editor-panel";
+import { BreakpointQueuePanel } from "./breakpoint-queue-panel";
 
 export function buildBreakpointDecision(
   draft: BreakpointDraft,
@@ -56,7 +31,6 @@ export function buildBreakpointDecision(
     truncateAt?: number;
   },
 ): BreakpointDecision {
-  // 默认参数由 Rust 随动作 ViewModel 给出，用户只覆盖实际修改过的值。
   return {
     breakpoint_id: draft.breakpoint_id,
     expected_revision: draft.expected_revision,
@@ -72,7 +46,7 @@ export function buildBreakpointDecision(
 
 export function BreakpointsView() {
   const { searchParams } = useWorkspaceNavigation();
-  const requestedBreakpointId = searchParams.get("breakpointId") ?? undefined;
+  const requestedId = searchParams.get("breakpointId") ?? undefined;
   const queue = useIpcQuery<BreakpointSummaryViewModel[]>(
     "breakpoint-query",
     () => callCommand(commands.breakpointQuery(null)),
@@ -82,17 +56,15 @@ export function BreakpointsView() {
     queue.refresh,
   );
   const [selection, setSelection] = useState(() => ({
-    routeBreakpointId: requestedBreakpointId,
-    selectedId: requestedBreakpointId,
+    routeBreakpointId: requestedId,
+    selectedId: requestedId,
   }));
   const selectedId =
-    // URL 可能从抓包页跳到另一断点。把路由 ID 与手工选择绑定，既支持同一路由
-    // A→B 切换，也能在路由真的变化时采用新目标，避免 render 中 setState。
-    selection.routeBreakpointId === requestedBreakpointId
+    selection.routeBreakpointId === requestedId
       ? selection.selectedId
-      : requestedBreakpointId;
-  const setSelectedId = (selectedId: string | undefined) =>
-    setSelection({ routeBreakpointId: requestedBreakpointId, selectedId });
+      : requestedId;
+  const setSelectedId = (value?: string) =>
+    setSelection({ routeBreakpointId: requestedId, selectedId: value });
   const [bodyEdits, setBodyEdits] = useState<Record<string, string>>({});
   const [validationState, setValidationState] = useState<{
     breakpointId: string;
@@ -104,13 +76,12 @@ export function BreakpointsView() {
   const [httpStatus, setHttpStatus] = useState<number>();
   const [contentLengthDelta, setContentLengthDelta] = useState<number>();
   const [truncateAt, setTruncateAt] = useState<number>();
-  const [resolveDrawerOpen, setResolveDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [resolvePending, setResolvePending] = useState(false);
   const [editorPending, setEditorPending] = useState<
     "format" | "restore" | "validate"
   >();
   const effectiveSelectedId = selectedId ?? queue.data?.[0]?.breakpoint_id;
-
   const selectedSummary = queue.data?.find(
     (item) => item.breakpoint_id === effectiveSelectedId,
   );
@@ -130,131 +101,107 @@ export function BreakpointsView() {
     detail.data?.available_actions.find(
       (action) => action.kind === decisionKind,
     ) ?? detail.data?.available_actions[0];
-  const activeDecisionKind = selectedAction?.kind;
-
-  function selectDecision(kind: BreakpointDecision["kind"]) {
-    // 只允许选择 Rust 当前阶段返回的 available_actions，前端不拼动作全集。
-    const action = detail.data?.available_actions.find(
-      (candidate) => candidate.kind === kind,
-    );
-    if (!action) return;
-    setDecisionKind(action.kind);
-    setDelayMs(action.default_delay_ms ?? undefined);
-    setHttpStatus(action.default_http_status ?? undefined);
-    setContentLengthDelta(
-      action.default_content_length_delta ?? undefined,
-    );
-    setTruncateAt(action.default_truncate_at ?? undefined);
-  }
-
   const bodyText =
     (effectiveSelectedId && bodyEdits[effectiveSelectedId]) ??
     detail.data?.effective.body_text ??
     "";
   const validation =
-    validationState &&
-    validationState.breakpointId === effectiveSelectedId
-      ? validationState.result
+    validationState?.breakpointId === effectiveSelectedId
+      ? validationState?.result
       : undefined;
   const validationError = (field: string) =>
     validation?.field_errors[field]?.join("；");
+  const draft = useMemo<BreakpointDraft | undefined>(
+    () =>
+      detail.data
+        ? {
+            breakpoint_id: detail.data.summary.breakpoint_id,
+            expected_revision: detail.data.summary.revision,
+            message: { ...detail.data.effective, body_text: bodyText },
+          }
+        : undefined,
+    [bodyText, detail.data],
+  );
 
-  function recordCommandFieldErrors(reason: unknown) {
+  function recordErrors(reason: unknown) {
     const errors = appErrorViewModel(reason)?.field_errors;
-    if (!effectiveSelectedId || !errors || Object.keys(errors).length === 0) {
+    if (effectiveSelectedId && errors && Object.keys(errors).length > 0)
+      setValidationState({
+        breakpointId: effectiveSelectedId,
+        result: { valid: false, field_errors: errors, warnings: [] },
+      });
+  }
+  function selectDecision(kind: BreakpointDecision["kind"]) {
+    const action = detail.data?.available_actions.find(
+      (item) => item.kind === kind,
+    );
+    if (!action) return;
+    setDecisionKind(action.kind);
+    setDelayMs(action.default_delay_ms ?? undefined);
+    setHttpStatus(action.default_http_status ?? undefined);
+    setContentLengthDelta(action.default_content_length_delta ?? undefined);
+    setTruncateAt(action.default_truncate_at ?? undefined);
+  }
+  async function runEditor(kind: "format" | "restore" | "validate") {
+    if (
+      !selectedSummary ||
+      editorPending ||
+      resolvePending ||
+      (kind !== "restore" && !draft)
+    )
       return;
-    }
-    setValidationState({
-      breakpointId: effectiveSelectedId,
-      result: { valid: false, field_errors: errors, warnings: [] },
-    });
-  }
-
-  const draft = useMemo<BreakpointDraft | undefined>(() => {
-    // 原始报文始终只读；draft 基于自动规则后的 effective 报文叠加当前人工编辑。
-    if (!detail.data) return;
-    return {
-      breakpoint_id: detail.data.summary.breakpoint_id,
-      expected_revision: detail.data.summary.revision,
-      message: { ...detail.data.effective, body_text: bodyText },
-    };
-  }, [bodyText, detail.data]);
-
-  async function formatJson() {
-    // 格式化也交给 Rust，以保持 Shift-JIS、JSON 与最终发送逻辑使用同一实现。
-    if (!draft || editorPending || resolvePending) return;
-    setEditorPending("format");
+    setEditorPending(kind);
     try {
-      const result = await callCommand(commands.breakpointFormatJson(draft));
-      setBodyEdits((current) => ({
-        ...current,
-        [result.breakpoint_id]: result.message.body_text ?? "",
-      }));
-      setValidationState(undefined);
+      if (kind === "format") {
+        const result = await callCommand(commands.breakpointFormatJson(draft!));
+        setBodyEdits((current) => ({
+          ...current,
+          [result.breakpoint_id]: result.message.body_text ?? "",
+        }));
+        setValidationState(undefined);
+      } else if (kind === "restore") {
+        const result = await callCommand(
+          commands.breakpointRestoreOriginal(
+            selectedSummary.breakpoint_id,
+            selectedSummary.runtime_epoch,
+          ),
+        );
+        setBodyEdits((current) => ({
+          ...current,
+          [result.breakpoint_id]: result.message.body_text ?? "",
+        }));
+        setValidationState(undefined);
+      } else {
+        const result = await callCommand(
+          commands.breakpointValidate(draft!, selectedSummary.runtime_epoch),
+        );
+        setValidationState({ breakpointId: draft!.breakpoint_id, result });
+      }
     } catch (reason) {
-      recordCommandFieldErrors(reason);
+      recordErrors(reason);
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
       setEditorPending(undefined);
     }
   }
-
-  async function restoreOriginal() {
-    if (!selectedSummary || editorPending || resolvePending) return;
-    setEditorPending("restore");
-    try {
-      const result = await callCommand(
-        commands.breakpointRestoreOriginal(
-          selectedSummary.breakpoint_id,
-          selectedSummary.runtime_epoch,
-        ),
-      );
-      setBodyEdits((current) => ({
-        ...current,
-        [result.breakpoint_id]: result.message.body_text ?? "",
-      }));
-      setValidationState(undefined);
-    } catch (reason) {
-      recordCommandFieldErrors(reason);
-      toast(errorMessage(reason), { variant: "danger" });
-    } finally {
-      setEditorPending(undefined);
-    }
-  }
-
-  async function validate() {
-    if (!draft || !selectedSummary || editorPending || resolvePending) return;
-    setEditorPending("validate");
-    try {
-      const result = await callCommand(
-        commands.breakpointValidate(draft, selectedSummary.runtime_epoch),
-      );
-      setValidationState({ breakpointId: draft.breakpoint_id, result });
-    } catch (reason) {
-      recordCommandFieldErrors(reason);
-      toast(errorMessage(reason), { variant: "danger" });
-    } finally {
-      setEditorPending(undefined);
-    }
-  }
-
   async function resolve(kind: BreakpointDecision["kind"]) {
     const action = detail.data?.available_actions.find(
-      (candidate) => candidate.kind === kind,
+      (item) => item.kind === kind,
     );
-    if (!draft || !selectedSummary || !action?.enabled || resolvePending) {
+    if (!draft || !selectedSummary || !action?.enabled || resolvePending)
       return;
-    }
     setResolvePending(true);
     try {
-      const decision = buildBreakpointDecision(draft, action, {
-        delayMs,
-        httpStatus,
-        contentLengthDelta,
-        truncateAt,
-      });
       const result = await callCommand(
-        commands.breakpointResolve(selectedSummary.runtime_epoch, decision),
+        commands.breakpointResolve(
+          selectedSummary.runtime_epoch,
+          buildBreakpointDecision(draft, action, {
+            delayMs,
+            httpStatus,
+            contentLengthDelta,
+            truncateAt,
+          }),
+        ),
       );
       toast(result.state_text, { variant: toneColor(result.ui_tone) });
       setBodyEdits((current) => {
@@ -266,594 +213,70 @@ export function BreakpointsView() {
       detail.invalidate();
       setSelectedId(undefined);
       await queue.refresh();
-      setResolveDrawerOpen(false);
+      setDrawerOpen(false);
     } catch (reason) {
-      recordCommandFieldErrors(reason);
+      recordErrors(reason);
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
       setResolvePending(false);
     }
   }
 
+  const actionProps = {
+    actions: detail.data?.available_actions ?? [],
+    selected: selectedAction,
+    delayMs,
+    httpStatus,
+    contentLengthDelta,
+    truncateAt,
+    resolvePending,
+    canResolve: detail.data?.can_resolve ?? false,
+    validationValid: validation?.valid,
+    onSelect: selectDecision,
+    onDelayChange: setDelayMs,
+    onHttpStatusChange: setHttpStatus,
+    onContentLengthDeltaChange: setContentLengthDelta,
+    onTruncateAtChange: setTruncateAt,
+    onResolve: (kind: BreakpointDecision["kind"]) => void resolve(kind),
+  };
   return (
     <section className="grid h-full grid-cols-[290px_minmax(0,1fr)_260px] max-[1280px]:grid-cols-[250px_minmax(0,1fr)] max-[820px]:grid-cols-1">
-      <aside className="overflow-auto border-r border-[var(--telemetry-line)] p-3 max-[820px]:max-h-64 max-[820px]:border-r-0 max-[820px]:border-b">
-        <div className="mb-3 flex items-center">
-          <h1 className="text-lg font-semibold">
-            暂停队列 ({queue.data?.length ?? 0})
-          </h1>
-          <Tooltip delay={0}>
-            <Button
-              className="ml-auto"
-              isIconOnly
-              size="sm"
-              variant="ghost"
-              aria-label="刷新断点队列"
-              onPress={() => void queue.refresh()}
-            >
-              <ArrowRotateRight className="size-4" />
-            </Button>
-            <Tooltip.Content>刷新断点队列</Tooltip.Content>
-          </Tooltip>
-        </div>
-        <div className="space-y-3">
-          {queue.error && (
-            <Alert status="danger">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Title>断点队列读取失败</Alert.Title>
-                <Alert.Description>{queue.error}</Alert.Description>
-              </Alert.Content>
-              <Button
-                size="sm"
-                variant="outline"
-                onPress={() => void queue.refresh()}
-              >
-                重试
-              </Button>
-            </Alert>
-          )}
-          {(queue.data ?? []).map((item) => (
-            <Button
-              key={item.breakpoint_id}
-              variant={
-                item.breakpoint_id === effectiveSelectedId
-                  ? "primary"
-                  : "outline"
-              }
-              className="h-auto w-full justify-start px-3 py-3 text-left"
-              onPress={() => setSelectedId(item.breakpoint_id)}
-            >
-              <div className="min-w-0 flex-1 space-y-2">
-                <div className="flex items-center gap-2">
-                  <Chip
-                    size="sm"
-                    color={toneColor(item.ui_tone)}
-                    variant="soft"
-                  >
-                    {item.stage === "request" ? "请求断点" : "响应断点"}
-                  </Chip>
-                  <span>{item.terminal_ip}</span>
-                  <span className="ml-auto">
-                    {item.channel_text}
-                  </span>
-                </div>
-                <div className="truncate font-mono text-xs">
-                  {item.method} {item.target}
-                </div>
-                <div className="flex text-xs">
-                  <span>{formatTimestamp(item.waiting_since)}</span>
-                  <span className="ml-auto">
-                    {item.certificate_fingerprint_suffix}
-                  </span>
-                </div>
-              </div>
-            </Button>
-          ))}
-          {!queue.isLoading && !queue.error && queue.data?.length === 0 && (
-            <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">
-              当前没有待处理断点
-            </p>
-          )}
-          {queue.isLoading && <Spinner aria-label="正在加载断点队列" />}
-        </div>
-      </aside>
-
-      <div className="min-w-0 overflow-auto p-5">
-        {selectedSummary && detail.error ? (
-          <Alert status="danger">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>断点详情读取失败</Alert.Title>
-              <Alert.Description>{detail.error}</Alert.Description>
-            </Alert.Content>
-            <Button
-              size="sm"
-              variant="outline"
-              onPress={() => void detail.refresh()}
-            >
-              重试
-            </Button>
-          </Alert>
-        ) : selectedSummary && detail.isLoading ? (
-          <div className="grid h-full place-items-center">
-            <Spinner aria-label="正在读取断点详情" />
-          </div>
-        ) : !detail.data ? (
-          <div className="grid h-full place-items-center text-sm text-[var(--telemetry-muted)]">
-            选择一条待处理断点
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
-              <h2 className="min-w-0 text-lg font-semibold">
-                {detail.data.summary.title}
-              </h2>
-              <span>终端 IP {detail.data.summary.terminal_ip}</span>
-              <span>
-                {detail.data.summary.channel_text}通道
-              </span>
-              <span className="ml-auto max-w-full truncate font-mono text-xs">
-                请求 ID {detail.data.summary.session_id}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-5 max-[1100px]:grid-cols-1">
-              <div>
-                <h3 className="mb-2 font-semibold">原始报文</h3>
-                <Tabs defaultSelectedKey="json">
-                  <Tabs.ListContainer>
-                    <Tabs.List aria-label="原始报文查看">
-                      <Tabs.Tab id="json">
-                        JSON
-                        <Tabs.Indicator />
-                      </Tabs.Tab>
-                      <Tabs.Tab id="headers">
-                        请求头
-                        <Tabs.Indicator />
-                      </Tabs.Tab>
-                      <Tabs.Tab id="bytes">
-                        原始字节
-                        <Tabs.Indicator />
-                      </Tabs.Tab>
-                    </Tabs.List>
-                  </Tabs.ListContainer>
-                  <Tabs.Panel id="json" className="pt-3">
-                    <TextArea
-                      aria-label="原始 JSON"
-                      className="min-h-[430px] font-mono text-xs"
-                      value={detail.data.original.body_text ?? ""}
-                      readOnly
-                    />
-                  </Tabs.Panel>
-                  <Tabs.Panel id="headers" className="pt-3">
-                    <TextArea
-                      aria-label="原始请求头"
-                      className="min-h-[430px] font-mono text-xs"
-                      value={JSON.stringify(detail.data.original.headers, null, 2)}
-                      readOnly
-                    />
-                  </Tabs.Panel>
-                  <Tabs.Panel id="bytes" className="pt-3">
-                    <TextArea
-                      aria-label="原始字节"
-                      className="min-h-[430px] font-mono text-xs"
-                      value={detail.data.original.body_bytes.join(" ")}
-                      readOnly
-                    />
-                  </Tabs.Panel>
-                </Tabs>
-              </div>
-              <div>
-                <h3 className="mb-2 font-semibold">有效报文</h3>
-                <Tabs defaultSelectedKey="json">
-                  <Tabs.ListContainer>
-                    <Tabs.List aria-label="有效报文编辑">
-                      <Tabs.Tab id="json">
-                        JSON
-                        <Tabs.Indicator />
-                      </Tabs.Tab>
-                      <Tabs.Tab id="headers">
-                        请求头
-                        <Tabs.Indicator />
-                      </Tabs.Tab>
-                      <Tabs.Tab id="bytes">
-                        原始字节
-                        <Tabs.Indicator />
-                      </Tabs.Tab>
-                    </Tabs.List>
-                  </Tabs.ListContainer>
-                  <Tabs.Panel id="json" className="pt-3">
-                    <TextField
-                      aria-label="有效 JSON 字段"
-                      isInvalid={Boolean(
-                        validationError("message.body_text") ??
-                          validationError("message"),
-                      )}
-                    >
-                      <TextArea
-                        aria-label="有效 JSON"
-                        className="min-h-[430px] font-mono text-xs"
-                        value={bodyText}
-                        onChange={(event) => {
-                          if (!effectiveSelectedId) return;
-                          setBodyEdits((current) => ({
-                            ...current,
-                            [effectiveSelectedId]: event.target.value,
-                          }));
-                          setValidationState(undefined);
-                        }}
-                      />
-                      {(validationError("message.body_text") ??
-                        validationError("message")) && (
-                        <FieldError>
-                          {validationError("message.body_text") ??
-                            validationError("message")}
-                        </FieldError>
-                      )}
-                    </TextField>
-                  </Tabs.Panel>
-                  <Tabs.Panel id="headers" className="pt-3">
-                    <TextArea
-                      aria-label="有效请求头"
-                      className="min-h-[430px] font-mono text-xs"
-                      value={JSON.stringify(detail.data.effective.headers, null, 2)}
-                      readOnly
-                    />
-                    {validationError("message.headers") && (
-                      <p className="mt-2 text-sm text-danger">
-                        {validationError("message.headers")}
-                      </p>
-                    )}
-                  </Tabs.Panel>
-                  <Tabs.Panel id="bytes" className="pt-3">
-                    <TextArea
-                      aria-label="有效原始字节"
-                      className="min-h-[430px] font-mono text-xs"
-                      value={detail.data.effective.body_bytes.join(" ")}
-                      readOnly
-                    />
-                  </Tabs.Panel>
-                </Tabs>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Button
-                variant="outline"
-                isDisabled={Boolean(editorPending) || resolvePending}
-                onPress={() => void formatJson()}
-              >
-                {editorPending === "format" ? "正在格式化…" : "格式化 JSON"}
-              </Button>
-              <Button
-                variant="outline"
-                onPress={() => void navigator.clipboard.writeText(bodyText)}
-              >
-                <Copy className="size-4" />
-                复制
-              </Button>
-              <Button
-                variant="outline"
-                isDisabled={Boolean(editorPending) || resolvePending}
-                onPress={() => void restoreOriginal()}
-              >
-                {editorPending === "restore" ? "正在恢复…" : "恢复原始报文"}
-              </Button>
-              <Button
-                className="ml-auto max-[1280px]:ml-0"
-                variant="outline"
-                isDisabled={Boolean(editorPending) || resolvePending}
-                onPress={() => void validate()}
-              >
-                {editorPending === "validate" ? "正在校验…" : "由 Rust 校验"}
-              </Button>
-              <Drawer
-                isOpen={resolveDrawerOpen}
-                onOpenChange={(open) => {
-                  if (!open && resolvePending) return;
-                  setResolveDrawerOpen(open);
-                }}
-              >
-                <Button
-                  className="hidden max-[1280px]:inline-flex"
-                  variant="outline"
-                >
-                  处理断点
-                </Button>
-                <Drawer.Backdrop isDismissable={!resolvePending}>
-                  <Drawer.Content placement="right">
-                    <Drawer.Dialog>
-                      <Drawer.Header>
-                        <Drawer.Heading>处理断点</Drawer.Heading>
-                      </Drawer.Header>
-                      <Drawer.Body className="space-y-4">
-                        <Select
-                          aria-label="移动端断点处理方式"
-                          selectedKey={activeDecisionKind}
-                          onSelectionChange={(key) =>
-                            selectDecision(
-                              key as BreakpointDecision["kind"],
-                            )
-                          }
-                        >
-                          <Select.Trigger>
-                            <Select.Value />
-                            <Select.Indicator />
-                          </Select.Trigger>
-                          <Select.Popover>
-                            <ListBox>
-                              {detail.data?.available_actions.map((action) => (
-                                <ListBox.Item
-                                  key={action.kind}
-                                  id={action.kind}
-                                  isDisabled={!action.enabled}
-                                >
-                                  {action.label}
-                                </ListBox.Item>
-                              ))}
-                            </ListBox>
-                          </Select.Popover>
-                        </Select>
-                        {activeDecisionKind === "delay" &&
-                          selectedAction?.default_delay_ms != null && (
-                          <NumberField
-                            value={
-                              delayMs ?? selectedAction.default_delay_ms
-                            }
-                            minValue={0}
-                            onChange={setDelayMs}
-                          >
-                            <Label>延迟毫秒</Label>
-                            <NumberField.Group className="w-full">
-                              <NumberField.DecrementButton />
-                              <NumberField.Input />
-                              <NumberField.IncrementButton />
-                            </NumberField.Group>
-                          </NumberField>
-                          )}
-                        {activeDecisionKind === "custom_http_status" &&
-                          selectedAction?.default_http_status != null && (
-                          <NumberField
-                            value={
-                              httpStatus ??
-                              selectedAction.default_http_status
-                            }
-                            minValue={100}
-                            maxValue={599}
-                            onChange={setHttpStatus}
-                          >
-                            <Label>HTTP 状态码</Label>
-                            <NumberField.Group className="w-full">
-                              <NumberField.DecrementButton />
-                              <NumberField.Input />
-                              <NumberField.IncrementButton />
-                            </NumberField.Group>
-                          </NumberField>
-                          )}
-                        {activeDecisionKind === "wrong_content_length" &&
-                          selectedAction?.default_content_length_delta !=
-                            null && (
-                          <NumberField
-                            value={
-                              contentLengthDelta ??
-                              selectedAction.default_content_length_delta
-                            }
-                            onChange={setContentLengthDelta}
-                          >
-                            <Label>Content-Length 差值</Label>
-                            <NumberField.Group className="w-full">
-                              <NumberField.DecrementButton />
-                              <NumberField.Input />
-                              <NumberField.IncrementButton />
-                            </NumberField.Group>
-                          </NumberField>
-                          )}
-                        {activeDecisionKind === "truncate" &&
-                          selectedAction?.default_truncate_at != null && (
-                          <NumberField
-                            value={
-                              truncateAt ??
-                              selectedAction.default_truncate_at
-                            }
-                            minValue={0}
-                            onChange={setTruncateAt}
-                          >
-                            <Label>截断字节位置</Label>
-                            <NumberField.Group className="w-full">
-                              <NumberField.DecrementButton />
-                              <NumberField.Input />
-                              <NumberField.IncrementButton />
-                            </NumberField.Group>
-                          </NumberField>
-                          )}
-                      </Drawer.Body>
-                      <Drawer.Footer>
-                        <Button
-                          slot="close"
-                          variant="outline"
-                          isDisabled={resolvePending}
-                        >
-                          取消
-                        </Button>
-                        <Button
-                          variant="primary"
-                          isDisabled={
-                            resolvePending ||
-                            !detail.data?.can_resolve ||
-                            validation?.valid === false
-                          }
-                          onPress={() => {
-                            if (activeDecisionKind) {
-                              void resolve(activeDecisionKind);
-                            }
-                          }}
-                        >
-                          {resolvePending ? "正在处理…" : "执行所选处理"}
-                        </Button>
-                      </Drawer.Footer>
-                    </Drawer.Dialog>
-                  </Drawer.Content>
-                </Drawer.Backdrop>
-              </Drawer>
-            </div>
-
-            {validation && (
-              <Alert status={validation.valid ? "success" : "danger"}>
-                <Alert.Indicator />
-                <Alert.Content>
-                  <Alert.Title>
-                    {validation.valid ? "报文校验通过" : "报文校验失败"}
-                  </Alert.Title>
-                  <Alert.Description>
-                    {validation.valid
-                      ? validation.warnings.join("；") || "JSON、Shift-JIS 和报文长度有效。"
-                      : Object.values(validation.field_errors).flat().join("；")}
-                  </Alert.Description>
-                </Alert.Content>
-              </Alert>
-            )}
-          </div>
-        )}
-      </div>
-
-      <aside className="overflow-auto border-l border-[var(--telemetry-line)] p-4 max-[1280px]:hidden">
-        <h2 className="mb-5 text-lg font-semibold">处理方式</h2>
-        <Select
-          aria-label="断点处理方式"
-          selectedKey={activeDecisionKind}
-          onSelectionChange={(key) =>
-            selectDecision(key as BreakpointDecision["kind"])
-          }
-        >
-          <Select.Trigger>
-            <Select.Value />
-            <Select.Indicator />
-          </Select.Trigger>
-          <Select.Popover>
-            <ListBox>
-              {detail.data?.available_actions.map((action) => (
-                <ListBox.Item
-                  key={action.kind}
-                  id={action.kind}
-                  isDisabled={!action.enabled}
-                >
-                  {action.label}
-                </ListBox.Item>
-              ))}
-            </ListBox>
-          </Select.Popover>
-        </Select>
-        <div className="mt-4 space-y-3">
-          {activeDecisionKind === "delay" &&
-            selectedAction?.default_delay_ms != null && (
-            <NumberField
-              value={delayMs ?? selectedAction.default_delay_ms}
-              minValue={0}
-              onChange={setDelayMs}
-            >
-              <Label>延迟毫秒</Label>
-              <NumberField.Group className="w-full">
-                <NumberField.DecrementButton />
-                <NumberField.Input />
-                <NumberField.IncrementButton />
-              </NumberField.Group>
-            </NumberField>
-            )}
-          {activeDecisionKind === "custom_http_status" &&
-            selectedAction?.default_http_status != null && (
-            <NumberField
-              value={httpStatus ?? selectedAction.default_http_status}
-              minValue={100}
-              maxValue={599}
-              onChange={setHttpStatus}
-            >
-              <Label>HTTP 状态码</Label>
-              <NumberField.Group className="w-full">
-                <NumberField.DecrementButton />
-                <NumberField.Input />
-                <NumberField.IncrementButton />
-              </NumberField.Group>
-            </NumberField>
-            )}
-          {activeDecisionKind === "wrong_content_length" &&
-            selectedAction?.default_content_length_delta != null && (
-            <NumberField
-              value={
-                contentLengthDelta ??
-                selectedAction.default_content_length_delta
-              }
-              onChange={setContentLengthDelta}
-            >
-              <Label>Content-Length 差值</Label>
-              <NumberField.Group className="w-full">
-                <NumberField.DecrementButton />
-                <NumberField.Input />
-                <NumberField.IncrementButton />
-              </NumberField.Group>
-            </NumberField>
-            )}
-          {activeDecisionKind === "truncate" &&
-            selectedAction?.default_truncate_at != null && (
-            <NumberField
-              value={truncateAt ?? selectedAction.default_truncate_at}
-              minValue={0}
-              onChange={setTruncateAt}
-            >
-              <Label>截断字节位置</Label>
-              <NumberField.Group className="w-full">
-                <NumberField.DecrementButton />
-                <NumberField.Input />
-                <NumberField.IncrementButton />
-              </NumberField.Group>
-            </NumberField>
-            )}
-        </div>
-        <div className="mt-8 space-y-3">
-          <Button
-            fullWidth
-            variant="primary"
-            isDisabled={
-              resolvePending ||
-              !detail.data?.can_resolve ||
-              validation?.valid === false
-            }
-            onPress={() => {
-              if (activeDecisionKind) void resolve(activeDecisionKind);
-            }}
-          >
-            {resolvePending ? "正在处理…" : "执行所选处理"}
-          </Button>
-          {detail.data?.available_actions
-            .filter((action) => action.kind === "forward_original")
-            .map((action) => (
-              <Button
-                key={action.kind}
-                fullWidth
-                variant="outline"
-                isDisabled={resolvePending || !action.enabled}
-                onPress={() => void resolve(action.kind)}
-              >
-                {action.label}
-              </Button>
-            ))}
-          {detail.data?.available_actions
-            .filter(
-              (action) => action.kind === "disconnect_before_upstream",
-            )
-            .map((action) => (
-              <Button
-                key={action.kind}
-                fullWidth
-                variant="danger-soft"
-                isDisabled={resolvePending || !action.enabled}
-                onPress={() => void resolve(action.kind)}
-              >
-                {action.label}
-              </Button>
-            ))}
-        </div>
-      </aside>
+      <BreakpointQueuePanel
+        data={queue.data}
+        error={queue.error}
+        isLoading={queue.isLoading}
+        selectedId={effectiveSelectedId}
+        onRefresh={() => void queue.refresh()}
+        onSelect={setSelectedId}
+      />
+      <BreakpointEditorPanel
+        hasSelection={Boolean(selectedSummary)}
+        detail={detail}
+        bodyText={bodyText}
+        editorPending={editorPending}
+        resolvePending={resolvePending}
+        validation={validation}
+        validationError={validationError}
+        drawerOpen={drawerOpen}
+        actionProps={actionProps}
+        onBodyChange={(value) => {
+          if (!effectiveSelectedId) return;
+          setBodyEdits((current) => ({
+            ...current,
+            [effectiveSelectedId]: value,
+          }));
+          setValidationState(undefined);
+        }}
+        onFormat={() => void runEditor("format")}
+        onRestore={() => void runEditor("restore")}
+        onValidate={() => void runEditor("validate")}
+        onDrawerChange={(open) => {
+          if (!open && resolvePending) return;
+          setDrawerOpen(open);
+        }}
+        onResolve={(kind) => void resolve(kind)}
+      />
+      <BreakpointActionPanel {...actionProps} />
     </section>
   );
 }

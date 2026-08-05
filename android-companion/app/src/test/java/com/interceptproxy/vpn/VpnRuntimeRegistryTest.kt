@@ -1,6 +1,7 @@
 package com.interceptproxy.vpn
 
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -53,6 +54,35 @@ class VpnRuntimeRegistryTest {
         assertFalse(VpnRuntimeRegistry.canStart(startGeneration))
         assertTrue(VpnRuntimeRegistry.snapshot().verified)
         assertTrue(VpnRuntimeRegistry.snapshot().state == "stopped")
+    }
+
+    @Test
+    fun activeServiceStopTimeoutClosesTunAndRejectsLateCallback() {
+        VpnRuntimeRegistry.startRequested("profile-1", runtime)
+        val stop = VpnRuntimeRegistry.stopRequested()
+        var tunCloseCount = 0
+
+        assertTrue(
+            VpnExternalStopCoordinator.completeActiveServiceStop(
+                stopRequest = stop,
+                message = "主线程超时，TUN 已强制关闭",
+                releaseTun = { tunCloseCount += 1 },
+            ),
+        )
+        assertEquals(1, tunCloseCount)
+        assertEquals(stop.generation, VpnRuntimeRegistry.snapshot().generation)
+        assertEquals("stopped", VpnRuntimeRegistry.snapshot().state)
+
+        val newStart = VpnRuntimeRegistry.startRequested("profile-2", runtime)
+        assertFalse(
+            VpnExternalStopCoordinator.completeActiveServiceStop(
+                stopRequest = stop,
+                message = "late callback",
+                releaseTun = { tunCloseCount += 1 },
+            ),
+        )
+        assertEquals(1, tunCloseCount)
+        assertTrue(VpnRuntimeRegistry.canStart(newStart))
     }
 
     @Test

@@ -23,7 +23,11 @@ pub struct FileSelection {
 
 pub trait NativeFileDialog: fmt::Debug + Send + Sync {
     fn choose_open_file(&self, purpose: &str) -> AppResult<Option<PathBuf>>;
-    fn choose_save_file(&self, purpose: &str) -> AppResult<Option<FileSelection>>;
+    fn choose_save_file(
+        &self,
+        purpose: &str,
+        suggested_file_name: &str,
+    ) -> AppResult<Option<FileSelection>>;
 }
 
 #[derive(Debug)]
@@ -55,7 +59,10 @@ impl FileExportPort for FileExportAdapter {
                 "导出文件包含原始敏感数据，请确认后再导出。",
             ));
         }
-        let Some(selection) = self.dialog.choose_save_file("session_json")? else {
+        let Some(selection) = self
+            .dialog
+            .choose_save_file("session_json", "session.json")?
+        else {
             return Ok(cancelled("已取消会话导出。"));
         };
         let bytes = Zeroizing::new(

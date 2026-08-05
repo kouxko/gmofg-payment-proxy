@@ -92,6 +92,24 @@ object VpnRuntimeRegistry {
     }
 
     @Synchronized
+    internal fun completeActiveServiceStop(
+        generation: Long,
+        message: String,
+        releaseTun: () -> Unit,
+    ): Boolean {
+        if (desiredRunning || snapshot.state != "stop_requested" || snapshot.generation != generation) {
+            return false
+        }
+        releaseTun()
+        snapshot = stoppedSnapshot(generation, message)
+        return true
+    }
+
+    @Synchronized
+    fun isStopped(generation: Long): Boolean =
+        !desiredRunning && snapshot.state == "stopped" && snapshot.generation == generation
+
+    @Synchronized
     fun faulted(message: String) {
         desiredRunning = false
         snapshot = snapshot.copy(
@@ -132,6 +150,22 @@ object VpnRuntimeRegistry {
  * Service 启动请求后，不再等待一个可能永远不会创建的 Service 回调确认。
  */
 internal object VpnExternalStopCoordinator {
+    /**
+     * 只允许当前 stop generation 释放数据面。超时线程和稍后到达的主线程回调共用
+     * 此门禁，因此超时已完成或已有新 start 时，旧回调不能关闭新一代 TUN。
+     */
+    fun completeActiveServiceStop(
+        stopRequest: VpnRuntimeRegistry.StopRequest,
+        message: String,
+        releaseTun: () -> Unit,
+    ): Boolean {
+        return VpnRuntimeRegistry.completeActiveServiceStop(
+            stopRequest.generation,
+            message,
+            releaseTun,
+        )
+    }
+
     fun completeWithoutActiveService(
         stopRequest: VpnRuntimeRegistry.StopRequest,
         message: String,

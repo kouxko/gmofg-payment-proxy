@@ -15,7 +15,7 @@ use super::Application;
 use crate::{
     AndroidNetworkState, AppError, AppResult, OperationResultViewModel, ProxyWorkspace,
     UiEventPayload, UiTone, WorkspaceChangeKind, WorkspaceChangedViewModel, WorkspaceId,
-    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    WorkspaceSummaryViewModel, WorkspaceValidationViewModel, parse_workspace_document,
 };
 
 impl Application {
@@ -167,6 +167,13 @@ impl Application {
     pub async fn workspace_save(&self, workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace> {
         let _gate = self.mutation_gate.lock().await;
         let current = self.workspaces.get(workspace.id).await?;
+        if current.certificate_references != workspace.certificate_references {
+            return Err(AppError::new(
+                "WORKSPACE_CERTIFICATE_IMPORT_REQUIRED",
+                "Workspace 证书引用只能通过代理入口的证书导入功能变更。",
+            )
+            .entity(workspace.id.to_string()));
+        }
         self.ensure_workspace_update_allowed(&current, &workspace)
             .await?;
         let workspace = self.workspaces.save(workspace).await?;
@@ -210,7 +217,7 @@ impl Application {
 
     /// 设备网络接管与桌面 Listener 是两个独立运行时。删除 Workspace 前必须分别确认
     /// 两者均未引用该 Workspace，避免设备继续运行一个已经无法编辑或停止的方案。
-    async fn ensure_workspace_android_network_not_running(
+    pub(crate) async fn ensure_workspace_android_network_not_running(
         &self,
         workspace: &ProxyWorkspace,
     ) -> AppResult<()> {
@@ -246,6 +253,53 @@ impl Application {
             )
             .retryable("请先停止设备网络接管，再删除 Workspace。")
             .entity(workspace.id.to_string()));
+        }
+        Ok(())
+    }
+
+    /// 在原子替换全部 Workspace 前确认设备网络运行时已经停止。
+    ///
+    /// 单个 Workspace 删除可以按 `active_profile_id` 判断归属；完整配置替换则不同：旧
+    /// Profile 会全部消失，因此只要 Companion 处于启动、运行或停止过渡态就必须拒绝。
+    /// 即使设备回报了已经无法映射到本地配置的陈旧 Profile ID，也不能假定网络接管已
+    /// 停止，否则替换后将失去恢复该运行时所需的配置。
+    pub(crate) async fn ensure_android_network_replacement_safe(
+        &self,
+        observation_required: bool,
+    ) -> AppResult<()> {
+        let status = match self.android.network_status().await {
+            Ok(status) => status,
+            Err(error)
+                if !observation_required
+                    && matches!(
+                        error.view_model.code.as_str(),
+                        "ANDROID_CONTROL_UNAVAILABLE" | "ANDROID_DEVICE_NOT_SELECTED"
+                    ) =>
+            {
+                return Ok(());
+            }
+            Err(error) => {
+                return Err(AppError::new(
+                    "WORKSPACE_ANDROID_STATUS_UNAVAILABLE",
+                    format!(
+                        "无法确认设备网络接管是否已经停止：{}",
+                        error.view_model.message
+                    ),
+                )
+                .retryable("请连接目标设备并刷新 VPN 状态，或先执行紧急恢复网络。"));
+            }
+        };
+        if matches!(
+            status.state,
+            AndroidNetworkState::StartRequested
+                | AndroidNetworkState::Running
+                | AndroidNetworkState::StopRequested
+        ) {
+            return Err(AppError::new(
+                "WORKSPACE_ANDROID_NETWORK_ACTIVE",
+                "设备网络接管仍在运行或正在切换状态，不能替换完整配置。",
+            )
+            .retryable("请先停止设备网络接管，再导入完整配置。"));
         }
         Ok(())
     }
@@ -303,6 +357,9 @@ impl Application {
         let Some(document) = self.workspace_documents.pick_import_document().await? else {
             return Ok(cancelled("已取消导入 Workspace。"));
         };
+        parse_workspace_document(&document)?;
+        // 可移植文档只携带安全引用元数据，不携带系统密钥材料。跨机导入允许先保留
+        // 这些引用；真正启动引用它们的入口前，证书端口仍会要求在本机重新导入材料。
         let workspace = self.workspaces.import_document(document).await?;
         let selected = self
             .workspaces
@@ -380,182 +437,12 @@ impl Application {
     }
 }
 
-fn find_mut<'a, T>(
-    items: &'a mut [T],
-    component_id: &str,
-    id: impl Fn(&T) -> String,
-) -> AppResult<&'a mut T> {
-    items
-        .iter_mut()
-        .find(|item| id(item) == component_id)
-        .ok_or_else(|| {
-            AppError::new(
-                "WORKSPACE_COMPONENT_NOT_FOUND",
-                "Workspace 组件不存在或已被删除。",
-            )
-            .entity(component_id.to_owned())
-        })
-}
-
-fn parse_listener_ids(raw: &str) -> AppResult<Vec<ListenerId>> {
-    raw.split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| {
-            Uuid::parse_str(value)
-                .map(ListenerId::from_uuid)
-                .map_err(|_| {
-                    AppError::new(
-                        "WORKSPACE_LISTENER_ID_INVALID",
-                        format!("代理入口 ID“{value}”不是有效 UUID。"),
-                    )
-                })
-        })
-        .collect()
-}
-
-fn metadata_source(kind: &str) -> AppResult<MetadataExtractorSource> {
-    match kind {
-        "header" => Ok(MetadataExtractorSource::Header {
-            name: String::new(),
-        }),
-        "json_path" => Ok(MetadataExtractorSource::JsonPath {
-            path: "$.field".into(),
-        }),
-        "body_text" => Ok(MetadataExtractorSource::BodyText),
-        "fixed_value" => Ok(MetadataExtractorSource::FixedValue {
-            value: String::new(),
-        }),
-        _ => Err(component_variant_error()),
-    }
-}
-
-fn response_assertion(kind: &str) -> AppResult<ResponseAssertionKind> {
-    match kind {
-        "http_status_equals" => Ok(ResponseAssertionKind::HttpStatusEquals { expected: 200 }),
-        "header_equals" => Ok(ResponseAssertionKind::HeaderEquals {
-            name: String::new(),
-            expected: String::new(),
-        }),
-        "json_path_equals" => Ok(ResponseAssertionKind::JsonPathEquals {
-            path: "$.field".into(),
-            expected: serde_json::Value::Null,
-        }),
-        "body_text_contains" => Ok(ResponseAssertionKind::BodyTextContains {
-            expected: String::new(),
-        }),
-        "body_length_equals" => Ok(ResponseAssertionKind::BodyLengthEquals { expected: 0 }),
-        "body_sha256_equals" => Ok(ResponseAssertionKind::BodySha256Equals {
-            expected_hex: String::new(),
-        }),
-        _ => Err(component_variant_error()),
-    }
-}
-
-fn connection_fault(kind: &str) -> AppResult<ConnectionFaultAction> {
-    match kind {
-        "delay" => Ok(ConnectionFaultAction::Delay { milliseconds: 100 }),
-        "reject" => Ok(ConnectionFaultAction::Reject),
-        "rate_limit" => Ok(ConnectionFaultAction::RateLimit {
-            bytes_per_second: 64 * 1024,
-        }),
-        "close_after_bytes" => Ok(ConnectionFaultAction::CloseAfterBytes { bytes: 1 }),
-        "half_close_after_bytes" => Ok(ConnectionFaultAction::HalfCloseAfterBytes { bytes: 1 }),
-        "idle_timeout" => Ok(ConnectionFaultAction::IdleTimeout {
-            milliseconds: 30_000,
-        }),
-        _ => Err(component_variant_error()),
-    }
-}
-
-fn component_variant_error() -> AppError {
-    AppError::new(
-        "WORKSPACE_COMPONENT_VARIANT_INVALID",
-        "Workspace 组件类型选项无效。",
-    )
-}
-
-fn delete_component(
-    workspace: &mut ProxyWorkspace,
-    component_kind: &str,
-    component_id: &str,
-) -> AppResult<()> {
-    let removed = match component_kind {
-        "metadata_extractor" => {
-            retain_removed(&mut workspace.metadata_extractors, component_id, |item| {
-                item.id.to_string()
-            })
-        }
-        "response_assertion" => {
-            retain_removed(&mut workspace.response_assertions, component_id, |item| {
-                item.id.to_string()
-            })
-        }
-        "fault_preset" => retain_removed(&mut workspace.fault_presets, component_id, |item| {
-            item.id.to_string()
-        }),
-        "certificate_reference" => retain_removed(
-            &mut workspace.certificate_references,
-            component_id,
-            |item| item.id.to_string(),
-        ),
-        _ => return Err(component_variant_error()),
-    };
-    if removed {
-        Ok(())
-    } else {
-        Err(AppError::new(
-            "WORKSPACE_COMPONENT_NOT_FOUND",
-            "Workspace 组件不存在或已被删除。",
-        )
-        .entity(component_id.to_owned()))
-    }
-}
-
-fn retain_removed<T>(items: &mut Vec<T>, component_id: &str, id: impl Fn(&T) -> String) -> bool {
-    let before = items.len();
-    items.retain(|item| id(item) != component_id);
-    items.len() != before
-}
-
-fn cancelled(message: &str) -> OperationResultViewModel {
-    OperationResultViewModel {
-        success: false,
-        cancelled: true,
-        message: message.into(),
-        ui_tone: UiTone::Neutral,
-        entity_id: None,
-        revision: None,
-        requires_restart: false,
-    }
-}
-
-fn safe_file_stem(name: &str) -> String {
-    let value = name
-        .trim()
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    if value.is_empty() {
-        "workspace".into()
-    } else {
-        value
-    }
-}
+mod support;
+use support::{
+    cancelled, connection_fault, delete_component, find_mut, metadata_source, parse_listener_ids,
+    response_assertion, safe_file_stem,
+};
 
 #[cfg(test)]
-mod tests {
-    use super::safe_file_stem;
-
-    #[test]
-    fn export_file_name_cannot_escape_selected_directory() {
-        assert_eq!(safe_file_stem("../Lab Workspace"), ".._Lab_Workspace");
-        assert_eq!(safe_file_stem("  "), "workspace");
-    }
-}
+#[path = "workspaces_tests.rs"]
+mod tests;

@@ -20,6 +20,20 @@ function sourceFiles(directory) {
     .filter((path) => !path.endsWith("generated/rust-types.ts"));
 }
 
+// 页面按职责拆分后，一个功能契约可能由 facade、列表面板和详情面板共同消费。
+// 架构门禁应检查整个 feature，而不是迫使所有契约重新堆回单个超长组件。
+function featureModuleSource(featureName) {
+  const directory = join(sourceRoot, "features", featureName);
+  return readdirSync(directory)
+    .filter(
+      (name) =>
+        /\.(?:ts|tsx)$/.test(name) &&
+        !/\.(?:test|spec)\.(?:ts|tsx)$/.test(name),
+    )
+    .map((name) => readFileSync(join(directory, name), "utf8"))
+    .join("\n");
+}
+
 // 第一层是跨文件通用禁令。正则只识别明确的危险模式，命中后要求开发者把逻辑下沉到 Rust
 // 或改用 HeroUI；不要为了“绕过正则”改写同一段前端业务逻辑。
 const forbidden = [
@@ -98,20 +112,24 @@ for (const file of sourceFiles(sourceRoot)) {
 
 // 第二层检查具体页面与 Rust 契约的对应关系。这些规则比通用正则更精确，用于防止以后重构
 // 页面时把规则默认值、断点动作、通道目录或 HTTP 报文解释偷偷搬回 TypeScript。
-const captureSource = readFileSync(
-  join(sourceRoot, "features/capture/capture-view.tsx"),
-  "utf8",
-);
+const captureSource = featureModuleSource("capture");
 if (/commands\.ruleSave/.test(captureSource)) {
   failures.push(
     "src/features/capture/capture-view.tsx: CAPTURE-009 禁止在跳转前保存规则",
   );
 }
 
-const ruleEditorSource = readFileSync(
-  join(sourceRoot, "features/rules/rule-editor.tsx"),
-  "utf8",
-);
+// 规则编辑器按职责拆分为 facade、模型、条件与动作模块。架构门禁必须检查整个模块组，
+// 不能把“单文件包含所有 Rust Command”误当成边界要求，否则会反向鼓励超长组件。
+const ruleEditorDirectory = join(sourceRoot, "features/rules");
+const ruleEditorSource = readdirSync(ruleEditorDirectory)
+  .filter((name) =>
+    /^(?:rule-editor(?:-controls|-model)?|condition-editor|actions-editor|action-fields|terminal-action-fields)\.tsx?$/.test(
+      name,
+    ),
+  )
+  .map((name) => readFileSync(join(ruleEditorDirectory, name), "utf8"))
+  .join("\n");
 if (
   /\bcreateAction\b|\bcreateCondition\b|\bparseBytes\b/.test(ruleEditorSource)
 ) {
@@ -161,10 +179,7 @@ if (
   );
 }
 
-const breakpointSource = readFileSync(
-  join(sourceRoot, "features/breakpoints/breakpoints-view.tsx"),
-  "utf8",
-);
+const breakpointSource = featureModuleSource("breakpoints");
 if (/decisionRequires(?:JsonFormatting|Validation)/.test(breakpointSource)) {
   failures.push(
     "src/features/breakpoints/breakpoints-view.tsx: 断点决策预处理策略必须由 Rust 提供",
@@ -181,10 +196,7 @@ if (
   );
 }
 
-const faultSource = readFileSync(
-  join(sourceRoot, "features/faults/faults-view.tsx"),
-  "utf8",
-);
+const faultSource = featureModuleSource("faults");
 if (/\.name\.includes\(/.test(faultSource)) {
   failures.push(
     "src/features/faults/faults-view.tsx: 禁止根据中文名称推断故障业务语义",
@@ -208,14 +220,14 @@ if (
 }
 
 const productChannelUiContracts = [
-  ["features/capture/capture-view.tsx", ["channel_catalog", "channel_text"]],
-  ["features/sessions/sessions-view.tsx", ["channel_catalog", "channel_text"]],
-  ["features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
-  ["features/rules/rules-view.tsx", ["channel_catalog", "channel_text"]],
-  ["features/faults/faults-view.tsx", ["channel_catalog"]],
+  ["capture", "features/capture/capture-view.tsx", ["channel_catalog", "channel_text"]],
+  ["sessions", "features/sessions/sessions-view.tsx", ["channel_catalog", "channel_text"]],
+  ["breakpoints", "features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
+  ["rules", "features/rules/rules-view.tsx", ["channel_catalog", "channel_text"]],
+  ["faults", "features/faults/faults-view.tsx", ["channel_catalog"]],
 ];
-for (const [relativePath, requiredContracts] of productChannelUiContracts) {
-  const source = readFileSync(join(sourceRoot, relativePath), "utf8");
+for (const [featureName, relativePath, requiredContracts] of productChannelUiContracts) {
+  const source = featureModuleSource(featureName);
   if (/["'](?:transaction|dll)["']/.test(source)) {
     failures.push(
       `src/${relativePath}: 产品通道 ID 和展示名称必须来自 Rust DTO/catalog，禁止写死 transaction/dll`,
@@ -232,16 +244,18 @@ for (const [relativePath, requiredContracts] of productChannelUiContracts) {
 
 const httpInspectionUiContracts = [
   [
+    "capture",
     "features/capture/capture-view.tsx",
     ["http_status", ".headers", "HTTP 状态码"],
   ],
   [
+    "sessions",
     "features/sessions/sessions-view.tsx",
     ["http_status", ".headers", "HTTP 状态码"],
   ],
 ];
-for (const [relativePath, requiredContracts] of httpInspectionUiContracts) {
-  const source = readFileSync(join(sourceRoot, relativePath), "utf8");
+for (const [featureName, relativePath, requiredContracts] of httpInspectionUiContracts) {
+  const source = featureModuleSource(featureName);
   for (const contract of requiredContracts) {
     if (!source.includes(contract)) {
       failures.push(
@@ -264,10 +278,7 @@ if (
   );
 }
 
-const captureSourceForResume = readFileSync(
-  join(sourceRoot, "features/capture/capture-view.tsx"),
-  "utf8",
-);
+const captureSourceForResume = captureSource;
 if (/after_event_id:\s*pauseCursor/.test(captureSourceForResume)) {
   failures.push(
     "src/features/capture/capture-view.tsx: 恢复滚动必须请求完整 Rust 显示快照，不能永久切换到增量游标",
