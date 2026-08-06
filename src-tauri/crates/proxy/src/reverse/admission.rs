@@ -31,12 +31,10 @@ impl std::fmt::Debug for ReverseConnectionAcceptor {
 #[async_trait]
 impl ConnectionAcceptor for ReverseConnectionAcceptor {
     async fn accept(&self, io: BoxIo, context: &ConnectionContext) -> Result<AcceptedConnection> {
-        if !self.allowed_client_networks.is_empty()
-            && !self
-                .allowed_client_networks
-                .iter()
-                .any(|network| network.contains(context.peer_addr.ip()))
-        {
+        if !peer_is_allowed(
+            context.peer_addr.ip(),
+            self.allowed_client_networks.as_ref(),
+        ) {
             return Err(ProxyError::new(
                 ErrorCode::ConfigInvalid,
                 format!(
@@ -64,6 +62,20 @@ impl ConnectionAcceptor for ReverseConnectionAcceptor {
             tls_peer,
         })
     }
+}
+
+/// 判断下游连接是否可以进入 TLS/HTTP 管线。
+///
+/// Android 设备网络接管通过 `adb reverse` 把设备端临时端口映射到桌面监听端口。
+/// 该连接到达桌面进程时，操作系统报告的对端是本机回环地址，而不是 Android 的
+/// WLAN 地址。回环地址不能由远程主机直接伪造，因此可作为受控本机传输放行；
+/// 非回环连接仍必须匹配用户配置的 CIDR，避免削弱局域网准入边界。
+fn peer_is_allowed(peer: IpAddr, allowed_networks: &[ClientNetwork]) -> bool {
+    peer.is_loopback()
+        || allowed_networks.is_empty()
+        || allowed_networks
+            .iter()
+            .any(|network| network.contains(peer))
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -140,5 +152,20 @@ mod tests {
         assert!(network.contains("10.0.34.94".parse().unwrap()));
         assert!(!network.contains("10.0.35.1".parse().unwrap()));
         assert!(!network.contains("::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn adb_reverse_loopback_is_allowed_without_weakening_remote_cidr() {
+        let networks = vec![ClientNetwork::parse("10.0.34.0/23").unwrap()];
+
+        assert!(peer_is_allowed("127.0.0.1".parse().unwrap(), &networks));
+        assert!(peer_is_allowed("::1".parse().unwrap(), &networks));
+        assert!(peer_is_allowed("10.0.34.42".parse().unwrap(), &networks));
+        assert!(!peer_is_allowed("10.0.36.42".parse().unwrap(), &networks));
+    }
+
+    #[test]
+    fn empty_cidr_list_keeps_existing_allow_all_behavior() {
+        assert!(peer_is_allowed("203.0.113.10".parse().unwrap(), &[]));
     }
 }
