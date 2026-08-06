@@ -110,6 +110,7 @@ impl HostPlatformServices {
 #[derive(Debug)]
 pub struct ApplicationHostBuilder {
     data_dir: PathBuf,
+    android_companion_apk: Option<PathBuf>,
     platform: HostPlatformServices,
     product: Arc<dyn ProductProfile>,
     proxy_override: Option<Arc<dyn ProxySupervisorPort>>,
@@ -125,11 +126,22 @@ impl ApplicationHostBuilder {
     ) -> Self {
         Self {
             data_dir: data_dir.into(),
+            android_companion_apk: None,
             platform,
             product,
             proxy_override: None,
             breakpoint_coordinator: None,
         }
+    }
+
+    /// 提供桌面安装包内 Android Companion APK 的绝对路径。
+    ///
+    /// Tauri、未来 CLI 或其他外壳各自负责解析自己的资源目录；Host 只把明确路径交给
+    /// Android 适配器，不再让基础设施层猜测平台安装目录。
+    #[must_use]
+    pub fn with_android_companion_apk(mut self, path: impl Into<PathBuf>) -> Self {
+        self.android_companion_apk = Some(path.into());
+        self
     }
 
     /// 只替换网络监督器，同时保留真实应用、仓储、规则、证书和设置适配器。
@@ -195,7 +207,7 @@ impl ApplicationHostBuilder {
             // 永远停止的兼容适配器，保证任何遗漏调用都不能偷偷启动第二套监听器。
             Arc::new(RetiredProxyAdapter::new(stored_settings))
         });
-        let android = Arc::new(AndroidAdbAdapter::new(&self.data_dir));
+        let android = Arc::new(AndroidAdbAdapter::new(self.android_companion_apk));
         let application_configuration = services.workspaces.clone();
         let application = Arc::new(Application::new_with_platform_services(
             self.product.name().to_owned(),

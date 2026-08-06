@@ -4,6 +4,7 @@ use intercept_proxy_application::{
     WeakNetworkProfile,
 };
 use intercept_proxy_domain::ListenerId;
+use std::path::Path;
 
 #[test]
 fn canonical_fingerprint_matches_android_for_cidr_and_url() {
@@ -80,6 +81,17 @@ fn packaged_apk_candidates_include_the_tauri_macos_resource_layout() {
     assert!(candidates.contains(&PathBuf::from(
             "/Applications/Intercept Proxy.app/Contents/MacOS/../Resources/resources/android-companion.apk",
         )));
+}
+
+#[test]
+fn packaged_apk_candidates_include_windows_installed_and_portable_layout() {
+    // Windows 接受正斜杠路径；这样同一测试也能在 macOS/Linux CI 验证目录布局。
+    let executable = Path::new("C:/Program Files/Intercept Proxy/Intercept-Proxy.exe");
+    let candidates = bundled_companion_apk_candidates(executable);
+
+    assert!(candidates.contains(&PathBuf::from(
+        "C:/Program Files/Intercept Proxy/resources/android-companion.apk"
+    )));
 }
 
 #[derive(Debug)]
