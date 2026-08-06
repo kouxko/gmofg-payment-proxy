@@ -76,7 +76,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
           "先在“工作区”选择本次测试使用的工作区，再进入“入口配置”。",
           "在“入口配置”中为每个客户端连接端点建立独立入口，填写监听地址、端口、请求去向和 TLS；不同本地端口或不同上游应建立多条入口。",
           "需要客户端信任 Proxy 的 TLS 或 MITM 时，在“证书管理”初始化本机证书并导出公开 Root CA，再把公开 .crt 加入受控客户端的测试信任库；Root 私钥和叶子私钥永不导出。",
-          "本机 Root CA 与其他 Intercept Proxy 安装实例相互独立；服务端叶子证书的 SAN 必须覆盖客户端实际连接的 IP 或 DNS。",
+          "Windows 与 macOS 使用同一张固定测试 Root CA；各机器的服务端叶子证书 SAN 必须覆盖客户端实际连接的 IP 或 DNS。",
           "普通 Server TLS 不需要客户端身份；只有 Server 要求 mTLS 时，才在具体监听的固定 Server 配置中导入并选择对应的 PKCS12。Server CA 也按监听独立导入和选择。",
           "在证书页检查本机 Root CA 与服务端叶子证书，再回到“入口配置”为启用固定 Server 的监听执行真实 TLS/mTLS 握手测试。",
           "Android 应用网络接管不修改业务 App 的 URL 或 Proxy IP；在设备网络方案中把原始目标透明映射到当前 Workspace 的代理入口。非 VPN 客户端则按自身能力配置标准代理或直接连接入口。",
@@ -130,7 +130,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "出现“端口已占用”时，到“入口配置”确认该入口端口，并关闭占用进程或改用空闲端口后重新启动该入口。",
           "出现“证书未就绪/证书无效”时，到证书页检查本机 SAN 与有效期；目标入口的 PKCS12、上游 CA 和真实握手结果则在“入口配置”检查。",
-          "客户端 → Proxy 失败时优先检查设备访问的 IP/端口、客户端是否信任当前安装实例导出的公开 Root CA、叶子证书 SAN、入口客户端认证模式以及电脑防火墙。",
+          "客户端 → Proxy 失败时优先检查设备访问的 IP/端口、客户端是否信任固定测试 Root CA、叶子证书 SAN、入口客户端认证模式以及电脑防火墙。",
           "Proxy → Server 失败时检查上游 URL、DNS、网络、PKCS12 身份、上游 CA、TLS 主机名和超时设置。",
           "状态为“故障”时先阅读该入口的错误详情；修正原因后在“入口配置”停止并重新启动该入口，不要只刷新页面。",
         ],

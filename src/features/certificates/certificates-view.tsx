@@ -157,10 +157,10 @@ export function CertificatesView() {
       <Alert status="danger">
         <Alert.Indicator />
         <Alert.Content>
-          <Alert.Title>本机 Root CA 仅限受控调试环境</Alert.Title>
+          <Alert.Title>固定测试 Root CA 仅限受控调试环境</Alert.Title>
           <Alert.Description>
-            每个 Intercept Proxy 安装实例都会生成独立 Root CA，私钥仅保存在当前系统用户的受保护存储中且不可导出。
-            请勿把该 CA 用于生产、预生产或真实商户信任体系。
+            Windows 与 macOS 使用同一张固定测试 Root CA，便于测试客户端只内置信任一次。
+            该签发材料随测试工具分发，不具备生产密钥的安全边界，禁止用于生产、预生产或真实商户信任体系。
           </Alert.Description>
         </Alert.Content>
       </Alert>
@@ -196,7 +196,7 @@ export function CertificatesView() {
       <div className="space-y-4">
         <Card>
           <Card.Header>
-            <Card.Title>A. 本机 Root CA 与客户端 → Proxy 服务端身份</Card.Title>
+            <Card.Title>A. 固定测试 Root CA 与客户端 → Proxy 服务端身份</Card.Title>
           </Card.Header>
           <Card.Content className="space-y-4">
             <div
@@ -407,10 +407,10 @@ export function CertificatesView() {
           <Shield className="size-5" />
         </Alert.Indicator>
         <Alert.Content>
-          <Alert.Title>重新初始化本机服务端证书（危险操作）</Alert.Title>
+          <Alert.Title>恢复固定测试证书并重签叶子证书</Alert.Title>
           <Alert.Description>
-            将替换本机 Root CA、Root 私钥、服务端私钥和叶子证书。此前信任旧 Root CA
-            的客户端必须重新导入新公开证书；仅所有代理入口均已停止时可执行。
+            将恢复内置的固定测试 Root CA，并按当前 SAN 重新生成本机叶子证书。
+            已信任该固定 Root CA 的客户端无需重新导入；仅所有代理入口均已停止时可执行。
           </Alert.Description>
         </Alert.Content>
         <AlertDialog
@@ -425,17 +425,17 @@ export function CertificatesView() {
             isDisabled={!overview.data?.can_change || writePending}
           >
             <TrashBin className="size-4" />
-            重新初始化本机证书
+            恢复固定测试证书
           </Button>
           <AlertDialog.Backdrop>
             <AlertDialog.Container>
               <AlertDialog.Dialog>
                 <AlertDialog.Header>
-                  <AlertDialog.Heading>确认重新初始化本机证书？</AlertDialog.Heading>
+                  <AlertDialog.Heading>确认恢复固定测试证书？</AlertDialog.Heading>
                 </AlertDialog.Header>
                 <AlertDialog.Body>
-                  本机 Root CA、Root 私钥、服务端私钥和叶子证书都会被替换。
-                  已信任旧 Root CA 的客户端将无法继续连接，必须重新导入新公开证书。
+                  将恢复应用内置的固定测试 Root CA，并重新生成本机服务端叶子证书。
+                  Root CA 指纹保持不变，但当前连接会被停止，因此仅可在所有代理入口停止后执行。
                 </AlertDialog.Body>
                 <AlertDialog.Footer>
                   <Button

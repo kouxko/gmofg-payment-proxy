@@ -252,21 +252,19 @@ impl ApplicationHostBuilder {
 async fn initialize_installation_state(
     services: &InfrastructureServiceBundle,
 ) -> AppResult<SettingsDraft> {
-    // 首次启动仍自动创建每安装实例独立的 Root CA，但系统密钥库拒绝或用户取消授权
-    // 属于可恢复状态：Host 必须继续启动，让 UI/TUI/CLI 能显示状态并再次执行初始化。
-    // 数据库损坏、证书生成失败等其他错误继续封闭失败，不能被误当作普通取消。
-    let certificate_status = services.certificates.status().await?;
-    if certificate_status.can_initialize
-        && let Err(error) = services
-            .certificates
-            .generate_ca(vec!["localhost".into(), "127.0.0.1".into()])
-            .await
+    // 每次启动都执行幂等同步：全新安装写入包内固定测试 Root；旧安装如果仍保存
+    // 每机器随机 Root，则原子替换 Root 并按原 SAN 重签叶子证书。密钥库拒绝或用户
+    // 取消授权仍是可恢复状态，Host 必须继续启动并由 UI 展示证书未就绪原因。
+    if let Err(error) = services
+        .certificates
+        .synchronize_installation_ca(vec!["localhost".into(), "127.0.0.1".into()])
+        .await
     {
         if is_recoverable_secret_store_error(&error) {
             tracing::warn!(
                 code = %error.view_model.code,
                 message = %error.view_model.message,
-                "installation certificate initialization was deferred"
+                "installation certificate synchronization was deferred"
             );
         } else {
             return Err(error);

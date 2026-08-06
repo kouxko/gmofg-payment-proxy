@@ -55,7 +55,7 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
             items: [
               {
                 kind: "local_root_ca",
-                subject: "CN=Intercept Proxy Root CA",
+                subject: "CN=Intercept Proxy TEST ONLY Root CA",
                 usage: "签发本机代理服务端证书",
                 sans: [],
                 valid_from: "2026-08-01T00:00:00Z",
@@ -174,19 +174,23 @@ describe("CertificatesView settings freshness", () => {
   it("shows the Root CA and local server leaf public metadata", () => {
     render(<CertificatesView />);
 
-    expect(screen.getAllByText("CN=Intercept Proxy Root CA")).not.toHaveLength(0);
+    expect(
+      screen.getAllByText("CN=Intercept Proxy TEST ONLY Root CA"),
+    ).not.toHaveLength(0);
     expect(screen.getAllByText("CN=10.0.34.50")).not.toHaveLength(0);
     expect(screen.getByText("IP:10.0.34.50、DNS:proxy.test")).toBeVisible();
     expect(screen.getByText("AA:BB:CC:DD")).toBeVisible();
     expect(screen.getByText("11:22:33:44")).toBeVisible();
   });
 
-  it("warns that reinitialization replaces the installation Root CA", () => {
+  it("explains that restoring certificates keeps the fixed Root CA", () => {
     render(<CertificatesView />);
 
     expect(
-      screen.getByText(/将替换本机 Root CA、Root 私钥、服务端私钥和叶子证书/),
+      screen.getByText(/将恢复内置的固定测试 Root CA/),
     ).toBeInTheDocument();
-    expect(screen.queryByText(/Root CA 保持不变/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/已信任该固定 Root CA 的客户端无需重新导入/),
+    ).toBeInTheDocument();
   });
 });

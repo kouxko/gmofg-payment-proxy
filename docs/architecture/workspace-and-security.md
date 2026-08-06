@@ -112,12 +112,15 @@ flowchart LR
 
 ## 8. Root CA 与 MITM
 
-首次初始化会生成安装实例独有的 Root CA。私钥由当前系统用户的安全存储保护：
+Intercept Proxy 为受控测试环境内置一套跨 Windows/macOS 固定的 Root CA 签发材料。
+这样测试客户端只需内置信任一次，桌面端仍把运行时私钥副本交给当前系统用户的安全存储保护：
 
 - macOS 使用 Keychain；
 - Windows 使用当前用户 DPAPI；
 - 前端永远拿不到私钥；
 - 导出按钮只能导出公开 Root CA。
+
+该私钥随测试工具分发，不具备生产密钥的保密边界，禁止用于生产、预生产或真实商户信任体系。
 
 MITM 叶子证书按 authority/SNI 动态签发并使用有界缓存。只有显式 allowlist 中的目标才
 允许 MITM，其他 CONNECT 保持透明隧道。

@@ -6,6 +6,21 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::ListenerId;
 use std::path::Path;
 
+impl AndroidAdbAdapter {
+    /// 为单元测试注入可记录、可编排的 ADB 执行器，避免启动真实 adb 进程。
+    fn with_runner(data_dir: &Path, runner: Arc<dyn AdbCommandRunner>) -> Self {
+        Self {
+            adb_path: Some(PathBuf::from("adb")),
+            companion_apk: Some(data_dir.join("android-companion.apk")),
+            selected_serial: RwLock::new(None),
+            network_operation: Mutex::new(()),
+            active_reverse: Mutex::new(None),
+            active_runtime: Mutex::new(None),
+            runner,
+        }
+    }
+}
+
 #[test]
 fn canonical_fingerprint_matches_android_for_cidr_and_url() {
     let value = serde_json::json!({

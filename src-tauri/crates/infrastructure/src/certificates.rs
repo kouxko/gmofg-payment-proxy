@@ -114,6 +114,30 @@ impl fmt::Debug for ParsedPemServerIdentity {
 pub struct CertificateService;
 
 impl CertificateService {
+    /// 解析产品包内固定的测试 Root CA 与签发私钥。
+    ///
+    /// 固定材料仍经过与运行时生成证书相同的自签名、CA 能力和密钥匹配校验，避免
+    /// 打包资源损坏或证书与私钥错配后继续启动监听。
+    pub fn load_fixed_root_ca(
+        &self,
+        certificate_pem: &[u8],
+        private_key_pem: &[u8],
+    ) -> Result<CertificateBundle, InfrastructureError> {
+        let trusted = self.parse_upstream_ca(certificate_pem)?;
+        let mut private_key_reader = Cursor::new(private_key_pem);
+        let private_key = rustls_pemfile::private_key(&mut private_key_reader)
+            .map_err(|error| invalid(format!("固定 Root CA 私钥解析失败：{error}")))?
+            .ok_or_else(|| invalid("固定 Root CA 资源不包含私钥"))?;
+        let key_pair = KeyPair::try_from(&private_key).map_err(rcgen_error)?;
+        let private_key_pkcs8_der = Zeroizing::new(key_pair.serialize_der());
+        let metadata = self.validate_root(&trusted.certificate_der, &private_key_pkcs8_der)?;
+        Ok(CertificateBundle {
+            certificate_der: trusted.certificate_der,
+            private_key_pkcs8_der,
+            metadata,
+        })
+    }
+
     pub fn load_bundled_upstream_ca(
         &self,
         certificates_pem: &[u8],
@@ -367,7 +391,7 @@ impl CertificateService {
                 .verify_signature(Some(root.public_key()))
                 .is_err()
         {
-            return Err(invalid("Proxy 叶子证书不是由当前安装实例的 Root CA 签发"));
+            return Err(invalid("Proxy 叶子证书不是由固定测试 Root CA 签发"));
         }
         let eku = certificate
             .extended_key_usage()

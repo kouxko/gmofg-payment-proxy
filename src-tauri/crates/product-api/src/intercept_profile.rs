@@ -45,13 +45,25 @@ impl RequestClassifier for EmptyRequestClassifier {
 }
 
 impl ProductCertificatePolicy for InterceptProxyProfile {
+    fn fixed_installation_root_ca_pem(&self) -> Option<&'static [u8]> {
+        Some(include_bytes!(
+            "../../../resources/certificates/intercept-proxy-test-root-ca.crt"
+        ))
+    }
+
+    fn fixed_installation_root_key_pem(&self) -> Option<&'static [u8]> {
+        Some(include_bytes!(
+            "../../../resources/certificates/intercept-proxy-test-root-key.TEST-ONLY.pem"
+        ))
+    }
+
     fn bundled_upstream_ca_pem(&self) -> Option<&'static [u8]> {
         None
     }
 
     fn labels(&self) -> CertificateLabels {
         CertificateLabels {
-            root_name: "Intercept Proxy Root CA",
+            root_name: "Intercept Proxy TEST ONLY Root CA",
             root_usage: "仅用于用户显式允许的 HTTPS MITM 目标",
             leaf_name: "动态代理服务端证书",
             leaf_usage: "按监听地址或 CONNECT authority 动态签发",
@@ -62,7 +74,7 @@ impl ProductCertificatePolicy for InterceptProxyProfile {
             upstream_override_usage: "用户为反向监听器导入的上游 CA",
             ready_status: "证书已就绪",
             incomplete_status: "证书尚未初始化",
-            already_exists_message: "当前安装实例已经存在 Root CA。",
+            already_exists_message: "固定测试 Root CA 已经初始化。",
             export_cancelled_message: "已取消导出 Root CA。",
             export_success_message: "Root CA 已导出。",
         }

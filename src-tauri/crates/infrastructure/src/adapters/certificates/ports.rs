@@ -4,10 +4,9 @@ impl InstallationServerIdentityProvider for CertificateServiceAdapter {
     fn load_installation_server_identity(&self) -> AppResult<ReverseClientIdentity> {
         let _guard = self.material_lock.lock();
         let snapshot = self.load_snapshot(&[ROOT, LEAF])?;
-        let root = snapshot
-            .materials
-            .get(ROOT)
-            .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "本机 Root CA 尚未初始化。"))?;
+        let root = snapshot.materials.get(ROOT).ok_or_else(|| {
+            AppError::new("CERTIFICATE_NOT_READY", "固定测试 Root CA 尚未初始化。")
+        })?;
         let leaf = snapshot
             .materials
             .get(LEAF)
@@ -46,6 +45,52 @@ impl CertificateServicePort for CertificateServiceAdapter {
         self.status_locked()
     }
 
+    async fn synchronize_installation_ca(
+        &self,
+        fallback_sans: Vec<String>,
+    ) -> AppResult<CertificateOverviewViewModel> {
+        let _guard = self.material_lock.lock();
+        let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
+        let Some(fixed_root) = self.fixed_root_bundle()? else {
+            if snapshot.materials.contains_key(ROOT) && snapshot.materials.contains_key(LEAF) {
+                return self.overview_locked();
+            }
+            self.generate_locked(&fallback_sans, snapshot)?;
+            return self.overview_locked();
+        };
+
+        let root_is_current = snapshot.materials.get(ROOT).is_some_and(|stored| {
+            stored.certificate_der == fixed_root.certificate_der
+                && self
+                    .certificates
+                    .validate_root(&stored.certificate_der, &stored.private_key_der)
+                    .is_ok()
+        });
+        if root_is_current && snapshot.materials.contains_key(LEAF) {
+            return self.overview_locked();
+        }
+
+        // 升级旧安装时保留原叶子证书覆盖的 IP/DNS，只替换签发链。这样 Windows、
+        // macOS 更新后无需重新填写监听 SAN，同时测试客户端只需信任一张固定 Root。
+        let existing_sans = snapshot
+            .materials
+            .get(LEAF)
+            .map(|leaf| {
+                leaf.sans
+                    .iter()
+                    .map(|san| {
+                        san.trim_start_matches("DNS:")
+                            .trim_start_matches("IP:")
+                            .to_owned()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .filter(|sans| !sans.is_empty())
+            .unwrap_or(fallback_sans);
+        self.generate_locked(&existing_sans, snapshot)?;
+        self.overview_locked()
+    }
+
     async fn overview(&self) -> AppResult<CertificateOverviewViewModel> {
         let _guard = self.material_lock.lock();
         self.overview_locked()
@@ -72,7 +117,7 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let root = snapshot.materials.get(ROOT).ok_or_else(|| {
             AppError::new(
                 "CERTIFICATE_NOT_INITIALIZED",
-                "当前安装实例尚未生成 Root CA，请先初始化证书。",
+                "固定测试 Root CA 尚未初始化，请重新打开应用或恢复测试证书。",
             )
         })?;
         let Some(selection) = self
@@ -102,7 +147,7 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let root = snapshot.materials.get(ROOT).cloned().ok_or_else(|| {
             AppError::new(
                 "CERTIFICATE_NOT_INITIALIZED",
-                "当前安装实例尚未生成 Root CA。",
+                "固定测试 Root CA 尚未初始化。",
             )
         })?;
         self.certificates

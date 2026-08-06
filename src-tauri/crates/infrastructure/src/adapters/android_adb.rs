@@ -103,19 +103,6 @@ impl AndroidAdbAdapter {
             runner: Arc::new(SystemAdbCommandRunner),
         }
     }
-
-    #[cfg(test)]
-    fn with_runner(data_dir: &Path, runner: Arc<dyn AdbCommandRunner>) -> Self {
-        Self {
-            adb_path: Some(PathBuf::from("adb")),
-            companion_apk: Some(data_dir.join("android-companion.apk")),
-            selected_serial: RwLock::new(None),
-            network_operation: Mutex::new(()),
-            active_reverse: Mutex::new(None),
-            active_runtime: Mutex::new(None),
-            runner,
-        }
-    }
 }
 
 #[async_trait]

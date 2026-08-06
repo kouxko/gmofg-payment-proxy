@@ -8,7 +8,7 @@ impl Application {
         self.certificates.overview().await
     }
 
-    /// 首次安装后异步创建独立 Root CA；该用例允许展示适配器在窗口建立后调用。
+    /// 首次安装后异步装载固定测试 Root CA，并按本机 SAN 签发叶子证书。
     ///
     /// 系统密钥库拒绝或用户取消授权时错误只返回给调用者，不得影响应用 Host 生命周期。
     pub async fn certificate_initialize_if_needed(

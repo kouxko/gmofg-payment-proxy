@@ -321,6 +321,13 @@ impl CertificateServicePort for FakePorts {
         Ok(self.certificate_overview.lock().clone())
     }
 
+    async fn synchronize_installation_ca(
+        &self,
+        _: Vec<String>,
+    ) -> AppResult<CertificateOverviewViewModel> {
+        CertificateServicePort::status(self).await
+    }
+
     async fn overview(&self) -> AppResult<CertificateOverviewViewModel> {
         self.certificate_overview_calls
             .fetch_add(1, Ordering::SeqCst);
