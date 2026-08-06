@@ -31,10 +31,11 @@ parse_signing_report() {
     return 1
   fi
 
-  # build-tools 版本不同时，证书行可能以 `Signer #1` 或 `V3.0 Signer`
-  # 开头。只接受 signer 证书指纹，不要把 public key 指纹误当成证书。
+  # build-tools 版本不同时，证书行可能以 `Signer #1`、`V3.0 Signer`
+  # 或 `V3.0 Signer:` 开头。只接受 signer 证书指纹，不要把 public key
+  # 指纹误当成证书。
   certificate_digests="$(printf '%s\n' "$signing_report" | awk '
-    /^(Signer #[0-9]+|V[0-9]+([.][0-9]+)? Signer( #[0-9]+)?) certificate SHA-256 digest:[[:space:]]*/ {
+    /^(Signer #[0-9]+|V[0-9]+([.][0-9]+)? Signer( #[0-9]+)?):?[[:space:]]+certificate SHA-256 digest:[[:space:]]*/ {
       line = $0
       sub(/^.*certificate SHA-256 digest:[[:space:]]*/, "", line)
       print line
