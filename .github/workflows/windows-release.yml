@@ -1,14 +1,14 @@
-name: Windows signed release and cache warmup
+name: Desktop release and cache warmup
 
 on:
   workflow_dispatch:
   push:
     branches:
-      # 该分支只用于提前填充 Windows/Rust/Tauri 缓存并验证安装包能构建，不发布产物。
+      # 开发分支上传未签名安装包，便于真机验收；v* 标签继续执行严格签名发布门禁。
       - "codex/windows-ci-cache-warmup"
       - "codex/intercept-proxy-generalization"
     tags:
-      # 只有 v* 标签进入签名、签名校验和 artifact 上传步骤。
+      # 只有 v* 标签进入签名与签名校验；分支产物会以 unsigned 名称上传。
       - "v*"
 
 jobs:
@@ -205,24 +205,21 @@ jobs:
           }
 
       - name: Upload MSI and NSIS installers
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: Intercept-Proxy-signed-installers-x64
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && 'Intercept-Proxy-signed-installers-x64' || 'Intercept-Proxy-unsigned-installers-x64' }}
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
       - name: Package portable executable
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: ./scripts/package-portable.ps1 -SkipBuild
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: startsWith(github.ref, 'refs/tags/v')
         with:
-          name: Intercept-Proxy-signed-portable-x64
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && 'Intercept-Proxy-signed-portable-x64' || 'Intercept-Proxy-unsigned-portable-x64' }}
           path: dist/*.zip
           if-no-files-found: error
 
@@ -242,3 +239,74 @@ jobs:
             Remove-Item $env:SIGNING_PFX_PATH -Force -ErrorAction SilentlyContinue
           }
           Remove-Item "src-tauri/tauri.signing.conf.json" -Force -ErrorAction SilentlyContinue
+
+  build-macos:
+    name: build-macos-universal
+    needs: android-companion
+    runs-on: macos-14
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.13.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Restore Rust and Tauri tool caches
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: macos-universal-release
+          cache-on-failure: true
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: intercept-proxy-android-companion
+          path: companion-artifact
+
+      - name: Stage Companion desktop resource
+        shell: bash
+        run: >-
+          ./scripts/stage-android-companion.sh
+          companion-artifact/intercept-proxy-android-companion.apk
+
+      - name: Audit production frontend dependencies
+        run: pnpm audit --prod --audit-level high
+
+      - name: Build universal macOS app and DMG
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        with:
+          args: --target universal-apple-darwin --bundles app,dmg
+
+      - name: Package macOS app bundle
+        shell: bash
+        run: |
+          mkdir -p dist
+          app_path="$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          if [[ -z "$app_path" ]]; then
+            echo "未找到 macOS .app 构建产物。" >&2
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" dist/Intercept-Proxy-macos-universal-app.zip
+
+      - name: Upload universal macOS artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Intercept-Proxy-macos-universal
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            dist/Intercept-Proxy-macos-universal-app.zip
+          if-no-files-found: error
