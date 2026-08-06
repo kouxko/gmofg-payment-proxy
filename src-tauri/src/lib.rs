@@ -61,8 +61,8 @@ fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> 
         .ok()
         .filter(|path| path.is_file());
     let dialog = Arc::new(TauriNativeFileDialog::new(app.handle().clone()));
-    // 新应用使用纯通用配置：不读取旧数据库、不加载业务模板，也不携带任何固定 CA、
-    // 上游地址或客户端身份。每安装实例的 Root CA 由基础设施层生成后交给系统密钥保护。
+    // 新应用使用纯通用配置：不读取旧数据库、不加载业务模板，也不携带业务 CA、
+    // 上游地址或客户端身份。包内固定测试 Root 的运行时副本由基础设施层交给系统密钥保护。
     let product = Arc::new(InterceptProxyProfile);
     let mut host_builder = ApplicationHostBuilder::new(
         app_data_dir,

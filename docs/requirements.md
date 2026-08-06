@@ -210,7 +210,8 @@ Android 设备网络方案及其透明代理路由与弱网参数。
 - HTTP/1.1 正向请求支持 absolute-form。
 - CONNECT authority 必须是合法主机和端口，禁止 userinfo、路径、query 和 fragment。
 - 隧道支持背压、双向复制、half-close、空闲超时和 CancellationToken。
-- 每安装实例生成独立 Root CA，私钥由当前用户 Keychain/DPAPI 保护。
+- Windows 与 macOS 内置同一套仅限受控测试环境的固定 Root CA 签发材料；启动时将旧版随机 Root 自动迁移为固定 Root，并按本机 SAN 重签叶子证书。
+- 固定 Root 私钥会随测试工具分发，因此不得用于生产、预生产或真实商户信任体系；数据库中的运行时副本仍由当前用户 Keychain/DPAPI 保护，UI 只允许导出公开证书。
 - UI 只能导出公开 Root CA。
 - MITM 叶子按 authority/SNI 动态签发，内存最多缓存 256 个。
 - HTTP/2、HTTP/3 和 QUIC 首版只允许 Tunnel，不解析和修改。
@@ -247,7 +248,7 @@ HTTP 动作：Header 增删改、文本替换、JSONPath 修改、Mock、状态�
   客户端 P12 和 Server CA。
 - 普通 TLS 与 mTLS 均为按入口选择：客户端或 Server 未要求双向认证时，不得强制配置
   客户端证书；真实握手测试必须使用该入口的实际选择验证 Server 兼容性。
-- 按请求目标转发的 MITM 只引用安装实例 Root CA。
+- 按请求目标转发的 MITM 默认引用固定测试 Root CA。
 - 重置 Root CA 是危险操作，代理必须停止且用户确认。
 
 ## 8. Android Companion

@@ -249,6 +249,14 @@ pub trait CertificateServicePort: Send + Sync + std::fmt::Debug {
     /// 这个调用不得解密私钥，也不得触发系统钥匙串授权；需要验证证书与私钥是否匹配时
     /// 必须显式调用 [`Self::overview`] 或 [`Self::validate`]。
     async fn status(&self) -> AppResult<CertificateOverviewViewModel>;
+    /// 将持久化证书同步为产品策略要求的安装级信任链。
+    ///
+    /// 对固定 Root CA 产品而言，这会在升级后替换旧安装实例 Root，并用原叶子 SAN
+    /// 重新签发服务端证书；材料已经一致时必须保持幂等且不增加修订号。
+    async fn synchronize_installation_ca(
+        &self,
+        fallback_sans: Vec<String>,
+    ) -> AppResult<CertificateOverviewViewModel>;
     async fn overview(&self) -> AppResult<CertificateOverviewViewModel>;
     async fn generate_ca(&self, sans: Vec<String>) -> AppResult<CertificateOverviewViewModel>;
     async fn export_ca(&self) -> AppResult<OperationResultViewModel>;

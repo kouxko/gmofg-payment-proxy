@@ -125,7 +125,7 @@ fn validate_listener_access(
                 "MITM 叶子证书缓存必须在 1..=256",
             );
         }
-        // `None` 表示使用当前安装实例首次启动时生成并受系统密钥保护的 Root CA。
+        // `None` 表示使用产品内置的固定测试 Root CA。运行时私钥副本仍由系统密钥保护。
         // 只有用户显式提供 Workspace 证书引用时才校验该引用，避免为了使用默认安装级
         // Root 而伪造文件路径或把私钥材料写入 Workspace。
         if value
@@ -136,7 +136,7 @@ fn validate_listener_access(
             push_field_error(
                 error,
                 format!("{prefix}.mitm.root_ca"),
-                "MITM Root CA 引用不存在；留空可使用当前安装实例 Root CA",
+                "MITM Root CA 引用不存在；留空可使用固定测试 Root CA",
             );
         } else {
             validate_certificate_role(
@@ -167,7 +167,7 @@ fn validate_downstream_tls(
     prefix: &str,
     error: &mut DomainError,
 ) {
-    // `None` 明确表示使用当前安装实例的 Root CA 按客户端 SNI 动态签发叶子证书。
+    // `None` 明确表示使用固定测试 Root CA 按客户端 SNI 动态签发叶子证书。
     // 只有用户改选固定 Workspace 身份时才要求该引用存在。
     if value.downstream_tls.enabled
         && value

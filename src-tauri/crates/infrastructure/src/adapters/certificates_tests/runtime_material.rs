@@ -1,5 +1,5 @@
 #[tokio::test]
-async fn generic_profile_generates_and_exports_per_installation_root() {
+async fn generic_profile_exports_the_fixed_test_root_without_private_material() {
     let directory = tempfile::tempdir().expect("tempdir");
     let export_path = directory.path().join("public-root-ca.crt");
     let adapter = CertificateServiceAdapter::new(
@@ -17,7 +17,7 @@ async fn generic_profile_generates_and_exports_per_installation_root() {
     adapter
         .generate_ca(vec!["127.0.0.1".into()])
         .await
-        .expect("generic signing is generated at runtime");
+        .expect("fixed test signing material is initialized");
     adapter.export_ca().await.expect("public-only export");
     let exported = std::fs::read(export_path).expect("exported public certificate");
     assert!(exported.starts_with(b"-----BEGIN CERTIFICATE-----"));
@@ -57,7 +57,7 @@ async fn protected_material_builds_a_complete_epoch_snapshot() {
         .await
         .expect_err("duplicate generation must fail");
     assert_eq!(duplicate.view_model.code, "CERTIFICATE_ALREADY_EXISTS");
-    assert!(duplicate.view_model.message.contains("已经存在 Root CA"));
+    assert!(duplicate.view_model.message.contains("Root CA 已经初始化"));
     let identity_overview = adapter
         .import_pkcs12("password".into())
         .await
@@ -121,7 +121,7 @@ async fn protected_material_builds_a_complete_epoch_snapshot() {
 }
 
 #[tokio::test]
-async fn separate_proxy_installations_have_distinct_roots_and_leaves() {
+async fn separate_proxy_installations_share_the_fixed_root_but_keep_distinct_leaves() {
     let dialog = || {
         Arc::new(QueueDialog {
             open: ParkingMutex::new(VecDeque::new()),
@@ -158,10 +158,104 @@ async fn separate_proxy_installations_have_distinct_roots_and_leaves() {
     let first_leaf = first_materials.materials.get(LEAF).expect("first leaf");
     let second_leaf = second_materials.materials.get(LEAF).expect("second leaf");
 
-    assert_ne!(first_root.certificate_der, second_root.certificate_der);
-    assert_ne!(first_root.fingerprint, second_root.fingerprint);
+    assert_eq!(first_root.certificate_der, second_root.certificate_der);
+    assert_eq!(first_root.fingerprint, second_root.fingerprint);
+    assert_eq!(
+        first_root.fingerprint,
+        "B4:72:77:A5:8D:81:AD:EB:3C:CE:59:7A:15:58:85:4D:AB:3D:0B:30:AB:CE:15:06:5A:FB:73:33:9B:CB:D7:4C"
+    );
     assert_ne!(first_leaf.certificate_der, second_leaf.certificate_der);
     assert_ne!(first_leaf.private_key_der, second_leaf.private_key_der);
     assert_eq!(first_leaf.sans, vec!["IP:10.0.34.50"]);
     assert_eq!(second_leaf.sans, vec!["IP:10.0.28.99"]);
+}
+
+#[tokio::test]
+async fn startup_synchronization_is_idempotent_for_the_fixed_test_root() {
+    let adapter = CertificateServiceAdapter::new(
+        Arc::new(SqliteStore::in_memory().expect("store")),
+        Arc::new(XorProtector),
+        Arc::new(QueueDialog {
+            open: ParkingMutex::new(VecDeque::new()),
+        }),
+        test_profile(),
+    );
+
+    let first = adapter
+        .synchronize_installation_ca(vec!["10.0.34.50".into()])
+        .await
+        .expect("first synchronization");
+    let second = adapter
+        .synchronize_installation_ca(vec!["127.0.0.1".into()])
+        .await
+        .expect("second synchronization");
+
+    assert_eq!(first.revision, second.revision);
+    let root = adapter
+        .load_snapshot(&[ROOT])
+        .expect("fixed root snapshot")
+        .materials
+        .remove(ROOT)
+        .expect("fixed root");
+    assert_eq!(
+        root.fingerprint,
+        "B4:72:77:A5:8D:81:AD:EB:3C:CE:59:7A:15:58:85:4D:AB:3D:0B:30:AB:CE:15:06:5A:FB:73:33:9B:CB:D7:4C"
+    );
+}
+
+#[tokio::test]
+async fn startup_synchronization_migrates_a_legacy_random_root_and_preserves_leaf_sans() {
+    let adapter = CertificateServiceAdapter::new(
+        Arc::new(SqliteStore::in_memory().expect("store")),
+        Arc::new(XorProtector),
+        Arc::new(QueueDialog {
+            open: ParkingMutex::new(VecDeque::new()),
+        }),
+        test_profile(),
+    );
+    let legacy_root = adapter
+        .certificates
+        .generate_root_ca("Legacy Per-install Root CA")
+        .expect("legacy root");
+    let legacy_leaf = adapter
+        .certificates
+        .generate_leaf(
+            &legacy_root.certificate_der,
+            &legacy_root.private_key_pkcs8_der,
+            &leaf_request(&["10.0.34.50".into(), "proxy.test".into()]).expect("leaf request"),
+        )
+        .expect("legacy leaf");
+    let mut legacy_snapshot = adapter.load_snapshot(&MATERIAL_KINDS).expect("snapshot");
+    legacy_snapshot
+        .materials
+        .insert(ROOT.into(), from_bundle(1, &legacy_root));
+    legacy_snapshot
+        .materials
+        .insert(LEAF.into(), from_bundle(1, &legacy_leaf));
+    adapter
+        .commit_snapshot(legacy_snapshot)
+        .expect("store legacy installation");
+
+    adapter
+        .synchronize_installation_ca(vec!["127.0.0.1".into()])
+        .await
+        .expect("migrate to fixed root");
+
+    let migrated = adapter.load_snapshot(&[ROOT, LEAF]).expect("migrated snapshot");
+    let root = migrated.materials.get(ROOT).expect("fixed root");
+    let leaf = migrated.materials.get(LEAF).expect("reissued leaf");
+    assert_eq!(
+        root.fingerprint,
+        "B4:72:77:A5:8D:81:AD:EB:3C:CE:59:7A:15:58:85:4D:AB:3D:0B:30:AB:CE:15:06:5A:FB:73:33:9B:CB:D7:4C"
+    );
+    assert_eq!(leaf.sans, vec!["DNS:proxy.test", "IP:10.0.34.50"]);
+    adapter
+        .certificates
+        .validate_leaf(
+            &root.certificate_der,
+            &leaf.certificate_der,
+            &leaf.private_key_der,
+            &["10.0.34.50".into(), "proxy.test".into()],
+        )
+        .expect("migrated leaf chains to fixed root");
 }

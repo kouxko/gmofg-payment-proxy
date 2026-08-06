@@ -298,25 +298,6 @@ impl CertificateServiceAdapter {
         )
     }
 
-    fn generate_locked(&self, sans: &[String], mut snapshot: MaterialSnapshot) -> AppResult<u64> {
-        let root = self
-            .certificates
-            .generate_root_ca(self.certificate_policy().labels().root_name)
-            .map_err(app_error)?;
-        let request = leaf_request(sans)?;
-        let leaf = self
-            .certificates
-            .generate_leaf(&root.certificate_der, &root.private_key_pkcs8_der, &request)
-            .map_err(app_error)?;
-        snapshot
-            .materials
-            .insert(ROOT.into(), from_bundle(snapshot.revision, &root));
-        snapshot
-            .materials
-            .insert(LEAF.into(), from_bundle(snapshot.revision, &leaf));
-        self.commit_snapshot(snapshot)
-    }
-
     fn bundled_upstream_material(&self, revision: u64) -> AppResult<Option<ProtectedMaterial>> {
         let Some(certificates_pem) = self.certificate_policy().bundled_upstream_ca_pem() else {
             return Ok(None);
@@ -481,6 +462,7 @@ impl CertificateServiceAdapter {
     }
 }
 
+mod fixed_root;
 mod helpers;
 mod ports;
 
