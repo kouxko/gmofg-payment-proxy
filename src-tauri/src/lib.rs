@@ -12,7 +12,7 @@ use std::{error::Error, path::PathBuf, sync::Arc};
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_product_api::InterceptProxyProfile;
 use specta_typescript::Typescript;
-use tauri::Manager;
+use tauri::{Manager, path::BaseDirectory};
 
 use crate::{app_state::AppState, native_dialog::TauriNativeFileDialog};
 
@@ -53,18 +53,26 @@ pub fn export_bindings() -> Result<PathBuf, String> {
 
 fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
     let app_data_dir = app.path().app_data_dir()?;
+    // 资源在不同平台的安装目录不同。必须由 Tauri 的路径解析器给出真实绝对路径，
+    // 不能从当前 exe 所在目录猜测，否则 Windows 安装版和便携版容易出现差异。
+    let companion_apk = app
+        .path()
+        .resolve("resources/android-companion.apk", BaseDirectory::Resource)
+        .ok()
+        .filter(|path| path.is_file());
     let dialog = Arc::new(TauriNativeFileDialog::new(app.handle().clone()));
     // 新应用使用纯通用配置：不读取旧数据库、不加载业务模板，也不携带任何固定 CA、
     // 上游地址或客户端身份。每安装实例的 Root CA 由基础设施层生成后交给系统密钥保护。
     let product = Arc::new(InterceptProxyProfile);
-    let host = tauri::async_runtime::block_on(
-        ApplicationHostBuilder::new(
-            app_data_dir,
-            HostPlatformServices::production(dialog),
-            product,
-        )
-        .build(),
-    )?;
+    let mut host_builder = ApplicationHostBuilder::new(
+        app_data_dir,
+        HostPlatformServices::production(dialog),
+        product,
+    );
+    if let Some(companion_apk) = companion_apk {
+        host_builder = host_builder.with_android_companion_apk(companion_apk);
+    }
+    let host = tauri::async_runtime::block_on(host_builder.build())?;
     Ok(AppState::new(host))
 }
 

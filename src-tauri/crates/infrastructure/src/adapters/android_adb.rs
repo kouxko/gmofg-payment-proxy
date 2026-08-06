@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -36,7 +36,6 @@ use fingerprint::canonical_json;
 use protocol::{ActivationObservation, classify_activation_status, reconcile_forward_cleanup};
 #[cfg(test)]
 use reverse::allocated_reverse_ports;
-
 const CONTROL_SOCKET: &str = "intercept_proxy_vpn";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const INSTALL_TIMEOUT: Duration = Duration::from_mins(2);
@@ -89,10 +88,14 @@ struct ReverseCleanupOutcome {
 
 impl AndroidAdbAdapter {
     #[must_use]
-    pub fn new(_data_dir: impl AsRef<Path>) -> Self {
+    pub fn new(companion_apk: Option<PathBuf>) -> Self {
+        // 优先使用桌面外壳解析的安装资源；无界面测试和其他 Host 再按约定位置回退发现。
+        let companion_apk = companion_apk
+            .filter(|path| path.is_file())
+            .or_else(discover_companion_apk);
         Self {
             adb_path: discover_adb(),
-            companion_apk: discover_companion_apk(),
+            companion_apk,
             selected_serial: RwLock::new(None),
             network_operation: Mutex::new(()),
             active_reverse: Mutex::new(None),
