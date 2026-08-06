@@ -39,6 +39,7 @@ assert_parse_failure() {
 
 assert_digest "$fixtures/apksigner-signer-numbered.txt"
 assert_digest "$fixtures/apksigner-v3-signer.txt"
+assert_digest "$fixtures/apksigner-v3-signer-colon.txt"
 assert_parse_failure "$fixtures/apksigner-multiple-signers.txt"
 assert_parse_failure "$fixtures/apksigner-missing-digest.txt"
 
