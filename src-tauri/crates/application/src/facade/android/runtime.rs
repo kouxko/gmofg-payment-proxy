@@ -1,5 +1,8 @@
 use super::{AndroidNetworkState, AndroidNetworkStatusViewModel, Application};
-use crate::UiEventPayload;
+use crate::{
+    AppError, DiagnosticLogEntryViewModel, DiagnosticLogLevel, DiagnosticLogStage, UiEventPayload,
+    events::stage_for_error_code,
+};
 use chrono::Utc;
 
 impl Application {
@@ -22,6 +25,44 @@ impl Application {
             Some(status.serial.clone()),
             None,
             UiEventPayload::AndroidVpnStatusChanged(status.clone()),
+        );
+    }
+
+    /// 记录设备网络操作的非敏感步骤。详细命令参数、报文正文、证书和密码均不得进入日志。
+    pub(super) fn publish_device_network_step(
+        &self,
+        level: DiagnosticLogLevel,
+        stage: DiagnosticLogStage,
+        summary: impl Into<String>,
+        detail: Option<String>,
+        device_serial: Option<String>,
+        profile_id: Option<String>,
+    ) {
+        self.diagnostic_log_record(DiagnosticLogEntryViewModel {
+            level,
+            stage,
+            summary: summary.into(),
+            detail,
+            device_serial,
+            listener_id: None,
+            profile_id,
+        });
+    }
+
+    /// 将稳定错误码归到用户可理解的链路阶段，避免所有失败都显示成“系统错误”。
+    pub(super) fn publish_device_network_error(
+        &self,
+        error: &AppError,
+        profile_id: Option<String>,
+    ) {
+        let stage = stage_for_error_code(&error.view_model.code);
+        self.publish_device_network_step(
+            DiagnosticLogLevel::Error,
+            stage,
+            error.view_model.message.clone(),
+            Some(format!("错误码：{}", error.view_model.code)),
+            None,
+            profile_id,
         );
     }
 }

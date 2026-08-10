@@ -21,8 +21,10 @@ use crate::{
 
 mod android;
 mod bootstrap;
+mod certificate_portability;
 mod certificates;
 mod configuration;
+mod diagnostics;
 mod listener_certificates;
 mod listeners;
 mod rules;

@@ -1,9 +1,9 @@
 //! 通用代理 Workspace 领域模型。
 //!
-//! Workspace 是桌面 UI、未来 TUI/CLI 和无界面测试共同使用的配置边界。这里仅保存
-//! 可序列化配置与安全引用，不保存证书私钥、PKCS#12 密码、代理认证明文或文件内容。
-//! 因此 `.intercept-workspace` 可以安全地经过统一导入导出流程，但真正的秘密仍由
-//! infrastructure 根据 [`SecretReference`] 从系统密钥库中解析。
+//! Workspace 是桌面 UI、未来 TUI/CLI 和无界面测试共同使用的运行时配置边界。这里
+//! 只保存可序列化配置与安全引用，不直接保存证书私钥、PKCS#12 密码、代理认证明文
+//! 或文件内容。用户主动导出的单文件文档可以在 Workspace 外层附带 Listener TLS
+//! 材料；运行时仍由 infrastructure 根据引用从系统受保护存储解析。
 
 use std::collections::BTreeMap;
 

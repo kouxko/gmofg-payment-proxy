@@ -7,6 +7,7 @@ mod android;
 mod app;
 mod capture;
 mod certificates;
+mod diagnostics;
 mod listener;
 mod rules;
 mod settings;
@@ -16,6 +17,7 @@ pub use android::*;
 pub use app::*;
 pub use capture::*;
 pub use certificates::*;
+pub use diagnostics::*;
 pub use listener::*;
 pub use rules::*;
 pub use settings::*;
@@ -44,6 +46,7 @@ pub fn builder() -> Builder<Wry> {
             app_bootstrap,
             app_subscribe_events,
             app_unsubscribe_events,
+            diagnostic_log_query,
             android_adb_get,
             android_adb_select,
             android_device_list,

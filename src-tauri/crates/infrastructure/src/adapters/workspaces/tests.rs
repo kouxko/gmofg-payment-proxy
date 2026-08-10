@@ -1,6 +1,7 @@
 use crate::adapters::FileSelection;
 use intercept_proxy_application::{
     APPLICATION_CONFIGURATION_FORMAT_VERSION, PortableSettings, SettingsDraft,
+    WORKSPACE_DOCUMENT_FORMAT_VERSION, WorkspaceDocument,
 };
 use intercept_proxy_domain::{
     AndroidNetworkProfile, AndroidProxyRoute, AndroidTargetApplication, BodyCodecKind,
@@ -193,8 +194,13 @@ async fn workspace_import_rejects_unmanaged_certificate_reference() {
         reference: "file:/tmp/untrusted-ca.pem".into(),
     });
 
+    let document = WorkspaceDocument {
+        format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
+        workspace,
+        certificate_materials: Vec::new(),
+    };
     let error = repository
-        .import_document(serde_json::to_vec(&workspace).expect("document"))
+        .import_document(serde_json::to_vec(&document).expect("document"))
         .await
         .expect_err("portable import must not read arbitrary local files");
 
@@ -225,6 +231,7 @@ async fn full_configuration_replaces_workspaces_selection_and_settings_together(
         selected_workspace_id: second.id,
         workspaces: vec![first.clone(), second.clone()],
         settings: PortableSettings::from(&settings),
+        certificate_materials: Vec::new(),
     };
 
     repository

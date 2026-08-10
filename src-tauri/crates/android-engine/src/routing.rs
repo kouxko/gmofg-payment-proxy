@@ -2,7 +2,8 @@
 //!
 //! Workspace 只保存 `destination + ports + listener_id`。桌面应用在启动 Android
 //! 数据面时把当前 Listener 和 USB/LAN 链路解析成 [`ProxyRuntimeConfiguration`]；本
-//! 模块再次校验这份临时配置，并把域名解析成 TUN 能看到的 IP 集合。
+//! 模块再次校验这份临时配置。域名的真实解析由桌面端完成并通过
+//! `resolved_original_ips` 下发；Android 端不依赖设备物理网络 DNS。
 
 use std::{collections::BTreeSet, io, net::IpAddr};
 
@@ -93,28 +94,14 @@ async fn compile_route(route: &ResolvedProxyRoute) -> io::Result<CompiledRoute> 
     let destination = normalize_destination(&route.original_destination)?;
     let network =
         parse_ip_cidr(&destination).map(|(address, prefix)| NetworkMatcher { address, prefix });
-    let mut resolved_ips = route
+    let resolved_ips = route
         .resolved_original_ips
         .iter()
         .copied()
         .collect::<BTreeSet<_>>();
-    if network.is_none() {
-        let device_resolved = tokio::net::lookup_host((destination.as_str(), 0))
-            .await
-            .map_err(|error| {
-                invalid_input(format!(
-                    "透明代理原始域名 {destination} 在 Android 启动阶段解析失败：{error}"
-                ))
-            })?
-            .map(|address| address.ip())
-            .collect::<BTreeSet<_>>();
-        if device_resolved.is_empty() {
-            return Err(invalid_input(format!(
-                "透明代理原始域名 {destination} 没有 A/AAAA 记录"
-            )));
-        }
-        resolved_ips.extend(device_resolved);
-    }
+    // 不在 Android 启动阶段再次解析域名：设备可能只有 USB/ADB、没有任何可用
+    // 物理网络。Fake-IP DNS 会让新连接以域名进入 SOCKS5，因此 `for_domain` 仍可
+    // 精确命中；桌面端快照则兼容应用缓存 DNS 后直接连接真实 IP 的情况。
 
     let proxy_addresses = tokio::net::lookup_host((route.proxy_host.as_str(), route.proxy_port))
         .await

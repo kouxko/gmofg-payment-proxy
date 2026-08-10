@@ -6,9 +6,9 @@
 use std::{fmt::Write as _, net::TcpListener as StdTcpListener, time::Duration};
 
 use intercept_proxy_application::{
-    ANDROID_CONTROL_MAX_FRAME_BYTES, ANDROID_CONTROL_PROTOCOL_VERSION, AndroidControlRequest,
-    AndroidControlResponse, AndroidNetworkState, AndroidNetworkStatusViewModel, AppError,
-    AppResult, encode_android_control_frame,
+    ANDROID_COMPANION_PACKAGE, ANDROID_CONTROL_MAX_FRAME_BYTES, ANDROID_CONTROL_PROTOCOL_VERSION,
+    AndroidControlRequest, AndroidControlResponse, AndroidControlTransport, AndroidNetworkState,
+    AndroidNetworkStatusViewModel, AppError, AppResult, UiTone, encode_android_control_frame,
 };
 use serde_json::{Value, json};
 use tokio::{
@@ -19,11 +19,42 @@ use tokio::{
 
 use super::{ActiveRuntimeFacts, AndroidAdbAdapter, COMMAND_TIMEOUT, CONTROL_SOCKET};
 use crate::adapters::android_adb::command::AdbOutput;
+use crate::adapters::android_adb::command::is_missing_adb_listener_error;
 
 const ACTIVATION_STATUS_ATTEMPTS: usize = 20;
 const ACTIVATION_STATUS_INTERVAL: Duration = Duration::from_millis(250);
 
 impl AndroidAdbAdapter {
+    /// 使用 Android 系统进程管理器强制关闭 Companion。
+    ///
+    /// 这是优雅 stop 控制协议失效时的安全兜底：进程退出会关闭 TUN 文件描述符，
+    /// 因而目标应用恢复系统网络。ADB reverse 的桌面端所有权由调用者随后统一清理。
+    pub(super) async fn force_stop_companion(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        let serial = self.selected_serial()?;
+        self.run_for_serial(
+            &serial,
+            &["shell", "am", "force-stop", ANDROID_COMPANION_PACKAGE],
+            COMMAND_TIMEOUT,
+        )
+        .await?;
+        Ok(AndroidNetworkStatusViewModel {
+            serial,
+            state: AndroidNetworkState::Stopped,
+            state_text: "已停止".into(),
+            ui_tone: UiTone::Neutral,
+            verified: true,
+            transport: AndroidControlTransport::AdbForceStop,
+            active_profile_id: None,
+            active_profile_fingerprint: None,
+            active_route_fingerprint: None,
+            active_route_count: 0,
+            companion_process_running: Some(false),
+            message: "控制协议不可用，已通过 ADB 强制停止设备端组件并关闭 TUN。".into(),
+            unsupported_fields: vec!["last_profile_id".into(), "packet_stats".into()],
+            stats: None,
+        })
+    }
+
     pub(super) async fn protocol_request(
         &self,
         operation: &str,
@@ -297,15 +328,29 @@ pub(super) fn reconcile_forward_cleanup<T>(
 ) -> AppResult<T> {
     match (result, cleanup) {
         (Ok(value), Ok(_)) => Ok(value),
+        // ADB 可能已随设备断开自动移除临时 forward。这个特定结果等价于清理完成，
+        // 不能反转已经成功的 stop/status 响应。
+        (Ok(value), Err(cleanup_error)) if is_missing_adb_listener_error(&cleanup_error) => {
+            tracing::warn!(
+                code = cleanup_error.view_model.code,
+                message = cleanup_error.view_model.message,
+                "adb forward was already absent after a successful control request"
+            );
+            Ok(value)
+        }
+        // 其他清理失败可能真的遗留端口，必须显式暴露，不能静默吞掉。
         (Ok(_), Err(cleanup_error)) => Err(AppError::new(
             "ANDROID_ADB_FORWARD_CLEANUP_FAILED",
             format!(
-                "设备控制请求已完成，但 adb forward 清理失败：{}",
+                "设备控制请求已完成，但临时 ADB forward 清理失败：{}",
                 cleanup_error.view_model.message
             ),
         )
-        .retryable("请检查 adb forward 列表并重试。")),
+        .retryable("请刷新设备状态后重试；必要时执行紧急恢复网络。")),
         (Err(error), Ok(_)) => Err(error),
+        (Err(error), Err(cleanup_error)) if is_missing_adb_listener_error(&cleanup_error) => {
+            Err(error)
+        }
         (Err(mut error), Err(cleanup_error)) => {
             let _ = write!(
                 error.view_model.message,

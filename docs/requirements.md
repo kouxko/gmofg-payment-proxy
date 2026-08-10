@@ -192,18 +192,24 @@ Android 设备网络方案及其透明代理路由与弱网参数。
 - 当前选中的 Workspace ID。
 - 全局 Settings：超时、Body/会话/内存容量、数据导出策略和 Host 重写等可移植值。
 
-两类导出都只能包含可移植配置和秘密引用，不得包含：
+两类导出都必须是单文件可移植文档。除结构化配置外，Rust 可以嵌入导出范围内 Listener 所引用证书材料的副本：
 
-- 私钥。
-- P12 原文或密码。
-- 系统密钥密文。
+- 导入的下游 Listener 服务端身份、证书链和私钥。
+- 下游客户端信任 CA 与上游 Server 信任 CA。
+- 上游 mTLS PKCS12/PFX 原文及其明文密码。
+
+这些材料只用于在受控测试环境中恢复 Listener，而不再依赖原外部文件。运行时 Workspace 对象和数据库仍只保存托管引用与受保护秘密。两种导出都必须先显示危险确认，并明确说明文件内容。
+
+两类导出都不得包含：
+
+- 本机 MITM Root CA 私钥或其受保护存储 envelope。
+- HTTP Basic 明文密码或系统密钥密文。
 - 完整抓包 Payload。
 - Android 设备 serial、ADB 转发端口、VPN 授权或运行状态。
 - 抓包、会话、断点、统计、运行任务或临时桌面/Android 网络端点。
 
-导入必须先完成 schema、版本、结构引用完整性和敏感字段扫描，
-全部通过后才原子替换。任何导入失败都不得部分修改当前 Workspace、全局 Settings 或当前选择。
-跨机导入时系统密钥不会随文档迁移；可以保留安全引用元数据，但启动引用它的入口前必须在新机器重新导入或选择实际秘密材料。
+导入必须先完成 schema、版本、结构引用完整性、内嵌材料大小/哈希/格式/用途校验和禁止字段扫描，
+全部通过后才原子替换。Rust 将内嵌 Listener 证书材料恢复到目标机器的受保护存储，并重写托管引用。任何导入失败都不得部分修改当前 Workspace、全局 Settings、当前选择或受保护证书存储。
 
 ## 5. HTTP、CONNECT 与 MITM
 
@@ -291,8 +297,9 @@ Kotlin 只负责授权 Activity、VpnService、通知、BootReceiver、TUN、all
   “全部端口”匹配。弱网覆盖范围的空端口集合仍表示全部端口，两者语义不得混用。
 - 业务 App 仍保留原始 Server URL，不填写电脑 IP 或代理端口。Rust 数据面在 TUN 中匹配
   原始目标；命中后才把 TCP 连接透明改送到引用的桌面 Listener。
-- 原始域名在每次启动/应用 Profile 时由 Rust 解析 A/AAAA；无法解析时禁止启动，
-  不允许悄然绕过。IP/CIDR 直接匹配。
+- 原始域名在每次启动/应用 Profile 时由桌面 Rust 解析 A/AAAA，并把地址快照连同域名一起
+  下发；Android 端不得再次依赖设备物理网络 DNS。桌面无法解析时禁止启动，不允许悄然
+  绕过。IP/CIDR 直接匹配。
 - `proxy_routes` 与 `destination_targets` 独立：前者决定 TCP 是否经桌面代理，后者决定是否
   对该连接注入弱网。不得为了代理而隐式扩大弱网范围。
 - 未命中 `proxy_routes` 的所选应用流量使用 `protect(fd)` 连接原始目标；非目标
@@ -317,8 +324,12 @@ Selected App → VpnService TUN → Rust ImpairedTun
 - 固定 `tun2proxy = "=0.8.3"`。
 - 支持 IPv4/IPv6、TCP、UDP、SOCKS5 CONNECT 和 UDP ASSOCIATE。
 - 透明桌面代理首版只改送 TCP；UDP 保持原目标直连，不得把 UDP 误送到 HTTP Listener。
-- USB 链路优先由桌面 Rust 创建 `adb reverse tcp:0 tcp:<listener-port>` 的临时运行端点；
-  LAN 链路可使用电脑可达地址。这些端点只在启动时下发，不写入 Workspace。
+- USB 链路是透明代理路由的默认优先路径。桌面 Rust 为每个被引用 Listener 创建
+  `adb reverse tcp:<device-temporary-port> tcp:<listener-port>`，Android 只连接
+  `127.0.0.1:<device-temporary-port>`。因此设备没有 Wi-Fi/蜂窝外网时仍可经电脑访问上游。
+  这些端点只在启动时下发，不写入 Workspace；电脑自身仍须能够访问上游 Server。
+- TUN 使用虚拟 DNS，不从 Android 当前物理网络读取 DNS Server。ADB 控制命令使用
+  `adb forward`，业务数据使用方向相反的 `adb reverse`；UI 统一称为“USB/ADB 通道”。
 - 上行使用原始 destination、下行使用原始 source 作为远端地址，保证同一目标的
   双向流量命中同一组多地址规则。
 - 不持久化 Payload。
@@ -342,7 +353,8 @@ Selected App → VpnService TUN → Rust ImpairedTun
 - Rust/JNI/TUN 失败立即关闭 TUN并 fail-open。
 - 5 分钟失败 3 次后禁止自动恢复。
 - 用户主动停止后保持停止。
-- 重启后等待用户解锁、网络可用，再等待 30 秒恢复。
+- 重启后等待用户解锁及桌面 USB/ADB 控制通道恢复，再等待 30 秒恢复；不把 Android
+  Wi-Fi/蜂窝网络可用作为透明代理启动前提。
 - 不启用 lockdown kill switch。
 - 100% 丢包和全黑洞必须二次确认。
 - 发现作用域越界立即关闭 TUN。

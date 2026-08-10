@@ -11,13 +11,14 @@ Android 系统流量和 ADB 不进入 TUN。
   `protect()` 回调。
 - 每次启动重新读取包名、当前签名和 UID；shared UID 必须选择完整应用组并显式确认。
 - Companion 自身禁止进入允许列表；单个 Profile 最多 64 个包。
-- Boot 后等待网络可用且至少 30 秒再恢复；5 分钟内失败 3 次会关闭自动恢复。
+- Boot 后等待用户解锁和桌面控制端重新建立 USB/ADB 通道；5 分钟内失败 3 次会关闭自动恢复。
 - 用户通过通知停止后保持停止。
 
 ## 数据面与安全边界
 
 Android 工程已接入最小真实数据面：`TUN -> ImpairedTun -> tun2proxy -> 进程内
-SOCKS5 -> VpnService.protect(fd) -> 原始目标`。Rust 动态库由 Gradle 在构建 APK 前
+SOCKS5 -> 命中透明代理路由时进入 adb reverse -> 桌面 Listener`；未命中透明代理
+路由的连接才通过 `VpnService.protect(fd) -> 原始目标`。Rust 动态库由 Gradle 在构建 APK 前
 编译并装入四个 Android ABI 目录。每个 TCP/UDP 外连 socket 都必须在连接或发送前调用
 `protect(fd)`；任何原生运行时、TUN、SOCKS5 或 protect 异常都会回调 Service 关闭 TUN，
 恢复系统直连。
@@ -28,6 +29,17 @@ ICMP Fragmentation Needed 与 IPv6 Packet Too Big 的主动构造仍需在后续
 抓包完成验证，不能仅以 Rust 单元测试代替。
 
 Payload 只存在于 TUN 读写缓冲区，不写入 SharedPreferences、文件或数据库。
+
+### 无线网络不可用时的 USB/ADB 路径
+
+- 透明代理路由默认且优先使用 `adb reverse`。设备只连接 `127.0.0.1:<临时端口>`，ADB
+  负责把该端口送到电脑上的代理 Listener，因此设备无需知道电脑 LAN IP。
+- TUN 使用 tun2proxy 的虚拟 DNS。Android 不再依赖当前 Wi-Fi/蜂窝网络提供 DNS；域名会在
+  TUN 内保留，并由电脑侧解析后下发的地址快照共同完成匹配。
+- 电脑仍需能够访问真实上游 Server。所谓“设备无网络”是指设备没有可用 Wi-Fi/蜂窝外网，
+  不是电脑也断网。
+- ADB 控制通道与业务数据通道相互独立：控制使用 `adb forward` 连接 Companion socket，
+  业务连接使用 `adb reverse` 从设备进入电脑 Listener。
 
 ## 构建
 

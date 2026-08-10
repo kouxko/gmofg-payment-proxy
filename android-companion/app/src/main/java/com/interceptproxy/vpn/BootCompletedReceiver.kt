@@ -7,7 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 
-/** 重启或 Companion 升级后，等待网络可用且至少 30 秒再尝试恢复。 */
+/** 重启或 Companion 升级后至少等待 30 秒再尝试恢复，不要求设备物理网络可用。 */
 class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         // 即使 Manifest 只声明系统广播，也要再次校验 action，避免导出 Receiver 被伪造调用。
@@ -20,7 +20,6 @@ class BootCompletedReceiver : BroadcastReceiver() {
         if (!state.autoResumeEnabled || state.activation == null) return
         val job = JobInfo.Builder(JOB_ID, ComponentName(context, ResumeVpnJobService::class.java))
             .setMinimumLatency(30_000)
-            .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
             .setPersisted(true)
             .build()
         context.getSystemService(JobScheduler::class.java).schedule(job)

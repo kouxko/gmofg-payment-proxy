@@ -86,6 +86,44 @@ async fn device_network_start_and_apply_accept_running_listener_runtime() {
 }
 
 #[tokio::test]
+async fn device_network_start_rejects_listener_unreachable_from_adb_reverse() {
+    let fixture =
+        running_vpn_fixture_with_listener_state(false, Some(ListenerRuntimeState::Running)).await;
+    fixture
+        .workspaces
+        .select(fixture.original_id)
+        .await
+        .unwrap();
+
+    let mut workspace = fixture.workspaces.get(fixture.original_id).await.unwrap();
+    workspace.listeners[0].bind_address = "192.0.2.10".into();
+    workspace.listeners[0].allowed_client_cidrs = vec!["10.0.0.0/8".into()];
+    workspace.listeners[0].authentication =
+        intercept_proxy_domain::ForwardProxyAuthentication::Basic {
+        credential: intercept_proxy_domain::SecretReference {
+            provider: "test".into(),
+            key: "credential".into(),
+        },
+    };
+    fixture.workspaces.save(workspace).await.unwrap();
+
+    let error = fixture
+        .application
+        .device_network_start(fixture.profile_id.clone(), false)
+        .await
+        .expect_err("ADB reverse 只能连接本机回环或未指定地址上的监听");
+
+    assert_eq!(
+        error.view_model.code,
+        "ANDROID_PROXY_LISTENER_BIND_UNREACHABLE"
+    );
+    assert_eq!(
+        fixture.android.network_start_calls.load(Ordering::SeqCst),
+        0
+    );
+}
+
+#[tokio::test]
 async fn full_configuration_import_rejects_active_android_network() {
     let fixture = running_vpn_fixture().await;
     let summaries = fixture.workspaces.list().await.unwrap();
@@ -103,6 +141,7 @@ async fn full_configuration_import_rejects_active_android_network() {
         selected_workspace_id,
         workspaces,
         settings: PortableSettings::from(&SettingsDraft::default()),
+        certificate_materials: Vec::new(),
     };
     fixture
         .documents
@@ -136,6 +175,7 @@ async fn full_configuration_import_rejects_running_android_network_with_stale_pr
             selected_workspace_id,
             workspaces,
             settings: PortableSettings::from(&SettingsDraft::default()),
+            certificate_materials: Vec::new(),
         })
         .unwrap(),
     );

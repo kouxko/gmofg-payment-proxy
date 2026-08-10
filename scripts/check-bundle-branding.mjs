@@ -19,7 +19,10 @@ const forbidden = [
 const compiledForbidden = [
   /GMO-FG/i,
   /gmofg/i,
-  /\bD48\b/i,
+  // D48 是测试报告中的大写业务码。二进制指令/压缩字节可能形成类似 `d48*`
+  // 的短小写 ASCII 片段；对编译产物仅拦截准确的大写业务码，文本资源仍保持
+  // 不区分大小写的严格扫描。
+  /\bD48\b/,
   /https\.gmo-fg\.net/i,
 ];
 const textExtensions = new Set([

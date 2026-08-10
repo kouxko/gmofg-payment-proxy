@@ -26,7 +26,7 @@ use command::{
 };
 use fingerprint::sha256_json;
 use protocol::{fallback_unsupported_fields, is_socket_unavailable};
-use reverse::{combine_operation_and_cleanup, reverse_mapping_present};
+use reverse::{combine_operation_and_cleanup, combine_stop_failures, reverse_mapping_present};
 
 #[cfg(test)]
 use command::{AdbOutput, bundled_companion_apk_candidates};
@@ -314,6 +314,12 @@ impl AndroidControlPort for AndroidAdbAdapter {
                     self.finish_prepared_network_update(prepared, Ok(confirmed))
                         .await
                 }
+                Err(error) if error.view_model.code == "ANDROID_NETWORK_START_FAILED" => {
+                    // 设备明确报告 Faulted 时，新 reverse 端口不会再被使用，应立即回滚。
+                    // 只有状态查询超时或控制通道中断这类“不确定”结果才保留两代映射。
+                    self.finish_prepared_network_update(prepared, Err(error))
+                        .await
+                }
                 Err(error) => self.retain_uncertain_network_update(prepared, error).await,
             },
             Err(error) => {
@@ -345,6 +351,10 @@ impl AndroidControlPort for AndroidAdbAdapter {
             {
                 Ok(confirmed) => {
                     self.finish_prepared_network_update(prepared, Ok(confirmed))
+                        .await
+                }
+                Err(error) if error.view_model.code == "ANDROID_NETWORK_START_FAILED" => {
+                    self.finish_prepared_network_update(prepared, Err(error))
                         .await
                 }
                 Err(error) => self.retain_uncertain_network_update(prepared, error).await,
@@ -397,12 +407,19 @@ impl AndroidControlPort for AndroidAdbAdapter {
 
     async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         let _operation = self.network_operation.lock().await;
-        let result = match self.protocol_request("stop", json!({})).await {
+        let graceful = match self.protocol_request("stop", json!({})).await {
             Ok(status) => Ok(status),
             Err(error) if is_socket_unavailable(&error) => {
                 self.protocol_request_after_wake("stop", json!({})).await
             }
             Err(error) => Err(error),
+        };
+        let result = match graceful {
+            Ok(status) => Ok(status),
+            Err(graceful_error) => match self.force_stop_companion().await {
+                Ok(status) => Ok(status),
+                Err(force_error) => Err(combine_stop_failures(graceful_error, &force_error)),
+            },
         };
         let cleanup = self.clear_active_reverse_ports().await;
         match result {
@@ -415,30 +432,14 @@ impl AndroidControlPort for AndroidAdbAdapter {
 
     async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         let _operation = self.network_operation.lock().await;
-        let serial = self.selected_serial()?;
-        self.run_for_serial(
-            &serial,
-            &["shell", "am", "force-stop", ANDROID_COMPANION_PACKAGE],
-            COMMAND_TIMEOUT,
-        )
-        .await?;
-        self.clear_active_reverse_ports().await?;
-        Ok(AndroidNetworkStatusViewModel {
-            serial,
-            state: AndroidNetworkState::Stopped,
-            state_text: "已停止".into(),
-            ui_tone: intercept_proxy_application::UiTone::Neutral,
-            verified: true,
-            transport: AndroidControlTransport::AdbForceStop,
-            active_profile_id: None,
-            active_profile_fingerprint: None,
-            active_route_fingerprint: None,
-            active_route_count: 0,
-            companion_process_running: Some(false),
-            message: "设备端组件进程已被系统强制停止；TUN 文件描述符随进程关闭，设备网络已恢复为故障放行。".into(),
-            unsupported_fields: vec!["last_profile_id".into(), "packet_stats".into()],
-            stats: None,
-        })
+        let force_stop = self.force_stop_companion().await;
+        let cleanup = self.clear_active_reverse_ports().await;
+        match force_stop {
+            Ok(status) => cleanup.map(|()| status),
+            Err(error) => Err(cleanup.err().map_or(error.clone(), |cleanup_error| {
+                combine_operation_and_cleanup(error, &cleanup_error)
+            })),
+        }
     }
 
     async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {

@@ -21,6 +21,7 @@ export type WorkspacePath =
   | "/workspaces"
   | "/listeners"
   | "/android-network"
+  | "/diagnostics"
   | "/console"
   | "/capture"
   | "/sessions"
@@ -44,6 +45,7 @@ const workspacePaths = new Set<WorkspacePath>([
   "/workspaces",
   "/listeners",
   "/android-network",
+  "/diagnostics",
   "/console",
   "/capture",
   "/sessions",

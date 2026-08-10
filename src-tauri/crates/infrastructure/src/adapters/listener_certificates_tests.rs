@@ -8,7 +8,7 @@ use crate::{InfrastructureError, adapters::FileSelection};
 #[path = "listener_certificates_test_support.rs"]
 mod test_support;
 
-use test_support::{client_pkcs12, server_identity_pem};
+use test_support::{client_pkcs12, client_pkcs12_with_password, server_identity_pem};
 
 #[derive(Debug)]
 struct QueueDialog(Mutex<VecDeque<PathBuf>>);
@@ -206,6 +206,31 @@ async fn discard_rejects_non_managed_references() {
     let error = adapter.discard(reference).await.unwrap_err();
 
     assert_eq!(error.view_model.code, "CERTIFICATE_DISCARD_FORBIDDEN");
+}
+
+#[tokio::test]
+async fn empty_password_pkcs12_remains_importable_after_portable_round_trip() {
+    let directory = tempfile::tempdir().unwrap();
+    let (pkcs12, _, _) = client_pkcs12_with_password("");
+    let path = directory.path().join("empty-password.p12");
+    std::fs::write(&path, pkcs12).unwrap();
+    let adapter = ManagedListenerCertificateAdapter::new(
+        Arc::new(SqliteStore::in_memory().unwrap()),
+        Arc::new(XorProtector),
+        Arc::new(QueueDialog(Mutex::new(VecDeque::from([path])))),
+    );
+    let imported = adapter
+        .import_upstream_client_identity("空密码身份".into(), String::new())
+        .await
+        .unwrap()
+        .unwrap()
+        .reference;
+
+    let portable = adapter.export_portable(imported).await.unwrap();
+    assert_eq!(portable.password.as_deref(), Some(""));
+
+    let restored = adapter.restore_portable(portable).await.unwrap();
+    assert!(adapter.inspect(restored).await.is_ok());
 }
 
 fn assert_imported_certificate_subjects(

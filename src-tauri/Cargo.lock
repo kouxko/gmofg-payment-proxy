@@ -2325,11 +2325,13 @@ name = "intercept-proxy-application"
 version = "1.0.0"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "chrono",
  "http",
  "intercept-proxy-domain",
  "intercept-proxy-product-api",
  "parking_lot",
+ "ring",
  "serde",
  "serde_json",
  "specta",

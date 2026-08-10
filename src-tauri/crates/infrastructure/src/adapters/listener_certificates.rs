@@ -3,11 +3,12 @@
 use std::{fmt, sync::Arc};
 
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use intercept_proxy_application::{
     AppError, AppResult, CertificateItemViewModel, CertificateReference, CertificateReferenceId,
     CertificateReferenceKind, ListenerCertificateDetailViewModel, ListenerCertificateImportPort,
-    ListenerCertificateImportViewModel,
+    ListenerCertificateImportViewModel, PortableCertificateMaterial,
 };
 use intercept_proxy_runtime::ReverseClientIdentity;
 use uuid::Uuid;
@@ -25,11 +26,16 @@ use super::{
     },
 };
 
+#[path = "listener_certificate_portable.rs"]
+mod portable;
+use portable::validate_portable_material;
+
 const PROVIDER: &str = "listener_tls";
 const KIND_UPSTREAM_CLIENT_IDENTITY: u8 = 1;
 const KIND_UPSTREAM_SERVER_TRUST: u8 = 2;
 const KIND_DOWNSTREAM_SERVER_IDENTITY: u8 = 3;
 const KIND_DOWNSTREAM_CLIENT_TRUST: u8 = 4;
+const MAX_PORTABLE_MATERIAL_BYTES: usize = 16 * 1024 * 1024;
 
 pub struct ManagedListenerCertificateAdapter {
     store: Arc<SqliteStore>,
@@ -307,6 +313,71 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         Ok(view_model(reference.kind, metadata))
     }
 
+    async fn export_portable(
+        &self,
+        reference: CertificateReference,
+    ) -> AppResult<PortableCertificateMaterial> {
+        let key = managed_key(&reference.reference).ok_or_else(|| {
+            AppError::new(
+                "CERTIFICATE_EXPORT_FORBIDDEN",
+                "只能导出由 Intercept Proxy 托管的 Listener TLS 证书材料。",
+            )
+        })??;
+        let material = self.load(key)?;
+        ensure_kind_matches(reference.kind, material.kind)?;
+        // PKCS#12 的空密码与“不提供密码”含义不同。可移植文档必须保留 Some("")，
+        // 否则导出后再导入会被 `validate_portable_material` 判定为缺少密码。
+        let password = if reference.kind == CertificateReferenceKind::UpstreamClientIdentity {
+            Some(
+                std::str::from_utf8(&material.password)
+                    .map_err(|_| {
+                        AppError::new("CERTIFICATE_NOT_READY", "受保护的 PKCS12 密码编码无效。")
+                    })?
+                    .to_owned(),
+            )
+        } else {
+            None
+        };
+        Ok(PortableCertificateMaterial {
+            reference_id: reference.id,
+            label: reference.label,
+            kind: reference.kind,
+            material_base64: STANDARD.encode(&material.bytes),
+            material_sha256: intercept_proxy_application::portable_material_sha256(&material.bytes),
+            password,
+        })
+    }
+
+    async fn restore_portable(
+        &self,
+        material: PortableCertificateMaterial,
+    ) -> AppResult<CertificateReference> {
+        material.validate_shape()?;
+        let bytes = STANDARD.decode(&material.material_base64).map_err(|_| {
+            AppError::new(
+                "PORTABLE_CERTIFICATE_INVALID",
+                "配置文件中的证书材料不是有效的 Base64。",
+            )
+            .entity(material.reference_id.to_string())
+        })?;
+        if bytes.is_empty() || bytes.len() > MAX_PORTABLE_MATERIAL_BYTES {
+            return Err(AppError::new(
+                "PORTABLE_CERTIFICATE_INVALID",
+                "配置文件中的证书材料为空或超过 16 MiB 上限。",
+            )
+            .entity(material.reference_id.to_string()));
+        }
+
+        let (stored_kind, password, stored_bytes) = validate_portable_material(&material, &bytes)?;
+        let key = self.persist(stored_kind, password.as_bytes(), &stored_bytes)?;
+        Ok(CertificateReference {
+            id: material.reference_id,
+            label: material.label,
+            kind: material.kind,
+            reference: format!("{REFERENCE_PREFIX}{key}"),
+        })
+    }
+
     async fn discard(&self, reference: CertificateReference) -> AppResult<()> {
         let key = managed_key(&reference.reference).ok_or_else(|| {
             AppError::new(
@@ -374,6 +445,30 @@ fn kind_mismatch() -> AppError {
         "CERTIFICATE_NOT_READY",
         "Listener TLS 安全引用的材料类型不匹配。",
     )
+}
+
+fn ensure_kind_matches(kind: CertificateReferenceKind, stored_kind: u8) -> AppResult<()> {
+    let matches = matches!(
+        (kind, stored_kind),
+        (
+            CertificateReferenceKind::UpstreamClientIdentity,
+            KIND_UPSTREAM_CLIENT_IDENTITY
+        ) | (
+            CertificateReferenceKind::UpstreamServerTrust,
+            KIND_UPSTREAM_SERVER_TRUST
+        ) | (
+            CertificateReferenceKind::ReverseServerIdentity,
+            KIND_DOWNSTREAM_SERVER_IDENTITY
+        ) | (
+            CertificateReferenceKind::DownstreamClientTrust,
+            KIND_DOWNSTREAM_CLIENT_TRUST
+        )
+    );
+    if matches {
+        Ok(())
+    } else {
+        Err(kind_mismatch())
+    }
 }
 
 #[cfg(test)]

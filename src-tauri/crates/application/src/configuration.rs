@@ -1,7 +1,8 @@
 //! 整个应用的可移植配置文档。
 //!
 //! `.intercept-config` 与单个 `.intercept-workspace` 文档分工明确：前者用于完整备份与
-//! 恢复，后者用于分享一个 Workspace。两者都只允许非敏感配置和稳定安全引用。
+//! 恢复，后者用于分享一个 Workspace。用户明确要求测试配置可在单个 JSON 文件中携带
+//! 证书、PKCS#12 和密码；运行时仍只保存本机受保护引用。
 
 use std::collections::BTreeSet;
 
@@ -12,11 +13,12 @@ use crate::document_security::{canonical_field_name, is_secret_field};
 use specta::Type;
 
 use crate::{
-    AppError, AppResult, ChannelSettingsDraft, ProxyWorkspace, SettingsDraft, WorkspaceId,
+    AppError, AppResult, ChannelSettingsDraft, PortableCertificateMaterial, ProxyWorkspace,
+    SettingsDraft, WorkspaceId, validate_certificate_materials,
 };
 
-pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 1;
-pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 32 * 1024 * 1024;
+pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 2;
+pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 128 * 1024 * 1024;
 /// 监听证书只能引用应用受保护存储中的材料，不能携带文件路径或环境变量密码。
 pub const MANAGED_LISTENER_CERTIFICATE_PREFIX: &str = "managed:listener-tls:";
 
@@ -98,6 +100,7 @@ pub struct ApplicationConfigurationDocument {
     pub selected_workspace_id: WorkspaceId,
     pub workspaces: Vec<ProxyWorkspace>,
     pub settings: PortableSettings,
+    pub certificate_materials: Vec<PortableCertificateMaterial>,
 }
 
 impl ApplicationConfigurationDocument {
@@ -136,6 +139,7 @@ impl ApplicationConfigurationDocument {
             )
             .entity(self.selected_workspace_id.to_string()));
         }
+        validate_certificate_materials(&self.workspaces, &self.certificate_materials)?;
         Ok(())
     }
 }
@@ -146,12 +150,12 @@ pub fn parse_application_configuration(
     if document.len() > MAX_APPLICATION_CONFIGURATION_BYTES {
         return Err(AppError::new(
             "IMPORT_FAILED",
-            "完整配置文档超过 32 MiB 安全上限。",
+            "完整配置文档超过 128 MiB 安全上限。",
         ));
     }
     let value = serde_json::from_slice::<Value>(document)
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("完整配置 JSON 无效：{error}")))?;
-    reject_sensitive_configuration_fields(&value, "$")?;
+    reject_configuration_fields_outside_certificate_materials(&value)?;
     let parsed = serde_json::from_value::<ApplicationConfigurationDocument>(value)
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("完整配置结构无效：{error}")))?;
     parsed.validate()?;
@@ -167,9 +171,18 @@ pub fn serialize_application_configuration(
     let value = serde_json::from_slice::<Value>(&bytes).map_err(|error| {
         AppError::new("EXPORT_FAILED", format!("完整配置导出自检失败：{error}"))
     })?;
-    reject_sensitive_configuration_fields(&value, "$")
+    reject_configuration_fields_outside_certificate_materials(&value)
         .map_err(|_| AppError::new("EXPORT_FAILED", "完整配置包含禁止导出的敏感或运行态字段。"))?;
     Ok(bytes)
+}
+
+/// 证书载荷是唯一允许明文密码和 PKCS#12 的受控区域；其他未知字段继续递归拒绝。
+fn reject_configuration_fields_outside_certificate_materials(value: &Value) -> AppResult<()> {
+    let mut scanned = value.clone();
+    if let Some(object) = scanned.as_object_mut() {
+        object.insert("certificate_materials".into(), Value::Array(Vec::new()));
+    }
+    reject_sensitive_configuration_fields(&scanned, "$")
 }
 
 /// 对未知字段也执行递归拒绝，避免 Serde 忽略攻击者额外塞入的秘密或运行态。
@@ -234,6 +247,7 @@ mod tests {
             selected_workspace_id: workspace.id,
             workspaces: vec![workspace],
             settings: PortableSettings::from(&SettingsDraft::default()),
+            certificate_materials: Vec::new(),
         }
     }
 

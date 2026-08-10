@@ -128,7 +128,20 @@ async fn workspace_import_preserves_managed_certificate_metadata_for_cross_machi
         kind: CertificateReferenceKind::UpstreamServerTrust,
         reference: reference_value,
     });
-    documents.set_next_import(serialize_workspace_document(&workspace).unwrap());
+    let materials = vec![
+        ports
+            .export_portable(workspace.certificate_references[0].clone())
+            .await
+            .unwrap(),
+    ];
+    documents.set_next_import(
+        serialize_workspace_document(&WorkspaceDocument {
+            format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
+            workspace,
+            certificate_materials: materials,
+        })
+        .unwrap(),
+    );
 
     application
         .workspace_import()
@@ -175,8 +188,14 @@ async fn full_configuration_import_preserves_managed_certificate_metadata() {
     let document = ApplicationConfigurationDocument {
         format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
         selected_workspace_id: workspace.id,
-        workspaces: vec![workspace],
+        workspaces: vec![workspace.clone()],
         settings: PortableSettings::from(&SettingsDraft::default()),
+        certificate_materials: vec![
+            ports
+                .export_portable(workspace.certificate_references[0].clone())
+                .await
+                .unwrap(),
+        ],
     };
     documents.set_next_import(serialize_application_configuration(&document).unwrap());
 
@@ -191,6 +210,60 @@ async fn full_configuration_import_preserves_managed_certificate_metadata() {
         .clone()
         .expect("replacement document recorded");
     assert_eq!(imported.workspaces[0].certificate_references.len(), 1);
+}
+
+#[tokio::test]
+async fn full_configuration_import_reports_old_certificate_cleanup_as_success_warning() {
+    let ports = Arc::new(FakePorts::default());
+    ports.fail_certificate_discard.store(true, Ordering::SeqCst);
+    let workspaces = Arc::new(InMemoryWorkspaceStore::default());
+    let old_summary = workspaces.list().await.unwrap().remove(0);
+    let mut old_workspace = workspaces.get(old_summary.id).await.unwrap();
+    old_workspace
+        .certificate_references
+        .push(CertificateReference {
+            id: CertificateReferenceId::new(),
+            label: "待清理旧 CA".into(),
+            kind: CertificateReferenceKind::UpstreamServerTrust,
+            reference: format!("{MANAGED_LISTENER_CERTIFICATE_PREFIX}old-ca"),
+        });
+    workspaces.save(old_workspace).await.unwrap();
+
+    let documents = Arc::new(InMemoryWorkspaceDocumentStore::default());
+    let configuration_store = Arc::new(RecordingConfigurationStore::default());
+    let application = application_with_configuration_store(
+        ports,
+        workspaces,
+        documents.clone(),
+        configuration_store.clone(),
+    );
+    let mut events = application.app_subscribe_events(0).unwrap();
+    let replacement = ProxyWorkspace::default();
+    documents.set_next_import(
+        serialize_application_configuration(&ApplicationConfigurationDocument {
+            format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
+            selected_workspace_id: replacement.id,
+            workspaces: vec![replacement],
+            settings: PortableSettings::from(&SettingsDraft::default()),
+            certificate_materials: Vec::new(),
+        })
+        .unwrap(),
+    );
+
+    let result = application
+        .application_configuration_import()
+        .await
+        .expect("committed replacement must remain a successful import");
+
+    assert!(result.success);
+    assert_eq!(result.ui_tone, UiTone::Warning);
+    assert!(configuration_store.document.lock().is_some());
+    let warning = events.live.recv().await.unwrap();
+    assert!(matches!(
+        warning.payload,
+        UiEventPayload::ResourceWarning { ref message }
+            if message.contains("旧证书材料未全部清理")
+    ));
 }
 
 #[tokio::test]

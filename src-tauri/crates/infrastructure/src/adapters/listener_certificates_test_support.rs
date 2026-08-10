@@ -36,6 +36,10 @@ pub(super) fn server_identity_pem() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
 }
 
 pub(super) fn client_pkcs12() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+    client_pkcs12_with_password("password")
+}
+
+pub(super) fn client_pkcs12_with_password(password: &str) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     let root = CertificateService
         .generate_root_ca("Listener Client Root")
         .unwrap();
@@ -69,7 +73,7 @@ pub(super) fn client_pkcs12() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
         )),
     );
     (
-        keystore.writer("password").write().unwrap(),
+        keystore.writer(password).write().unwrap(),
         private_key,
         root.certificate_der.clone(),
     )

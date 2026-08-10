@@ -320,7 +320,7 @@ async fn failed_reverse_cleanup_retains_only_failed_ports_for_retry() {
         .clear_active_reverse_ports()
         .await
         .expect_err("部分删除失败必须可观察");
-    assert_eq!(error.view_model.code, "ANDROID_ADB_COMMAND_FAILED");
+    assert_eq!(error.view_model.code, "ANDROID_ADB_REVERSE_CLEANUP_FAILED");
     assert_eq!(
         adapter.active_reverse.lock().await.as_ref().unwrap().ports,
         vec![31_628]
@@ -337,6 +337,59 @@ async fn failed_reverse_cleanup_retains_only_failed_ports_for_retry() {
             vec!["-s", "DEVICE-A", "reverse", "--remove", "tcp:31627"],
             vec!["-s", "DEVICE-A", "reverse", "--remove", "tcp:31628"],
             vec!["-s", "DEVICE-A", "reverse", "--remove", "tcp:31628"],
+        ]
+    );
+}
+
+#[tokio::test]
+async fn missing_reverse_listener_is_an_idempotent_cleanup_success() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(SequenceRunner {
+        calls: std::sync::Mutex::new(Vec::new()),
+        outputs: std::sync::Mutex::new(std::collections::VecDeque::from([
+            AdbOutput {
+                success: false,
+                stdout: String::new(),
+                stderr: "adb.exe: error: listener 'tcp:40163' not found".into(),
+            },
+            AdbOutput {
+                success: true,
+                stdout: "List of devices attached\nDEVICE-B device model:A920MAX\n".into(),
+                stderr: String::new(),
+            },
+            AdbOutput {
+                success: true,
+                stdout: "Android Debug Bridge version 1.0.41".into(),
+                stderr: String::new(),
+            },
+        ])),
+    });
+    let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+    *adapter.active_reverse.lock().await = Some(ActiveReverseOwnership {
+        serial: "DEVICE-A".into(),
+        profile_id: "profile-a".into(),
+        ports: vec![40_163],
+    });
+
+    adapter
+        .clear_active_reverse_ports()
+        .await
+        .expect("已经不存在的 reverse 映射应视为清理完成");
+
+    assert!(adapter.active_reverse.lock().await.is_none());
+    assert!(adapter.active_runtime.lock().await.is_none());
+
+    let selected = adapter
+        .adb_select("DEVICE-B".into())
+        .await
+        .expect("幂等停止完成后不应再被陈旧映射阻止切换设备");
+    assert_eq!(selected.selected_serial.as_deref(), Some("DEVICE-B"));
+    assert_eq!(
+        *runner.calls.lock().unwrap(),
+        vec![
+            vec!["-s", "DEVICE-A", "reverse", "--remove", "tcp:40163"],
+            vec!["devices", "-l"],
+            vec!["version"],
         ]
     );
 }
@@ -410,7 +463,7 @@ async fn reverse_creation_failure_keeps_active_mapping_and_runtime() {
         .await
         .expect_err("staged reverse creation must fail");
 
-    assert_eq!(error.view_model.code, "ANDROID_ADB_COMMAND_FAILED");
+    assert_eq!(error.view_model.code, "ANDROID_ADB_REVERSE_CREATE_FAILED");
     assert_eq!(*adapter.active_reverse.lock().await, Some(old_reverse));
     assert_eq!(*adapter.active_runtime.lock().await, Some(old_runtime));
     assert_eq!(runner.calls.lock().unwrap().len(), 1);

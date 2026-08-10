@@ -311,7 +311,10 @@ async fn run_data_plane(
         ArgProxy::try_from(format!("socks5://{socks_address}").as_str())
             .map_err(|error| format!("配置本地 SOCKS5 失败：{error}"))?,
     )
-    .dns(ArgDns::OverTcp)
+    // DNS 查询只在 TUN 内由 tun2proxy 的 Fake-IP 解析器回答。这样目标应用即使
+    // 没有 Wi-Fi/蜂窝网络，也能先得到虚拟地址；随后 SOCKS5 会携带原始域名，
+    // 再按运行态透明路由连接 adb reverse 暴露的桌面代理入口。
+    .dns(ArgDns::Virtual)
     .tun_fd(Some(tun2proxy_end.as_raw_fd()))
     .close_fd_on_drop(false)
     .ipv6_enabled(true);

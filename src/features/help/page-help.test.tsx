@@ -14,6 +14,7 @@ const workspacePaths: WorkspacePath[] = [
   "/workspaces",
   "/listeners",
   "/android-network",
+  "/diagnostics",
   "/console",
   "/capture",
   "/sessions",
