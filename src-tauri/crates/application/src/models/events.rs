@@ -39,6 +39,7 @@ pub enum UiEventPayload {
     RuntimeStatusChanged(Box<ProxyStatusViewModel>),
     ChannelStatusChanged(ChannelStatusViewModel),
     CaptureRowsAdded(Vec<CaptureRowViewModel>),
+    DiagnosticLogAdded(crate::DiagnosticLogEntryViewModel),
     SessionUpdated(SessionSummaryViewModel),
     BreakpointQueued(BreakpointSummaryViewModel),
     BreakpointResolved(BreakpointSummaryViewModel),

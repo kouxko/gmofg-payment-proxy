@@ -79,6 +79,7 @@ describe("UI-001 fixed navigation order", () => {
       "/workspaces",
       "/listeners",
       "/android-network",
+      "/diagnostics",
       "/console",
       "/capture",
       "/sessions",

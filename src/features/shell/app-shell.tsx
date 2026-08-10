@@ -25,6 +25,7 @@ import {
   CircleInfo,
   DatabaseMagnifier,
   File,
+  FileText,
   FolderOpen,
   Gear,
   ListCheck,
@@ -70,6 +71,12 @@ export const navigation = [
     label: "设备网络",
     title: "应用网络接管",
     icon: Smartphone,
+  },
+  {
+    href: "/diagnostics",
+    label: "日志",
+    title: "诊断日志",
+    icon: FileText,
   },
   {
     href: "/console",

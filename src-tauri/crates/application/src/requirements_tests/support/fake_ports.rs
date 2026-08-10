@@ -21,7 +21,7 @@ fn fake_settings_view() -> SettingsViewModel {
     }
 }
 
-fn fake_certificate_overview() -> CertificateOverviewViewModel {
+pub(super) fn fake_certificate_overview() -> CertificateOverviewViewModel {
     CertificateOverviewViewModel {
         revision: 1,
         ready: true,
@@ -61,6 +61,7 @@ pub(in crate::requirements_tests) struct FakePorts {
     pub(in crate::requirements_tests) certificate_overview_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_discard_calls: AtomicUsize,
     pub(in crate::requirements_tests) block_certificate_discard: AtomicBool,
+    pub(in crate::requirements_tests) fail_certificate_discard: AtomicBool,
     pub(in crate::requirements_tests) certificate_discard_entered: tokio::sync::Notify,
     pub(in crate::requirements_tests) continue_certificate_discard: tokio::sync::Notify,
     pub(in crate::requirements_tests) discarded_certificate_references:
@@ -87,74 +88,13 @@ impl Default for FakePorts {
             certificate_overview_calls: AtomicUsize::new(0),
             certificate_discard_calls: AtomicUsize::new(0),
             block_certificate_discard: AtomicBool::new(false),
+            fail_certificate_discard: AtomicBool::new(false),
             certificate_discard_entered: tokio::sync::Notify::new(),
             continue_certificate_discard: tokio::sync::Notify::new(),
             discarded_certificate_references: parking_lot::Mutex::new(BTreeSet::new()),
             settings: parking_lot::Mutex::new(fake_settings_view()),
             certificate_overview: parking_lot::Mutex::new(fake_certificate_overview()),
         }
-    }
-}
-
-#[async_trait]
-impl ListenerCertificateImportPort for FakePorts {
-    async fn import_downstream_server_identity(
-        &self,
-        _label: String,
-    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
-        Ok(None)
-    }
-
-    async fn import_downstream_client_trust(
-        &self,
-        _label: String,
-    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
-        Ok(None)
-    }
-
-    async fn import_upstream_client_identity(
-        &self,
-        _label: String,
-        _password: String,
-    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
-        Ok(None)
-    }
-
-    async fn import_upstream_server_trust(
-        &self,
-        _label: String,
-    ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
-        Ok(None)
-    }
-
-    async fn inspect(
-        &self,
-        reference: CertificateReference,
-    ) -> AppResult<CertificateItemViewModel> {
-        if self
-            .discarded_certificate_references
-            .lock()
-            .contains(&reference.reference)
-        {
-            return Err(AppError::new(
-                "LISTENER_CERTIFICATE_MATERIAL_UNAVAILABLE",
-                "托管证书材料已被清理。",
-            ));
-        }
-        Ok(fake_certificate_overview().items.remove(0))
-    }
-
-    async fn discard(&self, reference: CertificateReference) -> AppResult<()> {
-        self.certificate_discard_calls
-            .fetch_add(1, Ordering::SeqCst);
-        if self.block_certificate_discard.load(Ordering::SeqCst) {
-            self.certificate_discard_entered.notify_one();
-            self.continue_certificate_discard.notified().await;
-        }
-        self.discarded_certificate_references
-            .lock()
-            .insert(reference.reference);
-        Ok(())
     }
 }
 

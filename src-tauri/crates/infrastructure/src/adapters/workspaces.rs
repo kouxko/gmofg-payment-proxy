@@ -252,6 +252,13 @@ impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
         Ok(workspace)
     }
 
+    async fn import_workspace(&self, mut workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace> {
+        workspace.validate().map_err(AppError::from)?;
+        remap_workspace_identity(&mut workspace)?;
+        infra(self.store.insert_workspace(&Self::record(&workspace)?))?;
+        Ok(workspace)
+    }
+
     async fn delete(
         &self,
         workspace_id: WorkspaceId,
@@ -273,14 +280,16 @@ impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
     }
 
     async fn import_document(&self, document: Vec<u8>) -> AppResult<ProxyWorkspace> {
-        let mut workspace = parse_workspace_document(&document)?;
-        remap_workspace_identity(&mut workspace)?;
-        infra(self.store.insert_workspace(&Self::record(&workspace)?))?;
-        Ok(workspace)
+        self.import_workspace(parse_workspace_document(&document)?.workspace)
+            .await
     }
 
     async fn export_document(&self, workspace_id: WorkspaceId) -> AppResult<Vec<u8>> {
-        serialize_workspace_document(&self.get_stored(workspace_id)?)
+        serialize_workspace_document(&intercept_proxy_application::WorkspaceDocument {
+            format_version: intercept_proxy_application::WORKSPACE_DOCUMENT_FORMAT_VERSION,
+            workspace: self.get_stored(workspace_id)?,
+            certificate_materials: Vec::new(),
+        })
     }
 }
 

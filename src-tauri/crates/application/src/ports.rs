@@ -16,11 +16,11 @@ use crate::{
     CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
     FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
     ListenerId, ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel,
-    OperationResultViewModel, ProxyListener, ProxyStatusViewModel, ProxyWorkspace, RuleDraft,
-    RuleId, RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, RuntimeEpoch,
-    SecretReference, SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery,
-    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, WorkspaceId,
-    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    OperationResultViewModel, PortableCertificateMaterial, ProxyListener, ProxyStatusViewModel,
+    ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel, RuleValidationViewModel,
+    RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel, SessionId,
+    SessionPageViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
+    SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
 #[async_trait]
@@ -53,6 +53,21 @@ pub trait ListenerCertificateImportPort: Send + Sync + std::fmt::Debug {
     /// 读取安全引用并只返回证书的公开元数据，不返回路径、密码、私钥或证书原始字节。
     async fn inspect(&self, reference: CertificateReference)
     -> AppResult<CertificateItemViewModel>;
+
+    /// 将托管证书材料读取为单文件配置中的可移植载荷。
+    ///
+    /// 该方法只由用户主动导出配置时调用。运行时 Workspace 仍只保存安全引用，不会把
+    /// 原始证书、私钥或密码写入 SQLite、事件或普通 DTO。
+    async fn export_portable(
+        &self,
+        reference: CertificateReference,
+    ) -> AppResult<PortableCertificateMaterial>;
+
+    /// 校验可移植载荷并写入当前机器的受保护存储，返回新的本机托管引用。
+    async fn restore_portable(
+        &self,
+        material: PortableCertificateMaterial,
+    ) -> AppResult<CertificateReference>;
 
     /// 删除尚未被任何 Workspace 引用的受保护证书材料。
     ///
@@ -94,8 +109,8 @@ impl ProtectedSecretPort for UnavailableProtectedSecretPort {
 #[async_trait]
 /// Workspace 的应用层持久化边界。
 ///
-/// 导入导出实现必须只处理领域模型中的安全引用，不能自行附加证书私钥、PKCS#12 密码
-/// 或代理认证明文。文件选择仍由 Tauri/Dialog 或未来 CLI 适配器负责。
+/// 仓储只处理领域模型及其本机安全引用。单文件证书载荷由应用门面通过证书端口恢复后，
+/// 再把重写过引用的 Workspace 交给仓储持久化。
 pub trait WorkspaceRepositoryPort: Send + Sync + std::fmt::Debug {
     async fn list(&self) -> AppResult<Vec<WorkspaceSummaryViewModel>>;
     async fn get(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace>;
@@ -104,6 +119,8 @@ pub trait WorkspaceRepositoryPort: Send + Sync + std::fmt::Debug {
     async fn select(&self, workspace_id: WorkspaceId) -> AppResult<WorkspaceSummaryViewModel>;
     async fn validate(&self, workspace: ProxyWorkspace) -> AppResult<WorkspaceValidationViewModel>;
     async fn save(&self, workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace>;
+    /// 保存已由应用层完成证书恢复的可移植 Workspace，并重映射全部领域 ID。
+    async fn import_workspace(&self, workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace>;
     async fn delete(
         &self,
         workspace_id: WorkspaceId,

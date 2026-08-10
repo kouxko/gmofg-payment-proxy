@@ -261,6 +261,16 @@ pub(super) fn is_stale_adb_transport_error(error: &AppError) -> bool {
         || message.contains("more than one device or emulator")
 }
 
+/// 判断 ADB 端口映射是否已经不存在。
+///
+/// `adb forward/reverse --remove` 不是严格幂等的：映射已经被 ADB、设备重连或前一次
+/// 清理删除时，命令会以非零状态退出。对停止流程而言，这个结果等价于“清理完成”，
+/// 不能因此把已经停止的 VPN 重新标记为失败，也不能继续保留陈旧的端口所有权。
+pub(super) fn is_missing_adb_listener_error(error: &AppError) -> bool {
+    let message = error.view_model.message.to_ascii_lowercase();
+    message.contains("listener 'tcp:") && message.contains("not found")
+}
+
 fn non_empty<'a>(preferred: &'a str, fallback: &'a str) -> &'a str {
     if preferred.trim().is_empty() {
         fallback.trim()

@@ -109,6 +109,31 @@ fn packaged_apk_candidates_include_windows_installed_and_portable_layout() {
     )));
 }
 
+#[tokio::test]
+async fn force_stop_companion_closes_tun_without_control_socket() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(RecordingRunner::default());
+    let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+    *adapter.selected_serial.write().unwrap() = Some("SER123".into());
+
+    let status = adapter.force_stop_companion().await.unwrap();
+
+    assert_eq!(status.state, AndroidNetworkState::Stopped);
+    assert!(status.verified);
+    assert_eq!(status.transport, AndroidControlTransport::AdbForceStop);
+    assert_eq!(
+        *runner.calls.lock().unwrap(),
+        vec![vec![
+            "-s",
+            "SER123",
+            "shell",
+            "am",
+            "force-stop",
+            ANDROID_COMPANION_PACKAGE,
+        ]]
+    );
+}
+
 #[derive(Debug)]
 struct FakeRunner;
 
@@ -398,7 +423,7 @@ async fn stale_multi_device_forward_fails_without_mutating_other_transports() {
 }
 
 #[test]
-fn forward_cleanup_failure_is_observable_after_successful_request() {
+fn real_forward_cleanup_failure_is_reported_after_successful_control_request() {
     let cleanup = Err(AppError::new(
         "ANDROID_ADB_COMMAND_FAILED",
         "cannot remove forward",
@@ -406,7 +431,35 @@ fn forward_cleanup_failure_is_observable_after_successful_request() {
     let error = reconcile_forward_cleanup(Ok("response"), cleanup).unwrap_err();
 
     assert_eq!(error.view_model.code, "ANDROID_ADB_FORWARD_CLEANUP_FAILED");
-    assert!(error.view_model.message.contains("cannot remove forward"));
+}
+
+#[test]
+fn missing_forward_listener_is_idempotent_after_successful_control_request() {
+    let cleanup = Err(AppError::new(
+        "ANDROID_ADB_COMMAND_FAILED",
+        "adb.exe: error: listener 'tcp:40163' not found",
+    ));
+
+    let response = reconcile_forward_cleanup(Ok("response"), cleanup).unwrap();
+
+    assert_eq!(response, "response");
+}
+
+#[test]
+fn missing_forward_listener_does_not_obscure_the_primary_error() {
+    let operation = Err::<(), _>(AppError::new(
+        "ANDROID_CONTROL_SOCKET_FAILED",
+        "control request failed",
+    ));
+    let cleanup = Err(AppError::new(
+        "ANDROID_ADB_COMMAND_FAILED",
+        "adb 命令失败：adb.exe: error: listener 'tcp:40163' not found",
+    ));
+
+    let error = reconcile_forward_cleanup(operation, cleanup).unwrap_err();
+
+    assert_eq!(error.view_model.code, "ANDROID_CONTROL_SOCKET_FAILED");
+    assert_eq!(error.view_model.message, "control request failed");
 }
 
 #[cfg(unix)]

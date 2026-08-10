@@ -14,8 +14,9 @@ use uuid::Uuid;
 use super::Application;
 use crate::{
     AndroidNetworkState, AppError, AppResult, OperationResultViewModel, ProxyWorkspace,
-    UiEventPayload, UiTone, WorkspaceChangeKind, WorkspaceChangedViewModel, WorkspaceId,
-    WorkspaceSummaryViewModel, WorkspaceValidationViewModel, parse_workspace_document,
+    UiEventPayload, UiTone, WORKSPACE_DOCUMENT_FORMAT_VERSION, WorkspaceChangeKind,
+    WorkspaceChangedViewModel, WorkspaceDocument, WorkspaceId, WorkspaceSummaryViewModel,
+    WorkspaceValidationViewModel, parse_workspace_document, serialize_workspace_document,
 };
 
 impl Application {
@@ -357,10 +358,24 @@ impl Application {
         let Some(document) = self.workspace_documents.pick_import_document().await? else {
             return Ok(cancelled("已取消导入 Workspace。"));
         };
-        parse_workspace_document(&document)?;
-        // 可移植文档只携带安全引用元数据，不携带系统密钥材料。跨机导入允许先保留
-        // 这些引用；真正启动引用它们的入口前，证书端口仍会要求在本机重新导入材料。
-        let workspace = self.workspaces.import_document(document).await?;
+        let parsed = parse_workspace_document(&document)?;
+        let mut workspaces = vec![parsed.workspace];
+        let restored = self
+            .restore_certificate_materials(&mut workspaces, parsed.certificate_materials)
+            .await?;
+        let workspace = match self.workspaces.import_workspace(workspaces.remove(0)).await {
+            Ok(workspace) => workspace,
+            Err(error) => {
+                return Err(match self.rollback_restored_certificates(&restored).await {
+                    Ok(()) => error,
+                    Err(cleanup) => {
+                        super::certificate_portability::certificate_operation_cleanup_error(
+                            error, cleanup,
+                        )
+                    }
+                });
+            }
+        };
         let selected = self
             .workspaces
             .list()
@@ -371,7 +386,7 @@ impl Application {
         Ok(OperationResultViewModel {
             success: true,
             cancelled: false,
-            message: "Workspace 已导入。".into(),
+            message: "Workspace 与证书材料已从单个文件导入。".into(),
             ui_tone: UiTone::Positive,
             entity_id: Some(workspace.id.to_string()),
             revision: Some(workspace.revision.get()),
@@ -385,7 +400,14 @@ impl Application {
         workspace_id: WorkspaceId,
     ) -> AppResult<OperationResultViewModel> {
         let workspace = self.workspaces.get(workspace_id).await?;
-        let document = self.workspaces.export_document(workspace_id).await?;
+        let certificate_materials = self
+            .export_certificate_materials(std::slice::from_ref(&workspace))
+            .await?;
+        let document = serialize_workspace_document(&WorkspaceDocument {
+            format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
+            workspace: workspace.clone(),
+            certificate_materials,
+        })?;
         let suggested_file_name =
             format!("{}.intercept-workspace", safe_file_stem(&workspace.name));
         if !self
@@ -398,7 +420,7 @@ impl Application {
         Ok(OperationResultViewModel {
             success: true,
             cancelled: false,
-            message: "Workspace 已导出。".into(),
+            message: "Workspace 与证书材料已导出到单个文件。".into(),
             ui_tone: UiTone::Positive,
             entity_id: Some(workspace.id.to_string()),
             revision: Some(workspace.revision.get()),

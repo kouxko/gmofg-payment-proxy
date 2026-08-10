@@ -20,6 +20,7 @@ use super::{
     ActiveReverseOwnership, ActiveRuntimeFacts, AndroidAdbAdapter, COMMAND_TIMEOUT,
     PreparedUsbProxyRuntime, ReverseCleanupOutcome, sha256_json,
 };
+use crate::adapters::android_adb::command::is_missing_adb_listener_error;
 
 impl AndroidAdbAdapter {
     pub(super) async fn remove_reverse_ports(
@@ -37,10 +38,12 @@ impl AndroidAdbAdapter {
                     COMMAND_TIMEOUT,
                 )
                 .await;
-            if let Err(error) = result {
+            if let Err(error) = result
+                && !is_missing_adb_listener_error(&error)
+            {
                 remaining_ports.push(port);
                 if first_error.is_none() {
-                    first_error = Some(error);
+                    first_error = Some(reverse_cleanup_error(&error, port));
                 }
             }
         }
@@ -99,6 +102,7 @@ impl AndroidAdbAdapter {
                 )
                 .await;
             if let Err(error) = result {
+                let error = reverse_create_error(&error, *device_port, desktop_listener_port);
                 let cleanup = self.remove_reverse_ports(serial, created).await;
                 if !cleanup.remaining_ports.is_empty() {
                     self.retain_reverse_ownership(ActiveReverseOwnership {
@@ -307,6 +311,28 @@ impl AndroidAdbAdapter {
     }
 }
 
+fn reverse_create_error(error: &AppError, device_port: u16, desktop_port: u16) -> AppError {
+    AppError::new(
+        "ANDROID_ADB_REVERSE_CREATE_FAILED",
+        format!(
+            "ADB 业务代理映射 tcp:{device_port} → tcp:{desktop_port} 创建失败：{}",
+            error.view_model.message
+        ),
+    )
+    .retryable("请保持设备在线，确认 ADB reverse 可用后重新启动设备网络接管。")
+}
+
+fn reverse_cleanup_error(error: &AppError, device_port: u16) -> AppError {
+    AppError::new(
+        "ANDROID_ADB_REVERSE_CLEANUP_FAILED",
+        format!(
+            "ADB 业务代理映射 tcp:{device_port} 清理失败：{}",
+            error.view_model.message
+        ),
+    )
+    .retryable("请保持设备在线并再次停止网络接管，或执行紧急恢复网络。")
+}
+
 #[cfg(test)]
 pub(super) fn allocated_reverse_ports(
     routes: &[AndroidProxyRouteActivation],
@@ -363,6 +389,18 @@ pub(super) fn combine_operation_and_cleanup(
     operation.view_model.suggested_action =
         Some("请保持设备在线并再次停止设备网络接管或执行紧急恢复，以重试清理残留映射。".into());
     operation
+}
+
+pub(super) fn combine_stop_failures(mut graceful: AppError, force_stop: &AppError) -> AppError {
+    let _ = write!(
+        graceful.view_model.message,
+        "；ADB 强制停止也失败：{}",
+        force_stop.view_model.message
+    );
+    graceful.view_model.retryable = true;
+    graceful.view_model.suggested_action =
+        Some("请保持 USB/ADB 连接后执行紧急恢复；必要时在 Android VPN 设置中手动停止接管。".into());
+    graceful
 }
 
 fn reconcile_operation_cleanup<T>(operation: AppResult<T>, cleanup: AppResult<()>) -> AppResult<T> {

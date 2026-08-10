@@ -27,6 +27,7 @@ use support::*;
 mod android_runtime;
 mod breakpoints;
 mod capacity;
+mod diagnostics;
 mod events;
 mod listener_certificates;
 mod settings_lifecycle;

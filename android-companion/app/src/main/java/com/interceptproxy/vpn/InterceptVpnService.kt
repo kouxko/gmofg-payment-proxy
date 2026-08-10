@@ -205,7 +205,10 @@ class InterceptVpnService : VpnService() {
             .addAddress("fd00:6970:7670::2", 128)
             .addRoute("0.0.0.0", 0)
             .addRoute("::", 0)
-            .let { PhysicalNetworkDns.addTo(it, this) }
+            // DNS 只用于把查询送入 TUN。Rust/tun2proxy 在本机用 Fake-IP 回答，
+            // 随后的原始域名通过 SOCKS5 和 adb reverse 交给桌面代理处理。
+            // 因此设备没有 Wi-Fi、蜂窝或系统 DNS 时仍可启动并代理目标应用。
+            .let(VpnLocalDns::addTo)
 
         for (target in profile.targetPackages) {
             // 非空 allowlist 的语义是：只有这些包进 VPN，系统和其他应用继续直连。

@@ -76,7 +76,7 @@ async fn routes_multiple_original_targets_to_independent_runtime_endpoints() {
 }
 
 #[tokio::test]
-async fn domain_route_matches_tun_ip_after_startup_resolution() {
+async fn domain_route_matches_desktop_resolved_ip_without_device_dns() {
     let profile = profile(vec![ProxyRoute {
         listener_id: "localhost".into(),
         destination: "localhost".into(),
@@ -87,7 +87,7 @@ async fn domain_route_matches_tun_ip_after_startup_resolution() {
             listener_id: "localhost".into(),
             original_destination: "localhost".into(),
             original_ports: vec![443],
-            resolved_original_ips: Vec::new(),
+            resolved_original_ips: vec![IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)],
             proxy_host: "127.0.0.1".into(),
             proxy_port: 18_080,
         }],
@@ -96,6 +96,33 @@ async fn domain_route_matches_tun_ip_after_startup_resolution() {
     assert_eq!(
         table.for_ip(IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 443),
         Some(&["127.0.0.1:18080".parse().unwrap()][..])
+    );
+}
+
+#[tokio::test]
+async fn domain_route_compiles_offline_and_matches_virtual_dns_domain() {
+    let profile = profile(vec![ProxyRoute {
+        listener_id: "offline-domain".into(),
+        destination: "offline.example".into(),
+        ports: vec![16_127],
+    }]);
+    let runtime = ProxyRuntimeConfiguration {
+        routes: vec![ResolvedProxyRoute {
+            listener_id: "offline-domain".into(),
+            original_destination: "offline.example".into(),
+            original_ports: vec![16_127],
+            resolved_original_ips: Vec::new(),
+            proxy_host: "127.0.0.1".into(),
+            proxy_port: 40_127,
+        }],
+    };
+
+    let table = ProxyRouteTable::compile(&profile, &runtime)
+        .await
+        .expect("没有设备 DNS 时域名路由也应由 Fake-IP + ADB 路径启动");
+    assert_eq!(
+        table.for_domain("offline.example", 16_127),
+        Some(&["127.0.0.1:40127".parse().unwrap()][..])
     );
 }
 

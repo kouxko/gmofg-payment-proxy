@@ -1,5 +1,6 @@
 import type { WorkspacePath } from "@/features/shell/workspace-navigation";
 import { systemPageHelpGuides } from "./system-page-help-guides";
+import { diagnosticPageHelpGuides } from "./diagnostic-page-help-guide";
 
 /**
  * 八个页面的内置操作手册数据。
@@ -62,6 +63,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
     "只接管设备网络方案中明确选择的安卓应用，由 Rust 完成透明代理路由、弱网执行、配置校验和状态判断。",
     ["检查连接工具", "选择目标设备", "安装设备端组件", "配置设备网络方案", "启动与恢复"],
   ),
+  ...diagnosticPageHelpGuides,
   "/console": {
     title: "运行监控",
     summary:

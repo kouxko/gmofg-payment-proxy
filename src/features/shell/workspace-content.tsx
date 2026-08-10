@@ -19,6 +19,7 @@ import { SettingsView } from "@/features/settings/settings-view";
 import { AndroidNetworkView } from "@/features/android-network/android-network-view";
 import { ListenersView } from "@/features/listeners/listeners-view";
 import { WorkspacesView } from "@/features/workspaces/workspaces-view";
+import { DiagnosticLogsView } from "@/features/diagnostics/diagnostic-logs-view";
 import { useWorkspaceNavigation } from "./workspace-navigation";
 
 export function WorkspaceContent() {
@@ -31,6 +32,8 @@ export function WorkspaceContent() {
       return <ListenersView />;
     case "/android-network":
       return <AndroidNetworkView />;
+    case "/diagnostics":
+      return <DiagnosticLogsView />;
     case "/capture":
       return <CaptureRoute />;
     case "/sessions":

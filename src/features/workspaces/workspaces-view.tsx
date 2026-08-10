@@ -13,12 +13,14 @@ import {
   Table,
   toast,
 } from "@heroui/react";
-import { ArrowDownToLine, ArrowUpFromLine, Copy, Plus, TrashBin } from "@gravity-ui/icons";
+import { ArrowUpFromLine, Copy, Plus, TrashBin } from "@gravity-ui/icons";
 import type { ProxyWorkspace, WorkspaceSummaryViewModel } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
+import { toneColor } from "@/lib/format";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { WorkspaceComponentsEditor } from "./workspace-components-editor";
+import { PortableExportDialog } from "./portable-export-dialog";
 
 export function WorkspacesView() {
   const list = useIpcQuery<WorkspaceSummaryViewModel[]>("workspace-list", () =>
@@ -30,6 +32,8 @@ export function WorkspacesView() {
   const [pendingAction, setPendingAction] = useState<string>();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [fullImportOpen, setFullImportOpen] = useState(false);
+  const [workspaceExportOpen, setWorkspaceExportOpen] = useState(false);
+  const [fullExportOpen, setFullExportOpen] = useState(false);
   const effectiveSelectedId = selectedId ?? list.data?.find((item) => item.selected)?.id ?? list.data?.[0]?.id;
   const selectedSummary = list.data?.find((item) => item.id === effectiveSelectedId);
   const detail = useIpcQuery<ProxyWorkspace>(
@@ -130,16 +134,26 @@ export function WorkspacesView() {
             })}>
               <ArrowUpFromLine className="size-4" />导入单个 Workspace
             </Button>
-            <Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("full-export", async () => {
-              const result = await callCommand(commands.applicationConfigurationExport());
-              toast(result.message, { variant: result.cancelled ? "default" : "success" });
-            })}><ArrowDownToLine className="size-4" />导出完整应用配置</Button>
+            <PortableExportDialog
+              isOpen={fullExportOpen}
+              onOpenChange={setFullExportOpen}
+              triggerLabel="导出完整应用配置"
+              heading="导出完整应用配置的敏感内容？"
+              description="文件可能包含全部 Workspace 引用的外部证书原文、Listener 服务端私钥、PKCS12/PFX 原文及明文密码。文件不会包含本机 MITM Root CA 私钥、抓包 Payload、系统密钥密文或运行状态。请仅保存在受控测试环境。"
+              confirmLabel="确认导出完整应用配置"
+              isDisabled={Boolean(pendingAction)}
+              onConfirm={() => void run("full-export", async () => {
+                const result = await callCommand(commands.applicationConfigurationExport());
+                toast(result.message, { variant: result.cancelled ? "default" : "success" });
+                setFullExportOpen(false);
+              })}
+            />
             <AlertDialog isOpen={fullImportOpen} onOpenChange={setFullImportOpen}>
               <Button variant="danger-soft" isDisabled={Boolean(pendingAction)}><ArrowUpFromLine className="size-4" />导入完整应用配置</Button>
               <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>
                 <AlertDialog.Header><AlertDialog.Heading>替换全部应用配置？</AlertDialog.Heading></AlertDialog.Header>
                 <AlertDialog.Body>导入会原子替换全部 Workspace、Android 设备网络方案、当前选择和可移植全局设置。请先导出备份。</AlertDialog.Body>
-                <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("full-import", async () => { const result = await callCommand(commands.applicationConfigurationImport()); toast(result.message, { variant: result.cancelled ? "default" : "success" }); setFullImportOpen(false); setSelectedId(undefined); setDraft(undefined); await list.refresh(); })}>确认选择文件并替换</Button></AlertDialog.Footer>
+                <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("full-import", async () => { const result = await callCommand(commands.applicationConfigurationImport()); toast(result.message, { variant: result.cancelled ? "default" : toneColor(result.ui_tone) }); setFullImportOpen(false); setSelectedId(undefined); setDraft(undefined); await list.refresh(); })}>确认选择文件并替换</Button></AlertDialog.Footer>
               </AlertDialog.Dialog></AlertDialog.Container></AlertDialog.Backdrop>
             </AlertDialog>
           </div>
@@ -149,7 +163,7 @@ export function WorkspacesView() {
           <Alert.Content>
             <Alert.Title>两种可移植配置文件</Alert.Title>
             <Alert.Description>
-              单个 Workspace 文件包含该工作区的入口、规则、策略与 Android 设备网络方案；完整应用配置还包含全部 Workspace、当前选择和可移植全局设置。私钥与密码都不会写入文件。
+              单个 Workspace 文件包含该工作区的入口、规则、策略与 Android 设备网络方案；完整应用配置还包含全部 Workspace、当前选择和可移植全局设置。为便于测试迁移，文件可能包含 Listener 外部证书、服务端私钥、PKCS12/PFX 原文及明文密码，但绝不包含本机 MITM Root CA 私钥。
             </Alert.Description>
           </Alert.Content>
         </Alert>
@@ -213,7 +227,21 @@ export function WorkspacesView() {
             <Button fullWidth variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("save", saveWorkspace)}>保存</Button>
             <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("select", async () => { await callCommand(commands.workspaceSelect(effectiveDraft.id)); toast("已切换当前 Workspace；运行中的代理入口和设备网络接管保持不变。", { variant: "success" }); await list.refresh(); })}>设为当前 Workspace</Button>
             <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("copy", async () => { const copied = await callCommand(commands.workspaceCopy(effectiveDraft.id)); setSelectedId(copied.id); setDraft(copied); await list.refresh(); })}><Copy className="size-4" />复制</Button>
-            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("export", async () => { const result = await callCommand(commands.workspaceExport(effectiveDraft.id)); toast(result.message, { variant: result.cancelled ? "default" : "success" }); })}><ArrowDownToLine className="size-4" />导出当前 Workspace</Button>
+            <PortableExportDialog
+              isOpen={workspaceExportOpen}
+              onOpenChange={setWorkspaceExportOpen}
+              triggerLabel="导出当前 Workspace"
+              heading="导出当前 Workspace 的敏感配置？"
+              description="文件可能包含当前 Workspace 引用的外部证书原文、Listener 服务端私钥、PKCS12/PFX 原文及明文密码。文件不会包含本机 MITM Root CA 私钥、抓包 Payload、系统密钥密文或运行状态。请仅保存在受控测试环境。"
+              confirmLabel="确认导出当前 Workspace"
+              isDisabled={Boolean(pendingAction)}
+              fullWidth
+              onConfirm={() => void run("export", async () => {
+                const result = await callCommand(commands.workspaceExport(effectiveDraft.id));
+                toast(result.message, { variant: result.cancelled ? "default" : "success" });
+                setWorkspaceExportOpen(false);
+              })}
+            />
             <AlertDialog isOpen={deleteOpen} onOpenChange={setDeleteOpen}>
               <Button fullWidth variant="danger-soft"><TrashBin className="size-4" />删除</Button>
               <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>

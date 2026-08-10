@@ -17,6 +17,7 @@ mod events;
 mod facade;
 mod listeners;
 mod models;
+mod portable_certificates;
 mod ports;
 mod sessions;
 mod workspace_documents;
@@ -32,10 +33,12 @@ pub use events::{EventHub, EventReplay, EventSubscription};
 pub use facade::{Application, ApplicationDependencies};
 pub use listeners::InMemoryListenerRuntime;
 pub use models::*;
+pub use portable_certificates::*;
 pub use ports::*;
 pub use sessions::{InMemorySessionStore, SessionStore};
 pub use workspace_documents::{
-    MAX_WORKSPACE_DOCUMENT_BYTES, parse_workspace_document, serialize_workspace_document,
+    MAX_WORKSPACE_DOCUMENT_BYTES, WORKSPACE_DOCUMENT_FORMAT_VERSION, WorkspaceDocument,
+    parse_workspace_document, serialize_workspace_document,
 };
 pub use workspaces::{
     InMemoryWorkspaceDocumentStore, InMemoryWorkspaceStore, remap_workspace_identity,

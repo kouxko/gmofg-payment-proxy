@@ -6,6 +6,7 @@ use crate::{
     ApplicationConfigurationDocument, OperationResultViewModel, PortableSettings, UiTone,
     parse_application_configuration, serialize_application_configuration,
 };
+use chrono::Utc;
 
 impl Application {
     pub async fn application_configuration_export(&self) -> AppResult<OperationResultViewModel> {
@@ -20,11 +21,13 @@ impl Application {
             workspaces.push(self.workspaces.get(summary.id).await?);
         }
         let settings = self.settings.get().await?;
+        let certificate_materials = self.export_certificate_materials(&workspaces).await?;
         let document = ApplicationConfigurationDocument {
             format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
             selected_workspace_id,
             workspaces,
             settings: PortableSettings::from(&settings.stored),
+            certificate_materials,
         };
         let bytes = serialize_application_configuration(&document)?;
         let saved = self
@@ -35,7 +38,7 @@ impl Application {
             success: saved,
             cancelled: !saved,
             message: if saved {
-                "完整应用配置已导出。".into()
+                "完整应用配置与证书材料已导出到单个文件。".into()
             } else {
                 "已取消导出完整应用配置。".into()
             },
@@ -67,7 +70,7 @@ impl Application {
                 requires_restart: false,
             });
         };
-        let document = parse_application_configuration(&bytes)?;
+        let mut document = parse_application_configuration(&bytes)?;
         let imported_settings = document.settings.to_draft(None);
         let settings_validation = self.settings.validate(&imported_settings).await?;
         if !settings_validation.valid {
@@ -78,22 +81,70 @@ impl Application {
             ));
         }
         let mut has_android_network_profiles = false;
+        let mut old_workspaces = Vec::new();
         for summary in self.workspaces.list().await? {
             let current = self.workspaces.get(summary.id).await?;
             self.ensure_workspace_not_running(&current).await?;
             has_android_network_profiles |= !current.android_network_profiles.is_empty();
+            old_workspaces.push(current);
         }
         // 完整替换会移除所有本地 Profile 元数据。即使本地存储已经为空，设备端仍可能
         // 残留一个无法映射回 Workspace 的运行态，因此在控制适配器可用时仍主动确认；
         // 只有旧配置确实包含 Profile 时，离线或未选设备才必须阻止替换。
         self.ensure_android_network_replacement_safe(has_android_network_profiles)
             .await?;
-        self.configuration_store.replace_all(document).await?;
+        let materials = document.certificate_materials.clone();
+        let restored = self
+            .restore_certificate_materials(&mut document.workspaces, materials)
+            .await?;
+        let imported_workspaces = document.workspaces.clone();
+        if let Err(error) = self.configuration_store.replace_all(document).await {
+            return Err(match self.rollback_restored_certificates(&restored).await {
+                Ok(()) => error,
+                Err(cleanup) => {
+                    super::certificate_portability::certificate_operation_cleanup_error(
+                        error, cleanup,
+                    )
+                }
+            });
+        }
+        let cleanup_warning = self
+            .discard_replaced_certificate_materials(&old_workspaces, &imported_workspaces)
+            .await
+            .err();
+        if let Some(error) = &cleanup_warning {
+            self.events.publish(
+                None,
+                Utc::now(),
+                None,
+                None,
+                crate::UiEventPayload::ResourceWarning {
+                    message: error.view_model.message.clone(),
+                },
+            );
+        }
+        let (message, ui_tone) = cleanup_warning.as_ref().map_or_else(
+            || {
+                (
+                    "完整应用配置已原子替换；全局设置将在下次启动代理时生效。".into(),
+                    UiTone::Positive,
+                )
+            },
+            |error| {
+                (
+                    format!(
+                        "完整应用配置已导入；旧证书材料清理未全部完成：{}",
+                        error.view_model.message
+                    ),
+                    UiTone::Warning,
+                )
+            },
+        );
         Ok(OperationResultViewModel {
             success: true,
             cancelled: false,
-            message: "完整应用配置已原子替换；全局设置将在下次启动代理时生效。".into(),
-            ui_tone: UiTone::Positive,
+            message,
+            ui_tone,
             entity_id: None,
             revision: None,
             requires_restart: true,

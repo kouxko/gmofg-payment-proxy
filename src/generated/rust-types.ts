@@ -14,6 +14,7 @@ export const commands = {
 	 */
 	appSubscribeEvents: (afterEventId: number, onEvent: Channel<UiEventEnvelope>) => typedError<SubscriptionAckViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_subscribe_events", { afterEventId, onEvent })),
 	appUnsubscribeEvents: (subscriptionId: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_unsubscribe_events", { subscriptionId })),
+	diagnosticLogQuery: (query: DiagnosticLogQuery) => typedError<DiagnosticLogPageViewModel, AppErrorViewModel>(__TAURI_INVOKE("diagnostic_log_query", { query })),
 	androidAdbGet: () => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_get")),
 	androidAdbSelect: (serial: string) => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_select", { serial })),
 	androidDeviceList: () => typedError<AndroidDeviceViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_device_list")),
@@ -517,6 +518,51 @@ export type ConnectionHealthViewModel = {
 	detail: string,
 	ui_tone: UiTone,
 };
+
+/**  生产者提交的脱敏日志。禁止写入报文正文、密码、私钥或 PKCS12 字节。 */
+export type DiagnosticLogEntryViewModel = {
+	level: DiagnosticLogLevel,
+	stage: DiagnosticLogStage,
+	summary: string,
+	detail: string | null,
+	device_serial: string | null,
+	listener_id: string | null,
+	profile_id: string | null,
+};
+
+export type DiagnosticLogLevel = "info" | "warning" | "error";
+
+export type DiagnosticLogPageViewModel = {
+	rows: DiagnosticLogRowViewModel[],
+	current_cursor: number,
+	retained_count: number,
+	truncated: boolean,
+	empty_message: string,
+};
+
+export type DiagnosticLogQuery = {
+	keyword: string | null,
+	after_event_id: number | null,
+	limit: number,
+};
+
+export type DiagnosticLogRowViewModel = {
+	event_id: number,
+	occurred_at: string,
+	level: DiagnosticLogLevel,
+	level_text: string,
+	stage: DiagnosticLogStage,
+	stage_text: string,
+	summary: string,
+	detail: string | null,
+	device_serial: string | null,
+	listener_id: string | null,
+	profile_id: string | null,
+	ui_tone: UiTone,
+};
+
+/**  跨桌面、ADB、Companion 与代理链路共用的诊断阶段。 */
+export type DiagnosticLogStage = "system" | "adb_forward_control" | "adb_reverse_business" | "desktop_dns" | "companion" | "vpn" | "tun" | "app_selection" | "route_activation" | "listener" | "downstream_tls" | "upstream_tls" | "http" | "stop_fallback" | "cleanup";
 
 /**  Rust 判断某操作不可用时给出的稳定原因。 */
 export type DisabledReason = {
@@ -1092,7 +1138,7 @@ export type UiEventEnvelope = {
 };
 
 /**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
-export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
+export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
 	message: string,
 } } | { type: "operation_failed"; data: AppErrorViewModel } | { type: "snapshot_required"; data: {
 	reason: string,

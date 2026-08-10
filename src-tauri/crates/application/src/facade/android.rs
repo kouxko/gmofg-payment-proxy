@@ -1,15 +1,13 @@
+use super::Application;
 use crate::{
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidDeviceViewModel,
-    AndroidNetworkActivation, AndroidNetworkProfile, AndroidNetworkProfileSummary,
-    AndroidNetworkState, AndroidNetworkStatusViewModel, AndroidPackageViewModel,
-    AndroidProfileEditIntent, AndroidProxyRouteActivation, AndroidTargetApplication, AppError,
-    AppResult, OperationResultViewModel,
+    AndroidNetworkActivation, AndroidNetworkProfile, AndroidNetworkState,
+    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidProxyRouteActivation,
+    AndroidTargetApplication, AppError, AppResult, OperationResultViewModel,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use uuid::Uuid;
-
-use super::Application;
 mod packages;
+mod profiles;
 mod runtime;
 #[cfg(test)]
 use packages::filter_packages;
@@ -23,104 +21,10 @@ impl Application {
     pub async fn android_companion_update(&self) -> AppResult<AndroidCompanionInstallViewModel> {
         self.android.companion_install(true).await
     }
-
     pub async fn android_vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         let status = self.android.vpn_open_consent().await?;
         self.publish_android_vpn_status(&status);
         Ok(status)
-    }
-
-    pub async fn device_network_profile_list(
-        &self,
-    ) -> AppResult<Vec<AndroidNetworkProfileSummary>> {
-        let workspace = self.selected_workspace().await?;
-        Ok(workspace
-            .android_network_profiles
-            .iter()
-            .map(AndroidNetworkProfileSummary::from)
-            .collect())
-    }
-
-    /// 由 Rust 生成稳定方案 ID 和完整网络默认值；展示层不得自行构造领域对象。
-    pub fn device_network_profile_new(&self) -> AndroidNetworkProfile {
-        AndroidNetworkProfile {
-            id: Uuid::new_v4().to_string(),
-            name: "新建设备网络方案".into(),
-            target_applications: Vec::new(),
-            destination_targets: Vec::new(),
-            proxy_routes: Vec::new(),
-            confirmed_shared_uids: BTreeSet::default(),
-            auto_resume_after_reboot: false,
-            weak_network: intercept_proxy_domain::WeakNetworkProfile::default(),
-        }
-    }
-
-    pub async fn device_network_profile_get(
-        &self,
-        profile_id: String,
-    ) -> AppResult<AndroidNetworkProfile> {
-        validate_profile_id(&profile_id)?;
-        self.selected_workspace()
-            .await?
-            .android_network_profiles
-            .into_iter()
-            .find(|profile| profile.id == profile_id)
-            .ok_or_else(|| {
-                AppError::new(
-                    "ANDROID_PROFILE_NOT_FOUND",
-                    "当前 Workspace 中不存在该设备网络方案。",
-                )
-                .entity(profile_id)
-            })
-    }
-
-    /// 将页面编辑意图规范化为完整 Profile。
-    ///
-    /// 选择共享 UID 应用时，Rust 自动选择整个 UID 组，并把这次明确点击记录为整组确认；
-    /// 取消时整组移除。前端不接触 UID 分组或嵌套默认值。
-    pub async fn device_network_profile_apply_intent(
-        &self,
-        mut profile: AndroidNetworkProfile,
-        intent: AndroidProfileEditIntent,
-    ) -> AppResult<AndroidNetworkProfile> {
-        if let AndroidProfileEditIntent::TogglePackage {
-            package_name,
-            selected,
-        } = &intent
-        {
-            validate_package_name(package_name)?;
-            let packages = self.android_package_list().await?;
-            apply_package_toggle(&mut profile, &packages, package_name, *selected)?;
-        } else {
-            intent.apply_defaults(&mut profile);
-        }
-        Ok(profile)
-    }
-
-    pub async fn device_network_profile_save(
-        &self,
-        profile: AndroidNetworkProfile,
-    ) -> AppResult<AndroidNetworkProfile> {
-        profile.validate().map_err(AppError::from)?;
-        self.validate_profile_against_device(&profile).await?;
-        let _gate = self.mutation_gate.lock().await;
-        let mut workspace = self.selected_workspace().await?;
-        let current = workspace.clone();
-        if let Some(stored) = workspace
-            .android_network_profiles
-            .iter_mut()
-            .find(|stored| stored.id == profile.id)
-        {
-            *stored = profile.clone();
-        } else {
-            workspace.android_network_profiles.push(profile.clone());
-        }
-        workspace.validate().map_err(AppError::from)?;
-        self.ensure_workspace_update_allowed(&current, &workspace)
-            .await?;
-        let workspace = self.workspaces.save(workspace).await?;
-        self.publish_workspace(&workspace, true, crate::WorkspaceChangeKind::Updated);
-        Ok(profile)
     }
 
     pub async fn device_network_profile_delete(
@@ -198,7 +102,34 @@ impl Application {
         let activation = Self::android_activation(&workspace, profile)?;
         self.ensure_android_proxy_listeners_running(&workspace, &activation.profile)
             .await?;
-        let status = self.android.network_start(activation).await?;
+        let profile_id = activation.profile.id.clone();
+        self.publish_device_network_step(
+            crate::DiagnosticLogLevel::Info,
+            crate::DiagnosticLogStage::RouteActivation,
+            "开始建立 USB/ADB 代理通道",
+            Some(format!(
+                "目标应用 {} 个；透明代理路由 {} 条；控制走 adb forward，业务走 adb reverse。",
+                activation.profile.target_applications.len(),
+                activation.proxy_routes.len()
+            )),
+            None,
+            Some(profile_id.clone()),
+        );
+        let status = match self.android.network_start(activation).await {
+            Ok(status) => status,
+            Err(error) => {
+                self.publish_device_network_error(&error, Some(profile_id));
+                return Err(error);
+            }
+        };
+        self.publish_device_network_step(
+            crate::DiagnosticLogLevel::Info,
+            crate::DiagnosticLogStage::AdbReverseBusiness,
+            "USB/ADB 业务映射已生效",
+            Some("设备连接本机临时端口，ADB 将业务连接反向映射到桌面代理入口。".into()),
+            Some(status.serial.clone()),
+            status.active_profile_id.clone(),
+        );
         self.publish_android_vpn_status(&status);
         Ok(status)
     }
@@ -216,14 +147,60 @@ impl Application {
         let activation = Self::android_activation(&workspace, profile)?;
         self.ensure_android_proxy_listeners_running(&workspace, &activation.profile)
             .await?;
-        let status = self.android.network_apply(activation).await?;
+        let profile_id = activation.profile.id.clone();
+        self.publish_device_network_step(
+            crate::DiagnosticLogLevel::Info,
+            crate::DiagnosticLogStage::RouteActivation,
+            "开始更新 USB/ADB 代理通道",
+            Some(format!(
+                "透明代理路由 {} 条。",
+                activation.proxy_routes.len()
+            )),
+            None,
+            Some(profile_id.clone()),
+        );
+        let status = match self.android.network_apply(activation).await {
+            Ok(status) => status,
+            Err(error) => {
+                self.publish_device_network_error(&error, Some(profile_id));
+                return Err(error);
+            }
+        };
         self.publish_android_vpn_status(&status);
         Ok(status)
     }
 
     pub async fn device_network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        let status = self.android.network_stop().await?;
+        let status = match self.android.network_stop().await {
+            Ok(status) => status,
+            Err(error) => {
+                self.publish_device_network_error(&error, None);
+                return Err(error);
+            }
+        };
+        let (level, stage, summary) =
+            if status.transport == crate::AndroidControlTransport::AdbForceStop {
+                (
+                    crate::DiagnosticLogLevel::Warning,
+                    crate::DiagnosticLogStage::StopFallback,
+                    "控制通道不可用，已通过 ADB 强制停止设备端组件",
+                )
+            } else {
+                (
+                    crate::DiagnosticLogLevel::Info,
+                    crate::DiagnosticLogStage::Cleanup,
+                    "设备网络接管已停止并清理 ADB 映射",
+                )
+            };
+        self.publish_device_network_step(
+            level,
+            stage,
+            summary,
+            (!status.message.is_empty()).then(|| status.message.clone()),
+            Some(status.serial.clone()),
+            status.active_profile_id.clone(),
+        );
         self.publish_android_vpn_status(&status);
         Ok(status)
     }
@@ -232,7 +209,21 @@ impl Application {
         &self,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        let status = self.android.emergency_restore().await?;
+        let status = match self.android.emergency_restore().await {
+            Ok(status) => status,
+            Err(error) => {
+                self.publish_device_network_error(&error, None);
+                return Err(error);
+            }
+        };
+        self.publish_device_network_step(
+            crate::DiagnosticLogLevel::Warning,
+            crate::DiagnosticLogStage::StopFallback,
+            "已执行紧急恢复并清理 USB/ADB 映射",
+            (!status.message.is_empty()).then(|| status.message.clone()),
+            Some(status.serial.clone()),
+            status.active_profile_id.clone(),
+        );
         self.publish_android_vpn_status(&status);
         Ok(status)
     }
@@ -322,6 +313,27 @@ impl Application {
                     format!("代理入口“{}”尚未启用。", listener.name),
                 )
                 .entity(listener.id.to_string()));
+            }
+            let bind_address = listener
+                .bind_address
+                .parse::<std::net::IpAddr>()
+                .map_err(|_| {
+                    AppError::new(
+                        "ANDROID_PROXY_LISTENER_BIND_INVALID",
+                        format!("代理入口“{}”的绑定地址无效。", listener.name),
+                    )
+                    .entity(listener.id.to_string())
+                })?;
+            if !bind_address.is_loopback() && !bind_address.is_unspecified() {
+                return Err(AppError::new(
+                    "ANDROID_PROXY_LISTENER_BIND_UNREACHABLE",
+                    format!(
+                        "代理入口“{}”不能用于 USB 透明代理路由；入口必须绑定回环地址或未指定地址。",
+                        listener.name
+                    ),
+                )
+                .entity(listener.id.to_string())
+                .retryable("请将入口绑定地址改为 127.0.0.1、::1、0.0.0.0 或 ::。"));
             }
             proxy_routes.push(AndroidProxyRouteActivation {
                 listener_id: listener.id.to_string(),
