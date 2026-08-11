@@ -50,6 +50,12 @@ fn message(text: &str) -> MessageContentViewModel {
         body_bytes: text.as_bytes().to_vec(),
         json: None,
         content_length: text.len(),
+        media_type: Some("application/json".into()),
+        charset: None,
+        content_kind: crate::MessageContentKind::Json,
+        codec_id: Some("test-prefix".into()),
+        decode_error: None,
+        query_string: None,
     }
 }
 
@@ -99,6 +105,23 @@ fn format_json_uses_injected_product_codec_and_recalculates_length() {
         formatted.message.body_bytes,
         formatted.message.body_text.unwrap().into_bytes()
     );
+}
+
+#[test]
+fn format_json_rejects_non_json_media_types() {
+    let detail = detail(MessageStage::Request);
+    let mut xml = message("<result>ok</result>");
+    xml.media_type = Some("application/xml".into());
+    xml.content_kind = crate::MessageContentKind::Xml;
+    let error = validator()
+        .format_json(BreakpointDraft {
+            breakpoint_id: detail.summary.breakpoint_id,
+            expected_revision: 1,
+            message: xml,
+        })
+        .expect_err("XML must not be treated as JSON");
+
+    assert_eq!(error.view_model.code, "JSON_MEDIA_TYPE_REQUIRED");
 }
 
 #[test]

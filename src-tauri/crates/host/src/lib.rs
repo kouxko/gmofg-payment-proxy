@@ -23,9 +23,9 @@ use intercept_proxy_infrastructure::DpapiProtector;
 #[cfg(target_os = "macos")]
 use intercept_proxy_infrastructure::MacKeychainProtector;
 use intercept_proxy_infrastructure::{
-    AndroidAdbAdapter, InfrastructureError, InfrastructureServiceBundle, NativeFileDialog,
-    RetiredProxyAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector,
-    SqliteStore,
+    AndroidAdbAdapter, HeaderBodyCodecResolver, InfrastructureError, InfrastructureServiceBundle,
+    NativeFileDialog, RetiredProxyAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
+    SecretProtector, SqliteStore,
 };
 use intercept_proxy_product_api::{
     ProductError, ProductProfile, ProductStorageNamespace, validate_product_profile,
@@ -216,9 +216,9 @@ impl ApplicationHostBuilder {
                 capture: services.capture,
                 sessions: services.sessions,
                 breakpoints,
-                breakpoint_validation: Arc::new(BreakpointValidator::new(
-                    self.product.body_codec(),
-                )),
+                breakpoint_validation: Arc::new(BreakpointValidator::new_with_resolver(Arc::new(
+                    HeaderBodyCodecResolver,
+                ))),
                 rules: services.rules,
                 faults: services.faults,
                 certificates: services.certificates,

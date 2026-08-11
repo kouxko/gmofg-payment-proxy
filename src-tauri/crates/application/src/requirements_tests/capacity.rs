@@ -6,6 +6,9 @@ fn logical_byte_accounting_is_exact_and_repeatable() {
     let expected_message = MessageContentViewModel::ENTITY_FIXED_OVERHEAD_BYTES
         + "content-type".len() as u64
         + "application/json".len() as u64
+        + "application/json".len() as u64
+        + "utf-8".len() as u64
+        + 5
         + 5;
     assert_eq!(message.logical_bytes(), expected_message);
     assert_eq!(message.logical_bytes(), message.clone().logical_bytes());

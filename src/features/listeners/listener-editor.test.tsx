@@ -165,7 +165,7 @@ describe("ListenerEditor", () => {
 
     expect(screen.queryByRole("switch", { name: "启用 allowlist MITM" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "固定 Server URL" })).toHaveValue("https://server.test:443");
-    expect(screen.getByRole("button", { name: "测试上游 TLS / mTLS 握手" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeEnabled();
   });
 
   it("pending 状态禁用所有异步凭据和 TLS 操作", () => {
@@ -190,6 +190,32 @@ describe("ListenerEditor", () => {
     expect(screen.getByRole("button", { name: "保护中…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "导入 Server CA" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "导入 client.p12" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "测试上游 TLS / mTLS 握手" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeDisabled();
+  });
+
+  it("HTTP 固定 Server 仅显示通用连接测试，不显示 TLS 专属配置", () => {
+    const props = editorProps({
+      listener: fixedListener("fixed-http", "HTTP Server", 9080, "http://server.test:8080"),
+      tlsTest: {
+        listener_id: "fixed-http",
+        upstream_origin: "http://server.test:8080",
+        resolved_address: "127.0.0.1:8080",
+        scheme: "http",
+        transport: "TCP",
+        tls: null,
+        elapsed_millis: 5,
+        message: "Server 连接成功。",
+        ui_tone: "positive",
+      },
+    });
+    render(<ListenerEditor {...props} />);
+
+    expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "导入 Server CA" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导入 client.p12" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "校验上游服务器主机名" })).not.toBeInTheDocument();
+    expect(screen.getByText(/127\.0\.0\.1:8080 · 5 ms/)).toBeVisible();
+    expect(screen.queryByText(/协商：/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/客户端身份：/)).not.toBeInTheDocument();
   });
 });

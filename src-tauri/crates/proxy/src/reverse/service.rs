@@ -1,17 +1,18 @@
 use super::{
     Arc, AsyncWriteExt, BoxIo, CancellationToken, ChannelId, ClientNetwork, ClientTlsAdapter,
-    ConnectionAcceptor, ConnectionAdmission, ConnectionService, ErrorCode, HyperUpstreamConnector,
-    Instant, IpAddr, JoinSet, MessageLimits, PipelinePorts, ProxyError, Result,
-    ReverseConnectionAcceptor, ReverseProxyConfig, ReverseUpstreamTls, SystemClock, TcpListener,
-    TcpStream, TlsAcceptor, UpstreamEndpoint, UpstreamTlsHandshakeResult, Uuid,
-    build_client_connector, build_server_acceptor, peer_is_allowed, relay_exact, timeout_cancel,
+    ConnectionAcceptor, ConnectionAdmission, ConnectionService, DownstreamTlsAcceptor, ErrorCode,
+    HyperUpstreamConnector, Instant, IpAddr, JoinSet, MessageLimits, PipelinePorts, ProxyError,
+    Result, ReverseConnectionAcceptor, ReverseProxyConfig, ReverseUpstreamTls, SystemClock,
+    TcpListener, TcpStream, UpstreamConnectionTestResult, UpstreamEndpoint, UpstreamScheme,
+    UpstreamTlsHandshakeResult, UpstreamTransport, Uuid, build_client_connector, peer_is_allowed,
+    relay_exact, timeout_cancel,
 };
 
 #[derive(Clone)]
 pub struct ReverseProxyService {
     config: ReverseProxyConfig,
     endpoint: UpstreamEndpoint,
-    downstream_acceptor: Option<TlsAcceptor>,
+    downstream_acceptor: Option<DownstreamTlsAcceptor>,
     upstream_connector: Option<ClientTlsAdapter>,
     pipeline: Option<ConnectionService>,
     pipeline_channel: Option<ChannelId>,
@@ -43,7 +44,7 @@ impl ReverseProxyService {
         let downstream_acceptor = config
             .downstream_tls
             .as_ref()
-            .map(build_server_acceptor)
+            .map(DownstreamTlsAcceptor::new)
             .transpose()?;
         let upstream_connector = match (&config.upstream_tls, endpoint.uses_tls) {
             (Some(settings), true) => Some(build_client_connector(settings)?),
@@ -75,24 +76,10 @@ impl ReverseProxyService {
         })
     }
 
-    /// 真实连接固定上游并完成 TLS 握手，但不发送 HTTP 请求。
+    /// 真实解析并连接固定上游，但不发送 HTTP 请求。
     ///
-    /// 该探测复用 Listener 启动时完全相同的 DNS、系统/自定义 CA、主机名验证、TLS 1.2
-    /// 和可选客户端身份配置，因此可以在启动代理前识别错误密码、错误 CA、证书用途、
-    /// 主机名不匹配、Server 强制 mTLS 但未配置客户端身份等问题。
-    pub async fn test_upstream_tls(&self) -> Result<UpstreamTlsHandshakeResult> {
-        if !self.endpoint.uses_tls {
-            return Err(ProxyError::new(
-                ErrorCode::ConfigInvalid,
-                "upstream origin uses HTTP and has no TLS handshake to test",
-            ));
-        }
-        let connector = self.upstream_connector.as_ref().ok_or_else(|| {
-            ProxyError::new(
-                ErrorCode::CertificateNotReady,
-                "upstream TLS connector is not configured",
-            )
-        })?;
+    /// HTTP 验证 DNS/TCP；HTTPS 继续使用运行时相同的 TLS、CA、主机名与 mTLS 配置。
+    pub async fn test_upstream_connection(&self) -> Result<UpstreamConnectionTestResult> {
         let started = Instant::now();
         let tcp = tokio::time::timeout(
             self.config.connect_timeout,
@@ -108,30 +95,73 @@ impl ReverseProxyService {
         .map_err(|error| ProxyError::io("connect reverse upstream", &error))?;
         tcp.set_nodelay(true)
             .map_err(|error| ProxyError::io("configure reverse upstream", &error))?;
-        let connected = tokio::time::timeout(
-            self.config.connect_timeout,
-            connector.connect_with_evidence(&self.endpoint.host, Box::new(tcp)),
-        )
-        .await
-        .map_err(|_| {
-            ProxyError::new(
-                ErrorCode::TlsHandshakeFailed,
-                "reverse upstream TLS handshake timed out",
+        let scheme = if self.endpoint.uses_tls {
+            UpstreamScheme::Https
+        } else {
+            UpstreamScheme::Http
+        };
+        let tls = if let Some(connector) = &self.upstream_connector {
+            let connected = tokio::time::timeout(
+                self.config.connect_timeout,
+                connector.connect_with_evidence(&self.endpoint.host, Box::new(tcp)),
             )
-        })?
-        .map_err(|error| ProxyError::new(ErrorCode::TlsHandshakeFailed, error.to_string()))?;
+            .await
+            .map_err(|_| {
+                ProxyError::new(
+                    ErrorCode::TlsHandshakeFailed,
+                    "reverse upstream TLS handshake timed out",
+                )
+            })?
+            .map_err(|error| ProxyError::new(ErrorCode::TlsHandshakeFailed, error.to_string()))?;
+            let elapsed_millis = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+            let mut io = connected.io;
+            let _ = io.shutdown().await;
+            Some(UpstreamTlsHandshakeResult {
+                resolved_address: self.endpoint.address,
+                tls_version: connected.evidence.tls_version,
+                cipher_suite: connected.evidence.cipher_suite,
+                peer_subject: connected.evidence.peer.subject_summary,
+                peer_sha256_fingerprint: connected.evidence.peer.sha256_fingerprint,
+                hostname_verification_enabled: connected.evidence.hostname_verification_enabled,
+                client_identity_configured: connected.evidence.client_identity_configured,
+                elapsed_millis,
+            })
+        } else {
+            let mut tcp = tcp;
+            let _ = tcp.shutdown().await;
+            None
+        };
         let elapsed_millis = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
-        let mut io = connected.io;
-        let _ = io.shutdown().await;
-        Ok(UpstreamTlsHandshakeResult {
+        Ok(UpstreamConnectionTestResult {
             resolved_address: self.endpoint.address,
-            tls_version: connected.evidence.tls_version,
-            cipher_suite: connected.evidence.cipher_suite,
-            peer_subject: connected.evidence.peer.subject_summary,
-            peer_sha256_fingerprint: connected.evidence.peer.sha256_fingerprint,
-            hostname_verification_enabled: connected.evidence.hostname_verification_enabled,
-            client_identity_configured: connected.evidence.client_identity_configured,
+            scheme,
+            transport: if tls.is_some() {
+                UpstreamTransport::Tls
+            } else {
+                UpstreamTransport::Tcp
+            },
+            tls,
             elapsed_millis,
+        })
+    }
+
+    /// 兼容旧调用方：仅接受 HTTPS，并返回原有平铺 TLS 证据。
+    ///
+    /// 该探测复用 Listener 启动时完全相同的 DNS、系统/自定义 CA、主机名验证、TLS 1.2
+    /// 和可选客户端身份配置，因此可以在启动代理前识别错误密码、错误 CA、证书用途、
+    /// 主机名不匹配、Server 强制 mTLS 但未配置客户端身份等问题。
+    pub async fn test_upstream_tls(&self) -> Result<UpstreamTlsHandshakeResult> {
+        if !self.endpoint.uses_tls {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "upstream origin uses HTTP and has no TLS handshake to test",
+            ));
+        }
+        self.test_upstream_connection().await?.tls.ok_or_else(|| {
+            ProxyError::new(
+                ErrorCode::CertificateNotReady,
+                "upstream TLS connector is not configured",
+            )
         })
     }
 
@@ -245,15 +275,20 @@ impl ReverseProxyService {
             .set_nodelay(true)
             .map_err(|error| ProxyError::io("configure reverse downstream", &error))?;
         let downstream: BoxIo = if let Some(acceptor) = &self.downstream_acceptor {
-            let stream = timeout_cancel(
-                self.config.connect_timeout,
-                &cancellation,
-                acceptor.accept(downstream_tcp),
-                ErrorCode::TlsHandshakeFailed,
-            )
-            .await?
-            .map_err(|error| ProxyError::new(ErrorCode::TlsHandshakeFailed, error.to_string()))?;
-            Box::new(stream)
+            let context = crate::transport::ConnectionContext {
+                runtime_epoch: Uuid::new_v4(),
+                connection_id: Uuid::new_v4(),
+                channel: ChannelId::new("reverse-relay")?,
+                peer_addr: downstream_tcp.peer_addr().map_err(|error| {
+                    ProxyError::io("read reverse downstream peer address", &error)
+                })?,
+                accepted_at: std::time::SystemTime::now(),
+                tls_peer: None,
+            };
+            acceptor
+                .accept(Box::new(downstream_tcp), &context)
+                .await?
+                .io
         } else {
             Box::new(downstream_tcp)
         };

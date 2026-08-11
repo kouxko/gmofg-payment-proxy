@@ -6,7 +6,7 @@ import type {
   CertificateItemViewModel,
   ListenerCertificateDetailViewModel,
   ListenerOverviewViewModel,
-  ListenerUpstreamTlsTestViewModel,
+  ListenerUpstreamConnectionTestViewModel,
   ProxyListener,
   ProxyWorkspace,
   WorkspaceSummaryViewModel,
@@ -56,7 +56,7 @@ export function ListenersView() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [validation, setValidation] = useState<WorkspaceValidationViewModel>();
   const [pending, setPending] = useState<ListenerPending>();
-  const [tlsTest, setTlsTest] = useState<ListenerUpstreamTlsTestViewModel>();
+  const [tlsTest, setTlsTest] = useState<ListenerUpstreamConnectionTestViewModel>();
   const [tlsTestError, setTlsTestError] = useState<string>();
   const [basicUsername, setBasicUsername] = useState("");
   const [basicPassword, setBasicPassword] = useState("");
@@ -211,14 +211,14 @@ export function ListenersView() {
       ));
       setValidation(result);
       if (!result.valid) return;
-      // TLS 测试只读取当前草稿并建立一次临时上游连接，不持久化 Workspace。
+      // 连接测试只读取当前草稿并建立一次临时上游连接，不持久化 Workspace。
       // 因此其他 Listener 正在运行时也可以安全测试当前 Listener 的证书配置。
       const normalizedListener = result.normalized.listeners.find(
         (listener) => listener.id === selected.id,
       );
       if (!normalizedListener) throw new Error("当前代理监听已被删除，请刷新后重试。");
       const test = await callCommand(
-        commands.listenerTestUpstreamTls(
+        commands.listenerTestUpstreamConnection(
           result.normalized.id,
           result.normalized.revision,
           normalizedListener,

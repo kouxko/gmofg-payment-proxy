@@ -53,6 +53,27 @@ pub struct UpstreamTlsHandshakeResult {
     pub elapsed_millis: u64,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpstreamScheme {
+    Http,
+    Https,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UpstreamTransport {
+    Tcp,
+    Tls,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UpstreamConnectionTestResult {
+    pub resolved_address: SocketAddr,
+    pub scheme: UpstreamScheme,
+    pub transport: UpstreamTransport,
+    pub tls: Option<UpstreamTlsHandshakeResult>,
+    pub elapsed_millis: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct ReverseProxyConfig {
     pub bind_addr: SocketAddr,

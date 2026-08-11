@@ -175,6 +175,36 @@ impl Application {
             .await
     }
 
+    /// 按固定 Server scheme 执行真实连接测试：HTTP=DNS/TCP，HTTPS=DNS/TCP+TLS。
+    pub async fn listener_test_upstream_connection(
+        &self,
+        workspace_id: WorkspaceId,
+        expected_workspace_revision: u64,
+        listener: ProxyListener,
+        certificate_references: Vec<CertificateReference>,
+    ) -> AppResult<crate::ListenerUpstreamConnectionTestViewModel> {
+        let workspace = self.workspaces.get(workspace_id).await?;
+        let candidate = self
+            .listener_draft_workspace(
+                workspace,
+                expected_workspace_revision,
+                listener.clone(),
+                certificate_references,
+            )
+            .await?;
+        candidate.validate().map_err(AppError::from)?;
+        if listener.fixed_server.is_none() {
+            return Err(AppError::new(
+                "LISTENER_CONNECTION_TEST_UNSUPPORTED",
+                "该监听器未开启固定 Server，无法测试单一 Server 连接。",
+            )
+            .entity(listener.id.to_string()));
+        }
+        self.listener_runtime
+            .test_upstream_connection(candidate, listener)
+            .await
+    }
+
     /// 返回当前 Workspace 的入口配置与实际运行状态合并快照。
     ///
     /// 停止状态同样由 Rust 补齐，前端只渲染结果，不根据“运行状态列表里没有该 ID”

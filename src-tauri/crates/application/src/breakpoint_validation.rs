@@ -10,20 +10,42 @@ use intercept_proxy_product_api::BodyCodec;
 
 use crate::{
     AppError, AppResult, BreakpointDecision, BreakpointDecisionKind, BreakpointDetailViewModel,
-    BreakpointDraft, BreakpointValidationPort, BreakpointValidationViewModel,
+    BreakpointDraft, BreakpointValidationPort, BreakpointValidationViewModel, MessageContentKind,
     MessageContentViewModel, MessageStage,
 };
 
 /// 断点编辑在 Rust 侧的唯一校验器和规范化器。
 #[derive(Debug)]
 pub struct BreakpointValidator {
+    body_codec_resolver: Arc<dyn BreakpointBodyCodecResolver>,
+}
+
+pub trait BreakpointBodyCodecResolver: std::fmt::Debug + Send + Sync {
+    fn resolve(&self, message: &MessageContentViewModel) -> Arc<dyn BodyCodec>;
+}
+
+#[derive(Debug)]
+struct FixedBreakpointBodyCodecResolver {
     body_codec: Arc<dyn BodyCodec>,
+}
+
+impl BreakpointBodyCodecResolver for FixedBreakpointBodyCodecResolver {
+    fn resolve(&self, _message: &MessageContentViewModel) -> Arc<dyn BodyCodec> {
+        Arc::clone(&self.body_codec)
+    }
 }
 
 impl BreakpointValidator {
     #[must_use]
     pub fn new(body_codec: Arc<dyn BodyCodec>) -> Self {
-        Self { body_codec }
+        Self::new_with_resolver(Arc::new(FixedBreakpointBodyCodecResolver { body_codec }))
+    }
+
+    #[must_use]
+    pub fn new_with_resolver(body_codec_resolver: Arc<dyn BreakpointBodyCodecResolver>) -> Self {
+        Self {
+            body_codec_resolver,
+        }
     }
 
     fn normalize_message(
@@ -44,8 +66,9 @@ impl BreakpointValidator {
             ));
         }
         validate_headers(&message.headers)?;
+        let body_codec = self.body_codec_resolver.resolve(&message);
         if let Some(text) = message.body_text.as_deref() {
-            message.body_bytes = self.body_codec.encode(text).map_err(|error| {
+            message.body_bytes = body_codec.encode(text).map_err(|error| {
                 AppError::field(
                     error.code,
                     "报文正文无法使用当前产品编码器进行无损编码。",
@@ -55,19 +78,24 @@ impl BreakpointValidator {
         }
         message.content_length = message.body_bytes.len();
         set_content_length(&mut message.headers, message.content_length);
-        message.json = message
-            .body_text
-            .as_deref()
-            .filter(|text| !text.trim().is_empty())
-            .map(serde_json::from_str)
-            .transpose()
-            .map_err(|error| {
-                AppError::field(
-                    "JSON_INVALID",
-                    "报文 JSON 无效。",
-                    BTreeMap::from([("message.body_text".into(), vec![error.to_string()])]),
-                )
-            })?;
+        message.json = if message.content_kind == MessageContentKind::Json {
+            message
+                .body_text
+                .as_deref()
+                .filter(|text| !text.trim().is_empty())
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|error| {
+                    AppError::field(
+                        "JSON_INVALID",
+                        "报文 JSON 无效。",
+                        BTreeMap::from([("message.body_text".into(), vec![error.to_string()])]),
+                    )
+                })?
+        } else {
+            None
+        };
+        message.decode_error = None;
         Ok(message)
     }
 
@@ -95,6 +123,12 @@ impl BreakpointValidator {
 
 impl BreakpointValidationPort for BreakpointValidator {
     fn format_json(&self, mut draft: BreakpointDraft) -> AppResult<BreakpointDraft> {
+        if draft.message.content_kind != MessageContentKind::Json {
+            return Err(AppError::new(
+                "JSON_MEDIA_TYPE_REQUIRED",
+                "只有 JSON Content-Type 的报文可以执行 JSON 格式化。",
+            ));
+        }
         let text =
             draft.message.body_text.as_deref().ok_or_else(|| {
                 AppError::new("JSON_INVALID", "当前报文没有可格式化的文本 Body。")

@@ -32,6 +32,7 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::message::MessageLimits;
+use crate::reverse::{DownstreamTlsAcceptor, ReverseDownstreamTls};
 use crate::supervisor::ChannelId;
 use crate::traffic::TrafficDirection;
 use crate::transport::{BoxIo, ConnectionContext, PipelinePorts, traffic_schedule};
@@ -87,6 +88,7 @@ pub struct ForwardProxyService {
     authenticator: Arc<dyn ForwardProxyAuthenticator>,
     mitm: Option<Arc<ForwardMitmRuntime>>,
     pipeline: Option<Arc<ForwardPipelineRuntime>>,
+    downstream_tls: Option<DownstreamTlsAcceptor>,
 }
 
 impl ForwardProxyService {
@@ -100,7 +102,14 @@ impl ForwardProxyService {
             authenticator,
             mitm: None,
             pipeline: None,
+            downstream_tls: None,
         })
+    }
+
+    /// 在正向代理 HTTP 解析之前启用与固定监听一致的 TLS/mTLS 下游握手。
+    pub fn with_downstream_tls(mut self, settings: &ReverseDownstreamTls) -> Result<Self> {
+        self.downstream_tls = Some(DownstreamTlsAcceptor::new(settings)?);
+        Ok(self)
     }
 
     /// 将可解析的正向 HTTP/1.1 消息接入与 Reverse Listener 相同的应用管线。

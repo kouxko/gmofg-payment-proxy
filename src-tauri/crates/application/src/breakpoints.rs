@@ -362,6 +362,12 @@ mod tests {
             body_bytes: body.to_vec(),
             json: None,
             content_length: body.len(),
+            media_type: None,
+            charset: None,
+            content_kind: crate::MessageContentKind::Unknown,
+            codec_id: None,
+            decode_error: None,
+            query_string: None,
         }
     }
 

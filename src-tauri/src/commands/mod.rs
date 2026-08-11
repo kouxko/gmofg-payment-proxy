@@ -94,6 +94,7 @@ pub fn builder() -> Builder<Wry> {
             listener_overview,
             listener_start,
             listener_stop,
+            listener_test_upstream_connection,
             listener_test_upstream_tls,
             listener_import_downstream_server_identity,
             listener_import_downstream_client_trust,

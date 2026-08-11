@@ -16,6 +16,8 @@ use intercept_proxy_runtime::{
 };
 use serde_json::Value;
 
+use crate::adapters::body_codecs::decode_message_body;
+
 pub(super) fn content_view(
     body_codec: &dyn BodyCodec,
     message: &Message,
@@ -31,10 +33,27 @@ pub(super) fn content_view(
         })
         .collect::<Vec<_>>();
     let headers = display_headers(&raw_headers);
-    let body_text = decode_body(body_codec, &message.body).ok();
-    let json = body_text
-        .as_deref()
-        .and_then(|text| serde_json::from_str(text).ok());
+    let (metadata, body_text, codec_id, mut decode_error) =
+        decode_message_body(message, body_codec);
+    if codec_id.as_deref() == Some("unsupported") {
+        decode_error = Some(format!(
+            "unsupported charset: {}",
+            metadata.charset.as_deref().unwrap_or("unknown")
+        ));
+    }
+    let json = if metadata.content_kind == intercept_proxy_application::MessageContentKind::Json {
+        body_text
+            .as_deref()
+            .and_then(|text| match serde_json::from_str(text) {
+                Ok(value) => Some(value),
+                Err(error) => {
+                    decode_error = Some(format!("invalid JSON body: {error}"));
+                    None
+                }
+            })
+    } else {
+        None
+    };
     MessageContentViewModel {
         http_status: message.http_status(),
         start_line_bytes: message.start_line.as_bytes().to_vec(),
@@ -44,7 +63,24 @@ pub(super) fn content_view(
         body_bytes: message.body.to_vec(),
         json,
         content_length: message.body.len(),
+        media_type: metadata.media_type,
+        charset: metadata.charset,
+        content_kind: metadata.content_kind,
+        codec_id,
+        decode_error,
+        query_string: query_string(&message.start_line),
     }
+}
+
+fn query_string(start_line: &str) -> Option<String> {
+    let mut fields = start_line.split_ascii_whitespace();
+    let first = fields.next()?;
+    if first.starts_with("HTTP/") {
+        return None;
+    }
+    let target = fields.next()?;
+    let (_, query) = target.split_once('?')?;
+    Some(query.split('#').next().unwrap_or_default().to_owned())
 }
 
 pub(super) fn display_headers(

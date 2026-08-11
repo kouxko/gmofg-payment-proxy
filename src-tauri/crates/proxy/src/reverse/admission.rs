@@ -14,7 +14,7 @@ use crate::{ErrorCode, ProxyError, Result};
 
 #[derive(Clone)]
 pub(super) struct ReverseConnectionAcceptor {
-    pub(super) tls: Option<TlsAcceptor>,
+    pub(super) tls: Option<DownstreamTlsAcceptor>,
     pub(super) allowed_client_networks: Arc<Vec<ClientNetwork>>,
 }
 
@@ -46,7 +46,37 @@ impl ConnectionAcceptor for ReverseConnectionAcceptor {
         let Some(acceptor) = &self.tls else {
             return Ok(AcceptedConnection { io, tls_peer: None });
         };
-        let stream = acceptor.accept(io).await.map_err(|error| {
+        acceptor.accept(io, context).await
+    }
+}
+
+/// 可复用于固定转发和动态正向代理的下游 TLS 接受器。
+///
+/// 它只负责 TLS/mTLS 握手与客户端证书证据；网络 CIDR 准入由各监听器自身处理。
+#[derive(Clone)]
+pub struct DownstreamTlsAcceptor {
+    tls: TlsAcceptor,
+}
+
+impl std::fmt::Debug for DownstreamTlsAcceptor {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("DownstreamTlsAcceptor").finish()
+    }
+}
+
+impl DownstreamTlsAcceptor {
+    pub fn new(settings: &super::ReverseDownstreamTls) -> Result<Self> {
+        Ok(Self {
+            tls: super::build_server_acceptor(settings)?,
+        })
+    }
+
+    pub async fn accept(
+        &self,
+        io: BoxIo,
+        context: &ConnectionContext,
+    ) -> Result<AcceptedConnection> {
+        let stream = self.tls.accept(io).await.map_err(|error| {
             // 下游握手发生在 HTTP Session 创建之前。保留对端地址和 rustls 原始错误，
             // 让桌面诊断页能够区分 SNI、签名算法、协议版本和证书链等失败原因。
             tracing::warn!(

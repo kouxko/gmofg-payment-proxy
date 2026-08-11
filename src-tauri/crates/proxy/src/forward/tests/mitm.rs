@@ -31,7 +31,7 @@ async fn allowlisted_connect_is_mitm_and_preserves_unmodified_body_bytes() {
             let response_payload = response_payload.clone();
             async move {
                 assert_eq!(request.method(), Method::POST);
-                assert_eq!(request.uri(), "/binary");
+                assert_eq!(request.uri(), "/binary?mode=mitm&case=1");
                 let actual = request.into_body().collect().await.unwrap().to_bytes();
                 assert_eq!(actual, request_assertion);
                 Ok::<_, Infallible>(Response::new(Full::new(response_payload)))
@@ -96,16 +96,15 @@ async fn allowlisted_connect_is_mitm_and_preserves_unmodified_body_bytes() {
         .connect(ServerName::IpAddress(host.into()), TokioIo::new(upgraded))
         .await
         .unwrap();
-    let (mut mitm_sender, mitm_connection) =
-        client_http1::handshake(TokioIo::new(downstream_tls))
-            .await
-            .unwrap();
+    let (mut mitm_sender, mitm_connection) = client_http1::handshake(TokioIo::new(downstream_tls))
+        .await
+        .unwrap();
     let mitm_connection_task = tokio::spawn(mitm_connection);
     let response = mitm_sender
         .send_request(
             Request::builder()
                 .method(Method::POST)
-                .uri("/binary")
+                .uri("/binary?mode=mitm&case=1")
                 .header(HOST, target_address.to_string())
                 .body(Full::new(expected_request_body.clone()))
                 .unwrap(),

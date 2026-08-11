@@ -30,6 +30,36 @@ async fn upstream_tls_probe_requires_a_fixed_https_server() {
     assert_eq!(error.view_model.code, "UPSTREAM_TLS_NOT_ENABLED");
 }
 
+#[tokio::test]
+async fn upstream_connection_probe_accepts_a_fixed_http_server() {
+    let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_address = upstream.local_addr().unwrap();
+    let accepted = tokio::spawn(async move { upstream.accept().await.unwrap() });
+    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let listener = ProxyListener {
+        fixed_server: Some(FixedServerSettings {
+            upstream_url: format!("http://{upstream_address}"),
+            upstream_tls: UpstreamTlsSettings::default(),
+        }),
+        ..ProxyListener::default()
+    };
+    let workspace = ProxyWorkspace {
+        listeners: vec![listener.clone()],
+        ..ProxyWorkspace::default()
+    };
+
+    let result = runtime
+        .test_upstream_connection(workspace, listener)
+        .await
+        .unwrap();
+
+    assert_eq!(result.resolved_address, upstream_address.to_string());
+    assert_eq!(result.scheme, "http");
+    assert_eq!(result.transport, "tcp");
+    assert!(result.tls.is_none());
+    accepted.await.unwrap();
+}
+
 #[test]
 fn pkcs12_reference_requires_external_password_reference() {
     let error = identity_reference("pkcs12:/tmp/client.p12").unwrap_err();

@@ -105,12 +105,13 @@ pub struct RuntimePipelineProductHooks {
 /// 根据动态 Listener 和消息阶段选择 Body 编解码器。
 ///
 /// 旧 supervisor 没有 Workspace Listener ID 时可以返回 `None`，运行时会使用通用产品
-/// fallback；动态 Reverse Listener 则由 `SQLite` Workspace 快照解析 Raw/UTF-8/Shift-JIS。
+/// fallback；动态 Listener 结合 Workspace 兼容设置与当前消息 Content-Type 解析编码。
 pub trait RuntimeBodyCodecResolver: std::fmt::Debug + Send + Sync {
     fn resolve(
         &self,
         context: &ConnectionContext,
         stage: DomainMessageStage,
+        message: &Message,
     ) -> ProxyResult<Option<Arc<dyn BodyCodec>>>;
 }
 

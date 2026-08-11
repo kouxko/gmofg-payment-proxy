@@ -33,7 +33,7 @@ export const mocks = {
   listenerValidate: vi.fn(),
   listenerNew: vi.fn(), listenerCopy: vi.fn(), listenerSave: vi.fn(), listenerDelete: vi.fn(),
   listenerOverview: vi.fn(), listenerStart: vi.fn(), listenerStop: vi.fn(),
-  listenerTestUpstreamTls: vi.fn(), listenerImportUpstreamClientIdentity: vi.fn(), listenerImportUpstreamServerTrust: vi.fn(),
+  listenerTestUpstreamConnection: vi.fn(), listenerImportUpstreamClientIdentity: vi.fn(), listenerImportUpstreamServerTrust: vi.fn(),
   listenerImportDownstreamServerIdentity: vi.fn(), listenerImportDownstreamClientTrust: vi.fn(),
   listenerCertificateOverview: vi.fn(), listenerCertificateDiscard: vi.fn(),
   workspaceSecretStoreBasic: vi.fn(),
@@ -191,10 +191,12 @@ export function setupListenerMocks() {
     mocks.listenerOverview.mockReturnValue(ok(listenerOverview()));
     mocks.listenerStart.mockImplementation((_workspaceId, _revision, listenerId) => ok(listenerStatus(listenerId, "running")));
     mocks.listenerStop.mockImplementation((_workspaceId, _revision, listenerId) => ok(listenerStatus(listenerId, "stopped")));
-    mocks.listenerTestUpstreamTls.mockReturnValue(ok({
+    mocks.listenerTestUpstreamConnection.mockReturnValue(ok({
       listener_id: "fixed-1", upstream_origin: "https://127.0.0.1:9443", resolved_address: "127.0.0.1:9443",
-      tls_version: "TLS 1.2", cipher_suite: "TLS_TEST", peer_subject: "CN=测试上游", peer_sha256_fingerprint: "AA:BB",
-      hostname_verification_enabled: true, client_identity_configured: true, elapsed_millis: 12,
+      scheme: "https", transport: "TCP + TLS", tls: {
+        tls_version: "TLS 1.2", cipher_suite: "TLS_TEST", peer_subject: "CN=测试上游", peer_sha256_fingerprint: "AA:BB",
+        hostname_verification_enabled: true, client_identity_configured: true,
+      }, elapsed_millis: 12,
       message: "上游 Server TLS 握手成功。", ui_tone: "positive",
     }));
     const identity = certificateReference("identity-ref-1", "测试身份", "upstream_client_identity");

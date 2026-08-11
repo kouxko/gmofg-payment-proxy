@@ -12,7 +12,7 @@ import type {
   CertificateItemViewModel,
   CertificateReference,
   ListenerCertificateDetailViewModel,
-  ListenerUpstreamTlsTestViewModel,
+  ListenerUpstreamConnectionTestViewModel,
   ProxyListener,
 } from "@/generated/rust-types";
 import { DownstreamTlsCard } from "./downstream-tls-card";
@@ -30,7 +30,7 @@ type Props = {
   installationRoot?: CertificateItemViewModel;
   busy: boolean;
   testing: boolean;
-  testResult?: ListenerUpstreamTlsTestViewModel;
+  testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
   onChange: (changes: Partial<ProxyListener>) => void;
   onImportDownstreamServerIdentity: (label: string) => Promise<boolean>;
@@ -141,7 +141,7 @@ export function FixedServerTlsSettings(props: Props) {
           title="导入用于验证客户端证书的 CA"
           description="仅在客户端证书模式为“可选”或“必须”时使用。请选择签发客户端证书的 CA，不要选择客户端自身的 client.p12 或本机代理服务端证书。"
           detail="Rust 会校验 CA 能力并保存受保护引用；导入后会在当前页面显示主题、SAN、有效期和 SHA-256。"
-          buttonLabel="选择客户端 CA（.crt / .pem）"
+          buttonLabel="选择客户端 CA（.cer / .crt / .pem / .der）"
           onOpenChange={setDownstreamTrustOpen}
           onLabelChange={setDownstreamTrustLabel}
           onImport={importDownstreamTrust}

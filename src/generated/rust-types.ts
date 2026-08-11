@@ -62,6 +62,7 @@ export const commands = {
 	listenerOverview: (workspaceId: WorkspaceId) => typedError<ListenerOverviewViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_overview", { workspaceId })),
 	listenerStart: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_start", { workspaceId, expectedWorkspaceRevision, listenerId })),
 	listenerStop: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_stop", { workspaceId, expectedWorkspaceRevision, listenerId })),
+	listenerTestUpstreamConnection: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamConnectionTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_connection", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	listenerTestUpstreamTls: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	listenerImportDownstreamServerIdentity: (label: string) => typedError<{
 	reference: CertificateReference,
@@ -292,7 +293,7 @@ export type BlackoutWindow = {
 	duration_millis: number,
 };
 
-export type BodyCodecKind = "raw" | "utf8" | "shift_jis";
+export type BodyCodecKind = "auto" | "raw" | "utf8" | "shift_jis";
 
 export type BreakpointActionOptionViewModel = {
 	kind: BreakpointDecisionKind,
@@ -734,6 +735,28 @@ export type ListenerStatusViewModel = {
 	can_stop: boolean,
 };
 
+/**  对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。 */
+export type ListenerUpstreamConnectionTestViewModel = {
+	listener_id: ListenerId,
+	upstream_origin: string,
+	resolved_address: string,
+	scheme: string,
+	transport: string,
+	tls: ListenerUpstreamTlsEvidenceViewModel | null,
+	elapsed_millis: number,
+	message: string,
+	ui_tone: UiTone,
+};
+
+export type ListenerUpstreamTlsEvidenceViewModel = {
+	tls_version: string,
+	cipher_suite: string,
+	peer_subject: string,
+	peer_sha256_fingerprint: string,
+	hostname_verification_enabled: boolean,
+	client_identity_configured: boolean,
+};
+
 /**
  *  对单条已启用 HTTPS 固定 Server 的代理监听执行真实 TCP + TLS 握手后的只读结果。
  *  该模型只包含公开的对端证书元数据，不返回证书字节、客户端私钥或安全引用内容。
@@ -755,6 +778,8 @@ export type ListenerUpstreamTlsTestViewModel = {
 	ui_tone: UiTone,
 };
 
+export type MessageContentKind = "json" | "xml" | "text" | "binary" | "unknown";
+
 /**  可供界面查看/编辑，同时可无损重建网络报文的内容模型。 */
 export type MessageContentViewModel = {
 	http_status: number | null,
@@ -768,6 +793,12 @@ export type MessageContentViewModel = {
 	body_bytes: number[],
 	json: unknown | null,
 	content_length: number,
+	media_type?: string | null,
+	charset?: string | null,
+	content_kind?: MessageContentKind,
+	codec_id?: string | null,
+	decode_error?: string | null,
+	query_string?: string | null,
 };
 
 export type MessageStage = "tls_handshake" | "request" | "response" | "terminal";
@@ -846,9 +877,9 @@ export type ProxyListener = {
 	read_timeout_ms: number,
 	write_timeout_ms: number,
 	downstream_tls: DownstreamTlsSettings,
-	/**  当前监听处理请求正文时采用的字符编码。Raw 表示不执行文本/JSON解码。 */
+	/**  兼容旧 Workspace 的正文编码偏好。新配置使用 Auto，以 Content-Type charset 为准。 */
 	request_body_codec: BodyCodecKind,
-	/**  当前监听处理响应正文时采用的字符编码。Raw 表示不执行文本/JSON解码。 */
+	/**  兼容旧 Workspace 的正文编码偏好。新配置使用 Auto，以 Content-Type charset 为准。 */
 	response_body_codec: BodyCodecKind,
 	fixed_server: FixedServerSettings | null,
 };

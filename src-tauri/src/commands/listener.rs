@@ -3,8 +3,9 @@
 use intercept_proxy_application::{
     CertificateReference, ListenerCertificateDetailViewModel, ListenerCertificateImportViewModel,
     ListenerId, ListenerOverviewViewModel, ListenerStatusViewModel,
-    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, ProxyListener, ProxyWorkspace,
-    WorkspaceId, WorkspaceValidationViewModel,
+    ListenerUpstreamConnectionTestViewModel, ListenerUpstreamTlsTestViewModel,
+    OperationResultViewModel, ProxyListener, ProxyWorkspace, WorkspaceId,
+    WorkspaceValidationViewModel,
 };
 use tauri::State;
 
@@ -182,6 +183,27 @@ pub async fn listener_test_upstream_tls(
     state
         .application
         .listener_test_upstream_tls(
+            workspace_id,
+            expected_workspace_revision,
+            listener,
+            certificate_references,
+        )
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_test_upstream_connection(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    expected_workspace_revision: u64,
+    listener: ProxyListener,
+    certificate_references: Vec<CertificateReference>,
+) -> CommandResult<ListenerUpstreamConnectionTestViewModel> {
+    state
+        .application
+        .listener_test_upstream_connection(
             workspace_id,
             expected_workspace_revision,
             listener,

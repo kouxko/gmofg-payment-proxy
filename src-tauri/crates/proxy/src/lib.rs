@@ -31,7 +31,8 @@ pub use production_factory::{
 };
 pub use reverse::{
     ReverseClientIdentity, ReverseDownstreamTls, ReverseProxyConfig, ReverseProxyService,
-    ReverseUpstreamTls, UpstreamTlsHandshakeResult,
+    ReverseUpstreamTls, UpstreamConnectionTestResult, UpstreamScheme, UpstreamTlsHandshakeResult,
+    UpstreamTransport,
 };
 pub use supervisor::{
     ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,

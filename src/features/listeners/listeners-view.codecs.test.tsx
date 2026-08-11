@@ -18,19 +18,21 @@ import { ListenersView } from "./listeners-view";
 describe("统一代理监听编辑器", () => {
   beforeEach(setupListenerMocks);
 
-  it("直接为当前监听选择请求和响应正文编码", async () => {
+  it("按 Content-Type charset 自动识别且保存时保留旧编码字段", async () => {
     const fixedWorkspace = {
       ...workspace,
-      listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")],
+      listeners: [{
+        ...fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+        request_body_codec: "shift_jis" as const,
+        response_body_codec: "utf8" as const,
+      }],
     };
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
     const user = userEvent.setup(); render(<ListenersView />);
 
-    expect(await screen.findByText("HTTP 正文编码")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /请求正文编码/ }));
-    await user.click(await screen.findByRole("option", { name: "Shift-JIS" }));
-    await user.click(screen.getByRole("button", { name: /响应正文编码/ }));
-    await user.click(await screen.findByRole("option", { name: "UTF-8" }));
+    expect(await screen.findByText(/按 Content-Type charset 自动识别/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: /请求正文编码/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /响应正文编码/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
 
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));

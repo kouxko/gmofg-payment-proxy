@@ -93,6 +93,17 @@ pub struct RawHttpHeaderViewModel {
     pub trailing_ows_bytes: Vec<u8>,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageContentKind {
+    Json,
+    Xml,
+    Text,
+    Binary,
+    #[default]
+    Unknown,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 /// 可供界面查看/编辑，同时可无损重建网络报文的内容模型。
 pub struct MessageContentViewModel {
@@ -110,6 +121,18 @@ pub struct MessageContentViewModel {
     #[specta(type = Option<specta_typescript::Unknown<Value>>)]
     pub json: Option<Value>,
     pub content_length: usize,
+    #[serde(default)]
+    pub media_type: Option<String>,
+    #[serde(default)]
+    pub charset: Option<String>,
+    #[serde(default)]
+    pub content_kind: MessageContentKind,
+    #[serde(default)]
+    pub codec_id: Option<String>,
+    #[serde(default)]
+    pub decode_error: Option<String>,
+    #[serde(default)]
+    pub query_string: Option<String>,
 }
 
 impl MessageContentViewModel {
@@ -131,8 +154,94 @@ impl MessageContentViewModel {
                     + header.trailing_ows_bytes.len()
             })
             .sum::<usize>();
+        let metadata = [
+            &self.media_type,
+            &self.charset,
+            &self.codec_id,
+            &self.decode_error,
+            &self.query_string,
+        ]
+        .into_iter()
+        .flatten()
+        .map(String::len)
+        .sum::<usize>();
+        let derived_body = self.body_text.as_ref().map_or(0, String::len)
+            + self.json.as_ref().map_or(0, json_logical_bytes);
         Self::ENTITY_FIXED_OVERHEAD_BYTES
-            + (self.start_line_bytes.len() + headers + raw_headers + self.body_bytes.len()) as u64
+            + (self.start_line_bytes.len()
+                + headers
+                + raw_headers
+                + self.body_bytes.len()
+                + derived_body
+                + metadata) as u64
+    }
+}
+
+fn json_logical_bytes(value: &Value) -> usize {
+    const NODE_OVERHEAD: usize = 16;
+    NODE_OVERHEAD
+        + match value {
+            Value::Null => 0,
+            Value::Bool(_) => 1,
+            Value::Number(number) => number.to_string().len(),
+            Value::String(text) => text.len(),
+            Value::Array(values) => values.iter().map(json_logical_bytes).sum(),
+            Value::Object(entries) => entries
+                .iter()
+                .map(|(key, value)| key.len() + json_logical_bytes(value))
+                .sum(),
+        }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_message_content_document_defaults_new_http_metadata() {
+        let content: MessageContentViewModel = serde_json::from_value(serde_json::json!({
+            "http_status": null,
+            "start_line_bytes": [],
+            "raw_headers": [],
+            "headers": {},
+            "body_text": null,
+            "body_bytes": [0, 255],
+            "json": null,
+            "content_length": 2
+        }))
+        .unwrap();
+
+        assert_eq!(content.content_kind, MessageContentKind::Unknown);
+        assert!(content.media_type.is_none());
+        assert!(content.charset.is_none());
+        assert!(content.codec_id.is_none());
+        assert!(content.decode_error.is_none());
+        assert!(content.query_string.is_none());
+        assert_eq!(content.body_bytes, [0, 255]);
+    }
+
+    #[test]
+    fn logical_bytes_include_text_and_structured_json_projections() {
+        let mut content: MessageContentViewModel = serde_json::from_value(serde_json::json!({
+            "http_status": null,
+            "headers": {},
+            "body_text": "D48",
+            "body_bytes": [68, 52, 56],
+            "json": {"code": "D48"},
+            "content_length": 3
+        }))
+        .unwrap();
+        let without_json = {
+            content.json = None;
+            content.logical_bytes()
+        };
+        content.json = Some(serde_json::json!({"code": "D48"}));
+
+        assert_eq!(
+            without_json,
+            MessageContentViewModel::ENTITY_FIXED_OVERHEAD_BYTES + 6,
+        );
+        assert!(content.logical_bytes() > without_json + "codeD48".len() as u64);
     }
 }
 

@@ -15,11 +15,11 @@ use crate::{
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, CertificateItemViewModel,
     CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
     FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
-    ListenerId, ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel,
-    OperationResultViewModel, PortableCertificateMaterial, ProxyListener, ProxyStatusViewModel,
-    ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel, RuleValidationViewModel,
-    RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel, SessionId,
-    SessionPageViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
+    ListenerId, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
+    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
+    ProxyListener, ProxyStatusViewModel, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
+    RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
+    SessionId, SessionPageViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
     SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
@@ -194,6 +194,12 @@ pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
         listener: ProxyListener,
     ) -> AppResult<ListenerStatusViewModel>;
     async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel>;
+    /// 使用固定 Server 的 scheme 执行 DNS/TCP 或 DNS/TCP/TLS 连接测试。
+    async fn test_upstream_connection(
+        &self,
+        workspace: ProxyWorkspace,
+        listener: ProxyListener,
+    ) -> AppResult<ListenerUpstreamConnectionTestViewModel>;
     /// 使用该入口持久化的上游地址、CA、主机名校验和可选客户端身份执行真实握手。
     async fn test_upstream_tls(
         &self,

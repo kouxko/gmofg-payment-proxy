@@ -106,6 +106,14 @@ impl ListenerRuntimePort for StaticListenerRuntime {
     ) -> AppResult<ListenerUpstreamTlsTestViewModel> {
         unused()
     }
+
+    async fn test_upstream_connection(
+        &self,
+        _: ProxyWorkspace,
+        _: ProxyListener,
+    ) -> AppResult<ListenerUpstreamConnectionTestViewModel> {
+        unused()
+    }
 }
 
 struct RunningVpnFixture {

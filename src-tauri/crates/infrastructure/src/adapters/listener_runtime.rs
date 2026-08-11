@@ -16,7 +16,9 @@ use std::{
 
 use intercept_proxy_application::{
     AppError, AppResult, ListenerId, ListenerRuntimePort, ListenerRuntimeState,
-    ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener, UiTone, WorkspaceId,
+    ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
+    ListenerUpstreamTlsEvidenceViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener, UiTone,
+    WorkspaceId,
 };
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, DownstreamClientAuthentication,
@@ -28,7 +30,7 @@ use intercept_proxy_runtime::{
     ForwardMitmConfig, ForwardProxyAuthenticator, ForwardProxyConfig, ForwardProxyService,
     MessageLimits, MitmCertificateAuthority, NativeRootMitmConnector, NoAuthentication,
     PipelinePorts, ReverseClientIdentity, ReverseDownstreamTls, ReverseProxyConfig,
-    ReverseProxyService, ReverseUpstreamTls,
+    ReverseProxyService, ReverseUpstreamTls, UpstreamScheme, UpstreamTransport,
 };
 use parking_lot::RwLock;
 use tokio::{net::TcpListener, task::JoinHandle};

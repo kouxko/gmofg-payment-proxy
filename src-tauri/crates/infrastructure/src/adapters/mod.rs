@@ -26,7 +26,7 @@ mod workspaces;
 
 pub use android_adb::AndroidAdbAdapter;
 pub use application_proxy::ApplicationProxyAdapter;
-pub use body_codecs::WorkspaceBodyCodecResolver;
+pub use body_codecs::{HeaderBodyCodecResolver, WorkspaceBodyCodecResolver};
 pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;

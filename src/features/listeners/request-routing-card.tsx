@@ -29,7 +29,8 @@ export function RequestRoutingCard({ listener, onChange }: Props) {
       <Card.Header>
         <Card.Title>请求转发方式</Card.Title>
         <Card.Description>
-          关闭时按客户端请求目标转发；开启后，所有请求转发到当前监听指定的固定 Server。
+          关闭时按客户端请求目标转发；开启后仅替换 host/port，原请求 path 与
+          query 保持不变。
         </Card.Description>
       </Card.Header>
       <Card.Content className="space-y-5">
@@ -40,7 +41,7 @@ export function RequestRoutingCard({ listener, onChange }: Props) {
             </p>
             <p className="text-sm text-[var(--telemetry-muted)]">
               {fixedServer
-                ? "忽略请求中的目标地址，统一转发到下方配置的 Server。"
+                ? "仅用 Server URL 替换目标 host/port；原请求 path 与 query 原样保留。"
                 : "读取每个请求中的目标主机和端口，适用于标准 HTTP/HTTPS 正向代理。"}
             </p>
           </div>
@@ -60,7 +61,7 @@ export function RequestRoutingCard({ listener, onChange }: Props) {
             <div>
               <h3 className="font-semibold">固定 Server 目标</h3>
               <p className="text-sm text-[var(--telemetry-muted)]">
-                为当前监听指定唯一上游地址；不同监听可以使用不同的地址、端口和证书。
+                为当前监听指定唯一 host/port；不同监听可以使用不同的地址、端口和证书。
               </p>
             </div>
             <div className="grid gap-1">

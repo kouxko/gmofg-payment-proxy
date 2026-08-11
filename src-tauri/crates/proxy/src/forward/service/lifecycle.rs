@@ -22,6 +22,36 @@ impl ForwardProxyService {
             accepted_at: SystemTime::now(),
             tls_peer: None,
         });
+        let accepted = if let Some(acceptor) = &self.downstream_tls {
+            let admission_context = context.clone().unwrap_or_else(|| ConnectionContext {
+                runtime_epoch: Uuid::new_v4(),
+                connection_id: Uuid::new_v4(),
+                channel: crate::supervisor::ChannelId::new("forward-downstream-tls")
+                    .expect("static channel id is valid"),
+                peer_addr: peer,
+                accepted_at: SystemTime::now(),
+                tls_peer: None,
+            });
+            tokio::select! {
+                () = cancellation.cancelled() => return Err(ProxyError::new(
+                    ErrorCode::ProxyStopped,
+                    "forward proxy stopped during downstream TLS handshake",
+                )),
+                result = tokio::time::timeout(
+                    self.config.connect_timeout,
+                    acceptor.accept(io, &admission_context),
+                ) => result.map_err(|_| ProxyError::new(
+                    ErrorCode::DownstreamTlsHandshakeFailed,
+                    "forward downstream TLS handshake timed out",
+                ))??,
+            }
+        } else {
+            crate::transport::AcceptedConnection { io, tls_peer: None }
+        };
+        let context = context.map(|mut context| {
+            context.tls_peer = accepted.tls_peer;
+            context
+        });
         if let (Some(pipeline), Some(context)) = (&self.pipeline, &context) {
             pipeline.ports.connection_opened(context).await;
         }
@@ -36,7 +66,7 @@ impl ForwardProxyService {
         });
         let connection = server_http1::Builder::new()
             .keep_alive(true)
-            .serve_connection(TokioIo::new(io), handler)
+            .serve_connection(TokioIo::new(accepted.io), handler)
             .with_upgrades();
         let result = tokio::select! {
             () = cancellation.cancelled() => Err(ProxyError::new(
