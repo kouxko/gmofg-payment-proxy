@@ -161,6 +161,36 @@ async fn reports_upstream_security_evidence_when_connection_has_no_session() {
 }
 
 #[tokio::test]
+async fn reports_pre_session_tls_failure_with_listener_context() {
+    let pipeline = adapter(Vec::new(), 10);
+    let context = test_context(Uuid::new_v4(), Uuid::new_v4(), dll_channel());
+
+    pipeline
+        .connection_closed(
+            &context,
+            &Err(ProxyError::new(
+                ErrorCode::DownstreamTlsHandshakeFailed,
+                "peer is incompatible: no cipher suites in common",
+            )),
+        )
+        .await;
+
+    let replay = pipeline.events.replay_after(0);
+    let failure = replay.events.iter().find_map(|event| match &event.payload {
+        UiEventPayload::OperationFailed(error)
+            if error.code == "DOWNSTREAM_TLS_HANDSHAKE_FAILED" =>
+        {
+            Some(error)
+        }
+        _ => None,
+    });
+    let failure = failure.expect("pre-session TLS failure must reach diagnostics");
+    assert_eq!(failure.entity_id.as_deref(), Some(dll_channel().as_str()));
+    assert_eq!(failure.runtime_epoch, Some(context.runtime_epoch));
+    assert!(failure.message.contains("no cipher suites in common"));
+}
+
+#[tokio::test]
 async fn reports_capacity_failure_and_keeps_previous_upstream_security_evidence() {
     let pipeline = adapter(Vec::new(), 10);
     let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());

@@ -69,7 +69,8 @@ export function DiagnosticLogsView() {
         <Alert.Content>
           <Alert.Title>控制通道与业务通道相互独立</Alert.Title>
           <Alert.Description>
-            ADB forward 用于桌面控制 Companion；ADB reverse 将设备业务连接映射到桌面代理入口。业务上游由桌面访问，因此设备没有 Wi-Fi 时也可通过 USB 链路完成代理测试。
+            ADB forward 用于桌面控制 Companion；设备与桌面同网段且入口允许 LAN 时，业务连接会直连桌面，否则回退到 ADB reverse。部分 OEM 的 ADB reverse
+            可能只接受设备侧连接却未转发到主机，此时应使用同网段 LAN 或独立 USB 数据隧道。
           </Alert.Description>
         </Alert.Content>
       </Alert>

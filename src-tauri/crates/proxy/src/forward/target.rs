@@ -154,6 +154,12 @@ impl Network {
     }
 
     pub(super) fn contains(self, candidate: IpAddr) -> bool {
+        let candidate = match candidate {
+            IpAddr::V6(address) => address
+                .to_ipv4_mapped()
+                .map_or(IpAddr::V6(address), IpAddr::V4),
+            IpAddr::V4(_) => candidate,
+        };
         match (self.address, candidate) {
             (IpAddr::V4(network), IpAddr::V4(candidate)) => {
                 let mask = if self.prefix == 0 {

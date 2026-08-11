@@ -106,9 +106,9 @@ impl Application {
         self.publish_device_network_step(
             crate::DiagnosticLogLevel::Info,
             crate::DiagnosticLogStage::RouteActivation,
-            "开始建立 USB/ADB 代理通道",
+            "开始建立设备代理数据通道",
             Some(format!(
-                "目标应用 {} 个；透明代理路由 {} 条；控制走 adb forward，业务走 adb reverse。",
+                "目标应用 {} 个；透明代理路由 {} 条；同网段且入口允许 LAN 时直连桌面，否则业务走 adb reverse。",
                 activation.profile.target_applications.len(),
                 activation.proxy_routes.len()
             )),
@@ -125,8 +125,8 @@ impl Application {
         self.publish_device_network_step(
             crate::DiagnosticLogLevel::Info,
             crate::DiagnosticLogStage::AdbReverseBusiness,
-            "USB/ADB 业务映射已生效",
-            Some("设备连接本机临时端口，ADB 将业务连接反向映射到桌面代理入口。".into()),
+            "设备代理数据通道已生效",
+            Some("目标应用 VPN 与桌面 Listener 的临时运行端点已装载。".into()),
             Some(status.serial.clone()),
             status.active_profile_id.clone(),
         );
@@ -151,7 +151,7 @@ impl Application {
         self.publish_device_network_step(
             crate::DiagnosticLogLevel::Info,
             crate::DiagnosticLogStage::RouteActivation,
-            "开始更新 USB/ADB 代理通道",
+            "开始更新设备代理数据通道",
             Some(format!(
                 "透明代理路由 {} 条。",
                 activation.proxy_routes.len()
@@ -339,7 +339,9 @@ impl Application {
                 listener_id: listener.id.to_string(),
                 original_destination: route.destination.clone(),
                 original_ports: route.ports.clone(),
+                desktop_listener_bind_address: listener.bind_address.clone(),
                 desktop_listener_port: listener.port,
+                allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
             });
         }
         Ok(AndroidNetworkActivation {

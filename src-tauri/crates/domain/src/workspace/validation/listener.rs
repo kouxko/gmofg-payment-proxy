@@ -78,26 +78,19 @@ fn validate_listener_access(
             );
         }
     }
-    // 任何非回环监听都必须有 CIDR 准入。动态正向代理还要求 HTTP 代理认证。
+    // 空 CIDR 表示允许任意客户端；非空列表逐项校验并用于运行时准入。
+    // 动态正向代理在非回环地址上仍要求 HTTP 代理认证。
     // 固定 Server 入口允许使用明文、普通 TLS 或 mTLS；客户端证书验证仅在用户
     // 显式配置 Optional/Required 时启用，不能由绑定地址隐式改变协议语义。
-    if bind_ip.is_some_and(|ip| !ip.is_loopback()) {
-        if value.allowed_client_cidrs.is_empty() {
-            push_field_error(
-                error,
-                format!("{prefix}.allowed_client_cidrs"),
-                "非回环监听必须配置客户端 CIDR 白名单",
-            );
-        }
-        if value.fixed_server.is_none()
-            && matches!(value.authentication, ForwardProxyAuthentication::None)
-        {
-            push_field_error(
-                error,
-                format!("{prefix}.authentication"),
-                "非回环正向代理必须启用代理认证",
-            );
-        }
+    if bind_ip.is_some_and(|ip| !ip.is_loopback())
+        && value.fixed_server.is_none()
+        && matches!(value.authentication, ForwardProxyAuthentication::None)
+    {
+        push_field_error(
+            error,
+            format!("{prefix}.authentication"),
+            "非回环正向代理必须启用代理认证",
+        );
     }
     if let ForwardProxyAuthentication::Basic { credential } = &value.authentication
         && (credential.provider.trim().is_empty() || credential.key.trim().is_empty())

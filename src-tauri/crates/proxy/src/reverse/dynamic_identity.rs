@@ -118,11 +118,18 @@ impl DynamicServerIdentityResolver {
 impl ResolvesServerCert for DynamicServerIdentityResolver {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         let Some(server_name) = client_hello.server_name() else {
+            tracing::info!("downstream ClientHello has no SNI; using fallback identity");
             return Some(Arc::clone(&self.fallback));
         };
         if !authority_is_allowed(server_name, &self.allowlist) {
+            tracing::warn!(
+                server_name,
+                allowlist = ?self.allowlist,
+                "downstream ClientHello SNI is not allowed"
+            );
             return None;
         }
+        tracing::info!(server_name, "resolving downstream server identity");
         match self.resolve_identity(server_name) {
             Ok(identity) => Some(identity),
             Err(error) => {

@@ -80,8 +80,8 @@ async fn plaintext_reverse_listener_preserves_every_byte() {
 }
 
 #[tokio::test]
-async fn non_loopback_listener_fails_closed_without_cidr() {
-    let error = ReverseProxyService::build(ReverseProxyConfig {
+async fn non_loopback_listener_allows_all_clients_without_cidr() {
+    ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: "0.0.0.0:18080".parse().unwrap(),
         allowed_client_cidrs: Vec::new(),
         upstream_origin: "http://127.0.0.1:9".into(),
@@ -92,7 +92,5 @@ async fn non_loopback_listener_fails_closed_without_cidr() {
         write_timeout: Duration::from_secs(1),
     })
     .await
-    .expect_err("non-loopback listener must have CIDR admission");
-
-    assert_eq!(error.code, ErrorCode::ConfigInvalid.as_str());
+    .expect("empty CIDR list explicitly allows all clients");
 }

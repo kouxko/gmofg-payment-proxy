@@ -38,6 +38,7 @@ import {
 } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { ThemeSettings } from "./settings-content";
 
 function mib(bytes: number) {
   // ViewModel 使用字节，页面按需求用 MiB 展示；保存时仍通过 Rust Draft 字段提交。
@@ -326,8 +327,9 @@ export function SettingsView() {
                   <Alert status="accent">
                     系统设置只管理全局行为；入口配置、证书和规则分别在对应页面管理。
                   </Alert>
+                  <ThemeSettings />
                   <p className="text-sm">
-                    应用启动和诊断日志由 Rust/Tauri 桌面侧管理，前端不访问文件系统或浏览器持久化。
+                    应用启动和诊断日志由 Rust/Tauri 桌面侧管理；外观主题仅保存在本机浏览器存储中。
                   </p>
                 </Tabs.Panel>
               </Tabs>

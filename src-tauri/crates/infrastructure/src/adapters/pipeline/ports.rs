@@ -295,6 +295,24 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 }
             }
         }
+        if let Err(error) = result {
+            // TLS 接受失败发生在 connection_opened 之前，因此没有 SessionUpdated 可以
+            // 承载错误。如果只更新计数，Android 侧只能看到模糊的 EOF，诊断页也无法
+            // 区分 CIDR、TLS 协议、证书或 HTTP 管线错误。统一发布稳定错误码，同时用
+            // channel 作为实体 ID，使诊断日志能准确归属到发生失败的代理入口。
+            self.events.publish(
+                Some(context.runtime_epoch),
+                Utc::now(),
+                None,
+                None,
+                UiEventPayload::OperationFailed(
+                    AppError::new(error.code, error.message.clone())
+                        .entity(context.channel.as_str())
+                        .epoch(context.runtime_epoch)
+                        .into(),
+                ),
+            );
+        }
         self.finish_session(context, result);
         self.state.lock().remove_connection(context);
     }

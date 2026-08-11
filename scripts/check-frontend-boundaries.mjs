@@ -59,16 +59,29 @@ const forbidden = [
   ],
 ];
 
+const themeStorageFiles = new Set([
+  "src/features/theme/theme-provider.tsx",
+  "src/features/theme/theme-provider.test.tsx",
+]);
+
 const failures = [];
 for (const file of sourceFiles(sourceRoot)) {
   const content = readFileSync(file, "utf8");
+  const relativePath = relative(root, file);
   const isTestFile = /\.(?:test|spec)\.(?:ts|tsx)$/.test(file);
   for (const [pattern, message] of forbidden) {
     // 架构测试需要读取源码来验证 HeroUI 组合方式；Node.js API 禁令只约束会进入
     // WebView 的生产展示代码，不能反过来禁止测试工具检查这些代码。
     if (isTestFile && message === "展示层不得引入 Node.js 系统 API") continue;
+    // 主题偏好不是业务数据；只允许主题状态模块及其契约测试触碰 localStorage。
+    if (
+      themeStorageFiles.has(relativePath) &&
+      message === "前端不得持久化业务数据"
+    ) {
+      continue;
+    }
     if (pattern.test(content)) {
-      failures.push(`${relative(root, file)}: ${message}`);
+      failures.push(`${relativePath}: ${message}`);
     }
   }
   if (
@@ -108,6 +121,23 @@ for (const file of sourceFiles(sourceRoot)) {
       );
     }
   }
+}
+
+const themeProviderSource = readFileSync(
+  join(sourceRoot, "features", "theme", "theme-provider.tsx"),
+  "utf8",
+);
+if (
+  !themeProviderSource.includes(
+    'export const THEME_STORAGE_KEY = "intercept-proxy-theme";',
+  ) ||
+  [...themeProviderSource.matchAll(/localStorage\.(?:getItem|setItem|removeItem)\(([^,)]*)/g)].some(
+    ([, keyExpression]) => keyExpression.trim() !== "THEME_STORAGE_KEY",
+  )
+) {
+  failures.push(
+    "src/features/theme/theme-provider.tsx: localStorage 只能使用固定主题偏好 key",
+  );
 }
 
 // 第二层检查具体页面与 Rust 契约的对应关系。这些规则比通用正则更精确，用于防止以后重构

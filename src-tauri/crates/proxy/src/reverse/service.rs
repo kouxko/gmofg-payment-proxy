@@ -4,7 +4,7 @@ use super::{
     Instant, IpAddr, JoinSet, MessageLimits, PipelinePorts, ProxyError, Result,
     ReverseConnectionAcceptor, ReverseProxyConfig, ReverseUpstreamTls, SystemClock, TcpListener,
     TcpStream, TlsAcceptor, UpstreamEndpoint, UpstreamTlsHandshakeResult, Uuid,
-    build_client_connector, build_server_acceptor, relay_exact, timeout_cancel,
+    build_client_connector, build_server_acceptor, peer_is_allowed, relay_exact, timeout_cancel,
 };
 
 #[derive(Clone)]
@@ -38,12 +38,6 @@ impl ReverseProxyService {
             .iter()
             .map(|cidr| ClientNetwork::parse(cidr))
             .collect::<Result<Vec<_>>>()?;
-        if !config.bind_addr.ip().is_loopback() && allowed_client_networks.is_empty() {
-            return Err(ProxyError::new(
-                ErrorCode::ConfigInvalid,
-                "non-loopback reverse listener requires an allowed client CIDR",
-            ));
-        }
         let endpoint =
             UpstreamEndpoint::parse(&config.upstream_origin, config.connect_timeout).await?;
         let downstream_acceptor = config
@@ -239,11 +233,7 @@ impl ReverseProxyService {
     }
 
     fn permits_peer(&self, peer: IpAddr) -> bool {
-        self.allowed_client_networks.is_empty()
-            || self
-                .allowed_client_networks
-                .iter()
-                .any(|network| network.contains(peer))
+        peer_is_allowed(peer, self.allowed_client_networks.as_ref())
     }
 
     async fn serve_connection(

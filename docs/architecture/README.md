@@ -47,7 +47,7 @@ Workspace 是“希望系统怎样运行”的持久化配置；Listener、VPN�
 
 ### 2.3 默认安全，显式放开
 
-- 非回环 Listener 必须配置客户端 CIDR，正向代理还必须配置认证。
+- Listener 的客户端 CIDR 留空表示允许任意地址；非空时按列表准入。非回环正向代理仍必须配置认证。
 - CONNECT 默认透明隧道，只有显式 allowlist 才执行 MITM。
 - 私钥/P12 字节和密码不进入前端 DTO。明确确认后，Rust 可把 Listener 证书材料和明文 P12 密码嵌入可移植导出，但本机 MITM Root CA 私钥绝不进入任何导出。
 - Android VPN 只接管明确选择的应用，失败时关闭 TUN，让应用恢复系统网络。
