@@ -23,8 +23,7 @@ async fn absolute_form_round_trip_once() {
             .unwrap();
     });
 
-    let service =
-        ForwardProxyService::new(loopback_config(), Arc::new(NoAuthentication)).unwrap();
+    let service = ForwardProxyService::new(loopback_config(), Arc::new(NoAuthentication)).unwrap();
     let (client, proxy) = tokio::io::duplex(16 * 1024);
     let proxy_task = tokio::spawn(async move {
         service
@@ -61,6 +60,95 @@ async fn absolute_form_round_trip_once() {
 async fn absolute_form_request_is_stable_for_one_hundred_consecutive_connections() {
     for _ in 0..100 {
         absolute_form_round_trip_once().await;
+    }
+}
+
+#[tokio::test]
+async fn absolute_form_preserves_standard_and_extension_methods_query_and_body() {
+    let cases = [
+        ("GET", "/method?kind=get", ""),
+        ("POST", "/method?kind=post", "post-body"),
+        ("PUT", "/method?kind=put", "put-body"),
+        ("DELETE", "/method?kind=delete", ""),
+        ("QUERY", "/method?kind=query&cursor=next", "query-body"),
+    ];
+    for (method, path_and_query, body) in cases {
+        let origin = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin_address = origin.local_addr().unwrap();
+        let expected_start = format!("{method} {path_and_query} HTTP/1.1\r\n");
+        let expected_body = body.as_bytes().to_vec();
+        let origin_task = tokio::spawn(async move {
+            let (mut stream, _) = origin.accept().await.unwrap();
+            let mut request = Vec::new();
+            let header_end = loop {
+                if let Some(index) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+                    break index + 4;
+                }
+                let mut buffer = [0_u8; 512];
+                let read = stream.read(&mut buffer).await.unwrap();
+                assert_ne!(read, 0);
+                request.extend_from_slice(&buffer[..read]);
+            };
+            let headers = std::str::from_utf8(&request[..header_end]).unwrap();
+            assert!(
+                headers.starts_with(&expected_start),
+                "actual headers: {headers:?}"
+            );
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("content-length:")
+                        .map(str::trim)
+                        .map(str::parse::<usize>)
+                })
+                .transpose()
+                .unwrap()
+                .unwrap_or(0);
+            while request.len() - header_end < content_length {
+                let mut buffer = [0_u8; 512];
+                let read = stream.read(&mut buffer).await.unwrap();
+                assert_ne!(read, 0);
+                request.extend_from_slice(&buffer[..read]);
+            }
+            assert_eq!(
+                &request[header_end..header_end + content_length],
+                expected_body
+            );
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .await
+                .unwrap();
+        });
+        let service =
+            ForwardProxyService::new(loopback_config(), Arc::new(NoAuthentication)).unwrap();
+        let (client, proxy) = tokio::io::duplex(16 * 1024);
+        let proxy_task = tokio::spawn(async move {
+            service
+                .serve_connection(
+                    Box::new(proxy),
+                    "127.0.0.1:45010".parse().unwrap(),
+                    CancellationToken::new(),
+                )
+                .await
+        });
+        let (mut sender, connection) = client_http1::handshake(TokioIo::new(client)).await.unwrap();
+        let connection_task = tokio::spawn(connection);
+        let response = sender
+            .send_request(
+                Request::builder()
+                    .method(Method::from_bytes(method.as_bytes()).unwrap())
+                    .uri(format!("http://{origin_address}{path_and_query}"))
+                    .body(Full::new(Bytes::copy_from_slice(body.as_bytes())))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        drop(sender);
+        connection_task.await.unwrap().unwrap();
+        proxy_task.await.unwrap().unwrap();
+        origin_task.await.unwrap();
     }
 }
 

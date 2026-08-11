@@ -44,6 +44,7 @@ use crate::{ErrorCode, MitmCertificateAuthority, ProxyError, Result};
 mod admission;
 mod dynamic_identity;
 
+pub use admission::DownstreamTlsAcceptor;
 use admission::{ClientNetwork, ReverseConnectionAcceptor, peer_is_allowed};
 use dynamic_identity::{DynamicServerIdentityResolver, certified_key};
 mod config;
@@ -54,7 +55,7 @@ mod tls_config;
 
 pub use config::{
     ReverseClientIdentity, ReverseDownstreamTls, ReverseProxyConfig, ReverseUpstreamTls,
-    UpstreamTlsHandshakeResult,
+    UpstreamConnectionTestResult, UpstreamScheme, UpstreamTlsHandshakeResult, UpstreamTransport,
 };
 pub use service::ReverseProxyService;
 

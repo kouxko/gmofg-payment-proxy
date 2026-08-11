@@ -4,7 +4,7 @@ import { Alert, Chip, Label, ListBox, Select } from "@heroui/react";
 import type {
   CertificateReference,
   ListenerCertificateDetailViewModel,
-  ListenerUpstreamTlsTestViewModel,
+  ListenerUpstreamConnectionTestViewModel,
 } from "@/generated/rust-types";
 import { formatTimestamp, toneColor } from "@/lib/format";
 
@@ -51,10 +51,12 @@ export function CertificateReferenceSelect({
   );
 }
 
-export function TlsTestResult({
+export function ConnectionTestResult({
   result,
+  showTlsDetails = true,
 }: {
-  result: ListenerUpstreamTlsTestViewModel;
+  result: ListenerUpstreamConnectionTestViewModel;
+  showTlsDetails?: boolean;
 }) {
   return (
     <Alert status="success" className="col-span-2 max-[700px]:col-span-1">
@@ -64,15 +66,26 @@ export function TlsTestResult({
         <Alert.Description>
           <span className="grid gap-1">
             <span>连接：{result.resolved_address} · {result.elapsed_millis} ms</span>
-            <span>协商：{result.tls_version} · {result.cipher_suite}</span>
-            <span>Server：{result.peer_subject}</span>
-            <span className="break-all font-mono text-xs">
-              SHA-256：{result.peer_sha256_fingerprint}
-            </span>
-            <span>
-              主机名校验：{result.hostname_verification_enabled ? "已启用并通过" : "按入口配置关闭"}
-              {" · "}客户端身份：{result.client_identity_configured ? "已配置" : "未配置（普通 TLS）"}
-            </span>
+            <span>传输：{result.transport}</span>
+            {showTlsDetails && result.tls && (
+              <>
+                <span>协商：{result.tls.tls_version} · {result.tls.cipher_suite}</span>
+                <span>Server：{result.tls.peer_subject}</span>
+                <span className="break-all font-mono text-xs">
+                  SHA-256：{result.tls.peer_sha256_fingerprint}
+                </span>
+                <span>
+                  主机名校验：
+                  {result.tls.hostname_verification_enabled
+                    ? "已启用并通过"
+                    : "按入口配置关闭"}
+                  {" · "}客户端身份：
+                  {result.tls.client_identity_configured
+                    ? "已配置"
+                    : "未配置（普通 TLS）"}
+                </span>
+              </>
+            )}
           </span>
         </Alert.Description>
       </Alert.Content>

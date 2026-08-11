@@ -12,7 +12,7 @@ import type {
   CertificateItemViewModel,
   CertificateReference,
   ListenerCertificateDetailViewModel,
-  ListenerUpstreamTlsTestViewModel,
+  ListenerUpstreamConnectionTestViewModel,
   ProxyListener,
 } from "@/generated/rust-types";
 import { BodyCodecSettings } from "./body-codec-settings";
@@ -31,7 +31,7 @@ type Props = {
   certificateDetails: ListenerCertificateDetailViewModel[];
   installationRoot?: CertificateItemViewModel;
   pending?: string;
-  tlsTest?: ListenerUpstreamTlsTestViewModel;
+  tlsTest?: ListenerUpstreamConnectionTestViewModel;
   tlsTestError?: string;
   basicUsername: string;
   basicPassword: string;
@@ -120,12 +120,6 @@ export function ListenerEditor({
         <BodyCodecSettings
           requestCodec={listener.request_body_codec}
           responseCodec={listener.response_body_codec}
-          onRequestCodecChange={(requestBodyCodec) =>
-            onChange({ request_body_codec: requestBodyCodec })
-          }
-          onResponseCodecChange={(responseBodyCodec) =>
-            onChange({ response_body_codec: responseBodyCodec })
-          }
         />
         <FixedServerTlsSettings
           listener={listener}

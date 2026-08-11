@@ -68,6 +68,12 @@ pub(in crate::requirements_tests) fn content(body: &[u8]) -> MessageContentViewM
         body_bytes: body.to_vec(),
         json: None,
         content_length: body.len(),
+        media_type: Some("application/json".into()),
+        charset: None,
+        content_kind: MessageContentKind::Json,
+        codec_id: Some("utf-8".into()),
+        decode_error: None,
+        query_string: None,
     }
 }
 

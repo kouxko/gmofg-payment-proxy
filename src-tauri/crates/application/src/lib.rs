@@ -24,7 +24,7 @@ mod workspace_documents;
 mod workspaces;
 
 pub use android::*;
-pub use breakpoint_validation::BreakpointValidator;
+pub use breakpoint_validation::{BreakpointBodyCodecResolver, BreakpointValidator};
 pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket};
 pub use capacity::CapacityLedger;
 pub use configuration::*;

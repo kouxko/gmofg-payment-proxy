@@ -65,11 +65,12 @@ impl RuntimePipelineAdapter {
         &self,
         context: &ConnectionContext,
         stage: DomainMessageStage,
+        message: &Message,
     ) -> ProxyResult<Arc<dyn BodyCodec>> {
         let resolved = self
             .body_codec_resolver
             .as_ref()
-            .map(|resolver| resolver.resolve(context, stage))
+            .map(|resolver| resolver.resolve(context, stage, message))
             .transpose()?
             .flatten();
         Ok(resolved.unwrap_or_else(|| Arc::clone(&self.body_codec)))

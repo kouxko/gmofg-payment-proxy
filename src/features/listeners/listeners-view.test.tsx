@@ -55,9 +55,11 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getByRole("switch", { name: "为此监听启用 TLS" })).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
-    expect(await screen.findByRole("textbox", { name: "固定 Server URL" })).toBeVisible();
+    const serverUrl = await screen.findByRole("textbox", { name: "固定 Server URL" });
+    await user.type(serverUrl, "https://server.test:443");
     expect(screen.getByText("固定 Server 目标")).toBeVisible();
-    expect(screen.getByText(/忽略请求中的目标地址/)).toBeVisible();
+    expect(screen.getByText(/仅用 Server URL 替换目标 host\/port/)).toBeVisible();
+    expect(screen.getByText(/原请求 path 与 query 原样保留/)).toBeVisible();
     expect(screen.getByRole("textbox", { name: "允许的客户端 CIDR" })).toBeVisible();
     expect(screen.getByRole("switch", { name: "启用 HTTP Basic 认证" })).toBeVisible();
     expect(screen.getByRole("switch", { name: "为此监听启用 TLS" })).toBeVisible();
@@ -66,8 +68,9 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getByRole("button", { name: "导入 Server CA" })).toBeVisible();
     expect(screen.getByRole("button", { name: "导入 client.p12" })).toBeVisible();
     expect(screen.queryByRole("textbox", { name: /Body Codec 引用/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /请求正文编码/ })).toBeVisible();
-    expect(screen.getByRole("button", { name: /响应正文编码/ })).toBeVisible();
+    expect(screen.getByText(/按 Content-Type charset 自动识别/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: /请求正文编码/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /响应正文编码/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
     expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
     expect(screen.getByText("按原请求目标转发")).toBeVisible();
@@ -198,8 +201,12 @@ describe("统一代理监听编辑器", () => {
 
     await user.click(await screen.findByRole("button", { name: "新建代理监听" }));
     await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "固定 Server URL" }),
+      "https://server.test:443",
+    );
     await user.click(screen.getByRole("button", { name: "导入 Server CA" }));
-    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByText("监听 B"));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
 
@@ -254,7 +261,7 @@ describe("统一代理监听编辑器", () => {
     await user.clear(name);
     await user.type(name, "监听 A 未保存名称");
     await user.click(screen.getByRole("button", { name: "导入 Server CA" }));
-    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByText("监听 B"));
     await user.click(screen.getByRole("button", { name: "删除监听" }));
 

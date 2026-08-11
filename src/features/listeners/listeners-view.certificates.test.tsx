@@ -41,7 +41,7 @@ describe("统一代理监听编辑器", () => {
     }));
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByText("交易"));
-    await user.click(await screen.findByRole("button", { name: "测试上游 TLS / mTLS 握手" }));
+    await user.click(await screen.findByRole("button", { name: "测试 Server 连接" }));
     await waitFor(() => expect(mocks.listenerValidate).toHaveBeenCalledWith(
       fixedWorkspace.id,
       fixedWorkspace.revision,
@@ -49,7 +49,7 @@ describe("统一代理监听编辑器", () => {
       fixedWorkspace.certificate_references,
     ));
     expect(mocks.listenerSave).not.toHaveBeenCalled();
-    expect(mocks.listenerTestUpstreamTls).toHaveBeenCalledWith(
+    expect(mocks.listenerTestUpstreamConnection).toHaveBeenCalledWith(
       fixedWorkspace.id,
       fixedWorkspace.revision,
       fixedWorkspace.listeners[1],
@@ -63,8 +63,8 @@ describe("统一代理监听编辑器", () => {
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
-    expect(screen.getByText(/签发上游 Server 证书的 ca\.crt/)).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    expect(screen.getByText(/签发上游 Server 证书的单个 CA 锚/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     expect(mocks.listenerSave.mock.calls[0][2].fixed_server.upstream_tls.server_trust).toBe("ca-ref-1");
@@ -82,7 +82,7 @@ describe("统一代理监听编辑器", () => {
     render(<ListenersView />);
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
-    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
 
     await waitFor(() => expect(mocks.listenerCertificateDiscard).toHaveBeenCalledWith(
@@ -100,7 +100,7 @@ describe("统一代理监听编辑器", () => {
     const { unmount } = render(<ListenersView />);
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
-    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     expect(await screen.findByText("CN=测试上游 CA")).toBeVisible();
     unmount();
 
@@ -121,7 +121,7 @@ describe("统一代理监听编辑器", () => {
     const { unmount } = render(<ListenersView />);
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
-    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     unmount();
@@ -180,7 +180,7 @@ describe("统一代理监听编辑器", () => {
     render(<ListenersView />);
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
-    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.crt / .pem）" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByText("监听 B"));
     await user.click(screen.getByRole("button", { name: "删除监听" }));
 

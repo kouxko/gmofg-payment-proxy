@@ -13,9 +13,13 @@ import type {
   CaptureDetailViewModel,
   CaptureRowViewModel,
 } from "@/generated/rust-types";
-import { formatMessageBody } from "@/lib/message-content";
+import type { QueryAwareRequest } from "@/lib/message-content";
 import { toneColor } from "@/lib/format";
 import { errorMessage } from "@/lib/ipc/client";
+import {
+  HttpBodyViewer,
+  HttpRequestTargetView,
+} from "@/features/shared/http-inspection";
 import { captureDetailTabLabels } from "./capture-view";
 
 interface DetailQuery {
@@ -90,7 +94,8 @@ export function CaptureDetailPanel({
     <aside
       ref={panelRef}
       className={[
-        "min-w-0 overflow-auto border-l border-[var(--telemetry-line)] p-4 max-[1280px]:border-l-0 max-[1280px]:border-t",
+        "min-w-0 overflow-auto border-l border-[var(--telemetry-line)] p-4",
+        "max-[1280px]:border-l-0 max-[1280px]:border-t",
         selected ? "" : "max-[1280px]:hidden",
       ].join(" ")}
     >
@@ -279,11 +284,12 @@ export function CaptureDetailPanel({
             </p>
           ) : (
             <>
+              <HttpRequestTargetView
+                method={selected.method}
+                target={selected.target}
+                queryString={(selected as CaptureRowViewModel & QueryAwareRequest).query_string}
+              />
               <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
-                <dt>请求行</dt>
-                <dd className="break-all font-mono text-xs">
-                  {selected.method} {selected.target}
-                </dd>
                 <dt>Header 数量</dt>
                 <dd>{requestHeaderCount}</dd>
               </dl>
@@ -296,9 +302,11 @@ export function CaptureDetailPanel({
               </div>
               <div>
                 <h2 className="mb-2 font-semibold">请求 Body</h2>
-                <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">
-                  {formatMessageBody(detail.data?.request, "无请求正文")}
-                </pre>
+                <HttpBodyViewer
+                  label="请求 Body"
+                  message={detail.data?.request}
+                  emptyText="无请求正文"
+                />
               </div>
             </>
           )}
@@ -333,9 +341,11 @@ export function CaptureDetailPanel({
               </div>
               <div>
                 <h2 className="mb-2 font-semibold">响应 Body</h2>
-                <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">
-                  {formatMessageBody(detail.data.response, "无响应正文")}
-                </pre>
+                <HttpBodyViewer
+                  label="响应 Body"
+                  message={detail.data.response}
+                  emptyText="无响应正文"
+                />
               </div>
             </>
           )}

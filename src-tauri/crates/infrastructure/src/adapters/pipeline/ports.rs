@@ -108,7 +108,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
         context: &ConnectionContext,
         message: &mut Message,
     ) -> ProxyResult<Vec<FaultAction>> {
-        let body_codec = self.codec_for(context, DomainMessageStage::Request)?;
+        let body_codec = self.codec_for(context, DomainMessageStage::Request, message)?;
         let original = message.clone();
         self.begin_session(context, &original, body_codec.as_ref())?;
         let evaluated = self.evaluate(
@@ -163,8 +163,8 @@ impl PipelinePorts for RuntimePipelineAdapter {
             .iter()
             .find(|action| matches!(action, FaultAction::MockResponse { .. }))
         {
-            let response_codec = self.codec_for(context, DomainMessageStage::Response)?;
             let mock = mock_response(*status, headers, body.clone());
+            let response_codec = self.codec_for(context, DomainMessageStage::Response, &mock)?;
             let record = self.update_response(
                 context,
                 &mock,
@@ -193,7 +193,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
         context: &ConnectionContext,
         message: &mut Message,
     ) -> ProxyResult<Vec<FaultAction>> {
-        let body_codec = self.codec_for(context, DomainMessageStage::Response)?;
+        let body_codec = self.codec_for(context, DomainMessageStage::Response, message)?;
         {
             let mut state = self.state.lock();
             if let Some(metrics) = state.channel_metrics_mut(context) {

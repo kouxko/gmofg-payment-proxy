@@ -227,6 +227,31 @@ async fn listener_tls_test_validates_the_persisted_workspace_candidate() {
 }
 
 #[tokio::test]
+async fn listener_connection_test_supports_http_without_tls_evidence() {
+    let application = application_with_fake_ports(Arc::new(FakePorts::default()));
+    let workspace = application.workspace_create("Lab".into()).await.unwrap();
+    let mut listener = workspace.listeners[0].clone();
+    listener.fixed_server = Some(FixedServerSettings {
+        upstream_url: "http://upstream.example.test:8080".into(),
+        upstream_tls: UpstreamTlsSettings::default(),
+    });
+
+    let result = application
+        .listener_test_upstream_connection(
+            workspace.id,
+            workspace.revision.get(),
+            listener,
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result.scheme, "http");
+    assert_eq!(result.transport, "tcp");
+    assert!(result.tls.is_none());
+}
+
+#[tokio::test]
 async fn listener_validation_uses_persisted_other_listeners_not_unrelated_ui_drafts() {
     let ports = Arc::new(FakePorts::default());
     let application = application_with_fake_ports(ports);

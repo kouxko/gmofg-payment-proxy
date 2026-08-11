@@ -1,3 +1,5 @@
+use intercept_proxy_application::MessageContentKind;
+
 #[test]
 fn product_codec_error_codes_and_json_syntax_classification_are_stable() {
     let decode = decode_body(&StableErrorCodec, b"wire").expect_err("decode must fail");
@@ -11,6 +13,109 @@ fn product_codec_error_codes_and_json_syntax_classification_are_stable() {
     let json = decode_json(&Utf8BodyCodec, b"{invalid").expect_err("JSON must fail");
     assert_eq!(json.code, "JSON_INVALID");
     assert!(json.message.contains("not valid JSON"));
+}
+
+#[test]
+fn content_view_uses_declared_shift_jis_for_vendor_json_and_preserves_query() {
+    let (encoded, _, had_errors) = encoding_rs::SHIFT_JIS.encode(r#"{"result":"成功"}"#);
+    assert!(!had_errors);
+    let message = Message {
+        start_line: "POST /payment?terminal=920&retry=1 HTTP/1.1".into(),
+        headers: vec![RawHeader::new(
+            Bytes::from_static(b"Content-Type"),
+            Bytes::from_static(b"application/vnd.gmo.result+json; charset=Windows-31J"),
+        )],
+        body: Bytes::copy_from_slice(&encoded),
+        body_modified: false,
+    };
+
+    let view = content_view(&StableErrorCodec, &message);
+
+    assert_eq!(
+        view.media_type.as_deref(),
+        Some("application/vnd.gmo.result+json")
+    );
+    assert_eq!(view.charset.as_deref(), Some("windows-31j"));
+    assert_eq!(view.content_kind, MessageContentKind::Json);
+    assert_eq!(view.codec_id.as_deref(), Some("shift-jis"));
+    assert_eq!(view.body_text.as_deref(), Some(r#"{"result":"成功"}"#));
+    assert_eq!(view.json.as_ref().unwrap()["result"], "成功");
+    assert_eq!(view.query_string.as_deref(), Some("terminal=920&retry=1"));
+    assert!(view.decode_error.is_none());
+}
+
+#[test]
+fn content_view_classifies_xml_text_binary_and_unknown_without_guessing_json() {
+    let cases = [
+        (
+            "application/soap+xml; charset=utf-8",
+            MessageContentKind::Xml,
+            true,
+        ),
+        ("text/plain; charset=UTF8", MessageContentKind::Text, true),
+        (
+            "application/octet-stream",
+            MessageContentKind::Binary,
+            false,
+        ),
+        ("application/problem", MessageContentKind::Unknown, false),
+    ];
+    for (content_type, expected_kind, expects_text) in cases {
+        let message = Message {
+            start_line: "PUT /resource HTTP/1.1".into(),
+            headers: vec![RawHeader::new(
+                Bytes::from_static(b"Content-Type"),
+                Bytes::copy_from_slice(content_type.as_bytes()),
+            )],
+            body: Bytes::from_static(br#"{"looks":"json"}"#),
+            body_modified: false,
+        };
+
+        let view = content_view(&Utf8BodyCodec, &message);
+
+        assert_eq!(view.content_kind, expected_kind, "{content_type}");
+        assert_eq!(view.body_text.is_some(), expects_text, "{content_type}");
+        assert!(view.json.is_none(), "{content_type}");
+        assert_eq!(view.body_bytes, br#"{"looks":"json"}"#);
+    }
+}
+
+#[test]
+fn content_view_reports_unsupported_or_invalid_declared_charset() {
+    for (content_type, body, expected_error) in [
+        (
+            "application/json; charset=iso-8859-1",
+            b"{}".as_slice(),
+            "unsupported charset",
+        ),
+        (
+            "text/plain; charset=shift_jis",
+            b"\x82".as_slice(),
+            "invalid Shift-JIS",
+        ),
+    ] {
+        let message = Message {
+            start_line: "DELETE /resource HTTP/1.1".into(),
+            headers: vec![RawHeader::new(
+                Bytes::from_static(b"Content-Type"),
+                Bytes::copy_from_slice(content_type.as_bytes()),
+            )],
+            body: Bytes::copy_from_slice(body),
+            body_modified: false,
+        };
+
+        let view = content_view(&Utf8BodyCodec, &message);
+
+        assert!(view.body_text.is_none());
+        assert!(view.json.is_none());
+        assert!(
+            view.decode_error
+                .as_deref()
+                .unwrap()
+                .contains(expected_error)
+        );
+        assert_eq!(view.body_bytes, body);
+    }
 }
 
 #[test]

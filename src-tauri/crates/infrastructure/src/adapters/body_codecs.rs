@@ -1,18 +1,25 @@
-//! 监听器级 Body 编码解析器。
+//! HTTP Body 编码解析器。
 //!
-//! 每个 Listener 直接保存请求和响应的 Raw、UTF-8 或 Shift-JIS 选择。Rust 在每个
-//! 请求/响应阶段读取持久化监听器快照；前端不解码、不猜测，也不重建长度。
+//! 新 Listener 使用 `Auto`，最终展示投影以每条消息的 Content-Type charset 为准。
+//! 旧 Workspace 的 Raw、UTF-8 和 Shift-JIS 仍可加载，避免配置升级破坏运行现场。
 
 use std::sync::Arc;
 
 use encoding_rs::SHIFT_JIS;
-use intercept_proxy_domain::{BodyCodecKind, MessageStage};
+use intercept_proxy_domain::MessageStage;
 use intercept_proxy_product_api::{BodyCodec, ProductError};
-use intercept_proxy_runtime::{ConnectionContext, ErrorCode, ProxyError, Result as ProxyResult};
+use intercept_proxy_runtime::{
+    ConnectionContext, ErrorCode, Message, ProxyError, Result as ProxyResult,
+};
 
 use crate::SqliteStore;
 
 use super::{common::decode_workspace_record, pipeline::RuntimeBodyCodecResolver};
+
+mod content_type;
+pub use content_type::HeaderBodyCodecResolver;
+pub(crate) use content_type::decode_message_body;
+use content_type::resolve_message_codec;
 
 #[derive(Debug)]
 pub struct WorkspaceBodyCodecResolver {
@@ -31,6 +38,7 @@ impl RuntimeBodyCodecResolver for WorkspaceBodyCodecResolver {
         &self,
         context: &ConnectionContext,
         stage: MessageStage,
+        message: &Message,
     ) -> ProxyResult<Option<Arc<dyn BodyCodec>>> {
         if matches!(stage, MessageStage::TlsHandshake) {
             return Ok(None);
@@ -87,12 +95,7 @@ impl RuntimeBodyCodecResolver for WorkspaceBodyCodecResolver {
             MessageStage::Response => listener.response_body_codec,
             MessageStage::TlsHandshake => return Ok(None),
         };
-        let codec: Arc<dyn BodyCodec> = match selected {
-            BodyCodecKind::Raw => Arc::new(RawBodyCodec),
-            BodyCodecKind::Utf8 => Arc::new(Utf8BodyCodec),
-            BodyCodecKind::ShiftJis => Arc::new(ShiftJisBodyCodec),
-        };
-        Ok(Some(codec))
+        Ok(Some(resolve_message_codec(selected, message)))
     }
 }
 
@@ -162,7 +165,7 @@ impl BodyCodec for ShiftJisBodyCodec {
         if had_errors {
             return Err(ProductError::new(
                 "SHIFT_JIS_DECODE_FAILED",
-                "Body 包含无效的 Shift-JIS 字节序列",
+                "invalid Shift-JIS byte sequence in Body",
             ));
         }
         Ok(decoded.into_owned())
@@ -182,10 +185,13 @@ impl BodyCodec for ShiftJisBodyCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::{net::SocketAddr, time::SystemTime};
+    use std::{collections::BTreeMap, net::SocketAddr, time::SystemTime};
 
     use chrono::Utc;
-    use intercept_proxy_domain::{ListenerId, ProxyListener, ProxyWorkspace};
+    use intercept_proxy_application::{
+        BreakpointBodyCodecResolver, MessageContentKind, MessageContentViewModel,
+    };
+    use intercept_proxy_domain::{BodyCodecKind, ListenerId, ProxyListener, ProxyWorkspace};
     use intercept_proxy_runtime::ChannelId;
     use uuid::Uuid;
 
@@ -227,18 +233,93 @@ mod tests {
             accepted_at: SystemTime::now(),
             tls_peer: None,
         };
+        let message = message_with_content_type("text/plain", b"body");
 
         let request_codec = resolver
-            .resolve(&context, MessageStage::Request)
+            .resolve(&context, MessageStage::Request, &message)
             .unwrap()
             .expect("request Raw codec");
         assert_eq!(request_codec.id(), "raw");
         let codec = resolver
-            .resolve(&context, MessageStage::Response)
+            .resolve(&context, MessageStage::Response, &message)
             .unwrap()
             .expect("response Shift-JIS codec");
         let encoded = codec.encode("結果D48").unwrap();
         assert_eq!(codec.decode(&encoded).unwrap(), "結果D48");
         assert!(codec.encode("😀").is_err());
+    }
+
+    #[test]
+    fn declared_charset_aliases_are_canonicalized_without_lossy_decoding() {
+        let (encoded, _, had_errors) = SHIFT_JIS.encode("結果D48");
+        assert!(!had_errors);
+        for alias in [
+            "Shift_JIS",
+            "shift-jis",
+            "SJIS",
+            "Windows-31J",
+            "MS932",
+            "CP932",
+        ] {
+            let message =
+                message_with_content_type(&format!("text/plain; charset={alias}"), &encoded);
+            let codec = resolve_message_codec(BodyCodecKind::Auto, &message);
+            assert_eq!(codec.id(), "shift-jis");
+            assert_eq!(codec.decode(&encoded).unwrap(), "結果D48");
+        }
+        for alias in ["UTF-8", "utf8", "\"utf-8\""] {
+            let message = message_with_content_type(
+                &format!("text/plain; charset={alias}"),
+                "成功".as_bytes(),
+            );
+            let codec = resolve_message_codec(BodyCodecKind::Auto, &message);
+            assert_eq!(codec.id(), "utf-8");
+            assert_eq!(codec.decode("成功".as_bytes()).unwrap(), "成功");
+        }
+    }
+
+    #[test]
+    fn breakpoint_resolver_uses_edited_content_type_instead_of_stale_codec_id() {
+        let resolver = HeaderBodyCodecResolver;
+        let message = MessageContentViewModel {
+            http_status: None,
+            start_line_bytes: b"POST / HTTP/1.1".to_vec(),
+            raw_headers: Vec::new(),
+            headers: BTreeMap::from([(
+                "Content-Type".into(),
+                vec!["application/json; charset=windows-31j".into()],
+            )]),
+            body_text: Some(r#"{"result":"成功"}"#.into()),
+            body_bytes: Vec::new(),
+            json: None,
+            content_length: 0,
+            media_type: Some("application/json".into()),
+            charset: Some("utf-8".into()),
+            content_kind: MessageContentKind::Json,
+            codec_id: Some("utf-8".into()),
+            decode_error: None,
+            query_string: None,
+        };
+
+        let codec = resolver.resolve(&message);
+        let encoded = codec.encode(message.body_text.as_deref().unwrap()).unwrap();
+
+        assert_eq!(codec.id(), "shift-jis");
+        assert_eq!(SHIFT_JIS.decode(&encoded).0, message.body_text.unwrap());
+    }
+
+    fn message_with_content_type(content_type: &str, body: &[u8]) -> Message {
+        use bytes::Bytes;
+        use intercept_proxy_runtime::RawHeader;
+
+        Message {
+            start_line: "POST / HTTP/1.1".into(),
+            headers: vec![RawHeader::new(
+                Bytes::from_static(b"Content-Type"),
+                Bytes::copy_from_slice(content_type.as_bytes()),
+            )],
+            body: Bytes::copy_from_slice(body),
+            body_modified: false,
+        }
     }
 }

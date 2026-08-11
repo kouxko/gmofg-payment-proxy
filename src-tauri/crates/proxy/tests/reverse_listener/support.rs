@@ -1,4 +1,3 @@
-
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::{Arc, Mutex},
@@ -7,9 +6,11 @@ use std::{
 
 use async_trait::async_trait;
 use intercept_proxy_runtime::{
-    HandshakePolicy, MessageLimits, MitmCertificateAuthority, MitmServerIdentity, PipelinePorts,
+    ForwardAuthenticationMode, ForwardProxyConfig, ForwardProxyService, HandshakePolicy,
+    MessageLimits, MitmCertificateAuthority, MitmServerIdentity, NoAuthentication, PipelinePorts,
     ReverseClientIdentity, ReverseDownstreamTls, ReverseProxyConfig, ReverseProxyService,
-    ReverseUpstreamTls, UpstreamSecurityEvidence, UpstreamTransportSecurity,
+    ReverseUpstreamTls, UpstreamScheme, UpstreamSecurityEvidence, UpstreamTransport,
+    UpstreamTransportSecurity,
     tls::{ClientTlsAdapter, ServerTlsAdapter},
     transport::{ConnectionAcceptor, ConnectionContext, NoopPipelinePorts},
 };

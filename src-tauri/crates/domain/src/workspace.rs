@@ -37,6 +37,7 @@ pub struct SecretReference {
 #[serde(rename_all = "snake_case")]
 pub enum BodyCodecKind {
     #[default]
+    Auto,
     Raw,
     Utf8,
     ShiftJis,
@@ -222,9 +223,9 @@ pub struct ProxyListener {
     pub read_timeout_ms: u64,
     pub write_timeout_ms: u64,
     pub downstream_tls: DownstreamTlsSettings,
-    /// 当前监听处理请求正文时采用的字符编码。Raw 表示不执行文本/JSON解码。
+    /// 兼容旧 Workspace 的正文编码偏好。新配置使用 Auto，以 Content-Type charset 为准。
     pub request_body_codec: BodyCodecKind,
-    /// 当前监听处理响应正文时采用的字符编码。Raw 表示不执行文本/JSON解码。
+    /// 兼容旧 Workspace 的正文编码偏好。新配置使用 Auto，以 Content-Type charset 为准。
     pub response_body_codec: BodyCodecKind,
     pub fixed_server: Option<FixedServerSettings>,
 }
@@ -291,8 +292,8 @@ impl Default for ProxyListener {
             read_timeout_ms: 70_000,
             write_timeout_ms: 70_000,
             downstream_tls: DownstreamTlsSettings::default(),
-            request_body_codec: BodyCodecKind::Raw,
-            response_body_codec: BodyCodecKind::Raw,
+            request_body_codec: BodyCodecKind::Auto,
+            response_body_codec: BodyCodecKind::Auto,
             fixed_server: None,
         }
     }

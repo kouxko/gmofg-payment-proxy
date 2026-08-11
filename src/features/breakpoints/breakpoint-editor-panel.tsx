@@ -2,11 +2,9 @@ import {
   Alert,
   Button,
   Drawer,
-  FieldError,
   Spinner,
   Tabs,
   TextArea,
-  TextField,
 } from "@heroui/react";
 import { Copy } from "@gravity-ui/icons";
 import type {
@@ -14,6 +12,8 @@ import type {
   BreakpointDetailViewModel,
   FieldValidationViewModel,
 } from "@/generated/rust-types";
+import { HttpBodyViewer, HttpRequestTargetView } from "@/features/shared/http-inspection";
+import { messageContentLabel } from "@/lib/message-content";
 import type { BreakpointActionPanelProps } from "./breakpoint-action-panel";
 import { BreakpointActionPanel } from "./breakpoint-action-panel";
 
@@ -43,6 +43,7 @@ interface BreakpointEditorPanelProps {
 
 function MessageTabs({
   label,
+  message,
   body,
   headers,
   bytes,
@@ -51,6 +52,7 @@ function MessageTabs({
   onChange,
 }: {
   label: string;
+  message: BreakpointDetailViewModel["original"];
   body: string;
   headers: Record<string, string[]>;
   bytes: number[];
@@ -61,11 +63,11 @@ function MessageTabs({
   return (
     <div>
       <h3 className="mb-2 font-semibold">{label}</h3>
-      <Tabs defaultSelectedKey="json">
+      <Tabs defaultSelectedKey="body">
         <Tabs.ListContainer>
           <Tabs.List aria-label={`${label}查看`}>
-            <Tabs.Tab id="json">
-              JSON
+            <Tabs.Tab id="body">
+              {messageContentLabel(message)}
               <Tabs.Indicator />
             </Tabs.Tab>
             <Tabs.Tab id="headers">
@@ -78,25 +80,18 @@ function MessageTabs({
             </Tabs.Tab>
           </Tabs.List>
         </Tabs.ListContainer>
-        <Tabs.Panel id="json" className="pt-3">
-          {editable ? (
-            <TextField aria-label="有效 JSON 字段" isInvalid={Boolean(error)}>
-              <TextArea
-                aria-label="有效 JSON"
-                className="min-h-[430px] font-mono text-xs"
-                value={body}
-                onChange={(event) => onChange?.(event.target.value)}
-              />
-              {error && <FieldError>{error}</FieldError>}
-            </TextField>
-          ) : (
-            <TextArea
-              aria-label="原始 JSON"
-              className="min-h-[430px] font-mono text-xs"
-              value={body}
-              readOnly
-            />
-          )}
+        <Tabs.Panel id="body" className="pt-3">
+          <HttpBodyViewer
+            label={`${label} Body`}
+            message={message}
+            emptyText="无正文"
+            textOverride={body}
+            editable={editable}
+            error={error}
+            ariaLabel={`${label === "有效报文" ? "有效" : "原始"} ${messageContentLabel(message)}`}
+            showRawBytes={false}
+            onChange={onChange}
+          />
         </Tabs.Panel>
         <Tabs.Panel id="headers" className="pt-3">
           <TextArea
@@ -166,14 +161,27 @@ export function BreakpointEditorPanel(props: BreakpointEditorPanelProps) {
           </span>
         </div>
         <div className="grid grid-cols-2 gap-5 max-[1100px]:grid-cols-1">
+          <div className="col-span-2">
+            <HttpRequestTargetView
+              method={data.summary.method}
+              target={data.summary.target}
+              queryString={(
+                data.summary as BreakpointDetailViewModel["summary"] & {
+                  query_string?: string | null;
+                }
+              ).query_string}
+            />
+          </div>
           <MessageTabs
             label="原始报文"
+            message={data.original}
             body={data.original.body_text ?? ""}
             headers={data.original.headers}
             bytes={data.original.body_bytes}
           />
           <MessageTabs
             label="有效报文"
+            message={data.effective}
             body={props.bodyText}
             headers={data.effective.headers}
             bytes={data.effective.body_bytes}

@@ -12,6 +12,8 @@ fn default_workspace_is_empty_safe_and_serializable() {
     assert_eq!(listener.bind_address, "127.0.0.1");
     assert_eq!(listener.port, 8080);
     assert!(listener.fixed_server.is_none());
+    assert_eq!(listener.request_body_codec, BodyCodecKind::Auto);
+    assert_eq!(listener.response_body_codec, BodyCodecKind::Auto);
     assert!(workspace.rules.is_empty());
     assert!(workspace.fault_presets.is_empty());
     workspace.validate().expect("safe draft must validate");
@@ -19,6 +21,37 @@ fn default_workspace_is_empty_safe_and_serializable() {
     for forbidden in ["private_key", "password", "pkcs12"] {
         assert!(!json.to_ascii_lowercase().contains(forbidden));
     }
+}
+
+#[test]
+fn legacy_listener_body_codec_values_remain_deserializable() {
+    for (serialized, expected) in [
+        ("raw", BodyCodecKind::Raw),
+        ("utf8", BodyCodecKind::Utf8),
+        ("shift_jis", BodyCodecKind::ShiftJis),
+    ] {
+        let codec: BodyCodecKind = serde_json::from_value(serialized.into()).unwrap();
+        assert_eq!(codec, expected);
+    }
+}
+
+#[test]
+fn listener_documents_without_body_codec_use_header_driven_auto() {
+    let mut document = serde_json::to_value(ProxyWorkspace::default()).unwrap();
+    let listener = document["listeners"][0].as_object_mut().unwrap();
+    listener.remove("request_body_codec");
+    listener.remove("response_body_codec");
+
+    let workspace: ProxyWorkspace = serde_json::from_value(document).unwrap();
+
+    assert_eq!(
+        workspace.listeners[0].request_body_codec,
+        BodyCodecKind::Auto
+    );
+    assert_eq!(
+        workspace.listeners[0].response_body_codec,
+        BodyCodecKind::Auto
+    );
 }
 
 #[test]

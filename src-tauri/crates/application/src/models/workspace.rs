@@ -115,6 +115,30 @@ pub struct ListenerUpstreamTlsTestViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。
+pub struct ListenerUpstreamConnectionTestViewModel {
+    pub listener_id: ListenerId,
+    pub upstream_origin: String,
+    pub resolved_address: String,
+    pub scheme: String,
+    pub transport: String,
+    pub tls: Option<ListenerUpstreamTlsEvidenceViewModel>,
+    pub elapsed_millis: u64,
+    pub message: String,
+    pub ui_tone: UiTone,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ListenerUpstreamTlsEvidenceViewModel {
+    pub tls_version: String,
+    pub cipher_suite: String,
+    pub peer_subject: String,
+    pub peer_sha256_fingerprint: String,
+    pub hostname_verification_enabled: bool,
+    pub client_identity_configured: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 运行监控中的单个入口行。配置与运行状态由 Rust 合并，前端不推断“缺少状态即停止”。
 pub struct ListenerMonitorRowViewModel {
     pub listener_id: ListenerId,

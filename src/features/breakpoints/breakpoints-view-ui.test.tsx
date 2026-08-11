@@ -125,6 +125,8 @@ const details: Record<string, BreakpointDetailViewModel> = {
 describe("BreakpointsView queue controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    details.A = detail(summaries[0]);
+    details.B = detail(summaries[1]);
     navigationMocks.searchParams = new URLSearchParams();
     queryMocks.refresh.mockResolvedValue(undefined);
     commandMocks.breakpointValidate.mockResolvedValue({
@@ -211,5 +213,32 @@ describe("BreakpointsView queue controls", () => {
     );
     expect(queryMocks.invalidate).toHaveBeenCalled();
     expect(queryMocks.refresh).toHaveBeenCalled();
+  });
+
+  it("uses the Rust content kind for the breakpoint body label", () => {
+    navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
+    details.A = {
+      ...detail(summaries[0]),
+      original: {
+        ...message("<request><code>D48</code></request>"),
+        headers: { "content-type": ["application/xml"] },
+        json: null,
+        content_kind: "xml",
+        media_type: "application/xml",
+      } as BreakpointDetailViewModel["original"],
+      effective: {
+        ...message("<request><code>D48</code></request>"),
+        headers: { "content-type": ["application/xml"] },
+        json: null,
+        content_kind: "xml",
+        media_type: "application/xml",
+      } as BreakpointDetailViewModel["effective"],
+    };
+
+    render(<BreakpointsView />);
+
+    expect(screen.getAllByRole("tab", { name: "XML" })).toHaveLength(2);
+    expect(screen.getByRole("textbox", { name: "有效 XML" })).toBeVisible();
+    expect(screen.queryByRole("tab", { name: "JSON" })).not.toBeInTheDocument();
   });
 });

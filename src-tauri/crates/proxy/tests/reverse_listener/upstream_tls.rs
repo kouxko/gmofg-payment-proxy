@@ -98,3 +98,33 @@ async fn upstream_tls_test_supports_ordinary_tls_without_a_client_identity() {
     assert!(!result.client_identity_configured);
     upstream_task.await.unwrap();
 }
+
+#[tokio::test]
+async fn upstream_connection_test_uses_tcp_only_for_http() {
+    let upstream_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let upstream_address = upstream_listener.local_addr().unwrap();
+    let upstream_task = tokio::spawn(async move {
+        let (mut tcp, _) = upstream_listener.accept().await.unwrap();
+        let mut byte = [0_u8; 1];
+        assert_eq!(tcp.read(&mut byte).await.unwrap(), 0);
+    });
+    let service = ReverseProxyService::build(ReverseProxyConfig {
+        bind_addr: (Ipv4Addr::LOCALHOST, 0).into(),
+        allowed_client_cidrs: Vec::new(),
+        upstream_origin: format!("http://{upstream_address}"),
+        downstream_tls: None,
+        upstream_tls: None,
+        connect_timeout: Duration::from_secs(2),
+        read_timeout: Duration::from_secs(2),
+        write_timeout: Duration::from_secs(2),
+    })
+    .await
+    .unwrap();
+
+    let result = service.test_upstream_connection().await.unwrap();
+    assert_eq!(result.resolved_address, upstream_address);
+    assert_eq!(result.scheme, UpstreamScheme::Http);
+    assert_eq!(result.transport, UpstreamTransport::Tcp);
+    assert!(result.tls.is_none());
+    upstream_task.await.unwrap();
+}

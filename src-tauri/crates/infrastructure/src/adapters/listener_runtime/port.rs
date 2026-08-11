@@ -4,10 +4,12 @@ use super::{
     AppError, AppResult, Arc, CancellationToken, Duration, ForwardAuthenticationMode,
     ForwardMitmConfig, ForwardProxyAuthentication, ForwardProxyAuthenticator, ForwardProxyConfig,
     ForwardProxyService, ListenerId, ListenerRuntimeAdapter, ListenerRuntimePort,
-    ListenerRuntimeState, ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel, MessageLimits,
+    ListenerRuntimeState, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
+    ListenerUpstreamTlsEvidenceViewModel, ListenerUpstreamTlsTestViewModel, MessageLimits,
     NativeRootMitmConnector, NoAuthentication, ProxyListener, ProxyWorkspace, ReverseProxyConfig,
-    ReverseProxyService, RunningListener, RuntimeChannelId, RwLock, UiTone, bind_tcp_listener,
-    parse_bind_address, running_status, upstream_tls_test_error,
+    ReverseProxyService, RunningListener, RuntimeChannelId, RwLock, UiTone, UpstreamScheme,
+    UpstreamTransport, bind_tcp_listener, parse_bind_address, running_status,
+    upstream_tls_test_error,
 };
 
 #[async_trait]
@@ -137,6 +139,11 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             authenticator,
         )
         .map_err(|error| AppError::new(error.code, error.message))?;
+        if let Some(downstream_tls) = self.downstream_tls(&workspace, &listener)? {
+            service = service
+                .with_downstream_tls(&downstream_tls)
+                .map_err(|error| AppError::new(error.code, error.message))?;
+        }
         if listener.mitm.enabled {
             // Workspace 校验已经保证 allowlist 与 Root CA 引用存在。这里仍 fail-closed：
             // 宿主若没有注入受保护的安装级签发器，绝不能静默降级为透明隧道。
@@ -263,6 +270,42 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             )
             .entity(listener.id.to_string()));
         }
+        let result = self.test_upstream_connection(workspace, listener).await?;
+        let tls = result.tls.ok_or_else(|| {
+            AppError::new(
+                "CERTIFICATE_NOT_READY",
+                "HTTPS 上游连接成功但未返回 TLS 证据。",
+            )
+            .entity(result.listener_id.to_string())
+        })?;
+        Ok(ListenerUpstreamTlsTestViewModel {
+            listener_id: result.listener_id,
+            upstream_origin: result.upstream_origin,
+            resolved_address: result.resolved_address,
+            tls_version: tls.tls_version,
+            cipher_suite: tls.cipher_suite,
+            peer_subject: tls.peer_subject,
+            peer_sha256_fingerprint: tls.peer_sha256_fingerprint,
+            hostname_verification_enabled: tls.hostname_verification_enabled,
+            client_identity_configured: tls.client_identity_configured,
+            elapsed_millis: result.elapsed_millis,
+            message: "上游 Server TLS 握手成功。".into(),
+            ui_tone: UiTone::Positive,
+        })
+    }
+
+    async fn test_upstream_connection(
+        &self,
+        workspace: ProxyWorkspace,
+        listener: ProxyListener,
+    ) -> AppResult<ListenerUpstreamConnectionTestViewModel> {
+        let fixed_server = listener.fixed_server.as_ref().ok_or_else(|| {
+            AppError::new(
+                "FIXED_SERVER_NOT_CONFIGURED",
+                "该代理监听未配置固定 Server，没有上游连接可测试。",
+            )
+            .entity(listener.id.to_string())
+        })?;
         let upstream_tls = self.upstream_tls(&workspace, fixed_server)?;
         let service = ReverseProxyService::build(ReverseProxyConfig {
             bind_addr: "127.0.0.1:0"
@@ -279,21 +322,36 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         .await
         .map_err(|error| upstream_tls_test_error(listener.id, &error))?;
         let result = service
-            .test_upstream_tls()
+            .test_upstream_connection()
             .await
             .map_err(|error| upstream_tls_test_error(listener.id, &error))?;
-        Ok(ListenerUpstreamTlsTestViewModel {
+        let tls = result
+            .tls
+            .map(|evidence| ListenerUpstreamTlsEvidenceViewModel {
+                tls_version: evidence.tls_version,
+                cipher_suite: evidence.cipher_suite,
+                peer_subject: evidence.peer_subject,
+                peer_sha256_fingerprint: evidence.peer_sha256_fingerprint,
+                hostname_verification_enabled: evidence.hostname_verification_enabled,
+                client_identity_configured: evidence.client_identity_configured,
+            });
+        let scheme = match result.scheme {
+            UpstreamScheme::Http => "http",
+            UpstreamScheme::Https => "https",
+        };
+        let transport = match result.transport {
+            UpstreamTransport::Tcp => "tcp",
+            UpstreamTransport::Tls => "tls",
+        };
+        Ok(ListenerUpstreamConnectionTestViewModel {
             listener_id: listener.id,
             upstream_origin: fixed_server.upstream_url.clone(),
             resolved_address: result.resolved_address.to_string(),
-            tls_version: result.tls_version,
-            cipher_suite: result.cipher_suite,
-            peer_subject: result.peer_subject,
-            peer_sha256_fingerprint: result.peer_sha256_fingerprint,
-            hostname_verification_enabled: result.hostname_verification_enabled,
-            client_identity_configured: result.client_identity_configured,
+            scheme: scheme.into(),
+            transport: transport.into(),
+            tls,
             elapsed_millis: result.elapsed_millis,
-            message: "上游 Server TLS 握手成功。".into(),
+            message: format!("上游 Server {transport} 连接成功。"),
             ui_tone: UiTone::Positive,
         })
     }

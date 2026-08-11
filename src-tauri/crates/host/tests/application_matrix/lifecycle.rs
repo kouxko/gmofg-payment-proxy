@@ -95,6 +95,12 @@ fn message_content() -> MessageContentViewModel {
         body_bytes: body,
         json: None,
         content_length: 42,
+        media_type: Some("application/json".into()),
+        charset: None,
+        content_kind: intercept_proxy_application::MessageContentKind::Json,
+        codec_id: Some("utf-8".into()),
+        decode_error: None,
+        query_string: None,
     }
 }
 

@@ -109,10 +109,14 @@ export function ImportIdentityModal({
                 />
               </TextField>
               <p className="text-sm text-[var(--telemetry-muted)]">
-                选择包含“客户端证书 + 私钥”的 client.p12 或 client.pfx。代理连接上游 Server 时出示它；它不是本入口给 Android/App 使用的服务端证书。
+                选择包含“客户端证书 + 私钥”的 client.p12 或 client.pfx。
+                代理连接上游 Server 时出示它；它不是本入口给 Android/App
+                使用的服务端证书。
               </p>
               <p className="text-xs text-[var(--telemetry-muted)]">
-                文件由 Rust 原生对话框读取和解析，导入后会在当前页面显示主题、SAN、有效期和 SHA-256；私钥和密码不会进入 Workspace。
+                文件由 Rust 原生对话框读取和解析，导入后会显示主题、SAN、
+                有效期和 SHA-256。私钥与密码由系统保护存储；显式导出可移植
+                应用配置时会随配置包含。
               </p>
             </Modal.Body>
             <Modal.Footer>
@@ -160,10 +164,12 @@ export function ImportTrustModal({
                 />
               </TextField>
               <p className="text-sm text-[var(--telemetry-muted)]">
-                选择签发上游 Server 证书的 ca.crt、chain.crt 或 PEM 证书链。不要选择带私钥的 Server 身份文件，也不要用客户端 client.p12 代替。
+                选择签发上游 Server 证书的单个 CA 锚（.cer / .crt / .pem /
+                .der）。不要选择证书链、带私钥的 Server 身份文件或 client.p12。
               </p>
               <p className="text-xs text-[var(--telemetry-muted)]">
-                Rust 会立即解析证书，导入后在当前页面显示主题、SAN、有效期和 SHA-256，并在“测试上游 TLS / mTLS 握手”中实际验证。
+                Rust 会立即解析证书，导入后在当前页面显示主题、SAN、有效期和
+                SHA-256，并在“测试 Server 连接”中实际验证。
               </p>
             </Modal.Body>
             <Modal.Footer>
@@ -173,7 +179,7 @@ export function ImportTrustModal({
                 isDisabled={busy || !label.trim()}
                 onPress={() => void onImport()}
               >
-                选择 CA 证书（.crt / .pem）
+                选择 CA 证书（.cer / .crt / .pem / .der）
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

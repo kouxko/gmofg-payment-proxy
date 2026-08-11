@@ -7,8 +7,9 @@ use parking_lot::RwLock;
 
 use crate::{
     AppError, AppResult, ListenerId, ListenerRuntimePort, ListenerRuntimeState,
-    ListenerStatusViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener, ProxyWorkspace,
-    UiTone,
+    ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
+    ListenerUpstreamTlsEvidenceViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener,
+    ProxyWorkspace, UiTone,
 };
 
 #[derive(Debug, Default)]
@@ -103,6 +104,44 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
             client_identity_configured: fixed_server.upstream_tls.client_identity.is_some(),
             elapsed_millis: 1,
             message: "上游 Server TLS 握手成功。".into(),
+            ui_tone: UiTone::Positive,
+        })
+    }
+
+    async fn test_upstream_connection(
+        &self,
+        _workspace: ProxyWorkspace,
+        listener: ProxyListener,
+    ) -> AppResult<ListenerUpstreamConnectionTestViewModel> {
+        let fixed_server = listener.fixed_server.as_ref().ok_or_else(|| {
+            AppError::new(
+                "LISTENER_CONNECTION_TEST_UNSUPPORTED",
+                "该监听器未开启固定 Server，无法测试单一 Server 连接。",
+            )
+            .entity(listener.id.to_string())
+        })?;
+        let is_https = fixed_server.upstream_url.starts_with("https://");
+        Ok(ListenerUpstreamConnectionTestViewModel {
+            listener_id: listener.id,
+            upstream_origin: fixed_server.upstream_url.clone(),
+            resolved_address: if is_https {
+                "127.0.0.1:443"
+            } else {
+                "127.0.0.1:80"
+            }
+            .into(),
+            scheme: if is_https { "https" } else { "http" }.into(),
+            transport: if is_https { "tls" } else { "tcp" }.into(),
+            tls: is_https.then(|| ListenerUpstreamTlsEvidenceViewModel {
+                tls_version: "TLS 1.2".into(),
+                cipher_suite: "测试密码套件".into(),
+                peer_subject: "CN=测试上游".into(),
+                peer_sha256_fingerprint: "00:11:22".into(),
+                hostname_verification_enabled: fixed_server.upstream_tls.verify_hostname,
+                client_identity_configured: fixed_server.upstream_tls.client_identity.is_some(),
+            }),
+            elapsed_millis: 1,
+            message: "上游 Server 连接成功。".into(),
             ui_tone: UiTone::Positive,
         })
     }

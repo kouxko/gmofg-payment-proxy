@@ -3,7 +3,11 @@ import type {
   SessionDetailViewModel,
   SessionSummaryViewModel,
 } from "@/generated/rust-types";
-import { formatMessageBody } from "@/lib/message-content";
+import type { QueryAwareRequest } from "@/lib/message-content";
+import {
+  HttpBodyViewer,
+  HttpRequestTargetView,
+} from "@/features/shared/http-inspection";
 import { sessionDetailTabLabels } from "./session-config";
 
 interface DetailQuery {
@@ -182,15 +186,24 @@ export function SessionDetailContent({
           )}
         </Tabs.Panel>
         <Tabs.Panel id="request" className="space-y-4 pt-4">
+          {selected && (
+            <HttpRequestTargetView
+              method={selected.method}
+              target={selected.target}
+              queryString={(selected as SessionSummaryViewModel & QueryAwareRequest).query_string}
+            />
+          )}
           <h2 className="font-semibold">请求 Header</h2>
           <HeadersTable
             label="详情请求 HTTP Header"
             headers={detail.data?.request?.headers ?? {}}
           />
           <h2 className="font-semibold">请求 Body</h2>
-          <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">
-            {formatMessageBody(detail.data?.request, "按需读取后显示请求报文")}
-          </pre>
+          <HttpBodyViewer
+            label="请求 Body"
+            message={detail.data?.request}
+            emptyText="按需读取后显示请求报文"
+          />
         </Tabs.Panel>
         <Tabs.Panel id="response" className="space-y-4 pt-4">
           <h2 className="font-semibold">响应 Header</h2>
@@ -199,9 +212,11 @@ export function SessionDetailContent({
             headers={detail.data?.response?.headers ?? {}}
           />
           <h2 className="font-semibold">响应 Body</h2>
-          <pre className="max-h-80 overflow-auto whitespace-pre font-mono text-xs">
-            {formatMessageBody(detail.data?.response, "按需读取后显示响应报文")}
-          </pre>
+          <HttpBodyViewer
+            label="响应 Body"
+            message={detail.data?.response}
+            emptyText="按需读取后显示响应报文"
+          />
         </Tabs.Panel>
       </Tabs>
     </>
