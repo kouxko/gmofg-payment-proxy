@@ -77,27 +77,71 @@ async fn workspace_facade_exposes_complete_headless_crud_document_and_event_flow
 }
 
 #[tokio::test]
-async fn full_configuration_export_excludes_installation_root_but_keeps_listener_material() {
+async fn full_configuration_export_keeps_reachable_listener_material_and_drops_orphans() {
     let ports = Arc::new(FakePorts::default());
     let workspaces = Arc::new(InMemoryWorkspaceStore::default());
     let documents = Arc::new(InMemoryWorkspaceDocumentStore::default());
     let selected = workspaces.list().await.unwrap().remove(0);
     let mut workspace = workspaces.get(selected.id).await.unwrap();
+    let root_id = CertificateReferenceId::new();
     workspace.certificate_references.push(CertificateReference {
-        id: CertificateReferenceId::new(),
+        id: root_id,
         label: "本机 MITM Root CA".into(),
         kind: CertificateReferenceKind::MitmRootCa,
         reference: INSTALLATION_ROOT_CERTIFICATE_REFERENCE.into(),
     });
+    let server_identity = CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "Listener 服务端身份".into(),
+        kind: CertificateReferenceKind::ReverseServerIdentity,
+        reference: format!("{MANAGED_LISTENER_CERTIFICATE_PREFIX}server-identity"),
+    };
+    let client_trust = CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "下游客户端 CA".into(),
+        kind: CertificateReferenceKind::DownstreamClientTrust,
+        reference: format!("{MANAGED_LISTENER_CERTIFICATE_PREFIX}client-trust"),
+    };
+    let server_trust = CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "上游服务端 CA".into(),
+        kind: CertificateReferenceKind::UpstreamServerTrust,
+        reference: format!("{MANAGED_LISTENER_CERTIFICATE_PREFIX}server-trust"),
+    };
     let client_identity = CertificateReference {
         id: CertificateReferenceId::new(),
         label: "上游 P12".into(),
         kind: CertificateReferenceKind::UpstreamClientIdentity,
         reference: format!("{MANAGED_LISTENER_CERTIFICATE_PREFIX}client-identity"),
     };
-    workspace
-        .certificate_references
-        .push(client_identity.clone());
+    let orphan = CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "已丢失的旧临时证书".into(),
+        kind: CertificateReferenceKind::ReverseServerIdentity,
+        reference: "file:/tmp/deleted-listener-identity.pem".into(),
+    };
+    workspace.certificate_references.extend([
+        server_identity.clone(),
+        client_trust.clone(),
+        server_trust.clone(),
+        client_identity.clone(),
+        orphan,
+    ]);
+    workspace.listeners[0].mitm.root_ca = Some(root_id);
+    workspace.listeners[0].downstream_tls.enabled = true;
+    workspace.listeners[0].downstream_tls.server_identity = Some(server_identity.id);
+    workspace.listeners[0].downstream_tls.client_authentication =
+        DownstreamClientAuthentication::Required {
+            trust: client_trust.id,
+        };
+    workspace.listeners[0].fixed_server = Some(FixedServerSettings {
+        upstream_url: "https://upstream.test".into(),
+        upstream_tls: UpstreamTlsSettings {
+            verify_hostname: true,
+            server_trust: Some(server_trust.id),
+            client_identity: Some(client_identity.id),
+        },
+    });
     workspaces.save(workspace).await.unwrap();
     let application = application_with_workspace_ports(ports, workspaces, Arc::clone(&documents));
 
@@ -108,20 +152,72 @@ async fn full_configuration_export_excludes_installation_root_but_keeps_listener
 
     let (_, bytes) = documents.take_last_export().unwrap();
     let exported = parse_application_configuration(&bytes).unwrap();
-    assert_eq!(exported.certificate_materials.len(), 1);
+    assert_eq!(exported.certificate_materials.len(), 4);
     assert_eq!(
-        exported.certificate_materials[0].reference_id,
-        client_identity.id
-    );
-    assert_eq!(
-        exported.certificate_materials[0].password.as_deref(),
+        exported
+            .certificate_materials
+            .iter()
+            .find(|material| material.reference_id == client_identity.id)
+            .unwrap()
+            .password
+            .as_deref(),
         Some("test-password")
     );
-    assert_eq!(exported.workspaces[0].certificate_references.len(), 2);
-    assert_eq!(
-        exported.workspaces[0].certificate_references[0].reference,
-        INSTALLATION_ROOT_CERTIFICATE_REFERENCE
+    assert_eq!(exported.workspaces[0].certificate_references.len(), 5);
+    assert!(
+        exported.workspaces[0]
+            .certificate_references
+            .iter()
+            .any(|reference| reference.reference == INSTALLATION_ROOT_CERTIFICATE_REFERENCE)
     );
+    assert!(
+        exported.workspaces[0]
+            .certificate_references
+            .iter()
+            .all(|reference| !reference.reference.starts_with("file:"))
+    );
+}
+
+#[tokio::test]
+async fn application_data_reset_requires_confirmation_and_replaces_everything_with_defaults() {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(InMemoryWorkspaceStore::default());
+    let documents = Arc::new(InMemoryWorkspaceDocumentStore::default());
+    let configuration_store = Arc::new(RecordingConfigurationStore::default());
+    let application = application_with_configuration_store(
+        ports,
+        workspaces,
+        documents,
+        configuration_store.clone(),
+    );
+
+    let error = application
+        .application_data_reset(false)
+        .await
+        .expect_err("destructive reset must require explicit confirmation");
+    assert_eq!(error.view_model.code, "CONFIRMATION_REQUIRED");
+    assert!(configuration_store.document.lock().is_none());
+
+    let result = application
+        .application_data_reset(true)
+        .await
+        .expect("confirmed reset");
+    assert!(result.success);
+    assert!(result.requires_restart);
+
+    let document = configuration_store
+        .document
+        .lock()
+        .clone()
+        .expect("clean document recorded");
+    assert_eq!(document.workspaces.len(), 1);
+    assert_eq!(document.workspaces[0].name, "Default Workspace");
+    assert_eq!(document.selected_workspace_id, document.workspaces[0].id);
+    assert_eq!(
+        document.settings,
+        PortableSettings::from(&SettingsDraft::default())
+    );
+    assert!(document.certificate_materials.is_empty());
 }
 
 #[tokio::test]

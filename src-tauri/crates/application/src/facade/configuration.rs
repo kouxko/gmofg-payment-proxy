@@ -1,10 +1,11 @@
 //! 完整应用配置导入导出用例。
 
-use super::Application;
+use super::{Application, validation::require_confirmation};
 use crate::{
-    APPLICATION_CONFIGURATION_FORMAT_VERSION, AppError, AppResult,
-    ApplicationConfigurationDocument, OperationResultViewModel, PortableSettings, UiTone,
-    parse_application_configuration, serialize_application_configuration,
+    APPLICATION_CONFIGURATION_FORMAT_VERSION, AndroidNetworkState, AppError, AppResult,
+    ApplicationConfigurationDocument, OperationResultViewModel, PortableSettings, ProxyWorkspace,
+    SettingsDraft, UiTone, parse_application_configuration,
+    retain_reachable_certificate_references, serialize_application_configuration,
 };
 use chrono::Utc;
 
@@ -18,7 +19,9 @@ impl Application {
             .ok_or_else(|| AppError::new("WORKSPACE_NOT_SELECTED", "请先选择一个 Workspace。"))?;
         let mut workspaces = Vec::with_capacity(summaries.len());
         for summary in summaries {
-            workspaces.push(self.workspaces.get(summary.id).await?);
+            let mut workspace = self.workspaces.get(summary.id).await?;
+            retain_reachable_certificate_references(&mut workspace);
+            workspaces.push(workspace);
         }
         let settings = self.settings.get().await?;
         let certificate_materials = self.export_certificate_materials(&workspaces).await?;
@@ -50,6 +53,59 @@ impl Application {
             entity_id: None,
             revision: None,
             requires_restart: false,
+        })
+    }
+
+    pub async fn application_data_reset(
+        &self,
+        confirmed: bool,
+    ) -> AppResult<OperationResultViewModel> {
+        require_confirmation(confirmed, "清除全部配置和测试数据需要显式确认。")?;
+        let _gate = self.mutation_gate.lock().await;
+
+        if let Ok(status) = self.android.network_status().await
+            && matches!(
+                status.state,
+                AndroidNetworkState::StartRequested
+                    | AndroidNetworkState::Running
+                    | AndroidNetworkState::StopRequested
+            )
+        {
+            self.android.network_stop().await.map_err(|error| {
+                AppError::new(
+                    "APPLICATION_DATA_RESET_BLOCKED",
+                    format!(
+                        "设备网络接管停止失败，未清除数据：{}",
+                        error.view_model.message
+                    ),
+                )
+                .retryable("请先在设备网络页执行紧急恢复，再重试清除。")
+            })?;
+        }
+        self.app_shutdown_inner().await?;
+
+        let workspace = ProxyWorkspace {
+            name: "Default Workspace".into(),
+            ..ProxyWorkspace::default()
+        };
+        let document = ApplicationConfigurationDocument {
+            format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
+            selected_workspace_id: workspace.id,
+            workspaces: vec![workspace],
+            settings: PortableSettings::from(&SettingsDraft::default()),
+            certificate_materials: Vec::new(),
+        };
+        self.configuration_store.reset_all(document).await?;
+        *self.android_package_cache.lock().await = None;
+
+        Ok(OperationResultViewModel {
+            success: true,
+            cancelled: false,
+            message: "全部配置与测试数据已清除，应用将重启并重建干净初始状态。".into(),
+            ui_tone: UiTone::Positive,
+            entity_id: None,
+            revision: None,
+            requires_restart: true,
         })
     }
 

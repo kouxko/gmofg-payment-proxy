@@ -159,6 +159,14 @@ pub trait WorkspaceDocumentPort: Send + Sync + std::fmt::Debug {
 /// application 全量校验；实现失败时不得留下任何部分写入。
 pub trait ApplicationConfigurationStorePort: Send + Sync + std::fmt::Debug {
     async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()>;
+
+    /// 原子清除全部用户配置、规则和受保护秘密，再写入干净默认文档。
+    ///
+    /// 默认实现仅替换可移植配置，无状态测试替身可直接复用；生产 `SQLite`
+    /// 适配器必须覆盖并清理其他持久化表。
+    async fn reset_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
+        self.replace_all(document).await
+    }
 }
 
 #[derive(Debug, Default)]

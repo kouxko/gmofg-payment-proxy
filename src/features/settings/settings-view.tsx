@@ -5,7 +5,6 @@
  *
  * 本页只管理与具体代理入口无关的全局超时、容量和应用策略。监听地址、端口、
  * 上游、TLS 与入口启停统一由“入口配置”负责，避免同一网络参数出现两处入口。
- * Rust 负责规范化、字段校验和持久化，前端只维护当前表单草稿。
  */
 
 import { useMemo, useState } from "react";
@@ -38,6 +37,7 @@ import {
 } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { ApplicationDataResetDialog } from "./application-data-reset-dialog";
 import { ThemeSettings } from "./settings-content";
 
 function mib(bytes: number) {
@@ -82,7 +82,6 @@ export function SettingsView() {
   const writePending = pendingAction != null || resetPending;
 
   async function validate(candidate = draft) {
-    // 通用产品不再从系统设置编辑证书 SAN；完整 Draft 直接交由 Rust 校验。
     if (!candidate || writePending) return;
     setPendingAction("validate");
     try {
@@ -105,7 +104,6 @@ export function SettingsView() {
   }
 
   async function save() {
-    // 系统设置只保存全局容量与应用策略；代理入口在“入口配置”中独立启停。
     if (!draft || writePending) return;
     setPendingAction("save");
     try {
@@ -322,6 +320,10 @@ export function SettingsView() {
                     Payload 仅内存保存；规则与设置持久化；敏感导出需要确认；诊断日志不记录
                     Payload、密码、私钥或 PKCS12 原始数据。
                   </p>
+                  <Alert status="warning">
+                    如旧版本数据不兼容，可在页面底部清除全部配置与测试数据。此操作会停止入口、
+                    删除工作区、规则、设备方案、会话、抓包及导入证书，并自动重启应用。
+                  </Alert>
                 </Tabs.Panel>
                 <Tabs.Panel id="app" className="space-y-4 p-4">
                   <Alert status="accent">
@@ -471,6 +473,7 @@ export function SettingsView() {
             </AlertDialog.Container>
           </AlertDialog.Backdrop>
         </AlertDialog>
+        <ApplicationDataResetDialog isDisabled={writePending} />
         <div className="ml-auto flex gap-3">
           <Button
             variant="outline"

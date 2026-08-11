@@ -189,6 +189,26 @@ impl ApplicationConfigurationStorePort for WorkspaceRepositoryAdapter {
             &settings,
         ))
     }
+
+    async fn reset_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
+        document.validate()?;
+        let records = document
+            .workspaces
+            .iter()
+            .map(Self::record)
+            .collect::<AppResult<Vec<_>>>()?;
+        let settings = serialize_settings(&document.settings.to_draft(None)).map_err(|error| {
+            AppError::new(
+                "APPLICATION_CONFIGURATION_INVALID",
+                format!("默认 Settings 无法持久化：{error}"),
+            )
+        })?;
+        infra(self.store.reset_application_data(
+            document.selected_workspace_id.as_uuid(),
+            &records,
+            &settings,
+        ))
+    }
 }
 
 #[async_trait]

@@ -126,6 +126,7 @@ export const commands = {
 	settingsValidate: (draft: SettingsDraft) => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_validate", { draft })),
 	settingsSave: (draft: SettingsDraft) => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_save", { draft })),
 	settingsResetDefaults: (confirmed: boolean) => typedError<SettingsDraft, AppErrorViewModel>(__TAURI_INVOKE("settings_reset_defaults", { confirmed })),
+	applicationDataReset: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_data_reset", { confirmed })),
 };
 
 /* Types */
