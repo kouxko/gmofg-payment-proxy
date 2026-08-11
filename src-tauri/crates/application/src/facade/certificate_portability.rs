@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::Application;
 use crate::{
-    AppError, AppResult, CertificateReference, CertificateReferenceId, PortableCertificateMaterial,
-    ProxyWorkspace, validate_certificate_materials,
+    AppError, AppResult, CertificateReference, CertificateReferenceId, CertificateReferenceKind,
+    PortableCertificateMaterial, ProxyWorkspace, validate_certificate_materials,
 };
 
 impl Application {
@@ -23,6 +23,9 @@ impl Application {
             .iter()
             .flat_map(|workspace| workspace.certificate_references.iter())
         {
+            if reference.kind == CertificateReferenceKind::MitmRootCa {
+                continue;
+            }
             if let Some(existing) = seen.get(&reference.id) {
                 if existing != reference {
                     return Err(crate::AppError::new(
@@ -117,7 +120,8 @@ impl Application {
             .iter()
             .flat_map(|workspace| &workspace.certificate_references)
         {
-            if retained.contains(reference.reference.as_str())
+            if reference.kind == CertificateReferenceKind::MitmRootCa
+                || retained.contains(reference.reference.as_str())
                 || !seen.insert(reference.reference.clone())
             {
                 continue;
