@@ -19,6 +19,12 @@ import { BodyCodecSettings } from "./body-codec-settings";
 import { FixedServerTlsSettings } from "./fixed-server-tls-settings";
 import { RequestRoutingCard } from "./request-routing-card";
 
+const timeoutFields = [
+  { key: "connect", field: "connect_timeout_ms", label: "连接超时" },
+  { key: "read", field: "read_timeout_ms", label: "读取超时" },
+  { key: "write", field: "write_timeout_ms", label: "写入超时" },
+] as const;
+
 type Props = {
   listener: ProxyListener;
   certificateReferences: CertificateReference[];
@@ -159,55 +165,214 @@ function CommonListenerSettings({
 }) {
   return (
     <>
-      {(["connect", "read", "write"] as const).map((kind) => {
-        const field = `${kind}_timeout_ms` as const;
-        const labels = { connect: "连接超时", read: "读取超时", write: "写入超时" };
-        return (
-          <NumberField key={kind} aria-label={`${labels[kind]}毫秒`} minValue={0} value={listener[field]} onChange={(value) => onChange({ [field]: value })}>
-            <Label>{labels[kind]}（ms）</Label>
-            <NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
-          </NumberField>
-        );
-      })}
-      <div className="col-span-2 grid gap-1 max-[700px]:col-span-1">
-        <Label>允许的客户端 CIDR</Label>
-        <Input
-          aria-label="允许的客户端 CIDR"
-          value={listener.allowed_client_cidrs.join(", ")}
-          onChange={(event) => onChange({ allowed_client_cidrs: splitValues(event.target.value) })}
-          placeholder="127.0.0.1/32, 10.0.0.0/8"
+      {timeoutFields.map(({ key, field, label }) => (
+        <TimeoutField
+          key={key}
+          label={label}
+          value={listener[field]}
+          onChange={(value) => onChange({ [field]: value })}
         />
-        <p className="text-xs text-[var(--telemetry-muted)]">留空时允许任意客户端地址连接。</p>
-      </div>
+      ))}
+      <CidrField listener={listener} onChange={onChange} />
       <div className="col-span-2 grid grid-cols-2 gap-4 rounded-2xl border border-[var(--telemetry-line)] p-4 max-[700px]:col-span-1 max-[700px]:grid-cols-1">
         <Switch
           isSelected={listener.authentication.mode === "basic"}
-          onChange={(enabled) => onChange({ authentication: enabled ? { mode: "basic", credential: { provider: "system", key: "" } } : { mode: "none" } })}
+          onChange={(enabled) =>
+            onChange(
+              enabled
+                ? { authentication: { mode: "basic", credential: { provider: "system", key: "" } } }
+                : { authentication: { mode: "none" } },
+            )
+          }
         >
-          <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control><span>启用 HTTP Basic 认证</span></Switch.Content>
+          <Switch.Content>
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+            <span>启用 HTTP Basic 认证</span>
+          </Switch.Content>
         </Switch>
         {!listener.fixed_server && (
-          <Switch isSelected={listener.mitm.enabled} onChange={(enabled) => onChange({ mitm: { ...listener.mitm, enabled } })}>
-            <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control><span>启用 allowlist MITM</span></Switch.Content>
+          <Switch
+            isSelected={listener.mitm.enabled}
+            onChange={(enabled) => onChange({ mitm: { ...listener.mitm, enabled } })}
+          >
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+              <span>启用 allowlist MITM</span>
+            </Switch.Content>
           </Switch>
         )}
         {listener.authentication.mode === "basic" && (
-          <>
-            <div className="grid gap-1"><Label>用户名</Label><Input aria-label="代理认证用户名" value={basicUsername} onChange={(event) => onBasicUsernameChange(event.target.value)} autoComplete="off" /></div>
-            <div className="grid gap-1"><Label>密码</Label><Input aria-label="代理认证密码" type="password" value={basicPassword} onChange={(event) => onBasicPasswordChange(event.target.value)} autoComplete="new-password" /></div>
-            <div className="col-span-2 flex items-center justify-between gap-3 max-[700px]:col-span-1">
-              <p className="min-w-0 truncate text-xs text-[var(--telemetry-muted)]">{basicCredentialKey ? `已保存安全引用：${basicCredentialProvider}/${basicCredentialKey}` : "尚未保存凭据；明文不会写入 Workspace。"}</p>
-              <Button variant="outline" isDisabled={!basicUsername || !basicPassword || Boolean(pending)} onPress={() => void onStoreBasicCredential()}>{pending === "secret" ? "保护中…" : "保护并引用"}</Button>
-            </div>
-          </>
+          <BasicAuthSection
+            pending={pending}
+            basicUsername={basicUsername}
+            basicPassword={basicPassword}
+            basicCredentialKey={basicCredentialKey}
+            basicCredentialProvider={basicCredentialProvider}
+            onBasicUsernameChange={onBasicUsernameChange}
+            onBasicPasswordChange={onBasicPasswordChange}
+            onStoreBasicCredential={onStoreBasicCredential}
+          />
         )}
         {!listener.fixed_server && listener.mitm.enabled && (
-          <>
-            <div className="col-span-2 grid gap-1 max-[700px]:col-span-1"><Label>MITM authority allowlist</Label><Input aria-label="MITM authority allowlist" value={listener.mitm.authority_allowlist.join(", ")} onChange={(event) => onChange({ mitm: { ...listener.mitm, authority_allowlist: splitValues(event.target.value) } })} placeholder="api.example.test, *.test.example" /></div>
-            <NumberField aria-label="MITM 叶子证书缓存" minValue={1} maxValue={256} value={listener.mitm.maximum_cached_leaf_certificates} onChange={(maximum_cached_leaf_certificates) => onChange({ mitm: { ...listener.mitm, maximum_cached_leaf_certificates } })}><Label>叶子证书缓存</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group></NumberField>
-          </>
+          <MitmSection listener={listener} onChange={onChange} />
         )}
       </div>
+    </>
+  );
+}
+
+function TimeoutField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <NumberField aria-label={`${label}毫秒`} minValue={0} value={value} onChange={onChange}>
+      <Label>{label}（ms）</Label>
+      <NumberField.Group>
+        <NumberField.DecrementButton />
+        <NumberField.Input />
+        <NumberField.IncrementButton />
+      </NumberField.Group>
+    </NumberField>
+  );
+}
+
+function CidrField({
+  listener,
+  onChange,
+}: {
+  listener: Props["listener"];
+  onChange: Props["onChange"];
+}) {
+  return (
+    <div className="col-span-2 grid gap-1 max-[700px]:col-span-1">
+      <Label>允许的客户端 CIDR</Label>
+      <Input
+        aria-label="允许的客户端 CIDR"
+        value={listener.allowed_client_cidrs.join(", ")}
+        onChange={(event) => onChange({ allowed_client_cidrs: splitValues(event.target.value) })}
+        placeholder="127.0.0.1/32, 10.0.0.0/8"
+      />
+      <p className="text-xs text-[var(--telemetry-muted)]">留空时允许任意客户端地址连接。</p>
+    </div>
+  );
+}
+
+function BasicAuthSection({
+  pending,
+  basicUsername,
+  basicPassword,
+  basicCredentialKey,
+  basicCredentialProvider,
+  onBasicUsernameChange,
+  onBasicPasswordChange,
+  onStoreBasicCredential,
+}: Pick<
+  Props,
+  | "pending"
+  | "basicUsername"
+  | "basicPassword"
+  | "onBasicUsernameChange"
+  | "onBasicPasswordChange"
+  | "onStoreBasicCredential"
+> & {
+  basicCredentialKey?: string;
+  basicCredentialProvider?: string;
+}) {
+  return (
+    <>
+      <div className="grid gap-1">
+        <Label>用户名</Label>
+        <Input
+          aria-label="代理认证用户名"
+          value={basicUsername}
+          onChange={(event) => onBasicUsernameChange(event.target.value)}
+          autoComplete="off"
+        />
+      </div>
+      <div className="grid gap-1">
+        <Label>密码</Label>
+        <Input
+          aria-label="代理认证密码"
+          type="password"
+          value={basicPassword}
+          onChange={(event) => onBasicPasswordChange(event.target.value)}
+          autoComplete="new-password"
+        />
+      </div>
+      <div className="col-span-2 flex items-center justify-between gap-3 max-[700px]:col-span-1">
+        <p className="min-w-0 truncate text-xs text-[var(--telemetry-muted)]">
+          {basicCredentialKey
+            ? `已保存安全引用：${basicCredentialProvider}/${basicCredentialKey}`
+            : "尚未保存凭据；明文不会写入 Workspace。"}
+        </p>
+        <Button
+          variant="outline"
+          isDisabled={!basicUsername || !basicPassword || Boolean(pending)}
+          onPress={() => void onStoreBasicCredential()}
+        >
+          {pending === "secret" ? "保护中…" : "保护并引用"}
+        </Button>
+      </div>
+    </>
+  );
+}
+
+function MitmSection({
+  listener,
+  onChange,
+}: {
+  listener: Props["listener"];
+  onChange: Props["onChange"];
+}) {
+  return (
+    <>
+      <div className="col-span-2 grid gap-1 max-[700px]:col-span-1">
+        <Label>MITM authority allowlist</Label>
+        <Input
+          aria-label="MITM authority allowlist"
+          value={listener.mitm.authority_allowlist.join(", ")}
+          onChange={(event) =>
+            onChange({
+              mitm: {
+                ...listener.mitm,
+                authority_allowlist: splitValues(event.target.value),
+              },
+            })
+          }
+          placeholder="api.example.test, *.test.example"
+        />
+      </div>
+      <NumberField
+        aria-label="MITM 叶子证书缓存"
+        minValue={1}
+        maxValue={256}
+        value={listener.mitm.maximum_cached_leaf_certificates}
+        onChange={(maximum_cached_leaf_certificates) =>
+          onChange({
+            mitm: {
+              ...listener.mitm,
+              maximum_cached_leaf_certificates,
+            },
+          })
+        }
+      >
+        <Label>叶子证书缓存</Label>
+        <NumberField.Group>
+          <NumberField.DecrementButton />
+          <NumberField.Input />
+          <NumberField.IncrementButton />
+        </NumberField.Group>
+      </NumberField>
     </>
   );
 }

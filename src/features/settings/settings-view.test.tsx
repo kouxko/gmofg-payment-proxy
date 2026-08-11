@@ -16,6 +16,9 @@ const commandMocks = vi.hoisted(() => ({
   applicationDataReset: vi.fn(),
   settingsResetDefaults: vi.fn(),
   settingsSave: vi.fn(),
+  settingsValidate: vi.fn(),
+  settingsGet: vi.fn(),
+  settingsSetData: vi.fn(),
 }));
 
 vi.mock("@/generated/rust-types", () => ({
@@ -78,7 +81,7 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
     error: undefined,
     isLoading: false,
     refresh: vi.fn(),
-    setData: vi.fn(),
+    setData: commandMocks.settingsSetData,
   }),
 }));
 
@@ -89,6 +92,45 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
 describe("production SettingsView overlay", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    commandMocks.settingsValidate.mockResolvedValue({
+      valid: true,
+      field_errors: {},
+      warnings: ["Rust 校验警告"],
+    });
+    commandMocks.settingsSave.mockResolvedValue({
+      ...settings,
+      stored: { ...draft, max_sessions: 501 },
+      effective: { ...draft, max_sessions: 501 },
+    });
+  });
+
+  it("submits the current draft to Rust validation and renders its result", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("button", { name: "校验结果" }));
+    await user.click(screen.getByRole("button", { name: "运行 Rust 校验" }));
+
+    await waitFor(() =>
+      expect(commandMocks.settingsValidate).toHaveBeenCalledWith(draft),
+    );
+    expect(screen.getByText("Rust 校验警告")).toBeVisible();
+  });
+
+  it("saves through Rust and replaces the displayed stored snapshot", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+
+    await waitFor(() =>
+      expect(commandMocks.settingsSave).toHaveBeenCalledWith(draft),
+    );
+    expect(commandMocks.settingsSetData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stored: expect.objectContaining({ max_sessions: 501 }),
+      }),
+    );
   });
 
   it("keeps the real reset AlertDialog open while Rust is pending", async () => {

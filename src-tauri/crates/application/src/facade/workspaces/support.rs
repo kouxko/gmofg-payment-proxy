@@ -1,7 +1,9 @@
-use super::{
-    AppError, AppResult, ConnectionFaultAction, ListenerId, MetadataExtractorSource,
-    OperationResultViewModel, ProxyWorkspace, ResponseAssertionKind, UiTone, Uuid,
+use intercept_proxy_domain::{
+    ConnectionFaultAction, ListenerId, MetadataExtractorSource, ResponseAssertionKind,
 };
+use uuid::Uuid;
+
+use super::{AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone};
 
 pub(super) fn find_mut<'a, T>(
     items: &'a mut [T],

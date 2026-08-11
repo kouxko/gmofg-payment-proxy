@@ -8,38 +8,16 @@
  * `workspace_component_new`，最终合法性统一由 `workspace_validate` 决定。
  */
 
-import {
-  Button,
-  Card,
-  Input,
-  Label,
-  ListBox,
-  NumberField,
-  Select,
-  Switch,
-  Tabs,
-} from "@heroui/react";
-import { Plus, TrashBin } from "@gravity-ui/icons";
+import { Tabs } from "@heroui/react";
+import type { ProxyWorkspace } from "@/generated/rust-types";
+import { CertificateReferencesSection } from "./workspace-components-editor-certificate-section";
+import { FaultPresetsSection } from "./workspace-components-editor-fault-section";
+import { MetadataExtractorsSection } from "./workspace-components-editor-metadata-section";
 import type {
-  CertificateReferenceKind,
-  ConnectionFaultAction,
-  ProxyWorkspace,
-  ResponseAssertionKind,
-} from "@/generated/rust-types";
-
-type ComponentKind =
-  | "metadata_extractor"
-  | "response_assertion"
-  | "fault_preset"
-  | "certificate_reference";
-
-const certificateKindLabels: Record<CertificateReferenceKind, string> = {
-  mitm_root_ca: "MITM Root CA",
-  reverse_server_identity: "Reverse 服务端身份",
-  downstream_client_trust: "下游客户端信任",
-  upstream_client_identity: "上游客户端身份",
-  upstream_server_trust: "上游服务端信任",
-};
+  ComponentKind,
+  ComponentOperation,
+} from "./workspace-components-editor-model";
+import { ResponseAssertionsSection } from "./workspace-components-editor-response-section";
 
 export function WorkspaceComponentsEditor({
   workspace,
@@ -51,86 +29,31 @@ export function WorkspaceComponentsEditor({
   workspace: ProxyWorkspace;
   onChange: (workspace: ProxyWorkspace) => void;
   onAdd: (kind: ComponentKind) => void;
-  onIntent: (kind: ComponentKind, id: string, operation: string, value: string) => void;
+  onIntent: (
+    kind: ComponentKind,
+    id: string,
+    operation: ComponentOperation,
+    value: string,
+  ) => void;
   disabled: boolean;
 }) {
+  const sectionProps = { workspace, onChange, onAdd, onIntent, disabled };
+
   return (
     <Tabs aria-label="Workspace 策略配置" defaultSelectedKey="extractors">
-      <Tabs.ListContainer><Tabs.List>
-        <Tabs.Tab id="extractors">元数据提取</Tabs.Tab>
-        <Tabs.Tab id="assertions">响应断言</Tabs.Tab>
-        <Tabs.Tab id="certificates">证书引用</Tabs.Tab>
-        <Tabs.Tab id="faults">连接故障预设</Tabs.Tab>
-      </Tabs.List></Tabs.ListContainer>
+      <Tabs.ListContainer>
+        <Tabs.List>
+          <Tabs.Tab id="extractors">元数据提取</Tabs.Tab>
+          <Tabs.Tab id="assertions">响应断言</Tabs.Tab>
+          <Tabs.Tab id="certificates">证书引用</Tabs.Tab>
+          <Tabs.Tab id="faults">连接故障预设</Tabs.Tab>
+        </Tabs.List>
+      </Tabs.ListContainer>
 
-      <Tabs.Panel id="extractors" className="space-y-3 pt-4">
-        <Button variant="outline" isDisabled={disabled} onPress={() => onAdd("metadata_extractor")}><Plus className="size-4" />新增提取器</Button>
-        {workspace.metadata_extractors.map((extractor, index) => (
-          <Card key={extractor.id}><Card.Content className="grid grid-cols-2 gap-3 p-4 max-[700px]:grid-cols-1">
-            <div className="col-span-2 flex items-center gap-3 max-[700px]:col-span-1"><strong>提取器 {index + 1}</strong><code className="text-xs text-[var(--telemetry-muted)]">{extractor.id}</code><Button className="ml-auto" isIconOnly aria-label={`删除提取器 ${index + 1}`} variant="danger-soft" onPress={() => onIntent("metadata_extractor", extractor.id, "delete", "")}><TrashBin className="size-4" /></Button></div>
-            <div className="grid gap-1"><Label>名称（作为元数据 Key）</Label><Input value={extractor.name} onChange={(event) => onChange({ ...workspace, metadata_extractors: workspace.metadata_extractors.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} /></div>
-            <div className="grid gap-1"><Label>代理入口 ID（逗号分隔）</Label><Input key={`${extractor.id}:${extractor.listener_ids.join(",")}`} defaultValue={extractor.listener_ids.join(", ")} onBlur={(event) => onIntent("metadata_extractor", extractor.id, "listener_ids", event.target.value)} /></div>
-            <Select aria-label={`提取器 ${index + 1} 来源`} selectedKey={extractor.source.kind} onSelectionChange={(key) => onIntent("metadata_extractor", extractor.id, "variant", String(key))}><Label>来源</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="header">Header</ListBox.Item><ListBox.Item id="json_path">JSONPath</ListBox.Item><ListBox.Item id="body_text">Body 文本</ListBox.Item><ListBox.Item id="fixed_value">固定值</ListBox.Item></ListBox></Select.Popover></Select>
-            <div className="grid gap-1"><Label>参数</Label><Input disabled={extractor.source.kind === "body_text"} value={extractor.source.kind === "header" ? extractor.source.name : extractor.source.kind === "json_path" ? extractor.source.path : extractor.source.kind === "fixed_value" ? extractor.source.value : ""} onChange={(event) => { const value = event.target.value; const source = extractor.source.kind === "header" ? { ...extractor.source, name: value } : extractor.source.kind === "json_path" ? { ...extractor.source, path: value } : extractor.source.kind === "fixed_value" ? { ...extractor.source, value } : extractor.source; onChange({ ...workspace, metadata_extractors: workspace.metadata_extractors.map((item, itemIndex) => itemIndex === index ? { ...item, source } : item) }); }} placeholder="Header 名 / $.path / 固定值" /></div>
-          </Card.Content></Card>
-        ))}
-      </Tabs.Panel>
-
-      <Tabs.Panel id="assertions" className="space-y-3 pt-4">
-        <Button variant="outline" isDisabled={disabled} onPress={() => onAdd("response_assertion")}><Plus className="size-4" />新增响应断言</Button>
-        {workspace.response_assertions.map((assertion, index) => (
-          <Card key={assertion.id}><Card.Content className="grid grid-cols-2 gap-3 p-4 max-[700px]:grid-cols-1">
-            <div className="col-span-2 flex items-center gap-3 max-[700px]:col-span-1"><strong>响应断言 {index + 1}</strong><code className="text-xs text-[var(--telemetry-muted)]">{assertion.id}</code><Switch className="ml-auto" isSelected={assertion.enabled} onChange={(enabled) => onChange({ ...workspace, response_assertions: workspace.response_assertions.map((item, itemIndex) => itemIndex === index ? { ...item, enabled } : item) })}><Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control><span>启用</span></Switch.Content></Switch><Button isIconOnly aria-label={`删除响应断言 ${index + 1}`} variant="danger-soft" onPress={() => onIntent("response_assertion", assertion.id, "delete", "")}><TrashBin className="size-4" /></Button></div>
-            <div className="grid gap-1"><Label>名称</Label><Input value={assertion.name} onChange={(event) => onChange({ ...workspace, response_assertions: workspace.response_assertions.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} /></div>
-            <div className="grid gap-1"><Label>代理入口 ID（逗号分隔）</Label><Input key={`${assertion.id}:${assertion.listener_ids.join(",")}`} defaultValue={assertion.listener_ids.join(", ")} onBlur={(event) => onIntent("response_assertion", assertion.id, "listener_ids", event.target.value)} /></div>
-            <Select aria-label={`响应断言 ${index + 1} 类型`} selectedKey={assertion.assertion.kind} onSelectionChange={(key) => onIntent("response_assertion", assertion.id, "variant", String(key))}><Label>断言类型</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="http_status_equals">HTTP 状态码等于</ListBox.Item><ListBox.Item id="header_equals">Header 等于</ListBox.Item><ListBox.Item id="json_path_equals">JSONPath 等于</ListBox.Item><ListBox.Item id="body_text_contains">Body 文本包含</ListBox.Item><ListBox.Item id="body_length_equals">Body 长度等于</ListBox.Item><ListBox.Item id="body_sha256_equals">Body SHA-256 等于</ListBox.Item></ListBox></Select.Popover></Select>
-            <AssertionInputs assertion={assertion.assertion} onChange={(value) => onChange({ ...workspace, response_assertions: workspace.response_assertions.map((item, itemIndex) => itemIndex === index ? { ...item, assertion: value } : item) })} />
-          </Card.Content></Card>
-        ))}
-      </Tabs.Panel>
-
-      <Tabs.Panel id="certificates" className="space-y-3 pt-4">
-        <p className="text-sm text-[var(--telemetry-muted)]">证书材料必须在“入口配置”中按具体用途导入。Rust 会解析证书并保存受系统密钥保护的引用；Workspace 页面不创建或编辑外部文件路径。</p>
-        {workspace.certificate_references.map((reference, index) => (
-          <Card key={reference.id}><Card.Content className="grid grid-cols-2 gap-3 p-4 max-[700px]:grid-cols-1">
-            <div className="col-span-2 flex items-center gap-3 max-[700px]:col-span-1"><strong>证书引用 {index + 1}</strong><code className="text-xs text-[var(--telemetry-muted)]">{reference.id}</code><Button className="ml-auto" isIconOnly aria-label={`删除证书引用 ${index + 1}`} variant="danger-soft" onPress={() => onIntent("certificate_reference", reference.id, "delete", "")}><TrashBin className="size-4" /></Button></div>
-            <div><p className="text-xs text-[var(--telemetry-muted)]">名称</p><p>{reference.label}</p></div>
-            <div><p className="text-xs text-[var(--telemetry-muted)]">用途</p><p>{certificateKindLabels[reference.kind]}</p></div>
-            <div className="col-span-2 max-[700px]:col-span-1"><p className="text-xs text-[var(--telemetry-muted)]">保存方式</p><p>{reference.reference.startsWith("managed:listener-tls:") ? "系统密钥保护的 Listener TLS 引用" : "外部文件引用（建议在入口配置中重新导入）"}</p></div>
-          </Card.Content></Card>
-        ))}
-        {workspace.certificate_references.length === 0 && <p className="rounded-xl bg-[var(--telemetry-table-head)] px-4 py-3 text-sm text-[var(--telemetry-muted)]">当前 Workspace 尚未导入独立监听证书。</p>}
-      </Tabs.Panel>
-
-      <Tabs.Panel id="faults" className="space-y-3 pt-4">
-        <Button variant="outline" isDisabled={disabled} onPress={() => onAdd("fault_preset")}><Plus className="size-4" />新增连接故障预设</Button>
-        {workspace.fault_presets.map((preset, index) => {
-          const action = preset.connection_actions[0];
-          return <Card key={preset.id}><Card.Content className="grid grid-cols-2 gap-3 p-4 max-[700px]:grid-cols-1">
-            <div className="col-span-2 flex items-center gap-3 max-[700px]:col-span-1"><strong>故障预设 {index + 1}</strong><code className="text-xs text-[var(--telemetry-muted)]">{preset.id}</code><Button className="ml-auto" isIconOnly aria-label={`删除故障预设 ${index + 1}`} variant="danger-soft" onPress={() => onIntent("fault_preset", preset.id, "delete", "")}><TrashBin className="size-4" /></Button></div>
-            <div className="grid gap-1"><Label>名称</Label><Input value={preset.name} onChange={(event) => onChange({ ...workspace, fault_presets: workspace.fault_presets.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item) })} /></div>
-            <div className="grid gap-1"><Label>说明</Label><Input value={preset.description} onChange={(event) => onChange({ ...workspace, fault_presets: workspace.fault_presets.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item) })} /></div>
-            <Select aria-label={`故障预设 ${index + 1} 动作`} selectedKey={action?.kind} onSelectionChange={(key) => onIntent("fault_preset", preset.id, "variant", String(key))}><Label>连接动作</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="delay">连接延迟</ListBox.Item><ListBox.Item id="reject">拒绝连接</ListBox.Item><ListBox.Item id="rate_limit">连接限速</ListBox.Item><ListBox.Item id="close_after_bytes">指定字节后关闭</ListBox.Item><ListBox.Item id="half_close_after_bytes">指定字节后 half-close</ListBox.Item><ListBox.Item id="idle_timeout">空闲超时</ListBox.Item></ListBox></Select.Popover></Select>
-            {action ? <FaultValue action={action} onChange={(value) => onChange({ ...workspace, fault_presets: workspace.fault_presets.map((item, itemIndex) => itemIndex === index ? { ...item, connection_actions: [value] } : item) })} /> : <p className="text-sm text-danger">缺少连接动作，请重新选择。</p>}
-          </Card.Content></Card>;
-        })}
-      </Tabs.Panel>
+      <MetadataExtractorsSection {...sectionProps} />
+      <ResponseAssertionsSection {...sectionProps} />
+      <CertificateReferencesSection {...sectionProps} />
+      <FaultPresetsSection {...sectionProps} />
     </Tabs>
   );
-}
-
-function AssertionInputs({ assertion, onChange }: { assertion: ResponseAssertionKind; onChange: (value: ResponseAssertionKind) => void }) {
-  if (assertion.kind === "http_status_equals") return <NumberField minValue={100} maxValue={599} value={assertion.expected} onChange={(expected) => onChange({ ...assertion, expected })}><Label>期望状态码</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group></NumberField>;
-  if (assertion.kind === "body_length_equals") return <NumberField minValue={0} value={assertion.expected} onChange={(expected) => onChange({ ...assertion, expected })}><Label>期望字节数</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group></NumberField>;
-  if (assertion.kind === "header_equals") return <div className="grid grid-cols-2 gap-2"><div className="grid gap-1"><Label>Header 名</Label><Input value={assertion.name} onChange={(event) => onChange({ ...assertion, name: event.target.value })} /></div><div className="grid gap-1"><Label>期望值</Label><Input value={assertion.expected} onChange={(event) => onChange({ ...assertion, expected: event.target.value })} /></div></div>;
-  if (assertion.kind === "json_path_equals") return <div className="grid grid-cols-2 gap-2"><div className="grid gap-1"><Label>JSONPath</Label><Input value={assertion.path} onChange={(event) => onChange({ ...assertion, path: event.target.value })} /></div><div className="grid gap-1"><Label>期望值</Label><Input value={String(assertion.expected ?? "")} onChange={(event) => onChange({ ...assertion, expected: event.target.value })} /></div></div>;
-  if (assertion.kind === "body_text_contains") return <div className="grid gap-1"><Label>Body 必须包含</Label><Input value={assertion.expected} onChange={(event) => onChange({ ...assertion, expected: event.target.value })} /></div>;
-  return <div className="grid gap-1"><Label>SHA-256（64 位十六进制）</Label><Input value={assertion.expected_hex} onChange={(event) => onChange({ ...assertion, expected_hex: event.target.value })} /></div>;
-}
-
-function FaultValue({ action, onChange }: { action: ConnectionFaultAction; onChange: (value: ConnectionFaultAction) => void }) {
-  if (action.kind === "reject") return <p className="self-end text-sm text-[var(--telemetry-muted)]">该动作没有参数。</p>;
-  const value = action.kind === "delay" || action.kind === "idle_timeout" ? action.milliseconds : action.kind === "rate_limit" ? action.bytes_per_second : action.bytes;
-  const label = action.kind === "delay" || action.kind === "idle_timeout" ? "毫秒" : action.kind === "rate_limit" ? "字节/秒" : "字节数";
-  return <NumberField minValue={1} value={value} onChange={(next) => onChange(action.kind === "delay" || action.kind === "idle_timeout" ? { ...action, milliseconds: next } : action.kind === "rate_limit" ? { ...action, bytes_per_second: next } : { ...action, bytes: next })}><Label>{label}</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group></NumberField>;
 }

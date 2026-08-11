@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => ({
   certificateExportCa: vi.fn(),
   certificateGenerateCa: vi.fn(),
   certificateOverview: vi.fn(),
+  certificateReissueLeaf: vi.fn(),
+  certificateResetCa: vi.fn(),
+  certificateValidate: vi.fn(),
   settingsGet: vi.fn(),
   settingsSetData: vi.fn(),
   overviewRefresh: vi.fn().mockResolvedValue(undefined),
@@ -27,9 +30,9 @@ vi.mock("@/generated/rust-types", () => ({
     certificateExportCa: mocks.certificateExportCa,
     certificateGenerateCa: mocks.certificateGenerateCa,
     certificateOverview: mocks.certificateOverview,
-    certificateReissueLeaf: vi.fn(),
-    certificateResetCa: vi.fn(),
-    certificateValidate: vi.fn(),
+    certificateReissueLeaf: mocks.certificateReissueLeaf,
+    certificateResetCa: mocks.certificateResetCa,
+    certificateValidate: mocks.certificateValidate,
     settingsGet: mocks.settingsGet,
   },
 }));
@@ -120,6 +123,31 @@ describe("CertificatesView settings freshness", () => {
       revision: null,
       requires_restart: false,
     });
+    mocks.certificateReissueLeaf.mockResolvedValue({
+      revision: 2,
+      ready: true,
+      status_text: "服务端证书已重新签发",
+      ui_tone: "positive",
+      items: [],
+      can_initialize: false,
+      can_change: true,
+      disabled_reason: null,
+    });
+    mocks.certificateResetCa.mockResolvedValue({
+      revision: 2,
+      ready: true,
+      status_text: "固定测试证书已恢复",
+      ui_tone: "positive",
+      items: [],
+      can_initialize: false,
+      can_change: true,
+      disabled_reason: null,
+    });
+    mocks.certificateValidate.mockResolvedValue({
+      valid: true,
+      field_errors: {},
+      warnings: ["证书即将过期"],
+    });
   });
 
   it("reads the latest Rust settings immediately before generating a leaf", async () => {
@@ -154,6 +182,77 @@ describe("CertificatesView settings freshness", () => {
 
     await waitFor(() =>
       expect(mocks.certificateExportCa).toHaveBeenCalledTimes(1),
+    );
+  });
+
+  it("reads fresh SANs before reissuing and refreshes after Rust succeeds", async () => {
+    const user = userEvent.setup();
+    render(<CertificatesView />);
+
+    await user.click(
+      screen.getByRole("button", { name: "重新签发服务端证书" }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.certificateReissueLeaf).toHaveBeenCalledWith(1, [
+        "10.0.28.99",
+      ]),
+    );
+    expect(mocks.overviewRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the Rust certificate validation result", async () => {
+    const user = userEvent.setup();
+    render(<CertificatesView />);
+
+    await user.click(screen.getByRole("button", { name: "重新检查" }));
+
+    await waitFor(() =>
+      expect(mocks.certificateValidate).toHaveBeenCalledTimes(1),
+    );
+    expect(screen.getByText("证书即将过期")).toBeVisible();
+  });
+
+  it("confirms reset, holds the dialog during Rust work, then refreshes", async () => {
+    let finish!: (value: unknown) => void;
+    mocks.certificateResetCa.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<CertificatesView />);
+
+    await user.click(
+      screen.getByRole("button", { name: "恢复固定测试证书" }),
+    );
+    await user.click(screen.getByRole("button", { name: "确认重置" }));
+
+    expect(mocks.certificateResetCa).toHaveBeenCalledWith(1, true);
+    expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "正在重置…" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(
+      screen.getByRole("alertdialog", { name: "确认恢复固定测试证书？" }),
+    ).toBeVisible();
+
+    finish({
+      revision: 2,
+      ready: true,
+      status_text: "固定测试证书已恢复",
+      ui_tone: "positive",
+      items: [],
+      can_initialize: false,
+      can_change: true,
+      disabled_reason: null,
+    });
+    await waitFor(() => expect(mocks.overviewRefresh).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("alertdialog", {
+          name: "确认恢复固定测试证书？",
+        }),
+      ).not.toBeInTheDocument(),
     );
   });
 

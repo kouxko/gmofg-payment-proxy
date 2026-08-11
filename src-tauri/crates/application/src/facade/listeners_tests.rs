@@ -1,5 +1,7 @@
 use intercept_proxy_domain::{FixedServerSettings, UpstreamTlsSettings};
 
+use crate::ListenerRuntimeState;
+
 use super::*;
 
 #[test]

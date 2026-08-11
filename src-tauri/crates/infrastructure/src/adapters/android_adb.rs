@@ -1,7 +1,4 @@
 use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::Debug,
-    net::{IpAddr, Ipv4Addr, UdpSocket},
     path::PathBuf,
     sync::{Arc, RwLock},
     time::Duration,
@@ -10,34 +7,44 @@ use std::{
 use async_trait::async_trait;
 use intercept_proxy_application::{
     ANDROID_COMPANION_PACKAGE, AndroidAdbViewModel, AndroidCompanionInstallViewModel,
-    AndroidControlPort, AndroidControlTransport, AndroidDeviceState, AndroidDeviceViewModel,
-    AndroidNetworkActivation, AndroidNetworkState, AndroidNetworkStatusViewModel,
-    AndroidPackageViewModel, AppError, AppResult,
+    AndroidControlPort, AndroidDeviceState, AndroidDeviceViewModel, AndroidNetworkActivation,
+    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AppError, AppResult,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 use tokio::sync::Mutex;
 
 mod command;
 mod fingerprint;
 mod protocol;
 mod reverse;
+mod runtime;
+mod status;
 
-use command::{
-    AdbCommandRunner, SystemAdbCommandRunner, discover_adb, discover_companion_apk, parse_devices,
-    parse_package_version, parse_packages,
-};
+use command::{AdbCommandRunner, parse_devices, parse_package_version, parse_packages};
 use fingerprint::sha256_json;
-use protocol::{fallback_unsupported_fields, is_socket_unavailable};
+use protocol::is_socket_unavailable;
 use reverse::{combine_operation_and_cleanup, combine_stop_failures, reverse_mapping_present};
+use runtime::{
+    ActiveReverseOwnership, ActiveRuntimeFacts, DeviceLanAddressProvider, PreparedUsbProxyRuntime,
+    ReverseCleanupOutcome,
+};
+use status::{
+    adb_view_model, companion_install_view_model, consent_opened_status,
+    control_unavailable_status, normalize_packages,
+};
 
 #[cfg(test)]
-use command::{AdbOutput, bundled_companion_apk_candidates};
+use command::{AdbOutput, SystemAdbCommandRunner, bundled_companion_apk_candidates};
 #[cfg(test)]
 use fingerprint::canonical_json;
+#[cfg(test)]
+use intercept_proxy_application::{AndroidControlTransport, AndroidNetworkState};
 #[cfg(test)]
 use protocol::{ActivationObservation, classify_activation_status, reconcile_forward_cleanup};
 #[cfg(test)]
 use reverse::{allocated_reverse_ports, lan_endpoint_is_eligible};
+#[cfg(test)]
+use std::collections::BTreeMap;
 const CONTROL_SOCKET: &str = "intercept_proxy_vpn";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const INSTALL_TIMEOUT: Duration = Duration::from_mins(2);
@@ -52,81 +59,6 @@ pub struct AndroidAdbAdapter {
     active_runtime: Mutex<Option<ActiveRuntimeFacts>>,
     runner: Arc<dyn AdbCommandRunner>,
     lan_address: Arc<dyn DeviceLanAddressProvider>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ActiveReverseOwnership {
-    serial: String,
-    profile_id: String,
-    ports: Vec<u16>,
-}
-
-/// 桌面端为当前 Android start/apply 解析出的运行事实。
-///
-/// 不能从可持久化 Profile 重新推导该值，因为实际端点包含本次 ADB reverse 端口与
-/// DNS 解析结果。桌面进程重启后该事实自然丢失，状态核对会 fail-closed，要求重新
-/// apply，而不是假定设备仍连接旧端点。
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ActiveRuntimeFacts {
-    serial: String,
-    profile_id: String,
-    profile_fingerprint: String,
-    route_fingerprint: String,
-    route_count: usize,
-    listener_ports: BTreeMap<String, u16>,
-    uses_adb_reverse: bool,
-}
-
-#[derive(Debug)]
-struct PreparedUsbProxyRuntime {
-    payload: Value,
-    reverse: Option<ActiveReverseOwnership>,
-    runtime: ActiveRuntimeFacts,
-}
-
-#[derive(Debug)]
-struct ReverseCleanupOutcome {
-    remaining_ports: Vec<u16>,
-    error: Option<AppError>,
-}
-
-trait DeviceLanAddressProvider: Debug + Send + Sync {
-    fn local_ipv4_for(&self, device_address: Ipv4Addr) -> Option<Ipv4Addr>;
-}
-
-#[derive(Debug, Default)]
-struct SystemDeviceLanAddressProvider;
-
-impl DeviceLanAddressProvider for SystemDeviceLanAddressProvider {
-    fn local_ipv4_for(&self, device_address: Ipv4Addr) -> Option<Ipv4Addr> {
-        // UDP connect 只让系统选择到设备地址的本地接口，不建立连接也不发送数据。
-        let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
-        socket.connect((device_address, 9)).ok()?;
-        let IpAddr::V4(address) = socket.local_addr().ok()?.ip() else {
-            return None;
-        };
-        (!address.is_unspecified() && !address.is_loopback()).then_some(address)
-    }
-}
-
-impl AndroidAdbAdapter {
-    #[must_use]
-    pub fn new(companion_apk: Option<PathBuf>) -> Self {
-        // 优先使用桌面外壳解析的安装资源；无界面测试和其他 Host 再按约定位置回退发现。
-        let companion_apk = companion_apk
-            .filter(|path| path.is_file())
-            .or_else(discover_companion_apk);
-        Self {
-            adb_path: discover_adb(),
-            companion_apk,
-            selected_serial: RwLock::new(None),
-            network_operation: Mutex::new(()),
-            active_reverse: Mutex::new(None),
-            active_runtime: Mutex::new(None),
-            runner: Arc::new(SystemAdbCommandRunner),
-            lan_address: Arc::new(SystemDeviceLanAddressProvider),
-        }
-    }
 }
 
 #[async_trait]
@@ -145,19 +77,14 @@ impl AndroidControlPort for AndroidAdbAdapter {
         } else {
             None
         };
-        Ok(AndroidAdbViewModel {
-            available: self.adb_path.is_some(),
-            executable: self
-                .adb_path
-                .as_ref()
-                .map(|path| path.display().to_string()),
+        Ok(adb_view_model(
+            self.adb_path.as_deref(),
             version,
-            selected_serial: self
-                .selected_serial
+            self.selected_serial
                 .read()
                 .expect("selected serial lock")
                 .clone(),
-        })
+        ))
     }
 
     async fn adb_select(&self, serial: String) -> AppResult<AndroidAdbViewModel> {
@@ -215,19 +142,7 @@ impl AndroidControlPort for AndroidAdbAdapter {
                 COMMAND_TIMEOUT,
             )
             .await?;
-        let mut packages = parse_packages(&output.stdout);
-        let counts = packages
-            .iter()
-            .fold(HashMap::<u32, usize>::new(), |mut counts, package| {
-                *counts.entry(package.uid).or_default() += 1;
-                counts
-            });
-        for package in &mut packages {
-            package.shared_uid =
-                (counts.get(&package.uid).copied().unwrap_or_default() > 1).then_some(package.uid);
-        }
-        packages.sort_by(|left, right| left.package_name.cmp(&right.package_name));
-        Ok(packages)
+        Ok(normalize_packages(parse_packages(&output.stdout)))
     }
 
     async fn package_get(&self, package_name: String) -> AppResult<AndroidPackageViewModel> {
@@ -272,13 +187,11 @@ impl AndroidControlPort for AndroidAdbAdapter {
             )
             .await?;
         let (version_name, version_code) = parse_package_version(&dump.stdout);
-        Ok(AndroidCompanionInstallViewModel {
+        Ok(companion_install_view_model(
             serial,
-            package_name: ANDROID_COMPANION_PACKAGE.into(),
-            installed: true,
             version_name,
             version_code,
-        })
+        ))
     }
 
     async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
@@ -296,22 +209,7 @@ impl AndroidControlPort for AndroidAdbAdapter {
             COMMAND_TIMEOUT,
         )
         .await?;
-        Ok(AndroidNetworkStatusViewModel {
-            serial,
-            state: AndroidNetworkState::Unknown,
-            state_text: "状态未知".into(),
-            ui_tone: intercept_proxy_application::UiTone::Warning,
-            verified: false,
-            transport: AndroidControlTransport::RescueActivity,
-            active_profile_id: None,
-            active_profile_fingerprint: None,
-            active_route_fingerprint: None,
-            active_route_count: 0,
-            companion_process_running: None,
-            message: "已打开 Android 系统 VPN consent 页面；用户授权结果仅能在设备上确认。".into(),
-            unsupported_fields: vec!["vpn_consent_granted".into()],
-            stats: None,
-        })
+        Ok(consent_opened_status(serial))
     }
 
     async fn network_start(
@@ -484,24 +382,7 @@ impl AndroidControlPort for AndroidAdbAdapter {
                 let running = output
                     .as_ref()
                     .is_ok_and(|output| !output.stdout.trim().is_empty());
-                Ok(AndroidNetworkStatusViewModel {
-                    serial,
-                    state: AndroidNetworkState::Unknown,
-                    state_text: "状态未知".into(),
-                    ui_tone: intercept_proxy_application::UiTone::Warning,
-                    verified: false,
-                    transport: AndroidControlTransport::Unavailable,
-                    active_profile_id: None,
-                    active_profile_fingerprint: None,
-                    active_route_fingerprint: None,
-                    active_route_count: 0,
-                    companion_process_running: Some(running),
-                    message:
-                        "设备端组件未提供控制通道；仅凭进程是否存在无法证明网络接管或弱网数据面状态。"
-                            .into(),
-                    unsupported_fields: fallback_unsupported_fields(),
-                    stats: None,
-                })
+                Ok(control_unavailable_status(serial, running))
             }
             Err(error) => Err(error),
         }

@@ -20,6 +20,10 @@ import { toneColor } from "@/lib/format";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { WorkspaceComponentsEditor } from "./workspace-components-editor";
+import type {
+  ComponentKind,
+  ComponentOperation,
+} from "./workspace-components-editor-model";
 import { PortableExportDialog } from "./portable-export-dialog";
 
 export function WorkspacesView() {
@@ -45,6 +49,12 @@ export function WorkspacesView() {
 
   const effectiveDraft = draft?.id === effectiveSelectedId ? draft : detail.data;
 
+  function refreshState(selected?: string) {
+    if (selected) setSelectedId(selected);
+    void list.refresh();
+    void detail.refresh();
+  }
+
   async function run(action: string, task: () => Promise<void>) {
     if (pendingAction) return;
     setPendingAction(action);
@@ -57,17 +67,32 @@ export function WorkspacesView() {
     }
   }
 
-  function reload(selected?: string) {
-    if (selected) setSelectedId(selected);
-    void list.refresh();
-    void detail.refresh();
-  }
-
   async function createWorkspace() {
     const created = await callCommand(commands.workspaceCreate(newName));
     setNewName("");
     setSelectedId(created.id);
     await list.refresh();
+  }
+
+  async function importWorkspace() {
+    const result = await callCommand(commands.workspaceImport());
+    toast(result.message, { variant: result.cancelled ? "default" : "success" });
+    await list.refresh();
+  }
+
+  async function importFullConfiguration() {
+    const result = await callCommand(commands.applicationConfigurationImport());
+    toast(result.message, { variant: result.cancelled ? "default" : toneColor(result.ui_tone) });
+    setFullImportOpen(false);
+    setSelectedId(undefined);
+    setDraft(undefined);
+    await list.refresh();
+  }
+
+  async function exportFullConfiguration() {
+    const result = await callCommand(commands.applicationConfigurationExport());
+    toast(result.message, { variant: result.cancelled ? "default" : "success" });
+    setFullExportOpen(false);
   }
 
   async function saveWorkspace() {
@@ -80,7 +105,7 @@ export function WorkspacesView() {
     const saved = await callCommand(commands.workspaceSave(validation.normalized));
     setDraft(saved);
     toast("Workspace 已保存。", { variant: "success" });
-    reload(saved.id);
+    refreshState(saved.id);
   }
 
   async function addComponent(kind: Parameters<typeof commands.workspaceComponentNew>[1]) {
@@ -90,9 +115,9 @@ export function WorkspacesView() {
   }
 
   async function applyComponentIntent(
-    componentKind: string,
+    componentKind: ComponentKind,
     componentId: string,
-    operation: string,
+    operation: ComponentOperation,
     value: string,
   ) {
     if (!effectiveDraft) return;
@@ -108,6 +133,38 @@ export function WorkspacesView() {
     setDraft(updated);
   }
 
+  async function exportWorkspace() {
+    if (!effectiveDraft) return;
+    const result = await callCommand(commands.workspaceExport(effectiveDraft.id));
+    toast(result.message, { variant: result.cancelled ? "default" : "success" });
+    setWorkspaceExportOpen(false);
+  }
+
+  async function selectCurrentWorkspace() {
+    if (!effectiveDraft) return;
+    await callCommand(commands.workspaceSelect(effectiveDraft.id));
+    toast("已切换当前 Workspace；运行中的代理入口和设备网络接管保持不变。", { variant: "success" });
+    await list.refresh();
+  }
+
+  async function copyWorkspace() {
+    if (!effectiveDraft) return;
+    const copied = await callCommand(commands.workspaceCopy(effectiveDraft.id));
+    setSelectedId(copied.id);
+    setDraft(copied);
+    await list.refresh();
+  }
+
+  async function deleteWorkspace() {
+    if (!effectiveDraft) return;
+    const result = await callCommand(commands.workspaceDelete(effectiveDraft.id, effectiveDraft.revision));
+    toast(result.message, { variant: "success" });
+    setDeleteOpen(false);
+    setSelectedId(undefined);
+    setDraft(undefined);
+    await list.refresh();
+  }
+
   return (
     <section className="grid h-full grid-cols-[minmax(420px,1fr)_380px] max-[1000px]:grid-cols-1">
       <div className="min-w-0 space-y-4 overflow-auto p-5">
@@ -119,6 +176,7 @@ export function WorkspacesView() {
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 max-[720px]:w-full max-[720px]:justify-start">
             <Input
               aria-label="新 Workspace 名称"
+              disabled={Boolean(pendingAction)}
               className="w-72 max-[720px]:min-w-56 max-[720px]:flex-1"
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
@@ -127,11 +185,7 @@ export function WorkspacesView() {
             <Button variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("create", createWorkspace)}>
               <Plus className="size-4" />新建
             </Button>
-            <Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("import", async () => {
-              const result = await callCommand(commands.workspaceImport());
-              toast(result.message, { variant: result.cancelled ? "default" : "success" });
-              await list.refresh();
-            })}>
+            <Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("import", importWorkspace)}>
               <ArrowUpFromLine className="size-4" />导入单个 Workspace
             </Button>
             <PortableExportDialog
@@ -142,18 +196,14 @@ export function WorkspacesView() {
               description="文件可能包含全部 Workspace 引用的外部证书原文、Listener 服务端私钥、PKCS12/PFX 原文及明文密码。文件不会包含本机 MITM Root CA 私钥、抓包 Payload、系统密钥密文或运行状态。请仅保存在受控测试环境。"
               confirmLabel="确认导出完整应用配置"
               isDisabled={Boolean(pendingAction)}
-              onConfirm={() => void run("full-export", async () => {
-                const result = await callCommand(commands.applicationConfigurationExport());
-                toast(result.message, { variant: result.cancelled ? "default" : "success" });
-                setFullExportOpen(false);
-              })}
+              onConfirm={() => void run("full-export", exportFullConfiguration)}
             />
             <AlertDialog isOpen={fullImportOpen} onOpenChange={setFullImportOpen}>
               <Button variant="danger-soft" isDisabled={Boolean(pendingAction)}><ArrowUpFromLine className="size-4" />导入完整应用配置</Button>
               <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>
                 <AlertDialog.Header><AlertDialog.Heading>替换全部应用配置？</AlertDialog.Heading></AlertDialog.Header>
                 <AlertDialog.Body>导入会原子替换全部 Workspace、Android 设备网络方案、当前选择和可移植全局设置。请先导出备份。</AlertDialog.Body>
-                <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("full-import", async () => { const result = await callCommand(commands.applicationConfigurationImport()); toast(result.message, { variant: result.cancelled ? "default" : toneColor(result.ui_tone) }); setFullImportOpen(false); setSelectedId(undefined); setDraft(undefined); await list.refresh(); })}>确认选择文件并替换</Button></AlertDialog.Footer>
+                <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("full-import", importFullConfiguration)}>确认选择文件并替换</Button></AlertDialog.Footer>
               </AlertDialog.Dialog></AlertDialog.Container></AlertDialog.Backdrop>
             </AlertDialog>
           </div>
@@ -222,11 +272,11 @@ export function WorkspacesView() {
         <h2 className="text-lg font-semibold">所选 Workspace</h2>
         {detail.isLoading ? <Spinner aria-label="正在读取 Workspace 详情" /> : effectiveDraft ? (
           <>
-            <div className="grid gap-1"><Label>名称</Label><Input aria-label="Workspace 名称" value={effectiveDraft.name} onChange={(event) => setDraft({ ...effectiveDraft, name: event.target.value })} /></div>
+            <div className="grid gap-1"><Label>名称</Label><Input aria-label="Workspace 名称" disabled={Boolean(pendingAction)} value={effectiveDraft.name} onChange={(event) => setDraft({ ...effectiveDraft, name: event.target.value })} /></div>
             <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm"><dt>ID</dt><dd className="break-all font-mono text-xs">{effectiveDraft.id}</dd><dt>代理入口</dt><dd>{effectiveDraft.listeners.length}</dd><dt>版本</dt><dd>{effectiveDraft.revision}</dd></dl>
             <Button fullWidth variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("save", saveWorkspace)}>保存</Button>
-            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("select", async () => { await callCommand(commands.workspaceSelect(effectiveDraft.id)); toast("已切换当前 Workspace；运行中的代理入口和设备网络接管保持不变。", { variant: "success" }); await list.refresh(); })}>设为当前 Workspace</Button>
-            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("copy", async () => { const copied = await callCommand(commands.workspaceCopy(effectiveDraft.id)); setSelectedId(copied.id); setDraft(copied); await list.refresh(); })}><Copy className="size-4" />复制</Button>
+            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("select", selectCurrentWorkspace)}>设为当前 Workspace</Button>
+            <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("copy", copyWorkspace)}><Copy className="size-4" />复制</Button>
             <PortableExportDialog
               isOpen={workspaceExportOpen}
               onOpenChange={setWorkspaceExportOpen}
@@ -236,18 +286,14 @@ export function WorkspacesView() {
               confirmLabel="确认导出当前 Workspace"
               isDisabled={Boolean(pendingAction)}
               fullWidth
-              onConfirm={() => void run("export", async () => {
-                const result = await callCommand(commands.workspaceExport(effectiveDraft.id));
-                toast(result.message, { variant: result.cancelled ? "default" : "success" });
-                setWorkspaceExportOpen(false);
-              })}
+              onConfirm={() => void run("export", exportWorkspace)}
             />
             <AlertDialog isOpen={deleteOpen} onOpenChange={setDeleteOpen}>
               <Button fullWidth variant="danger-soft"><TrashBin className="size-4" />删除</Button>
               <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>
                 <AlertDialog.Header><AlertDialog.Heading>删除 {selectedSummary?.name ?? effectiveDraft.name}？</AlertDialog.Heading></AlertDialog.Header>
                 <AlertDialog.Body>此操作会删除 Rust 存储中的 Workspace。</AlertDialog.Body>
-                <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("delete", async () => { const result = await callCommand(commands.workspaceDelete(effectiveDraft.id, effectiveDraft.revision)); toast(result.message, { variant: "success" }); setDeleteOpen(false); setSelectedId(undefined); setDraft(undefined); await list.refresh(); })}>确认删除</Button></AlertDialog.Footer>
+                <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("delete", deleteWorkspace)}>确认删除</Button></AlertDialog.Footer>
               </AlertDialog.Dialog></AlertDialog.Container></AlertDialog.Backdrop>
             </AlertDialog>
           </>
