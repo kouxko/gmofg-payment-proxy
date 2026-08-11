@@ -14,7 +14,9 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
-use intercept_proxy_domain::{FixedServerSettings, UpstreamTlsSettings};
+use intercept_proxy_domain::{
+    DownstreamClientAuthentication, FixedServerSettings, UpstreamTlsSettings,
+};
 use intercept_proxy_product_api::{BodyCodec, ProductError};
 use uuid::Uuid;
 

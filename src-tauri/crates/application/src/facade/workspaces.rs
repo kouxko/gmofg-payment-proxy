@@ -16,7 +16,8 @@ use crate::{
     AndroidNetworkState, AppError, AppResult, OperationResultViewModel, ProxyWorkspace,
     UiEventPayload, UiTone, WORKSPACE_DOCUMENT_FORMAT_VERSION, WorkspaceChangeKind,
     WorkspaceChangedViewModel, WorkspaceDocument, WorkspaceId, WorkspaceSummaryViewModel,
-    WorkspaceValidationViewModel, parse_workspace_document, serialize_workspace_document,
+    WorkspaceValidationViewModel, parse_workspace_document,
+    retain_reachable_certificate_references, serialize_workspace_document,
 };
 
 impl Application {
@@ -399,7 +400,8 @@ impl Application {
         &self,
         workspace_id: WorkspaceId,
     ) -> AppResult<OperationResultViewModel> {
-        let workspace = self.workspaces.get(workspace_id).await?;
+        let mut workspace = self.workspaces.get(workspace_id).await?;
+        retain_reachable_certificate_references(&mut workspace);
         let certificate_materials = self
             .export_certificate_materials(std::slice::from_ref(&workspace))
             .await?;

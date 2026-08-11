@@ -147,6 +147,88 @@ fn full_configuration_replace_rolls_back_all_tables_on_failure() {
     );
 }
 
+#[test]
+fn application_data_reset_atomically_removes_persisted_user_data() {
+    let store = SqliteStore::in_memory().expect("store");
+    let old_id = Uuid::new_v4();
+    store
+        .insert_workspace(&WorkspaceRecord {
+            id: old_id,
+            revision: 1,
+            value: json!({"id": old_id, "name": "old", "revision": 1}),
+            updated_at: Utc::now(),
+        })
+        .expect("seed workspace");
+    store
+        .save_settings(0, &json!({"name": "old settings"}))
+        .expect("seed settings");
+    store
+        .save_protected_secret(&ProtectedSecretRecord {
+            provider: "test".into(),
+            key: "listener-p12".into(),
+            protected_blob: vec![1, 2, 3],
+            updated_at: Utc::now(),
+        })
+        .expect("seed protected secret");
+    {
+        let connection = store.connection.lock();
+        connection
+            .execute(
+                "INSERT INTO rules(id, revision, enabled, json, updated_at) VALUES (?1, 1, 1, ?2, ?3)",
+                params![Uuid::new_v4().to_string(), "{}", Utc::now().to_rfc3339()],
+            )
+            .expect("seed rule");
+        connection
+            .execute(
+                "INSERT INTO certificate_material(kind, protected_blob, metadata_json, updated_at) VALUES (?1, ?2, ?3, ?4)",
+                params!["listener_identity", vec![4_u8, 5], "{}", Utc::now().to_rfc3339()],
+            )
+            .expect("seed certificate");
+    }
+
+    let clean_id = Uuid::new_v4();
+    let clean = WorkspaceRecord {
+        id: clean_id,
+        revision: 1,
+        value: json!({"id": clean_id, "name": "Default Workspace", "revision": 1}),
+        updated_at: Utc::now(),
+    };
+    store
+        .reset_application_data(
+            clean_id,
+            std::slice::from_ref(&clean),
+            &json!({"default": true}),
+        )
+        .expect("atomic reset");
+
+    let snapshot = store.load_workspaces().expect("workspace snapshot");
+    assert_eq!(snapshot.selected_id, Some(clean_id));
+    assert_eq!(snapshot.records, vec![clean]);
+    assert_eq!(
+        store
+            .load_settings()
+            .expect("settings")
+            .expect("stored")
+            .value,
+        json!({"default": true})
+    );
+    assert!(
+        store
+            .load_protected_secret("test", "listener-p12")
+            .expect("secret lookup")
+            .is_none()
+    );
+    let connection = store.connection.lock();
+    for table in ["rules", "certificate_material"] {
+        let count: i64 = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .expect("row count");
+        assert_eq!(count, 0, "{table} must be empty");
+    }
+}
+
 /// ENGINE-008, SECURITY-004: stale settings writes fail atomically.
 #[test]
 fn settings_use_optimistic_revision() {

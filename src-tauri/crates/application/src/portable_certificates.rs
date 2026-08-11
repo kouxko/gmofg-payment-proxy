@@ -11,7 +11,8 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_domain::{
-    CertificateReference, CertificateReferenceId, CertificateReferenceKind, ProxyWorkspace,
+    CertificateReference, CertificateReferenceId, CertificateReferenceKind,
+    DownstreamClientAuthentication, ProxyWorkspace,
 };
 use ring::digest::{SHA256, digest};
 use serde::{Deserialize, Serialize};
@@ -97,6 +98,32 @@ pub fn portable_material_sha256(bytes: &[u8]) -> String {
             write!(output, "{byte:02x}").expect("writing SHA-256 to String cannot fail");
             output
         })
+}
+
+/// 只保留 Listener 实际使用的证书引用。
+///
+/// 旧版 Workspace 可能遗留已脱离 Listener 的文件路径或托管引用。它们不是
+/// 当前配置的一部分，也不应该让已丢失的临时文件阻断导出。
+pub fn retain_reachable_certificate_references(workspace: &mut ProxyWorkspace) {
+    let mut reachable = BTreeSet::new();
+    for listener in &workspace.listeners {
+        reachable.extend(listener.mitm.root_ca);
+        reachable.extend(listener.downstream_tls.server_identity);
+        match listener.downstream_tls.client_authentication {
+            DownstreamClientAuthentication::Disabled => {}
+            DownstreamClientAuthentication::Optional { trust }
+            | DownstreamClientAuthentication::Required { trust } => {
+                reachable.insert(trust);
+            }
+        }
+        if let Some(fixed_server) = &listener.fixed_server {
+            reachable.extend(fixed_server.upstream_tls.server_trust);
+            reachable.extend(fixed_server.upstream_tls.client_identity);
+        }
+    }
+    workspace
+        .certificate_references
+        .retain(|reference| reachable.contains(&reference.id));
 }
 
 /// 确保证书材料与 Workspace 中的引用一一对应。

@@ -293,4 +293,76 @@ impl SqliteStore {
             .commit()
             .map_err(|source| InfrastructureError::Database { source })
     }
+
+    /// 在一个事务中清空用户数据并写入干净默认配置。
+    ///
+    /// schema 迁移记录与单例状态行属于数据库结构，不删除；其他 Workspace、
+    /// Settings、规则、证书材料和受保护秘密全部重置。应用重启时会重建安装级 CA。
+    pub fn reset_application_data(
+        &self,
+        selected_id: Uuid,
+        records: &[WorkspaceRecord],
+        settings: &Value,
+    ) -> Result<(), InfrastructureError> {
+        if records.len() != 1 || records[0].id != selected_id {
+            return Err(InfrastructureError::RevisionConflict);
+        }
+        let mut connection = self.connection.lock();
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|source| InfrastructureError::Database { source })?;
+
+        transaction
+            .execute_batch(
+                "DELETE FROM rules;
+                 UPDATE rule_state SET revision = revision + 1 WHERE singleton_id = 1;
+                 DELETE FROM protected_secrets;
+                 DELETE FROM certificate_material;
+                 UPDATE certificate_state SET revision = revision + 1 WHERE singleton_id = 1;
+                 DELETE FROM workspaces;",
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        let record = &records[0];
+        transaction
+            .execute(
+                "INSERT INTO workspaces(id, revision, json, updated_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    record.id.to_string(),
+                    revision_to_i64(record.revision)?,
+                    record.value.to_string(),
+                    record.updated_at.to_rfc3339(),
+                ],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        transaction
+            .execute(
+                "UPDATE workspace_state SET selected_id = ?1 WHERE singleton_id = 1",
+                [selected_id.to_string()],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+
+        let current_settings_revision =
+            current_revision(&transaction, "settings", "singleton_id = 1")?.unwrap_or(0);
+        let next_settings_revision = current_settings_revision.saturating_add(1);
+        transaction
+            .execute(
+                "INSERT INTO settings(singleton_id, revision, json, updated_at)
+                 VALUES (1, ?1, ?2, ?3)
+                 ON CONFLICT(singleton_id) DO UPDATE SET
+                    revision = excluded.revision,
+                    json = excluded.json,
+                    updated_at = excluded.updated_at",
+                params![
+                    revision_to_i64(next_settings_revision)?,
+                    settings.to_string(),
+                    Utc::now().to_rfc3339(),
+                ],
+            )
+            .map_err(|source| InfrastructureError::Database { source })?;
+
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::Database { source })
+    }
 }

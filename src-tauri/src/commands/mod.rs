@@ -146,5 +146,6 @@ pub fn builder() -> Builder<Wry> {
             settings_validate,
             settings_save,
             settings_reset_defaults,
+            application_data_reset,
         ])
 }

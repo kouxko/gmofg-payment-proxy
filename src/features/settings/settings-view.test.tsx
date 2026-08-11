@@ -13,6 +13,7 @@ import type {
 import { SettingsView } from "./settings-view";
 
 const commandMocks = vi.hoisted(() => ({
+  applicationDataReset: vi.fn(),
   settingsResetDefaults: vi.fn(),
   settingsSave: vi.fn(),
 }));
@@ -118,6 +119,41 @@ describe("production SettingsView overlay", () => {
       expect(
         screen.queryByRole("alertdialog", {
           name: "恢复默认设置草稿？",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
+  it("requires destructive confirmation before clearing all persisted data", async () => {
+    let finish!: () => void;
+    commandMocks.applicationDataReset.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(
+      screen.getByRole("button", { name: "清除全部配置与数据" }),
+    );
+    expect(
+      screen.getByRole("alertdialog", { name: "清除全部配置与测试数据？" }),
+    ).toBeVisible();
+    expect(commandMocks.applicationDataReset).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "确认清除并重启" }));
+    expect(commandMocks.applicationDataReset).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "正在清除并重启…" }),
+    ).toBeDisabled();
+
+    finish();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("alertdialog", {
+          name: "清除全部配置与测试数据？",
         }),
       ).not.toBeInTheDocument(),
     );

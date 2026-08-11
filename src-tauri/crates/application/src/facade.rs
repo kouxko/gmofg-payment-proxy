@@ -217,12 +217,13 @@ impl Application {
         OperationResultViewModel::success("实时事件订阅已取消。")
     }
 
-    /// Gracefully stops the complete runtime during application exit.
-    ///
-    /// This bypasses the interactive lifecycle guard so an in-flight start or
-    /// stop operation is awaited and then fully cleaned up by the supervisor.
+    /// Stops the runtime on exit after waiting for any in-flight mutation.
     pub async fn app_shutdown(&self) -> AppResult<ProxyStatusViewModel> {
         let _gate = self.mutation_gate.lock().await;
+        self.app_shutdown_inner().await
+    }
+
+    async fn app_shutdown_inner(&self) -> AppResult<ProxyStatusViewModel> {
         let mut listener_cleanup_errors = Vec::new();
         match self.listener_runtime.statuses().await {
             Ok(statuses) => {
