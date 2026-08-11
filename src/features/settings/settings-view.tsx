@@ -8,21 +8,7 @@
  */
 
 import { useMemo, useState } from "react";
-import {
-  Accordion,
-  Alert,
-  AlertDialog,
-  Button,
-  Card,
-  Chip,
-  FieldError,
-  Form,
-  Label,
-  NumberField,
-  Switch,
-  Tabs,
-  toast,
-} from "@heroui/react";
+import { Alert, AlertDialog, Button, toast } from "@heroui/react";
 import { ArrowRotateLeft, FloppyDisk } from "@gravity-ui/icons";
 import type {
   FieldValidationViewModel,
@@ -38,12 +24,8 @@ import {
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { ApplicationDataResetDialog } from "./application-data-reset-dialog";
-import { ThemeSettings } from "./settings-content";
-
-function mib(bytes: number) {
-  // ViewModel 使用字节，页面按需求用 MiB 展示；保存时仍通过 Rust Draft 字段提交。
-  return Math.round(bytes / 1024 / 1024);
-}
+import { SettingsEditorTabs } from "./settings-editor-tabs";
+import { SettingsSummary } from "./settings-summary";
 
 export function SettingsView() {
   const settings = useIpcQuery<SettingsViewModel>("settings-get", () =>
@@ -54,23 +36,12 @@ export function SettingsView() {
     settings.refresh,
   );
   const [draftState, setDraftState] = useState<SettingsDraft>();
-  const [validation, setValidation] =
-    useState<FieldValidationViewModel>();
-  const [pendingAction, setPendingAction] = useState<
-    "validate" | "save"
-  >();
+  const [validation, setValidation] = useState<FieldValidationViewModel>();
+  const [pendingAction, setPendingAction] = useState<"validate" | "save">();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
-  const fieldError = (field: string) =>
-    validation?.field_errors[field]?.join("；");
-  function setDraft(next: SettingsDraft | undefined) {
-    // 用户继续编辑后，旧校验结果不再可信，必须清除并重新请求 Rust 校验。
-    setDraftState(next);
-    setValidation(undefined);
-  }
   const draft = draftState ?? settings.data?.stored;
   const draftDirty = useMemo(
-    // 只用于提示“有未保存改动”，不承担业务字段校验。
     () =>
       Boolean(
         draft &&
@@ -80,14 +51,20 @@ export function SettingsView() {
     [draft, settings.data],
   );
   const writePending = pendingAction != null || resetPending;
+  const fieldError = (field: string) =>
+    validation?.field_errors[field]?.join("；");
+
+  function setDraft(next: SettingsDraft | undefined) {
+    // 用户继续编辑后，旧校验结果不再可信，必须清除并重新请求 Rust 校验。
+    setDraftState(next);
+    setValidation(undefined);
+  }
 
   async function validate(candidate = draft) {
     if (!candidate || writePending) return;
     setPendingAction("validate");
     try {
-      setValidation(
-        await callCommand(commands.settingsValidate(candidate)),
-      );
+      setValidation(await callCommand(commands.settingsValidate(candidate)));
     } catch (reason) {
       const appError = appErrorViewModel(reason);
       if (appError) {
@@ -180,256 +157,20 @@ export function SettingsView() {
   return (
     <section className="flex h-full flex-col">
       <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_440px] gap-4 overflow-hidden p-5 max-[1280px]:block max-[1280px]:overflow-auto">
-        <div className="min-w-0 overflow-auto max-[1280px]:overflow-visible">
-          <h1 className="mb-4 text-2xl font-semibold">系统设置</h1>
-          <Card className="border border-[var(--telemetry-line)] shadow-sm">
-            <Card.Content className="p-0">
-              <Tabs defaultSelectedKey="capacity">
-                <Tabs.ListContainer>
-                  <Tabs.List aria-label="系统设置分类" className="px-3 pt-2">
-                    <Tabs.Tab id="capacity">
-                      超时与容量
-                      <Tabs.Indicator />
-                    </Tabs.Tab>
-                    <Tabs.Tab id="data">
-                      数据与导出
-                      <Tabs.Indicator />
-                    </Tabs.Tab>
-                    <Tabs.Tab id="app">
-                      应用
-                      <Tabs.Indicator />
-                    </Tabs.Tab>
-                  </Tabs.List>
-                </Tabs.ListContainer>
-                <Tabs.Panel id="capacity" className="p-4">
-                  <Form className="space-y-5">
-                    <Alert status="accent">
-                      代理入口的监听地址、端口、上游和 TLS 请统一到“入口配置”中管理。
-                    </Alert>
-                    <div className="grid grid-cols-3 gap-4 max-[760px]:grid-cols-1">
-                      {[
-                        ["连接超时（秒）", "connect_timeout_seconds"],
-                        ["写入超时（秒）", "write_timeout_seconds"],
-                        ["读取超时（秒）", "read_timeout_seconds"],
-                      ].map(([label, key]) => (
-                        <NumberField
-                          key={key}
-                          isInvalid={fieldError(key) != null}
-                          value={draft[key as keyof SettingsDraft] as number}
-                          minValue={1}
-                          onChange={(value) =>
-                            setDraft({ ...draft, [key]: value })
-                          }
-                        >
-                          <Label>{label}</Label>
-                          <NumberField.Group className="w-full">
-                            <NumberField.DecrementButton />
-                            <NumberField.Input />
-                            <NumberField.IncrementButton />
-                          </NumberField.Group>
-                          {fieldError(key) && (
-                            <FieldError>{fieldError(key)}</FieldError>
-                          )}
-                        </NumberField>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
-                      <NumberField
-                        isInvalid={fieldError("max_sessions") != null}
-                        value={draft.max_sessions}
-                        minValue={1}
-                        onChange={(max_sessions) =>
-                          setDraft({ ...draft, max_sessions })
-                        }
-                      >
-                        <Label>最大会话数</Label>
-                        <NumberField.Group className="w-full">
-                          <NumberField.DecrementButton />
-                          <NumberField.Input />
-                          <NumberField.IncrementButton />
-                        </NumberField.Group>
-                        {fieldError("max_sessions") && (
-                          <FieldError>{fieldError("max_sessions")}</FieldError>
-                        )}
-                      </NumberField>
-                      <NumberField
-                        isInvalid={fieldError("max_memory_bytes") != null}
-                        value={mib(draft.max_memory_bytes)}
-                        minValue={1}
-                        onChange={(value) =>
-                          setDraft({
-                            ...draft,
-                            max_memory_bytes: value * 1024 * 1024,
-                          })
-                        }
-                      >
-                        <Label>最大内存 MiB</Label>
-                        <NumberField.Group className="w-full">
-                          <NumberField.DecrementButton />
-                          <NumberField.Input />
-                          <NumberField.IncrementButton />
-                        </NumberField.Group>
-                        {fieldError("max_memory_bytes") && (
-                          <FieldError>{fieldError("max_memory_bytes")}</FieldError>
-                        )}
-                      </NumberField>
-                      <NumberField
-                        isInvalid={fieldError("max_body_bytes") != null}
-                        value={mib(draft.max_body_bytes)}
-                        minValue={1}
-                        onChange={(value) =>
-                          setDraft({
-                            ...draft,
-                            max_body_bytes: value * 1024 * 1024,
-                          })
-                        }
-                      >
-                        <Label>请求体大小限制 MiB</Label>
-                        <NumberField.Group className="w-full">
-                          <NumberField.DecrementButton />
-                          <NumberField.Input />
-                          <NumberField.IncrementButton />
-                        </NumberField.Group>
-                        {fieldError("max_body_bytes") && (
-                          <FieldError>{fieldError("max_body_bytes")}</FieldError>
-                        )}
-                      </NumberField>
-                      <Switch
-                        aria-label="Host 头重写为目标主机"
-                        isSelected={draft.rewrite_host}
-                        onChange={(rewrite_host) =>
-                          setDraft({ ...draft, rewrite_host })
-                        }
-                      >
-                        <Switch.Content>
-                          <Switch.Control>
-                            <Switch.Thumb />
-                          </Switch.Control>
-                          <span>Host 头重写为目标主机</span>
-                        </Switch.Content>
-                      </Switch>
-                    </div>
-                    <Alert status="accent">
-                      待处理断点及其会话永不自动淘汰；容量判定使用 Rust 可重复计算的逻辑字节数。
-                    </Alert>
-                  </Form>
-                </Tabs.Panel>
-                <Tabs.Panel id="data" className="space-y-4 p-4">
-                  <Alert status="accent">{settings.data.payload_policy_text}</Alert>
-                  <p className="text-sm">
-                    Payload 仅内存保存；规则与设置持久化；敏感导出需要确认；诊断日志不记录
-                    Payload、密码、私钥或 PKCS12 原始数据。
-                  </p>
-                  <Alert status="warning">
-                    如旧版本数据不兼容，可在页面底部清除全部配置与测试数据。此操作会停止入口、
-                    删除工作区、规则、设备方案、会话、抓包及导入证书，并自动重启应用。
-                  </Alert>
-                </Tabs.Panel>
-                <Tabs.Panel id="app" className="space-y-4 p-4">
-                  <Alert status="accent">
-                    系统设置只管理全局行为；入口配置、证书和规则分别在对应页面管理。
-                  </Alert>
-                  <ThemeSettings />
-                  <p className="text-sm">
-                    应用启动和诊断日志由 Rust/Tauri 桌面侧管理；外观主题仅保存在本机浏览器存储中。
-                  </p>
-                </Tabs.Panel>
-              </Tabs>
-            </Card.Content>
-          </Card>
-        </div>
-
-        <aside className="overflow-auto max-[1280px]:mt-4 max-[1280px]:overflow-visible">
-          <Card className="border border-[var(--telemetry-line)] shadow-sm">
-            <Card.Header>
-              <Card.Title>配置摘要与校验</Card.Title>
-            </Card.Header>
-            <Card.Content className="space-y-4">
-              <Accordion defaultExpandedKeys={["stored", "pending", "validation"]}>
-                <Accordion.Item id="stored">
-                  <Accordion.Heading>
-                    <Accordion.Trigger>
-                      已保存的全局设置
-                      <Accordion.Indicator />
-                    </Accordion.Trigger>
-                  </Accordion.Heading>
-                  <Accordion.Panel>
-                    <Accordion.Body>
-                      <dl className="grid grid-cols-[120px_1fr] gap-y-2 text-sm">
-                        <dt>连接超时</dt>
-                        <dd>{settings.data.stored.connect_timeout_seconds} 秒</dd>
-                        <dt>写入超时</dt>
-                        <dd>{settings.data.stored.write_timeout_seconds} 秒</dd>
-                        <dt>读取超时</dt>
-                        <dd>{settings.data.stored.read_timeout_seconds} 秒</dd>
-                        <dt>最大会话数</dt>
-                        <dd>{settings.data.stored.max_sessions}</dd>
-                        <dt>最大内存</dt>
-                        <dd>{mib(settings.data.stored.max_memory_bytes)} MiB</dd>
-                      </dl>
-                      <p className="mt-3 text-xs text-[var(--telemetry-muted)]">
-                        监听端口、请求去向和入口启停不属于系统设置。
-                      </p>
-                    </Accordion.Body>
-                  </Accordion.Panel>
-                </Accordion.Item>
-                <Accordion.Item id="pending">
-                  <Accordion.Heading>
-                    <Accordion.Trigger>
-                      保存与生效状态
-                      <Accordion.Indicator />
-                    </Accordion.Trigger>
-                  </Accordion.Heading>
-                  <Accordion.Panel>
-                    <Accordion.Body className="flex flex-wrap gap-2">
-                      <Chip
-                        color={draftDirty ? "warning" : "success"}
-                        variant="soft"
-                      >
-                        {draftDirty
-                          ? "存在未保存草稿"
-                          : "草稿与已保存设置一致"}
-                      </Chip>
-                    </Accordion.Body>
-                  </Accordion.Panel>
-                </Accordion.Item>
-                <Accordion.Item id="validation">
-                  <Accordion.Heading>
-                    <Accordion.Trigger>
-                      校验结果
-                      <Accordion.Indicator />
-                    </Accordion.Trigger>
-                  </Accordion.Heading>
-                  <Accordion.Panel>
-                    <Accordion.Body>
-                      {!validation ? (
-                        <Button
-                          variant="outline"
-                          isDisabled={writePending}
-                          onPress={() => void validate()}
-                        >
-                          {pendingAction === "validate"
-                            ? "正在校验…"
-                            : "运行 Rust 校验"}
-                        </Button>
-                      ) : (
-                        <Alert
-                          status={validation.valid ? "success" : "danger"}
-                        >
-                          {validation.valid
-                            ? validation.warnings.join("；") || "全部检查通过。"
-                            : Object.values(validation.field_errors)
-                                .flat()
-                                .join("；")}
-                        </Alert>
-                      )}
-                    </Accordion.Body>
-                  </Accordion.Panel>
-                </Accordion.Item>
-              </Accordion>
-            </Card.Content>
-          </Card>
-        </aside>
+        <SettingsEditorTabs
+          draft={draft}
+          payloadPolicyText={settings.data.payload_policy_text}
+          fieldError={fieldError}
+          onDraftChange={setDraft}
+        />
+        <SettingsSummary
+          stored={settings.data.stored}
+          draftDirty={draftDirty}
+          validation={validation}
+          writePending={writePending}
+          validating={pendingAction === "validate"}
+          onValidate={() => void validate()}
+        />
       </div>
 
       <footer className="flex h-16 items-center border-t border-[var(--telemetry-line)] px-5">
@@ -478,9 +219,7 @@ export function SettingsView() {
           <Button
             variant="outline"
             isDisabled={writePending}
-            onPress={() => {
-              setDraft(settings.data?.stored);
-            }}
+            onPress={() => setDraft(settings.data?.stored)}
           >
             放弃更改
           </Button>

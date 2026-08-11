@@ -5,15 +5,11 @@
 //! 使用一个已被桌面端撤销的端口。Android 数据面自身遵循 fail-open，不承诺无中断切换。
 
 use std::{
-    collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher},
-    fmt::Write as _,
-    hash::{Hash, Hasher},
+    collections::{BTreeMap, BTreeSet},
     net::{IpAddr, Ipv4Addr},
 };
 
-use intercept_proxy_application::{
-    AndroidNetworkActivation, AndroidProxyRouteActivation, AppError, AppResult,
-};
+use intercept_proxy_application::{AndroidNetworkActivation, AppError, AppResult};
 use serde_json::json;
 
 use super::{
@@ -21,6 +17,21 @@ use super::{
     PreparedUsbProxyRuntime, ReverseCleanupOutcome, sha256_json,
 };
 use crate::adapters::android_adb::command::is_missing_adb_listener_error;
+
+mod lan;
+mod support;
+
+pub(super) use lan::lan_endpoint_is_eligible;
+use lan::parse_device_lan_addresses;
+#[cfg(test)]
+pub(super) use support::allocated_reverse_ports;
+use support::{
+    allocated_reverse_ports_avoiding, reconcile_operation_cleanup, reverse_cleanup_error,
+    reverse_create_error,
+};
+pub(super) use support::{
+    combine_operation_and_cleanup, combine_stop_failures, reverse_mapping_present,
+};
 
 impl AndroidAdbAdapter {
     pub(super) async fn remove_reverse_ports(
@@ -347,175 +358,5 @@ impl AndroidAdbAdapter {
             .await;
         }
         outcome.error.map_or(Ok(()), Err)
-    }
-}
-
-fn parse_device_lan_addresses(output: &str) -> Vec<(Ipv4Addr, u8)> {
-    output
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.split_whitespace();
-            let _index = fields.next()?;
-            let interface = fields.next()?;
-            if interface == "lo" || interface.starts_with("tun") {
-                return None;
-            }
-            if fields.next()? != "inet" {
-                return None;
-            }
-            let (address, prefix) = fields.next()?.split_once('/')?;
-            let address = address.parse::<Ipv4Addr>().ok()?;
-            let prefix = prefix.parse::<u8>().ok()?;
-            (prefix <= 32 && !address.is_loopback() && !address.is_link_local())
-                .then_some((address, prefix))
-        })
-        .collect()
-}
-
-pub(super) fn lan_endpoint_is_eligible(
-    host: Ipv4Addr,
-    device: Ipv4Addr,
-    device_prefix: u8,
-    routes: &[AndroidProxyRouteActivation],
-) -> bool {
-    same_ipv4_network(host, device, device_prefix)
-        && routes.iter().all(|route| {
-            listener_accepts_lan_host(&route.desktop_listener_bind_address, host)
-                && cidrs_allow_device(&route.allowed_client_cidrs, device)
-        })
-}
-
-fn listener_accepts_lan_host(bind_address: &str, host: Ipv4Addr) -> bool {
-    bind_address
-        .parse::<IpAddr>()
-        .is_ok_and(|address| address.is_unspecified() || address == IpAddr::V4(host))
-}
-
-fn cidrs_allow_device(cidrs: &[String], device: Ipv4Addr) -> bool {
-    cidrs.is_empty() || cidrs.iter().any(|cidr| ipv4_cidr_contains(cidr, device))
-}
-
-fn ipv4_cidr_contains(cidr: &str, candidate: Ipv4Addr) -> bool {
-    let Some((network, prefix)) = cidr.split_once('/') else {
-        return false;
-    };
-    let Ok(network) = network.parse::<Ipv4Addr>() else {
-        return false;
-    };
-    let Ok(prefix) = prefix.parse::<u8>() else {
-        return false;
-    };
-    same_ipv4_network(network, candidate, prefix)
-}
-
-fn same_ipv4_network(left: Ipv4Addr, right: Ipv4Addr, prefix: u8) -> bool {
-    if prefix > 32 {
-        return false;
-    }
-    let mask = u32::MAX.checked_shl(32 - u32::from(prefix)).unwrap_or(0);
-    u32::from(left) & mask == u32::from(right) & mask
-}
-
-fn reverse_create_error(error: &AppError, device_port: u16, desktop_port: u16) -> AppError {
-    AppError::new(
-        "ANDROID_ADB_REVERSE_CREATE_FAILED",
-        format!(
-            "ADB 业务代理映射 tcp:{device_port} → tcp:{desktop_port} 创建失败：{}",
-            error.view_model.message
-        ),
-    )
-    .retryable("请保持设备在线，确认 ADB reverse 可用后重新启动设备网络接管。")
-}
-
-fn reverse_cleanup_error(error: &AppError, device_port: u16) -> AppError {
-    AppError::new(
-        "ANDROID_ADB_REVERSE_CLEANUP_FAILED",
-        format!(
-            "ADB 业务代理映射 tcp:{device_port} 清理失败：{}",
-            error.view_model.message
-        ),
-    )
-    .retryable("请保持设备在线并再次停止网络接管，或执行紧急恢复网络。")
-}
-
-#[cfg(test)]
-pub(super) fn allocated_reverse_ports(
-    routes: &[AndroidProxyRouteActivation],
-) -> BTreeMap<String, u16> {
-    allocated_reverse_ports_avoiding(routes, std::iter::empty())
-}
-
-fn allocated_reverse_ports_avoiding(
-    routes: &[AndroidProxyRouteActivation],
-    reserved_ports: impl IntoIterator<Item = u16>,
-) -> BTreeMap<String, u16> {
-    let mut listener_ports = BTreeMap::new();
-    let mut used_device_ports = reserved_ports.into_iter().collect::<BTreeSet<_>>();
-    for route in routes {
-        if listener_ports.contains_key(&route.listener_id) {
-            continue;
-        }
-        let mut hasher = DefaultHasher::new();
-        route.listener_id.hash(&mut hasher);
-        let mut device_port = 40_000 + u16::try_from(hasher.finish() % 20_000).unwrap_or(0);
-        while !used_device_ports.insert(device_port) {
-            device_port = if device_port == 59_999 {
-                40_000
-            } else {
-                device_port + 1
-            };
-        }
-        listener_ports.insert(route.listener_id.clone(), device_port);
-    }
-    listener_ports
-}
-
-pub(super) fn reverse_mapping_present(listing: &str, device_port: u16, desktop_port: u16) -> bool {
-    let device = format!("tcp:{device_port}");
-    let desktop = format!("tcp:{desktop_port}");
-    listing.lines().any(|line| {
-        let fields = line.split_whitespace().collect::<Vec<_>>();
-        fields
-            .windows(2)
-            .any(|pair| pair[0] == device && pair[1] == desktop)
-    })
-}
-
-pub(super) fn combine_operation_and_cleanup(
-    mut operation: AppError,
-    cleanup: &AppError,
-) -> AppError {
-    let _ = write!(
-        operation.view_model.message,
-        "；同时 adb reverse 清理失败：{}",
-        cleanup.view_model.message
-    );
-    operation.view_model.retryable = true;
-    operation.view_model.suggested_action =
-        Some("请保持设备在线并再次停止设备网络接管或执行紧急恢复，以重试清理残留映射。".into());
-    operation
-}
-
-pub(super) fn combine_stop_failures(mut graceful: AppError, force_stop: &AppError) -> AppError {
-    let _ = write!(
-        graceful.view_model.message,
-        "；ADB 强制停止也失败：{}",
-        force_stop.view_model.message
-    );
-    graceful.view_model.retryable = true;
-    graceful.view_model.suggested_action =
-        Some("请保持 USB/ADB 连接后执行紧急恢复；必要时在 Android VPN 设置中手动停止接管。".into());
-    graceful
-}
-
-fn reconcile_operation_cleanup<T>(operation: AppResult<T>, cleanup: AppResult<()>) -> AppResult<T> {
-    match (operation, cleanup) {
-        (Ok(value), Ok(())) => Ok(value),
-        (Ok(_), Err(cleanup_error)) => Err(cleanup_error),
-        (Err(operation_error), Ok(())) => Err(operation_error),
-        (Err(operation_error), Err(cleanup_error)) => Err(combine_operation_and_cleanup(
-            operation_error,
-            &cleanup_error,
-        )),
     }
 }
