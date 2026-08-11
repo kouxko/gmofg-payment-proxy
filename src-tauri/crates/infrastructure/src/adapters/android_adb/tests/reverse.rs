@@ -29,7 +29,9 @@ async fn usb_runtime_creates_reverse_and_keeps_endpoint_out_of_profile() {
             listener_id: listener_id.to_string(),
             original_destination: "203.0.113.10".into(),
             original_ports: vec![16_127],
+            desktop_listener_bind_address: "0.0.0.0".into(),
             desktop_listener_port: 26_127,
+            allowed_client_cidrs: Vec::new(),
         }],
     };
 
@@ -97,7 +99,9 @@ async fn normalized_route_fingerprint_changes_when_runtime_endpoint_changes() {
             listener_id: listener_id.to_string(),
             original_destination: "203.0.113.10".into(),
             original_ports: vec![16_127],
+            desktop_listener_bind_address: "0.0.0.0".into(),
             desktop_listener_port: 26_127,
+            allowed_client_cidrs: Vec::new(),
         }],
     };
 
@@ -280,10 +284,10 @@ async fn successful_apply_publishes_staged_mapping_before_retiring_old_mapping()
     assert_eq!(active.ports, vec![staged_port]);
     assert_ne!(staged_port, old_port);
     let calls = runner.calls.lock().unwrap();
-    assert_eq!(calls.len(), 2);
-    assert_eq!(calls[0][2], "reverse");
-    assert_eq!(calls[1][3], "--remove");
-    assert_eq!(calls[1][4], format!("tcp:{old_port}"));
+    assert_eq!(calls.len(), 3);
+    assert_eq!(calls[1][2], "reverse");
+    assert_eq!(calls[2][3], "--remove");
+    assert_eq!(calls[2][4], format!("tcp:{old_port}"));
 }
 
 #[tokio::test]
@@ -447,11 +451,18 @@ async fn reverse_creation_failure_keeps_active_mapping_and_runtime() {
     let temp = tempfile::tempdir().unwrap();
     let runner = Arc::new(SequenceRunner {
         calls: std::sync::Mutex::new(Vec::new()),
-        outputs: std::sync::Mutex::new(std::collections::VecDeque::from([AdbOutput {
-            success: false,
-            stdout: String::new(),
-            stderr: "cannot create staged reverse".into(),
-        }])),
+        outputs: std::sync::Mutex::new(std::collections::VecDeque::from([
+            AdbOutput {
+                success: true,
+                stdout: String::new(),
+                stderr: String::new(),
+            },
+            AdbOutput {
+                success: false,
+                stdout: String::new(),
+                stderr: "cannot create staged reverse".into(),
+            },
+        ])),
     });
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
     *adapter.selected_serial.write().unwrap() = Some("SER123".into());
@@ -466,7 +477,83 @@ async fn reverse_creation_failure_keeps_active_mapping_and_runtime() {
     assert_eq!(error.view_model.code, "ANDROID_ADB_REVERSE_CREATE_FAILED");
     assert_eq!(*adapter.active_reverse.lock().await, Some(old_reverse));
     assert_eq!(*adapter.active_runtime.lock().await, Some(old_runtime));
-    assert_eq!(runner.calls.lock().unwrap().len(), 1);
-    assert!(!runner.calls.lock().unwrap()[0].contains(&"--remove".to_owned()));
+    assert_eq!(runner.calls.lock().unwrap().len(), 2);
+    assert!(!runner.calls.lock().unwrap()[1].contains(&"--remove".to_owned()));
+}
+
+#[derive(Debug)]
+struct FixedLanAddressProvider(std::net::Ipv4Addr);
+
+impl DeviceLanAddressProvider for FixedLanAddressProvider {
+    fn local_ipv4_for(&self, _: std::net::Ipv4Addr) -> Option<std::net::Ipv4Addr> {
+        Some(self.0)
+    }
+}
+
+#[tokio::test]
+async fn same_subnet_listener_uses_lan_without_creating_reverse() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(SequenceRunner {
+        calls: std::sync::Mutex::new(Vec::new()),
+        outputs: std::sync::Mutex::new(std::collections::VecDeque::from([AdbOutput {
+            success: true,
+            stdout: "30: wlan0 inet 10.0.35.195/23 brd 10.0.35.255 scope global wlan0\n36: tun0 inet 10.254.0.2/32 scope global tun0\n".into(),
+            stderr: String::new(),
+        }])),
+    });
+    let mut adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+    adapter.lan_address = Arc::new(FixedLanAddressProvider("10.0.34.48".parse().unwrap()));
+    *adapter.selected_serial.write().unwrap() = Some("SER123".into());
+    let activation = test_activation("lan-profile", "203.0.113.10", ListenerId::new(), 16_127);
+
+    let prepared = adapter
+        .prepare_usb_proxy_runtime(&activation)
+        .await
+        .unwrap();
+
+    assert_eq!(prepared.payload["routes"][0]["proxy_host"], "10.0.34.48");
+    assert_eq!(prepared.payload["routes"][0]["proxy_port"], 16_127);
+    assert!(!prepared.runtime.uses_adb_reverse);
+    assert!(prepared.reverse.is_none());
+    let calls = runner.calls.lock().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(
+        &calls[0][2..],
+        &["shell", "ip", "-o", "-4", "addr", "show", "scope", "global"]
+    );
+}
+
+#[test]
+fn lan_selection_requires_same_subnet_and_lan_listener() {
+    let route = AndroidProxyRouteActivation {
+        listener_id: "listener".into(),
+        original_destination: "example.test".into(),
+        original_ports: vec![443],
+        desktop_listener_bind_address: "0.0.0.0".into(),
+        desktop_listener_port: 443,
+        allowed_client_cidrs: Vec::new(),
+    };
+    assert!(lan_endpoint_is_eligible(
+        "10.0.34.48".parse().unwrap(),
+        "10.0.35.195".parse().unwrap(),
+        23,
+        std::slice::from_ref(&route),
+    ));
+    assert!(!lan_endpoint_is_eligible(
+        "10.0.34.48".parse().unwrap(),
+        "10.0.35.195".parse().unwrap(),
+        24,
+        std::slice::from_ref(&route),
+    ));
+    let loopback_route = AndroidProxyRouteActivation {
+        desktop_listener_bind_address: "127.0.0.1".into(),
+        ..route
+    };
+    assert!(!lan_endpoint_is_eligible(
+        "10.0.34.48".parse().unwrap(),
+        "10.0.35.195".parse().unwrap(),
+        23,
+        &[loopback_route],
+    ));
 }
 use super::*;

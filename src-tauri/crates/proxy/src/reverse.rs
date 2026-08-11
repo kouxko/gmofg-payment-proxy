@@ -44,7 +44,7 @@ use crate::{ErrorCode, MitmCertificateAuthority, ProxyError, Result};
 mod admission;
 mod dynamic_identity;
 
-use admission::{ClientNetwork, ReverseConnectionAcceptor};
+use admission::{ClientNetwork, ReverseConnectionAcceptor, peer_is_allowed};
 use dynamic_identity::{DynamicServerIdentityResolver, certified_key};
 mod config;
 mod endpoint;

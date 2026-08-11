@@ -75,7 +75,16 @@ impl ForwardProxyConfig {
     }
 
     pub(super) fn permits_peer(&self, peer: IpAddr) -> bool {
-        self.allowed_client_cidrs.is_empty()
+        let peer = match peer {
+            IpAddr::V6(address) => address
+                .to_ipv4_mapped()
+                .map_or(IpAddr::V6(address), IpAddr::V4),
+            IpAddr::V4(_) => peer,
+        };
+        // ADB reverse terminates on the desktop as a loopback connection. It still passes
+        // through proxy authentication, while remote clients remain constrained by CIDR.
+        peer.is_loopback()
+            || self.allowed_client_cidrs.is_empty()
             || self
                 .allowed_client_cidrs
                 .iter()

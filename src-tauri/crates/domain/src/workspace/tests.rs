@@ -37,7 +37,7 @@ fn dynamic_listener_without_new_optional_downstream_tls_still_loads() {
 }
 
 #[test]
-fn non_loopback_forward_listener_requires_authentication_and_cidr() {
+fn non_loopback_forward_listener_requires_authentication_but_allows_empty_cidr() {
     let mut workspace = ProxyWorkspace::default();
     let listener = &mut workspace.listeners[0];
     listener.enabled = true;
@@ -49,14 +49,14 @@ fn non_loopback_forward_listener_requires_authentication_and_cidr() {
             .contains_key("listeners.0.authentication")
     );
     assert!(
-        error
+        !error
             .field_errors
             .contains_key("listeners.0.allowed_client_cidrs")
     );
 }
 
 #[test]
-fn non_loopback_fixed_server_requires_only_cidr_admission() {
+fn non_loopback_fixed_server_allows_all_clients_when_cidr_is_empty() {
     let mut workspace = ProxyWorkspace::default();
     let listener = &mut workspace.listeners[0];
     listener.enabled = true;
@@ -66,18 +66,7 @@ fn non_loopback_fixed_server_requires_only_cidr_admission() {
         upstream_tls: UpstreamTlsSettings::default(),
     });
 
-    let error = workspace.validate().unwrap_err();
-
-    assert!(
-        error
-            .field_errors
-            .contains_key("listeners.0.allowed_client_cidrs")
-    );
-    assert!(
-        !error
-            .field_errors
-            .contains_key("listeners.0.downstream_tls.client_authentication")
-    );
+    workspace.validate().unwrap();
 }
 
 #[test]

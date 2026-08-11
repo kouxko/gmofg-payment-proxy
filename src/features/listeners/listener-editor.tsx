@@ -177,6 +177,7 @@ function CommonListenerSettings({
           onChange={(event) => onChange({ allowed_client_cidrs: splitValues(event.target.value) })}
           placeholder="127.0.0.1/32, 10.0.0.0/8"
         />
+        <p className="text-xs text-[var(--telemetry-muted)]">留空时允许任意客户端地址连接。</p>
       </div>
       <div className="col-span-2 grid grid-cols-2 gap-4 rounded-2xl border border-[var(--telemetry-line)] p-4 max-[700px]:col-span-1 max-[700px]:grid-cols-1">
         <Switch

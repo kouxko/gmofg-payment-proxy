@@ -18,15 +18,16 @@ use rcgen::{
     Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, SanType,
 };
 use rustls::{
-    ServerConfig,
-    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
+    ClientConfig, RootCertStore, ServerConfig, SignatureScheme,
+    crypto::WebPkiSupportedAlgorithms,
+    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
     version::TLS12,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
-use tokio_rustls::TlsAcceptor;
+use tokio_rustls::{TlsAcceptor, TlsConnector};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
@@ -144,4 +145,50 @@ fn context(peer_port: u16) -> ConnectionContext {
         accepted_at: std::time::SystemTime::now(),
         tls_peer: None,
     }
+}
+
+/// 构造只向服务端声明指定签名算法的 TLS 1.2 客户端。
+///
+/// Android 设备使用 Conscrypt 生成 ClientHello。真实设备如果没有声明
+/// ECDSA，动态 ECDSA 叶子证书就无法完成握手。该辅助函数让集成测试不依赖
+/// 真机也能稳定覆盖这一兼容性边界，同时保留完整证书链验证算法，避免把
+/// “证书无法验证”和“握手签名算法不匹配”混为一谈。
+fn tls12_connector_with_signature_schemes(
+    root_der: Vec<u8>,
+    schemes: &[SignatureScheme],
+) -> TlsConnector {
+    let mut provider = rustls::crypto::ring::default_provider();
+    let supported = provider.signature_verification_algorithms;
+    let filtered = supported
+        .mapping
+        .iter()
+        .copied()
+        .filter(|(scheme, _)| schemes.contains(scheme))
+        .collect::<Vec<_>>();
+    assert!(!filtered.is_empty(), "测试必须至少保留一种签名算法");
+    provider.signature_verification_algorithms = WebPkiSupportedAlgorithms {
+        all: supported.all,
+        mapping: Box::leak(filtered.into_boxed_slice()),
+    };
+
+    let mut roots = RootCertStore::empty();
+    roots.add(CertificateDer::from(root_der)).unwrap();
+    let config = ClientConfig::builder_with_provider(Arc::new(provider))
+        .with_protocol_versions(&[&TLS12])
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    TlsConnector::from(Arc::new(config))
+}
+
+async fn connect_with_signature_schemes(
+    address: std::net::SocketAddr,
+    server_name: &'static str,
+    root_der: Vec<u8>,
+    schemes: &[SignatureScheme],
+) -> std::io::Result<tokio_rustls::client::TlsStream<TcpStream>> {
+    let connector = tls12_connector_with_signature_schemes(root_der, schemes);
+    let tcp = TcpStream::connect(address).await?;
+    let server_name = ServerName::try_from(server_name).unwrap();
+    connector.connect(server_name, tcp).await
 }

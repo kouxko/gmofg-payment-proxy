@@ -115,7 +115,9 @@ pub struct AndroidProxyRouteActivation {
     pub listener_id: String,
     pub original_destination: String,
     pub original_ports: Vec<u16>,
+    pub desktop_listener_bind_address: String,
     pub desktop_listener_port: u16,
+    pub allowed_client_cidrs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

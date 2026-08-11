@@ -100,6 +100,76 @@ async fn domain_route_matches_desktop_resolved_ip_without_device_dns() {
 }
 
 #[tokio::test]
+async fn unique_domain_route_uses_port_fallback_when_socks_only_reports_an_unknown_ip() {
+    let profile = profile(vec![ProxyRoute {
+        listener_id: "payment-dll".into(),
+        destination: "https.gmo-fg.net".into(),
+        ports: vec![16_127],
+    }]);
+    let runtime = ProxyRuntimeConfiguration {
+        routes: vec![ResolvedProxyRoute {
+            listener_id: "payment-dll".into(),
+            original_destination: "https.gmo-fg.net".into(),
+            original_ports: vec![16_127],
+            // 桌面启动时的 DNS 快照可能与应用缓存 IP、DNS 轮询结果或
+            // tun2proxy 暴露的 Fake-IP 不同。此时不能静默直连原 Server。
+            resolved_original_ips: vec!["153.150.240.65".parse().unwrap()],
+            proxy_host: "127.0.0.1".into(),
+            proxy_port: 40_127,
+        }],
+    };
+
+    let table = ProxyRouteTable::compile(&profile, &runtime).await.unwrap();
+    assert_eq!(
+        table.for_ip("198.18.0.1".parse().unwrap(), 16_127),
+        Some(&["127.0.0.1:40127".parse().unwrap()][..])
+    );
+}
+
+#[tokio::test]
+async fn same_port_domain_routes_do_not_guess_when_ip_does_not_match() {
+    let profile = profile(vec![
+        ProxyRoute {
+            listener_id: "first".into(),
+            destination: "first.example".into(),
+            ports: vec![16_127],
+        },
+        ProxyRoute {
+            listener_id: "second".into(),
+            destination: "second.example".into(),
+            ports: vec![16_127],
+        },
+    ]);
+    let runtime = ProxyRuntimeConfiguration {
+        routes: vec![
+            ResolvedProxyRoute {
+                listener_id: "first".into(),
+                original_destination: "first.example".into(),
+                original_ports: vec![16_127],
+                resolved_original_ips: vec!["192.0.2.1".parse().unwrap()],
+                proxy_host: "127.0.0.1".into(),
+                proxy_port: 40_127,
+            },
+            ResolvedProxyRoute {
+                listener_id: "second".into(),
+                original_destination: "second.example".into(),
+                original_ports: vec![16_127],
+                resolved_original_ips: vec!["192.0.2.2".parse().unwrap()],
+                proxy_host: "127.0.0.1".into(),
+                proxy_port: 40_128,
+            },
+        ],
+    };
+
+    let table = ProxyRouteTable::compile(&profile, &runtime).await.unwrap();
+    assert!(
+        table
+            .for_ip("198.18.0.1".parse().unwrap(), 16_127)
+            .is_none()
+    );
+}
+
+#[tokio::test]
 async fn domain_route_compiles_offline_and_matches_virtual_dns_domain() {
     let profile = profile(vec![ProxyRoute {
         listener_id: "offline-domain".into(),

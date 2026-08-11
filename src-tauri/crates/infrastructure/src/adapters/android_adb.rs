@@ -1,5 +1,7 @@
 use std::{
     collections::{BTreeMap, HashMap},
+    fmt::Debug,
+    net::{IpAddr, Ipv4Addr, UdpSocket},
     path::PathBuf,
     sync::{Arc, RwLock},
     time::Duration,
@@ -35,7 +37,7 @@ use fingerprint::canonical_json;
 #[cfg(test)]
 use protocol::{ActivationObservation, classify_activation_status, reconcile_forward_cleanup};
 #[cfg(test)]
-use reverse::allocated_reverse_ports;
+use reverse::{allocated_reverse_ports, lan_endpoint_is_eligible};
 const CONTROL_SOCKET: &str = "intercept_proxy_vpn";
 const COMMAND_TIMEOUT: Duration = Duration::from_secs(20);
 const INSTALL_TIMEOUT: Duration = Duration::from_mins(2);
@@ -49,6 +51,7 @@ pub struct AndroidAdbAdapter {
     active_reverse: Mutex<Option<ActiveReverseOwnership>>,
     active_runtime: Mutex<Option<ActiveRuntimeFacts>>,
     runner: Arc<dyn AdbCommandRunner>,
+    lan_address: Arc<dyn DeviceLanAddressProvider>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +74,7 @@ struct ActiveRuntimeFacts {
     route_fingerprint: String,
     route_count: usize,
     listener_ports: BTreeMap<String, u16>,
+    uses_adb_reverse: bool,
 }
 
 #[derive(Debug)]
@@ -84,6 +88,25 @@ struct PreparedUsbProxyRuntime {
 struct ReverseCleanupOutcome {
     remaining_ports: Vec<u16>,
     error: Option<AppError>,
+}
+
+trait DeviceLanAddressProvider: Debug + Send + Sync {
+    fn local_ipv4_for(&self, device_address: Ipv4Addr) -> Option<Ipv4Addr>;
+}
+
+#[derive(Debug, Default)]
+struct SystemDeviceLanAddressProvider;
+
+impl DeviceLanAddressProvider for SystemDeviceLanAddressProvider {
+    fn local_ipv4_for(&self, device_address: Ipv4Addr) -> Option<Ipv4Addr> {
+        // UDP connect 只让系统选择到设备地址的本地接口，不建立连接也不发送数据。
+        let socket = UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+        socket.connect((device_address, 9)).ok()?;
+        let IpAddr::V4(address) = socket.local_addr().ok()?.ip() else {
+            return None;
+        };
+        (!address.is_unspecified() && !address.is_loopback()).then_some(address)
+    }
 }
 
 impl AndroidAdbAdapter {
@@ -101,6 +124,7 @@ impl AndroidAdbAdapter {
             active_reverse: Mutex::new(None),
             active_runtime: Mutex::new(None),
             runner: Arc::new(SystemAdbCommandRunner),
+            lan_address: Arc::new(SystemDeviceLanAddressProvider),
         }
     }
 }
@@ -387,6 +411,9 @@ impl AndroidControlPort for AndroidAdbAdapter {
             return Ok(false);
         }
         if activation.proxy_routes.is_empty() {
+            return Ok(true);
+        }
+        if !active_runtime.uses_adb_reverse {
             return Ok(true);
         }
         let listing = self

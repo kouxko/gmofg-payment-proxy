@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AppProviders } from "@/features/shell/app-providers";
+import { ThemeProvider } from "@/features/theme/theme-provider";
 import "./globals.css";
 
 /**
@@ -25,7 +26,9 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" className="h-full">
       <body className="h-full min-w-0 overflow-hidden antialiased">
-        <AppProviders>{children}</AppProviders>
+        <ThemeProvider>
+          <AppProviders>{children}</AppProviders>
+        </ThemeProvider>
       </body>
     </html>
   );

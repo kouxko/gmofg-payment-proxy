@@ -144,3 +144,164 @@ async fn reverse_listener_rejects_sni_outside_dynamic_allowlist() {
     reverse_task.await.unwrap().unwrap();
     assert!(authority.issued_names.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn reverse_listener_uses_fallback_identity_when_client_sends_ip_without_sni() {
+    let authority = Arc::new(DynamicAuthority::new());
+    let fallback = identity("fallback-server", false);
+    let downstream_client = identity("ordinary-client", true);
+    let reverse_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let reverse_address = reverse_listener.local_addr().unwrap();
+    let cancellation = CancellationToken::new();
+    let service = ReverseProxyService::build(ReverseProxyConfig {
+        bind_addr: reverse_address,
+        allowed_client_cidrs: Vec::new(),
+        upstream_origin: "http://127.0.0.1:9".into(),
+        downstream_tls: Some(ReverseDownstreamTls {
+            server_identity: ReverseClientIdentity {
+                certificate_chain_der: vec![fallback.cert, fallback.ca.clone()],
+                private_key_pkcs8_der: fallback.key.into(),
+            },
+            dynamic_server_identity: Some(authority.clone()),
+            dynamic_server_name_allowlist: vec!["https.gmo-fg.net".into()],
+            client_trust_der: Vec::new(),
+            client_authentication_required: false,
+        }),
+        upstream_tls: None,
+        connect_timeout: Duration::from_secs(2),
+        read_timeout: Duration::from_secs(2),
+        write_timeout: Duration::from_secs(2),
+    })
+    .await
+    .unwrap();
+    let task_cancellation = cancellation.clone();
+    let reverse_task = tokio::spawn(async move {
+        service
+            .serve_listener(reverse_listener, task_cancellation)
+            .await
+    });
+
+    // rustls 对 IP 类型 ServerName 不发送 SNI；此时必须退回监听器固定证书，
+    // 不能因为动态域名证书启用就直接关闭连接。
+    let client = ClientTlsAdapter::build(
+        vec![downstream_client.cert, downstream_client.ca],
+        downstream_client.key,
+        fallback.ca,
+    )
+    .unwrap();
+    let tcp = TcpStream::connect(reverse_address).await.unwrap();
+    let mut stream = client.connect("127.0.0.1", Box::new(tcp)).await.unwrap();
+    stream.shutdown().await.unwrap();
+
+    cancellation.cancel();
+    reverse_task.await.unwrap().unwrap();
+    assert!(authority.issued_names.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn dynamic_ecdsa_identity_accepts_android_compatible_tls12_client_hello() {
+    let authority = Arc::new(DynamicAuthority::new());
+    let fallback = identity("fallback-server", false);
+    let reverse_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let reverse_address = reverse_listener.local_addr().unwrap();
+    let cancellation = CancellationToken::new();
+    let service = ReverseProxyService::build(ReverseProxyConfig {
+        bind_addr: reverse_address,
+        allowed_client_cidrs: Vec::new(),
+        upstream_origin: "http://127.0.0.1:9".into(),
+        downstream_tls: Some(ReverseDownstreamTls {
+            server_identity: ReverseClientIdentity {
+                certificate_chain_der: vec![fallback.cert, fallback.ca],
+                private_key_pkcs8_der: fallback.key.into(),
+            },
+            dynamic_server_identity: Some(authority.clone()),
+            dynamic_server_name_allowlist: vec!["https.gmo-fg.net".into()],
+            client_trust_der: Vec::new(),
+            client_authentication_required: false,
+        }),
+        upstream_tls: None,
+        connect_timeout: Duration::from_secs(2),
+        read_timeout: Duration::from_secs(2),
+        write_timeout: Duration::from_secs(2),
+    })
+    .await
+    .unwrap();
+    let task_cancellation = cancellation.clone();
+    let reverse_task = tokio::spawn(async move {
+        service
+            .serve_listener(reverse_listener, task_cancellation)
+            .await
+    });
+
+    // Android 11 Conscrypt 支持的核心 TLS 1.2 ECDSA 签名组合。将声明范围
+    // 收窄到该组合，可避免“默认客户端能力过宽”掩盖兼容性问题。
+    let mut stream = connect_with_signature_schemes(
+        reverse_address,
+        "https.gmo-fg.net",
+        authority.ca_der.clone(),
+        &[SignatureScheme::ECDSA_NISTP256_SHA256],
+    )
+    .await
+    .unwrap();
+    stream.shutdown().await.unwrap();
+
+    cancellation.cancel();
+    reverse_task.await.unwrap().unwrap();
+    assert_eq!(
+        authority.issued_names.lock().unwrap().as_slice(),
+        ["https.gmo-fg.net"]
+    );
+}
+
+#[tokio::test]
+async fn dynamic_ecdsa_identity_rejects_client_hello_without_ecdsa_signature_scheme() {
+    let authority = Arc::new(DynamicAuthority::new());
+    let fallback = identity("fallback-server", false);
+    let reverse_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let reverse_address = reverse_listener.local_addr().unwrap();
+    let cancellation = CancellationToken::new();
+    let service = ReverseProxyService::build(ReverseProxyConfig {
+        bind_addr: reverse_address,
+        allowed_client_cidrs: Vec::new(),
+        upstream_origin: "http://127.0.0.1:9".into(),
+        downstream_tls: Some(ReverseDownstreamTls {
+            server_identity: ReverseClientIdentity {
+                certificate_chain_der: vec![fallback.cert, fallback.ca],
+                private_key_pkcs8_der: fallback.key.into(),
+            },
+            dynamic_server_identity: Some(authority.clone()),
+            dynamic_server_name_allowlist: vec!["https.gmo-fg.net".into()],
+            client_trust_der: Vec::new(),
+            client_authentication_required: false,
+        }),
+        upstream_tls: None,
+        connect_timeout: Duration::from_secs(2),
+        read_timeout: Duration::from_secs(2),
+        write_timeout: Duration::from_secs(2),
+    })
+    .await
+    .unwrap();
+    let task_cancellation = cancellation.clone();
+    let reverse_task = tokio::spawn(async move {
+        service
+            .serve_listener(reverse_listener, task_cancellation)
+            .await
+    });
+
+    let result = connect_with_signature_schemes(
+        reverse_address,
+        "https.gmo-fg.net",
+        authority.ca_der.clone(),
+        &[SignatureScheme::RSA_PKCS1_SHA256],
+    )
+    .await;
+    assert!(result.is_err(), "RSA-only ClientHello 不应匹配 ECDSA 叶子证书");
+
+    cancellation.cancel();
+    reverse_task.await.unwrap().unwrap();
+    assert_eq!(
+        authority.issued_names.lock().unwrap().as_slice(),
+        ["https.gmo-fg.net"],
+        "解析 SNI 后会先签发叶子证书，随后因客户端未声明 ECDSA 而拒绝握手"
+    );
+}

@@ -76,7 +76,8 @@ impl ProxyRouteTable {
     }
 
     pub(crate) fn for_ip(&self, address: IpAddr, port: u16) -> Option<&[std::net::SocketAddr]> {
-        self.routes
+        let exact_match = self
+            .routes
             .iter()
             .find(|route| {
                 route.ports.contains(&port)
@@ -86,7 +87,30 @@ impl ProxyRouteTable {
                         .is_some_and(|network| network.contains(address))
                         || route.resolved_ips.contains(&address))
             })
-            .map(|route| route.proxy_addresses.as_slice())
+            .map(|route| route.proxy_addresses.as_slice());
+        if exact_match.is_some() {
+            return exact_match;
+        }
+
+        self.unique_domain_route_for_port(port)
+    }
+
+    /// 当 SOCKS5 只提供数值 IP、且该端口只属于一条域名路由时，按端口补偿匹配。
+    ///
+    /// 应用可能缓存旧 DNS 结果，域名也可能轮询到桌面启动快照之外的新 IP；部分
+    /// tun2proxy 路径还会把 Fake-IP 作为 SOCKS5 目标上报。若此时直接回退到原始
+    /// Server，就会绕过用户明确配置的透明代理。只有一条域名路由占用该端口时，
+    /// 端口足以唯一确定代理入口；同端口存在多条域名路由时保持不匹配，禁止猜测。
+    fn unique_domain_route_for_port(&self, port: u16) -> Option<&[std::net::SocketAddr]> {
+        let mut candidates = self
+            .routes
+            .iter()
+            .filter(|route| route.network.is_none() && route.ports.contains(&port));
+        let route = candidates.next()?;
+        if candidates.next().is_some() {
+            return None;
+        }
+        Some(route.proxy_addresses.as_slice())
     }
 }
 

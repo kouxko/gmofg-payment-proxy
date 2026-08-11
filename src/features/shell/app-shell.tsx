@@ -110,7 +110,7 @@ export const sideNavigationIconClassName =
 export const sideNavigationLabelClassName =
   "block w-14 shrink-0 whitespace-nowrap text-center leading-5";
 export const sideNavigationClassName =
-  "row-start-2 flex w-24 flex-col gap-2 overflow-y-auto border-r border-[var(--telemetry-line)] bg-white px-2 py-3 max-[1280px]:w-20 max-[1025px]:hidden";
+  "row-start-2 flex w-24 flex-col gap-2 overflow-y-auto border-r border-[var(--telemetry-line)] bg-[var(--telemetry-surface)] px-2 py-3 max-[1280px]:w-20 max-[1025px]:hidden";
 export const shellErrorRegionClassName = "px-5 pt-4";
 
 function CurrentTime() {
@@ -151,7 +151,7 @@ function GlobalStatusBar() {
   );
 
   return (
-    <header className="col-span-2 flex min-h-14 items-center overflow-x-auto border-b border-[var(--telemetry-line)] bg-white px-4 max-[1025px]:col-span-1 max-[1025px]:overflow-visible max-[1025px]:py-2">
+    <header className="col-span-2 flex min-h-14 items-center overflow-x-auto border-b border-[var(--telemetry-line)] bg-[var(--telemetry-surface)] px-4 max-[1025px]:col-span-1 max-[1025px]:overflow-visible max-[1025px]:py-2">
       <Toolbar className="flex min-w-max flex-1 items-center gap-4 whitespace-nowrap text-sm max-[1025px]:min-w-0 max-[1025px]:flex-wrap max-[1025px]:gap-x-3 max-[1025px]:gap-y-2">
         <Drawer
           isOpen={mobileNavigationOpen}
@@ -332,7 +332,7 @@ function ShellContent({ children }: Readonly<{ children: React.ReactNode }>) {
     <div className="grid h-full grid-cols-[96px_minmax(0,1fr)] grid-rows-[56px_minmax(0,1fr)] max-[1280px]:grid-cols-[80px_minmax(0,1fr)] max-[1025px]:grid-cols-1 max-[1025px]:grid-rows-[auto_minmax(0,1fr)]">
       <GlobalStatusBar />
       <SideNavigation />
-      <main className="min-w-0 overflow-auto bg-white">
+      <main className="min-w-0 overflow-auto bg-[var(--telemetry-background)]">
         {error && (
           <div className={shellErrorRegionClassName}>
             <Alert status="danger">

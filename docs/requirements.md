@@ -119,7 +119,7 @@ ProxyWorkspace
 - 运行时仅在 Listener 启动时解密到自动清零内存，并以常量时间 MAC 校验请求凭据；错误、
   事件和抓包不得包含明文或认证 Header。
 - 默认只能监听 loopback。
-- 非 loopback 必须同时配置认证与 CIDR allowlist。
+- 客户端 CIDR allowlist 留空表示允许任意地址；非空时按列表准入。非 loopback 正向代理必须配置认证。
 - HTTP absolute-form 转换为 origin-form。
 - 删除 Proxy-Authorization 和 hop-by-hop Header。
 - CONNECT 默认为 Tunnel；只有 allowlist 命中才进入 MITM。
@@ -324,7 +324,8 @@ Selected App → VpnService TUN → Rust ImpairedTun
 - 固定 `tun2proxy = "=0.8.3"`。
 - 支持 IPv4/IPv6、TCP、UDP、SOCKS5 CONNECT 和 UDP ASSOCIATE。
 - 透明桌面代理首版只改送 TCP；UDP 保持原目标直连，不得把 UDP 误送到 HTTP Listener。
-- USB 链路是透明代理路由的默认优先路径。桌面 Rust 为每个被引用 Listener 创建
+- 设备与电脑处于同一 IPv4 子网、Listener 对 LAN 地址开放且 CIDR 允许设备时，透明代理
+  路由优先使用 LAN；否则桌面 Rust 为每个被引用 Listener 创建
   `adb reverse tcp:<device-temporary-port> tcp:<listener-port>`，Android 只连接
   `127.0.0.1:<device-temporary-port>`。因此设备没有 Wi-Fi/蜂窝外网时仍可经电脑访问上游。
   这些端点只在启动时下发，不写入 Workspace；电脑自身仍须能够访问上游 Server。

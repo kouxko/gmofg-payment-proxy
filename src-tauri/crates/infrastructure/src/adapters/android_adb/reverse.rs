@@ -8,7 +8,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher},
     fmt::Write as _,
     hash::{Hash, Hasher},
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr},
 };
 
 use intercept_proxy_application::{
@@ -180,10 +180,16 @@ impl AndroidAdbAdapter {
             resolved_routes.push((route, resolved_original_ips));
         }
 
-        let listener_ports = allocated_reverse_ports_avoiding(
-            &activation.proxy_routes,
-            reserved_ports.iter().copied(),
-        );
+        let lan_host = self.preferred_lan_proxy_host(&serial, activation).await;
+        let uses_adb_reverse = lan_host.is_none();
+        let listener_ports = if uses_adb_reverse {
+            allocated_reverse_ports_avoiding(
+                &activation.proxy_routes,
+                reserved_ports.iter().copied(),
+            )
+        } else {
+            BTreeMap::new()
+        };
         let created = if listener_ports.is_empty() {
             Vec::new()
         } else {
@@ -194,13 +200,17 @@ impl AndroidAdbAdapter {
         let routes = resolved_routes
             .into_iter()
             .map(|(route, resolved_original_ips)| {
+                let (proxy_host, proxy_port) = lan_host.map_or_else(
+                    || ("127.0.0.1".to_owned(), listener_ports[&route.listener_id]),
+                    |host| (host.to_string(), route.desktop_listener_port),
+                );
                 json!({
                     "listener_id": route.listener_id,
                     "original_destination": route.original_destination,
                     "original_ports": route.original_ports,
                     "resolved_original_ips": resolved_original_ips,
-                    "proxy_host": "127.0.0.1",
-                    "proxy_port": listener_ports[&route.listener_id],
+                    "proxy_host": proxy_host,
+                    "proxy_port": proxy_port,
                 })
             })
             .collect::<Vec<_>>();
@@ -226,8 +236,37 @@ impl AndroidAdbAdapter {
                 route_fingerprint,
                 route_count,
                 listener_ports,
+                uses_adb_reverse,
             },
         })
+    }
+
+    /// 同网段 LAN 可用时直接连接桌面 Listener。部分定制 Android 固件会让
+    /// `adb reverse` 在设备端 connect 成功后立即关闭，却从未建立主机侧连接；
+    /// 这种情况下应用只能看到 TLS EOF，LAN 路径可以绕过 OEM adbd 缺陷。
+    async fn preferred_lan_proxy_host(
+        &self,
+        serial: &str,
+        activation: &AndroidNetworkActivation,
+    ) -> Option<Ipv4Addr> {
+        if activation.proxy_routes.is_empty() {
+            return None;
+        }
+        let output = self
+            .run_for_serial(
+                serial,
+                &["shell", "ip", "-o", "-4", "addr", "show", "scope", "global"],
+                COMMAND_TIMEOUT,
+            )
+            .await
+            .ok()?;
+        parse_device_lan_addresses(&output.stdout)
+            .into_iter()
+            .find_map(|(device_address, prefix)| {
+                let host = self.lan_address.local_ipv4_for(device_address)?;
+                lan_endpoint_is_eligible(host, device_address, prefix, &activation.proxy_routes)
+                    .then_some(host)
+            })
     }
 
     pub(super) async fn finish_prepared_network_update<T>(
@@ -309,6 +348,72 @@ impl AndroidAdbAdapter {
         }
         outcome.error.map_or(Ok(()), Err)
     }
+}
+
+fn parse_device_lan_addresses(output: &str) -> Vec<(Ipv4Addr, u8)> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let _index = fields.next()?;
+            let interface = fields.next()?;
+            if interface == "lo" || interface.starts_with("tun") {
+                return None;
+            }
+            if fields.next()? != "inet" {
+                return None;
+            }
+            let (address, prefix) = fields.next()?.split_once('/')?;
+            let address = address.parse::<Ipv4Addr>().ok()?;
+            let prefix = prefix.parse::<u8>().ok()?;
+            (prefix <= 32 && !address.is_loopback() && !address.is_link_local())
+                .then_some((address, prefix))
+        })
+        .collect()
+}
+
+pub(super) fn lan_endpoint_is_eligible(
+    host: Ipv4Addr,
+    device: Ipv4Addr,
+    device_prefix: u8,
+    routes: &[AndroidProxyRouteActivation],
+) -> bool {
+    same_ipv4_network(host, device, device_prefix)
+        && routes.iter().all(|route| {
+            listener_accepts_lan_host(&route.desktop_listener_bind_address, host)
+                && cidrs_allow_device(&route.allowed_client_cidrs, device)
+        })
+}
+
+fn listener_accepts_lan_host(bind_address: &str, host: Ipv4Addr) -> bool {
+    bind_address
+        .parse::<IpAddr>()
+        .is_ok_and(|address| address.is_unspecified() || address == IpAddr::V4(host))
+}
+
+fn cidrs_allow_device(cidrs: &[String], device: Ipv4Addr) -> bool {
+    cidrs.is_empty() || cidrs.iter().any(|cidr| ipv4_cidr_contains(cidr, device))
+}
+
+fn ipv4_cidr_contains(cidr: &str, candidate: Ipv4Addr) -> bool {
+    let Some((network, prefix)) = cidr.split_once('/') else {
+        return false;
+    };
+    let Ok(network) = network.parse::<Ipv4Addr>() else {
+        return false;
+    };
+    let Ok(prefix) = prefix.parse::<u8>() else {
+        return false;
+    };
+    same_ipv4_network(network, candidate, prefix)
+}
+
+fn same_ipv4_network(left: Ipv4Addr, right: Ipv4Addr, prefix: u8) -> bool {
+    if prefix > 32 {
+        return false;
+    }
+    let mask = u32::MAX.checked_shl(32 - u32::from(prefix)).unwrap_or(0);
+    u32::from(left) & mask == u32::from(right) & mask
 }
 
 fn reverse_create_error(error: &AppError, device_port: u16, desktop_port: u16) -> AppError {

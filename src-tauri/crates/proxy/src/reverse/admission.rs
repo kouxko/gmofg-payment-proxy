@@ -46,10 +46,22 @@ impl ConnectionAcceptor for ReverseConnectionAcceptor {
         let Some(acceptor) = &self.tls else {
             return Ok(AcceptedConnection { io, tls_peer: None });
         };
-        let stream = acceptor
-            .accept(io)
-            .await
-            .map_err(|error| ProxyError::new(ErrorCode::TlsHandshakeFailed, error.to_string()))?;
+        let stream = acceptor.accept(io).await.map_err(|error| {
+            // 下游握手发生在 HTTP Session 创建之前。保留对端地址和 rustls 原始错误，
+            // 让桌面诊断页能够区分 SNI、签名算法、协议版本和证书链等失败原因。
+            tracing::warn!(
+                peer = %context.peer_addr,
+                error = %error,
+                "reverse downstream TLS handshake failed"
+            );
+            ProxyError::new(
+                ErrorCode::DownstreamTlsHandshakeFailed,
+                format!(
+                    "客户端到代理的 TLS 握手失败（对端 {}）：{error}",
+                    context.peer_addr
+                ),
+            )
+        })?;
         let tls_peer = stream
             .get_ref()
             .1
@@ -69,13 +81,24 @@ impl ConnectionAcceptor for ReverseConnectionAcceptor {
 /// Android 设备网络接管通过 `adb reverse` 把设备端临时端口映射到桌面监听端口。
 /// 该连接到达桌面进程时，操作系统报告的对端是本机回环地址，而不是 Android 的
 /// WLAN 地址。回环地址不能由远程主机直接伪造，因此可作为受控本机传输放行；
-/// 非回环连接仍必须匹配用户配置的 CIDR，避免削弱局域网准入边界。
-fn peer_is_allowed(peer: IpAddr, allowed_networks: &[ClientNetwork]) -> bool {
-    peer.is_loopback()
+/// 配置 CIDR 时，非回环连接必须命中准入列表；列表留空则由用户显式选择允许所有地址。
+pub(super) fn peer_is_allowed(peer: IpAddr, allowed_networks: &[ClientNetwork]) -> bool {
+    canonical_peer_ip(peer).is_loopback()
         || allowed_networks.is_empty()
         || allowed_networks
             .iter()
             .any(|network| network.contains(peer))
+}
+
+/// 将操作系统可能返回的 IPv4-mapped IPv6 地址还原为 IPv4。
+///
+/// ADB reverse 在不同平台上可能把同一个本机连接报告为 `127.0.0.1`，也可能报告为
+/// `::ffff:127.0.0.1`。两者的安全含义相同，必须在回环判断和 IPv4 CIDR 匹配前统一。
+fn canonical_peer_ip(peer: IpAddr) -> IpAddr {
+    match peer {
+        IpAddr::V6(address) => address.to_ipv4_mapped().map_or(peer, IpAddr::V4),
+        IpAddr::V4(_) => peer,
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -100,7 +123,7 @@ impl ClientNetwork {
     }
 
     pub(super) fn contains(self, candidate: IpAddr) -> bool {
-        match (self.address, candidate) {
+        match (self.address, canonical_peer_ip(candidate)) {
             (IpAddr::V4(network), IpAddr::V4(candidate)) => {
                 masked(u128::from(u32::from(network)), self.prefix, 32)
                     == masked(u128::from(u32::from(candidate)), self.prefix, 32)
@@ -160,7 +183,15 @@ mod tests {
 
         assert!(peer_is_allowed("127.0.0.1".parse().unwrap(), &networks));
         assert!(peer_is_allowed("::1".parse().unwrap(), &networks));
+        assert!(peer_is_allowed(
+            "::ffff:127.0.0.1".parse().unwrap(),
+            &networks
+        ));
         assert!(peer_is_allowed("10.0.34.42".parse().unwrap(), &networks));
+        assert!(peer_is_allowed(
+            "::ffff:10.0.34.42".parse().unwrap(),
+            &networks
+        ));
         assert!(!peer_is_allowed("10.0.36.42".parse().unwrap(), &networks));
     }
 

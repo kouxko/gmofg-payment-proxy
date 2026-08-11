@@ -17,7 +17,17 @@ impl AndroidAdbAdapter {
             active_reverse: Mutex::new(None),
             active_runtime: Mutex::new(None),
             runner,
+            lan_address: Arc::new(NoLanAddressProvider),
         }
+    }
+}
+
+#[derive(Debug)]
+struct NoLanAddressProvider;
+
+impl DeviceLanAddressProvider for NoLanAddressProvider {
+    fn local_ipv4_for(&self, _: std::net::Ipv4Addr) -> Option<std::net::Ipv4Addr> {
+        None
     }
 }
 
@@ -62,7 +72,9 @@ fn reverse_runtime_mapping_accepts_adb_serial_prefix() {
         listener_id: "listener-a".into(),
         original_destination: "203.0.113.10".into(),
         original_ports: vec![16_127],
+        desktop_listener_bind_address: "0.0.0.0".into(),
         desktop_listener_port: 26_127,
+        allowed_client_cidrs: Vec::new(),
     }];
     let device_port = allocated_reverse_ports(&routes)["listener-a"];
 
@@ -209,7 +221,9 @@ fn test_activation(
             listener_id: listener_id.to_string(),
             original_destination: destination.into(),
             original_ports: vec![443],
+            desktop_listener_bind_address: "0.0.0.0".into(),
             desktop_listener_port,
+            allowed_client_cidrs: Vec::new(),
         }],
     }
 }
@@ -230,6 +244,7 @@ async fn seed_active_runtime(
         profile_fingerprint: "old-profile".into(),
         route_fingerprint: "old-routes".into(),
         route_count: 1,
+        uses_adb_reverse: true,
         listener_ports: BTreeMap::new(),
     };
     *adapter.active_reverse.lock().await = Some(reverse.clone());
@@ -268,6 +283,7 @@ fn activation_runtime() -> ActiveRuntimeFacts {
         profile_fingerprint: "profile-fingerprint".into(),
         route_fingerprint: "route-fingerprint".into(),
         route_count: 2,
+        uses_adb_reverse: true,
         listener_ports: BTreeMap::new(),
     }
 }
