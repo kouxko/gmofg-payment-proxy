@@ -123,6 +123,11 @@ pub fn validate_certificate_materials(
             references.insert(reference.id, reference);
         }
     }
+    let portable_references = references
+        .iter()
+        .filter(|(_, reference)| reference.kind != CertificateReferenceKind::MitmRootCa)
+        .map(|(id, reference)| (*id, *reference))
+        .collect::<BTreeMap<_, _>>();
 
     let mut material_ids = BTreeSet::new();
     for material in materials {
@@ -134,10 +139,10 @@ pub fn validate_certificate_materials(
             )
             .entity(material.reference_id.to_string()));
         }
-        let Some(reference) = references.get(&material.reference_id) else {
+        let Some(reference) = portable_references.get(&material.reference_id) else {
             return Err(AppError::new(
                 "PORTABLE_CERTIFICATE_INVALID",
-                "配置文件包含未被任何 Workspace 引用的证书材料。",
+                "配置文件包含未被任何 Workspace 引用或禁止导出的证书材料。",
             )
             .entity(material.reference_id.to_string()));
         };
@@ -150,7 +155,7 @@ pub fn validate_certificate_materials(
         }
     }
 
-    if references.len() != material_ids.len() {
+    if portable_references.len() != material_ids.len() {
         return Err(AppError::new(
             "PORTABLE_CERTIFICATE_MISSING",
             "配置文件没有包含全部 Listener TLS 证书材料。",
@@ -206,6 +211,42 @@ mod tests {
         });
 
         let error = validate_certificate_materials(&[first, second], &[]).unwrap_err();
+        assert_eq!(error.view_model.code, "PORTABLE_CERTIFICATE_INVALID");
+    }
+
+    #[test]
+    fn installation_root_reference_requires_no_portable_material() {
+        let mut workspace = ProxyWorkspace::default();
+        workspace.certificate_references.push(CertificateReference {
+            id: CertificateReferenceId::new(),
+            label: "本机 MITM Root CA".into(),
+            kind: CertificateReferenceKind::MitmRootCa,
+            reference: "installation:root-ca".into(),
+        });
+
+        validate_certificate_materials(&[workspace], &[]).unwrap();
+    }
+
+    #[test]
+    fn installation_root_material_is_rejected() {
+        let reference = CertificateReference {
+            id: CertificateReferenceId::new(),
+            label: "本机 MITM Root CA".into(),
+            kind: CertificateReferenceKind::MitmRootCa,
+            reference: "installation:root-ca".into(),
+        };
+        let mut workspace = ProxyWorkspace::default();
+        workspace.certificate_references.push(reference.clone());
+        let material = PortableCertificateMaterial {
+            reference_id: reference.id,
+            label: reference.label,
+            kind: reference.kind,
+            material_base64: STANDARD.encode(b"must-not-export"),
+            material_sha256: portable_material_sha256(b"must-not-export"),
+            password: None,
+        };
+
+        let error = validate_certificate_materials(&[workspace], &[material]).unwrap_err();
         assert_eq!(error.view_model.code, "PORTABLE_CERTIFICATE_INVALID");
     }
 

@@ -21,17 +21,27 @@ pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 2;
 pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 128 * 1024 * 1024;
 /// 监听证书只能引用应用受保护存储中的材料，不能携带文件路径或环境变量密码。
 pub const MANAGED_LISTENER_CERTIFICATE_PREFIX: &str = "managed:listener-tls:";
+/// Workspace 仅保留这个安装级符号引用；导出文档不携带对应 Root CA 私钥或叶子证书。
+pub const INSTALLATION_ROOT_CERTIFICATE_REFERENCE: &str = "installation:root-ca";
 
 /// 校验可移植文档中的证书引用边界。
 ///
 /// Workspace 与完整配置导入都会调用此函数，因此 Tauri、未来 CLI/TUI 和测试夹具
 /// 共享同一安全语义，不会出现“界面保存拒绝、文件导入却允许”的旁路。
 pub fn validate_portable_certificate_references(workspace: &ProxyWorkspace) -> AppResult<()> {
-    if let Some(reference) = workspace.certificate_references.iter().find(|reference| {
-        !reference
-            .reference
-            .starts_with(MANAGED_LISTENER_CERTIFICATE_PREFIX)
-    }) {
+    if let Some(reference) =
+        workspace
+            .certificate_references
+            .iter()
+            .find(|reference| match reference.kind {
+                intercept_proxy_domain::CertificateReferenceKind::MitmRootCa => {
+                    reference.reference != INSTALLATION_ROOT_CERTIFICATE_REFERENCE
+                }
+                _ => !reference
+                    .reference
+                    .starts_with(MANAGED_LISTENER_CERTIFICATE_PREFIX),
+            })
+    {
         return Err(AppError::new(
             "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED",
             "证书引用必须由应用内的原生导入功能创建，配置文档不能包含文件路径或外部密码引用。",
@@ -312,5 +322,21 @@ mod tests {
             error.view_model.code,
             "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED"
         );
+    }
+
+    #[test]
+    fn installation_root_reference_is_allowed_without_exporting_local_material() {
+        let mut value = document();
+        value.workspaces[0]
+            .certificate_references
+            .push(CertificateReference {
+                id: intercept_proxy_domain::CertificateReferenceId::new(),
+                label: "本机 MITM Root CA".into(),
+                kind: CertificateReferenceKind::MitmRootCa,
+                reference: INSTALLATION_ROOT_CERTIFICATE_REFERENCE.into(),
+            });
+
+        let bytes = serialize_application_configuration(&value).expect("serialize");
+        assert_eq!(parse_application_configuration(&bytes).unwrap(), value);
     }
 }

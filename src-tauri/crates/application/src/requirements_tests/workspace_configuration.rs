@@ -77,6 +77,54 @@ async fn workspace_facade_exposes_complete_headless_crud_document_and_event_flow
 }
 
 #[tokio::test]
+async fn full_configuration_export_excludes_installation_root_but_keeps_listener_material() {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(InMemoryWorkspaceStore::default());
+    let documents = Arc::new(InMemoryWorkspaceDocumentStore::default());
+    let selected = workspaces.list().await.unwrap().remove(0);
+    let mut workspace = workspaces.get(selected.id).await.unwrap();
+    workspace.certificate_references.push(CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "本机 MITM Root CA".into(),
+        kind: CertificateReferenceKind::MitmRootCa,
+        reference: INSTALLATION_ROOT_CERTIFICATE_REFERENCE.into(),
+    });
+    let client_identity = CertificateReference {
+        id: CertificateReferenceId::new(),
+        label: "上游 P12".into(),
+        kind: CertificateReferenceKind::UpstreamClientIdentity,
+        reference: format!("{MANAGED_LISTENER_CERTIFICATE_PREFIX}client-identity"),
+    };
+    workspace
+        .certificate_references
+        .push(client_identity.clone());
+    workspaces.save(workspace).await.unwrap();
+    let application = application_with_workspace_ports(ports, workspaces, Arc::clone(&documents));
+
+    application
+        .application_configuration_export()
+        .await
+        .unwrap();
+
+    let (_, bytes) = documents.take_last_export().unwrap();
+    let exported = parse_application_configuration(&bytes).unwrap();
+    assert_eq!(exported.certificate_materials.len(), 1);
+    assert_eq!(
+        exported.certificate_materials[0].reference_id,
+        client_identity.id
+    );
+    assert_eq!(
+        exported.certificate_materials[0].password.as_deref(),
+        Some("test-password")
+    );
+    assert_eq!(exported.workspaces[0].certificate_references.len(), 2);
+    assert_eq!(
+        exported.workspaces[0].certificate_references[0].reference,
+        INSTALLATION_ROOT_CERTIFICATE_REFERENCE
+    );
+}
+
+#[tokio::test]
 async fn workspace_save_rejects_direct_certificate_reference_mutation() {
     let ports = Arc::new(FakePorts::default());
     let workspaces = Arc::new(InMemoryWorkspaceStore::default());
