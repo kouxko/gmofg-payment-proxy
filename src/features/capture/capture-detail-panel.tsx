@@ -1,8 +1,8 @@
-import type { RefObject } from "react";
 import {
   Alert,
   Button,
   Chip,
+  Modal,
   Spinner,
   Table,
   Tabs,
@@ -31,7 +31,6 @@ interface DetailQuery {
 }
 
 interface CaptureDetailPanelProps {
-  panelRef: RefObject<HTMLElement | null>;
   selected?: CaptureRowViewModel;
   detail: DetailQuery;
   requestHeaderCount: number;
@@ -81,7 +80,6 @@ function HeadersTable({
 }
 
 export function CaptureDetailPanel({
-  panelRef,
   selected,
   detail,
   requestHeaderCount,
@@ -91,40 +89,38 @@ export function CaptureDetailPanel({
   onCreateRule,
 }: CaptureDetailPanelProps) {
   return (
-    <aside
-      ref={panelRef}
-      aria-label="抓包详情面板"
-      className={[
-        "min-h-0 min-w-0 overflow-auto border-t border-[var(--telemetry-line)] p-4",
-        selected ? "" : "hidden",
-      ].join(" ")}
+    <Modal
+      isOpen={Boolean(selected)}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      {selected && (
-        <header
-          className={[
-            "sticky top-0 z-10 -mx-4 -mt-4 mb-3 flex items-center gap-3 border-b px-4 py-3",
-            "border-[var(--telemetry-line)] bg-[var(--telemetry-surface)]",
-          ].join(" ")}
-        >
-          <div>
-            <h2 className="font-semibold">抓包详情</h2>
-            <p className="text-xs text-[var(--telemetry-muted)]">
-              请求、响应与原始字节仅保留在当前会话
-            </p>
-          </div>
-          <Button
-            aria-label="关闭详情并释放报文"
-            className="ml-auto shrink-0"
-            size="sm"
-            variant="outline"
-            onPress={onClose}
-          >
-            <Xmark className="size-4" />
-            关闭详情
-          </Button>
-        </header>
-      )}
-      <Tabs defaultSelectedKey="overview">
+      <Button className="hidden" aria-hidden="true">
+        打开抓包详情
+      </Button>
+      <Modal.Backdrop isDismissable>
+        <Modal.Container size="cover" scroll="inside">
+          <Modal.Dialog>
+            <Modal.Header className="flex items-center gap-3">
+              <div>
+                <Modal.Heading>抓包详情</Modal.Heading>
+                <p className="text-xs text-[var(--telemetry-muted)]">
+                  请求、响应与原始字节仅保留在当前会话
+                </p>
+              </div>
+              <Button
+                slot="close"
+                aria-label="关闭详情并释放报文"
+                className="ml-auto shrink-0"
+                size="sm"
+                variant="outline"
+              >
+                <Xmark className="size-4" />
+                关闭详情
+              </Button>
+            </Modal.Header>
+            <Modal.Body className="min-h-0">
+              <Tabs defaultSelectedKey="overview">
         <Tabs.ListContainer>
           <Tabs.List aria-label="抓包详情">
             {Object.entries(captureDetailTabLabels).map(([id, label]) => (
@@ -365,7 +361,11 @@ export function CaptureDetailPanel({
             </>
           )}
         </Tabs.Panel>
-      </Tabs>
-    </aside>
+              </Tabs>
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }
