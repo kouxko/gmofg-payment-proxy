@@ -144,7 +144,9 @@ describe("统一代理监听编辑器", () => {
     mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")] }));
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "导入客户端身份" }));
+    expect(screen.getByRole("dialog", { name: "导入 Proxy → Server 的客户端身份" })).toHaveClass("modal__dialog--scroll-inside");
     expect(screen.getByText(/client\.p12 \/ client\.pfx.*client\.pem/)).toBeVisible();
+    expect(screen.getByText("选择身份文件")).toBeVisible();
     await user.type(await screen.findByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）"), "p12-secret");
     await user.click(screen.getByRole("button", { name: "选择客户端身份（.p12 / .pfx / .pem）" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
