@@ -23,7 +23,6 @@ import {
   useBootstrap,
 } from "@/features/shell/bootstrap-context";
 import { SessionActions } from "./session-actions";
-import { SessionDetailPanel } from "./session-detail-panel";
 import { SessionsListPanel } from "./sessions-list-panel";
 import { defaultSessionQuery } from "./session-config";
 
@@ -39,7 +38,6 @@ export function SessionsView() {
   const [selectedId, setSelectedId] = useState<string>();
   const [query, setQuery] = useState<SessionQuery>(defaultSessionQuery);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [detailRequested, setDetailRequested] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportPending, setExportPending] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
@@ -53,13 +51,13 @@ export function SessionsView() {
   useAppEventRefresh(["session_updated", "snapshot_required"], page.refresh);
 
   const detail = useIpcQuery<SessionDetailViewModel>(
-    `session-detail:${detailRequested ? (selectedId ?? "none") : "closed"}`,
+    `session-detail:${detailOpen ? (selectedId ?? "none") : "closed"}`,
     () => callCommand(commands.sessionGet(selectedId!)),
     undefined,
-    { enabled: Boolean(selectedId && detailRequested) },
+    { enabled: Boolean(selectedId && detailOpen) },
   );
   useAppEventRefresh(["session_updated"], detail.refresh, {
-    paused: !selectedId || !detailRequested,
+    paused: !selectedId || !detailOpen,
     entityId: selectedId,
   });
 
@@ -70,13 +68,12 @@ export function SessionsView() {
   function selectSession(id: string) {
     setSelectedId(id);
     detail.invalidate();
-    setDetailRequested(window.matchMedia("(min-width: 1281px)").matches);
+    setDetailOpen(true);
   }
 
   function closeDetail() {
     setDetailOpen(false);
     setSelectedId(undefined);
-    setDetailRequested(false);
     detail.invalidate();
   }
 
@@ -115,7 +112,7 @@ export function SessionsView() {
   }
 
   return (
-    <section className="grid h-full grid-cols-[minmax(0,1fr)_380px] max-[1280px]:grid-cols-1">
+    <section className="h-full">
       <div className="min-w-0 space-y-4 overflow-auto p-5">
         <SessionsListPanel
           query={query}
@@ -135,7 +132,6 @@ export function SessionsView() {
           clearPending={clearPending}
           onDetailOpenChange={(open) => {
             setDetailOpen(open);
-            setDetailRequested(open);
             if (!open) detail.invalidate();
           }}
           onExportDialogOpenChange={setExportDialogOpen}
@@ -144,11 +140,6 @@ export function SessionsView() {
           onClear={() => void clearSessions()}
         />
       </div>
-      <SessionDetailPanel
-        selected={selected}
-        detail={detail}
-        onClose={closeDetail}
-      />
     </section>
   );
 }
