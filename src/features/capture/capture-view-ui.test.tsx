@@ -167,4 +167,26 @@ describe("CaptureView live controls", () => {
       ).not.toBeInTheDocument(),
     );
   });
+
+  it("通过详情工具栏关闭并恢复列表布局", async () => {
+    const user = userEvent.setup();
+    render(<CaptureView />);
+
+    const row = screen
+      .getByRole("grid", { name: "实时抓包事件" })
+      .querySelector<HTMLElement>('[data-key="42"]');
+    await user.click(row!);
+
+    expect(screen.getByText("抓包详情")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "关闭详情并释放报文" }),
+    );
+
+    expect(screen.getByLabelText("实时抓包工作区")).toHaveAttribute(
+      "data-layout",
+      "list-only",
+    );
+    expect(screen.queryByText("抓包详情")).not.toBeInTheDocument();
+    expect(queryMocks.detailInvalidate).toHaveBeenCalled();
+  });
 });
