@@ -42,8 +42,13 @@ export function HttpBodyViewer({
 }: BodyViewerProps) {
   const body = textOverride ?? formatMessageBody(message, emptyText);
   const kind = messageContentKind(message);
+  const presentation = editable
+    ? { text: body, kind, detectedLabel: undefined }
+    : formatBodyForPresentation(message, body, kind);
   const bytes = message?.body_bytes ?? [];
-  const textPreview = editable ? { value: body, truncated: false } : previewText(body);
+  const textPreview = editable
+    ? { value: presentation.text, truncated: false }
+    : previewText(presentation.text);
   const bytePreview = bytes.slice(0, MAX_BYTE_PREVIEW_BYTES);
   const bytesTruncated = bytePreview.length < bytes.length;
 
@@ -59,6 +64,11 @@ export function HttpBodyViewer({
         )}
         {message?.codec_id && (
           <Chip size="sm" variant="soft">codec={messageCodecLabel(message.codec_id)}</Chip>
+        )}
+        {presentation.detectedLabel && (
+          <Chip size="sm" color="accent" variant="soft">
+            {presentation.detectedLabel}
+          </Chip>
         )}
       </div>
       {message?.decode_error && (
@@ -77,25 +87,29 @@ export function HttpBodyViewer({
           onChange={onChange}
         />
       ) : (
-        <CodeSurface text={textPreview.value} kind={kind} ariaLabel={ariaLabel} />
+        <CodeSurface
+          text={textPreview.value}
+          kind={presentation.kind}
+          ariaLabel={ariaLabel}
+        />
       )}
       {showRawBytes && (
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-[var(--telemetry-muted)]">
+        <details className="group rounded-lg" open={kind === "binary"}>
+          <summary className="cursor-pointer text-xs font-medium text-[var(--telemetry-muted)]">
             {bytesTruncated
               ? `原始字节（总计 ${bytes.length} bytes，预览 ${bytePreview.length} bytes）`
               : `原始字节（${bytes.length} bytes）`}
-          </p>
+          </summary>
           <pre
             className={[
-              "max-h-32 overflow-auto rounded-lg border p-3",
+              "mt-2 max-h-48 overflow-auto rounded-lg border p-3",
               "border-[var(--telemetry-line)] bg-[var(--telemetry-table-head)]",
               "font-mono text-xs",
             ].join(" ")}
           >
             {formatBytes(bytePreview)}
           </pre>
-        </div>
+        </details>
       )}
     </section>
   );
@@ -178,8 +192,9 @@ function CodeSurface({
   return (
     <div
       aria-label={ariaLabel}
+      data-code-surface={kind}
       className={[
-        "max-h-[430px] overflow-auto rounded-lg border",
+        "min-h-64 max-h-[520px] overflow-auto rounded-lg border",
         "border-[var(--telemetry-line)] bg-[var(--telemetry-table-head)]",
       ].join(" ")}
     >
@@ -199,6 +214,54 @@ function CodeSurface({
       ))}
     </div>
   );
+}
+
+function formatBodyForPresentation(
+  message: InspectableMessage | null | undefined,
+  body: string,
+  declaredKind: ReturnType<typeof messageContentKind>,
+): {
+  text: string;
+  kind: ReturnType<typeof messageContentKind>;
+  detectedLabel?: string;
+} {
+  if (message?.json != null) return { text: body, kind: "json" };
+
+  const source = message?.body_text?.trim();
+  if (!source) return { text: body, kind: declaredKind };
+
+  if (source.startsWith("{") || source.startsWith("[")) {
+    try {
+      return {
+        text: JSON.stringify(JSON.parse(source), null, 2),
+        kind: "json",
+        detectedLabel: declaredKind === "json" ? undefined : "格式化为 JSON 展示",
+      };
+    } catch {
+      // Invalid JSON remains byte-faithful decoded text in the viewer.
+    }
+  }
+
+  if (declaredKind === "xml") {
+    return { text: formatXmlForPresentation(source), kind: "xml" };
+  }
+
+  return { text: body, kind: declaredKind };
+}
+
+function formatXmlForPresentation(xml: string) {
+  return xml
+    .replace(/>\s*</g, ">\n<")
+    .split("\n")
+    .reduce<{ depth: number; lines: string[] }>((state, line) => {
+      const closes = /^<\//.test(line);
+      const depth = Math.max(0, state.depth - Number(closes));
+      state.lines.push(`${"  ".repeat(depth)}${line}`);
+      const opens = /^<[^!?/][^>]*[^/]?>$/.test(line) && !/<\/[^>]+>$/.test(line);
+      state.depth = depth + Number(opens);
+      return state;
+    }, { depth: 0, lines: [] })
+    .lines.join("\n");
 }
 
 function LineNumberGutter({ count }: { count: number }) {

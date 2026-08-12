@@ -51,6 +51,38 @@ describe("HTTP 报文共享查看器", () => {
     expect(screen.getByText("codec=自动 → Shift-JIS")).toBeVisible();
   });
 
+  it("Header 标成普通文本但正文是 JSON 时，仅为展示生成格式化预览", () => {
+    const { container } = render(
+      <HttpBodyViewer
+        label="响应 Body"
+        message={{
+          ...jsonMessage,
+          headers: { "content-type": ["text/csv; charset=shift_jis"] },
+          body_text: '{"ErrorCode":"D48","ResponseID":"A"}',
+          json: null,
+          media_type: "text/csv",
+          charset: "shift_jis",
+          content_kind: "text",
+          codec_id: "shift-jis",
+        }}
+        emptyText="无正文"
+      />,
+    );
+
+    expect(screen.getByText("文本")).toBeVisible();
+    expect(screen.getByText("格式化为 JSON 展示")).toBeVisible();
+    const formattedLines = Array.from(
+      container.querySelectorAll('[data-code-surface="json"] code'),
+      (line) => line.textContent,
+    );
+    expect(formattedLines).toEqual([
+      "{",
+      '  "ErrorCode": "D48",',
+      '  "ResponseID": "A"',
+      "}",
+    ]);
+  });
+
   it("按 Content-Type 展示 XML，高亮标签且保留解码失败信息", () => {
     const { container } = render(
       <HttpBodyViewer
@@ -97,6 +129,15 @@ describe("HTTP 报文共享查看器", () => {
     expect(screen.getByText("二进制")).toBeVisible();
     expect(screen.getByText("原始字节（3 bytes）")).toBeVisible();
     expect(screen.getByText(/00 ff 41/i)).toBeVisible();
+  });
+
+  it("文本正文使用可读的主展示高度，原始字节默认折叠", () => {
+    const { container } = render(
+      <HttpBodyViewer label="请求 Body" message={jsonMessage} emptyText="无正文" />,
+    );
+
+    expect(container.querySelector("[data-code-surface]")).toHaveClass("min-h-64");
+    expect(container.querySelector("details")).not.toHaveAttribute("open");
   });
 
   it("大正文只创建有界预览并说明完整原始数据仍保留", () => {

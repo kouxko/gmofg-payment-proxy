@@ -153,6 +153,10 @@ describe("CaptureView live controls", () => {
     expect(
       screen.getByRole("button", { name: "关闭详情并释放报文" }),
     ).toBeVisible();
+    expect(screen.getByLabelText("实时抓包工作区")).toHaveAttribute(
+      "data-layout",
+      "stacked",
+    );
 
     captureState.page = { ...page(), rows: [], total: 0 };
     rerender(<CaptureView />);

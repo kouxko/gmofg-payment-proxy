@@ -145,7 +145,16 @@ export function CaptureView({
   }
 
   return (
-    <section className="grid h-full grid-cols-[minmax(0,1fr)_380px] max-[1280px]:grid-cols-1">
+    <section
+      aria-label="实时抓包工作区"
+      data-layout={selected ? "stacked" : "list-only"}
+      className={[
+        "grid h-full min-h-0 grid-cols-1",
+        selected
+          ? "grid-rows-[minmax(300px,55%)_minmax(280px,45%)]"
+          : "grid-rows-1",
+      ].join(" ")}
+    >
       <CaptureListPanel
         paused={paused}
         clearPending={clearPending}
