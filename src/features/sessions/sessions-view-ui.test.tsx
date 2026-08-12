@@ -1,16 +1,15 @@
 // @vitest-environment jsdom
 
-/** 验证会话详情按需读取、导出确认、清空确认和 Payload 释放。 */
+/** 验证会话详情按需读取、清空确认和 Payload 释放。 */
 
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SessionPageViewModel } from "@/generated/rust-types";
+import type { SessionListViewModel } from "@/generated/rust-types";
 import { SessionsView } from "./sessions-view";
 
 const commandMocks = vi.hoisted(() => ({
-  sessionExport: vi.fn(),
   sessionClear: vi.fn(),
 }));
 const queryMocks = vi.hoisted(() => ({
@@ -53,7 +52,7 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
         },
 }));
 
-const page: SessionPageViewModel = {
+const page: SessionListViewModel = {
   items: [
     {
       session_id: "session-1",
@@ -77,9 +76,6 @@ const page: SessionPageViewModel = {
     },
   ],
   total: 1,
-  page: 1,
-  page_size: 10,
-  total_pages: 1,
   empty_message: "暂无会话",
 };
 
@@ -87,10 +83,6 @@ describe("SessionsView destructive actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryMocks.pageRefresh.mockResolvedValue(undefined);
-    commandMocks.sessionExport.mockResolvedValue({
-      message: "导出完成",
-      ui_tone: "positive",
-    });
     commandMocks.sessionClear.mockResolvedValue({
       message: "清空完成",
       ui_tone: "positive",
@@ -124,40 +116,12 @@ describe("SessionsView destructive actions", () => {
     ).not.toBeInTheDocument();
     expect(queryMocks.detailInvalidate).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("button", { name: "导出所选会话" }),
-    ).toBeEnabled();
-  });
-
-  it("exports the selected session only after the sensitive-data confirmation", async () => {
-    const user = userEvent.setup();
-    render(<SessionsView />);
-
-    const row = screen
-      .getByRole("grid", { name: "会话记录" })
-      .querySelector<HTMLElement>('[data-key="session-1"]');
-    expect(row).toBeTruthy();
-    await user.click(row!);
-    await user.click(
-      screen.getByRole("button", {
-        name: "关闭会话详情并释放报文",
-      }),
-    );
-    await user.click(screen.getByRole("button", { name: "导出所选会话" }));
+      screen.queryByRole("button", { name: "查看完整报文" }),
+    ).not.toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: "确认导出原始报文" }),
-    ).toBeVisible();
-    expect(commandMocks.sessionExport).not.toHaveBeenCalled();
-
-    await user.click(
-      screen.getByRole("button", { name: "确认并选择位置" }),
-    );
-
-    await waitFor(() =>
-      expect(commandMocks.sessionExport).toHaveBeenCalledWith(
-        "session-1",
-        true,
-      ),
-    );
+      screen.queryByRole("button", { name: "导出所选会话" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("会话分页")).not.toBeInTheDocument();
   });
 
   it("clears through confirmation and releases the selected detail", async () => {
@@ -187,8 +151,6 @@ describe("SessionsView destructive actions", () => {
     );
     expect(queryMocks.detailInvalidate).toHaveBeenCalled();
     expect(queryMocks.pageRefresh).toHaveBeenCalled();
-    expect(
-      screen.getByRole("button", { name: "导出所选会话" }),
-    ).toBeDisabled();
+    expect(screen.queryByRole("dialog", { name: "完整会话报文" })).toBeNull();
   });
 });

@@ -105,9 +105,10 @@ describe("side navigation alignment", () => {
   it("uses the same centered icon and label contract for links and About", () => {
     expect(sideNavigationIconClassName).toContain("self-center");
     expect(sideNavigationIconClassName).toContain("shrink-0");
-    expect(sideNavigationLabelClassName).toContain("w-14");
-    expect(sideNavigationLabelClassName).toContain("shrink-0");
-    expect(sideNavigationLabelClassName).toContain("whitespace-nowrap");
+    expect(sideNavigationLabelClassName).toContain("w-full");
+    expect(sideNavigationLabelClassName).toContain("min-w-0");
+    expect(sideNavigationLabelClassName).toContain("whitespace-normal");
+    expect(sideNavigationLabelClassName).not.toContain("whitespace-nowrap");
     expect(sideNavigationLabelClassName).toContain("text-center");
   });
 });

@@ -85,9 +85,8 @@ export const commands = {
 	captureQuery: (query: CaptureQuery) => typedError<CapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_query", { query })),
 	captureGetDetail: (sessionId: string, runtimeEpoch: string) => typedError<CaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_get_detail", { sessionId, runtimeEpoch })),
 	captureClearView: (currentCursor: number) => typedError<number, AppErrorViewModel>(__TAURI_INVOKE("capture_clear_view", { currentCursor })),
-	sessionQuery: (query: SessionQuery) => typedError<SessionPageViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_query", { query })),
+	sessionQuery: (query: SessionQuery) => typedError<SessionListViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_query", { query })),
 	sessionGet: (sessionId: string) => typedError<SessionDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_get", { sessionId })),
-	sessionExport: (sessionId: string, sensitiveDataConfirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_export", { sessionId, sensitiveDataConfirmed })),
 	sessionClear: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_clear", { confirmed })),
 	breakpointQuery: (runtimeEpoch: string | null) => typedError<BreakpointSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("breakpoint_query", { runtimeEpoch })),
 	breakpointGet: (breakpointId: string, runtimeEpoch: string) => typedError<BreakpointDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_get", { breakpointId, runtimeEpoch })),
@@ -1063,16 +1062,13 @@ export type SessionDetailViewModel = {
 	response_assertions?: ResponseAssertionResultViewModel[],
 };
 
-export type SessionPageViewModel = {
+export type SessionListViewModel = {
 	items: SessionSummaryViewModel[],
 	total: number,
-	page: number,
-	page_size: number,
-	total_pages: number,
 	empty_message: string,
 };
 
-/**  会话页提交给 Rust 的筛选、时间范围、排序和分页条件。 */
+/**  会话页提交给 Rust 的筛选、时间范围和排序条件。 */
 export type SessionQuery = {
 	keyword: string | null,
 	terminal_ip: string | null,
@@ -1083,7 +1079,6 @@ export type SessionQuery = {
 	started_to: string | null,
 	sort: SessionSort,
 	direction: SortDirection,
-	page: PageRequest,
 };
 
 export type SessionSort = "started_at" | "terminal_ip" | "duration" | "request_size" | "response_size";

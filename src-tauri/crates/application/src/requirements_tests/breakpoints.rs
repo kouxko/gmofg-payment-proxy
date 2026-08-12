@@ -160,7 +160,6 @@ async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
             certificates: ports.clone(),
             settings: ports.clone(),
             listener_certificates: ports.clone(),
-            file_export: ports,
             workspaces: Arc::new(InMemoryWorkspaceStore::default()),
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: Arc::new(InMemoryListenerRuntime::default()),

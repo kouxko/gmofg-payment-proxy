@@ -31,7 +31,7 @@ pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;
 pub use faults::FaultServiceAdapter;
-pub use files::{FileExportAdapter, FileSelection, NativeFileDialog};
+pub use files::{FileSelection, NativeFileDialog};
 pub use listener_certificates::ManagedListenerCertificateAdapter;
 pub use listener_runtime::ListenerRuntimeAdapter;
 pub use pipeline::{

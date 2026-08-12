@@ -16,7 +16,6 @@ export const defaultSessionQuery: SessionQuery = {
   started_to: null,
   sort: "started_at",
   direction: "desc",
-  page: { page: 1, page_size: 10 },
 };
 
 export const sessionDetailTabLabels = {

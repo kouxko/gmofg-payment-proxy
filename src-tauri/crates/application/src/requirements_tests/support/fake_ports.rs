@@ -155,7 +155,7 @@ impl CaptureRepositoryPort for FakePorts {
 
 #[async_trait]
 impl SessionQueryPort for FakePorts {
-    async fn query(&self, _: SessionQuery) -> AppResult<SessionPageViewModel> {
+    async fn query(&self, _: SessionQuery) -> AppResult<SessionListViewModel> {
         unused()
     }
     async fn get(&self, _: SessionId) -> AppResult<SessionDetailViewModel> {
@@ -352,17 +352,6 @@ impl SettingsRepositoryPort for FakePorts {
         settings.pending_changes = false;
         settings.requires_restart = false;
         Ok(settings.clone())
-    }
-}
-
-#[async_trait]
-impl FileExportPort for FakePorts {
-    async fn export_session(
-        &self,
-        _: SessionDetailViewModel,
-        _: bool,
-    ) -> AppResult<OperationResultViewModel> {
-        unused()
     }
 }
 

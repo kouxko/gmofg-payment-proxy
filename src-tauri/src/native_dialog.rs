@@ -75,7 +75,6 @@ impl TauriNativeFileDialog {
             "intercept_configuration" => builder
                 .set_title("导出 Intercept Proxy 完整配置")
                 .add_filter("Intercept Config", &["intercept-config"]),
-            "session_json" => builder.set_title("导出会话").add_filter("JSON", &["json"]),
             "rules_json" => builder.set_title("导出规则").add_filter("JSON", &["json"]),
             "root_ca" => builder
                 .set_title("导出 Intercept Proxy Root CA 公开证书")
@@ -138,7 +137,6 @@ fn default_file_name(purpose: &str) -> &'static str {
     match purpose {
         "intercept_workspace" => "workspace.intercept-workspace",
         "intercept_configuration" => "intercept-proxy.intercept-config",
-        "session_json" => "session.json",
         "rules_json" => "rules.json",
         "root_ca" => "intercept-proxy-root-ca.crt",
         _ => "export",

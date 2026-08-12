@@ -13,7 +13,7 @@ use crate::{
     AppError, AppResult, BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft,
     BreakpointId, BreakpointSummaryViewModel, BreakpointValidationViewModel,
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, OperationResultViewModel,
-    ProxyState, RuntimeEpoch, SessionDetailViewModel, SessionId, SessionPageViewModel,
+    ProxyState, RuntimeEpoch, SessionDetailViewModel, SessionId, SessionListViewModel,
     SessionQuery, UiEventPayload,
 };
 
@@ -38,33 +38,15 @@ impl Application {
         self.capture.clear_view(current_cursor).await
     }
 
-    pub async fn session_query(&self, mut query: SessionQuery) -> AppResult<SessionPageViewModel> {
+    pub async fn session_query(&self, mut query: SessionQuery) -> AppResult<SessionListViewModel> {
         query.keyword = normalized_optional(query.keyword);
         query.terminal_ip = normalized_optional(query.terminal_ip);
         query.result = normalized_optional(query.result);
-        query.page = query.page.normalized();
         self.sessions.query(query).await
     }
 
     pub async fn session_get(&self, session_id: SessionId) -> AppResult<SessionDetailViewModel> {
         self.sessions.get(session_id).await
-    }
-
-    pub async fn session_export(
-        &self,
-        session_id: SessionId,
-        sensitive_data_confirmed: bool,
-    ) -> AppResult<OperationResultViewModel> {
-        if !sensitive_data_confirmed {
-            return Err(AppError::new(
-                "EXPORT_CONFIRMATION_REQUIRED",
-                "导出文件包含原始敏感数据，请确认后再导出。",
-            ));
-        }
-        let session = self.sessions.get(session_id).await?;
-        self.file_export
-            .export_session(session, sensitive_data_confirmed)
-            .await
     }
 
     pub async fn session_clear(&self, confirmed: bool) -> AppResult<OperationResultViewModel> {

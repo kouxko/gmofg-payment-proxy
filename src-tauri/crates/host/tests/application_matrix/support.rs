@@ -354,10 +354,6 @@ fn session_query() -> SessionQuery {
         started_to: None,
         sort: SessionSort::StartedAt,
         direction: SortDirection::Desc,
-        page: PageRequest {
-            page: 0,
-            page_size: 0,
-        },
     }
 }
 

@@ -15,7 +15,7 @@ pub mod sqlite;
 
 pub use adapters::{
     AndroidAdbAdapter, ApplicationProxyAdapter, CaptureRepositoryAdapter,
-    CertificateServiceAdapter, FaultServiceAdapter, FileExportAdapter, HeaderBodyCodecResolver,
+    CertificateServiceAdapter, FaultServiceAdapter, HeaderBodyCodecResolver,
     InfrastructureServiceBundle, ListenerRuntimeAdapter, NativeFileDialog, ProtectedSecretAdapter,
     RetiredProxyAdapter, RuleRepositoryAdapter, RuntimePipelineAdapter,
     RuntimePipelineProductHooks, RuntimeRuleRepository, SettingsRepositoryAdapter,
