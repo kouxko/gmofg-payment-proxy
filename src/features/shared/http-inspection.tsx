@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Chip, FieldError, TextArea, TextField } from "@heroui/react";
 import {
   formatMessageBody,
+  messageCodecLabel,
   messageCharset,
   messageContentKind,
   messageContentLabel,
@@ -57,7 +58,7 @@ export function HttpBodyViewer({
           <Chip size="sm" variant="soft">charset={messageCharset(message)}</Chip>
         )}
         {message?.codec_id && (
-          <Chip size="sm" variant="soft">codec={message.codec_id}</Chip>
+          <Chip size="sm" variant="soft">codec={messageCodecLabel(message.codec_id)}</Chip>
         )}
       </div>
       {message?.decode_error && (

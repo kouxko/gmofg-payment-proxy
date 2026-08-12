@@ -34,6 +34,25 @@ function editorProps(
 }
 
 describe("ListenerEditor", () => {
+  it("请求和响应可分别选择自动或强制正文编码", async () => {
+    const listener: ProxyListener = {
+      ...dynamicListener(),
+      request_body_codec: "auto",
+      response_body_codec: "auto",
+    };
+    const props = editorProps({ listener });
+    const user = userEvent.setup();
+    render(<ListenerEditor {...props} />);
+
+    await user.click(screen.getByRole("button", { name: /请求正文编码/ }));
+    await user.click(await screen.findByRole("option", { name: "强制 Shift-JIS" }));
+    expect(props.onChange).toHaveBeenLastCalledWith({ request_body_codec: "shift_jis" });
+
+    await user.click(screen.getByRole("button", { name: /响应正文编码/ }));
+    await user.click(await screen.findByRole("option", { name: "强制 UTF-8" }));
+    expect(props.onChange).toHaveBeenLastCalledWith({ response_body_codec: "utf8" });
+  });
+
   it.each([
     ["连接超时毫秒", "connect_timeout_ms", 30001],
     ["读取超时毫秒", "read_timeout_ms", 70001],
@@ -189,7 +208,7 @@ describe("ListenerEditor", () => {
 
     expect(screen.getByRole("button", { name: "保护中…" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "导入 Server CA" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "导入 client.p12" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "导入客户端身份" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeDisabled();
   });
 
@@ -212,7 +231,7 @@ describe("ListenerEditor", () => {
 
     expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "导入 Server CA" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "导入 client.p12" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导入客户端身份" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "校验上游服务器主机名" })).not.toBeInTheDocument();
     expect(screen.getByText(/127\.0\.0\.1:8080 · 5 ms/)).toBeVisible();
     expect(screen.queryByText(/协商：/)).not.toBeInTheDocument();

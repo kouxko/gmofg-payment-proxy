@@ -66,11 +66,11 @@ describe("统一代理监听编辑器", () => {
     expect(screen.queryByRole("switch", { name: "启用 allowlist MITM" })).not.toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "校验上游服务器主机名" })).toBeChecked();
     expect(screen.getByRole("button", { name: "导入 Server CA" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "导入 client.p12" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "导入客户端身份" })).toBeVisible();
     expect(screen.queryByRole("textbox", { name: /Body Codec 引用/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/按 Content-Type charset 自动识别/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: /请求正文编码/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /响应正文编码/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/自动模式遵循 Header；强制模式覆盖 charset/)).toBeVisible();
+    expect(screen.getByRole("button", { name: /请求正文编码/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /响应正文编码/ })).toBeVisible();
     await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
     expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
     expect(screen.getByText("按原请求目标转发")).toBeVisible();

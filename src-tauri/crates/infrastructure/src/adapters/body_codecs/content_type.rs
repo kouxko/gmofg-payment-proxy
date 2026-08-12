@@ -25,16 +25,21 @@ pub(super) fn http_body_metadata(message: &Message) -> HttpBodyMetadata {
     parse_content_type(content_type)
 }
 
-pub(super) fn resolve_message_codec(
+pub(crate) fn resolve_message_codec(
     selected: BodyCodecKind,
     message: &Message,
 ) -> Arc<dyn BodyCodec> {
-    codec_for_metadata(&http_body_metadata(message), Some(selected))
+    match selected {
+        BodyCodecKind::Auto => automatic_codec_for_metadata(&http_body_metadata(message)),
+        BodyCodecKind::Raw => Arc::new(RawBodyCodec),
+        BodyCodecKind::Utf8 => Arc::new(Utf8BodyCodec),
+        BodyCodecKind::ShiftJis => Arc::new(ShiftJisBodyCodec),
+    }
 }
 
 pub(crate) fn decode_message_body(
     message: &Message,
-    legacy_fallback: &dyn BodyCodec,
+    body_codec: &dyn BodyCodec,
 ) -> (
     HttpBodyMetadata,
     Option<String>,
@@ -42,21 +47,16 @@ pub(crate) fn decode_message_body(
     Option<String>,
 ) {
     let metadata = http_body_metadata(message);
-    if !matches!(
+    let automatic = body_codec.id().starts_with("auto:");
+    let declared_text = matches!(
         metadata.content_kind,
         MessageContentKind::Json | MessageContentKind::Xml | MessageContentKind::Text
-    ) {
+    );
+    if body_codec.id().ends_with("raw") || (automatic && !declared_text) {
         return (metadata, None, None, None);
     }
-    let declared = metadata.charset.is_some()
-        || matches!(
-            metadata.content_kind,
-            MessageContentKind::Json | MessageContentKind::Xml
-        );
-    let declared_codec = declared.then(|| codec_for_metadata(&metadata, None));
-    let codec = declared_codec.as_deref().unwrap_or(legacy_fallback);
-    let codec_id = Some(codec.id().to_owned());
-    match codec.decode(&message.body) {
+    let codec_id = Some(body_codec.id().to_owned());
+    match body_codec.decode(&message.body) {
         Ok(text) => (metadata, Some(text), codec_id, None),
         Err(error) => (metadata, None, codec_id, Some(error.message)),
     }
@@ -73,13 +73,12 @@ impl BreakpointBodyCodecResolver for HeaderBodyCodecResolver {
                 .flatten()
                 .map(String::as_str)
         });
-        let legacy = match message.codec_id.as_deref() {
-            Some("utf-8" | "utf8") => BodyCodecKind::Utf8,
-            Some("shift-jis" | "shift_jis") => BodyCodecKind::ShiftJis,
-            Some("raw") => BodyCodecKind::Raw,
-            _ => BodyCodecKind::Auto,
-        };
-        codec_for_metadata(&parse_content_type(content_type), Some(legacy))
+        match message.codec_id.as_deref() {
+            Some("utf-8" | "utf8") => Arc::new(Utf8BodyCodec),
+            Some("shift-jis" | "shift_jis") => Arc::new(ShiftJisBodyCodec),
+            Some("raw") => Arc::new(RawBodyCodec),
+            _ => automatic_codec_for_metadata(&parse_content_type(content_type)),
+        }
     }
 }
 
@@ -117,28 +116,55 @@ fn unknown_body_metadata() -> HttpBodyMetadata {
     }
 }
 
-fn codec_for_metadata(
-    metadata: &HttpBodyMetadata,
-    legacy: Option<BodyCodecKind>,
-) -> Arc<dyn BodyCodec> {
-    if let Some(charset) = metadata.charset.as_deref() {
-        return match charset {
-            "utf-8" | "utf8" => Arc::new(Utf8BodyCodec),
-            "shift_jis" | "shift-jis" | "sjis" | "windows-31j" | "ms932" | "cp932" => {
-                Arc::new(ShiftJisBodyCodec)
+fn automatic_codec_for_metadata(metadata: &HttpBodyMetadata) -> Arc<dyn BodyCodec> {
+    let (id, inner): (&'static str, Arc<dyn BodyCodec>) = match metadata.charset.as_deref() {
+        Some("utf-8" | "utf8") => ("auto:utf-8", Arc::new(Utf8BodyCodec)),
+        Some("shift_jis" | "shift-jis" | "sjis" | "windows-31j" | "ms932" | "cp932") => {
+            ("auto:shift-jis", Arc::new(ShiftJisBodyCodec))
+        }
+        Some(_) => ("auto:unsupported", Arc::new(UnsupportedCharsetBodyCodec)),
+        None => match metadata.content_kind {
+            MessageContentKind::Json | MessageContentKind::Xml => {
+                ("auto:utf-8", Arc::new(Utf8BodyCodec))
             }
-            _ => Arc::new(UnsupportedCharsetBodyCodec),
-        };
-    }
-    match metadata.content_kind {
-        MessageContentKind::Json | MessageContentKind::Xml => Arc::new(Utf8BodyCodec),
-        MessageContentKind::Text => match legacy.unwrap_or(BodyCodecKind::Auto) {
-            BodyCodecKind::Utf8 => Arc::new(Utf8BodyCodec),
-            BodyCodecKind::ShiftJis => Arc::new(ShiftJisBodyCodec),
-            BodyCodecKind::Auto => Arc::new(MissingCharsetBodyCodec),
-            BodyCodecKind::Raw => Arc::new(RawBodyCodec),
+            MessageContentKind::Text => ("auto:missing", Arc::new(MissingCharsetBodyCodec)),
+            MessageContentKind::Binary | MessageContentKind::Unknown => {
+                ("auto:raw", Arc::new(RawBodyCodec))
+            }
         },
-        MessageContentKind::Binary | MessageContentKind::Unknown => Arc::new(RawBodyCodec),
+    };
+    Arc::new(AutomaticBodyCodec { id, inner })
+}
+
+struct AutomaticBodyCodec {
+    id: &'static str,
+    inner: Arc<dyn BodyCodec>,
+}
+
+impl std::fmt::Debug for AutomaticBodyCodec {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AutomaticBodyCodec")
+            .field("id", &self.id)
+            .finish_non_exhaustive()
+    }
+}
+
+impl BodyCodec for AutomaticBodyCodec {
+    fn id(&self) -> &'static str {
+        self.id
+    }
+
+    fn name(&self) -> &'static str {
+        self.inner.name()
+    }
+
+    fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
+        self.inner.decode(bytes)
+    }
+
+    fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
+        self.inner.encode(text)
     }
 }
 

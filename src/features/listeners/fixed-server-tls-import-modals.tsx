@@ -101,7 +101,7 @@ export function ImportIdentityModal({
                 />
               </TextField>
               <TextField>
-                <Label>client.p12 / client.pfx 密码（允许为空）</Label>
+                <Label>P12 / PFX 密码（PEM 不使用；允许为空）</Label>
                 <Input
                   type="password"
                   value={password}
@@ -109,7 +109,8 @@ export function ImportIdentityModal({
                 />
               </TextField>
               <p className="text-sm text-[var(--telemetry-muted)]">
-                选择包含“客户端证书 + 私钥”的 client.p12 或 client.pfx。
+                支持 client.p12 / client.pfx，或同时包含客户端证书链与匹配私钥的
+                client.pem。
                 代理连接上游 Server 时出示它；它不是本入口给 Android/App
                 使用的服务端证书。
               </p>
@@ -126,7 +127,7 @@ export function ImportIdentityModal({
                 isDisabled={busy || !label.trim()}
                 onPress={() => void onImport()}
               >
-                选择 client.p12 / .pfx
+                选择客户端身份（.p12 / .pfx / .pem）
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

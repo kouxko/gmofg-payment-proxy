@@ -131,10 +131,10 @@ describe("统一代理监听编辑器", () => {
   it("导入 mTLS 身份时密码不进入 Workspace", async () => {
     mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")] }));
     const user = userEvent.setup(); render(<ListenersView />);
-    await user.click(await screen.findByRole("button", { name: "导入 client.p12" }));
-    expect(screen.getByText(/包含“客户端证书 \+ 私钥”的 client\.p12/)).toBeVisible();
-    await user.type(await screen.findByLabelText("client.p12 / client.pfx 密码（允许为空）"), "p12-secret");
-    await user.click(screen.getByRole("button", { name: "选择 client.p12 / .pfx" }));
+    await user.click(await screen.findByRole("button", { name: "导入客户端身份" }));
+    expect(screen.getByText(/client\.p12 \/ client\.pfx.*client\.pem/)).toBeVisible();
+    await user.type(await screen.findByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）"), "p12-secret");
+    await user.click(screen.getByRole("button", { name: "选择客户端身份（.p12 / .pfx / .pem）" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     expect(mocks.listenerSave.mock.calls[0][2].fixed_server.upstream_tls.client_identity).toBe("identity-ref-1");
