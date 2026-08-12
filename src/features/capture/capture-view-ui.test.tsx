@@ -182,10 +182,13 @@ describe("CaptureView live controls", () => {
     await user.click(row!);
 
     expect(screen.getByText("抓包详情")).toBeVisible();
+    expect(screen.getByText("POST /payment · 192.168.1.20")).toBeVisible();
     expect(screen.getByRole("dialog", { name: "抓包详情" })).toBeVisible();
-    await user.click(
-      screen.getByRole("button", { name: "关闭详情并释放报文" }),
-    );
+    const closeButton = screen.getByRole("button", {
+      name: "关闭详情并释放报文",
+    });
+    expect(closeButton).toHaveTextContent("");
+    await user.click(closeButton);
 
     expect(screen.getByLabelText("实时抓包工作区")).toHaveAttribute(
       "data-layout",
