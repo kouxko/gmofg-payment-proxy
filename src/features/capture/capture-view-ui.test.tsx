@@ -187,6 +187,7 @@ describe("CaptureView live controls", () => {
     const closeButton = screen.getByRole("button", {
       name: "关闭详情并释放报文",
     });
+    expect(closeButton).toHaveAttribute("data-slot", "modal-close-trigger");
     expect(closeButton).toHaveTextContent("");
     await user.click(closeButton);
 

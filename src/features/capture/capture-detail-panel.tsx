@@ -110,15 +110,11 @@ export function CaptureDetailPanel({
                   ? `${selected.method} ${selected.target} · ${selected.terminal_ip}`
                   : "请求、响应与原始字节仅保留在当前会话"}
               </p>
-              <Button
-                slot="close"
+              <Modal.CloseTrigger
                 aria-label="关闭详情并释放报文"
-                isIconOnly
-                size="sm"
-                variant="ghost"
               >
                 <Xmark className="size-4" />
-              </Button>
+              </Modal.CloseTrigger>
             </Modal.Header>
             <Modal.Body className="min-h-0">
               <Tabs defaultSelectedKey="overview">
