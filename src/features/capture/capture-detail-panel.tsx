@@ -93,10 +93,10 @@ export function CaptureDetailPanel({
   return (
     <aside
       ref={panelRef}
+      aria-label="抓包详情面板"
       className={[
-        "min-w-0 overflow-auto border-l border-[var(--telemetry-line)] p-4",
-        "max-[1280px]:border-l-0 max-[1280px]:border-t",
-        selected ? "" : "max-[1280px]:hidden",
+        "min-h-0 min-w-0 overflow-auto border-t border-[var(--telemetry-line)] p-4",
+        selected ? "" : "hidden",
       ].join(" ")}
     >
       {selected && (
