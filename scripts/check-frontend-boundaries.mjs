@@ -63,6 +63,9 @@ const themeStorageFiles = new Set([
   "src/features/theme/theme-provider.tsx",
   "src/features/theme/theme-provider.test.tsx",
 ]);
+const iconCloseTriggerFiles = new Set([
+  "src/features/capture/capture-detail-panel.tsx",
+]);
 
 const failures = [];
 for (const file of sourceFiles(sourceRoot)) {
@@ -77,6 +80,12 @@ for (const file of sourceFiles(sourceRoot)) {
     if (
       themeStorageFiles.has(relativePath) &&
       message === "前端不得持久化业务数据"
+    ) {
+      continue;
+    }
+    if (
+      iconCloseTriggerFiles.has(relativePath) &&
+      message.startsWith("CloseTrigger 仅用于右上角关闭图标")
     ) {
       continue;
     }
@@ -121,6 +130,20 @@ for (const file of sourceFiles(sourceRoot)) {
       );
     }
   }
+}
+
+const captureDetailSource = readFileSync(
+  join(sourceRoot, "features", "capture", "capture-detail-panel.tsx"),
+  "utf8",
+);
+if (
+  !/<Modal\.CloseTrigger(?=[^>]*aria-label="关闭详情并释放报文")[^>]*>\s*<Xmark[^>]*\/>\s*<\/Modal\.CloseTrigger>/.test(
+    captureDetailSource,
+  )
+) {
+  failures.push(
+    "src/features/capture/capture-detail-panel.tsx: 抓包详情必须使用右上角纯图标 CloseTrigger",
+  );
 }
 
 const themeProviderSource = readFileSync(

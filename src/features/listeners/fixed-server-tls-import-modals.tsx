@@ -36,10 +36,10 @@ export function ImportPemModal({
         打开证书导入对话框
       </Button>
       <Modal.Backdrop isDismissable={!busy}>
-        <Modal.Container size="sm">
+        <Modal.Container size="sm" scroll="inside">
           <Modal.Dialog>
             <Modal.Header><Modal.Heading>{title}</Modal.Heading></Modal.Header>
-            <Modal.Body className="space-y-3">
+            <Modal.Body className="min-h-0 space-y-4 pr-1">
               <TextField>
                 <Label>显示名称</Label>
                 <Input
@@ -108,26 +108,29 @@ export function ImportIdentityModal({
                   onChange={(event) => onPasswordChange(event.target.value)}
                 />
               </TextField>
-              <p className="text-sm text-[var(--telemetry-muted)]">
-                支持 client.p12 / client.pfx，或同时包含客户端证书链与匹配私钥的
-                client.pem。
-                代理连接上游 Server 时出示它；它不是本入口给 Android/App
-                使用的服务端证书。
-              </p>
-              <p className="text-xs text-[var(--telemetry-muted)]">
-                文件由 Rust 原生对话框读取和解析，导入后会显示主题、SAN、
-                有效期和 SHA-256。私钥与密码由系统保护存储；显式导出可移植
-                应用配置时会随配置包含。
-              </p>
+              <div className="space-y-2 rounded-2xl border border-[var(--telemetry-line)] p-3">
+                <p className="text-sm text-[var(--telemetry-muted)]">
+                  支持 client.p12 / client.pfx，或同时包含客户端证书链与匹配私钥的
+                  client.pem。代理连接上游 Server 时出示它；它不是本入口给
+                  Android/App 使用的服务端证书。
+                </p>
+                <p className="text-xs text-[var(--telemetry-muted)]">
+                  文件由 Rust 原生对话框读取和解析，导入后会显示主题、SAN、
+                  有效期和 SHA-256。私钥与密码由系统保护存储；显式导出可移植
+                  应用配置时会随配置包含。
+                </p>
+              </div>
             </Modal.Body>
-            <Modal.Footer>
+            <Modal.Footer className="shrink-0 flex-wrap border-t border-[var(--telemetry-line)] pt-4">
               <Button slot="close" variant="outline" isDisabled={busy}>取消</Button>
               <Button
+                aria-label="选择客户端身份（.p12 / .pfx / .pem）"
+                className="min-w-48 flex-1"
                 variant="primary"
                 isDisabled={busy || !label.trim()}
                 onPress={() => void onImport()}
               >
-                选择客户端身份（.p12 / .pfx / .pem）
+                选择身份文件
               </Button>
             </Modal.Footer>
           </Modal.Dialog>
