@@ -27,6 +27,14 @@
 /src-tauri/resources/android-companion.apk
 /src-tauri/target-listener-fix/
 
+# Local agent/runtime state and generated scratch assets
+/.omx/
+/tmp/
+
+# Local diagnostics and launch helpers
+/scripts/run-latest-app.sh
+/src-tauri/crates/host/examples/live_listener_diagnostic.rs
+
 # misc
 .DS_Store
 *.pem
