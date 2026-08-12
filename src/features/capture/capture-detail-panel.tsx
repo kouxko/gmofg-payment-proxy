@@ -101,22 +101,23 @@ export function CaptureDetailPanel({
       <Modal.Backdrop isDismissable>
         <Modal.Container size="cover" scroll="inside">
           <Modal.Dialog>
-            <Modal.Header className="flex items-center gap-3">
-              <div>
-                <Modal.Heading>抓包详情</Modal.Heading>
-                <p className="text-xs text-[var(--telemetry-muted)]">
-                  请求、响应与原始字节仅保留在当前会话
-                </p>
-              </div>
+            <Modal.Header className="items-start gap-1 pr-12 text-left">
+              <Modal.Heading className="text-left text-lg font-semibold">
+                抓包详情
+              </Modal.Heading>
+              <p className="max-w-full truncate text-left text-xs text-[var(--telemetry-muted)]">
+                {selected
+                  ? `${selected.method} ${selected.target} · ${selected.terminal_ip}`
+                  : "请求、响应与原始字节仅保留在当前会话"}
+              </p>
               <Button
                 slot="close"
                 aria-label="关闭详情并释放报文"
-                className="ml-auto shrink-0"
+                isIconOnly
                 size="sm"
-                variant="outline"
+                variant="ghost"
               >
                 <Xmark className="size-4" />
-                关闭详情
               </Button>
             </Modal.Header>
             <Modal.Body className="min-h-0">
