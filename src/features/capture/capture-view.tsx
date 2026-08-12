@@ -1,7 +1,7 @@
 "use client";
 
 /** 实时抓包页面容器：仅管理 Rust 查询、游标、选择和详情生命周期。 */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "@heroui/react";
 import type {
   CaptureDetailViewModel,
@@ -56,7 +56,6 @@ export function CaptureView({
   const [paused, setPaused] = useState(false);
   const [clearPending, setClearPending] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState<number>();
-  const detailPanelRef = useRef<HTMLElement>(null);
   const [query, setQuery] = useState(defaultCaptureQuery);
   const queryKey = useMemo(() => JSON.stringify(query), [query]);
   const page = useIpcQuery<CapturePageViewModel>(
@@ -138,22 +137,13 @@ export function CaptureView({
 
   function selectEvent(eventId: number) {
     setSelectedEventId(eventId);
-    if (window.matchMedia("(max-width: 1280px)").matches)
-      requestAnimationFrame(() =>
-        detailPanelRef.current?.scrollIntoView({ block: "start" }),
-      );
   }
 
   return (
     <section
       aria-label="实时抓包工作区"
-      data-layout={selected ? "stacked" : "list-only"}
-      className={[
-        "grid h-full min-h-0 grid-cols-1",
-        selected
-          ? "grid-rows-[minmax(300px,55%)_minmax(280px,45%)]"
-          : "grid-rows-1",
-      ].join(" ")}
+      data-layout="list-only"
+      className="grid h-full min-h-0 grid-cols-1 grid-rows-1"
     >
       <CaptureListPanel
         paused={paused}
@@ -168,7 +158,6 @@ export function CaptureView({
         onSelectEvent={selectEvent}
       />
       <CaptureDetailPanel
-        panelRef={detailPanelRef}
         selected={selected}
         detail={detail}
         requestHeaderCount={requestHeaderCount}

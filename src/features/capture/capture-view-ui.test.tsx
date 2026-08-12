@@ -128,6 +128,9 @@ describe("CaptureView live controls", () => {
     expect(row).toBeTruthy();
     await user.click(row!);
     await user.click(
+      screen.getByRole("button", { name: "关闭详情并释放报文" }),
+    );
+    await user.click(
       screen.getByRole("button", { name: "清空当前显示" }),
     );
 
@@ -153,9 +156,10 @@ describe("CaptureView live controls", () => {
     expect(
       screen.getByRole("button", { name: "关闭详情并释放报文" }),
     ).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "抓包详情" })).toBeVisible();
     expect(screen.getByLabelText("实时抓包工作区")).toHaveAttribute(
       "data-layout",
-      "stacked",
+      "list-only",
     );
 
     captureState.page = { ...page(), rows: [], total: 0 };
@@ -178,6 +182,7 @@ describe("CaptureView live controls", () => {
     await user.click(row!);
 
     expect(screen.getByText("抓包详情")).toBeVisible();
+    expect(screen.getByRole("dialog", { name: "抓包详情" })).toBeVisible();
     await user.click(
       screen.getByRole("button", { name: "关闭详情并释放报文" }),
     );
@@ -186,7 +191,9 @@ describe("CaptureView live controls", () => {
       "data-layout",
       "list-only",
     );
-    expect(screen.queryByText("抓包详情")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "抓包详情" }),
+    ).not.toBeInTheDocument();
     expect(queryMocks.detailInvalidate).toHaveBeenCalled();
   });
 });

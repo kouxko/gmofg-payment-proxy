@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import { createRef } from "react";
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -89,7 +88,6 @@ describe("抓包与会话正文接入共享查看器", () => {
 
     render(
       <CaptureDetailPanel
-        panelRef={createRef<HTMLElement>()}
         selected={selected}
         detail={detail}
         requestHeaderCount={1}
@@ -99,6 +97,7 @@ describe("抓包与会话正文接入共享查看器", () => {
         onCreateRule={vi.fn()}
       />,
     );
+    expect(screen.getByRole("dialog", { name: "抓包详情" })).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "请求" }));
 
     expect(screen.getByText("QUERY")).toBeVisible();
