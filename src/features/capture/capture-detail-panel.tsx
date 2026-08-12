@@ -8,7 +8,7 @@ import {
   Tabs,
   toast,
 } from "@heroui/react";
-import { Circle, Copy } from "@gravity-ui/icons";
+import { Circle, Copy, Xmark } from "@gravity-ui/icons";
 import type {
   CaptureDetailViewModel,
   CaptureRowViewModel,
@@ -100,14 +100,29 @@ export function CaptureDetailPanel({
       ].join(" ")}
     >
       {selected && (
-        <Button
-          className="mb-3 ml-auto"
-          size="sm"
-          variant="ghost"
-          onPress={onClose}
+        <header
+          className={[
+            "sticky top-0 z-10 -mx-4 -mt-4 mb-3 flex items-center gap-3 border-b px-4 py-3",
+            "border-[var(--telemetry-line)] bg-[var(--telemetry-surface)]",
+          ].join(" ")}
         >
-          关闭详情并释放报文
-        </Button>
+          <div>
+            <h2 className="font-semibold">抓包详情</h2>
+            <p className="text-xs text-[var(--telemetry-muted)]">
+              请求、响应与原始字节仅保留在当前会话
+            </p>
+          </div>
+          <Button
+            aria-label="关闭详情并释放报文"
+            className="ml-auto shrink-0"
+            size="sm"
+            variant="outline"
+            onPress={onClose}
+          >
+            <Xmark className="size-4" />
+            关闭详情
+          </Button>
+        </header>
       )}
       <Tabs defaultSelectedKey="overview">
         <Tabs.ListContainer>
