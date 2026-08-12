@@ -16,12 +16,10 @@ use async_trait::async_trait;
 use http::Uri;
 use zeroize::Zeroizing;
 
+use crate::http::{ConnectionAdmission, ConnectionService, HyperUpstreamConnector, PipelinePorts};
 use crate::supervisor::{ChannelId, ProxyConfig, RuntimeServiceFactory};
 use crate::tls::{ClientTlsAdapter, ServerTlsAdapter};
-use crate::transport::{
-    Clock, ConnectionAdmission, ConnectionService, HandshakePolicy, HyperUpstreamConnector,
-    PipelinePorts,
-};
+use crate::transport::{Clock, HandshakePolicy};
 use crate::{ErrorCode, ProxyError, Result};
 
 /// Decrypted, validated materials for one runtime epoch. Debug output is
@@ -125,6 +123,7 @@ impl RuntimeServiceFactory for RustlsRuntimeServiceFactory {
                     ports: Arc::clone(&self.ports),
                     clock: Arc::clone(&self.clock),
                     admission: admission.clone(),
+                    allowed_client_cidrs: Vec::new(),
                     limits: config.limits,
                     read_timeout: config.read_timeout,
                     write_timeout: config.write_timeout,

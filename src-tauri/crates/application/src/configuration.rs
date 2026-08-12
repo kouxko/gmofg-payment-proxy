@@ -14,10 +14,11 @@ use specta::Type;
 
 use crate::{
     AppError, AppResult, ChannelSettingsDraft, PortableCertificateMaterial, ProxyWorkspace,
-    SettingsDraft, WorkspaceId, validate_certificate_materials,
+    ProxyWorkspaceV2, SettingsDraft, WorkspaceId, validate_certificate_materials,
 };
 
-pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 2;
+pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 3;
+pub const APPLICATION_CONFIGURATION_V2_FORMAT_VERSION: u16 = 2;
 pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 128 * 1024 * 1024;
 /// 监听证书只能引用应用受保护存储中的材料，不能携带文件路径或环境变量密码。
 pub const MANAGED_LISTENER_CERTIFICATE_PREFIX: &str = "managed:listener-tls:";
@@ -44,7 +45,10 @@ pub fn validate_portable_certificate_references(workspace: &ProxyWorkspace) -> A
     {
         return Err(AppError::new(
             "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED",
-            "证书引用必须由应用内的原生导入功能创建，配置文档不能包含文件路径或外部密码引用。",
+            concat!(
+                "证书引用必须由应用内的原生导入功能创建，",
+                "配置文档不能包含文件路径或外部密码引用。"
+            ),
         )
         .entity(reference.id.to_string()));
     }
@@ -53,6 +57,7 @@ pub fn validate_portable_certificate_references(workspace: &ProxyWorkspace) -> A
 
 /// 不含乐观锁 revision 的全局设置值。
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize, Type)]
+#[serde(deny_unknown_fields)]
 pub struct PortableSettings {
     pub bind_address: String,
     pub channels: Vec<ChannelSettingsDraft>,
@@ -113,6 +118,33 @@ pub struct ApplicationConfigurationDocument {
     pub certificate_materials: Vec<PortableCertificateMaterial>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApplicationConfigurationDocumentV2 {
+    pub format_version: u16,
+    pub selected_workspace_id: WorkspaceId,
+    pub workspaces: Vec<ProxyWorkspaceV2>,
+    pub settings: PortableSettings,
+    pub certificate_materials: Vec<PortableCertificateMaterial>,
+}
+
+impl TryFrom<ApplicationConfigurationDocumentV2> for ApplicationConfigurationDocument {
+    type Error = AppError;
+
+    fn try_from(value: ApplicationConfigurationDocumentV2) -> Result<Self, Self::Error> {
+        if value.format_version != APPLICATION_CONFIGURATION_V2_FORMAT_VERSION {
+            return Err(unsupported_configuration_version(value.format_version));
+        }
+        Ok(Self {
+            format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
+            selected_workspace_id: value.selected_workspace_id,
+            workspaces: value.workspaces.into_iter().map(Into::into).collect(),
+            settings: value.settings,
+            certificate_materials: value.certificate_materials,
+        })
+    }
+}
+
 impl ApplicationConfigurationDocument {
     pub fn validate(&self) -> AppResult<()> {
         if self.format_version != APPLICATION_CONFIGURATION_FORMAT_VERSION {
@@ -166,10 +198,43 @@ pub fn parse_application_configuration(
     let value = serde_json::from_slice::<Value>(document)
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("完整配置 JSON 无效：{error}")))?;
     reject_configuration_fields_outside_certificate_materials(&value)?;
-    let parsed = serde_json::from_value::<ApplicationConfigurationDocument>(value)
-        .map_err(|error| AppError::new("IMPORT_FAILED", format!("完整配置结构无效：{error}")))?;
+    let version = read_configuration_format_version(&value)?;
+    let parsed = match version {
+        APPLICATION_CONFIGURATION_FORMAT_VERSION => {
+            serde_json::from_value::<ApplicationConfigurationDocument>(value)
+                .map_err(|error| invalid_configuration_structure(&error))?
+        }
+        APPLICATION_CONFIGURATION_V2_FORMAT_VERSION => {
+            let legacy = serde_json::from_value::<ApplicationConfigurationDocumentV2>(value)
+                .map_err(|error| invalid_configuration_structure(&error))?;
+            legacy.try_into()?
+        }
+        _ => return Err(unsupported_configuration_version(version)),
+    };
     parsed.validate()?;
     Ok(parsed)
+}
+
+fn read_configuration_format_version(value: &Value) -> AppResult<u16> {
+    value
+        .get("format_version")
+        .and_then(Value::as_u64)
+        .and_then(|version| u16::try_from(version).ok())
+        .ok_or_else(|| AppError::new("IMPORT_FAILED", "完整配置 format_version 缺失或无效。"))
+}
+
+fn invalid_configuration_structure(error: &serde_json::Error) -> AppError {
+    AppError::new("IMPORT_FAILED", format!("完整配置结构无效：{error}"))
+}
+
+fn unsupported_configuration_version(version: u16) -> AppError {
+    AppError::new(
+        "APPLICATION_CONFIGURATION_VERSION_UNSUPPORTED",
+        format!(
+            "配置文档版本 {version} 不受支持；当前支持版本 2 和 \
+             {APPLICATION_CONFIGURATION_FORMAT_VERSION}。"
+        ),
+    )
 }
 
 pub fn serialize_application_configuration(
@@ -245,7 +310,10 @@ fn is_forbidden_field(field: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use intercept_proxy_domain::{CertificateReference, CertificateReferenceKind};
+    use intercept_proxy_domain::{
+        CertificateReference, CertificateReferenceKind, HttpListenerSettings, ProxyListenerV2,
+        ProxyWorkspaceV2,
+    };
     use serde_json::json;
 
     use super::*;
@@ -261,6 +329,46 @@ mod tests {
         }
     }
 
+    fn v2_document() -> ApplicationConfigurationDocumentV2 {
+        let current = ProxyWorkspace::default();
+        let listener = &current.listeners[0];
+        let http = listener.http().unwrap();
+        ApplicationConfigurationDocumentV2 {
+            format_version: APPLICATION_CONFIGURATION_V2_FORMAT_VERSION,
+            selected_workspace_id: current.id,
+            workspaces: vec![ProxyWorkspaceV2 {
+                id: current.id,
+                name: current.name,
+                revision: current.revision,
+                listeners: vec![ProxyListenerV2 {
+                    id: listener.id,
+                    name: listener.name.clone(),
+                    enabled: listener.enabled,
+                    bind_address: listener.bind_address.clone(),
+                    port: listener.port,
+                    authentication: http.authentication.clone(),
+                    allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
+                    mitm: http.mitm.clone(),
+                    connect_timeout_ms: listener.connect_timeout_ms,
+                    read_timeout_ms: listener.read_timeout_ms,
+                    write_timeout_ms: listener.write_timeout_ms,
+                    downstream_tls: Some(http.downstream_tls.clone()),
+                    request_body_codec: http.request_body_codec,
+                    response_body_codec: http.response_body_codec,
+                    fixed_server: http.fixed_server.clone(),
+                }],
+                metadata_extractors: current.metadata_extractors,
+                response_assertions: current.response_assertions,
+                rules: current.rules,
+                fault_presets: current.fault_presets,
+                certificate_references: current.certificate_references,
+                android_network_profiles: current.android_network_profiles,
+            }],
+            settings: PortableSettings::from(&SettingsDraft::default()),
+            certificate_materials: Vec::new(),
+        }
+    }
+
     #[test]
     fn full_configuration_round_trips() {
         let expected = document();
@@ -269,6 +377,27 @@ mod tests {
             parse_application_configuration(&bytes).expect("parse"),
             expected
         );
+    }
+
+    #[test]
+    fn v2_full_configuration_migrates_to_v3_without_changing_settings() {
+        let v2 = v2_document();
+        let expected_settings = v2.settings.clone();
+        let parsed = parse_application_configuration(&serde_json::to_vec(&v2).unwrap()).unwrap();
+
+        assert_eq!(
+            parsed.format_version,
+            APPLICATION_CONFIGURATION_FORMAT_VERSION
+        );
+        assert_eq!(parsed.settings, expected_settings);
+        assert!(matches!(
+            parsed.workspaces[0].listeners[0].data_plane,
+            intercept_proxy_domain::ListenerDataPlane::Http(HttpListenerSettings { .. })
+        ));
+        let exported = serialize_application_configuration(&parsed).unwrap();
+        let exported_value: Value = serde_json::from_slice(&exported).unwrap();
+        assert_eq!(exported_value["format_version"], 3);
+        assert_eq!(parse_application_configuration(&exported).unwrap(), parsed);
     }
 
     #[test]

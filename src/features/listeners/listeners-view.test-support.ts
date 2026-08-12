@@ -1,4 +1,5 @@
 import { vi } from "vitest";
+import type { HttpListenerSettings, ProxyListener } from "@/generated/rust-types";
 
 export const navigationMocks = { navigate: vi.fn() };
 
@@ -42,27 +43,84 @@ export const mocks = {
 export function dynamicListener(id = "listener-1", name = "默认代理监听", port = 8080) {
   return {
     id, name, enabled: false, bind_address: "127.0.0.1", port,
-    authentication: { mode: "none" as const }, allowed_client_cidrs: [],
-    mitm: { enabled: false, authority_allowlist: [], root_ca: null, maximum_cached_leaf_certificates: 256 },
+    allowed_client_cidrs: [],
     connect_timeout_ms: 30000, read_timeout_ms: 70000, write_timeout_ms: 70000,
-    downstream_tls: {
-      enabled: false,
-      server_identity: null,
-      dynamic_sni_allowlist: [],
-      client_authentication: { mode: "disabled" as const },
+    data_plane: {
+      kind: "http" as const,
+      settings: {
+        authentication: { mode: "none" as const },
+        mitm: { enabled: false, authority_allowlist: [], root_ca: null, maximum_cached_leaf_certificates: 256 },
+        downstream_tls: {
+          enabled: false,
+          server_identity: null,
+          dynamic_sni_allowlist: [],
+          client_authentication: { mode: "disabled" as const },
+        },
+        request_body_codec: "auto" as const,
+        response_body_codec: "auto" as const,
+        fixed_server: null,
+      },
     },
-    request_body_codec: "raw" as const,
-    response_body_codec: "raw" as const,
-    fixed_server: null,
   };
 }
 
 export function fixedListener(id: string, name: string, port: number, upstreamUrl: string) {
   return {
     ...dynamicListener(id, name, port),
-    fixed_server: {
-      upstream_url: upstreamUrl,
-      upstream_tls: { verify_hostname: true, server_trust: null, client_identity: null },
+    data_plane: {
+      kind: "http" as const,
+      settings: {
+        ...dynamicListener(id, name, port).data_plane.settings,
+        fixed_server: {
+          upstream_url: upstreamUrl,
+          upstream_tls: { verify_hostname: true, server_trust: null, client_identity: null },
+        },
+      },
+    },
+  };
+}
+
+export function withHttpSettings(
+  listener: ProxyListener,
+  changes: Partial<HttpListenerSettings>,
+): ProxyListener {
+  if (listener.data_plane.kind !== "http") throw new Error("expected HTTP listener");
+  return {
+    ...listener,
+    data_plane: {
+      kind: "http" as const,
+      settings: { ...listener.data_plane.settings, ...changes },
+    },
+  };
+}
+
+export function socketListener(
+  id = "socket-1",
+  name = "Socket Relay",
+  port = 9000,
+  mode: "transparent" | "tcp_to_tls" | "tls_to_tcp" | "tls_to_tls" = "transparent",
+) {
+  const upstreamTls = { verify_hostname: true, server_trust: null, client_identity: null };
+  const downstreamTls = {
+    server_identity: "",
+    client_authentication: { mode: "disabled" as const },
+  };
+  const security = mode === "tcp_to_tls"
+    ? { mode, upstream_tls: upstreamTls }
+    : mode === "tls_to_tcp"
+      ? { mode, downstream_tls: downstreamTls }
+      : mode === "tls_to_tls"
+        ? { mode, downstream_tls: downstreamTls, upstream_tls: upstreamTls }
+        : { mode: "transparent" as const };
+  return {
+    ...dynamicListener(id, name, port),
+    data_plane: {
+      kind: "socket" as const,
+      settings: {
+        upstream: { host: "server.test", port: 9443 },
+        security,
+        maximum_connections: 500,
+      },
     },
   };
 }
@@ -138,6 +196,9 @@ export function listenerStatus(
     fault_reason: state === "faulted" ? "Listener 任务已意外结束。" : null,
     can_start: canStart,
     can_stop: canStop,
+    active_connections: state === "running" ? 2 : 0,
+    client_to_server_bytes: state === "running" ? 1024 : 0,
+    server_to_client_bytes: state === "running" ? 2048 : 0,
   };
 }
 
@@ -192,11 +253,11 @@ export function setupListenerMocks() {
     mocks.listenerStart.mockImplementation((_workspaceId, _revision, listenerId) => ok(listenerStatus(listenerId, "running")));
     mocks.listenerStop.mockImplementation((_workspaceId, _revision, listenerId) => ok(listenerStatus(listenerId, "stopped")));
     mocks.listenerTestUpstreamConnection.mockReturnValue(ok({
-      listener_id: "fixed-1", upstream_origin: "https://127.0.0.1:9443", resolved_address: "127.0.0.1:9443",
+      listener_id: "fixed-1", data_plane: "http", upstream_origin: "https://127.0.0.1:9443", resolved_address: "127.0.0.1:9443",
       scheme: "https", transport: "TCP + TLS", tls: {
         tls_version: "TLS 1.2", cipher_suite: "TLS_TEST", peer_subject: "CN=测试上游", peer_sha256_fingerprint: "AA:BB",
         hostname_verification_enabled: true, client_identity_configured: true,
-      }, elapsed_millis: 12,
+      }, socket_transport_mode: null, elapsed_millis: 12,
       message: "上游 Server TLS 握手成功。", ui_tone: "positive",
     }));
     const identity = certificateReference("identity-ref-1", "测试身份", "upstream_client_identity");

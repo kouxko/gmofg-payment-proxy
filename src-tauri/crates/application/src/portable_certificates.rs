@@ -12,7 +12,7 @@ use std::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    DownstreamClientAuthentication, ProxyWorkspace,
+    DownstreamClientAuthentication, ListenerDataPlane, ProxyWorkspace, SocketRelaySecurity,
 };
 use ring::digest::{SHA256, digest};
 use serde::{Deserialize, Serialize};
@@ -107,23 +107,69 @@ pub fn portable_material_sha256(bytes: &[u8]) -> String {
 pub fn retain_reachable_certificate_references(workspace: &mut ProxyWorkspace) {
     let mut reachable = BTreeSet::new();
     for listener in &workspace.listeners {
-        reachable.extend(listener.mitm.root_ca);
-        reachable.extend(listener.downstream_tls.server_identity);
-        match listener.downstream_tls.client_authentication {
-            DownstreamClientAuthentication::Disabled => {}
-            DownstreamClientAuthentication::Optional { trust }
-            | DownstreamClientAuthentication::Required { trust } => {
-                reachable.insert(trust);
+        match &listener.data_plane {
+            ListenerDataPlane::Http(settings) => {
+                reachable.extend(settings.mitm.root_ca);
+                reachable.extend(settings.downstream_tls.server_identity);
+                collect_client_trust(
+                    &settings.downstream_tls.client_authentication,
+                    &mut reachable,
+                );
+                if let Some(fixed_server) = &settings.fixed_server {
+                    reachable.extend(fixed_server.upstream_tls.server_trust);
+                    reachable.extend(fixed_server.upstream_tls.client_identity);
+                }
             }
-        }
-        if let Some(fixed_server) = &listener.fixed_server {
-            reachable.extend(fixed_server.upstream_tls.server_trust);
-            reachable.extend(fixed_server.upstream_tls.client_identity);
+            ListenerDataPlane::Socket(settings) => match &settings.security {
+                SocketRelaySecurity::Transparent => {}
+                SocketRelaySecurity::TcpToTls { upstream_tls } => {
+                    collect_socket_upstream(upstream_tls, &mut reachable);
+                }
+                SocketRelaySecurity::TlsToTcp { downstream_tls } => {
+                    collect_socket_downstream(downstream_tls, &mut reachable);
+                }
+                SocketRelaySecurity::TlsToTls {
+                    downstream_tls,
+                    upstream_tls,
+                } => {
+                    collect_socket_downstream(downstream_tls, &mut reachable);
+                    collect_socket_upstream(upstream_tls, &mut reachable);
+                }
+            },
         }
     }
     workspace
         .certificate_references
         .retain(|reference| reachable.contains(&reference.id));
+}
+
+fn collect_client_trust(
+    authentication: &DownstreamClientAuthentication,
+    reachable: &mut BTreeSet<CertificateReferenceId>,
+) {
+    match authentication {
+        DownstreamClientAuthentication::Disabled => {}
+        DownstreamClientAuthentication::Optional { trust }
+        | DownstreamClientAuthentication::Required { trust } => {
+            reachable.insert(*trust);
+        }
+    }
+}
+
+fn collect_socket_downstream(
+    settings: &intercept_proxy_domain::SocketDownstreamTlsSettings,
+    reachable: &mut BTreeSet<CertificateReferenceId>,
+) {
+    reachable.insert(settings.server_identity);
+    collect_client_trust(&settings.client_authentication, reachable);
+}
+
+fn collect_socket_upstream(
+    settings: &intercept_proxy_domain::SocketUpstreamTlsSettings,
+    reachable: &mut BTreeSet<CertificateReferenceId>,
+) {
+    reachable.extend(settings.server_trust);
+    reachable.extend(settings.client_identity);
 }
 
 /// 确保证书材料与 Workspace 中的引用一一对应。
@@ -307,5 +353,78 @@ mod tests {
 
         let error = material.validate_shape().unwrap_err();
         assert_eq!(error.view_model.code, "PORTABLE_CERTIFICATE_HASH_MISMATCH");
+    }
+
+    #[test]
+    fn socket_bridge_references_are_reachable_but_transparent_uses_none() {
+        let server_identity = CertificateReferenceId::new();
+        let client_trust = CertificateReferenceId::new();
+        let server_trust = CertificateReferenceId::new();
+        let client_identity = CertificateReferenceId::new();
+        let orphan = CertificateReferenceId::new();
+        let mut workspace = ProxyWorkspace::default();
+        workspace.listeners[0].data_plane =
+            ListenerDataPlane::Socket(intercept_proxy_domain::SocketRelaySettings {
+                upstream: intercept_proxy_domain::SocketEndpoint {
+                    host: "socket.example.test".into(),
+                    port: 443,
+                },
+                security: SocketRelaySecurity::TlsToTls {
+                    downstream_tls: intercept_proxy_domain::SocketDownstreamTlsSettings {
+                        server_identity,
+                        client_authentication: DownstreamClientAuthentication::Required {
+                            trust: client_trust,
+                        },
+                    },
+                    upstream_tls: intercept_proxy_domain::SocketUpstreamTlsSettings {
+                        verify_hostname: true,
+                        server_trust: Some(server_trust),
+                        client_identity: Some(client_identity),
+                    },
+                },
+                maximum_connections: 500,
+            });
+        workspace.certificate_references = [
+            (
+                server_identity,
+                CertificateReferenceKind::ReverseServerIdentity,
+            ),
+            (
+                client_trust,
+                CertificateReferenceKind::DownstreamClientTrust,
+            ),
+            (server_trust, CertificateReferenceKind::UpstreamServerTrust),
+            (
+                client_identity,
+                CertificateReferenceKind::UpstreamClientIdentity,
+            ),
+            (orphan, CertificateReferenceKind::UpstreamServerTrust),
+        ]
+        .into_iter()
+        .map(|(id, kind)| CertificateReference {
+            id,
+            label: id.to_string(),
+            kind,
+            reference: format!("managed:listener-tls:{id}"),
+        })
+        .collect();
+
+        retain_reachable_certificate_references(&mut workspace);
+        let retained = workspace
+            .certificate_references
+            .iter()
+            .map(|reference| reference.id)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            retained,
+            BTreeSet::from([server_identity, client_trust, server_trust, client_identity])
+        );
+
+        let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane else {
+            unreachable!()
+        };
+        settings.security = SocketRelaySecurity::Transparent;
+        retain_reachable_certificate_references(&mut workspace);
+        assert!(workspace.certificate_references.is_empty());
     }
 }

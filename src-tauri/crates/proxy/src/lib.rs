@@ -8,10 +8,14 @@
 
 pub mod fault;
 pub mod forward;
+pub mod http;
+#[allow(dead_code)]
+pub(crate) mod listener;
 pub mod message;
 pub mod metrics;
 pub mod production_factory;
 pub mod reverse;
+pub mod socket_relay;
 pub mod supervisor;
 pub mod tls;
 pub mod traffic;
@@ -24,6 +28,9 @@ pub use forward::{
     NativeRootMitmConnector, NoAuthentication, absolute_uri_to_origin_form,
     strip_hop_by_hop_headers,
 };
+pub use http::{
+    ConnectionAdmission, ConnectionService, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
+};
 pub use message::{Message, MessageLimits, RawHeader};
 pub use metrics::{ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot};
 pub use production_factory::{
@@ -34,15 +41,22 @@ pub use reverse::{
     ReverseUpstreamTls, UpstreamConnectionTestResult, UpstreamScheme, UpstreamTlsHandshakeResult,
     UpstreamTransport,
 };
+pub use socket_relay::{
+    BoundedSocketConnectionObserver, NoopSocketConnectionObserver, SocketConnectionEvent,
+    SocketConnectionObserver, SocketDownstreamTlsConfig, SocketEndpoint, SocketRejectionReason,
+    SocketRelayBytes, SocketRelayConfig, SocketRelayDirection, SocketRelayFailure,
+    SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity, SocketRelayService,
+    SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity, SocketTransportMode,
+    SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig, SocketUpstreamTransport,
+};
 pub use supervisor::{
     ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,
     RuntimeServiceFactory, RuntimeSnapshot,
 };
 pub use traffic::{JitterScope, TrafficDirection};
 pub use transport::{
-    AcceptedConnection, Clock, ConnectionAdmission, ConnectionContext, HandshakePolicy,
-    NoopPipelinePorts, PipelinePorts, SystemClock, TlsPeerIdentity, TokioListenerBinder,
-    UpstreamConnector, UpstreamSecurityEvidence, UpstreamTransportSecurity,
+    AcceptedConnection, Clock, ConnectionContext, HandshakePolicy, SystemClock, TlsPeerIdentity,
+    TokioListenerBinder, UpstreamSecurityEvidence, UpstreamTransportSecurity,
 };
 
 use std::fmt::Debug;
@@ -67,6 +81,22 @@ pub enum ErrorCode {
     UpstreamConnectTimeout,
     UpstreamWriteTimeout,
     UpstreamReadTimeout,
+    SocketCidrDenied,
+    SocketCapacityExhausted,
+    SocketDnsFailed,
+    SocketDnsTimeout,
+    SocketConnectFailed,
+    SocketConnectTimeout,
+    SocketDownstreamTlsFailed,
+    SocketDownstreamTlsTimeout,
+    SocketUpstreamTlsFailed,
+    SocketUpstreamTlsTimeout,
+    SocketReadFailed,
+    SocketReadTimeout,
+    SocketWriteFailed,
+    SocketWriteTimeout,
+    SocketRelayCancelled,
+    SocketConnectionTaskPanicked,
     BodyTooLarge,
     HeaderLimitExceeded,
     IncorrectContentLength,
@@ -96,6 +126,22 @@ impl ErrorCode {
             Self::UpstreamConnectTimeout => "UPSTREAM_CONNECT_TIMEOUT",
             Self::UpstreamWriteTimeout => "UPSTREAM_WRITE_TIMEOUT",
             Self::UpstreamReadTimeout => "UPSTREAM_READ_TIMEOUT",
+            Self::SocketCidrDenied => "SOCKET_CIDR_DENIED",
+            Self::SocketCapacityExhausted => "SOCKET_CAPACITY_EXHAUSTED",
+            Self::SocketDnsFailed => "SOCKET_DNS_FAILED",
+            Self::SocketDnsTimeout => "SOCKET_DNS_TIMEOUT",
+            Self::SocketConnectFailed => "SOCKET_CONNECT_FAILED",
+            Self::SocketConnectTimeout => "SOCKET_CONNECT_TIMEOUT",
+            Self::SocketDownstreamTlsFailed => "SOCKET_DOWNSTREAM_TLS_FAILED",
+            Self::SocketDownstreamTlsTimeout => "SOCKET_DOWNSTREAM_TLS_TIMEOUT",
+            Self::SocketUpstreamTlsFailed => "SOCKET_UPSTREAM_TLS_FAILED",
+            Self::SocketUpstreamTlsTimeout => "SOCKET_UPSTREAM_TLS_TIMEOUT",
+            Self::SocketReadFailed => "SOCKET_READ_FAILED",
+            Self::SocketReadTimeout => "SOCKET_READ_TIMEOUT",
+            Self::SocketWriteFailed => "SOCKET_WRITE_FAILED",
+            Self::SocketWriteTimeout => "SOCKET_WRITE_TIMEOUT",
+            Self::SocketRelayCancelled => "SOCKET_RELAY_CANCELLED",
+            Self::SocketConnectionTaskPanicked => "SOCKET_CONNECTION_TASK_PANICKED",
             Self::BodyTooLarge => "BODY_TOO_LARGE",
             Self::HeaderLimitExceeded => "HEADER_LIMIT_EXCEEDED",
             Self::IncorrectContentLength => "INCORRECT_CONTENT_LENGTH",

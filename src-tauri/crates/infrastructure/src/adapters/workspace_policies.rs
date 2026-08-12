@@ -16,6 +16,8 @@ use serde_json::Value;
 
 use crate::SqliteStore;
 
+#[cfg(test)]
+use super::common::encode_workspace_record;
 use super::{
     common::decode_workspace_record,
     pipeline::{RuntimeWorkspacePolicyEvaluation, RuntimeWorkspacePolicyResolver},
@@ -242,8 +244,9 @@ mod tests {
     use bytes::Bytes;
     use chrono::Utc;
     use intercept_proxy_domain::{
-        FixedServerSettings, ListenerId, MetadataExtractor, MetadataExtractorId, ProxyListener,
-        ResponseAssertion, ResponseAssertionId, UpstreamTlsSettings,
+        FixedServerSettings, HttpListenerSettings, ListenerDataPlane, ListenerId,
+        MetadataExtractor, MetadataExtractorId, ProxyListener, ResponseAssertion,
+        ResponseAssertionId, UpstreamTlsSettings,
     };
     use intercept_proxy_product_api::ProductError;
     use intercept_proxy_runtime::{ChannelId, RawHeader};
@@ -281,9 +284,12 @@ mod tests {
                 enabled: false,
                 bind_address: "127.0.0.1".into(),
                 port: 18_443,
-                fixed_server: Some(FixedServerSettings {
-                    upstream_url: "https://example.test".into(),
-                    upstream_tls: UpstreamTlsSettings::default(),
+                data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+                    fixed_server: Some(FixedServerSettings {
+                        upstream_url: "https://example.test".into(),
+                        upstream_tls: UpstreamTlsSettings::default(),
+                    }),
+                    ..HttpListenerSettings::default()
                 }),
                 ..ProxyListener::default()
             }],
@@ -311,7 +317,7 @@ mod tests {
             .insert_workspace(&WorkspaceRecord {
                 id: workspace.id.as_uuid(),
                 revision: workspace.revision.get(),
-                value: serde_json::to_value(&workspace).unwrap(),
+                value: encode_workspace_record(&workspace).unwrap(),
                 updated_at: Utc::now(),
             })
             .unwrap();

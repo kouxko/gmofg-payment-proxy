@@ -26,9 +26,12 @@ async fn fixed_server_connect_cannot_escape_to_request_authority() {
         name: "fixed CONNECT isolation".into(),
         bind_address: bind_address.ip().to_string(),
         port: bind_address.port(),
-        fixed_server: Some(FixedServerSettings {
-            upstream_url: format!("http://{fixed_upstream_address}"),
-            upstream_tls: UpstreamTlsSettings::default(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: format!("http://{fixed_upstream_address}"),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
     };
@@ -116,9 +119,12 @@ async fn multiple_fixed_server_listeners_route_to_their_own_upstream_origins() {
         enabled: false,
         bind_address: bind.ip().to_string(),
         port: bind.port(),
-        fixed_server: Some(FixedServerSettings {
-            upstream_url: format!("http://{upstream}"),
-            upstream_tls: UpstreamTlsSettings::default(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: format!("http://{upstream}"),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
     };
@@ -142,7 +148,7 @@ async fn multiple_fixed_server_listeners_route_to_their_own_upstream_origins() {
         .insert_workspace(&WorkspaceRecord {
             id: workspace.id.as_uuid(),
             revision: workspace.revision.get(),
-            value: serde_json::to_value(&workspace).unwrap(),
+            value: encode_workspace_record(&workspace).unwrap(),
             updated_at: Utc::now(),
         })
         .unwrap();

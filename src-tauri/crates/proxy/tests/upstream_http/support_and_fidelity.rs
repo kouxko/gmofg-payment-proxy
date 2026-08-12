@@ -8,9 +8,11 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use http::{HeaderMap, HeaderValue, Method, Uri};
 use intercept_proxy_runtime::message::{Message, MessageLimits};
+use intercept_proxy_runtime::http::{
+    ForwardRequest, HyperUpstreamConnector, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
+};
 use intercept_proxy_runtime::transport::{
-    ConnectionContext, ForwardRequest, HandshakePolicy, HyperUpstreamConnector, NoopPipelinePorts,
-    PipelinePorts, UpstreamConnector, UpstreamSecurityEvidence, UpstreamTransportSecurity,
+    ConnectionContext, HandshakePolicy, UpstreamSecurityEvidence, UpstreamTransportSecurity,
 };
 use intercept_proxy_runtime::{ChannelId, FaultAction, TrafficDirection};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

@@ -9,24 +9,25 @@ fn non_loopback_listener_fails_closed_without_both_controls() {
     assert!(config.validate().is_ok());
 }
 
-#[test]
-fn cidr_matching_is_family_safe() {
-    let network = Network::parse("10.20.0.0/16").unwrap();
-    assert!(network.contains("10.20.4.5".parse().unwrap()));
-    assert!(network.contains("::ffff:10.20.4.5".parse().unwrap()));
-    assert!(!network.contains("10.21.4.5".parse().unwrap()));
-    assert!(!network.contains("::1".parse().unwrap()));
-}
+#[tokio::test]
+async fn listener_admission_can_project_plain_http_cidr_rejection() {
+    let service = ForwardProxyService::new(loopback_config(), Arc::new(NoAuthentication)).unwrap();
+    let (server, mut client) = tokio::io::duplex(512);
 
-#[test]
-fn adb_reverse_mapped_loopback_bypasses_only_the_cidr_gate() {
-    let mut config = loopback_config();
-    config.allowed_client_cidrs = vec!["10.20.0.0/16".into()];
+    crate::listener::ConnectionHandler::reject(
+        &service,
+        Box::new(server),
+        service.connection_context("192.0.2.10:1234".parse().unwrap()),
+        crate::listener::ListenerRejection::NetworkDenied,
+        CancellationToken::new(),
+    )
+    .await;
 
-    assert!(config.permits_peer("127.0.0.1".parse().unwrap()));
-    assert!(config.permits_peer("::ffff:127.0.0.1".parse().unwrap()));
-    assert!(config.permits_peer("10.20.4.5".parse().unwrap()));
-    assert!(!config.permits_peer("10.21.4.5".parse().unwrap()));
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.unwrap();
+    let response = String::from_utf8(response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 403 Forbidden\r\n"));
+    assert!(response.ends_with("client address is not allowed"));
 }
 
 #[test]

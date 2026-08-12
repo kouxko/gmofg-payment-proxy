@@ -7,10 +7,10 @@ use intercept_proxy_domain::{
     AndroidNetworkProfile, AndroidProxyRoute, AndroidTargetApplication, BodyCodecKind,
     CertificateReference, CertificateReferenceId, CertificateReferenceKind, ChannelId,
     ConnectionFaultAction, DownstreamClientAuthentication, DownstreamTlsSettings, FaultPreset,
-    FaultPresetId, FixedServerSettings, ListenerId, MatchCondition, MessageStage,
-    MetadataExtractor, MetadataExtractorId, MetadataExtractorSource, ProxyListener,
-    ResponseAssertion, ResponseAssertionId, ResponseAssertionKind, Revision as DomainRevision,
-    Rule, RuleId, UpstreamTlsSettings, WeakNetworkProfile,
+    FaultPresetId, FixedServerSettings, HttpListenerSettings, ListenerDataPlane, ListenerId,
+    MatchCondition, MessageStage, MetadataExtractor, MetadataExtractorId, MetadataExtractorSource,
+    ProxyListener, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
+    Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings, WeakNetworkProfile,
 };
 use serde_json::Value;
 use std::{collections::BTreeSet, path::PathBuf, sync::Mutex};
@@ -279,10 +279,11 @@ fn copy_identity_remaps_nested_ids_and_references() {
     );
 
     let listener = &workspace.listeners[0];
-    assert_eq!(listener.request_body_codec, BodyCodecKind::Utf8);
-    assert_eq!(listener.response_body_codec, BodyCodecKind::ShiftJis);
+    let http = listener.http().expect("migrated HTTP listener");
+    assert_eq!(http.request_body_codec, BodyCodecKind::Utf8);
+    assert_eq!(http.response_body_codec, BodyCodecKind::ShiftJis);
     assert_eq!(
-        listener.downstream_tls.server_identity,
+        http.downstream_tls.server_identity,
         Some(workspace.certificate_references[0].id)
     );
     assert_eq!(
@@ -339,23 +340,26 @@ fn referenced_workspace() -> ProxyWorkspace {
             enabled: false,
             bind_address: "127.0.0.1".into(),
             port: 18443,
-            downstream_tls: DownstreamTlsSettings {
-                enabled: true,
-                server_identity: Some(server_identity),
-                dynamic_sni_allowlist: Vec::new(),
-                client_authentication: DownstreamClientAuthentication::Required {
-                    trust: downstream_trust,
+            data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+                downstream_tls: DownstreamTlsSettings {
+                    enabled: true,
+                    server_identity: Some(server_identity),
+                    dynamic_sni_allowlist: Vec::new(),
+                    client_authentication: DownstreamClientAuthentication::Required {
+                        trust: downstream_trust,
+                    },
                 },
-            },
-            request_body_codec: BodyCodecKind::Utf8,
-            response_body_codec: BodyCodecKind::ShiftJis,
-            fixed_server: Some(FixedServerSettings {
-                upstream_url: "https://example.test".into(),
-                upstream_tls: UpstreamTlsSettings {
-                    verify_hostname: true,
-                    server_trust: Some(upstream_trust),
-                    client_identity: Some(upstream_identity),
-                },
+                request_body_codec: BodyCodecKind::Utf8,
+                response_body_codec: BodyCodecKind::ShiftJis,
+                fixed_server: Some(FixedServerSettings {
+                    upstream_url: "https://example.test".into(),
+                    upstream_tls: UpstreamTlsSettings {
+                        verify_hostname: true,
+                        server_trust: Some(upstream_trust),
+                        client_identity: Some(upstream_identity),
+                    },
+                }),
+                ..HttpListenerSettings::default()
             }),
             ..ProxyListener::default()
         }],
@@ -419,3 +423,5 @@ fn referenced_workspace() -> ProxyWorkspace {
     workspace
 }
 use super::*;
+
+include!("tests/persistence_migration.rs");

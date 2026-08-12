@@ -3,9 +3,10 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    AppError, AppResult, CertificateReference, ListenerId, ListenerMonitorRowViewModel,
-    ListenerOverviewViewModel, ListenerRuntimePort, ListenerRuntimeState, ListenerStatusViewModel,
-    MANAGED_LISTENER_CERTIFICATE_PREFIX, ProxyListener, ProxyWorkspace, UiTone,
+    AppError, AppResult, CertificateReference, ListenerDataPlane, ListenerId,
+    ListenerMonitorRowViewModel, ListenerOverviewViewModel, ListenerRuntimePort,
+    ListenerRuntimeState, ListenerStatusViewModel, MANAGED_LISTENER_CERTIFICATE_PREFIX,
+    ProxyListener, ProxyWorkspace, SocketRelaySecurity, UiTone,
 };
 
 /// 证书导入会先产生受基础设施管理的不可变引用，再由当前监听保存动作把引用并入
@@ -36,7 +37,10 @@ pub(super) async fn validate_new_certificate_references(
         {
             return Err(AppError::new(
                 "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED",
-                "监听证书必须通过应用内的原生导入功能创建，不能保存文件路径或外部密码引用。",
+                concat!(
+                    "监听证书必须通过应用内的原生导入功能创建，",
+                    "不能保存文件路径或外部密码引用。"
+                ),
             )
             .entity(reference.id.to_string()));
         }
@@ -89,11 +93,12 @@ pub(super) fn build_listener_overview(
                 fault_reason: None,
                 can_start: true,
                 can_stop: false,
+                active_connections: 0,
+                client_to_server_bytes: 0,
+                server_to_client_bytes: 0,
+                retained_diagnostic_evictions: 0,
             });
-            let (kind_text, request_destination) = listener.fixed_server.as_ref().map_or_else(
-                || ("动态目标".to_owned(), "请求中的目标地址".to_owned()),
-                |fixed| ("固定 Server".to_owned(), fixed.upstream_url.clone()),
-            );
+            let (kind_text, request_destination) = listener_presentation(listener);
             ListenerMonitorRowViewModel {
                 listener_id: id,
                 name: listener.name.clone(),
@@ -106,6 +111,9 @@ pub(super) fn build_listener_overview(
                 fault_reason: status.fault_reason,
                 can_start: status.can_start,
                 can_stop: status.can_stop,
+                active_connections: status.active_connections,
+                client_to_server_bytes: status.client_to_server_bytes,
+                server_to_client_bytes: status.server_to_client_bytes,
             }
         })
         .collect::<Vec<_>>();
@@ -145,6 +153,27 @@ pub(super) fn build_listener_overview(
         active_count,
         faulted_count,
         rows,
+    }
+}
+
+fn listener_presentation(listener: &ProxyListener) -> (String, String) {
+    match &listener.data_plane {
+        ListenerDataPlane::Http(settings) => settings.fixed_server.as_ref().map_or_else(
+            || ("HTTP · 动态目标".to_owned(), "请求中的目标地址".to_owned()),
+            |fixed| ("HTTP · 固定 Server".to_owned(), fixed.upstream_url.clone()),
+        ),
+        ListenerDataPlane::Socket(settings) => {
+            let mode = match settings.security {
+                SocketRelaySecurity::Transparent => "Transparent",
+                SocketRelaySecurity::TcpToTls { .. } => "TCP → TLS",
+                SocketRelaySecurity::TlsToTcp { .. } => "TLS → TCP",
+                SocketRelaySecurity::TlsToTls { .. } => "TLS → TLS",
+            };
+            (
+                format!("Socket · {mode}"),
+                format!("{}:{}", settings.upstream.host, settings.upstream.port),
+            )
+        }
     }
 }
 

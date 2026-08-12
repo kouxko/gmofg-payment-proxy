@@ -37,8 +37,14 @@ describe("ListenerEditor", () => {
   it("请求和响应可分别选择自动或强制正文编码", async () => {
     const listener: ProxyListener = {
       ...dynamicListener(),
-      request_body_codec: "auto",
-      response_body_codec: "auto",
+      data_plane: {
+        kind: "http",
+        settings: {
+          ...dynamicListener().data_plane.settings,
+          request_body_codec: "auto",
+          response_body_codec: "auto",
+        },
+      },
     };
     const props = editorProps({ listener });
     const user = userEvent.setup();
@@ -46,11 +52,17 @@ describe("ListenerEditor", () => {
 
     await user.click(screen.getByRole("button", { name: /请求正文编码/ }));
     await user.click(await screen.findByRole("option", { name: "强制 Shift-JIS" }));
-    expect(props.onChange).toHaveBeenLastCalledWith({ request_body_codec: "shift_jis" });
+    expect(props.onChange).toHaveBeenLastCalledWith({ data_plane: {
+      kind: "http",
+      settings: { ...listener.data_plane.settings, request_body_codec: "shift_jis" },
+    } });
 
     await user.click(screen.getByRole("button", { name: /响应正文编码/ }));
     await user.click(await screen.findByRole("option", { name: "强制 UTF-8" }));
-    expect(props.onChange).toHaveBeenLastCalledWith({ response_body_codec: "utf8" });
+    expect(props.onChange).toHaveBeenLastCalledWith({ data_plane: {
+      kind: "http",
+      settings: { ...listener.data_plane.settings, response_body_codec: "utf8" },
+    } });
   });
 
   it.each([
@@ -92,21 +104,32 @@ describe("ListenerEditor", () => {
 
     await user.click(screen.getByRole("switch", { name: "启用 HTTP Basic 认证" }));
 
-    expect(props.onChange).toHaveBeenCalledWith({
-      authentication: {
-        mode: "basic",
-        credential: { provider: "system", key: "" },
+    const settings = dynamicListener().data_plane.settings;
+    expect(props.onChange).toHaveBeenCalledWith({ data_plane: {
+      kind: "http",
+      settings: {
+        ...settings,
+        authentication: {
+          mode: "basic",
+          credential: { provider: "system", key: "" },
+        },
       },
-    });
+    } });
   });
 
   it("提交 Basic 凭据时只触发安全存储意图", async () => {
     const props = editorProps({
       listener: {
         ...dynamicListener(),
-        authentication: {
-          mode: "basic",
-          credential: { provider: "system", key: "" },
+        data_plane: {
+          kind: "http",
+          settings: {
+            ...dynamicListener().data_plane.settings,
+            authentication: {
+              mode: "basic",
+              credential: { provider: "system", key: "" },
+            },
+          },
         },
       },
       basicUsername: "operator",
@@ -125,9 +148,15 @@ describe("ListenerEditor", () => {
     const props = editorProps({
       listener: {
         ...dynamicListener(),
-        authentication: {
-          mode: "basic",
-          credential: { provider: "system", key: "" },
+        data_plane: {
+          kind: "http",
+          settings: {
+            ...dynamicListener().data_plane.settings,
+            authentication: {
+              mode: "basic",
+              credential: { provider: "system", key: "" },
+            },
+          },
         },
       },
       basicUsername: "operator",
@@ -139,7 +168,8 @@ describe("ListenerEditor", () => {
 
   it("将 MITM allowlist 输入规范化为 authority 列表", () => {
     const listener: ProxyListener = dynamicListener();
-    listener.mitm.enabled = true;
+    if (listener.data_plane.kind !== "http") throw new Error("expected HTTP");
+    listener.data_plane.settings.mitm.enabled = true;
     const props = editorProps({ listener });
     render(<ListenerEditor {...props} />);
 
@@ -148,17 +178,21 @@ describe("ListenerEditor", () => {
     });
 
     expect(props.onChange).toHaveBeenLastCalledWith({
-      mitm: {
-        ...listener.mitm,
-        authority_allowlist: ["api.example.test", "*.test.example"],
-      },
+      data_plane: { kind: "http", settings: {
+        ...listener.data_plane.settings,
+        mitm: {
+          ...listener.data_plane.settings.mitm,
+          authority_allowlist: ["api.example.test", "*.test.example"],
+        },
+      } },
     });
   });
 
   it("MITM 叶子证书缓存变更保留其他 MITM 设置", async () => {
     const listener: ProxyListener = dynamicListener();
-    listener.mitm = {
-      ...listener.mitm,
+    if (listener.data_plane.kind !== "http") throw new Error("expected HTTP");
+    listener.data_plane.settings.mitm = {
+      ...listener.data_plane.settings.mitm,
       enabled: true,
       authority_allowlist: ["api.example.test"],
     };
@@ -169,10 +203,13 @@ describe("ListenerEditor", () => {
     await user.click(screen.getByRole("button", { name: "Decrease MITM 叶子证书缓存" }));
 
     expect(props.onChange).toHaveBeenLastCalledWith({
-      mitm: {
-        ...listener.mitm,
-        maximum_cached_leaf_certificates: 255,
-      },
+      data_plane: { kind: "http", settings: {
+        ...listener.data_plane.settings,
+        mitm: {
+          ...listener.data_plane.settings.mitm,
+          maximum_cached_leaf_certificates: 255,
+        },
+      } },
     });
   });
 
@@ -194,10 +231,11 @@ describe("ListenerEditor", () => {
       9443,
       "https://server.test:443",
     );
-    listener.authentication = {
-      mode: "basic",
-      credential: { provider: "system", key: "" },
-    };
+    if (listener.data_plane.kind !== "http") throw new Error("expected HTTP");
+    listener.data_plane.settings.authentication = {
+        mode: "basic",
+        credential: { provider: "system", key: "" },
+      };
     const props = editorProps({
       listener,
       basicUsername: "operator",
@@ -217,11 +255,13 @@ describe("ListenerEditor", () => {
       listener: fixedListener("fixed-http", "HTTP Server", 9080, "http://server.test:8080"),
       tlsTest: {
         listener_id: "fixed-http",
+        data_plane: "http",
         upstream_origin: "http://server.test:8080",
         resolved_address: "127.0.0.1:8080",
         scheme: "http",
         transport: "TCP",
         tls: null,
+        socket_transport_mode: null,
         elapsed_millis: 5,
         message: "Server 连接成功。",
         ui_tone: "positive",

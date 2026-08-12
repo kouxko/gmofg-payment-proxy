@@ -20,7 +20,7 @@ use crate::{AtomicFileExporter, SqliteStore, WorkspaceRecord};
 
 use super::{
     NativeFileDialog,
-    common::{app_error, infra},
+    common::{app_error, decode_workspace_record, encode_workspace_record, infra},
     settings::serialize_settings,
 };
 
@@ -120,23 +120,8 @@ impl WorkspaceRepositoryAdapter {
             .records
             .into_iter()
             .map(|record| {
-                let workspace =
-                    serde_json::from_value::<ProxyWorkspace>(record.value).map_err(|error| {
-                        AppError::new(
-                            "PERSISTENCE_CORRUPT",
-                            format!("Workspace 持久化文档无效：{error}"),
-                        )
-                    })?;
-                if workspace.id.as_uuid() != record.id
-                    || workspace.revision.get() != record.revision
-                {
-                    return Err(AppError::new(
-                        "PERSISTENCE_CORRUPT",
-                        "Workspace 索引与 JSON 中的 ID 或 revision 不一致。",
-                    ));
-                }
-                workspace.validate().map_err(AppError::from)?;
-                Ok(workspace)
+                decode_workspace_record(record)
+                    .map_err(|message| AppError::new("PERSISTENCE_CORRUPT", message))
             })
             .collect::<AppResult<Vec<_>>>()?;
         Ok((selected, workspaces))
@@ -157,12 +142,8 @@ impl WorkspaceRepositoryAdapter {
         Ok(WorkspaceRecord {
             id: workspace.id.as_uuid(),
             revision: workspace.revision.get(),
-            value: serde_json::to_value(workspace).map_err(|error| {
-                AppError::new(
-                    "PERSISTENCE_FAILED",
-                    format!("Workspace 序列化失败：{error}"),
-                )
-            })?,
+            value: encode_workspace_record(workspace)
+                .map_err(|message| AppError::new("PERSISTENCE_FAILED", message))?,
             updated_at: Utc::now(),
         })
     }

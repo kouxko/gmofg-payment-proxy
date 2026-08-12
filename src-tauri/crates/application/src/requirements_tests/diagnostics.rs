@@ -11,6 +11,7 @@ fn diagnostic_log_query_returns_rust_labels_and_filters_in_rust() {
         device_serial: Some("device-001".into()),
         listener_id: None,
         profile_id: Some("profile-001".into()),
+        socket_context: None,
     });
     application.diagnostic_log_record(DiagnosticLogEntryViewModel {
         level: DiagnosticLogLevel::Error,
@@ -20,6 +21,7 @@ fn diagnostic_log_query_returns_rust_labels_and_filters_in_rust() {
         device_serial: None,
         listener_id: Some("listener-001".into()),
         profile_id: None,
+        socket_context: None,
     });
 
     let page = application.diagnostic_log_query(&DiagnosticLogQuery {
@@ -43,6 +45,7 @@ fn diagnostic_log_dto_does_not_define_sensitive_payload_fields() {
         device_serial: None,
         listener_id: None,
         profile_id: None,
+        socket_context: None,
     };
     let serialized = serde_json::to_string(&entry).expect("diagnostic entry serializes");
     for forbidden in ["payload", "password", "private_key", "pkcs12"] {
@@ -64,6 +67,7 @@ fn diagnostic_log_boundary_redacts_secrets_and_limits_text() {
         device_serial: Some("device-001".into()),
         listener_id: None,
         profile_id: None,
+        socket_context: None,
     });
 
     let page = application.diagnostic_log_query(&DiagnosticLogQuery::default());

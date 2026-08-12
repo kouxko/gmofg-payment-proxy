@@ -46,6 +46,7 @@ impl Application {
             device_serial,
             listener_id: None,
             profile_id,
+            socket_context: None,
         });
     }
 

@@ -1,10 +1,18 @@
 use super::{
     Arc, BoundListener, BoxIo, Bytes, CancellationToken, ChannelId, Clock, ConnectionAcceptor,
     ConnectionContext, Debug, Duration, ErrorCode, InformationalResponseSink, IntentionalWireFault,
-    JoinSet, MessageLimits, OwnedSemaphorePermit, PipelinePorts, ProxyError, RawHttp1HeadCapture,
-    Result, Semaphore, StdMutex, TcpListener, TokioBoundListener, TryAcquireError,
-    UpstreamConnector, Uuid, timeout_stage,
+    MessageLimits, PipelinePorts, ProxyError, RawHttp1HeadCapture, Result, StdMutex, TcpListener,
+    TokioBoundListener, UpstreamConnector, Uuid, timeout_stage,
 };
+use async_trait::async_trait;
+
+use crate::listener::{
+    ConnectionHandler, ConnectionTaskScope, ListenerCapacity, ListenerConfig, ListenerSupervisor,
+    NoopConnectionLifecycleObserver, PrimaryConnectionOutcome, sealed,
+};
+use crate::transport::TokioListenerBinder;
+
+const HTTP_LISTENER_SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone)]
 pub struct ConnectionService {
@@ -14,6 +22,7 @@ pub struct ConnectionService {
     pub ports: Arc<dyn PipelinePorts>,
     pub clock: Arc<dyn Clock>,
     pub admission: ConnectionAdmission,
+    pub allowed_client_cidrs: Vec<String>,
     pub limits: MessageLimits,
     /// Covers the inbound TLS handshake and the downstream request body.
     pub read_timeout: Duration,
@@ -34,24 +43,18 @@ pub(super) struct RequestWireState<'a> {
 /// within one configured capacity.
 #[derive(Debug, Clone)]
 pub struct ConnectionAdmission {
-    permits: Arc<Semaphore>,
+    capacity: ListenerCapacity,
 }
 
 impl ConnectionAdmission {
     pub fn new(capacity: usize) -> Result<Self> {
-        if capacity == 0 {
-            return Err(ProxyError::new(
-                ErrorCode::ConfigInvalid,
-                "connection capacity must be greater than zero",
-            ));
-        }
         Ok(Self {
-            permits: Arc::new(Semaphore::new(capacity)),
+            capacity: ListenerCapacity::new(capacity)?,
         })
     }
 
-    fn try_acquire(&self) -> std::result::Result<OwnedSemaphorePermit, TryAcquireError> {
-        Arc::clone(&self.permits).try_acquire_owned()
+    fn listener_capacity(&self) -> ListenerCapacity {
+        self.capacity.clone()
     }
 }
 
@@ -87,51 +90,27 @@ impl ConnectionService {
         epoch: Uuid,
         cancellation: CancellationToken,
     ) -> Result<()> {
-        let mut connections = JoinSet::new();
-        loop {
-            tokio::select! {
-                () = cancellation.cancelled() => break,
-                accepted = listener.accept() => {
-                    let (io, peer_addr) = accepted
-                        .map_err(|error| ProxyError::io("accept connection", &error))?;
-                    let permit = match self.admission.try_acquire() {
-                        Ok(permit) => permit,
-                        Err(error) => {
-                            tracing::warn!(
-                                ?channel,
-                                %peer_addr,
-                                ?error,
-                                "proxy connection rejected because runtime capacity is exhausted"
-                            );
-                            drop(io);
-                            continue;
-                        }
-                    };
-                    let context = ConnectionContext {
-                        runtime_epoch: epoch,
-                        connection_id: Uuid::new_v4(),
-                        channel: channel.clone(),
-                        peer_addr,
-                        accepted_at: self.clock.now(),
-                        tls_peer: None,
-                    };
-                    let service = self.clone();
-                    let child_cancel = cancellation.child_token();
-                    connections.spawn(async move {
-                        let _permit = permit;
-                        service.run_connection(io, context, child_cancel).await;
-                    });
-                }
-                Some(joined) = connections.join_next(), if !connections.is_empty() => {
-                    if let Err(error) = joined {
-                        tracing::warn!(?error, "proxy connection task failed");
-                    }
-                }
-            }
-        }
-        cancellation.cancel();
-        while connections.join_next().await.is_some() {}
-        Ok(())
+        let bind_addr = listener
+            .local_addr()
+            .map_err(|error| ProxyError::io("read HTTP listener address", &error))?;
+        let supervisor = ListenerSupervisor::new(
+            ListenerConfig {
+                bind_addr,
+                runtime_epoch: epoch,
+                listener_id: channel,
+                allowed_client_cidrs: self.allowed_client_cidrs.clone(),
+                capacity: self.admission.listener_capacity(),
+                shutdown_grace: HTTP_LISTENER_SHUTDOWN_GRACE,
+            },
+            Arc::new(TokioListenerBinder),
+            Arc::clone(&self.clock),
+            Arc::new(self.clone()),
+            Arc::new(NoopConnectionLifecycleObserver),
+        )?;
+        supervisor
+            .run_bound(listener, cancellation)
+            .await?
+            .into_result("HTTP listener stopped after a fatal lifecycle failure")
     }
 
     async fn run_connection(
@@ -139,7 +118,7 @@ impl ConnectionService {
         io: BoxIo,
         mut context: ConnectionContext,
         cancellation: CancellationToken,
-    ) {
+    ) -> Result<()> {
         let accepted = timeout_stage(
             self.read_timeout,
             &cancellation,
@@ -158,5 +137,21 @@ impl ConnectionService {
             Err(error) => Err(error),
         };
         self.ports.connection_closed(&context, &result).await;
+        result
+    }
+}
+
+impl sealed::Sealed for ConnectionService {}
+
+#[async_trait]
+impl ConnectionHandler for ConnectionService {
+    async fn handle(
+        &self,
+        io: BoxIo,
+        context: ConnectionContext,
+        _child_tasks: ConnectionTaskScope,
+        cancellation: CancellationToken,
+    ) -> PrimaryConnectionOutcome {
+        self.run_connection(io, context, cancellation).await.into()
     }
 }

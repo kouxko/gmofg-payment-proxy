@@ -6,19 +6,21 @@ use super::{
     ProxyListener, ProxyWorkspace, ReverseClientIdentity, ReverseDownstreamTls, ReverseUpstreamTls,
     normalize_android_network_destination,
 };
+use intercept_proxy_domain::HttpListenerSettings;
 
 impl ListenerRuntimeAdapter {
     pub(super) fn downstream_tls(
         &self,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
+        http: &HttpListenerSettings,
     ) -> AppResult<Option<ReverseDownstreamTls>> {
-        if !listener.downstream_tls.enabled {
+        if !http.downstream_tls.enabled {
             return Ok(None);
         }
 
-        let dynamic_sni = listener.downstream_tls.server_identity.is_none();
-        let server_identity = match listener.downstream_tls.server_identity {
+        let dynamic_sni = http.downstream_tls.server_identity.is_none();
+        let server_identity = match http.downstream_tls.server_identity {
             Some(identity_id) => {
                 self.load_identity(certificate_reference(workspace, identity_id)?)?
             }
@@ -31,7 +33,7 @@ impl ListenerRuntimeAdapter {
                 .load_installation_server_identity()?,
         };
         let (client_trust_der, client_authentication_required) =
-            match listener.downstream_tls.client_authentication {
+            match http.downstream_tls.client_authentication {
                 DownstreamClientAuthentication::Disabled => (Vec::new(), false),
                 DownstreamClientAuthentication::Optional { trust } => (
                     self.load_trust(certificate_reference(workspace, trust)?)?,
@@ -43,7 +45,7 @@ impl ListenerRuntimeAdapter {
                 ),
             };
         let (dynamic_server_identity, dynamic_server_name_allowlist) = if dynamic_sni {
-            let allowlist = downstream_sni_allowlist(workspace, listener);
+            let allowlist = downstream_sni_allowlist(workspace, listener, http);
             if allowlist.is_empty() {
                 return Err(AppError::new(
                     "DYNAMIC_SNI_ALLOWLIST_EMPTY",
@@ -126,6 +128,22 @@ impl ListenerRuntimeAdapter {
         }
         Err(unmanaged_certificate_reference(reference))
     }
+
+    pub(super) fn load_trust_by_id(
+        &self,
+        workspace: &ProxyWorkspace,
+        id: CertificateReferenceId,
+    ) -> AppResult<Vec<Vec<u8>>> {
+        self.load_trust(certificate_reference(workspace, id)?)
+    }
+
+    pub(super) fn load_identity_by_id(
+        &self,
+        workspace: &ProxyWorkspace,
+        id: CertificateReferenceId,
+    ) -> AppResult<ReverseClientIdentity> {
+        self.load_identity(certificate_reference(workspace, id)?)
+    }
 }
 
 fn unmanaged_certificate_reference(reference: &CertificateReference) -> AppError {
@@ -140,16 +158,19 @@ fn unmanaged_certificate_reference(reference: &CertificateReference) -> AppError
 ///
 /// 显式配置用于普通客户端；固定 Server 主机名和 Android 透明路由目标用于让常见
 /// 反向代理场景无需重复录入。CIDR 不是合法 SNI，因而不会进入允许列表。
-fn downstream_sni_allowlist(workspace: &ProxyWorkspace, listener: &ProxyListener) -> Vec<String> {
+fn downstream_sni_allowlist(
+    workspace: &ProxyWorkspace,
+    listener: &ProxyListener,
+    http: &HttpListenerSettings,
+) -> Vec<String> {
     let mut names = BTreeSet::new();
     names.extend(
-        listener
-            .downstream_tls
+        http.downstream_tls
             .dynamic_sni_allowlist
             .iter()
             .filter_map(|name| normalize_sni_pattern(name)),
     );
-    if let Some(fixed_server) = &listener.fixed_server
+    if let Some(fixed_server) = &http.fixed_server
         && let Ok(uri) = fixed_server.upstream_url.parse::<http::Uri>()
         && let Some(host) = uri.host()
         && let Some(host) = normalize_sni_pattern(host.trim_matches(['[', ']']))

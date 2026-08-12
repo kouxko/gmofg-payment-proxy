@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, codex/intercept-proxy-generalization]
 
 permissions:
   contents: read
@@ -97,13 +97,18 @@ jobs:
       - name: Verify generated IPC bindings
         shell: pwsh
         run: |
-          # Rust 是 IPC 类型的唯一来源。重新生成后必须零差异，禁止手改 TypeScript 镜像类型。
+          # Rust 是 IPC 类型的唯一来源。连续生成两次都必须零差异，既防手改镜像类型，
+          # 也防生成器顺序或时间戳导致同一源码产生不同结果。
+          pnpm bindings
+          git diff --exit-code -- src/generated/rust-types.ts
           pnpm bindings
           git diff --exit-code -- src/generated/rust-types.ts
 
       - name: Verify frontend
         run: |
           # 先跑 Rust-only 架构门禁，再跑普通 lint/typecheck/test/build；两类检查关注点不同。
+          node scripts/check-runtime-architecture.mjs --require-zero-debt
+          node scripts/check-socket-relay-boundaries.mjs
           pnpm scan:frontend-boundaries
           pnpm scan:source-size
           pnpm lint
@@ -120,3 +125,9 @@ jobs:
 
       - name: Verify Rust tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets
+
+      - name: Verify independent runtime gates
+        run: |
+          cargo check --manifest-path test-support/emulator-proxy-gate/Cargo.toml --all-targets
+          cargo test --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets
+          cargo clippy --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets -- -D warnings

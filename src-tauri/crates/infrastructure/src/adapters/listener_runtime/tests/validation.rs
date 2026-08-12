@@ -13,9 +13,12 @@ async fn upstream_tls_probe_requires_a_fixed_https_server() {
     assert_eq!(error.view_model.code, "FIXED_SERVER_NOT_CONFIGURED");
 
     let http = ProxyListener {
-        fixed_server: Some(FixedServerSettings {
-            upstream_url: "http://127.0.0.1:8080".into(),
-            upstream_tls: UpstreamTlsSettings::default(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: "http://127.0.0.1:8080".into(),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
     };
@@ -37,9 +40,12 @@ async fn upstream_connection_probe_accepts_a_fixed_http_server() {
     let accepted = tokio::spawn(async move { upstream.accept().await.unwrap() });
     let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
     let listener = ProxyListener {
-        fixed_server: Some(FixedServerSettings {
-            upstream_url: format!("http://{upstream_address}"),
-            upstream_tls: UpstreamTlsSettings::default(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: format!("http://{upstream_address}"),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
     };

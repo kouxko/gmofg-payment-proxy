@@ -14,6 +14,8 @@ use intercept_proxy_runtime::{
 
 use crate::SqliteStore;
 
+#[cfg(test)]
+use super::common::encode_workspace_record;
 use super::{common::decode_workspace_record, pipeline::RuntimeBodyCodecResolver};
 
 mod content_type;
@@ -90,9 +92,12 @@ impl RuntimeBodyCodecResolver for WorkspaceBodyCodecResolver {
             // 旧 supervisor 通道当前没有 Listener 级 Codec 引用。
             return Ok(None);
         };
+        let Some(http) = listener.http() else {
+            return Ok(None);
+        };
         let selected = match stage {
-            MessageStage::Request => listener.request_body_codec,
-            MessageStage::Response => listener.response_body_codec,
+            MessageStage::Request => http.request_body_codec,
+            MessageStage::Response => http.response_body_codec,
             MessageStage::TlsHandshake => return Ok(None),
         };
         Ok(Some(resolve_message_codec(selected, message)))
@@ -191,7 +196,10 @@ mod tests {
     use intercept_proxy_application::{
         BreakpointBodyCodecResolver, MessageContentKind, MessageContentViewModel,
     };
-    use intercept_proxy_domain::{BodyCodecKind, ListenerId, ProxyListener, ProxyWorkspace};
+    use intercept_proxy_domain::{
+        BodyCodecKind, HttpListenerSettings, ListenerDataPlane, ListenerId, ProxyListener,
+        ProxyWorkspace,
+    };
     use intercept_proxy_runtime::ChannelId;
     use uuid::Uuid;
 
@@ -208,8 +216,11 @@ mod tests {
                 enabled: false,
                 bind_address: "127.0.0.1".into(),
                 port: 18_443,
-                request_body_codec: BodyCodecKind::Raw,
-                response_body_codec: BodyCodecKind::ShiftJis,
+                data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+                    request_body_codec: BodyCodecKind::Raw,
+                    response_body_codec: BodyCodecKind::ShiftJis,
+                    ..HttpListenerSettings::default()
+                }),
                 ..ProxyListener::default()
             }],
             ..ProxyWorkspace::default()
@@ -220,7 +231,7 @@ mod tests {
             .insert_workspace(&WorkspaceRecord {
                 id: workspace.id.as_uuid(),
                 revision: workspace.revision.get(),
-                value: serde_json::to_value(&workspace).unwrap(),
+                value: encode_workspace_record(&workspace).unwrap(),
                 updated_at: Utc::now(),
             })
             .unwrap();

@@ -11,9 +11,9 @@ import { useState } from "react";
 import type {
   CertificateItemViewModel,
   CertificateReference,
+  HttpListenerSettings,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamConnectionTestViewModel,
-  ProxyListener,
 } from "@/generated/rust-types";
 import { DownstreamTlsCard } from "./downstream-tls-card";
 import {
@@ -24,7 +24,7 @@ import {
 import { UpstreamTlsCard } from "./upstream-tls-card";
 
 type Props = {
-  listener: ProxyListener;
+  settings: HttpListenerSettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   installationRoot?: CertificateItemViewModel;
@@ -32,7 +32,7 @@ type Props = {
   testing: boolean;
   testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
-  onChange: (changes: Partial<ProxyListener>) => void;
+  onChange: (changes: Partial<HttpListenerSettings>) => void;
   onImportDownstreamServerIdentity: (label: string) => Promise<boolean>;
   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
@@ -75,7 +75,7 @@ export function FixedServerTlsSettings(props: Props) {
   return (
     <div className="col-span-2 space-y-4 max-[700px]:col-span-1">
       <DownstreamTlsCard
-        listener={props.listener}
+        settings={props.settings}
         certificateReferences={props.certificateReferences}
         certificateDetails={props.certificateDetails}
         installationRoot={props.installationRoot}
@@ -85,7 +85,7 @@ export function FixedServerTlsSettings(props: Props) {
         onOpenTrustImport={() => setDownstreamTrustOpen(true)}
       />
       <UpstreamTlsCard
-        listener={props.listener}
+        settings={props.settings}
         certificateReferences={props.certificateReferences}
         certificateDetails={props.certificateDetails}
         busy={props.busy}

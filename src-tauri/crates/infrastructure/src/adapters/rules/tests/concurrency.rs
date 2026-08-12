@@ -90,7 +90,7 @@ async fn rule_import_rejects_files_over_the_rule_specific_limit() {
 async fn malformed_persisted_rule_maps_to_persistence_corrupt() {
     let store = Arc::new(SqliteStore::in_memory().expect("store"));
     let workspace = ProxyWorkspace::default();
-    let mut value = serde_json::to_value(&workspace).expect("workspace value");
+    let mut value = encode_workspace_record(&workspace).expect("workspace value");
     value["rules"] = serde_json::json!([{"not": "a rule"}]);
     store
         .insert_workspace(&WorkspaceRecord {

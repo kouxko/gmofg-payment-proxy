@@ -21,10 +21,9 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::http::{ConnectionAdmission, ConnectionService, PipelinePorts};
 use crate::message::MessageLimits;
-use crate::transport::{
-    BoundListener, ConnectionAdmission, ConnectionService, ListenerBinder, PipelinePorts,
-};
+use crate::transport::{BoundListener, ListenerBinder};
 use crate::{ErrorCode, ProxyError, Result};
 
 pub const DEFAULT_MAX_CONNECTIONS: usize = 500;

@@ -17,11 +17,9 @@ use intercept_proxy_runtime::{
     ChannelConfig, ChannelId, ConnectionAdmission, ConnectionContext, FaultAction, HandshakePolicy,
     MessageLimits, ProxyConfig, ProxyError, ProxySupervisor, Result, SystemClock, TlsPeerIdentity,
     TokioListenerBinder, UpstreamConnector,
+    http::{ConnectionService, ForwardRequest, NoopPipelinePorts, PipelinePorts},
     tls::{ClientTlsAdapter, ServerTlsAdapter},
-    transport::{
-        AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionService, ForwardRequest,
-        NoopPipelinePorts, PipelinePorts,
-    },
+    transport::{AcceptedConnection, BoxIo, ConnectionAcceptor},
 };
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
@@ -130,9 +128,9 @@ impl UpstreamConnector for UnusedUpstream {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&intercept_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
-    ) -> Result<intercept_proxy_runtime::transport::UpstreamExchange> {
+    ) -> Result<intercept_proxy_runtime::http::UpstreamExchange> {
         unreachable!("silent TLS clients never reach the upstream connector")
     }
 }
@@ -354,6 +352,7 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
         ports: Arc::new(NoopPipelinePorts),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(4).unwrap(),
+        allowed_client_cidrs: Vec::new(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(30),
         write_timeout: Duration::from_secs(30),
@@ -420,6 +419,7 @@ async fn silent_inbound_tls_handshake_times_out_and_releases_its_permit() {
         ports: Arc::new(NoopPipelinePorts),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(1).unwrap(),
+        allowed_client_cidrs: Vec::new(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_millis(30),
         write_timeout: Duration::from_secs(30),

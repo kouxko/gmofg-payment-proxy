@@ -3,12 +3,12 @@
 import { Card, Input, Label, Switch } from "@heroui/react";
 import type {
   FixedServerSettings,
-  ProxyListener,
+  HttpListenerSettings,
 } from "@/generated/rust-types";
 
 type Props = {
-  listener: ProxyListener;
-  onChange: (changes: Partial<ProxyListener>) => void;
+  settings: HttpListenerSettings;
+  onChange: (changes: Partial<HttpListenerSettings>) => void;
 };
 
 /**
@@ -17,8 +17,8 @@ type Props = {
  * 这里仅切换两种已有的 Rust 转发模式：按请求目标转发，或转发到固定 Server。
  * 固定 Server 的 TLS/mTLS 配置仍由同页的“上游 Server 连接安全”卡片负责。
  */
-export function RequestRoutingCard({ listener, onChange }: Props) {
-  const fixedServer = listener.fixed_server;
+export function RequestRoutingCard({ settings, onChange }: Props) {
+  const fixedServer = settings.fixed_server;
 
   function changeMode(enabled: boolean) {
     onChange({ fixed_server: enabled ? defaultFixedServer() : null });

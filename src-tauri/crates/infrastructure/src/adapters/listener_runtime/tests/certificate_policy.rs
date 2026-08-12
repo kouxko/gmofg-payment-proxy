@@ -4,7 +4,8 @@ use async_trait::async_trait;
 use chrono::Utc;
 use intercept_proxy_application::ListenerRuntimePort;
 use intercept_proxy_domain::{
-    FixedServerSettings, ListenerId, ProxyListener, ProxyWorkspace, Revision, UpstreamTlsSettings,
+    FixedServerSettings, HttpListenerSettings, ListenerDataPlane, ListenerId, ProxyListener,
+    ProxyWorkspace, Revision, UpstreamTlsSettings,
 };
 use intercept_proxy_runtime::{
     ConnectionContext, ErrorCode, FaultAction, HandshakePolicy, Message, NoopPipelinePorts,
@@ -46,12 +47,15 @@ impl MitmCertificateAuthority for StaticDynamicAuthority {
 #[test]
 fn installation_root_enables_allowlisted_sni_dynamic_signing() {
     let listener = ProxyListener {
-        downstream_tls: intercept_proxy_domain::DownstreamTlsSettings {
-            enabled: true,
-            server_identity: None,
-            dynamic_sni_allowlist: vec!["api.example.test".into()],
-            client_authentication: DownstreamClientAuthentication::Disabled,
-        },
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            downstream_tls: intercept_proxy_domain::DownstreamTlsSettings {
+                enabled: true,
+                server_identity: None,
+                dynamic_sni_allowlist: vec!["api.example.test".into()],
+                client_authentication: DownstreamClientAuthentication::Disabled,
+            },
+            ..HttpListenerSettings::default()
+        }),
         ..ProxyListener::default()
     };
     let workspace = ProxyWorkspace {
@@ -63,7 +67,11 @@ fn installation_root_enables_allowlisted_sni_dynamic_signing() {
         .with_mitm_certificate_authority(Arc::new(StaticDynamicAuthority));
 
     let tls = runtime
-        .downstream_tls(&workspace, &listener)
+        .downstream_tls(
+            &workspace,
+            &listener,
+            listener.http().expect("HTTP listener"),
+        )
         .unwrap()
         .expect("downstream TLS");
     assert!(tls.dynamic_server_identity.is_some());

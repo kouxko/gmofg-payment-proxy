@@ -3,9 +3,9 @@
 import { Alert, Button, Card, Switch } from "@heroui/react";
 import type {
   CertificateReference,
+  HttpListenerSettings,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamConnectionTestViewModel,
-  ProxyListener,
 } from "@/generated/rust-types";
 import {
   CertificateDetailPanel,
@@ -27,21 +27,21 @@ const CLIENT_IDENTITY_DESCRIPTION = [
 ].join("");
 
 type Props = {
-  listener: ProxyListener;
+  settings: HttpListenerSettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   busy: boolean;
   testing: boolean;
   testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
-  onChange: (changes: Partial<ProxyListener>) => void;
+  onChange: (changes: Partial<HttpListenerSettings>) => void;
   onOpenIdentityImport: () => void;
   onOpenTrustImport: () => void;
   onTest: () => Promise<void>;
 };
 
 export function UpstreamTlsCard(props: Props) {
-  const fixedServer = props.listener.fixed_server;
+  const fixedServer = props.settings.fixed_server;
   if (!fixedServer) return null;
   const server = fixedServer;
   const identities = props.certificateReferences.filter(

@@ -530,6 +530,7 @@ export type DiagnosticLogEntryViewModel = {
 	device_serial: string | null,
 	listener_id: string | null,
 	profile_id: string | null,
+	socket_context: SocketDiagnosticContextViewModel | null,
 };
 
 export type DiagnosticLogLevel = "info" | "warning" | "error";
@@ -560,11 +561,12 @@ export type DiagnosticLogRowViewModel = {
 	device_serial: string | null,
 	listener_id: string | null,
 	profile_id: string | null,
+	socket_context: SocketDiagnosticContextViewModel | null,
 	ui_tone: UiTone,
 };
 
 /**  跨桌面、ADB、Companion 与代理链路共用的诊断阶段。 */
-export type DiagnosticLogStage = "system" | "adb_forward_control" | "adb_reverse_business" | "desktop_dns" | "companion" | "vpn" | "tun" | "app_selection" | "route_activation" | "listener" | "downstream_tls" | "upstream_tls" | "http" | "stop_fallback" | "cleanup";
+export type DiagnosticLogStage = "system" | "adb_forward_control" | "adb_reverse_business" | "desktop_dns" | "companion" | "vpn" | "tun" | "app_selection" | "route_activation" | "listener" | "downstream_tls" | "upstream_tls" | "http" | "socket" | "stop_fallback" | "cleanup";
 
 /**  Rust 判断某操作不可用时给出的稳定原因。 */
 export type DisabledReason = {
@@ -576,17 +578,7 @@ export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "opt
 
 export type DownstreamTlsSettings = {
 	enabled: boolean,
-	/**
-	 *  `None` 表示使用证书管理页的 Root CA，按客户端 SNI 动态签发服务端证书。
-	 *  `Some` 仅用于显式选择 Workspace 内的固定服务端身份引用。
-	 */
 	server_identity: CertificateReferenceId | null,
-	/**
-	 *  允许动态签发的精确 DNS 或 `*.example.test` 域名模式。IP 字面量
-	 *  必须由固定服务端身份的 SAN 覆盖，不参与基于 SNI 的动态签发。Android 透明代理路由
-	 *  目标与固定 Server 主机名会在运行时自动合并到此列表，
-	 *  因此这里只需填写额外允许的客户端访问域名。
-	 */
 	dynamic_sni_allowlist?: string[],
 	client_authentication: DownstreamClientAuthentication,
 };
@@ -652,19 +644,21 @@ export type FieldValidationViewModel = {
 	warnings: string[],
 };
 
-/**
- *  将该监听器收到的全部 HTTP 请求转发到一个固定 Server。
- *  `None` 表示普通正向代理：每个请求使用自己的目标地址。`Some` 表示固定 Server
- *  模式：监听器仍是同一条代理入口，只是目的地改由这里统一指定。上游 CA 和可选的
- *  mTLS 客户端身份属于这条固定转发配置，不能放在全局证书页或另一条“上游入口”中。
- */
 export type FixedServerSettings = {
-	/**  固定上游 origin，只允许 `http`/`https`、主机和可选端口。 */
 	upstream_url: string,
 	upstream_tls: UpstreamTlsSettings,
 };
 
 export type ForwardProxyAuthentication = { mode: "none" } | { mode: "basic"; credential: SecretReference };
+
+export type HttpListenerSettings = {
+	authentication: ForwardProxyAuthentication,
+	mitm: MitmSettings,
+	downstream_tls: DownstreamTlsSettings,
+	request_body_codec: BodyCodecKind,
+	response_body_codec: BodyCodecKind,
+	fixed_server: FixedServerSettings | null,
+};
 
 /**
  *  代理监听页面使用的证书引用详情。
@@ -687,9 +681,16 @@ export type ListenerCertificateImportViewModel = {
 	detail: ListenerCertificateDetailViewModel,
 };
 
+export type ListenerDataPlane = { kind: "http"; settings: HttpListenerSettings } | { kind: "socket"; settings: SocketRelaySettings };
+
+export type ListenerDataPlaneKind = "http" | "socket";
+
 export type ListenerId = string;
 
-/**  运行监控中的单个入口行。配置与运行状态由 Rust 合并，前端不推断“缺少状态即停止”。 */
+/**
+ *  运行监控中的单个入口行。
+ *  配置与运行状态由 Rust 合并，前端不推断“缺少状态即停止”。
+ */
 export type ListenerMonitorRowViewModel = {
 	listener_id: ListenerId,
 	name: string,
@@ -707,6 +708,9 @@ export type ListenerMonitorRowViewModel = {
 	 *  `Faulted` 仍可能为 `true`，用于释放 runtime ownership。
 	 */
 	can_stop: boolean,
+	active_connections: number,
+	client_to_server_bytes: number,
+	server_to_client_bytes: number,
 };
 
 /**  当前 Workspace 的入口运行概览，供顶部状态栏与运行监控复用。 */
@@ -733,16 +737,22 @@ export type ListenerStatusViewModel = {
 	fault_reason: string | null,
 	can_start: boolean,
 	can_stop: boolean,
+	active_connections: number,
+	client_to_server_bytes: number,
+	server_to_client_bytes: number,
+	retained_diagnostic_evictions: number,
 };
 
 /**  对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。 */
 export type ListenerUpstreamConnectionTestViewModel = {
 	listener_id: ListenerId,
+	data_plane: ListenerDataPlaneKind,
 	upstream_origin: string,
 	resolved_address: string,
 	scheme: string,
 	transport: string,
 	tls: ListenerUpstreamTlsEvidenceViewModel | null,
+	socket_transport_mode: SocketTransportMode | null,
 	elapsed_millis: number,
 	message: string,
 	ui_tone: UiTone,
@@ -817,7 +827,6 @@ export type MetadataExtractorSource = { kind: "header"; name: string } | { kind:
 
 export type MitmSettings = {
 	enabled: boolean,
-	/**  精确主机名或 `*.example.test` 形式的单层/多层子域后缀。 */
 	authority_allowlist: string[],
 	root_ca: CertificateReferenceId | null,
 	maximum_cached_leaf_certificates: number,
@@ -859,29 +868,17 @@ export type PathMtuProfile = {
 /**  超过路径 MTU 时的处理语义。 */
 export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
 
-/**
- *  用户面对的唯一代理监听配置。
- *  不再用 `Forward`/`Reverse` 两种公开类型割裂配置流程。监听地址、访问控制、下游
- *  TLS 和超时始终属于监听器；是否固定转发到 Server 只由 [`Self::fixed_server`] 决定。
- */
 export type ProxyListener = {
 	id: ListenerId,
 	name: string,
 	enabled: boolean,
 	bind_address: string,
 	port: number,
-	authentication: ForwardProxyAuthentication,
 	allowed_client_cidrs: string[],
-	mitm: MitmSettings,
 	connect_timeout_ms: number,
 	read_timeout_ms: number,
 	write_timeout_ms: number,
-	downstream_tls: DownstreamTlsSettings,
-	/**  兼容旧 Workspace 的正文编码偏好。新配置使用 Auto，以 Content-Type charset 为准。 */
-	request_body_codec: BodyCodecKind,
-	/**  兼容旧 Workspace 的正文编码偏好。新配置使用 Auto，以 Content-Type charset 为准。 */
-	response_body_codec: BodyCodecKind,
-	fixed_server: FixedServerSettings | null,
+	data_plane: ListenerDataPlane,
 };
 
 export type ProxyState = "stopped" | "starting" | "running" | "stopping" | "faulted";
@@ -928,7 +925,8 @@ export type ProxyWorkspace = {
 	certificate_references: CertificateReference[],
 	/**
 	 *  与该 Workspace 一起迁移的 Android 设备网络方案。
-	 *  设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，不属于此字段。
+	 *  设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，
+	 *  不属于此字段。
 	 */
 	android_network_profiles?: AndroidNetworkProfile[],
 };
@@ -1040,11 +1038,6 @@ export type RuleViewModel = {
 	draft: RuleDraft,
 };
 
-/**
- *  系统密钥库中一项秘密的稳定引用。
- *  `provider` 例如 `keychain`、`dpapi` 或测试内存实现；`key` 是该 provider 内的标识。
- *  结构中刻意没有 `value`、`password` 或私钥字节字段。
- */
 export type SecretReference = {
 	provider: string,
 	key: string,
@@ -1147,6 +1140,46 @@ export type SettingsViewModel = {
 	payload_policy_text: string,
 };
 
+export type SocketDiagnosticContextViewModel = {
+	connection_id: string | null,
+	workspace_runtime_epoch: string,
+	listener_run_epoch: string,
+	stage: SocketDiagnosticStage,
+	direction: SocketDiagnosticDirection | null,
+	client_to_server_bytes: number,
+	server_to_client_bytes: number,
+};
+
+export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_server" | "server_to_client";
+
+export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "relay_write" | "shutdown";
+
+export type SocketDownstreamTlsSettings = {
+	server_identity: CertificateReferenceId,
+	client_authentication: DownstreamClientAuthentication,
+};
+
+export type SocketEndpoint = {
+	host: string,
+	port: number,
+};
+
+export type SocketRelaySecurity = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsSettings; upstream_tls: SocketUpstreamTlsSettings };
+
+export type SocketRelaySettings = {
+	upstream: SocketEndpoint,
+	security: SocketRelaySecurity,
+	maximum_connections: number,
+};
+
+export type SocketTransportMode = "transparent" | "tcp_to_tls" | "tls_to_tcp" | "tls_to_tls";
+
+export type SocketUpstreamTlsSettings = {
+	verify_hostname: boolean,
+	server_trust: CertificateReferenceId | null,
+	client_identity: CertificateReferenceId | null,
+};
+
 export type SortDirection = "asc" | "desc";
 
 export type SubscriptionAckViewModel = {
@@ -1181,7 +1214,6 @@ export type UiTone = "neutral" | "info" | "positive" | "warning" | "danger";
 
 export type UpstreamTlsSettings = {
 	verify_hostname: boolean,
-	/**  `None` 表示使用操作系统信任根。 */
 	server_trust: CertificateReferenceId | null,
 	client_identity: CertificateReferenceId | null,
 };

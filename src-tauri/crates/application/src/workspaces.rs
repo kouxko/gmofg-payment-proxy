@@ -1,15 +1,17 @@
 //! Workspace 的 UI 无关内存仓储。
 //!
-//! 该实现既是无界面单元测试夹具，也是 `SQLite` 适配器的行为参考：所有更新执行乐观锁，
-//! 所有导入先拒绝秘密字段并经过领域校验，所有导出只序列化安全领域模型。Tauri/Dialog
+//! 该实现既是无界面单元测试夹具，也是 `SQLite` 适配器的行为参考：
+//! 所有更新执行乐观锁，所有导入先拒绝秘密字段并经过领域校验，
+//! 所有导出只序列化安全领域模型。Tauri/Dialog
 //! 仅负责取得或保存文件字节，不得在展示层重新实现这些规则。
 
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    CertificateReferenceId, ChannelId, DownstreamClientAuthentication, FaultPresetId, ListenerId,
-    MetadataExtractorId, ResponseAssertionId, Revision, RuleId,
+    CertificateReferenceId, ChannelId, DownstreamClientAuthentication, FaultPresetId,
+    ListenerDataPlane, ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, RuleId,
+    SocketRelaySecurity,
 };
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -40,44 +42,7 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
 
     for listener in &mut workspace.listeners {
         listener.id = mapped(&listener_ids, listener.id, "Listener")?;
-        listener.mitm.root_ca = listener
-            .mitm
-            .root_ca
-            .map(|id| mapped(&certificate_ids, id, "MITM Root CA"))
-            .transpose()?;
-        if let Some(fixed_server) = &mut listener.fixed_server {
-            fixed_server.upstream_tls.server_trust = fixed_server
-                .upstream_tls
-                .server_trust
-                .map(|id| mapped(&certificate_ids, id, "upstream trust"))
-                .transpose()?;
-            fixed_server.upstream_tls.client_identity = fixed_server
-                .upstream_tls
-                .client_identity
-                .map(|id| mapped(&certificate_ids, id, "upstream identity"))
-                .transpose()?;
-        }
-        listener.downstream_tls.server_identity = listener
-            .downstream_tls
-            .server_identity
-            .map(|id| mapped(&certificate_ids, id, "server identity"))
-            .transpose()?;
-        listener.downstream_tls.client_authentication = match listener
-            .downstream_tls
-            .client_authentication
-        {
-            DownstreamClientAuthentication::Disabled => DownstreamClientAuthentication::Disabled,
-            DownstreamClientAuthentication::Optional { trust } => {
-                DownstreamClientAuthentication::Optional {
-                    trust: mapped(&certificate_ids, trust, "client trust")?,
-                }
-            }
-            DownstreamClientAuthentication::Required { trust } => {
-                DownstreamClientAuthentication::Required {
-                    trust: mapped(&certificate_ids, trust, "client trust")?,
-                }
-            }
-        };
+        remap_listener_certificates(listener, &certificate_ids)?;
     }
 
     for extractor in &mut workspace.metadata_extractors {
@@ -117,6 +82,94 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
     workspace.id = WorkspaceId::new();
     workspace.revision = Revision::INITIAL;
     workspace.validate().map_err(AppError::from)
+}
+
+fn remap_listener_certificates(
+    listener: &mut crate::ProxyListener,
+    mapping: &BTreeMap<CertificateReferenceId, CertificateReferenceId>,
+) -> AppResult<()> {
+    match &mut listener.data_plane {
+        ListenerDataPlane::Http(settings) => {
+            settings.mitm.root_ca = remap_optional(settings.mitm.root_ca, mapping, "MITM Root CA")?;
+            settings.downstream_tls.server_identity = remap_optional(
+                settings.downstream_tls.server_identity,
+                mapping,
+                "server identity",
+            )?;
+            remap_client_authentication(
+                &mut settings.downstream_tls.client_authentication,
+                mapping,
+            )?;
+            if let Some(fixed_server) = &mut settings.fixed_server {
+                fixed_server.upstream_tls.server_trust = remap_optional(
+                    fixed_server.upstream_tls.server_trust,
+                    mapping,
+                    "upstream trust",
+                )?;
+                fixed_server.upstream_tls.client_identity = remap_optional(
+                    fixed_server.upstream_tls.client_identity,
+                    mapping,
+                    "upstream identity",
+                )?;
+            }
+        }
+        ListenerDataPlane::Socket(settings) => match &mut settings.security {
+            SocketRelaySecurity::Transparent => {}
+            SocketRelaySecurity::TcpToTls { upstream_tls } => {
+                remap_socket_upstream(upstream_tls, mapping)?;
+            }
+            SocketRelaySecurity::TlsToTcp { downstream_tls } => {
+                remap_socket_downstream(downstream_tls, mapping)?;
+            }
+            SocketRelaySecurity::TlsToTls {
+                downstream_tls,
+                upstream_tls,
+            } => {
+                remap_socket_downstream(downstream_tls, mapping)?;
+                remap_socket_upstream(upstream_tls, mapping)?;
+            }
+        },
+    }
+    Ok(())
+}
+
+fn remap_client_authentication(
+    value: &mut DownstreamClientAuthentication,
+    mapping: &BTreeMap<CertificateReferenceId, CertificateReferenceId>,
+) -> AppResult<()> {
+    match value {
+        DownstreamClientAuthentication::Disabled => {}
+        DownstreamClientAuthentication::Optional { trust }
+        | DownstreamClientAuthentication::Required { trust } => {
+            *trust = mapped(mapping, *trust, "client trust")?;
+        }
+    }
+    Ok(())
+}
+
+fn remap_socket_downstream(
+    value: &mut intercept_proxy_domain::SocketDownstreamTlsSettings,
+    mapping: &BTreeMap<CertificateReferenceId, CertificateReferenceId>,
+) -> AppResult<()> {
+    value.server_identity = mapped(mapping, value.server_identity, "server identity")?;
+    remap_client_authentication(&mut value.client_authentication, mapping)
+}
+
+fn remap_socket_upstream(
+    value: &mut intercept_proxy_domain::SocketUpstreamTlsSettings,
+    mapping: &BTreeMap<CertificateReferenceId, CertificateReferenceId>,
+) -> AppResult<()> {
+    value.server_trust = remap_optional(value.server_trust, mapping, "upstream trust")?;
+    value.client_identity = remap_optional(value.client_identity, mapping, "upstream identity")?;
+    Ok(())
+}
+
+fn remap_optional(
+    value: Option<CertificateReferenceId>,
+    mapping: &BTreeMap<CertificateReferenceId, CertificateReferenceId>,
+    label: &str,
+) -> AppResult<Option<CertificateReferenceId>> {
+    value.map(|id| mapped(mapping, id, label)).transpose()
 }
 
 fn remap_listener_references(

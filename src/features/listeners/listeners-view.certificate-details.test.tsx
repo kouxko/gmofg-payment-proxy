@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bootstrap, setupListenerMocks, mocks, workspace, fixedListener, certificateReference, certificateDetail, ok, navigationMocks } from "./listeners-view.test-support";
+import { bootstrap, setupListenerMocks, mocks, workspace, fixedListener, certificateReference, certificateDetail, ok, navigationMocks, withHttpSettings } from "./listeners-view.test-support";
 
 vi.mock("@/features/shell/workspace-navigation", () => ({ useWorkspaceNavigation: () => navigationMocks }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
@@ -21,15 +21,17 @@ describe("统一代理监听编辑器", () => {
   it("在当前监听内展示 Rust 解析的证书主题、SAN、有效期和指纹", async () => {
     const serverIdentity = certificateReference("server-ref", "本入口服务端身份", "reverse_server_identity");
     const clientTrust = certificateReference("client-ca-ref", "客户端证书 CA", "downstream_client_trust");
-    const listener = {
-      ...fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+    const listener = withHttpSettings(
+      fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+      {
       downstream_tls: {
         enabled: true,
         server_identity: serverIdentity.id,
         dynamic_sni_allowlist: [],
         client_authentication: { mode: "required" as const, trust: clientTrust.id },
       },
-    };
+    },
+    );
     mocks.workspaceGet.mockReturnValue(ok({
       ...workspace,
       listeners: [listener],
@@ -51,15 +53,17 @@ describe("统一代理监听编辑器", () => {
   it("下游 TLS 留空时按允许的客户端 SNI 动态签发证书", async () => {
     mocks.workspaceGet.mockReturnValue(ok({
       ...workspace,
-      listeners: [{
-        ...fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+      listeners: [withHttpSettings(
+        fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+        {
         downstream_tls: {
           enabled: true,
           server_identity: null,
           dynamic_sni_allowlist: ["api.example.test"],
           client_authentication: { mode: "disabled" as const },
         },
-      }],
+      },
+      )],
     }));
 
     render(<ListenersView />);
@@ -75,15 +79,17 @@ describe("统一代理监听编辑器", () => {
     const staleIdentity = certificateReference("stale-server-ref", "已失效的服务端身份", "reverse_server_identity");
     mocks.workspaceGet.mockReturnValue(ok({
       ...workspace,
-      listeners: [{
-        ...fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+      listeners: [withHttpSettings(
+        fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+        {
         downstream_tls: {
           enabled: true,
           server_identity: staleIdentity.id,
           dynamic_sni_allowlist: [],
           client_authentication: { mode: "disabled" as const },
         },
-      }],
+      },
+      )],
       certificate_references: [staleIdentity],
     }));
     mocks.listenerCertificateOverview.mockReturnValue(ok([{
@@ -100,20 +106,24 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
 
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
-    expect(mocks.listenerSave.mock.calls[0][2].downstream_tls.server_identity).toBeNull();
+    expect(
+      mocks.listenerSave.mock.calls[0][2].data_plane.settings.downstream_tls.server_identity,
+    ).toBeNull();
   });
 
   it("导入独立下游身份后只保存受保护引用并显示解析详情", async () => {
     mocks.workspaceGet.mockReturnValue(ok({
       ...workspace,
-      listeners: [{
-        ...fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+      listeners: [withHttpSettings(
+        fixedListener("fixed-1", "交易", 16627, "https://server.test:443"),
+        {
         downstream_tls: {
           enabled: true,
           server_identity: null,
           client_authentication: { mode: "disabled" as const },
         },
-      }],
+      },
+      )],
     }));
 
     const user = userEvent.setup();
@@ -123,7 +133,9 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
 
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
-    expect(mocks.listenerSave.mock.calls[0][2].downstream_tls.server_identity).toBe("downstream-identity-ref-1");
+    expect(
+      mocks.listenerSave.mock.calls[0][2].data_plane.settings.downstream_tls.server_identity,
+    ).toBe("downstream-identity-ref-1");
     expect(mocks.listenerSave.mock.calls[0][3][0].reference).toBe("managed:downstream-identity-ref-1");
     expect(await screen.findByText("CN=proxy.test")).toBeVisible();
   });
@@ -137,7 +149,9 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "选择客户端身份（.p12 / .pfx / .pem）" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
-    expect(mocks.listenerSave.mock.calls[0][2].fixed_server.upstream_tls.client_identity).toBe("identity-ref-1");
+    expect(
+      mocks.listenerSave.mock.calls[0][2].data_plane.settings.fixed_server.upstream_tls.client_identity,
+    ).toBe("identity-ref-1");
     expect(JSON.stringify(mocks.listenerSave.mock.calls[0])).not.toContain("p12-secret");
   }, 15_000);
 
@@ -154,7 +168,9 @@ describe("统一代理监听编辑器", () => {
     expect(await screen.findByRole("textbox", { name: "固定 Server URL" })).toHaveValue("https://dll.test:16127");
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
-    expect(mocks.listenerSave.mock.calls[0][2].fixed_server.upstream_url).toBe("https://dll.test:16127");
+    expect(
+      mocks.listenerSave.mock.calls[0][2].data_plane.settings.fixed_server.upstream_url,
+    ).toBe("https://dll.test:16127");
     expect(mocks.listenerSave.mock.calls[0][2].id).toBe("dll");
   });
 
@@ -162,8 +178,9 @@ describe("统一代理监听编辑器", () => {
     const downstreamIdentity = certificateReference("transaction-downstream", "交易入口服务端身份", "reverse_server_identity");
     const upstreamTrust = certificateReference("transaction-upstream-ca", "交易上游 CA", "upstream_server_trust");
     const otherIdentity = certificateReference("dll-downstream", "DLL 入口服务端身份", "reverse_server_identity");
-    const transaction = {
-      ...fixedListener("transaction", "Transaction", 16627, "https://transaction.test:16627"),
+    const transaction = withHttpSettings(
+      fixedListener("transaction", "Transaction", 16627, "https://transaction.test:16627"),
+      {
       downstream_tls: {
         enabled: true,
         server_identity: downstreamIdentity.id,
@@ -177,15 +194,16 @@ describe("统一代理监听编辑器", () => {
           client_identity: null,
         },
       },
-    };
-    const dll = {
-      ...fixedListener("dll", "DLL", 16127, "https://dll.test:16127"),
+    });
+    const dll = withHttpSettings(
+      fixedListener("dll", "DLL", 16127, "https://dll.test:16127"),
+      {
       downstream_tls: {
         enabled: true,
         server_identity: otherIdentity.id,
         client_authentication: { mode: "disabled" as const },
       },
-    };
+    });
     mocks.workspaceGet.mockReturnValue(ok({
       ...workspace,
       listeners: [transaction, dll],

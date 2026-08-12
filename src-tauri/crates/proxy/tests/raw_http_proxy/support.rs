@@ -11,10 +11,12 @@ use http::{HeaderMap, StatusCode};
 use intercept_proxy_runtime::RuntimeServiceFactory;
 use intercept_proxy_runtime::message::{Message, MessageLimits};
 use intercept_proxy_runtime::supervisor::{ChannelConfig, ChannelId, ProxyConfig, ProxyState};
-use intercept_proxy_runtime::transport::{
-    AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionContext, ConnectionService,
-    ForwardRequest, HandshakePolicy, HyperUpstreamConnector, NoopPipelinePorts, PipelinePorts,
+use intercept_proxy_runtime::http::{
+    ConnectionService, ForwardRequest, HyperUpstreamConnector, NoopPipelinePorts, PipelinePorts,
     UpstreamExchange,
+};
+use intercept_proxy_runtime::transport::{
+    AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionContext, HandshakePolicy,
 };
 use intercept_proxy_runtime::{
     ConnectionAdmission, ErrorCode, FaultAction, ProxyError, ProxySupervisor, Result, SystemClock,
@@ -114,7 +116,7 @@ impl UpstreamConnector for EchoConnector {
         _ports: &dyn PipelinePorts,
         request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&intercept_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
         Ok(Message::response(
@@ -137,7 +139,7 @@ impl UpstreamConnector for RawResponseConnector {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&intercept_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
         Message::from_raw_http1_head(
@@ -212,7 +214,7 @@ impl UpstreamConnector for FailingConnector {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&intercept_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
         Err(ProxyError::new(self.0, "injected connector failure"))
@@ -262,6 +264,7 @@ fn service_with_connector(
         ports,
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(500).unwrap(),
+        allowed_client_cidrs: Vec::new(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(2),
         write_timeout: Duration::from_secs(2),

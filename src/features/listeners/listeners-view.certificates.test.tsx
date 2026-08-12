@@ -67,7 +67,9 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
-    expect(mocks.listenerSave.mock.calls[0][2].fixed_server.upstream_tls.server_trust).toBe("ca-ref-1");
+    expect(
+      mocks.listenerSave.mock.calls[0][2].data_plane.settings.fixed_server.upstream_tls.server_trust,
+    ).toBe("ca-ref-1");
     expect(await screen.findByText("CN=测试上游 CA")).toBeVisible();
     expect(screen.getByText("AA:BB:CC:DD")).toBeVisible();
   });
@@ -134,11 +136,17 @@ describe("统一代理监听编辑器", () => {
         revision: 2,
         listeners: [{
           ...fixedWorkspace.listeners[0],
-          fixed_server: {
-            ...fixedWorkspace.listeners[0].fixed_server!,
-            upstream_tls: {
-              ...fixedWorkspace.listeners[0].fixed_server!.upstream_tls,
-              server_trust: trust.id,
+          data_plane: {
+            kind: "http" as const,
+            settings: {
+              ...fixedWorkspace.listeners[0].data_plane.settings,
+              fixed_server: {
+                ...fixedWorkspace.listeners[0].data_plane.settings.fixed_server!,
+                upstream_tls: {
+                  ...fixedWorkspace.listeners[0].data_plane.settings.fixed_server!.upstream_tls,
+                  server_trust: trust.id,
+                },
+              },
             },
           },
         }],
@@ -195,9 +203,18 @@ describe("统一代理监听编辑器", () => {
     const base = fixedListener("fixed-1", "交易", 16627, "https://server.test:443");
     const listener = {
       ...base,
-      fixed_server: {
-        ...base.fixed_server,
-        upstream_tls: { ...base.fixed_server.upstream_tls, server_trust: trust.id },
+      data_plane: {
+        kind: "http" as const,
+        settings: {
+          ...base.data_plane.settings,
+          fixed_server: {
+            ...base.data_plane.settings.fixed_server!,
+            upstream_tls: {
+              ...base.data_plane.settings.fixed_server!.upstream_tls,
+              server_trust: trust.id,
+            },
+          },
+        },
       },
     };
     mocks.workspaceGet.mockReturnValue(ok({

@@ -1,14 +1,15 @@
 //! WebSocket HTTP 握手转发与升级后的透明双向隧道。
 
 use super::{
-    BodyExt, Bytes, CancellationToken, ConnectionContext, ErrorCode, ForwardProxyService, HOST,
-    HeaderValue, Incoming, ProxyBody, ProxyError, Request, Response, Result, StatusCode, TokioIo,
-    TrafficDirection, absolute_http_target, absolute_uri_to_origin_form, client_http1,
-    collect_pipeline_body, config_error, connect_target, ensure_websocket_upgrade_headers,
-    finish_pipeline_response, full_body, incoming_body, prepare_pipeline_request,
-    record_websocket_response, reject_websocket_drop, request_terminal_response, run_tunnel,
-    scheduled_body, strip_hop_by_hop_headers, strip_hop_by_hop_headers_preserving_upgrade,
-    timeout_or_cancel, traffic_schedule,
+    BodyExt, Bytes, CancellationToken, ConnectionContext, ConnectionTaskScope, ErrorCode,
+    ForwardProxyService, HOST, HeaderValue, Incoming, ProxyBody, ProxyError, Request, Response,
+    Result, StatusCode, TokioIo, TrafficDirection, absolute_http_target,
+    absolute_uri_to_origin_form, client_http1, collect_pipeline_body, config_error, connect_target,
+    ensure_websocket_upgrade_headers, finish_pipeline_response, full_body, incoming_body,
+    prepare_pipeline_request, record_websocket_response, reject_websocket_drop,
+    request_terminal_response, run_tunnel, scheduled_body, spawn_connection_task,
+    strip_hop_by_hop_headers, strip_hop_by_hop_headers_preserving_upgrade, timeout_or_cancel,
+    traffic_schedule,
 };
 
 impl ForwardProxyService {
@@ -18,6 +19,7 @@ impl ForwardProxyService {
         mut request: Request<Incoming>,
         context: Option<&ConnectionContext>,
         cancellation: CancellationToken,
+        task_scope: &ConnectionTaskScope,
     ) -> Result<Response<ProxyBody>> {
         let downstream_upgrade = hyper::upgrade::on(&mut request);
         let (mut parts, body) = request.into_parts();
@@ -84,11 +86,14 @@ impl ForwardProxyService {
         let (mut sender, connection) = client_http1::handshake(TokioIo::new(stream))
             .await
             .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
-        tokio::spawn(async move {
-            if let Err(error) = connection.with_upgrades().await {
-                tracing::debug!(?error, "WebSocket origin connection ended");
-            }
-        });
+        spawn_connection_task(task_scope, "WebSocket origin connection", async move {
+            connection.with_upgrades().await.map_err(|error| {
+                ProxyError::new(
+                    ErrorCode::Io,
+                    format!("WebSocket origin connection ended: {error}"),
+                )
+            })
+        })?;
         let schedule = traffic_schedule(&request_actions, TrafficDirection::Upstream)?;
         let outgoing = Request::from_parts(
             parts,
@@ -133,25 +138,19 @@ impl ForwardProxyService {
         ensure_websocket_upgrade_headers(&mut parts.headers);
         let idle_timeout = self.config.tunnel_idle_timeout;
         let tunnel_cancellation = cancellation.clone();
-        tokio::spawn(async move {
-            let result = async {
-                let (downstream, upstream) = tokio::try_join!(downstream_upgrade, upstream_upgrade)
-                    .map_err(|error| {
-                        ProxyError::new(ErrorCode::Io, format!("WebSocket upgrade failed: {error}"))
-                    })?;
-                run_tunnel(
-                    TokioIo::new(downstream),
-                    TokioIo::new(upstream),
-                    idle_timeout,
-                    tunnel_cancellation,
-                )
-                .await
-            }
-            .await;
-            if let Err(error) = result {
-                tracing::debug!(code = error.code, message = %error.message, "WebSocket tunnel ended");
-            }
-        });
+        spawn_connection_task(task_scope, "WebSocket upgraded tunnel", async move {
+            let (downstream, upstream) = tokio::try_join!(downstream_upgrade, upstream_upgrade)
+                .map_err(|error| {
+                    ProxyError::new(ErrorCode::Io, format!("WebSocket upgrade failed: {error}"))
+                })?;
+            run_tunnel(
+                TokioIo::new(downstream),
+                TokioIo::new(upstream),
+                idle_timeout,
+                tunnel_cancellation,
+            )
+            .await
+        })?;
         Ok(Response::from_parts(parts, full_body(Bytes::new())))
     }
 }

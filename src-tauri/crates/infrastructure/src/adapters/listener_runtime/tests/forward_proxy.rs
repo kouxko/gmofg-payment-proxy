@@ -38,7 +38,7 @@ async fn forward_absolute_form_http_enters_shared_pipeline() {
         .insert_workspace(&WorkspaceRecord {
             id: workspace.id.as_uuid(),
             revision: workspace.revision.get(),
-            value: serde_json::to_value(&workspace).unwrap(),
+            value: encode_workspace_record(&workspace).unwrap(),
             updated_at: Utc::now(),
         })
         .unwrap();
@@ -115,9 +115,12 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
         enabled: false,
         bind_address: bind_address.ip().to_string(),
         port: bind_address.port(),
-        fixed_server: Some(FixedServerSettings {
-            upstream_url: format!("http://{upstream_address}"),
-            upstream_tls: UpstreamTlsSettings::default(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: format!("http://{upstream_address}"),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
     };
@@ -139,7 +142,7 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
         .insert_workspace(&WorkspaceRecord {
             id: workspace.id.as_uuid(),
             revision: workspace.revision.get(),
-            value: serde_json::to_value(&workspace).unwrap(),
+            value: encode_workspace_record(&workspace).unwrap(),
             updated_at: Utc::now(),
         })
         .unwrap();

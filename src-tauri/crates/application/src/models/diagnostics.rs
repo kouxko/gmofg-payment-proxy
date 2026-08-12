@@ -28,6 +28,7 @@ pub enum DiagnosticLogStage {
     DownstreamTls,
     UpstreamTls,
     Http,
+    Socket,
     StopFallback,
     Cleanup,
 }
@@ -49,6 +50,7 @@ impl DiagnosticLogStage {
             Self::DownstreamTls => "客户端 TLS",
             Self::UpstreamTls => "上游 TLS",
             Self::Http => "HTTP",
+            Self::Socket => "Socket",
             Self::StopFallback => "停止回退",
             Self::Cleanup => "资源清理",
         }
@@ -93,6 +95,40 @@ pub struct DiagnosticLogEntryViewModel {
     pub device_serial: Option<String>,
     pub listener_id: Option<String>,
     pub profile_id: Option<String>,
+    pub socket_context: Option<SocketDiagnosticContextViewModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct SocketDiagnosticContextViewModel {
+    pub connection_id: Option<String>,
+    pub workspace_runtime_epoch: String,
+    pub listener_run_epoch: String,
+    pub stage: SocketDiagnosticStage,
+    pub direction: Option<SocketDiagnosticDirection>,
+    pub client_to_server_bytes: u64,
+    pub server_to_client_bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum SocketDiagnosticStage {
+    Admission,
+    DownstreamTls,
+    Dns,
+    Connect,
+    UpstreamTls,
+    RelayRead,
+    RelayWrite,
+    Shutdown,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum SocketDiagnosticDirection {
+    Downstream,
+    Upstream,
+    ClientToServer,
+    ServerToClient,
 }
 
 impl DiagnosticLogEntryViewModel {
@@ -116,6 +152,7 @@ impl DiagnosticLogEntryViewModel {
                 DIAGNOSTIC_CONTEXT_MAX_CHARS,
             ),
             profile_id: sanitize_optional(self.profile_id.as_deref(), DIAGNOSTIC_CONTEXT_MAX_CHARS),
+            socket_context: self.socket_context,
         }
     }
 }
@@ -133,6 +170,7 @@ pub struct DiagnosticLogRowViewModel {
     pub device_serial: Option<String>,
     pub listener_id: Option<String>,
     pub profile_id: Option<String>,
+    pub socket_context: Option<SocketDiagnosticContextViewModel>,
     pub ui_tone: UiTone,
 }
 
@@ -156,6 +194,7 @@ impl DiagnosticLogRowViewModel {
             device_serial: entry.device_serial,
             listener_id: entry.listener_id,
             profile_id: entry.profile_id,
+            socket_context: entry.socket_context,
             ui_tone: entry.level.tone(),
         }
     }

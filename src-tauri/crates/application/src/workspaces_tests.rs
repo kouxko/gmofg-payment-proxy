@@ -146,3 +146,73 @@ async fn importing_same_document_twice_never_overwrites_existing_workspace() {
     assert_ne!(second.id, first.id);
     assert_eq!(store.list().await.unwrap().len(), 2);
 }
+
+#[test]
+fn identity_remap_preserves_socket_target_and_remaps_all_tls_references() {
+    use intercept_proxy_domain::{
+        CertificateReference, CertificateReferenceKind, DownstreamClientAuthentication,
+        ListenerDataPlane, SocketDownstreamTlsSettings, SocketEndpoint, SocketRelaySecurity,
+        SocketRelaySettings, SocketUpstreamTlsSettings,
+    };
+
+    let server_identity = CertificateReferenceId::new();
+    let client_trust = CertificateReferenceId::new();
+    let server_trust = CertificateReferenceId::new();
+    let client_identity = CertificateReferenceId::new();
+    let old_ids = [server_identity, client_trust, server_trust, client_identity];
+    let kinds = [
+        CertificateReferenceKind::ReverseServerIdentity,
+        CertificateReferenceKind::DownstreamClientTrust,
+        CertificateReferenceKind::UpstreamServerTrust,
+        CertificateReferenceKind::UpstreamClientIdentity,
+    ];
+    let mut workspace = ProxyWorkspace {
+        certificate_references: old_ids
+            .into_iter()
+            .zip(kinds)
+            .map(|(id, kind)| CertificateReference {
+                id,
+                label: id.to_string(),
+                kind,
+                reference: format!("managed:listener-tls:{id}"),
+            })
+            .collect(),
+        ..ProxyWorkspace::default()
+    };
+    workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
+        upstream: SocketEndpoint {
+            host: "socket.example.test".into(),
+            port: 16_127,
+        },
+        security: SocketRelaySecurity::TlsToTls {
+            downstream_tls: SocketDownstreamTlsSettings {
+                server_identity,
+                client_authentication: DownstreamClientAuthentication::Required {
+                    trust: client_trust,
+                },
+            },
+            upstream_tls: SocketUpstreamTlsSettings {
+                verify_hostname: true,
+                server_trust: Some(server_trust),
+                client_identity: Some(client_identity),
+            },
+        },
+        maximum_connections: 777,
+    });
+
+    remap_workspace_identity(&mut workspace).unwrap();
+
+    let ListenerDataPlane::Socket(settings) = &workspace.listeners[0].data_plane else {
+        panic!("socket listener preserved")
+    };
+    assert_eq!(settings.upstream.host, "socket.example.test");
+    assert_eq!(settings.upstream.port, 16_127);
+    assert_eq!(settings.maximum_connections, 777);
+    let new_ids = workspace
+        .certificate_references
+        .iter()
+        .map(|reference| reference.id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(old_ids.into_iter().all(|id| !new_ids.contains(&id)));
+    workspace.validate().unwrap();
+}

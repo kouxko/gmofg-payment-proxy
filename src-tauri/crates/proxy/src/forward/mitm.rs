@@ -2,16 +2,17 @@
 
 use super::{
     Arc, AsyncRead, AsyncWrite, BodyExt, BoxIo, Bytes, CancellationToken, ConnectionContext,
-    DropResponseMode, ErrorCode, ForwardMitmRuntime, ForwardPipelineRuntime, HOST, HeaderValue,
-    Incoming, ProxyBody, ProxyError, Request, Response, Result, StatusCode, TokioIo,
-    TrafficDirection, client_http1, collect_pipeline_body, completion_body, config_error,
-    connect_authority, drain_upstream_body, drop_response_mode, ensure_websocket_upgrade_headers,
-    error_response, finish_pipeline_response, full_body, incoming_body, intentional_drop_error,
-    intentional_response_drop, is_websocket_upgrade, prepare_pipeline_request,
-    record_websocket_response, reject_websocket_drop, request_terminal_response, run_tunnel,
-    scheduled_body, send_request_then_drop_after_write, server_http1, service_fn,
-    strip_hop_by_hop_headers, strip_hop_by_hop_headers_preserving_upgrade, timeout_or_cancel,
-    tls_config_error, traffic_schedule,
+    ConnectionTaskScope, DropResponseMode, ErrorCode, ForwardMitmRuntime, ForwardPipelineRuntime,
+    HOST, HeaderValue, Incoming, ProxyBody, ProxyError, Request, Response, Result, StatusCode,
+    TokioIo, TrafficDirection, client_http1, collect_pipeline_body, completion_body, config_error,
+    connect_authority, drain_connection_scope, drain_upstream_body, drop_response_mode,
+    ensure_websocket_upgrade_headers, error_response, finish_pipeline_response, full_body,
+    incoming_body, intentional_drop_error, intentional_response_drop, is_websocket_upgrade,
+    prepare_pipeline_request, record_websocket_response, reject_websocket_drop,
+    request_terminal_response, run_tunnel, scheduled_body, send_request_then_drop_after_write,
+    server_http1, service_fn, spawn_connection_task, strip_hop_by_hop_headers,
+    strip_hop_by_hop_headers_preserving_upgrade, timeout_or_cancel, tls_config_error,
+    traffic_schedule,
 };
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -38,6 +39,40 @@ pub(super) async fn serve_mitm_http1<D>(
 where
     D: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    let task_scope = ConnectionTaskScope::new();
+    let result = serve_mitm_http1_primary(
+        downstream,
+        upstream,
+        authority,
+        read_timeout,
+        write_timeout,
+        idle_timeout,
+        pipeline,
+        context,
+        cancellation,
+        task_scope.clone(),
+    )
+    .await;
+    drain_connection_scope(&task_scope, "MITM session").await;
+    result
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn serve_mitm_http1_primary<D>(
+    downstream: D,
+    upstream: BoxIo,
+    authority: String,
+    read_timeout: Duration,
+    write_timeout: Duration,
+    idle_timeout: Duration,
+    pipeline: Option<Arc<ForwardPipelineRuntime>>,
+    context: Option<ConnectionContext>,
+    cancellation: CancellationToken,
+    task_scope: ConnectionTaskScope,
+) -> Result<()>
+where
+    D: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let (sender, upstream_connection) = client_http1::handshake(TokioIo::new(upstream))
         .await
         .map_err(|error| {
@@ -50,7 +85,7 @@ where
     let upstream_shutdown = CancellationToken::new();
     let upstream_cancel = cancellation.clone();
     let upstream_drop = upstream_shutdown.clone();
-    let upstream_task = tokio::spawn(async move {
+    spawn_connection_task(&task_scope, "MITM upstream HTTP/1 connection", async move {
         tokio::select! {
             () = upstream_cancel.cancelled() => Ok(()),
             () = upstream_drop.cancelled() => Ok(()),
@@ -59,16 +94,19 @@ where
                 format!("MITM upstream HTTP/1 connection failed: {error}"),
             )),
         }
-    });
+    })?;
 
     let handler_cancellation = cancellation.clone();
+    let handler_task_scope = task_scope;
+    let handler_upstream_shutdown = upstream_shutdown.clone();
     let handler = service_fn(move |request: Request<Incoming>| {
         let sender = sender.clone();
         let authority = authority.clone();
         let pipeline = pipeline.clone();
         let context = context.clone();
         let cancellation = handler_cancellation.clone();
-        let upstream_shutdown = upstream_shutdown.clone();
+        let upstream_shutdown = handler_upstream_shutdown.clone();
+        let task_scope = handler_task_scope.clone();
         async move {
             let result = forward_mitm_request(
                 request,
@@ -81,6 +119,7 @@ where
                 context.as_ref(),
                 &upstream_shutdown,
                 &cancellation,
+                &task_scope,
             )
             .await;
             match result {
@@ -106,8 +145,7 @@ where
             )
         }),
     };
-    upstream_task.abort();
-    let _ = upstream_task.await;
+    upstream_shutdown.cancel();
     downstream_result
 }
 
@@ -124,6 +162,7 @@ async fn forward_mitm_request(
     context: Option<&ConnectionContext>,
     upstream_shutdown: &CancellationToken,
     cancellation: &CancellationToken,
+    task_scope: &ConnectionTaskScope,
 ) -> Result<Response<ProxyBody>> {
     if is_websocket_upgrade(&request) {
         return forward_mitm_websocket(
@@ -136,6 +175,7 @@ async fn forward_mitm_request(
             pipeline,
             context,
             cancellation,
+            task_scope,
         )
         .await;
     }

@@ -1,8 +1,9 @@
 //! 基础设施错误到应用错误的公共映射。
 //!
-//! 集中映射可保持前端错误码稳定，并保证底层错误链不会把敏感内容直接暴露给 `WebView`。
+//! 集中映射可保持前端错误码稳定，并保证底层错误链
+//! 不会把敏感内容直接暴露给 `WebView`。
 
-use intercept_proxy_application::{AppError, AppResult, ProxyWorkspace};
+use intercept_proxy_application::{AppError, AppResult, ProxyWorkspace, ProxyWorkspaceV2};
 
 use crate::{InfrastructureError, InfrastructureErrorCode, WorkspaceRecord};
 
@@ -13,8 +14,20 @@ use crate::{InfrastructureError, InfrastructureErrorCode, WorkspaceRecord};
 pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWorkspace, String> {
     let indexed_id = record.id;
     let indexed_revision = record.revision;
-    let workspace = serde_json::from_value::<ProxyWorkspace>(record.value)
-        .map_err(|error| format!("Workspace {indexed_id} 结构无效：{error}"))?;
+    let mut value = record.value;
+    let version = take_workspace_persistence_version(&mut value)?;
+    let workspace = match version {
+        Some(3) => serde_json::from_value::<ProxyWorkspace>(value)
+            .map_err(|error| format!("Workspace {indexed_id} v3 结构无效：{error}"))?,
+        None => serde_json::from_value::<ProxyWorkspaceV2>(value)
+            .map(Into::into)
+            .map_err(|error| format!("Workspace {indexed_id} v2 结构无效：{error}"))?,
+        Some(other) => {
+            return Err(format!(
+                "Workspace {indexed_id} 持久化版本 {other} 不受支持"
+            ));
+        }
+    };
     if workspace.id.as_uuid() != indexed_id || workspace.revision.get() != indexed_revision {
         return Err(format!(
             "Workspace {indexed_id} 的索引 ID/revision 与 JSON 内容不一致"
@@ -24,6 +37,34 @@ pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWo
         .validate()
         .map_err(|error| format!("Workspace {indexed_id} 领域校验失败：{error}"))?;
     Ok(workspace)
+}
+
+pub(crate) fn encode_workspace_record(
+    workspace: &ProxyWorkspace,
+) -> Result<serde_json::Value, String> {
+    let mut value = serde_json::to_value(workspace)
+        .map_err(|error| format!("Workspace 序列化失败：{error}"))?;
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| "Workspace 序列化结果不是 JSON object".to_owned())?;
+    object.insert("_persistence_version".into(), serde_json::json!(3));
+    Ok(value)
+}
+
+fn take_workspace_persistence_version(
+    value: &mut serde_json::Value,
+) -> Result<Option<u64>, String> {
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| "Workspace 持久化值不是 JSON object".to_owned())?;
+    object
+        .remove("_persistence_version")
+        .map(|version| {
+            version
+                .as_u64()
+                .ok_or_else(|| "Workspace _persistence_version 必须是整数".to_owned())
+        })
+        .transpose()
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -112,14 +153,72 @@ mod tests {
     #[test]
     fn workspace_record_decoder_rejects_index_json_mismatch() {
         let workspace = ProxyWorkspace::default();
-        let record = WorkspaceRecord {
-            id: uuid::Uuid::new_v4(),
-            revision: workspace.revision.get(),
-            value: serde_json::to_value(workspace).expect("workspace JSON"),
-            updated_at: Utc::now(),
-        };
+        for (id, revision) in [
+            (uuid::Uuid::new_v4(), workspace.revision.get()),
+            (workspace.id.as_uuid(), workspace.revision.get() + 1),
+        ] {
+            let record = WorkspaceRecord {
+                id,
+                revision,
+                value: encode_workspace_record(&workspace).expect("workspace JSON"),
+                updated_at: Utc::now(),
+            };
+            let error = decode_workspace_record(record).expect_err("mismatched index must fail");
+            assert!(error.contains("索引 ID/revision"), "{error}");
+        }
+    }
 
-        let error = decode_workspace_record(record).expect_err("mismatched index must fail");
-        assert!(error.contains("索引 ID/revision"), "{error}");
+    #[test]
+    fn workspace_record_decoder_rejects_unknown_v3_fields_and_versions() {
+        let workspace = ProxyWorkspace::default();
+        for value in [
+            {
+                let mut value = encode_workspace_record(&workspace).expect("workspace JSON");
+                value["proxy_password"] = serde_json::json!("must-not-leak");
+                value
+            },
+            {
+                let mut value = encode_workspace_record(&workspace).expect("workspace JSON");
+                value["_persistence_version"] = serde_json::json!(99);
+                value
+            },
+        ] {
+            let record = WorkspaceRecord {
+                id: workspace.id.as_uuid(),
+                revision: workspace.revision.get(),
+                value,
+                updated_at: Utc::now(),
+            };
+            let error = decode_workspace_record(record).expect_err("corrupt v3 must fail");
+            assert!(!error.contains("must-not-leak"));
+        }
+    }
+
+    #[test]
+    fn workspace_record_decoder_rejects_invalid_discriminator_and_damaged_v3() {
+        let workspace = ProxyWorkspace::default();
+        for value in [
+            {
+                let mut value = encode_workspace_record(&workspace).expect("workspace JSON");
+                value["_persistence_version"] = serde_json::json!("3");
+                value
+            },
+            {
+                let mut value = encode_workspace_record(&workspace).expect("workspace JSON");
+                value
+                    .as_object_mut()
+                    .unwrap()
+                    .remove("_persistence_version");
+                value
+            },
+        ] {
+            let record = WorkspaceRecord {
+                id: workspace.id.as_uuid(),
+                revision: workspace.revision.get(),
+                value,
+                updated_at: Utc::now(),
+            };
+            decode_workspace_record(record).expect_err("invalid version shape must fail closed");
+        }
     }
 }

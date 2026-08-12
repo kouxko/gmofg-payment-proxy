@@ -27,6 +27,83 @@ async fn tunnel_copies_both_directions_and_half_closes() {
     server.await.unwrap();
 }
 
+#[tokio::test]
+async fn current_upgraded_tunnel_reports_proxy_stopped_when_cancelled() {
+    let (_client, proxy) = tokio::io::duplex(64);
+    let (upstream, _target) = tokio::io::duplex(64);
+    let cancellation = CancellationToken::new();
+    cancellation.cancel();
+
+    let error = run_tunnel(proxy, upstream, Duration::from_secs(30), cancellation)
+        .await
+        .expect_err("current upgraded tunnel must observe listener cancellation");
+
+    assert_eq!(error.code, ErrorCode::ProxyStopped.as_str());
+}
+
+// UPGRADE-OWN: an upgraded tunnel belongs to the downstream connection that accepted it.
+#[tokio::test]
+async fn connect_upgrade_is_owned_by_downstream_connection_scope() {
+    let target = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let target_address = target.local_addr().unwrap();
+    let target_task = tokio::spawn(async move {
+        let (mut stream, _) = target.accept().await.unwrap();
+        let mut byte = [0_u8; 1];
+        assert_eq!(stream.read(&mut byte).await.unwrap(), 0);
+    });
+
+    let service = ForwardProxyService::new(loopback_config(), Arc::new(NoAuthentication)).unwrap();
+    let scope = crate::listener::ConnectionTaskScope::new();
+    let observed_scope = scope.clone();
+    let cancellation = CancellationToken::new();
+    let connection_cancellation = cancellation.clone();
+    let (client, proxy) = tokio::io::duplex(16 * 1024);
+    let proxy_task = tokio::spawn(async move {
+        service
+            .serve_connection_in_scope(
+                Box::new(proxy),
+                "127.0.0.1:45008".parse().unwrap(),
+                connection_cancellation,
+                scope,
+            )
+            .await
+    });
+    let (mut sender, connection) = client_http1::handshake(TokioIo::new(client)).await.unwrap();
+    let connection_task = tokio::spawn(connection.with_upgrades());
+    let response = sender
+        .send_request(
+            Request::builder()
+                .method(Method::CONNECT)
+                .uri(target_address.to_string())
+                .body(Full::new(Bytes::new()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let upgraded = hyper::upgrade::on(response).await.unwrap();
+
+    while observed_scope.snapshot().live_count == 0 {
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(observed_scope.snapshot().live_count, 1);
+
+    drop(upgraded);
+    while observed_scope.snapshot().live_count != 0 {
+        tokio::task::yield_now().await;
+    }
+    cancellation.cancel();
+    tokio::time::timeout(Duration::from_secs(1), proxy_task)
+        .await
+        .expect("connection scope must drain its upgraded tunnel")
+        .unwrap()
+        .unwrap();
+    assert_eq!(observed_scope.snapshot().live_count, 0);
+    drop(sender);
+    connection_task.await.unwrap().unwrap();
+    target_task.await.unwrap();
+}
+
 async fn connect_tunnel_round_trip_once() {
     let target = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let target_address = target.local_addr().unwrap();

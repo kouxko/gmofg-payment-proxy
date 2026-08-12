@@ -1,12 +1,21 @@
 use super::{
-    Arc, AsyncWriteExt, BoxIo, CancellationToken, ChannelId, ClientNetwork, ClientTlsAdapter,
-    ConnectionAcceptor, ConnectionAdmission, ConnectionService, DownstreamTlsAcceptor, ErrorCode,
-    HyperUpstreamConnector, Instant, IpAddr, JoinSet, MessageLimits, PipelinePorts, ProxyError,
-    Result, ReverseConnectionAcceptor, ReverseProxyConfig, ReverseUpstreamTls, SystemClock,
-    TcpListener, TcpStream, UpstreamConnectionTestResult, UpstreamEndpoint, UpstreamScheme,
-    UpstreamTlsHandshakeResult, UpstreamTransport, Uuid, build_client_connector, peer_is_allowed,
-    relay_exact, timeout_cancel,
+    Arc, AsyncWriteExt, BoxIo, CancellationToken, ChannelId, ClientTlsAdapter, ConnectionAcceptor,
+    ConnectionAdmission, ConnectionService, DownstreamTlsAcceptor, ErrorCode,
+    HyperUpstreamConnector, Instant, MessageLimits, PipelinePorts, ProxyError, Result,
+    ReverseConnectionAcceptor, ReverseProxyConfig, ReverseUpstreamTls, SystemClock, TcpListener,
+    TcpStream, UpstreamConnectionTestResult, UpstreamEndpoint, UpstreamScheme,
+    UpstreamTlsHandshakeResult, UpstreamTransport, Uuid, build_client_connector, relay_exact,
+    timeout_cancel,
 };
+use async_trait::async_trait;
+
+use crate::listener::{
+    ConnectionHandler, ConnectionTaskScope, ListenerConfig, ListenerSupervisor,
+    NoopConnectionLifecycleObserver, PrimaryConnectionOutcome, sealed,
+};
+use crate::transport::{ConnectionContext, TokioBoundListener, TokioListenerBinder};
+
+const REVERSE_LISTENER_SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[derive(Clone)]
 pub struct ReverseProxyService {
@@ -16,7 +25,6 @@ pub struct ReverseProxyService {
     upstream_connector: Option<ClientTlsAdapter>,
     pipeline: Option<ConnectionService>,
     pipeline_channel: Option<ChannelId>,
-    allowed_client_networks: Arc<Vec<ClientNetwork>>,
 }
 
 impl std::fmt::Debug for ReverseProxyService {
@@ -34,11 +42,6 @@ impl std::fmt::Debug for ReverseProxyService {
 
 impl ReverseProxyService {
     pub async fn build(mut config: ReverseProxyConfig) -> Result<Self> {
-        let allowed_client_networks = config
-            .allowed_client_cidrs
-            .iter()
-            .map(|cidr| ClientNetwork::parse(cidr))
-            .collect::<Result<Vec<_>>>()?;
         let endpoint =
             UpstreamEndpoint::parse(&config.upstream_origin, config.connect_timeout).await?;
         let downstream_acceptor = config
@@ -72,7 +75,6 @@ impl ReverseProxyService {
             upstream_connector,
             pipeline: None,
             pipeline_channel: None,
-            allowed_client_networks: Arc::new(allowed_client_networks),
         })
     }
 
@@ -178,7 +180,6 @@ impl ReverseProxyService {
     ) -> Result<Self> {
         let acceptor: Arc<dyn ConnectionAcceptor> = Arc::new(ReverseConnectionAcceptor {
             tls: self.downstream_acceptor.clone(),
-            allowed_client_networks: Arc::clone(&self.allowed_client_networks),
         });
         let upstream_tls = self.upstream_connector.clone();
         let upstream = HyperUpstreamConnector {
@@ -201,6 +202,7 @@ impl ReverseProxyService {
             ports,
             clock: Arc::new(SystemClock),
             admission: ConnectionAdmission::new(maximum_connections)?,
+            allowed_client_cidrs: self.config.allowed_client_cidrs.clone(),
             limits,
             read_timeout: self.config.read_timeout,
             write_timeout: self.config.write_timeout,
@@ -233,64 +235,38 @@ impl ReverseProxyService {
                 .run_tcp_listener(listener, channel.clone(), runtime_epoch, cancellation)
                 .await;
         }
-        let mut connections = JoinSet::new();
-        loop {
-            tokio::select! {
-                biased;
-                () = cancellation.cancelled() => break,
-                accepted = listener.accept() => {
-                    let (stream, peer) = accepted.map_err(|error| ProxyError::io("accept reverse downstream", &error))?;
-                    if !self.permits_peer(peer.ip()) {
-                        drop(stream);
-                        continue;
-                    }
-                    let service = self.clone();
-                    let connection_cancellation = cancellation.child_token();
-                    connections.spawn(async move {
-                        service.serve_connection(stream, connection_cancellation).await
-                    });
-                }
-                joined = connections.join_next(), if !connections.is_empty() => {
-                    if let Some(Err(error)) = joined {
-                        return Err(ProxyError::new(ErrorCode::Internal, format!("reverse connection task failed: {error}")));
-                    }
-                }
-            }
-        }
-        cancellation.cancel();
-        while connections.join_next().await.is_some() {}
-        Ok(())
-    }
-
-    fn permits_peer(&self, peer: IpAddr) -> bool {
-        peer_is_allowed(peer, self.allowed_client_networks.as_ref())
+        let supervisor = ListenerSupervisor::new(
+            ListenerConfig {
+                bind_addr: self.config.bind_addr,
+                runtime_epoch,
+                listener_id: ChannelId::new("reverse-relay")?,
+                allowed_client_cidrs: self.config.allowed_client_cidrs.clone(),
+                capacity: crate::listener::ListenerCapacity::new(
+                    tokio::sync::Semaphore::MAX_PERMITS,
+                )?,
+                shutdown_grace: REVERSE_LISTENER_SHUTDOWN_GRACE,
+            },
+            Arc::new(TokioListenerBinder),
+            Arc::new(SystemClock),
+            Arc::new(self.clone()),
+            Arc::new(NoopConnectionLifecycleObserver),
+        )?;
+        supervisor
+            .run_bound(Arc::new(TokioBoundListener(listener)), cancellation)
+            .await?
+            .into_result("reverse listener stopped after a fatal lifecycle failure")
     }
 
     async fn serve_connection(
         &self,
-        downstream_tcp: TcpStream,
+        downstream_io: BoxIo,
+        context: &ConnectionContext,
         cancellation: CancellationToken,
     ) -> Result<()> {
-        downstream_tcp
-            .set_nodelay(true)
-            .map_err(|error| ProxyError::io("configure reverse downstream", &error))?;
         let downstream: BoxIo = if let Some(acceptor) = &self.downstream_acceptor {
-            let context = crate::transport::ConnectionContext {
-                runtime_epoch: Uuid::new_v4(),
-                connection_id: Uuid::new_v4(),
-                channel: ChannelId::new("reverse-relay")?,
-                peer_addr: downstream_tcp.peer_addr().map_err(|error| {
-                    ProxyError::io("read reverse downstream peer address", &error)
-                })?,
-                accepted_at: std::time::SystemTime::now(),
-                tls_peer: None,
-            };
-            acceptor
-                .accept(Box::new(downstream_tcp), &context)
-                .await?
-                .io
+            acceptor.accept(downstream_io, context).await?.io
         } else {
-            Box::new(downstream_tcp)
+            downstream_io
         };
 
         let upstream_tcp = timeout_cancel(
@@ -325,5 +301,22 @@ impl ReverseProxyService {
             cancellation,
         )
         .await
+    }
+}
+
+impl sealed::Sealed for ReverseProxyService {}
+
+#[async_trait]
+impl ConnectionHandler for ReverseProxyService {
+    async fn handle(
+        &self,
+        io: BoxIo,
+        context: ConnectionContext,
+        _child_tasks: ConnectionTaskScope,
+        cancellation: CancellationToken,
+    ) -> PrimaryConnectionOutcome {
+        self.serve_connection(io, &context, cancellation)
+            .await
+            .into()
     }
 }

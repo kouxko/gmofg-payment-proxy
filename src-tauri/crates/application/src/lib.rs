@@ -37,7 +37,8 @@ pub use portable_certificates::*;
 pub use ports::*;
 pub use sessions::{InMemorySessionStore, SessionStore};
 pub use workspace_documents::{
-    MAX_WORKSPACE_DOCUMENT_BYTES, WORKSPACE_DOCUMENT_FORMAT_VERSION, WorkspaceDocument,
+    MAX_WORKSPACE_DOCUMENT_BYTES, WORKSPACE_DOCUMENT_FORMAT_VERSION,
+    WORKSPACE_DOCUMENT_V2_FORMAT_VERSION, WorkspaceDocument, WorkspaceDocumentV2,
     parse_workspace_document, serialize_workspace_document,
 };
 pub use workspaces::{

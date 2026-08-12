@@ -13,7 +13,7 @@ import type {
   CapturePageViewModel,
   ListenerOverviewViewModel,
 } from "@/generated/rust-types";
-import { formatDuration, formatTimestamp, toneColor } from "@/lib/format";
+import { formatBytes, formatDuration, formatTimestamp, toneColor } from "@/lib/format";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 
 function alertStatus(tone: ListenerOverviewViewModel["ui_tone"]) {
@@ -82,6 +82,8 @@ export function ConsoleView({
                   <Table.Column>监听地址</Table.Column>
                   <Table.Column>请求去向</Table.Column>
                   <Table.Column>状态</Table.Column>
+                  <Table.Column>连接</Table.Column>
+                  <Table.Column>流量 C→S / S→C</Table.Column>
                   <Table.Column>故障原因</Table.Column>
                 </Table.Header>
                 <Table.Body
@@ -105,6 +107,10 @@ export function ConsoleView({
                         <Chip size="sm" color={toneColor(row.ui_tone)} variant="soft">
                           {row.state_text}
                         </Chip>
+                      </Table.Cell>
+                      <Table.Cell>{row.active_connections}</Table.Cell>
+                      <Table.Cell className="font-mono text-xs">
+                        {formatBytes(row.client_to_server_bytes)} / {formatBytes(row.server_to_client_bytes)}
                       </Table.Cell>
                       <Table.Cell>{row.fault_reason ?? "—"}</Table.Cell>
                     </Table.Row>

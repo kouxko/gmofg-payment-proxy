@@ -202,6 +202,9 @@ impl ApplicationHostBuilder {
         services
             .listener_runtime
             .set_pipeline_ports(pipeline.clone());
+        services
+            .listener_runtime
+            .set_socket_diagnostic_events(events.clone());
         let proxy: Arc<dyn ProxySupervisorPort> = self.proxy_override.unwrap_or_else(|| {
             // 生产环境只能由 ListenerRuntime 管理动态 Workspace 入口。旧端口注入一个
             // 永远停止的兼容适配器，保证任何遗漏调用都不能偷偷启动第二套监听器。

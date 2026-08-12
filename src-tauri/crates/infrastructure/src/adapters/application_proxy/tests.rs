@@ -1,4 +1,4 @@
-use intercept_proxy_runtime::transport::ConnectionService;
+use intercept_proxy_runtime::http::ConnectionService;
 use intercept_proxy_runtime::{
     ChannelRuntimeMetrics, Result, RuntimeMetricsSnapshot, RuntimeServiceFactory,
     TokioListenerBinder,

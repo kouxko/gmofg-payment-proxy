@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
 
@@ -16,32 +16,16 @@ use crate::{
     ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, Rule, RuleAction, WorkspaceId,
 };
 
+mod listener_model;
 mod validation;
 
-pub use validation::{is_valid_cidr, is_valid_upstream_origin};
+pub use listener_model::*;
+pub use validation::{is_valid_cidr, is_valid_socket_host, is_valid_upstream_origin};
 use validation::{push_field_error, unique_ids, validate_listener, validate_workspace_references};
 
-/// 首次启动创建的正向代理草稿端口。监听器默认禁用，因此不会在用户确认前打开端口。
+/// 首次启动创建的正向代理草稿端口。
+/// 监听器默认禁用，因此不会在用户确认前打开端口。
 pub const DEFAULT_FORWARD_PROXY_PORT: u16 = 8080;
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-/// 系统密钥库中一项秘密的稳定引用。
-/// `provider` 例如 `keychain`、`dpapi` 或测试内存实现；`key` 是该 provider 内的标识。
-/// 结构中刻意没有 `value`、`password` 或私钥字节字段。
-pub struct SecretReference {
-    pub provider: String,
-    pub key: String,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum BodyCodecKind {
-    #[default]
-    Auto,
-    Raw,
-    Utf8,
-    ShiftJis,
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -117,206 +101,6 @@ pub struct CertificateReference {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "mode", rename_all = "snake_case")]
-pub enum ForwardProxyAuthentication {
-    None,
-    Basic { credential: SecretReference },
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub struct MitmSettings {
-    pub enabled: bool,
-    /// 精确主机名或 `*.example.test` 形式的单层/多层子域后缀。
-    pub authority_allowlist: Vec<String>,
-    pub root_ca: Option<CertificateReferenceId>,
-    pub maximum_cached_leaf_certificates: u16,
-}
-
-impl Default for MitmSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            authority_allowlist: Vec::new(),
-            root_ca: None,
-            maximum_cached_leaf_certificates: 256,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "mode", rename_all = "snake_case")]
-pub enum DownstreamClientAuthentication {
-    Disabled,
-    Optional { trust: CertificateReferenceId },
-    Required { trust: CertificateReferenceId },
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub struct DownstreamTlsSettings {
-    pub enabled: bool,
-    /// `None` 表示使用证书管理页的 Root CA，按客户端 SNI 动态签发服务端证书。
-    /// `Some` 仅用于显式选择 Workspace 内的固定服务端身份引用。
-    pub server_identity: Option<CertificateReferenceId>,
-    /// 允许动态签发的精确 DNS 或 `*.example.test` 域名模式。IP 字面量
-    /// 必须由固定服务端身份的 SAN 覆盖，不参与基于 SNI 的动态签发。Android 透明代理路由
-    /// 目标与固定 Server 主机名会在运行时自动合并到此列表，
-    /// 因此这里只需填写额外允许的客户端访问域名。
-    #[serde(default)]
-    pub dynamic_sni_allowlist: Vec<String>,
-    pub client_authentication: DownstreamClientAuthentication,
-}
-
-impl Default for DownstreamTlsSettings {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            server_identity: None,
-            dynamic_sni_allowlist: Vec::new(),
-            client_authentication: DownstreamClientAuthentication::Disabled,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub struct UpstreamTlsSettings {
-    pub verify_hostname: bool,
-    /// `None` 表示使用操作系统信任根。
-    pub server_trust: Option<CertificateReferenceId>,
-    pub client_identity: Option<CertificateReferenceId>,
-}
-
-impl Default for UpstreamTlsSettings {
-    fn default() -> Self {
-        Self {
-            verify_hostname: true,
-            server_trust: None,
-            client_identity: None,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-/// 将该监听器收到的全部 HTTP 请求转发到一个固定 Server。
-/// `None` 表示普通正向代理：每个请求使用自己的目标地址。`Some` 表示固定 Server
-/// 模式：监听器仍是同一条代理入口，只是目的地改由这里统一指定。上游 CA 和可选的
-/// mTLS 客户端身份属于这条固定转发配置，不能放在全局证书页或另一条“上游入口”中。
-pub struct FixedServerSettings {
-    /// 固定上游 origin，只允许 `http`/`https`、主机和可选端口。
-    pub upstream_url: String,
-    pub upstream_tls: UpstreamTlsSettings,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
-/// 用户面对的唯一代理监听配置。
-/// 不再用 `Forward`/`Reverse` 两种公开类型割裂配置流程。监听地址、访问控制、下游
-/// TLS 和超时始终属于监听器；是否固定转发到 Server 只由 [`Self::fixed_server`] 决定。
-pub struct ProxyListener {
-    pub id: ListenerId,
-    pub name: String,
-    pub enabled: bool,
-    pub bind_address: String,
-    pub port: u16,
-    pub authentication: ForwardProxyAuthentication,
-    pub allowed_client_cidrs: Vec<String>,
-    pub mitm: MitmSettings,
-    pub connect_timeout_ms: u64,
-    pub read_timeout_ms: u64,
-    pub write_timeout_ms: u64,
-    pub downstream_tls: DownstreamTlsSettings,
-    /// 兼容旧 Workspace 的正文编码偏好。新配置使用 Auto，以 Content-Type charset 为准。
-    pub request_body_codec: BodyCodecKind,
-    /// 兼容旧 Workspace 的正文编码偏好。新配置使用 Auto，以 Content-Type charset 为准。
-    pub response_body_codec: BodyCodecKind,
-    pub fixed_server: Option<FixedServerSettings>,
-}
-
-#[derive(Deserialize)]
-struct ProxyListenerDocument {
-    id: ListenerId,
-    name: String,
-    enabled: bool,
-    bind_address: String,
-    port: u16,
-    authentication: ForwardProxyAuthentication,
-    allowed_client_cidrs: Vec<String>,
-    mitm: MitmSettings,
-    connect_timeout_ms: u64,
-    read_timeout_ms: u64,
-    write_timeout_ms: u64,
-    downstream_tls: Option<DownstreamTlsSettings>,
-    #[serde(default)]
-    request_body_codec: BodyCodecKind,
-    #[serde(default)]
-    response_body_codec: BodyCodecKind,
-    fixed_server: Option<FixedServerSettings>,
-}
-
-impl<'de> Deserialize<'de> for ProxyListener {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let document = ProxyListenerDocument::deserialize(deserializer)?;
-        Ok(Self {
-            id: document.id,
-            name: document.name,
-            enabled: document.enabled,
-            bind_address: document.bind_address,
-            port: document.port,
-            authentication: document.authentication,
-            allowed_client_cidrs: document.allowed_client_cidrs,
-            mitm: document.mitm,
-            connect_timeout_ms: document.connect_timeout_ms,
-            read_timeout_ms: document.read_timeout_ms,
-            write_timeout_ms: document.write_timeout_ms,
-            downstream_tls: document.downstream_tls.unwrap_or_default(),
-            request_body_codec: document.request_body_codec,
-            response_body_codec: document.response_body_codec,
-            fixed_server: document.fixed_server,
-        })
-    }
-}
-
-impl Default for ProxyListener {
-    fn default() -> Self {
-        Self {
-            id: ListenerId::new(),
-            name: "默认代理监听".into(),
-            enabled: false,
-            bind_address: "127.0.0.1".into(),
-            port: DEFAULT_FORWARD_PROXY_PORT,
-            authentication: ForwardProxyAuthentication::None,
-            allowed_client_cidrs: Vec::new(),
-            mitm: MitmSettings::default(),
-            connect_timeout_ms: 30_000,
-            read_timeout_ms: 70_000,
-            write_timeout_ms: 70_000,
-            downstream_tls: DownstreamTlsSettings::default(),
-            request_body_codec: BodyCodecKind::Auto,
-            response_body_codec: BodyCodecKind::Auto,
-            fixed_server: None,
-        }
-    }
-}
-
-impl ProxyListener {
-    #[must_use]
-    pub const fn id(&self) -> ListenerId {
-        self.id
-    }
-
-    #[must_use]
-    pub const fn enabled(&self) -> bool {
-        self.enabled
-    }
-
-    #[must_use]
-    pub fn bind_endpoint(&self) -> (&str, u16) {
-        (&self.bind_address, self.port)
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ConnectionFaultAction {
     Delay { milliseconds: u64 },
@@ -340,6 +124,7 @@ pub struct FaultPreset {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(deny_unknown_fields)]
 pub struct ProxyWorkspace {
     pub id: WorkspaceId,
     pub name: String,
@@ -354,9 +139,46 @@ pub struct ProxyWorkspace {
     pub fault_presets: Vec<FaultPreset>,
     pub certificate_references: Vec<CertificateReference>,
     /// 与该 Workspace 一起迁移的 Android 设备网络方案。
-    /// 设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，不属于此字段。
+    /// 设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，
+    /// 不属于此字段。
     #[serde(default)]
     pub android_network_profiles: Vec<AndroidNetworkProfile>,
+}
+
+/// v2 文件和 `SQLite` JSON 的严格兼容结构。
+///
+/// 仅此结构保留历史 Listener 扁平字段与三个历史默认；迁移后运行时只处理 v3 模型。
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProxyWorkspaceV2 {
+    pub id: WorkspaceId,
+    pub name: String,
+    pub revision: Revision,
+    pub listeners: Vec<ProxyListenerV2>,
+    pub metadata_extractors: Vec<MetadataExtractor>,
+    pub response_assertions: Vec<ResponseAssertion>,
+    pub rules: Vec<Rule>,
+    pub fault_presets: Vec<FaultPreset>,
+    pub certificate_references: Vec<CertificateReference>,
+    #[serde(default)]
+    pub android_network_profiles: Vec<AndroidNetworkProfile>,
+}
+
+impl From<ProxyWorkspaceV2> for ProxyWorkspace {
+    fn from(value: ProxyWorkspaceV2) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            revision: value.revision,
+            listeners: value.listeners.into_iter().map(Into::into).collect(),
+            metadata_extractors: value.metadata_extractors,
+            response_assertions: value.response_assertions,
+            rules: value.rules,
+            fault_presets: value.fault_presets,
+            certificate_references: value.certificate_references,
+            android_network_profiles: value.android_network_profiles,
+        }
+    }
 }
 
 impl Default for ProxyWorkspace {

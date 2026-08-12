@@ -8,7 +8,7 @@ mod listener;
 mod value;
 
 pub(crate) use listener::validate_listener;
-pub use value::{is_valid_cidr, is_valid_upstream_origin};
+pub use value::{is_valid_cidr, is_valid_socket_host, is_valid_upstream_origin};
 
 pub(super) fn validate_workspace_references(
     workspace: &ProxyWorkspace,

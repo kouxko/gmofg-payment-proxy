@@ -1,4 +1,6 @@
-use intercept_proxy_domain::{FixedServerSettings, UpstreamTlsSettings};
+use intercept_proxy_domain::{
+    FixedServerSettings, HttpListenerSettings, ListenerDataPlane, UpstreamTlsSettings,
+};
 
 use crate::ListenerRuntimeState;
 
@@ -13,9 +15,12 @@ fn copied_listener_preserves_fixed_server_and_stops_by_default() {
         enabled: true,
         bind_address: "0.0.0.0".into(),
         port: 16_627,
-        fixed_server: Some(FixedServerSettings {
-            upstream_url: "https://transaction.example.test:16627".into(),
-            upstream_tls: UpstreamTlsSettings::default(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: "https://transaction.example.test:16627".into(),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
     };
@@ -26,7 +31,12 @@ fn copied_listener_preserves_fixed_server_and_stops_by_default() {
     assert!(!copy.enabled);
     assert_eq!(copy.port, 16_627);
     assert_eq!(
-        copy.fixed_server.unwrap().upstream_url,
+        copy.http()
+            .unwrap()
+            .fixed_server
+            .as_ref()
+            .unwrap()
+            .upstream_url,
         "https://transaction.example.test:16627"
     );
 }
@@ -41,9 +51,12 @@ fn overview_uses_workspace_as_the_only_listener_catalog() {
         enabled: false,
         bind_address: "127.0.0.1".into(),
         port: 9_001,
-        fixed_server: Some(FixedServerSettings {
-            upstream_url: "https://api.example.test:9443".into(),
-            upstream_tls: UpstreamTlsSettings::default(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: "https://api.example.test:9443".into(),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
     });
@@ -58,6 +71,10 @@ fn overview_uses_workspace_as_the_only_listener_catalog() {
             fault_reason: None,
             can_start: false,
             can_stop: true,
+            active_connections: 1,
+            client_to_server_bytes: 11,
+            server_to_client_bytes: 22,
+            retained_diagnostic_evictions: 0,
         }],
     );
 
@@ -91,6 +108,10 @@ fn overview_preserves_faulted_listener_stop_capability() {
             fault_reason: Some("Listener 任务已意外结束。".into()),
             can_start: false,
             can_stop: true,
+            active_connections: 0,
+            client_to_server_bytes: 0,
+            server_to_client_bytes: 0,
+            retained_diagnostic_evictions: 0,
         }],
     );
 

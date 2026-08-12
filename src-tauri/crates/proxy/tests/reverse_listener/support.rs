@@ -12,7 +12,8 @@ use intercept_proxy_runtime::{
     ReverseUpstreamTls, UpstreamScheme, UpstreamSecurityEvidence, UpstreamTransport,
     UpstreamTransportSecurity,
     tls::{ClientTlsAdapter, ServerTlsAdapter},
-    transport::{ConnectionAcceptor, ConnectionContext, NoopPipelinePorts},
+    http::NoopPipelinePorts,
+    transport::{ConnectionAcceptor, ConnectionContext},
 };
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,

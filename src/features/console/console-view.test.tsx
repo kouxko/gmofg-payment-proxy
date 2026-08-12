@@ -26,7 +26,7 @@ const overview: ListenerOverviewViewModel = {
     {
       listener_id: "transaction",
       name: "交易入口",
-      kind_text: "固定上游",
+      kind_text: "Socket · Transparent",
       listen_address: "0.0.0.0:16627",
       request_destination: "https://transaction.example.test:16627",
       state: "running",
@@ -35,11 +35,14 @@ const overview: ListenerOverviewViewModel = {
       fault_reason: null,
       can_start: false,
       can_stop: true,
+      active_connections: 2,
+      client_to_server_bytes: 1024,
+      server_to_client_bytes: 2048,
     },
     {
       listener_id: "dll",
       name: "DLL 入口",
-      kind_text: "固定上游",
+      kind_text: "Socket · TLS Bridge",
       listen_address: "0.0.0.0:16127",
       request_destination: "https://dll.example.test:16127",
       state: "stopped",
@@ -48,6 +51,9 @@ const overview: ListenerOverviewViewModel = {
       fault_reason: null,
       can_start: true,
       can_stop: false,
+      active_connections: 0,
+      client_to_server_bytes: 0,
+      server_to_client_bytes: 0,
     },
   ],
 };
@@ -66,6 +72,8 @@ describe("ConsoleView", () => {
     expect(screen.getByText("交易入口")).toBeVisible();
     expect(screen.getByText("0.0.0.0:16627")).toBeVisible();
     expect(screen.getByText("https://dll.example.test:16127")).toBeVisible();
+    expect(screen.getByText("Socket · Transparent")).toBeVisible();
+    expect(screen.getByText("1.0 KiB / 2.0 KiB")).toBeVisible();
     expect(screen.getByText(/共 2 个入口，当前活动 1 个/)).toBeVisible();
   });
 

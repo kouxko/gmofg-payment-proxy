@@ -98,13 +98,13 @@ async fn device_network_start_rejects_listener_unreachable_from_adb_reverse() {
     let mut workspace = fixture.workspaces.get(fixture.original_id).await.unwrap();
     workspace.listeners[0].bind_address = "192.0.2.10".into();
     workspace.listeners[0].allowed_client_cidrs = vec!["10.0.0.0/8".into()];
-    workspace.listeners[0].authentication =
+    workspace.listeners[0].http_mut().unwrap().authentication =
         intercept_proxy_domain::ForwardProxyAuthentication::Basic {
-        credential: intercept_proxy_domain::SecretReference {
-            provider: "test".into(),
-            key: "credential".into(),
-        },
-    };
+            credential: intercept_proxy_domain::SecretReference {
+                provider: "test".into(),
+                key: "credential".into(),
+            },
+        };
     fixture.workspaces.save(workspace).await.unwrap();
 
     let error = fixture
