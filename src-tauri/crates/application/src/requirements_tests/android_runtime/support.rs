@@ -242,7 +242,6 @@ async fn running_vpn_fixture_with_listener_state(
             certificates: ports.clone(),
             settings: ports.clone(),
             listener_certificates: ports.clone(),
-            file_export: ports,
             workspaces: workspaces.clone(),
             workspace_documents: documents.clone(),
             listener_runtime,

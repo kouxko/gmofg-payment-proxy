@@ -150,7 +150,7 @@ fn shared_capacity_ledger_evicts_only_completed_sessions_without_snapshot_sync()
     assert!(ledger.logical_bytes() <= ledger.max_bytes());
 }
 
-// SESSION-002~003, CAPTURE-004: filtering, sorting, pagination and total are Rust deterministic.
+// SESSION-002~003, CAPTURE-004: filtering, sorting and total are Rust deterministic.
 #[test]
 fn session_query_is_deterministic() {
     let store = InMemorySessionStore::new(10, u64::MAX);
@@ -164,7 +164,7 @@ fn session_query_is_deterministic() {
             ))
             .expect("insert");
     }
-    let page = SessionStore::query(
+    let list = SessionStore::query(
         &store,
         &SessionQuery {
             keyword: Some("payment".into()),
@@ -176,20 +176,15 @@ fn session_query_is_deterministic() {
             started_to: None,
             sort: SessionSort::StartedAt,
             direction: SortDirection::Asc,
-            page: PageRequest {
-                page: 1,
-                page_size: 2,
-            },
         },
     );
-    assert_eq!(page.total, 3);
-    assert_eq!(page.total_pages, 2);
+    assert_eq!(list.total, 3);
     assert_eq!(
-        page.items
+        list.items
             .iter()
             .map(|item| item.request_id.as_str())
             .collect::<Vec<_>>(),
-        vec!["REQ-1", "REQ-2"]
+        vec!["REQ-1", "REQ-2", "REQ-3"]
     );
 }
 

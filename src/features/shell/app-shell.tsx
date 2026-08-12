@@ -104,11 +104,11 @@ export const navigation = [
 ] as const;
 
 export const sideNavigationItemClassName =
-  "flex min-h-20 !w-full flex-col items-center justify-center gap-1.5 rounded-xl px-3 text-center text-sm";
+  "flex min-h-20 !w-full min-w-0 flex-col items-center justify-center gap-1.5 rounded-xl px-1 text-center text-sm";
 export const sideNavigationIconClassName =
   "block size-6 shrink-0 self-center";
 export const sideNavigationLabelClassName =
-  "block w-14 shrink-0 whitespace-nowrap text-center leading-5";
+  "block w-full min-w-0 whitespace-normal break-words text-center leading-5";
 export const sideNavigationClassName =
   "row-start-2 flex w-24 flex-col gap-2 overflow-y-auto border-r border-[var(--telemetry-line)] bg-[var(--telemetry-surface)] px-2 py-3 max-[1280px]:w-20 max-[1025px]:hidden";
 export const shellErrorRegionClassName = "px-5 pt-4";

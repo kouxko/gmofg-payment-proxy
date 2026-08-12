@@ -9,9 +9,9 @@ use async_trait::async_trait;
 use parking_lot::RwLock;
 
 use crate::{
-    AppError, AppResult, CapacityLedger, PageRequest, SessionDetailViewModel, SessionId,
-    SessionPageViewModel, SessionQuery, SessionQueryPort, SessionRecord, SessionSort,
-    SessionSummaryViewModel, SortDirection,
+    AppError, AppResult, CapacityLedger, SessionDetailViewModel, SessionId, SessionListViewModel,
+    SessionQuery, SessionQueryPort, SessionRecord, SessionSort, SessionSummaryViewModel,
+    SortDirection,
 };
 
 /// 会话存储的最小业务接口。
@@ -21,7 +21,7 @@ use crate::{
 pub trait SessionStore: Send + Sync + std::fmt::Debug {
     fn upsert(&self, record: SessionRecord) -> AppResult<Vec<SessionId>>;
     fn get(&self, session_id: SessionId) -> AppResult<SessionDetailViewModel>;
-    fn query(&self, query: &SessionQuery) -> SessionPageViewModel;
+    fn query(&self, query: &SessionQuery) -> SessionListViewModel;
     fn clear_completed(&self) -> usize;
     fn logical_bytes(&self) -> u64;
     fn len(&self) -> usize;
@@ -161,8 +161,7 @@ impl SessionStore for InMemorySessionStore {
             })
     }
 
-    fn query(&self, query: &SessionQuery) -> SessionPageViewModel {
-        let normalized_page = query.page.normalized();
+    fn query(&self, query: &SessionQuery) -> SessionListViewModel {
         let keyword = normalize_filter(query.keyword.as_deref());
         let terminal_ip = normalize_filter(query.terminal_ip.as_deref());
         let result = normalize_filter(query.result.as_deref());
@@ -219,24 +218,9 @@ impl SessionStore for InMemorySessionStore {
         });
 
         let total = items.len();
-        let start = (normalized_page.page.saturating_sub(1) as usize)
-            .saturating_mul(normalized_page.page_size as usize);
-        let items = items
-            .into_iter()
-            .skip(start)
-            .take(normalized_page.page_size as usize)
-            .collect();
-        let total_pages = total
-            .div_ceil(normalized_page.page_size as usize)
-            .try_into()
-            .unwrap_or(u32::MAX);
-
-        SessionPageViewModel {
+        SessionListViewModel {
             items,
             total,
-            page: normalized_page.page,
-            page_size: normalized_page.page_size,
-            total_pages,
             empty_message: if total == 0 {
                 "没有符合条件的会话。".into()
             } else {
@@ -275,7 +259,7 @@ impl SessionStore for InMemorySessionStore {
 
 #[async_trait]
 impl SessionQueryPort for InMemorySessionStore {
-    async fn query(&self, query: SessionQuery) -> AppResult<SessionPageViewModel> {
+    async fn query(&self, query: SessionQuery) -> AppResult<SessionListViewModel> {
         Ok(SessionStore::query(self, &query))
     }
 
@@ -367,6 +351,3 @@ fn compare_sessions(
         SessionSort::ResponseSize => left.response_size_bytes.cmp(&right.response_size_bytes),
     }
 }
-
-#[allow(dead_code)]
-fn _page_request_is_public_contract(_: PageRequest) {}

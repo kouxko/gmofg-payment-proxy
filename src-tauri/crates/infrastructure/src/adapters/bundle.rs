@@ -11,7 +11,7 @@ use intercept_proxy_product_api::ProductProfile;
 use crate::{SecretProtector, SqliteStore};
 
 use super::{
-    CaptureRepositoryAdapter, CertificateServiceAdapter, FaultServiceAdapter, FileExportAdapter,
+    CaptureRepositoryAdapter, CertificateServiceAdapter, FaultServiceAdapter,
     ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
     ProtectedSecretAdapter, RuleRepositoryAdapter, SettingsRepositoryAdapter,
     WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
@@ -31,7 +31,6 @@ pub struct InfrastructureServiceBundle {
     pub rules: Arc<RuleRepositoryAdapter>,
     pub faults: Arc<FaultServiceAdapter>,
     pub certificates: Arc<CertificateServiceAdapter>,
-    pub file_export: Arc<FileExportAdapter>,
     pub capture: Arc<CaptureRepositoryAdapter>,
     pub sessions: Arc<InMemorySessionStore>,
     pub capacity: Arc<CapacityLedger>,
@@ -95,7 +94,7 @@ impl InfrastructureServiceBundle {
         );
         Self {
             workspaces: Arc::new(WorkspaceRepositoryAdapter::new(store)),
-            workspace_documents: Arc::new(WorkspaceDocumentAdapter::new(Arc::clone(&dialog))),
+            workspace_documents: Arc::new(WorkspaceDocumentAdapter::new(dialog)),
             workspace_body_codecs,
             workspace_runtime_policies,
             listener_runtime,
@@ -104,7 +103,6 @@ impl InfrastructureServiceBundle {
             settings,
             faults,
             certificates,
-            file_export: Arc::new(FileExportAdapter::new(dialog)),
             capture,
             sessions,
             capacity,

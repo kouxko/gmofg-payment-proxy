@@ -4,7 +4,7 @@ use intercept_proxy_application::{
     BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft, BreakpointId,
     BreakpointSummaryViewModel, BreakpointValidationViewModel, CaptureDetailViewModel,
     CapturePageViewModel, CaptureQuery, OperationResultViewModel, RuntimeEpoch,
-    SessionDetailViewModel, SessionId, SessionPageViewModel, SessionQuery,
+    SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
 };
 use tauri::State;
 
@@ -56,7 +56,7 @@ pub async fn capture_clear_view(
 pub async fn session_query(
     state: State<'_, AppState>,
     query: SessionQuery,
-) -> CommandResult<SessionPageViewModel> {
+) -> CommandResult<SessionListViewModel> {
     state
         .application
         .session_query(query)
@@ -73,20 +73,6 @@ pub async fn session_get(
     state
         .application
         .session_get(session_id)
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn session_export(
-    state: State<'_, AppState>,
-    session_id: SessionId,
-    sensitive_data_confirmed: bool,
-) -> CommandResult<OperationResultViewModel> {
-    state
-        .application
-        .session_export(session_id, sensitive_data_confirmed)
         .await
         .map_err(command_error)
 }

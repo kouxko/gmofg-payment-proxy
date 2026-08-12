@@ -226,7 +226,6 @@ impl ApplicationHostBuilder {
                 faults: services.faults,
                 certificates: services.certificates,
                 settings: services.settings,
-                file_export: services.file_export,
                 workspaces: services.workspaces,
                 workspace_documents: services.workspace_documents,
                 listener_runtime: services.listener_runtime,

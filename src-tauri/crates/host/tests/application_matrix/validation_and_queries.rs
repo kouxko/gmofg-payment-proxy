@@ -58,8 +58,7 @@ async fn production_host_covers_queries_and_settings_without_ui() {
         .await
         .expect("query empty sessions");
     assert!(sessions.items.is_empty());
-    assert_eq!(sessions.page, 1);
-    assert_eq!(sessions.page_size, 1);
+    assert_eq!(sessions.total, 0);
 
     let settings = valid_settings();
     let validation = application

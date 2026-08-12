@@ -16,7 +16,7 @@ import {
 } from "@heroui/react";
 import type {
   ChannelPresentationViewModel,
-  SessionPageViewModel,
+  SessionListViewModel,
   SessionQuery,
 } from "@/generated/rust-types";
 import {
@@ -33,8 +33,8 @@ import {
 interface SessionsListPanelProps {
   query: SessionQuery;
   setQuery: Dispatch<SetStateAction<SessionQuery>>;
-  page: {
-    data?: SessionPageViewModel;
+  list: {
+    data?: SessionListViewModel;
     error?: string;
     isLoading: boolean;
     refresh: () => Promise<void>;
@@ -96,11 +96,7 @@ function DateFilter({
 
 export function SessionsListPanel(props: SessionsListPanelProps) {
   const update = (change: Partial<SessionQuery>) =>
-    props.setQuery((query) => ({
-      ...query,
-      ...change,
-      page: { ...query.page, page: 1 },
-    }));
+    props.setQuery((query) => ({ ...query, ...change }));
   return (
     <>
       <div className="flex items-center gap-3">
@@ -205,13 +201,13 @@ export function SessionsListPanel(props: SessionsListPanelProps) {
           <Button
             className="self-end"
             variant="primary"
-            onPress={() => void props.page.refresh()}
+            onPress={() => void props.list.refresh()}
           >
             应用筛选
           </Button>
         </Card.Content>
       </Card>
-      {props.page.error && <Alert status="danger">{props.page.error}</Alert>}
+      {props.list.error && <Alert status="danger">{props.list.error}</Alert>}
       <Table>
         <Table.ScrollContainer>
           <Table.Content
@@ -240,15 +236,15 @@ export function SessionsListPanel(props: SessionsListPanelProps) {
             <Table.Body
               renderEmptyState={() => (
                 <div className="p-8 text-center">
-                  {props.page.isLoading
+                  {props.list.isLoading
                     ? "正在查询会话…"
-                    : props.page.error
+                    : props.list.error
                       ? "会话列表暂不可用"
-                      : (props.page.data?.empty_message ?? "暂无会话记录")}
+                      : (props.list.data?.empty_message ?? "暂无会话记录")}
                 </div>
               )}
             >
-              {(props.page.data?.items ?? []).map((session) => (
+              {(props.list.data?.items ?? []).map((session) => (
                 <Table.Row key={session.session_id} id={session.session_id}>
                   <Table.Cell className="whitespace-nowrap">
                     {formatTimestamp(session.started_at)}
@@ -292,51 +288,8 @@ export function SessionsListPanel(props: SessionsListPanelProps) {
             </Table.Body>
           </Table.Content>
         </Table.ScrollContainer>
-        <Table.Footer className="flex items-center gap-4 px-4 py-3">
-          <span className="text-sm">
-            共 {props.page.data?.total ?? 0} 条 /{" "}
-            {props.page.data?.page_size ?? 10} 条每页
-          </span>
-          <div
-            className="ml-auto flex items-center gap-3"
-            aria-label="会话分页"
-          >
-            <Button
-              size="sm"
-              variant="outline"
-              isDisabled={(props.page.data?.page ?? 1) <= 1}
-              onPress={() =>
-                props.setQuery((query) => ({
-                  ...query,
-                  page: {
-                    ...query.page,
-                    page: Math.max(1, query.page.page - 1),
-                  },
-                }))
-              }
-            >
-              上一页
-            </Button>
-            <span className="tabular-nums">
-              {props.page.data?.page ?? 1} / {props.page.data?.total_pages ?? 1}
-            </span>
-            <Button
-              size="sm"
-              variant="outline"
-              isDisabled={
-                (props.page.data?.page ?? 1) >=
-                (props.page.data?.total_pages ?? 1)
-              }
-              onPress={() =>
-                props.setQuery((query) => ({
-                  ...query,
-                  page: { ...query.page, page: query.page.page + 1 },
-                }))
-              }
-            >
-              下一页
-            </Button>
-          </div>
+        <Table.Footer className="px-4 py-3 text-sm">
+          当前保留 {props.list.data?.total ?? 0} 条；达到容量上限后自动淘汰最旧的已完成会话
         </Table.Footer>
       </Table>
     </>

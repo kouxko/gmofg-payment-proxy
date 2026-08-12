@@ -11,7 +11,7 @@ import { useMemo, useState } from "react";
 import { toast } from "@heroui/react";
 import type {
   SessionDetailViewModel,
-  SessionPageViewModel,
+  SessionListViewModel,
   SessionQuery,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
@@ -38,17 +38,15 @@ export function SessionsView() {
   const [selectedId, setSelectedId] = useState<string>();
   const [query, setQuery] = useState<SessionQuery>(defaultSessionQuery);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [exportPending, setExportPending] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearPending, setClearPending] = useState(false);
 
   const queryKey = useMemo(() => JSON.stringify(query), [query]);
-  const page = useIpcQuery<SessionPageViewModel>(
+  const list = useIpcQuery<SessionListViewModel>(
     `session-query:${queryKey}`,
     () => callCommand(commands.sessionQuery(query)),
   );
-  useAppEventRefresh(["session_updated", "snapshot_required"], page.refresh);
+  useAppEventRefresh(["session_updated", "snapshot_required"], list.refresh);
 
   const detail = useIpcQuery<SessionDetailViewModel>(
     `session-detail:${detailOpen ? (selectedId ?? "none") : "closed"}`,
@@ -61,7 +59,7 @@ export function SessionsView() {
     entityId: selectedId,
   });
 
-  const selected = page.data?.items.find(
+  const selected = list.data?.items.find(
     (item) => item.session_id === selectedId,
   );
 
@@ -77,23 +75,6 @@ export function SessionsView() {
     detail.invalidate();
   }
 
-  async function exportSelected() {
-    if (!selectedId || exportPending) return;
-
-    setExportPending(true);
-    try {
-      const result = await callCommand(
-        commands.sessionExport(selectedId, true),
-      );
-      toast(result.message, { variant: toneColor(result.ui_tone) });
-      setExportDialogOpen(false);
-    } catch (reason) {
-      toast(errorMessage(reason), { variant: "danger" });
-    } finally {
-      setExportPending(false);
-    }
-  }
-
   async function clearSessions() {
     if (clearPending) return;
 
@@ -102,7 +83,7 @@ export function SessionsView() {
       const result = await callCommand(commands.sessionClear(true));
       toast(result.message, { variant: toneColor(result.ui_tone) });
       closeDetail();
-      await page.refresh();
+      await list.refresh();
       setClearDialogOpen(false);
     } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
@@ -117,7 +98,7 @@ export function SessionsView() {
         <SessionsListPanel
           query={query}
           setQuery={setQuery}
-          page={page}
+          list={list}
           channels={bootstrap?.channel_catalog ?? []}
           selectedId={selectedId}
           onSelect={selectSession}
@@ -126,16 +107,12 @@ export function SessionsView() {
           selected={selected}
           detail={detail}
           detailOpen={detailOpen}
-          exportDialogOpen={exportDialogOpen}
-          exportPending={exportPending}
           clearDialogOpen={clearDialogOpen}
           clearPending={clearPending}
           onDetailOpenChange={(open) => {
             setDetailOpen(open);
             if (!open) detail.invalidate();
           }}
-          onExportDialogOpenChange={setExportDialogOpen}
-          onExport={() => void exportSelected()}
           onClearDialogOpenChange={setClearDialogOpen}
           onClear={() => void clearSessions()}
         />

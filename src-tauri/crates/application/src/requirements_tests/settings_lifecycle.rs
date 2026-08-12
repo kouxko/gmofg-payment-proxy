@@ -281,7 +281,6 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
             certificates: ports.clone(),
             settings: ports.clone(),
             listener_certificates: ports.clone(),
-            file_export: ports,
             workspaces: Arc::new(InMemoryWorkspaceStore::default()),
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),

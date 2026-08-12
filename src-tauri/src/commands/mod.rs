@@ -107,7 +107,6 @@ pub fn builder() -> Builder<Wry> {
             capture_clear_view,
             session_query,
             session_get,
-            session_export,
             session_clear,
             breakpoint_query,
             breakpoint_get,

@@ -157,7 +157,7 @@ export const systemPageHelpGuides: Record<SystemHelpPath, PageHelpGuide> = {
           "清除操作不可撤销；需要保留的配置应先导出。外观主题属于本机偏好，不随业务配置清除。",
           "“数据与导出”说明 Payload 仅保存在内存，会话随应用重启清空。",
           "规则、配置和证书元数据会持久化；敏感材料由系统当前用户密钥保护。",
-          "导出原始会话需要显式确认，诊断日志必须脱敏，不应包含 Payload、密码、私钥或 PKCS12 原始内容。",
+          "诊断日志必须脱敏，不应包含 Payload、密码、私钥或 PKCS12 原始内容。",
         ],
       },
       {

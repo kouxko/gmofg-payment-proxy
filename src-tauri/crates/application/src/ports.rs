@@ -19,7 +19,7 @@ use crate::{
     ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
     ProxyListener, ProxyStatusViewModel, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
     RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
-    SessionId, SessionPageViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
+    SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
     SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
@@ -315,19 +315,10 @@ pub trait SettingsRepositoryPort: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
-/// 会话导出端口。选择路径和写文件属于平台能力，因此从核心用例中倒置出去。
-pub trait FileExportPort: Send + Sync + std::fmt::Debug {
-    async fn export_session(
-        &self,
-        session: SessionDetailViewModel,
-        sensitive_data_confirmed: bool,
-    ) -> AppResult<OperationResultViewModel>;
-}
-
 #[async_trait]
-/// 会话查询端口，负责 Rust 侧筛选、排序和分页。
+/// 会话查询端口，负责 Rust 侧筛选和排序。
 pub trait SessionQueryPort: Send + Sync + std::fmt::Debug {
-    async fn query(&self, query: SessionQuery) -> AppResult<SessionPageViewModel>;
+    async fn query(&self, query: SessionQuery) -> AppResult<SessionListViewModel>;
     async fn get(&self, session_id: SessionId) -> AppResult<SessionDetailViewModel>;
     async fn clear_completed(&self) -> AppResult<usize>;
 }

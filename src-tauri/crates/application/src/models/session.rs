@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use super::{
-    ChannelId, MessageContentViewModel, PageRequest, ResponseAssertionId, Revision, RuleId,
-    RuntimeEpoch, SessionId, SortDirection, UiTone,
+    ChannelId, MessageContentViewModel, ResponseAssertionId, Revision, RuleId, RuntimeEpoch,
+    SessionId, SortDirection, UiTone,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 会话页提交给 Rust 的筛选、时间范围、排序和分页条件。
+/// 会话页提交给 Rust 的筛选、时间范围和排序条件。
 pub struct SessionQuery {
     pub keyword: Option<String>,
     pub terminal_ip: Option<String>,
@@ -21,7 +21,6 @@ pub struct SessionQuery {
     pub started_to: Option<DateTime<Utc>>,
     pub sort: SessionSort,
     pub direction: SortDirection,
-    pub page: PageRequest,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -57,12 +56,9 @@ pub struct SessionSummaryViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct SessionPageViewModel {
+pub struct SessionListViewModel {
     pub items: Vec<SessionSummaryViewModel>,
     pub total: usize,
-    pub page: u32,
-    pub page_size: u32,
-    pub total_pages: u32,
     pub empty_message: String,
 }
 
