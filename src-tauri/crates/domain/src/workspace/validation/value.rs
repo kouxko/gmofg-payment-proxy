@@ -36,6 +36,11 @@ pub fn is_valid_upstream_origin(value: &str) -> bool {
     valid_authority(authority)
 }
 
+#[must_use]
+pub fn is_valid_socket_host(value: &str) -> bool {
+    value == value.trim() && valid_host(value)
+}
+
 pub(super) fn is_valid_authority_pattern(value: &str) -> bool {
     let value = value.strip_prefix("*.").unwrap_or(value);
     !value.is_empty() && valid_host(value)

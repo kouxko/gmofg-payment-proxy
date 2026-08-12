@@ -4,8 +4,8 @@ import { Button, Card, Input, Label, ListBox, Select, Switch } from "@heroui/rea
 import type {
   CertificateItemViewModel,
   CertificateReference,
+  HttpListenerSettings,
   ListenerCertificateDetailViewModel,
-  ProxyListener,
 } from "@/generated/rust-types";
 import {
   CertificateDetailPanel,
@@ -13,18 +13,18 @@ import {
 } from "./fixed-server-tls-fields";
 
 type Props = {
-  listener: ProxyListener;
+  settings: HttpListenerSettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   installationRoot?: CertificateItemViewModel;
   busy: boolean;
-  onChange: (changes: Partial<ProxyListener>) => void;
+  onChange: (changes: Partial<HttpListenerSettings>) => void;
   onOpenIdentityImport: () => void;
   onOpenTrustImport: () => void;
 };
 
 export function DownstreamTlsCard({
-  listener,
+  settings,
   certificateReferences,
   certificateDetails,
   installationRoot,
@@ -39,7 +39,7 @@ export function DownstreamTlsCard({
   const trusts = certificateReferences.filter(
     (reference) => reference.kind === "downstream_client_trust",
   );
-  const tls = listener.downstream_tls;
+  const tls = settings.downstream_tls;
   const authentication = tls.client_authentication;
   const identity = findReference(identities, tls.server_identity);
   const effectiveIdentity = identity ?? INSTALLATION_ROOT_REFERENCE;

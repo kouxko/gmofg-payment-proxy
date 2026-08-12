@@ -1,6 +1,6 @@
-use super::{
-    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BoxIo, CancellationToken, Duration,
-    ErrorCode, ProxyError, Result,
+use super::{BoxIo, CancellationToken, Duration, ErrorCode, Result};
+use crate::transport::relay::{
+    RelayTimeoutCodes, RelayTimeouts, relay_bidirectional, timeout_cancel_first,
 };
 
 pub(super) async fn relay_exact(
@@ -10,71 +10,25 @@ pub(super) async fn relay_exact(
     write_timeout: Duration,
     cancellation: CancellationToken,
 ) -> Result<()> {
-    let (down_read, down_write) = tokio::io::split(downstream);
-    let (up_read, up_write) = tokio::io::split(upstream);
-    let upstream_direction = copy_exact_direction(
-        down_read,
-        up_write,
-        read_timeout,
-        write_timeout,
-        cancellation.child_token(),
-    );
-    let downstream_direction = copy_exact_direction(
-        up_read,
-        down_write,
-        read_timeout,
-        write_timeout,
-        cancellation.child_token(),
-    );
-    tokio::try_join!(upstream_direction, downstream_direction)?;
-    Ok(())
-}
-
-async fn copy_exact_direction<R, W>(
-    mut reader: R,
-    mut writer: W,
-    read_timeout: Duration,
-    write_timeout: Duration,
-    cancellation: CancellationToken,
-) -> Result<()>
-where
-    R: AsyncRead + Unpin,
-    W: AsyncWrite + Unpin,
-{
-    let mut buffer = vec![0_u8; 16 * 1024];
-    loop {
-        let read = timeout_cancel(
-            read_timeout,
-            &cancellation,
-            reader.read(&mut buffer),
-            ErrorCode::UpstreamReadTimeout,
-        )
-        .await?
-        .map_err(|error| ProxyError::io("read reverse stream", &error))?;
-        if read == 0 {
-            writer
-                .shutdown()
-                .await
-                .map_err(|error| ProxyError::io("half-close reverse stream", &error))?;
-            return Ok(());
-        }
-        timeout_cancel(
-            write_timeout,
-            &cancellation,
-            writer.write_all(&buffer[..read]),
-            ErrorCode::UpstreamWriteTimeout,
-        )
-        .await?
-        .map_err(|error| ProxyError::io("write reverse stream", &error))?;
-        timeout_cancel(
-            write_timeout,
-            &cancellation,
-            writer.flush(),
-            ErrorCode::UpstreamWriteTimeout,
-        )
-        .await?
-        .map_err(|error| ProxyError::io("flush reverse stream", &error))?;
-    }
+    relay_bidirectional(
+        downstream,
+        upstream,
+        RelayTimeouts::new(read_timeout, write_timeout, RelayTimeoutCodes::upstream()),
+        cancellation,
+    )
+    .await
+    .map(|_| ())
+    .map_err(|failure| {
+        tracing::debug!(
+            direction = ?failure.direction,
+            operation = ?failure.operation,
+            client_to_server_bytes = failure.bytes.client_to_server,
+            server_to_client_bytes = failure.bytes.server_to_client,
+            code = failure.error.code,
+            "reverse relay failed"
+        );
+        failure.error
+    })
 }
 
 pub(super) async fn timeout_cancel<F, T>(
@@ -86,9 +40,13 @@ pub(super) async fn timeout_cancel<F, T>(
 where
     F: std::future::Future<Output = T>,
 {
-    tokio::select! {
-        biased;
-        () = cancellation.cancelled() => Err(ProxyError::new(ErrorCode::ProxyStopped, "reverse listener stopped")),
-        outcome = tokio::time::timeout(duration, future) => outcome.map_err(|_| ProxyError::new(timeout_code, format!("reverse I/O timed out after {} ms", duration.as_millis()))),
-    }
+    timeout_cancel_first(
+        duration,
+        cancellation,
+        future,
+        timeout_code,
+        "reverse listener stopped",
+        "reverse I/O",
+    )
+    .await
 }

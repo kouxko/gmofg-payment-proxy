@@ -305,7 +305,7 @@ function SideNavigation() {
                   <Modal.Heading>关于 {productName}</Modal.Heading>
                 </Modal.Header>
                 <Modal.Body className="space-y-3 text-sm">
-                  <p>面向通用 HTTP 联机测试的拦截代理与故障注入工具。</p>
+                  <p>面向 HTTP 与 Socket 联机测试的拦截代理、TLS Bridge 与故障注入工具。</p>
                   <p className="text-[var(--telemetry-muted)]">
                     网络、证书、规则、校验、存储和导出均由 Rust
                     核心执行；Next.js 仅负责显示状态和提交用户操作。

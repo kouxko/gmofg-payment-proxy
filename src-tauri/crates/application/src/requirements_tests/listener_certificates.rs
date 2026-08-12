@@ -46,7 +46,7 @@ async fn listener_certificate_discard_rejects_references_used_by_any_workspace()
         kind: CertificateReferenceKind::UpstreamClientIdentity,
         reference: "managed:listener-tls:in-use".into(),
     };
-    listener.fixed_server = Some(FixedServerSettings {
+    listener.http_mut().unwrap().fixed_server = Some(FixedServerSettings {
         upstream_url: "https://upstream.example.test:443".into(),
         upstream_tls: UpstreamTlsSettings {
             client_identity: Some(reference.id),
@@ -108,7 +108,7 @@ async fn listener_certificate_discard_is_atomic_with_listener_save() {
         kind: CertificateReferenceKind::UpstreamClientIdentity,
         reference: "managed:listener-tls:concurrent-save".into(),
     };
-    listener.fixed_server = Some(FixedServerSettings {
+    listener.http_mut().unwrap().fixed_server = Some(FixedServerSettings {
         upstream_url: "https://upstream.example.test:443".into(),
         upstream_tls: UpstreamTlsSettings {
             client_identity: Some(reference.id),
@@ -172,7 +172,7 @@ async fn listener_tls_test_rejects_unmanaged_file_and_pkcs12_references() {
     let application = application_with_fake_ports(ports);
     let workspace = application.workspace_create("Lab".into()).await.unwrap();
     let mut listener = workspace.listeners[0].clone();
-    listener.fixed_server = Some(FixedServerSettings {
+    listener.http_mut().unwrap().fixed_server = Some(FixedServerSettings {
         upstream_url: "https://upstream.example.test:443".into(),
         upstream_tls: UpstreamTlsSettings::default(),
     });
@@ -210,7 +210,7 @@ async fn listener_tls_test_validates_the_persisted_workspace_candidate() {
     let application = application_with_fake_ports(ports);
     let workspace = application.workspace_create("Lab".into()).await.unwrap();
     let mut listener = workspace.listeners[0].clone();
-    listener.fixed_server = Some(FixedServerSettings {
+    listener.http_mut().unwrap().fixed_server = Some(FixedServerSettings {
         upstream_url: "https://".into(),
         upstream_tls: UpstreamTlsSettings::default(),
     });
@@ -231,7 +231,7 @@ async fn listener_connection_test_supports_http_without_tls_evidence() {
     let application = application_with_fake_ports(Arc::new(FakePorts::default()));
     let workspace = application.workspace_create("Lab".into()).await.unwrap();
     let mut listener = workspace.listeners[0].clone();
-    listener.fixed_server = Some(FixedServerSettings {
+    listener.http_mut().unwrap().fixed_server = Some(FixedServerSettings {
         upstream_url: "http://upstream.example.test:8080".into(),
         upstream_tls: UpstreamTlsSettings::default(),
     });

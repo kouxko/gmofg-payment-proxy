@@ -26,16 +26,17 @@ use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpListener;
 #[cfg(test)]
 use tokio::net::TcpStream;
-use tokio::task::JoinSet;
 use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+use crate::http::{PipelinePorts, traffic_schedule};
+use crate::listener::{ChildTaskError, ConnectionTaskScope};
 use crate::message::MessageLimits;
 use crate::reverse::{DownstreamTlsAcceptor, ReverseDownstreamTls};
 use crate::supervisor::ChannelId;
 use crate::traffic::TrafficDirection;
-use crate::transport::{BoxIo, ConnectionContext, PipelinePorts, traffic_schedule};
+use crate::transport::{BoxIo, ConnectionContext};
 use crate::{ErrorCode, ProxyError, Result};
 
 #[path = "body.rs"]
@@ -72,8 +73,6 @@ use pipeline::{
     intentional_response_drop, prepare_pipeline_request, record_websocket_response,
     reject_websocket_drop, request_terminal_response, send_request_then_drop_after_write,
 };
-#[cfg(test)]
-use target::Network;
 pub use target::absolute_uri_to_origin_form;
 pub(crate) use target::authority_is_allowed;
 use target::{HttpTarget, absolute_http_target, authority_host, connect_authority};
@@ -159,13 +158,8 @@ impl ForwardProxyService {
         peer: SocketAddr,
         context: Option<ConnectionContext>,
         cancellation: CancellationToken,
+        task_scope: ConnectionTaskScope,
     ) -> Result<Response<ProxyBody>> {
-        if !self.config.permits_peer(peer.ip()) {
-            return Ok(text_response(
-                StatusCode::FORBIDDEN,
-                "client address is not allowed",
-            ));
-        }
         if self.config.authentication == ForwardAuthenticationMode::Required
             && !self
                 .authenticator
@@ -184,12 +178,12 @@ impl ForwardProxyService {
 
         if request.method() == Method::CONNECT {
             return Ok(self
-                .handle_connect(&mut request, context, cancellation)
+                .handle_connect(&mut request, context, cancellation, &task_scope)
                 .await
                 .unwrap_or_else(|error| error_response(&error)));
         }
         match self
-            .forward_http(request, context.as_ref(), cancellation)
+            .forward_http(request, context.as_ref(), cancellation, &task_scope)
             .await
         {
             Ok(response) => Ok(response),
@@ -199,12 +193,45 @@ impl ForwardProxyService {
     }
 }
 
+fn spawn_connection_task<F>(
+    task_scope: &ConnectionTaskScope,
+    task_name: &'static str,
+    future: F,
+) -> Result<()>
+where
+    F: std::future::Future<Output = Result<()>> + Send + 'static,
+{
+    task_scope
+        .spawn_owned(async move {
+            match future.await {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    tracing::debug!(
+                        code = error.code,
+                        message = %error.message,
+                        task = task_name,
+                        "forward connection child task ended"
+                    );
+                    Err(ChildTaskError::new(error.code, error.message))
+                }
+            }
+        })
+        .map(|_| ())
+        .map_err(|_| {
+            ProxyError::new(
+                ErrorCode::Internal,
+                format!("connection task scope closed before {task_name} could start"),
+            )
+        })
+}
+
 #[path = "service/connect.rs"]
 mod connect;
 #[path = "service/http.rs"]
 mod http_flow;
 #[path = "service/lifecycle.rs"]
 mod lifecycle;
+use lifecycle::drain_connection_scope;
 #[path = "mitm.rs"]
 mod mitm;
 #[path = "service/websocket.rs"]

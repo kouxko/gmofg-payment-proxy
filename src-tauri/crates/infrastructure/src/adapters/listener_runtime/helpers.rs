@@ -54,6 +54,10 @@ pub(super) fn running_status(
         fault_reason: None,
         can_start: false,
         can_stop: true,
+        active_connections: 0,
+        client_to_server_bytes: 0,
+        server_to_client_bytes: 0,
+        retained_diagnostic_evictions: 0,
     }
 }
 

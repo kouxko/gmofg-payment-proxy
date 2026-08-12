@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bootstrap, setupListenerMocks, mocks, workspace, dynamicListener, fixedListener, ok, commandError, listenerStatus, listenerOverview, navigationMocks } from "./listeners-view.test-support";
+import { bootstrap, setupListenerMocks, mocks, workspace, dynamicListener, fixedListener, socketListener, ok, commandError, listenerStatus, listenerOverview, navigationMocks } from "./listeners-view.test-support";
 
 vi.mock("@/features/shell/workspace-navigation", () => ({ useWorkspaceNavigation: () => navigationMocks }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
@@ -347,6 +347,82 @@ describe("统一代理监听编辑器", () => {
 
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     expect(mocks.listenerStart).toHaveBeenCalledWith("workspace-1", 2, "listener-1");
+  });
+
+  it("保存 Socket 时只提交 active variant，不泄漏隐藏的 HTTP 或 TLS 字段", async () => {
+    const socket = socketListener("socket-1", "Socket", 9000, "transparent");
+    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [socket] }));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("socket-1")])));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "保存当前监听" }));
+
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledOnce());
+    const saved = mocks.listenerSave.mock.calls[0][2];
+    expect(saved.data_plane).toEqual(socket.data_plane);
+    expect(JSON.stringify(saved.data_plane)).not.toMatch(
+      /authentication|mitm|fixed_server|downstream_tls|request_body_codec/,
+    );
+  });
+
+  it("Socket 连接探测 pending 时禁止重复触发", async () => {
+    const socket = socketListener("socket-1", "Socket", 9000, "tcp_to_tls");
+    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [socket] }));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("socket-1")])));
+    mocks.listenerTestUpstreamConnection.mockReturnValue(new Promise(() => undefined));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    const testButton = await screen.findByRole("button", { name: "测试 Socket 上游连接" });
+    await user.click(testButton);
+
+    expect(await screen.findByRole("button", { name: "正在探测 Socket 上游…" })).toBeDisabled();
+    expect(mocks.listenerValidate).toHaveBeenCalledOnce();
+    expect(mocks.listenerTestUpstreamConnection).toHaveBeenCalledOnce();
+  });
+
+  it("Socket 运行卡展示 Rust 协议标签、活动连接和双向字节", async () => {
+    const socket = socketListener("socket-1", "Socket 入口", 9000, "tls_to_tls");
+    const running = {
+      ...listenerStatus("socket-1", "running"),
+      kind_text: "Socket · TLS → TLS",
+    };
+    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [socket] }));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([running])));
+
+    render(<ListenersView />);
+
+    expect(await screen.findByText("Socket · TLS → TLS")).toBeVisible();
+    expect(await screen.findByText(
+      "活动连接 2 · C→S 1.0 KiB · S→C 2.0 KiB",
+    )).toBeVisible();
+  });
+
+  it("Socket 启动和停止请求 pending 时显示精确状态并禁止重复操作", async () => {
+    const socket = socketListener("socket-1", "Socket 入口", 9000, "transparent");
+    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [socket] }));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("socket-1")])))
+    mocks.listenerStart.mockReturnValue(new Promise(() => undefined));
+    const user = userEvent.setup();
+    const view = render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "启动监听" }));
+    expect(await screen.findByRole("button", { name: "启动中…" })).toBeDisabled();
+    expect(mocks.listenerStart).toHaveBeenCalledOnce();
+
+    view.unmount();
+    setupListenerMocks();
+    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [socket] }));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
+      listenerStatus("socket-1", "running"),
+    ])));
+    mocks.listenerStop.mockReturnValue(new Promise(() => undefined));
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "停止监听" }));
+    expect(await screen.findByRole("button", { name: "停止中…" })).toBeDisabled();
+    expect(mocks.listenerStop).toHaveBeenCalledOnce();
   });
 
 });

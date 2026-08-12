@@ -36,8 +36,8 @@ export const generalPageHelpGuides: Record<GeneralHelpPath, PageHelpGuide> = {
   ),
   "/listeners": generalGuide(
     "代理入口配置",
-    "代理入口只决定客户端连接本机的地址、端口和请求去向。TLS/mTLS 与证书均按入口独立配置；Android 客户端或上游 Server 未要求 mTLS 时，客户端身份可以留空。入口本身不添加模拟。",
-    ["理解入口与模拟的区别", "新增或复制入口", "配置普通 TLS 或 mTLS", "测试握手、保存并启动", "添加故障模拟或规则"],
+    "每个入口明确选择 HTTP 或 Socket 数据平面。HTTP 保留请求解析、固定 Server 与 MITM；Socket 按原始字节转发，并可选择 Transparent 或 TLS Bridge。证书与启停仍按入口独立配置。",
+    ["选择 HTTP 或 Socket", "配置目标与安全模式", "按 TLS 方向绑定证书", "测试连接、保存并启动", "查看连接与双向字节"],
   ),
   "/android-network": generalGuide(
     "应用网络接管",

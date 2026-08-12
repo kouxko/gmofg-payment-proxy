@@ -1,13 +1,14 @@
 //! MITM 内层 WebSocket 握手与升级后的透明帧隧道。
 
 use super::{
-    Arc, BodyExt, Bytes, CancellationToken, ConnectionContext, ErrorCode, ForwardPipelineRuntime,
-    HOST, HeaderValue, Incoming, Mutex, ProxyBody, ProxyError, Request, Response, Result,
-    StatusCode, TokioIo, TrafficDirection, client_http1, collect_pipeline_body, config_error,
-    connect_authority, ensure_websocket_upgrade_headers, finish_pipeline_response, full_body,
-    incoming_body, prepare_pipeline_request, record_websocket_response, reject_websocket_drop,
-    request_terminal_response, run_tunnel, scheduled_body, strip_hop_by_hop_headers,
-    strip_hop_by_hop_headers_preserving_upgrade, timeout_or_cancel, traffic_schedule,
+    Arc, BodyExt, Bytes, CancellationToken, ConnectionContext, ConnectionTaskScope, ErrorCode,
+    ForwardPipelineRuntime, HOST, HeaderValue, Incoming, Mutex, ProxyBody, ProxyError, Request,
+    Response, Result, StatusCode, TokioIo, TrafficDirection, client_http1, collect_pipeline_body,
+    config_error, connect_authority, ensure_websocket_upgrade_headers, finish_pipeline_response,
+    full_body, incoming_body, prepare_pipeline_request, record_websocket_response,
+    reject_websocket_drop, request_terminal_response, run_tunnel, scheduled_body,
+    spawn_connection_task, strip_hop_by_hop_headers, strip_hop_by_hop_headers_preserving_upgrade,
+    timeout_or_cancel, traffic_schedule,
 };
 use std::time::Duration;
 
@@ -22,6 +23,7 @@ pub(super) async fn forward_mitm_websocket(
     pipeline: Option<&ForwardPipelineRuntime>,
     context: Option<&ConnectionContext>,
     cancellation: &CancellationToken,
+    task_scope: &ConnectionTaskScope,
 ) -> Result<Response<ProxyBody>> {
     let downstream_upgrade = hyper::upgrade::on(&mut request);
     let (mut parts, body) = request.into_parts();
@@ -120,27 +122,21 @@ pub(super) async fn forward_mitm_websocket(
     }
     ensure_websocket_upgrade_headers(&mut parts.headers);
     let tunnel_cancellation = cancellation.clone();
-    tokio::spawn(async move {
-        let result = async {
-            let (downstream, upstream) = tokio::try_join!(downstream_upgrade, upstream_upgrade)
-                .map_err(|error| {
-                    ProxyError::new(
-                        ErrorCode::Io,
-                        format!("MITM WebSocket upgrade failed: {error}"),
-                    )
-                })?;
-            run_tunnel(
-                TokioIo::new(downstream),
-                TokioIo::new(upstream),
-                idle_timeout,
-                tunnel_cancellation,
-            )
-            .await
-        }
-        .await;
-        if let Err(error) = result {
-            tracing::debug!(code = error.code, message = %error.message, "MITM WebSocket tunnel ended");
-        }
-    });
+    spawn_connection_task(task_scope, "MITM WebSocket upgraded tunnel", async move {
+        let (downstream, upstream) = tokio::try_join!(downstream_upgrade, upstream_upgrade)
+            .map_err(|error| {
+                ProxyError::new(
+                    ErrorCode::Io,
+                    format!("MITM WebSocket upgrade failed: {error}"),
+                )
+            })?;
+        run_tunnel(
+            TokioIo::new(downstream),
+            TokioIo::new(upstream),
+            idle_timeout,
+            tunnel_cancellation,
+        )
+        .await
+    })?;
     Ok(Response::from_parts(parts, full_body(Bytes::new())))
 }

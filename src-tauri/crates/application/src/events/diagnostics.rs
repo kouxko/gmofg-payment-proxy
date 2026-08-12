@@ -39,6 +39,7 @@ fn diagnostic_entry(payload: &UiEventPayload) -> Option<DiagnosticLogEntryViewMo
             device_serial: None,
             listener_id: Some(status.listener_id.to_string()),
             profile_id: None,
+            socket_context: None,
         }),
         UiEventPayload::AndroidVpnStatusChanged(status) => Some(DiagnosticLogEntryViewModel {
             level: match status.state {
@@ -52,6 +53,7 @@ fn diagnostic_entry(payload: &UiEventPayload) -> Option<DiagnosticLogEntryViewMo
             device_serial: Some(status.serial.clone()),
             listener_id: None,
             profile_id: status.active_profile_id.clone(),
+            socket_context: None,
         }),
         UiEventPayload::SessionUpdated(session) => Some(DiagnosticLogEntryViewModel {
             level: level_for_tone(session.ui_tone),
@@ -71,6 +73,7 @@ fn diagnostic_entry(payload: &UiEventPayload) -> Option<DiagnosticLogEntryViewMo
             device_serial: None,
             listener_id: Some(session.channel.as_str().to_owned()),
             profile_id: None,
+            socket_context: None,
         }),
         UiEventPayload::ResourceWarning { message } => Some(DiagnosticLogEntryViewModel {
             level: DiagnosticLogLevel::Warning,
@@ -80,6 +83,7 @@ fn diagnostic_entry(payload: &UiEventPayload) -> Option<DiagnosticLogEntryViewMo
             device_serial: None,
             listener_id: None,
             profile_id: None,
+            socket_context: None,
         }),
         UiEventPayload::OperationFailed(error) => {
             let stage = stage_for_error_code(&error.code);
@@ -96,6 +100,7 @@ fn diagnostic_entry(payload: &UiEventPayload) -> Option<DiagnosticLogEntryViewMo
                 device_serial,
                 listener_id,
                 profile_id,
+                socket_context: None,
             })
         }
         _ => None,
@@ -112,45 +117,99 @@ fn level_for_tone(tone: UiTone) -> DiagnosticLogLevel {
 
 /// 稳定错误码是诊断阶段的唯一分类依据；前端和日志页不解析中文错误文本。
 pub(crate) fn stage_for_error_code(code: &str) -> DiagnosticLogStage {
-    if code.starts_with("ANDROID_ADB_FORWARD") || code.starts_with("ANDROID_CONTROL_SOCKET") {
-        DiagnosticLogStage::AdbForwardControl
-    } else if code.starts_with("ANDROID_ADB_REVERSE") {
-        DiagnosticLogStage::AdbReverseBusiness
-    } else if code.starts_with("ANDROID_ADB") || code.starts_with("ANDROID_PROTOCOL") {
-        DiagnosticLogStage::Companion
-    } else if code.starts_with("ANDROID_VPN") {
-        DiagnosticLogStage::Vpn
-    } else if code.starts_with("ANDROID_TUN") {
-        DiagnosticLogStage::Tun
-    } else if code.starts_with("ANDROID_PACKAGE") || code.starts_with("APP_SELECTION") {
-        DiagnosticLogStage::AppSelection
-    } else if code.starts_with("ANDROID_ROUTE") || code.starts_with("ROUTE_") {
-        DiagnosticLogStage::RouteActivation
-    } else if code.contains("DNS") {
-        DiagnosticLogStage::DesktopDns
-    } else if code.starts_with("DOWNSTREAM_TLS") || code.starts_with("CLIENT_TLS") {
-        DiagnosticLogStage::DownstreamTls
-    } else if code == "TLS_HANDSHAKE_FAILED" || code.starts_with("UPSTREAM_") {
-        DiagnosticLogStage::UpstreamTls
-    } else if code.starts_with("HTTP_")
-        || code.starts_with("SESSION_")
-        || code.starts_with("BODY_")
-        || code.starts_with("HEADER_")
-        || code.starts_with("JSON_")
-        || matches!(code, "INCORRECT_CONTENT_LENGTH" | "TRUNCATED_RESPONSE")
-    {
-        DiagnosticLogStage::Http
-    } else if code.starts_with("LISTENER_")
-        || code.starts_with("PROXY_")
-        || matches!(code, "PORT_IN_USE" | "IO_ERROR")
-    {
-        DiagnosticLogStage::Listener
-    } else if code.starts_with("STOP_") || code == "FAULT_EXECUTION_CANCELLED" {
-        DiagnosticLogStage::StopFallback
-    } else if code.starts_with("CLEANUP_") {
-        DiagnosticLogStage::Cleanup
-    } else {
-        DiagnosticLogStage::System
+    match code {
+        "ANDROID_ADB_FORWARD_INVALID"
+        | "ANDROID_ADB_FORWARD_CLEANUP_FAILED"
+        | "ANDROID_CONTROL_SOCKET_FAILED"
+        | "ANDROID_CONTROL_SOCKET_TIMEOUT"
+        | "ANDROID_CONTROL_SOCKET_UNAVAILABLE" => DiagnosticLogStage::AdbForwardControl,
+        "ANDROID_ADB_REVERSE_FAILED"
+        | "ANDROID_ADB_REVERSE_CREATE_FAILED"
+        | "ANDROID_ADB_REVERSE_CLEANUP_FAILED" => DiagnosticLogStage::AdbReverseBusiness,
+        "ANDROID_ADB_COMMAND_FAILED"
+        | "ANDROID_ADB_EXEC_FAILED"
+        | "ANDROID_ADB_NOT_FOUND"
+        | "ANDROID_ADB_SELECTED_TRANSPORT_STALE"
+        | "ANDROID_ADB_TIMEOUT"
+        | "ANDROID_PROTOCOL_ENCODE_FAILED"
+        | "ANDROID_PROTOCOL_FRAME_INVALID"
+        | "ANDROID_PROTOCOL_FRAME_TOO_LARGE"
+        | "ANDROID_PROTOCOL_JSON_INVALID"
+        | "ANDROID_PROTOCOL_OPERATION_INVALID"
+        | "ANDROID_PROTOCOL_RESPONSE_INVALID"
+        | "ANDROID_PROTOCOL_RESPONSE_MISMATCH" => DiagnosticLogStage::Companion,
+        "ANDROID_VPN" | "ANDROID_NETWORK_START_FAILED" => DiagnosticLogStage::Vpn,
+        "ANDROID_TUN" => DiagnosticLogStage::Tun,
+        "ANDROID_PACKAGE_NAME_INVALID"
+        | "ANDROID_PACKAGE_NOT_FOUND"
+        | "ANDROID_PACKAGE_QUERY_TOO_LONG"
+        | "APP_SELECTION" => DiagnosticLogStage::AppSelection,
+        "ANDROID_ROUTE" | "ANDROID_PROXY_DESTINATION_RESOLVE_FAILED" => {
+            DiagnosticLogStage::RouteActivation
+        }
+        "ANDROID_PROXY_LISTENER_BIND_UNREACHABLE" => DiagnosticLogStage::DesktopDns,
+        "DOWNSTREAM_TLS_HANDSHAKE_FAILED"
+        | "CLIENT_TLS"
+        | "SOCKET_DOWNSTREAM_TLS_FAILED"
+        | "SOCKET_DOWNSTREAM_TLS_TIMEOUT" => DiagnosticLogStage::DownstreamTls,
+        "TLS_HANDSHAKE_FAILED"
+        | "UPSTREAM_CONNECT_TIMEOUT"
+        | "UPSTREAM_WRITE_TIMEOUT"
+        | "UPSTREAM_READ_TIMEOUT"
+        | "UPSTREAM_SECURITY_SESSION_MISSING"
+        | "UPSTREAM_TLS_NOT_ENABLED"
+        | "SOCKET_UPSTREAM_TLS_FAILED"
+        | "SOCKET_UPSTREAM_TLS_TIMEOUT" => DiagnosticLogStage::UpstreamTls,
+        "HTTP_STATUS_INVALID"
+        | "SESSION_NOT_FOUND"
+        | "BODY_CHARSET_MISSING"
+        | "BODY_CHARSET_UNSUPPORTED"
+        | "BODY_DECODE_FAILED"
+        | "BODY_ENCODE_FAILED"
+        | "BODY_TOO_LARGE"
+        | "HEADER_INVALID"
+        | "HEADER_LIMIT_EXCEEDED"
+        | "JSON_INVALID"
+        | "JSON_MEDIA_TYPE_REQUIRED"
+        | "INCORRECT_CONTENT_LENGTH"
+        | "TRUNCATED_RESPONSE"
+        | "RAW_BODY_HAS_NO_TEXT"
+        | "SHIFT_JIS_DECODE_FAILED"
+        | "SHIFT_JIS_ENCODE_FAILED"
+        | "UTF8_DECODE_FAILED" => DiagnosticLogStage::Http,
+        "SOCKET_TARGET_INVALID"
+        | "SOCKET_CIDR_DENIED"
+        | "SOCKET_CAPACITY_EXHAUSTED"
+        | "SOCKET_DNS_FAILED"
+        | "SOCKET_DNS_TIMEOUT"
+        | "SOCKET_CONNECT_TIMEOUT"
+        | "SOCKET_CONNECT_FAILED"
+        | "SOCKET_READ_TIMEOUT"
+        | "SOCKET_READ_FAILED"
+        | "SOCKET_WRITE_TIMEOUT"
+        | "SOCKET_WRITE_FAILED"
+        | "SOCKET_RELAY_CANCELLED"
+        | "SOCKET_CONNECTION_TASK_PANICKED" => DiagnosticLogStage::Socket,
+        "LISTENER_ALREADY_RUNNING"
+        | "LISTENER_CERTIFICATE_MATERIAL_UNAVAILABLE"
+        | "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED"
+        | "LISTENER_CONNECTION_TEST_UNSUPPORTED"
+        | "LISTENER_NOT_FOUND"
+        | "LISTENER_NOT_RUNNING"
+        | "LISTENER_REQUIRED"
+        | "LISTENER_RUNTIME_ACTIVE"
+        | "LISTENER_RUNTIME_NOT_READY"
+        | "LISTENER_START_FAILED"
+        | "LISTENER_STOP_FAILED"
+        | "PROXY_ALREADY_RUNNING"
+        | "PROXY_NOT_RUNNING"
+        | "PROXY_START_CLEANUP_FAILED"
+        | "PROXY_STOPPED"
+        | "PORT_IN_USE"
+        | "IO_ERROR" => DiagnosticLogStage::Listener,
+        "STOP_FAILED" | "FAULT_EXECUTION_CANCELLED" => DiagnosticLogStage::StopFallback,
+        "CLEANUP_FAILED" | "CERTIFICATE_CLEANUP_FAILED" => DiagnosticLogStage::Cleanup,
+        _ => DiagnosticLogStage::System,
     }
 }
 
@@ -171,7 +230,8 @@ fn error_context(
         DiagnosticLogStage::Listener
         | DiagnosticLogStage::DownstreamTls
         | DiagnosticLogStage::UpstreamTls
-        | DiagnosticLogStage::Http => (None, entity_id, None),
+        | DiagnosticLogStage::Http
+        | DiagnosticLogStage::Socket => (None, entity_id, None),
         DiagnosticLogStage::System | DiagnosticLogStage::DesktopDns => (None, None, None),
     }
 }
@@ -216,10 +276,69 @@ mod tests {
             ("TLS_HANDSHAKE_FAILED", DiagnosticLogStage::UpstreamTls),
             ("UPSTREAM_READ_TIMEOUT", DiagnosticLogStage::UpstreamTls),
             ("HTTP_STATUS_INVALID", DiagnosticLogStage::Http),
+            ("SOCKET_CONNECT_TIMEOUT", DiagnosticLogStage::Socket),
+            ("SOCKET_WRITE_FAILED", DiagnosticLogStage::Socket),
+            (
+                "SOCKET_DOWNSTREAM_TLS_TIMEOUT",
+                DiagnosticLogStage::DownstreamTls,
+            ),
+            (
+                "SOCKET_UPSTREAM_TLS_FAILED",
+                DiagnosticLogStage::UpstreamTls,
+            ),
         ] {
             let entry = diagnostic_entry(&operation_failed(code)).expect("diagnostic event");
             assert_eq!(entry.stage, expected, "unexpected stage for {code}");
         }
+    }
+
+    #[test]
+    fn every_socket_error_code_has_an_explicit_diagnostic_stage() {
+        for (code, expected) in [
+            ("SOCKET_TARGET_INVALID", DiagnosticLogStage::Socket),
+            ("SOCKET_CIDR_DENIED", DiagnosticLogStage::Socket),
+            ("SOCKET_CAPACITY_EXHAUSTED", DiagnosticLogStage::Socket),
+            ("SOCKET_DNS_FAILED", DiagnosticLogStage::Socket),
+            ("SOCKET_DNS_TIMEOUT", DiagnosticLogStage::Socket),
+            ("SOCKET_CONNECT_TIMEOUT", DiagnosticLogStage::Socket),
+            ("SOCKET_CONNECT_FAILED", DiagnosticLogStage::Socket),
+            (
+                "SOCKET_DOWNSTREAM_TLS_TIMEOUT",
+                DiagnosticLogStage::DownstreamTls,
+            ),
+            (
+                "SOCKET_DOWNSTREAM_TLS_FAILED",
+                DiagnosticLogStage::DownstreamTls,
+            ),
+            (
+                "SOCKET_UPSTREAM_TLS_TIMEOUT",
+                DiagnosticLogStage::UpstreamTls,
+            ),
+            (
+                "SOCKET_UPSTREAM_TLS_FAILED",
+                DiagnosticLogStage::UpstreamTls,
+            ),
+            ("SOCKET_READ_TIMEOUT", DiagnosticLogStage::Socket),
+            ("SOCKET_READ_FAILED", DiagnosticLogStage::Socket),
+            ("SOCKET_WRITE_TIMEOUT", DiagnosticLogStage::Socket),
+            ("SOCKET_WRITE_FAILED", DiagnosticLogStage::Socket),
+            ("SOCKET_RELAY_CANCELLED", DiagnosticLogStage::Socket),
+            (
+                "SOCKET_CONNECTION_TASK_PANICKED",
+                DiagnosticLogStage::Socket,
+            ),
+        ] {
+            assert_eq!(
+                stage_for_error_code(code),
+                expected,
+                "unexpected stage for {code}"
+            );
+        }
+        assert_eq!(
+            stage_for_error_code("SOCKET_UNKNOWN_FUTURE_CODE"),
+            DiagnosticLogStage::System,
+            "unknown codes must not be classified by a string prefix"
+        );
     }
 
     #[test]

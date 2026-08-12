@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -18,9 +18,10 @@ use uuid::Uuid;
 use super::target::{Network, valid_authority_pattern};
 use super::tunnel::timeout_or_cancel;
 use super::{config_error, tls_config_error};
+use crate::http::PipelinePorts;
 use crate::message::MessageLimits;
 use crate::supervisor::ChannelId;
-use crate::transport::{BoxIo, PipelinePorts};
+use crate::transport::BoxIo;
 use crate::{ErrorCode, ProxyError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,24 +73,6 @@ impl ForwardProxyConfig {
             })?;
         }
         Ok(())
-    }
-
-    pub(super) fn permits_peer(&self, peer: IpAddr) -> bool {
-        let peer = match peer {
-            IpAddr::V6(address) => address
-                .to_ipv4_mapped()
-                .map_or(IpAddr::V6(address), IpAddr::V4),
-            IpAddr::V4(_) => peer,
-        };
-        // ADB reverse terminates on the desktop as a loopback connection. It still passes
-        // through proxy authentication, while remote clients remain constrained by CIDR.
-        peer.is_loopback()
-            || self.allowed_client_cidrs.is_empty()
-            || self
-                .allowed_client_cidrs
-                .iter()
-                .filter_map(|value| Network::parse(value))
-                .any(|network| network.contains(peer))
     }
 }
 

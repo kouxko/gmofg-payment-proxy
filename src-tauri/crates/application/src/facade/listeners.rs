@@ -5,9 +5,10 @@ use intercept_proxy_domain::Revision as DomainRevision;
 
 use super::Application;
 use crate::{
-    AppError, AppResult, CertificateReference, ListenerId, ListenerOverviewViewModel,
-    ListenerStatusViewModel, OperationResultViewModel, ProxyListener, ProxyWorkspace,
-    UiEventPayload, UiTone, WorkspaceChangeKind, WorkspaceId, WorkspaceValidationViewModel,
+    AppError, AppResult, CertificateReference, ListenerDataPlane, ListenerId,
+    ListenerOverviewViewModel, ListenerStatusViewModel, OperationResultViewModel, ProxyListener,
+    ProxyWorkspace, SocketRelaySecurity, UiEventPayload, UiTone, WorkspaceChangeKind, WorkspaceId,
+    WorkspaceValidationViewModel,
 };
 
 use model::{
@@ -132,8 +133,9 @@ impl Application {
 
     /// 使用经 Rust 校验的当前监听草稿测试真实上游 TLS 握手。
     ///
-    /// 只允许已配置 HTTPS 固定 Server 的监听器调用。证书材料由 infrastructure 根据安全引用读取，应用层与
-    /// 前端都不会接触客户端私钥或 PKCS#12 密码。
+    /// 只允许已配置 HTTPS 固定 Server 的监听器调用。
+    /// 证书材料由 infrastructure 根据安全引用读取，应用层与前端都不会接触客户端私钥
+    /// 或 PKCS#12 密码。
     pub async fn listener_test_upstream_tls(
         &self,
         workspace_id: WorkspaceId,
@@ -152,21 +154,10 @@ impl Application {
             .await?;
         candidate.validate().map_err(AppError::from)?;
 
-        let Some(fixed_server) = &listener.fixed_server else {
-            return Err(AppError::new(
-                "LISTENER_TLS_TEST_UNSUPPORTED",
-                "该监听器未开启固定 Server，无法测试单一 Server TLS。",
-            )
-            .entity(listener.id.to_string()));
-        };
-        if !fixed_server
-            .upstream_url
-            .to_ascii_lowercase()
-            .starts_with("https://")
-        {
+        if !has_upstream_tls(&listener) {
             return Err(AppError::new(
                 "UPSTREAM_TLS_NOT_ENABLED",
-                "固定 Server 使用 HTTP，没有 TLS 握手可测试。",
+                "该入口的上游连接没有启用 TLS。",
             )
             .entity(listener.id.to_string()));
         }
@@ -193,10 +184,10 @@ impl Application {
             )
             .await?;
         candidate.validate().map_err(AppError::from)?;
-        if listener.fixed_server.is_none() {
+        if !has_fixed_target(&listener) {
             return Err(AppError::new(
                 "LISTENER_CONNECTION_TEST_UNSUPPORTED",
-                "该监听器未开启固定 Server，无法测试单一 Server 连接。",
+                "动态 HTTP 监听器没有可独立测试的固定上游。",
             )
             .entity(listener.id.to_string()));
         }
@@ -222,7 +213,8 @@ impl Application {
     ///
     /// mutation gate 串行化监听配置变更；先让 runtime 真实绑定端口，成功后才把 `enabled`
     /// 写入 Workspace。若持久化因 revision 冲突或 I/O 失败，立即 stop 刚启动的 listener，
-    /// 避免界面/数据库显示停止但端口仍开放。只有两个阶段都成功才发布状态事件，因此订阅者
+    /// 避免界面/数据库显示停止但端口仍开放。
+    /// 只有两个阶段都成功才发布状态事件，因此订阅者
     /// 不会观察到尚未提交的短暂 Running 状态。
     pub async fn listener_start(
         &self,
@@ -306,6 +298,28 @@ impl Application {
             certificate_references,
         );
         Ok(workspace)
+    }
+}
+
+fn has_fixed_target(listener: &ProxyListener) -> bool {
+    match &listener.data_plane {
+        ListenerDataPlane::Http(settings) => settings.fixed_server.is_some(),
+        ListenerDataPlane::Socket(_) => true,
+    }
+}
+
+fn has_upstream_tls(listener: &ProxyListener) -> bool {
+    match &listener.data_plane {
+        ListenerDataPlane::Http(settings) => settings.fixed_server.as_ref().is_some_and(|fixed| {
+            fixed
+                .upstream_url
+                .get(..8)
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("https://"))
+        }),
+        ListenerDataPlane::Socket(settings) => matches!(
+            settings.security,
+            SocketRelaySecurity::TcpToTls { .. } | SocketRelaySecurity::TlsToTls { .. }
+        ),
     }
 }
 

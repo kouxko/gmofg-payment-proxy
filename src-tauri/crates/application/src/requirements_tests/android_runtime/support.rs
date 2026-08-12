@@ -220,6 +220,10 @@ async fn running_vpn_fixture_with_listener_state(
                 fault_reason: None,
                 can_start: false,
                 can_stop: false,
+                active_connections: 0,
+                client_to_server_bytes: 0,
+                server_to_client_bytes: 0,
+                retained_diagnostic_evictions: 0,
             })
             .into_iter()
             .collect(),

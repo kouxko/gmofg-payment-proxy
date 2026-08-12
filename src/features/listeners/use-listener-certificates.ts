@@ -11,6 +11,7 @@ import { callCommand } from "@/lib/ipc/client";
 import { mergeCertificateDetails, pruneDetachedDraftCertificates } from "./listener-workspace-draft";
 import type { ListenerPending } from "./listener-runtime-card";
 import { useDraftCertificateLeases } from "./use-draft-certificate-leases";
+import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
 
 type ImportPending = Extract<ListenerPending, `import-${string}`>;
 type RunPending = (
@@ -92,45 +93,90 @@ export function useListenerCertificates({
     importDownstreamIdentity: (label: string) => importCertificate(
       "import-downstream-identity",
       () => callCommand(commands.listenerImportDownstreamServerIdentity(label)),
-      (listener, referenceId) => ({
-        ...listener,
-        downstream_tls: { ...listener.downstream_tls, server_identity: referenceId },
-      }),
+      (listener, referenceId) => bindDownstreamIdentity(listener, referenceId),
     ),
     importDownstreamTrust: (label: string) => importCertificate(
       "import-downstream-trust",
       () => callCommand(commands.listenerImportDownstreamClientTrust(label)),
-      (listener, referenceId) => ({
-        ...listener,
-        downstream_tls: {
-          ...listener.downstream_tls,
-          client_authentication: listener.downstream_tls.client_authentication.mode === "required"
-            ? { mode: "required", trust: referenceId }
-            : { mode: "optional", trust: referenceId },
-        },
-      }),
+      (listener, referenceId) => bindDownstreamTrust(listener, referenceId),
     ),
     importUpstreamIdentity: (label: string, password: string) => importCertificate(
       "import-upstream-identity",
       () => callCommand(commands.listenerImportUpstreamClientIdentity(label, password)),
-      (listener, referenceId) => listener.fixed_server ? {
-        ...listener,
-        fixed_server: {
-          ...listener.fixed_server,
-          upstream_tls: { ...listener.fixed_server.upstream_tls, client_identity: referenceId },
-        },
-      } : listener,
+      (listener, referenceId) => bindUpstream(listener, { client_identity: referenceId }),
     ),
     importUpstreamTrust: (label: string) => importCertificate(
       "import-upstream-trust",
       () => callCommand(commands.listenerImportUpstreamServerTrust(label)),
-      (listener, referenceId) => listener.fixed_server ? {
-        ...listener,
-        fixed_server: {
-          ...listener.fixed_server,
-          upstream_tls: { ...listener.fixed_server.upstream_tls, server_trust: referenceId },
-        },
-      } : listener,
+      (listener, referenceId) => bindUpstream(listener, { server_trust: referenceId }),
     ),
   };
+}
+
+function bindDownstreamIdentity(listener: ProxyListener, referenceId: string): ProxyListener {
+  if (listener.data_plane.kind === "http") {
+    const settings = listener.data_plane.settings;
+    return { ...listener, data_plane: { kind: "http", settings: {
+      ...settings,
+      downstream_tls: { ...settings.downstream_tls, server_identity: referenceId },
+    } } };
+  }
+  const settings = listener.data_plane.settings;
+  const tls = socketDownstreamTls(settings.security);
+  if (!tls) return listener;
+  const security = settings.security.mode === "tls_to_tls"
+    ? { ...settings.security, downstream_tls: { ...tls, server_identity: referenceId } }
+    : { ...settings.security, downstream_tls: { ...tls, server_identity: referenceId } };
+  return { ...listener, data_plane: { kind: "socket", settings: { ...settings, security } } };
+}
+
+function bindDownstreamTrust(listener: ProxyListener, referenceId: string): ProxyListener {
+  if (listener.data_plane.kind === "http") {
+    const settings = listener.data_plane.settings;
+    const current = settings.downstream_tls.client_authentication;
+    const client_authentication = current.mode === "required"
+      ? { mode: "required" as const, trust: referenceId }
+      : { mode: "optional" as const, trust: referenceId };
+    return { ...listener, data_plane: { kind: "http", settings: {
+      ...settings,
+      downstream_tls: { ...settings.downstream_tls, client_authentication },
+    } } };
+  }
+  const settings = listener.data_plane.settings;
+  const tls = socketDownstreamTls(settings.security);
+  if (!tls) return listener;
+  const required = tls.client_authentication.mode === "required";
+  const downstream_tls = {
+    ...tls,
+    client_authentication: required
+      ? { mode: "required" as const, trust: referenceId }
+      : { mode: "optional" as const, trust: referenceId },
+  };
+  const security = settings.security.mode === "tls_to_tls"
+    ? { ...settings.security, downstream_tls }
+    : { ...settings.security, downstream_tls };
+  return { ...listener, data_plane: { kind: "socket", settings: { ...settings, security } } };
+}
+
+function bindUpstream(
+  listener: ProxyListener,
+  changes: { client_identity?: string; server_trust?: string },
+): ProxyListener {
+  if (listener.data_plane.kind === "http") {
+    const settings = listener.data_plane.settings;
+    const fixed = settings.fixed_server;
+    if (!fixed) return listener;
+    return { ...listener, data_plane: { kind: "http", settings: {
+      ...settings,
+      fixed_server: { ...fixed, upstream_tls: { ...fixed.upstream_tls, ...changes } },
+    } } };
+  }
+  const settings = listener.data_plane.settings;
+  const tls = socketUpstreamTls(settings.security);
+  if (!tls) return listener;
+  const upstream_tls = { ...tls, ...changes };
+  const security = settings.security.mode === "tls_to_tls"
+    ? { ...settings.security, upstream_tls }
+    : { ...settings.security, upstream_tls };
+  return { ...listener, data_plane: { kind: "socket", settings: { ...settings, security } } };
 }

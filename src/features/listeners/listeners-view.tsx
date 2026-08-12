@@ -185,17 +185,24 @@ export function ListenersView() {
   }
 
   async function storeBasicCredential() {
-    if (!selected || pending) return;
+    if (!selected || selected.data_plane.kind !== "http" || pending) return;
+    const settings = selected.data_plane.settings;
     await withPending("secret", async () => {
       const credential = await callCommand(commands.workspaceSecretStoreBasic(basicUsername, basicPassword));
-      replaceSelected({ authentication: { mode: "basic", credential } });
+      replaceSelected({ data_plane: {
+        kind: "http",
+        settings: {
+          ...settings,
+          authentication: { mode: "basic", credential },
+        },
+      } });
       setBasicPassword("");
       toast("认证凭据已由系统密钥保护。", { variant: "success" });
     });
   }
 
   async function testUpstreamTls() {
-    if (!effectiveWorkspace || !selected?.fixed_server || pending) return;
+    if (!effectiveWorkspace || !selected || !hasUpstream(selected) || pending) return;
     setTlsTest(undefined);
     setTlsTestError(undefined);
     await withPending("tls-test", async () => {
@@ -257,7 +264,7 @@ export function ListenersView() {
       <main className="min-w-0 space-y-5 overflow-auto p-5">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-xl font-semibold">监听配置</h2>
-          {selected && <Chip color="accent" variant="soft">{selected.fixed_server ? "固定 Server" : "按请求目标"}</Chip>}
+          {selected && <Chip color="accent" variant="soft">{listenerKind(selected)}</Chip>}
           <div className="ml-auto flex flex-wrap gap-2"><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void copySelectedListener()}>复制监听</Button><Button variant="danger-soft" isDisabled={!selected || !selectedCanDelete || Boolean(pending)} onPress={() => void removeSelectedListener()}>{pending === "delete" ? "删除中…" : "删除监听"}</Button><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void persistenceActions.validate()}>{pending === "validate" ? "校验中…" : "校验当前监听"}</Button><Button variant="primary" isDisabled={!selected || Boolean(pending)} onPress={() => void persistenceActions.save()}>{pending === "save" ? "保存中…" : "保存当前监听"}</Button></div>
         </div>
         {validation && (validation.valid ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验通过</Alert.Title><Alert.Description>当前监听可保存、启动或执行上游 TLS 测试。</Alert.Description></Alert.Content></Alert> : <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验未通过</Alert.Title><Alert.Description>{errors.map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description></Alert.Content></Alert>)}
@@ -266,4 +273,16 @@ export function ListenersView() {
       </main>
     </section>
   );
+}
+
+function hasUpstream(listener: ProxyListener) {
+  return listener.data_plane.kind === "socket"
+    || listener.data_plane.settings.fixed_server !== null;
+}
+
+function listenerKind(listener: ProxyListener) {
+  if (listener.data_plane.kind === "socket") {
+    return `Socket · ${listener.data_plane.settings.security.mode}`;
+  }
+  return listener.data_plane.settings.fixed_server ? "HTTP · 固定 Server" : "HTTP · 按请求目标";
 }

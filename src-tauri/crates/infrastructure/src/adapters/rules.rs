@@ -30,7 +30,7 @@ use crate::files::RULE_IMPORT_MAX_BYTES;
 use crate::{AtomicFileExporter, InfrastructureError, SqliteStore, WorkspaceRecord};
 
 use super::{
-    common::{app_error, decode_workspace_record, infra, json_error},
+    common::{app_error, decode_workspace_record, encode_workspace_record, infra, json_error},
     files::{NativeFileDialog, cancelled},
 };
 
@@ -141,8 +141,8 @@ impl RuleRepositoryAdapter {
         Ok(WorkspaceRecord {
             id: workspace.id.as_uuid(),
             revision: workspace.revision.get(),
-            value: serde_json::to_value(workspace)
-                .map_err(|error| json_error("Workspace 序列化失败", error))?,
+            value: encode_workspace_record(workspace)
+                .map_err(|message| AppError::new("PERSISTENCE_FAILED", message))?,
             updated_at: Utc::now(),
         })
     }

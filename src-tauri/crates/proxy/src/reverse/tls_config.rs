@@ -44,7 +44,7 @@ pub(super) fn build_server_acceptor(settings: &ReverseDownstreamTls) -> Result<T
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
-pub(super) fn build_client_connector(settings: &ReverseUpstreamTls) -> Result<ClientTlsAdapter> {
+pub(crate) fn build_client_connector(settings: &ReverseUpstreamTls) -> Result<ClientTlsAdapter> {
     let mut roots = root_store(&settings.server_trust_der)?;
     if settings.server_trust_der.is_empty() {
         let native = rustls_native_certs::load_native_certs();

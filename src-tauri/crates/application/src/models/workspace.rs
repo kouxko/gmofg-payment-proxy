@@ -92,6 +92,26 @@ pub struct ListenerStatusViewModel {
     pub fault_reason: Option<String>,
     pub can_start: bool,
     pub can_stop: bool,
+    pub active_connections: u32,
+    pub client_to_server_bytes: u64,
+    pub server_to_client_bytes: u64,
+    pub retained_diagnostic_evictions: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ListenerDataPlaneKind {
+    Http,
+    Socket,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum SocketTransportMode {
+    Transparent,
+    TcpToTls,
+    TlsToTcp,
+    TlsToTls,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -118,11 +138,13 @@ pub struct ListenerUpstreamTlsTestViewModel {
 /// 对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。
 pub struct ListenerUpstreamConnectionTestViewModel {
     pub listener_id: ListenerId,
+    pub data_plane: ListenerDataPlaneKind,
     pub upstream_origin: String,
     pub resolved_address: String,
     pub scheme: String,
     pub transport: String,
     pub tls: Option<ListenerUpstreamTlsEvidenceViewModel>,
+    pub socket_transport_mode: Option<SocketTransportMode>,
     pub elapsed_millis: u64,
     pub message: String,
     pub ui_tone: UiTone,
@@ -139,7 +161,8 @@ pub struct ListenerUpstreamTlsEvidenceViewModel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 运行监控中的单个入口行。配置与运行状态由 Rust 合并，前端不推断“缺少状态即停止”。
+/// 运行监控中的单个入口行。
+/// 配置与运行状态由 Rust 合并，前端不推断“缺少状态即停止”。
 pub struct ListenerMonitorRowViewModel {
     pub listener_id: ListenerId,
     pub name: String,
@@ -155,6 +178,9 @@ pub struct ListenerMonitorRowViewModel {
     /// Rust runtime 是否允许当前 Listener 执行停止。
     /// `Faulted` 仍可能为 `true`，用于释放 runtime ownership。
     pub can_stop: bool,
+    pub active_connections: u32,
+    pub client_to_server_bytes: u64,
+    pub server_to_client_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

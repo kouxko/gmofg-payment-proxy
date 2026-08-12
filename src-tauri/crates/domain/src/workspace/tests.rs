@@ -3,6 +3,41 @@ use std::collections::BTreeSet;
 use super::*;
 use crate::{AndroidProxyRoute, AndroidTargetApplication, WeakNetworkProfile};
 
+mod listener_v3;
+
+fn http(listener: &ProxyListener) -> &HttpListenerSettings {
+    listener.http().expect("HTTP listener")
+}
+
+fn http_mut(listener: &mut ProxyListener) -> &mut HttpListenerSettings {
+    match &mut listener.data_plane {
+        ListenerDataPlane::Http(settings) => settings,
+        ListenerDataPlane::Socket(_) => panic!("expected HTTP listener"),
+    }
+}
+
+fn v2_listener() -> ProxyListenerV2 {
+    let listener = ProxyListener::default();
+    let http = http(&listener);
+    ProxyListenerV2 {
+        id: listener.id,
+        name: listener.name.clone(),
+        enabled: listener.enabled,
+        bind_address: listener.bind_address.clone(),
+        port: listener.port,
+        authentication: http.authentication.clone(),
+        allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
+        mitm: http.mitm.clone(),
+        connect_timeout_ms: listener.connect_timeout_ms,
+        read_timeout_ms: listener.read_timeout_ms,
+        write_timeout_ms: listener.write_timeout_ms,
+        downstream_tls: Some(http.downstream_tls.clone()),
+        request_body_codec: http.request_body_codec,
+        response_body_codec: http.response_body_codec,
+        fixed_server: http.fixed_server.clone(),
+    }
+}
+
 #[test]
 fn default_workspace_is_empty_safe_and_serializable() {
     let workspace = ProxyWorkspace::default();
@@ -11,9 +46,9 @@ fn default_workspace_is_empty_safe_and_serializable() {
     assert!(!listener.enabled);
     assert_eq!(listener.bind_address, "127.0.0.1");
     assert_eq!(listener.port, 8080);
-    assert!(listener.fixed_server.is_none());
-    assert_eq!(listener.request_body_codec, BodyCodecKind::Auto);
-    assert_eq!(listener.response_body_codec, BodyCodecKind::Auto);
+    assert!(http(listener).fixed_server.is_none());
+    assert_eq!(http(listener).request_body_codec, BodyCodecKind::Auto);
+    assert_eq!(http(listener).response_body_codec, BodyCodecKind::Auto);
     assert!(workspace.rules.is_empty());
     assert!(workspace.fault_presets.is_empty());
     workspace.validate().expect("safe draft must validate");
@@ -37,36 +72,30 @@ fn legacy_listener_body_codec_values_remain_deserializable() {
 
 #[test]
 fn listener_documents_without_body_codec_use_header_driven_auto() {
-    let mut document = serde_json::to_value(ProxyWorkspace::default()).unwrap();
-    let listener = document["listeners"][0].as_object_mut().unwrap();
+    let mut document = serde_json::to_value(v2_listener()).unwrap();
+    let listener = document.as_object_mut().unwrap();
     listener.remove("request_body_codec");
     listener.remove("response_body_codec");
 
-    let workspace: ProxyWorkspace = serde_json::from_value(document).unwrap();
+    let listener: ProxyListener = serde_json::from_value::<ProxyListenerV2>(document)
+        .unwrap()
+        .into();
 
-    assert_eq!(
-        workspace.listeners[0].request_body_codec,
-        BodyCodecKind::Auto
-    );
-    assert_eq!(
-        workspace.listeners[0].response_body_codec,
-        BodyCodecKind::Auto
-    );
+    assert_eq!(http(&listener).request_body_codec, BodyCodecKind::Auto);
+    assert_eq!(http(&listener).response_body_codec, BodyCodecKind::Auto);
 }
 
 #[test]
 fn dynamic_listener_without_new_optional_downstream_tls_still_loads() {
-    let mut document = serde_json::to_value(ProxyWorkspace::default()).unwrap();
-    document["listeners"][0]
-        .as_object_mut()
+    let mut document = serde_json::to_value(v2_listener()).unwrap();
+    document.as_object_mut().unwrap().remove("downstream_tls");
+
+    let listener: ProxyListener = serde_json::from_value::<ProxyListenerV2>(document)
         .unwrap()
-        .remove("downstream_tls");
+        .into();
 
-    let workspace: ProxyWorkspace = serde_json::from_value(document).unwrap();
-
-    assert!(!workspace.listeners[0].downstream_tls.enabled);
-    assert!(workspace.listeners[0].fixed_server.is_none());
-    workspace.validate().unwrap();
+    assert!(!http(&listener).downstream_tls.enabled);
+    assert!(http(&listener).fixed_server.is_none());
 }
 
 #[test]
@@ -79,7 +108,7 @@ fn non_loopback_forward_listener_requires_authentication_but_allows_empty_cidr()
     assert!(
         error
             .field_errors
-            .contains_key("listeners.0.authentication")
+            .contains_key("listeners.0.data_plane.settings.authentication")
     );
     assert!(
         !error
@@ -94,7 +123,7 @@ fn non_loopback_fixed_server_allows_all_clients_when_cidr_is_empty() {
     let listener = &mut workspace.listeners[0];
     listener.enabled = true;
     listener.bind_address = "0.0.0.0".into();
-    listener.fixed_server = Some(FixedServerSettings {
+    http_mut(listener).fixed_server = Some(FixedServerSettings {
         upstream_url: "https://server.example.test:443".into(),
         upstream_tls: UpstreamTlsSettings::default(),
     });
@@ -124,11 +153,14 @@ fn workspace_accepts_multiple_fixed_server_listener_mappings() {
         enabled: true,
         bind_address: "127.0.0.1".into(),
         port,
-        request_body_codec: BodyCodecKind::Raw,
-        response_body_codec: BodyCodecKind::Raw,
-        fixed_server: Some(FixedServerSettings {
-            upstream_url: upstream_url.into(),
-            upstream_tls: UpstreamTlsSettings::default(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            request_body_codec: BodyCodecKind::Raw,
+            response_body_codec: BodyCodecKind::Raw,
+            fixed_server: Some(FixedServerSettings {
+                upstream_url: upstream_url.into(),
+                upstream_tls: UpstreamTlsSettings::default(),
+            }),
+            ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
     };
@@ -149,23 +181,30 @@ fn workspace_accepts_multiple_fixed_server_listener_mappings() {
 fn mitm_is_fail_closed_without_allowlist_but_can_use_installation_root() {
     let mut workspace = ProxyWorkspace::default();
     let listener = &mut workspace.listeners[0];
-    listener.mitm.enabled = true;
+    http_mut(listener).mitm.enabled = true;
     let error = workspace.validate().unwrap_err();
     assert!(
         error
             .field_errors
-            .contains_key("listeners.0.mitm.authority_allowlist")
+            .contains_key("listeners.0.data_plane.settings.mitm.authority_allowlist")
     );
-    assert!(!error.field_errors.contains_key("listeners.0.mitm.root_ca"));
+    assert!(
+        !error
+            .field_errors
+            .contains_key("listeners.0.data_plane.settings.mitm.root_ca")
+    );
 }
 
 #[test]
 fn downstream_tls_can_use_installation_root_for_dynamic_sni() {
     let mut workspace = ProxyWorkspace::default();
-    workspace.listeners[0].downstream_tls.enabled = true;
-    workspace.listeners[0].downstream_tls.server_identity = None;
-    workspace.listeners[0].downstream_tls.dynamic_sni_allowlist =
-        vec!["api.example.test".into(), "*.service.test".into()];
+    http_mut(&mut workspace.listeners[0]).downstream_tls.enabled = true;
+    http_mut(&mut workspace.listeners[0])
+        .downstream_tls
+        .server_identity = None;
+    http_mut(&mut workspace.listeners[0])
+        .downstream_tls
+        .dynamic_sni_allowlist = vec!["api.example.test".into(), "*.service.test".into()];
 
     workspace
         .validate()
@@ -175,30 +214,33 @@ fn downstream_tls_can_use_installation_root_for_dynamic_sni() {
 #[test]
 fn downstream_tls_rejects_invalid_dynamic_sni_pattern() {
     let mut workspace = ProxyWorkspace::default();
-    workspace.listeners[0].downstream_tls.enabled = true;
-    workspace.listeners[0].downstream_tls.dynamic_sni_allowlist =
-        vec!["https://api.example.test/path".into()];
+    http_mut(&mut workspace.listeners[0]).downstream_tls.enabled = true;
+    http_mut(&mut workspace.listeners[0])
+        .downstream_tls
+        .dynamic_sni_allowlist = vec!["https://api.example.test/path".into()];
 
     let error = workspace.validate().expect_err("invalid SNI pattern");
     assert!(
         error
             .field_errors
-            .contains_key("listeners.0.downstream_tls.dynamic_sni_allowlist.0")
+            .contains_key("listeners.0.data_plane.settings.downstream_tls.dynamic_sni_allowlist.0")
     );
 }
 
 #[test]
 fn downstream_tls_rejects_ip_literal_dynamic_sni() {
     let mut workspace = ProxyWorkspace::default();
-    workspace.listeners[0].downstream_tls.enabled = true;
-    workspace.listeners[0].downstream_tls.dynamic_sni_allowlist = vec!["10.0.0.1".into()];
+    http_mut(&mut workspace.listeners[0]).downstream_tls.enabled = true;
+    http_mut(&mut workspace.listeners[0])
+        .downstream_tls
+        .dynamic_sni_allowlist = vec!["10.0.0.1".into()];
 
     let error = workspace.validate().expect_err("IP is not a TLS SNI name");
 
     assert!(
         error
             .field_errors
-            .contains_key("listeners.0.downstream_tls.dynamic_sni_allowlist.0")
+            .contains_key("listeners.0.data_plane.settings.downstream_tls.dynamic_sni_allowlist.0")
     );
 }
 
@@ -212,7 +254,7 @@ fn fixed_http_server_rejects_tls_certificate_configuration() {
         kind: CertificateReferenceKind::UpstreamServerTrust,
         reference: "managed:test-ca".into(),
     });
-    workspace.listeners[0].fixed_server = Some(FixedServerSettings {
+    http_mut(&mut workspace.listeners[0]).fixed_server = Some(FixedServerSettings {
         upstream_url: "http://server.example.test:8080".into(),
         upstream_tls: UpstreamTlsSettings {
             server_trust: Some(trust_id),
@@ -224,7 +266,7 @@ fn fixed_http_server_rejects_tls_certificate_configuration() {
     assert!(
         error
             .field_errors
-            .contains_key("listeners.0.fixed_server.upstream_tls")
+            .contains_key("listeners.0.data_plane.settings.fixed_server.upstream_tls")
     );
 }
 
@@ -238,7 +280,7 @@ fn listener_tls_rejects_certificate_references_used_in_the_wrong_role() {
         kind: CertificateReferenceKind::DownstreamClientTrust,
         reference: "managed:listener-tls:test-client-ca".into(),
     });
-    workspace.listeners[0].fixed_server = Some(FixedServerSettings {
+    http_mut(&mut workspace.listeners[0]).fixed_server = Some(FixedServerSettings {
         upstream_url: "https://server.example.test:443".into(),
         upstream_tls: UpstreamTlsSettings {
             server_trust: Some(trust_id),
@@ -251,16 +293,16 @@ fn listener_tls_rejects_certificate_references_used_in_the_wrong_role() {
     assert!(
         error
             .field_errors
-            .contains_key("listeners.0.fixed_server.upstream_tls.server_trust")
+            .contains_key("listeners.0.data_plane.settings.fixed_server.upstream_tls.server_trust")
     );
 }
 
 #[test]
 fn fixed_server_stores_body_encoding_on_the_listener() {
     let mut workspace = ProxyWorkspace::default();
-    workspace.listeners[0].request_body_codec = BodyCodecKind::Utf8;
-    workspace.listeners[0].response_body_codec = BodyCodecKind::ShiftJis;
-    workspace.listeners[0].fixed_server = Some(FixedServerSettings {
+    http_mut(&mut workspace.listeners[0]).request_body_codec = BodyCodecKind::Utf8;
+    http_mut(&mut workspace.listeners[0]).response_body_codec = BodyCodecKind::ShiftJis;
+    http_mut(&mut workspace.listeners[0]).fixed_server = Some(FixedServerSettings {
         upstream_url: "https://example.test".into(),
         upstream_tls: UpstreamTlsSettings::default(),
     });
@@ -269,11 +311,11 @@ fn fixed_server_stores_body_encoding_on_the_listener() {
         .validate()
         .expect("listener body codecs are self-contained");
     assert_eq!(
-        workspace.listeners[0].request_body_codec,
+        http(&workspace.listeners[0]).request_body_codec,
         BodyCodecKind::Utf8
     );
     assert_eq!(
-        workspace.listeners[0].response_body_codec,
+        http(&workspace.listeners[0]).response_body_codec,
         BodyCodecKind::ShiftJis
     );
 }

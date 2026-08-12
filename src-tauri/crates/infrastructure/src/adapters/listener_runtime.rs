@@ -4,7 +4,6 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     net::{IpAddr, SocketAddr},
     sync::Arc,
-    time::Duration,
 };
 
 #[cfg(test)]
@@ -12,25 +11,20 @@ use std::{
     fs,
     io::{Cursor, Read},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 use intercept_proxy_application::{
-    AppError, AppResult, ListenerId, ListenerRuntimePort, ListenerRuntimeState,
-    ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
-    ListenerUpstreamTlsEvidenceViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener, UiTone,
-    WorkspaceId,
+    AppError, AppResult, EventHub, ListenerId, ListenerRuntimeState, ListenerStatusViewModel,
+    ProxyListener, UiTone, WorkspaceId,
 };
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, DownstreamClientAuthentication,
-    FixedServerSettings, ForwardProxyAuthentication, ProxyWorkspace,
-    normalize_android_network_destination,
+    FixedServerSettings, ProxyWorkspace, normalize_android_network_destination,
 };
 use intercept_proxy_runtime::{
-    ChannelId as RuntimeChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode,
-    ForwardMitmConfig, ForwardProxyAuthenticator, ForwardProxyConfig, ForwardProxyService,
-    MessageLimits, MitmCertificateAuthority, NativeRootMitmConnector, NoAuthentication,
-    PipelinePorts, ReverseClientIdentity, ReverseDownstreamTls, ReverseProxyConfig,
-    ReverseProxyService, ReverseUpstreamTls, UpstreamScheme, UpstreamTransport,
+    MitmCertificateAuthority, PipelinePorts, ReverseClientIdentity, ReverseDownstreamTls,
+    ReverseUpstreamTls, SocketRelayService,
 };
 use parking_lot::RwLock;
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -44,7 +38,7 @@ use crate::CertificateService;
 use crate::SqliteStore;
 
 #[cfg(test)]
-use super::common::app_error;
+use super::common::{app_error, encode_workspace_record};
 use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
 
 /// 读取当前安装实例在证书管理页签发的服务端叶子证书。
@@ -64,6 +58,7 @@ struct RunningListener {
     /// Immutable configuration identity used by this task. Keeping the snapshot makes runtime
     /// ownership explicit and prevents later Workspace edits from silently changing live traffic.
     workspace: ProxyWorkspace,
+    socket_service: Option<Arc<SocketRelayService>>,
 }
 
 #[derive(Debug)]
@@ -77,6 +72,7 @@ pub struct ListenerRuntimeAdapter {
     protected_secrets: Option<Arc<ProtectedSecretAdapter>>,
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
     pipeline_ports: RwLock<Option<Arc<dyn PipelinePorts>>>,
+    socket_diagnostic_events: RwLock<Arc<EventHub>>,
 }
 
 impl ListenerRuntimeAdapter {
@@ -91,6 +87,7 @@ impl ListenerRuntimeAdapter {
             protected_secrets: None,
             managed_listener_certificates: None,
             pipeline_ports: RwLock::new(None),
+            socket_diagnostic_events: RwLock::new(Arc::new(EventHub::default())),
         }
     }
 
@@ -142,6 +139,10 @@ impl ListenerRuntimeAdapter {
         *self.pipeline_ports.write() = Some(ports);
     }
 
+    pub fn set_socket_diagnostic_events(&self, events: Arc<EventHub>) {
+        *self.socket_diagnostic_events.write() = events;
+    }
+
     fn runtime_epoch_for_start(&self, workspace_id: WorkspaceId) -> Uuid {
         let mut epochs = self.runtime_epochs.write();
         *epochs.entry(workspace_id).or_insert_with(Uuid::new_v4)
@@ -157,76 +158,11 @@ impl ListenerRuntimeAdapter {
             fault_reason: None,
             can_start: true,
             can_stop: false,
+            active_connections: 0,
+            client_to_server_bytes: 0,
+            server_to_client_bytes: 0,
+            retained_diagnostic_evictions: 0,
         }
-    }
-
-    async fn start_fixed_server(
-        &self,
-        workspace: &ProxyWorkspace,
-        listener: &ProxyListener,
-    ) -> AppResult<(TcpListener, ReverseProxyService, String)> {
-        let persisted = workspace
-            .listeners
-            .iter()
-            .find(|candidate| candidate.id == listener.id)
-            .ok_or_else(|| {
-                AppError::new("LISTENER_NOT_FOUND", "Workspace 中不存在该 Listener。")
-                    .entity(listener.id.to_string())
-            })?;
-        if persisted != listener {
-            return Err(AppError::new(
-                "REVISION_CONFLICT",
-                "Listener 配置与当前 Workspace 快照不一致，请重新加载。",
-            )
-            .entity(listener.id.to_string()));
-        }
-
-        let bind_addr = parse_bind_address(&listener.bind_address, listener.port, listener.id)?;
-        let fixed_server = listener.fixed_server.as_ref().ok_or_else(|| {
-            AppError::new(
-                "FIXED_SERVER_NOT_CONFIGURED",
-                "该代理监听未配置固定 Server。",
-            )
-            .entity(listener.id.to_string())
-        })?;
-        let downstream_tls = self.downstream_tls(workspace, listener)?;
-        let upstream_tls = self.upstream_tls(workspace, fixed_server)?;
-
-        let mut service = ReverseProxyService::build(ReverseProxyConfig {
-            bind_addr,
-            allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
-            upstream_origin: fixed_server.upstream_url.clone(),
-            downstream_tls,
-            upstream_tls,
-            connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
-            read_timeout: Duration::from_millis(listener.read_timeout_ms),
-            write_timeout: Duration::from_millis(listener.write_timeout_ms),
-        })
-        .await
-        .map_err(|error| {
-            AppError::new(error.code, error.message).entity(listener.id.to_string())
-        })?;
-        let pipeline_ports = self.pipeline_ports.read().clone().ok_or_else(|| {
-            AppError::new(
-                "LISTENER_RUNTIME_NOT_READY",
-                "通用规则、抓包与断点管线尚未完成装配。",
-            )
-            .entity(listener.id.to_string())
-        })?;
-        let channel = RuntimeChannelId::new(listener.id.to_string())
-            .map_err(|error| AppError::new(error.code, error.message))?;
-        service = service
-            .with_pipeline(
-                channel,
-                pipeline_ports,
-                MessageLimits::default(),
-                DEFAULT_MAX_CONNECTIONS,
-            )
-            .map_err(|error| {
-                AppError::new(error.code, error.message).entity(listener.id.to_string())
-            })?;
-        let tcp_listener = bind_tcp_listener(bind_addr, listener.id).await?;
-        Ok((tcp_listener, service, bind_addr.to_string()))
     }
 }
 
@@ -242,10 +178,13 @@ impl Drop for ListenerRuntimeAdapter {
 }
 
 mod helpers;
+mod plan;
 mod port;
+mod socket_diagnostics;
 mod tls_material;
 
 use helpers::{bind_tcp_listener, parse_bind_address, running_status, upstream_tls_test_error};
+use plan::{ListenerRuntimePlanBuilder, PreparedListenerRuntime};
 #[cfg(test)]
 use tls_material::normalize_sni_pattern;
 

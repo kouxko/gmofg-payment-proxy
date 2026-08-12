@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use parking_lot::RwLock;
 
 use crate::{
-    AppError, AppResult, ListenerId, ListenerRuntimePort, ListenerRuntimeState,
-    ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
+    AppError, AppResult, ListenerDataPlane, ListenerDataPlaneKind, ListenerId, ListenerRuntimePort,
+    ListenerRuntimeState, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsEvidenceViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener,
-    ProxyWorkspace, UiTone,
+    ProxyWorkspace, SocketRelaySecurity, SocketTransportMode, UiTone,
 };
 
 #[derive(Debug, Default)]
@@ -51,6 +51,10 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
             fault_reason: None,
             can_start: false,
             can_stop: true,
+            active_connections: 0,
+            client_to_server_bytes: 0,
+            server_to_client_bytes: 0,
+            retained_diagnostic_evictions: 0,
         };
         self.statuses.write().insert(id, status.clone());
         Ok(status)
@@ -70,6 +74,10 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
             fault_reason: None,
             can_start: true,
             can_stop: false,
+            active_connections: 0,
+            client_to_server_bytes: running.client_to_server_bytes,
+            server_to_client_bytes: running.server_to_client_bytes,
+            retained_diagnostic_evictions: running.retained_diagnostic_evictions,
         })
     }
 
@@ -78,30 +86,17 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
         _workspace: ProxyWorkspace,
         listener: ProxyListener,
     ) -> AppResult<ListenerUpstreamTlsTestViewModel> {
-        let fixed_server = listener.fixed_server.as_ref().ok_or_else(|| {
-            AppError::new(
-                "LISTENER_TLS_TEST_UNSUPPORTED",
-                "该监听器未开启固定 Server，无法测试单一 Server TLS。",
-            )
-            .entity(listener.id.to_string())
-        })?;
-        if !fixed_server.upstream_url.starts_with("https://") {
-            return Err(AppError::new(
-                "UPSTREAM_TLS_NOT_ENABLED",
-                "该入口使用 HTTP 上游，没有 TLS 握手可测试。",
-            )
-            .entity(listener.id.to_string()));
-        }
+        let target = upstream_tls_target(&listener)?;
         Ok(ListenerUpstreamTlsTestViewModel {
             listener_id: listener.id,
-            upstream_origin: fixed_server.upstream_url.clone(),
+            upstream_origin: target.address,
             resolved_address: "127.0.0.1:443".into(),
             tls_version: "TLS 1.2".into(),
             cipher_suite: "测试密码套件".into(),
             peer_subject: "CN=测试上游".into(),
             peer_sha256_fingerprint: "00:11:22".into(),
-            hostname_verification_enabled: fixed_server.upstream_tls.verify_hostname,
-            client_identity_configured: fixed_server.upstream_tls.client_identity.is_some(),
+            hostname_verification_enabled: target.verify_hostname,
+            client_identity_configured: target.client_identity_configured,
             elapsed_millis: 1,
             message: "上游 Server TLS 握手成功。".into(),
             ui_tone: UiTone::Positive,
@@ -113,36 +108,164 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
         _workspace: ProxyWorkspace,
         listener: ProxyListener,
     ) -> AppResult<ListenerUpstreamConnectionTestViewModel> {
-        let fixed_server = listener.fixed_server.as_ref().ok_or_else(|| {
-            AppError::new(
-                "LISTENER_CONNECTION_TEST_UNSUPPORTED",
-                "该监听器未开启固定 Server，无法测试单一 Server 连接。",
-            )
-            .entity(listener.id.to_string())
-        })?;
-        let is_https = fixed_server.upstream_url.starts_with("https://");
+        let target = connection_target(&listener)?;
         Ok(ListenerUpstreamConnectionTestViewModel {
             listener_id: listener.id,
-            upstream_origin: fixed_server.upstream_url.clone(),
-            resolved_address: if is_https {
+            data_plane: target.data_plane,
+            upstream_origin: target.address,
+            resolved_address: if target.uses_tls {
                 "127.0.0.1:443"
             } else {
                 "127.0.0.1:80"
             }
             .into(),
-            scheme: if is_https { "https" } else { "http" }.into(),
-            transport: if is_https { "tls" } else { "tcp" }.into(),
-            tls: is_https.then(|| ListenerUpstreamTlsEvidenceViewModel {
-                tls_version: "TLS 1.2".into(),
-                cipher_suite: "测试密码套件".into(),
-                peer_subject: "CN=测试上游".into(),
-                peer_sha256_fingerprint: "00:11:22".into(),
-                hostname_verification_enabled: fixed_server.upstream_tls.verify_hostname,
-                client_identity_configured: fixed_server.upstream_tls.client_identity.is_some(),
-            }),
+            scheme: target.scheme,
+            transport: if target.uses_tls { "tls" } else { "tcp" }.into(),
+            tls: target
+                .uses_tls
+                .then(|| ListenerUpstreamTlsEvidenceViewModel {
+                    tls_version: "TLS 1.2".into(),
+                    cipher_suite: "测试密码套件".into(),
+                    peer_subject: "CN=测试上游".into(),
+                    peer_sha256_fingerprint: "00:11:22".into(),
+                    hostname_verification_enabled: target.verify_hostname,
+                    client_identity_configured: target.client_identity_configured,
+                }),
+            socket_transport_mode: target.socket_transport_mode,
             elapsed_millis: 1,
             message: "上游 Server 连接成功。".into(),
             ui_tone: UiTone::Positive,
         })
+    }
+}
+
+struct TestTarget {
+    address: String,
+    scheme: String,
+    data_plane: ListenerDataPlaneKind,
+    uses_tls: bool,
+    verify_hostname: bool,
+    client_identity_configured: bool,
+    socket_transport_mode: Option<SocketTransportMode>,
+}
+
+fn connection_target(listener: &ProxyListener) -> AppResult<TestTarget> {
+    match &listener.data_plane {
+        ListenerDataPlane::Http(settings) => {
+            let fixed = settings.fixed_server.as_ref().ok_or_else(|| {
+                unsupported_connection_test(listener.id, "该 HTTP 监听器未开启固定 Server。")
+            })?;
+            let uses_tls = fixed.upstream_url.starts_with("https://");
+            Ok(TestTarget {
+                address: fixed.upstream_url.clone(),
+                scheme: if uses_tls { "https" } else { "http" }.into(),
+                data_plane: ListenerDataPlaneKind::Http,
+                uses_tls,
+                verify_hostname: fixed.upstream_tls.verify_hostname,
+                client_identity_configured: fixed.upstream_tls.client_identity.is_some(),
+                socket_transport_mode: None,
+            })
+        }
+        ListenerDataPlane::Socket(settings) => {
+            let (mode, upstream_tls) = match &settings.security {
+                SocketRelaySecurity::Transparent => (SocketTransportMode::Transparent, None),
+                SocketRelaySecurity::TcpToTls { upstream_tls } => {
+                    (SocketTransportMode::TcpToTls, Some(upstream_tls))
+                }
+                SocketRelaySecurity::TlsToTcp { .. } => (SocketTransportMode::TlsToTcp, None),
+                SocketRelaySecurity::TlsToTls { upstream_tls, .. } => {
+                    (SocketTransportMode::TlsToTls, Some(upstream_tls))
+                }
+            };
+            Ok(TestTarget {
+                address: format!("{}:{}", settings.upstream.host, settings.upstream.port),
+                scheme: "socket".into(),
+                data_plane: ListenerDataPlaneKind::Socket,
+                uses_tls: upstream_tls.is_some(),
+                verify_hostname: upstream_tls.is_some_and(|tls| tls.verify_hostname),
+                client_identity_configured: upstream_tls
+                    .is_some_and(|tls| tls.client_identity.is_some()),
+                socket_transport_mode: Some(mode),
+            })
+        }
+    }
+}
+
+fn upstream_tls_target(listener: &ProxyListener) -> AppResult<TestTarget> {
+    let target = connection_target(listener)?;
+    if target.uses_tls {
+        Ok(target)
+    } else {
+        Err(
+            AppError::new("UPSTREAM_TLS_NOT_ENABLED", "该入口的上游连接没有启用 TLS。")
+                .entity(listener.id.to_string()),
+        )
+    }
+}
+
+fn unsupported_connection_test(listener_id: ListenerId, message: &str) -> AppError {
+    AppError::new("LISTENER_CONNECTION_TEST_UNSUPPORTED", message).entity(listener_id.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ListenerDataPlane, SocketEndpoint, SocketRelaySecurity, SocketRelaySettings,
+        SocketUpstreamTlsSettings,
+    };
+
+    use super::*;
+
+    #[test]
+    fn socket_connection_probe_reports_transport_without_inventing_tls() {
+        let listener = ProxyListener {
+            data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
+                upstream: SocketEndpoint {
+                    host: "socket.example.test".into(),
+                    port: 16_127,
+                },
+                security: SocketRelaySecurity::Transparent,
+                maximum_connections: 500,
+            }),
+            ..ProxyListener::default()
+        };
+
+        let target = connection_target(&listener).unwrap();
+        assert_eq!(target.data_plane, ListenerDataPlaneKind::Socket);
+        assert_eq!(target.address, "socket.example.test:16127");
+        assert!(!target.uses_tls);
+        assert_eq!(
+            target.socket_transport_mode,
+            Some(SocketTransportMode::Transparent)
+        );
+    }
+
+    #[test]
+    fn socket_connection_probe_reports_only_upstream_tls_evidence() {
+        let listener = ProxyListener {
+            data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
+                upstream: SocketEndpoint {
+                    host: "socket.example.test".into(),
+                    port: 443,
+                },
+                security: SocketRelaySecurity::TcpToTls {
+                    upstream_tls: SocketUpstreamTlsSettings {
+                        verify_hostname: false,
+                        server_trust: None,
+                        client_identity: None,
+                    },
+                },
+                maximum_connections: 500,
+            }),
+            ..ProxyListener::default()
+        };
+
+        let target = upstream_tls_target(&listener).unwrap();
+        assert!(target.uses_tls);
+        assert!(!target.verify_hostname);
+        assert_eq!(
+            target.socket_transport_mode,
+            Some(SocketTransportMode::TcpToTls)
+        );
     }
 }

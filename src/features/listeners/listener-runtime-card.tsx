@@ -1,5 +1,6 @@
 import { Button } from "@heroui/react";
 import type { ListenerMonitorRowViewModel } from "@/generated/rust-types";
+import { formatBytes } from "@/lib/format";
 
 export type ListenerPending = "validate" | "save" | "delete" | "start" | "stop" | "secret" | "tls-test"
   | "import-downstream-identity" | "import-downstream-trust"
@@ -21,7 +22,13 @@ export function ListenerRuntimeCard({ status, isLoading, error, pending, onToggl
     : unavailable ? "状态不可用" : operation === "stop" ? "停止监听"
       : operation === "start" ? "启动监听" : "无可用操作";
   return <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--telemetry-line)] p-3">
-    <div className="min-w-0"><p className="text-sm">运行状态：{stateText}</p>
+    <div className="min-w-0">
+      <p className="text-sm">运行状态：{stateText}</p>
+      {status && <p className="mt-1 text-xs text-[var(--telemetry-muted)]">{status.kind_text}</p>}
+      {status && <p className="mt-1 text-xs text-[var(--telemetry-muted)]">
+        活动连接 {status.active_connections} · C→S {formatBytes(status.client_to_server_bytes)}
+        {" · "}S→C {formatBytes(status.server_to_client_bytes)}
+      </p>}
       {error && <p className="mt-1 text-xs text-[var(--telemetry-danger)]">{error}</p>}
     </div>
     <div className="flex items-center gap-2">

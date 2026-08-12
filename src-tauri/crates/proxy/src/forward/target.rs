@@ -140,44 +140,13 @@ fn format_authority(host: &str, port: u16) -> String {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Network {
-    address: IpAddr,
-    prefix: u8,
-}
+pub(super) struct Network;
 
 impl Network {
     pub(super) fn parse(value: &str) -> Option<Self> {
         let (address, prefix) = value.split_once('/')?;
         let address = address.parse::<IpAddr>().ok()?;
         let prefix = prefix.parse::<u8>().ok()?;
-        (prefix <= if address.is_ipv4() { 32 } else { 128 }).then_some(Self { address, prefix })
-    }
-
-    pub(super) fn contains(self, candidate: IpAddr) -> bool {
-        let candidate = match candidate {
-            IpAddr::V6(address) => address
-                .to_ipv4_mapped()
-                .map_or(IpAddr::V6(address), IpAddr::V4),
-            IpAddr::V4(_) => candidate,
-        };
-        match (self.address, candidate) {
-            (IpAddr::V4(network), IpAddr::V4(candidate)) => {
-                let mask = if self.prefix == 0 {
-                    0
-                } else {
-                    u32::MAX << (32 - self.prefix)
-                };
-                u32::from(network) & mask == u32::from(candidate) & mask
-            }
-            (IpAddr::V6(network), IpAddr::V6(candidate)) => {
-                let mask = if self.prefix == 0 {
-                    0
-                } else {
-                    u128::MAX << (128 - self.prefix)
-                };
-                u128::from(network) & mask == u128::from(candidate) & mask
-            }
-            _ => false,
-        }
+        (prefix <= if address.is_ipv4() { 32 } else { 128 }).then_some(Self)
     }
 }

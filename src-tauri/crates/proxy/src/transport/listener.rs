@@ -1,6 +1,17 @@
-use super::{
-    Arc, BoxIo, ConnectionContext, Debug, Duration, Result, SocketAddr, SystemTime, TcpListener,
-    async_trait, io,
+use std::{
+    fmt::Debug,
+    io,
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, SystemTime},
+};
+
+use async_trait::async_trait;
+use tokio::net::TcpListener;
+
+use crate::{
+    Result,
+    transport::{BoxIo, ConnectionContext},
 };
 
 #[async_trait]
@@ -52,7 +63,7 @@ impl ListenerBinder for TokioListenerBinder {
 }
 
 #[derive(Debug)]
-pub(super) struct TokioBoundListener(pub(super) TcpListener);
+pub(crate) struct TokioBoundListener(pub(crate) TcpListener);
 
 #[async_trait]
 impl BoundListener for TokioBoundListener {

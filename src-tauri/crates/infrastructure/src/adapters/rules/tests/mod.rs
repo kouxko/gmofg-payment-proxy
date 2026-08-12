@@ -49,8 +49,7 @@ impl NativeFileDialog for MutatingOpenDialog {
             .into_iter()
             .find(|record| record.id == selected_id)
             .expect("selected record");
-        let mut workspace: ProxyWorkspace =
-            serde_json::from_value(record.value).expect("workspace");
+        let mut workspace = decode_workspace_record(record.clone()).expect("workspace");
         workspace.rules.push(self.concurrent_rule.clone());
         workspace.revision = workspace.revision.next();
         infra(self.store.compare_and_swap_selected_workspace(

@@ -86,18 +86,45 @@ export function listenerCertificateReferences(
 function listenerCertificateReferenceIds(listeners: ProxyListener[]) {
   const referencedIds = new Set<string>();
   for (const listener of listeners) {
-    if (listener.downstream_tls.server_identity) {
-      referencedIds.add(listener.downstream_tls.server_identity);
+    if (listener.data_plane.kind === "http") {
+      collectDownstream(
+        listener.data_plane.settings.downstream_tls.server_identity,
+        listener.data_plane.settings.downstream_tls.client_authentication,
+        referencedIds,
+      );
+      collectUpstream(listener.data_plane.settings.fixed_server?.upstream_tls, referencedIds);
+      continue;
     }
-    const clientAuthentication = listener.downstream_tls.client_authentication;
-    if (clientAuthentication.mode !== "disabled" && clientAuthentication.trust) {
-      referencedIds.add(clientAuthentication.trust);
+    const security = listener.data_plane.settings.security;
+    if (security.mode === "tls_to_tcp" || security.mode === "tls_to_tls") {
+      collectDownstream(
+        security.downstream_tls.server_identity,
+        security.downstream_tls.client_authentication,
+        referencedIds,
+      );
     }
-    const upstreamTls = listener.fixed_server?.upstream_tls;
-    if (upstreamTls?.server_trust) referencedIds.add(upstreamTls.server_trust);
-    if (upstreamTls?.client_identity) referencedIds.add(upstreamTls.client_identity);
+    if (security.mode === "tcp_to_tls" || security.mode === "tls_to_tls") {
+      collectUpstream(security.upstream_tls, referencedIds);
+    }
   }
   return referencedIds;
+}
+
+function collectDownstream(
+  serverIdentity: string | null,
+  authentication: { mode: "disabled" } | { mode: "optional" | "required"; trust: string },
+  ids: Set<string>,
+) {
+  if (serverIdentity) ids.add(serverIdentity);
+  if (authentication.mode !== "disabled" && authentication.trust) ids.add(authentication.trust);
+}
+
+function collectUpstream(
+  tls: { server_trust: string | null; client_identity: string | null } | undefined,
+  ids: Set<string>,
+) {
+  if (tls?.server_trust) ids.add(tls.server_trust);
+  if (tls?.client_identity) ids.add(tls.client_identity);
 }
 
 /**

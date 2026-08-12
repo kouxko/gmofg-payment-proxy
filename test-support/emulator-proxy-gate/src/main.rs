@@ -40,7 +40,11 @@ impl NativeFileDialog for NoFileDialog {
         Ok(None)
     }
 
-    fn choose_save_file(&self, _purpose: &str) -> AppResult<Option<FileSelection>> {
+    fn choose_save_file(
+        &self,
+        _purpose: &str,
+        _suggested_file_name: &str,
+    ) -> AppResult<Option<FileSelection>> {
         Ok(None)
     }
 }
@@ -329,9 +333,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     // Listener 必须监听所有本机地址。它只存在于 mktemp 数据目录和本次门禁进程中。
     dll_listener.bind_address = "0.0.0.0".into();
     dll_listener.port = host_listener_port;
-    dll_listener.request_body_codec = BodyCodecKind::Utf8;
-    dll_listener.response_body_codec = BodyCodecKind::ShiftJis;
-    dll_listener.fixed_server = Some(FixedServerSettings {
+    let dll_http = dll_listener
+        .http_mut()
+        .expect("new listener defaults to HTTP");
+    dll_http.request_body_codec = BodyCodecKind::Utf8;
+    dll_http.response_body_codec = BodyCodecKind::ShiftJis;
+    dll_http.fixed_server = Some(FixedServerSettings {
         upstream_url: format!("http://{dll_upstream_address}"),
         upstream_tls: UpstreamTlsSettings::default(),
     });
@@ -350,9 +357,12 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     transaction_listener.name = "TEST ONLY - Transaction channel".into();
     transaction_listener.bind_address = "0.0.0.0".into();
     transaction_listener.port = host_listener_port + 1;
-    transaction_listener.request_body_codec = BodyCodecKind::Utf8;
-    transaction_listener.response_body_codec = BodyCodecKind::ShiftJis;
-    transaction_listener.fixed_server = Some(FixedServerSettings {
+    let transaction_http = transaction_listener
+        .http_mut()
+        .expect("new listener defaults to HTTP");
+    transaction_http.request_body_codec = BodyCodecKind::Utf8;
+    transaction_http.response_body_codec = BodyCodecKind::ShiftJis;
+    transaction_http.fixed_server = Some(FixedServerSettings {
         upstream_url: format!("http://{transaction_upstream_address}"),
         upstream_tls: UpstreamTlsSettings::default(),
     });

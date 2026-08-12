@@ -22,12 +22,12 @@ export function ListenerListPanel({
 }) {
   return <aside className="min-w-0 space-y-4 overflow-auto border-r border-[var(--telemetry-line)] p-5 max-[900px]:border-r-0 max-[900px]:border-b">
     <div><h1 className="text-2xl font-semibold">代理监听</h1>
-      <p className="mt-1 text-sm text-[var(--telemetry-muted)]">每个监听都可按请求目标转发，或选择转发到一个固定 Server。</p>
+      <p className="mt-1 text-sm text-[var(--telemetry-muted)]">统一管理 HTTP 代理与原始 Socket 双向转发。</p>
     </div>
     <Button variant="primary" className="w-full" isDisabled={disabled} onPress={onAdd}>新建代理监听</Button>
     <Alert status="accent"><Alert.Indicator /><Alert.Content>
-      <Alert.Title>一个监听，两种请求去向</Alert.Title>
-      <Alert.Description>默认读取请求目标；启用“转发到固定 Server”后，可为当前监听单独配置 Server URL、CA、主机名校验和可选 mTLS 身份。</Alert.Description>
+      <Alert.Title>HTTP 与 Socket 两种数据平面</Alert.Title>
+      <Alert.Description>新建监听默认使用 HTTP；切换 Socket 后需配置唯一上游 host、port 和安全桥接模式。</Alert.Description>
     </Alert.Content></Alert>
     <Alert status="warning"><Alert.Indicator /><Alert.Content>
       <Alert.Title>故障模拟与规则作用于监听流量</Alert.Title>
@@ -58,9 +58,17 @@ function ListenerTable({ listeners, selectedIndex, onSelect }: {
         <Table.Cell><span className="font-medium">{listener.name}</span></Table.Cell>
         <Table.Cell><div className="grid min-w-0 gap-1 font-mono text-xs">
           <span className="truncate">{listener.bind_address}:{listener.port}</span>
-          <span className="truncate text-[var(--telemetry-muted)]">→ {listener.fixed_server?.upstream_url || "请求中的目标地址"}</span>
+          <span className="truncate text-[var(--telemetry-muted)]">→ {listenerDestination(listener)}</span>
         </div></Table.Cell>
       </Table.Row>)}
     </Table.Body>
   </Table.Content></Table.ScrollContainer></Table>;
+}
+
+function listenerDestination(listener: ProxyListener) {
+  if (listener.data_plane.kind === "socket") {
+    const { host, port } = listener.data_plane.settings.upstream;
+    return `${host || "未配置主机"}:${port} · ${listener.data_plane.settings.security.mode}`;
+  }
+  return listener.data_plane.settings.fixed_server?.upstream_url || "请求中的目标地址";
 }

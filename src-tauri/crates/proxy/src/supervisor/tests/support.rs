@@ -3,9 +3,10 @@ use std::io;
 use std::sync::atomic::AtomicUsize;
 
 use crate::fault::FaultAction;
+use crate::http::{ForwardRequest, NoopPipelinePorts, UpstreamConnector};
 use crate::transport::{
-    AcceptedConnection, BoxIo, ConnectionAcceptor, ForwardRequest, HandshakePolicy,
-    NoopPipelinePorts, SystemClock, TokioListenerBinder, UpstreamConnector,
+    AcceptedConnection, BoxIo, ConnectionAcceptor, HandshakePolicy, SystemClock,
+    TokioListenerBinder,
 };
 
 use super::*;
@@ -35,9 +36,9 @@ impl UpstreamConnector for UnusedUpstream {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&crate::transport::InformationalResponseSink>,
+        _informational: Option<&crate::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
-    ) -> Result<crate::transport::UpstreamExchange> {
+    ) -> Result<crate::http::UpstreamExchange> {
         unreachable!("the synthetic listeners never accept a connection")
     }
 }
@@ -49,6 +50,7 @@ fn test_service(ports: Arc<dyn PipelinePorts>) -> ConnectionService {
         ports,
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(8).unwrap(),
+        allowed_client_cidrs: Vec::new(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),

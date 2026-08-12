@@ -1,10 +1,20 @@
 //! 监听器绑定、连接任务监督与 HTTP/1.1 连接生命周期。
 
 use super::{
-    BoxIo, CancellationToken, ConnectionContext, Duration, ErrorCode, ForwardProxyService, JoinSet,
-    ProxyError, Result, SocketAddr, SystemTime, TcpListener, TokioIo, Uuid, server_http1,
-    service_fn,
+    Arc, BoxIo, CancellationToken, ConnectionContext, ConnectionTaskScope, Duration, ErrorCode,
+    ForwardProxyService, ProxyError, Result, SocketAddr, SystemTime, TcpListener, TokioIo, Uuid,
+    server_http1, service_fn,
 };
+use async_trait::async_trait;
+use tokio::io::AsyncWriteExt;
+
+use crate::listener::{
+    ConnectionHandler, ListenerCapacity, ListenerConfig, ListenerRejection, ListenerSupervisor,
+    NoopConnectionLifecycleObserver, PrimaryConnectionOutcome, sealed,
+};
+use crate::transport::{SystemClock, TokioBoundListener, TokioListenerBinder};
+
+const CONNECTION_CHILD_GRACE: Duration = Duration::from_secs(5);
 
 impl ForwardProxyService {
     /// 在一条已接受的下游 TCP 连接上提供 HTTP/1.1 正向代理服务。
@@ -14,24 +24,34 @@ impl ForwardProxyService {
         peer: SocketAddr,
         cancellation: CancellationToken,
     ) -> Result<()> {
-        let context = self.pipeline.as_ref().map(|pipeline| ConnectionContext {
-            runtime_epoch: pipeline.runtime_epoch,
-            connection_id: Uuid::new_v4(),
-            channel: pipeline.channel.clone(),
-            peer_addr: peer,
-            accepted_at: SystemTime::now(),
-            tls_peer: None,
-        });
+        self.serve_connection_in_scope(io, peer, cancellation, ConnectionTaskScope::new())
+            .await
+    }
+
+    pub(super) async fn serve_connection_in_scope(
+        &self,
+        io: BoxIo,
+        peer: SocketAddr,
+        cancellation: CancellationToken,
+        task_scope: ConnectionTaskScope,
+    ) -> Result<()> {
+        let context = self.connection_context(peer);
+        let result = self
+            .serve_connection_primary(io, context, cancellation, task_scope.clone())
+            .await;
+        drain_connection_scope(&task_scope, "forward connection").await;
+        result
+    }
+
+    async fn serve_connection_primary(
+        &self,
+        io: BoxIo,
+        mut context: ConnectionContext,
+        cancellation: CancellationToken,
+        task_scope: ConnectionTaskScope,
+    ) -> Result<()> {
+        let peer = context.peer_addr;
         let accepted = if let Some(acceptor) = &self.downstream_tls {
-            let admission_context = context.clone().unwrap_or_else(|| ConnectionContext {
-                runtime_epoch: Uuid::new_v4(),
-                connection_id: Uuid::new_v4(),
-                channel: crate::supervisor::ChannelId::new("forward-downstream-tls")
-                    .expect("static channel id is valid"),
-                peer_addr: peer,
-                accepted_at: SystemTime::now(),
-                tls_peer: None,
-            });
             tokio::select! {
                 () = cancellation.cancelled() => return Err(ProxyError::new(
                     ErrorCode::ProxyStopped,
@@ -39,7 +59,7 @@ impl ForwardProxyService {
                 )),
                 result = tokio::time::timeout(
                     self.config.connect_timeout,
-                    acceptor.accept(io, &admission_context),
+                    acceptor.accept(io, &context),
                 ) => result.map_err(|_| ProxyError::new(
                     ErrorCode::DownstreamTlsHandshakeFailed,
                     "forward downstream TLS handshake timed out",
@@ -48,21 +68,24 @@ impl ForwardProxyService {
         } else {
             crate::transport::AcceptedConnection { io, tls_peer: None }
         };
-        let context = context.map(|mut context| {
-            context.tls_peer = accepted.tls_peer;
-            context
-        });
-        if let (Some(pipeline), Some(context)) = (&self.pipeline, &context) {
-            pipeline.ports.connection_opened(context).await;
+        context.tls_peer = accepted.tls_peer;
+        if let Some(pipeline) = &self.pipeline {
+            pipeline.ports.connection_opened(&context).await;
         }
         let service = self.clone();
-        let handler_context = context.clone();
+        let handler_context = Some(context.clone());
         let handler_cancellation = cancellation.clone();
+        let handler_task_scope = task_scope;
         let handler = service_fn(move |request| {
             let service = service.clone();
             let context = handler_context.clone();
             let cancellation = handler_cancellation.clone();
-            async move { service.handle(request, peer, context, cancellation).await }
+            let task_scope = handler_task_scope.clone();
+            async move {
+                service
+                    .handle(request, peer, context, cancellation, task_scope)
+                    .await
+            }
         });
         let connection = server_http1::Builder::new()
             .keep_alive(true)
@@ -80,10 +103,32 @@ impl ForwardProxyService {
                 )
             }),
         };
-        if let (Some(pipeline), Some(context)) = (&self.pipeline, &context) {
-            pipeline.ports.connection_closed(context, &result).await;
+        if let Some(pipeline) = &self.pipeline {
+            pipeline.ports.connection_closed(&context, &result).await;
         }
         result
+    }
+
+    pub(super) fn connection_context(&self, peer: SocketAddr) -> ConnectionContext {
+        self.pipeline.as_ref().map_or_else(
+            || ConnectionContext {
+                runtime_epoch: Uuid::new_v4(),
+                connection_id: Uuid::new_v4(),
+                channel: crate::supervisor::ChannelId::new("forward-http")
+                    .expect("static channel id is valid"),
+                peer_addr: peer,
+                accepted_at: SystemTime::now(),
+                tls_peer: None,
+            },
+            |pipeline| ConnectionContext {
+                runtime_epoch: pipeline.runtime_epoch,
+                connection_id: Uuid::new_v4(),
+                channel: pipeline.channel.clone(),
+                peer_addr: peer,
+                accepted_at: SystemTime::now(),
+                tls_peer: None,
+            },
+        )
     }
 
     /// 绑定配置中的地址并运行监听循环。
@@ -92,23 +137,11 @@ impl ForwardProxyService {
     /// [`Self::serve_listener`]；这样能在启动 epoch 发布前完成“全部端口先绑定”的事务式
     /// 准备。单监听器 CLI/测试则可直接使用本方法。
     pub async fn bind_and_serve(&self, cancellation: CancellationToken) -> Result<()> {
-        let listener = TcpListener::bind(self.config.bind_addr)
-            .await
-            .map_err(|error| {
-                let code = if error.kind() == std::io::ErrorKind::AddrInUse {
-                    ErrorCode::PortInUse
-                } else {
-                    ErrorCode::Io
-                };
-                ProxyError::new(
-                    code,
-                    format!(
-                        "cannot bind forward proxy listener {}: {error}",
-                        self.config.bind_addr
-                    ),
-                )
-            })?;
-        self.serve_listener(listener, cancellation).await
+        let supervisor = self.listener_supervisor(Uuid::new_v4())?;
+        supervisor
+            .bind_and_run(cancellation)
+            .await?
+            .into_result("forward listener stopped after a fatal lifecycle failure")
     }
 
     /// 在已经绑定的 listener 上运行，直到取消或 accept 失败。
@@ -117,56 +150,107 @@ impl ForwardProxyService {
         listener: TcpListener,
         cancellation: CancellationToken,
     ) -> Result<()> {
-        let mut connections = JoinSet::new();
-        loop {
-            tokio::select! {
-                biased;
-                () = cancellation.cancelled() => break,
-                completed = connections.join_next(), if !connections.is_empty() => {
-                    if let Some(Err(error)) = completed
-                        && !error.is_cancelled()
-                    {
-                        tracing::warn!(?error, "forward proxy connection task panicked");
-                    }
-                }
-                accepted = listener.accept() => {
-                    let (stream, peer) = accepted
-                        .map_err(|error| ProxyError::io("accept forward proxy client", &error))?;
-                    stream
-                        .set_nodelay(true)
-                        .map_err(|error| ProxyError::io("configure forward proxy client", &error))?;
-                    let service = self.clone();
-                    let connection_cancellation = cancellation.clone();
-                    connections.spawn(async move {
-                        let result = service
-                            .serve_connection(Box::new(stream), peer, connection_cancellation)
-                            .await;
-                        if let Err(error) = &result
-                            && error.code != ErrorCode::ProxyStopped.as_str()
-                        {
-                            tracing::debug!(
-                                code = error.code,
-                                message = %error.message,
-                                %peer,
-                                "forward proxy client connection ended"
-                            );
-                        }
-                        result
-                    });
-                }
-            }
-        }
+        let epoch = self
+            .pipeline
+            .as_ref()
+            .map_or_else(Uuid::new_v4, |pipeline| pipeline.runtime_epoch);
+        let supervisor = self.listener_supervisor(epoch)?;
+        supervisor
+            .run_bound(Arc::new(TokioBoundListener(listener)), cancellation)
+            .await?
+            .into_result("forward listener stopped after a fatal lifecycle failure")
+    }
 
-        // 所有子任务共享同一取消令牌。正常情况下会立即结束；超出短暂宽限期时强制
-        // abort，保证监听器 stop 不会被静默客户端无限拖住。
-        let graceful = async { while connections.join_next().await.is_some() {} };
-        if tokio::time::timeout(Duration::from_secs(5), graceful)
-            .await
-            .is_err()
-        {
-            connections.abort_all();
-            while connections.join_next().await.is_some() {}
+    fn listener_supervisor(&self, epoch: Uuid) -> Result<ListenerSupervisor<ForwardProxyService>> {
+        let listener_id = self.pipeline.as_ref().map_or_else(
+            || crate::supervisor::ChannelId::new("forward-http"),
+            |pipeline| Ok(pipeline.channel.clone()),
+        )?;
+        ListenerSupervisor::new(
+            ListenerConfig {
+                bind_addr: self.config.bind_addr,
+                runtime_epoch: epoch,
+                listener_id,
+                allowed_client_cidrs: self.config.allowed_client_cidrs.clone(),
+                capacity: ListenerCapacity::new(tokio::sync::Semaphore::MAX_PERMITS)?,
+                shutdown_grace: CONNECTION_CHILD_GRACE,
+            },
+            Arc::new(TokioListenerBinder),
+            Arc::new(SystemClock),
+            Arc::new(self.clone()),
+            Arc::new(NoopConnectionLifecycleObserver),
+        )
+    }
+}
+
+impl sealed::Sealed for ForwardProxyService {}
+
+#[async_trait]
+impl ConnectionHandler for ForwardProxyService {
+    async fn reject(
+        &self,
+        io: BoxIo,
+        context: ConnectionContext,
+        reason: ListenerRejection,
+        cancellation: CancellationToken,
+    ) {
+        if reason != ListenerRejection::NetworkDenied {
+            return;
         }
-        Ok(())
+        let mut io = if let Some(acceptor) = &self.downstream_tls {
+            tokio::select! {
+                () = cancellation.cancelled() => return,
+                accepted = tokio::time::timeout(
+                    self.config.connect_timeout,
+                    acceptor.accept(io, &context),
+                ) => match accepted {
+                    Ok(Ok(accepted)) => accepted.io,
+                    Ok(Err(_)) | Err(_) => return,
+                },
+            }
+        } else {
+            io
+        };
+        let response = b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 29\r\n\r\nclient address is not allowed";
+        let write = async {
+            io.write_all(response).await?;
+            io.shutdown().await
+        };
+        tokio::select! {
+            () = cancellation.cancelled() => {}
+            _ = tokio::time::timeout(self.config.write_timeout, write) => {}
+        }
+    }
+
+    async fn handle(
+        &self,
+        io: BoxIo,
+        context: ConnectionContext,
+        child_tasks: ConnectionTaskScope,
+        cancellation: CancellationToken,
+    ) -> PrimaryConnectionOutcome {
+        self.serve_connection_primary(io, context, cancellation, child_tasks)
+            .await
+            .into()
+    }
+}
+
+pub(super) async fn drain_connection_scope(task_scope: &ConnectionTaskScope, owner: &'static str) {
+    task_scope.close();
+    if tokio::time::timeout(CONNECTION_CHILD_GRACE, task_scope.drain())
+        .await
+        .is_err()
+    {
+        let aborted = task_scope.abort_live();
+        tracing::warn!(
+            aborted_count = aborted.len(),
+            ?aborted,
+            owner,
+            "forward connection child-task grace period expired"
+        );
+        task_scope.drain().await;
+    }
+    if task_scope.snapshot().aggregate.panic_seen {
+        tracing::warn!(owner, "forward connection child task panicked");
     }
 }

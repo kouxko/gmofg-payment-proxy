@@ -1,5 +1,7 @@
 use super::*;
 
+mod socket_portability;
+
 #[derive(Debug, Default)]
 struct RecordingConfigurationStore {
     document: parking_lot::Mutex<Option<ApplicationConfigurationDocument>>,
@@ -127,14 +129,14 @@ async fn full_configuration_export_keeps_reachable_listener_material_and_drops_o
         client_identity.clone(),
         orphan,
     ]);
-    workspace.listeners[0].mitm.root_ca = Some(root_id);
-    workspace.listeners[0].downstream_tls.enabled = true;
-    workspace.listeners[0].downstream_tls.server_identity = Some(server_identity.id);
-    workspace.listeners[0].downstream_tls.client_authentication =
-        DownstreamClientAuthentication::Required {
-            trust: client_trust.id,
-        };
-    workspace.listeners[0].fixed_server = Some(FixedServerSettings {
+    let http = workspace.listeners[0].http_mut().unwrap();
+    http.mitm.root_ca = Some(root_id);
+    http.downstream_tls.enabled = true;
+    http.downstream_tls.server_identity = Some(server_identity.id);
+    http.downstream_tls.client_authentication = DownstreamClientAuthentication::Required {
+        trust: client_trust.id,
+    };
+    http.fixed_server = Some(FixedServerSettings {
         upstream_url: "https://upstream.test".into(),
         upstream_tls: UpstreamTlsSettings {
             verify_hostname: true,

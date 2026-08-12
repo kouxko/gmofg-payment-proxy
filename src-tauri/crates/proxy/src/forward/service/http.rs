@@ -1,15 +1,15 @@
 //! 非升级 HTTP/1.1 请求的目标解析、转发与应用管线接入。
 
 use super::{
-    CancellationToken, ConnectionContext, DropResponseMode, ErrorCode, ForwardPipelineRuntime,
-    ForwardProxyService, HOST, HeaderValue, HttpTarget, Incoming, ProxyBody, ProxyError, Request,
-    Response, Result, TokioIo, TrafficDirection, Uri, absolute_http_target,
-    absolute_uri_to_origin_form, client_http1, collect_pipeline_body, completion_body,
-    config_error, connect_target, drain_upstream_body, drop_response_mode,
+    CancellationToken, ConnectionContext, ConnectionTaskScope, DropResponseMode, ErrorCode,
+    ForwardPipelineRuntime, ForwardProxyService, HOST, HeaderValue, HttpTarget, Incoming,
+    ProxyBody, ProxyError, Request, Response, Result, TokioIo, TrafficDirection, Uri,
+    absolute_http_target, absolute_uri_to_origin_form, client_http1, collect_pipeline_body,
+    completion_body, config_error, connect_target, drain_upstream_body, drop_response_mode,
     finish_pipeline_response, incoming_body, intentional_drop_error, is_websocket_upgrade,
     prepare_pipeline_request, request_terminal_response, scheduled_body,
-    send_request_then_drop_after_write, strip_hop_by_hop_headers, timeout_or_cancel,
-    traffic_schedule,
+    send_request_then_drop_after_write, spawn_connection_task, strip_hop_by_hop_headers,
+    timeout_or_cancel, traffic_schedule,
 };
 
 impl ForwardProxyService {
@@ -18,9 +18,12 @@ impl ForwardProxyService {
         request: Request<Incoming>,
         context: Option<&ConnectionContext>,
         cancellation: CancellationToken,
+        task_scope: &ConnectionTaskScope,
     ) -> Result<Response<ProxyBody>> {
         if is_websocket_upgrade(&request) {
-            return self.forward_websocket(request, context, cancellation).await;
+            return self
+                .forward_websocket(request, context, cancellation, task_scope)
+                .await;
         }
         let (mut parts, body) = request.into_parts();
         let captured_uri = parts.uri.clone();
@@ -46,6 +49,7 @@ impl ForwardProxyService {
                     pipeline,
                     context,
                     &cancellation,
+                    task_scope,
                 )
                 .await;
         }
@@ -64,11 +68,14 @@ impl ForwardProxyService {
                     format!("origin HTTP handshake failed: {error}"),
                 )
             })?;
-        tokio::spawn(async move {
-            if let Err(error) = connection.await {
-                tracing::debug!(?error, "forward origin HTTP connection ended");
-            }
-        });
+        spawn_connection_task(task_scope, "forward origin HTTP connection", async move {
+            connection.await.map_err(|error| {
+                ProxyError::new(
+                    ErrorCode::Io,
+                    format!("forward origin HTTP connection ended: {error}"),
+                )
+            })
+        })?;
 
         let outgoing = Request::from_parts(parts, incoming_body(body));
         let response = timeout_or_cancel(
@@ -105,6 +112,7 @@ impl ForwardProxyService {
         pipeline: &ForwardPipelineRuntime,
         context: &ConnectionContext,
         cancellation: &CancellationToken,
+        task_scope: &ConnectionTaskScope,
     ) -> Result<Response<ProxyBody>> {
         let body = collect_pipeline_body(
             body,
@@ -153,14 +161,19 @@ impl ForwardProxyService {
             .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
         let upstream_shutdown = CancellationToken::new();
         let connection_shutdown = upstream_shutdown.clone();
-        tokio::spawn(async move {
-            tokio::select! {
-                () = connection_shutdown.cancelled() => {}
-                result = connection => if let Err(error) = result {
-                    tracing::debug!(?error, "forward pipeline origin connection ended");
+        spawn_connection_task(
+            task_scope,
+            "forward pipeline origin connection",
+            async move {
+                tokio::select! {
+                    () = connection_shutdown.cancelled() => Ok(()),
+                    result = connection => result.map_err(|error| ProxyError::new(
+                        ErrorCode::Io,
+                        format!("forward pipeline origin connection ended: {error}"),
+                    )),
                 }
-            }
-        });
+            },
+        )?;
         let schedule = traffic_schedule(&actions, TrafficDirection::Upstream)?;
         let effective_timeout = self
             .config

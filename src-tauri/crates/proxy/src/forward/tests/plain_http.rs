@@ -57,6 +57,78 @@ async fn absolute_form_round_trip_once() {
 }
 
 #[tokio::test]
+async fn keepalive_releases_completed_origin_tasks_without_retaining_handles() {
+    const REQUESTS: u64 = 64;
+
+    let origin = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin_address = origin.local_addr().unwrap();
+    let origin_task = tokio::spawn(async move {
+        for _ in 0..REQUESTS {
+            let (mut stream, _) = origin.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0_u8; 512];
+            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+                let read = stream.read(&mut buffer).await.unwrap();
+                assert_ne!(read, 0);
+                request.extend_from_slice(&buffer[..read]);
+            }
+            stream
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+                .await
+                .unwrap();
+        }
+    });
+
+    let service = ForwardProxyService::new(loopback_config(), Arc::new(NoAuthentication)).unwrap();
+    let scope = crate::listener::ConnectionTaskScope::new();
+    let observed_scope = scope.clone();
+    let (client, proxy) = tokio::io::duplex(32 * 1024);
+    let proxy_task = tokio::spawn(async move {
+        service
+            .serve_connection_in_scope(
+                Box::new(proxy),
+                "127.0.0.1:45009".parse().unwrap(),
+                CancellationToken::new(),
+                scope,
+            )
+            .await
+    });
+    let (mut sender, connection) = client_http1::handshake(TokioIo::new(client)).await.unwrap();
+    let connection_task = tokio::spawn(connection);
+
+    for completed in 1..=REQUESTS {
+        let response = sender
+            .send_request(
+                Request::builder()
+                    .uri(format!("http://{origin_address}/keepalive/{completed}"))
+                    .body(Full::new(Bytes::new()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response.into_body().collect().await.unwrap().to_bytes(),
+            "ok"
+        );
+        while observed_scope.snapshot().aggregate.completed_count < completed {
+            tokio::task::yield_now().await;
+        }
+        assert_eq!(observed_scope.snapshot().live_count, 0);
+    }
+
+    drop(sender);
+    connection_task.await.unwrap().unwrap();
+    proxy_task.await.unwrap().unwrap();
+    origin_task.await.unwrap();
+    assert_eq!(observed_scope.snapshot().live_count, 0);
+    assert_eq!(
+        observed_scope.snapshot().aggregate.completed_count,
+        REQUESTS
+    );
+}
+
+#[tokio::test]
 async fn absolute_form_request_is_stable_for_one_hundred_consecutive_connections() {
     for _ in 0..100 {
         absolute_form_round_trip_once().await;
