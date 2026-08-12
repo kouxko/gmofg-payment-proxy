@@ -97,6 +97,37 @@ describe("SessionsView destructive actions", () => {
     });
   });
 
+  it("opens the selected session in a modal and releases its payload on close", async () => {
+    const user = userEvent.setup();
+    render(<SessionsView />);
+
+    const row = screen
+      .getByRole("grid", { name: "会话记录" })
+      .querySelector<HTMLElement>('[data-key="session-1"]');
+    expect(row).toBeTruthy();
+    await user.click(row!);
+
+    expect(
+      screen.getByRole("dialog", { name: "完整会话报文" }),
+    ).toBeVisible();
+    expect(screen.getByText("POST /payment · 192.168.1.20")).toBeVisible();
+    const closeButton = screen.getByRole("button", {
+      name: "关闭会话详情并释放报文",
+    });
+    expect(closeButton).toHaveAttribute("data-slot", "modal-close-trigger");
+
+    queryMocks.detailInvalidate.mockClear();
+    await user.click(closeButton);
+
+    expect(
+      screen.queryByRole("dialog", { name: "完整会话报文" }),
+    ).not.toBeInTheDocument();
+    expect(queryMocks.detailInvalidate).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("button", { name: "导出所选会话" }),
+    ).toBeEnabled();
+  });
+
   it("exports the selected session only after the sensitive-data confirmation", async () => {
     const user = userEvent.setup();
     render(<SessionsView />);
@@ -106,6 +137,11 @@ describe("SessionsView destructive actions", () => {
       .querySelector<HTMLElement>('[data-key="session-1"]');
     expect(row).toBeTruthy();
     await user.click(row!);
+    await user.click(
+      screen.getByRole("button", {
+        name: "关闭会话详情并释放报文",
+      }),
+    );
     await user.click(screen.getByRole("button", { name: "导出所选会话" }));
     expect(
       await screen.findByRole("heading", { name: "确认导出原始报文" }),
@@ -133,6 +169,11 @@ describe("SessionsView destructive actions", () => {
       .querySelector<HTMLElement>('[data-key="session-1"]');
     expect(row).toBeTruthy();
     await user.click(row!);
+    await user.click(
+      screen.getByRole("button", {
+        name: "关闭会话详情并释放报文",
+      }),
+    );
     await user.click(screen.getByRole("button", { name: "清空全部会话" }));
     expect(
       await screen.findByRole("heading", { name: "清空已完成会话？" }),

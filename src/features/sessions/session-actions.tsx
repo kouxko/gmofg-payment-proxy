@@ -1,5 +1,5 @@
-import { AlertDialog, Button, Drawer } from "@heroui/react";
-import { ArrowDownToLine, Eye, TrashBin } from "@gravity-ui/icons";
+import { AlertDialog, Button, Modal } from "@heroui/react";
+import { ArrowDownToLine, Eye, TrashBin, Xmark } from "@gravity-ui/icons";
 import type {
   SessionDetailViewModel,
   SessionSummaryViewModel,
@@ -30,33 +30,38 @@ interface SessionActionsProps {
 
 export function SessionActions(props: SessionActionsProps) {
   return (
-    <div className="flex items-center gap-3">
-      <Drawer isOpen={props.detailOpen} onOpenChange={props.onDetailOpenChange}>
+    <div className="flex flex-wrap items-center gap-3">
+      <Modal isOpen={props.detailOpen} onOpenChange={props.onDetailOpenChange}>
         <Button isDisabled={!props.selected} variant="outline">
           <Eye className="size-4" />
           查看完整报文
         </Button>
-        <Drawer.Backdrop>
-          <Drawer.Content placement="right">
-            <Drawer.Dialog>
-              <Drawer.Header>
-                <Drawer.Heading>完整会话报文</Drawer.Heading>
-              </Drawer.Header>
-              <Drawer.Body>
+        <Modal.Backdrop isDismissable>
+          <Modal.Container size="cover" scroll="inside">
+            <Modal.Dialog>
+              <Modal.Header className="items-start gap-1 pr-12 text-left">
+                <Modal.Heading className="text-left text-lg font-semibold">
+                  完整会话报文
+                </Modal.Heading>
+                <p className="max-w-full truncate text-left text-xs text-[var(--telemetry-muted)]">
+                  {props.selected
+                    ? `${props.selected.method} ${props.selected.target} · ${props.selected.terminal_ip}`
+                    : "请求、响应与原始字节仅保留在当前会话"}
+                </p>
+                <Modal.CloseTrigger aria-label="关闭会话详情并释放报文">
+                  <Xmark className="size-4" />
+                </Modal.CloseTrigger>
+              </Modal.Header>
+              <Modal.Body className="min-h-0">
                 <SessionDetailContent
                   selected={props.selected}
                   detail={props.detail}
                 />
-              </Drawer.Body>
-              <Drawer.Footer>
-                <Button slot="close" variant="outline">
-                  关闭
-                </Button>
-              </Drawer.Footer>
-            </Drawer.Dialog>
-          </Drawer.Content>
-        </Drawer.Backdrop>
-      </Drawer>
+              </Modal.Body>
+            </Modal.Dialog>
+          </Modal.Container>
+        </Modal.Backdrop>
+      </Modal>
 
       <AlertDialog
         isOpen={props.exportDialogOpen}

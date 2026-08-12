@@ -1,9 +1,15 @@
-name: CI
+name: Code verification
+run-name: Code verification · ${{ github.ref_name }} · ${{ github.event_name }}
 
 on:
+  workflow_dispatch:
   pull_request:
   push:
-    branches: [main, codex/intercept-proxy-generalization]
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -45,8 +51,8 @@ jobs:
           if-no-files-found: error
 
   verify:
-    # Windows 与 macOS 都执行同一套边界、前端和 Rust 检查，防止只在开发者当前平台可用。
-    # 这里证明源码可构建/可测试；安装包签名和发布物验证由 windows-release.yml 负责。
+    # 开发分支普通 push 不触发本工作流；需要提前验证时手动运行 Windows。
+    # PR 只跑 Windows，main 再补 Windows + macOS；安装包签名和发布物由 windows-release.yml 负责。
     name: Verify (${{ matrix.os }})
     needs: android-companion
     runs-on: ${{ matrix.os }}
@@ -54,9 +60,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - windows-latest
-          - macos-14
+        os: ${{ fromJSON(github.ref == 'refs/heads/main' && '["windows-latest","macos-14"]' || '["windows-latest"]') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 

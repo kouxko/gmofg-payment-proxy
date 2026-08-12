@@ -65,6 +65,7 @@ const themeStorageFiles = new Set([
 ]);
 const iconCloseTriggerFiles = new Set([
   "src/features/capture/capture-detail-panel.tsx",
+  "src/features/sessions/session-actions.tsx",
 ]);
 
 const failures = [];
@@ -132,18 +133,17 @@ for (const file of sourceFiles(sourceRoot)) {
   }
 }
 
-const captureDetailSource = readFileSync(
-  join(sourceRoot, "features", "capture", "capture-detail-panel.tsx"),
-  "utf8",
-);
-if (
-  !/<Modal\.CloseTrigger(?=[^>]*aria-label="关闭详情并释放报文")[^>]*>\s*<Xmark[^>]*\/>\s*<\/Modal\.CloseTrigger>/.test(
-    captureDetailSource,
-  )
-) {
-  failures.push(
-    "src/features/capture/capture-detail-panel.tsx: 抓包详情必须使用右上角纯图标 CloseTrigger",
+for (const [path, label] of [
+  ["src/features/capture/capture-detail-panel.tsx", "关闭详情并释放报文"],
+  ["src/features/sessions/session-actions.tsx", "关闭会话详情并释放报文"],
+]) {
+  const source = readFileSync(join(root, path), "utf8");
+  const contract = new RegExp(
+    `<Modal\\.CloseTrigger(?=[^>]*aria-label="${label}")[^>]*>\\s*<Xmark[^>]*\\/>\\s*</Modal\\.CloseTrigger>`,
   );
+  if (!contract.test(source)) {
+    failures.push(`${path}: 详情弹窗必须使用右上角纯图标 CloseTrigger`);
+  }
 }
 
 const themeProviderSource = readFileSync(

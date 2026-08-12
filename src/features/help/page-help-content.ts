@@ -179,11 +179,11 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "sessions-detail",
         title: "查看会话详情",
         steps: [
-          "宽屏选择会话后右侧直接读取详情；窄屏先选择会话，再点击“查看完整报文”打开 Drawer。",
+          "选择表格中的会话会打开全尺寸详情弹窗；关闭后仍保留当前选择，可再次点击“查看完整报文”打开。",
           "“概览”查看请求 ID、证书指纹、上游主机、双向 TLS、最终动作以及分阶段耗时。",
-          "“请求”和“响应”分别显示按需取得的完整 Header 和 Shift-JIS 解码 Body，响应区同时显示 Rust 提取的 HTTP 状态码；列表查询本身不会预加载全部 Payload。",
+          "“请求”和“响应”分别显示按需取得的完整 Header，并按 Content-Type charset 或强制编码设置解码 Body；响应区同时显示 Rust 提取的 HTTP 状态码，列表查询本身不会预加载全部 Payload。",
           "“规则轨迹”查看每条规则的评估和动作结果，用于解释最终报文为何被修改、暂停或终止。",
-          "关闭详情或完整报文 Drawer 后，前端释放 Payload 引用；会话仍由 Rust 容量策略保留。",
+          "点击弹窗右上角关闭图标、按 Escape 或点击遮罩后，前端释放 Payload 引用；会话仍由 Rust 容量策略保留。",
         ],
       },
       {

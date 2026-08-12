@@ -1,15 +1,16 @@
-name: Desktop release and cache warmup
+name: Desktop release
+run-name: Desktop release · ${{ github.ref_name }} · ${{ github.event_name }}
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      # 开发分支上传未签名安装包，便于真机验收；v* 标签继续执行严格签名发布门禁。
-      - "codex/windows-ci-cache-warmup"
-      - "codex/intercept-proxy-generalization"
     tags:
-      # 只有 v* 标签进入签名与签名校验；分支产物会以 unsigned 名称上传。
+      # 正式版本标签自动执行签名发布；开发分支需要安装包时使用 workflow_dispatch。
       - "v*"
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   android-companion:
