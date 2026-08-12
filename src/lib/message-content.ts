@@ -69,6 +69,19 @@ export function messageContentLabel(message?: InspectableMessage | null) {
   return "二进制";
 }
 
+export function messageCodecLabel(codecId: string) {
+  if (!codecId.startsWith("auto:")) return codecId;
+  const resolved = codecId.slice("auto:".length);
+  const label = resolved === "utf-8"
+    ? "UTF-8"
+    : resolved === "shift-jis"
+      ? "Shift-JIS"
+      : resolved === "raw"
+        ? "原始字节"
+        : resolved;
+  return `自动 → ${label}`;
+}
+
 export function requestQueryString(
   request: QueryAwareRequest | null | undefined,
   target: string,

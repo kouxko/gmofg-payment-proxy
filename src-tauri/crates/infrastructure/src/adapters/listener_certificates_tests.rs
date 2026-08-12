@@ -1,5 +1,6 @@
 use std::{collections::VecDeque, path::PathBuf};
 
+use intercept_proxy_application::CertificateReferenceId;
 use parking_lot::Mutex;
 
 use super::*;
@@ -8,7 +9,9 @@ use crate::{InfrastructureError, adapters::FileSelection};
 #[path = "listener_certificates_test_support.rs"]
 mod test_support;
 
-use test_support::{client_pkcs12, client_pkcs12_with_password, server_identity_pem};
+use test_support::{
+    client_identity_pem, client_pkcs12, client_pkcs12_with_password, server_identity_pem,
+};
 
 #[derive(Debug)]
 struct QueueDialog(Mutex<VecDeque<PathBuf>>);
@@ -228,6 +231,35 @@ async fn empty_password_pkcs12_remains_importable_after_portable_round_trip() {
 
     let portable = adapter.export_portable(imported).await.unwrap();
     assert_eq!(portable.password.as_deref(), Some(""));
+
+    let restored = adapter.restore_portable(portable).await.unwrap();
+    assert!(adapter.inspect(restored).await.is_ok());
+}
+
+#[tokio::test]
+async fn pem_client_identity_imports_without_password_and_survives_portable_round_trip() {
+    let directory = tempfile::tempdir().unwrap();
+    let (pem, private_key, _) = client_identity_pem();
+    let path = directory.path().join("client.pem");
+    std::fs::write(&path, &pem).unwrap();
+    let adapter = ManagedListenerCertificateAdapter::new(
+        Arc::new(SqliteStore::in_memory().unwrap()),
+        Arc::new(XorProtector),
+        Arc::new(QueueDialog(Mutex::new(VecDeque::from([path])))),
+    );
+
+    let imported = adapter
+        .import_upstream_client_identity("PEM 客户端身份".into(), "ignored".into())
+        .await
+        .unwrap()
+        .unwrap()
+        .reference;
+    let resolved = adapter.resolve_identity(&imported).unwrap().unwrap();
+    assert_eq!(resolved.private_key_pkcs8_der.as_slice(), private_key);
+
+    let portable = adapter.export_portable(imported).await.unwrap();
+    assert_eq!(portable.password, None);
+    assert_eq!(STANDARD.decode(&portable.material_base64).unwrap(), pem);
 
     let restored = adapter.restore_portable(portable).await.unwrap();
     assert!(adapter.inspect(restored).await.is_ok());

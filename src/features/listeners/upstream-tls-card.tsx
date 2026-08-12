@@ -152,7 +152,7 @@ export function UpstreamTlsCard(props: Props) {
                   isDisabled={props.busy}
                   onPress={props.onOpenIdentityImport}
                 >
-                  导入 client.p12
+                  导入客户端身份
                 </Button>
               </div>
               <CertificateDetailPanel

@@ -6,9 +6,8 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use intercept_proxy_application::{
-    AppError, AppResult, CertificateItemViewModel, CertificateReference, CertificateReferenceId,
-    CertificateReferenceKind, ListenerCertificateDetailViewModel, ListenerCertificateImportPort,
-    ListenerCertificateImportViewModel, PortableCertificateMaterial,
+    AppError, AppResult, CertificateItemViewModel, CertificateReference, CertificateReferenceKind,
+    ListenerCertificateImportPort, ListenerCertificateImportViewModel, PortableCertificateMaterial,
 };
 use intercept_proxy_runtime::ReverseClientIdentity;
 use uuid::Uuid;
@@ -30,11 +29,16 @@ use super::{
 mod portable;
 use portable::validate_portable_material;
 
+#[path = "listener_certificate_reference.rs"]
+mod reference_support;
+use reference_support::{ensure_kind_matches, imported, kind_mismatch, reference};
+
 const PROVIDER: &str = "listener_tls";
 const KIND_UPSTREAM_CLIENT_IDENTITY: u8 = 1;
 const KIND_UPSTREAM_SERVER_TRUST: u8 = 2;
 const KIND_DOWNSTREAM_SERVER_IDENTITY: u8 = 3;
 const KIND_DOWNSTREAM_CLIENT_TRUST: u8 = 4;
+const KIND_UPSTREAM_CLIENT_IDENTITY_PEM: u8 = 5;
 const MAX_PORTABLE_MATERIAL_BYTES: usize = 16 * 1024 * 1024;
 
 pub struct ManagedListenerCertificateAdapter {
@@ -116,6 +120,22 @@ impl ManagedListenerCertificateAdapter {
                         chain.extend(std::mem::take(&mut parsed.chain_der));
                         Ok(ReverseClientIdentity {
                             certificate_chain_der: chain,
+                            private_key_pkcs8_der: std::mem::take(
+                                &mut parsed.private_key_pkcs8_der,
+                            ),
+                        })
+                    }
+                    (
+                        CertificateReferenceKind::UpstreamClientIdentity,
+                        KIND_UPSTREAM_CLIENT_IDENTITY_PEM,
+                    ) => {
+                        let mut parsed = CertificateService
+                            .parse_client_identity_pem(&material.bytes)
+                            .map_err(app_error)?;
+                        Ok(ReverseClientIdentity {
+                            certificate_chain_der: std::mem::take(
+                                &mut parsed.certificate_chain_der,
+                            ),
                             private_key_pkcs8_der: std::mem::take(
                                 &mut parsed.private_key_pkcs8_der,
                             ),
@@ -226,14 +246,43 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         password: String,
     ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
         let password = Zeroizing::new(password);
-        let Some(path) = self.dialog.choose_open_file("pkcs12")? else {
+        let Some(path) = self.dialog.choose_open_file("upstream_client_identity")? else {
             return Ok(None);
         };
         let bytes = read_secret_file(&path)?;
-        let parsed = CertificateService
-            .parse_pkcs12(&bytes, &password)
-            .map_err(app_error)?;
-        let key = self.persist(KIND_UPSTREAM_CLIENT_IDENTITY, password.as_bytes(), &bytes)?;
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(str::to_ascii_lowercase);
+        let (stored_kind, stored_password, metadata) = match extension.as_deref() {
+            Some("p12" | "pfx") => {
+                let parsed = CertificateService
+                    .parse_pkcs12(&bytes, &password)
+                    .map_err(app_error)?;
+                (
+                    KIND_UPSTREAM_CLIENT_IDENTITY,
+                    password.as_bytes(),
+                    parsed.metadata.clone(),
+                )
+            }
+            Some("pem") => {
+                let parsed = CertificateService
+                    .parse_client_identity_pem(&bytes)
+                    .map_err(app_error)?;
+                (
+                    KIND_UPSTREAM_CLIENT_IDENTITY_PEM,
+                    &[][..],
+                    parsed.metadata.clone(),
+                )
+            }
+            _ => {
+                return Err(AppError::new(
+                    "CERTIFICATE_INVALID",
+                    "上游客户端身份仅支持 .p12、.pfx 或包含证书链与私钥的 .pem。",
+                ));
+            }
+        };
+        let key = self.persist(stored_kind, stored_password, &bytes)?;
         let reference = reference(
             label,
             CertificateReferenceKind::UpstreamClientIdentity,
@@ -241,10 +290,7 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         );
         Ok(Some(imported(
             reference,
-            view_model(
-                CertificateReferenceKind::UpstreamClientIdentity,
-                parsed.metadata.clone(),
-            ),
+            view_model(CertificateReferenceKind::UpstreamClientIdentity, metadata),
         )))
     }
 
@@ -289,6 +335,14 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
                     .metadata
                     .clone()
             }
+            (
+                CertificateReferenceKind::UpstreamClientIdentity,
+                KIND_UPSTREAM_CLIENT_IDENTITY_PEM,
+            ) => CertificateService
+                .parse_client_identity_pem(&material.bytes)
+                .map_err(app_error)?
+                .metadata
+                .clone(),
             (CertificateReferenceKind::UpstreamServerTrust, KIND_UPSTREAM_SERVER_TRUST) => {
                 CertificateService
                     .parse_upstream_ca(&material.bytes)
@@ -327,7 +381,7 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         ensure_kind_matches(reference.kind, material.kind)?;
         // PKCS#12 的空密码与“不提供密码”含义不同。可移植文档必须保留 Some("")，
         // 否则导出后再导入会被 `validate_portable_material` 判定为缺少密码。
-        let password = if reference.kind == CertificateReferenceKind::UpstreamClientIdentity {
+        let password = if material.kind == KIND_UPSTREAM_CLIENT_IDENTITY {
             Some(
                 std::str::from_utf8(&material.password)
                     .map_err(|_| {
@@ -386,25 +440,7 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
             )
         })??;
         let material = self.load(key)?;
-        let kind_matches = matches!(
-            (reference.kind, material.kind),
-            (
-                CertificateReferenceKind::UpstreamClientIdentity,
-                KIND_UPSTREAM_CLIENT_IDENTITY
-            ) | (
-                CertificateReferenceKind::UpstreamServerTrust,
-                KIND_UPSTREAM_SERVER_TRUST
-            ) | (
-                CertificateReferenceKind::ReverseServerIdentity,
-                KIND_DOWNSTREAM_SERVER_IDENTITY
-            ) | (
-                CertificateReferenceKind::DownstreamClientTrust,
-                KIND_DOWNSTREAM_CLIENT_TRUST
-            )
-        );
-        if !kind_matches {
-            return Err(kind_mismatch());
-        }
+        ensure_kind_matches(reference.kind, material.kind)?;
         let deleted = infra(self.store.delete_protected_secret(PROVIDER, key))?;
         if !deleted {
             return Err(AppError::new(
@@ -413,61 +449,6 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
             ));
         }
         Ok(())
-    }
-}
-
-fn reference(label: String, kind: CertificateReferenceKind, key: &str) -> CertificateReference {
-    CertificateReference {
-        id: CertificateReferenceId::new(),
-        label,
-        kind,
-        reference: format!("{REFERENCE_PREFIX}{key}"),
-    }
-}
-
-fn imported(
-    reference: CertificateReference,
-    certificate: CertificateItemViewModel,
-) -> ListenerCertificateImportViewModel {
-    ListenerCertificateImportViewModel {
-        detail: ListenerCertificateDetailViewModel {
-            reference_id: reference.id,
-            label: reference.label.clone(),
-            certificate: Some(certificate),
-            error_message: None,
-        },
-        reference,
-    }
-}
-
-fn kind_mismatch() -> AppError {
-    AppError::new(
-        "CERTIFICATE_NOT_READY",
-        "Listener TLS 安全引用的材料类型不匹配。",
-    )
-}
-
-fn ensure_kind_matches(kind: CertificateReferenceKind, stored_kind: u8) -> AppResult<()> {
-    let matches = matches!(
-        (kind, stored_kind),
-        (
-            CertificateReferenceKind::UpstreamClientIdentity,
-            KIND_UPSTREAM_CLIENT_IDENTITY
-        ) | (
-            CertificateReferenceKind::UpstreamServerTrust,
-            KIND_UPSTREAM_SERVER_TRUST
-        ) | (
-            CertificateReferenceKind::ReverseServerIdentity,
-            KIND_DOWNSTREAM_SERVER_IDENTITY
-        ) | (
-            CertificateReferenceKind::DownstreamClientTrust,
-            KIND_DOWNSTREAM_CLIENT_TRUST
-        )
-    );
-    if matches {
-        Ok(())
-    } else {
-        Err(kind_mismatch())
     }
 }
 

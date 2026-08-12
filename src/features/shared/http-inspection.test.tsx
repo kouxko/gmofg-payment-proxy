@@ -39,6 +39,18 @@ describe("HTTP 报文共享查看器", () => {
     expect(container.querySelector("[dangerouslySetInnerHTML]")).toBeNull();
   });
 
+  it("把自动解析结果显示为用户可读的编码来源", () => {
+    render(
+      <HttpBodyViewer
+        label="响应 Body"
+        message={{ ...jsonMessage, codec_id: "auto:shift-jis" }}
+        emptyText="无正文"
+      />,
+    );
+
+    expect(screen.getByText("codec=自动 → Shift-JIS")).toBeVisible();
+  });
+
   it("按 Content-Type 展示 XML，高亮标签且保留解码失败信息", () => {
     const { container } = render(
       <HttpBodyViewer

@@ -120,6 +120,8 @@ export function ListenerEditor({
         <BodyCodecSettings
           requestCodec={listener.request_body_codec}
           responseCodec={listener.response_body_codec}
+          onRequestCodecChange={(request_body_codec) => onChange({ request_body_codec })}
+          onResponseCodecChange={(response_body_codec) => onChange({ response_body_codec })}
         />
         <FixedServerTlsSettings
           listener={listener}

@@ -1,4 +1,7 @@
 use intercept_proxy_application::MessageContentKind;
+use intercept_proxy_domain::BodyCodecKind;
+
+use crate::adapters::body_codecs::resolve_message_codec;
 
 #[test]
 fn product_codec_error_codes_and_json_syntax_classification_are_stable() {
@@ -29,7 +32,8 @@ fn content_view_uses_declared_shift_jis_for_vendor_json_and_preserves_query() {
         body_modified: false,
     };
 
-    let view = content_view(&StableErrorCodec, &message);
+    let codec = resolve_message_codec(BodyCodecKind::Auto, &message);
+    let view = content_view(codec.as_ref(), &message);
 
     assert_eq!(
         view.media_type.as_deref(),
@@ -37,7 +41,7 @@ fn content_view_uses_declared_shift_jis_for_vendor_json_and_preserves_query() {
     );
     assert_eq!(view.charset.as_deref(), Some("windows-31j"));
     assert_eq!(view.content_kind, MessageContentKind::Json);
-    assert_eq!(view.codec_id.as_deref(), Some("shift-jis"));
+    assert_eq!(view.codec_id.as_deref(), Some("auto:shift-jis"));
     assert_eq!(view.body_text.as_deref(), Some(r#"{"result":"成功"}"#));
     assert_eq!(view.json.as_ref().unwrap()["result"], "成功");
     assert_eq!(view.query_string.as_deref(), Some("terminal=920&retry=1"));
@@ -71,7 +75,8 @@ fn content_view_classifies_xml_text_binary_and_unknown_without_guessing_json() {
             body_modified: false,
         };
 
-        let view = content_view(&Utf8BodyCodec, &message);
+        let codec = resolve_message_codec(BodyCodecKind::Auto, &message);
+        let view = content_view(codec.as_ref(), &message);
 
         assert_eq!(view.content_kind, expected_kind, "{content_type}");
         assert_eq!(view.body_text.is_some(), expects_text, "{content_type}");
@@ -104,7 +109,8 @@ fn content_view_reports_unsupported_or_invalid_declared_charset() {
             body_modified: false,
         };
 
-        let view = content_view(&Utf8BodyCodec, &message);
+        let codec = resolve_message_codec(BodyCodecKind::Auto, &message);
+        let view = content_view(codec.as_ref(), &message);
 
         assert!(view.body_text.is_none());
         assert!(view.json.is_none());

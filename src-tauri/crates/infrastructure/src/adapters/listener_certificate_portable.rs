@@ -6,7 +6,7 @@ use intercept_proxy_application::{
 
 use super::{
     KIND_DOWNSTREAM_CLIENT_TRUST, KIND_DOWNSTREAM_SERVER_IDENTITY, KIND_UPSTREAM_CLIENT_IDENTITY,
-    KIND_UPSTREAM_SERVER_TRUST,
+    KIND_UPSTREAM_CLIENT_IDENTITY_PEM, KIND_UPSTREAM_SERVER_TRUST,
 };
 use crate::{CertificateService, adapters::common::app_error};
 
@@ -16,17 +16,21 @@ pub(super) fn validate_portable_material(
 ) -> AppResult<(u8, String, Vec<u8>)> {
     match material.kind {
         CertificateReferenceKind::UpstreamClientIdentity => {
-            let password = material.password.clone().ok_or_else(|| {
-                AppError::new(
-                    "PORTABLE_CERTIFICATE_INVALID",
-                    "PKCS12 客户端身份缺少密码。",
-                )
-                .entity(material.reference_id.to_string())
-            })?;
-            CertificateService
-                .parse_pkcs12(bytes, &password)
-                .map_err(app_error)?;
-            Ok((KIND_UPSTREAM_CLIENT_IDENTITY, password, bytes.to_vec()))
+            if let Some(password) = material.password.clone() {
+                CertificateService
+                    .parse_pkcs12(bytes, &password)
+                    .map_err(app_error)?;
+                Ok((KIND_UPSTREAM_CLIENT_IDENTITY, password, bytes.to_vec()))
+            } else {
+                CertificateService
+                    .parse_client_identity_pem(bytes)
+                    .map_err(app_error)?;
+                Ok((
+                    KIND_UPSTREAM_CLIENT_IDENTITY_PEM,
+                    String::new(),
+                    bytes.to_vec(),
+                ))
+            }
         }
         CertificateReferenceKind::UpstreamServerTrust => {
             let parsed = CertificateService

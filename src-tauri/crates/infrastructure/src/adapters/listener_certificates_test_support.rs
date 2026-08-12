@@ -40,6 +40,39 @@ pub(super) fn client_pkcs12() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
 }
 
 pub(super) fn client_pkcs12_with_password(password: &str) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+    let (certificate_der, private_key, root_der) = client_identity_material();
+    let mut keystore = KeyStore::new();
+    keystore.add_entry(
+        "listener",
+        KeyStoreEntry::PrivateKeyChain(PrivateKeyChain::new(
+            "listener-key",
+            PrivateKey::from_der(&private_key).unwrap(),
+            [
+                Certificate::from_der(&certificate_der).unwrap(),
+                Certificate::from_der(&root_der).unwrap(),
+            ],
+        )),
+    );
+    (
+        keystore.writer(password).write().unwrap(),
+        private_key,
+        root_der,
+    )
+}
+
+pub(super) fn client_identity_pem() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+    let (certificate_der, private_key, root_der) = client_identity_material();
+    let pem = format!(
+        "-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
+        STANDARD.encode(&certificate_der),
+        STANDARD.encode(&root_der),
+        STANDARD.encode(&private_key),
+    )
+    .into_bytes();
+    (pem, private_key, root_der)
+}
+
+fn client_identity_material() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     let root = CertificateService
         .generate_root_ca("Listener Client Root")
         .unwrap();
@@ -60,20 +93,8 @@ pub(super) fn client_pkcs12_with_password(password: &str) -> (Vec<u8>, Vec<u8>, 
     params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ClientAuth];
     let certificate = params.signed_by(&client_key, &issuer).unwrap();
     let private_key = client_key.serialize_der();
-    let mut keystore = KeyStore::new();
-    keystore.add_entry(
-        "listener",
-        KeyStoreEntry::PrivateKeyChain(PrivateKeyChain::new(
-            "listener-key",
-            PrivateKey::from_der(&private_key).unwrap(),
-            [
-                Certificate::from_der(certificate.der()).unwrap(),
-                Certificate::from_der(&root.certificate_der).unwrap(),
-            ],
-        )),
-    );
     (
-        keystore.writer(password).write().unwrap(),
+        certificate.der().to_vec(),
         private_key,
         root.certificate_der.clone(),
     )

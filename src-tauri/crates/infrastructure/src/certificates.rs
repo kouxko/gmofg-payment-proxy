@@ -60,15 +60,8 @@ pub struct ParsedPkcs12 {
     pub metadata: CertificateMetadata,
 }
 
-/// 已校验并转换为 PKCS#8 的 PEM 服务端身份。
-///
-/// Listener 运行时统一按 PKCS#8 向 rustls 提交私钥，因此导入阶段即完成格式归一化，
-/// 避免把只能在当前临时文件存在时才能解析的外部路径保存进 Workspace。
-pub struct ParsedPemServerIdentity {
-    pub certificate_chain_der: Vec<Vec<u8>>,
-    pub private_key_pkcs8_der: Zeroizing<Vec<u8>>,
-    pub metadata: CertificateMetadata,
-}
+pub type ParsedPemServerIdentity = ParsedPemIdentity;
+pub type ParsedPemClientIdentity = ParsedPemIdentity;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrustedCa {
@@ -94,17 +87,6 @@ impl fmt::Debug for ParsedPkcs12 {
             .field("certificate_der_len", &self.certificate_der.len())
             .field("private_key_pkcs8_der", &"<redacted>")
             .field("chain_certificates", &self.chain_der.len())
-            .field("metadata", &self.metadata)
-            .finish()
-    }
-}
-
-impl fmt::Debug for ParsedPemServerIdentity {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("ParsedPemServerIdentity")
-            .field("certificate_chain_len", &self.certificate_chain_der.len())
-            .field("private_key_pkcs8_der", &"<redacted>")
             .field("metadata", &self.metadata)
             .finish()
     }
@@ -255,25 +237,33 @@ impl CertificateService {
         &self,
         bytes: &[u8],
     ) -> Result<ParsedPemServerIdentity, InfrastructureError> {
-        let mut certificates = Cursor::new(bytes);
-        let certificate_chain_der = rustls_pemfile::certs(&mut certificates)
-            .map(|entry| {
-                entry
-                    .map(|certificate| certificate.as_ref().to_vec())
-                    .map_err(x509_error)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
+        let material = parse_pem_identity(bytes, "PEM 服务端身份")?;
+        let certificate_chain_der = material.certificate_chain_der;
+        let private_key_pkcs8_der = material.private_key_pkcs8_der;
         let leaf = certificate_chain_der
             .first()
             .ok_or_else(|| invalid("PEM 服务端身份缺少证书链"))?;
-        let mut private_key = Cursor::new(bytes);
-        let private_key = rustls_pemfile::private_key(&mut private_key)
-            .map_err(x509_error)?
-            .ok_or_else(|| invalid("PEM 服务端身份缺少私钥"))?;
-        let key_pair = KeyPair::try_from(&private_key).map_err(rcgen_error)?;
-        let private_key_pkcs8_der = Zeroizing::new(key_pair.serialize_der());
         validate_server_chain(&certificate_chain_der, &private_key_pkcs8_der)?;
-        Ok(ParsedPemServerIdentity {
+        Ok(ParsedPemIdentity {
+            metadata: metadata(&parse_der(leaf)?)?,
+            certificate_chain_der,
+            private_key_pkcs8_der,
+        })
+    }
+
+    /// 解析包含客户端证书链与匹配私钥的组合 PEM。
+    pub fn parse_client_identity_pem(
+        &self,
+        bytes: &[u8],
+    ) -> Result<ParsedPemClientIdentity, InfrastructureError> {
+        let material = parse_pem_identity(bytes, "PEM 客户端身份")?;
+        let certificate_chain_der = material.certificate_chain_der;
+        let private_key_pkcs8_der = material.private_key_pkcs8_der;
+        let (leaf, chain) = certificate_chain_der
+            .split_first()
+            .ok_or_else(|| invalid("PEM 客户端身份缺少证书链"))?;
+        self.validate_client_identity(leaf, &private_key_pkcs8_der, chain)?;
+        Ok(ParsedPemIdentity {
             metadata: metadata(&parse_der(leaf)?)?,
             certificate_chain_der,
             private_key_pkcs8_der,
@@ -452,6 +442,9 @@ impl CertificateService {
     }
 }
 
+mod pem_identity;
+use pem_identity::{ParsedPemIdentity, parse_pem_identity};
+
 mod validation;
 use validation::{
     bundle, certificate_is_ca, classify_pkcs12_error, common_name_dn, extract_sans, invalid,
@@ -470,14 +463,6 @@ impl Drop for ParsedPkcs12 {
     fn drop(&mut self) {
         self.certificate_der.zeroize();
         for certificate in &mut self.chain_der {
-            certificate.zeroize();
-        }
-    }
-}
-
-impl Drop for ParsedPemServerIdentity {
-    fn drop(&mut self) {
-        for certificate in &mut self.certificate_chain_der {
             certificate.zeroize();
         }
     }

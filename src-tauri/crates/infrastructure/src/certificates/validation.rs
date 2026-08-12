@@ -121,7 +121,7 @@ pub(super) fn validate_client_chain(
     let certificate = parse_der(certificate_der)?;
     validate_client_end_entity(&certificate)?;
     if chain.is_empty() {
-        return Err(invalid("PKCS12 缺少可验证的 CA 证书链"));
+        return Err(invalid("客户端身份缺少可验证的 CA 证书链"));
     }
     let mut current_der = certificate_der;
     for (index, issuer) in chain.iter().enumerate() {
@@ -132,7 +132,7 @@ pub(super) fn validate_client_chain(
                 .verify_signature(Some(issuer_x509.public_key()))
                 .is_err()
         {
-            return Err(invalid("PKCS12 证书链签名无效"));
+            return Err(invalid("客户端身份的证书链签名无效"));
         }
         if validate_ca(&issuer_x509).is_err()
             && !(index + 1 == chain.len() && is_legacy_self_signed_trust_anchor(&issuer_x509)?)
@@ -182,15 +182,15 @@ pub(super) fn validate_client_end_entity(
 ) -> Result<(), InfrastructureError> {
     validate_validity(certificate)?;
     if certificate_is_ca(certificate)? {
-        return Err(invalid("PKCS12 客户端身份必须是非 CA 终端证书"));
+        return Err(invalid("客户端身份必须是非 CA 终端证书"));
     }
-    validate_digital_signature_usage(certificate, "PKCS12 客户端证书")?;
+    validate_digital_signature_usage(certificate, "客户端证书")?;
     let eku = certificate
         .extended_key_usage()
         .map_err(x509_error)?
-        .ok_or_else(|| invalid("PKCS12 客户端证书缺少 clientAuth EKU"))?;
+        .ok_or_else(|| invalid("客户端证书缺少 clientAuth EKU"))?;
     if !eku.value.client_auth {
-        return Err(invalid("PKCS12 客户端证书缺少 clientAuth EKU"));
+        return Err(invalid("客户端证书缺少 clientAuth EKU"));
     }
     Ok(())
 }

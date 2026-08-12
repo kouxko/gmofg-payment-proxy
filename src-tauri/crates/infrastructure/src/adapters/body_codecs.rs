@@ -19,7 +19,7 @@ use super::{common::decode_workspace_record, pipeline::RuntimeBodyCodecResolver}
 mod content_type;
 pub use content_type::HeaderBodyCodecResolver;
 pub(crate) use content_type::decode_message_body;
-use content_type::resolve_message_codec;
+pub(crate) use content_type::resolve_message_codec;
 
 #[derive(Debug)]
 pub struct WorkspaceBodyCodecResolver {
@@ -264,7 +264,7 @@ mod tests {
             let message =
                 message_with_content_type(&format!("text/plain; charset={alias}"), &encoded);
             let codec = resolve_message_codec(BodyCodecKind::Auto, &message);
-            assert_eq!(codec.id(), "shift-jis");
+            assert_eq!(codec.id(), "auto:shift-jis");
             assert_eq!(codec.decode(&encoded).unwrap(), "結果D48");
         }
         for alias in ["UTF-8", "utf8", "\"utf-8\""] {
@@ -273,9 +273,25 @@ mod tests {
                 "成功".as_bytes(),
             );
             let codec = resolve_message_codec(BodyCodecKind::Auto, &message);
-            assert_eq!(codec.id(), "utf-8");
+            assert_eq!(codec.id(), "auto:utf-8");
             assert_eq!(codec.decode("成功".as_bytes()).unwrap(), "成功");
         }
+    }
+
+    #[test]
+    fn forced_codec_overrides_conflicting_content_type_charset() {
+        let utf8_message =
+            message_with_content_type("text/plain; charset=utf-8", "結果D48".as_bytes());
+        let shift_jis = resolve_message_codec(BodyCodecKind::ShiftJis, &utf8_message);
+        assert_eq!(shift_jis.id(), "shift-jis");
+        let encoded = shift_jis.encode("結果D48").unwrap();
+        assert_eq!(shift_jis.decode(&encoded).unwrap(), "結果D48");
+
+        let shift_jis_message =
+            message_with_content_type("text/plain; charset=shift_jis", "成功".as_bytes());
+        let utf8 = resolve_message_codec(BodyCodecKind::Utf8, &shift_jis_message);
+        assert_eq!(utf8.id(), "utf-8");
+        assert_eq!(utf8.decode("成功".as_bytes()).unwrap(), "成功");
     }
 
     #[test]
@@ -296,7 +312,7 @@ mod tests {
             media_type: Some("application/json".into()),
             charset: Some("utf-8".into()),
             content_kind: MessageContentKind::Json,
-            codec_id: Some("utf-8".into()),
+            codec_id: Some("auto:utf-8".into()),
             decode_error: None,
             query_string: None,
         };
@@ -304,8 +320,38 @@ mod tests {
         let codec = resolver.resolve(&message);
         let encoded = codec.encode(message.body_text.as_deref().unwrap()).unwrap();
 
-        assert_eq!(codec.id(), "shift-jis");
+        assert_eq!(codec.id(), "auto:shift-jis");
         assert_eq!(SHIFT_JIS.decode(&encoded).0, message.body_text.unwrap());
+    }
+
+    #[test]
+    fn breakpoint_resolver_preserves_forced_codec_when_header_is_edited() {
+        let resolver = HeaderBodyCodecResolver;
+        let message = MessageContentViewModel {
+            http_status: None,
+            start_line_bytes: b"POST / HTTP/1.1".to_vec(),
+            raw_headers: Vec::new(),
+            headers: BTreeMap::from([(
+                "Content-Type".into(),
+                vec!["text/plain; charset=utf-8".into()],
+            )]),
+            body_text: Some("結果D48".into()),
+            body_bytes: Vec::new(),
+            json: None,
+            content_length: 0,
+            media_type: Some("text/plain".into()),
+            charset: Some("utf-8".into()),
+            content_kind: MessageContentKind::Text,
+            codec_id: Some("shift-jis".into()),
+            decode_error: None,
+            query_string: None,
+        };
+
+        let codec = resolver.resolve(&message);
+
+        assert_eq!(codec.id(), "shift-jis");
+        let encoded = codec.encode("結果D48").unwrap();
+        assert_eq!(codec.decode(&encoded).unwrap(), "結果D48");
     }
 
     fn message_with_content_type(content_type: &str, body: &[u8]) -> Message {

@@ -11,6 +11,7 @@ use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
 const PKCS12_EXTENSIONS: &[&str] = &["p12", "pfx"];
+const CLIENT_IDENTITY_EXTENSIONS: &[&str] = &["p12", "pfx", "pem"];
 const IDENTITY_PEM_EXTENSIONS: &[&str] = &["pem"];
 const TRUST_CERTIFICATE_EXTENSIONS: &[&str] = &["cer", "crt", "pem", "der"];
 
@@ -45,6 +46,9 @@ impl TauriNativeFileDialog {
             "pkcs12" => builder
                 .set_title("导入上游 PKCS12")
                 .add_filter("PKCS12", PKCS12_EXTENSIONS),
+            "upstream_client_identity" => builder
+                .set_title("导入上游 mTLS 客户端身份")
+                .add_filter("客户端身份", CLIENT_IDENTITY_EXTENSIONS),
             "server_identity_pem" => builder
                 .set_title("导入本监听服务端身份（证书链 + 私钥）")
                 .add_filter("PEM 服务端身份", IDENTITY_PEM_EXTENSIONS),

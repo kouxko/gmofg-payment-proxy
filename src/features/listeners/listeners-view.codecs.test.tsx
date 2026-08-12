@@ -18,7 +18,7 @@ import { ListenersView } from "./listeners-view";
 describe("统一代理监听编辑器", () => {
   beforeEach(setupListenerMocks);
 
-  it("按 Content-Type charset 自动识别且保存时保留旧编码字段", async () => {
+  it("保存请求和响应各自选择的自动或强制正文编码", async () => {
     const fixedWorkspace = {
       ...workspace,
       listeners: [{
@@ -30,15 +30,16 @@ describe("统一代理监听编辑器", () => {
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
     const user = userEvent.setup(); render(<ListenersView />);
 
-    expect(await screen.findByText(/按 Content-Type charset 自动识别/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: /请求正文编码/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /响应正文编码/ })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /请求正文编码/ }));
+    await user.click(await screen.findByRole("option", { name: "自动（读取 Content-Type charset）" }));
+    await user.click(screen.getByRole("button", { name: /响应正文编码/ }));
+    await user.click(await screen.findByRole("option", { name: "强制 Shift-JIS" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
 
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     const savedListener = mocks.listenerSave.mock.calls[0][2];
-    expect(savedListener.request_body_codec).toBe("shift_jis");
-    expect(savedListener.response_body_codec).toBe("utf8");
+    expect(savedListener.request_body_codec).toBe("auto");
+    expect(savedListener.response_body_codec).toBe("shift_jis");
   });
 
   it("动态目标监听的 Basic 密码只进入 Rust 安全存储", async () => {

@@ -35,7 +35,10 @@ pub(super) fn content_view(
     let headers = display_headers(&raw_headers);
     let (metadata, body_text, codec_id, mut decode_error) =
         decode_message_body(message, body_codec);
-    if codec_id.as_deref() == Some("unsupported") {
+    if codec_id
+        .as_deref()
+        .is_some_and(|id| id.ends_with("unsupported"))
+    {
         decode_error = Some(format!(
             "unsupported charset: {}",
             metadata.charset.as_deref().unwrap_or("unknown")
