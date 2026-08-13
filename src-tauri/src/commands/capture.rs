@@ -1,7 +1,9 @@
 //! 抓包、会话与断点命令适配层：查询和决策语义由 application 门面定义，本层保持 IPC 形状。
 
+use std::sync::Arc;
+
 use intercept_proxy_application::{
-    BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft, BreakpointId,
+    AppError, BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft, BreakpointId,
     BreakpointSummaryViewModel, BreakpointValidationViewModel, CaptureDetailViewModel,
     CapturePageViewModel, CaptureQuery, OperationResultViewModel, RuntimeEpoch,
     SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
@@ -157,9 +159,14 @@ pub async fn breakpoint_resolve(
     runtime_epoch: RuntimeEpoch,
     decision: BreakpointDecision,
 ) -> CommandResult<BreakpointSummaryViewModel> {
-    state
-        .application
-        .breakpoint_resolve(runtime_epoch, decision)
+    let application = Arc::clone(&state.application);
+    tokio::task::spawn_blocking(move || application.breakpoint_resolve(runtime_epoch, decision))
         .await
+        .map_err(|error| {
+            command_error(AppError::new(
+                "BREAKPOINT_RESOLVE_TASK_FAILED",
+                format!("断点处理任务异常结束：{error}"),
+            ))
+        })?
         .map_err(command_error)
 }

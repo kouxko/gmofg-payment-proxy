@@ -4,8 +4,13 @@ import { describe, expect, it } from "vitest";
 import type {
   BreakpointActionOptionViewModel,
   BreakpointDraft,
+  MessageContentViewModel,
 } from "@/generated/rust-types";
-import { buildBreakpointDecision } from "./breakpoints-view";
+import {
+  breakpointDraftBody,
+  breakpointEditableBody,
+  buildBreakpointDecision,
+} from "./breakpoints-view";
 
 const draft: BreakpointDraft = {
   breakpoint_id: "breakpoint-1",
@@ -78,5 +83,27 @@ describe("buildBreakpointDecision", () => {
         message: draft.message,
         truncate_at: 8,
       });
+  });
+});
+
+describe("breakpointEditableBody", () => {
+  it("formats display JSON but keeps wire draft raw until the user edits", () => {
+    const message = {
+      body_text: '{"ErrorCode":"D48"}',
+      json: { ErrorCode: "D48" },
+    } as MessageContentViewModel;
+
+    expect(breakpointEditableBody(undefined, message)).toBe(
+      '{\n  "ErrorCode": "D48"\n}',
+    );
+    expect(breakpointDraftBody(undefined, message)).toBe(
+      '{"ErrorCode":"D48"}',
+    );
+    expect(breakpointEditableBody('{"ErrorCode":"D32"}', message)).toBe(
+      '{"ErrorCode":"D32"}',
+    );
+    expect(breakpointDraftBody('{"ErrorCode":"D32"}', message)).toBe(
+      '{"ErrorCode":"D32"}',
+    );
   });
 });

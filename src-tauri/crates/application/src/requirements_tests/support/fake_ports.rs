@@ -170,6 +170,9 @@ impl BreakpointValidationPort for FakePorts {
     fn format_json(&self, _: BreakpointDraft) -> AppResult<BreakpointDraft> {
         unused()
     }
+    fn normalize(&self, _: BreakpointDraft) -> AppResult<BreakpointDraft> {
+        unused()
+    }
     fn restore_original(&self, _: &BreakpointDetailViewModel) -> AppResult<BreakpointDraft> {
         unused()
     }

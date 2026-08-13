@@ -68,17 +68,23 @@ impl BreakpointValidator {
         validate_headers(&message.headers)?;
         let body_codec = self.body_codec_resolver.resolve(&message);
         if let Some(text) = message.body_text.as_deref() {
-            message.body_bytes = body_codec.encode(text).map_err(|error| {
-                AppError::field(
-                    error.code,
-                    "报文正文无法使用当前产品编码器进行无损编码。",
-                    BTreeMap::from([("message.body_text".into(), vec![error.message])]),
-                )
-            })?;
+            let preserves_existing_bytes = body_codec
+                .decode(&message.body_bytes)
+                .is_ok_and(|decoded| decoded == text);
+            if !preserves_existing_bytes {
+                message.body_bytes = body_codec.encode(text).map_err(|error| {
+                    AppError::field(
+                        error.code,
+                        "报文正文无法使用当前产品编码器进行无损编码。",
+                        BTreeMap::from([("message.body_text".into(), vec![error.message])]),
+                    )
+                })?;
+            }
         }
         message.content_length = message.body_bytes.len();
         set_content_length(&mut message.headers, message.content_length);
-        message.json = if message.content_kind == MessageContentKind::Json {
+        message.json = if message.content_kind == MessageContentKind::Json || message.json.is_some()
+        {
             message
                 .body_text
                 .as_deref()
@@ -123,12 +129,6 @@ impl BreakpointValidator {
 
 impl BreakpointValidationPort for BreakpointValidator {
     fn format_json(&self, mut draft: BreakpointDraft) -> AppResult<BreakpointDraft> {
-        if draft.message.content_kind != MessageContentKind::Json {
-            return Err(AppError::new(
-                "JSON_MEDIA_TYPE_REQUIRED",
-                "只有 JSON Content-Type 的报文可以执行 JSON 格式化。",
-            ));
-        }
         let text =
             draft.message.body_text.as_deref().ok_or_else(|| {
                 AppError::new("JSON_INVALID", "当前报文没有可格式化的文本 Body。")
@@ -145,6 +145,11 @@ impl BreakpointValidationPort for BreakpointValidator {
                 .map_err(|error| AppError::new("JSON_INVALID", error.to_string()))?,
         );
         draft.message.json = Some(json);
+        draft.message = self.normalize_message(draft.message)?;
+        Ok(draft)
+    }
+
+    fn normalize(&self, mut draft: BreakpointDraft) -> AppResult<BreakpointDraft> {
         draft.message = self.normalize_message(draft.message)?;
         Ok(draft)
     }

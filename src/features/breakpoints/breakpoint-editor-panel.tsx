@@ -53,7 +53,7 @@ function MessageTabs({
 }: {
   label: string;
   message: BreakpointDetailViewModel["original"];
-  body: string;
+  body?: string;
   headers: Record<string, string[]>;
   bytes: number[];
   editable?: boolean;
@@ -61,9 +61,14 @@ function MessageTabs({
   onChange?: (value: string) => void;
 }) {
   return (
-    <div>
-      <h3 className="mb-2 font-semibold">{label}</h3>
-      <Tabs defaultSelectedKey="body">
+    <div className="min-w-0 max-w-full">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 className="font-semibold">{label}</h3>
+        <span className="rounded-full bg-[var(--telemetry-table-head)] px-2 py-0.5 text-xs text-[var(--telemetry-muted)]">
+          {editable ? "可编辑" : "只读"}
+        </span>
+      </div>
+      <Tabs className="min-w-0 max-w-full" defaultSelectedKey="body">
         <Tabs.ListContainer>
           <Tabs.List aria-label={`${label}查看`}>
             <Tabs.Tab id="body">
@@ -80,7 +85,7 @@ function MessageTabs({
             </Tabs.Tab>
           </Tabs.List>
         </Tabs.ListContainer>
-        <Tabs.Panel id="body" className="pt-3">
+        <Tabs.Panel id="body" className="min-w-0 max-w-full pt-3">
           <HttpBodyViewer
             label={`${label} Body`}
             message={message}
@@ -160,8 +165,8 @@ export function BreakpointEditorPanel(props: BreakpointEditorPanelProps) {
             请求 ID {data.summary.session_id}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-5 max-[1100px]:grid-cols-1">
-          <div className="col-span-2">
+        <div className="grid grid-cols-1 gap-5">
+          <div>
             <HttpRequestTargetView
               method={data.summary.method}
               target={data.summary.target}
@@ -175,7 +180,6 @@ export function BreakpointEditorPanel(props: BreakpointEditorPanelProps) {
           <MessageTabs
             label="原始报文"
             message={data.original}
-            body={data.original.body_text ?? ""}
             headers={data.original.headers}
             bytes={data.original.body_bytes}
           />

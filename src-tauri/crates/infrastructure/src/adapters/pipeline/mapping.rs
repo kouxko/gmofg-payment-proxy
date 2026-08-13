@@ -2,8 +2,8 @@ use super::{
     AppChannelId, AppError, AppMessageStage, BodyCodec, BreakpointDecision, BreakpointDecisionKind,
     BreakpointDetailViewModel, BreakpointState, BreakpointSummaryViewModel, Bytes, ChannelId,
     ConnectionContext, DomainChannelId, Duration, ErrorCode, FaultAction, Message, ProxyError,
-    ProxyResult, UiTone, Utc, Uuid, content_view, encode_body, message_method, message_target,
-    proxy_message,
+    ProxyResult, UiTone, Utc, Uuid, breakpoint_content_view, encode_body, message_method,
+    message_target, proxy_message,
 };
 #[cfg(test)]
 use super::{DomainMessageStage, Rule};
@@ -170,8 +170,8 @@ pub(super) fn breakpoint_detail(
             ui_tone: UiTone::Warning,
             revision: 1,
         },
-        original: content_view(body_codec, original),
-        effective: content_view(body_codec, effective),
+        original: breakpoint_content_view(body_codec, original),
+        effective: breakpoint_content_view(body_codec, effective),
         can_resolve: true,
         resolve_disabled_reason: None,
         available_actions: Vec::new(),

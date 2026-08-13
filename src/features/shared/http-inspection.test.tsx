@@ -39,6 +39,20 @@ describe("HTTP 报文共享查看器", () => {
     expect(container.querySelector("[dangerouslySetInnerHTML]")).toBeNull();
   });
 
+  it("只读长行在卡片内换行，不用内容宽度撑破布局", () => {
+    const { container } = render(
+      <HttpBodyViewer label="请求 Body" message={jsonMessage} emptyText="无正文" />,
+    );
+
+    const surface = container.querySelector("[data-code-surface]");
+    const row = surface?.querySelector("[data-code-row]");
+    const code = row?.querySelector("code");
+    expect(surface).toHaveClass("w-full", "max-w-full");
+    expect(row).toHaveClass("min-w-0");
+    expect(row).not.toHaveClass("min-w-max");
+    expect(code).toHaveClass("whitespace-pre-wrap", "break-all");
+  });
+
   it("把自动解析结果显示为用户可读的编码来源", () => {
     render(
       <HttpBodyViewer
@@ -136,7 +150,7 @@ describe("HTTP 报文共享查看器", () => {
       <HttpBodyViewer label="请求 Body" message={jsonMessage} emptyText="无正文" />,
     );
 
-    expect(container.querySelector("[data-code-surface]")).toHaveClass("min-h-64");
+    expect(container.querySelector("[data-code-surface]")).toHaveClass("min-h-[320px]");
     expect(container.querySelector("details")).not.toHaveAttribute("open");
   });
 

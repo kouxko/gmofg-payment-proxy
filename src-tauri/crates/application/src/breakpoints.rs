@@ -84,6 +84,22 @@ impl BreakpointCoordinator {
     }
 
     pub fn query(&self, epoch: Option<RuntimeEpoch>) -> Vec<BreakpointSummaryViewModel> {
+        let disconnected = {
+            let state = self.state.lock();
+            state
+                .pending
+                .iter()
+                .filter_map(|(id, item)| {
+                    item.sender
+                        .as_ref()
+                        .is_some_and(tokio::sync::oneshot::Sender::is_closed)
+                        .then_some(*id)
+                })
+                .collect::<Vec<_>>()
+        };
+        for id in disconnected {
+            let _ = self.terminate(id, BreakpointState::ClientDisconnected);
+        }
         let state = self.state.lock();
         let mut items = state
             .pending

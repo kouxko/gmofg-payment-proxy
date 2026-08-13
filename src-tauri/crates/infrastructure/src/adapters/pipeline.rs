@@ -39,8 +39,8 @@ use uuid::Uuid;
 
 use super::{CaptureRepositoryAdapter, RuleRepositoryAdapter};
 use message_projection::{
-    classify_request, content_view, decode_json, encode_body, header_value, message_method,
-    message_target, proxy_message,
+    breakpoint_content_view, classify_request, content_view, decode_json, encode_body,
+    header_value, message_method, message_target, proxy_message,
 };
 #[cfg(test)]
 use message_projection::{decode_body, display_headers, merge_edited_headers};

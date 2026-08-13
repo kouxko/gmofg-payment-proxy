@@ -36,6 +36,40 @@ impl BodyCodec for TestBodyCodec {
     }
 }
 
+#[derive(Debug)]
+struct AliasBodyCodec;
+
+impl BodyCodec for AliasBodyCodec {
+    fn id(&self) -> &'static str {
+        "alias-test"
+    }
+
+    fn name(&self) -> &'static str {
+        "Alias Test"
+    }
+
+    fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
+        match bytes {
+            [0x87, 0x90] | [0x81, 0xE0] => Ok("≒".into()),
+            _ => Err(ProductError::new(
+                "BODY_DECODE_FAILED",
+                "unexpected alias-test bytes",
+            )),
+        }
+    }
+
+    fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
+        if text == "≒" {
+            Ok(vec![0x81, 0xE0])
+        } else {
+            Err(ProductError::new(
+                "BODY_ENCODE_FAILED",
+                "unexpected alias-test text",
+            ))
+        }
+    }
+}
+
 fn validator() -> BreakpointValidator {
     BreakpointValidator::new(Arc::new(TestBodyCodec))
 }
@@ -108,20 +142,68 @@ fn format_json_uses_injected_product_codec_and_recalculates_length() {
 }
 
 #[test]
-fn format_json_rejects_non_json_media_types() {
+fn normalize_preserves_original_bytes_when_codec_text_is_unchanged() {
     let detail = detail(MessageStage::Request);
-    let mut xml = message("<result>ok</result>");
-    xml.media_type = Some("application/xml".into());
-    xml.content_kind = crate::MessageContentKind::Xml;
+    let mut unchanged = message("≒");
+    unchanged.body_bytes = vec![0x87, 0x90];
+    unchanged.content_length = unchanged.body_bytes.len();
+    unchanged.content_kind = crate::MessageContentKind::Text;
+    unchanged.json = None;
+    let normalized = BreakpointValidator::new(Arc::new(AliasBodyCodec))
+        .normalize(BreakpointDraft {
+            breakpoint_id: detail.summary.breakpoint_id,
+            expected_revision: 1,
+            message: unchanged,
+        })
+        .expect("unchanged decoded text must preserve its exact wire bytes");
+
+    assert_eq!(normalized.message.body_bytes, [0x87, 0x90]);
+}
+
+#[test]
+fn format_json_accepts_vendor_media_type_when_text_is_valid_json() {
+    let detail = detail(MessageStage::Request);
+    let mut vendor_json = message(r#"{"result":"ok"}"#);
+    vendor_json.media_type = Some("text/csv".into());
+    vendor_json.content_kind = crate::MessageContentKind::Text;
+    vendor_json.json = Some(serde_json::json!({"result": "ok"}));
+    let formatted = validator()
+        .format_json(BreakpointDraft {
+            breakpoint_id: detail.summary.breakpoint_id,
+            expected_revision: 1,
+            message: vendor_json,
+        })
+        .expect("decodable vendor JSON can be formatted");
+
+    assert_eq!(
+        formatted.message.content_kind,
+        crate::MessageContentKind::Text
+    );
+    assert_eq!(
+        formatted.message.body_text.as_deref(),
+        Some("{\n  \"result\": \"ok\"\n}")
+    );
+    assert_eq!(
+        formatted.message.json,
+        Some(serde_json::json!({"result": "ok"}))
+    );
+}
+
+#[test]
+fn format_json_rejects_text_that_is_not_json() {
+    let detail = detail(MessageStage::Request);
+    let mut text = message("not-json");
+    text.media_type = Some("text/csv".into());
+    text.content_kind = crate::MessageContentKind::Text;
     let error = validator()
         .format_json(BreakpointDraft {
             breakpoint_id: detail.summary.breakpoint_id,
             expected_revision: 1,
-            message: xml,
+            message: text,
         })
-        .expect_err("XML must not be treated as JSON");
+        .expect_err("ordinary text must not be treated as JSON");
 
-    assert_eq!(error.view_model.code, "JSON_MEDIA_TYPE_REQUIRED");
+    assert_eq!(error.view_model.code, "JSON_INVALID");
 }
 
 #[test]
