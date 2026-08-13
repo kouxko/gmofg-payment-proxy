@@ -1,0 +1,43 @@
+# Document Schema 是规则变量的稳定契约。
+# 字段名称必须匹配 [a-z][a-z0-9_]*，并且不能在脚本中动态增加未知字段。
+# v1 支持 string/int/bool/blob；required 未写时默认为 false。
+id = "iso8583-financial-message"
+version = 1
+title = "ISO 8583 Financial Message"
+
+[[fields]]
+name = "message_type"
+label = "Message Type"
+type = "string"
+required = true
+
+[[fields]]
+name = "processing_code"
+label = "Processing Code"
+type = "string"
+
+[[fields]]
+# 金额使用最小货币单位。例如 JPY 1000 表示 1000 日元。
+name = "amount"
+label = "Amount"
+type = "int"
+
+[[fields]]
+name = "transmission_time"
+label = "Transmission Time"
+type = "string"
+
+[[fields]]
+name = "stan"
+label = "System Trace Audit Number"
+type = "string"
+
+[[fields]]
+name = "terminal_id"
+label = "Terminal ID"
+type = "string"
+
+[[fields]]
+name = "currency"
+label = "Currency Code"
+type = "string"
