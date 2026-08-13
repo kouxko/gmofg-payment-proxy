@@ -241,4 +241,42 @@ describe("BreakpointsView queue controls", () => {
     expect(screen.getByRole("textbox", { name: "有效 XML" })).toBeVisible();
     expect(screen.queryByRole("tab", { name: "JSON" })).not.toBeInTheDocument();
   });
+
+  it("formats original and effective vendor JSON consistently", () => {
+    navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
+    const vendorMessage = {
+      ...message('{"ErrorCode":"D48","ResponseID":"A"}'),
+      headers: { "content-type": ["text/csv; charset=shift_jis"] },
+      json: { ErrorCode: "D48", ResponseID: "A" },
+      content_kind: "text",
+      media_type: "text/csv",
+      charset: "shift_jis",
+      codec_id: "shift-jis",
+    } as BreakpointDetailViewModel["original"];
+    details.A = {
+      ...detail(summaries[0]),
+      original: vendorMessage,
+      effective: vendorMessage,
+    };
+
+    const { container } = render(<BreakpointsView />);
+
+    const originalLines = Array.from(
+      container.querySelectorAll(
+        '[aria-label="原始 文本"][data-code-surface="json"] code',
+      ),
+      (line) => line.textContent,
+    );
+    expect(originalLines).toEqual([
+      "{",
+      '  "ErrorCode": "D48",',
+      '  "ResponseID": "A"',
+      "}",
+    ]);
+    expect(screen.getByRole("textbox", { name: "有效 文本" })).toHaveValue(
+      '{\n  "ErrorCode": "D48",\n  "ResponseID": "A"\n}',
+    );
+    expect(screen.getByText("只读")).toBeVisible();
+    expect(screen.getByText("可编辑")).toBeVisible();
+  });
 });

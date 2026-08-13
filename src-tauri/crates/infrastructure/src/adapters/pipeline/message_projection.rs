@@ -75,6 +75,17 @@ pub(super) fn content_view(
     }
 }
 
+pub(super) fn breakpoint_content_view(
+    body_codec: &dyn BodyCodec,
+    message: &Message,
+) -> MessageContentViewModel {
+    let mut view = content_view(body_codec, message);
+    if view.json.is_none() {
+        view.json = decode_json(body_codec, &message.body).ok();
+    }
+    view
+}
+
 fn query_string(start_line: &str) -> Option<String> {
     let mut fields = start_line.split_ascii_whitespace();
     let first = fields.next()?;

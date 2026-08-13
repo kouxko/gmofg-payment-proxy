@@ -328,6 +328,7 @@ pub trait SessionQueryPort: Send + Sync + std::fmt::Debug {
 /// 任何展示层都只能提交意图，而不能自行重建报文。
 pub trait BreakpointValidationPort: Send + Sync + std::fmt::Debug {
     fn format_json(&self, draft: BreakpointDraft) -> AppResult<BreakpointDraft>;
+    fn normalize(&self, draft: BreakpointDraft) -> AppResult<BreakpointDraft>;
     fn restore_original(&self, detail: &BreakpointDetailViewModel) -> AppResult<BreakpointDraft>;
     fn validate(
         &self,

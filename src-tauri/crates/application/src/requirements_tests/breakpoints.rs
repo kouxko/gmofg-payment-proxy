@@ -136,11 +136,33 @@ fn breakpoint_terminal_tombstones_are_bounded() {
     );
 }
 
-// TEST-EVENT, NFR-004: capture events flush at 200 rows or 100 ms.
+#[test]
+fn breakpoint_query_reclaims_waiters_dropped_by_listener_shutdown() {
+    let coordinator = BreakpointCoordinator::default();
+    let epoch = Uuid::from_u128(20);
+    let id = Uuid::from_u128(21);
+    let ticket = coordinator
+        .register(breakpoint(id, epoch, 1))
+        .expect("register");
+    drop(ticket.outcome);
+
+    assert!(coordinator.query(None).is_empty());
+    assert_eq!(
+        coordinator
+            .client_disconnected(id)
+            .expect_err("reclaimed breakpoint keeps its terminal cause")
+            .view_model
+            .code,
+        "BREAKPOINT_CLIENT_DISCONNECTED"
+    );
+}
+
+// BREAKPOINT-016: dynamic Listener breakpoints do not depend on the retired
+// single-proxy compatibility state.
 #[tokio::test]
-async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
+async fn dynamic_listener_breakpoint_resolve_normalizes_without_reformatting_body() {
     let ports = Arc::new(FakePorts::default());
-    *ports.proxy_state.lock() = ProxyState::Running;
+    assert_eq!(*ports.proxy_state.lock(), ProxyState::Stopped);
     let coordinator = Arc::new(BreakpointCoordinator::default());
     let epoch = Uuid::from_u128(20);
     let id = Uuid::from_u128(30);
@@ -199,17 +221,14 @@ async fn breakpoint_resolve_normalizes_modified_json_inside_rust_use_case() {
                 truncate_at: Some(1),
             },
         )
-        .await
         .expect("resolve");
 
     let BreakpointOutcome::Decision(decision) = ticket.outcome.await.expect("outcome") else {
         panic!("expected decision");
     };
     let message = decision.message.expect("normalized message");
-    assert_eq!(
-        message.body_text.as_deref(),
-        Some("{\n  \"amount\": 100\n}")
-    );
+    assert_eq!(message.body_text.as_deref(), Some(r#"{"amount":100}"#));
+    assert_eq!(message.body_bytes, br#"{"amount":100}"#);
     assert_eq!(message.content_length, message.body_bytes.len());
     assert_eq!(
         message.headers.get("content-length"),

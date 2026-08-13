@@ -66,7 +66,6 @@ async fn injected_supervisor_exercises_lifecycle_and_breakpoint_state_without_ui
                 truncate_at: None,
             },
         )
-        .await
         .expect("resolve breakpoint through application");
     assert_eq!(resolved.state, BreakpointState::Resolved);
     assert!(matches!(

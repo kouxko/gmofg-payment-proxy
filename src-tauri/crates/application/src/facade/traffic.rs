@@ -1,6 +1,6 @@
 //! 抓包、会话和断点用例。
 //!
-//! 查询规范化、敏感导出确认、断点校验和运行周期检查全部留在 Rust，使桌面界面和未来
+//! 查询规范化、敏感导出确认、断点校验和运行周期隔离全部留在 Rust，使桌面界面和未来
 //! 终端界面不会产生不同行为。
 
 use chrono::Utc;
@@ -13,8 +13,8 @@ use crate::{
     AppError, AppResult, BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft,
     BreakpointId, BreakpointSummaryViewModel, BreakpointValidationViewModel,
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, OperationResultViewModel,
-    ProxyState, RuntimeEpoch, SessionDetailViewModel, SessionId, SessionListViewModel,
-    SessionQuery, UiEventPayload,
+    RuntimeEpoch, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
+    UiEventPayload,
 };
 
 impl Application {
@@ -99,19 +99,11 @@ impl Application {
         self.breakpoint_validation.validate(&detail, draft)
     }
 
-    pub async fn breakpoint_resolve(
+    pub fn breakpoint_resolve(
         &self,
         runtime_epoch: RuntimeEpoch,
         mut decision: BreakpointDecision,
     ) -> AppResult<BreakpointSummaryViewModel> {
-        let status = self.proxy.status().await?;
-        if status.state != ProxyState::Running || status.runtime_epoch != Some(runtime_epoch) {
-            return Err(AppError::new(
-                "BREAKPOINT_PROXY_STOPPED",
-                "Proxy 未在对应运行周期中运行，不能处理断点。",
-            )
-            .epoch(runtime_epoch));
-        }
         let detail = self
             .breakpoints
             .get(decision.breakpoint_id, runtime_epoch)?;
@@ -134,7 +126,7 @@ impl Application {
                     )
                 })?,
             };
-            decision.message = Some(self.breakpoint_validation.format_json(draft)?.message);
+            decision.message = Some(self.breakpoint_validation.normalize(draft)?.message);
         }
         let validation = self
             .breakpoint_validation

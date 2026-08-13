@@ -162,14 +162,14 @@ function EditableCodeSurface({
     <TextField aria-label={`${ariaLabel}字段`} isInvalid={Boolean(error)}>
       <div
         className={[
-          "grid grid-cols-[3rem_minmax(0,1fr)] overflow-hidden rounded-lg border",
+          "grid min-w-0 w-full max-w-full grid-cols-[3rem_minmax(0,1fr)] overflow-hidden rounded-lg border",
           "border-[var(--telemetry-line)] bg-[var(--telemetry-table-head)]",
         ].join(" ")}
       >
         <LineNumberGutter count={lineCount(value)} />
         <TextArea
           aria-label={ariaLabel}
-          className="min-h-[430px] border-0 font-mono text-xs"
+          className="min-h-[320px] max-h-[520px] min-w-0 resize-none overflow-auto border-0 font-mono text-xs"
           value={value}
           onChange={(event) => onChange?.(event.target.value)}
         />
@@ -194,12 +194,16 @@ function CodeSurface({
       aria-label={ariaLabel}
       data-code-surface={kind}
       className={[
-        "min-h-64 max-h-[520px] overflow-auto rounded-lg border",
+        "min-h-[320px] max-h-[520px] min-w-0 w-full max-w-full overflow-auto rounded-lg border",
         "border-[var(--telemetry-line)] bg-[var(--telemetry-table-head)]",
       ].join(" ")}
     >
       {lines.map((line, index) => (
-        <div key={index} className="grid min-w-max grid-cols-[3rem_minmax(0,1fr)] font-mono text-xs leading-5">
+        <div
+          key={index}
+          data-code-row
+          className="grid min-w-0 w-full grid-cols-[3rem_minmax(0,1fr)] font-mono text-xs leading-5"
+        >
           <span
             data-line-number
             className={[
@@ -209,7 +213,9 @@ function CodeSurface({
           >
             {index + 1}
           </span>
-          <code className="min-h-5 whitespace-pre px-3">{highlightLine(line, kind)}</code>
+          <code className="min-h-5 min-w-0 whitespace-pre-wrap break-all px-3">
+            {highlightLine(line, kind)}
+          </code>
         </div>
       ))}
     </div>

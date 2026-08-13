@@ -86,6 +86,26 @@ fn content_view_classifies_xml_text_binary_and_unknown_without_guessing_json() {
 }
 
 #[test]
+fn breakpoint_view_exposes_decodable_vendor_json_without_reclassifying_content_type() {
+    let message = Message {
+        start_line: "HTTP/1.1 200 OK".into(),
+        headers: vec![RawHeader::new(
+            Bytes::from_static(b"Content-Type"),
+            Bytes::from_static(b"text/csv; charset=Shift_JIS"),
+        )],
+        body: Bytes::from_static(br#"{"ErrorCode":"D48"}"#),
+        body_modified: false,
+    };
+    let codec = resolve_message_codec(BodyCodecKind::ShiftJis, &message);
+
+    let view = breakpoint_content_view(codec.as_ref(), &message);
+
+    assert_eq!(view.content_kind, MessageContentKind::Text);
+    assert_eq!(view.media_type.as_deref(), Some("text/csv"));
+    assert_eq!(view.json.as_ref().unwrap()["ErrorCode"], "D48");
+}
+
+#[test]
 fn content_view_reports_unsupported_or_invalid_declared_charset() {
     for (content_type, body, expected_error) in [
         (

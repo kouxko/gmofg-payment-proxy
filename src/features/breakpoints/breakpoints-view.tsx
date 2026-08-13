@@ -15,6 +15,7 @@ import { commands } from "@/generated/rust-types";
 import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
+import { formatMessageBody } from "@/lib/message-content";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import { BreakpointActionPanel } from "./breakpoint-action-panel";
@@ -42,6 +43,20 @@ export function buildBreakpointDecision(
       parameters.contentLengthDelta ?? action.default_content_length_delta,
     truncate_at: parameters.truncateAt ?? action.default_truncate_at,
   };
+}
+
+export function breakpointEditableBody(
+  edited: string | undefined,
+  message: BreakpointDetailViewModel["effective"] | undefined,
+) {
+  return edited ?? formatMessageBody(message, "");
+}
+
+export function breakpointDraftBody(
+  edited: string | undefined,
+  message: BreakpointDetailViewModel["effective"] | undefined,
+) {
+  return edited ?? message?.body_text ?? "";
 }
 
 export function BreakpointsView() {
@@ -101,10 +116,14 @@ export function BreakpointsView() {
     detail.data?.available_actions.find(
       (action) => action.kind === decisionKind,
     ) ?? detail.data?.available_actions[0];
-  const bodyText =
-    (effectiveSelectedId && bodyEdits[effectiveSelectedId]) ??
-    detail.data?.effective.body_text ??
-    "";
+  const editedBody = effectiveSelectedId
+    ? bodyEdits[effectiveSelectedId]
+    : undefined;
+  const bodyText = breakpointEditableBody(editedBody, detail.data?.effective);
+  const draftBodyText = breakpointDraftBody(
+    editedBody,
+    detail.data?.effective,
+  );
   const validation =
     validationState?.breakpointId === effectiveSelectedId
       ? validationState?.result
@@ -117,10 +136,10 @@ export function BreakpointsView() {
         ? {
             breakpoint_id: detail.data.summary.breakpoint_id,
             expected_revision: detail.data.summary.revision,
-            message: { ...detail.data.effective, body_text: bodyText },
+            message: { ...detail.data.effective, body_text: draftBodyText },
           }
         : undefined,
-    [bodyText, detail.data],
+    [draftBodyText, detail.data],
   );
 
   function recordErrors(reason: unknown) {
