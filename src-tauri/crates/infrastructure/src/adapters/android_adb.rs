@@ -34,7 +34,7 @@ use status::{
 };
 
 #[cfg(test)]
-use command::{AdbOutput, SystemAdbCommandRunner, bundled_companion_apk_candidates};
+use command::{AdbOutput, bundled_companion_apk_candidates};
 #[cfg(test)]
 use fingerprint::canonical_json;
 #[cfg(test)]

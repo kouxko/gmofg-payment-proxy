@@ -141,7 +141,8 @@ async fn command_timeout_terminates_the_spawned_process() {
     let temp = tempfile::tempdir().unwrap();
     let pid_path = temp.path().join("adb-child.pid");
     let script = format!("echo $$ > '{}'; exec sleep 30", pid_path.display());
-    let mut adapter = AndroidAdbAdapter::with_runner(temp.path(), Arc::new(SystemAdbCommandRunner));
+    let mut adapter =
+        AndroidAdbAdapter::with_runner(temp.path(), Arc::new(command::SystemAdbCommandRunner));
     adapter.adb_path = Some(PathBuf::from("/bin/sh"));
 
     let error = adapter
