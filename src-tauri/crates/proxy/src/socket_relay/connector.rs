@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, time::Duration};
 
+use futures_util::{StreamExt, stream::FuturesUnordered};
 use tokio::{
     io::AsyncWriteExt,
     net::{TcpStream, lookup_host},
@@ -257,45 +258,43 @@ async fn connect_tcp(
     timeout: Duration,
     cancellation: &CancellationToken,
 ) -> Result<(SocketAddr, BoxIo)> {
-    let deadline = tokio::time::Instant::now() + timeout;
+    let (address, stream) = timeout_cancel_first(
+        timeout,
+        cancellation,
+        connect_first_available(addresses),
+        ErrorCode::SocketConnectTimeout,
+        "socket relay cancelled during TCP connect",
+        "socket upstream TCP connect",
+    )
+    .await?
+    .map_err(|error| ProxyError::new(ErrorCode::SocketConnectFailed, error.to_string()))?;
+    stream
+        .set_nodelay(true)
+        .map_err(|error| ProxyError::new(ErrorCode::SocketConnectFailed, error.to_string()))?;
+    Ok((address, Box::new(stream)))
+}
+
+async fn connect_first_available(
+    addresses: &[SocketAddr],
+) -> std::io::Result<(SocketAddr, TcpStream)> {
+    let mut attempts = addresses
+        .iter()
+        .copied()
+        .map(|address| async move { (address, TcpStream::connect(address).await) })
+        .collect::<FuturesUnordered<_>>();
     let mut last_error = None;
-    for &address in addresses {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            return Err(ProxyError::new(
-                ErrorCode::SocketConnectTimeout,
-                format!(
-                    "socket upstream TCP connect timed out after {} ms",
-                    timeout.as_millis()
-                ),
-            ));
-        }
-        let result = timeout_cancel_first(
-            remaining,
-            cancellation,
-            TcpStream::connect(address),
-            ErrorCode::SocketConnectTimeout,
-            "socket relay cancelled during TCP connect",
-            "socket upstream TCP connect",
-        )
-        .await?;
+    while let Some((address, result)) = attempts.next().await {
         match result {
-            Ok(stream) => {
-                stream.set_nodelay(true).map_err(|error| {
-                    ProxyError::new(ErrorCode::SocketConnectFailed, error.to_string())
-                })?;
-                return Ok((address, Box::new(stream)));
-            }
+            Ok(stream) => return Ok((address, stream)),
             Err(error) => last_error = Some(error),
         }
     }
-    Err(ProxyError::new(
-        ErrorCode::SocketConnectFailed,
-        last_error.map_or_else(
-            || "socket upstream has no resolved address".to_owned(),
-            |error| error.to_string(),
-        ),
-    ))
+    Err(last_error.unwrap_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "socket upstream has no resolved address",
+        )
+    }))
 }
 
 fn downstream_acceptor(config: &SocketDownstreamTlsConfig) -> Result<DownstreamTlsAcceptor> {
