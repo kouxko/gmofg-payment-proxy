@@ -74,6 +74,7 @@ impl AtomicFileExporter {
             source: error.error,
         })?;
 
+        #[cfg(unix)]
         sync_parent(parent, path)?;
         Ok(ExportOutcome {
             path: path.to_path_buf(),
@@ -125,17 +126,14 @@ impl AtomicFileExporter {
     }
 }
 
+#[cfg(unix)]
 fn sync_parent(parent: &Path, target: &Path) -> Result<(), InfrastructureError> {
-    #[cfg(unix)]
-    {
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|source| InfrastructureError::Export {
-                path: target.to_path_buf(),
-                source,
-            })?;
-    }
-    Ok(())
+    File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|source| InfrastructureError::Export {
+            path: target.to_path_buf(),
+            source,
+        })
 }
 
 #[cfg(test)]

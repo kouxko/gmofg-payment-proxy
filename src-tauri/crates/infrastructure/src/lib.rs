@@ -12,6 +12,7 @@ pub mod files;
 #[cfg(target_os = "macos")]
 pub mod keychain;
 pub mod sqlite;
+mod windows_process;
 
 pub use adapters::{
     AndroidAdbAdapter, ApplicationProxyAdapter, CaptureRepositoryAdapter,
