@@ -23,7 +23,7 @@ export function ThemeSettings() {
         <div>
           <Card.Title>外观主题</Card.Title>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
-            主题保存在本机，切换后立即生效，不会写入 Workspace 或 Rust 设置。
+            主题保存在本机，切换后立即生效，不会写入 Workspace 或应用设置。
           </p>
         </div>
         <Chip className="ml-auto" size="sm" variant="soft">

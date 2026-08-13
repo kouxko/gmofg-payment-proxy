@@ -121,7 +121,7 @@ export function PathMtuSection({
     <section className="space-y-3 border-t border-[var(--telemetry-line)] pt-5">
       <div>
         <h3 className="font-semibold">MTU / MSS / PMTU</h3>
-        <p className="text-sm text-[var(--telemetry-muted)]">0 表示不设置 MTU 或 MSS；具体组合由 Rust 校验。</p>
+        <p className="text-sm text-[var(--telemetry-muted)]">0 表示不设置 MTU 或 MSS；保存时会校验具体组合。</p>
       </div>
       <div className="grid grid-cols-3 gap-4 max-[820px]:grid-cols-1">
         <Select
@@ -173,7 +173,7 @@ export function CorruptionSection({
     <section className="space-y-3 border-t border-[var(--telemetry-line)] pt-5">
       <div>
         <h3 className="font-semibold">TCP / UDP 数据载荷位翻转</h3>
-        <p className="text-sm text-[var(--telemetry-muted)]">仅编辑概率与每包翻转位数，不在前端判断可发送性。</p>
+        <p className="text-sm text-[var(--telemetry-muted)]">仅编辑概率与每包翻转位数，保存时统一判断可发送性。</p>
       </div>
       <div className="grid grid-cols-2 gap-4 max-[620px]:grid-cols-1">
         <NumericField

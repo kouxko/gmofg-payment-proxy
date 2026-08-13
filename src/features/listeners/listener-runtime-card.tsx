@@ -17,7 +17,7 @@ export function ListenerRuntimeCard({ status, isLoading, error, pending, onToggl
   const unavailable = isLoading || Boolean(error) || !status;
   const operation = status?.can_stop ? "stop" : status?.can_start ? "start" : undefined;
   const stateText = isLoading ? "正在读取…" : error ? "查询失败"
-    : status?.state_text ?? "未知（Rust 未返回当前监听状态）";
+    : status?.state_text ?? "未知（当前监听状态不可用）";
   const actionText = pending === "start" ? "启动中…" : pending === "stop" ? "停止中…"
     : unavailable ? "状态不可用" : operation === "stop" ? "停止监听"
       : operation === "start" ? "启动监听" : "无可用操作";

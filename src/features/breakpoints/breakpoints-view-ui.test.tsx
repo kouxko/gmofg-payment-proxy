@@ -155,6 +155,23 @@ describe("BreakpointsView queue controls", () => {
     expect(queryMocks.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps long queue metadata inside the breakpoint card", () => {
+    const { container } = render(<BreakpointsView />);
+
+    expect(container.querySelector("[data-breakpoint-card]")).toHaveClass(
+      "min-w-0",
+      "max-w-full",
+      "overflow-hidden",
+    );
+    expect(
+      container.querySelector("[data-breakpoint-card-content]"),
+    ).toHaveClass("overflow-hidden");
+    expect(container.querySelector("[data-breakpoint-channel]")).toHaveClass(
+      "min-w-0",
+      "truncate",
+    );
+  });
+
   it("follows breakpointId changes while staying on the same route", async () => {
     navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
     const { rerender } = render(<BreakpointsView />);
@@ -180,7 +197,7 @@ describe("BreakpointsView queue controls", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "有效 JSON" }), {
       target: { value: '{"edited":true}' },
     });
-    await user.click(screen.getByRole("button", { name: "由 Rust 校验" }));
+    await user.click(screen.getByRole("button", { name: "校验" }));
 
     await waitFor(() =>
       expect(commandMocks.breakpointValidate).toHaveBeenCalledWith(
@@ -238,8 +255,41 @@ describe("BreakpointsView queue controls", () => {
     render(<BreakpointsView />);
 
     expect(screen.getAllByRole("tab", { name: "XML" })).toHaveLength(2);
-    expect(screen.getByRole("textbox", { name: "有效 XML" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "有效 XML" })).toHaveValue(
+      "<request><code>D48</code></request>",
+    );
+    expect(
+      document.querySelector('[aria-label="有效 XML"][data-code-surface="xml"]'),
+    ).toHaveClass("font-mono");
     expect(screen.queryByRole("tab", { name: "JSON" })).not.toBeInTheDocument();
+  });
+
+  it("uses the shared code surface for editable plain text", () => {
+    navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
+    const textMessage = {
+      ...message("ErrorCode=D48&ResponseID=A"),
+      headers: { "content-type": ["text/plain; charset=shift_jis"] },
+      json: null,
+      content_kind: "text",
+      media_type: "text/plain",
+      charset: "shift_jis",
+      codec_id: "shift-jis",
+    } as BreakpointDetailViewModel["original"];
+    details.A = {
+      ...detail(summaries[0]),
+      original: textMessage,
+      effective: textMessage,
+    };
+
+    const { container } = render(<BreakpointsView />);
+
+    expect(
+      container.querySelector('[aria-label="有效 文本"][data-code-surface="text"]'),
+    ).toHaveClass("min-h-[320px]", "font-mono");
+    expect(screen.getByRole("textbox", { name: "有效 文本" })).toHaveClass(
+      "text-sm",
+      "leading-[22px]",
+    );
   });
 
   it("formats original and effective vendor JSON consistently", () => {
@@ -274,8 +324,46 @@ describe("BreakpointsView queue controls", () => {
       "}",
     ]);
     expect(screen.getByRole("textbox", { name: "有效 文本" })).toHaveValue(
-      '{\n  "ErrorCode": "D48",\n  "ResponseID": "A"\n}',
+      '{"ErrorCode":"D48","ResponseID":"A"}',
     );
+    const effectiveSurface = container.querySelector(
+      '[aria-label="有效 文本"][data-code-surface="json"]',
+    );
+    const effectiveEditor = screen.getByRole("textbox", { name: "有效 文本" });
+    const originalCodeRow = container.querySelector(
+      '[aria-label="原始 文本"] [data-code-row]',
+    );
+    expect(effectiveSurface).toHaveClass(
+      "min-h-[320px]",
+      "max-h-[520px]",
+      "w-full",
+      "max-w-full",
+    );
+    expect(effectiveEditor).toHaveClass(
+      "bg-transparent",
+      "px-3",
+      "py-0",
+      "font-mono",
+      "text-sm",
+      "leading-[22px]",
+      "text-[var(--telemetry-accent)]",
+    );
+    expect(effectiveEditor).not.toHaveClass(
+      "textarea",
+      "absolute",
+      "text-transparent",
+    );
+    for (const codeText of [originalCodeRow, effectiveEditor]) {
+      expect(codeText).toHaveStyle({
+        fontSize: "14px",
+        lineHeight: "22px",
+        fontWeight: "400",
+        letterSpacing: "normal",
+      });
+    }
+    expect(
+      effectiveSurface?.querySelector("[data-editor-highlight-layer]"),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("只读")).toBeVisible();
     expect(screen.getByText("可编辑")).toBeVisible();
   });

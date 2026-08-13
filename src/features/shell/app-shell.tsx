@@ -307,8 +307,7 @@ function SideNavigation() {
                 <Modal.Body className="space-y-3 text-sm">
                   <p>面向 HTTP 与 Socket 联机测试的拦截代理、TLS Bridge 与故障注入工具。</p>
                   <p className="text-[var(--telemetry-muted)]">
-                    网络、证书、规则、校验、存储和导出均由 Rust
-                    核心执行；Next.js 仅负责显示状态和提交用户操作。
+                    集中管理网络、证书、规则、校验、存储和导出，并提供实时运行状态。
                   </p>
                 </Modal.Body>
                 <Modal.Footer>
@@ -338,7 +337,7 @@ function ShellContent({ children }: Readonly<{ children: React.ReactNode }>) {
             <Alert status="danger">
               <Alert.Indicator />
               <Alert.Content>
-                <Alert.Title>Rust 核心暂不可用</Alert.Title>
+                <Alert.Title>应用核心暂不可用</Alert.Title>
                 <Alert.Description>{error}</Alert.Description>
               </Alert.Content>
               <Button size="sm" variant="outline" onPress={() => void refresh()}>

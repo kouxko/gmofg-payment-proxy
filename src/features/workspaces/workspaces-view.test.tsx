@@ -403,7 +403,7 @@ describe("Workspace CRUD surface", () => {
 
     await waitFor(() =>
       expect(mocks.toast).toHaveBeenCalledWith(
-        "无法连接 Rust 核心，请确认桌面应用已完成初始化。",
+        "无法连接应用核心，请确认桌面应用已完成初始化。",
         { variant: "danger" },
       ),
     );

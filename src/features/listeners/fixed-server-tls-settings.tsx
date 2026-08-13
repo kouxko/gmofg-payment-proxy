@@ -126,7 +126,7 @@ export function FixedServerTlsSettings(props: Props) {
           label={downstreamIdentityLabel}
           title="导入本监听独立服务端身份"
           description="选择同时包含服务端证书链与对应私钥的 PEM 文件。本机代理接受客户端 TLS 连接时会出示该身份。一般监听直接使用证书管理页签发的本机叶子证书，无需重复导入。"
-          detail="Rust 会校验证书与私钥匹配、有效期、DigitalSignature 和 serverAuth，并将材料保存为受系统密钥保护的引用；原文件路径不会写入 Workspace。"
+          detail="导入时会校验证书与私钥匹配、有效期、DigitalSignature 和 serverAuth，并将材料保存为受系统密钥保护的引用；原文件路径不会写入 Workspace。"
           buttonLabel="选择服务端身份 PEM"
           onOpenChange={setDownstreamIdentityOpen}
           onLabelChange={setDownstreamIdentityLabel}
@@ -140,7 +140,7 @@ export function FixedServerTlsSettings(props: Props) {
           label={downstreamTrustLabel}
           title="导入用于验证客户端证书的 CA"
           description="仅在客户端证书模式为“可选”或“必须”时使用。请选择签发客户端证书的 CA，不要选择客户端自身的 client.p12 或本机代理服务端证书。"
-          detail="Rust 会校验 CA 能力并保存受保护引用；导入后会在当前页面显示主题、SAN、有效期和 SHA-256。"
+          detail="导入时会校验 CA 能力并保存受保护引用；完成后会在当前页面显示主题、SAN、有效期和 SHA-256。"
           buttonLabel="选择客户端 CA（.cer / .crt / .pem / .der）"
           onOpenChange={setDownstreamTrustOpen}
           onLabelChange={setDownstreamTrustLabel}

@@ -74,7 +74,7 @@ export function SettingsEditorTabs({
               </Alert>
               <ThemeSettings />
               <p className="text-sm">
-                应用启动和诊断日志由 Rust/Tauri 桌面侧管理；外观主题仅保存在本机浏览器存储中。
+                应用启动和诊断日志由桌面端管理；外观主题仅保存在本机浏览器存储中。
               </p>
             </Tabs.Panel>
           </Tabs>
@@ -175,7 +175,7 @@ function CapacitySettings({
         </Switch>
       </div>
       <Alert status="accent">
-        待处理断点及其会话永不自动淘汰；容量判定使用 Rust 可重复计算的逻辑字节数。
+        待处理断点及其会话永不自动淘汰；容量按可重复计算的逻辑字节数判定。
       </Alert>
     </Form>
   );

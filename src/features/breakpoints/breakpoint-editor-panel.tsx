@@ -230,7 +230,7 @@ export function BreakpointEditorPanel(props: BreakpointEditorPanelProps) {
             isDisabled={Boolean(props.editorPending) || props.resolvePending}
             onPress={props.onValidate}
           >
-            {props.editorPending === "validate" ? "正在校验…" : "由 Rust 校验"}
+            {props.editorPending === "validate" ? "正在校验…" : "校验"}
           </Button>
           <Drawer isOpen={props.drawerOpen} onOpenChange={props.onDrawerChange}>
             <Button

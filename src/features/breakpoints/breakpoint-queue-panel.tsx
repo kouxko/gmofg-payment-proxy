@@ -49,19 +49,29 @@ export function BreakpointQueuePanel(props: BreakpointQueuePanelProps) {
         {(props.data ?? []).map((item) => (
           <Button
             key={item.breakpoint_id}
+            data-breakpoint-card
             variant={
               item.breakpoint_id === props.selectedId ? "primary" : "outline"
             }
-            className="h-auto w-full justify-start px-3 py-3 text-left"
+            className="h-auto min-w-0 w-full max-w-full justify-start overflow-hidden px-3 py-3 text-left"
             onPress={() => props.onSelect(item.breakpoint_id)}
           >
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex items-center gap-2">
+            <div
+              data-breakpoint-card-content
+              className="min-w-0 flex-1 space-y-2 overflow-hidden"
+            >
+              <div className="grid min-w-0 grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-2">
                 <Chip size="sm" color={toneColor(item.ui_tone)} variant="soft">
                   {item.stage === "request" ? "请求断点" : "响应断点"}
                 </Chip>
-                <span>{item.terminal_ip}</span>
-                <span className="ml-auto">{item.channel_text}</span>
+                <span className="whitespace-nowrap">{item.terminal_ip}</span>
+                <span
+                  data-breakpoint-channel
+                  className="min-w-0 truncate text-right"
+                  title={item.channel_text}
+                >
+                  {item.channel_text}
+                </span>
               </div>
               <div className="truncate font-mono text-xs">
                 {item.method} {item.target}

@@ -239,7 +239,7 @@ describe("production RulesView async save guard", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "等待 Rust 解析输入",
+        name: "正在解析输入",
       }),
     ).toBeDisabled();
     expect(commandMocks.ruleSave).not.toHaveBeenCalled();
@@ -299,7 +299,7 @@ describe("production RulesView async save guard", () => {
 
     expect(
       await screen.findByRole("button", {
-        name: "等待 Rust 解析输入",
+        name: "正在解析输入",
       }),
     ).toBeDisabled();
     expect(commandMocks.ruleSave).not.toHaveBeenCalled();

@@ -284,7 +284,7 @@ describe("统一代理监听编辑器", () => {
     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([])));
     render(<ListenersView />);
 
-    expect(await screen.findByText("运行状态：未知（Rust 未返回当前监听状态）")).toBeVisible();
+    expect(await screen.findByText("运行状态：未知（当前监听状态不可用）")).toBeVisible();
     expect(screen.getByRole("button", { name: "状态不可用" })).toBeDisabled();
     expect(mocks.listenerStart).not.toHaveBeenCalled();
   });

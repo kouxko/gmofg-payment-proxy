@@ -171,7 +171,7 @@ export function WorkspacesView() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-64">
             <h1 className="text-2xl font-semibold">Workspace</h1>
-            <p className="mt-1 text-sm text-[var(--telemetry-muted)]">列表、导入导出、复制、选择与持久化均由 Rust 执行。</p>
+            <p className="mt-1 text-sm text-[var(--telemetry-muted)]">在此创建、复制、选择及导入导出 Workspace。</p>
           </div>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 max-[720px]:w-full max-[720px]:justify-start">
             <Input
@@ -250,7 +250,7 @@ export function WorkspacesView() {
             <Card.Content className="p-4">
               <div className="mb-4">
                 <Card.Title>Workspace 策略与安全引用</Card.Title>
-                <Card.Description>组件 ID 由 Rust 创建；最终校验、执行和持久化也全部在 Rust。</Card.Description>
+                <Card.Description>组件 ID 自动创建；保存前会统一校验配置。</Card.Description>
               </div>
               <WorkspaceComponentsEditor
                 workspace={effectiveDraft}
@@ -292,7 +292,7 @@ export function WorkspacesView() {
               <Button fullWidth variant="danger-soft"><TrashBin className="size-4" />删除</Button>
               <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>
                 <AlertDialog.Header><AlertDialog.Heading>删除 {selectedSummary?.name ?? effectiveDraft.name}？</AlertDialog.Heading></AlertDialog.Header>
-                <AlertDialog.Body>此操作会删除 Rust 存储中的 Workspace。</AlertDialog.Body>
+                <AlertDialog.Body>此操作会永久删除所选 Workspace。</AlertDialog.Body>
                 <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("delete", deleteWorkspace)}>确认删除</Button></AlertDialog.Footer>
               </AlertDialog.Dialog></AlertDialog.Container></AlertDialog.Backdrop>
             </AlertDialog>

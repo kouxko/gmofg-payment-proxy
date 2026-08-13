@@ -76,7 +76,7 @@ export function SettingsSummary({
                       isDisabled={writePending}
                       onPress={onValidate}
                     >
-                      {validating ? "正在校验…" : "运行 Rust 校验"}
+                      {validating ? "正在校验…" : "校验设置"}
                     </Button>
                   ) : (
                     <Alert status={validation.valid ? "success" : "danger"}>

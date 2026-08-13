@@ -31,7 +31,7 @@ export function AdvancedNetworkCard({
       <Card.Header>
         <Card.Title>高级 TCP/IP 故障</Card.Title>
         <Card.Description>
-          桌面端只记录配置；范围、组合关系和危险等级由 Rust 保存时统一校验。
+          桌面端只记录配置；保存时会统一校验范围、组合关系和危险等级。
         </Card.Description>
       </Card.Header>
       <Card.Content className="space-y-6 p-4">

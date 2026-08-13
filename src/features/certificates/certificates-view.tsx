@@ -228,7 +228,7 @@ function CertificateSafetyAlerts({
             <Alert.Title>设置快照不可用</Alert.Title>
             <Alert.Description>
               已禁用证书初始化和叶子证书重签，避免使用空 SAN
-              继续执行。请先恢复 Rust 核心连接。
+              继续执行。请先恢复应用核心连接。
             </Alert.Description>
           </Alert.Content>
         </Alert>
