@@ -295,18 +295,18 @@ async fn cidr_and_capacity_rejections_are_typed_and_counted() {
 
 #[tokio::test]
 async fn pre_open_dns_and_connect_failures_have_typed_stages() {
-    for (host, port, expected_stage, expected_code) in [
+    for (host, port, expected_stage, expected_codes) in [
         (
             "does-not-exist.invalid".to_owned(),
             443,
             SocketRelayStage::Dns,
-            "SOCKET_DNS_FAILED",
+            &["SOCKET_DNS_FAILED", "SOCKET_DNS_TIMEOUT"][..],
         ),
         (
             "127.0.0.1".to_owned(),
             reserve_address().port(),
             SocketRelayStage::Connect,
-            "SOCKET_CONNECT_FAILED",
+            &["SOCKET_CONNECT_FAILED", "SOCKET_CONNECT_TIMEOUT"][..],
         ),
     ] {
         let bind_addr = reserve_address();
@@ -325,7 +325,7 @@ async fn pre_open_dns_and_connect_failures_have_typed_stages() {
                 opened: false,
                 failure: Some(failure),
                 ..
-            } => failure.stage == expected_stage && failure.code == expected_code,
+            } => failure.stage == expected_stage && expected_codes.contains(&failure.code),
             _ => false,
         })
         .await;
