@@ -150,6 +150,40 @@ async fn write_test_request(client: &mut tokio::io::DuplexStream) {
 }
 
 #[tokio::test]
+async fn stalled_upstream_request_write_has_write_timeout_classification() {
+    let body = Bytes::from_static(b"request body");
+    let mut headers = HeaderMap::new();
+    headers.insert("host", http::HeaderValue::from_static("upstream.test"));
+    headers.insert(
+        "content-length",
+        http::HeaderValue::from_str(&body.len().to_string()).expect("valid content length"),
+    );
+    let uri = http::Uri::from_static("/resource");
+    let request = ForwardRequest {
+        method: Method::POST,
+        uri: uri.clone(),
+        message: Message::request(&Method::POST, &uri, &headers, body),
+    };
+
+    let error = send_http1_request(
+        Box::new(PendingWriteIo(PendingWriteStage::Tail)),
+        request,
+        Http1ExchangeConfig {
+            schedule: TrafficSchedule::default(),
+            write_timeout: Duration::from_millis(5),
+            read_timeout: Duration::from_secs(1),
+            limits: MessageLimits::default(),
+        },
+        None,
+        &CancellationToken::new(),
+    )
+    .await
+    .expect_err("a stalled request write must hit the write-stage timeout");
+
+    assert_eq!(error.code, ErrorCode::UpstreamWriteTimeout.as_str());
+}
+
+#[tokio::test]
 async fn intentional_content_length_and_truncation_faults_have_stable_classifications() {
     let cases = [
         (
