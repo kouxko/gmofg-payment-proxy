@@ -73,7 +73,7 @@ export function errorMessage(error: unknown): string {
       ? `${appError.message}：${details.join("；")}`
       : appError.message;
   }
-  return "无法连接 Rust 核心，请确认桌面应用已完成初始化。";
+  return "无法连接应用核心，请确认桌面应用已完成初始化。";
 }
 
 /**

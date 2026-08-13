@@ -60,7 +60,7 @@ export function DiagnosticLogsView() {
       <div>
         <h1 className="text-2xl font-semibold">诊断日志</h1>
         <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
-          汇总 Rust 已产生的 ADB、设备网络、代理入口、TLS 与 HTTP 诊断事件，便于定位已记录的失败阶段。
+          汇总已记录的 ADB、设备网络、代理入口、TLS 与 HTTP 诊断事件，便于定位失败阶段。
         </p>
       </div>
 

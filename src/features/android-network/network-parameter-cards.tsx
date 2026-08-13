@@ -91,7 +91,7 @@ export function DestinationTargetsCard({
           添加弱网覆盖地址
         </Button>
         <p className="text-xs text-[var(--telemetry-muted)]">
-          TUN 只能稳定识别 IP/CIDR；合法性、重复项和范围由 Rust 保存时统一校验。
+          TUN 只能稳定识别 IP/CIDR；保存时会统一校验合法性、重复项和范围。
         </p>
       </Card.Content>
     </Card>
@@ -111,7 +111,7 @@ export function BasicNetworkParametersCard({
     <Card className="border border-[var(--telemetry-line)] shadow-sm">
       <Card.Header>
         <Card.Title>TCP/IP 弱网参数</Card.Title>
-        <Card.Description>概率使用 0–10000 基点，全部由 Rust 校验和执行。</Card.Description>
+        <Card.Description>概率使用 0–10000 基点，保存时统一校验。</Card.Description>
       </Card.Header>
       <Card.Content className="grid grid-cols-3 gap-4 p-4 max-[900px]:grid-cols-2 max-[620px]:grid-cols-1">
         <NumericField label="随机种子" value={weak.seed} onChange={(seed) => onUpdate({ seed })} />

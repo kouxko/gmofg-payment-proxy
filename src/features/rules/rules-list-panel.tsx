@@ -154,7 +154,6 @@ export function RulesListPanel({
         <Alert.Content>
           <Alert.Title>执行顺序</Alert.Title>
           <Alert.Description>
-            Rust
             按优先级升序、同优先级按创建顺序执行；命中终止动作后停止后续规则。
           </Alert.Description>
         </Alert.Content>

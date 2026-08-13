@@ -193,7 +193,7 @@ export function RuleEditorPanel({
                 onAsyncStateChange={onAsyncStateChange}
               />
               <p className="mt-2 text-xs text-[var(--telemetry-muted)]">
-                空条件表示匹配该通道和阶段的全部消息；保存时由 Rust 统一校验。
+                空条件表示匹配该通道和阶段的全部消息；保存时统一校验。
               </p>
             </Tabs.Panel>
             <Tabs.Panel id="actions" className="pt-4">
@@ -209,7 +209,7 @@ export function RuleEditorPanel({
             </Tabs.Panel>
           </Tabs>
           <Alert status="success">
-            配置将由 Rust 校验字段、正则、JSON 路径和动作兼容性。
+            保存时会校验字段、正则、JSON 路径和动作兼容性。
           </Alert>
           {Object.keys(fieldErrors).length > 0 && (
             <Alert status="danger">
@@ -340,7 +340,7 @@ function EditorActions(props: EditorActionsProps) {
         {props.pendingAction === "save"
           ? "正在保存…"
           : props.editorBlocked
-            ? "等待 Rust 解析输入"
+            ? "正在解析输入"
             : "保存规则"}
       </Button>
       <Button

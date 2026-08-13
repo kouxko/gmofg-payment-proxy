@@ -181,7 +181,7 @@ export function SocketListenerSettings(props: Props): ReactNode {
       description={identity
         ? "选择同时包含服务端证书链与匹配私钥的 PEM identity。"
         : "选择用于验证下游客户端证书的 CA（CER / CRT / PEM / DER）。"}
-      detail="文件由 Rust 原生读取、校验并保存为受保护引用。"
+      detail="文件会通过系统对话框读取，校验后保存为受保护引用。"
       buttonLabel={identity ? "选择服务端身份 PEM" : "选择客户端 CA"}
       onImport={() => runImport(() => identity
         ? props.onImportDownstreamServerIdentity(label)

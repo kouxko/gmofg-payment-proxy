@@ -358,7 +358,7 @@ export function AndroidNetworkView(): ReactElement {
 
   async function saveAndNotify(): Promise<void> {
     await saveProfile();
-    toast("设备网络方案已由 Rust 校验并保存。", { variant: "success" });
+    toast("设备网络方案已校验并保存。", { variant: "success" });
   }
 
   async function stopNetwork(): Promise<void> {

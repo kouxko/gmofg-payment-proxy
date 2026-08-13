@@ -87,14 +87,14 @@ describe("buildBreakpointDecision", () => {
 });
 
 describe("breakpointEditableBody", () => {
-  it("formats display JSON but keeps wire draft raw until the user edits", () => {
+  it("keeps the editable display and wire draft raw until the user edits", () => {
     const message = {
       body_text: '{"ErrorCode":"D48"}',
       json: { ErrorCode: "D48" },
     } as MessageContentViewModel;
 
     expect(breakpointEditableBody(undefined, message)).toBe(
-      '{\n  "ErrorCode": "D48"\n}',
+      '{"ErrorCode":"D48"}',
     );
     expect(breakpointDraftBody(undefined, message)).toBe(
       '{"ErrorCode":"D48"}',

@@ -173,7 +173,7 @@ export function UpstreamTlsCard(props: Props) {
             {props.testing ? "正在连接 Server…" : "测试 Server 连接"}
           </Button>
           <p className="text-xs text-[var(--telemetry-muted)]">
-            Rust 使用当前监听配置真实连接 Server，只验证
+            使用当前监听配置真实连接 Server，只验证
             {usesTls ? " TCP + TLS" : " TCP"}，不发送 HTTP 业务请求。
           </p>
         </div>

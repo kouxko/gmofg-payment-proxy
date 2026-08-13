@@ -252,7 +252,7 @@ export function FaultsListPanel({
                                 </AlertDialog.Heading>
                               </AlertDialog.Header>
                               <AlertDialog.Body>
-                                Rust 将停用对应的普通拦截规则。
+                                将停用对应的普通拦截规则。
                               </AlertDialog.Body>
                               <AlertDialog.Footer>
                                 <Button

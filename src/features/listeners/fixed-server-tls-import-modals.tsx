@@ -115,7 +115,7 @@ export function ImportIdentityModal({
                   Android/App 使用的服务端证书。
                 </p>
                 <p className="text-xs text-[var(--telemetry-muted)]">
-                  文件由 Rust 原生对话框读取和解析，导入后会显示主题、SAN、
+                  文件通过系统对话框读取和解析，导入后会显示主题、SAN、
                   有效期和 SHA-256。私钥与密码由系统保护存储；显式导出可移植
                   应用配置时会随配置包含。
                 </p>
@@ -172,7 +172,7 @@ export function ImportTrustModal({
                 .der）。不要选择证书链、带私钥的 Server 身份文件或 client.p12。
               </p>
               <p className="text-xs text-[var(--telemetry-muted)]">
-                Rust 会立即解析证书，导入后在当前页面显示主题、SAN、有效期和
+                导入时会立即解析证书，并在当前页面显示主题、SAN、有效期和
                 SHA-256，并在“测试 Server 连接”中实际验证。
               </p>
             </Modal.Body>

@@ -45,7 +45,7 @@ export function TargetApplicationsCard({
         <div className="min-w-0">
           <Card.Title>目标应用</Card.Title>
           <Card.Description>
-            点击应用所在整行即可选择，再次点击取消；共享 UID 的整组扩选和确认由 Rust 自动完成。
+            点击应用所在整行即可选择，再次点击取消；共享 UID 的整组扩选和确认会自动完成。
           </Card.Description>
         </div>
         <Button
@@ -177,7 +177,7 @@ function PackageRow({ item, selected, onToggle }: PackageRowProps): ReactElement
 }
 
 function emptyStateText(filtering: boolean, activeFilter: string): string {
-  if (filtering) return "正在由 Rust 筛选包名…";
+  if (filtering) return "正在筛选包名…";
   if (activeFilter) return "没有匹配该包名的应用。";
   return "选择设备后读取应用。";
 }

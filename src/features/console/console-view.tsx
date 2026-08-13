@@ -71,7 +71,7 @@ export function ConsoleView({
       <Card className="border border-[var(--telemetry-line)] shadow-sm">
         <Card.Header>
           <Card.Title>代理入口运行状态</Card.Title>
-          <Card.Description>配置与运行状态均由 Rust 汇总</Card.Description>
+          <Card.Description>集中显示当前配置与运行状态</Card.Description>
         </Card.Header>
         <Card.Content className="p-0">
           <Table>

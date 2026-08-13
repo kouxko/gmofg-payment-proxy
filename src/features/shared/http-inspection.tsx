@@ -1,6 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import {
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type UIEvent,
+} from "react";
 import { Chip, FieldError, TextArea, TextField } from "@heroui/react";
 import {
   formatMessageBody,
@@ -28,6 +33,16 @@ type BodyViewerProps = {
 const MAX_TEXT_PREVIEW_CHARS = 256 * 1024;
 const MAX_TEXT_PREVIEW_LINES = 5_000;
 const MAX_BYTE_PREVIEW_BYTES = 64 * 1024;
+const CODE_TEXT_STYLE: CSSProperties = {
+  fontFamily:
+    'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+  fontSize: "14px",
+  lineHeight: "22px",
+  fontWeight: 400,
+  letterSpacing: "normal",
+  tabSize: 2,
+  WebkitTextSizeAdjust: "100%",
+};
 
 export function HttpBodyViewer({
   label,
@@ -43,7 +58,7 @@ export function HttpBodyViewer({
   const body = textOverride ?? formatMessageBody(message, emptyText);
   const kind = messageContentKind(message);
   const presentation = editable
-    ? { text: body, kind, detectedLabel: undefined }
+    ? formatEditableBodyForPresentation(message, body, kind)
     : formatBodyForPresentation(message, body, kind);
   const bytes = message?.body_bytes ?? [];
   const textPreview = editable
@@ -83,6 +98,7 @@ export function HttpBodyViewer({
         <EditableCodeSurface
           ariaLabel={ariaLabel}
           value={textPreview.value}
+          kind={presentation.kind}
           error={error}
           onChange={onChange}
         />
@@ -150,27 +166,58 @@ export function HttpRequestTargetView({
 function EditableCodeSurface({
   ariaLabel,
   value,
+  kind,
   error,
   onChange,
 }: {
   ariaLabel: string;
   value: string;
+  kind: ReturnType<typeof messageContentKind>;
   error?: string;
   onChange?: (value: string) => void;
 }) {
+  const [scrollTop, setScrollTop] = useState(0);
+  const handleScroll = (event: UIEvent<HTMLTextAreaElement>) => {
+    setScrollTop(event.currentTarget.scrollTop);
+  };
   return (
     <TextField aria-label={`${ariaLabel}字段`} isInvalid={Boolean(error)}>
       <div
+        aria-label={ariaLabel}
+        data-code-surface={kind}
         className={[
-          "grid min-w-0 w-full max-w-full grid-cols-[3rem_minmax(0,1fr)] overflow-hidden rounded-lg border",
+          "grid h-[320px] min-h-[320px] max-h-[520px] min-w-0 w-full max-w-full font-mono",
+          "grid-cols-[3rem_minmax(0,1fr)] overflow-hidden rounded-lg border",
           "border-[var(--telemetry-line)] bg-[var(--telemetry-table-head)]",
         ].join(" ")}
       >
-        <LineNumberGutter count={lineCount(value)} />
+        <div
+          aria-hidden
+          className="min-h-[320px] overflow-hidden border-r border-[var(--telemetry-line)]"
+        >
+          <pre
+            className="px-2 text-right font-mono text-sm leading-[22px] text-[var(--telemetry-muted)]"
+            style={{
+              ...CODE_TEXT_STYLE,
+              transform: `translateY(-${scrollTop}px)`,
+            }}
+          >
+            {Array.from({ length: lineCount(value) }, (_, index) => index + 1).join("\n")}
+          </pre>
+        </div>
         <TextArea
           aria-label={ariaLabel}
-          className="min-h-[320px] max-h-[520px] min-w-0 resize-none overflow-auto border-0 font-mono text-xs"
+          className={[
+            "block h-full min-h-[320px] w-full min-w-0 resize-none overflow-auto",
+            "border-0 bg-transparent px-3 py-0 font-mono text-sm leading-[22px]",
+            "text-[var(--telemetry-accent)] caret-[var(--telemetry-ink)] outline-none",
+            "whitespace-pre-wrap break-all",
+          ].join(" ")}
           value={value}
+          wrap="soft"
+          spellCheck={false}
+          style={CODE_TEXT_STYLE}
+          onScroll={handleScroll}
           onChange={(event) => onChange?.(event.target.value)}
         />
       </div>
@@ -194,7 +241,7 @@ function CodeSurface({
       aria-label={ariaLabel}
       data-code-surface={kind}
       className={[
-        "min-h-[320px] max-h-[520px] min-w-0 w-full max-w-full overflow-auto rounded-lg border",
+        "min-h-[320px] max-h-[520px] min-w-0 w-full max-w-full overflow-auto rounded-lg border font-mono",
         "border-[var(--telemetry-line)] bg-[var(--telemetry-table-head)]",
       ].join(" ")}
     >
@@ -202,7 +249,8 @@ function CodeSurface({
         <div
           key={index}
           data-code-row
-          className="grid min-w-0 w-full grid-cols-[3rem_minmax(0,1fr)] font-mono text-xs leading-5"
+          className="grid min-w-0 w-full grid-cols-[3rem_minmax(0,1fr)] font-mono text-sm leading-[22px]"
+          style={CODE_TEXT_STYLE}
         >
           <span
             data-line-number
@@ -255,6 +303,32 @@ function formatBodyForPresentation(
   return { text: body, kind: declaredKind };
 }
 
+function formatEditableBodyForPresentation(
+  message: InspectableMessage | null | undefined,
+  body: string,
+  declaredKind: ReturnType<typeof messageContentKind>,
+): {
+  text: string;
+  kind: ReturnType<typeof messageContentKind>;
+  detectedLabel?: string;
+} {
+  if (message?.json != null) return { text: body, kind: "json" };
+  const source = body.trim();
+  if (source.startsWith("{") || source.startsWith("[")) {
+    try {
+      JSON.parse(source);
+      return {
+        text: body,
+        kind: "json",
+        detectedLabel: declaredKind === "json" ? undefined : "格式化为 JSON 展示",
+      };
+    } catch {
+      // Keep the Rust-declared kind while the user is editing invalid JSON.
+    }
+  }
+  return { text: body, kind: declaredKind };
+}
+
 function formatXmlForPresentation(xml: string) {
   return xml
     .replace(/>\s*</g, ">\n<")
@@ -268,19 +342,6 @@ function formatXmlForPresentation(xml: string) {
       return state;
     }, { depth: 0, lines: [] })
     .lines.join("\n");
-}
-
-function LineNumberGutter({ count }: { count: number }) {
-  return (
-    <pre
-      className={[
-        "select-none border-r border-[var(--telemetry-line)] px-2 py-2",
-        "text-right font-mono text-xs leading-5 text-[var(--telemetry-muted)]",
-      ].join(" ")}
-    >
-      {Array.from({ length: count }, (_, index) => index + 1).join("\n")}
-    </pre>
-  );
 }
 
 function highlightLine(

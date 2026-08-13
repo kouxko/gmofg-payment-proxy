@@ -109,7 +109,7 @@ describe("production SettingsView overlay", () => {
     render(<SettingsView />);
 
     await user.click(screen.getByRole("button", { name: "校验结果" }));
-    await user.click(screen.getByRole("button", { name: "运行 Rust 校验" }));
+    await user.click(screen.getByRole("button", { name: "校验设置" }));
 
     await waitFor(() =>
       expect(commandMocks.settingsValidate).toHaveBeenCalledWith(draft),

@@ -15,7 +15,6 @@ import { commands } from "@/generated/rust-types";
 import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
-import { formatMessageBody } from "@/lib/message-content";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import { BreakpointActionPanel } from "./breakpoint-action-panel";
@@ -49,7 +48,7 @@ export function breakpointEditableBody(
   edited: string | undefined,
   message: BreakpointDetailViewModel["effective"] | undefined,
 ) {
-  return edited ?? formatMessageBody(message, "");
+  return edited ?? message?.body_text ?? "";
 }
 
 export function breakpointDraftBody(

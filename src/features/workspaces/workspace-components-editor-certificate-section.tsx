@@ -14,7 +14,7 @@ export function CertificateReferencesSection({
   return (
     <Tabs.Panel id="certificates" className="space-y-3 pt-4">
       <p className="text-sm text-[var(--telemetry-muted)]">
-        证书材料必须在“入口配置”中按具体用途导入。Rust 会解析证书并保存受系统密钥保护的引用；
+        证书材料必须在“入口配置”中按具体用途导入。证书解析后会保存为受系统密钥保护的引用；
         Workspace 页面不创建或编辑外部文件路径。
       </p>
       {workspace.certificate_references.map((reference, index) => (

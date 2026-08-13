@@ -178,7 +178,7 @@ export function ProxyRoutesCard({
           添加透明代理路由
         </Button>
         <p className="text-xs text-[var(--telemetry-muted)]">
-          设备网络方案不保存桌面 IP、ADB 端口或设备传输地址；这些运行态由 Rust 启动时解析。
+          设备网络方案不保存桌面 IP、ADB 端口或设备传输地址；这些运行参数会在启动时解析。
         </p>
       </Card.Content>
     </Card>
