@@ -16,7 +16,32 @@ export default defineConfig({
     // 统一设置上限，避免各测试文件重复声明不同的超时时间。
     testTimeout: 15_000,
     coverage: {
-      reporter: ["text", "html"],
+      provider: "v8",
+      reporter: ["text", "html", "json-summary"],
+      thresholds: {
+        // Current repository baseline. These values prevent coverage regression
+        // without pretending that historical frontend code already meets the
+        // stricter protocol-package target below.
+        statements: 68,
+        branches: 65,
+        functions: 59,
+        lines: 71,
+        // New Socket protocol UI must meet the feature-level gate from its
+        // first committed source file. Vitest ignores globs with no source
+        // matches, so these become active as the directories are introduced.
+        "src/features/protocol-packages/**": {
+          statements: 90,
+          branches: 90,
+          functions: 90,
+          lines: 90,
+        },
+        "src/features/listeners/socket-processing*": {
+          statements: 90,
+          branches: 90,
+          functions: 90,
+          lines: 90,
+        },
+      },
     },
   },
 });
