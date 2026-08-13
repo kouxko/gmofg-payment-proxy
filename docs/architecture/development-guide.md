@@ -66,6 +66,31 @@ Rust DTO 字段；网络运行错误携带 entity ID/runtime epoch。前端只�
 6. Android 改动额外运行 Release lint、单元测试和 assembleRelease。
 7. 涉及真实设备网络时单独记录真机证据，不把自动化结果冒充真机结果。
 
+### 覆盖率门禁
+
+```bash
+pnpm test:coverage-policy
+pnpm check:coverage:frontend
+pnpm check:coverage:rust
+# 或依次执行以上三项
+pnpm check:coverage
+```
+
+- 前端报告输出到忽略提交的 `coverage/`。历史全仓基线用于防止回退；新增
+  `src/features/protocol-packages/**` 和 `socket-processing*` 源码从第一天起要求 statements、branches、
+  functions、lines 均不低于 90%。
+- Rust coverage runner 固定要求 `cargo-llvm-cov 0.8.7`。首次本机运行前安装：
+
+  ```bash
+  rustup component add llvm-tools-preview
+  cargo install cargo-llvm-cov --version 0.8.7 --locked
+  ```
+
+- Rust 当前锁定 `intercept-proxy-runtime` 的实际基线；当
+  `intercept-proxy-protocol-scripting` crate 出现时，runner 自动启用 functions、lines、regions 90% 门禁。
+- 阈值不能替代行为矩阵。安全校验器、方向开关和状态机仍要求每个成功、失败、边界与回退分支有直接测试。
+- CI 在独立 Linux job 执行覆盖率并上传机器可读摘要和 HTML，不把 macOS 本地通过当作 Windows 或发布证明。
+
 ## 7. 提交前检查
 
 ```bash
