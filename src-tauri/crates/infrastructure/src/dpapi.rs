@@ -52,6 +52,9 @@ mod windows_impl {
                 return;
             }
             unsafe {
+                // SAFETY: DPAPI returned this writable buffer and `cbData` byte length. The
+                // wrapper owns it until this `Drop`, so zeroing then releasing it exactly once is
+                // valid. `LocalFree` accepts the allocation returned by DPAPI.
                 ptr::write_bytes(self.0.pbData, 0, self.0.cbData as usize);
                 LocalFree(self.0.pbData.cast());
             }
@@ -67,25 +70,32 @@ mod windows_impl {
     }
 
     fn copy_output(blob: &LocalBlob) -> Vec<u8> {
-        unsafe { slice::from_raw_parts(blob.0.pbData, blob.0.cbData as usize).to_vec() }
+        unsafe {
+            // SAFETY: a successful DPAPI call initializes `pbData` with exactly `cbData` bytes.
+            // `blob` remains alive for the duration of this copy and owns the allocation.
+            slice::from_raw_parts(blob.0.pbData, blob.0.cbData as usize).to_vec()
+        }
     }
 
     impl SecretProtector for DpapiProtector {
         fn protect(&self, plaintext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
-            let mut input = input_blob(plaintext)?;
+            let input = input_blob(plaintext)?;
             let mut output = LocalBlob(CRYPT_INTEGER_BLOB {
                 cbData: 0,
                 pbData: ptr::null_mut(),
             });
             let ok = unsafe {
+                // SAFETY: all pointers follow the Windows DPAPI contract. `input` borrows
+                // `plaintext` for this call, optional parameters are null, and `output` is a
+                // writable zero-initialized blob subsequently owned by `LocalBlob`.
                 CryptProtectData(
-                    &mut input,
+                    &raw const input,
                     ptr::null(),
                     ptr::null(),
                     ptr::null_mut(),
                     ptr::null_mut(),
                     CRYPTPROTECT_UI_FORBIDDEN,
-                    &mut output.0,
+                    &raw mut output.0,
                 )
             };
             if ok == 0 {
@@ -95,21 +105,23 @@ mod windows_impl {
         }
 
         fn unprotect(&self, ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
-            let mut input =
-                input_blob(ciphertext).map_err(|_| InfrastructureError::DpapiUnprotect)?;
+            let input = input_blob(ciphertext).map_err(|_| InfrastructureError::DpapiUnprotect)?;
             let mut output = LocalBlob(CRYPT_INTEGER_BLOB {
                 cbData: 0,
                 pbData: ptr::null_mut(),
             });
             let ok = unsafe {
+                // SAFETY: all pointers follow the Windows DPAPI contract. `input` borrows
+                // `ciphertext` for this call, optional parameters are null, and `output` is a
+                // writable zero-initialized blob subsequently owned by `LocalBlob`.
                 CryptUnprotectData(
-                    &mut input,
+                    &raw const input,
                     ptr::null_mut(),
                     ptr::null(),
                     ptr::null_mut(),
                     ptr::null_mut(),
                     CRYPTPROTECT_UI_FORBIDDEN,
-                    &mut output.0,
+                    &raw mut output.0,
                 )
             };
             if ok == 0 {

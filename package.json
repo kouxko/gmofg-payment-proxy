@@ -18,11 +18,12 @@
     "build:android-companion": "bash scripts/build-android-companion.sh",
     "check:rust:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
     "check:rust:clippy": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
+    "check:rust:windows": "node scripts/check-windows-rust.mjs",
     "bindings": "cargo run --release --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "pnpm build:android-companion && tauri build",
-    "check": "pnpm bindings && pnpm scan:frontend-boundaries && pnpm scan:source-size && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm scan:bundle-branding && pnpm check:rust:fmt && pnpm check:rust:clippy && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
+    "check": "pnpm bindings && pnpm scan:frontend-boundaries && pnpm scan:source-size && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm scan:bundle-branding && pnpm check:rust:fmt && pnpm check:rust:clippy && pnpm check:rust:windows && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
   },
   "dependencies": {
     "@gravity-ui/icons": "2.21.0",

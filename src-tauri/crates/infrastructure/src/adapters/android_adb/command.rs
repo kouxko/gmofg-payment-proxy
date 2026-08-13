@@ -18,6 +18,7 @@ use intercept_proxy_application::{
 use tokio::{process::Command, time::timeout};
 
 use super::{AndroidAdbAdapter, COMMAND_TIMEOUT};
+use crate::windows_process::configure_background_process;
 
 impl AndroidAdbAdapter {
     pub(super) fn selected_serial(&self) -> AppResult<String> {
@@ -108,7 +109,7 @@ pub(super) struct SystemAdbCommandRunner;
 impl AdbCommandRunner for SystemAdbCommandRunner {
     async fn run(&self, executable: &Path, args: &[String]) -> std::io::Result<AdbOutput> {
         let mut command = Command::new(executable);
-        configure_background_process(&mut command);
+        configure_background_process(command.as_std_mut());
         command.args(args).kill_on_drop(true);
         let output = command.output().await?;
         Ok(AdbOutput {
@@ -118,22 +119,6 @@ impl AdbCommandRunner for SystemAdbCommandRunner {
         })
     }
 }
-
-/// 让短生命周期的 ADB 调用保持为真正的后台任务。
-///
-/// Windows GUI 程序如果直接创建控制台子进程，系统会为每一次 `adb` 轮询短暂显示
-/// 一个命令行窗口。设备状态与 VPN 状态会定时刷新，因此缺少该标志时窗口会持续闪烁。
-/// 这里通过 Tokio 暴露的标准库命令对象设置 `CREATE_NO_WINDOW`；其他平台无需处理。
-#[cfg(windows)]
-fn configure_background_process(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    command.as_std_mut().creation_flags(CREATE_NO_WINDOW);
-}
-
-#[cfg(not(windows))]
-fn configure_background_process(_: &mut Command) {}
 
 #[derive(Clone, Debug)]
 pub(super) struct AdbOutput {
