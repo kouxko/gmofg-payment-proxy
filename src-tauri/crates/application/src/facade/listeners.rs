@@ -60,7 +60,12 @@ impl Application {
     ) -> AppResult<ProxyWorkspace> {
         let _gate = self.mutation_gate.lock().await;
         let workspace = self.workspaces.get(workspace_id).await?;
+        workspace
+            .revision
+            .verify(DomainRevision::new(expected_workspace_revision))
+            .map_err(AppError::from)?;
         ensure_listener_not_running(&*self.listener_runtime, listener.id).await?;
+        let listener_id = listener.id;
         let workspace = self
             .listener_draft_workspace(
                 workspace,
@@ -68,6 +73,9 @@ impl Application {
                 listener,
                 certificate_references,
             )
+            .await?;
+        workspace.validate().map_err(AppError::from)?;
+        self.validate_listener_protocol_package(&workspace, listener_id, false)
             .await?;
         let saved = self.workspaces.save(workspace).await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
@@ -86,7 +94,13 @@ impl Application {
         listener: ProxyListener,
         certificate_references: Vec<CertificateReference>,
     ) -> AppResult<WorkspaceValidationViewModel> {
+        let _gate = self.mutation_gate.lock().await;
         let workspace = self.workspaces.get(workspace_id).await?;
+        workspace
+            .revision
+            .verify(DomainRevision::new(expected_workspace_revision))
+            .map_err(AppError::from)?;
+        let listener_id = listener.id;
         let candidate = self
             .listener_draft_workspace(
                 workspace,
@@ -95,7 +109,13 @@ impl Application {
                 certificate_references,
             )
             .await?;
-        Ok(WorkspaceValidationViewModel::validate(candidate))
+        let validation = WorkspaceValidationViewModel::validate(candidate.clone());
+        if !validation.valid {
+            return Ok(validation);
+        }
+        self.validate_listener_protocol_package(&candidate, listener_id, false)
+            .await?;
+        Ok(validation)
     }
 
     pub async fn listener_delete(
@@ -235,16 +255,15 @@ impl Application {
     ) -> AppResult<ListenerStatusViewModel> {
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.workspaces.get(workspace_id).await?;
+        workspace
+            .revision
+            .verify(DomainRevision::new(expected_workspace_revision))
+            .map_err(AppError::from)?;
         let listener = find_listener(&workspace.listeners, listener_id)?;
-        reject_local_responder_after_revision_check(
-            &workspace,
-            expected_workspace_revision,
-            &listener,
-        )?;
         workspace.revision = DomainRevision::new(expected_workspace_revision);
         // Scripted Listener 可以保存对已停用版本的精确引用，便于之后重新启用；但实际
         // 打开网络入口前必须在同一个 mutation gate 内重新确认包仍可用。
-        self.ensure_listener_protocol_package_available(&listener)
+        self.validate_listener_protocol_package(&workspace, listener.id, true)
             .await?;
         let status = self
             .listener_runtime
@@ -330,9 +349,9 @@ fn has_fixed_target(listener: &ProxyListener) -> bool {
     }
 }
 
-/// T18 只建立可持久化的 `LocalResponder` 拓扑，真正的数据面要到后续任务接入。
-/// 所有真实入口都在查询协议包、解析证书或构建网络计划之前调用此门禁，保证同一配置
-/// 不会因为外部资源状态不同而漂移成其他错误码，更不会误触发 DNS/连接。
+/// T21 允许 `LocalResponder` 通过保存和启动前校验，但真实数据面仍留给 T22。
+/// 复制入口继续隐藏这种尚不能由 UI 创建的拓扑；两个上游探测入口也在 runtime 前调用
+/// 此门禁，保证 `LocalResponder` 永远不会误触发 DNS、连接或 upstream TLS。
 fn reject_unavailable_local_responder(listener: &ProxyListener) -> AppResult<()> {
     if matches!(
         &listener.data_plane,
@@ -341,7 +360,7 @@ fn reject_unavailable_local_responder(listener: &ProxyListener) -> AppResult<()>
     ) {
         return Err(AppError::new(
             "LOCAL_RESPONDER_NOT_AVAILABLE",
-            "LocalResponder 数据面将在后续任务接入，当前不能复制、启动或测试上游。",
+            "LocalResponder 当前不能复制或测试上游；运行计划由启动路径单独校验。",
         )
         .entity(listener.id.to_string()));
     }
@@ -349,7 +368,7 @@ fn reject_unavailable_local_responder(listener: &ProxyListener) -> AppResult<()>
 }
 
 /// 保留 Workspace identity/revision 作为所有写入和探测入口的第一层并发门禁；通过后再
-/// 返回 T18 的稳定 unavailable。这样 stale draft 仍报告 revision conflict，而当前 draft
+/// 返回稳定 unavailable。这样 stale draft 仍报告 revision conflict，而当前 draft
 /// 不会进入证书、协议包或 runtime ports。
 fn reject_local_responder_after_revision_check(
     workspace: &ProxyWorkspace,

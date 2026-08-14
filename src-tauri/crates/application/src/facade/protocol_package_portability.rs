@@ -72,6 +72,54 @@ pub fn validate_portable_protocol_bindings(
     Ok(())
 }
 
+/// 校验一个 Scripted Listener 与它当前绑定的全部 Socket 规则。
+///
+/// Listener 保存/启动只应重验目标入口，不能因为同一 Workspace 中另一个未修改入口的
+/// 外部包状态而阻断当前操作。调用方已经用精确包身份取得 fresh 编译描述；这里继续
+/// fail-closed 校验描述身份、双方向入口能力、规则 Schema/方向以及规则与 Listener 的
+/// 精确版本绑定。Direct/HTTP Listener 没有协议包边界，直接返回成功。
+pub(super) fn validate_listener_protocol_binding(
+    workspace: &ProxyWorkspace,
+    listener_id: crate::ListenerId,
+    description: &ProtocolPackageDescriptionViewModel,
+) -> AppResult<()> {
+    let listener = workspace
+        .listeners
+        .iter()
+        .find(|listener| listener.id == listener_id)
+        .ok_or_else(|| portability_error("待校验的 Listener 不存在。"))?;
+    let ListenerDataPlane::Socket(socket) = &listener.data_plane else {
+        return Ok(());
+    };
+    let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
+        return Ok(());
+    };
+
+    ensure_description_identity(&scripted.package, description)?;
+    validate_direction_capabilities(
+        &scripted.package,
+        "upstream",
+        scripted.upstream,
+        description.capabilities.upstream,
+    )?;
+    validate_direction_capabilities(
+        &scripted.package,
+        "downstream",
+        scripted.downstream,
+        description.capabilities.downstream,
+    )?;
+
+    let schema = domain_schema(description)?;
+    for rule in workspace
+        .socket_rules
+        .iter()
+        .filter(|rule| rule.listener_id() == listener_id)
+    {
+        validate_rule_binding(socket, scripted, rule, description, &schema)?;
+    }
+    Ok(())
+}
+
 pub(super) fn referenced_protocol_packages(
     workspaces: &[ProxyWorkspace],
 ) -> Vec<ProtocolPackageRef> {
@@ -128,9 +176,6 @@ fn validate_workspace_bindings(
     for rule in &workspace.socket_rules {
         let description = required_description(descriptions, rule.package())?;
         ensure_description_identity(rule.package(), description)?;
-        let schema = domain_schema(description)?;
-        rule.validate_against_schema(&schema)?;
-
         let listener = workspace
             .listeners
             .iter()
@@ -142,25 +187,38 @@ fn validate_workspace_bindings(
         let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
             return Err(portability_error("Socket 规则只能绑定 Scripted Listener。"));
         };
-        let manifest = match rule.direction() {
-            SocketDirection::Upstream => description.capabilities.upstream,
-            SocketDirection::Downstream => description.capabilities.downstream,
-        };
-        if matches!(socket.topology, SocketTopology::Relay(_)) && !manifest.decode {
-            return Err(portability_error(
-                "Relay 规则方向未声明 Decode 入口，不能导入。",
-            ));
-        }
-        if rule.modifies_document() && !manifest.encode {
-            return Err(portability_error(
-                "修改 Document 的规则方向未声明 Encode 入口，不能导入。",
-            ));
-        }
-        if scripted.package != *rule.package() {
-            return Err(portability_error(
-                "Socket 规则与 Listener 绑定的精确协议包不一致。",
-            ));
-        }
+        let schema = domain_schema(description)?;
+        validate_rule_binding(socket, scripted, rule, description, &schema)?;
+    }
+    Ok(())
+}
+
+fn validate_rule_binding(
+    socket: &intercept_proxy_domain::SocketRelaySettings,
+    scripted: &intercept_proxy_domain::ScriptedSocketProcessing,
+    rule: &intercept_proxy_domain::SocketDocumentRuleDefinition,
+    description: &ProtocolPackageDescriptionViewModel,
+    schema: &DocumentSchema,
+) -> AppResult<()> {
+    rule.validate_against_schema(schema)?;
+    let manifest = match rule.direction() {
+        SocketDirection::Upstream => description.capabilities.upstream,
+        SocketDirection::Downstream => description.capabilities.downstream,
+    };
+    if matches!(socket.topology, SocketTopology::Relay(_)) && !manifest.decode {
+        return Err(portability_error(
+            "Relay 规则方向未声明 Decode 入口，不能使用。",
+        ));
+    }
+    if rule.modifies_document() && !manifest.encode {
+        return Err(portability_error(
+            "修改 Document 的规则方向未声明 Encode 入口，不能使用。",
+        ));
+    }
+    if scripted.package != *rule.package() {
+        return Err(portability_error(
+            "Socket 规则与 Listener 绑定的精确协议包不一致。",
+        ));
     }
     Ok(())
 }

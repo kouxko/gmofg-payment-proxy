@@ -409,7 +409,7 @@ async fn usage_and_store_failures_propagate_without_partial_state() {
 }
 
 #[tokio::test]
-async fn disabled_or_invalid_scripted_package_is_rejected_before_listener_runtime_start() {
+async fn disabled_or_fresh_compile_failure_is_rejected_before_listener_runtime_start() {
     let (application, services, _, runtime) = fixture();
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target.clone(), false));
@@ -440,12 +440,9 @@ async fn disabled_or_invalid_scripted_package_is_rejected_before_listener_runtim
     assert_eq!(error_code(&error), "PROTOCOL_PACKAGE_DISABLED");
     assert!(runtime.statuses().await.unwrap().is_empty());
 
-    let mut invalid = services.record(&target).unwrap();
-    invalid.enabled = true;
-    invalid.validation = ProtocolPackageValidationViewModel::Invalid {
-        code: "SCRIPT_INVALID".into(),
-    };
-    services.insert(invalid);
+    services.insert(record(target.clone(), true));
+    services.failures.lock().compile =
+        Some(AppError::new("SCRIPT_INVALID", "fresh compile failed"));
     let error = application
         .listener_start(
             workspace.id,
@@ -454,6 +451,6 @@ async fn disabled_or_invalid_scripted_package_is_rejected_before_listener_runtim
         )
         .await
         .unwrap_err();
-    assert_eq!(error_code(&error), "PROTOCOL_PACKAGE_INVALID");
+    assert_eq!(error_code(&error), "SCRIPT_INVALID");
     assert!(runtime.statuses().await.unwrap().is_empty());
 }

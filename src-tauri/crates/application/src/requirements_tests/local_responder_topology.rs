@@ -5,6 +5,51 @@ use intercept_proxy_domain::{
     SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySettings, SocketTopology,
 };
 
+#[derive(Debug, Default)]
+struct CountingNetworkRuntime {
+    start: AtomicUsize,
+    connection: AtomicUsize,
+    upstream_tls: AtomicUsize,
+}
+
+#[async_trait]
+impl ListenerRuntimePort for CountingNetworkRuntime {
+    async fn statuses(&self) -> AppResult<Vec<ListenerStatusViewModel>> {
+        Ok(Vec::new())
+    }
+
+    async fn start(
+        &self,
+        _: ProxyWorkspace,
+        _: ProxyListener,
+    ) -> AppResult<ListenerStatusViewModel> {
+        self.start.fetch_add(1, Ordering::SeqCst);
+        unused()
+    }
+
+    async fn stop(&self, _: ListenerId) -> AppResult<ListenerStatusViewModel> {
+        unused()
+    }
+
+    async fn test_upstream_connection(
+        &self,
+        _: ProxyWorkspace,
+        _: ProxyListener,
+    ) -> AppResult<ListenerUpstreamConnectionTestViewModel> {
+        self.connection.fetch_add(1, Ordering::SeqCst);
+        unused()
+    }
+
+    async fn test_upstream_tls(
+        &self,
+        _: ProxyWorkspace,
+        _: ProxyListener,
+    ) -> AppResult<ListenerUpstreamTlsTestViewModel> {
+        self.upstream_tls.fetch_add(1, Ordering::SeqCst);
+        unused()
+    }
+}
+
 fn local_responder_listener(mut listener: ProxyListener) -> ProxyListener {
     listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
         topology: SocketTopology::LocalResponder(SocketLocalResponderTopology {
@@ -30,9 +75,10 @@ fn local_responder_listener(mut listener: ProxyListener) -> ProxyListener {
 }
 
 #[tokio::test]
-async fn local_responder_real_facade_entries_fail_before_packages_certificates_or_runtime() {
+async fn local_responder_start_uses_package_gate_but_upstream_tests_remain_unavailable() {
     let ports = Arc::new(FakePorts::default());
-    let application = application_with_fake_ports(ports);
+    let runtime = Arc::new(CountingNetworkRuntime::default());
+    let application = application_with_fake_ports_and_listener_runtime(ports, runtime.clone());
     let mut workspace = application
         .workspace_create("Local responder".into())
         .await
@@ -57,8 +103,11 @@ async fn local_responder_real_facade_entries_fail_before_packages_certificates_o
     let start_error = application
         .listener_start(workspace.id, workspace.revision.get(), listener.id)
         .await
-        .expect_err("package lookup and runtime must not run for T18 LocalResponder");
-    assert_eq!(start_error.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+        .expect_err("T21 must pass LocalResponder through the scripted package gate");
+    assert_eq!(
+        start_error.view_model.code,
+        "PROTOCOL_PACKAGE_SERVICES_UNAVAILABLE"
+    );
 
     let stale_connection = application
         .listener_test_upstream_connection(
@@ -108,4 +157,7 @@ async fn local_responder_real_facade_entries_fail_before_packages_certificates_o
         .await
         .expect_err("LocalResponder has no upstream TLS probe");
     assert_eq!(tls_error.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+    assert_eq!(runtime.start.load(Ordering::SeqCst), 0);
+    assert_eq!(runtime.connection.load(Ordering::SeqCst), 0);
+    assert_eq!(runtime.upstream_tls.load(Ordering::SeqCst), 0);
 }

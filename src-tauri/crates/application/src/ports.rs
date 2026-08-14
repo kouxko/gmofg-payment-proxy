@@ -192,8 +192,9 @@ impl ApplicationConfigurationStorePort for UnavailableApplicationConfigurationSt
 /// 每个动态 Listener 的网络生命周期边界。
 pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
     async fn statuses(&self) -> AppResult<Vec<ListenerStatusViewModel>>;
-    /// 以 application 已校验的不可变 Workspace 快照启动入口。运行时不得再反查 `SQLite`
-    /// 或依赖 UI 当前选择状态，这也是未来 CLI/TUI 使用同一核心的稳定边界。
+    /// 以 application 已校验的不可变 Workspace 快照启动入口。Infrastructure 可以在
+    /// Scripted 启动边界从持久化规范文件 fresh 编译精确包；计划生成后不得再反查 `SQLite`
+    /// 或依赖 UI 当前选择状态。Direct 分支也不得访问协议包注册表。
     async fn start(
         &self,
         workspace: ProxyWorkspace,

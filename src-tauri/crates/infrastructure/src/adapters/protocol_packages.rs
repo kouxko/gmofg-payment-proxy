@@ -33,7 +33,6 @@ pub enum ProtocolPackageValidationStatus {
         code: String,
     },
 }
-
 /// 协议包列表和后续 Application 用例使用的无源码记录。
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProtocolPackageSummary {
@@ -50,14 +49,12 @@ pub struct ProtocolPackageSummary {
     /// 首次安装时间；幂等重入不会改写。
     pub installed_at: DateTime<Utc>,
 }
-
 /// 幂等导入结果；相同身份与完全相同文件集合会复用现有记录。
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProtocolPackageInstallOutcome {
     Installed(ProtocolPackageSummary),
     Reused(ProtocolPackageSummary),
 }
-
 /// 启动时单个包的缓存恢复失败。
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProtocolPackageRecoveryFailure {
@@ -66,7 +63,6 @@ pub struct ProtocolPackageRecoveryFailure {
     /// 路径、声明或脚本阶段产生的稳定脱敏机器码。
     pub code: String,
 }
-
 /// 启动缓存恢复报告；一个坏包不会阻止其他独立版本恢复。
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ProtocolPackageRecoveryReport {
@@ -152,6 +148,7 @@ impl ProtocolPackageStorageError {
 pub struct ProtocolPackageRepositoryAdapter {
     store: Arc<SqliteStore>,
     archive_limits: ProtocolArchiveLimits,
+    runtime_limits: ProtocolRuntimeLimits,
     compiler: ProtocolPackageCompiler,
     cache: Mutex<HashMap<ProtocolPackageRef, CachedCompiledPackage>>,
 }
@@ -173,6 +170,7 @@ impl ProtocolPackageRepositoryAdapter {
         Self {
             store,
             archive_limits,
+            runtime_limits,
             compiler: ProtocolPackageCompiler::new(runtime_limits),
             cache: Mutex::new(HashMap::new()),
         }
@@ -491,6 +489,7 @@ mod prepared;
 pub(super) use prepared::PreparedProtocolPackage;
 #[path = "protocol_packages/portability.rs"]
 mod portability;
+pub(in crate::adapters) mod runtime_snapshot;
 #[path = "protocol_packages/summary.rs"]
 mod summary;
 use summary::summary_from_header;

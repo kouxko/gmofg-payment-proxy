@@ -5,8 +5,9 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     DownstreamClientAuthentication, HttpListenerSettings, ListenerDataPlane, ProxyListener,
-    ProxyWorkspace, SocketDownstreamTlsSettings, SocketRelaySecurity as DomainSocketSecurity,
-    SocketRelaySettings, SocketTopology, SocketUpstreamTlsSettings,
+    ProxyWorkspace, SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketPayloadProcessing,
+    SocketRelaySecurity as DomainSocketSecurity, SocketRelaySettings, SocketTopology,
+    SocketUpstreamTlsSettings,
 };
 use intercept_proxy_runtime::{
     ChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode, ForwardMitmConfig,
@@ -18,7 +19,12 @@ use intercept_proxy_runtime::{
 };
 
 use super::{
-    ListenerRuntimeAdapter, parse_bind_address, socket_diagnostics::SocketDiagnosticObserver,
+    ListenerRuntimeAdapter,
+    helpers::ensure_snapshot_matches,
+    parse_bind_address,
+    scripted_snapshot::{ScriptedSocketRuntimeSnapshot, ScriptedSocketSecuritySnapshot},
+    socket_diagnostics::SocketDiagnosticObserver,
+    socket_plan,
 };
 
 pub(super) enum PreparedListenerRuntime {
@@ -34,14 +40,26 @@ pub(super) enum PreparedListenerRuntime {
         bind_addr: SocketAddr,
         service: Arc<SocketRelayService>,
     },
+    /// T21 冻结校验完成；T22 Frame Pump 接线前真实 start 必须 fail-closed。
+    ScriptedSocket {
+        bind_addr: SocketAddr,
+        snapshot: Arc<ScriptedSocketRuntimeSnapshot>,
+    },
 }
-
 impl PreparedListenerRuntime {
     pub(super) const fn bind_addr(&self) -> SocketAddr {
         match self {
             Self::HttpForward { bind_addr, .. }
             | Self::HttpFixed { bind_addr, .. }
-            | Self::Socket { bind_addr, .. } => *bind_addr,
+            | Self::Socket { bind_addr, .. }
+            | Self::ScriptedSocket { bind_addr, .. } => *bind_addr,
+        }
+    }
+
+    pub(super) fn scripted_snapshot(&self) -> Option<Arc<ScriptedSocketRuntimeSnapshot>> {
+        match self {
+            Self::ScriptedSocket { snapshot, .. } => Some(Arc::clone(snapshot)),
+            _ => None,
         }
     }
 }
@@ -213,18 +231,51 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
         bind_addr: SocketAddr,
         full_runtime: bool,
     ) -> AppResult<PreparedListenerRuntime> {
+        if !full_runtime {
+            return self.build_socket_probe(workspace, listener, socket, bind_addr);
+        }
+        if matches!(&socket.processing, SocketPayloadProcessing::Scripted(_)) {
+            let security = match &socket.topology {
+                SocketTopology::Relay(relay) => ScriptedSocketSecuritySnapshot::Relay(
+                    self.socket_security(workspace, &relay.security)?,
+                ),
+                SocketTopology::LocalResponder(local) => {
+                    ScriptedSocketSecuritySnapshot::LocalResponder {
+                        downstream_tls: match &local.downstream_security {
+                            SocketDownstreamSecurity::Tcp => None,
+                            SocketDownstreamSecurity::Tls { downstream_tls } => {
+                                Some(self.socket_downstream_tls(workspace, downstream_tls)?)
+                            }
+                        },
+                    }
+                }
+            };
+            let snapshot = ScriptedSocketRuntimeSnapshot::prepare(
+                self.adapter,
+                workspace,
+                listener,
+                security,
+            )?
+            .ok_or_else(|| {
+                AppError::new(
+                    "SCRIPTED_SOCKET_PLAN_INVALID",
+                    "Scripted Socket 未能生成不可变运行计划。",
+                )
+                .entity(listener.id.to_string())
+            })?;
+            return Ok(PreparedListenerRuntime::ScriptedSocket {
+                bind_addr,
+                snapshot,
+            });
+        }
         let SocketTopology::Relay(relay) = &socket.topology else {
             return Err(AppError::new(
-                "LOCAL_RESPONDER_NOT_AVAILABLE",
-                "LocalResponder 数据面尚未接入当前运行时。",
+                "LOCAL_RESPONDER_SCRIPTED_REQUIRED",
+                "LocalResponder 必须使用 Scripted 数据处理模式。",
             )
             .entity(listener.id.to_string()));
         };
-        let security = if full_runtime {
-            self.socket_security(workspace, &relay.security)?
-        } else {
-            self.socket_probe_security(workspace, &relay.security)?
-        };
+        let security = self.socket_security(workspace, &relay.security)?;
         let observer = Arc::new(SocketDiagnosticObserver::new(
             self.adapter.socket_diagnostic_events.read().clone(),
         ));
@@ -249,6 +300,30 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             bind_addr,
             service: Arc::new(service),
         })
+    }
+
+    fn build_socket_probe(
+        &self,
+        workspace: &ProxyWorkspace,
+        listener: &ProxyListener,
+        socket: &SocketRelaySettings,
+        bind_addr: SocketAddr,
+    ) -> AppResult<PreparedListenerRuntime> {
+        let SocketTopology::Relay(relay) = &socket.topology else {
+            return Err(AppError::new(
+                "LOCAL_RESPONDER_NOT_AVAILABLE",
+                "LocalResponder 没有上游连接、DNS 或 TLS 探测能力。",
+            )
+            .entity(listener.id.to_string()));
+        };
+        socket_plan::build_probe(
+            self.adapter,
+            listener,
+            socket,
+            relay,
+            bind_addr,
+            self.socket_probe_security(workspace, &relay.security)?,
+        )
     }
 
     fn authentication(
@@ -388,32 +463,16 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
     }
 }
 
-fn ensure_snapshot_matches(workspace: &ProxyWorkspace, listener: &ProxyListener) -> AppResult<()> {
-    let persisted = workspace
-        .listeners
-        .iter()
-        .find(|candidate| candidate.id == listener.id)
-        .ok_or_else(|| {
-            AppError::new("LISTENER_NOT_FOUND", "Workspace 中不存在该 Listener。")
-                .entity(listener.id.to_string())
-        })?;
-    if persisted == listener {
-        Ok(())
-    } else {
-        Err(AppError::new(
-            "REVISION_CONFLICT",
-            "Listener 配置与当前 Workspace 快照不一致，请重新加载。",
-        )
-        .entity(listener.id.to_string()))
-    }
-}
-
 fn channel(listener: &ProxyListener) -> AppResult<ChannelId> {
     ChannelId::new(listener.id.to_string())
         .map_err(|error| AppError::new(error.code, error.message))
 }
 
-fn runtime_error(listener: &ProxyListener, code: &'static str, message: String) -> AppError {
+pub(super) fn runtime_error(
+    listener: &ProxyListener,
+    code: &'static str,
+    message: String,
+) -> AppError {
     AppError::new(code, message).entity(listener.id.to_string())
 }
 

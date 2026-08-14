@@ -11,8 +11,8 @@ use crate::{
     AppError, AppResult, OperationResultViewModel, ProtocolPackageDetailViewModel,
     ProtocolPackageGroupViewModel, ProtocolPackageImportPreviewViewModel,
     ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
-    ProtocolPackageUsageViewModel, ProtocolPackageValidationViewModel,
-    ProtocolPackageVersionViewModel, SocketPayloadProcessing, UiTone,
+    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel, SocketPayloadProcessing,
+    UiTone,
 };
 
 impl Application {
@@ -168,14 +168,7 @@ impl Application {
             .protocol_package_compiler
             .validate_for_enable(&package)
             .await?;
-        if receipt.package != package || receipt.host_api != stored.host_api || !receipt.compatible
-        {
-            return Err(AppError::new(
-                "PROTOCOL_PACKAGE_API_INCOMPATIBLE",
-                "协议包无法由当前版本的脚本 Host 安全加载。",
-            )
-            .entity(package_entity(&package)));
-        }
+        ensure_compilation_receipt(&package, stored.host_api, &receipt)?;
         self.protocol_package_store
             .set_enabled(&package, true)
             .await?;
@@ -246,11 +239,24 @@ impl Application {
         })
     }
 
-    /// Listener 启动前确认其精确脚本包仍存在、启用且最近一次校验有效。
-    pub(super) async fn ensure_listener_protocol_package_available(
+    /// 对目标 Scripted Listener 执行 fresh 包恢复/编译描述与绑定规则校验。
+    ///
+    /// 保存允许引用停用包，以便用户先完成配置再启用；启动则额外要求精确版本当前启用。
+    /// Direct/HTTP 在识别数据面后立即返回，绝不访问包 Store、Compiler 或 Usage 端口。
+    pub(super) async fn validate_listener_protocol_package(
         &self,
-        listener: &crate::ProxyListener,
+        workspace: &crate::ProxyWorkspace,
+        listener_id: crate::ListenerId,
+        require_enabled: bool,
     ) -> AppResult<()> {
+        let listener = workspace
+            .listeners
+            .iter()
+            .find(|listener| listener.id == listener_id)
+            .ok_or_else(|| {
+                AppError::new("LISTENER_NOT_FOUND", "未找到指定的 Listener。")
+                    .entity(listener_id.to_string())
+            })?;
         let crate::ListenerDataPlane::Socket(socket) = &listener.data_plane else {
             return Ok(());
         };
@@ -258,23 +264,29 @@ impl Application {
             return Ok(());
         };
         let version = self.require_protocol_package(&scripted.package).await?;
-        if !version.enabled {
+        if require_enabled && !version.enabled {
             return Err(AppError::new(
                 "PROTOCOL_PACKAGE_DISABLED",
                 "Listener 引用的协议包版本已停用，请先在协议包页面启用。",
             )
             .entity(package_entity(&scripted.package)));
         }
-        if !matches!(
-            version.validation,
-            ProtocolPackageValidationViewModel::Valid
-        ) {
-            return Err(AppError::new(
-                "PROTOCOL_PACKAGE_INVALID",
-                "Listener 引用的协议包版本未通过校验，请重新导入有效版本。",
-            )
-            .entity(package_entity(&scripted.package)));
-        }
+        // validation 列是导入/上次编译的历史快照，不能代替当前 Host API
+        // 下的 fresh 恢复与编译。真实的可加载性只由下面的 compiler receipt 决定。
+        let receipt = self
+            .protocol_package_compiler
+            .validate_for_enable(&scripted.package)
+            .await?;
+        ensure_compilation_receipt(&scripted.package, version.host_api, &receipt)?;
+        let description = self
+            .protocol_package_compiler
+            .describe(&scripted.package)
+            .await?;
+        super::protocol_package_portability::validate_listener_protocol_binding(
+            workspace,
+            listener_id,
+            &description,
+        )?;
         Ok(())
     }
 
@@ -287,6 +299,21 @@ impl Application {
             .await?
             .ok_or_else(|| protocol_package_not_found(package))
     }
+}
+
+fn ensure_compilation_receipt(
+    package: &ProtocolPackageRef,
+    stored_host_api: u32,
+    receipt: &crate::ProtocolPackageCompilationReceipt,
+) -> AppResult<()> {
+    if receipt.package == *package && receipt.host_api == stored_host_api && receipt.compatible {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "PROTOCOL_PACKAGE_API_INCOMPATIBLE",
+        "协议包无法由当前版本的脚本 Host 安全加载。",
+    )
+    .entity(package_entity(package)))
 }
 
 fn protocol_package_not_found(package: &ProtocolPackageRef) -> AppError {

@@ -43,6 +43,9 @@ pub(super) struct FakeProtocolPackageServices {
     pub application_export_calls: AtomicUsize,
     pub exported_workspace_refs: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
     pub exact_calls: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
+    pub block_compile: AtomicBool,
+    pub compile_entered: tokio::sync::Notify,
+    pub continue_compile: tokio::sync::Notify,
     pub block_usage: AtomicBool,
     pub usage_entered: tokio::sync::Notify,
     pub continue_usage: tokio::sync::Notify,
@@ -162,6 +165,10 @@ impl ProtocolPackageCompilerPort for FakeProtocolPackageServices {
     ) -> AppResult<ProtocolPackageCompilationReceipt> {
         self.compile_calls.fetch_add(1, Ordering::SeqCst);
         self.record_call(package);
+        if self.block_compile.load(Ordering::SeqCst) {
+            self.compile_entered.notify_one();
+            self.continue_compile.notified().await;
+        }
         if let Some(error) = self.failures.lock().compile.clone() {
             return Err(error);
         }

@@ -37,6 +37,7 @@ use zeroize::Zeroizing;
 use crate::CertificateService;
 use crate::SqliteStore;
 
+use super::ProtocolPackageRepositoryAdapter;
 #[cfg(test)]
 use super::common::{app_error, encode_workspace_record};
 use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
@@ -71,6 +72,7 @@ pub struct ListenerRuntimeAdapter {
     installation_server_identity: Option<Arc<dyn InstallationServerIdentityProvider>>,
     protected_secrets: Option<Arc<ProtectedSecretAdapter>>,
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
+    protocol_packages: Option<Arc<ProtocolPackageRepositoryAdapter>>,
     pipeline_ports: RwLock<Option<Arc<dyn PipelinePorts>>>,
     socket_diagnostic_events: RwLock<Arc<EventHub>>,
 }
@@ -86,6 +88,7 @@ impl ListenerRuntimeAdapter {
             installation_server_identity: None,
             protected_secrets: None,
             managed_listener_certificates: None,
+            protocol_packages: None,
             pipeline_ports: RwLock::new(None),
             socket_diagnostic_events: RwLock::new(Arc::new(EventHub::default())),
         }
@@ -97,6 +100,16 @@ impl ListenerRuntimeAdapter {
         certificates: Arc<ManagedListenerCertificateAdapter>,
     ) -> Self {
         self.managed_listener_certificates = Some(certificates);
+        self
+    }
+
+    /// 注入协议包注册表，仅 Scripted Socket 启动计划会访问；Direct 分支不会触碰它。
+    #[must_use]
+    pub fn with_protocol_packages(
+        mut self,
+        protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
+    ) -> Self {
+        self.protocol_packages = Some(protocol_packages);
         self
     }
 
@@ -180,7 +193,9 @@ impl Drop for ListenerRuntimeAdapter {
 mod helpers;
 mod plan;
 mod port;
+mod scripted_snapshot;
 mod socket_diagnostics;
+mod socket_plan;
 mod tls_material;
 
 use helpers::{bind_tcp_listener, parse_bind_address, running_status, upstream_tls_test_error};
