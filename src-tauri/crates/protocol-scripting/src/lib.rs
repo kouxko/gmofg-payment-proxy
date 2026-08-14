@@ -7,7 +7,8 @@
 //! 导入链路会在内存中依次完成 ZIP 限额读取、Manifest/Schema 解析、包内模块解析、Rhai 语法编译
 //! 和入口签名校验。只有整条链路全部成功，才会产生 [`CompiledProtocolPackage`]；调用方因而无法把
 //! “只解析了一半”的协议包误当成可执行对象。当前运行时已经实现受限 `frame(reader, context)` 与
-//! 单方向有界 FIFO；Decode/Encode/Display 和代理数据面接线由后续阶段完成。
+//! 单方向有界 FIFO，以及完整 Frame 上的 Decode/Encode/Display 四态执行器；代理数据面接线由后续
+//! 阶段完成。
 
 #![deny(missing_docs)]
 
@@ -21,6 +22,7 @@ mod host;
 mod limits;
 mod manifest;
 mod parse_error;
+mod runtime;
 mod schema_parser;
 mod toml_parser;
 
@@ -49,6 +51,7 @@ pub use framing::{
     MAX_FRAME_FIFO_BYTES_LIMIT, ProtocolFramingError, ProtocolFramingErrorCode,
     ProtocolFramingLimit, ProtocolFramingLimits,
 };
+pub use host::context::ProtocolDirection;
 pub use limits::{
     DEFAULT_MAX_BLOB_BYTES, DEFAULT_MAX_CALL_DEPTH, DEFAULT_MAX_OPERATIONS,
     DEFAULT_MAX_STRING_BYTES, DEFAULT_MAX_WALL_TIME_MS, MAX_BLOB_BYTES_LIMIT, MAX_CALL_DEPTH_LIMIT,
@@ -61,6 +64,10 @@ pub use manifest::{
 };
 pub use parse_error::{
     ProtocolPackageFile, ProtocolPackageParseError, ProtocolPackageParseErrorCode,
+};
+pub use runtime::{
+    DirectionExecutionPlan, DisplayFallbackReason, ProtocolDirectionExecutor,
+    ProtocolDisplayResult, ProtocolFrameOutput,
 };
 pub use schema_parser::{MAX_DOCUMENT_SCHEMA_TOML_BYTES, parse_document_schema};
 

@@ -12,6 +12,10 @@ use crate::{
 pub(crate) struct CompiledProtocolPackageTestBuilder {
     package: ProtocolPackageRef,
     schema: DocumentSchema,
+    script: String,
+    upstream_encode: bool,
+    downstream_encode: bool,
+    display: bool,
 }
 
 impl CompiledProtocolPackageTestBuilder {
@@ -35,6 +39,11 @@ impl CompiledProtocolPackageTestBuilder {
                 ],
             )
             .unwrap(),
+            script: "fn frame(reader, context) { () }\nfn decode(origin, context) { document::create() }\n"
+                .to_owned(),
+            upstream_encode: false,
+            downstream_encode: false,
+            display: false,
         }
     }
 
@@ -48,8 +57,28 @@ impl CompiledProtocolPackageTestBuilder {
         self
     }
 
+    pub(crate) fn with_script(mut self, script: impl Into<String>) -> Self {
+        self.script = script.into();
+        self
+    }
+
+    pub(crate) const fn with_upstream_encode(mut self) -> Self {
+        self.upstream_encode = true;
+        self
+    }
+
+    pub(crate) const fn with_downstream_encode(mut self) -> Self {
+        self.downstream_encode = true;
+        self
+    }
+
+    pub(crate) const fn with_display(mut self) -> Self {
+        self.display = true;
+        self
+    }
+
     pub(crate) fn build(self) -> CompiledProtocolPackage {
-        let manifest = format!(
+        let mut manifest = format!(
             r#"api = 1
 
 [package]
@@ -72,8 +101,23 @@ decode = "decode"
 "#,
             self.package.id, self.package.version
         );
+        if self.upstream_encode {
+            manifest.push_str(
+                "\n[hooks.upstream.send]\nscript = \"protocol.rhai\"\nencode = \"encode\"\n",
+            );
+        }
+        if self.downstream_encode {
+            manifest.push_str(
+                "\n[hooks.downstream.send]\nscript = \"protocol.rhai\"\nencode = \"encode\"\n",
+            );
+        }
+        if self.display {
+            manifest.push_str(
+                "\n[document.display]\nscript = \"protocol.rhai\"\nfunction = \"display\"\n",
+            );
+        }
         let schema = schema_toml(&self.schema);
-        let script = b"fn frame(reader, context) { () }\nfn decode(origin, context) { () }\n";
+        let script = self.script.into_bytes();
         let total_bytes = manifest.len() + schema.len() + script.len();
         let files = ProtocolPackageFiles::new(
             BTreeMap::from([
@@ -85,10 +129,7 @@ decode = "decode"
                     PackageFilePath::new("document.toml").unwrap(),
                     schema.into_bytes(),
                 ),
-                (
-                    PackageFilePath::new("protocol.rhai").unwrap(),
-                    script.to_vec(),
-                ),
+                (PackageFilePath::new("protocol.rhai").unwrap(), script),
             ]),
             u64::try_from(total_bytes).unwrap(),
         );

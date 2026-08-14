@@ -1,11 +1,8 @@
 //! Rhai Host API v1 的类型注册边界。
 //!
 //! 本模块只把领域层已经验证的 [`Document`](intercept_proxy_domain::Document) 与当前调用的只读
-//! [`ProtocolCallContext`] 注册给 Rhai。T10 同时把只读 Reader 与 `FramingDecision` 构造器加入固定
-//! 注册表；Decode/Encode/Display 的调用、超时和返回值校验仍属于 T11 的执行器职责。
-
-// T10 已消费 Reader/Context；Document 与剩余 Stage 将由 T11 Executor 接入，届时自然消除本豁免。
-#![allow(dead_code)]
+//! [`ProtocolCallContext`] 注册给 Rhai。只读 Reader 与 `FramingDecision` 构造器也在同一固定注册表；
+//! framing 和 runtime 执行器各自只调用自己负责的入口。
 
 pub(crate) mod context;
 mod document;

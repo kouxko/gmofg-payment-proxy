@@ -4,6 +4,8 @@ use intercept_proxy_domain::ProtocolPackageRef;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::ProtocolDirection;
+
 /// 可被资源门禁拒绝的脚本执行维度。
 ///
 /// 该枚举同时用于限制配置错误和运行时超限错误，调用方不需要解析消息文本来判断是哪一项门禁。
@@ -86,6 +88,20 @@ pub enum ProtocolRuntimeError {
         /// 失败包的精确 ID 与版本。
         package: ProtocolPackageRef,
     },
+    /// 配置启用了某个可选入口，但 Manifest 没有声明该方向的入口。
+    #[error(
+        "协议包 {id}@{version} 的 {direction} 方向未声明 {entry} 入口",
+        id = .package.id,
+        version = .package.version
+    )]
+    EntryPointUnavailable {
+        /// 缺少入口的精确包 ID 与版本。
+        package: ProtocolPackageRef,
+        /// 配置尝试启用的 Socket 方向。
+        direction: ProtocolDirection,
+        /// Manifest 没有声明的入口。
+        entry: ProtocolEntryPoint,
+    },
     /// 某个声明入口执行失败，但未触发资源门禁。
     #[error(
         "协议包 {id}@{version} 的 {entry} 入口执行失败",
@@ -121,6 +137,7 @@ impl ProtocolRuntimeError {
         match self {
             Self::InvalidResourceLimit { .. } => "INVALID_RESOURCE_LIMIT",
             Self::CompilationFailed { .. } => "COMPILATION_FAILED",
+            Self::EntryPointUnavailable { .. } => "ENTRY_POINT_UNAVAILABLE",
             Self::EntryPointFailed { .. } => "ENTRY_POINT_FAILED",
             Self::ResourceLimitExceeded { .. } => "RESOURCE_LIMIT_EXCEEDED",
         }

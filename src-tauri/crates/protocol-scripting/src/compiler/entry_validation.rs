@@ -15,7 +15,6 @@ const ENCODE_ARITY: usize = 3;
 
 /// 已验证名称、参数数量和可见性的单个 Rhai 入口。
 #[derive(Clone)]
-#[allow(dead_code)] // AST 与访问器由 T10/T11 的 Framing/Executor 消费；T08 只负责安全冻结。
 pub(crate) struct CompiledEntry {
     entry: ProtocolEntryPoint,
     script: PackageFilePath,
@@ -35,12 +34,13 @@ impl fmt::Debug for CompiledEntry {
     }
 }
 
-#[allow(dead_code)]
 impl CompiledEntry {
+    #[cfg(test)]
     pub(crate) const fn entry(&self) -> ProtocolEntryPoint {
         self.entry
     }
 
+    #[cfg(test)]
     pub(crate) const fn script(&self) -> &PackageFilePath {
         &self.script
     }
@@ -56,14 +56,12 @@ impl CompiledEntry {
 
 /// 单方向已经编译的 Frame、Decode 与可选 Encode 入口。
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // Frame/Decode AST 已在 T08 冻结，运行调用属于后续任务。
 pub(crate) struct CompiledDirection {
     frame: CompiledEntry,
     decode: CompiledEntry,
     encode: Option<CompiledEntry>,
 }
 
-#[allow(dead_code)]
 impl CompiledDirection {
     pub(crate) const fn frame(&self) -> &CompiledEntry {
         &self.frame
