@@ -4,10 +4,10 @@
 //! 数据库、进程或 UI。这样现有 Direct relay 不需要依赖或初始化脚本引擎；只有选择 Scripted 的
 //! Listener 才会由外层基础设施显式构造本 crate 的对象。
 //!
-//! 当前导入链路会在内存中依次完成 ZIP 限额读取、Manifest/Schema 解析、包内模块解析、Rhai
-//! 语法编译和入口签名校验。只有整条链路全部成功，才会产生 [`CompiledProtocolPackage`]；调用方
-//! 因而无法把“只解析了一半”的协议包误当成可执行对象。脚本执行和 Host Document/Context API
-//! 仍由后续运行时任务负责，本 crate 在这一阶段不会执行协议入口函数。
+//! 导入链路会在内存中依次完成 ZIP 限额读取、Manifest/Schema 解析、包内模块解析、Rhai 语法编译
+//! 和入口签名校验。只有整条链路全部成功，才会产生 [`CompiledProtocolPackage`]；调用方因而无法把
+//! “只解析了一半”的协议包误当成可执行对象。当前运行时已经实现受限 `frame(reader, context)` 与
+//! 单方向有界 FIFO；Decode/Encode/Display 和代理数据面接线由后续阶段完成。
 
 #![deny(missing_docs)]
 
@@ -16,6 +16,7 @@ mod compiled;
 mod compiler;
 mod declaration_name;
 mod error;
+mod framing;
 mod host;
 mod limits;
 mod manifest;
@@ -42,6 +43,11 @@ pub use declaration_name::{
 };
 pub use error::{
     ProtocolEntryPoint, ProtocolResourceLimit, ProtocolRuntimeError, ProtocolRuntimeResult,
+};
+pub use framing::{
+    DEFAULT_MAX_FRAME_BYTES, DEFAULT_MAX_FRAME_FIFO_BYTES, MAX_FRAME_BYTES_LIMIT,
+    MAX_FRAME_FIFO_BYTES_LIMIT, ProtocolFramingError, ProtocolFramingErrorCode,
+    ProtocolFramingLimit, ProtocolFramingLimits,
 };
 pub use limits::{
     DEFAULT_MAX_BLOB_BYTES, DEFAULT_MAX_CALL_DEPTH, DEFAULT_MAX_OPERATIONS,

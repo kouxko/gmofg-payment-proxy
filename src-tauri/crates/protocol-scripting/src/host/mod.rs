@@ -1,10 +1,10 @@
 //! Rhai Host API v1 的类型注册边界。
 //!
 //! 本模块只把领域层已经验证的 [`Document`](intercept_proxy_domain::Document) 与当前调用的只读
-//! [`ProtocolCallContext`] 注册给 Rhai。它不负责选择或执行 Frame/Decode/Encode/Display 入口；
-//! 每次调用创建新 Scope、超时与返回值校验属于 T11 的执行器职责。
+//! [`ProtocolCallContext`] 注册给 Rhai。T10 同时把只读 Reader 与 `FramingDecision` 构造器加入固定
+//! 注册表；Decode/Encode/Display 的调用、超时和返回值校验仍属于 T11 的执行器职责。
 
-// T09 先完成并测试固定 Host 注册表；生产调用点在 T11 Executor 接入，届时会自然消除本豁免。
+// T10 已消费 Reader/Context；Document 与剩余 Stage 将由 T11 Executor 接入，届时自然消除本豁免。
 #![allow(dead_code)]
 
 pub(crate) mod context;
@@ -16,6 +16,7 @@ use intercept_proxy_domain::DocumentSchema;
 use rhai::Engine;
 
 use crate::CompiledProtocolPackage;
+use crate::framing;
 
 /// 与一个不可变 Document Schema 绑定的 Host API 注册器。
 ///
@@ -41,6 +42,7 @@ impl ProtocolHostApi {
     pub(crate) fn register(&self, engine: &mut Engine) {
         document::register(engine, Arc::clone(&self.schema));
         context::register(engine);
+        framing::register(engine);
     }
 
     /// 创建 Encode-only 等场景需要的空 Document，语义与脚本 `document::create()` 完全一致。

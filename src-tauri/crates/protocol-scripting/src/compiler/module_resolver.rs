@@ -77,7 +77,7 @@ impl PackageModuleResolver {
                 ast.set_source(path.as_str());
                 validate_ast_policy(&ast, path)?;
                 self.register_function_count(path, &ast)?;
-                let mut ast = engine.optimize_ast(&Scope::new(), ast, OptimizationLevel::Simple);
+                let mut ast = optimize_preserving_embedded_modules(engine, ast);
                 ast.set_source(path.as_str());
                 Ok(ast)
             }
@@ -199,7 +199,7 @@ impl PackageModuleResolver {
             .into());
         }
 
-        let mut ast = engine.optimize_ast(&Scope::new(), ast, OptimizationLevel::Simple);
+        let mut ast = optimize_preserving_embedded_modules(engine, ast);
         ast.set_source(path.as_str());
         self.lock_state().compiled.insert(path, ast.clone());
         Ok(ast)
@@ -270,6 +270,17 @@ impl PackageModuleResolver {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
+}
+
+/// Rhai 1.25 的 `Engine::optimize_ast` 会重建 AST，但不会复制 self-contained AST 内嵌的
+/// `StaticModuleResolver`。如果直接返回优化结果，导入阶段明明已经安全解析并冻结的 `import` 会在
+/// 真实入口调用时退化为 `ModuleNotFound`。这里先克隆一个“无语句、无函数、仅保留 resolver”的
+/// AST，优化完成后再只合并 resolver；绝不把文件 resolver 或新的脚本内容带回运行时。
+fn optimize_preserving_embedded_modules(engine: &Engine, ast: AST) -> AST {
+    let embedded_modules = ast.clone_functions_only_filtered(|_, _, _, _, _| false);
+    let mut optimized = engine.optimize_ast(&Scope::new(), ast, OptimizationLevel::Simple);
+    optimized.combine_filtered(embedded_modules, |_, _, _, _, _| false);
+    optimized
 }
 
 impl ModuleResolver for PackageModuleResolver {
