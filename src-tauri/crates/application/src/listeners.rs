@@ -210,8 +210,8 @@ fn unsupported_connection_test(listener_id: ListenerId, message: &str) -> AppErr
 #[cfg(test)]
 mod tests {
     use crate::{
-        ListenerDataPlane, SocketEndpoint, SocketRelaySecurity, SocketRelaySettings,
-        SocketUpstreamTlsSettings,
+        ListenerDataPlane, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
+        SocketRelaySettings, SocketUpstreamTlsSettings,
     };
 
     use super::*;
@@ -226,6 +226,7 @@ mod tests {
                 },
                 security: SocketRelaySecurity::Transparent,
                 maximum_connections: 500,
+                processing: SocketPayloadProcessing::Direct,
             }),
             ..ProxyListener::default()
         };
@@ -256,6 +257,7 @@ mod tests {
                     },
                 },
                 maximum_connections: 500,
+                processing: SocketPayloadProcessing::Direct,
             }),
             ..ProxyListener::default()
         };

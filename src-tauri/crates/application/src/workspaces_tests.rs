@@ -151,8 +151,8 @@ async fn importing_same_document_twice_never_overwrites_existing_workspace() {
 fn identity_remap_preserves_socket_target_and_remaps_all_tls_references() {
     use intercept_proxy_domain::{
         CertificateReference, CertificateReferenceKind, DownstreamClientAuthentication,
-        ListenerDataPlane, SocketDownstreamTlsSettings, SocketEndpoint, SocketRelaySecurity,
-        SocketRelaySettings, SocketUpstreamTlsSettings,
+        ListenerDataPlane, SocketDownstreamTlsSettings, SocketEndpoint, SocketPayloadProcessing,
+        SocketRelaySecurity, SocketRelaySettings, SocketUpstreamTlsSettings,
     };
 
     let server_identity = CertificateReferenceId::new();
@@ -198,6 +198,7 @@ fn identity_remap_preserves_socket_target_and_remaps_all_tls_references() {
             },
         },
         maximum_connections: 777,
+        processing: SocketPayloadProcessing::Direct,
     });
 
     remap_workspace_identity(&mut workspace).unwrap();

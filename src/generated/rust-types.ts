@@ -567,6 +567,20 @@ export type DiagnosticLogRowViewModel = {
 /**  跨桌面、ADB、Companion 与代理链路共用的诊断阶段。 */
 export type DiagnosticLogStage = "system" | "adb_forward_control" | "adb_reverse_business" | "desktop_dns" | "companion" | "vpn" | "tun" | "app_selection" | "route_activation" | "listener" | "downstream_tls" | "upstream_tls" | "http" | "socket" | "stop_fallback" | "cleanup";
 
+/**
+ *  单个 Socket 数据方向是否启用协议包的 Decode 与 Encode 阶段。
+ *  `decode_enabled` 与 `encode_enabled` 是两个彼此独立的开关，而不是同一个“脚本启用”状态：
+ *  Decode 关闭时仍可让 Encode 只根据原始 Frame 产生新字节；Encode 关闭时，即使 Decode 和规则
+ *  修改了 Document，线路上仍发送原始 Frame。Display 没有单独配置字段，后续运行时会按产品契约
+ *  跟随同方向的 Encode 开关和 Manifest 能力决定是否调用。
+ */
+export type DirectionProcessingOptions = {
+	/**  是否把完整 Frame 交给该方向的 Decode 入口并生成 Document。 */
+	decode_enabled: boolean,
+	/**  是否把该方向的 Document 与原始 Frame 交给 Encode 入口生成待发送字节。 */
+	encode_enabled: boolean,
+};
+
 /**  Rust 判断某操作不可用时给出的稳定原因。 */
 export type DisabledReason = {
 	code: string,
@@ -867,6 +881,31 @@ export type PathMtuProfile = {
 /**  超过路径 MTU 时的处理语义。 */
 export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
 
+/**
+ *  应用级协议包的稳定 ID。
+ *  Wire 形式是字符串，必须匹配 `[a-z][a-z0-9-]*`；小写限制保证跨平台文件系统、
+ *  ZIP 条目和数据库查询使用同一规范形式。
+ */
+export type ProtocolPackageId = string;
+
+/**
+ *  Listener/Workspace 引用协议包时使用的精确身份。
+ *  ID 与版本缺一不可；该类型不表达版本范围，也不负责查询包是否已安装或启用。
+ */
+export type ProtocolPackageRef = {
+	/**  应用级协议包 ID。 */
+	id: ProtocolPackageId,
+	/**  必须精确匹配的协议包版本。 */
+	version: ProtocolPackageVersion,
+};
+
+/**
+ *  协议包不可变版本号。
+ *  保存作者提供的完整 `SemVer` 文本，包括 prerelease 和 build metadata；Listener 后续必须绑定
+ *  此精确值，不做范围匹配或自动升级。
+ */
+export type ProtocolPackageVersion = string;
+
 export type ProxyListener = {
 	id: ListenerId,
 	name: string,
@@ -1037,6 +1076,21 @@ export type RuleViewModel = {
 	draft: RuleDraft,
 };
 
+/**
+ *  Scripted 模式所需的完整、静态 Listener 配置。
+ *  Listener 精确绑定一个 `package id + version`，不会自动选择、升级或回退协议包。领域层只保证
+ *  引用和开关结构合法；包是否已安装、已启用、API 兼容，以及方向是否声明 Encode，必须由需要
+ *  查询协议包注册表的 Application 层校验。
+ */
+export type ScriptedSocketProcessing = {
+	/**  Listener 固定使用的协议包 ID 与精确 `SemVer`。 */
+	package: ProtocolPackageRef,
+	/**  App -> Proxy -> Server 方向的 Decode/Encode 开关。 */
+	upstream: DirectionProcessingOptions,
+	/**  Server -> Proxy -> App 方向的 Decode/Encode 开关。 */
+	downstream: DirectionProcessingOptions,
+};
+
 export type SecretReference = {
 	provider: string,
 	key: string,
@@ -1159,12 +1213,27 @@ export type SocketEndpoint = {
 	port: number,
 };
 
+/**
+ *  Socket payload 的处理方式。
+ *  `Direct` 保持现有透明字节转发，不加载脚本、不切 Frame、不创建 Document；`Scripted` 按绑定
+ *  协议包切分完整 Frame，并分别应用两个方向的处理开关。
+ *  Wire 结构使用 `mode` + `settings`，例如 Direct 是 `{"mode":"direct"}`，Scripted 是
+ *  `{"mode":"scripted","settings":{...}}`。额外字段会被拒绝，防止 Direct 配置中夹带不会生效的
+ *  脚本字段。旧 Socket 配置缺少整个 `processing` 字段时由 [`SocketRelaySettings`] 迁移为 Direct。
+ */
+export type SocketPayloadProcessing = { mode: "direct" } | { mode: "scripted"; settings: ScriptedSocketProcessing };
+
 export type SocketRelaySecurity = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsSettings; upstream_tls: SocketUpstreamTlsSettings };
 
 export type SocketRelaySettings = {
+	/**  Server 侧固定连接目标。 */
 	upstream: SocketEndpoint,
+	/**  App/Server 两侧使用 TCP 或 TLS 的组合。 */
 	security: SocketRelaySecurity,
+	/**  Listener 同时接受的最大 Socket 连接数。 */
 	maximum_connections: number,
+	/**  Frame/payload 处理方式。历史配置没有该字段时必须保持透明直通。 */
+	processing?: SocketPayloadProcessing,
 };
 
 export type SocketTransportMode = "transparent" | "tcp_to_tls" | "tls_to_tcp" | "tls_to_tls";

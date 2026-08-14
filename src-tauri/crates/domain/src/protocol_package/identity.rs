@@ -26,7 +26,6 @@ fn valid_kebab_id(value: &str) -> bool {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
 #[serde(try_from = "String", into = "String")]
 /// 应用级协议包的稳定 ID。
-///
 /// Wire 形式是字符串，必须匹配 `[a-z][a-z0-9-]*`；小写限制保证跨平台文件系统、
 /// ZIP 条目和数据库查询使用同一规范形式。
 pub struct ProtocolPackageId(String);
@@ -86,7 +85,6 @@ impl fmt::Display for ProtocolPackageId {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
 #[serde(try_from = "String", into = "String")]
 /// 协议包不可变版本号。
-///
 /// 保存作者提供的完整 `SemVer` 文本，包括 prerelease 和 build metadata；Listener 后续必须绑定
 /// 此精确值，不做范围匹配或自动升级。
 pub struct ProtocolPackageVersion(String);
@@ -148,7 +146,6 @@ impl fmt::Display for ProtocolPackageVersion {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 /// Listener/Workspace 引用协议包时使用的精确身份。
-///
 /// ID 与版本缺一不可；该类型不表达版本范围，也不负责查询包是否已安装或启用。
 pub struct ProtocolPackageRef {
     /// 应用级协议包 ID。
