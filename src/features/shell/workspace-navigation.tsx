@@ -20,6 +20,7 @@ import {
 export type WorkspacePath =
   | "/workspaces"
   | "/listeners"
+  | "/protocol-packages"
   | "/android-network"
   | "/diagnostics"
   | "/console"
@@ -44,6 +45,7 @@ const defaultPath: WorkspacePath = "/console";
 const workspacePaths = new Set<WorkspacePath>([
   "/workspaces",
   "/listeners",
+  "/protocol-packages",
   "/android-network",
   "/diagnostics",
   "/console",

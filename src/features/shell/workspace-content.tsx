@@ -18,6 +18,7 @@ import { SessionsView } from "@/features/sessions/sessions-view";
 import { SettingsView } from "@/features/settings/settings-view";
 import { AndroidNetworkView } from "@/features/android-network/android-network-view";
 import { ListenersView } from "@/features/listeners/listeners-view";
+import { ProtocolPackagesView } from "@/features/protocol-packages/protocol-packages-view";
 import { WorkspacesView } from "@/features/workspaces/workspaces-view";
 import { DiagnosticLogsView } from "@/features/diagnostics/diagnostic-logs-view";
 import { useWorkspaceNavigation } from "./workspace-navigation";
@@ -30,6 +31,8 @@ export function WorkspaceContent() {
       return <WorkspacesView />;
     case "/listeners":
       return <ListenersView />;
+    case "/protocol-packages":
+      return <ProtocolPackagesView />;
     case "/android-network":
       return <AndroidNetworkView />;
     case "/diagnostics":

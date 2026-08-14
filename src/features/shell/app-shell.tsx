@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 八个业务页面共用的永久桌面外壳。
+ * 各业务页面共用的永久桌面外壳。
  *
  * 负责顶部运行状态、左侧导航、全局 Rust 错误和帮助入口。它只显示
  * BootstrapProvider 提供的 ViewModel，并通过内存导航切换中央内容；代理启停、
@@ -20,6 +20,7 @@ import {
   Tooltip,
 } from "@heroui/react";
 import {
+  Archive,
   Bug,
   Bars,
   CircleInfo,
@@ -65,6 +66,12 @@ export const navigation = [
     label: "入口配置",
     title: "代理入口配置",
     icon: Server,
+  },
+  {
+    href: "/protocol-packages",
+    label: "协议包",
+    title: "Socket 协议包",
+    icon: Archive,
   },
   {
     href: "/android-network",

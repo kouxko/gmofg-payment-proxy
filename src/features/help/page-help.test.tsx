@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-/** 验证八页帮助 Drawer 可访问且不会触发工作区导航或业务命令。 */
+/** 验证各页面帮助 Drawer 可访问且不会触发工作区导航或业务命令。 */
 
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
@@ -13,6 +13,7 @@ import { pageHelpGuides } from "./page-help-content";
 const workspacePaths: WorkspacePath[] = [
   "/workspaces",
   "/listeners",
+  "/protocol-packages",
   "/android-network",
   "/diagnostics",
   "/console",
