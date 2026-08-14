@@ -10,10 +10,19 @@
 #![deny(missing_docs)]
 
 mod compiled;
+mod declaration_name;
 mod error;
 mod limits;
+mod manifest;
+mod parse_error;
+mod schema_parser;
+mod toml_parser;
 
 pub use compiled::CompiledProtocolPackage;
+pub use declaration_name::{
+    MAX_PACKAGE_FILE_PATH_BYTES, MAX_PROTOCOL_FUNCTION_NAME_BYTES, PackageFilePath,
+    ProtocolFunctionName,
+};
 pub use error::{
     ProtocolEntryPoint, ProtocolResourceLimit, ProtocolRuntimeError, ProtocolRuntimeResult,
 };
@@ -22,6 +31,15 @@ pub use limits::{
     DEFAULT_MAX_STRING_BYTES, DEFAULT_MAX_WALL_TIME_MS, MAX_BLOB_BYTES_LIMIT, MAX_CALL_DEPTH_LIMIT,
     MAX_OPERATIONS_LIMIT, MAX_STRING_BYTES_LIMIT, MAX_WALL_TIME_MS_LIMIT, ProtocolRuntimeLimits,
 };
+pub use manifest::{
+    DirectionHooks, DisplayDeclaration, DocumentDeclaration, MAX_MANIFEST_TOML_BYTES,
+    ProtocolHooks, ProtocolManifest, ProtocolPackageMetadata, ReceiveHookDeclaration,
+    SUPPORTED_PROTOCOL_HOST_API, SendHookDeclaration, parse_protocol_manifest,
+};
+pub use parse_error::{
+    ProtocolPackageFile, ProtocolPackageParseError, ProtocolPackageParseErrorCode,
+};
+pub use schema_parser::{MAX_DOCUMENT_SCHEMA_TOML_BYTES, parse_document_schema};
 
 #[cfg(test)]
 mod test_support;

@@ -77,6 +77,15 @@ pub(super) const RHAI_RESERVED_WORDS: &[&str] = &[
     "yield",
 ];
 
+/// 判断名称是否属于 Host API v1 明确拒绝的 Rhai active/reserved 关键字。
+///
+/// Document 字段名和 Manifest 顶层函数名必须使用同一份关键字表，否则协议包可能在 Schema
+/// 校验时通过，却在脚本编译或变量注册时失败。该函数只判断关键字；调用方仍需自行校验标识符形状。
+#[must_use]
+pub fn is_rhai_reserved_word(value: &str) -> bool {
+    RHAI_RESERVED_WORDS.contains(&value)
+}
+
 fn invalid_schema(field: &str, message: impl Into<String>) -> DomainError {
     DomainError::new(ErrorCode::DocumentSchemaInvalid, "Document Schema 无效")
         .with_field_error(field, message)
@@ -100,7 +109,7 @@ fn valid_field_name(value: &str) -> bool {
             .bytes()
             .skip(1)
             .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
-        && !RHAI_RESERVED_WORDS.contains(&value)
+        && !is_rhai_reserved_word(value)
 }
 
 fn valid_display_text(value: &str) -> bool {

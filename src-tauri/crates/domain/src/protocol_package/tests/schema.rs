@@ -27,9 +27,11 @@ fn schema_and_field_ids_enforce_ascii_boundaries() {
 #[test]
 fn field_names_reject_all_v1_rhai_reserved_words() {
     for reserved in RHAI_RESERVED_WORDS {
+        assert!(is_rhai_reserved_word(reserved));
         let error = DocumentFieldName::new(*reserved).unwrap_err();
         assert_eq!(error.code, ErrorCode::DocumentSchemaInvalid, "{reserved}");
     }
+    assert!(!is_rhai_reserved_word("decode_payment"));
 }
 
 #[test]
