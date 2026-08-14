@@ -15,7 +15,7 @@ const ENCODE_ARITY: usize = 3;
 
 /// 已验证名称、参数数量和可见性的单个 Rhai 入口。
 #[derive(Clone)]
-#[allow(dead_code)] // AST 与访问器由 T09-T11 的 Host/Executor 消费；T08 只负责安全冻结。
+#[allow(dead_code)] // AST 与访问器由 T10/T11 的 Framing/Executor 消费；T08 只负责安全冻结。
 pub(crate) struct CompiledEntry {
     entry: ProtocolEntryPoint,
     script: PackageFilePath,

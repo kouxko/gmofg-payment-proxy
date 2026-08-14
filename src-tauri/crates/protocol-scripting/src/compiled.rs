@@ -49,6 +49,12 @@ impl CompiledProtocolPackage {
         &self.schema
     }
 
+    /// 为同 crate 的 Host/Executor 共享 Schema 所有权，不把可变性暴露给外层。
+    #[allow(dead_code)] // T09 注册 Host，实际入口执行和消费由 T11 接入。
+    pub(crate) fn schema_arc(&self) -> Arc<DocumentSchema> {
+        Arc::clone(&self.schema)
+    }
+
     /// 返回已经通过编译校验的 Manifest 声明；不包含脚本源码或 AST。
     #[must_use]
     pub const fn manifest(&self) -> &ProtocolManifest {
@@ -73,7 +79,7 @@ impl CompiledProtocolPackage {
         self.downstream.encode().is_some()
     }
 
-    // T08 冻结 AST；这些内部访问器由 T09-T11 的 Host/Executor 接上真实调用。
+    // T08 冻结 AST；这些内部访问器由 T10/T11 的 Framing/Executor 接上真实调用。
     #[allow(dead_code)]
     pub(crate) const fn upstream(&self) -> &CompiledDirection {
         &self.upstream

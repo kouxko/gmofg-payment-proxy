@@ -4,6 +4,7 @@ mod compiler;
 mod declaration_name;
 mod error;
 mod fixtures;
+mod host;
 mod limits;
 mod manifest;
 mod parse_error;

@@ -16,6 +16,7 @@ mod compiled;
 mod compiler;
 mod declaration_name;
 mod error;
+mod host;
 mod limits;
 mod manifest;
 mod parse_error;

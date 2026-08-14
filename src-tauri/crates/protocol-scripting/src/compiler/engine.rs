@@ -33,9 +33,10 @@ pub(crate) const FORBIDDEN_SCRIPT_SYMBOLS: &[&str] = &[
 
 /// 创建不带文件、网络、进程或 UI 能力的 Rhai Engine。
 ///
-/// `Engine::new` 只提供 Rhai 标准语言包；宿主对象要到 T09/T10 才显式注册。这里额外关闭能够在
-/// 脚本运行时再次解释源码的 `eval`，以及可能向宿主输出内容的 `print/debug`。模块解析器由调用方
-/// 随后强制替换成包内内存解析器，因此不会使用 Rhai 默认的文件系统解析器。
+/// `Engine::new` 只提供 Rhai 标准语言包；T09 的 `ProtocolHostApi` 会在执行专用 Engine 上显式注册
+/// Document/Context，T10 再增加 Reader/Framing。本编译阶段不执行入口，所以故意不注册宿主对象。
+/// 这里额外关闭能够再次解释源码的 `eval` 以及向宿主输出的 `print/debug`；调用方还会强制安装包内
+/// 内存模块解析器，避免使用 Rhai 默认的文件系统解析器。
 pub(crate) fn build_engine(limits: ProtocolRuntimeLimits) -> Engine {
     let mut engine = Engine::new();
     engine

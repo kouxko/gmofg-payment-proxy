@@ -2,7 +2,8 @@
 
 本文是协议包作者的接口契约。示例中的具体协议格式不属于 Host API。
 
-> 实现状态：v1 契约已经用于模板设计，Rust Host API 尚未在产品中实现。Runtime 实现必须遵守本文；在此之前，模板只能进行 Rhai 语法和算法验证。
+> 实现状态：ZIP/Manifest/Schema 校验、Rhai 编译以及 Document/Context Host API 已在 Rust 中实现并
+> 通过契约测试。Reader/Framing 与入口执行链仍在后续任务中，因此当前模板尚未接入产品 Socket 数据面。
 
 ## 1. 包结构和路径
 
