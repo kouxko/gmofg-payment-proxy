@@ -295,6 +295,7 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
             workspaces,
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
             events: Arc::new(EventHub::default()),
         },
     );
@@ -361,6 +362,7 @@ async fn running_workspace_listener_allows_saving_and_starting_a_stopped_listene
             workspaces,
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
             events: Arc::new(EventHub::default()),
         },
     );
@@ -442,6 +444,7 @@ async fn running_workspace_listener_allows_device_network_profile_persistence() 
             workspaces,
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
             events: Arc::new(EventHub::default()),
         },
     );

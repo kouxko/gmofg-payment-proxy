@@ -1,0 +1,242 @@
+use std::collections::HashMap;
+
+use super::*;
+
+#[derive(Debug, Default)]
+pub(super) struct ProtocolPortFailures {
+    pub list: Option<AppError>,
+    pub get: Option<AppError>,
+    pub compile: Option<AppError>,
+    pub usage: Option<AppError>,
+    pub set_enabled: Option<AppError>,
+    pub delete: Option<AppError>,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct FakeProtocolPackageServices {
+    records: parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageVersionViewModel>>,
+    usages: parking_lot::Mutex<HashMap<ProtocolPackageRef, Vec<ProtocolPackageUsageViewModel>>>,
+    usage_responses: parking_lot::Mutex<VecDeque<AppResult<Vec<ProtocolPackageUsageViewModel>>>>,
+    compilation_results: parking_lot::Mutex<
+        HashMap<ProtocolPackageRef, AppResult<ProtocolPackageCompilationReceipt>>,
+    >,
+    pub failures: parking_lot::Mutex<ProtocolPortFailures>,
+    pub get_calls: AtomicUsize,
+    pub compile_calls: AtomicUsize,
+    pub usage_calls: AtomicUsize,
+    pub set_enabled_calls: AtomicUsize,
+    pub delete_calls: AtomicUsize,
+    pub exact_calls: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
+    pub block_usage: AtomicBool,
+    pub usage_entered: tokio::sync::Notify,
+    pub continue_usage: tokio::sync::Notify,
+}
+
+impl FakeProtocolPackageServices {
+    pub fn insert(&self, record: ProtocolPackageVersionViewModel) {
+        self.records.lock().insert(record.package.clone(), record);
+    }
+
+    pub fn record(&self, package: &ProtocolPackageRef) -> Option<ProtocolPackageVersionViewModel> {
+        self.records.lock().get(package).cloned()
+    }
+
+    pub fn set_usages(
+        &self,
+        package: ProtocolPackageRef,
+        usages: Vec<ProtocolPackageUsageViewModel>,
+    ) {
+        self.usages.lock().insert(package, usages);
+    }
+
+    pub fn usages(&self, package: &ProtocolPackageRef) -> Vec<ProtocolPackageUsageViewModel> {
+        self.usages.lock().get(package).cloned().unwrap_or_default()
+    }
+
+    pub fn push_usage_response(&self, response: AppResult<Vec<ProtocolPackageUsageViewModel>>) {
+        self.usage_responses.lock().push_back(response);
+    }
+
+    pub fn set_compilation_result(
+        &self,
+        package: ProtocolPackageRef,
+        result: AppResult<ProtocolPackageCompilationReceipt>,
+    ) {
+        self.compilation_results.lock().insert(package, result);
+    }
+
+    fn record_call(&self, package: &ProtocolPackageRef) {
+        self.exact_calls.lock().push(package.clone());
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageStorePort for FakeProtocolPackageServices {
+    async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
+        if let Some(error) = self.failures.lock().list.clone() {
+            return Err(error);
+        }
+        Ok(self.records.lock().values().cloned().collect())
+    }
+
+    async fn get(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
+        self.get_calls.fetch_add(1, Ordering::SeqCst);
+        self.record_call(package);
+        if let Some(error) = self.failures.lock().get.clone() {
+            return Err(error);
+        }
+        Ok(self.records.lock().get(package).cloned())
+    }
+
+    async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()> {
+        self.set_enabled_calls.fetch_add(1, Ordering::SeqCst);
+        self.record_call(package);
+        if let Some(error) = self.failures.lock().set_enabled.clone() {
+            return Err(error);
+        }
+        let mut records = self.records.lock();
+        let record = records
+            .get_mut(package)
+            .ok_or_else(|| AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试记录不存在。"))?;
+        record.enabled = enabled;
+        Ok(())
+    }
+
+    async fn delete(&self, package: &ProtocolPackageRef) -> AppResult<()> {
+        self.delete_calls.fetch_add(1, Ordering::SeqCst);
+        self.record_call(package);
+        if let Some(error) = self.failures.lock().delete.clone() {
+            return Err(error);
+        }
+        self.records
+            .lock()
+            .remove(package)
+            .ok_or_else(|| AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试记录不存在。"))?;
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageCompilerPort for FakeProtocolPackageServices {
+    async fn validate_for_enable(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageCompilationReceipt> {
+        self.compile_calls.fetch_add(1, Ordering::SeqCst);
+        self.record_call(package);
+        if let Some(error) = self.failures.lock().compile.clone() {
+            return Err(error);
+        }
+        if let Some(result) = self.compilation_results.lock().get(package).cloned() {
+            return result;
+        }
+        let record = self
+            .records
+            .lock()
+            .get(package)
+            .cloned()
+            .ok_or_else(|| AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试记录不存在。"))?;
+        Ok(ProtocolPackageCompilationReceipt {
+            package: package.clone(),
+            host_api: record.host_api,
+            compatible: true,
+        })
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageUsageQueryPort for FakeProtocolPackageServices {
+    async fn usages(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<Vec<ProtocolPackageUsageViewModel>> {
+        self.usage_calls.fetch_add(1, Ordering::SeqCst);
+        self.record_call(package);
+        if self.block_usage.load(Ordering::SeqCst) {
+            self.usage_entered.notify_one();
+            self.continue_usage.notified().await;
+        }
+        if let Some(response) = self.usage_responses.lock().pop_front() {
+            return response;
+        }
+        if let Some(error) = self.failures.lock().usage.clone() {
+            return Err(error);
+        }
+        Ok(self.usages(package))
+    }
+}
+
+pub(super) fn package(id: &str, version: &str) -> ProtocolPackageRef {
+    ProtocolPackageRef {
+        id: ProtocolPackageId::new(id).unwrap(),
+        version: ProtocolPackageVersion::new(version).unwrap(),
+    }
+}
+
+pub(super) fn record(
+    package: ProtocolPackageRef,
+    enabled: bool,
+) -> ProtocolPackageVersionViewModel {
+    ProtocolPackageVersionViewModel {
+        name: format!("{} {}", package.id, package.version),
+        package,
+        host_api: 1,
+        enabled,
+        validation: ProtocolPackageValidationViewModel::Valid,
+        installed_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),
+    }
+}
+
+pub(super) fn usage(
+    workspace_id: WorkspaceId,
+    listener_id: ListenerId,
+    runtime_state: ListenerRuntimeState,
+) -> ProtocolPackageUsageViewModel {
+    ProtocolPackageUsageViewModel {
+        workspace_id,
+        workspace_name: format!("Workspace {workspace_id}"),
+        listener_id,
+        listener_name: format!("Listener {listener_id}"),
+        listener_enabled: runtime_state != ListenerRuntimeState::Stopped,
+        runtime_state,
+    }
+}
+
+pub(super) fn application(
+    services: Arc<FakeProtocolPackageServices>,
+    workspaces: Arc<InMemoryWorkspaceStore>,
+    runtime: Arc<InMemoryListenerRuntime>,
+) -> Application {
+    let ports = Arc::new(FakePorts::default());
+    Application::new(
+        "Protocol lifecycle test".into(),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: Arc::new(BreakpointCoordinator::default()),
+            breakpoint_validation: ports.clone(),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            workspaces,
+            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
+            listener_runtime: runtime,
+            listener_certificates: ports,
+            protocol_packages: ProtocolPackageApplicationServices {
+                store: services.clone(),
+                compiler: services.clone(),
+                usage_query: services,
+            },
+            events: Arc::new(EventHub::default()),
+        },
+    )
+}
+
+pub(super) fn error_code(error: &AppError) -> &str {
+    &error.view_model.code
+}

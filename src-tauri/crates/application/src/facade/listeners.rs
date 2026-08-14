@@ -226,6 +226,10 @@ impl Application {
         let mut workspace = self.workspaces.get(workspace_id).await?;
         workspace.revision = DomainRevision::new(expected_workspace_revision);
         let listener = find_listener(&workspace.listeners, listener_id)?;
+        // Scripted Listener 可以保存对已停用版本的精确引用，便于之后重新启用；但实际
+        // 打开网络入口前必须在同一个 mutation gate 内重新确认包仍可用。
+        self.ensure_listener_protocol_package_available(&listener)
+            .await?;
         let status = self
             .listener_runtime
             .start(workspace.clone(), listener)

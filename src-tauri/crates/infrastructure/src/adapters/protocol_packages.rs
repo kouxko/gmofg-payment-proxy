@@ -268,6 +268,19 @@ impl ProtocolPackageRepositoryAdapter {
         self.compiled_locked(package, &mut cache)
     }
 
+    /// 忽略现有 AST 缓存，对持久化文件执行完整恢复、身份校验和 Rhai 重新编译。
+    ///
+    /// 普通运行时读取可使用 [`Self::compiled`] 的代际缓存；生命周期“启用”属于显式安全
+    /// 边界，必须调用本方法重新确认数据库中的当前文件仍有效且仍受 Host API 支持。
+    pub fn revalidate(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> Result<Arc<CompiledProtocolPackage>, ProtocolPackageStorageError> {
+        let mut cache = self.cache.lock();
+        cache.remove(package);
+        self.compiled_locked(package, &mut cache)
+    }
+
     fn compiled_locked(
         &self,
         package: &ProtocolPackageRef,
@@ -451,6 +464,8 @@ fn compilation_code(error: &ProtocolPackageCompilationError) -> &str {
         "COMPILATION_FAILED"
     }
 }
+
+mod application_port;
 
 #[cfg(test)]
 #[path = "protocol_packages/tests.rs"]

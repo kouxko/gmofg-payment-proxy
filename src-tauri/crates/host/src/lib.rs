@@ -15,8 +15,9 @@ use std::{
 
 use intercept_proxy_application::{
     AppError, AppResult, Application, ApplicationDependencies, BreakpointCoordinator,
-    BreakpointValidator, CapacityLedger, CertificateServicePort, EventHub, ProxyStatusViewModel,
-    ProxySupervisorPort, SettingsDraft, SettingsRepositoryPort, WorkspaceRepositoryPort,
+    BreakpointValidator, CapacityLedger, CertificateServicePort, EventHub,
+    ProtocolPackageApplicationServices, ProxyStatusViewModel, ProxySupervisorPort, SettingsDraft,
+    SettingsRepositoryPort, WorkspaceRepositoryPort,
 };
 #[cfg(not(target_os = "macos"))]
 use intercept_proxy_infrastructure::DpapiProtector;
@@ -212,6 +213,11 @@ impl ApplicationHostBuilder {
         });
         let android = Arc::new(AndroidAdbAdapter::new(self.android_companion_apk));
         let application_configuration = services.workspaces.clone();
+        let protocol_packages = ProtocolPackageApplicationServices {
+            store: services.protocol_packages.clone(),
+            compiler: services.protocol_packages.clone(),
+            usage_query: services.protocol_package_usage.clone(),
+        };
         let application = Arc::new(Application::new_with_platform_services(
             self.product.name().to_owned(),
             ApplicationDependencies {
@@ -230,6 +236,7 @@ impl ApplicationHostBuilder {
                 workspace_documents: services.workspace_documents,
                 listener_runtime: services.listener_runtime,
                 listener_certificates: services.listener_certificates,
+                protocol_packages,
                 events: events.clone(),
             },
             android,

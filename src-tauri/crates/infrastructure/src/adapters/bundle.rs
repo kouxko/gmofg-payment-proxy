@@ -13,9 +13,9 @@ use crate::{SecretProtector, SqliteStore};
 use super::{
     CaptureRepositoryAdapter, CertificateServiceAdapter, FaultServiceAdapter,
     ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
-    ProtectedSecretAdapter, ProtocolPackageRepositoryAdapter, RuleRepositoryAdapter,
-    SettingsRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter,
-    WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
+    ProtectedSecretAdapter, ProtocolPackageRepositoryAdapter, ProtocolPackageUsageQueryAdapter,
+    RuleRepositoryAdapter, SettingsRepositoryAdapter, WorkspaceBodyCodecResolver,
+    WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
 };
 
 #[derive(Debug)]
@@ -30,6 +30,8 @@ pub struct InfrastructureServiceBundle {
     pub protected_secrets: Arc<ProtectedSecretAdapter>,
     /// 应用级协议包文件、启用位和可重建编译缓存；生命周期约束由 T14 Application 用例接管。
     pub protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
+    /// 汇总全部 Workspace 的精确引用，并与 Listener 运行态合并。
+    pub protocol_package_usage: Arc<ProtocolPackageUsageQueryAdapter>,
     pub rules: Arc<RuleRepositoryAdapter>,
     pub faults: Arc<FaultServiceAdapter>,
     pub certificates: Arc<CertificateServiceAdapter>,
@@ -79,6 +81,7 @@ impl InfrastructureServiceBundle {
             Arc::clone(&store),
             Arc::clone(&protector),
         ));
+        let workspaces = Arc::new(WorkspaceRepositoryAdapter::new(Arc::clone(&store)));
         let protocol_packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
             Arc::clone(&store),
         ));
@@ -91,14 +94,18 @@ impl InfrastructureServiceBundle {
         let workspace_runtime_policies =
             Arc::new(WorkspaceRuntimePolicyResolver::new(Arc::clone(&store)));
         let listener_runtime = Arc::new(
-            ListenerRuntimeAdapter::new(Arc::clone(&store))
+            ListenerRuntimeAdapter::new(store)
                 .with_mitm_certificate_authority(certificates.clone())
                 .with_installation_server_identity(certificates.clone())
                 .with_protected_secrets(protected_secrets.clone())
                 .with_managed_listener_certificates(listener_certificates.clone()),
         );
+        let protocol_package_usage = Arc::new(ProtocolPackageUsageQueryAdapter::new(
+            workspaces.clone(),
+            listener_runtime.clone(),
+        ));
         Self {
-            workspaces: Arc::new(WorkspaceRepositoryAdapter::new(store)),
+            workspaces,
             workspace_documents: Arc::new(WorkspaceDocumentAdapter::new(dialog)),
             workspace_body_codecs,
             workspace_runtime_policies,
@@ -106,6 +113,7 @@ impl InfrastructureServiceBundle {
             listener_certificates,
             protected_secrets,
             protocol_packages,
+            protocol_package_usage,
             settings,
             faults,
             certificates,
