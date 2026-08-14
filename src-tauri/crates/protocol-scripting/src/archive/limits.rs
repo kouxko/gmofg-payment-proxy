@@ -28,7 +28,7 @@ pub const MAX_COMPRESSION_RATIO_LIMIT: u64 = 1000;
 /// 宿主允许配置的相对路径深度硬上限。
 pub const MAX_PATH_DEPTH_LIMIT: usize = 32;
 
-/// 普通协议包 ZIP 的全部资源门禁。
+/// 普通协议包 ZIP 的全部资源门禁，以及持久化文件恢复时复用的适用门禁。
 ///
 /// 字段保持私有，构造和反序列化都会重新校验。`max_file_bytes` 不能大于
 /// `max_total_bytes`，因此单文件成功路径必然也能被累计上限表达。
@@ -95,7 +95,7 @@ impl ProtocolArchiveLimits {
         self.archive_bytes
     }
 
-    /// 返回中央目录条目数量上限，目录条目也计数。
+    /// 返回中央目录条目或持久化文件行数量上限；ZIP 目录条目也计数。
     #[must_use]
     pub const fn max_entries(&self) -> usize {
         self.entries

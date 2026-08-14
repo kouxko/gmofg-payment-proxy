@@ -33,7 +33,7 @@ impl SqliteStore {
         Ok(store)
     }
 
-    fn migrate(&self) -> Result<(), InfrastructureError> {
+    pub(super) fn migrate(&self) -> Result<(), InfrastructureError> {
         let mut connection = self.connection.lock();
         let transaction = connection
             .transaction()

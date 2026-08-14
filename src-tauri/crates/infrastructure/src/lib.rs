@@ -18,10 +18,12 @@ pub use adapters::{
     AndroidAdbAdapter, ApplicationProxyAdapter, CaptureRepositoryAdapter,
     CertificateServiceAdapter, FaultServiceAdapter, HeaderBodyCodecResolver,
     InfrastructureServiceBundle, ListenerRuntimeAdapter, NativeFileDialog, ProtectedSecretAdapter,
-    RetiredProxyAdapter, RuleRepositoryAdapter, RuntimePipelineAdapter,
-    RuntimePipelineProductHooks, RuntimeRuleRepository, SettingsRepositoryAdapter,
-    WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
-    WorkspaceRuntimePolicyResolver,
+    ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure, ProtocolPackageRecoveryReport,
+    ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError, ProtocolPackageStorageErrorCode,
+    ProtocolPackageSummary, ProtocolPackageValidationStatus, RetiredProxyAdapter,
+    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
+    RuntimeRuleRepository, SettingsRepositoryAdapter, WorkspaceBodyCodecResolver,
+    WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
 };
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,

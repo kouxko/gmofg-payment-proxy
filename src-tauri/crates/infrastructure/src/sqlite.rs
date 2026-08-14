@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::InfrastructureError;
 
-const LATEST_SCHEMA_VERSION: i64 = 5;
+const LATEST_SCHEMA_VERSION: i64 = 6;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredSettings {
@@ -97,6 +97,7 @@ pub struct SqliteStore {
 }
 
 mod core;
+pub(crate) mod protocol_packages;
 mod rules_and_certificates;
 mod workspaces;
 
@@ -152,6 +153,34 @@ fn create_schema(transaction: &Transaction<'_>) -> Result<(), InfrastructureErro
                 protected_blob BLOB NOT NULL,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY(provider, secret_key)
+            );
+            CREATE TABLE IF NOT EXISTS protocol_packages (
+                package_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                name TEXT NOT NULL,
+                host_api INTEGER NOT NULL,
+                enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+                validation_state TEXT NOT NULL,
+                validation_error_code TEXT NULL,
+                installed_at TEXT NOT NULL,
+                generation TEXT NOT NULL,
+                PRIMARY KEY(package_id, version),
+                CHECK(validation_state IN ('valid', 'invalid')),
+                CHECK(
+                    (validation_state = 'valid' AND validation_error_code IS NULL)
+                    OR
+                    (validation_state = 'invalid' AND validation_error_code IS NOT NULL)
+                )
+            );
+            CREATE TABLE IF NOT EXISTS protocol_package_files (
+                package_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                path TEXT NOT NULL,
+                contents BLOB NOT NULL,
+                PRIMARY KEY(package_id, version, path),
+                FOREIGN KEY(package_id, version)
+                    REFERENCES protocol_packages(package_id, version)
+                    ON DELETE CASCADE
             );
             ",
         )

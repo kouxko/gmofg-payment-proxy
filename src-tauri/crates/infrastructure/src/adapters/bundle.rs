@@ -13,9 +13,9 @@ use crate::{SecretProtector, SqliteStore};
 use super::{
     CaptureRepositoryAdapter, CertificateServiceAdapter, FaultServiceAdapter,
     ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
-    ProtectedSecretAdapter, RuleRepositoryAdapter, SettingsRepositoryAdapter,
-    WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
-    WorkspaceRuntimePolicyResolver,
+    ProtectedSecretAdapter, ProtocolPackageRepositoryAdapter, RuleRepositoryAdapter,
+    SettingsRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter,
+    WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
 };
 
 #[derive(Debug)]
@@ -28,6 +28,8 @@ pub struct InfrastructureServiceBundle {
     pub listener_runtime: Arc<ListenerRuntimeAdapter>,
     pub listener_certificates: Arc<ManagedListenerCertificateAdapter>,
     pub protected_secrets: Arc<ProtectedSecretAdapter>,
+    /// 应用级协议包文件、启用位和可重建编译缓存；生命周期约束由 T14 Application 用例接管。
+    pub protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
     pub rules: Arc<RuleRepositoryAdapter>,
     pub faults: Arc<FaultServiceAdapter>,
     pub certificates: Arc<CertificateServiceAdapter>,
@@ -77,6 +79,9 @@ impl InfrastructureServiceBundle {
             Arc::clone(&store),
             Arc::clone(&protector),
         ));
+        let protocol_packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
+            Arc::clone(&store),
+        ));
         let listener_certificates = Arc::new(ManagedListenerCertificateAdapter::new(
             Arc::clone(&store),
             protector,
@@ -100,6 +105,7 @@ impl InfrastructureServiceBundle {
             listener_runtime,
             listener_certificates,
             protected_secrets,
+            protocol_packages,
             settings,
             faults,
             certificates,
