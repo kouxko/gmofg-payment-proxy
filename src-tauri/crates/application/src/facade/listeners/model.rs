@@ -6,7 +6,7 @@ use crate::{
     AppError, AppResult, CertificateReference, ListenerDataPlane, ListenerId,
     ListenerMonitorRowViewModel, ListenerOverviewViewModel, ListenerRuntimePort,
     ListenerRuntimeState, ListenerStatusViewModel, MANAGED_LISTENER_CERTIFICATE_PREFIX,
-    ProxyListener, ProxyWorkspace, SocketRelaySecurity, UiTone,
+    ProxyListener, ProxyWorkspace, SocketRelaySecurity, SocketTopology, UiTone,
 };
 
 /// 证书导入会先产生受基础设施管理的不可变引用，再由当前监听保存动作把引用并入
@@ -163,7 +163,13 @@ fn listener_presentation(listener: &ProxyListener) -> (String, String) {
             |fixed| ("HTTP · 固定 Server".to_owned(), fixed.upstream_url.clone()),
         ),
         ListenerDataPlane::Socket(settings) => {
-            let mode = match settings.security {
+            let SocketTopology::Relay(relay) = &settings.topology else {
+                return (
+                    "Socket · LocalResponder".to_owned(),
+                    "本地响应数据面尚未可用".to_owned(),
+                );
+            };
+            let mode = match relay.security {
                 SocketRelaySecurity::Transparent => "Transparent",
                 SocketRelaySecurity::TcpToTls { .. } => "TCP → TLS",
                 SocketRelaySecurity::TlsToTcp { .. } => "TLS → TCP",
@@ -171,7 +177,7 @@ fn listener_presentation(listener: &ProxyListener) -> (String, String) {
             };
             (
                 format!("Socket · {mode}"),
-                format!("{}:{}", settings.upstream.host, settings.upstream.port),
+                format!("{}:{}", relay.upstream.host, relay.upstream.port),
             )
         }
     }

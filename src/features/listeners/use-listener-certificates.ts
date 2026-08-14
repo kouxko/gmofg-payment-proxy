@@ -122,12 +122,31 @@ function bindDownstreamIdentity(listener: ProxyListener, referenceId: string): P
     } } };
   }
   const settings = listener.data_plane.settings;
-  const tls = socketDownstreamTls(settings.security);
+  const topology = settings.topology;
+  if (topology.mode === "local_responder") {
+    const downstream = topology.settings.downstream_security;
+    if (downstream.mode !== "tls") return listener;
+    return { ...listener, data_plane: { kind: "socket", settings: {
+      ...settings,
+      topology: { mode: "local_responder", settings: {
+        downstream_security: {
+          ...downstream,
+          downstream_tls: { ...downstream.downstream_tls, server_identity: referenceId },
+        },
+      } },
+    } } };
+  }
+  const currentSecurity = topology.settings.security;
+  const tls = socketDownstreamTls(currentSecurity);
   if (!tls) return listener;
-  const security = settings.security.mode === "tls_to_tls"
-    ? { ...settings.security, downstream_tls: { ...tls, server_identity: referenceId } }
-    : { ...settings.security, downstream_tls: { ...tls, server_identity: referenceId } };
-  return { ...listener, data_plane: { kind: "socket", settings: { ...settings, security } } };
+  const downstream_tls = { ...tls, server_identity: referenceId };
+  const security = currentSecurity.mode === "tls_to_tls"
+    ? { ...currentSecurity, downstream_tls }
+    : { ...currentSecurity, downstream_tls };
+  return { ...listener, data_plane: { kind: "socket", settings: {
+    ...settings,
+    topology: { mode: "relay", settings: { ...topology.settings, security } },
+  } } };
 }
 
 function bindDownstreamTrust(listener: ProxyListener, referenceId: string): ProxyListener {
@@ -143,7 +162,26 @@ function bindDownstreamTrust(listener: ProxyListener, referenceId: string): Prox
     } } };
   }
   const settings = listener.data_plane.settings;
-  const tls = socketDownstreamTls(settings.security);
+  const topology = settings.topology;
+  if (topology.mode === "local_responder") {
+    const downstream = topology.settings.downstream_security;
+    if (downstream.mode !== "tls") return listener;
+    const tls = downstream.downstream_tls;
+    const required = tls.client_authentication.mode === "required";
+    return { ...listener, data_plane: { kind: "socket", settings: {
+      ...settings,
+      topology: { mode: "local_responder", settings: {
+        downstream_security: { ...downstream, downstream_tls: {
+          ...tls,
+          client_authentication: required
+            ? { mode: "required", trust: referenceId }
+            : { mode: "optional", trust: referenceId },
+        } },
+      } },
+    } } };
+  }
+  const currentSecurity = topology.settings.security;
+  const tls = socketDownstreamTls(currentSecurity);
   if (!tls) return listener;
   const required = tls.client_authentication.mode === "required";
   const downstream_tls = {
@@ -152,10 +190,13 @@ function bindDownstreamTrust(listener: ProxyListener, referenceId: string): Prox
       ? { mode: "required" as const, trust: referenceId }
       : { mode: "optional" as const, trust: referenceId },
   };
-  const security = settings.security.mode === "tls_to_tls"
-    ? { ...settings.security, downstream_tls }
-    : { ...settings.security, downstream_tls };
-  return { ...listener, data_plane: { kind: "socket", settings: { ...settings, security } } };
+  const security = currentSecurity.mode === "tls_to_tls"
+    ? { ...currentSecurity, downstream_tls }
+    : { ...currentSecurity, downstream_tls };
+  return { ...listener, data_plane: { kind: "socket", settings: {
+    ...settings,
+    topology: { mode: "relay", settings: { ...topology.settings, security } },
+  } } };
 }
 
 function bindUpstream(
@@ -172,11 +213,17 @@ function bindUpstream(
     } } };
   }
   const settings = listener.data_plane.settings;
-  const tls = socketUpstreamTls(settings.security);
+  const topology = settings.topology;
+  if (topology.mode === "local_responder") return listener;
+  const currentSecurity = topology.settings.security;
+  const tls = socketUpstreamTls(currentSecurity);
   if (!tls) return listener;
   const upstream_tls = { ...tls, ...changes };
-  const security = settings.security.mode === "tls_to_tls"
-    ? { ...settings.security, upstream_tls }
-    : { ...settings.security, upstream_tls };
-  return { ...listener, data_plane: { kind: "socket", settings: { ...settings, security } } };
+  const security = currentSecurity.mode === "tls_to_tls"
+    ? { ...currentSecurity, upstream_tls }
+    : { ...currentSecurity, upstream_tls };
+  return { ...listener, data_plane: { kind: "socket", settings: {
+    ...settings,
+    topology: { mode: "relay", settings: { ...topology.settings, security } },
+  } } };
 }

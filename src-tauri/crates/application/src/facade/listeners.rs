@@ -7,8 +7,8 @@ use super::Application;
 use crate::{
     AppError, AppResult, CertificateReference, ListenerDataPlane, ListenerId,
     ListenerOverviewViewModel, ListenerStatusViewModel, OperationResultViewModel, ProxyListener,
-    ProxyWorkspace, SocketRelaySecurity, UiEventPayload, UiTone, WorkspaceChangeKind, WorkspaceId,
-    WorkspaceValidationViewModel,
+    ProxyWorkspace, SocketRelaySecurity, SocketTopology, UiEventPayload, UiTone,
+    WorkspaceChangeKind, WorkspaceId, WorkspaceValidationViewModel,
 };
 
 use model::{
@@ -32,6 +32,7 @@ impl Application {
     /// 旧 ID 或把一个正在运行的监听器误认为第二个独立运行实例。端口和上游配置保留，
     /// 便于用户以现有映射为模板，再修改为另一条本地端口 -> 上游 origin 映射。
     pub fn listener_copy(&self, source: ProxyListener) -> AppResult<ProxyListener> {
+        reject_unavailable_local_responder(&source)?;
         Ok(copy_listener_draft(source))
     }
 
@@ -144,6 +145,11 @@ impl Application {
         certificate_references: Vec<CertificateReference>,
     ) -> AppResult<crate::ListenerUpstreamTlsTestViewModel> {
         let workspace = self.workspaces.get(workspace_id).await?;
+        reject_local_responder_after_revision_check(
+            &workspace,
+            expected_workspace_revision,
+            &listener,
+        )?;
         let candidate = self
             .listener_draft_workspace(
                 workspace,
@@ -175,6 +181,11 @@ impl Application {
         certificate_references: Vec<CertificateReference>,
     ) -> AppResult<crate::ListenerUpstreamConnectionTestViewModel> {
         let workspace = self.workspaces.get(workspace_id).await?;
+        reject_local_responder_after_revision_check(
+            &workspace,
+            expected_workspace_revision,
+            &listener,
+        )?;
         let candidate = self
             .listener_draft_workspace(
                 workspace,
@@ -224,8 +235,13 @@ impl Application {
     ) -> AppResult<ListenerStatusViewModel> {
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.workspaces.get(workspace_id).await?;
-        workspace.revision = DomainRevision::new(expected_workspace_revision);
         let listener = find_listener(&workspace.listeners, listener_id)?;
+        reject_local_responder_after_revision_check(
+            &workspace,
+            expected_workspace_revision,
+            &listener,
+        )?;
+        workspace.revision = DomainRevision::new(expected_workspace_revision);
         // Scripted Listener 可以保存对已停用版本的精确引用，便于之后重新启用；但实际
         // 打开网络入口前必须在同一个 mutation gate 内重新确认包仍可用。
         self.ensure_listener_protocol_package_available(&listener)
@@ -308,8 +324,50 @@ impl Application {
 fn has_fixed_target(listener: &ProxyListener) -> bool {
     match &listener.data_plane {
         ListenerDataPlane::Http(settings) => settings.fixed_server.is_some(),
-        ListenerDataPlane::Socket(_) => true,
+        ListenerDataPlane::Socket(settings) => {
+            matches!(settings.topology, SocketTopology::Relay(_))
+        }
     }
+}
+
+/// T18 只建立可持久化的 `LocalResponder` 拓扑，真正的数据面要到后续任务接入。
+/// 所有真实入口都在查询协议包、解析证书或构建网络计划之前调用此门禁，保证同一配置
+/// 不会因为外部资源状态不同而漂移成其他错误码，更不会误触发 DNS/连接。
+fn reject_unavailable_local_responder(listener: &ProxyListener) -> AppResult<()> {
+    if matches!(
+        &listener.data_plane,
+        ListenerDataPlane::Socket(settings)
+            if matches!(settings.topology, SocketTopology::LocalResponder(_))
+    ) {
+        return Err(AppError::new(
+            "LOCAL_RESPONDER_NOT_AVAILABLE",
+            "LocalResponder 数据面将在后续任务接入，当前不能复制、启动或测试上游。",
+        )
+        .entity(listener.id.to_string()));
+    }
+    Ok(())
+}
+
+/// 保留 Workspace identity/revision 作为所有写入和探测入口的第一层并发门禁；通过后再
+/// 返回 T18 的稳定 unavailable。这样 stale draft 仍报告 revision conflict，而当前 draft
+/// 不会进入证书、协议包或 runtime ports。
+fn reject_local_responder_after_revision_check(
+    workspace: &ProxyWorkspace,
+    expected_workspace_revision: u64,
+    listener: &ProxyListener,
+) -> AppResult<()> {
+    if matches!(
+        &listener.data_plane,
+        ListenerDataPlane::Socket(settings)
+            if matches!(settings.topology, SocketTopology::LocalResponder(_))
+    ) {
+        workspace
+            .revision
+            .verify(DomainRevision::new(expected_workspace_revision))
+            .map_err(AppError::from)?;
+        reject_unavailable_local_responder(listener)?;
+    }
+    Ok(())
 }
 
 fn has_upstream_tls(listener: &ProxyListener) -> bool {
@@ -320,10 +378,13 @@ fn has_upstream_tls(listener: &ProxyListener) -> bool {
                 .get(..8)
                 .is_some_and(|scheme| scheme.eq_ignore_ascii_case("https://"))
         }),
-        ListenerDataPlane::Socket(settings) => matches!(
-            settings.security,
-            SocketRelaySecurity::TcpToTls { .. } | SocketRelaySecurity::TlsToTls { .. }
-        ),
+        ListenerDataPlane::Socket(settings) => match &settings.topology {
+            SocketTopology::Relay(relay) => matches!(
+                relay.security,
+                SocketRelaySecurity::TcpToTls { .. } | SocketRelaySecurity::TlsToTls { .. }
+            ),
+            SocketTopology::LocalResponder(_) => false,
+        },
     }
 }
 

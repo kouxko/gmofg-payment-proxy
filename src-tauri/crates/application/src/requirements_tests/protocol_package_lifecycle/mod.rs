@@ -413,19 +413,19 @@ async fn disabled_or_invalid_scripted_package_is_rejected_before_listener_runtim
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target.clone(), false));
     let mut workspace = application.workspace_create("Socket".into()).await.unwrap();
-    workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-        upstream: SocketEndpoint {
+    workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings::relay(
+        SocketEndpoint {
             host: "127.0.0.1".into(),
             port: 9_999,
         },
-        security: SocketRelaySecurity::Transparent,
-        maximum_connections: 10,
-        processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
+        SocketRelaySecurity::Transparent,
+        10,
+        SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: target.clone(),
             upstream: DirectionProcessingOptions::default(),
             downstream: DirectionProcessingOptions::default(),
         }),
-    });
+    ));
     workspace = application.workspace_save(workspace).await.unwrap();
 
     let error = application

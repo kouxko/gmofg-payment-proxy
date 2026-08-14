@@ -15,15 +15,28 @@ fn scripted_processing(
     })
 }
 
+fn relay_topology(upstream: SocketEndpoint, security: SocketRelaySecurity) -> SocketTopology {
+    SocketTopology::Relay(SocketRelayTopology { upstream, security })
+}
+
+fn relay_mut(settings: &mut SocketRelaySettings) -> &mut SocketRelayTopology {
+    let SocketTopology::Relay(relay) = &mut settings.topology else {
+        panic!("test fixture must remain Relay")
+    };
+    relay
+}
+
 #[test]
 fn socket_target_and_capacity_are_validated_without_http_state() {
     let mut workspace = ProxyWorkspace::default();
     workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-        upstream: SocketEndpoint {
-            host: "socket.example.test".into(),
-            port: 16_127,
-        },
-        security: SocketRelaySecurity::Transparent,
+        topology: relay_topology(
+            SocketEndpoint {
+                host: "socket.example.test".into(),
+                port: 16_127,
+            },
+            SocketRelaySecurity::Transparent,
+        ),
         maximum_connections: DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
         processing: SocketPayloadProcessing::Direct,
     });
@@ -40,12 +53,12 @@ fn socket_target_and_capacity_are_validated_without_http_state() {
         let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane else {
             unreachable!()
         };
-        settings.upstream.host = host.into();
+        relay_mut(settings).upstream.host = host.into();
         assert!(workspace.validate().is_err(), "{host}");
     }
 
     if let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane {
-        settings.upstream.host = "127.0.0.1".into();
+        relay_mut(settings).upstream.host = "127.0.0.1".into();
         settings.maximum_connections = 0;
     }
     assert!(workspace.validate().is_err());
@@ -89,23 +102,25 @@ fn socket_tls_roles_are_exhaustive_and_round_trip() {
         ..ProxyWorkspace::default()
     };
     workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-        upstream: SocketEndpoint {
-            host: "socket.example.test".into(),
-            port: 443,
-        },
-        security: SocketRelaySecurity::TlsToTls {
-            downstream_tls: SocketDownstreamTlsSettings {
-                server_identity,
-                client_authentication: DownstreamClientAuthentication::Required {
-                    trust: client_trust,
+        topology: relay_topology(
+            SocketEndpoint {
+                host: "socket.example.test".into(),
+                port: 443,
+            },
+            SocketRelaySecurity::TlsToTls {
+                downstream_tls: SocketDownstreamTlsSettings {
+                    server_identity,
+                    client_authentication: DownstreamClientAuthentication::Required {
+                        trust: client_trust,
+                    },
+                },
+                upstream_tls: SocketUpstreamTlsSettings {
+                    verify_hostname: true,
+                    server_trust: Some(server_trust),
+                    client_identity: Some(client_identity),
                 },
             },
-            upstream_tls: SocketUpstreamTlsSettings {
-                verify_hostname: true,
-                server_trust: Some(server_trust),
-                client_identity: Some(client_identity),
-            },
-        },
+        ),
         maximum_connections: 500,
         processing: SocketPayloadProcessing::Direct,
     });
@@ -208,14 +223,31 @@ fn socket_processing_defaults_and_historical_settings_are_direct() {
     );
 
     // T04 之前保存的 Socket settings 只有 upstream/security/maximum_connections。
-    // 删除新字段模拟真实历史 JSON，反序列化必须无损迁移为 Direct。
-    let mut historical = serde_json::to_value(SocketRelaySettings::default()).unwrap();
-    historical.as_object_mut().unwrap().remove("processing");
+    // 它们没有 topology tag，必须按原义迁移为 Relay + Direct，不能猜成 LocalResponder。
+    let historical = serde_json::json!({
+        "upstream": { "host": "legacy.example.test", "port": 8123 },
+        "security": { "mode": "transparent" },
+        "maximum_connections": 12
+    });
     let migrated: SocketRelaySettings = serde_json::from_value(historical).unwrap();
     assert_eq!(migrated.processing, SocketPayloadProcessing::Direct);
     assert_eq!(
-        serde_json::to_value(migrated).unwrap()["processing"],
+        migrated.topology,
+        relay_topology(
+            SocketEndpoint {
+                host: "legacy.example.test".into(),
+                port: 8123,
+            },
+            SocketRelaySecurity::Transparent,
+        )
+    );
+    assert_eq!(
+        serde_json::to_value(&migrated).unwrap()["processing"],
         serde_json::json!({"mode": "direct"})
+    );
+    assert_eq!(
+        serde_json::to_value(migrated).unwrap()["topology"]["mode"],
+        "relay"
     );
 }
 
@@ -278,11 +310,13 @@ fn socket_processing_rejects_incomplete_invalid_or_ambiguous_wire_data() {
 fn cloned_socket_workspace_edits_only_the_selected_direction() {
     let mut workspace = ProxyWorkspace::default();
     workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-        upstream: SocketEndpoint {
-            host: "socket.example.test".into(),
-            port: 16_127,
-        },
-        security: SocketRelaySecurity::Transparent,
+        topology: relay_topology(
+            SocketEndpoint {
+                host: "socket.example.test".into(),
+                port: 16_127,
+            },
+            SocketRelaySecurity::Transparent,
+        ),
         maximum_connections: DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
         processing: scripted_processing(
             DirectionProcessingOptions {

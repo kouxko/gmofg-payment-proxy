@@ -425,14 +425,14 @@ mod tests {
     fn v3_socket_workspace_round_trip_preserves_the_tagged_variant() {
         let listener = intercept_proxy_domain::ProxyListener {
             data_plane: intercept_proxy_domain::ListenerDataPlane::Socket(
-                intercept_proxy_domain::SocketRelaySettings {
-                    upstream: intercept_proxy_domain::SocketEndpoint {
+                intercept_proxy_domain::SocketRelaySettings::relay(
+                    intercept_proxy_domain::SocketEndpoint {
                         host: "socket.example.test".into(),
                         port: 16_127,
                     },
-                    security: intercept_proxy_domain::SocketRelaySecurity::Transparent,
-                    maximum_connections: 777,
-                    processing: intercept_proxy_domain::SocketPayloadProcessing::Scripted(
+                    intercept_proxy_domain::SocketRelaySecurity::Transparent,
+                    777,
+                    intercept_proxy_domain::SocketPayloadProcessing::Scripted(
                         intercept_proxy_domain::ScriptedSocketProcessing {
                             package: intercept_proxy_domain::ProtocolPackageRef {
                                 id: intercept_proxy_domain::ProtocolPackageId::new(
@@ -454,7 +454,7 @@ mod tests {
                             },
                         },
                     ),
-                },
+                ),
             ),
             ..intercept_proxy_domain::ProxyListener::default()
         };

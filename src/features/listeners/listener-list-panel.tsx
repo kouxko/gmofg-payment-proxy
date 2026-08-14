@@ -27,7 +27,10 @@ export function ListenerListPanel({
     <Button variant="primary" className="w-full" isDisabled={disabled} onPress={onAdd}>新建代理监听</Button>
     <Alert status="accent"><Alert.Indicator /><Alert.Content>
       <Alert.Title>HTTP 与 Socket 两种数据平面</Alert.Title>
-      <Alert.Description>新建监听默认使用 HTTP；切换 Socket 后需配置唯一上游 host、port 和安全桥接模式。</Alert.Description>
+      <Alert.Description>
+        新建监听默认使用 HTTP；Socket Relay 需配置唯一 Server 上游，
+        LocalResponder 配置暂时只支持安全读取。
+      </Alert.Description>
     </Alert.Content></Alert>
     <Alert status="warning"><Alert.Indicator /><Alert.Content>
       <Alert.Title>故障模拟与规则作用于监听流量</Alert.Title>
@@ -67,8 +70,10 @@ function ListenerTable({ listeners, selectedIndex, onSelect }: {
 
 function listenerDestination(listener: ProxyListener) {
   if (listener.data_plane.kind === "socket") {
-    const { host, port } = listener.data_plane.settings.upstream;
-    return `${host || "未配置主机"}:${port} · ${listener.data_plane.settings.security.mode}`;
+    const topology = listener.data_plane.settings.topology;
+    if (topology.mode === "local_responder") return "LocalResponder · 无 Server 上游";
+    const { host, port } = topology.settings.upstream;
+    return `${host || "未配置主机"}:${port} · ${topology.settings.security.mode}`;
   }
   return listener.data_plane.settings.fixed_server?.upstream_url || "请求中的目标地址";
 }

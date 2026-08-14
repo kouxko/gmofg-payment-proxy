@@ -117,9 +117,43 @@ export function socketListener(
     data_plane: {
       kind: "socket" as const,
       settings: {
-        upstream: { host: "server.test", port: 9443 },
-        security,
+        topology: {
+          mode: "relay" as const,
+          settings: {
+            upstream: { host: "server.test", port: 9443 },
+            security,
+          },
+        },
         maximum_connections: 500,
+        processing: { mode: "direct" as const },
+      },
+    },
+  };
+}
+
+export function localResponderListener(
+  id = "local-responder-1",
+  name = "LocalResponder",
+  port = 9001,
+) {
+  return {
+    ...dynamicListener(id, name, port),
+    data_plane: {
+      kind: "socket" as const,
+      settings: {
+        topology: {
+          mode: "local_responder" as const,
+          settings: { downstream_security: { mode: "tcp" as const } },
+        },
+        maximum_connections: 100,
+        processing: {
+          mode: "scripted" as const,
+          settings: {
+            package: { id: "example.local-responder", version: "1.0.0" },
+            upstream: { decode_enabled: true, encode_enabled: false },
+            downstream: { decode_enabled: false, encode_enabled: true },
+          },
+        },
       },
     },
   };

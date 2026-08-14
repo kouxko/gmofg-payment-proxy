@@ -1,8 +1,10 @@
 use intercept_proxy_application::{ListenerDataPlaneKind, SocketTransportMode};
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    SocketDownstreamTlsSettings, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
-    SocketRelaySettings, SocketUpstreamTlsSettings,
+    DirectionProcessingOptions, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ScriptedSocketProcessing, SocketDownstreamSecurity, SocketDownstreamTlsSettings,
+    SocketEndpoint, SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
+    SocketRelaySettings, SocketTopology, SocketUpstreamTlsSettings,
 };
 
 fn socket_listener(bind: SocketAddr, upstream: SocketAddr) -> ProxyListener {
@@ -12,17 +14,79 @@ fn socket_listener(bind: SocketAddr, upstream: SocketAddr) -> ProxyListener {
         enabled: false,
         bind_address: bind.ip().to_string(),
         port: bind.port(),
-        data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
-            upstream: SocketEndpoint {
+        data_plane: ListenerDataPlane::Socket(SocketRelaySettings::relay(
+            SocketEndpoint {
                 host: upstream.ip().to_string(),
                 port: upstream.port(),
             },
-            security: SocketRelaySecurity::Transparent,
+            SocketRelaySecurity::Transparent,
+            8,
+            SocketPayloadProcessing::Direct,
+        )),
+        ..ProxyListener::default()
+    }
+}
+
+fn local_responder_listener(bind: SocketAddr) -> ProxyListener {
+    ProxyListener {
+        id: ListenerId::new(),
+        name: "local responder".into(),
+        enabled: false,
+        bind_address: bind.ip().to_string(),
+        port: bind.port(),
+        data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
+            topology: SocketTopology::LocalResponder(SocketLocalResponderTopology {
+                downstream_security: SocketDownstreamSecurity::Tcp,
+            }),
             maximum_connections: 8,
-            processing: SocketPayloadProcessing::Direct,
+            processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
+                package: ProtocolPackageRef {
+                    id: ProtocolPackageId::new("iso8583-standard").unwrap(),
+                    version: ProtocolPackageVersion::new("1.2.3").unwrap(),
+                },
+                upstream: DirectionProcessingOptions {
+                    decode_enabled: true,
+                    encode_enabled: false,
+                },
+                downstream: DirectionProcessingOptions {
+                    decode_enabled: false,
+                    encode_enabled: true,
+                },
+            }),
         }),
         ..ProxyListener::default()
     }
+}
+
+#[tokio::test]
+async fn local_responder_start_and_upstream_probe_return_typed_unavailable() {
+    let listener = local_responder_listener("127.0.0.1:19079".parse().unwrap());
+    let workspace = ProxyWorkspace {
+        listeners: vec![listener.clone()],
+        ..ProxyWorkspace::default()
+    };
+    workspace.validate().expect("valid LocalResponder fixture");
+    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let builder = ListenerRuntimePlanBuilder::new(&runtime);
+
+    let start_error = builder
+        .build(&workspace, &listener, Uuid::new_v4())
+        .await
+        .err()
+        .expect("LocalResponder is not wired in T18");
+    assert_eq!(
+        start_error.view_model.code,
+        "LOCAL_RESPONDER_NOT_AVAILABLE"
+    );
+    let probe_error = builder
+        .build_probe(&workspace, &listener, Uuid::new_v4())
+        .await
+        .err()
+        .expect("LocalResponder has no upstream probe");
+    assert_eq!(
+        probe_error.view_model.code,
+        "LOCAL_RESPONDER_NOT_AVAILABLE"
+    );
 }
 
 #[tokio::test]
@@ -31,20 +95,20 @@ async fn socket_probe_does_not_load_downstream_tls_identity() {
     let upstream = "127.0.0.1:19084".parse().unwrap();
     let identity_id = CertificateReferenceId::new();
     let mut listener = socket_listener(bind, upstream);
-    listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-        upstream: SocketEndpoint {
+    listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings::relay(
+        SocketEndpoint {
             host: upstream.ip().to_string(),
             port: upstream.port(),
         },
-        security: SocketRelaySecurity::TlsToTcp {
+        SocketRelaySecurity::TlsToTcp {
             downstream_tls: SocketDownstreamTlsSettings {
                 server_identity: identity_id,
                 client_authentication: DownstreamClientAuthentication::Disabled,
             },
         },
-        maximum_connections: 8,
-        processing: SocketPayloadProcessing::Direct,
-    });
+        8,
+        SocketPayloadProcessing::Direct,
+    ));
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
         certificate_references: vec![CertificateReference {
@@ -138,38 +202,38 @@ async fn socket_plan_resolves_only_references_selected_by_its_tls_mode() {
         .await
         .expect("Transparent mode does not resolve unrelated certificate references");
 
-    listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-        upstream: SocketEndpoint {
+    listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings::relay(
+        SocketEndpoint {
             host: upstream.ip().to_string(),
             port: upstream.port(),
         },
-        security: SocketRelaySecurity::TcpToTls {
+        SocketRelaySecurity::TcpToTls {
             upstream_tls: SocketUpstreamTlsSettings::default(),
         },
-        maximum_connections: 8,
-        processing: SocketPayloadProcessing::Direct,
-    });
+        8,
+        SocketPayloadProcessing::Direct,
+    ));
     let system_trust_workspace = workspace_with(listener.clone());
     ListenerRuntimePlanBuilder::new(&runtime)
         .build(&system_trust_workspace, &listener, Uuid::new_v4())
         .await
         .expect("TCP-to-TLS resolves only configured upstream roles and no HTTP pipeline");
 
-    listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-        upstream: SocketEndpoint {
+    listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings::relay(
+        SocketEndpoint {
             host: upstream.ip().to_string(),
             port: upstream.port(),
         },
-        security: SocketRelaySecurity::TcpToTls {
+        SocketRelaySecurity::TcpToTls {
             upstream_tls: SocketUpstreamTlsSettings {
                 verify_hostname: true,
                 server_trust: Some(reference_id),
                 client_identity: None,
             },
         },
-        maximum_connections: 8,
-        processing: SocketPayloadProcessing::Direct,
-    });
+        8,
+        SocketPayloadProcessing::Direct,
+    ));
     let selected_workspace = workspace_with(listener.clone());
     let error = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&selected_workspace, &listener, Uuid::new_v4())

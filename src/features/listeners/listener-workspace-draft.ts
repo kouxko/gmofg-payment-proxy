@@ -95,7 +95,15 @@ function listenerCertificateReferenceIds(listeners: ProxyListener[]) {
       collectUpstream(listener.data_plane.settings.fixed_server?.upstream_tls, referencedIds);
       continue;
     }
-    const security = listener.data_plane.settings.security;
+    const topology = listener.data_plane.settings.topology;
+    if (topology.mode === "local_responder") {
+      if (topology.settings.downstream_security.mode === "tls") {
+        const tls = topology.settings.downstream_security.downstream_tls;
+        collectDownstream(tls.server_identity, tls.client_authentication, referencedIds);
+      }
+      continue;
+    }
+    const security = topology.settings.security;
     if (security.mode === "tls_to_tcp" || security.mode === "tls_to_tls") {
       collectDownstream(
         security.downstream_tls.server_identity,

@@ -6,7 +6,7 @@ use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     DownstreamClientAuthentication, HttpListenerSettings, ListenerDataPlane, ProxyListener,
     ProxyWorkspace, SocketDownstreamTlsSettings, SocketRelaySecurity as DomainSocketSecurity,
-    SocketRelaySettings, SocketUpstreamTlsSettings,
+    SocketRelaySettings, SocketTopology, SocketUpstreamTlsSettings,
 };
 use intercept_proxy_runtime::{
     ChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode, ForwardMitmConfig,
@@ -213,10 +213,17 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
         bind_addr: SocketAddr,
         full_runtime: bool,
     ) -> AppResult<PreparedListenerRuntime> {
+        let SocketTopology::Relay(relay) = &socket.topology else {
+            return Err(AppError::new(
+                "LOCAL_RESPONDER_NOT_AVAILABLE",
+                "LocalResponder 数据面尚未接入当前运行时。",
+            )
+            .entity(listener.id.to_string()));
+        };
         let security = if full_runtime {
-            self.socket_security(workspace, &socket.security)?
+            self.socket_security(workspace, &relay.security)?
         } else {
-            self.socket_probe_security(workspace, &socket.security)?
+            self.socket_probe_security(workspace, &relay.security)?
         };
         let observer = Arc::new(SocketDiagnosticObserver::new(
             self.adapter.socket_diagnostic_events.read().clone(),
@@ -226,8 +233,8 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
                 bind_addr,
                 allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
                 upstream: SocketEndpoint {
-                    host: socket.upstream.host.clone(),
-                    port: socket.upstream.port,
+                    host: relay.upstream.host.clone(),
+                    port: relay.upstream.port,
                 },
                 security,
                 maximum_connections: socket.maximum_connections,

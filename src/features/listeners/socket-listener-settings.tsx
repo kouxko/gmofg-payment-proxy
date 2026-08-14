@@ -10,6 +10,7 @@ import type {
   SocketDownstreamTlsSettings,
   SocketRelaySecurity,
   SocketRelaySettings,
+  SocketRelayTopology,
   SocketUpstreamTlsSettings,
 } from "@/generated/rust-types";
 import {
@@ -18,7 +19,12 @@ import {
   ConnectionTestResult,
 } from "./fixed-server-tls-fields";
 import { ImportIdentityModal, ImportPemModal, ImportTrustModal } from "./fixed-server-tls-import-modals";
-import { changeSocketSecurity, socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
+import {
+  changeSocketSecurity,
+  socketDownstreamTls,
+  socketRelayTopology,
+  socketUpstreamTls,
+} from "./listener-data-plane";
 
 type Props = {
   settings: SocketRelaySettings;
@@ -44,13 +50,47 @@ const modes: Array<{ id: SocketRelaySecurity["mode"]; label: string }> = [
 ];
 
 export function SocketListenerSettings(props: Props): ReactNode {
+  const relay = socketRelayTopology(props.settings);
+  if (!relay) {
+    return <LocalResponderUnavailable maximumConnections={props.settings.maximum_connections} />;
+  }
+  return <RelaySocketListenerSettings {...props} relay={relay} />;
+}
+
+function LocalResponderUnavailable({ maximumConnections }: { maximumConnections: number }): ReactNode {
+  return <div className="col-span-2 space-y-4 max-[700px]:col-span-1">
+    <Alert status="warning">
+      <Alert.Indicator />
+      <Alert.Content>
+        <Alert.Title>LocalResponder 数据面将在后续任务接入</Alert.Title>
+        <Alert.Description>
+          当前版本可以安全读取此配置，但不会读取或探测 Server 上游，也不能启动运行。
+          当前最大并发连接数为 {maximumConnections}。
+        </Alert.Description>
+      </Alert.Content>
+    </Alert>
+  </div>;
+}
+
+type RelayProps = Props & { relay: SocketRelayTopology };
+
+function RelaySocketListenerSettings(props: RelayProps): ReactNode {
   const [modal, setModal] = useState<
     "downstream-identity" | "downstream-trust" | "upstream-identity" | "upstream-trust"
   >();
   const [label, setLabel] = useState("Socket TLS 证书");
   const [password, setPassword] = useState("");
-  const downstream = socketDownstreamTls(props.settings.security);
-  const upstream = socketUpstreamTls(props.settings.security);
+  const downstream = socketDownstreamTls(props.relay.security);
+  const upstream = socketUpstreamTls(props.relay.security);
+
+  function changeRelay(changes: Partial<SocketRelayTopology>) {
+    props.onChange({
+      topology: {
+        mode: "relay",
+        settings: { ...props.relay, ...changes },
+      },
+    });
+  }
 
   return (
     <div className="col-span-2 space-y-4 max-[700px]:col-span-1">
@@ -66,17 +106,17 @@ export function SocketListenerSettings(props: Props): ReactNode {
             <Label>上游主机</Label>
             <Input
               aria-label="Socket 上游主机"
-              value={props.settings.upstream.host}
-              onChange={(event) => props.onChange({
-                upstream: { ...props.settings.upstream, host: event.target.value },
+              value={props.relay.upstream.host}
+              onChange={(event) => changeRelay({
+                upstream: { ...props.relay.upstream, host: event.target.value },
               })}
             />
           </div>
           <SocketNumberField
             label="Socket 上游端口"
-            value={props.settings.upstream.port}
+            value={props.relay.upstream.port}
             maximum={65535}
-            onChange={(port) => props.onChange({ upstream: { ...props.settings.upstream, port } })}
+            onChange={(port) => changeRelay({ upstream: { ...props.relay.upstream, port } })}
           />
           <SocketNumberField
             label="最大并发连接"
@@ -86,11 +126,11 @@ export function SocketListenerSettings(props: Props): ReactNode {
           />
           <Select
             aria-label="Socket 安全模式"
-            selectedKey={props.settings.security.mode}
-            onSelectionChange={(key) => props.onChange({
+            selectedKey={props.relay.security.mode}
+            onSelectionChange={(key) => changeRelay({
               security: changeSocketSecurity(
                 String(key) as SocketRelaySecurity["mode"],
-                props.settings.security,
+                props.relay.security,
               ),
             })}
           >
@@ -105,7 +145,7 @@ export function SocketListenerSettings(props: Props): ReactNode {
         </Card.Content>
       </Card>
 
-      {props.settings.security.mode === "transparent" && (
+      {props.relay.security.mode === "transparent" && (
         <Alert status="accent">
           <Alert.Indicator />
           <Alert.Content>
@@ -124,8 +164,8 @@ export function SocketListenerSettings(props: Props): ReactNode {
           references={props.certificateReferences}
           details={props.certificateDetails}
           busy={props.busy}
-          onChange={(next) => props.onChange({
-            security: replaceDownstream(props.settings.security, next),
+          onChange={(next) => changeRelay({
+            security: replaceDownstream(props.relay.security, next),
           })}
           onImportIdentity={() => openModal("downstream-identity", "Socket 服务端身份")}
           onImportTrust={() => openModal("downstream-trust", "Socket 客户端 CA")}
@@ -137,15 +177,15 @@ export function SocketListenerSettings(props: Props): ReactNode {
           references={props.certificateReferences}
           details={props.certificateDetails}
           busy={props.busy}
-          onChange={(next) => props.onChange({
-            security: replaceUpstream(props.settings.security, next),
+          onChange={(next) => changeRelay({
+            security: replaceUpstream(props.relay.security, next),
           })}
           onImportIdentity={() => openModal("upstream-identity", "Socket 上游客户端身份")}
           onImportTrust={() => openModal("upstream-trust", "Socket 上游 CA")}
         />
       )}
 
-      <ConnectionProbe {...props} />
+      <ConnectionProbe {...props} relay={props.relay} />
       {modal && renderImportModal()}
     </div>
   );
@@ -344,8 +384,8 @@ function ClientAuthentication({ value, trusts, onChange }: {
   </Select>;
 }
 
-function ConnectionProbe(props: Props): ReactNode {
-  const mode = modes.find((item) => item.id === props.settings.security.mode)?.label;
+function ConnectionProbe(props: RelayProps): ReactNode {
+  const mode = modes.find((item) => item.id === props.relay.security.mode)?.label;
   return <Card><Card.Content className="space-y-3 p-4">
     <div className="flex flex-wrap items-center gap-3">
       <Button variant="outline" isDisabled={props.busy} onPress={() => void props.onTest()}>
@@ -358,7 +398,7 @@ function ConnectionProbe(props: Props): ReactNode {
     {props.testResult && <><p className="text-xs text-[var(--telemetry-muted)]">桥接：{mode}</p>
       <ConnectionTestResult
         result={props.testResult}
-        showTlsDetails={Boolean(socketUpstreamTls(props.settings.security))}
+        showTlsDetails={Boolean(socketUpstreamTls(props.relay.security))}
       /></>}
     {props.testError && <Alert status="danger"><Alert.Indicator /><Alert.Content>
       <Alert.Title>Socket 上游连接失败</Alert.Title><Alert.Description>{props.testError}</Alert.Description>

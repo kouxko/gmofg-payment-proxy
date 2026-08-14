@@ -179,12 +179,12 @@ fn identity_remap_preserves_socket_target_and_remaps_all_tls_references() {
             .collect(),
         ..ProxyWorkspace::default()
     };
-    workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-        upstream: SocketEndpoint {
+    workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings::relay(
+        SocketEndpoint {
             host: "socket.example.test".into(),
             port: 16_127,
         },
-        security: SocketRelaySecurity::TlsToTls {
+        SocketRelaySecurity::TlsToTls {
             downstream_tls: SocketDownstreamTlsSettings {
                 server_identity,
                 client_authentication: DownstreamClientAuthentication::Required {
@@ -197,17 +197,18 @@ fn identity_remap_preserves_socket_target_and_remaps_all_tls_references() {
                 client_identity: Some(client_identity),
             },
         },
-        maximum_connections: 777,
-        processing: SocketPayloadProcessing::Direct,
-    });
+        777,
+        SocketPayloadProcessing::Direct,
+    ));
 
     remap_workspace_identity(&mut workspace).unwrap();
 
     let ListenerDataPlane::Socket(settings) = &workspace.listeners[0].data_plane else {
         panic!("socket listener preserved")
     };
-    assert_eq!(settings.upstream.host, "socket.example.test");
-    assert_eq!(settings.upstream.port, 16_127);
+    let relay = settings.relay_topology().expect("Relay topology preserved");
+    assert_eq!(relay.upstream.host, "socket.example.test");
+    assert_eq!(relay.upstream.port, 16_127);
     assert_eq!(settings.maximum_connections, 777);
     let new_ids = workspace
         .certificate_references

@@ -7,7 +7,9 @@ use intercept_proxy_application::{
     ListenerUpstreamTlsEvidenceViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener,
     ProxyWorkspace, SocketTransportMode as ApplicationSocketMode, UiTone,
 };
-use intercept_proxy_domain::SocketRelaySecurity as DomainSocketSecurity;
+use intercept_proxy_domain::{
+    SocketRelaySecurity as DomainSocketSecurity, SocketTopology as DomainSocketTopology,
+};
 use intercept_proxy_runtime::{SocketRelayMetricsSnapshot, UpstreamScheme, UpstreamTransport};
 use parking_lot::RwLock;
 use tokio_util::sync::CancellationToken;
@@ -221,7 +223,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                     .test_upstream_connection()
                     .await
                     .map_err(|error| upstream_tls_test_error(listener.id, &error))?;
-                Ok(socket_probe_view(&listener, result))
+                socket_probe_view(&listener, result)
             }
             PreparedListenerRuntime::HttpForward { .. } => Err(AppError::new(
                 "FIXED_SERVER_NOT_CONFIGURED",
@@ -298,27 +300,38 @@ fn http_probe_view(
 fn socket_probe_view(
     listener: &ProxyListener,
     result: intercept_proxy_runtime::SocketUpstreamConnectionTestResult,
-) -> ListenerUpstreamConnectionTestViewModel {
-    let settings = listener
-        .socket()
-        .expect("prepared Socket plan has Socket settings");
+) -> AppResult<ListenerUpstreamConnectionTestViewModel> {
+    let Some(settings) = listener.socket() else {
+        return Err(AppError::new(
+            "LISTENER_DATA_PLANE_MISMATCH",
+            "Socket 上游测试结果与 Listener 数据面不匹配。",
+        )
+        .entity(listener.id.to_string()));
+    };
+    let DomainSocketTopology::Relay(relay) = &settings.topology else {
+        return Err(AppError::new(
+            "LOCAL_RESPONDER_NOT_AVAILABLE",
+            "LocalResponder 没有可测试的 Server 上游。",
+        )
+        .entity(listener.id.to_string()));
+    };
     let transport = match result.transport {
         intercept_proxy_runtime::SocketUpstreamTransport::Tcp => "tcp",
         intercept_proxy_runtime::SocketUpstreamTransport::Tls => "tls",
     };
-    ListenerUpstreamConnectionTestViewModel {
+    Ok(ListenerUpstreamConnectionTestViewModel {
         listener_id: listener.id,
         data_plane: ListenerDataPlaneKind::Socket,
-        upstream_origin: format!("{}:{}", settings.upstream.host, settings.upstream.port),
+        upstream_origin: format!("{}:{}", relay.upstream.host, relay.upstream.port),
         resolved_address: result.resolved_address.to_string(),
         scheme: "socket".into(),
         transport: transport.into(),
         tls: result.tls.map(socket_tls_evidence_view),
-        socket_transport_mode: Some(socket_mode(&settings.security)),
+        socket_transport_mode: Some(socket_mode(&relay.security)),
         elapsed_millis: result.elapsed_millis,
         message: format!("上游 Socket {transport} 连接成功。"),
         ui_tone: UiTone::Positive,
-    }
+    })
 }
 
 fn tls_evidence_view(
@@ -370,10 +383,19 @@ fn ensure_upstream_tls_enabled(listener: &ProxyListener) -> AppResult<()> {
             })?
             .upstream_url
             .starts_with("https://"),
-        intercept_proxy_domain::ListenerDataPlane::Socket(socket) => matches!(
-            socket.security,
-            DomainSocketSecurity::TcpToTls { .. } | DomainSocketSecurity::TlsToTls { .. }
-        ),
+        intercept_proxy_domain::ListenerDataPlane::Socket(socket) => match &socket.topology {
+            DomainSocketTopology::Relay(relay) => matches!(
+                relay.security,
+                DomainSocketSecurity::TcpToTls { .. } | DomainSocketSecurity::TlsToTls { .. }
+            ),
+            DomainSocketTopology::LocalResponder(_) => {
+                return Err(AppError::new(
+                    "LOCAL_RESPONDER_NOT_AVAILABLE",
+                    "LocalResponder 没有可测试的 Server 上游 TLS。",
+                )
+                .entity(listener.id.to_string()));
+            }
+        },
     };
     if enabled {
         Ok(())
