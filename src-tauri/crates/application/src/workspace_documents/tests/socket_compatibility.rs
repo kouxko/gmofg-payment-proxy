@@ -1,4 +1,92 @@
 use super::*;
+use crate::PortableProtocolPackageFile;
+
+#[test]
+fn v4_round_trip_preserves_socket_rule_high_water_field() {
+    let workspace = ProxyWorkspace {
+        socket_rule_created_order_high_water: 42,
+        ..ProxyWorkspace::default()
+    };
+    let document = WorkspaceDocument {
+        format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
+        workspace,
+        certificate_materials: Vec::new(),
+        protocol_packages: Vec::new(),
+    };
+
+    let bytes = serialize_workspace_document(&document).unwrap();
+    let wire: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        wire["workspace"]["socket_rule_created_order_high_water"],
+        42
+    );
+    assert_eq!(parse_workspace_document(&bytes).unwrap(), document);
+}
+
+#[test]
+fn v4_document_round_trip_preserves_all_sixteen_direction_switch_combinations() {
+    use intercept_proxy_domain::{
+        DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
+        ProtocolPackageVersion, ProxyListener, ScriptedSocketProcessing, SocketEndpoint,
+        SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings,
+    };
+
+    let package = ProtocolPackageRef {
+        id: ProtocolPackageId::new("switch-matrix").unwrap(),
+        version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+    };
+    for bits in 0_u8..16 {
+        let upstream = DirectionProcessingOptions {
+            decode_enabled: bits & 0b0001 != 0,
+            encode_enabled: bits & 0b0010 != 0,
+        };
+        let downstream = DirectionProcessingOptions {
+            decode_enabled: bits & 0b0100 != 0,
+            encode_enabled: bits & 0b1000 != 0,
+        };
+        let listener = ProxyListener {
+            data_plane: ListenerDataPlane::Socket(SocketRelaySettings::relay(
+                SocketEndpoint {
+                    host: "socket.example.test".into(),
+                    port: 16_127,
+                },
+                SocketRelaySecurity::Transparent,
+                777,
+                SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
+                    package: package.clone(),
+                    upstream,
+                    downstream,
+                }),
+            )),
+            ..ProxyListener::default()
+        };
+        let document = WorkspaceDocument {
+            format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
+            workspace: ProxyWorkspace {
+                listeners: vec![listener],
+                ..ProxyWorkspace::default()
+            },
+            certificate_materials: Vec::new(),
+            protocol_packages: vec![PortableProtocolPackage {
+                package: package.clone(),
+                files: vec![PortableProtocolPackageFile {
+                    path: "manifest.toml".into(),
+                    contents_base64: "bWFuaWZlc3Q=".into(),
+                }],
+            }],
+        };
+
+        let parsed =
+            parse_workspace_document(&serialize_workspace_document(&document).unwrap()).unwrap();
+        let SocketPayloadProcessing::Scripted(actual) =
+            &parsed.workspace.listeners[0].socket().unwrap().processing
+        else {
+            panic!("case {bits}: scripted processing must survive v4 round-trip")
+        };
+        assert_eq!(actual.upstream, upstream, "case {bits}");
+        assert_eq!(actual.downstream, downstream, "case {bits}");
+    }
+}
 
 #[test]
 fn v3_socket_workspace_round_trip_preserves_the_tagged_variant() {
@@ -37,22 +125,19 @@ fn v3_socket_workspace_round_trip_preserves_the_tagged_variant() {
         listeners: vec![listener],
         ..ProxyWorkspace::default()
     };
-    let document = WorkspaceDocument {
-        format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
-        workspace,
-        certificate_materials: Vec::new(),
-    };
-
-    let bytes = serialize_workspace_document(&document).unwrap();
-    let mut wire: Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(wire["workspace"].get("socket_rules").is_none());
-    assert!(
-        wire["workspace"]
-            .get("socket_rule_created_order_high_water")
-            .is_none()
-    );
+    let expected_workspace = workspace.clone();
+    let mut wire = json!({
+        "format_version": WORKSPACE_DOCUMENT_V3_FORMAT_VERSION,
+        "workspace": workspace,
+        "certificate_materials": []
+    });
+    let workspace_wire = wire["workspace"].as_object_mut().unwrap();
+    workspace_wire.remove("socket_rules");
+    workspace_wire.remove("socket_rule_created_order_high_water");
+    let bytes = serde_json::to_vec_pretty(&wire).unwrap();
     let parsed = parse_workspace_document(&bytes).unwrap();
-    assert_eq!(parsed, document);
+    assert_eq!(parsed.workspace, expected_workspace);
+    assert!(parsed.protocol_packages.is_empty());
     let socket = parsed.workspace.listeners[0].socket().unwrap();
     let intercept_proxy_domain::SocketPayloadProcessing::Scripted(processing) = &socket.processing
     else {

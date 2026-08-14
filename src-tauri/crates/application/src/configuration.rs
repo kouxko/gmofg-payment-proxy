@@ -13,11 +13,13 @@ use crate::document_security::{canonical_field_name, is_secret_field};
 use specta::Type;
 
 use crate::{
-    AppError, AppResult, ChannelSettingsDraft, PortableCertificateMaterial, ProxyWorkspace,
-    ProxyWorkspaceV2, SettingsDraft, WorkspaceId, validate_certificate_materials,
+    AppError, AppResult, ChannelSettingsDraft, PortableApplicationProtocolPackage,
+    PortableCertificateMaterial, ProxyWorkspace, ProxyWorkspaceV2, SettingsDraft, WorkspaceId,
+    validate_certificate_materials, validate_configuration_package_references,
 };
 
-pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 3;
+pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 4;
+pub const APPLICATION_CONFIGURATION_V3_FORMAT_VERSION: u16 = 3;
 pub const APPLICATION_CONFIGURATION_V2_FORMAT_VERSION: u16 = 2;
 pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 128 * 1024 * 1024;
 /// 监听证书只能引用应用受保护存储中的材料，不能携带文件路径或环境变量密码。
@@ -116,6 +118,18 @@ pub struct ApplicationConfigurationDocument {
     pub workspaces: Vec<ProxyWorkspace>,
     pub settings: PortableSettings,
     pub certificate_materials: Vec<PortableCertificateMaterial>,
+    pub protocol_packages: Vec<PortableApplicationProtocolPackage>,
+}
+
+/// v3 完整配置支持显式 Socket 拓扑，但没有协议包载荷或 Socket 规则 wire。
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ApplicationConfigurationDocumentV3 {
+    pub format_version: u16,
+    pub selected_workspace_id: WorkspaceId,
+    pub workspaces: Vec<ProxyWorkspace>,
+    pub settings: PortableSettings,
+    pub certificate_materials: Vec<PortableCertificateMaterial>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -141,8 +155,34 @@ impl TryFrom<ApplicationConfigurationDocumentV2> for ApplicationConfigurationDoc
             workspaces: value.workspaces.into_iter().map(Into::into).collect(),
             settings: value.settings,
             certificate_materials: value.certificate_materials,
+            protocol_packages: Vec::new(),
         })
     }
+}
+
+impl TryFrom<ApplicationConfigurationDocumentV3> for ApplicationConfigurationDocument {
+    type Error = AppError;
+
+    fn try_from(value: ApplicationConfigurationDocumentV3) -> Result<Self, Self::Error> {
+        if value.format_version != APPLICATION_CONFIGURATION_V3_FORMAT_VERSION {
+            return Err(unsupported_configuration_version(value.format_version));
+        }
+        Ok(Self {
+            format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
+            selected_workspace_id: value.selected_workspace_id,
+            workspaces: value.workspaces,
+            settings: value.settings,
+            certificate_materials: value.certificate_materials,
+            protocol_packages: Vec::new(),
+        })
+    }
+}
+
+/// 已迁移到当前模型的完整配置及其原始 wire 版本。
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParsedApplicationConfigurationDocument {
+    pub source_version: u16,
+    pub document: ApplicationConfigurationDocument,
 }
 
 impl ApplicationConfigurationDocument {
@@ -156,6 +196,11 @@ impl ApplicationConfigurationDocument {
                 ),
             ));
         }
+        self.validate_common()?;
+        validate_configuration_package_references(&self.workspaces, &self.protocol_packages, true)
+    }
+
+    fn validate_common(&self) -> AppResult<()> {
         if self.workspaces.is_empty() {
             return Err(AppError::new(
                 "APPLICATION_CONFIGURATION_INVALID",
@@ -189,6 +234,13 @@ impl ApplicationConfigurationDocument {
 pub fn parse_application_configuration(
     document: &[u8],
 ) -> AppResult<ApplicationConfigurationDocument> {
+    Ok(parse_application_configuration_with_source(document)?.document)
+}
+
+/// 解析完整配置并保留来源版本，供恢复用例区分 legacy 文档。
+pub fn parse_application_configuration_with_source(
+    document: &[u8],
+) -> AppResult<ParsedApplicationConfigurationDocument> {
     if document.len() > MAX_APPLICATION_CONFIGURATION_BYTES {
         return Err(AppError::new(
             "IMPORT_FAILED",
@@ -199,13 +251,18 @@ pub fn parse_application_configuration(
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("完整配置 JSON 无效：{error}")))?;
     reject_configuration_fields_outside_certificate_materials(&value)?;
     let version = read_configuration_format_version(&value)?;
-    if version == APPLICATION_CONFIGURATION_FORMAT_VERSION {
+    if version == APPLICATION_CONFIGURATION_V3_FORMAT_VERSION {
         crate::portable_socket_rules::reject_configuration_fields(&value)?;
     }
     let parsed = match version {
         APPLICATION_CONFIGURATION_FORMAT_VERSION => {
             serde_json::from_value::<ApplicationConfigurationDocument>(value)
                 .map_err(|error| invalid_configuration_structure(&error))?
+        }
+        APPLICATION_CONFIGURATION_V3_FORMAT_VERSION => {
+            let legacy = serde_json::from_value::<ApplicationConfigurationDocumentV3>(value)
+                .map_err(|error| invalid_configuration_structure(&error))?;
+            legacy.try_into()?
         }
         APPLICATION_CONFIGURATION_V2_FORMAT_VERSION => {
             let legacy = serde_json::from_value::<ApplicationConfigurationDocumentV2>(value)
@@ -214,8 +271,16 @@ pub fn parse_application_configuration(
         }
         _ => return Err(unsupported_configuration_version(version)),
     };
-    parsed.validate()?;
-    Ok(parsed)
+    parsed.validate_common()?;
+    validate_configuration_package_references(
+        &parsed.workspaces,
+        &parsed.protocol_packages,
+        version == APPLICATION_CONFIGURATION_FORMAT_VERSION,
+    )?;
+    Ok(ParsedApplicationConfigurationDocument {
+        source_version: version,
+        document: parsed,
+    })
 }
 
 fn read_configuration_format_version(value: &Value) -> AppResult<u16> {
@@ -234,7 +299,7 @@ fn unsupported_configuration_version(version: u16) -> AppError {
     AppError::new(
         "APPLICATION_CONFIGURATION_VERSION_UNSUPPORTED",
         format!(
-            "配置文档版本 {version} 不受支持；当前支持版本 2 和 \
+            "配置文档版本 {version} 不受支持；当前支持版本 2、3 和 \
              {APPLICATION_CONFIGURATION_FORMAT_VERSION}。"
         ),
     )
@@ -243,11 +308,9 @@ fn unsupported_configuration_version(version: u16) -> AppError {
 pub fn serialize_application_configuration(
     document: &ApplicationConfigurationDocument,
 ) -> AppResult<Vec<u8>> {
-    crate::portable_socket_rules::ensure_not_portable(&document.workspaces)?;
     document.validate()?;
-    let mut value = serde_json::to_value(document)
+    let value = serde_json::to_value(document)
         .map_err(|error| AppError::new("EXPORT_FAILED", format!("完整配置序列化失败：{error}")))?;
-    crate::portable_socket_rules::remove_configuration_fields(&mut value);
     reject_configuration_fields_outside_certificate_materials(&value)
         .map_err(|_| AppError::new("EXPORT_FAILED", "完整配置包含禁止导出的敏感或运行态字段。"))?;
     serde_json::to_vec_pretty(&value)
@@ -312,183 +375,4 @@ fn is_forbidden_field(field: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use intercept_proxy_domain::{
-        CertificateReference, CertificateReferenceKind, HttpListenerSettings, ProxyListenerV2,
-        ProxyWorkspaceV2,
-    };
-    use serde_json::json;
-
-    use super::*;
-
-    fn document() -> ApplicationConfigurationDocument {
-        let workspace = ProxyWorkspace::default();
-        ApplicationConfigurationDocument {
-            format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
-            selected_workspace_id: workspace.id,
-            workspaces: vec![workspace],
-            settings: PortableSettings::from(&SettingsDraft::default()),
-            certificate_materials: Vec::new(),
-        }
-    }
-
-    fn v2_document() -> ApplicationConfigurationDocumentV2 {
-        let current = ProxyWorkspace::default();
-        let listener = &current.listeners[0];
-        let http = listener.http().unwrap();
-        ApplicationConfigurationDocumentV2 {
-            format_version: APPLICATION_CONFIGURATION_V2_FORMAT_VERSION,
-            selected_workspace_id: current.id,
-            workspaces: vec![ProxyWorkspaceV2 {
-                id: current.id,
-                name: current.name,
-                revision: current.revision,
-                listeners: vec![ProxyListenerV2 {
-                    id: listener.id,
-                    name: listener.name.clone(),
-                    enabled: listener.enabled,
-                    bind_address: listener.bind_address.clone(),
-                    port: listener.port,
-                    authentication: http.authentication.clone(),
-                    allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
-                    mitm: http.mitm.clone(),
-                    connect_timeout_ms: listener.connect_timeout_ms,
-                    read_timeout_ms: listener.read_timeout_ms,
-                    write_timeout_ms: listener.write_timeout_ms,
-                    downstream_tls: Some(http.downstream_tls.clone()),
-                    request_body_codec: http.request_body_codec,
-                    response_body_codec: http.response_body_codec,
-                    fixed_server: http.fixed_server.clone(),
-                }],
-                metadata_extractors: current.metadata_extractors,
-                response_assertions: current.response_assertions,
-                rules: current.rules,
-                fault_presets: current.fault_presets,
-                certificate_references: current.certificate_references,
-                android_network_profiles: current.android_network_profiles,
-            }],
-            settings: PortableSettings::from(&SettingsDraft::default()),
-            certificate_materials: Vec::new(),
-        }
-    }
-
-    #[test]
-    fn full_configuration_round_trips() {
-        let expected = document();
-        let bytes = serialize_application_configuration(&expected).expect("serialize");
-        let mut wire: Value = serde_json::from_slice(&bytes).unwrap();
-        assert!(wire["workspaces"][0].get("socket_rules").is_none());
-        assert!(
-            wire["workspaces"][0]
-                .get("socket_rule_created_order_high_water")
-                .is_none()
-        );
-        assert_eq!(
-            parse_application_configuration(&bytes).expect("parse"),
-            expected
-        );
-
-        wire["workspaces"][0]["socket_rules"] = serde_json::json!([]);
-        let error =
-            parse_application_configuration(&serde_json::to_vec(&wire).unwrap()).unwrap_err();
-        assert_eq!(error.view_model.code, "SOCKET_RULE_PORTABILITY_REQUIRES_V4");
-        wire["workspaces"][0]
-            .as_object_mut()
-            .unwrap()
-            .remove("socket_rules");
-        wire["workspaces"][0]["socket_rule_created_order_high_water"] = serde_json::json!(0);
-        let error =
-            parse_application_configuration(&serde_json::to_vec(&wire).unwrap()).unwrap_err();
-        assert_eq!(error.view_model.code, "SOCKET_RULE_PORTABILITY_REQUIRES_V4");
-    }
-
-    #[test]
-    fn v2_full_configuration_migrates_to_v3_without_changing_settings() {
-        let v2 = v2_document();
-        let expected_settings = v2.settings.clone();
-        let parsed = parse_application_configuration(&serde_json::to_vec(&v2).unwrap()).unwrap();
-
-        assert_eq!(
-            parsed.format_version,
-            APPLICATION_CONFIGURATION_FORMAT_VERSION
-        );
-        assert_eq!(parsed.settings, expected_settings);
-        assert!(matches!(
-            parsed.workspaces[0].listeners[0].data_plane,
-            intercept_proxy_domain::ListenerDataPlane::Http(HttpListenerSettings { .. })
-        ));
-        let exported = serialize_application_configuration(&parsed).unwrap();
-        let exported_value: Value = serde_json::from_slice(&exported).unwrap();
-        assert_eq!(exported_value["format_version"], 3);
-        assert_eq!(parse_application_configuration(&exported).unwrap(), parsed);
-    }
-
-    #[test]
-    fn sensitive_and_runtime_fields_are_rejected_before_deserialization() {
-        for forbidden in [
-            "private_key_pem",
-            "privateKey",
-            "password",
-            "basic_auth_password",
-            "basicAuthPassword",
-            "pkcs12_password",
-            "protected_blob",
-            "selected_serial",
-            "resolved_routes",
-            "payload",
-        ] {
-            let mut value = serde_json::to_value(document()).expect("value");
-            value
-                .as_object_mut()
-                .expect("object")
-                .insert(forbidden.into(), json!("forbidden"));
-            let error = parse_application_configuration(
-                &serde_json::to_vec(&value).expect("document bytes"),
-            )
-            .expect_err("forbidden field must fail");
-            assert_eq!(error.view_model.code, "IMPORT_CONTAINS_SENSITIVE_DATA");
-        }
-    }
-
-    #[test]
-    fn missing_selected_workspace_is_rejected() {
-        let mut value = document();
-        value.selected_workspace_id = WorkspaceId::new();
-        assert!(value.validate().is_err());
-    }
-
-    #[test]
-    fn unmanaged_certificate_reference_is_rejected() {
-        let mut value = document();
-        value.workspaces[0]
-            .certificate_references
-            .push(CertificateReference {
-                id: intercept_proxy_domain::CertificateReferenceId::new(),
-                label: "外部文件".into(),
-                kind: CertificateReferenceKind::UpstreamServerTrust,
-                reference: "file:/tmp/server-ca.pem".into(),
-            });
-
-        let error = value.validate().expect_err("unmanaged reference must fail");
-        assert_eq!(
-            error.view_model.code,
-            "LISTENER_CERTIFICATE_REFERENCE_UNTRUSTED"
-        );
-    }
-
-    #[test]
-    fn installation_root_reference_is_allowed_without_exporting_local_material() {
-        let mut value = document();
-        value.workspaces[0]
-            .certificate_references
-            .push(CertificateReference {
-                id: intercept_proxy_domain::CertificateReferenceId::new(),
-                label: "本机 MITM Root CA".into(),
-                kind: CertificateReferenceKind::MitmRootCa,
-                reference: INSTALLATION_ROOT_CERTIFICATE_REFERENCE.into(),
-            });
-
-        let bytes = serialize_application_configuration(&value).expect("serialize");
-        assert_eq!(parse_application_configuration(&bytes).unwrap(), value);
-    }
-}
+mod tests;

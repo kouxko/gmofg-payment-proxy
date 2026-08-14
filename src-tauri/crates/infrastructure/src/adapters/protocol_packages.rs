@@ -1,7 +1,6 @@
 //! 应用级协议包注册表适配器。
 //!
-//! 导入时先在数据库事务之外完成 ZIP 安全读取和 Rhai 编译，只有完整成功后才写入 SQLite。数据库只保存
-//! 规范化文件；编译缓存是可丢弃的进程内派生物，重启后通过相同校验链恢复。
+//! 导入在事务外完成 ZIP 安全读取和 Rhai 编译；数据库只保存规范文件，缓存可由相同校验链重建。
 
 use std::{collections::HashMap, io::Cursor, sync::Arc};
 
@@ -96,6 +95,8 @@ pub enum ProtocolPackageStorageError {
         #[source]
         source: ProtocolArchiveError,
     },
+    #[error("可移植协议包文件载荷无效")]
+    PortableInvalid,
     #[error("协议包声明或脚本编译失败")]
     Compilation {
         #[source]
@@ -118,7 +119,9 @@ impl ProtocolPackageStorageError {
     #[must_use]
     pub const fn code(&self) -> ProtocolPackageStorageErrorCode {
         match self {
-            Self::Archive { .. } => ProtocolPackageStorageErrorCode::ArchiveInvalid,
+            Self::Archive { .. } | Self::PortableInvalid => {
+                ProtocolPackageStorageErrorCode::ArchiveInvalid
+            }
             Self::Compilation { .. } => ProtocolPackageStorageErrorCode::CompilationFailed,
             Self::IdentityConflict { .. } => ProtocolPackageStorageErrorCode::IdentityConflict,
             Self::NotFound { .. } => ProtocolPackageStorageErrorCode::NotFound,
@@ -134,6 +137,7 @@ impl ProtocolPackageStorageError {
     pub fn detail_code(&self) -> Option<&str> {
         match self {
             Self::Archive { source } => Some(source.code().as_str()),
+            Self::PortableInvalid => Some("PORTABLE_PROTOCOL_PACKAGE_INVALID"),
             Self::Compilation { source } => Some(compilation_code(source)),
             Self::StoredPackageInvalid { code, .. } => Some(code),
             Self::IdentityConflict { .. } => Some("PROTOCOL_PACKAGE_IDENTITY_CONFLICT"),
@@ -174,7 +178,6 @@ impl ProtocolPackageRepositoryAdapter {
         }
     }
 
-    /// 创建使用 Host 默认安全门禁的注册表。
     #[must_use]
     pub fn with_default_limits(store: Arc<SqliteStore>) -> Self {
         Self::new(
@@ -184,10 +187,8 @@ impl ProtocolPackageRepositoryAdapter {
         )
     }
 
-    /// 返回原生文件读取必须遵守的压缩 ZIP 字节上限。
-    ///
-    /// 文件适配器在把字节交给 ZIP reader 前先使用相同上限，避免读取一个注定会被拒绝的
-    /// 超大文件。其他 Archive 限额仍只由协议脚本 crate 执行。
+    /// 返回原生文件读取必须遵守的压缩 ZIP 字节上限，避免文件适配器读取注定被拒绝的超大文件。
+    /// 其他 Archive 限额仍由协议脚本 crate 执行。
     #[must_use]
     pub const fn max_archive_bytes(&self) -> u64 {
         self.archive_limits.max_archive_bytes()
@@ -470,19 +471,17 @@ impl ProtocolPackageRepositoryAdapter {
 }
 
 fn compilation_code(error: &ProtocolPackageCompilationError) -> &str {
-    error.declaration_error().map_or_else(
-        || {
-            error
-                .script_error()
-                .map_or("COMPILATION_FAILED", |error| error.code().as_str())
-        },
-        |error| error.code().as_str(),
-    )
+    error
+        .declaration_error()
+        .map(|error| error.code().as_str())
+        .or_else(|| error.script_error().map(|error| error.code().as_str()))
+        .unwrap_or("COMPILATION_FAILED")
 }
 
 mod application_port;
 pub(super) use application_port::{
-    application_description, application_summary, protocol_package_app_error,
+    application_description, application_descriptions, application_summary,
+    protocol_package_app_error,
 };
 #[path = "protocol_packages/disposition.rs"]
 mod disposition;
@@ -490,10 +489,11 @@ pub(in crate::adapters) use disposition::PreparedProtocolPackageDisposition;
 #[path = "protocol_packages/prepared.rs"]
 mod prepared;
 pub(super) use prepared::PreparedProtocolPackage;
+#[path = "protocol_packages/portability.rs"]
+mod portability;
 #[path = "protocol_packages/summary.rs"]
 mod summary;
 use summary::summary_from_header;
-
 #[cfg(test)]
 #[path = "protocol_packages/tests.rs"]
 mod tests;

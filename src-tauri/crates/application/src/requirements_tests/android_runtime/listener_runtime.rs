@@ -142,6 +142,7 @@ async fn full_configuration_import_rejects_active_android_network() {
         workspaces,
         settings: PortableSettings::from(&SettingsDraft::default()),
         certificate_materials: Vec::new(),
+        protocol_packages: Vec::new(),
     };
     fixture
         .documents
@@ -176,6 +177,7 @@ async fn full_configuration_import_rejects_running_android_network_with_stale_pr
             workspaces,
             settings: PortableSettings::from(&SettingsDraft::default()),
             certificate_materials: Vec::new(),
+            protocol_packages: Vec::new(),
         })
         .unwrap(),
     );

@@ -135,6 +135,7 @@ async fn export_rejects_unmanaged_certificate_references() {
         format_version: crate::WORKSPACE_DOCUMENT_FORMAT_VERSION,
         workspace,
         certificate_materials: Vec::new(),
+        protocol_packages: Vec::new(),
     })
     .expect_err("portable export must reject unmanaged references");
 
@@ -173,19 +174,12 @@ async fn import_rejects_unmanaged_certificate_references() {
             reference: "pkcs12:/tmp/client.p12?password_env=P12_PASSWORD".into(),
         });
     let store = InMemoryWorkspaceStore::new_empty();
-    let mut wire = serde_json::json!({
+    let wire = serde_json::json!({
         "format_version": crate::WORKSPACE_DOCUMENT_FORMAT_VERSION,
         "workspace": workspace,
         "certificate_materials": [],
+        "protocol_packages": [],
     });
-    wire["workspace"]
-        .as_object_mut()
-        .unwrap()
-        .remove("socket_rules");
-    wire["workspace"]
-        .as_object_mut()
-        .unwrap()
-        .remove("socket_rule_created_order_high_water");
     let document = serde_json::to_vec(&wire).unwrap();
 
     let error = store
@@ -207,6 +201,7 @@ async fn importing_same_document_twice_never_overwrites_existing_workspace() {
         format_version: crate::WORKSPACE_DOCUMENT_FORMAT_VERSION,
         workspace: workspace.clone(),
         certificate_materials: Vec::new(),
+        protocol_packages: Vec::new(),
     })
     .unwrap();
     let store = InMemoryWorkspaceStore::new_empty();

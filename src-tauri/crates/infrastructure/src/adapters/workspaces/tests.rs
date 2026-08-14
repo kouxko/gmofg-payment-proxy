@@ -198,6 +198,7 @@ async fn workspace_import_rejects_unmanaged_certificate_reference() {
         format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
         workspace,
         certificate_materials: Vec::new(),
+        protocol_packages: Vec::new(),
     };
     let mut document = serde_json::to_value(document).expect("document value");
     // 该夹具模拟旧 v3 线格式；内部持久化新增字段不能混入可移植输入。
@@ -242,6 +243,7 @@ async fn full_configuration_replaces_workspaces_selection_and_settings_together(
         workspaces: vec![first.clone(), second.clone()],
         settings: PortableSettings::from(&settings),
         certificate_materials: Vec::new(),
+        protocol_packages: Vec::new(),
     };
 
     repository

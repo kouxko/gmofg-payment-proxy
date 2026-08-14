@@ -15,26 +15,13 @@ pub(in crate::requirements_tests) fn application_with_workspace_ports(
     workspaces: Arc<InMemoryWorkspaceStore>,
     workspace_documents: Arc<InMemoryWorkspaceDocumentStore>,
 ) -> Application {
-    Application::new(
-        "Test Product".into(),
-        ApplicationDependencies {
-            proxy: ports.clone(),
-            capture: ports.clone(),
-            sessions: ports.clone(),
-            breakpoints: Arc::new(BreakpointCoordinator::default()),
-            breakpoint_validation: ports.clone(),
-            rules: ports.clone(),
-            faults: ports.clone(),
-            certificates: ports.clone(),
-            settings: ports.clone(),
-            listener_certificates: ports,
-            workspaces,
-            workspace_documents,
-            listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
-            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
-            events: Arc::new(EventHub::default()),
-        },
+    application_with_workspace_configuration_and_packages(
+        ports,
+        workspaces,
+        workspace_documents,
+        Arc::new(UnavailableApplicationConfigurationStore),
     )
+    .0
 }
 
 pub(in crate::requirements_tests) fn application_with_configuration_store(
@@ -43,7 +30,30 @@ pub(in crate::requirements_tests) fn application_with_configuration_store(
     workspace_documents: Arc<InMemoryWorkspaceDocumentStore>,
     configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
 ) -> Application {
-    Application::new_with_platform_services(
+    application_with_workspace_configuration_and_packages(
+        ports,
+        workspaces,
+        workspace_documents,
+        configuration_store,
+    )
+    .0
+}
+
+pub(in crate::requirements_tests) fn application_with_workspace_configuration_and_packages(
+    ports: Arc<FakePorts>,
+    workspaces: Arc<InMemoryWorkspaceStore>,
+    workspace_documents: Arc<InMemoryWorkspaceDocumentStore>,
+    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+) -> (Application, Arc<FakeProtocolPackagePortability>) {
+    let workspace_port: Arc<dyn WorkspaceRepositoryPort> = workspaces.clone();
+    let portability = Arc::new(FakeProtocolPackagePortability::new(
+        workspace_port,
+        configuration_store,
+    ));
+    let mut protocol_packages = ProtocolPackageApplicationServices::unavailable();
+    protocol_packages.compiler = portability.clone();
+    protocol_packages.portability = portability.clone();
+    let application = Application::new_with_platform_services(
         "Test Product".into(),
         ApplicationDependencies {
             proxy: ports.clone(),
@@ -59,11 +69,11 @@ pub(in crate::requirements_tests) fn application_with_configuration_store(
             workspaces,
             workspace_documents,
             listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
-            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
+            protocol_packages,
             events: Arc::new(EventHub::default()),
         },
         Arc::new(UnavailableAndroidControlPort),
         Arc::new(UnavailableProtectedSecretPort),
-        configuration_store,
-    )
+    );
+    (application, portability)
 }

@@ -8,18 +8,29 @@ use serde_json::Value;
 use specta::Type;
 
 use crate::{
-    AppError, AppResult, PortableCertificateMaterial, ProxyWorkspace, ProxyWorkspaceV2,
-    document_security::is_secret_field, validate_certificate_materials,
-    validate_portable_certificate_references,
+    AppError, AppResult, PortableCertificateMaterial, PortableProtocolPackage, ProxyWorkspace,
+    ProxyWorkspaceV2, document_security::is_secret_field, validate_certificate_materials,
+    validate_portable_certificate_references, validate_workspace_package_references,
 };
 
-pub const WORKSPACE_DOCUMENT_FORMAT_VERSION: u16 = 3;
+pub const WORKSPACE_DOCUMENT_FORMAT_VERSION: u16 = 4;
+pub const WORKSPACE_DOCUMENT_V3_FORMAT_VERSION: u16 = 3;
 pub const WORKSPACE_DOCUMENT_V2_FORMAT_VERSION: u16 = 2;
 pub const MAX_WORKSPACE_DOCUMENT_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct WorkspaceDocument {
+    pub format_version: u16,
+    pub workspace: ProxyWorkspace,
+    pub certificate_materials: Vec<PortableCertificateMaterial>,
+    pub protocol_packages: Vec<PortableProtocolPackage>,
+}
+
+/// v3 已支持显式 Socket 拓扑，但尚未定义协议包和 Socket 规则可移植性。
+#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkspaceDocumentV3 {
     pub format_version: u16,
     pub workspace: ProxyWorkspace,
     pub certificate_materials: Vec<PortableCertificateMaterial>,
@@ -44,8 +55,32 @@ impl TryFrom<WorkspaceDocumentV2> for WorkspaceDocument {
             format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
             workspace: value.workspace.into(),
             certificate_materials: value.certificate_materials,
+            protocol_packages: Vec::new(),
         })
     }
+}
+
+impl TryFrom<WorkspaceDocumentV3> for WorkspaceDocument {
+    type Error = AppError;
+
+    fn try_from(value: WorkspaceDocumentV3) -> Result<Self, Self::Error> {
+        if value.format_version != WORKSPACE_DOCUMENT_V3_FORMAT_VERSION {
+            return Err(unsupported_version(value.format_version));
+        }
+        Ok(Self {
+            format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
+            workspace: value.workspace,
+            certificate_materials: value.certificate_materials,
+            protocol_packages: Vec::new(),
+        })
+    }
+}
+
+/// 已迁移到当前模型的 Workspace 文档及其原始 wire 版本。
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParsedWorkspaceDocument {
+    pub source_version: u16,
+    pub document: WorkspaceDocument,
 }
 
 impl WorkspaceDocument {
@@ -59,6 +94,11 @@ impl WorkspaceDocument {
                 ),
             ));
         }
+        self.validate_common()?;
+        validate_workspace_package_references(&self.workspace, &self.protocol_packages, true)
+    }
+
+    fn validate_common(&self) -> AppResult<()> {
         self.workspace.validate().map_err(AppError::from)?;
         validate_portable_certificate_references(&self.workspace)?;
         validate_certificate_materials(
@@ -70,6 +110,11 @@ impl WorkspaceDocument {
 
 /// 解析并验证可移植 Workspace，但不持久化也不重映射领域 ID。
 pub fn parse_workspace_document(document: &[u8]) -> AppResult<WorkspaceDocument> {
+    Ok(parse_workspace_document_with_source(document)?.document)
+}
+
+/// 解析 Workspace 文档并保留来源版本，供导入用例区分缺少协议包载荷的 legacy 文档。
+pub fn parse_workspace_document_with_source(document: &[u8]) -> AppResult<ParsedWorkspaceDocument> {
     if document.len() > MAX_WORKSPACE_DOCUMENT_BYTES {
         return Err(AppError::new(
             "IMPORT_FAILED",
@@ -80,12 +125,17 @@ pub fn parse_workspace_document(document: &[u8]) -> AppResult<WorkspaceDocument>
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("Workspace JSON 无效：{error}")))?;
     reject_workspace_fields_outside_certificate_materials(&value)?;
     let version = read_format_version(&value)?;
-    if version == WORKSPACE_DOCUMENT_FORMAT_VERSION {
+    if version == WORKSPACE_DOCUMENT_V3_FORMAT_VERSION {
         crate::portable_socket_rules::reject_workspace_fields(value.get("workspace"))?;
     }
     let parsed = match version {
         WORKSPACE_DOCUMENT_FORMAT_VERSION => serde_json::from_value::<WorkspaceDocument>(value)
             .map_err(|error| invalid_workspace_structure(&error))?,
+        WORKSPACE_DOCUMENT_V3_FORMAT_VERSION => {
+            let legacy = serde_json::from_value::<WorkspaceDocumentV3>(value)
+                .map_err(|error| invalid_workspace_structure(&error))?;
+            legacy.try_into()?
+        }
         WORKSPACE_DOCUMENT_V2_FORMAT_VERSION => {
             let legacy = serde_json::from_value::<WorkspaceDocumentV2>(value)
                 .map_err(|error| invalid_workspace_structure(&error))?;
@@ -93,8 +143,16 @@ pub fn parse_workspace_document(document: &[u8]) -> AppResult<WorkspaceDocument>
         }
         _ => return Err(unsupported_version(version)),
     };
-    parsed.validate()?;
-    Ok(parsed)
+    parsed.validate_common()?;
+    validate_workspace_package_references(
+        &parsed.workspace,
+        &parsed.protocol_packages,
+        version == WORKSPACE_DOCUMENT_FORMAT_VERSION,
+    )?;
+    Ok(ParsedWorkspaceDocument {
+        source_version: version,
+        document: parsed,
+    })
 }
 
 fn read_format_version(value: &Value) -> AppResult<u16> {
@@ -113,7 +171,7 @@ fn unsupported_version(version: u16) -> AppError {
     AppError::new(
         "WORKSPACE_DOCUMENT_VERSION_UNSUPPORTED",
         format!(
-            "Workspace 文档版本 {version} 不受支持；当前支持版本 2 和 \
+            "Workspace 文档版本 {version} 不受支持；当前支持版本 2、3 和 \
              {WORKSPACE_DOCUMENT_FORMAT_VERSION}。"
         ),
     )
@@ -121,12 +179,10 @@ fn unsupported_version(version: u16) -> AppError {
 
 /// 序列化经过领域校验的 Workspace，并对输出再次执行敏感字段扫描。
 pub fn serialize_workspace_document(document: &WorkspaceDocument) -> AppResult<Vec<u8>> {
-    crate::portable_socket_rules::ensure_not_portable(std::slice::from_ref(&document.workspace))?;
     document.validate()?;
-    let mut value = serde_json::to_value(document).map_err(|error| {
+    let value = serde_json::to_value(document).map_err(|error| {
         AppError::new("EXPORT_FAILED", format!("Workspace 序列化失败：{error}"))
     })?;
-    crate::portable_socket_rules::remove_workspace_fields(value.get_mut("workspace"));
     reject_workspace_fields_outside_certificate_materials(&value)
         .map_err(|_| AppError::new("EXPORT_FAILED", "Workspace 包含禁止导出的敏感字段。"))?;
     serde_json::to_vec_pretty(&value)
@@ -374,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn v2_workspace_migrates_every_http_field_and_exports_v3() {
+    fn v2_workspace_migrates_every_http_field_and_exports_v4() {
         let v2 = checked_v2_document();
         let expected_listener = v2.workspace.listeners[0].clone();
         let parsed = parse_workspace_document(&serde_json::to_vec(&v2).unwrap()).unwrap();
@@ -386,10 +442,11 @@ mod tests {
             v2.workspace.certificate_references
         );
         assert_eq!(parsed.certificate_materials, v2.certificate_materials);
+        assert!(parsed.protocol_packages.is_empty());
 
         let exported = serialize_workspace_document(&parsed).unwrap();
         let exported_value: Value = serde_json::from_slice(&exported).unwrap();
-        assert_eq!(exported_value["format_version"], 3);
+        assert_eq!(exported_value["format_version"], 4);
         assert_eq!(
             exported_value["workspace"]["listeners"][0]["data_plane"]["kind"],
             "http"
@@ -424,5 +481,15 @@ mod tests {
 
         value["workspace"]["listeners"][0]["unknown_v2_field"] = json!(true);
         assert!(parse_workspace_document(&serde_json::to_vec(&value).unwrap()).is_err());
+    }
+
+    #[test]
+    fn outer_size_limit_counts_embedded_rule_and_package_bytes_before_json_parsing() {
+        let mut document = br#"{"format_version":4,"workspace":{"socket_rules":["#.to_vec();
+        document.resize(MAX_WORKSPACE_DOCUMENT_BYTES + 1, b'x');
+
+        let error = parse_workspace_document(&document).expect_err("oversized document rejected");
+        assert_eq!(error.view_model.code, "IMPORT_FAILED");
+        assert!(error.view_model.message.contains("64 MiB"));
     }
 }

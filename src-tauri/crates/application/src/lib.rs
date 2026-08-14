@@ -18,6 +18,7 @@ mod facade;
 mod listeners;
 mod models;
 mod portable_certificates;
+mod portable_protocol_packages;
 mod portable_socket_rules;
 mod ports;
 mod sessions;
@@ -31,16 +32,18 @@ pub use capacity::CapacityLedger;
 pub use configuration::*;
 pub use error::{AppError, AppErrorDiagnosticViewModel, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
-pub use facade::{Application, ApplicationDependencies};
+pub use facade::{Application, ApplicationDependencies, validate_portable_protocol_bindings};
 pub use listeners::InMemoryListenerRuntime;
 pub use models::*;
 pub use portable_certificates::*;
+pub use portable_protocol_packages::*;
 pub use ports::*;
 pub use sessions::{InMemorySessionStore, SessionStore};
 pub use workspace_documents::{
-    MAX_WORKSPACE_DOCUMENT_BYTES, WORKSPACE_DOCUMENT_FORMAT_VERSION,
-    WORKSPACE_DOCUMENT_V2_FORMAT_VERSION, WorkspaceDocument, WorkspaceDocumentV2,
-    parse_workspace_document, serialize_workspace_document,
+    MAX_WORKSPACE_DOCUMENT_BYTES, ParsedWorkspaceDocument, WORKSPACE_DOCUMENT_FORMAT_VERSION,
+    WORKSPACE_DOCUMENT_V2_FORMAT_VERSION, WORKSPACE_DOCUMENT_V3_FORMAT_VERSION, WorkspaceDocument,
+    WorkspaceDocumentV2, parse_workspace_document, parse_workspace_document_with_source,
+    serialize_workspace_document,
 };
 pub use workspaces::{
     InMemoryWorkspaceDocumentStore, InMemoryWorkspaceStore, remap_workspace_identity,

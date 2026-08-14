@@ -12,7 +12,7 @@ pub(crate) use android::UnavailableAndroidControlPort;
 mod protocol_packages;
 pub use protocol_packages::{
     ProtocolPackageApplicationServices, ProtocolPackageCompilerPort, ProtocolPackageImportPort,
-    ProtocolPackageStorePort, ProtocolPackageUsageQueryPort,
+    ProtocolPackagePortabilityPort, ProtocolPackageStorePort, ProtocolPackageUsageQueryPort,
 };
 
 use crate::{

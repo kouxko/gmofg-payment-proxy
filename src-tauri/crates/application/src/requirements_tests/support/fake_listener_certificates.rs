@@ -71,6 +71,8 @@ impl ListenerCertificateImportPort for FakePorts {
         &self,
         material: PortableCertificateMaterial,
     ) -> AppResult<CertificateReference> {
+        self.certificate_restore_calls
+            .fetch_add(1, Ordering::SeqCst);
         material.validate_shape()?;
         Ok(CertificateReference {
             id: material.reference_id,

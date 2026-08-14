@@ -138,7 +138,7 @@ impl WorkspaceRepositoryAdapter {
             })
     }
 
-    fn record(workspace: &ProxyWorkspace) -> AppResult<WorkspaceRecord> {
+    pub(crate) fn record(workspace: &ProxyWorkspace) -> AppResult<WorkspaceRecord> {
         Ok(WorkspaceRecord {
             id: workspace.id.as_uuid(),
             revision: workspace.revision.get(),
@@ -290,6 +290,7 @@ impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
             format_version: intercept_proxy_application::WORKSPACE_DOCUMENT_FORMAT_VERSION,
             workspace: self.get_stored(workspace_id)?,
             certificate_materials: Vec::new(),
+            protocol_packages: Vec::new(),
         })
     }
 }
