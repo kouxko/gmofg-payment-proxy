@@ -17,12 +17,14 @@ use crate::{
     FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
     ListenerId, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
-    ProtocolPackageCompilationReceipt, ProtocolPackageRef, ProtocolPackageUsageViewModel,
-    ProtocolPackageVersionViewModel, ProxyListener, ProxyStatusViewModel, ProxyWorkspace,
-    RuleDraft, RuleId, RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, RuntimeEpoch,
-    SecretReference, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
-    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, WorkspaceId,
-    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    ProtocolPackageCompilationReceipt, ProtocolPackageDescriptionViewModel,
+    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
+    ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageCount,
+    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel, ProxyListener,
+    ProxyStatusViewModel, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
+    RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
+    SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
+    SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
 #[async_trait]
@@ -49,6 +51,23 @@ pub trait ProtocolPackageCompilerPort: Send + Sync + std::fmt::Debug {
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageCompilationReceipt>;
+    /// 从编译产物投影 Schema 和能力；不得返回脚本、AST 或包内路径。
+    async fn describe(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageDescriptionViewModel>;
+}
+
+#[async_trait]
+/// 使用宿主原生文件选择器导入一个 ZIP，并在成功前完成全部校验。
+///
+/// `WebView` 不提供路径或字节。`None` 只表示取消；非法包不得留下数据库记录或缓存。
+pub trait ProtocolPackageImportPort: Send + Sync + std::fmt::Debug {
+    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>>;
+    async fn commit_zip(
+        &self,
+        token: ProtocolPackageImportToken,
+    ) -> AppResult<ProtocolPackageImportViewModel>;
 }
 
 #[async_trait]
@@ -58,15 +77,15 @@ pub trait ProtocolPackageUsageQueryPort: Send + Sync + std::fmt::Debug {
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<Vec<ProtocolPackageUsageViewModel>>;
+    async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>>;
 }
 
-/// 协议包生命周期用例的三个独立端口。
-///
-/// 组合对象让 Host 和测试装配保持具名且紧凑，但 Application 内仍按职责分别持有 trait。
+/// 协议包生命周期用例的四个独立端口，Host/测试用它具名装配。
 #[derive(Debug, Clone)]
 pub struct ProtocolPackageApplicationServices {
     pub store: std::sync::Arc<dyn ProtocolPackageStorePort>,
     pub compiler: std::sync::Arc<dyn ProtocolPackageCompilerPort>,
+    pub importer: std::sync::Arc<dyn ProtocolPackageImportPort>,
     pub usage_query: std::sync::Arc<dyn ProtocolPackageUsageQueryPort>,
 }
 
@@ -77,6 +96,7 @@ impl ProtocolPackageApplicationServices {
         Self {
             store: unavailable.clone(),
             compiler: unavailable.clone(),
+            importer: unavailable.clone(),
             usage_query: unavailable,
         }
     }
@@ -122,6 +142,27 @@ impl ProtocolPackageCompilerPort for UnavailableProtocolPackageServices {
     ) -> AppResult<ProtocolPackageCompilationReceipt> {
         unavailable_protocol_packages()
     }
+
+    async fn describe(
+        &self,
+        _: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
+        unavailable_protocol_packages()
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageImportPort for UnavailableProtocolPackageServices {
+    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
+        unavailable_protocol_packages()
+    }
+
+    async fn commit_zip(
+        &self,
+        _: ProtocolPackageImportToken,
+    ) -> AppResult<ProtocolPackageImportViewModel> {
+        unavailable_protocol_packages()
+    }
 }
 
 #[async_trait]
@@ -130,6 +171,10 @@ impl ProtocolPackageUsageQueryPort for UnavailableProtocolPackageServices {
         &self,
         _: &ProtocolPackageRef,
     ) -> AppResult<Vec<ProtocolPackageUsageViewModel>> {
+        unavailable_protocol_packages()
+    }
+
+    async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>> {
         unavailable_protocol_packages()
     }
 }

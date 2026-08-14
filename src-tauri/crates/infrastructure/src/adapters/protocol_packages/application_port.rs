@@ -4,9 +4,13 @@
 
 use async_trait::async_trait;
 use intercept_proxy_application::{
-    AppError, AppResult, ProtocolPackageCompilationReceipt, ProtocolPackageCompilerPort,
-    ProtocolPackageStorePort, ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
+    AppError, AppResult, ProtocolPackageCapabilitiesViewModel, ProtocolPackageCompilationReceipt,
+    ProtocolPackageCompilerPort, ProtocolPackageDescriptionViewModel,
+    ProtocolPackageDirectionCapabilitiesViewModel, ProtocolPackageSchemaFieldTypeViewModel,
+    ProtocolPackageSchemaFieldViewModel, ProtocolPackageSchemaViewModel, ProtocolPackageStorePort,
+    ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
 };
+use intercept_proxy_protocol_scripting::CompiledProtocolPackage;
 
 use super::{
     ProtocolPackageRef, ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError,
@@ -58,9 +62,20 @@ impl ProtocolPackageCompilerPort for ProtocolPackageRepositoryAdapter {
             compatible: true,
         })
     }
+
+    async fn describe(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
+        self.compiled(package)
+            .map(|compiled| application_description(&compiled))
+            .map_err(|error| protocol_package_app_error(&error))
+    }
 }
 
-fn application_summary(summary: ProtocolPackageSummary) -> ProtocolPackageVersionViewModel {
+pub(in crate::adapters) fn application_summary(
+    summary: ProtocolPackageSummary,
+) -> ProtocolPackageVersionViewModel {
     ProtocolPackageVersionViewModel {
         package: summary.package,
         name: summary.name,
@@ -76,7 +91,57 @@ fn application_summary(summary: ProtocolPackageSummary) -> ProtocolPackageVersio
     }
 }
 
-pub(super) fn protocol_package_app_error(error: &ProtocolPackageStorageError) -> AppError {
+pub(in crate::adapters) fn application_description(
+    compiled: &CompiledProtocolPackage,
+) -> ProtocolPackageDescriptionViewModel {
+    let schema = compiled.schema();
+    ProtocolPackageDescriptionViewModel {
+        capabilities: ProtocolPackageCapabilitiesViewModel {
+            upstream: ProtocolPackageDirectionCapabilitiesViewModel {
+                frame: true,
+                decode: true,
+                encode: compiled.supports_upstream_encode(),
+            },
+            downstream: ProtocolPackageDirectionCapabilitiesViewModel {
+                frame: true,
+                decode: true,
+                encode: compiled.supports_downstream_encode(),
+            },
+            display: compiled.supports_display(),
+        },
+        schema: ProtocolPackageSchemaViewModel {
+            id: schema.id().as_str().to_owned(),
+            version: schema.version(),
+            title: schema.title().to_owned(),
+            fields: schema
+                .fields()
+                .iter()
+                .map(|field| ProtocolPackageSchemaFieldViewModel {
+                    name: field.name().as_str().to_owned(),
+                    label: field.label().to_owned(),
+                    field_type: match field.field_type() {
+                        intercept_proxy_domain::DocumentFieldType::String => {
+                            ProtocolPackageSchemaFieldTypeViewModel::String
+                        }
+                        intercept_proxy_domain::DocumentFieldType::Int => {
+                            ProtocolPackageSchemaFieldTypeViewModel::Int
+                        }
+                        intercept_proxy_domain::DocumentFieldType::Bool => {
+                            ProtocolPackageSchemaFieldTypeViewModel::Bool
+                        }
+                        intercept_proxy_domain::DocumentFieldType::Blob => {
+                            ProtocolPackageSchemaFieldTypeViewModel::Blob
+                        }
+                    },
+                })
+                .collect(),
+        },
+    }
+}
+
+pub(in crate::adapters) fn protocol_package_app_error(
+    error: &ProtocolPackageStorageError,
+) -> AppError {
     let entity = match error {
         ProtocolPackageStorageError::IdentityConflict { package }
         | ProtocolPackageStorageError::NotFound { package }

@@ -7,6 +7,8 @@ pub(super) struct ProtocolPortFailures {
     pub list: Option<AppError>,
     pub get: Option<AppError>,
     pub compile: Option<AppError>,
+    pub describe: Option<AppError>,
+    pub import: Option<AppError>,
     pub usage: Option<AppError>,
     pub set_enabled: Option<AppError>,
     pub delete: Option<AppError>,
@@ -20,10 +22,19 @@ pub(super) struct FakeProtocolPackageServices {
     compilation_results: parking_lot::Mutex<
         HashMap<ProtocolPackageRef, AppResult<ProtocolPackageCompilationReceipt>>,
     >,
+    descriptions:
+        parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageDescriptionViewModel>>,
+    import_responses:
+        parking_lot::Mutex<VecDeque<AppResult<Option<ProtocolPackageImportPreviewViewModel>>>>,
+    import_commit_responses:
+        parking_lot::Mutex<VecDeque<AppResult<ProtocolPackageImportViewModel>>>,
     pub failures: parking_lot::Mutex<ProtocolPortFailures>,
     pub get_calls: AtomicUsize,
     pub compile_calls: AtomicUsize,
+    pub describe_calls: AtomicUsize,
+    pub import_calls: AtomicUsize,
     pub usage_calls: AtomicUsize,
+    pub usage_count_calls: AtomicUsize,
     pub set_enabled_calls: AtomicUsize,
     pub delete_calls: AtomicUsize,
     pub exact_calls: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
@@ -63,6 +74,25 @@ impl FakeProtocolPackageServices {
         result: AppResult<ProtocolPackageCompilationReceipt>,
     ) {
         self.compilation_results.lock().insert(package, result);
+    }
+
+    pub fn set_description(
+        &self,
+        package: ProtocolPackageRef,
+        description: ProtocolPackageDescriptionViewModel,
+    ) {
+        self.descriptions.lock().insert(package, description);
+    }
+
+    pub fn push_import_response(
+        &self,
+        response: AppResult<Option<ProtocolPackageImportPreviewViewModel>>,
+    ) {
+        self.import_responses.lock().push_back(response);
+    }
+
+    pub fn push_import_commit_response(&self, response: AppResult<ProtocolPackageImportViewModel>) {
+        self.import_commit_responses.lock().push_back(response);
     }
 
     fn record_call(&self, package: &ProtocolPackageRef) {
@@ -145,6 +175,55 @@ impl ProtocolPackageCompilerPort for FakeProtocolPackageServices {
             compatible: true,
         })
     }
+
+    async fn describe(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
+        self.describe_calls.fetch_add(1, Ordering::SeqCst);
+        self.record_call(package);
+        if let Some(error) = self.failures.lock().describe.clone() {
+            return Err(error);
+        }
+        if !self.records.lock().contains_key(package) {
+            return Err(AppError::new(
+                "PROTOCOL_PACKAGE_NOT_FOUND",
+                "测试记录不存在。",
+            ));
+        }
+        Ok(self
+            .descriptions
+            .lock()
+            .get(package)
+            .cloned()
+            .unwrap_or_else(description))
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageImportPort for FakeProtocolPackageServices {
+    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
+        self.import_calls.fetch_add(1, Ordering::SeqCst);
+        if let Some(error) = self.failures.lock().import.clone() {
+            return Err(error);
+        }
+        self.import_responses.lock().pop_front().unwrap_or(Ok(None))
+    }
+
+    async fn commit_zip(
+        &self,
+        _: ProtocolPackageImportToken,
+    ) -> AppResult<ProtocolPackageImportViewModel> {
+        self.import_commit_responses
+            .lock()
+            .pop_front()
+            .unwrap_or_else(|| {
+                Err(AppError::new(
+                    "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID",
+                    "测试令牌不存在。",
+                ))
+            })
+    }
 }
 
 #[async_trait]
@@ -166,6 +245,26 @@ impl ProtocolPackageUsageQueryPort for FakeProtocolPackageServices {
             return Err(error);
         }
         Ok(self.usages(package))
+    }
+
+    async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>> {
+        self.usage_count_calls.fetch_add(1, Ordering::SeqCst);
+        if let Some(error) = self.failures.lock().usage.clone() {
+            return Err(error);
+        }
+        Ok(self
+            .usages
+            .lock()
+            .iter()
+            .map(|(package, usages)| ProtocolPackageUsageCount {
+                package: package.clone(),
+                reference_count: usages.len(),
+                active_reference_count: usages
+                    .iter()
+                    .filter(|usage| usage.blocks_disable())
+                    .count(),
+            })
+            .collect())
     }
 }
 
@@ -205,6 +304,55 @@ pub(super) fn usage(
     }
 }
 
+pub(super) fn description() -> ProtocolPackageDescriptionViewModel {
+    ProtocolPackageDescriptionViewModel {
+        capabilities: ProtocolPackageCapabilitiesViewModel {
+            upstream: ProtocolPackageDirectionCapabilitiesViewModel {
+                frame: true,
+                decode: true,
+                encode: true,
+            },
+            downstream: ProtocolPackageDirectionCapabilitiesViewModel {
+                frame: true,
+                decode: true,
+                encode: false,
+            },
+            display: true,
+        },
+        schema: ProtocolPackageSchemaViewModel {
+            id: "payments".into(),
+            version: 1,
+            title: "Payments".into(),
+            fields: [
+                (
+                    "trace_id",
+                    ProtocolPackageSchemaFieldTypeViewModel::String,
+                    "Trace ID",
+                ),
+                (
+                    "amount",
+                    ProtocolPackageSchemaFieldTypeViewModel::Int,
+                    "Amount",
+                ),
+                (
+                    "approved",
+                    ProtocolPackageSchemaFieldTypeViewModel::Bool,
+                    "Approved",
+                ),
+            ]
+            .into_iter()
+            .map(
+                |(name, field_type, label)| ProtocolPackageSchemaFieldViewModel {
+                    name: name.into(),
+                    label: label.into(),
+                    field_type,
+                },
+            )
+            .collect(),
+        },
+    }
+}
+
 pub(super) fn application(
     services: Arc<FakeProtocolPackageServices>,
     workspaces: Arc<InMemoryWorkspaceStore>,
@@ -230,6 +378,7 @@ pub(super) fn application(
             protocol_packages: ProtocolPackageApplicationServices {
                 store: services.clone(),
                 compiler: services.clone(),
+                importer: services.clone(),
                 usage_query: services,
             },
             events: Arc::new(EventHub::default()),

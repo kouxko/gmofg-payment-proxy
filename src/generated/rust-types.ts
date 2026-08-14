@@ -64,6 +64,21 @@ export const commands = {
 	listenerStop: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_stop", { workspaceId, expectedWorkspaceRevision, listenerId })),
 	listenerTestUpstreamConnection: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamConnectionTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_connection", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	listenerTestUpstreamTls: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
+	protocolPackageList: () => typedError<ProtocolPackageGroupViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_list")),
+	protocolPackageDetail: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_detail", { packageRef })),
+	protocolPackageImport: () => typedError<{
+	token: ProtocolPackageImportToken,
+	package: ProtocolPackageRef,
+	name: string,
+	host_api: number,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	schema: ProtocolPackageSchemaViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import")),
+	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
+	protocolPackageEnable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_enable", { packageRef })),
+	protocolPackageDisable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_disable", { packageRef })),
+	protocolPackageDelete: (packageRef: ProtocolPackageIdentityInput) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_delete", { packageRef })),
+	protocolPackageUsage: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageUsageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_usage", { packageRef })),
 	listenerImportDownstreamServerIdentity: (label: string) => typedError<{
 	reference: CertificateReference,
 	detail: ListenerCertificateDetailViewModel,
@@ -881,12 +896,88 @@ export type PathMtuProfile = {
 /**  超过路径 MTU 时的处理语义。 */
 export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
 
+/**  协议包两个方向与公共 Display 的完整能力投影。 */
+export type ProtocolPackageCapabilitiesViewModel = {
+	upstream: ProtocolPackageDirectionCapabilitiesViewModel,
+	downstream: ProtocolPackageDirectionCapabilitiesViewModel,
+	display: boolean,
+};
+
+/**  精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。 */
+export type ProtocolPackageDetailViewModel = {
+	version: ProtocolPackageVersionViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	schema: ProtocolPackageSchemaViewModel,
+	usages: ProtocolPackageUsageViewModel[],
+};
+
+/**
+ *  一个方向在 Manifest 中声明并通过编译校验的能力。
+ *  Frame 与 Decode 在 Host API v1 中是必需入口，仍显式返回给 UI，避免前端根据 API
+ *  版本自行推断。Encode 是可选入口；为 `false` 时对应开关必须保持关闭。
+ */
+export type ProtocolPackageDirectionCapabilitiesViewModel = {
+	frame: boolean,
+	decode: boolean,
+	encode: boolean,
+};
+
+/**  列表按协议包 ID 聚合，但每个版本仍保留自己的名称、状态和精确身份。 */
+export type ProtocolPackageGroupViewModel = {
+	id: ProtocolPackageId,
+	/**  最新已安装版本声明的名称，作为分组行的稳定展示名称。 */
+	name: string,
+	versions: ProtocolPackageVersionViewModel[],
+	/**  全部精确版本被已保存 Listener 引用的总次数。 */
+	reference_count: number,
+	/**  其中运行态不为 Stopped 的引用次数。 */
+	active_reference_count: number,
+};
+
 /**
  *  应用级协议包的稳定 ID。
  *  Wire 形式是字符串，必须匹配 `[a-z][a-z0-9-]*`；小写限制保证跨平台文件系统、
  *  ZIP 条目和数据库查询使用同一规范形式。
  */
 export type ProtocolPackageId = string;
+
+/**
+ *  `WebView` 提交的未验证协议包身份。
+ *  IPC 先反序列化普通字符串，再在命令内部调用领域构造器，因此恶意或过期前端提交的
+ *  非法 ID/SemVer 也会得到稳定 `PROTOCOL_PACKAGE_INVALID`，而不是框架私有反序列化文本。
+ */
+export type ProtocolPackageIdentityInput = {
+	id: string,
+	version: string,
+};
+
+/**  原生 ZIP 导入是新安装，还是相同身份和内容的幂等复用。 */
+export type ProtocolPackageImportOutcomeViewModel = "installed" | "reused";
+
+/**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+export type ProtocolPackageImportPreviewViewModel = {
+	token: ProtocolPackageImportToken,
+	package: ProtocolPackageRef,
+	name: string,
+	host_api: number,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	schema: ProtocolPackageSchemaViewModel,
+};
+
+/**  一次已验证但未安装的 pending import 随机令牌。 */
+export type ProtocolPackageImportToken = string;
+
+/**
+ *  原生文件选择和完整校验成功后的无源码导入结果。
+ *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 Rhai 错误均作为
+ *  稳定 `AppError` 返回，不会构造该类型。
+ */
+export type ProtocolPackageImportViewModel = {
+	outcome: ProtocolPackageImportOutcomeViewModel,
+	version: ProtocolPackageVersionViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	schema: ProtocolPackageSchemaViewModel,
+};
 
 /**
  *  Listener/Workspace 引用协议包时使用的精确身份。
@@ -899,12 +990,57 @@ export type ProtocolPackageRef = {
 	version: ProtocolPackageVersion,
 };
 
+/**  Host API v1 Schema 可向 UI 和规则目录公开的四种字段类型。 */
+export type ProtocolPackageSchemaFieldTypeViewModel = "string" | "int" | "bool" | "blob";
+
+/**  一个按作者声明顺序返回的 Schema 字段。 */
+export type ProtocolPackageSchemaFieldViewModel = {
+	name: string,
+	label: string,
+	type: ProtocolPackageSchemaFieldTypeViewModel,
+};
+
+/**  协议包提前声明的 Document Schema；不包含 Schema 文件路径或原始 TOML。 */
+export type ProtocolPackageSchemaViewModel = {
+	id: string,
+	version: number,
+	title: string,
+	fields: ProtocolPackageSchemaFieldViewModel[],
+};
+
+/**
+ *  一个已保存 Listener 对精确协议包版本的引用。
+ *  `runtime_state` 由 Rust 合并运行时状态；没有活动运行记录时固定为 `Stopped`。删除只看
+ *  引用是否存在，停用则仅允许所有引用都已确认停止。
+ */
+export type ProtocolPackageUsageViewModel = {
+	workspace_id: WorkspaceId,
+	workspace_name: string,
+	listener_id: ListenerId,
+	listener_name: string,
+	listener_enabled: boolean,
+	runtime_state: ListenerRuntimeState,
+};
+
+/**  最近一次持久化校验的无源码结果。 */
+export type ProtocolPackageValidationViewModel = { state: "valid" } | { state: "invalid"; code: string };
+
 /**
  *  协议包不可变版本号。
  *  保存作者提供的完整 `SemVer` 文本，包括 prerelease 和 build metadata；Listener 后续必须绑定
  *  此精确值，不做范围匹配或自动升级。
  */
 export type ProtocolPackageVersion = string;
+
+/**  一个不可变协议包版本的轻量摘要。 */
+export type ProtocolPackageVersionViewModel = {
+	package: ProtocolPackageRef,
+	name: string,
+	host_api: number,
+	enabled: boolean,
+	validation: ProtocolPackageValidationViewModel,
+	installed_at: string,
+};
 
 export type ProxyListener = {
 	id: ListenerId,

@@ -4,37 +4,95 @@
 //! 展示快照，真正执行停用或删除时一定会在同一临界区重新查询，不能利用查询和写入之间
 //! 的时间窗口绕过 Rust 约束。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use super::Application;
 use crate::{
     AppError, AppResult, OperationResultViewModel, ProtocolPackageDetailViewModel,
-    ProtocolPackageGroupViewModel, ProtocolPackageRef, ProtocolPackageValidationViewModel,
+    ProtocolPackageGroupViewModel, ProtocolPackageImportPreviewViewModel,
+    ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
+    ProtocolPackageUsageViewModel, ProtocolPackageValidationViewModel,
     ProtocolPackageVersionViewModel, SocketPayloadProcessing, UiTone,
 };
 
 impl Application {
     /// 按稳定 ID 分组列出所有精确版本，不隐式编译或改变启用状态。
     pub async fn protocol_package_list(&self) -> AppResult<Vec<ProtocolPackageGroupViewModel>> {
+        let versions = self.protocol_package_store.list().await?;
+        if versions.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut usage_counts = HashMap::new();
+        for count in self.protocol_package_usage.usage_counts().await? {
+            let totals = usage_counts
+                .entry(count.package)
+                .or_insert((0_usize, 0_usize));
+            totals.0 = totals.0.checked_add(count.reference_count).ok_or_else(|| {
+                AppError::new(
+                    "PROTOCOL_PACKAGE_USAGE_COUNT_INVALID",
+                    "协议包引用计数超过应用可表示范围。",
+                )
+            })?;
+            totals.1 = totals
+                .1
+                .checked_add(count.active_reference_count)
+                .ok_or_else(|| {
+                    AppError::new(
+                        "PROTOCOL_PACKAGE_USAGE_COUNT_INVALID",
+                        "协议包活动引用计数超过应用可表示范围。",
+                    )
+                })?;
+        }
         let mut groups = BTreeMap::new();
-        for version in self.protocol_package_store.list().await? {
+        for version in versions {
             groups
                 .entry(version.package.id.clone())
                 .or_insert_with(Vec::new)
                 .push(version);
         }
-        Ok(groups
+        groups
             .into_iter()
-            .map(|(id, mut versions)| {
+            .map(|(id, mut versions)| -> AppResult<_> {
                 versions.sort_by(|left, right| {
                     left.package
                         .version
-                        .cmp(&right.package.version)
+                        .semantic_cmp(&right.package.version)
                         .then_with(|| left.name.cmp(&right.name))
                 });
-                ProtocolPackageGroupViewModel { id, versions }
+                let name = versions
+                    .last()
+                    .map_or_else(|| id.as_str().to_owned(), |version| version.name.clone());
+                let (reference_count, active_reference_count) = versions.iter().try_fold(
+                    (0_usize, 0_usize),
+                    |totals, version| -> AppResult<_> {
+                        let Some(counts) = usage_counts.get(&version.package) else {
+                            return Ok(totals);
+                        };
+                        Ok((
+                            totals.0.checked_add(counts.0).ok_or_else(|| {
+                                AppError::new(
+                                    "PROTOCOL_PACKAGE_USAGE_COUNT_INVALID",
+                                    "协议包引用计数超过应用可表示范围。",
+                                )
+                            })?,
+                            totals.1.checked_add(counts.1).ok_or_else(|| {
+                                AppError::new(
+                                    "PROTOCOL_PACKAGE_USAGE_COUNT_INVALID",
+                                    "协议包活动引用计数超过应用可表示范围。",
+                                )
+                            })?,
+                        ))
+                    },
+                )?;
+                Ok(ProtocolPackageGroupViewModel {
+                    id,
+                    name,
+                    versions,
+                    reference_count,
+                    active_reference_count,
+                })
             })
-            .collect())
+            .collect()
     }
 
     /// 查询精确版本和当前全部已保存引用；任何依赖失败都使整个详情查询失败。
@@ -43,8 +101,42 @@ impl Application {
         package: ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageDetailViewModel> {
         let version = self.require_protocol_package(&package).await?;
+        let description = self.protocol_package_compiler.describe(&package).await?;
         let usages = self.protocol_package_usage.usages(&package).await?;
-        Ok(ProtocolPackageDetailViewModel { version, usages })
+        Ok(ProtocolPackageDetailViewModel {
+            version,
+            capabilities: description.capabilities,
+            schema: description.schema,
+            usages,
+        })
+    }
+
+    /// 通过宿主原生文件选择器导入 ZIP；WebView 不提交路径或文件内容。
+    pub async fn protocol_package_import(
+        &self,
+    ) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
+        // 原生文件 Dialog 可能长时间等待用户选择，不能在这段交互期间占用全局 mutation_gate。
+        // 注册表自身会串行化同一身份的 install/delete/cache 写入；导入又不会改写既有启用位或
+        // Listener 引用，因此无需阻塞其他独立的 Application 变更。
+        self.protocol_package_importer.prepare_zip().await
+    }
+
+    /// 使用 prepare 阶段返回的随机 token 原子提交被冻结的已验证包。
+    pub async fn protocol_package_import_commit(
+        &self,
+        token: ProtocolPackageImportToken,
+    ) -> AppResult<ProtocolPackageImportViewModel> {
+        let _gate = self.mutation_gate.lock().await;
+        self.protocol_package_importer.commit_zip(token).await
+    }
+
+    /// 单独查询精确版本的全部使用者，供详情刷新和删除确认 Dialog 复用。
+    pub async fn protocol_package_usage(
+        &self,
+        package: ProtocolPackageRef,
+    ) -> AppResult<Vec<ProtocolPackageUsageViewModel>> {
+        self.require_protocol_package(&package).await?;
+        self.protocol_package_usage.usages(&package).await
     }
 
     /// 完整重新编译并确认 Host API 后才原子写入启用位。

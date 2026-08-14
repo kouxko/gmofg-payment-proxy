@@ -115,5 +115,11 @@ tauri-specta.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
+tauri = { workspace = true, features = ["test"] }
+zip.workspace = true
+
 [lints]
 workspace = true

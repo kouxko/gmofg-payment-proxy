@@ -9,6 +9,7 @@ mod capture;
 mod certificates;
 mod diagnostics;
 mod listener;
+mod protocol_packages;
 mod rules;
 mod settings;
 mod workspace;
@@ -19,6 +20,7 @@ pub use capture::*;
 pub use certificates::*;
 pub use diagnostics::*;
 pub use listener::*;
+pub use protocol_packages::*;
 pub use rules::*;
 pub use settings::*;
 pub use workspace::*;
@@ -96,6 +98,14 @@ pub fn builder() -> Builder<Wry> {
             listener_stop,
             listener_test_upstream_connection,
             listener_test_upstream_tls,
+            protocol_package_list,
+            protocol_package_detail,
+            protocol_package_import,
+            protocol_package_import_commit,
+            protocol_package_enable,
+            protocol_package_disable,
+            protocol_package_delete,
+            protocol_package_usage,
             listener_import_downstream_server_identity,
             listener_import_downstream_client_trust,
             listener_import_upstream_client_identity,
