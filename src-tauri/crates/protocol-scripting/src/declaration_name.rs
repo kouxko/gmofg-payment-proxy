@@ -66,7 +66,7 @@ impl fmt::Display for PackageFilePath {
 ///
 /// Host API v1 将函数名限制为 ASCII 标识符 `[A-Za-z_][A-Za-z0-9_]*`，并与 Document 字段名
 /// 共用 Rhai 关键字拒绝表。T08 还会使用真实 AST 校验函数存在、位于顶层且参数数量正确。
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct ProtocolFunctionName(String);
 
 impl ProtocolFunctionName {
