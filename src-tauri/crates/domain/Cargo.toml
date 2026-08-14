@@ -9,6 +9,7 @@ chrono.workspace = true
 regex = "1.12.2"
 serde.workspace = true
 serde_json.workspace = true
+semver.workspace = true
 specta.workspace = true
 specta-typescript.workspace = true
 thiserror.workspace = true

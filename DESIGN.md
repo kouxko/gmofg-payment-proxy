@@ -38,7 +38,7 @@
 ### Package ownership and portability
 
 - Installed protocol packages are application-scoped and immutable by `package_id + version`.
-- Rust stores a stable content digest. Re-importing identical content reuses the version; different content under the same identity is rejected.
+- Protocol packages have no content digest or digital-signature contract. An installed `package_id + version` is reused and cannot be overwritten; changed content requires a new version.
 - `.intercept-workspace` embeds every exact package version referenced by that Workspace's Listeners.
 - `.intercept-config` embeds all installed packages and their application-level enabled/disabled state.
 - Workspace import installs missing embedded packages globally but leaves newly installed scripts disabled until explicit review and enablement.
@@ -66,9 +66,9 @@ The page lists packages by immutable package ID. Selecting a row opens a version
 
 - Package row: package name, ID, enabled/disabled state, installed version count and usage count.
 - Dialog version list: every installed version for that package ID, sorted by SemVer.
-- Detail header: name, exact ID/version, content digest, API version, Schema ID/version, status and primary actions.
+- Detail header: name, exact ID/version, API version, Schema ID/version, status and primary actions.
 - Overview: identity, installed time, declared capabilities and fixed fallback behavior.
-- Document fields: table of name, label, type and required/optional; field name uses monospace.
+- Document fields: table of name, label and type; field name uses monospace. Protocol-specific presence requirements stay in scripts.
 - Entry points: four Hook rows plus Display, showing function, script, required/optional, declared and compile state.
 - Validation: only successfully validated packages can be installed. Import errors stay in the import Dialog and never create a package row.
 - Users: Workspace, Listener name and runtime status; each row navigates to the owning Listener.
@@ -84,10 +84,10 @@ The page lists packages by immutable package ID. Selecting a row opens a version
 ```
 
 - File selection uses the native dialog through Rust.
-- Rust validates ZIP paths/limits, strict Manifest/Schema, every Rhai module, syntax and declared entry signature before returning a preview.
+- Rust validates ZIP paths/limits, strict Manifest/Schema, every Rhai module, syntax, parameters and return types before returning a preview.
 - Preview shows package identity, Schema field count, declared capabilities, validation result and conflicts, but never source.
 - Same `id + version` cannot overwrite an installed package; a new version installs alongside it.
-- Identical `id + version + content digest` reuses the existing package without creating a duplicate.
+- An existing exact `id + version` is reused without comparing or overwriting its installed content.
 - Failed validation leaves no partially installed package, file or compiled cache. A syntax error cannot be installed.
 - Enabling is explicit after a successful install; importing does not silently rebind Listeners.
 

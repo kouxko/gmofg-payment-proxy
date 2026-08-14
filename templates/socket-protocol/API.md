@@ -25,15 +25,14 @@ custom-protocol-1.0.0.zip
 - Rhai 模块使用 `import "libraries/parser" as parser`；规范写法省略 `.rhai`。
 - 导入路径仍受包根目录限制，不能加载系统或用户目录中的模块。
 - Manifest 声明的脚本、所有递归导入模块和入口函数在写入注册表前统一编译验证。任意 Rhai 语法错误、
-  模块解析错误、入口缺失或签名错误都会拒绝导入。
+  模块解析错误、入口缺失、参数数量或返回类型错误都会拒绝导入。
 
 ### 1.1 安装范围、身份与可移植性
 
 - 协议包安装在应用级注册表，不属于某一个 Workspace。
 - 包的不可变身份是 `package.id + package.version`。
-- Rust 对校验后的完整文件集合按稳定路径顺序计算 `content_sha256`；ZIP 时间戳、压缩级别等容器元数据不参与内容身份。
-- 同一个 `id + version + content_sha256` 再次导入时复用已有包。
-- 同一个 `id + version` 如果内容摘要不同，视为不可变版本冲突并拒绝导入；不能静默覆盖。
+- 协议包没有内容摘要或数字签名字段，ZIP 中也不要求这类文件。
+- 同一个 `id + version` 已安装时直接复用现有版本；新导入内容不能覆盖它。作者修改包内容时必须提升版本号。
 - 编译 AST、缓存和本机安装路径不进入任何导出文件；目标机器重新校验并编译脚本。
 
 可移植文件规则：
@@ -45,9 +44,9 @@ custom-protocol-1.0.0.zip
 
 导入 Workspace 时：
 
-1. Rust 在修改 Workspace 前校验全部嵌入包、Manifest、Schema、模块、入口和内容摘要。
-2. 已安装且摘要相同的版本直接复用；缺失版本安装到应用级注册表。
-3. 同 ID/版本内容冲突会让整个 Workspace 导入失败，不留下部分 Workspace 或部分协议包。
+1. Rust 在修改 Workspace 前校验全部需要安装的嵌入包、Manifest、Schema、模块和入口函数。
+2. 已安装的精确 ID/版本直接复用，不比较或覆盖内容；缺失版本安装到应用级注册表。
+3. 任一缺失版本校验失败都会让整个 Workspace 导入失败，不留下部分 Workspace 或部分协议包。
 4. 从 Workspace 新安装的协议包默认停用；用户在协议包页面检查并显式启用后，相关 Scripted Listener 才能启动。
 5. Workspace 只保存 Listener 的 `package_id + package_version` 引用，不保存全局启用状态。
 
@@ -78,14 +77,14 @@ UI 应展示阻止操作的 Workspace/Listener 使用者，并提供跳转；是
 
 导入是“先完整校验、后原子安装”：
 
-1. Rust 读取 ZIP 并校验路径、文件数量、解压大小和内容摘要。
+1. Rust 读取 ZIP 并校验路径、文件数量和解压大小。
 2. 严格解析 Manifest 与 Document Schema。
 3. 编译所有声明脚本和递归导入模块，验证 Rhai 语法与入口函数参数数量。
 4. 只有前三步全部成功，才返回无源码预览并允许安装。
 5. 安装使用已经校验的同一份有界内容，不重新信任可能已被替换的原文件路径。
 
 失败不会产生协议包记录、部分文件或可复用编译缓存。应用的协议包页面按 package ID 列表展示；点击包行打开 Dialog，
-Dialog 列出所有已安装版本，并可查看精确版本身份、能力、Schema、校验摘要和使用者。Rust ViewModel 不包含 Rhai
+Dialog 列出所有已安装版本，并可查看精确版本身份、能力、Schema、校验结果和使用者。Rust ViewModel 不包含 Rhai
 源码、原 ZIP、AST 或绝对安装路径，应用也不提供源码查看/编辑入口。
 
 ## 2. Manifest
@@ -150,7 +149,7 @@ hooks.downstream.send     Proxy -> App
 
 ## 3. 入口函数
 
-| 入口 | 签名 | 必需 | 返回值 |
+| 入口 | 函数形式 | 必需 | 返回值 |
 | --- | --- | --- | --- |
 | `frame` | `frame(reader, context)` | receive 必需 | `FramingDecision` |
 | `decode` | `decode(origin, context)` | receive 必需 | 当前 Schema 的 `Document` |
@@ -288,7 +287,6 @@ title = "Custom Message"
 name = "message_type"
 label = "Message Type"
 type = "string"
-required = true
 
 [[fields]]
 name = "payload"
@@ -301,7 +299,8 @@ type = "blob"
 - `id` 匹配 `[a-z][a-z0-9-]*`，`version` 是正整数。
 - 字段名匹配 `[a-z][a-z0-9_]*`，并拒绝 Rhai 保留字、重复名称。
 - `label` 和 `title` 只用于 UI，不参与脚本变量绑定。
-- `required` 默认 `false`；为 `true` 时，`decode()` 返回后必须已经赋值。
+- Schema 只声明允许出现的稳定字段和类型，不声明协议必填条件；条件完整性由具体协议脚本校验。
+- 字段只接受 `name`、`label`、`type`；包括 `required` 在内的未知键会使协议包导入失败。
 - Document 是一层扁平字段集合；首版不支持嵌套 Schema、Array 或 Map 字段。
 
 Host API v1 字段类型：
@@ -315,7 +314,8 @@ Host API v1 字段类型：
 
 涉及小数的协议，v1 使用缩放后的 `int` 或保留原始 `string`；`decimal` 在精确运行时类型确定前不属于 v1 Schema 类型。
 
-每个 Schema 字段会成为规则编辑器中的同名、同类型变量。未赋值的可选字段不存在于当前 Document，但仍存在于规则变量目录中。
+每个 Schema 字段会成为规则编辑器中的同名、同类型变量。当前报文未赋值的字段不存在于 Document 值集合，
+但仍存在于规则变量目录中；规则读取值前可先判断字段是否存在。
 
 ## 9. Document
 
@@ -335,11 +335,11 @@ document.fields()               -> Array<Map>
 - `set()` 只允许 Schema 已声明字段，并严格检查对应 Rhai 类型。
 - 写入未知字段或错误类型会抛错。
 - `has()` 表示当前 Document 是否已经给该字段赋值；未知字段会抛错。
-- `get()` 返回已赋值字段；字段未赋值或未知时会抛错。可选字段应先调用 `has()`。
+- `get()` 返回已赋值字段；字段未赋值或未知时会抛错。可能未赋值的字段应先调用 `has()`。
 - `fields()` 按 Schema 声明顺序返回全部字段，便于通用 Display。
 
 Decode 关闭但 Encode 开启时，宿主创建同一种 Schema 绑定 Document，但所有字段初始未赋值。`has()` 返回 false，
-`get()` 仍按未赋值规则报错。这个宿主空 Document 不执行 required 完成校验；Encode 脚本可以忽略 Document、只处理 origin。
+`get()` 仍按未赋值规则报错；Encode 脚本可以忽略 Document、只处理 origin。
 
 `fields()` 每一项是：
 
@@ -348,7 +348,6 @@ Decode 关闭但 Encode 开启时，宿主创建同一种 Schema 绑定 Document
     name: "amount",
     label: "Amount",
     type: "int",
-    required: false,
     present: true,
     value: 1000       // present=false 时为 ()
 }

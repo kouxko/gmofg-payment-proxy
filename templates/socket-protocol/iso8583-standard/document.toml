@@ -1,6 +1,6 @@
 # Document Schema 是规则变量的稳定契约。
 # 字段名称必须匹配 [a-z][a-z0-9_]*，并且不能在脚本中动态增加未知字段。
-# v1 支持 string/int/bool/blob；required 未写时默认为 false。
+# v1 支持 string/int/bool/blob；字段是否必须出现由具体 MTI/处理码对应的脚本逻辑校验。
 id = "iso8583-financial-message"
 version = 1
 title = "ISO 8583 Financial Message"
@@ -9,7 +9,6 @@ title = "ISO 8583 Financial Message"
 name = "message_type"
 label = "Message Type"
 type = "string"
-required = true
 
 [[fields]]
 name = "processing_code"
