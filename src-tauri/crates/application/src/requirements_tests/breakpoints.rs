@@ -185,6 +185,7 @@ async fn dynamic_listener_breakpoint_resolve_normalizes_without_reformatting_bod
             workspaces: Arc::new(InMemoryWorkspaceStore::default()),
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
             events: Arc::new(EventHub::default()),
         },
     );

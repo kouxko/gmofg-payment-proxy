@@ -31,6 +31,7 @@ pub(in crate::requirements_tests) fn application_with_workspace_ports(
             workspaces,
             workspace_documents,
             listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
             events: Arc::new(EventHub::default()),
         },
     )
@@ -58,6 +59,7 @@ pub(in crate::requirements_tests) fn application_with_configuration_store(
             workspaces,
             workspace_documents,
             listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
             events: Arc::new(EventHub::default()),
         },
         Arc::new(UnavailableAndroidControlPort),

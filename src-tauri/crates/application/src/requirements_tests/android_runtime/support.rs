@@ -245,6 +245,7 @@ async fn running_vpn_fixture_with_listener_state(
             workspaces: workspaces.clone(),
             workspace_documents: documents.clone(),
             listener_runtime,
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
             events: Arc::new(EventHub::default()),
         },
         android.clone(),

@@ -20,10 +20,11 @@ pub use adapters::{
     InfrastructureServiceBundle, ListenerRuntimeAdapter, NativeFileDialog, ProtectedSecretAdapter,
     ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure, ProtocolPackageRecoveryReport,
     ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError, ProtocolPackageStorageErrorCode,
-    ProtocolPackageSummary, ProtocolPackageValidationStatus, RetiredProxyAdapter,
-    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
-    RuntimeRuleRepository, SettingsRepositoryAdapter, WorkspaceBodyCodecResolver,
-    WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
+    ProtocolPackageSummary, ProtocolPackageUsageQueryAdapter, ProtocolPackageValidationStatus,
+    RetiredProxyAdapter, RuleRepositoryAdapter, RuntimePipelineAdapter,
+    RuntimePipelineProductHooks, RuntimeRuleRepository, SettingsRepositoryAdapter,
+    WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
+    WorkspaceRuntimePolicyResolver,
 };
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,

@@ -284,6 +284,7 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
             workspaces: Arc::new(InMemoryWorkspaceStore::default()),
             workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
             events: Arc::new(EventHub::default()),
         },
     );

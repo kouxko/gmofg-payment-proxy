@@ -17,11 +17,122 @@ use crate::{
     FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
     ListenerId, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
-    ProxyListener, ProxyStatusViewModel, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
-    RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
-    SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
-    SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    ProtocolPackageCompilationReceipt, ProtocolPackageRef, ProtocolPackageUsageViewModel,
+    ProtocolPackageVersionViewModel, ProxyListener, ProxyStatusViewModel, ProxyWorkspace,
+    RuleDraft, RuleId, RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, RuntimeEpoch,
+    SecretReference, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
+    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, WorkspaceId,
+    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
+
+#[async_trait]
+/// 协议包持久化的应用语义边界。
+///
+/// 实现只返回无源码摘要。`set_enabled` 和 `delete` 必须各自是原子存储操作；Application
+/// 在调用前负责引用与编译校验，端口不能自行修改 Workspace 或选择其他版本。
+pub trait ProtocolPackageStorePort: Send + Sync + std::fmt::Debug {
+    async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>>;
+    async fn get(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<Option<ProtocolPackageVersionViewModel>>;
+    async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()>;
+    async fn delete(&self, package: &ProtocolPackageRef) -> AppResult<()>;
+}
+
+#[async_trait]
+/// 启用协议包前执行完整恢复、编译与 Host API 兼容性校验。
+///
+/// 每次启用都必须调用该端口，不能只信任导入时或列表中的历史 `Valid` 状态。
+pub trait ProtocolPackageCompilerPort: Send + Sync + std::fmt::Debug {
+    async fn validate_for_enable(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageCompilationReceipt>;
+}
+
+#[async_trait]
+/// 查询所有 Workspace 中对精确协议包版本的已保存引用，并合并 Listener 运行态。
+pub trait ProtocolPackageUsageQueryPort: Send + Sync + std::fmt::Debug {
+    async fn usages(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<Vec<ProtocolPackageUsageViewModel>>;
+}
+
+/// 协议包生命周期用例的三个独立端口。
+///
+/// 组合对象让 Host 和测试装配保持具名且紧凑，但 Application 内仍按职责分别持有 trait。
+#[derive(Debug, Clone)]
+pub struct ProtocolPackageApplicationServices {
+    pub store: std::sync::Arc<dyn ProtocolPackageStorePort>,
+    pub compiler: std::sync::Arc<dyn ProtocolPackageCompilerPort>,
+    pub usage_query: std::sync::Arc<dyn ProtocolPackageUsageQueryPort>,
+}
+
+impl ProtocolPackageApplicationServices {
+    #[must_use]
+    pub fn unavailable() -> Self {
+        let unavailable = std::sync::Arc::new(UnavailableProtocolPackageServices);
+        Self {
+            store: unavailable.clone(),
+            compiler: unavailable.clone(),
+            usage_query: unavailable,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct UnavailableProtocolPackageServices;
+
+fn unavailable_protocol_packages<T>() -> AppResult<T> {
+    Err(AppError::new(
+        "PROTOCOL_PACKAGE_SERVICES_UNAVAILABLE",
+        "当前 Host 未提供协议包生命周期服务。",
+    ))
+}
+
+#[async_trait]
+impl ProtocolPackageStorePort for UnavailableProtocolPackageServices {
+    async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
+        unavailable_protocol_packages()
+    }
+
+    async fn get(
+        &self,
+        _: &ProtocolPackageRef,
+    ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
+        unavailable_protocol_packages()
+    }
+
+    async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
+        unavailable_protocol_packages()
+    }
+
+    async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        unavailable_protocol_packages()
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageCompilerPort for UnavailableProtocolPackageServices {
+    async fn validate_for_enable(
+        &self,
+        _: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageCompilationReceipt> {
+        unavailable_protocol_packages()
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageUsageQueryPort for UnavailableProtocolPackageServices {
+    async fn usages(
+        &self,
+        _: &ProtocolPackageRef,
+    ) -> AppResult<Vec<ProtocolPackageUsageViewModel>> {
+        unavailable_protocol_packages()
+    }
+}
 
 #[async_trait]
 /// Listener TLS 材料的原生导入边界。

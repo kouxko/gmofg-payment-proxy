@@ -8,6 +8,7 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::*;
 
+mod application_ports;
 mod cache;
 
 const MANIFEST: &str = r#"

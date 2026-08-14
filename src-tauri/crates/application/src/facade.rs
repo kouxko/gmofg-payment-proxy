@@ -12,9 +12,11 @@ use crate::{
     BreakpointCoordinator, BreakpointValidationPort, CertificateOverviewViewModel,
     CertificateServicePort, CertificateValidationViewModel, ChannelPresentationViewModel, EventHub,
     FaultServicePort, ListenerCertificateImportPort, ListenerRuntimePort, OperationResultViewModel,
-    ProtectedSecretPort, ProxyState, ProxyStatusViewModel, ProxySupervisorPort, RuleRepositoryPort,
-    SessionQueryPort, SettingsRepositoryPort, SettingsViewModel, UiEventPayload,
-    UnavailableApplicationConfigurationStore, WorkspaceDocumentPort, WorkspaceRepositoryPort,
+    ProtectedSecretPort, ProtocolPackageApplicationServices, ProtocolPackageCompilerPort,
+    ProtocolPackageStorePort, ProtocolPackageUsageQueryPort, ProxyState, ProxyStatusViewModel,
+    ProxySupervisorPort, RuleRepositoryPort, SessionQueryPort, SettingsRepositoryPort,
+    SettingsViewModel, UiEventPayload, UnavailableApplicationConfigurationStore,
+    WorkspaceDocumentPort, WorkspaceRepositoryPort,
 };
 
 mod android;
@@ -26,6 +28,7 @@ mod diagnostics;
 mod lifecycle;
 mod listener_certificates;
 mod listeners;
+mod protocol_packages;
 mod rules;
 mod secrets;
 mod settings;
@@ -62,6 +65,9 @@ pub struct Application {
     android_package_cache: tokio::sync::Mutex<Option<Vec<crate::AndroidPackageViewModel>>>,
     listener_runtime: Arc<dyn ListenerRuntimePort>,
     listener_certificates: Arc<dyn ListenerCertificateImportPort>,
+    protocol_package_store: Arc<dyn ProtocolPackageStorePort>,
+    protocol_package_compiler: Arc<dyn ProtocolPackageCompilerPort>,
+    protocol_package_usage: Arc<dyn ProtocolPackageUsageQueryPort>,
     protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
     mutation_gate: tokio::sync::Mutex<()>,
@@ -86,6 +92,7 @@ pub struct ApplicationDependencies {
     pub workspace_documents: Arc<dyn WorkspaceDocumentPort>,
     pub listener_runtime: Arc<dyn ListenerRuntimePort>,
     pub listener_certificates: Arc<dyn ListenerCertificateImportPort>,
+    pub protocol_packages: ProtocolPackageApplicationServices,
     pub events: Arc<EventHub>,
 }
 
@@ -152,6 +159,9 @@ impl Application {
             android_package_cache: tokio::sync::Mutex::new(None),
             listener_runtime: dependencies.listener_runtime,
             listener_certificates: dependencies.listener_certificates,
+            protocol_package_store: dependencies.protocol_packages.store,
+            protocol_package_compiler: dependencies.protocol_packages.compiler,
+            protocol_package_usage: dependencies.protocol_packages.usage_query,
             protected_secrets,
             events: dependencies.events,
             mutation_gate: tokio::sync::Mutex::new(()),
