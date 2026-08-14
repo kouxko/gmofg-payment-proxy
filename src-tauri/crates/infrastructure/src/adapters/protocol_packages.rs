@@ -470,25 +470,26 @@ impl ProtocolPackageRepositoryAdapter {
 }
 
 fn compilation_code(error: &ProtocolPackageCompilationError) -> &str {
-    if let Some(error) = error.declaration_error() {
-        error.code().as_str()
-    } else if let Some(error) = error.script_error() {
-        error.code().as_str()
-    } else {
-        // 枚举当前只有 Declaration/Script；保留稳定兜底避免未来新增变体时泄漏 Display 文本。
-        "COMPILATION_FAILED"
-    }
+    error.declaration_error().map_or_else(
+        || {
+            error
+                .script_error()
+                .map_or("COMPILATION_FAILED", |error| error.code().as_str())
+        },
+        |error| error.code().as_str(),
+    )
 }
 
 mod application_port;
 pub(super) use application_port::{
     application_description, application_summary, protocol_package_app_error,
 };
-
+#[path = "protocol_packages/disposition.rs"]
+mod disposition;
+pub(in crate::adapters) use disposition::PreparedProtocolPackageDisposition;
 #[path = "protocol_packages/prepared.rs"]
 mod prepared;
 pub(super) use prepared::PreparedProtocolPackage;
-
 #[path = "protocol_packages/summary.rs"]
 mod summary;
 use summary::summary_from_header;

@@ -50,6 +50,7 @@ pub async fn app_subscribe_events(
                     suggested_action: Some("请重新获取应用快照并订阅事件。".to_owned()),
                     entity_id: None,
                     runtime_epoch: None,
+                    diagnostic: None,
                 })
             })
         })

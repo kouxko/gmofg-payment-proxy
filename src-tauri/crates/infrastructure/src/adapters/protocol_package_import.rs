@@ -11,8 +11,9 @@ use std::{
 
 use async_trait::async_trait;
 use intercept_proxy_application::{
-    AppError, AppResult, ProtocolPackageImportPort, ProtocolPackageImportPreviewViewModel,
-    ProtocolPackageImportToken, ProtocolPackageImportViewModel,
+    AppError, AppResult, ProtocolPackageImportDispositionViewModel, ProtocolPackageImportPort,
+    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
+    ProtocolPackageImportViewModel,
 };
 use parking_lot::Mutex;
 use uuid::Uuid;
@@ -23,7 +24,10 @@ use super::{
     NativeFileDialog, PreparedProtocolPackage, ProtocolPackageInstallOutcome,
     ProtocolPackageRepositoryAdapter,
     common::infra,
-    protocol_packages::{application_description, application_summary, protocol_package_app_error},
+    protocol_packages::{
+        PreparedProtocolPackageDisposition, application_description, application_summary,
+        protocol_package_app_error,
+    },
 };
 
 const MAX_PENDING_IMPORTS: usize = 4;
@@ -99,6 +103,12 @@ impl PendingProtocolPackageImports {
             .saturating_sub(pending.prepared.total_bytes());
         Ok(pending.prepared)
     }
+
+    fn discard(&mut self, token: ProtocolPackageImportToken, now: Instant) -> AppResult<()> {
+        // discard 与 commit 使用完全相同的 take 语义：无论过期、重复还是伪造，都只返回同一
+        // 稳定错误，既不泄漏 pending 集合状态，也不会让已释放 token 再次变为有效。
+        self.take(token, now).map(drop)
+    }
 }
 
 fn pending_limit_error() -> AppError {
@@ -151,9 +161,27 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
         let name = compiled.manifest().package().name().to_owned();
         let host_api = compiled.manifest().api();
         let description = application_description(compiled);
-        let token = self.pending.lock().insert(prepared, Instant::now())?;
+        let disposition = self
+            .repository
+            .prepared_disposition(&prepared)
+            .map_err(|error| app_error_from_storage(&error))?;
+        let (disposition, token) = match disposition {
+            PreparedProtocolPackageDisposition::New => (
+                ProtocolPackageImportDispositionViewModel::New,
+                Some(self.pending.lock().insert(prepared, Instant::now())?),
+            ),
+            PreparedProtocolPackageDisposition::Reusable => (
+                ProtocolPackageImportDispositionViewModel::Reusable,
+                Some(self.pending.lock().insert(prepared, Instant::now())?),
+            ),
+            PreparedProtocolPackageDisposition::IdentityConflict => (
+                ProtocolPackageImportDispositionViewModel::IdentityConflict,
+                None,
+            ),
+        };
         Ok(Some(ProtocolPackageImportPreviewViewModel {
             token,
+            disposition,
             package,
             name,
             host_api,
@@ -189,6 +217,10 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
             schema: description.schema,
         })
     }
+
+    async fn discard_zip(&self, token: ProtocolPackageImportToken) -> AppResult<()> {
+        self.pending.lock().discard(token, Instant::now())
+    }
 }
 
 fn app_error_from_storage(
@@ -199,273 +231,5 @@ fn app_error_from_storage(
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{
-        io::{Cursor, Write},
-        path::PathBuf,
-        sync::Mutex,
-    };
-
-    use intercept_proxy_application::{
-        AppError, AppResult, ProtocolPackageImportOutcomeViewModel, ProtocolPackageImportPort,
-    };
-    use tempfile::TempDir;
-    use zip::{ZipWriter, write::SimpleFileOptions};
-
-    use super::*;
-    use crate::{SqliteStore, adapters::FileSelection};
-
-    const MANIFEST: &str = r#"
-api = 1
-
-[package]
-id = "example-protocol"
-name = "Example Protocol"
-version = "1.0.0"
-
-[document]
-schema = "document.toml"
-display = { script = "protocol.rhai", function = "display" }
-
-[hooks.upstream.receive]
-script = "protocol.rhai"
-frame = "frame"
-decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
-encode = "encode"
-
-[hooks.downstream.receive]
-script = "protocol.rhai"
-frame = "frame"
-decode = "decode"
-"#;
-
-    const SCHEMA: &str = r#"
-id = "example-message"
-version = 1
-title = "Example Message"
-
-[[fields]]
-name = "trace_id"
-label = "Trace ID"
-type = "string"
-
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
-
-[[fields]]
-name = "approved"
-label = "Approved"
-type = "bool"
-"#;
-
-    const SCRIPT: &str = r#"
-fn frame(reader, context) { framing::complete(1) }
-fn decode(origin, context) { document::create() }
-fn encode(origin, document, context) { origin }
-fn display(document, context) { "<p>ok</p>" }
-"#;
-
-    #[derive(Debug, Default)]
-    struct QueueDialog {
-        paths: Mutex<Vec<AppResult<Option<PathBuf>>>>,
-        purposes: Mutex<Vec<String>>,
-    }
-
-    impl QueueDialog {
-        fn push(&self, path: AppResult<Option<PathBuf>>) {
-            self.paths.lock().unwrap().push(path);
-        }
-    }
-
-    impl NativeFileDialog for QueueDialog {
-        fn choose_open_file(&self, purpose: &str) -> AppResult<Option<PathBuf>> {
-            self.purposes.lock().unwrap().push(purpose.to_owned());
-            self.paths.lock().unwrap().remove(0)
-        }
-
-        fn choose_save_file(&self, _: &str, _: &str) -> AppResult<Option<FileSelection>> {
-            unreachable!("protocol package import never opens a save dialog")
-        }
-    }
-
-    #[tokio::test]
-    async fn native_dialog_cancellation_and_permission_errors_never_change_the_registry() {
-        let store = Arc::new(SqliteStore::in_memory().unwrap());
-        let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
-            Arc::clone(&store),
-        ));
-        let dialog = Arc::new(QueueDialog::default());
-        dialog.push(Ok(None));
-        dialog.push(Err(AppError::new(
-            "FILE_DIALOG_PERMISSION_DENIED",
-            "denied",
-        )));
-        let importer = ProtocolPackageImportAdapter::new(repository.clone(), dialog.clone());
-
-        assert_eq!(importer.prepare_zip().await.unwrap(), None);
-        let error = importer.prepare_zip().await.unwrap_err();
-        assert_eq!(error.view_model.code, "FILE_DIALOG_PERMISSION_DENIED");
-        assert!(repository.list().unwrap().is_empty());
-        assert_eq!(store.protocol_package_row_counts_for_test(), (0, 0));
-        assert_eq!(
-            dialog.purposes.lock().unwrap().as_slice(),
-            ["protocol_package_zip", "protocol_package_zip"]
-        );
-    }
-
-    #[tokio::test]
-    async fn invalid_zip_and_rhai_are_rejected_without_partial_state() {
-        let fixture = TempDir::new().unwrap();
-        let invalid_zip = fixture.path().join("invalid.zip");
-        std::fs::write(&invalid_zip, b"not a zip").unwrap();
-        let invalid_rhai = fixture.path().join("invalid-rhai.zip");
-        std::fs::write(&invalid_rhai, package_zip("fn frame( {")).unwrap();
-        let store = Arc::new(SqliteStore::in_memory().unwrap());
-        let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
-            Arc::clone(&store),
-        ));
-        let dialog = Arc::new(QueueDialog::default());
-        dialog.push(Ok(Some(invalid_zip)));
-        dialog.push(Ok(Some(invalid_rhai)));
-        let importer = ProtocolPackageImportAdapter::new(repository.clone(), dialog);
-
-        assert_eq!(
-            importer.prepare_zip().await.unwrap_err().view_model.code,
-            "INVALID_ZIP"
-        );
-        assert_eq!(
-            importer.prepare_zip().await.unwrap_err().view_model.code,
-            "SCRIPT_SYNTAX_INVALID"
-        );
-        assert!(repository.list().unwrap().is_empty());
-        assert_eq!(store.protocol_package_row_counts_for_test(), (0, 0));
-    }
-
-    #[tokio::test]
-    async fn valid_zip_returns_safe_capabilities_schema_and_idempotent_outcome() {
-        let fixture = TempDir::new().unwrap();
-        let path = fixture.path().join("example.zip");
-        std::fs::write(&path, package_zip(SCRIPT)).unwrap();
-        let store = Arc::new(SqliteStore::in_memory().unwrap());
-        let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(store));
-        let dialog = Arc::new(QueueDialog::default());
-        dialog.push(Ok(Some(path.clone())));
-        dialog.push(Ok(Some(path)));
-        let importer = ProtocolPackageImportAdapter::new(repository, dialog);
-
-        let first_preview = importer.prepare_zip().await.unwrap().unwrap();
-        assert!(
-            importer.repository.list().unwrap().is_empty(),
-            "prepare must not install before explicit confirmation"
-        );
-        let installed = importer.commit_zip(first_preview.token).await.unwrap();
-        let second_preview = importer.prepare_zip().await.unwrap().unwrap();
-        let reused = importer.commit_zip(second_preview.token).await.unwrap();
-        assert_eq!(
-            installed.outcome,
-            ProtocolPackageImportOutcomeViewModel::Installed
-        );
-        assert_eq!(
-            reused.outcome,
-            ProtocolPackageImportOutcomeViewModel::Reused
-        );
-        assert_eq!(installed.version.package, reused.version.package);
-        assert!(installed.capabilities.upstream.encode);
-        assert!(!installed.capabilities.downstream.encode);
-        assert!(installed.capabilities.display);
-        assert_eq!(
-            installed
-                .schema
-                .fields
-                .iter()
-                .map(|field| field.name.as_str())
-                .collect::<Vec<_>>(),
-            ["trace_id", "amount", "approved"]
-        );
-    }
-
-    #[tokio::test]
-    async fn commit_uses_frozen_validated_files_and_token_is_single_use() {
-        let fixture = TempDir::new().unwrap();
-        let path = fixture.path().join("replace-after-prepare.zip");
-        std::fs::write(&path, package_zip(SCRIPT)).unwrap();
-        let store = Arc::new(SqliteStore::in_memory().unwrap());
-        let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(store));
-        let dialog = Arc::new(QueueDialog::default());
-        dialog.push(Ok(Some(path.clone())));
-        let importer = ProtocolPackageImportAdapter::new(repository.clone(), dialog);
-
-        let preview = importer.prepare_zip().await.unwrap().unwrap();
-        // prepare 后即使磁盘原 ZIP 被替换，commit 也只能提交内存中被冻结且已验证的规范文件。
-        std::fs::write(&path, b"not the validated archive").unwrap();
-        let installed = importer.commit_zip(preview.token).await.unwrap();
-        assert_eq!(installed.version.package, preview.package);
-        assert!(repository.summary(&preview.package).unwrap().is_some());
-
-        let reused_token = importer.commit_zip(preview.token).await.unwrap_err();
-        assert_eq!(
-            reused_token.view_model.code,
-            "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID"
-        );
-        let forged = ProtocolPackageImportToken::from_uuid(Uuid::new_v4());
-        assert_eq!(
-            importer
-                .commit_zip(forged)
-                .await
-                .unwrap_err()
-                .view_model
-                .code,
-            "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID"
-        );
-    }
-
-    #[test]
-    fn pending_imports_expire_and_enforce_the_count_limit() {
-        let repository = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::new(
-            SqliteStore::in_memory().unwrap(),
-        ));
-        let now = Instant::now();
-        let mut pending = PendingProtocolPackageImports::default();
-        let first = pending
-            .insert(repository.prepare_zip(&package_zip(SCRIPT)).unwrap(), now)
-            .unwrap();
-        assert_eq!(
-            pending
-                .take(first, now + PENDING_IMPORT_TTL)
-                .unwrap_err()
-                .view_model
-                .code,
-            "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID"
-        );
-
-        for _ in 0..MAX_PENDING_IMPORTS {
-            pending
-                .insert(repository.prepare_zip(&package_zip(SCRIPT)).unwrap(), now)
-                .unwrap();
-        }
-        let error = pending
-            .insert(repository.prepare_zip(&package_zip(SCRIPT)).unwrap(), now)
-            .unwrap_err();
-        assert_eq!(error.view_model.code, "PROTOCOL_PACKAGE_PENDING_LIMIT");
-    }
-
-    fn package_zip(script: &str) -> Vec<u8> {
-        let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
-        for (path, contents) in [
-            ("manifest.toml", MANIFEST.as_bytes()),
-            ("document.toml", SCHEMA.as_bytes()),
-            ("protocol.rhai", script.as_bytes()),
-        ] {
-            archive
-                .start_file(path, SimpleFileOptions::default())
-                .unwrap();
-            archive.write_all(contents).unwrap();
-        }
-        archive.finish().unwrap().into_inner()
-    }
-}
+#[path = "protocol_package_import/tests.rs"]
+mod tests;

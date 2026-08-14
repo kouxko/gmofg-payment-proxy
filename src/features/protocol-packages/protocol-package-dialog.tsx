@@ -15,12 +15,14 @@ export function ProtocolPackageDialog({
   group,
   selectedVersion,
   isOpen,
+  announcement,
   onVersionChange,
   onOpenChange,
 }: {
   group?: ProtocolPackageGroupViewModel;
   selectedVersion?: ProtocolPackageVersionViewModel;
   isOpen: boolean;
+  announcement?: string;
   onVersionChange: (version: ProtocolPackageVersionViewModel) => void;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -51,6 +53,7 @@ export function ProtocolPackageDialog({
               <p className="max-w-full break-all text-left font-mono text-xs text-[var(--telemetry-muted)]">{group?.id ?? ""}</p>
             </Modal.Header>
             <Modal.Body className="min-h-0 overflow-y-auto">
+              {announcement && <p role="status" className="mb-4 text-sm text-success">{announcement}</p>}
               <div className="grid min-w-0 gap-5 lg:grid-cols-[14rem_minmax(0,1fr)]">
                 <ProtocolPackageVersionList
                   versions={group ? group.versions : []}

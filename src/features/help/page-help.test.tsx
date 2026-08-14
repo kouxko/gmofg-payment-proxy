@@ -52,6 +52,18 @@ describe("page-specific usage guides", () => {
     expect(consoleGuide).not.toContain("将客户端应用的目标地址配置为代理电脑");
   });
 
+  it("documents the native and non-mutating protocol-package import boundary", () => {
+    const protocolPackageGuide = pageHelpGuides["/protocol-packages"].sections
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(protocolPackageGuide).toContain("原生文件选择器读取文件");
+    expect(protocolPackageGuide).toContain("页面不会接收本机路径或 ZIP 字节");
+    expect(protocolPackageGuide).toContain("此阶段不会安装任何内容");
+    expect(protocolPackageGuide).toContain("新安装版本默认停用");
+    expect(protocolPackageGuide).toContain("导入不会自动修改或重绑任何 Listener");
+  });
+
   it("opens the current page guide in a Drawer without document navigation", async () => {
     const user = userEvent.setup();
     const documentUrl = window.location.href;

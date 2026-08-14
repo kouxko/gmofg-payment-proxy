@@ -91,6 +91,19 @@ pub async fn protocol_package_import_commit(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn protocol_package_import_discard(
+    state: State<'_, AppState>,
+    token: ProtocolPackageImportToken,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .protocol_package_import_discard(token)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn protocol_package_enable(
     state: State<'_, AppState>,
     package_ref: ProtocolPackageIdentityInput,

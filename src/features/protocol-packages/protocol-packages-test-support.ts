@@ -1,6 +1,8 @@
 import type {
   ProtocolPackageDetailViewModel,
   ProtocolPackageGroupViewModel,
+  ProtocolPackageImportPreviewViewModel,
+  ProtocolPackageImportViewModel,
   ProtocolPackageVersionViewModel,
 } from "@/generated/rust-types";
 
@@ -64,6 +66,49 @@ export function detail(
       },
     ],
     ...overrides,
+  };
+}
+
+export function importPreview(
+  overrides: Partial<ProtocolPackageImportPreviewViewModel> = {},
+): ProtocolPackageImportPreviewViewModel {
+  return {
+    token: "018f-import-token",
+    disposition: "new",
+    package: { id: "iso-8583", version: "3.0.0" },
+    name: "ISO 8583 导入包",
+    host_api: 1,
+    capabilities: {
+      upstream: { frame: true, decode: true, encode: true },
+      downstream: { frame: true, decode: true, encode: false },
+      display: true,
+    },
+    schema: {
+      id: "iso-message",
+      version: 2,
+      title: "ISO 导入 Schema",
+      fields: [
+        { name: "mti", label: "消息类型", type: "string" },
+        { name: "amount", label: "金额", type: "int" },
+      ],
+    },
+    ...overrides,
+  };
+}
+
+export function importResult(
+  outcome: ProtocolPackageImportViewModel["outcome"] = "installed",
+): ProtocolPackageImportViewModel {
+  const preview = importPreview();
+  return {
+    outcome,
+    version: version("3.0.0", {
+      package: preview.package,
+      name: preview.name,
+      enabled: false,
+    }),
+    capabilities: preview.capabilities,
+    schema: preview.schema,
   };
 }
 

@@ -142,7 +142,8 @@ async fn native_import_cancellation_success_and_errors_are_forwarded_without_par
     let description = description();
     let token = ProtocolPackageImportToken::from_uuid(Uuid::new_v4());
     let preview = ProtocolPackageImportPreviewViewModel {
-        token,
+        token: Some(token),
+        disposition: crate::ProtocolPackageImportDispositionViewModel::New,
         package: version.package.clone(),
         name: version.name.clone(),
         host_api: version.host_api,

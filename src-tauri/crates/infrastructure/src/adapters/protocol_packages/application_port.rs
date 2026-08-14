@@ -4,11 +4,12 @@
 
 use async_trait::async_trait;
 use intercept_proxy_application::{
-    AppError, AppResult, ProtocolPackageCapabilitiesViewModel, ProtocolPackageCompilationReceipt,
-    ProtocolPackageCompilerPort, ProtocolPackageDescriptionViewModel,
-    ProtocolPackageDirectionCapabilitiesViewModel, ProtocolPackageSchemaFieldTypeViewModel,
-    ProtocolPackageSchemaFieldViewModel, ProtocolPackageSchemaViewModel, ProtocolPackageStorePort,
-    ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
+    AppError, AppErrorDiagnosticViewModel, AppResult, ProtocolPackageCapabilitiesViewModel,
+    ProtocolPackageCompilationReceipt, ProtocolPackageCompilerPort,
+    ProtocolPackageDescriptionViewModel, ProtocolPackageDirectionCapabilitiesViewModel,
+    ProtocolPackageSchemaFieldTypeViewModel, ProtocolPackageSchemaFieldViewModel,
+    ProtocolPackageSchemaViewModel, ProtocolPackageStorePort, ProtocolPackageValidationViewModel,
+    ProtocolPackageVersionViewModel,
 };
 use intercept_proxy_protocol_scripting::CompiledProtocolPackage;
 
@@ -195,5 +196,46 @@ pub(in crate::adapters) fn protocol_package_app_error(
     if let Some(entity) = entity {
         mapped = mapped.entity(entity);
     }
+    if let Some(diagnostic) = import_diagnostic(error) {
+        mapped = mapped.diagnostic(diagnostic);
+    }
     mapped
+}
+
+fn import_diagnostic(error: &ProtocolPackageStorageError) -> Option<AppErrorDiagnosticViewModel> {
+    match error {
+        ProtocolPackageStorageError::Archive { source } => Some(AppErrorDiagnosticViewModel {
+            file: source.path().map(|path| path.as_str().to_owned()),
+            field: None,
+            line: None,
+            column: None,
+            entry: None,
+        }),
+        ProtocolPackageStorageError::Compilation { source } => {
+            if let Some(declaration) = source.declaration_error() {
+                return Some(AppErrorDiagnosticViewModel {
+                    file: Some(declaration.file().file_name().to_owned()),
+                    field: Some(declaration.field().to_owned()),
+                    line: None,
+                    column: None,
+                    entry: None,
+                });
+            }
+            source
+                .script_error()
+                .map(|script| AppErrorDiagnosticViewModel {
+                    file: script.file().map(|path| path.as_str().to_owned()),
+                    field: None,
+                    line: script.line().and_then(|line| u32::try_from(line).ok()),
+                    column: script
+                        .column()
+                        .and_then(|column| u32::try_from(column).ok()),
+                    entry: script.entry().map(|entry| entry.as_str().to_owned()),
+                })
+        }
+        ProtocolPackageStorageError::IdentityConflict { .. }
+        | ProtocolPackageStorageError::NotFound { .. }
+        | ProtocolPackageStorageError::StoredPackageInvalid { .. }
+        | ProtocolPackageStorageError::Infrastructure(_) => None,
+    }
 }

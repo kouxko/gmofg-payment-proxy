@@ -102,6 +102,7 @@ pub fn builder() -> Builder<Wry> {
             protocol_package_detail,
             protocol_package_import,
             protocol_package_import_commit,
+            protocol_package_import_discard,
             protocol_package_enable,
             protocol_package_disable,
             protocol_package_delete,

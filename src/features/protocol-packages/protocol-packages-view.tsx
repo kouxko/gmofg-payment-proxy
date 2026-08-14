@@ -2,14 +2,22 @@
 
 import { useRef, useState } from "react";
 import { Alert, Button, Spinner } from "@heroui/react";
-import type {
-  ProtocolPackageGroupViewModel,
-  ProtocolPackageVersionViewModel,
-} from "@/generated/rust-types";
+import type { ProtocolPackageGroupViewModel, ProtocolPackageVersionViewModel } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { callCommand } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { ProtocolPackageDialog } from "./protocol-package-dialog";
+import { ProtocolPackageImportDialog } from "./protocol-package-import-dialog";
+import {
+  importResultError,
+  isCommittableImportPreview,
+  isImportPreview,
+  outcomeText,
+  presentImportError,
+  type CommittableImportPreview,
+  type ProtocolPackageImportState,
+  withoutImportToken,
+} from "./protocol-package-import-model";
 import { ProtocolPackageRow } from "./protocol-package-row";
 import {
   isProtocolPackageGroupList,
@@ -24,7 +32,15 @@ export function ProtocolPackagesView() {
   const [selectedGroup, setSelectedGroup] = useState<ProtocolPackageGroupViewModel>();
   const [selectedVersion, setSelectedVersion] = useState<ProtocolPackageVersionViewModel>();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [importState, setImportState] = useState<ProtocolPackageImportState>({ kind: "closed" });
+  const [importNotice, setImportNotice] = useState<string>();
+  // state 更新发生在下一次渲染；ref 在事件入口同步上锁，阻止同一帧的重复点击。
+  const prepareLock = useRef(false);
+  const commitLock = useRef(false);
+  const discardLock = useRef(false);
+  const importGeneration = useRef(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const importTriggerRef = useRef<HTMLButtonElement | null>(null);
   const headingRef = useRef<HTMLHeadingElement | null>(null);
   const listIsValid = isProtocolPackageGroupList(packages.data);
   const listError = packages.error
@@ -37,14 +53,16 @@ export function ProtocolPackagesView() {
 
   function openGroup(group: ProtocolPackageGroupViewModel, trigger: HTMLButtonElement) {
     triggerRef.current = trigger;
+    setImportNotice(undefined);
     setSelectedGroup(group);
-    setSelectedVersion(sortPackageVersions(group.versions ?? [])[0]);
+    setSelectedVersion(sortPackageVersions(group.versions)[0]);
     setDialogOpen(true);
   }
 
   function changeOpen(open: boolean) {
     setDialogOpen(open);
     if (!open) {
+      setImportNotice(undefined);
       requestAnimationFrame(() => {
         const focusTarget = triggerRef.current?.isConnected
           ? triggerRef.current
@@ -54,12 +72,166 @@ export function ProtocolPackagesView() {
     }
   }
 
+  async function chooseZip() {
+    if (prepareLock.current || commitLock.current) return;
+    triggerRef.current = importTriggerRef.current;
+    const generation = importGeneration.current + 1;
+    importGeneration.current = generation;
+    prepareLock.current = true;
+    setImportState({ kind: "preparing" });
+    setImportNotice(undefined);
+    try {
+      // 此命令同时打开原生文件选择器并在 Rust 中完整读取/校验 ZIP；前端不接触路径和字节。
+      const candidate = await callCommand(commands.protocolPackageImport());
+      if (generation !== importGeneration.current) return;
+      if (candidate === null) {
+        setImportState({ kind: "closed" });
+        requestAnimationFrame(() => importTriggerRef.current?.focus());
+        return;
+      }
+      if (!isImportPreview(candidate)) {
+        setImportState({ kind: "prepare-error", error: { message: "协议包校验预览数据不完整。", details: [] } });
+        return;
+      }
+      if (candidate.disposition === "identity_conflict") {
+        setImportState({ kind: "conflict", preview: withoutImportToken(candidate) });
+      } else if (isCommittableImportPreview(candidate)) {
+        setImportState({ kind: "ready", preview: candidate });
+      } else {
+        // IPC 结果即使通过生成类型编译，也可能来自旧后端或损坏适配器；确认入口必须关闭。
+        setImportState({ kind: "prepare-error", error: { message: "协议包校验预览的冲突状态与安装凭据不一致。", details: [] } });
+      }
+    } catch (reason) {
+      if (generation === importGeneration.current) {
+        setImportState({ kind: "prepare-error", error: presentImportError(reason) });
+      }
+    } finally {
+      prepareLock.current = false;
+    }
+  }
+
+  async function commitImport() {
+    if (importState.kind !== "ready" || prepareLock.current || commitLock.current) return;
+    const generation = importGeneration.current;
+    const { preview } = importState;
+    commitLock.current = true;
+    // 从这一行开始 token 已交给消费型命令；React 状态只保留不含 token 的展示副本。
+    setImportState({ kind: "committing", preview: withoutImportToken(preview) });
+    try {
+      const result = await callCommand(commands.protocolPackageImportCommit(preview.token));
+      if (generation !== importGeneration.current) return;
+      const resultError = importResultError(result, preview);
+      if (resultError) {
+        setImportState({ kind: "commit-error", error: { message: resultError, details: [] } });
+        return;
+      }
+      setImportState({ kind: "refreshing", packageRef: preview.package, outcome: result.outcome });
+      await refreshAfterImport(preview.package, result.outcome, generation);
+    } catch (reason) {
+      if (generation === importGeneration.current) {
+        setImportState({ kind: "commit-error", error: presentImportError(reason) });
+      }
+    } finally {
+      commitLock.current = false;
+    }
+  }
+
+  async function refreshAfterImport(
+    packageRef: { id: string; version: string },
+    outcome: "installed" | "reused",
+    generation = importGeneration.current,
+  ) {
+    setImportState({ kind: "refreshing", packageRef, outcome });
+    packages.invalidate(false);
+    try {
+      const refreshed = await callCommand(commands.protocolPackageList());
+      if (generation !== importGeneration.current) return;
+      if (!isProtocolPackageGroupList(refreshed)) throw new Error("INVALID_REFRESH_RESPONSE");
+      const exactGroup = refreshed.find((item) => item.id === packageRef.id);
+      const exactVersion = exactGroup?.versions.find((item) => item.package.version === packageRef.version);
+      if (!exactGroup || !exactVersion) throw new Error("EXACT_VERSION_MISSING");
+      packages.setData(refreshed);
+      setSelectedGroup(exactGroup);
+      setSelectedVersion(exactVersion);
+      setImportNotice(outcomeText(outcome));
+      setImportState({ kind: "closed" });
+      setDialogOpen(true);
+    } catch (reason) {
+      if (generation !== importGeneration.current) return;
+      const error = reason instanceof Error && reason.message === "EXACT_VERSION_MISSING"
+        ? { message: "列表刷新成功，但未找到刚安装的精确协议包版本。", details: [] }
+        : reason instanceof Error && reason.message === "INVALID_REFRESH_RESPONSE"
+          ? { message: "刷新后的协议包列表数据不完整。", details: [] }
+          : presentImportError(reason);
+      setImportState({
+        kind: "refresh-error",
+        packageRef,
+        outcome,
+        error,
+      });
+    }
+  }
+
+  function changeImportOpen(open: boolean) {
+    if ((prepareLock.current || commitLock.current || discardLock.current) && !open) return;
+    if (!open) {
+      if (importState.kind === "ready" || importState.kind === "discard-error") {
+        void discardAndClose(importState.preview);
+        return;
+      }
+      importGeneration.current += 1;
+      setImportState({ kind: "closed" });
+      requestAnimationFrame(() => importTriggerRef.current?.focus());
+    }
+  }
+
+  async function discardAndClose(preview: CommittableImportPreview) {
+    if (discardLock.current) return;
+    discardLock.current = true;
+    const generation = importGeneration.current;
+    setImportState({ kind: "discarding", preview: withoutImportToken(preview) });
+    try {
+      await callCommand(commands.protocolPackageImportDiscard(preview.token));
+      if (generation === importGeneration.current) {
+        importGeneration.current += 1;
+        setImportState({ kind: "closed" });
+        requestAnimationFrame(() => importTriggerRef.current?.focus());
+      }
+    } catch (reason) {
+      if (generation === importGeneration.current) {
+        const error = presentImportError(reason);
+        if (error.code === "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID") {
+          // 过期、已消费或已释放都会统一返回 TOKEN_INVALID；这些情况都表示后端已无
+          // 对应的待确认资源。继续保留同一 token 只会让用户陷入永久失败的重试循环。
+          importGeneration.current += 1;
+          setImportState({ kind: "closed" });
+          requestAnimationFrame(() => importTriggerRef.current?.focus());
+        } else {
+          setImportState({ kind: "discard-error", preview, error });
+        }
+      }
+    } finally {
+      discardLock.current = false;
+    }
+  }
+
   return (
     <section className="min-w-0 space-y-4 overflow-auto p-5">
-      <div>
-        <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold">协议包</h1>
-        <p className="mt-1 text-sm text-[var(--telemetry-muted)]">查看已安装 Socket 协议包、精确版本、能力与 Schema。</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold">协议包</h1>
+          <p className="mt-1 text-sm text-[var(--telemetry-muted)]">查看已安装 Socket 协议包、精确版本、能力与 Schema。</p>
+        </div>
+        <Button
+          ref={importTriggerRef}
+          variant="primary"
+          isDisabled={prepareLock.current || commitLock.current}
+          onPress={() => void chooseZip()}
+        >
+          导入协议包 ZIP
+        </Button>
       </div>
+      {importNotice && <p role="status" className="text-sm text-success">{importNotice}</p>}
       {listError && (
         <Alert status="danger">
           <Alert.Indicator />
@@ -91,8 +263,20 @@ export function ProtocolPackagesView() {
         group={selectedGroup}
         selectedVersion={selectedVersion}
         isOpen={dialogOpen}
+        announcement={importNotice}
         onVersionChange={setSelectedVersion}
         onOpenChange={changeOpen}
+      />
+      <ProtocolPackageImportDialog
+        state={importState}
+        onOpenChange={changeImportOpen}
+        onChoose={() => void chooseZip()}
+        onCommit={() => void commitImport()}
+        onRefresh={() => {
+          if (importState.kind === "refresh-error") {
+            void refreshAfterImport(importState.packageRef, importState.outcome);
+          }
+        }}
       />
     </section>
   );
