@@ -1,6 +1,8 @@
 use super::*;
 
+mod concurrency;
 mod lifecycle;
+mod listener_modes;
 
 fn pkg(id: &str, version: &str) -> ProtocolPackageRef {
     super::package(id, version)

@@ -59,7 +59,7 @@ fn local_responder_listener(bind: SocketAddr) -> ProxyListener {
 }
 
 #[tokio::test]
-async fn local_responder_start_and_upstream_probe_return_typed_unavailable() {
+async fn local_responder_plan_requires_package_services_but_upstream_probe_stays_unavailable() {
     let listener = local_responder_listener("127.0.0.1:19079".parse().unwrap());
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
@@ -73,10 +73,10 @@ async fn local_responder_start_and_upstream_probe_return_typed_unavailable() {
         .build(&workspace, &listener, Uuid::new_v4())
         .await
         .err()
-        .expect("LocalResponder is not wired in T18");
+        .expect("T21 LocalResponder plan must fresh-load its exact package");
     assert_eq!(
         start_error.view_model.code,
-        "LOCAL_RESPONDER_NOT_AVAILABLE"
+        "PROTOCOL_PACKAGE_SERVICES_UNAVAILABLE"
     );
     let probe_error = builder
         .build_probe(&workspace, &listener, Uuid::new_v4())

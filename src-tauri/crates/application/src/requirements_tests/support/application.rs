@@ -3,11 +3,27 @@ use super::*;
 pub(in crate::requirements_tests) fn application_with_fake_ports(
     ports: Arc<FakePorts>,
 ) -> Application {
-    application_with_workspace_ports(
+    application_with_fake_ports_and_listener_runtime(
         ports,
-        Arc::new(InMemoryWorkspaceStore::default()),
-        Arc::new(InMemoryWorkspaceDocumentStore::default()),
+        Arc::new(InMemoryListenerRuntime::default()),
     )
+}
+
+pub(in crate::requirements_tests) fn application_with_fake_ports_and_listener_runtime(
+    ports: Arc<FakePorts>,
+    listener_runtime: Arc<dyn ListenerRuntimePort>,
+) -> Application {
+    let workspaces = Arc::new(InMemoryWorkspaceStore::default());
+    let workspace_documents = Arc::new(InMemoryWorkspaceDocumentStore::default());
+    let configuration_store = Arc::new(UnavailableApplicationConfigurationStore);
+    application_with_workspace_configuration_packages_and_runtime(
+        ports,
+        workspaces,
+        workspace_documents,
+        configuration_store,
+        listener_runtime,
+    )
+    .0
 }
 
 pub(in crate::requirements_tests) fn application_with_workspace_ports(
@@ -15,11 +31,12 @@ pub(in crate::requirements_tests) fn application_with_workspace_ports(
     workspaces: Arc<InMemoryWorkspaceStore>,
     workspace_documents: Arc<InMemoryWorkspaceDocumentStore>,
 ) -> Application {
-    application_with_workspace_configuration_and_packages(
+    application_with_workspace_configuration_packages_and_runtime(
         ports,
         workspaces,
         workspace_documents,
         Arc::new(UnavailableApplicationConfigurationStore),
+        Arc::new(InMemoryListenerRuntime::default()),
     )
     .0
 }
@@ -45,6 +62,22 @@ pub(in crate::requirements_tests) fn application_with_workspace_configuration_an
     workspace_documents: Arc<InMemoryWorkspaceDocumentStore>,
     configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
 ) -> (Application, Arc<FakeProtocolPackagePortability>) {
+    application_with_workspace_configuration_packages_and_runtime(
+        ports,
+        workspaces,
+        workspace_documents,
+        configuration_store,
+        Arc::new(InMemoryListenerRuntime::default()),
+    )
+}
+
+fn application_with_workspace_configuration_packages_and_runtime(
+    ports: Arc<FakePorts>,
+    workspaces: Arc<InMemoryWorkspaceStore>,
+    workspace_documents: Arc<InMemoryWorkspaceDocumentStore>,
+    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+    listener_runtime: Arc<dyn ListenerRuntimePort>,
+) -> (Application, Arc<FakeProtocolPackagePortability>) {
     let workspace_port: Arc<dyn WorkspaceRepositoryPort> = workspaces.clone();
     let portability = Arc::new(FakeProtocolPackagePortability::new(
         workspace_port,
@@ -68,7 +101,7 @@ pub(in crate::requirements_tests) fn application_with_workspace_configuration_an
             listener_certificates: ports,
             workspaces,
             workspace_documents,
-            listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
+            listener_runtime,
             protocol_packages,
             events: Arc::new(EventHub::default()),
         },

@@ -27,9 +27,12 @@ pub trait ProtocolPackageStorePort: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
-/// 启用协议包前执行完整恢复、编译与 Host API 兼容性校验。
+/// 协议包进入启用态、Listener 配置或运行快照前，执行完整恢复、
+/// 编译与 Host API 兼容性校验。
 ///
-/// 每次启用都必须调用该端口，不能只信任导入时或列表中的历史 `Valid` 状态。
+/// 每次调用都必须从已安装的规范文件 fresh 构建结果，不能只信任
+/// 导入时或列表中的历史 `Valid` 状态。方法名保留 `validate_for_enable`
+/// 以维持已有 Host 端口兼容，但其语义是可安全加载的 fresh receipt。
 pub trait ProtocolPackageCompilerPort: Send + Sync + std::fmt::Debug {
     async fn validate_for_enable(
         &self,

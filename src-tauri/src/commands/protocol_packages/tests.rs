@@ -397,35 +397,34 @@ fn display(document, context) { "<p>ok</p>" }
             .code,
             "PROTOCOL_PACKAGE_REFERENCE_IN_USE"
         );
-        tauri::async_runtime::block_on(application.listener_start(
+        let start = tauri::async_runtime::block_on(application.listener_start(
             workspace.id,
             workspace.revision.get(),
             listener_id,
         ))
-        .unwrap();
+        .unwrap_err();
         assert_eq!(
-            invoke_error(
-                &webview,
-                "protocol_package_disable",
-                json!({ "packageRef": package_json }),
-            )
-            .code,
-            "PROTOCOL_PACKAGE_RUNTIME_IN_USE"
+            start.view_model.code,
+            "SCRIPTED_SOCKET_RUNTIME_NOT_AVAILABLE"
         );
-
-        tauri::async_runtime::block_on(application.listener_stop(workspace.id, 0, listener_id))
-            .unwrap();
-        let latest = tauri::async_runtime::block_on(application.workspace_get(workspace.id)).unwrap();
-        tauri::async_runtime::block_on(
-            application.workspace_delete(latest.id, latest.revision.get()),
-        )
-        .unwrap();
+        // T21 已完成完整运行计划校验，但 Scripted Frame Pump 要到 T22 才能真正进入
+        // Running。此时仍是 Stopped 引用，因此允许停用；真正 Running/Faulted/Stopping
+        // 的停用门禁由 Application requirement tests 使用受控 runtime 状态覆盖。
         let disabled: Value = invoke_ok(
             &webview,
             "protocol_package_disable",
             json!({ "packageRef": package_json }),
         );
-        assert_eq!(disabled["enabled"], false);
+        assert_eq!(
+            disabled["enabled"],
+            false,
+            "staged-but-not-running Listener must not invent runtime usage"
+        );
+        let latest = tauri::async_runtime::block_on(application.workspace_get(workspace.id)).unwrap();
+        tauri::async_runtime::block_on(
+            application.workspace_delete(latest.id, latest.revision.get()),
+        )
+        .unwrap();
     }
 
     #[test]

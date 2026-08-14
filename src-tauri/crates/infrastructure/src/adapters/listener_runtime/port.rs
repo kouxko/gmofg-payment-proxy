@@ -71,6 +71,19 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         let plan = ListenerRuntimePlanBuilder::new(self)
             .build(&workspace, &listener, runtime_epoch)
             .await?;
+        if let Some(snapshot) = plan.scripted_snapshot() {
+            let (code, message) = match snapshot.topology() {
+                DomainSocketTopology::Relay(_) => (
+                    "SCRIPTED_SOCKET_RUNTIME_NOT_AVAILABLE",
+                    "Scripted Relay 已完成运行计划校验，Frame Pump 将在后续任务接入。",
+                ),
+                DomainSocketTopology::LocalResponder(_) => (
+                    "LOCAL_RESPONDER_NOT_AVAILABLE",
+                    "LocalResponder 已完成运行计划校验，响应字节泵将在后续任务接入。",
+                ),
+            };
+            return Err(AppError::new(code, message).entity(listener_id.to_string()));
+        }
         let listen_address = plan.bind_addr().to_string();
         let tcp_listener = bind_tcp_listener(plan.bind_addr(), listener_id).await?;
         let cancellation = CancellationToken::new();
@@ -106,6 +119,12 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                             task_cancellation,
                         )
                         .await
+                }
+                PreparedListenerRuntime::ScriptedSocket { .. } => {
+                    Err(intercept_proxy_runtime::ProxyError::new(
+                        intercept_proxy_runtime::ErrorCode::Internal,
+                        "staged Scripted Socket plan escaped the start gate",
+                    ))
                 }
             };
             if let Err(error) = result
@@ -225,6 +244,11 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                     .map_err(|error| upstream_tls_test_error(listener.id, &error))?;
                 socket_probe_view(&listener, result)
             }
+            PreparedListenerRuntime::ScriptedSocket { .. } => Err(AppError::new(
+                "LISTENER_CONNECTION_TEST_UNSUPPORTED",
+                "Scripted Socket 运行计划不能直接作为上游探测服务。",
+            )
+            .entity(listener.id.to_string())),
             PreparedListenerRuntime::HttpForward { .. } => Err(AppError::new(
                 "FIXED_SERVER_NOT_CONFIGURED",
                 "该代理监听未配置固定 Server，没有上游连接可测试。",

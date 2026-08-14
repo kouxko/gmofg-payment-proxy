@@ -1,6 +1,6 @@
 use super::{
-    AppError, AppResult, ListenerId, ListenerRuntimeState, ListenerStatusViewModel, SocketAddr,
-    TcpListener, UiTone,
+    AppError, AppResult, ListenerId, ListenerRuntimeState, ListenerStatusViewModel, ProxyListener,
+    ProxyWorkspace, SocketAddr, TcpListener, UiTone,
 };
 
 pub(super) fn upstream_tls_test_error(
@@ -38,6 +38,29 @@ pub(super) fn upstream_tls_test_error(
         error.retryable("检查 Server 地址、网络、CA、主机名和可选客户端证书后重试。")
     } else {
         error
+    }
+}
+
+pub(super) fn ensure_snapshot_matches(
+    workspace: &ProxyWorkspace,
+    listener: &ProxyListener,
+) -> AppResult<()> {
+    let persisted = workspace
+        .listeners
+        .iter()
+        .find(|candidate| candidate.id == listener.id)
+        .ok_or_else(|| {
+            AppError::new("LISTENER_NOT_FOUND", "Workspace 中不存在该 Listener。")
+                .entity(listener.id.to_string())
+        })?;
+    if persisted == listener {
+        Ok(())
+    } else {
+        Err(AppError::new(
+            "REVISION_CONFLICT",
+            "Listener 配置与当前 Workspace 快照不一致，请重新加载。",
+        )
+        .entity(listener.id.to_string()))
     }
 }
 

@@ -102,6 +102,7 @@ impl InfrastructureServiceBundle {
             Arc::new(WorkspaceRuntimePolicyResolver::new(Arc::clone(&store)));
         let listener_runtime = Arc::new(
             ListenerRuntimeAdapter::new(store)
+                .with_protocol_packages(protocol_packages.clone())
                 .with_mitm_certificate_authority(certificates.clone())
                 .with_installation_server_identity(certificates.clone())
                 .with_protected_secrets(protected_secrets.clone())
