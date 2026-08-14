@@ -2418,6 +2418,16 @@ name = "intercept-proxy-product-api"
 version = "1.0.0"
 
 [[package]]
+name = "intercept-proxy-protocol-scripting"
+version = "1.0.0"
+dependencies = [
+ "intercept-proxy-domain",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "intercept-proxy-runtime"
 version = "1.0.0"
 dependencies = [
