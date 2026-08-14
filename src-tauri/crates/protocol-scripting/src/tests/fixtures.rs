@@ -9,6 +9,12 @@ pub(super) const TEMPLATE_DISPLAY: &[u8] =
 pub(super) const TEMPLATE_LIBRARY: &[u8] = include_bytes!(
     "../../../../../templates/socket-protocol/iso8583-standard/libraries/iso8583.rhai"
 );
+pub(super) const TEMPLATE_REQUEST_SAMPLE: &str = include_str!(
+    "../../../../../templates/socket-protocol/iso8583-standard/samples/financial-request.json"
+);
+pub(super) const TEMPLATE_RESPONSE_SAMPLE: &str = include_str!(
+    "../../../../../templates/socket-protocol/iso8583-standard/samples/financial-response.json"
+);
 
 pub(super) fn minimal_manifest() -> String {
     r#"

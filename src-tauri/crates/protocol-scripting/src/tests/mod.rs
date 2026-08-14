@@ -1,6 +1,7 @@
 mod archive;
 mod compiled;
 mod compiler;
+mod conformance;
 mod declaration_name;
 mod error;
 mod fixtures;
