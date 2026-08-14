@@ -13,9 +13,14 @@ async fn socket_workspace_round_trip_restores_all_tls_roles_and_remaps_ids() {
         .certificate_references
         .extend(std::iter::once(installation_root()).chain(roles.iter().cloned()));
     configure_socket_listener(&mut workspace, &roles);
-    workspaces.save(workspace).await.unwrap();
-    let application =
-        application_with_workspace_ports(ports, Arc::clone(&workspaces), Arc::clone(&documents));
+    let workspace = workspaces.save(workspace).await.unwrap();
+    let (application, portability) = application_with_workspace_configuration_and_packages(
+        ports,
+        Arc::clone(&workspaces),
+        Arc::clone(&documents),
+        Arc::new(UnavailableApplicationConfigurationStore),
+    );
+    register_listener_package(&portability, &workspace);
 
     application.workspace_export(selected.id).await.unwrap();
     let (_, bytes) = documents.take_last_export().unwrap();
@@ -93,9 +98,14 @@ async fn local_responder_tls_round_trip(required: bool) {
         .extend(roles.iter().cloned());
     configure_local_responder_listener(&mut workspace, &roles, required);
     let original_processing = workspace.listeners[0].socket().unwrap().processing.clone();
-    workspaces.save(workspace).await.unwrap();
-    let application =
-        application_with_workspace_ports(ports, Arc::clone(&workspaces), Arc::clone(&documents));
+    let workspace = workspaces.save(workspace).await.unwrap();
+    let (application, portability) = application_with_workspace_configuration_and_packages(
+        ports,
+        Arc::clone(&workspaces),
+        Arc::clone(&documents),
+        Arc::new(UnavailableApplicationConfigurationStore),
+    );
+    register_listener_package(&portability, &workspace);
 
     application.workspace_export(selected.id).await.unwrap();
     let (_, bytes) = documents.take_last_export().unwrap();
@@ -180,9 +190,14 @@ async fn local_responder_tcp_export_drops_all_unreachable_certificates() {
         .certificate_references
         .extend(roles.iter().cloned());
     configure_local_responder_tcp_listener(&mut workspace);
-    workspaces.save(workspace).await.unwrap();
-    let application =
-        application_with_workspace_ports(ports, Arc::clone(&workspaces), Arc::clone(&documents));
+    let workspace = workspaces.save(workspace).await.unwrap();
+    let (application, portability) = application_with_workspace_configuration_and_packages(
+        ports,
+        Arc::clone(&workspaces),
+        Arc::clone(&documents),
+        Arc::new(UnavailableApplicationConfigurationStore),
+    );
+    register_listener_package(&portability, &workspace);
 
     application.workspace_export(selected.id).await.unwrap();
     let (_, bytes) = documents.take_last_export().unwrap();
@@ -326,4 +341,49 @@ fn assert_socket_materials(exported: &WorkspaceDocument, roles: &[CertificateRef
             role.kind == CertificateReferenceKind::UpstreamClientIdentity
         );
     }
+}
+
+fn register_listener_package(
+    portability: &FakeProtocolPackagePortability,
+    workspace: &ProxyWorkspace,
+) {
+    let listener = &workspace.listeners[0];
+    let ListenerDataPlane::Socket(settings) = &listener.data_plane else {
+        return;
+    };
+    let SocketPayloadProcessing::Scripted(scripted) = &settings.processing else {
+        return;
+    };
+    portability.register(
+        PortableApplicationProtocolPackage {
+            package: scripted.package.clone(),
+            files: vec![PortableProtocolPackageFile {
+                path: "manifest.toml".into(),
+                contents_base64: "bWFuaWZlc3Q=".into(),
+            }],
+            enabled: true,
+        },
+        ProtocolPackageDescriptionViewModel {
+            package: scripted.package.clone(),
+            capabilities: ProtocolPackageCapabilitiesViewModel {
+                upstream: ProtocolPackageDirectionCapabilitiesViewModel {
+                    frame: true,
+                    decode: true,
+                    encode: false,
+                },
+                downstream: ProtocolPackageDirectionCapabilitiesViewModel {
+                    frame: true,
+                    decode: true,
+                    encode: true,
+                },
+                display: true,
+            },
+            schema: ProtocolPackageSchemaViewModel {
+                id: "message".into(),
+                version: 1,
+                title: "Message".into(),
+                fields: Vec::new(),
+            },
+        },
+    );
 }

@@ -375,6 +375,7 @@ impl WorkspaceRepositoryPort for InMemoryWorkspaceStore {
             format_version: crate::WORKSPACE_DOCUMENT_FORMAT_VERSION,
             workspace,
             certificate_materials: Vec::new(),
+            protocol_packages: Vec::new(),
         })
     }
 }

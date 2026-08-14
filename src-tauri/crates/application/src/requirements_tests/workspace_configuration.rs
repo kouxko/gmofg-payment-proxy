@@ -1,5 +1,9 @@
 use super::*;
 
+mod legacy_protocol_portability;
+mod portability_atomicity;
+mod protocol_package_portability;
+mod rule_round_trip;
 mod socket_portability;
 
 #[derive(Debug, Default)]
@@ -285,6 +289,7 @@ async fn workspace_import_preserves_managed_certificate_metadata_for_cross_machi
             format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
             workspace,
             certificate_materials: materials,
+            protocol_packages: Vec::new(),
         })
         .unwrap(),
     );
@@ -342,6 +347,7 @@ async fn full_configuration_import_preserves_managed_certificate_metadata() {
                 .await
                 .unwrap(),
         ],
+        protocol_packages: Vec::new(),
     };
     documents.set_next_import(serialize_application_configuration(&document).unwrap());
 
@@ -392,6 +398,7 @@ async fn full_configuration_import_reports_old_certificate_cleanup_as_success_wa
             workspaces: vec![replacement],
             settings: PortableSettings::from(&SettingsDraft::default()),
             certificate_materials: Vec::new(),
+            protocol_packages: Vec::new(),
         })
         .unwrap(),
     );

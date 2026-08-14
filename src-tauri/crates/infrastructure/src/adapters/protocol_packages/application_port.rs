@@ -14,8 +14,9 @@ use intercept_proxy_application::{
 use intercept_proxy_protocol_scripting::CompiledProtocolPackage;
 
 use super::{
-    ProtocolPackageRef, ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError,
-    ProtocolPackageStorageErrorCode, ProtocolPackageSummary, ProtocolPackageValidationStatus,
+    PreparedProtocolPackage, ProtocolPackageRef, ProtocolPackageRepositoryAdapter,
+    ProtocolPackageStorageError, ProtocolPackageStorageErrorCode, ProtocolPackageSummary,
+    ProtocolPackageValidationStatus,
 };
 
 #[async_trait]
@@ -141,6 +142,15 @@ pub(in crate::adapters) fn application_description(
     }
 }
 
+pub(in crate::adapters) fn application_descriptions(
+    packages: &[PreparedProtocolPackage],
+) -> Vec<ProtocolPackageDescriptionViewModel> {
+    packages
+        .iter()
+        .map(|package| application_description(package.compiled()))
+        .collect()
+}
+
 pub(in crate::adapters) fn protocol_package_app_error(
     error: &ProtocolPackageStorageError,
 ) -> AppError {
@@ -151,17 +161,25 @@ pub(in crate::adapters) fn protocol_package_app_error(
             Some(format!("{}@{}", package.id, package.version))
         }
         ProtocolPackageStorageError::Archive { .. }
+        | ProtocolPackageStorageError::PortableInvalid
         | ProtocolPackageStorageError::Compilation { .. }
         | ProtocolPackageStorageError::Infrastructure(_) => None,
     };
     let (code, message, retryable) = match error.code() {
-        ProtocolPackageStorageErrorCode::ArchiveInvalid => (
-            error
-                .detail_code()
-                .unwrap_or("PROTOCOL_PACKAGE_ARCHIVE_INVALID"),
-            "协议包 ZIP 无法通过安全校验。",
-            false,
-        ),
+        ProtocolPackageStorageErrorCode::ArchiveInvalid => {
+            let message = if matches!(error, ProtocolPackageStorageError::PortableInvalid) {
+                "可移植协议包文件载荷无法通过安全校验。"
+            } else {
+                "协议包 ZIP 无法通过安全校验。"
+            };
+            (
+                error
+                    .detail_code()
+                    .unwrap_or("PROTOCOL_PACKAGE_ARCHIVE_INVALID"),
+                message,
+                false,
+            )
+        }
         ProtocolPackageStorageErrorCode::CompilationFailed => (
             error
                 .detail_code()
@@ -234,7 +252,8 @@ fn import_diagnostic(error: &ProtocolPackageStorageError) -> Option<AppErrorDiag
                     entry: script.entry().map(|entry| entry.as_str().to_owned()),
                 })
         }
-        ProtocolPackageStorageError::IdentityConflict { .. }
+        ProtocolPackageStorageError::PortableInvalid
+        | ProtocolPackageStorageError::IdentityConflict { .. }
         | ProtocolPackageStorageError::NotFound { .. }
         | ProtocolPackageStorageError::StoredPackageInvalid { .. }
         | ProtocolPackageStorageError::Infrastructure(_) => None,

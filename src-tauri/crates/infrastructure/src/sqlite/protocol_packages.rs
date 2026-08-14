@@ -355,6 +355,13 @@ fn load_protocol_package_header(
         .transpose()
 }
 
+#[path = "protocol_packages/bundle.rs"]
+mod bundle;
+pub(crate) use bundle::{
+    StoredProtocolPackageBundleError, StoredProtocolPackageWrite,
+    compare_or_insert_protocol_package, require_existing_protocol_package,
+};
+
 fn preflight_protocol_package_files(
     transaction: &Transaction<'_>,
     package: &ProtocolPackageRef,

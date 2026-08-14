@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use super::*;
 
+mod portability;
+
 #[derive(Debug, Default)]
 pub(super) struct ProtocolPortFailures {
     pub list: Option<AppError>,
@@ -37,6 +39,9 @@ pub(super) struct FakeProtocolPackageServices {
     pub usage_count_calls: AtomicUsize,
     pub set_enabled_calls: AtomicUsize,
     pub delete_calls: AtomicUsize,
+    pub workspace_export_calls: AtomicUsize,
+    pub application_export_calls: AtomicUsize,
+    pub exported_workspace_refs: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
     pub exact_calls: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
     pub block_usage: AtomicBool,
     pub usage_entered: tokio::sync::Notify,
@@ -393,13 +398,13 @@ pub(super) fn application_with_proxy_ports(
                 store: services.clone(),
                 compiler: services.clone(),
                 importer: services.clone(),
-                usage_query: services,
+                usage_query: services.clone(),
+                portability: services,
             },
             events: Arc::new(EventHub::default()),
         },
     )
 }
-
 pub(super) fn error_code(error: &AppError) -> &str {
     &error.view_model.code
 }

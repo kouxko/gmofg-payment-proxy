@@ -72,7 +72,7 @@ async fn socket_rule_writes_share_the_existing_rule_lifecycle_guard() {
 }
 
 #[tokio::test]
-async fn v3_workspace_and_configuration_exports_reject_socket_rules() {
+async fn v4_workspace_and_configuration_exports_include_rule_package() {
     let (application, services, workspaces, _) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let listener_id = configure_relay(
@@ -87,7 +87,12 @@ async fn v3_workspace_and_configuration_exports_reject_socket_rules() {
     )
     .await;
     application
-        .socket_rule_save(input(listener_id, package, SocketDirection::Upstream, 0))
+        .socket_rule_save(input(
+            listener_id,
+            package.clone(),
+            SocketDirection::Upstream,
+            0,
+        ))
         .await
         .unwrap();
     let selected = workspaces
@@ -98,18 +103,16 @@ async fn v3_workspace_and_configuration_exports_reject_socket_rules() {
         .find(|summary| summary.selected)
         .unwrap();
 
-    let workspace_error = application.workspace_export(selected.id).await.unwrap_err();
-    assert_eq!(
-        error_code(&workspace_error),
-        "SOCKET_RULE_PORTABILITY_REQUIRES_V4"
-    );
-    let configuration_error = application
+    application.workspace_export(selected.id).await.unwrap();
+    application
         .application_configuration_export()
         .await
-        .unwrap_err();
+        .unwrap();
+    assert_eq!(services.workspace_export_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(services.application_export_calls.load(Ordering::SeqCst), 1);
     assert_eq!(
-        error_code(&configuration_error),
-        "SOCKET_RULE_PORTABILITY_REQUIRES_V4"
+        services.exported_workspace_refs.lock().as_slice(),
+        &[package]
     );
 }
 

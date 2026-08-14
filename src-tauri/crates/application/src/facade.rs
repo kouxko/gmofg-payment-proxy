@@ -8,15 +8,15 @@ use std::sync::Arc;
 use chrono::Utc;
 
 use crate::{
-    AndroidControlPort, AppError, AppResult, ApplicationConfigurationStorePort,
-    BreakpointCoordinator, BreakpointValidationPort, CertificateOverviewViewModel,
-    CertificateServicePort, CertificateValidationViewModel, ChannelPresentationViewModel, EventHub,
-    FaultServicePort, ListenerCertificateImportPort, ListenerRuntimePort, OperationResultViewModel,
-    ProtectedSecretPort, ProtocolPackageApplicationServices, ProtocolPackageCompilerPort,
-    ProtocolPackageImportPort, ProtocolPackageStorePort, ProtocolPackageUsageQueryPort, ProxyState,
-    ProxyStatusViewModel, ProxySupervisorPort, RuleRepositoryPort, SessionQueryPort,
-    SettingsRepositoryPort, SettingsViewModel, UiEventPayload,
-    UnavailableApplicationConfigurationStore, WorkspaceDocumentPort, WorkspaceRepositoryPort,
+    AndroidControlPort, AppError, AppResult, BreakpointCoordinator, BreakpointValidationPort,
+    CertificateOverviewViewModel, CertificateServicePort, CertificateValidationViewModel,
+    ChannelPresentationViewModel, EventHub, FaultServicePort, ListenerCertificateImportPort,
+    ListenerRuntimePort, OperationResultViewModel, ProtectedSecretPort,
+    ProtocolPackageApplicationServices, ProtocolPackageCompilerPort, ProtocolPackageImportPort,
+    ProtocolPackagePortabilityPort, ProtocolPackageStorePort, ProtocolPackageUsageQueryPort,
+    ProxyState, ProxyStatusViewModel, ProxySupervisorPort, RuleRepositoryPort, SessionQueryPort,
+    SettingsRepositoryPort, SettingsViewModel, UiEventPayload, WorkspaceDocumentPort,
+    WorkspaceRepositoryPort,
 };
 
 mod android;
@@ -28,6 +28,8 @@ mod diagnostics;
 mod lifecycle;
 mod listener_certificates;
 mod listeners;
+mod protocol_package_portability;
+pub use protocol_package_portability::validate_portable_protocol_bindings;
 mod protocol_packages;
 mod rules;
 mod secrets;
@@ -56,7 +58,6 @@ pub struct Application {
     settings: Arc<dyn SettingsRepositoryPort>,
     workspaces: Arc<dyn WorkspaceRepositoryPort>,
     workspace_documents: Arc<dyn WorkspaceDocumentPort>,
-    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
     android: Arc<dyn AndroidControlPort>,
     /// 当前已选择设备的完整应用清单。
     ///
@@ -70,6 +71,7 @@ pub struct Application {
     protocol_package_compiler: Arc<dyn ProtocolPackageCompilerPort>,
     protocol_package_importer: Arc<dyn ProtocolPackageImportPort>,
     protocol_package_usage: Arc<dyn ProtocolPackageUsageQueryPort>,
+    protocol_package_portability: Arc<dyn ProtocolPackagePortabilityPort>,
     protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
     mutation_gate: tokio::sync::Mutex<()>,
@@ -127,13 +129,7 @@ impl Application {
         android: Arc<dyn AndroidControlPort>,
         protected_secrets: Arc<dyn ProtectedSecretPort>,
     ) -> Self {
-        Self::new_with_platform_services(
-            product_name,
-            dependencies,
-            android,
-            protected_secrets,
-            Arc::new(UnavailableApplicationConfigurationStore),
-        )
+        Self::new_with_platform_services(product_name, dependencies, android, protected_secrets)
     }
 
     pub fn new_with_platform_services(
@@ -141,7 +137,6 @@ impl Application {
         dependencies: ApplicationDependencies,
         android: Arc<dyn AndroidControlPort>,
         protected_secrets: Arc<dyn ProtectedSecretPort>,
-        configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
     ) -> Self {
         Self {
             product_name,
@@ -156,7 +151,6 @@ impl Application {
             settings: dependencies.settings,
             workspaces: dependencies.workspaces,
             workspace_documents: dependencies.workspace_documents,
-            configuration_store,
             android,
             android_package_cache: tokio::sync::Mutex::new(None),
             listener_runtime: dependencies.listener_runtime,
@@ -165,6 +159,7 @@ impl Application {
             protocol_package_compiler: dependencies.protocol_packages.compiler,
             protocol_package_importer: dependencies.protocol_packages.importer,
             protocol_package_usage: dependencies.protocol_packages.usage_query,
+            protocol_package_portability: dependencies.protocol_packages.portability,
             protected_secrets,
             events: dependencies.events,
             mutation_gate: tokio::sync::Mutex::new(()),

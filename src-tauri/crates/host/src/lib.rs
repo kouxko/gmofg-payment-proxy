@@ -212,12 +212,12 @@ impl ApplicationHostBuilder {
             Arc::new(RetiredProxyAdapter::new(stored_settings))
         });
         let android = Arc::new(AndroidAdbAdapter::new(self.android_companion_apk));
-        let application_configuration = services.workspaces.clone();
         let protocol_packages = ProtocolPackageApplicationServices {
             store: services.protocol_packages.clone(),
             compiler: services.protocol_packages.clone(),
             importer: services.protocol_package_import.clone(),
             usage_query: services.protocol_package_usage.clone(),
+            portability: services.protocol_packages.clone(),
         };
         let application = Arc::new(Application::new_with_platform_services(
             self.product.name().to_owned(),
@@ -242,7 +242,6 @@ impl ApplicationHostBuilder {
             },
             android,
             services.protected_secrets,
-            application_configuration,
         ));
         let background_cancellation = CancellationToken::new();
         // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle

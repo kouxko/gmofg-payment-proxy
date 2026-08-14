@@ -97,6 +97,7 @@ pub struct SqliteStore {
 }
 
 mod core;
+mod portable_configuration;
 pub(crate) mod protocol_packages;
 mod rules_and_certificates;
 mod workspaces;
