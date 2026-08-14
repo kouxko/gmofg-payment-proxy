@@ -199,6 +199,16 @@ async fn workspace_import_rejects_unmanaged_certificate_reference() {
         workspace,
         certificate_materials: Vec::new(),
     };
+    let mut document = serde_json::to_value(document).expect("document value");
+    // 该夹具模拟旧 v3 线格式；内部持久化新增字段不能混入可移植输入。
+    document["workspace"]
+        .as_object_mut()
+        .expect("workspace object")
+        .remove("socket_rules");
+    document["workspace"]
+        .as_object_mut()
+        .expect("workspace object")
+        .remove("socket_rule_created_order_high_water");
     let error = repository
         .import_document(serde_json::to_vec(&document).expect("document"))
         .await
@@ -392,6 +402,8 @@ fn referenced_workspace() -> ProxyWorkspace {
             hit_count: 0,
             last_hit_at: None,
         }],
+        socket_rules: Vec::new(),
+        socket_rule_created_order_high_water: 0,
         fault_presets: vec![FaultPreset {
             id: FaultPresetId::new(),
             name: "Fault".into(),

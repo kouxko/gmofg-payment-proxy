@@ -80,6 +80,9 @@ pub fn parse_workspace_document(document: &[u8]) -> AppResult<WorkspaceDocument>
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("Workspace JSON 无效：{error}")))?;
     reject_workspace_fields_outside_certificate_materials(&value)?;
     let version = read_format_version(&value)?;
+    if version == WORKSPACE_DOCUMENT_FORMAT_VERSION {
+        crate::portable_socket_rules::reject_workspace_fields(value.get("workspace"))?;
+    }
     let parsed = match version {
         WORKSPACE_DOCUMENT_FORMAT_VERSION => serde_json::from_value::<WorkspaceDocument>(value)
             .map_err(|error| invalid_workspace_structure(&error))?,
@@ -118,16 +121,16 @@ fn unsupported_version(version: u16) -> AppError {
 
 /// 序列化经过领域校验的 Workspace，并对输出再次执行敏感字段扫描。
 pub fn serialize_workspace_document(document: &WorkspaceDocument) -> AppResult<Vec<u8>> {
+    crate::portable_socket_rules::ensure_not_portable(std::slice::from_ref(&document.workspace))?;
     document.validate()?;
-    let document = serde_json::to_vec_pretty(document).map_err(|error| {
+    let mut value = serde_json::to_value(document).map_err(|error| {
         AppError::new("EXPORT_FAILED", format!("Workspace 序列化失败：{error}"))
     })?;
-    let value = serde_json::from_slice::<Value>(&document).map_err(|error| {
-        AppError::new("EXPORT_FAILED", format!("Workspace 导出自检失败：{error}"))
-    })?;
+    crate::portable_socket_rules::remove_workspace_fields(value.get_mut("workspace"));
     reject_workspace_fields_outside_certificate_materials(&value)
         .map_err(|_| AppError::new("EXPORT_FAILED", "Workspace 包含禁止导出的敏感字段。"))?;
-    Ok(document)
+    serde_json::to_vec_pretty(&value)
+        .map_err(|error| AppError::new("EXPORT_FAILED", format!("Workspace 序列化失败：{error}")))
 }
 
 fn reject_workspace_fields_outside_certificate_materials(value: &Value) -> AppResult<()> {
@@ -172,6 +175,8 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    mod socket_compatibility;
 
     fn material(
         reference_id: CertificateReferenceId,
@@ -419,67 +424,5 @@ mod tests {
 
         value["workspace"]["listeners"][0]["unknown_v2_field"] = json!(true);
         assert!(parse_workspace_document(&serde_json::to_vec(&value).unwrap()).is_err());
-    }
-
-    #[test]
-    fn v3_socket_workspace_round_trip_preserves_the_tagged_variant() {
-        let listener = intercept_proxy_domain::ProxyListener {
-            data_plane: intercept_proxy_domain::ListenerDataPlane::Socket(
-                intercept_proxy_domain::SocketRelaySettings::relay(
-                    intercept_proxy_domain::SocketEndpoint {
-                        host: "socket.example.test".into(),
-                        port: 16_127,
-                    },
-                    intercept_proxy_domain::SocketRelaySecurity::Transparent,
-                    777,
-                    intercept_proxy_domain::SocketPayloadProcessing::Scripted(
-                        intercept_proxy_domain::ScriptedSocketProcessing {
-                            package: intercept_proxy_domain::ProtocolPackageRef {
-                                id: intercept_proxy_domain::ProtocolPackageId::new(
-                                    "iso8583-standard",
-                                )
-                                .unwrap(),
-                                version: intercept_proxy_domain::ProtocolPackageVersion::new(
-                                    "1.2.3",
-                                )
-                                .unwrap(),
-                            },
-                            upstream: intercept_proxy_domain::DirectionProcessingOptions {
-                                decode_enabled: true,
-                                encode_enabled: false,
-                            },
-                            downstream: intercept_proxy_domain::DirectionProcessingOptions {
-                                decode_enabled: false,
-                                encode_enabled: true,
-                            },
-                        },
-                    ),
-                ),
-            ),
-            ..intercept_proxy_domain::ProxyListener::default()
-        };
-        let workspace = ProxyWorkspace {
-            listeners: vec![listener],
-            ..ProxyWorkspace::default()
-        };
-        let document = WorkspaceDocument {
-            format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
-            workspace,
-            certificate_materials: Vec::new(),
-        };
-
-        let bytes = serialize_workspace_document(&document).unwrap();
-        let parsed = parse_workspace_document(&bytes).unwrap();
-        assert_eq!(parsed, document);
-        let socket = parsed.workspace.listeners[0].socket().unwrap();
-        let intercept_proxy_domain::SocketPayloadProcessing::Scripted(processing) =
-            &socket.processing
-        else {
-            panic!("scripted processing must survive workspace export/import")
-        };
-        assert!(processing.upstream.decode_enabled);
-        assert!(!processing.upstream.encode_enabled);
-        assert!(!processing.downstream.decode_enabled);
-        assert!(processing.downstream.encode_enabled);
     }
 }

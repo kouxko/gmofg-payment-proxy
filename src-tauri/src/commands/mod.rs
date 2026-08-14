@@ -12,6 +12,7 @@ mod listener;
 mod protocol_packages;
 mod rules;
 mod settings;
+mod socket_rules;
 mod workspace;
 
 pub use android::*;
@@ -23,6 +24,7 @@ pub use listener::*;
 pub use protocol_packages::*;
 pub use rules::*;
 pub use settings::*;
+pub use socket_rules::*;
 pub use workspace::*;
 
 use intercept_proxy_application::{AppError, AppErrorViewModel};
@@ -141,6 +143,11 @@ pub fn builder() -> Builder<Wry> {
             rule_toggle,
             rule_import,
             rule_export,
+            socket_rule_list,
+            socket_rule_capabilities,
+            socket_rule_save,
+            socket_rule_toggle,
+            socket_rule_delete,
             fault_template_list,
             fault_configure,
             fault_active_list,

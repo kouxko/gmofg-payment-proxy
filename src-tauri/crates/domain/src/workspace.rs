@@ -13,7 +13,8 @@ use specta::Type;
 
 use crate::{
     AndroidNetworkProfile, CertificateReferenceId, DomainError, ErrorCode, FaultPresetId,
-    ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, Rule, RuleAction, WorkspaceId,
+    ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, Rule, RuleAction,
+    SocketDocumentRuleDefinition, WorkspaceId,
 };
 
 mod listener_model;
@@ -138,6 +139,14 @@ pub struct ProxyWorkspace {
     /// 字段仍属于领域聚合并参与导入导出，只不重复进入 Workspace 的 TypeScript DTO。
     #[specta(skip)]
     pub rules: Vec<Rule>,
+    /// Schema 驱动的 Socket 规则；与 HTTP `rules` 使用完全独立的类型和维护入口。
+    #[serde(default)]
+    #[specta(skip)]
+    pub socket_rules: Vec<SocketDocumentRuleDefinition>,
+    /// Socket 规则 `created_order` 的单调高水位；删除规则不会降低此值。
+    #[serde(default)]
+    #[specta(skip)]
+    pub socket_rule_created_order_high_water: u64,
     pub fault_presets: Vec<FaultPreset>,
     pub certificate_references: Vec<CertificateReference>,
     /// 与该 Workspace 一起迁移的 Android 设备网络方案。
@@ -176,6 +185,8 @@ impl From<ProxyWorkspaceV2> for ProxyWorkspace {
             metadata_extractors: value.metadata_extractors,
             response_assertions: value.response_assertions,
             rules: value.rules,
+            socket_rules: Vec::new(),
+            socket_rule_created_order_high_water: 0,
             fault_presets: value.fault_presets,
             certificate_references: value.certificate_references,
             android_network_profiles: value.android_network_profiles,
@@ -193,6 +204,8 @@ impl Default for ProxyWorkspace {
             metadata_extractors: Vec::new(),
             response_assertions: Vec::new(),
             rules: Vec::new(),
+            socket_rules: Vec::new(),
+            socket_rule_created_order_high_water: 0,
             fault_presets: Vec::new(),
             certificate_references: Vec::new(),
             android_network_profiles: Vec::new(),

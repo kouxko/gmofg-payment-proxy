@@ -175,7 +175,6 @@ impl fmt::Display for DocumentSchemaId {
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
 #[serde(try_from = "String", into = "String")]
 /// Schema 字段名，同时也是脚本和 Socket 规则使用的稳定变量名。
-///
 /// 名称必须匹配 `[a-z][a-z0-9_]*`，并拒绝全部 Rhai active/reserved 关键字，
 /// 防止同一个字段在 Schema 中合法、注册到脚本时却无法使用。
 pub struct DocumentFieldName(String);

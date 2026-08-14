@@ -13,6 +13,7 @@ mod fault;
 mod protocol_package;
 mod rule;
 mod session;
+mod socket_rule;
 mod workspace;
 
 pub use breakpoint::*;
@@ -25,4 +26,5 @@ pub use fault::*;
 pub use protocol_package::*;
 pub use rule::*;
 pub use session::*;
+pub use socket_rule::*;
 pub use workspace::*;

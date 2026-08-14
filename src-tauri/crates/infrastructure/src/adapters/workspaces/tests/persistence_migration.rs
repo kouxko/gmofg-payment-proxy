@@ -1,5 +1,5 @@
 #[tokio::test]
-async fn persisted_v2_workspace_reads_without_writing_and_next_save_persists_v3() {
+async fn persisted_v2_workspace_reads_without_writing_and_next_save_persists_v4() {
     let store = Arc::new(SqliteStore::in_memory().expect("in-memory store"));
     let workspace = ProxyWorkspace::default();
     store
@@ -39,13 +39,75 @@ async fn persisted_v2_workspace_reads_without_writing_and_next_save_persists_v3(
 
     migrated.name = "Saved after migration".into();
     let saved = repository.save(migrated).await.expect("save migrated row");
-    let stored_after_save = store.load_workspaces().expect("reload v3 row");
+    let stored_after_save = store.load_workspaces().expect("reload v4 row");
     assert_eq!(stored_after_save.records[0].revision, saved.revision.get());
     assert_eq!(
         stored_after_save.records[0].value["_persistence_version"],
-        3
+        4
     );
     assert!(stored_after_save.records[0].value["listeners"][0]["data_plane"].is_object());
+}
+
+#[tokio::test]
+async fn persisted_v3_workspace_defaults_socket_rule_state_and_next_save_persists_v4() {
+    let store = Arc::new(SqliteStore::in_memory().expect("in-memory store"));
+    let workspace = ProxyWorkspace::default();
+    let mut value = serde_json::to_value(&workspace).unwrap();
+    let object = value.as_object_mut().unwrap();
+    object.remove("socket_rules");
+    object.remove("socket_rule_created_order_high_water");
+    object.insert("_persistence_version".into(), serde_json::json!(3));
+    store
+        .insert_workspace(&WorkspaceRecord {
+            id: workspace.id.as_uuid(),
+            revision: workspace.revision.get(),
+            value,
+            updated_at: chrono::Utc::now(),
+        })
+        .expect("seed v3 workspace JSON");
+    let repository = WorkspaceRepositoryAdapter::new(Arc::clone(&store));
+
+    let mut migrated = repository.get(workspace.id).await.expect("read v3 row");
+    assert!(migrated.socket_rules.is_empty());
+    assert_eq!(migrated.socket_rule_created_order_high_water, 0);
+    migrated.name = "Saved after v3 migration".into();
+    repository.save(migrated).await.expect("save migrated row");
+
+    let stored = store.load_workspaces().expect("reload v4 row");
+    assert_eq!(stored.records[0].value["_persistence_version"], 4);
+    assert!(stored.records[0].value["socket_rules"].is_array());
+    assert_eq!(
+        stored.records[0].value["socket_rule_created_order_high_water"],
+        0
+    );
+}
+
+#[tokio::test]
+async fn persisted_v4_workspace_rejects_each_missing_socket_rule_field() {
+    for missing_field in ["socket_rules", "socket_rule_created_order_high_water"] {
+        let store = Arc::new(SqliteStore::in_memory().expect("in-memory store"));
+        let workspace = ProxyWorkspace::default();
+        let mut value = encode_workspace_record(&workspace).expect("v4 workspace JSON");
+        value
+            .as_object_mut()
+            .expect("workspace object")
+            .remove(missing_field);
+        store
+            .insert_workspace(&WorkspaceRecord {
+                id: workspace.id.as_uuid(),
+                revision: workspace.revision.get(),
+                value,
+                updated_at: chrono::Utc::now(),
+            })
+            .expect("seed damaged v4 workspace JSON");
+
+        let repository = WorkspaceRepositoryAdapter::new(store);
+        let error = repository
+            .get(workspace.id)
+            .await
+            .expect_err("missing v4 field must fail closed");
+        assert_eq!(error.view_model.code, "PERSISTENCE_CORRUPT");
+    }
 }
 
 #[tokio::test]

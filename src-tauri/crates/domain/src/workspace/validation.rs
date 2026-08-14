@@ -2,7 +2,14 @@
 
 use std::collections::BTreeSet;
 
-use super::{DomainError, ListenerId, ProxyWorkspace, ResponseAssertion, ResponseAssertionKind};
+use super::{
+    DirectionProcessingOptions, DomainError, ListenerDataPlane, ListenerId, ProxyWorkspace,
+    ResponseAssertion, ResponseAssertionKind, SocketPayloadProcessing, SocketTopology,
+};
+use crate::{
+    MAX_JAVASCRIPT_SAFE_INTEGER, MAX_SOCKET_DOCUMENT_RULES, SocketDirection,
+    SocketDocumentRuleDefinition,
+};
 
 mod listener;
 mod value;
@@ -66,7 +73,135 @@ pub(super) fn validate_workspace_references(
         }
     }
 
+    validate_socket_rules(workspace, listener_ids, error);
+
     validate_android_profiles(workspace, listener_ids, error);
+}
+
+fn validate_socket_rules(
+    workspace: &ProxyWorkspace,
+    listener_ids: &BTreeSet<ListenerId>,
+    error: &mut DomainError,
+) {
+    if workspace.socket_rule_created_order_high_water > MAX_JAVASCRIPT_SAFE_INTEGER {
+        push_field_error(
+            error,
+            "socket_rule_created_order_high_water",
+            "Socket 规则创建顺序高水位不能超过 JavaScript 安全整数上限",
+        );
+    }
+    if workspace
+        .socket_rules
+        .iter()
+        .map(SocketDocumentRuleDefinition::created_order)
+        .max()
+        .is_some_and(|maximum| maximum > workspace.socket_rule_created_order_high_water)
+    {
+        push_field_error(
+            error,
+            "socket_rule_created_order_high_water",
+            "Socket 规则创建顺序高水位不能小于现存规则的 created_order",
+        );
+    }
+    if workspace.socket_rules.len() > MAX_SOCKET_DOCUMENT_RULES {
+        push_field_error(
+            error,
+            "socket_rules",
+            "单个 Workspace 的 Socket 规则不能超过 1024 条",
+        );
+    }
+    let mut rule_ids = BTreeSet::new();
+    for (index, rule) in workspace.socket_rules.iter().enumerate() {
+        let prefix = format!("socket_rules.{index}");
+        if !rule_ids.insert(rule.rule_id()) {
+            push_field_error(error, format!("{prefix}.rule_id"), "规则 ID 不能重复");
+        }
+        if !listener_ids.contains(&rule.listener_id()) {
+            push_field_error(
+                error,
+                format!("{prefix}.listener_id"),
+                "规则必须引用当前 Workspace 中存在的监听器",
+            );
+            continue;
+        }
+        let Some(listener) = workspace
+            .listeners
+            .iter()
+            .find(|item| item.id == rule.listener_id())
+        else {
+            continue;
+        };
+        let ListenerDataPlane::Socket(settings) = &listener.data_plane else {
+            push_field_error(
+                error,
+                format!("{prefix}.listener_id"),
+                "Socket 规则不能绑定 HTTP 监听器",
+            );
+            continue;
+        };
+        let SocketPayloadProcessing::Scripted(scripted) = &settings.processing else {
+            push_field_error(
+                error,
+                format!("{prefix}.listener_id"),
+                "Socket 规则只能绑定 Scripted 监听器",
+            );
+            continue;
+        };
+        if &scripted.package != rule.package() {
+            push_field_error(
+                error,
+                format!("{prefix}.package"),
+                "规则包版本必须与监听器精确绑定一致",
+            );
+        }
+        match &settings.topology {
+            SocketTopology::Relay(_) => {
+                let options = match rule.direction() {
+                    SocketDirection::Upstream => scripted.upstream,
+                    SocketDirection::Downstream => scripted.downstream,
+                };
+                validate_rule_options(rule.modifies_document(), options, &prefix, error);
+            }
+            SocketTopology::LocalResponder(_) => {
+                if rule.direction() != SocketDirection::Downstream {
+                    push_field_error(
+                        error,
+                        format!("{prefix}.direction"),
+                        "LocalResponder 只允许 downstream 响应规则",
+                    );
+                }
+                if rule.modifies_document() && !scripted.downstream.encode_enabled {
+                    push_field_error(
+                        error,
+                        format!("{prefix}.actions"),
+                        "修改 LocalResponder 响应需要开启 downstream Encode",
+                    );
+                }
+            }
+        }
+    }
+}
+
+fn validate_rule_options(
+    modifies_document: bool,
+    options: DirectionProcessingOptions,
+    prefix: &str,
+    error: &mut DomainError,
+) {
+    if !options.decode_enabled {
+        push_field_error(
+            error,
+            format!("{prefix}.direction"),
+            "Relay 规则要求对应方向开启 Decode",
+        );
+    }
+    if modifies_document && !options.encode_enabled {
+        push_field_error(
+            error,
+            format!("{prefix}.actions"),
+            "修改 Document 需要对应方向开启 Encode",
+        );
+    }
 }
 
 fn validate_android_profiles(

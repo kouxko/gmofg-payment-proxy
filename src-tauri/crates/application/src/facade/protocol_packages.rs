@@ -102,6 +102,7 @@ impl Application {
     ) -> AppResult<ProtocolPackageDetailViewModel> {
         let version = self.require_protocol_package(&package).await?;
         let description = self.protocol_package_compiler.describe(&package).await?;
+        ensure_description_identity(&package, &description)?;
         let usages = self.protocol_package_usage.usages(&package).await?;
         Ok(ProtocolPackageDetailViewModel {
             version,
@@ -277,7 +278,7 @@ impl Application {
         Ok(())
     }
 
-    async fn require_protocol_package(
+    pub(super) async fn require_protocol_package(
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageVersionViewModel> {
@@ -298,4 +299,18 @@ fn protocol_package_not_found(package: &ProtocolPackageRef) -> AppError {
 
 fn package_entity(package: &ProtocolPackageRef) -> String {
     format!("{}@{}", package.id, package.version)
+}
+
+pub(super) fn ensure_description_identity(
+    requested: &ProtocolPackageRef,
+    description: &crate::ProtocolPackageDescriptionViewModel,
+) -> AppResult<()> {
+    if description.package == *requested {
+        return Ok(());
+    }
+    Err(AppError::new(
+        "PROTOCOL_PACKAGE_DESCRIPTION_IDENTITY_MISMATCH",
+        "协议包编译描述与请求的精确版本不一致，已拒绝使用该结果。",
+    )
+    .entity(package_entity(requested)))
 }

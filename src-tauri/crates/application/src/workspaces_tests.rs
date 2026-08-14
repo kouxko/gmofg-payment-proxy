@@ -39,6 +39,68 @@ async fn create_validate_save_copy_select_and_delete_share_one_revision_contract
     assert_eq!(store.list().await.unwrap().len(), 1);
 }
 
+#[test]
+fn socket_rule_remap_preserves_rule_identity_revision_and_order_but_rebinds_listener() {
+    use intercept_proxy_domain::{
+        DirectionProcessingOptions, DocumentAction, ProtocolPackageId, ProtocolPackageRef,
+        ProtocolPackageVersion, ScriptedSocketProcessing, SocketDirection,
+        SocketDocumentRuleDefinition, SocketDocumentRuleId, SocketEndpoint,
+        SocketPayloadProcessing, SocketRelaySettings,
+    };
+
+    let package = ProtocolPackageRef {
+        id: ProtocolPackageId::new("iso-8583").unwrap(),
+        version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+    };
+    let mut workspace = ProxyWorkspace::default();
+    let old_listener_id = workspace.listeners[0].id;
+    workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings::relay(
+        SocketEndpoint {
+            host: "127.0.0.1".into(),
+            port: 9000,
+        },
+        SocketRelaySecurity::Transparent,
+        8,
+        SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
+            package: package.clone(),
+            upstream: DirectionProcessingOptions {
+                decode_enabled: true,
+                encode_enabled: false,
+            },
+            downstream: DirectionProcessingOptions::default(),
+        }),
+    ));
+    let rule_id = SocketDocumentRuleId::new();
+    let mut rule = SocketDocumentRuleDefinition::new(
+        rule_id,
+        true,
+        -7,
+        42,
+        old_listener_id,
+        package,
+        1,
+        SocketDirection::Upstream,
+        Vec::new(),
+        vec![DocumentAction::RecordMatch],
+    )
+    .unwrap();
+    rule.toggle(rule.revision(), false).unwrap();
+    let original_revision = rule.revision();
+    workspace.socket_rule_created_order_high_water = rule.created_order();
+    workspace.socket_rules.push(rule);
+
+    remap_workspace_identity(&mut workspace).unwrap();
+
+    let remapped = &workspace.socket_rules[0];
+    assert_eq!(remapped.rule_id(), rule_id);
+    assert_eq!(remapped.revision(), original_revision);
+    assert_eq!(remapped.created_order(), 42);
+    assert_eq!(remapped.priority(), -7);
+    assert_ne!(workspace.listeners[0].id, old_listener_id);
+    assert_eq!(remapped.listener_id(), workspace.listeners[0].id);
+    workspace.validate().unwrap();
+}
+
 #[tokio::test]
 async fn export_round_trip_contains_references_but_no_secret_values() {
     let source = InMemoryWorkspaceStore::default();
@@ -111,12 +173,20 @@ async fn import_rejects_unmanaged_certificate_references() {
             reference: "pkcs12:/tmp/client.p12?password_env=P12_PASSWORD".into(),
         });
     let store = InMemoryWorkspaceStore::new_empty();
-    let document = serde_json::to_vec(&serde_json::json!({
+    let mut wire = serde_json::json!({
         "format_version": crate::WORKSPACE_DOCUMENT_FORMAT_VERSION,
         "workspace": workspace,
         "certificate_materials": [],
-    }))
-    .unwrap();
+    });
+    wire["workspace"]
+        .as_object_mut()
+        .unwrap()
+        .remove("socket_rules");
+    wire["workspace"]
+        .as_object_mut()
+        .unwrap()
+        .remove("socket_rule_created_order_high_water");
+    let document = serde_json::to_vec(&wire).unwrap();
 
     let error = store
         .import_document(document)

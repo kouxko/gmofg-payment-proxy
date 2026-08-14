@@ -32,6 +32,7 @@ mod protocol_packages;
 mod rules;
 mod secrets;
 mod settings;
+mod socket_rules;
 mod traffic;
 mod validation;
 mod workspaces;

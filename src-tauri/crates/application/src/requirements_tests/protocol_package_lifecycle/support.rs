@@ -196,7 +196,7 @@ impl ProtocolPackageCompilerPort for FakeProtocolPackageServices {
             .lock()
             .get(package)
             .cloned()
-            .unwrap_or_else(description))
+            .unwrap_or_else(|| description(package.clone())))
     }
 }
 
@@ -308,8 +308,9 @@ pub(super) fn usage(
     }
 }
 
-pub(super) fn description() -> ProtocolPackageDescriptionViewModel {
+pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescriptionViewModel {
     ProtocolPackageDescriptionViewModel {
+        package,
         capabilities: ProtocolPackageCapabilitiesViewModel {
             upstream: ProtocolPackageDirectionCapabilitiesViewModel {
                 frame: true,
@@ -363,6 +364,15 @@ pub(super) fn application(
     runtime: Arc<InMemoryListenerRuntime>,
 ) -> Application {
     let ports = Arc::new(FakePorts::default());
+    application_with_proxy_ports(services, workspaces, runtime, ports)
+}
+
+pub(super) fn application_with_proxy_ports(
+    services: Arc<FakeProtocolPackageServices>,
+    workspaces: Arc<InMemoryWorkspaceStore>,
+    runtime: Arc<InMemoryListenerRuntime>,
+    ports: Arc<FakePorts>,
+) -> Application {
     Application::new(
         "Protocol lifecycle test".into(),
         ApplicationDependencies {
