@@ -17,10 +17,10 @@ use crate::transport::{AcceptedConnection, BoxIo, ConnectionContext};
 use crate::{ChannelId, ErrorCode, ProxyError, Result};
 
 use super::{
-    SocketDownstreamTlsConfig, SocketEndpoint, SocketRelayDirection, SocketRelayFailure,
-    SocketRelaySecurity, SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity,
-    SocketTransportMode, SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig,
-    SocketUpstreamTransport,
+    SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint, SocketRelayDirection,
+    SocketRelayFailure, SocketRelaySecurity, SocketRelayStage, SocketTlsEvidence,
+    SocketTlsIdentity, SocketTransportMode, SocketUpstreamConnectionTestResult,
+    SocketUpstreamTlsConfig, SocketUpstreamTransport,
 };
 
 #[derive(Debug)]
@@ -61,6 +61,15 @@ pub(super) struct ConnectedSocket {
     pub(super) upstream_tls: Option<SocketTlsEvidence>,
 }
 
+/// App 侧已接纳的 Socket 连接。
+///
+/// 该结果故意不包含上游地址、连接耗时或上游 TLS 证据。LocalResponder 只拿到这个
+/// 类型，因此后续代码无法把一次下游 TLS 握手误报成“已连接上游”。
+pub(super) struct AcceptedDownstreamSocket {
+    pub(super) downstream: BoxIo,
+    pub(super) downstream_tls_peer: Option<String>,
+}
+
 impl PreparedSocketSecurity {
     pub(super) fn build(security: &SocketRelaySecurity) -> Result<Self> {
         let (downstream, upstream, mode) = match security {
@@ -87,6 +96,25 @@ impl PreparedSocketSecurity {
         Ok(Self {
             downstream,
             upstream,
+            mode,
+        })
+    }
+
+    /// 只构造 App 侧的接入安全能力，不创建 resolver、TCP dialer 或上游 TLS adapter。
+    ///
+    /// 这个构造器是 `LocalResponder` 与 Relay 的安全边界：即使调用方配置错误，返回值
+    /// 中也没有可用于建立上游连接的 adapter。
+    pub(super) fn build_downstream(security: &SocketDownstreamSecurity) -> Result<Self> {
+        let (downstream, mode) = match security {
+            SocketDownstreamSecurity::Tcp => (None, SocketTransportMode::Transparent),
+            SocketDownstreamSecurity::Tls { downstream_tls } => (
+                Some(downstream_acceptor(downstream_tls)?),
+                SocketTransportMode::TlsToTcp,
+            ),
+        };
+        Ok(Self {
+            downstream,
+            upstream: None,
             mode,
         })
     }
@@ -132,10 +160,10 @@ impl PreparedSocketSecurity {
                 )
             })?;
         Ok(ConnectedSocket {
-            downstream: downstream.io,
+            downstream: downstream.downstream,
             upstream,
             resolved_address,
-            downstream_tls_peer: downstream.tls_peer.map(|peer| peer.sha256_fingerprint),
+            downstream_tls_peer: downstream.downstream_tls_peer,
             upstream_tls,
         })
     }
@@ -166,15 +194,22 @@ impl PreparedSocketSecurity {
         })
     }
 
-    async fn accept_downstream(
+    /// 接纳 App 侧连接；纯 TCP 原样返回，TLS 模式仅在本地完成服务端握手。
+    ///
+    /// 此方法不解析上游地址，也不会调用 DNS、TCP connect 或上游 TLS。调用方可据此
+    /// 实现不配置上游的 `LocalResponder`。
+    pub(super) async fn accept_downstream(
         &self,
         io: BoxIo,
         peer: SocketAddr,
         timeout: Duration,
         cancellation: &CancellationToken,
-    ) -> Result<AcceptedConnection> {
+    ) -> Result<AcceptedDownstreamSocket> {
         let Some(acceptor) = &self.downstream else {
-            return Ok(AcceptedConnection { io, tls_peer: None });
+            return Ok(AcceptedDownstreamSocket {
+                downstream: io,
+                downstream_tls_peer: None,
+            });
         };
         let context = ConnectionContext {
             runtime_epoch: uuid::Uuid::new_v4(),
@@ -184,16 +219,20 @@ impl PreparedSocketSecurity {
             accepted_at: std::time::SystemTime::now(),
             tls_peer: None,
         };
-        timeout_cancel_first(
+        let accepted: AcceptedConnection = timeout_cancel_first(
             timeout,
             cancellation,
             acceptor.accept(io, &context),
             ErrorCode::SocketDownstreamTlsTimeout,
-            "socket relay cancelled during downstream TLS",
+            "socket connection cancelled during downstream TLS",
             "socket downstream TLS handshake",
         )
         .await?
-        .map_err(|error| ProxyError::new(ErrorCode::SocketDownstreamTlsFailed, error.message))
+        .map_err(|error| ProxyError::new(ErrorCode::SocketDownstreamTlsFailed, error.message))?;
+        Ok(AcceptedDownstreamSocket {
+            downstream: accepted.io,
+            downstream_tls_peer: accepted.tls_peer.map(|peer| peer.sha256_fingerprint),
+        })
     }
 
     async fn connect_upstream(
@@ -325,6 +364,7 @@ fn reverse_identity(identity: &SocketTlsIdentity) -> ReverseClientIdentity {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
     #[tokio::test]
@@ -349,5 +389,30 @@ mod tests {
 
         assert_eq!(connected_address, target_address);
         accepted.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn downstream_only_tcp_accept_never_needs_an_upstream_endpoint() {
+        let prepared = PreparedSocketSecurity::build_downstream(&SocketDownstreamSecurity::Tcp)
+            .expect("plain downstream security must build");
+        assert_eq!(prepared.mode(), SocketTransportMode::Transparent);
+
+        let (proxy_side, mut app_side) = tokio::io::duplex(32);
+        let accepted = prepared
+            .accept_downstream(
+                Box::new(proxy_side),
+                "127.0.0.1:12345".parse().unwrap(),
+                Duration::from_secs(1),
+                &CancellationToken::new(),
+            )
+            .await
+            .expect("plain downstream connection must be accepted locally");
+        assert!(accepted.downstream_tls_peer.is_none());
+
+        let mut downstream = accepted.downstream;
+        downstream.write_all(b"reply").await.unwrap();
+        let mut bytes = [0_u8; 5];
+        app_side.read_exact(&mut bytes).await.unwrap();
+        assert_eq!(&bytes, b"reply");
     }
 }

@@ -80,6 +80,21 @@ pub enum SocketRelaySecurity {
     },
 }
 
+/// App 侧连接的传输安全配置。
+///
+/// `LocalResponder` 没有上游，因此不能复用同时描述上下游的
+/// [`SocketRelaySecurity`]。独立类型可以从结构上保证本地应答模式不会意外携带、
+/// 构造或调用上游 TLS 能力。
+#[derive(Clone, Debug)]
+pub enum SocketDownstreamSecurity {
+    /// 接收普通 TCP 连接。
+    Tcp,
+    /// 在 App 侧终止 TLS，可选校验客户端证书。
+    Tls {
+        downstream_tls: SocketDownstreamTlsConfig,
+    },
+}
+
 impl SocketRelaySecurity {
     pub fn terminates_downstream_tls(&self) -> bool {
         matches!(self, Self::TlsToTcp { .. } | Self::TlsToTls { .. })
@@ -102,6 +117,22 @@ pub struct SocketRelayConfig {
     pub write_timeout: Duration,
 }
 
+/// 仅在 App 侧接收请求并写回应的 Socket Listener 配置。
+///
+/// 该结构故意没有 upstream、DNS、connect timeout 或上游 TLS 字段；这样即使调用方
+/// 构造错误，也不能让 `LocalResponder` 偷偷建立上游连接。
+#[derive(Clone, Debug)]
+pub struct SocketLocalResponderConfig {
+    pub bind_addr: SocketAddr,
+    pub allowed_client_cidrs: Vec<String>,
+    pub security: SocketDownstreamSecurity,
+    pub maximum_connections: u16,
+    /// 下游 TLS 握手上限；纯 TCP 模式不会使用它。
+    pub handshake_timeout: Duration,
+    pub read_timeout: Duration,
+    pub write_timeout: Duration,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SocketUpstreamConnectionTestResult {
     pub resolved_address: SocketAddr,
@@ -119,24 +150,44 @@ pub enum SocketUpstreamTransport {
 impl SocketRelayConfig {
     pub fn validate(&self) -> Result<()> {
         self.upstream.validate()?;
-        if !(1..=5_000).contains(&self.maximum_connections) {
-            return Err(ProxyError::new(
-                ErrorCode::ConfigInvalid,
-                "socket maximum connections must be between 1 and 5000",
-            ));
-        }
-        for (field, duration) in [
+        validate_connection_limit(self.maximum_connections)?;
+        validate_timeouts([
             ("connect", self.connect_timeout),
             ("read", self.read_timeout),
             ("write", self.write_timeout),
-        ] {
-            if duration.is_zero() {
-                return Err(ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    format!("socket {field} timeout must be greater than zero"),
-                ));
-            }
-        }
-        Ok(())
+        ])
     }
+}
+
+impl SocketLocalResponderConfig {
+    pub fn validate(&self) -> Result<()> {
+        validate_connection_limit(self.maximum_connections)?;
+        validate_timeouts([
+            ("handshake", self.handshake_timeout),
+            ("read", self.read_timeout),
+            ("write", self.write_timeout),
+        ])
+    }
+}
+
+fn validate_connection_limit(maximum_connections: u16) -> Result<()> {
+    if !(1..=5_000).contains(&maximum_connections) {
+        return Err(ProxyError::new(
+            ErrorCode::ConfigInvalid,
+            "socket maximum connections must be between 1 and 5000",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_timeouts<const N: usize>(timeouts: [(&str, Duration); N]) -> Result<()> {
+    for (field, duration) in timeouts {
+        if duration.is_zero() {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                format!("socket {field} timeout must be greater than zero"),
+            ));
+        }
+    }
+    Ok(())
 }

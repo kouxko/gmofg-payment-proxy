@@ -8,29 +8,39 @@ use crate::listener::{ConnectionHandler, ConnectionTaskScope, PrimaryConnectionO
 use crate::transport::BoxIo;
 use crate::transport::ConnectionContext;
 use crate::transport::relay::{
-    RelayBytes, RelayFailure, RelayOperation, RelayProgress, RelayTimeoutCodes, RelayTimeouts,
+    RelayBytes, RelayFailure, RelayProgress, RelayTimeoutCodes, RelayTimeouts,
     relay_bidirectional_with_progress,
 };
 use crate::{ErrorCode, ProxyError, Result};
 
 use super::connector::PreparedSocketSecurity;
+use super::frame_pump::{
+    SocketFramePumpTimeouts, relay_framed_bidirectional, respond_framed_locally,
+};
+use super::handler_support::{
+    SocketHandlerConfig, SocketHandlerProcessing, connection_identity, normalize_cancelled,
+    processing_failure, socket_failure,
+};
 use super::{
-    SocketConnectionEvent, SocketConnectionObserver, SocketRelayBytes, SocketRelayConfig,
-    SocketRelayDirection, SocketRelayFailure, SocketRelayMetrics, SocketRelayRunContext,
-    SocketRelayStage, SocketUpstreamConnectionTestResult,
+    LocalResponderProcessorFactory, ScriptedRelayProcessorFactory, SocketConnectionEvent,
+    SocketConnectionObserver, SocketFramePumpLimits, SocketLocalResponderConfig,
+    SocketOpenedEvidence, SocketProcessingFailure, SocketRelayConfig, SocketRelayDirection,
+    SocketRelayFailure, SocketRelayMetrics, SocketRelayRunContext, SocketRelayStage,
+    SocketUpstreamConnectionTestResult,
 };
 
 #[derive(Debug)]
 pub(crate) struct SocketConnectionHandler {
-    config: SocketRelayConfig,
+    config: SocketHandlerConfig,
     security: PreparedSocketSecurity,
+    processing: SocketHandlerProcessing,
     observer: Arc<dyn SocketConnectionObserver>,
     metrics: Arc<SocketRelayMetrics>,
     run: Arc<std::sync::RwLock<SocketRelayRunContext>>,
 }
 
 impl SocketConnectionHandler {
-    pub(crate) fn build(
+    pub(crate) fn build_direct(
         config: SocketRelayConfig,
         observer: Arc<dyn SocketConnectionObserver>,
         metrics: Arc<SocketRelayMetrics>,
@@ -39,8 +49,49 @@ impl SocketConnectionHandler {
         config.validate()?;
         let security = PreparedSocketSecurity::build(&config.security)?;
         Ok(Self {
-            config,
+            config: SocketHandlerConfig::Relay(config),
             security,
+            processing: SocketHandlerProcessing::Direct,
+            observer,
+            metrics,
+            run,
+        })
+    }
+
+    pub(crate) fn build_scripted(
+        config: SocketRelayConfig,
+        factory: Arc<dyn ScriptedRelayProcessorFactory>,
+        limits: SocketFramePumpLimits,
+        observer: Arc<dyn SocketConnectionObserver>,
+        metrics: Arc<SocketRelayMetrics>,
+        run: Arc<std::sync::RwLock<SocketRelayRunContext>>,
+    ) -> Result<Self> {
+        config.validate()?;
+        let security = PreparedSocketSecurity::build(&config.security)?;
+        Ok(Self {
+            config: SocketHandlerConfig::Relay(config),
+            security,
+            processing: SocketHandlerProcessing::ScriptedRelay { factory, limits },
+            observer,
+            metrics,
+            run,
+        })
+    }
+
+    pub(crate) fn build_local_responder(
+        config: SocketLocalResponderConfig,
+        factory: Arc<dyn LocalResponderProcessorFactory>,
+        limits: SocketFramePumpLimits,
+        observer: Arc<dyn SocketConnectionObserver>,
+        metrics: Arc<SocketRelayMetrics>,
+        run: Arc<std::sync::RwLock<SocketRelayRunContext>>,
+    ) -> Result<Self> {
+        config.validate()?;
+        let security = PreparedSocketSecurity::build_downstream(&config.security)?;
+        Ok(Self {
+            config: SocketHandlerConfig::LocalResponder(config),
+            security,
+            processing: SocketHandlerProcessing::LocalResponder { factory, limits },
             observer,
             metrics,
             run,
@@ -54,10 +105,6 @@ impl SocketConnectionHandler {
         connection_id: Uuid,
         cancellation: CancellationToken,
     ) -> Result<()> {
-        let target = format!(
-            "{}:{}",
-            self.config.upstream.host, self.config.upstream.port
-        );
         let run = self.run();
         let progress = Arc::new(RelayProgress::default());
         self.metrics.admitted(connection_id, Arc::clone(&progress));
@@ -65,36 +112,152 @@ impl SocketConnectionHandler {
             run: run.clone(),
             connection_id,
             peer,
-            target,
+            target: self.config.target(),
             mode: self.security.mode(),
             at: SystemTime::now(),
         });
 
+        match (&self.config, &self.processing) {
+            (SocketHandlerConfig::Relay(config), processing) => {
+                self.handle_relay(
+                    io,
+                    peer,
+                    connection_id,
+                    run,
+                    config,
+                    processing,
+                    cancellation,
+                    progress,
+                )
+                .await
+            }
+            (
+                SocketHandlerConfig::LocalResponder(config),
+                SocketHandlerProcessing::LocalResponder { factory, limits },
+            ) => {
+                self.handle_local_responder(
+                    io,
+                    peer,
+                    connection_id,
+                    run,
+                    config,
+                    factory.as_ref(),
+                    *limits,
+                    cancellation,
+                    progress,
+                )
+                .await
+            }
+            _ => unreachable!("socket handler topology and processing mode are built together"),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn handle_relay(
+        &self,
+        io: BoxIo,
+        peer: SocketAddr,
+        connection_id: Uuid,
+        run: SocketRelayRunContext,
+        config: &SocketRelayConfig,
+        processing: &SocketHandlerProcessing,
+        cancellation: CancellationToken,
+        progress: Arc<RelayProgress>,
+    ) -> Result<()> {
         let connected = self
             .security
             .connect(
                 io,
                 peer,
-                &self.config.upstream,
-                self.config.connect_timeout,
+                &config.upstream,
+                config.connect_timeout,
                 &cancellation,
             )
             .await;
         let connected = match connected {
             Ok(connected) => connected,
             Err(preparation) => {
-                let error = normalize_cancelled(preparation.error);
-                let failure = if error.code == ErrorCode::SocketRelayCancelled.as_str() {
-                    SocketRelayFailure {
-                        stage: SocketRelayStage::Shutdown,
-                        direction: preparation.failure.direction,
-                        code: error.code,
-                    }
-                } else {
-                    SocketRelayFailure {
-                        code: error.code,
-                        ..preparation.failure
-                    }
+                return self.finish_preparation_failure(run, connection_id, preparation);
+            }
+        };
+        self.open(
+            &run,
+            connection_id,
+            SocketOpenedEvidence::Relay {
+                resolved_address: connected.resolved_address,
+                downstream_tls_peer: connected.downstream_tls_peer,
+                upstream_tls: connected.upstream_tls,
+            },
+        );
+
+        match processing {
+            SocketHandlerProcessing::Direct => {
+                let result = relay_bidirectional_with_progress(
+                    connected.downstream,
+                    connected.upstream,
+                    RelayTimeouts::new(
+                        config.read_timeout,
+                        config.write_timeout,
+                        RelayTimeoutCodes {
+                            read: ErrorCode::SocketReadTimeout,
+                            write: ErrorCode::SocketWriteTimeout,
+                        },
+                    ),
+                    cancellation,
+                    Arc::clone(&progress),
+                )
+                .await;
+                self.finish_direct(run, connection_id, result)
+            }
+            SocketHandlerProcessing::ScriptedRelay { factory, limits } => {
+                let result = relay_framed_bidirectional(
+                    connected.downstream,
+                    connected.upstream,
+                    connection_identity(&run, connection_id, peer),
+                    factory.as_ref(),
+                    *limits,
+                    SocketFramePumpTimeouts::new(config.read_timeout, config.write_timeout),
+                    cancellation,
+                    progress,
+                )
+                .await;
+                self.finish_processing(run, connection_id, result)
+            }
+            SocketHandlerProcessing::LocalResponder { .. } => {
+                unreachable!("relay config cannot carry a local responder processor")
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn handle_local_responder(
+        &self,
+        io: BoxIo,
+        peer: SocketAddr,
+        connection_id: Uuid,
+        run: SocketRelayRunContext,
+        config: &SocketLocalResponderConfig,
+        factory: &dyn LocalResponderProcessorFactory,
+        limits: SocketFramePumpLimits,
+        cancellation: CancellationToken,
+        progress: Arc<RelayProgress>,
+    ) -> Result<()> {
+        let accepted = self
+            .security
+            .accept_downstream(io, peer, config.handshake_timeout, &cancellation)
+            .await;
+        let accepted = match accepted {
+            Ok(accepted) => accepted,
+            Err(error) => {
+                let error = normalize_cancelled(error);
+                let failure = SocketRelayFailure {
+                    stage: if error.code == ErrorCode::SocketRelayCancelled.as_str() {
+                        SocketRelayStage::Shutdown
+                    } else {
+                        SocketRelayStage::DownstreamTls
+                    },
+                    direction: Some(SocketRelayDirection::Downstream),
+                    code: error.code,
                 };
                 self.close(
                     run,
@@ -106,33 +269,77 @@ impl SocketConnectionHandler {
                 return Err(error);
             }
         };
-
-        self.metrics.opened(connection_id);
-        self.observer.record(SocketConnectionEvent::Opened {
-            run: run.clone(),
+        self.open(
+            &run,
             connection_id,
-            resolved_address: connected.resolved_address,
-            downstream_tls_peer: connected.downstream_tls_peer,
-            upstream_tls: connected.upstream_tls,
-            at: SystemTime::now(),
-        });
-
-        let relayed = relay_bidirectional_with_progress(
-            connected.downstream,
-            connected.upstream,
-            RelayTimeouts::new(
-                self.config.read_timeout,
-                self.config.write_timeout,
-                RelayTimeoutCodes {
-                    read: ErrorCode::SocketReadTimeout,
-                    write: ErrorCode::SocketWriteTimeout,
-                },
-            ),
+            SocketOpenedEvidence::LocalResponder {
+                downstream_tls_peer: accepted.downstream_tls_peer,
+            },
+        );
+        let result = respond_framed_locally(
+            accepted.downstream,
+            connection_identity(&run, connection_id, peer),
+            factory,
+            limits,
+            SocketFramePumpTimeouts::new(config.read_timeout, config.write_timeout),
             cancellation,
             progress,
         )
         .await;
-        match relayed {
+        self.finish_processing(run, connection_id, result)
+    }
+
+    fn open(
+        &self,
+        run: &SocketRelayRunContext,
+        connection_id: Uuid,
+        evidence: SocketOpenedEvidence,
+    ) {
+        self.metrics.opened(connection_id);
+        self.observer.record(SocketConnectionEvent::Opened {
+            run: run.clone(),
+            connection_id,
+            evidence,
+            at: SystemTime::now(),
+        });
+    }
+
+    fn finish_preparation_failure(
+        &self,
+        run: SocketRelayRunContext,
+        connection_id: Uuid,
+        preparation: super::connector::SocketPreparationFailure,
+    ) -> Result<()> {
+        let error = normalize_cancelled(preparation.error);
+        let failure = if error.code == ErrorCode::SocketRelayCancelled.as_str() {
+            SocketRelayFailure {
+                stage: SocketRelayStage::Shutdown,
+                direction: preparation.failure.direction,
+                code: error.code,
+            }
+        } else {
+            SocketRelayFailure {
+                code: error.code,
+                ..preparation.failure
+            }
+        };
+        self.close(
+            run,
+            connection_id,
+            false,
+            RelayBytes::default(),
+            Some(failure),
+        );
+        Err(error)
+    }
+
+    fn finish_direct(
+        &self,
+        run: SocketRelayRunContext,
+        connection_id: Uuid,
+        result: std::result::Result<RelayBytes, RelayFailure>,
+    ) -> Result<()> {
+        match result {
             Ok(bytes) => {
                 self.close(run, connection_id, true, bytes, None);
                 Ok(())
@@ -150,6 +357,29 @@ impl SocketConnectionHandler {
         }
     }
 
+    fn finish_processing(
+        &self,
+        run: SocketRelayRunContext,
+        connection_id: Uuid,
+        result: std::result::Result<RelayBytes, SocketProcessingFailure>,
+    ) -> Result<()> {
+        match result {
+            Ok(bytes) => {
+                self.close(run, connection_id, true, bytes, None);
+                Ok(())
+            }
+            Err(failure) => {
+                let socket_failure = processing_failure(&failure);
+                let bytes = failure.bytes();
+                self.close(run, connection_id, true, bytes, Some(socket_failure));
+                Err(ProxyError {
+                    code: socket_failure.code,
+                    message: "socket frame processing failed".into(),
+                })
+            }
+        }
+    }
+
     fn close(
         &self,
         run: SocketRelayRunContext,
@@ -162,8 +392,9 @@ impl SocketConnectionHandler {
         self.observer.record(SocketConnectionEvent::Closed {
             run,
             connection_id,
+            target: self.config.target(),
             opened,
-            bytes: SocketRelayBytes::from(bytes),
+            bytes,
             failure,
             at: SystemTime::now(),
         });
@@ -179,10 +410,16 @@ impl SocketConnectionHandler {
     pub(crate) async fn test_upstream_connection(
         &self,
     ) -> Result<SocketUpstreamConnectionTestResult> {
+        let SocketHandlerConfig::Relay(config) = &self.config else {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "local responder has no upstream connection to test",
+            ));
+        };
         self.security
             .test_upstream(
-                &self.config.upstream,
-                self.config.connect_timeout,
+                &config.upstream,
+                config.connect_timeout,
                 &CancellationToken::new(),
             )
             .await
@@ -215,54 +452,6 @@ impl ConnectionHandler for SocketConnectionHandler {
     }
 }
 
-fn socket_failure(failure: &RelayFailure) -> SocketRelayFailure {
-    let direction = match failure.direction {
-        crate::transport::relay::RelayDirection::ClientToServer => {
-            SocketRelayDirection::ClientToServer
-        }
-        crate::transport::relay::RelayDirection::ServerToClient => {
-            SocketRelayDirection::ServerToClient
-        }
-    };
-    if failure.error.code == ErrorCode::ProxyStopped.as_str() {
-        return SocketRelayFailure {
-            stage: SocketRelayStage::Shutdown,
-            direction: Some(direction),
-            code: ErrorCode::SocketRelayCancelled.as_str(),
-        };
-    }
-    let (stage, code) = match failure.operation {
-        RelayOperation::Read => (
-            SocketRelayStage::RelayRead,
-            if failure.error.code == ErrorCode::SocketReadTimeout.as_str() {
-                ErrorCode::SocketReadTimeout.as_str()
-            } else {
-                ErrorCode::SocketReadFailed.as_str()
-            },
-        ),
-        RelayOperation::Write | RelayOperation::Flush | RelayOperation::HalfClose => (
-            SocketRelayStage::RelayWrite,
-            if failure.error.code == ErrorCode::SocketWriteTimeout.as_str() {
-                ErrorCode::SocketWriteTimeout.as_str()
-            } else {
-                ErrorCode::SocketWriteFailed.as_str()
-            },
-        ),
-    };
-    SocketRelayFailure {
-        stage,
-        direction: Some(direction),
-        code,
-    }
-}
-fn normalize_cancelled(error: ProxyError) -> ProxyError {
-    if error.code == ErrorCode::ProxyStopped.as_str() {
-        ProxyError::new(ErrorCode::SocketRelayCancelled, error.message)
-    } else {
-        error
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,5 +475,18 @@ mod tests {
         assert_eq!(mapped.code, "SOCKET_WRITE_FAILED");
         assert_eq!(failure.bytes.client_to_server, 37);
         assert_eq!(failure.bytes.server_to_client, 11);
+    }
+
+    #[test]
+    fn framed_cancellation_uses_the_standard_connection_cancel_code() {
+        let failure = SocketProcessingFailure::new(
+            crate::socket_relay::SocketProcessingFailureKind::Cancelled,
+            "injected cancellation",
+        )
+        .in_direction(crate::socket_relay::SocketPayloadDirection::LocalExchange);
+        let mapped = processing_failure(&failure);
+        assert_eq!(mapped.stage, SocketRelayStage::Shutdown);
+        assert_eq!(mapped.direction, Some(SocketRelayDirection::LocalExchange));
+        assert_eq!(mapped.code, ErrorCode::SocketRelayCancelled.as_str());
     }
 }

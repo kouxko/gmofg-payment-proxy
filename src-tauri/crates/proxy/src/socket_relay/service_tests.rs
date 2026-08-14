@@ -1,4 +1,5 @@
 use super::*;
+use crate::socket_relay::{SocketConnectionTarget, SocketOpenedEvidence};
 
 #[derive(Debug, Default)]
 struct RecordingObserver(std::sync::Mutex<Vec<SocketConnectionEvent>>);
@@ -67,6 +68,8 @@ fn metrics_reset_is_per_run_and_preserves_exact_partial_bytes() {
     let metrics = SocketRelayMetrics::default();
     let id = uuid::Uuid::new_v4();
     let progress = Arc::new(crate::transport::relay::RelayProgress::default());
+    progress.add_read(crate::transport::relay::RelayDirection::ClientToServer, 29);
+    progress.add_read(crate::transport::relay::RelayDirection::ServerToClient, 13);
     progress.add(crate::transport::relay::RelayDirection::ClientToServer, 19);
     progress.add(crate::transport::relay::RelayDirection::ServerToClient, 7);
     metrics.admitted(id, progress);
@@ -79,7 +82,9 @@ fn metrics_reset_is_per_run_and_preserves_exact_partial_bytes() {
             active_connections: 0,
             admitted_connections: 1,
             rejected_connections: 1,
+            client_to_server_read_bytes: 29,
             client_to_server_bytes: 19,
+            server_to_client_read_bytes: 13,
             server_to_client_bytes: 7,
             retained_diagnostic_evictions: 3
         }
@@ -93,6 +98,8 @@ fn metrics_snapshot_includes_active_connection_progress_without_double_counting_
     let metrics = SocketRelayMetrics::default();
     let id = uuid::Uuid::new_v4();
     let progress = Arc::new(crate::transport::relay::RelayProgress::default());
+    progress.add_read(crate::transport::relay::RelayDirection::ClientToServer, 41);
+    progress.add_read(crate::transport::relay::RelayDirection::ServerToClient, 17);
     progress.add(crate::transport::relay::RelayDirection::ClientToServer, 31);
     progress.add(crate::transport::relay::RelayDirection::ServerToClient, 11);
     metrics.admitted(id, progress);
@@ -100,13 +107,17 @@ fn metrics_snapshot_includes_active_connection_progress_without_double_counting_
 
     let active = metrics.snapshot(0);
     assert_eq!(active.active_connections, 1);
+    assert_eq!(active.client_to_server_read_bytes, 41);
     assert_eq!(active.client_to_server_bytes, 31);
+    assert_eq!(active.server_to_client_read_bytes, 17);
     assert_eq!(active.server_to_client_bytes, 11);
 
     metrics.closed(id, true, RelayBytes::default());
     let closed = metrics.snapshot(0);
     assert_eq!(closed.active_connections, 0);
+    assert_eq!(closed.client_to_server_read_bytes, 41);
     assert_eq!(closed.client_to_server_bytes, 31);
+    assert_eq!(closed.server_to_client_read_bytes, 17);
     assert_eq!(closed.server_to_client_bytes, 11);
 }
 
@@ -131,16 +142,18 @@ async fn panic_fallback_emits_the_tracked_partial_byte_counters() {
         run: run.clone(),
         connection_id: id,
         peer: "192.0.2.1:1234".parse().unwrap(),
-        target: "example.test:443".into(),
+        target: SocketConnectionTarget::Relay("example.test:443".into()),
         mode: crate::socket_relay::SocketTransportMode::Transparent,
         at: std::time::SystemTime::now(),
     });
     events.record(SocketConnectionEvent::Opened {
         run: run.clone(),
         connection_id: id,
-        resolved_address: "192.0.2.2:443".parse().unwrap(),
-        downstream_tls_peer: None,
-        upstream_tls: None,
+        evidence: SocketOpenedEvidence::Relay {
+            resolved_address: "192.0.2.2:443".parse().unwrap(),
+            downstream_tls_peer: None,
+            upstream_tls: None,
+        },
         at: std::time::SystemTime::now(),
     });
     let lifecycle = SocketLifecycleAdapter {

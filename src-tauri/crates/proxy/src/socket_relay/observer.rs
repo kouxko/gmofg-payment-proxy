@@ -10,19 +10,38 @@ use std::{
 
 use uuid::Uuid;
 
-use crate::transport::relay::{RelayBytes, RelayProgress};
+use crate::transport::relay::{RelayBytes, RelayIoBytes, RelayProgress};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SocketRelayBytes {
+    /// 从 App 侧实际读取、准备发往处理端/上游的 origin 字节数。
+    pub client_to_server_read: u64,
+    /// 实际提交到固定上游的输出字节数；LocalResponder 始终为零。
     pub client_to_server: u64,
+    /// 从固定上游实际读取的 origin 字节数；LocalResponder 始终为零。
+    pub server_to_client_read: u64,
+    /// 实际提交到 App 侧的输出字节数。
     pub server_to_client: u64,
 }
 
 impl From<RelayBytes> for SocketRelayBytes {
     fn from(bytes: RelayBytes) -> Self {
         Self {
+            client_to_server_read: 0,
             client_to_server: bytes.client_to_server,
+            server_to_client_read: 0,
             server_to_client: bytes.server_to_client,
+        }
+    }
+}
+
+impl From<RelayIoBytes> for SocketRelayBytes {
+    fn from(bytes: RelayIoBytes) -> Self {
+        Self {
+            client_to_server_read: bytes.read.client_to_server,
+            client_to_server: bytes.written.client_to_server,
+            server_to_client_read: bytes.read.server_to_client,
+            server_to_client: bytes.written.server_to_client,
         }
     }
 }
@@ -52,6 +71,29 @@ pub struct SocketRelayRunContext {
     pub listener_run_epoch: Uuid,
 }
 
+/// 被接纳连接的实际处理目标。
+///
+/// `LocalResponder` 没有上游地址。使用枚举而不是空字符串，能够阻止观察层和 UI 把
+/// 本地应答误展示成一次上游连接。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SocketConnectionTarget {
+    Relay(String),
+    LocalResponder,
+}
+
+/// 数据面准备完成后可被审计的、与模式一致的连接证据。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SocketOpenedEvidence {
+    Relay {
+        resolved_address: SocketAddr,
+        downstream_tls_peer: Option<String>,
+        upstream_tls: Option<SocketTlsEvidence>,
+    },
+    LocalResponder {
+        downstream_tls_peer: Option<String>,
+    },
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SocketRelayStage {
     Admission,
@@ -60,6 +102,10 @@ pub enum SocketRelayStage {
     Connect,
     UpstreamTls,
     RelayRead,
+    /// 已读取字节正在等待处理器确认完整 Frame 边界。
+    FrameInspect,
+    /// 完整 Frame 正由处理器生成下一跳输出。
+    FrameProcess,
     RelayWrite,
     Shutdown,
 }
@@ -70,6 +116,8 @@ pub enum SocketRelayDirection {
     Upstream,
     ClientToServer,
     ServerToClient,
+    /// `LocalResponder` 的一次 App request → local response 串行交换。
+    LocalExchange,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,21 +145,20 @@ pub enum SocketConnectionEvent {
         run: SocketRelayRunContext,
         connection_id: Uuid,
         peer: SocketAddr,
-        target: String,
+        target: SocketConnectionTarget,
         mode: SocketTransportMode,
         at: SystemTime,
     },
     Opened {
         run: SocketRelayRunContext,
         connection_id: Uuid,
-        resolved_address: SocketAddr,
-        downstream_tls_peer: Option<String>,
-        upstream_tls: Option<SocketTlsEvidence>,
+        evidence: SocketOpenedEvidence,
         at: SystemTime,
     },
     Closed {
         run: SocketRelayRunContext,
         connection_id: Uuid,
+        target: SocketConnectionTarget,
         opened: bool,
         bytes: SocketRelayBytes,
         failure: Option<SocketRelayFailure>,
@@ -197,7 +244,9 @@ pub struct SocketRelayMetricsSnapshot {
     pub active_connections: u64,
     pub admitted_connections: u64,
     pub rejected_connections: u64,
+    pub client_to_server_read_bytes: u64,
     pub client_to_server_bytes: u64,
+    pub server_to_client_read_bytes: u64,
     pub server_to_client_bytes: u64,
     pub retained_diagnostic_evictions: u64,
 }
@@ -207,7 +256,9 @@ pub(crate) struct SocketRelayMetrics {
     active_connections: AtomicU64,
     admitted_connections: AtomicU64,
     rejected_connections: AtomicU64,
+    client_to_server_read_bytes: AtomicU64,
     client_to_server_bytes: AtomicU64,
+    server_to_client_read_bytes: AtomicU64,
     server_to_client_bytes: AtomicU64,
     connections: Mutex<std::collections::BTreeMap<Uuid, (bool, std::sync::Arc<RelayProgress>)>>,
 }
@@ -217,7 +268,9 @@ impl SocketRelayMetrics {
         self.active_connections.store(0, Ordering::Relaxed);
         self.admitted_connections.store(0, Ordering::Relaxed);
         self.rejected_connections.store(0, Ordering::Relaxed);
+        self.client_to_server_read_bytes.store(0, Ordering::Relaxed);
         self.client_to_server_bytes.store(0, Ordering::Relaxed);
+        self.server_to_client_read_bytes.store(0, Ordering::Relaxed);
         self.server_to_client_bytes.store(0, Ordering::Relaxed);
         self.connections
             .lock()
@@ -254,14 +307,18 @@ impl SocketRelayMetrics {
         connection_id: Uuid,
         opened: bool,
         bytes: RelayBytes,
-    ) -> RelayBytes {
+    ) -> SocketRelayBytes {
         let mut connections = self
             .connections
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let tracked = connections
-            .remove(&connection_id)
-            .map_or(bytes, |(_, progress)| progress.snapshot());
+        let tracked = connections.remove(&connection_id).map_or(
+            RelayIoBytes {
+                read: RelayBytes::default(),
+                written: bytes,
+            },
+            |(_, progress)| progress.io_snapshot(),
+        );
         if opened {
             self.active_connections
                 .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |active| {
@@ -269,11 +326,15 @@ impl SocketRelayMetrics {
                 })
                 .ok();
         }
+        self.client_to_server_read_bytes
+            .fetch_add(tracked.read.client_to_server, Ordering::Relaxed);
         self.client_to_server_bytes
-            .fetch_add(tracked.client_to_server, Ordering::Relaxed);
+            .fetch_add(tracked.written.client_to_server, Ordering::Relaxed);
+        self.server_to_client_read_bytes
+            .fetch_add(tracked.read.server_to_client, Ordering::Relaxed);
         self.server_to_client_bytes
-            .fetch_add(tracked.server_to_client, Ordering::Relaxed);
-        tracked
+            .fetch_add(tracked.written.server_to_client, Ordering::Relaxed);
+        SocketRelayBytes::from(tracked)
     }
 
     pub(crate) fn snapshot(
@@ -287,28 +348,46 @@ impl SocketRelayMetrics {
         let active_bytes =
             connections
                 .values()
-                .fold(RelayBytes::default(), |mut total, (_, progress)| {
-                    let current = progress.snapshot();
-                    total.client_to_server = total
+                .fold(RelayIoBytes::default(), |mut total, (_, progress)| {
+                    let current = progress.io_snapshot();
+                    total.read.client_to_server = total
+                        .read
                         .client_to_server
-                        .saturating_add(current.client_to_server);
-                    total.server_to_client = total
+                        .saturating_add(current.read.client_to_server);
+                    total.read.server_to_client = total
+                        .read
                         .server_to_client
-                        .saturating_add(current.server_to_client);
+                        .saturating_add(current.read.server_to_client);
+                    total.written.client_to_server = total
+                        .written
+                        .client_to_server
+                        .saturating_add(current.written.client_to_server);
+                    total.written.server_to_client = total
+                        .written
+                        .server_to_client
+                        .saturating_add(current.written.server_to_client);
                     total
                 });
         SocketRelayMetricsSnapshot {
             active_connections: self.active_connections.load(Ordering::Relaxed),
             admitted_connections: self.admitted_connections.load(Ordering::Relaxed),
             rejected_connections: self.rejected_connections.load(Ordering::Relaxed),
+            client_to_server_read_bytes: self
+                .client_to_server_read_bytes
+                .load(Ordering::Relaxed)
+                .saturating_add(active_bytes.read.client_to_server),
             client_to_server_bytes: self
                 .client_to_server_bytes
                 .load(Ordering::Relaxed)
-                .saturating_add(active_bytes.client_to_server),
+                .saturating_add(active_bytes.written.client_to_server),
+            server_to_client_read_bytes: self
+                .server_to_client_read_bytes
+                .load(Ordering::Relaxed)
+                .saturating_add(active_bytes.read.server_to_client),
             server_to_client_bytes: self
                 .server_to_client_bytes
                 .load(Ordering::Relaxed)
-                .saturating_add(active_bytes.server_to_client),
+                .saturating_add(active_bytes.written.server_to_client),
             retained_diagnostic_evictions,
         }
     }

@@ -1408,13 +1408,15 @@ export type SocketDiagnosticContextViewModel = {
 	listener_run_epoch: string,
 	stage: SocketDiagnosticStage,
 	direction: SocketDiagnosticDirection | null,
+	client_to_server_read_bytes: number,
 	client_to_server_bytes: number,
+	server_to_client_read_bytes: number,
 	server_to_client_bytes: number,
 };
 
-export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_server" | "server_to_client";
+export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_server" | "server_to_client" | "local_exchange";
 
-export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "relay_write" | "shutdown";
+export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "frame_inspect" | "frame_process" | "relay_write" | "shutdown";
 
 /**  Socket Frame 相对于代理的稳定数据方向。 */
 export type SocketDirection =
