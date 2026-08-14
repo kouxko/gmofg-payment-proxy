@@ -432,6 +432,28 @@ mod tests {
                     },
                     security: intercept_proxy_domain::SocketRelaySecurity::Transparent,
                     maximum_connections: 777,
+                    processing: intercept_proxy_domain::SocketPayloadProcessing::Scripted(
+                        intercept_proxy_domain::ScriptedSocketProcessing {
+                            package: intercept_proxy_domain::ProtocolPackageRef {
+                                id: intercept_proxy_domain::ProtocolPackageId::new(
+                                    "iso8583-standard",
+                                )
+                                .unwrap(),
+                                version: intercept_proxy_domain::ProtocolPackageVersion::new(
+                                    "1.2.3",
+                                )
+                                .unwrap(),
+                            },
+                            upstream: intercept_proxy_domain::DirectionProcessingOptions {
+                                decode_enabled: true,
+                                encode_enabled: false,
+                            },
+                            downstream: intercept_proxy_domain::DirectionProcessingOptions {
+                                decode_enabled: false,
+                                encode_enabled: true,
+                            },
+                        },
+                    ),
                 },
             ),
             ..intercept_proxy_domain::ProxyListener::default()
@@ -447,6 +469,17 @@ mod tests {
         };
 
         let bytes = serialize_workspace_document(&document).unwrap();
-        assert_eq!(parse_workspace_document(&bytes).unwrap(), document);
+        let parsed = parse_workspace_document(&bytes).unwrap();
+        assert_eq!(parsed, document);
+        let socket = parsed.workspace.listeners[0].socket().unwrap();
+        let intercept_proxy_domain::SocketPayloadProcessing::Scripted(processing) =
+            &socket.processing
+        else {
+            panic!("scripted processing must survive workspace export/import")
+        };
+        assert!(processing.upstream.decode_enabled);
+        assert!(!processing.upstream.encode_enabled);
+        assert!(!processing.downstream.decode_enabled);
+        assert!(processing.downstream.encode_enabled);
     }
 }

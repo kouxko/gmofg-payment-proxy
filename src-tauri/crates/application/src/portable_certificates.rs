@@ -383,6 +383,7 @@ mod tests {
                     },
                 },
                 maximum_connections: 500,
+                processing: intercept_proxy_domain::SocketPayloadProcessing::Direct,
             });
         workspace.certificate_references = [
             (

@@ -1,8 +1,8 @@
 use intercept_proxy_application::{ListenerDataPlaneKind, SocketTransportMode};
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    SocketDownstreamTlsSettings, SocketEndpoint, SocketRelaySecurity, SocketRelaySettings,
-    SocketUpstreamTlsSettings,
+    SocketDownstreamTlsSettings, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
+    SocketRelaySettings, SocketUpstreamTlsSettings,
 };
 
 fn socket_listener(bind: SocketAddr, upstream: SocketAddr) -> ProxyListener {
@@ -19,6 +19,7 @@ fn socket_listener(bind: SocketAddr, upstream: SocketAddr) -> ProxyListener {
             },
             security: SocketRelaySecurity::Transparent,
             maximum_connections: 8,
+            processing: SocketPayloadProcessing::Direct,
         }),
         ..ProxyListener::default()
     }
@@ -42,6 +43,7 @@ async fn socket_probe_does_not_load_downstream_tls_identity() {
             },
         },
         maximum_connections: 8,
+        processing: SocketPayloadProcessing::Direct,
     });
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
@@ -145,6 +147,7 @@ async fn socket_plan_resolves_only_references_selected_by_its_tls_mode() {
             upstream_tls: SocketUpstreamTlsSettings::default(),
         },
         maximum_connections: 8,
+        processing: SocketPayloadProcessing::Direct,
     });
     let system_trust_workspace = workspace_with(listener.clone());
     ListenerRuntimePlanBuilder::new(&runtime)
@@ -165,6 +168,7 @@ async fn socket_plan_resolves_only_references_selected_by_its_tls_mode() {
             },
         },
         maximum_connections: 8,
+        processing: SocketPayloadProcessing::Direct,
     });
     let selected_workspace = workspace_with(listener.clone());
     let error = ListenerRuntimePlanBuilder::new(&runtime)

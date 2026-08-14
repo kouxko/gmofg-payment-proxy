@@ -4,13 +4,15 @@ use uuid::Uuid;
 
 pub use intercept_proxy_domain::{
     BodyCodecKind, CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    ChannelId, ConnectionFaultAction, DownstreamClientAuthentication, DownstreamTlsSettings,
-    FaultPreset, FaultPresetId, FixedServerSettings, ForwardProxyAuthentication,
-    HttpListenerSettings, ListenerDataPlane, ListenerId, MetadataExtractor, MetadataExtractorId,
-    MetadataExtractorSource, MitmSettings, ProxyListener, ProxyListenerV2, ProxyWorkspace,
-    ProxyWorkspaceV2, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
-    SecretReference, SocketDownstreamTlsSettings, SocketEndpoint, SocketRelaySecurity,
-    SocketRelaySettings, SocketUpstreamTlsSettings, UpstreamTlsSettings, WorkspaceId,
+    ChannelId, ConnectionFaultAction, DirectionProcessingOptions, DownstreamClientAuthentication,
+    DownstreamTlsSettings, FaultPreset, FaultPresetId, FixedServerSettings,
+    ForwardProxyAuthentication, HttpListenerSettings, ListenerDataPlane, ListenerId,
+    MetadataExtractor, MetadataExtractorId, MetadataExtractorSource, MitmSettings,
+    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyListenerV2,
+    ProxyWorkspace, ProxyWorkspaceV2, ResponseAssertion, ResponseAssertionId,
+    ResponseAssertionKind, ScriptedSocketProcessing, SecretReference, SocketDownstreamTlsSettings,
+    SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings,
+    SocketUpstreamTlsSettings, UpstreamTlsSettings, WorkspaceId,
 };
 
 /// 标识一次代理启动周期。代理重启后旧周期的事件和断点不得继续操作。

@@ -110,8 +110,8 @@ fn installation_root() -> CertificateReference {
 
 fn configure_socket_listener(workspace: &mut ProxyWorkspace, roles: &[CertificateReference; 4]) {
     use intercept_proxy_domain::{
-        ListenerDataPlane, SocketDownstreamTlsSettings, SocketEndpoint, SocketRelaySecurity,
-        SocketRelaySettings, SocketUpstreamTlsSettings,
+        ListenerDataPlane, SocketDownstreamTlsSettings, SocketEndpoint, SocketPayloadProcessing,
+        SocketRelaySecurity, SocketRelaySettings, SocketUpstreamTlsSettings,
     };
     workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
         upstream: SocketEndpoint {
@@ -132,6 +132,7 @@ fn configure_socket_listener(workspace: &mut ProxyWorkspace, roles: &[Certificat
             },
         },
         maximum_connections: 321,
+        processing: SocketPayloadProcessing::Direct,
     });
 }
 
