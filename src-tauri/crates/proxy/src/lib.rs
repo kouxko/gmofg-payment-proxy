@@ -42,12 +42,17 @@ pub use reverse::{
     UpstreamTransport,
 };
 pub use socket_relay::{
-    BoundedSocketConnectionObserver, NoopSocketConnectionObserver, SocketConnectionEvent,
-    SocketConnectionObserver, SocketDownstreamTlsConfig, SocketEndpoint, SocketRejectionReason,
-    SocketRelayBytes, SocketRelayConfig, SocketRelayDirection, SocketRelayFailure,
-    SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity, SocketRelayService,
-    SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity, SocketTransportMode,
-    SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig, SocketUpstreamTransport,
+    BoundedSocketConnectionObserver, FrameBoundary, LocalResponderProcessorFactory,
+    NoopSocketConnectionObserver, ScriptedRelayProcessorFactory, SocketConnectionEvent,
+    SocketConnectionIdentity, SocketConnectionObserver, SocketConnectionTarget,
+    SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint, SocketFrameProcessor,
+    SocketFramePumpLimits, SocketLocalResponderConfig, SocketOpenedEvidence,
+    SocketPayloadDirection, SocketProcessingFailure, SocketProcessingFailureKind,
+    SocketRejectionReason, SocketRelayBytes, SocketRelayConfig, SocketRelayDirection,
+    SocketRelayFailure, SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity,
+    SocketRelayService, SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity,
+    SocketTransportMode, SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig,
+    SocketUpstreamTransport,
 };
 pub use supervisor::{
     ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,

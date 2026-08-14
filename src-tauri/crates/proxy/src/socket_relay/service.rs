@@ -11,8 +11,9 @@ use crate::transport::{ConnectionContext, SystemClock, TokioBoundListener, Tokio
 use crate::{ChannelId, ErrorCode, Result};
 
 use super::{
-    NoopSocketConnectionObserver, SocketConnectionEvent, SocketConnectionObserver,
-    SocketRejectionReason, SocketRelayBytes, SocketRelayConfig, SocketRelayFailure,
+    LocalResponderProcessorFactory, NoopSocketConnectionObserver, ScriptedRelayProcessorFactory,
+    SocketConnectionEvent, SocketConnectionObserver, SocketFramePumpLimits,
+    SocketLocalResponderConfig, SocketRejectionReason, SocketRelayConfig, SocketRelayFailure,
     SocketRelayMetrics, SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelayStage,
     SocketUpstreamConnectionTestResult, handler::SocketConnectionHandler,
 };
@@ -20,7 +21,7 @@ use super::{
 const DEFAULT_SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
 
 pub struct SocketRelayService {
-    config: SocketRelayConfig,
+    config: SocketListenerConfig,
     handler: Arc<SocketConnectionHandler>,
     lifecycle: Arc<SocketLifecycleAdapter>,
     metrics: Arc<SocketRelayMetrics>,
@@ -29,13 +30,20 @@ pub struct SocketRelayService {
 
 impl fmt::Debug for SocketRelayService {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SocketRelayService")
-            .field("bind_addr", &self.config.bind_addr)
-            .field("upstream", &self.config.upstream)
-            .field("security", &self.config.security)
-            .field("maximum_connections", &self.config.maximum_connections)
-            .finish_non_exhaustive()
+        let mut output = formatter.debug_struct("SocketRelayService");
+        output
+            .field("bind_addr", &self.config.bind_addr())
+            .field("maximum_connections", &self.config.maximum_connections());
+        match &self.config {
+            SocketListenerConfig::Relay(config) => output
+                .field("topology", &"relay")
+                .field("upstream", &config.upstream)
+                .field("security", &config.security),
+            SocketListenerConfig::LocalResponder(config) => output
+                .field("topology", &"local_responder")
+                .field("security", &config.security),
+        };
+        output.finish_non_exhaustive()
     }
 }
 
@@ -48,15 +56,117 @@ impl SocketRelayService {
         config: SocketRelayConfig,
         observer: Arc<dyn SocketConnectionObserver>,
     ) -> Result<Self> {
+        let handler_config = config.clone();
+        let handler_builder = move |observer, metrics, run| {
+            SocketConnectionHandler::build_direct(handler_config, observer, metrics, run)
+        };
+        Self::build_inner(
+            SocketListenerConfig::Relay(config),
+            observer,
+            handler_builder,
+        )
+    }
+
+    /// 构造使用脚本 processor 的固定上游双向 Relay。
+    pub fn build_scripted(
+        config: SocketRelayConfig,
+        factory: Arc<dyn ScriptedRelayProcessorFactory>,
+        limits: SocketFramePumpLimits,
+    ) -> Result<Self> {
+        Self::build_scripted_with_observer(
+            config,
+            factory,
+            limits,
+            Arc::new(NoopSocketConnectionObserver),
+        )
+    }
+
+    /// 构造带 observer 的 Scripted Relay；processor 每连接每方向各创建一次。
+    pub fn build_scripted_with_observer(
+        config: SocketRelayConfig,
+        factory: Arc<dyn ScriptedRelayProcessorFactory>,
+        limits: SocketFramePumpLimits,
+        observer: Arc<dyn SocketConnectionObserver>,
+    ) -> Result<Self> {
+        let handler_factory = factory;
+        let handler_config = config.clone();
+        let handler_builder = move |observer, metrics, run| {
+            SocketConnectionHandler::build_scripted(
+                handler_config,
+                Arc::clone(&handler_factory),
+                limits,
+                observer,
+                metrics,
+                run,
+            )
+        };
+        Self::build_inner(
+            SocketListenerConfig::Relay(config),
+            observer,
+            handler_builder,
+        )
+    }
+
+    /// 构造不包含任何上游能力的本地应答 Listener。
+    pub fn build_local_responder(
+        config: SocketLocalResponderConfig,
+        factory: Arc<dyn LocalResponderProcessorFactory>,
+        limits: SocketFramePumpLimits,
+    ) -> Result<Self> {
+        Self::build_local_responder_with_observer(
+            config,
+            factory,
+            limits,
+            Arc::new(NoopSocketConnectionObserver),
+        )
+    }
+
+    /// 构造带 observer 的本地应答 Listener。
+    pub fn build_local_responder_with_observer(
+        config: SocketLocalResponderConfig,
+        factory: Arc<dyn LocalResponderProcessorFactory>,
+        limits: SocketFramePumpLimits,
+        observer: Arc<dyn SocketConnectionObserver>,
+    ) -> Result<Self> {
+        let handler_factory = factory;
+        let handler_config = config.clone();
+        let handler_builder = move |observer, metrics, run| {
+            SocketConnectionHandler::build_local_responder(
+                handler_config,
+                Arc::clone(&handler_factory),
+                limits,
+                observer,
+                metrics,
+                run,
+            )
+        };
+        Self::build_inner(
+            SocketListenerConfig::LocalResponder(config),
+            observer,
+            handler_builder,
+        )
+    }
+
+    fn build_inner<F>(
+        config: SocketListenerConfig,
+        observer: Arc<dyn SocketConnectionObserver>,
+        handler_builder: F,
+    ) -> Result<Self>
+    where
+        F: FnOnce(
+            Arc<dyn SocketConnectionObserver>,
+            Arc<SocketRelayMetrics>,
+            Arc<std::sync::RwLock<SocketRelayRunContext>>,
+        ) -> Result<SocketConnectionHandler>,
+    {
         let metrics = Arc::new(SocketRelayMetrics::default());
         let events = Arc::new(SocketEventCoordinator::new(observer));
         let run = Arc::new(std::sync::RwLock::new(SocketRelayRunContext {
-            listener_id: format!("socket-{}", config.bind_addr.port()),
+            listener_id: format!("socket-{}", config.bind_addr().port()),
             workspace_runtime_epoch: uuid::Uuid::nil(),
             listener_run_epoch: uuid::Uuid::nil(),
         }));
-        let handler = Arc::new(SocketConnectionHandler::build(
-            config.clone(),
+        let handler = Arc::new(handler_builder(
             events.clone(),
             Arc::clone(&metrics),
             Arc::clone(&run),
@@ -149,11 +259,11 @@ impl SocketRelayService {
         let listener_id = ChannelId::new(run.listener_id.clone())?;
         ListenerSupervisor::new(
             ListenerConfig {
-                bind_addr: self.config.bind_addr,
+                bind_addr: self.config.bind_addr(),
                 runtime_epoch: run.listener_run_epoch,
                 listener_id,
-                allowed_client_cidrs: self.config.allowed_client_cidrs.clone(),
-                capacity: ListenerCapacity::new(usize::from(self.config.maximum_connections))?,
+                allowed_client_cidrs: self.config.allowed_client_cidrs().to_vec(),
+                capacity: ListenerCapacity::new(usize::from(self.config.maximum_connections()))?,
                 shutdown_grace: DEFAULT_SHUTDOWN_GRACE,
             },
             Arc::new(TokioListenerBinder),
@@ -165,9 +275,38 @@ impl SocketRelayService {
 
     fn compatible_run_context(&self, run_id: uuid::Uuid) -> SocketRelayRunContext {
         SocketRelayRunContext {
-            listener_id: format!("socket-{}", self.config.bind_addr.port()),
+            listener_id: format!("socket-{}", self.config.bind_addr().port()),
             workspace_runtime_epoch: run_id,
             listener_run_epoch: run_id,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+enum SocketListenerConfig {
+    Relay(SocketRelayConfig),
+    LocalResponder(SocketLocalResponderConfig),
+}
+
+impl SocketListenerConfig {
+    fn bind_addr(&self) -> SocketAddr {
+        match self {
+            Self::Relay(config) => config.bind_addr,
+            Self::LocalResponder(config) => config.bind_addr,
+        }
+    }
+
+    fn allowed_client_cidrs(&self) -> &[String] {
+        match self {
+            Self::Relay(config) => &config.allowed_client_cidrs,
+            Self::LocalResponder(config) => &config.allowed_client_cidrs,
+        }
+    }
+
+    fn maximum_connections(&self) -> u16 {
+        match self {
+            Self::Relay(config) => config.maximum_connections,
+            Self::LocalResponder(config) => config.maximum_connections,
         }
     }
 }
@@ -210,12 +349,12 @@ impl ConnectionLifecycleObserver for SocketLifecycleAdapter {
         context: &ConnectionContext,
         outcome: &TerminalConnectionOutcome,
     ) {
-        let Some(opened) = self.events.take_unclosed(context.connection_id) else {
+        let Some(tracked) = self.events.take_unclosed(context.connection_id) else {
             return;
         };
-        let bytes = self
-            .metrics
-            .closed(context.connection_id, opened, RelayBytes::default());
+        let bytes =
+            self.metrics
+                .closed(context.connection_id, tracked.opened, RelayBytes::default());
         let run = self
             .run
             .read()
@@ -224,8 +363,9 @@ impl ConnectionLifecycleObserver for SocketLifecycleAdapter {
         self.events.record(SocketConnectionEvent::Closed {
             run,
             connection_id: context.connection_id,
-            opened,
-            bytes: SocketRelayBytes::from(bytes),
+            target: tracked.target,
+            opened: tracked.opened,
+            bytes,
             failure: terminal_failure(outcome),
             at: std::time::SystemTime::now(),
         });
@@ -252,7 +392,13 @@ fn terminal_failure(outcome: &TerminalConnectionOutcome) -> Option<SocketRelayFa
 #[derive(Debug)]
 struct SocketEventCoordinator {
     observer: Arc<dyn SocketConnectionObserver>,
-    unclosed: std::sync::Mutex<BTreeMap<uuid::Uuid, bool>>,
+    unclosed: std::sync::Mutex<BTreeMap<uuid::Uuid, TrackedSocketConnection>>,
+}
+
+#[derive(Clone, Debug)]
+struct TrackedSocketConnection {
+    opened: bool,
+    target: super::SocketConnectionTarget,
 }
 
 impl SocketEventCoordinator {
@@ -263,7 +409,7 @@ impl SocketEventCoordinator {
         }
     }
 
-    fn take_unclosed(&self, connection_id: uuid::Uuid) -> Option<bool> {
+    fn take_unclosed(&self, connection_id: uuid::Uuid) -> Option<TrackedSocketConnection> {
         self.unclosed
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -286,11 +432,21 @@ impl SocketEventCoordinator {
 impl SocketConnectionObserver for SocketEventCoordinator {
     fn record(&self, event: SocketConnectionEvent) {
         match &event {
-            SocketConnectionEvent::Admitted { connection_id, .. } => {
+            SocketConnectionEvent::Admitted {
+                connection_id,
+                target,
+                ..
+            } => {
                 self.unclosed
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .insert(*connection_id, false);
+                    .insert(
+                        *connection_id,
+                        TrackedSocketConnection {
+                            opened: false,
+                            target: target.clone(),
+                        },
+                    );
             }
             SocketConnectionEvent::Opened { connection_id, .. } => {
                 if let Some(opened) = self
@@ -299,7 +455,7 @@ impl SocketConnectionObserver for SocketEventCoordinator {
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .get_mut(connection_id)
                 {
-                    *opened = true;
+                    opened.opened = true;
                 }
             }
             SocketConnectionEvent::Closed { connection_id, .. } => {

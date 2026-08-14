@@ -170,6 +170,9 @@ fn endpoint_and_capacity_validation_reject_url_shaped_hosts_and_invalid_limits()
 }
 
 mod direct;
+mod local_responder;
+mod scripted_relay;
+mod support;
 mod tls;
 
 #[tokio::test]

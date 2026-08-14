@@ -105,7 +105,9 @@ pub struct SocketDiagnosticContextViewModel {
     pub listener_run_epoch: String,
     pub stage: SocketDiagnosticStage,
     pub direction: Option<SocketDiagnosticDirection>,
+    pub client_to_server_read_bytes: u64,
     pub client_to_server_bytes: u64,
+    pub server_to_client_read_bytes: u64,
     pub server_to_client_bytes: u64,
 }
 
@@ -118,6 +120,8 @@ pub enum SocketDiagnosticStage {
     Connect,
     UpstreamTls,
     RelayRead,
+    FrameInspect,
+    FrameProcess,
     RelayWrite,
     Shutdown,
 }
@@ -129,6 +133,7 @@ pub enum SocketDiagnosticDirection {
     Upstream,
     ClientToServer,
     ServerToClient,
+    LocalExchange,
 }
 
 impl DiagnosticLogEntryViewModel {
