@@ -10,7 +10,7 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{
     DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
     ProtocolPackageVersion, ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing,
-    SocketRelaySettings,
+    SocketRelaySecurity, SocketRelaySettings,
 };
 
 use super::ProtocolPackageUsageQueryAdapter;
@@ -130,18 +130,19 @@ fn scripted_listener(name: &str, port: u16, package: ProtocolPackageRef) -> Prox
         name: name.into(),
         enabled: true,
         port,
-        data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
-            upstream: SocketEndpoint {
+        data_plane: ListenerDataPlane::Socket(SocketRelaySettings::relay(
+            SocketEndpoint {
                 host: "upstream.example.test".into(),
                 port: 9_001,
             },
-            processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
+            SocketRelaySecurity::Transparent,
+            intercept_proxy_domain::DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
+            SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package,
                 upstream: DirectionProcessingOptions::default(),
                 downstream: DirectionProcessingOptions::default(),
             }),
-            ..SocketRelaySettings::default()
-        }),
+        )),
         ..ProxyListener::default()
     }
 }

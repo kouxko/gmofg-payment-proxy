@@ -371,18 +371,19 @@ fn display(document, context) { "<p>ok</p>" }
         .unwrap();
         let listener = &mut workspace.listeners[0];
         listener.port = unused_local_port();
-        listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
-            upstream: SocketEndpoint {
+        listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings::relay(
+            SocketEndpoint {
                 host: "127.0.0.1".into(),
                 port: 9_999,
             },
-            processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
+            intercept_proxy_domain::SocketRelaySecurity::Transparent,
+            intercept_proxy_domain::DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
+            SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package,
                 upstream: DirectionProcessingOptions::default(),
                 downstream: DirectionProcessingOptions::default(),
             }),
-            ..SocketRelaySettings::default()
-        });
+        ));
         let workspace =
             tauri::async_runtime::block_on(application.workspace_save(workspace)).unwrap();
         let listener_id = workspace.listeners[0].id;

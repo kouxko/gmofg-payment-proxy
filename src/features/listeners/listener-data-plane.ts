@@ -5,6 +5,7 @@ import type {
   SocketDownstreamTlsSettings,
   SocketRelaySecurity,
   SocketRelaySettings,
+  SocketRelayTopology,
   SocketUpstreamTlsSettings,
 } from "@/generated/rust-types";
 
@@ -36,11 +37,27 @@ export function defaultSocketDataPlane(): ListenerDataPlane {
   return {
     kind: "socket",
     settings: {
-      upstream: { host: "", port: 0 },
-      security: { mode: "transparent" },
+      topology: {
+        mode: "relay",
+        settings: {
+          upstream: { host: "", port: 0 },
+          security: { mode: "transparent" },
+        },
+      },
       maximum_connections: 500,
+      processing: { mode: "direct" },
     },
   };
+}
+
+/**
+ * Socket 的网络字段属于 Relay topology，LocalResponder 从类型上就没有上游。
+ * 所有调用方必须先通过这个窄化函数，再读取 upstream/security，避免用空地址模拟无上游。
+ */
+export function socketRelayTopology(
+  settings: SocketRelaySettings,
+): SocketRelayTopology | undefined {
+  return settings.topology.mode === "relay" ? settings.topology.settings : undefined;
 }
 
 export function changeDataPlaneKind(

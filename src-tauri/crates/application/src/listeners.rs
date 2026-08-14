@@ -9,7 +9,7 @@ use crate::{
     AppError, AppResult, ListenerDataPlane, ListenerDataPlaneKind, ListenerId, ListenerRuntimePort,
     ListenerRuntimeState, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsEvidenceViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener,
-    ProxyWorkspace, SocketRelaySecurity, SocketTransportMode, UiTone,
+    ProxyWorkspace, SocketRelaySecurity, SocketTopology, SocketTransportMode, UiTone,
 };
 
 #[derive(Debug, Default)]
@@ -40,6 +40,17 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
                 AppError::new("LISTENER_ALREADY_RUNNING", "Listener 已在运行。")
                     .entity(id.to_string()),
             );
+        }
+        if matches!(
+            &listener.data_plane,
+            ListenerDataPlane::Socket(settings)
+                if matches!(settings.topology, SocketTopology::LocalResponder(_))
+        ) {
+            return Err(AppError::new(
+                "LOCAL_RESPONDER_NOT_AVAILABLE",
+                "LocalResponder 数据面尚未接入当前运行时。",
+            )
+            .entity(id.to_string()));
         }
         let (address, port) = listener.bind_endpoint();
         let status = ListenerStatusViewModel {
@@ -139,6 +150,7 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
     }
 }
 
+#[derive(Debug)]
 struct TestTarget {
     address: String,
     scheme: String,
@@ -167,7 +179,14 @@ fn connection_target(listener: &ProxyListener) -> AppResult<TestTarget> {
             })
         }
         ListenerDataPlane::Socket(settings) => {
-            let (mode, upstream_tls) = match &settings.security {
+            let SocketTopology::Relay(relay) = &settings.topology else {
+                return Err(AppError::new(
+                    "LOCAL_RESPONDER_NOT_AVAILABLE",
+                    "LocalResponder 数据面尚未接入，且没有可测试的 Server 上游。",
+                )
+                .entity(listener.id.to_string()));
+            };
+            let (mode, upstream_tls) = match &relay.security {
                 SocketRelaySecurity::Transparent => (SocketTransportMode::Transparent, None),
                 SocketRelaySecurity::TcpToTls { upstream_tls } => {
                     (SocketTransportMode::TcpToTls, Some(upstream_tls))
@@ -178,7 +197,7 @@ fn connection_target(listener: &ProxyListener) -> AppResult<TestTarget> {
                 }
             };
             Ok(TestTarget {
-                address: format!("{}:{}", settings.upstream.host, settings.upstream.port),
+                address: format!("{}:{}", relay.upstream.host, relay.upstream.port),
                 scheme: "socket".into(),
                 data_plane: ListenerDataPlaneKind::Socket,
                 uses_tls: upstream_tls.is_some(),
@@ -210,8 +229,8 @@ fn unsupported_connection_test(listener_id: ListenerId, message: &str) -> AppErr
 #[cfg(test)]
 mod tests {
     use crate::{
-        ListenerDataPlane, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
-        SocketRelaySettings, SocketUpstreamTlsSettings,
+        ListenerDataPlane, SocketEndpoint, SocketLocalResponderTopology, SocketPayloadProcessing,
+        SocketRelaySecurity, SocketRelaySettings, SocketTopology, SocketUpstreamTlsSettings,
     };
 
     use super::*;
@@ -219,15 +238,15 @@ mod tests {
     #[test]
     fn socket_connection_probe_reports_transport_without_inventing_tls() {
         let listener = ProxyListener {
-            data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
-                upstream: SocketEndpoint {
+            data_plane: ListenerDataPlane::Socket(SocketRelaySettings::relay(
+                SocketEndpoint {
                     host: "socket.example.test".into(),
                     port: 16_127,
                 },
-                security: SocketRelaySecurity::Transparent,
-                maximum_connections: 500,
-                processing: SocketPayloadProcessing::Direct,
-            }),
+                SocketRelaySecurity::Transparent,
+                500,
+                SocketPayloadProcessing::Direct,
+            )),
             ..ProxyListener::default()
         };
 
@@ -242,23 +261,60 @@ mod tests {
     }
 
     #[test]
+    fn local_responder_connection_probe_is_stably_unavailable() {
+        let settings = SocketRelaySettings {
+            topology: SocketTopology::LocalResponder(SocketLocalResponderTopology::default()),
+            ..SocketRelaySettings::default()
+        };
+        let listener = ProxyListener {
+            data_plane: ListenerDataPlane::Socket(settings),
+            ..ProxyListener::default()
+        };
+
+        let error = connection_target(&listener).unwrap_err();
+        assert_eq!(error.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+    }
+
+    #[tokio::test]
+    async fn local_responder_in_memory_start_is_stably_unavailable() {
+        let settings = SocketRelaySettings {
+            topology: SocketTopology::LocalResponder(SocketLocalResponderTopology::default()),
+            ..SocketRelaySettings::default()
+        };
+        let listener = ProxyListener {
+            data_plane: ListenerDataPlane::Socket(settings),
+            ..ProxyListener::default()
+        };
+        let workspace = ProxyWorkspace {
+            listeners: vec![listener.clone()],
+            ..ProxyWorkspace::default()
+        };
+
+        let error = InMemoryListenerRuntime::default()
+            .start(workspace, listener)
+            .await
+            .unwrap_err();
+        assert_eq!(error.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+    }
+
+    #[test]
     fn socket_connection_probe_reports_only_upstream_tls_evidence() {
         let listener = ProxyListener {
-            data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
-                upstream: SocketEndpoint {
+            data_plane: ListenerDataPlane::Socket(SocketRelaySettings::relay(
+                SocketEndpoint {
                     host: "socket.example.test".into(),
                     port: 443,
                 },
-                security: SocketRelaySecurity::TcpToTls {
+                SocketRelaySecurity::TcpToTls {
                     upstream_tls: SocketUpstreamTlsSettings {
                         verify_hostname: false,
                         server_trust: None,
                         client_identity: None,
                     },
                 },
-                maximum_connections: 500,
-                processing: SocketPayloadProcessing::Direct,
-            }),
+                500,
+                SocketPayloadProcessing::Direct,
+            )),
             ..ProxyListener::default()
         };
 

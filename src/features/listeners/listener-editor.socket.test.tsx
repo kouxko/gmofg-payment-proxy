@@ -7,7 +7,11 @@ import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ListenerEditor } from "./listener-editor";
 import type { ProxyListener } from "@/generated/rust-types";
-import { dynamicListener, socketListener } from "./listeners-view.test-support";
+import {
+  dynamicListener,
+  localResponderListener,
+  socketListener,
+} from "./listeners-view.test-support";
 
 function props(
   listener: ProxyListener = socketListener(),
@@ -46,9 +50,15 @@ describe("Socket listener editor", () => {
       data_plane: {
         kind: "socket",
         settings: {
-          upstream: { host: "", port: 0 },
-          security: { mode: "transparent" },
+          topology: {
+            mode: "relay",
+            settings: {
+              upstream: { host: "", port: 0 },
+              security: { mode: "transparent" },
+            },
+          },
           maximum_connections: 500,
+          processing: { mode: "direct" },
         },
       },
     });
@@ -94,7 +104,9 @@ describe("Socket listener editor", () => {
     (mode) => {
       const listener = socketListener("socket-1", "Socket", 9000, mode);
       if (listener.data_plane.kind !== "socket") throw new Error("Socket fixture expected");
-      const security = listener.data_plane.settings.security;
+      const topology = listener.data_plane.settings.topology;
+      if (topology.mode !== "relay") throw new Error("Relay fixture expected");
+      const security = topology.settings.security;
       if (security.mode !== "tls_to_tcp" && security.mode !== "tls_to_tls") {
         throw new Error("downstream TLS fixture expected");
       }
@@ -104,13 +116,19 @@ describe("Socket listener editor", () => {
           kind: "socket",
           settings: {
             ...listener.data_plane.settings,
-            security: {
-              ...security,
-              downstream_tls: {
-                ...security.downstream_tls,
-                client_authentication: {
-                  mode: "required",
-                  trust: "downstream-trust-ref",
+            topology: {
+              mode: "relay",
+              settings: {
+                ...topology.settings,
+                security: {
+                  ...security,
+                  downstream_tls: {
+                    ...security.downstream_tls,
+                    client_authentication: {
+                      mode: "required",
+                      trust: "downstream-trust-ref",
+                    },
+                  },
                 },
               },
             },
@@ -151,5 +169,16 @@ describe("Socket listener editor", () => {
     expect(screen.getByText(/192\.0\.2\.5:9443 · 9 ms/)).toBeVisible();
     expect(screen.getByText(/TLS 1\.3 · TLS_AES_128_GCM_SHA256/)).toBeVisible();
     expect(screen.getByText("桥接：TCP → TLS")).toBeVisible();
+  });
+
+  it("LocalResponder 安全渲染且不挂载任何 Server 上游控件", () => {
+    const editor = props(localResponderListener() as ProxyListener);
+    render(<ListenerEditor {...editor} />);
+
+    expect(screen.getByText("LocalResponder 数据面将在后续任务接入")).toBeVisible();
+    expect(screen.getByText(/不会读取或探测 Server 上游，也不能启动运行/)).toBeVisible();
+    expect(screen.queryByRole("textbox", { name: "Socket 上游主机" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "测试 Socket 上游连接" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /导入上游/ })).not.toBeInTheDocument();
   });
 });

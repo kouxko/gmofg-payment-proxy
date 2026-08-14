@@ -11,7 +11,7 @@ use async_trait::async_trait;
 use intercept_proxy_domain::{
     CertificateReferenceId, ChannelId, DownstreamClientAuthentication, FaultPresetId,
     ListenerDataPlane, ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, RuleId,
-    SocketRelaySecurity,
+    SocketDownstreamSecurity, SocketRelaySecurity, SocketTopology,
 };
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -113,20 +113,29 @@ fn remap_listener_certificates(
                 )?;
             }
         }
-        ListenerDataPlane::Socket(settings) => match &mut settings.security {
-            SocketRelaySecurity::Transparent => {}
-            SocketRelaySecurity::TcpToTls { upstream_tls } => {
-                remap_socket_upstream(upstream_tls, mapping)?;
-            }
-            SocketRelaySecurity::TlsToTcp { downstream_tls } => {
-                remap_socket_downstream(downstream_tls, mapping)?;
-            }
-            SocketRelaySecurity::TlsToTls {
-                downstream_tls,
-                upstream_tls,
-            } => {
-                remap_socket_downstream(downstream_tls, mapping)?;
-                remap_socket_upstream(upstream_tls, mapping)?;
+        ListenerDataPlane::Socket(settings) => match &mut settings.topology {
+            SocketTopology::Relay(relay) => match &mut relay.security {
+                SocketRelaySecurity::Transparent => {}
+                SocketRelaySecurity::TcpToTls { upstream_tls } => {
+                    remap_socket_upstream(upstream_tls, mapping)?;
+                }
+                SocketRelaySecurity::TlsToTcp { downstream_tls } => {
+                    remap_socket_downstream(downstream_tls, mapping)?;
+                }
+                SocketRelaySecurity::TlsToTls {
+                    downstream_tls,
+                    upstream_tls,
+                } => {
+                    remap_socket_downstream(downstream_tls, mapping)?;
+                    remap_socket_upstream(upstream_tls, mapping)?;
+                }
+            },
+            SocketTopology::LocalResponder(local) => {
+                if let SocketDownstreamSecurity::Tls { downstream_tls } =
+                    &mut local.downstream_security
+                {
+                    remap_socket_downstream(downstream_tls, mapping)?;
+                }
             }
         },
     }

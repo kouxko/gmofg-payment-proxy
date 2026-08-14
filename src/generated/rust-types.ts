@@ -1366,6 +1366,9 @@ export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_s
 
 export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "relay_write" | "shutdown";
 
+/**  `LocalResponder` 只面向连接到 Listener 的 App，因此安全配置只能描述 App 侧传输。 */
+export type SocketDownstreamSecurity = { mode: "tcp" } | { mode: "tls"; downstream_tls: SocketDownstreamTlsSettings };
+
 export type SocketDownstreamTlsSettings = {
 	server_identity: CertificateReferenceId,
 	client_authentication: DownstreamClientAuthentication,
@@ -1374,6 +1377,11 @@ export type SocketDownstreamTlsSettings = {
 export type SocketEndpoint = {
 	host: string,
 	port: number,
+};
+
+/**  不连接 Server、而是由协议包在本机生成响应的 Socket 拓扑。 */
+export type SocketLocalResponderTopology = {
+	downstream_security: SocketDownstreamSecurity,
 };
 
 /**
@@ -1389,15 +1397,22 @@ export type SocketPayloadProcessing = { mode: "direct" } | { mode: "scripted"; s
 export type SocketRelaySecurity = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsSettings; upstream_tls: SocketUpstreamTlsSettings };
 
 export type SocketRelaySettings = {
-	/**  Server 侧固定连接目标。 */
-	upstream: SocketEndpoint,
-	/**  App/Server 两侧使用 TCP 或 TLS 的组合。 */
-	security: SocketRelaySecurity,
+	/**  网络拓扑。Relay 才拥有 Server 上游；LocalResponder 只拥有 App 侧安全设置。 */
+	topology: SocketTopology,
 	/**  Listener 同时接受的最大 Socket 连接数。 */
 	maximum_connections: number,
 	/**  Frame/payload 处理方式。历史配置没有该字段时必须保持透明直通。 */
 	processing?: SocketPayloadProcessing,
 };
+
+/**  具有真实 Server 上游的 Socket 转发拓扑。 */
+export type SocketRelayTopology = {
+	upstream: SocketEndpoint,
+	security: SocketRelaySecurity,
+};
+
+/**  Socket Listener 的网络拓扑。变体自身拥有且只拥有该模式可用的字段。 */
+export type SocketTopology = { mode: "relay"; settings: SocketRelayTopology } | { mode: "local_responder"; settings: SocketLocalResponderTopology };
 
 export type SocketTransportMode = "transparent" | "tcp_to_tls" | "tls_to_tcp" | "tls_to_tls";
 

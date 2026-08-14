@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bootstrap, setupListenerMocks, mocks, workspace, dynamicListener, fixedListener, certificateReference, ok, listenerStatus, listenerOverview, navigationMocks } from "./listeners-view.test-support";
+import { bootstrap, setupListenerMocks, mocks, workspace, dynamicListener, fixedListener, socketListener, certificateReference, ok, listenerStatus, listenerOverview, navigationMocks } from "./listeners-view.test-support";
 
 vi.mock("@/features/shell/workspace-navigation", () => ({ useWorkspaceNavigation: () => navigationMocks }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
@@ -72,6 +72,36 @@ describe("统一代理监听编辑器", () => {
     ).toBe("ca-ref-1");
     expect(await screen.findByText("CN=测试上游 CA")).toBeVisible();
     expect(screen.getByText("AA:BB:CC:DD")).toBeVisible();
+  });
+
+  it("Socket Relay 导入上游 CA 后保留 topology 并只更新 Relay 安全配置", async () => {
+    const socket = socketListener("socket-1", "Socket TLS", 9443, "tcp_to_tls");
+    const socketWorkspace = { ...workspace, listeners: [socket] };
+    mocks.workspaceGet.mockReturnValue(ok(socketWorkspace));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus(socket.id)])));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "导入上游 Server CA" }));
+    await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    const saved = mocks.listenerSave.mock.calls[0][2];
+    expect(saved.data_plane.settings.topology).toEqual({
+      mode: "relay",
+      settings: {
+        upstream: { host: "server.test", port: 9443 },
+        security: {
+          mode: "tcp_to_tls",
+          upstream_tls: {
+            verify_hostname: true,
+            server_trust: "ca-ref-1",
+            client_identity: null,
+          },
+        },
+      },
+    });
   });
 
   it("替换未保存的导入证书时清理 Rust 安全存储材料", async () => {

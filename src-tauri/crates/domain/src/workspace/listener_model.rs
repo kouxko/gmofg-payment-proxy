@@ -5,7 +5,7 @@ use specta::Type;
 
 use crate::{CertificateReferenceId, ListenerId, ProtocolPackageRef};
 
-use super::DEFAULT_FORWARD_PROXY_PORT;
+use super::{DEFAULT_FORWARD_PROXY_PORT, SocketRelaySettings};
 
 pub const DEFAULT_SOCKET_MAXIMUM_CONNECTIONS: u16 = 500;
 pub const MAX_SOCKET_MAXIMUM_CONNECTIONS: u16 = 5_000;
@@ -218,6 +218,41 @@ pub enum SocketRelaySecurity {
     },
 }
 
+/// `LocalResponder` 只面向连接到 Listener 的 App，因此安全配置只能描述 App 侧传输。
+// 该类型刻意不复用 SocketRelaySecurity：后者同时描述 App 与 Server 两侧，若复用就会让
+// LocalResponder 可以携带实际不会执行的上游 TLS 配置。独立 tagged union 使 Wire 层也无法
+// 表达上游地址、上游信任或客户端证书，从结构上避免“空地址表示无上游”一类哨兵值。
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Type)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum SocketDownstreamSecurity {
+    #[default]
+    Tcp,
+    Tls {
+        downstream_tls: SocketDownstreamTlsSettings,
+    },
+}
+
+impl<'de> Deserialize<'de> for SocketDownstreamSecurity {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+        enum Wire {
+            Tcp {},
+            Tls {
+                downstream_tls: SocketDownstreamTlsSettings,
+            },
+        }
+
+        Ok(match Wire::deserialize(deserializer)? {
+            Wire::Tcp {} => Self::Tcp,
+            Wire::Tls { downstream_tls } => Self::Tls { downstream_tls },
+        })
+    }
+}
+
 impl<'de> Deserialize<'de> for SocketRelaySecurity {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -299,31 +334,6 @@ pub enum SocketPayloadProcessing {
     #[default]
     Direct,
     Scripted(ScriptedSocketProcessing),
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct SocketRelaySettings {
-    /// Server 侧固定连接目标。
-    pub upstream: SocketEndpoint,
-    /// App/Server 两侧使用 TCP 或 TLS 的组合。
-    pub security: SocketRelaySecurity,
-    /// Listener 同时接受的最大 Socket 连接数。
-    pub maximum_connections: u16,
-    /// Frame/payload 处理方式。历史配置没有该字段时必须保持透明直通。
-    #[serde(default)]
-    pub processing: SocketPayloadProcessing,
-}
-
-impl Default for SocketRelaySettings {
-    fn default() -> Self {
-        Self {
-            upstream: SocketEndpoint::default(),
-            security: SocketRelaySecurity::Transparent,
-            maximum_connections: DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
-            processing: SocketPayloadProcessing::Direct,
-        }
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]

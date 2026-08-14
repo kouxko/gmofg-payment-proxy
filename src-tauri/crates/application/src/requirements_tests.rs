@@ -32,6 +32,7 @@ mod capacity;
 mod diagnostics;
 mod events;
 mod listener_certificates;
+mod local_responder_topology;
 mod protocol_package_lifecycle;
 mod settings_lifecycle;
 mod workspace_configuration;

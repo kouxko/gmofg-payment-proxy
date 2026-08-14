@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { bootstrap, setupListenerMocks, mocks, workspace, dynamicListener, fixedListener, socketListener, ok, commandError, listenerStatus, listenerOverview, navigationMocks } from "./listeners-view.test-support";
+import { bootstrap, setupListenerMocks, mocks, workspace, dynamicListener, fixedListener, socketListener, localResponderListener, ok, commandError, listenerStatus, listenerOverview, navigationMocks } from "./listeners-view.test-support";
 
 vi.mock("@/features/shell/workspace-navigation", () => ({ useWorkspaceNavigation: () => navigationMocks }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
@@ -380,6 +380,23 @@ describe("统一代理监听编辑器", () => {
     expect(await screen.findByRole("button", { name: "正在探测 Socket 上游…" })).toBeDisabled();
     expect(mocks.listenerValidate).toHaveBeenCalledOnce();
     expect(mocks.listenerTestUpstreamConnection).toHaveBeenCalledOnce();
+  });
+
+  it("LocalResponder 列表与编辑页不读取或探测不存在的 Server 上游", async () => {
+    const local = localResponderListener();
+    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [local] }));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus(local.id)])));
+    render(<ListenersView />);
+
+    expect(await screen.findByText("→ LocalResponder · 无 Server 上游")).toBeVisible();
+    expect(screen.getByText("Socket · LocalResponder（当前不可运行）")).toBeVisible();
+    expect(screen.getByText("LocalResponder 数据面将在后续任务接入")).toBeVisible();
+    expect(screen.getByRole("button", { name: "无可用操作" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "复制监听" })).toBeDisabled();
+    expect(screen.queryByRole("textbox", { name: "Socket 上游主机" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "测试 Socket 上游连接" })).not.toBeInTheDocument();
+    expect(mocks.listenerCopy).not.toHaveBeenCalled();
+    expect(mocks.listenerTestUpstreamConnection).not.toHaveBeenCalled();
   });
 
   it("Socket 运行卡展示 Rust 协议标签、活动连接和双向字节", async () => {

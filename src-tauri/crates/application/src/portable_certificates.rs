@@ -12,7 +12,8 @@ use std::{
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    DownstreamClientAuthentication, ListenerDataPlane, ProxyWorkspace, SocketRelaySecurity,
+    DownstreamClientAuthentication, ListenerDataPlane, ProxyWorkspace, SocketDownstreamSecurity,
+    SocketRelaySecurity, SocketTopology,
 };
 use ring::digest::{SHA256, digest};
 use serde::{Deserialize, Serialize};
@@ -120,20 +121,29 @@ pub fn retain_reachable_certificate_references(workspace: &mut ProxyWorkspace) {
                     reachable.extend(fixed_server.upstream_tls.client_identity);
                 }
             }
-            ListenerDataPlane::Socket(settings) => match &settings.security {
-                SocketRelaySecurity::Transparent => {}
-                SocketRelaySecurity::TcpToTls { upstream_tls } => {
-                    collect_socket_upstream(upstream_tls, &mut reachable);
-                }
-                SocketRelaySecurity::TlsToTcp { downstream_tls } => {
-                    collect_socket_downstream(downstream_tls, &mut reachable);
-                }
-                SocketRelaySecurity::TlsToTls {
-                    downstream_tls,
-                    upstream_tls,
-                } => {
-                    collect_socket_downstream(downstream_tls, &mut reachable);
-                    collect_socket_upstream(upstream_tls, &mut reachable);
+            ListenerDataPlane::Socket(settings) => match &settings.topology {
+                SocketTopology::Relay(relay) => match &relay.security {
+                    SocketRelaySecurity::Transparent => {}
+                    SocketRelaySecurity::TcpToTls { upstream_tls } => {
+                        collect_socket_upstream(upstream_tls, &mut reachable);
+                    }
+                    SocketRelaySecurity::TlsToTcp { downstream_tls } => {
+                        collect_socket_downstream(downstream_tls, &mut reachable);
+                    }
+                    SocketRelaySecurity::TlsToTls {
+                        downstream_tls,
+                        upstream_tls,
+                    } => {
+                        collect_socket_downstream(downstream_tls, &mut reachable);
+                        collect_socket_upstream(upstream_tls, &mut reachable);
+                    }
+                },
+                SocketTopology::LocalResponder(local) => {
+                    if let SocketDownstreamSecurity::Tls { downstream_tls } =
+                        &local.downstream_security
+                    {
+                        collect_socket_downstream(downstream_tls, &mut reachable);
+                    }
                 }
             },
         }
@@ -364,12 +374,12 @@ mod tests {
         let orphan = CertificateReferenceId::new();
         let mut workspace = ProxyWorkspace::default();
         workspace.listeners[0].data_plane =
-            ListenerDataPlane::Socket(intercept_proxy_domain::SocketRelaySettings {
-                upstream: intercept_proxy_domain::SocketEndpoint {
+            ListenerDataPlane::Socket(intercept_proxy_domain::SocketRelaySettings::relay(
+                intercept_proxy_domain::SocketEndpoint {
                     host: "socket.example.test".into(),
                     port: 443,
                 },
-                security: SocketRelaySecurity::TlsToTls {
+                SocketRelaySecurity::TlsToTls {
                     downstream_tls: intercept_proxy_domain::SocketDownstreamTlsSettings {
                         server_identity,
                         client_authentication: DownstreamClientAuthentication::Required {
@@ -382,9 +392,9 @@ mod tests {
                         client_identity: Some(client_identity),
                     },
                 },
-                maximum_connections: 500,
-                processing: intercept_proxy_domain::SocketPayloadProcessing::Direct,
-            });
+                500,
+                intercept_proxy_domain::SocketPayloadProcessing::Direct,
+            ));
         workspace.certificate_references = [
             (
                 server_identity,
@@ -424,7 +434,10 @@ mod tests {
         let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane else {
             unreachable!()
         };
-        settings.security = SocketRelaySecurity::Transparent;
+        let SocketTopology::Relay(relay) = &mut settings.topology else {
+            unreachable!()
+        };
+        relay.security = SocketRelaySecurity::Transparent;
         retain_reachable_certificate_references(&mut workspace);
         assert!(workspace.certificate_references.is_empty());
     }

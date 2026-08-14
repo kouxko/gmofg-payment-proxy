@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use super::*;
 use crate::{AndroidProxyRoute, AndroidTargetApplication, WeakNetworkProfile};
 
+mod listener_topology;
 mod listener_v3;
 
 fn http(listener: &ProxyListener) -> &HttpListenerSettings {
