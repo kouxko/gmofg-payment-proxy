@@ -216,6 +216,7 @@ impl ApplicationHostBuilder {
         let protocol_packages = ProtocolPackageApplicationServices {
             store: services.protocol_packages.clone(),
             compiler: services.protocol_packages.clone(),
+            importer: services.protocol_package_import.clone(),
             usage_query: services.protocol_package_usage.clone(),
         };
         let application = Arc::new(Application::new_with_platform_services(

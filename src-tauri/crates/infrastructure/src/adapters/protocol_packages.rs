@@ -184,17 +184,49 @@ impl ProtocolPackageRepositoryAdapter {
         )
     }
 
+    /// 返回原生文件读取必须遵守的压缩 ZIP 字节上限。
+    ///
+    /// 文件适配器在把字节交给 ZIP reader 前先使用相同上限，避免读取一个注定会被拒绝的
+    /// 超大文件。其他 Archive 限额仍只由协议脚本 crate 执行。
+    #[must_use]
+    pub const fn max_archive_bytes(&self) -> u64 {
+        self.archive_limits.max_archive_bytes()
+    }
+
     /// 完整校验 ZIP 后原子安装。新包默认停用；相同内容重入不改变已有启用状态和安装时间。
     pub fn install_zip(
         &self,
         zip_bytes: &[u8],
     ) -> Result<ProtocolPackageInstallOutcome, ProtocolPackageStorageError> {
+        self.install_prepared(self.prepare_zip(zip_bytes)?)
+    }
+
+    /// 完整校验 ZIP 并返回尚未持久化的准备对象。
+    ///
+    /// 本方法不写数据库、不改启用位，也不插入运行时缓存。调用方可先生成预览并等待
+    /// 用户确认；最终提交始终使用这里冻结的规范文件，原 ZIP 后续被替换也没有影响。
+    pub(crate) fn prepare_zip(
+        &self,
+        zip_bytes: &[u8],
+    ) -> Result<PreparedProtocolPackage, ProtocolPackageStorageError> {
         let files = read_protocol_package_zip(Cursor::new(zip_bytes), &self.archive_limits)
             .map_err(|source| ProtocolPackageStorageError::Archive { source })?;
         let compiled = self
             .compiler
             .compile(&files)
             .map_err(|source| ProtocolPackageStorageError::Compilation { source })?;
+        Ok(PreparedProtocolPackage { files, compiled })
+    }
+
+    /// 原子提交一个已经完整验证的准备对象。
+    ///
+    /// `SQLite` 事务仍重新判断身份冲突与幂等复用，防止 prepare 到 commit 之间的并发安装
+    /// 覆盖现有版本；提交不会重新读取或重新编译原 ZIP。
+    pub(crate) fn install_prepared(
+        &self,
+        prepared: PreparedProtocolPackage,
+    ) -> Result<ProtocolPackageInstallOutcome, ProtocolPackageStorageError> {
+        let PreparedProtocolPackage { files, compiled } = prepared;
         let manifest = compiled.manifest();
         let header = StoredProtocolPackageHeader {
             package: compiled.package().clone(),
@@ -437,23 +469,6 @@ impl ProtocolPackageRepositoryAdapter {
     }
 }
 
-fn summary_from_header(header: StoredProtocolPackageHeader) -> ProtocolPackageSummary {
-    let validation = match header.validation {
-        StoredProtocolPackageValidation::Valid => ProtocolPackageValidationStatus::Valid,
-        StoredProtocolPackageValidation::Invalid(code) => {
-            ProtocolPackageValidationStatus::Invalid { code }
-        }
-    };
-    ProtocolPackageSummary {
-        package: header.package,
-        name: header.name,
-        host_api: header.host_api,
-        enabled: header.enabled,
-        validation,
-        installed_at: header.installed_at,
-    }
-}
-
 fn compilation_code(error: &ProtocolPackageCompilationError) -> &str {
     if let Some(error) = error.declaration_error() {
         error.code().as_str()
@@ -466,6 +481,17 @@ fn compilation_code(error: &ProtocolPackageCompilationError) -> &str {
 }
 
 mod application_port;
+pub(super) use application_port::{
+    application_description, application_summary, protocol_package_app_error,
+};
+
+#[path = "protocol_packages/prepared.rs"]
+mod prepared;
+pub(super) use prepared::PreparedProtocolPackage;
+
+#[path = "protocol_packages/summary.rs"]
+mod summary;
+use summary::summary_from_header;
 
 #[cfg(test)]
 #[path = "protocol_packages/tests.rs"]

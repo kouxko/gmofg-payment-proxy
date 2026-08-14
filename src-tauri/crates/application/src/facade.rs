@@ -13,10 +13,10 @@ use crate::{
     CertificateServicePort, CertificateValidationViewModel, ChannelPresentationViewModel, EventHub,
     FaultServicePort, ListenerCertificateImportPort, ListenerRuntimePort, OperationResultViewModel,
     ProtectedSecretPort, ProtocolPackageApplicationServices, ProtocolPackageCompilerPort,
-    ProtocolPackageStorePort, ProtocolPackageUsageQueryPort, ProxyState, ProxyStatusViewModel,
-    ProxySupervisorPort, RuleRepositoryPort, SessionQueryPort, SettingsRepositoryPort,
-    SettingsViewModel, UiEventPayload, UnavailableApplicationConfigurationStore,
-    WorkspaceDocumentPort, WorkspaceRepositoryPort,
+    ProtocolPackageImportPort, ProtocolPackageStorePort, ProtocolPackageUsageQueryPort, ProxyState,
+    ProxyStatusViewModel, ProxySupervisorPort, RuleRepositoryPort, SessionQueryPort,
+    SettingsRepositoryPort, SettingsViewModel, UiEventPayload,
+    UnavailableApplicationConfigurationStore, WorkspaceDocumentPort, WorkspaceRepositoryPort,
 };
 
 mod android;
@@ -67,6 +67,7 @@ pub struct Application {
     listener_certificates: Arc<dyn ListenerCertificateImportPort>,
     protocol_package_store: Arc<dyn ProtocolPackageStorePort>,
     protocol_package_compiler: Arc<dyn ProtocolPackageCompilerPort>,
+    protocol_package_importer: Arc<dyn ProtocolPackageImportPort>,
     protocol_package_usage: Arc<dyn ProtocolPackageUsageQueryPort>,
     protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
@@ -161,6 +162,7 @@ impl Application {
             listener_certificates: dependencies.listener_certificates,
             protocol_package_store: dependencies.protocol_packages.store,
             protocol_package_compiler: dependencies.protocol_packages.compiler,
+            protocol_package_importer: dependencies.protocol_packages.importer,
             protocol_package_usage: dependencies.protocol_packages.usage_query,
             protected_secrets,
             events: dependencies.events,

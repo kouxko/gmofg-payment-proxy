@@ -1,7 +1,7 @@
 use crate::{DomainError, ErrorCode};
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use std::{fmt, str::FromStr};
+use std::{cmp::Ordering, fmt, str::FromStr};
 
 /// 协议包 ID 的最大 ASCII 字节数。
 pub const MAX_PROTOCOL_PACKAGE_ID_LEN: usize = 64;
@@ -112,6 +112,21 @@ impl ProtocolPackageVersion {
     /// 返回原始且已通过 `SemVer` 校验的版本文本。
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// 按 `SemVer` 数值语义比较版本，而不是按文本字典序比较。
+    ///
+    /// 类型构造器和反序列化已经保证两侧都是合法 `SemVer`；若未来内部表示被破坏，
+    /// 这里退回规范文本顺序，仍保持排序确定且不会在列表查询中 panic。
+    #[must_use]
+    pub fn semantic_cmp(&self, other: &Self) -> Ordering {
+        match (
+            semver::Version::parse(&self.0),
+            semver::Version::parse(&other.0),
+        ) {
+            (Ok(left), Ok(right)) => left.cmp(&right),
+            _ => self.0.cmp(&other.0),
+        }
     }
 }
 

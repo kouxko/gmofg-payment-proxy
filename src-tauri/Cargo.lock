@@ -2324,6 +2324,7 @@ dependencies = [
  "intercept-proxy-runtime",
  "log",
  "serde",
+ "serde_json",
  "specta",
  "specta-typescript",
  "tauri",
@@ -2331,8 +2332,10 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-log",
  "tauri-specta",
+ "tempfile",
  "tokio",
  "tracing",
+ "zip",
 ]
 
 [[package]]

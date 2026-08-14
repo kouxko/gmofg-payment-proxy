@@ -18,6 +18,7 @@ mod listener_certificates;
 mod listener_runtime;
 mod pipeline;
 mod protected_secrets;
+mod protocol_package_import;
 mod protocol_package_usage;
 mod protocol_packages;
 mod retired_proxy;
@@ -41,7 +42,9 @@ pub use pipeline::{
     RuntimeRuleRepository,
 };
 pub use protected_secrets::ProtectedSecretAdapter;
+pub use protocol_package_import::ProtocolPackageImportAdapter;
 pub use protocol_package_usage::ProtocolPackageUsageQueryAdapter;
+use protocol_packages::PreparedProtocolPackage;
 pub use protocol_packages::{
     ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure, ProtocolPackageRecoveryReport,
     ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError, ProtocolPackageStorageErrorCode,

@@ -83,6 +83,16 @@ async fn usages_match_exact_identity_across_workspaces_and_merge_runtime_state()
     assert_eq!(stopped.workspace_name, "Beta");
     assert_eq!(stopped.listener_name, "beta-target");
     assert_eq!(stopped.runtime_state, ListenerRuntimeState::Stopped);
+
+    let counts = adapter.usage_counts().await.unwrap();
+    assert_eq!(counts.len(), 3);
+    let target_count = counts.iter().find(|count| count.package == target).unwrap();
+    assert_eq!(target_count.reference_count, 2);
+    assert_eq!(target_count.active_reference_count, 1);
+    assert!(counts.windows(2).all(|pair| {
+        (&pair[0].package.id, &pair[0].package.version)
+            < (&pair[1].package.id, &pair[1].package.version)
+    }));
 }
 
 #[tokio::test]
@@ -101,6 +111,10 @@ async fn runtime_snapshot_failure_is_not_represented_as_no_usage() {
     let error = adapter.usages(&target).await.unwrap_err();
 
     assert_eq!(error.view_model.code, "RUNTIME_SNAPSHOT_UNAVAILABLE");
+    assert_eq!(
+        adapter.usage_counts().await.unwrap_err().view_model.code,
+        "RUNTIME_SNAPSHOT_UNAVAILABLE"
+    );
 }
 
 fn workspace(name: &str, listeners: Vec<ProxyListener>) -> ProxyWorkspace {

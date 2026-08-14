@@ -13,9 +13,10 @@ use crate::{SecretProtector, SqliteStore};
 use super::{
     CaptureRepositoryAdapter, CertificateServiceAdapter, FaultServiceAdapter,
     ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
-    ProtectedSecretAdapter, ProtocolPackageRepositoryAdapter, ProtocolPackageUsageQueryAdapter,
-    RuleRepositoryAdapter, SettingsRepositoryAdapter, WorkspaceBodyCodecResolver,
-    WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
+    ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageRepositoryAdapter,
+    ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, SettingsRepositoryAdapter,
+    WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
+    WorkspaceRuntimePolicyResolver,
 };
 
 #[derive(Debug)]
@@ -30,6 +31,8 @@ pub struct InfrastructureServiceBundle {
     pub protected_secrets: Arc<ProtectedSecretAdapter>,
     /// 应用级协议包文件、启用位和可重建编译缓存；生命周期约束由 T14 Application 用例接管。
     pub protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
+    /// 原生文件选择与有界 ZIP 读取；路径和 ZIP 字节不越过 Application 端口。
+    pub protocol_package_import: Arc<ProtocolPackageImportAdapter>,
     /// 汇总全部 Workspace 的精确引用，并与 Listener 运行态合并。
     pub protocol_package_usage: Arc<ProtocolPackageUsageQueryAdapter>,
     pub rules: Arc<RuleRepositoryAdapter>,
@@ -85,6 +88,10 @@ impl InfrastructureServiceBundle {
         let protocol_packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
             Arc::clone(&store),
         ));
+        let protocol_package_import = Arc::new(ProtocolPackageImportAdapter::new(
+            protocol_packages.clone(),
+            Arc::clone(&dialog),
+        ));
         let listener_certificates = Arc::new(ManagedListenerCertificateAdapter::new(
             Arc::clone(&store),
             protector,
@@ -113,6 +120,7 @@ impl InfrastructureServiceBundle {
             listener_certificates,
             protected_secrets,
             protocol_packages,
+            protocol_package_import,
             protocol_package_usage,
             settings,
             faults,

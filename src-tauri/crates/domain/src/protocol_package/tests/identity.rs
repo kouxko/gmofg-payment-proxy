@@ -49,6 +49,15 @@ fn package_version_accepts_complete_semver_and_boundaries() {
 }
 
 #[test]
+fn package_version_exposes_semver_numeric_order_for_grouped_views() {
+    let two = ProtocolPackageVersion::new("2.0.0").unwrap();
+    let ten = ProtocolPackageVersion::new("10.0.0").unwrap();
+
+    assert_eq!(two.semantic_cmp(&ten), std::cmp::Ordering::Less);
+    assert_eq!(ten.semantic_cmp(&two), std::cmp::Ordering::Greater);
+}
+
+#[test]
 fn package_version_rejects_invalid_truncated_unicode_and_too_long_values() {
     for value in ["", "1", "1.2", "v1.2.3", "01.2.3", "1.2.3-β"] {
         let error = ProtocolPackageVersion::new(value).unwrap_err();
