@@ -1,3 +1,8 @@
 mod compiled;
+mod declaration_name;
 mod error;
+mod fixtures;
 mod limits;
+mod manifest;
+mod parse_error;
+mod schema_parser;
