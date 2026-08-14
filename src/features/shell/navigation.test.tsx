@@ -78,6 +78,7 @@ describe("UI-001 fixed navigation order", () => {
     expect(navigation.map((item) => item.href)).toEqual([
       "/workspaces",
       "/listeners",
+      "/protocol-packages",
       "/android-network",
       "/diagnostics",
       "/console",
@@ -136,6 +137,24 @@ describe("desktop client navigation", () => {
     expect(
       screen.queryByRole("link", { name: "实时抓包" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens protocol packages through the same in-memory navigation", async () => {
+    workspaceNavigationMocks.navigate.mockClear();
+    const user = userEvent.setup();
+    const documentUrl = window.location.href;
+    render(
+      <AppShell>
+        <div>当前页面</div>
+      </AppShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Socket 协议包" }));
+
+    expect(workspaceNavigationMocks.navigate).toHaveBeenCalledWith(
+      "/protocol-packages",
+    );
+    expect(window.location.href).toBe(documentUrl);
   });
 
   it("uses the same client router for the toolbar settings action", async () => {

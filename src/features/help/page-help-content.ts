@@ -2,19 +2,23 @@ import type { WorkspacePath } from "@/features/shell/workspace-navigation";
 import { systemPageHelpGuides } from "./system-page-help-guides";
 import { diagnosticPageHelpGuides } from "./diagnostic-page-help-guide";
 import { generalPageHelpGuides } from "./general-page-help-guides";
+import { protocolPackageHelpGuide } from "./protocol-package-help-guide";
 import type { PageHelpGuide } from "./page-help-types";
 
 export type { PageHelpGuide, PageHelpSection } from "./page-help-types";
 
 /**
- * 八个页面的内置操作手册数据。
+ * 各业务页面的内置操作手册数据。
  *
  * 这里只保存面向用户的静态说明，不能复制 Rust 的状态机或校验逻辑。文字中的
  * 默认值、动作语义和验收边界应与 docs/requirements.md 保持同步。
  */
 
 export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
-  ...generalPageHelpGuides,
+  "/workspaces": generalPageHelpGuides["/workspaces"],
+  "/listeners": generalPageHelpGuides["/listeners"],
+  ...protocolPackageHelpGuide,
+  "/android-network": generalPageHelpGuides["/android-network"],
   ...diagnosticPageHelpGuides,
   "/console": {
     title: "运行监控",
