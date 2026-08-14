@@ -19,11 +19,15 @@ use decision::{FramingDecision, validate_decision};
 use error::ProtocolFramingResult;
 pub use error::{ProtocolFramingError, ProtocolFramingErrorCode, ProtocolFramingLimit};
 use framer::FrameDecider;
+#[cfg(test)]
+pub(crate) use framer::SingleDirectionFramer;
 pub use limits::{
     DEFAULT_MAX_FRAME_BYTES, DEFAULT_MAX_FRAME_FIFO_BYTES, MAX_FRAME_BYTES_LIMIT,
     MAX_FRAME_FIFO_BYTES_LIMIT, ProtocolFramingLimits,
 };
 use reader::{ProtocolReader, ReaderSegment};
+#[cfg(test)]
+pub(crate) use script::RhaiFrameDecider;
 
 pub(crate) fn register(engine: &mut rhai::Engine) {
     reader::register(engine);

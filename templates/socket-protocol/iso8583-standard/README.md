@@ -20,7 +20,8 @@ iso8583-standard/
 ├── libraries/
 │   └── iso8583.rhai            ISO 8583 字段解析和编码
 └── samples/
-    └── financial-request.json  拆包、解码和回编码样例
+    ├── financial-request.json  Upstream 请求拆包、解码和回编码样例
+    └── financial-response.json Downstream 响应粘包、解码和回编码样例
 ```
 
 `manifest.toml` 就是协议包的导出表。Rhai 本身不需要额外的 `export` 关键字；宿主只调用 Manifest 明确声明的函数。
@@ -106,4 +107,5 @@ Context:  direction(), stage(), connection_id(), listener_id()
 
 这里不是完整 API 清单；通用 `peek/find`、精确返回值、错误和类型规则以 [API.md](../API.md) 为准。这些宿主 API 仍需要由 Rust/Rhai 集成层注册。
 
-`samples/` 当前是说明和测试向量，不会被 Host API v1 自动执行。
+`samples/` 是协议作者维护的说明和测试向量，不会被 Host API v1 自动执行；本仓库的 Rust
+conformance 测试会逐个加载它们，第三方作者也应在交付前用自己的测试工具执行全部向量。
