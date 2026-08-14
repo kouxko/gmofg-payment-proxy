@@ -1,8 +1,12 @@
+use std::fmt;
+
 use rhai::{Engine, ImmutableString};
+use serde::{Deserialize, Serialize};
 
 /// Socket Frame 在代理链路中的固定方向。
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum ProtocolDirection {
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProtocolDirection {
     /// App -> Proxy -> Server。
     Upstream,
     /// Server -> Proxy -> App。
@@ -10,11 +14,19 @@ pub(crate) enum ProtocolDirection {
 }
 
 impl ProtocolDirection {
-    const fn as_str(self) -> &'static str {
+    /// 返回传给 Rhai `context.direction()` 的稳定小写值。
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
         match self {
             Self::Upstream => "upstream",
             Self::Downstream => "downstream",
         }
+    }
+}
+
+impl fmt::Display for ProtocolDirection {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
     }
 }
 

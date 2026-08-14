@@ -8,4 +8,5 @@ mod host;
 mod limits;
 mod manifest;
 mod parse_error;
+mod runtime;
 mod schema_parser;
