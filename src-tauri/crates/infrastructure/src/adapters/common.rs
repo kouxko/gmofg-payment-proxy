@@ -17,6 +17,11 @@ pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWo
     let mut value = record.value;
     let version = take_workspace_persistence_version(&mut value)?;
     let workspace = match version {
+        Some(4) => {
+            require_v4_socket_rule_fields(&value)?;
+            serde_json::from_value::<ProxyWorkspace>(value)
+                .map_err(|error| format!("Workspace {indexed_id} v4 结构无效：{error}"))?
+        }
         Some(3) => serde_json::from_value::<ProxyWorkspace>(value)
             .map_err(|error| format!("Workspace {indexed_id} v3 结构无效：{error}"))?,
         None => serde_json::from_value::<ProxyWorkspaceV2>(value)
@@ -39,6 +44,22 @@ pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWo
     Ok(workspace)
 }
 
+/// v4 是 Socket 规则首次进入本地持久化的版本，两个字段都必须显式存在。
+///
+/// `ProxyWorkspace` 上的 serde default 只服务于历史 v3 迁移；若把它同样用于 v4，
+/// 数据库行丢失规则字段时会被静默解释为空规则，掩盖持久化损坏。
+fn require_v4_socket_rule_fields(value: &serde_json::Value) -> Result<(), String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| "Workspace v4 持久化值不是 JSON object".to_owned())?;
+    for field in ["socket_rules", "socket_rule_created_order_high_water"] {
+        if !object.contains_key(field) {
+            return Err(format!("Workspace v4 缺少必需字段 {field}"));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn encode_workspace_record(
     workspace: &ProxyWorkspace,
 ) -> Result<serde_json::Value, String> {
@@ -47,7 +68,7 @@ pub(crate) fn encode_workspace_record(
     let object = value
         .as_object_mut()
         .ok_or_else(|| "Workspace 序列化结果不是 JSON object".to_owned())?;
-    object.insert("_persistence_version".into(), serde_json::json!(3));
+    object.insert("_persistence_version".into(), serde_json::json!(4));
     Ok(value)
 }
 

@@ -53,6 +53,7 @@ uuid_id!(SessionId);
 uuid_id!(MessageId);
 uuid_id!(BreakpointId);
 uuid_id!(RuleId);
+uuid_id!(SocketDocumentRuleId);
 uuid_id!(CertificateId);
 uuid_id!(EventId);
 uuid_id!(WorkspaceId);

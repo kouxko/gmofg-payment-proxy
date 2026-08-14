@@ -199,6 +199,9 @@ pub fn parse_application_configuration(
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("完整配置 JSON 无效：{error}")))?;
     reject_configuration_fields_outside_certificate_materials(&value)?;
     let version = read_configuration_format_version(&value)?;
+    if version == APPLICATION_CONFIGURATION_FORMAT_VERSION {
+        crate::portable_socket_rules::reject_configuration_fields(&value)?;
+    }
     let parsed = match version {
         APPLICATION_CONFIGURATION_FORMAT_VERSION => {
             serde_json::from_value::<ApplicationConfigurationDocument>(value)
@@ -240,15 +243,15 @@ fn unsupported_configuration_version(version: u16) -> AppError {
 pub fn serialize_application_configuration(
     document: &ApplicationConfigurationDocument,
 ) -> AppResult<Vec<u8>> {
+    crate::portable_socket_rules::ensure_not_portable(&document.workspaces)?;
     document.validate()?;
-    let bytes = serde_json::to_vec_pretty(document)
+    let mut value = serde_json::to_value(document)
         .map_err(|error| AppError::new("EXPORT_FAILED", format!("完整配置序列化失败：{error}")))?;
-    let value = serde_json::from_slice::<Value>(&bytes).map_err(|error| {
-        AppError::new("EXPORT_FAILED", format!("完整配置导出自检失败：{error}"))
-    })?;
+    crate::portable_socket_rules::remove_configuration_fields(&mut value);
     reject_configuration_fields_outside_certificate_materials(&value)
         .map_err(|_| AppError::new("EXPORT_FAILED", "完整配置包含禁止导出的敏感或运行态字段。"))?;
-    Ok(bytes)
+    serde_json::to_vec_pretty(&value)
+        .map_err(|error| AppError::new("EXPORT_FAILED", format!("完整配置序列化失败：{error}")))
 }
 
 /// 证书载荷是唯一允许明文密码和 PKCS#12 的受控区域；其他未知字段继续递归拒绝。
@@ -373,10 +376,30 @@ mod tests {
     fn full_configuration_round_trips() {
         let expected = document();
         let bytes = serialize_application_configuration(&expected).expect("serialize");
+        let mut wire: Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(wire["workspaces"][0].get("socket_rules").is_none());
+        assert!(
+            wire["workspaces"][0]
+                .get("socket_rule_created_order_high_water")
+                .is_none()
+        );
         assert_eq!(
             parse_application_configuration(&bytes).expect("parse"),
             expected
         );
+
+        wire["workspaces"][0]["socket_rules"] = serde_json::json!([]);
+        let error =
+            parse_application_configuration(&serde_json::to_vec(&wire).unwrap()).unwrap_err();
+        assert_eq!(error.view_model.code, "SOCKET_RULE_PORTABILITY_REQUIRES_V4");
+        wire["workspaces"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("socket_rules");
+        wire["workspaces"][0]["socket_rule_created_order_high_water"] = serde_json::json!(0);
+        let error =
+            parse_application_configuration(&serde_json::to_vec(&wire).unwrap()).unwrap_err();
+        assert_eq!(error.view_model.code, "SOCKET_RULE_PORTABILITY_REQUIRES_V4");
     }
 
     #[test]

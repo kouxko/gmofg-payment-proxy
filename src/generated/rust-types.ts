@@ -128,6 +128,11 @@ export const commands = {
 	ruleToggle: (ruleId: string, expectedRevision: number, enabled: boolean) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_toggle", { ruleId, expectedRevision, enabled })),
 	ruleImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_import")),
 	ruleExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_export")),
+	socketRuleList: () => typedError<SocketDocumentRuleDefinition[], AppErrorViewModel>(__TAURI_INVOKE("socket_rule_list")),
+	socketRuleCapabilities: (listenerId: ListenerId, direction: SocketDirection) => typedError<SocketRuleCapabilityCatalog, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_capabilities", { listenerId, direction })),
+	socketRuleSave: (input: SocketRuleSaveInput) => typedError<SocketDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_save", { input })),
+	socketRuleToggle: (ruleId: SocketDocumentRuleId, expectedRevision: number, enabled: boolean) => typedError<SocketDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_toggle", { ruleId, expectedRevision, enabled })),
+	socketRuleDelete: (ruleId: SocketDocumentRuleId, expectedRevision: number, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_delete", { ruleId, expectedRevision, confirmed })),
 	faultTemplateList: () => typedError<FaultTemplateViewModel[], AppErrorViewModel>(__TAURI_INVOKE("fault_template_list")),
 	faultConfigure: (draft: FaultConfigurationDraft) => typedError<ActiveFaultViewModel, AppErrorViewModel>(__TAURI_INVOKE("fault_configure", { draft })),
 	faultActiveList: () => typedError<ActiveFaultViewModel[], AppErrorViewModel>(__TAURI_INVOKE("fault_active_list")),
@@ -619,6 +624,51 @@ export type DisabledReason = {
 	code: string,
 	message: string,
 };
+
+/**  v1 Document 动作。动作按声明顺序执行，不包含隐式终止或 first-match 语义。 */
+export type DocumentAction =
+/**  只记录命中，不修改 Document。 */
+{ type: "record_match" } |
+/**  只替换一个 Schema 已声明字段的值。 */
+{ type: "set_field";
+/**  Schema 中声明的目标字段。 */
+field: DocumentFieldName;
+/**  与字段声明类型严格一致的新值。 */
+value: DocumentValue } |
+/**  清空所有字段值槽，但保留当前 Schema 身份和结构。 */
+{ type: "clear_document" };
+
+/**  v1 Document 条件。多个条件按声明顺序读取并执行 AND；空列表恒匹配。 */
+export type DocumentCondition =
+/**  字段当前值必须与给定类型化值严格相等；不进行文本或数字转换。 */
+{ operator: "equals";
+/**  Schema 中声明的字段名。 */
+field: DocumentFieldName;
+/**  参与严格比较的值。 */
+value: DocumentValue };
+
+/**
+ *  Schema 字段名，同时也是脚本和 Socket 规则使用的稳定变量名。
+ *  名称必须匹配 `[a-z][a-z0-9_]*`，并拒绝全部 Rhai active/reserved 关键字，
+ *  防止同一个字段在 Schema 中合法、注册到脚本时却无法使用。
+ */
+export type DocumentFieldName = string;
+
+/**
+ *  当前 Frame 中某个已声明字段的实际值。
+ *
+ *  serde 使用相邻标签 `{ "type": ..., "value": ... }`，因此文本 `"7"`、整数 `7` 和
+ *  单字节 Blob `[7]` 不会产生歧义或隐式转换。
+ */
+export type DocumentValue =
+/**  对应 [`DocumentFieldType::String`]。 */
+{ type: "string"; value: string } |
+/**  对应 [`DocumentFieldType::Int`]。 */
+{ type: "int"; value: number } |
+/**  对应 [`DocumentFieldType::Bool`]。 */
+{ type: "bool"; value: boolean } |
+/**  对应 [`DocumentFieldType::Blob`]。 */
+{ type: "blob"; value: number[] };
 
 export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "optional"; trust: CertificateReferenceId } | { mode: "required"; trust: CertificateReferenceId };
 
@@ -1366,6 +1416,35 @@ export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_s
 
 export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "relay_write" | "shutdown";
 
+/**  Socket Frame 相对于代理的稳定数据方向。 */
+export type SocketDirection =
+/**  App 到 Server，或 `LocalResponder` 的请求方向。 */
+"upstream" |
+/**  Server 到 App，或 `LocalResponder` 的响应方向。 */
+"downstream";
+
+/**
+ *  可持久化的 Socket Document 规则实体。
+ *
+ *  `rule_id` 与 `created_order` 在更新时保持稳定，`revision` 对每次成功更新或启停递增。
+ *  反序列化会重新执行全部结构限制，因此导入不能绕过空动作、重复字段或资源上限。
+ */
+export type SocketDocumentRuleDefinition = {
+	rule_id: SocketDocumentRuleId,
+	revision: Revision,
+	enabled: boolean,
+	priority: number,
+	created_order: number,
+	listener_id: ListenerId,
+	package: ProtocolPackageRef,
+	schema_version: number,
+	direction: SocketDirection,
+	conditions: DocumentCondition[],
+	actions: DocumentAction[],
+};
+
+export type SocketDocumentRuleId = string;
+
 /**  `LocalResponder` 只面向连接到 Listener 的 App，因此安全配置只能描述 App 侧传输。 */
 export type SocketDownstreamSecurity = { mode: "tcp" } | { mode: "tls"; downstream_tls: SocketDownstreamTlsSettings };
 
@@ -1409,6 +1488,42 @@ export type SocketRelaySettings = {
 export type SocketRelayTopology = {
 	upstream: SocketEndpoint,
 	security: SocketRelaySecurity,
+};
+
+export type SocketRuleCapabilityCatalog = {
+	package: ProtocolPackageRef,
+	schema_version: number,
+	direction: SocketDirection,
+	fields: SocketRuleFieldCapability[],
+	common_actions: SocketRuleCommonActionCapability[],
+};
+
+export type SocketRuleCommonActionCapability = "record_match" | "clear_document";
+
+export type SocketRuleFieldActionCapability = "set_field";
+
+export type SocketRuleFieldCapability = {
+	name: string,
+	label: string,
+	type: ProtocolPackageSchemaFieldTypeViewModel,
+	operators: SocketRuleFieldOperatorCapability[],
+	actions: SocketRuleFieldActionCapability[],
+};
+
+export type SocketRuleFieldOperatorCapability = "equals";
+
+export type SocketRuleSaveInput = {
+	/**  `None` 表示创建；更新时必须同时提供规则 ID 与期望 revision。 */
+	rule_id: SocketDocumentRuleId | null,
+	expected_revision: number | null,
+	enabled: boolean,
+	priority: number,
+	listener_id: ListenerId,
+	package: ProtocolPackageRef,
+	schema_version: number,
+	direction: SocketDirection,
+	conditions: DocumentCondition[],
+	actions: DocumentAction[],
 };
 
 /**  Socket Listener 的网络拓扑。变体自身拥有且只拥有该模式可用的字段。 */

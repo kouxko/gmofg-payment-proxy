@@ -97,6 +97,7 @@ pub(in crate::adapters) fn application_description(
 ) -> ProtocolPackageDescriptionViewModel {
     let schema = compiled.schema();
     ProtocolPackageDescriptionViewModel {
+        package: compiled.package().clone(),
         capabilities: ProtocolPackageCapabilitiesViewModel {
             upstream: ProtocolPackageDirectionCapabilitiesViewModel {
                 frame: true,

@@ -5,6 +5,7 @@ use super::*;
 mod support;
 use support::*;
 mod queries;
+mod socket_rules;
 
 fn fixture() -> (
     Application,

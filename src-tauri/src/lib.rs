@@ -48,7 +48,25 @@ pub fn export_bindings() -> Result<PathBuf, String> {
     commands::builder()
         .export(Typescript::default(), &path)
         .map_err(|error| error.to_string())?;
+    // Specta 会把带成员文档的 tagged union 排成多行，并在联合分隔符或空文档行后
+    // 留下空格。生成文件属于可重复构建产物：统一移除行尾空白，避免每次新增强类型
+    // DTO 都要删掉 Rust 文档，也保证 `pnpm bindings` 后 `git diff --check` 恒定通过。
+    let generated = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
+    let normalized = normalize_generated_typescript(&generated);
+    std::fs::write(&path, normalized).map_err(|error| error.to_string())?;
     Ok(path)
+}
+
+fn normalize_generated_typescript(generated: &str) -> String {
+    let mut normalized = generated
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    if generated.ends_with('\n') {
+        normalized.push('\n');
+    }
+    normalized
 }
 
 fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
@@ -129,7 +147,15 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{ExitRequestPlan, plan_exit_request};
+    use super::{ExitRequestPlan, normalize_generated_typescript, plan_exit_request};
+
+    #[test]
+    fn generated_typescript_normalization_removes_only_line_end_whitespace() {
+        assert_eq!(
+            normalize_generated_typescript("export type A = \n\tstring;  \n"),
+            "export type A =\n\tstring;\n"
+        );
+    }
 
     #[test]
     fn repeated_exit_requests_are_prevented_but_start_shutdown_once() {

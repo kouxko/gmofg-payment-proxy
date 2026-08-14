@@ -17,7 +17,7 @@ async fn list_groups_versions_by_id_and_detail_uses_the_exact_version() {
     );
     services.set_usages(iso_v1.clone(), vec![expected_usage.clone()]);
     services.set_usages(iso_v2.clone(), Vec::new());
-    let expected_description = description();
+    let expected_description = description(iso_v1.clone());
     services.set_description(iso_v1.clone(), expected_description.clone());
 
     let groups = application.protocol_package_list().await.unwrap();
@@ -63,6 +63,25 @@ async fn list_groups_versions_by_id_and_detail_uses_the_exact_version() {
         .unwrap_err();
     assert_eq!(error_code(&missing), "PROTOCOL_PACKAGE_NOT_FOUND");
     assert_eq!(services.usage_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn detail_rejects_a_compiler_description_for_another_exact_package() {
+    let (application, services, _, _) = fixture();
+    let requested = package("iso-8583", "1.0.0");
+    services.insert(record(requested.clone(), true));
+    services.set_description(requested.clone(), description(package("iso-8583", "2.0.0")));
+
+    let error = application
+        .protocol_package_detail(requested)
+        .await
+        .expect_err("串用另一版本的编译描述必须 fail-closed");
+
+    assert_eq!(
+        error_code(&error),
+        "PROTOCOL_PACKAGE_DESCRIPTION_IDENTITY_MISMATCH"
+    );
+    assert_eq!(services.usage_calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]
@@ -138,8 +157,8 @@ async fn usage_query_requires_an_installed_exact_version_and_preserves_runtime_s
 async fn native_import_cancellation_success_and_errors_are_forwarded_without_partial_dto() {
     let (application, services, _, _) = fixture();
     let target = package("iso-8583", "1.0.0");
+    let description = description(target.clone());
     let version = record(target, false);
-    let description = description();
     let token = ProtocolPackageImportToken::from_uuid(Uuid::new_v4());
     let preview = ProtocolPackageImportPreviewViewModel {
         token: Some(token),

@@ -18,6 +18,7 @@ mod facade;
 mod listeners;
 mod models;
 mod portable_certificates;
+mod portable_socket_rules;
 mod ports;
 mod sessions;
 mod workspace_documents;

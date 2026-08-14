@@ -16,6 +16,7 @@ pub mod revision;
 pub mod rule;
 pub mod session;
 pub mod settings;
+pub mod socket_document_rule;
 pub mod state;
 pub mod workspace;
 
@@ -34,5 +35,6 @@ pub use revision::*;
 pub use rule::*;
 pub use session::*;
 pub use settings::*;
+pub use socket_document_rule::*;
 pub use state::*;
 pub use workspace::*;

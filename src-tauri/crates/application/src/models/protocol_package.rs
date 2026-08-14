@@ -129,6 +129,8 @@ pub struct ProtocolPackageSchemaViewModel {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 基础设施从已编译包生成的安全描述，用于详情与导入结果。
 pub struct ProtocolPackageDescriptionViewModel {
+    /// 描述所属的精确协议包身份。Application 必须与请求身份再次比较，防止缓存串包。
+    pub package: ProtocolPackageRef,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
     pub schema: ProtocolPackageSchemaViewModel,
 }
