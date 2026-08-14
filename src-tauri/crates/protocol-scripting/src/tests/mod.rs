@@ -1,3 +1,4 @@
+mod archive;
 mod compiled;
 mod declaration_name;
 mod error;

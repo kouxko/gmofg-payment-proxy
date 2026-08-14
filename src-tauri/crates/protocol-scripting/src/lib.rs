@@ -9,6 +9,7 @@
 
 #![deny(missing_docs)]
 
+mod archive;
 mod compiled;
 mod declaration_name;
 mod error;
@@ -18,6 +19,14 @@ mod parse_error;
 mod schema_parser;
 mod toml_parser;
 
+pub use archive::{
+    DEFAULT_MAX_ARCHIVE_BYTES, DEFAULT_MAX_ARCHIVE_ENTRIES, DEFAULT_MAX_COMPRESSION_RATIO,
+    DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_PATH_DEPTH, DEFAULT_MAX_TOTAL_BYTES,
+    MAX_ARCHIVE_BYTES_LIMIT, MAX_ARCHIVE_ENTRIES_LIMIT, MAX_COMPRESSION_RATIO_LIMIT,
+    MAX_FILE_BYTES_LIMIT, MAX_PATH_DEPTH_LIMIT, MAX_TOTAL_BYTES_LIMIT, ProtocolArchiveError,
+    ProtocolArchiveErrorCode, ProtocolArchiveLimits, ProtocolPackageFiles,
+    read_protocol_package_zip,
+};
 pub use compiled::CompiledProtocolPackage;
 pub use declaration_name::{
     MAX_PACKAGE_FILE_PATH_BYTES, MAX_PROTOCOL_FUNCTION_NAME_BYTES, PackageFilePath,

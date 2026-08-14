@@ -1,6 +1,7 @@
 use std::fmt;
 
 use intercept_proxy_domain::is_rhai_reserved_word;
+use serde::Serialize;
 
 use crate::{ProtocolPackageFile, ProtocolPackageParseError, ProtocolPackageParseErrorCode};
 
@@ -14,7 +15,7 @@ pub const MAX_PROTOCOL_FUNCTION_NAME_BYTES: usize = 64;
 /// 本类型保存 `/` 分隔的 UTF-8 文本，不访问文件系统，也不执行规范化。它拒绝绝对路径、Windows
 /// 反斜线/盘符、空段、`.`、`..`、控制字符和冒号；T07 仍需对真实 ZIP 条目执行更严格的重复项、
 /// 大小写冲突和符号链接检查。
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct PackageFilePath(String);
 
 impl PackageFilePath {
