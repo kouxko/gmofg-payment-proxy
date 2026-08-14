@@ -18,6 +18,8 @@ use super::*;
 
 #[path = "scripted_snapshot/isolation.rs"]
 mod isolation;
+#[path = "scripted_snapshot/rule_matrix.rs"]
+mod rule_matrix;
 
 const SNAPSHOT_MANIFEST: &str = r#"
 api = 1
@@ -126,6 +128,19 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_without_sta
             .map(|item| (item.priority(), item.created_order()))
             .collect::<Vec<_>>(),
         vec![(10, 1), (10, 3), (20, 2)]
+    );
+    assert_eq!(
+        snapshot
+            .rule_program(SocketDirection::Upstream)
+            .rules()
+            .len(),
+        3
+    );
+    assert!(
+        snapshot
+            .rule_program(SocketDirection::Downstream)
+            .rules()
+            .is_empty()
     );
     assert!(snapshot.certificate_references().is_empty());
     assert!(matches!(

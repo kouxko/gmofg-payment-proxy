@@ -12,8 +12,10 @@ use crate::{
     Revision, SocketDocumentRuleId,
 };
 
+mod execution;
 mod validation;
 mod wire;
+pub use execution::*;
 use validation::{
     add_error, next_rule_revision, rule_error, validate_field_value, validate_structure,
 };

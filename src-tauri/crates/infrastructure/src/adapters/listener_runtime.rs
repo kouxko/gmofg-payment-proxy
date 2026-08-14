@@ -190,6 +190,7 @@ impl Drop for ListenerRuntimeAdapter {
     }
 }
 
+mod document_rules;
 mod helpers;
 mod plan;
 mod port;
@@ -198,6 +199,9 @@ mod socket_diagnostics;
 mod socket_plan;
 mod tls_material;
 
+pub use document_rules::{
+    BoundSocketDocument, SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory,
+};
 use helpers::{bind_tcp_listener, parse_bind_address, running_status, upstream_tls_test_error};
 use plan::{ListenerRuntimePlanBuilder, PreparedListenerRuntime};
 #[cfg(test)]

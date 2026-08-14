@@ -36,7 +36,10 @@ pub use certificates::CertificateServiceAdapter;
 pub use faults::FaultServiceAdapter;
 pub use files::{FileSelection, NativeFileDialog};
 pub use listener_certificates::ManagedListenerCertificateAdapter;
-pub use listener_runtime::ListenerRuntimeAdapter;
+pub use listener_runtime::{
+    BoundSocketDocument, ListenerRuntimeAdapter, SocketDocumentRuleConnection,
+    SocketDocumentRuleConnectionFactory,
+};
 pub use pipeline::{
     RuntimeBodyCodecResolver, RuntimePipelineAdapter, RuntimePipelineProductHooks,
     RuntimeRuleRepository,
