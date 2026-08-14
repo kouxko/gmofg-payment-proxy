@@ -34,6 +34,16 @@ pub enum ErrorCode {
     JsonInvalid,
     RuleInvalid,
     RuleConflictWarning,
+    /// 协议包 ID 或 `SemVer` 不符合稳定身份约束。
+    ProtocolPackageInvalid,
+    /// Document Schema 的身份、字段声明或聚合结构无效。
+    DocumentSchemaInvalid,
+    /// 脚本或调用方访问了 Schema 未声明的字段。
+    DocumentFieldUndeclared,
+    /// 字段已声明，但当前 Frame 尚未给它赋值。
+    DocumentFieldUnassigned,
+    /// 写入值的类型与 Schema 声明不一致。
+    DocumentFieldTypeMismatch,
     BreakpointNotFound,
     BreakpointAlreadyResolved,
     BreakpointClientDisconnected,
@@ -73,6 +83,11 @@ impl ErrorCode {
             Self::JsonInvalid => "JSON_INVALID",
             Self::RuleInvalid => "RULE_INVALID",
             Self::RuleConflictWarning => "RULE_CONFLICT_WARNING",
+            Self::ProtocolPackageInvalid => "PROTOCOL_PACKAGE_INVALID",
+            Self::DocumentSchemaInvalid => "DOCUMENT_SCHEMA_INVALID",
+            Self::DocumentFieldUndeclared => "DOCUMENT_FIELD_UNDECLARED",
+            Self::DocumentFieldUnassigned => "DOCUMENT_FIELD_UNASSIGNED",
+            Self::DocumentFieldTypeMismatch => "DOCUMENT_FIELD_TYPE_MISMATCH",
             Self::BreakpointNotFound => "BREAKPOINT_NOT_FOUND",
             Self::BreakpointAlreadyResolved => "BREAKPOINT_ALREADY_RESOLVED",
             Self::BreakpointClientDisconnected => "BREAKPOINT_CLIENT_DISCONNECTED",
@@ -154,7 +169,7 @@ mod tests {
             serde_json::to_string(&ErrorCode::BodyTooLarge).unwrap(),
             "\"BODY_TOO_LARGE\""
         );
-        let required = [
+        let cases = [
             (ErrorCode::ProxyAlreadyRunning, "PROXY_ALREADY_RUNNING"),
             (ErrorCode::ProxyNotRunning, "PROXY_NOT_RUNNING"),
             (ErrorCode::OperationInProgress, "OPERATION_IN_PROGRESS"),
@@ -180,6 +195,23 @@ mod tests {
             (ErrorCode::JsonInvalid, "JSON_INVALID"),
             (ErrorCode::RuleInvalid, "RULE_INVALID"),
             (ErrorCode::RuleConflictWarning, "RULE_CONFLICT_WARNING"),
+            (
+                ErrorCode::ProtocolPackageInvalid,
+                "PROTOCOL_PACKAGE_INVALID",
+            ),
+            (ErrorCode::DocumentSchemaInvalid, "DOCUMENT_SCHEMA_INVALID"),
+            (
+                ErrorCode::DocumentFieldUndeclared,
+                "DOCUMENT_FIELD_UNDECLARED",
+            ),
+            (
+                ErrorCode::DocumentFieldUnassigned,
+                "DOCUMENT_FIELD_UNASSIGNED",
+            ),
+            (
+                ErrorCode::DocumentFieldTypeMismatch,
+                "DOCUMENT_FIELD_TYPE_MISMATCH",
+            ),
             (ErrorCode::BreakpointNotFound, "BREAKPOINT_NOT_FOUND"),
             (
                 ErrorCode::BreakpointAlreadyResolved,
@@ -203,7 +235,7 @@ mod tests {
             ),
             (ErrorCode::InternalError, "INTERNAL_ERROR"),
         ];
-        for (code, expected) in required {
+        for (code, expected) in cases {
             assert_eq!(code.as_str(), expected);
             assert_eq!(
                 serde_json::to_string(&code).unwrap(),

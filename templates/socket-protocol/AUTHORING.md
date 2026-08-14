@@ -77,7 +77,6 @@ title = "Terminal Command"
 name = "command"
 label = "Command"
 type = "int"
-required = true
 
 [[fields]]
 name = "terminal_id"
@@ -177,7 +176,7 @@ script = "response.rhai"
 encode = "encode_response"
 ```
 
-两个 decode 仍必须返回同一个 `document.toml` 所约束的 Document。方向独有字段可以保持为未赋值的可选字段。
+两个 decode 仍必须返回同一个 `document.toml` 所约束的 Document。方向独有字段在不适用的报文中可以保持未赋值。
 
 ## 6. Display 不要承担解析职责
 
@@ -192,7 +191,7 @@ fn display(document, context) {
 
 Display 没有独立 Listener 开关，而是跟随当前方向的 Encode：Encode 关闭时宿主不调用 Display；Encode 开启时，
 Manifest 声明了 Display 才会调用。Decode 关闭/Encode 开启时 Display 可能收到空 Document，所以应使用 `has()`
-保护可选字段。任何 Display 错误只使应用回退 Hex。
+保护可能未赋值的字段。任何 Display 错误只使应用回退 Hex。
 
 ## 7. 从 ISO 8583 示例改成其他协议
 
@@ -212,7 +211,7 @@ Manifest 声明了 Display 才会调用。Decode 关闭/Encode 开启时 Display
 - ZIP 根目录直接包含 Manifest。
 - 两个 receive Hook 都声明可编译的 frame/decode。
 - ZIP 导入前确认主脚本和所有 `import` 模块都能用标准 Rhai 语法编译；语法错误会直接拒绝导入。
-- 所有 Schema 字段名、类型、required 设置正确。
+- 所有 Schema 字段名、标签和类型设置正确；协议必填条件由 decode/encode 自己校验。
 - 测试过一个 Frame 被拆成多个 TCP chunk。
 - 测试过多个 Frame 一次到达。
 - 测试过空报文、截断报文、超长报文和非法长度。

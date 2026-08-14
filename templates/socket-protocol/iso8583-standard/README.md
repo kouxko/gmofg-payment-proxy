@@ -62,7 +62,7 @@ TCP bytes
 - Listener 明确绑定一个协议包的 `id + version`，协议包之间不做自动识别。
 - Listener 分别配置 Upstream/Downstream 的 `decode_enabled` 与 `encode_enabled`，四个开关互相独立。
 - Decode 关闭/Encode 开启时，encode 收到空的 Schema 绑定 Document；本模板 encode 依赖字段，因此实际使用时应同时开启 Decode。
-- 导入会编译此目录所有声明脚本和模块；任意 Rhai 语法或入口签名错误都会拒绝导入。
+- 导入会编译此目录所有声明脚本和模块；任意 Rhai 语法、入口参数或返回类型错误都会拒绝导入。
 - 应用的版本详情 Dialog 可以查看此模板的 Schema 和入口能力，但不显示 Rhai 源码。
 
 ## 这个模板采用的 ISO 8583 Profile
