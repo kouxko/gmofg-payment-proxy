@@ -15,7 +15,7 @@ pub mod sqlite;
 mod windows_process;
 
 pub use adapters::{
-    AndroidAdbAdapter, ApplicationProxyAdapter, CaptureRepositoryAdapter,
+    AndroidAdbAdapter, ApplicationProxyAdapter, BoundSocketDocument, CaptureRepositoryAdapter,
     CertificateServiceAdapter, FaultServiceAdapter, HeaderBodyCodecResolver,
     InfrastructureServiceBundle, ListenerRuntimeAdapter, NativeFileDialog, ProtectedSecretAdapter,
     ProtocolPackageImportAdapter, ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure,
@@ -23,8 +23,9 @@ pub use adapters::{
     ProtocolPackageStorageErrorCode, ProtocolPackageSummary, ProtocolPackageUsageQueryAdapter,
     ProtocolPackageValidationStatus, RetiredProxyAdapter, RuleRepositoryAdapter,
     RuntimePipelineAdapter, RuntimePipelineProductHooks, RuntimeRuleRepository,
-    SettingsRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter,
-    WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
+    SettingsRepositoryAdapter, SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory,
+    WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
+    WorkspaceRuntimePolicyResolver,
 };
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,

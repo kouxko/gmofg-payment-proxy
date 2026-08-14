@@ -5,9 +5,10 @@ use std::{collections::BTreeSet, sync::Arc, time::Duration};
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, DownstreamClientAuthentication, ProxyListener,
-    ProxyWorkspace, SocketDirection, SocketDocumentRuleDefinition, SocketDownstreamSecurity,
-    SocketDownstreamTlsSettings, SocketPayloadProcessing, SocketRelaySecurity as DomainSecurity,
-    SocketTopology, SocketUpstreamTlsSettings, sort_socket_document_rules,
+    ProxyWorkspace, SocketDirection, SocketDocumentRuleDefinition, SocketDocumentRuleProgram,
+    SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketPayloadProcessing,
+    SocketRelaySecurity as DomainSecurity, SocketTopology, SocketUpstreamTlsSettings,
+    sort_socket_document_rules,
 };
 #[cfg(test)]
 use intercept_proxy_protocol_scripting::ProtocolRuntimeLimits;
@@ -16,7 +17,7 @@ use intercept_proxy_runtime::{SocketDownstreamTlsConfig, SocketRelaySecurity};
 
 use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackageSnapshot;
 
-use super::ListenerRuntimeAdapter;
+use super::{ListenerRuntimeAdapter, SocketDocumentRuleConnectionFactory};
 
 /// 一次 Listener start 冻结的脚本、拓扑、规则、证书引用与资源限制。
 #[derive(Clone)]
@@ -25,7 +26,7 @@ pub(super) struct ScriptedSocketRuntimeSnapshot {
     topology: SocketTopology,
     upstream: DirectionExecutionPlan,
     downstream: DirectionExecutionPlan,
-    rules: Arc<[SocketDocumentRuleDefinition]>,
+    document_rules: SocketDocumentRuleConnectionFactory,
     certificate_references: Arc<[CertificateReference]>,
     security: ScriptedSocketSecuritySnapshot,
     allowed_client_cidrs: Arc<[String]>,
@@ -98,12 +99,30 @@ impl ScriptedSocketRuntimeSnapshot {
             validate_rule_direction(rule, &socket.topology, upstream, downstream)?;
         }
         sort_socket_document_rules(&mut rules);
+        let upstream_rules = compile_rule_program(
+            listener,
+            &scripted.package,
+            package.compiled().schema(),
+            SocketDirection::Upstream,
+            &rules,
+        )?;
+        let downstream_rules = compile_rule_program(
+            listener,
+            &scripted.package,
+            package.compiled().schema(),
+            SocketDirection::Downstream,
+            &rules,
+        )?;
+        let document_rules = SocketDocumentRuleConnectionFactory::new(
+            Arc::new(upstream_rules),
+            Arc::new(downstream_rules),
+        )?;
         Ok(Some(Arc::new(Self {
             package,
             topology: socket.topology.clone(),
             upstream,
             downstream,
-            rules: rules.into(),
+            document_rules,
             certificate_references: selected_certificate_references(workspace, &socket.topology),
             security,
             allowed_client_cidrs: listener.allowed_client_cidrs.clone().into(),
@@ -134,8 +153,35 @@ impl ScriptedSocketRuntimeSnapshot {
     }
 
     #[cfg(test)]
-    pub(super) fn rules(&self) -> &[SocketDocumentRuleDefinition] {
-        &self.rules
+    pub(super) fn rules(&self) -> Vec<&SocketDocumentRuleDefinition> {
+        let mut rules = self
+            .document_rules
+            .program(SocketDirection::Upstream)
+            .rules()
+            .iter()
+            .chain(
+                self.document_rules
+                    .program(SocketDirection::Downstream)
+                    .rules(),
+            )
+            .collect::<Vec<_>>();
+        rules.sort_by(|left, right| {
+            left.priority()
+                .cmp(&right.priority())
+                .then_with(|| left.created_order().cmp(&right.created_order()))
+                .then_with(|| left.rule_id().cmp(&right.rule_id()))
+        });
+        rules
+    }
+
+    #[cfg(test)]
+    pub(super) fn rule_program(&self, direction: SocketDirection) -> &SocketDocumentRuleProgram {
+        self.document_rules.program(direction)
+    }
+
+    /// 返回启动时已编译并冻结的规则连接工厂。
+    pub(super) const fn rule_connections(&self) -> &SocketDocumentRuleConnectionFactory {
+        &self.document_rules
     }
 
     #[cfg(test)]
@@ -162,7 +208,7 @@ impl std::fmt::Debug for ScriptedSocketRuntimeSnapshot {
             .field("topology", &self.topology)
             .field("upstream", &self.upstream)
             .field("downstream", &self.downstream)
-            .field("rule_count", &self.rules.len())
+            .field("document_rules", self.rule_connections())
             .field(
                 "certificate_reference_count",
                 &self.certificate_references.len(),
@@ -259,6 +305,28 @@ impl std::fmt::Debug for ScriptedSocketSecuritySnapshot {
                 .finish(),
         }
     }
+}
+
+fn compile_rule_program(
+    listener: &ProxyListener,
+    package: &intercept_proxy_domain::ProtocolPackageRef,
+    schema: &intercept_proxy_domain::DocumentSchema,
+    direction: SocketDirection,
+    rules: &[SocketDocumentRuleDefinition],
+) -> AppResult<SocketDocumentRuleProgram> {
+    let selected = rules
+        .iter()
+        .filter(|rule| rule.direction() == direction)
+        .cloned()
+        .collect::<Vec<_>>();
+    SocketDocumentRuleProgram::new(
+        listener.id,
+        package.clone(),
+        schema.clone(),
+        direction,
+        selected,
+    )
+    .map_err(AppError::from)
 }
 
 fn validate_rule_direction(

@@ -130,6 +130,14 @@ impl Document {
         Ok(self.values[index].is_some())
     }
 
+    /// 清空当前 Document 的全部字段值，但保留原 Schema 身份、版本、字段顺序和共享关系。
+    ///
+    /// 规则的 `ClearDocument` 动作使用此方法生成同一协议下的空响应骨架。它不会把字段从
+    /// Schema 中删除，因此后续仍可通过 [`Self::set`] 按原声明类型重新赋值。
+    pub fn clear(&mut self) {
+        self.values.fill(None);
+    }
+
     /// 按 Schema 声明顺序遍历所有字段及其可选值。
     ///
     /// 迭代器长度恒等于 `schema().fields().len()`，适合 UI Display 和稳定序列化。
