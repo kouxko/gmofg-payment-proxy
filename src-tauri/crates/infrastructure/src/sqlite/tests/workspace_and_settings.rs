@@ -10,6 +10,8 @@ fn schema_has_no_payload_storage() {
             "certificate_material",
             "certificate_state",
             "protected_secrets",
+            "protocol_package_files",
+            "protocol_packages",
             "rule_state",
             "rules",
             "schema_migrations",

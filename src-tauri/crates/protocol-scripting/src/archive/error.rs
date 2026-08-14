@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::PackageFilePath;
 
-/// 安全 ZIP 读取器的稳定失败分类。
+/// 安全 ZIP 读取与持久化文件恢复边界共用的稳定失败分类。
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ProtocolArchiveErrorCode {
@@ -15,9 +15,9 @@ pub enum ProtocolArchiveErrorCode {
     ArchiveTooLarge,
     /// 输入不是结构完整的单卷 ZIP，或条目读取/校验失败。
     InvalidZip,
-    /// ZIP 中没有任何条目。
+    /// ZIP 或持久化文件集合中没有任何条目。
     EmptyArchive,
-    /// 中央目录声明的条目数超过上限。
+    /// 中央目录声明的条目数或持久化文件行数超过上限。
     TooManyEntries,
     /// 条目原始名称不是 UTF-8。
     NonUtf8Path,
@@ -29,7 +29,7 @@ pub enum ProtocolArchiveErrorCode {
     DuplicatePath,
     /// 两个条目只存在大小写差异，在大小写不敏感文件系统上会冲突。
     CaseConflict,
-    /// 文件与目录层级冲突，例如文件 `scripts` 同时作为 `scripts/main.rhai` 的父目录。
+    /// 文件与目录层级冲突，例如文件 `scripts` 同时作为 `scripts/main.rhai` 的父路径。
     PathTypeConflict,
     /// ZIP 条目是符号链接。
     SymlinkForbidden,
@@ -39,9 +39,9 @@ pub enum ProtocolArchiveErrorCode {
     EncryptedEntry,
     /// 条目使用 Host API v1 未启用的压缩算法。
     UnsupportedCompression,
-    /// 单个解压文件超过上限。
+    /// 单个解压文件或持久化文件内容超过上限。
     FileTooLarge,
-    /// 所有文件累计解压字节超过上限。
+    /// 所有文件累计实际字节超过上限。
     TotalTooLarge,
     /// 单个文件声明的解压/压缩比超过上限。
     CompressionRatioExceeded,
@@ -86,9 +86,10 @@ impl fmt::Display for ProtocolArchiveErrorCode {
     }
 }
 
-/// ZIP 导入阶段可安全返回给上层的脱敏错误。
+/// 协议包导入或恢复阶段可安全返回给上层的脱敏错误。
 ///
-/// `entry_index` 只定位中央目录序号；`path` 仅在原始名称已经通过相对 UTF-8 路径校验后出现。
+/// `entry_index` 定位 ZIP 中央目录序号或恢复输入行序号；`path` 仅在原始名称已经通过相对 UTF-8
+/// 路径校验后出现。
 /// 本类型不保存第三方错误、原始恶意路径、文件内容、绝对路径或临时目录。
 #[derive(Clone, Debug, Eq, Error, PartialEq, Serialize)]
 #[error("协议包 ZIP 校验失败（{code}）")]

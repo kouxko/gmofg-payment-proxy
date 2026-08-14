@@ -32,7 +32,7 @@ pub use archive::{
     MAX_ARCHIVE_BYTES_LIMIT, MAX_ARCHIVE_ENTRIES_LIMIT, MAX_COMPRESSION_RATIO_LIMIT,
     MAX_FILE_BYTES_LIMIT, MAX_PATH_DEPTH_LIMIT, MAX_TOTAL_BYTES_LIMIT, ProtocolArchiveError,
     ProtocolArchiveErrorCode, ProtocolArchiveLimits, ProtocolPackageFiles,
-    read_protocol_package_zip,
+    read_protocol_package_zip, restore_protocol_package_files,
 };
 pub use compiled::CompiledProtocolPackage;
 pub use compiler::{
