@@ -130,6 +130,23 @@ impl Application {
         self.protocol_package_importer.commit_zip(token).await
     }
 
+    /// 关闭已就绪预览时立即释放 pending 容量；无效、过期或已使用 token 均稳定失败。
+    pub async fn protocol_package_import_discard(
+        &self,
+        token: ProtocolPackageImportToken,
+    ) -> AppResult<OperationResultViewModel> {
+        self.protocol_package_importer.discard_zip(token).await?;
+        Ok(OperationResultViewModel {
+            success: true,
+            cancelled: false,
+            message: "待确认的协议包导入已释放。".into(),
+            ui_tone: UiTone::Neutral,
+            entity_id: None,
+            revision: None,
+            requires_restart: false,
+        })
+    }
+
     /// 单独查询精确版本的全部使用者，供详情刷新和删除确认 Dialog 复用。
     pub async fn protocol_package_usage(
         &self,

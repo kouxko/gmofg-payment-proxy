@@ -28,7 +28,7 @@ pub use breakpoint_validation::{BreakpointBodyCodecResolver, BreakpointValidator
 pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket};
 pub use capacity::CapacityLedger;
 pub use configuration::*;
-pub use error::{AppError, AppErrorViewModel, AppResult};
+pub use error::{AppError, AppErrorDiagnosticViewModel, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
 pub use facade::{Application, ApplicationDependencies};
 pub use listeners::InMemoryListenerRuntime;

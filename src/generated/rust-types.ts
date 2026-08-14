@@ -67,7 +67,9 @@ export const commands = {
 	protocolPackageList: () => typedError<ProtocolPackageGroupViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_list")),
 	protocolPackageDetail: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_detail", { packageRef })),
 	protocolPackageImport: () => typedError<{
-	token: ProtocolPackageImportToken,
+	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
+	token: ProtocolPackageImportToken | null,
+	disposition: ProtocolPackageImportDispositionViewModel,
 	package: ProtocolPackageRef,
 	name: string,
 	host_api: number,
@@ -75,6 +77,7 @@ export const commands = {
 	schema: ProtocolPackageSchemaViewModel,
 } | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import")),
 	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
+	protocolPackageImportDiscard: (token: ProtocolPackageImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_discard", { token })),
 	protocolPackageEnable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_enable", { packageRef })),
 	protocolPackageDisable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_disable", { packageRef })),
 	protocolPackageDelete: (packageRef: ProtocolPackageIdentityInput) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_delete", { packageRef })),
@@ -285,6 +288,20 @@ export type AppBootstrapViewModel = {
 	event_cursor: number,
 };
 
+/**
+ *  可安全跨 IPC 展示的导入定位信息。
+ *  所有字符串都必须在进入 Application 前完成校验：`file` 只能是包内相对路径，
+ *  `field` 只能是收敛后的声明字段路径，`entry` 只能是合法脚本函数标识。这里刻意没有
+ *  source、原始第三方错误文本或本机路径字段，避免诊断能力演变成源码泄漏通道。
+ */
+export type AppErrorDiagnosticViewModel = {
+	file: string | null,
+	field: string | null,
+	line: number | null,
+	column: number | null,
+	entry: string | null,
+};
+
 export type AppErrorViewModel = {
 	code: string,
 	message: string,
@@ -293,6 +310,7 @@ export type AppErrorViewModel = {
 	suggested_action: string | null,
 	entity_id: string | null,
 	runtime_epoch: string | null,
+	diagnostic: AppErrorDiagnosticViewModel | null,
 };
 
 /**  TCP/UDP Payload 位翻转配置。 */
@@ -951,12 +969,21 @@ export type ProtocolPackageIdentityInput = {
 	version: string,
 };
 
+/**
+ *  prepare 时针对当前注册表快照得到的权威处置结果。
+ *  commit 仍会在 mutation gate 与 `SQLite` 事务内重新比较，因此这个值用于决定当前预览
+ *  是否可提交，而不是替代最终写入门禁。
+ */
+export type ProtocolPackageImportDispositionViewModel = "new" | "reusable" | "identity_conflict";
+
 /**  原生 ZIP 导入是新安装，还是相同身份和内容的幂等复用。 */
 export type ProtocolPackageImportOutcomeViewModel = "installed" | "reused";
 
 /**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
 export type ProtocolPackageImportPreviewViewModel = {
-	token: ProtocolPackageImportToken,
+	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
+	token: ProtocolPackageImportToken | null,
+	disposition: ProtocolPackageImportDispositionViewModel,
 	package: ProtocolPackageRef,
 	name: string,
 	host_api: number,

@@ -141,6 +141,17 @@ pub enum ProtocolPackageImportOutcomeViewModel {
     Reused,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+/// prepare 时针对当前注册表快照得到的权威处置结果。
+/// commit 仍会在 mutation gate 与 `SQLite` 事务内重新比较，因此这个值用于决定当前预览
+/// 是否可提交，而不是替代最终写入门禁。
+pub enum ProtocolPackageImportDispositionViewModel {
+    New,
+    Reusable,
+    IdentityConflict,
+}
+
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(transparent)]
 /// 一次已验证但未安装的 pending import 随机令牌。
@@ -161,7 +172,9 @@ impl ProtocolPackageImportToken {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。
 pub struct ProtocolPackageImportPreviewViewModel {
-    pub token: ProtocolPackageImportToken,
+    /// 冲突预览没有 token，类型层面保证它不能进入 commit。
+    pub token: Option<ProtocolPackageImportToken>,
+    pub disposition: ProtocolPackageImportDispositionViewModel,
     pub package: ProtocolPackageRef,
     pub name: String,
     pub host_api: u32,

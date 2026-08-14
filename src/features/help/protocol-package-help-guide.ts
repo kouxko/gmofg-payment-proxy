@@ -4,8 +4,8 @@ import type { PageHelpGuide } from "./page-help-types";
 /**
  * 协议包页面的只读操作说明。
  *
- * T16 尚不提供导入、启停或删除入口，因此这里刻意只说明浏览、版本切换和
- * Schema 阅读方式，避免帮助文案承诺尚未交付的管理能力。
+ * T17 只新增由 Rust 原生文件选择器驱动的两阶段 ZIP 导入；启停和删除仍不在
+ * 当前页面交付范围。文案不能暗示 WebView 会读取本机路径、ZIP 字节或脚本源码。
  */
 export const protocolPackageHelpGuide: Record<
   Extract<WorkspacePath, "/protocol-packages">,
@@ -37,6 +37,17 @@ export const protocolPackageHelpGuide: Record<
           "详情左侧列出该协议包的全部已安装版本，默认选择版本列表中的最新版本。",
           "按 Escape、点击关闭按钮或关闭遮罩都可以退出详情。",
           "关闭后焦点会回到刚才打开详情的协议包行，便于继续使用键盘浏览。",
+        ],
+      },
+      {
+        id: "protocol-package-import",
+        title: "导入协议包 ZIP",
+        steps: [
+          "点击“导入协议包 ZIP”后，由桌面应用的原生文件选择器读取文件；页面不会接收本机路径或 ZIP 字节。",
+          "选择文件后等待应用完成 ZIP、Manifest、Document Schema、Rhai 模块和入口的全部校验；此阶段不会安装任何内容。",
+          "校验通过后核对名称、精确 ID 与版本、Host API、能力、Schema 字段数和冲突结果，再明确确认安装或复用。",
+          "校验失败时根据稳定错误码、包内逻辑文件、字段或行列修正协议包；失败不会留下部分安装记录。",
+          "新安装版本默认停用，导入不会自动修改或重绑任何 Listener；后续需要在相应配置任务中显式选择精确版本。",
         ],
       },
       {

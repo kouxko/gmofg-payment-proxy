@@ -224,6 +224,10 @@ impl ProtocolPackageImportPort for FakeProtocolPackageServices {
                 ))
             })
     }
+
+    async fn discard_zip(&self, _: ProtocolPackageImportToken) -> AppResult<()> {
+        Ok(())
+    }
 }
 
 #[async_trait]

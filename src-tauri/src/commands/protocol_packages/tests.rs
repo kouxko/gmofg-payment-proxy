@@ -29,7 +29,7 @@ mod tests {
     use super::{
         protocol_package_delete, protocol_package_detail, protocol_package_disable,
         protocol_package_enable, protocol_package_import, protocol_package_import_commit,
-        protocol_package_list, protocol_package_usage,
+        protocol_package_import_discard, protocol_package_list, protocol_package_usage,
     };
     use crate::app_state::AppState;
 
@@ -94,6 +94,12 @@ fn display(document, context) { "<p>ok</p>" }
                 open: Mutex::new(VecDeque::from([response])),
             }
         }
+
+        fn with_opens(responses: Vec<AppResult<Option<PathBuf>>>) -> Self {
+            Self {
+                open: Mutex::new(responses.into()),
+            }
+        }
     }
 
     impl NativeFileDialog for QueueDialog {
@@ -135,6 +141,7 @@ fn display(document, context) { "<p>ok</p>" }
 
         let preview: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
         assert_eq!(preview["package"], package);
+        assert_eq!(preview["disposition"], "new");
         assert_eq!(preview["schema"]["fields"][0]["name"], "trace_id");
         let imported: Value = invoke_ok(
             &webview,
@@ -190,6 +197,74 @@ fn display(document, context) { "<p>ok</p>" }
         );
         assert_eq!(error.code, "PROTOCOL_PACKAGE_NOT_FOUND");
         assert_eq!(error.entity_id.as_deref(), Some("example-protocol@1.0.0"));
+    }
+
+    #[test]
+    fn import_disposition_discard_and_diagnostics_round_trip_through_real_tauri_ipc() {
+        let fixture = TempDir::new().unwrap();
+        let valid = fixture.path().join("valid.zip");
+        let conflict = fixture.path().join("conflict.zip");
+        let invalid = fixture.path().join("invalid.zip");
+        std::fs::write(&valid, package_zip()).unwrap();
+        std::fs::write(
+            &conflict,
+            package_zip_with_script(&format!("{SCRIPT}\n// different immutable bytes")),
+        )
+        .unwrap();
+        std::fs::write(
+            &invalid,
+            package_zip_with_script("fn frame(reader, context) {\n  let card = ;\n}"),
+        )
+        .unwrap();
+        let app = test_app(
+            fixture.path(),
+            Arc::new(QueueDialog::with_opens(vec![
+                Ok(Some(valid.clone())),
+                Ok(Some(valid)),
+                Ok(Some(conflict)),
+                Ok(Some(invalid.clone())),
+            ])),
+        );
+        let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
+            .build()
+            .unwrap();
+
+        let discarded_preview: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
+        let discarded_token = discarded_preview["token"].clone();
+        let discarded: Value = invoke_ok(
+            &webview,
+            "protocol_package_import_discard",
+            json!({ "token": discarded_token.clone() }),
+        );
+        assert_eq!(discarded["success"], true);
+        assert_eq!(
+            invoke_error(
+                &webview,
+                "protocol_package_import_commit",
+                json!({ "token": discarded_token }),
+            )
+            .code,
+            "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID"
+        );
+
+        let ready: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
+        let _: Value = invoke_ok(
+            &webview,
+            "protocol_package_import_commit",
+            json!({ "token": ready["token"] }),
+        );
+        let conflict_preview: Value =
+            invoke_ok(&webview, "protocol_package_import", json!({}));
+        assert_eq!(conflict_preview["disposition"], "identity_conflict");
+        assert_eq!(conflict_preview["token"], Value::Null);
+
+        let error = invoke_error(&webview, "protocol_package_import", json!({}));
+        let diagnostic = error.diagnostic.expect("safe compiler diagnostic");
+        assert_eq!(diagnostic.file.as_deref(), Some("protocol.rhai"));
+        assert_eq!(diagnostic.line, Some(2));
+        let serialized = serde_json::to_string(&diagnostic).unwrap();
+        assert!(!serialized.contains(invalid.to_string_lossy().as_ref()));
+        assert!(!serialized.contains("let card"));
     }
 
     #[test]
@@ -365,117 +440,7 @@ fn display(document, context) { "<p>ok</p>" }
         }));
     }
 
-    fn test_app(data_dir: &Path, dialog: Arc<dyn NativeFileDialog>) -> tauri::App<MockRuntime> {
-        let host = tauri::async_runtime::block_on(
-            ApplicationHostBuilder::new(
-                data_dir,
-                HostPlatformServices::new(Arc::new(TestSecretProtector), dialog),
-                Arc::new(InterceptProxyProfile),
-            )
-            .build(),
-        )
-        .unwrap();
-        tauri::test::mock_builder()
-            .manage(AppState::new(host))
-            .invoke_handler(tauri::generate_handler![
-                protocol_package_list,
-                protocol_package_detail,
-                protocol_package_import,
-                protocol_package_import_commit,
-                protocol_package_enable,
-                protocol_package_disable,
-                protocol_package_delete,
-                protocol_package_usage,
-            ])
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .unwrap()
-    }
-
-    fn invoke_ok<T: DeserializeOwned>(
-        webview: &tauri::WebviewWindow<MockRuntime>,
-        command: &str,
-        body: Value,
-    ) -> T {
-        tauri::test::get_ipc_response(webview, request(command, body))
-            .unwrap()
-            .deserialize()
-            .unwrap()
-    }
-
-    fn invoke_error(
-        webview: &tauri::WebviewWindow<MockRuntime>,
-        command: &str,
-        body: Value,
-    ) -> AppErrorViewModel {
-        serde_json::from_value(
-            tauri::test::get_ipc_response(webview, request(command, body)).unwrap_err(),
-        )
-        .unwrap()
-    }
-
-    fn request(command: &str, body: Value) -> tauri::webview::InvokeRequest {
-        tauri::webview::InvokeRequest {
-            cmd: command.into(),
-            callback: tauri::ipc::CallbackFn(0),
-            error: tauri::ipc::CallbackFn(1),
-            url: if cfg!(any(windows, target_os = "android")) {
-                "http://tauri.localhost"
-            } else {
-                "tauri://localhost"
-            }
-            .parse()
-            .unwrap(),
-            body: InvokeBody::Json(body),
-            headers: HeaderMap::default(),
-            invoke_key: tauri::test::INVOKE_KEY.to_owned(),
-        }
-    }
-
-    fn assert_no_source_fields(value: &Value) {
-        const FORBIDDEN: &[&str] = &[
-            "source",
-            "script",
-            "script_content",
-            "ast",
-            "absolute_path",
-            "path",
-            "zip",
-            "zip_bytes",
-            "files",
-            "contents",
-        ];
-        match value {
-            Value::Object(object) => {
-                for (key, nested) in object {
-                    assert!(!FORBIDDEN.contains(&key.as_str()), "forbidden key: {key}");
-                    assert_no_source_fields(nested);
-                }
-            }
-            Value::Array(items) => items.iter().for_each(assert_no_source_fields),
-            _ => {}
-        }
-    }
-
-    fn unused_local_port() -> u16 {
-        std::net::TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port()
-    }
-
-    fn package_zip() -> Vec<u8> {
-        let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
-        for (path, contents) in [
-            ("manifest.toml", MANIFEST.as_bytes()),
-            ("document.toml", SCHEMA.as_bytes()),
-            ("protocol.rhai", SCRIPT.as_bytes()),
-        ] {
-            archive
-                .start_file(path, SimpleFileOptions::default())
-                .unwrap();
-            archive.write_all(contents).unwrap();
-        }
-        archive.finish().unwrap().into_inner()
-    }
+    #[path = "support.rs"]
+    mod support;
+    use support::*;
 }

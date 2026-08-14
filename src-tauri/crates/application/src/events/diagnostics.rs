@@ -255,6 +255,7 @@ mod tests {
             suggested_action: None,
             entity_id: Some("entity-1".into()),
             runtime_epoch: None,
+            diagnostic: None,
         })
     }
 
