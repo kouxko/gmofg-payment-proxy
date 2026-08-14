@@ -4,13 +4,16 @@
 //! 数据库、进程或 UI。这样现有 Direct relay 不需要依赖或初始化脚本引擎；只有选择 Scripted 的
 //! Listener 才会由外层基础设施显式构造本 crate 的对象。
 //!
-//! T05 先冻结三个不会依赖具体脚本引擎的基础契约：不可伪造的编译产物句柄、稳定运行时错误和
-//! 受校验资源限制。Manifest、ZIP 与 Rhai 实现分别属于后续任务，避免空壳依赖提前进入构建图。
+//! 当前导入链路会在内存中依次完成 ZIP 限额读取、Manifest/Schema 解析、包内模块解析、Rhai
+//! 语法编译和入口签名校验。只有整条链路全部成功，才会产生 [`CompiledProtocolPackage`]；调用方
+//! 因而无法把“只解析了一半”的协议包误当成可执行对象。脚本执行和 Host Document/Context API
+//! 仍由后续运行时任务负责，本 crate 在这一阶段不会执行协议入口函数。
 
 #![deny(missing_docs)]
 
 mod archive;
 mod compiled;
+mod compiler;
 mod declaration_name;
 mod error;
 mod limits;
@@ -28,6 +31,10 @@ pub use archive::{
     read_protocol_package_zip,
 };
 pub use compiled::CompiledProtocolPackage;
+pub use compiler::{
+    ProtocolPackageCompilationError, ProtocolPackageCompiler, ProtocolScriptCompileError,
+    ProtocolScriptCompileErrorCode,
+};
 pub use declaration_name::{
     MAX_PACKAGE_FILE_PATH_BYTES, MAX_PROTOCOL_FUNCTION_NAME_BYTES, PackageFilePath,
     ProtocolFunctionName,

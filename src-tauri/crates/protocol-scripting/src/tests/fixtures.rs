@@ -2,6 +2,13 @@ pub(super) const TEMPLATE_MANIFEST: &str =
     include_str!("../../../../../templates/socket-protocol/iso8583-standard/manifest.toml");
 pub(super) const TEMPLATE_SCHEMA: &str =
     include_str!("../../../../../templates/socket-protocol/iso8583-standard/document.toml");
+pub(super) const TEMPLATE_PROTOCOL: &[u8] =
+    include_bytes!("../../../../../templates/socket-protocol/iso8583-standard/protocol.rhai");
+pub(super) const TEMPLATE_DISPLAY: &[u8] =
+    include_bytes!("../../../../../templates/socket-protocol/iso8583-standard/display.rhai");
+pub(super) const TEMPLATE_LIBRARY: &[u8] = include_bytes!(
+    "../../../../../templates/socket-protocol/iso8583-standard/libraries/iso8583.rhai"
+);
 
 pub(super) fn minimal_manifest() -> String {
     r#"
