@@ -1,35 +1,27 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Alert, Button, Card, Input, Label, ListBox, NumberField, Select, Switch } from "@heroui/react";
+import { Alert, Card, Label, ListBox, NumberField, Select } from "@heroui/react";
 import type {
   CertificateReference,
-  DownstreamClientAuthentication,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamConnectionTestViewModel,
-  SocketDownstreamTlsSettings,
-  SocketRelaySecurity,
   SocketRelaySettings,
-  SocketRelayTopology,
-  SocketUpstreamTlsSettings,
 } from "@/generated/rust-types";
 import {
-  CertificateDetailPanel,
-  CertificateReferenceSelect,
-  ConnectionTestResult,
-} from "./fixed-server-tls-fields";
-import { ImportIdentityModal, ImportPemModal, ImportTrustModal } from "./fixed-server-tls-import-modals";
-import {
-  changeSocketSecurity,
-  socketDownstreamTls,
-  socketRelayTopology,
-  socketUpstreamTls,
-} from "./listener-data-plane";
+  setProcessingMode,
+  setSocketTopology,
+} from "./socket-listener-model";
+import { SocketProcessingCard, type ProtocolCatalogState } from "./socket-processing-card";
+import { SocketAppSecurityCard, SocketServerCard } from "./socket-security-cards";
 
 type Props = {
   settings: SocketRelaySettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
+  protocolCatalog: ProtocolCatalogState;
+  locked: boolean;
+  fieldErrors?: Record<string, string[]>;
   busy: boolean;
   testing: boolean;
   testResult?: ListenerUpstreamConnectionTestViewModel;
@@ -42,413 +34,105 @@ type Props = {
   onTest: () => Promise<void>;
 };
 
-const modes: Array<{ id: SocketRelaySecurity["mode"]; label: string }> = [
-  { id: "transparent", label: "Transparent（TCP → TCP）" },
-  { id: "tcp_to_tls", label: "TCP → TLS" },
-  { id: "tls_to_tcp", label: "TLS → TCP" },
-  { id: "tls_to_tls", label: "TLS → TLS" },
-];
-
 export function SocketListenerSettings(props: Props): ReactNode {
-  const relay = socketRelayTopology(props.settings);
-  if (!relay) {
-    return <LocalResponderUnavailable maximumConnections={props.settings.maximum_connections} />;
-  }
-  return <RelaySocketListenerSettings {...props} relay={relay} />;
-}
-
-function LocalResponderUnavailable({ maximumConnections }: { maximumConnections: number }): ReactNode {
-  return <div className="col-span-2 space-y-4 max-[700px]:col-span-1">
-    <Alert status="warning">
-      <Alert.Indicator />
-      <Alert.Content>
-        <Alert.Title>LocalResponder 数据面将在后续任务接入</Alert.Title>
-        <Alert.Description>
-          当前版本可以安全读取此配置，但不会读取或探测 Server 上游，也不能启动运行。
-          当前最大并发连接数为 {maximumConnections}。
-        </Alert.Description>
-      </Alert.Content>
-    </Alert>
-  </div>;
-}
-
-type RelayProps = Props & { relay: SocketRelayTopology };
-
-function RelaySocketListenerSettings(props: RelayProps): ReactNode {
-  const [modal, setModal] = useState<
-    "downstream-identity" | "downstream-trust" | "upstream-identity" | "upstream-trust"
-  >();
-  const [label, setLabel] = useState("Socket TLS 证书");
-  const [password, setPassword] = useState("");
-  const downstream = socketDownstreamTls(props.relay.security);
-  const upstream = socketUpstreamTls(props.relay.security);
-
-  function changeRelay(changes: Partial<SocketRelayTopology>) {
-    props.onChange({
-      topology: {
-        mode: "relay",
-        settings: { ...props.relay, ...changes },
-      },
-    });
-  }
-
+  const [announcement, setAnnouncement] = useState("");
+  const apply = (settings: SocketRelaySettings) => props.onChange(settings);
+  // 旧 Workspace 可能尚未序列化 processing；界面按向后兼容的 Direct 解释。
+  const processingMode = props.settings.processing?.mode ?? "direct";
+  const topologyMode = props.settings.topology.mode;
   return (
     <div className="col-span-2 space-y-4 max-[700px]:col-span-1">
+      {props.locked && (
+        <Alert status="warning"><Alert.Indicator /><Alert.Content>
+          <Alert.Title>运行快照已锁定</Alert.Title>
+          <Alert.Description>停止当前 Listener 后才能修改模式、拓扑、地址、证书、协议包和处理开关。</Alert.Description>
+        </Alert.Content></Alert>
+      )}
+      <SocketFieldErrors errors={props.fieldErrors} />
       <Card>
-        <Card.Header>
-          <Card.Title>Socket 上游目标</Card.Title>
-          <Card.Description>
-            按原始字节双向转发，不解析 HTTP 方法、Header、正文或 query。
-          </Card.Description>
+        <Card.Header><Card.Title>1. Socket 模式</Card.Title>
+          <Card.Description>Direct 透明转发完整字节；Scripted 才加载精确协议包、Frame、Document 与规则。</Card.Description>
         </Card.Header>
-        <Card.Content className="grid grid-cols-2 gap-4 max-[700px]:grid-cols-1">
-          <div className="grid gap-1">
-            <Label>上游主机</Label>
-            <Input
-              aria-label="Socket 上游主机"
-              value={props.relay.upstream.host}
-              onChange={(event) => changeRelay({
-                upstream: { ...props.relay.upstream, host: event.target.value },
-              })}
-            />
-          </div>
-          <SocketNumberField
-            label="Socket 上游端口"
-            value={props.relay.upstream.port}
-            maximum={65535}
-            onChange={(port) => changeRelay({ upstream: { ...props.relay.upstream, port } })}
-          />
-          <SocketNumberField
-            label="最大并发连接"
-            value={props.settings.maximum_connections}
-            maximum={5000}
-            onChange={(maximum_connections) => props.onChange({ maximum_connections })}
-          />
-          <Select
-            aria-label="Socket 安全模式"
-            selectedKey={props.relay.security.mode}
-            onSelectionChange={(key) => changeRelay({
-              security: changeSocketSecurity(
-                String(key) as SocketRelaySecurity["mode"],
-                props.relay.security,
-              ),
-            })}
-          >
-            <Label>安全桥接模式</Label>
-            <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
-            <Select.Popover><ListBox>
-              {modes.map((mode) => (
-                <ListBox.Item key={mode.id} id={mode.id} textValue={mode.label}>{mode.label}</ListBox.Item>
-              ))}
-            </ListBox></Select.Popover>
+        <Card.Content className="grid gap-4 md:grid-cols-3">
+          <Select aria-label="Socket 数据处理模式" selectedKey={processingMode} isDisabled={props.locked}
+            onSelectionChange={(key) => {
+              if (key !== "direct" && key !== "scripted") return;
+              apply(setProcessingMode(props.settings, key));
+              setAnnouncement(key === "direct"
+                ? "已切换 Direct；已恢复 Relay 并关闭脚本处理。"
+                : "已切换 Scripted；请选择精确协议包并配置方向能力。");
+            }}>
+            <Label>数据处理</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+            <Select.Popover><ListBox><ListBox.Item id="direct" textValue="Direct">Direct</ListBox.Item><ListBox.Item id="scripted" textValue="Scripted">Scripted</ListBox.Item></ListBox></Select.Popover>
           </Select>
+          <Select aria-label="Socket 连接拓扑" selectedKey={topologyMode} isDisabled={props.locked}
+            onSelectionChange={(key) => {
+              if (key !== "relay" && key !== "local_responder") return;
+              apply(setSocketTopology(props.settings, key));
+              setAnnouncement(key === "local_responder"
+                ? "已切换 LocalResponder；已移除远端目标并启用 Scripted。"
+                : "已切换 Relay；请配置远端目标。");
+            }}>
+            <Label>连接拓扑</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+            <Select.Popover><ListBox><ListBox.Item id="relay" textValue="Relay">Relay</ListBox.Item><ListBox.Item id="local_responder" textValue="LocalResponder">LocalResponder</ListBox.Item></ListBox></Select.Popover>
+          </Select>
+          <NumberField aria-label="Socket 最大并发连接" minValue={1} maxValue={5000}
+            value={props.settings.maximum_connections} isDisabled={props.locked}
+            onChange={(maximum_connections) => props.onChange({ maximum_connections })}>
+            <Label>最大并发连接</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
+          </NumberField>
         </Card.Content>
       </Card>
-
-      {props.relay.security.mode === "transparent" && (
-        <Alert status="accent">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>Transparent：TLS 与明文均保持 opaque</Alert.Title>
-            <Alert.Description>
-              Relay 不终止 TLS，也不读取应用协议；双向字节保持 opaque，
-              仅记录连接数和方向字节数。
-            </Alert.Description>
-          </Alert.Content>
-        </Alert>
+      {announcement && <p role="status" aria-live="polite" className="text-sm text-[var(--telemetry-muted)]">
+        {announcement}
+      </p>}
+      {/* 锁状态变化时重建证书卡，可立即关闭已打开的导入 Dialog，防止运行快照锁被绕过。 */}
+      <SocketAppSecurityCard key={`app-security-${props.locked}`} settings={props.settings} certificateReferences={props.certificateReferences}
+        certificateDetails={props.certificateDetails} locked={props.locked} busy={props.busy}
+        onChange={apply} onImportIdentity={props.onImportDownstreamServerIdentity}
+        onImportTrust={props.onImportDownstreamClientTrust} />
+      {topologyMode === "relay" && <SocketServerCard key={`server-security-${props.locked}`} settings={props.settings} certificateReferences={props.certificateReferences}
+        certificateDetails={props.certificateDetails} locked={props.locked} busy={props.busy}
+        testing={props.testing} testResult={props.testResult} testError={props.testError}
+        onChange={apply} onImportIdentity={props.onImportClientIdentity}
+        onImportTrust={props.onImportServerTrust} onTest={props.onTest} />}
+      {processingMode === "direct" ? (
+        <Card><Card.Header><Card.Title>4. Direct 字节转发</Card.Title>
+          <Card.Description>不加载 Rhai、不切分 Frame、不生成 Document，也不执行 Socket Document 规则或 Display。</Card.Description>
+        </Card.Header></Card>
+      ) : (
+        <SocketProcessingCard settings={props.settings} catalog={props.protocolCatalog}
+          locked={props.locked} onChange={apply} />
       )}
-
-      {downstream && (
-        <DownstreamSocketTls
-          tls={downstream}
-          references={props.certificateReferences}
-          details={props.certificateDetails}
-          busy={props.busy}
-          onChange={(next) => changeRelay({
-            security: replaceDownstream(props.relay.security, next),
-          })}
-          onImportIdentity={() => openModal("downstream-identity", "Socket 服务端身份")}
-          onImportTrust={() => openModal("downstream-trust", "Socket 客户端 CA")}
-        />
-      )}
-      {upstream && (
-        <UpstreamSocketTls
-          tls={upstream}
-          references={props.certificateReferences}
-          details={props.certificateDetails}
-          busy={props.busy}
-          onChange={(next) => changeRelay({
-            security: replaceUpstream(props.relay.security, next),
-          })}
-          onImportIdentity={() => openModal("upstream-identity", "Socket 上游客户端身份")}
-          onImportTrust={() => openModal("upstream-trust", "Socket 上游 CA")}
-        />
-      )}
-
-      <ConnectionProbe {...props} relay={props.relay} />
-      {modal && renderImportModal()}
     </div>
   );
-
-  function openModal(next: NonNullable<typeof modal>, nextLabel: string) {
-    setLabel(nextLabel);
-    setModal(next);
-  }
-
-  function closeModal(open: boolean) {
-    if (!open) setModal(undefined);
-  }
-
-  async function runImport(action: () => Promise<boolean>) {
-    if (!(await action())) return;
-    setPassword("");
-    setModal(undefined);
-  }
-
-  function renderImportModal() {
-    if (modal === "upstream-identity") {
-      return <ImportIdentityModal open busy={props.busy} label={label} password={password}
-        onOpenChange={closeModal} onLabelChange={setLabel} onPasswordChange={setPassword}
-        onImport={() => runImport(() => props.onImportClientIdentity(label, password))} />;
-    }
-    if (modal === "upstream-trust") {
-      return <ImportTrustModal open busy={props.busy} label={label} onOpenChange={closeModal}
-        onLabelChange={setLabel} onImport={() => runImport(() => props.onImportServerTrust(label))} />;
-    }
-    const identity = modal === "downstream-identity";
-    return <ImportPemModal open busy={props.busy} label={label} onOpenChange={closeModal}
-      onLabelChange={setLabel} title={identity ? "导入 Socket 服务端身份" : "导入 Socket 客户端 CA"}
-      description={identity
-        ? "选择同时包含服务端证书链与匹配私钥的 PEM identity。"
-        : "选择用于验证下游客户端证书的 CA（CER / CRT / PEM / DER）。"}
-      detail="文件会通过系统对话框读取，校验后保存为受保护引用。"
-      buttonLabel={identity ? "选择服务端身份 PEM" : "选择客户端 CA"}
-      onImport={() => runImport(() => identity
-        ? props.onImportDownstreamServerIdentity(label)
-        : props.onImportDownstreamClientTrust(label))} />;
-  }
 }
 
-function DownstreamSocketTls({ tls, references, details, busy, onChange, onImportIdentity, onImportTrust }: {
-  tls: SocketDownstreamTlsSettings;
-  references: CertificateReference[];
-  details: ListenerCertificateDetailViewModel[];
-  busy: boolean;
-  onChange: (tls: SocketDownstreamTlsSettings) => void;
-  onImportIdentity: () => void;
-  onImportTrust: () => void;
-}): ReactNode {
-  const identities = references.filter((item) => item.kind === "reverse_server_identity");
-  const trusts = references.filter((item) => item.kind === "downstream_client_trust");
-  const authentication = tls.client_authentication;
-  const identity = identities.find((item) => item.id === tls.server_identity);
-  const trustId = authentication.mode === "disabled" ? undefined : authentication.trust;
-  const trust = trusts.find((item) => item.id === trustId);
-  return <Card><Card.Header><Card.Title>客户端 → Relay TLS</Card.Title>
-    <Card.Description>
-      Relay 终止下游 TLS，因此必须配置服务端 PEM identity；mTLS 客户端 CA 可选。
-    </Card.Description>
-  </Card.Header><Card.Content className="space-y-4">
-    <CertificateRow label="Socket 服务端身份" value={tls.server_identity || null}
-      emptyLabel="请选择服务端 PEM identity" references={identities} button="导入服务端身份 PEM"
-      busy={busy}
-      onChange={(server_identity) => onChange({
-        ...tls,
-        server_identity: server_identity ?? "",
-      })}
-      onImport={onImportIdentity} />
-    <CertificateDetailPanel
-      reference={identity}
-      detail={detail(details, identity?.id)}
-      emptyText="尚未选择服务端身份。"
-    />
-    <ClientAuthentication value={authentication} trusts={trusts}
-      onChange={(client_authentication) => onChange({ ...tls, client_authentication })} />
-    {authentication.mode !== "disabled" && <>
-      <CertificateRow
-        label="Socket 下游客户端 CA"
-        value={trustId ?? null}
-        emptyLabel="请选择客户端 CA"
-        references={trusts}
-        button="导入下游客户端 CA"
-        busy={busy}
-        onChange={(nextTrust) => onChange({
-          ...tls,
-          client_authentication: authentication.mode === "required"
-            ? { mode: "required", trust: nextTrust ?? "" }
-            : { mode: "optional", trust: nextTrust ?? "" },
-        })}
-        onImport={onImportTrust}
-      />
-      <CertificateDetailPanel
-        reference={trust}
-        detail={detail(details, trust?.id)}
-        emptyText="尚未选择客户端 CA。"
-      />
-    </>}
-  </Card.Content></Card>;
-}
-
-function UpstreamSocketTls({ tls, references, details, busy, onChange, onImportIdentity, onImportTrust }: {
-  tls: SocketUpstreamTlsSettings;
-  references: CertificateReference[];
-  details: ListenerCertificateDetailViewModel[];
-  busy: boolean;
-  onChange: (tls: SocketUpstreamTlsSettings) => void;
-  onImportIdentity: () => void;
-  onImportTrust: () => void;
-}): ReactNode {
-  const trusts = references.filter((item) => item.kind === "upstream_server_trust");
-  const identities = references.filter((item) => item.kind === "upstream_client_identity");
-  const trust = trusts.find((item) => item.id === tls.server_trust);
-  const identity = identities.find((item) => item.id === tls.client_identity);
-  return <Card><Card.Header><Card.Title>Relay → Server TLS</Card.Title>
-    <Card.Description>Relay 建立上游 TLS，可绑定私有 CA 和可选 mTLS 客户端身份。</Card.Description>
-  </Card.Header><Card.Content className="space-y-4">
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--telemetry-line)] p-3">
-      <span>校验上游 Server 主机名</span>
-      <Switch aria-label="校验 Socket 上游主机名" isSelected={tls.verify_hostname}
-        onChange={(verify_hostname) => onChange({ ...tls, verify_hostname })}>
-        <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control></Switch.Content>
-      </Switch>
-    </div>
-    <CertificateRow
-      label="Socket 上游 Server CA"
-      value={tls.server_trust}
-      emptyLabel="使用系统信任根"
-      references={trusts}
-      button="导入上游 Server CA"
-      busy={busy}
-      onChange={(server_trust) => onChange({ ...tls, server_trust })}
-      onImport={onImportTrust}
-    />
-    <CertificateDetailPanel
-      reference={trust}
-      detail={detail(details, trust?.id)}
-      emptyText="当前使用系统信任根。"
-    />
-    <CertificateRow
-      label="Socket 上游客户端身份"
-      value={tls.client_identity}
-      emptyLabel="不提供客户端身份"
-      references={identities}
-      button="导入上游客户端身份"
-      busy={busy}
-      onChange={(client_identity) => onChange({ ...tls, client_identity })}
-      onImport={onImportIdentity}
-    />
-    <CertificateDetailPanel
-      reference={identity}
-      detail={detail(details, identity?.id)}
-      emptyText="当前不提供 mTLS 客户端身份。"
-    />
-  </Card.Content></Card>;
-}
-
-function CertificateRow({ label, value, emptyLabel, references, button, busy, onChange, onImport }: {
-  label: string; value: string | null; emptyLabel: string; references: CertificateReference[];
-  button: string; busy: boolean; onChange: (value: string | null) => void; onImport: () => void;
-}): ReactNode {
-  return <div className={[
-    "grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2",
-    "max-[620px]:grid-cols-1",
-  ].join(" ")}>
-    <CertificateReferenceSelect
-      label={label}
-      value={value}
-      emptyLabel={emptyLabel}
-      references={references}
-      onChange={onChange}
-    />
-    <Button variant="outline" isDisabled={busy} onPress={onImport}>{button}</Button>
-  </div>;
-}
-
-function ClientAuthentication({ value, trusts, onChange }: {
-  value: DownstreamClientAuthentication;
-  trusts: CertificateReference[];
-  onChange: (value: DownstreamClientAuthentication) => void;
-}): ReactNode {
-  const trust = value.mode === "disabled" ? trusts[0]?.id ?? "" : value.trust;
-  return <Select aria-label="Socket 下游客户端认证" selectedKey={value.mode}
-    onSelectionChange={(key) => {
-      onChange(clientAuthenticationFor(String(key), trust));
-    }}>
-    <Label>下游客户端证书要求</Label>
-    <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
-    <Select.Popover><ListBox>
-      <ListBox.Item id="disabled">不要求客户端证书</ListBox.Item>
-      <ListBox.Item id="optional">客户端证书可选</ListBox.Item>
-      <ListBox.Item id="required">必须验证客户端证书</ListBox.Item>
-    </ListBox></Select.Popover>
-  </Select>;
-}
-
-function ConnectionProbe(props: RelayProps): ReactNode {
-  const mode = modes.find((item) => item.id === props.relay.security.mode)?.label;
-  return <Card><Card.Content className="space-y-3 p-4">
-    <div className="flex flex-wrap items-center gap-3">
-      <Button variant="outline" isDisabled={props.busy} onPress={() => void props.onTest()}>
-        {props.testing ? "正在探测 Socket 上游…" : "测试 Socket 上游连接"}
-      </Button>
-      <span className="text-xs text-[var(--telemetry-muted)]">
-        真实建立 TCP；需要上游 TLS 的模式同时返回握手证据。
-      </span>
-    </div>
-    {props.testResult && <><p className="text-xs text-[var(--telemetry-muted)]">桥接：{mode}</p>
-      <ConnectionTestResult
-        result={props.testResult}
-        showTlsDetails={Boolean(socketUpstreamTls(props.relay.security))}
-      /></>}
-    {props.testError && <Alert status="danger"><Alert.Indicator /><Alert.Content>
-      <Alert.Title>Socket 上游连接失败</Alert.Title><Alert.Description>{props.testError}</Alert.Description>
-    </Alert.Content></Alert>}
-  </Card.Content></Card>;
-}
-
-function SocketNumberField({ label, value, maximum, onChange }: {
-  label: string; value: number; maximum: number; onChange: (value: number) => void;
-}): ReactNode {
-  return <NumberField aria-label={label} minValue={0} maxValue={maximum} value={value} onChange={onChange}>
-    <Label>{label}</Label><NumberField.Group><NumberField.DecrementButton />
-      <NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
-  </NumberField>;
-}
-
-function replaceDownstream(
-  security: SocketRelaySecurity,
-  downstream_tls: SocketDownstreamTlsSettings,
-): SocketRelaySecurity {
-  return security.mode === "tls_to_tls"
-    ? { ...security, downstream_tls }
-    : { mode: "tls_to_tcp", downstream_tls };
-}
-
-function replaceUpstream(
-  security: SocketRelaySecurity,
-  upstream_tls: SocketUpstreamTlsSettings,
-): SocketRelaySecurity {
-  return security.mode === "tls_to_tls"
-    ? { ...security, upstream_tls }
-    : { mode: "tcp_to_tls", upstream_tls };
-}
-
-function clientAuthenticationFor(
-  mode: string,
-  trust: string,
-): DownstreamClientAuthentication {
-  switch (mode) {
-    case "required":
-    case "optional":
-      return { mode, trust };
-    default:
-      return { mode: "disabled" };
-  }
-}
-
-function detail(
-  details: ListenerCertificateDetailViewModel[],
-  id?: string,
-): ListenerCertificateDetailViewModel | undefined {
-  return details.find((item) => item.reference_id === id);
+/**
+ * Rust 返回稳定字段路径；这里保留原路径和消息，同时把错误放到用户实际操作的
+ * 拓扑、精确包、方向能力或规则类别中，不从自然语言猜测修复动作。
+ */
+function SocketFieldErrors({ errors }: { errors?: Record<string, string[]> }): ReactNode {
+  const groups = [
+    { label: "Socket 拓扑", tokens: ["topology", "downstream_security"] },
+    // 规则路径也可能含 package/schema，必须先归入 Document 规则而不是包绑定。
+    { label: "Document 规则", tokens: ["socket_rules", "rule"] },
+    { label: "精确协议包", tokens: ["package", "schema"] },
+    { label: "方向能力", tokens: ["capability", "decode_enabled", "encode_enabled", "processing"] },
+  ];
+  const entries = Object.entries(errors ?? {});
+  const matched = new Set<string>();
+  const cards = groups.flatMap((group) => {
+    const fields = entries.filter(([path]) => !matched.has(path)
+      && group.tokens.some((token) => path.toLowerCase().includes(token)));
+    fields.forEach(([path]) => matched.add(path));
+    return fields.length > 0 ? [{ ...group, fields }] : [];
+  });
+  const remaining = entries.filter(([path]) => path.includes("data_plane.settings") && !matched.has(path));
+  if (remaining.length > 0) cards.push({ label: "Socket 配置", tokens: [], fields: remaining });
+  return <>{cards.map((group) => <Alert key={group.label} status="danger">
+    <Alert.Indicator /><Alert.Content><Alert.Title>{group.label}需要修正</Alert.Title>
+      <Alert.Description>{group.fields.map(([path, messages]) => `${path}: ${messages.join("，")}`).join("；")}</Alert.Description>
+    </Alert.Content>
+  </Alert>)}</>;
 }

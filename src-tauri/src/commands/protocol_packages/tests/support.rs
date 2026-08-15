@@ -14,6 +14,7 @@ pub(super) fn test_app(data_dir: &Path, dialog: Arc<dyn NativeFileDialog>) -> ta
         .manage(AppState::new(host))
         .invoke_handler(tauri::generate_handler![
             protocol_package_list,
+            listener_protocol_package_catalog,
             protocol_package_detail,
             protocol_package_import,
             protocol_package_import_commit,

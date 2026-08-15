@@ -57,6 +57,15 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackageServices {
         &self,
         packages: &[ProtocolPackageRef],
     ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        self.installed_preflight_calls
+            .fetch_add(1, Ordering::SeqCst);
+        if self.block_installed_preflight.load(Ordering::SeqCst) {
+            self.installed_preflight_entered.notify_one();
+            self.continue_installed_preflight.notified().await;
+        }
+        if let Some(error) = self.failures.lock().installed_preflight.clone() {
+            return Err(error);
+        }
         self.preflight(packages, |package| package)
     }
 

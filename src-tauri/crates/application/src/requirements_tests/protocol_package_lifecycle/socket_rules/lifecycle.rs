@@ -252,6 +252,12 @@ async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_rul
         .await
         .unwrap_err();
     assert_eq!(error_code(&error), "PROTOCOL_PACKAGE_CAPABILITY_MISMATCH");
+    assert!(
+        error
+            .view_model
+            .field_errors
+            .contains_key("listener.data_plane.socket.processing")
+    );
     assert_eq!(
         workspaces.get(workspace.id).await.unwrap().revision,
         workspace.revision

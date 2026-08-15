@@ -82,7 +82,7 @@ describe("统一代理监听编辑器", () => {
     const user = userEvent.setup();
     render(<ListenersView />);
 
-    await user.click(await screen.findByRole("button", { name: "导入上游 Server CA" }));
+    await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
 

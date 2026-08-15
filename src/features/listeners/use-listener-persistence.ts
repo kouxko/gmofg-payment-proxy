@@ -22,6 +22,7 @@ export function useListenerPersistence({
   selected,
   status,
   statusKnown,
+  snapshotLocked,
   pending,
   hasUnsavedChanges,
   leases,
@@ -36,6 +37,7 @@ export function useListenerPersistence({
   selected?: ProxyListener;
   status?: ListenerMonitorRowViewModel;
   statusKnown: boolean;
+  snapshotLocked: boolean;
   pending?: ListenerPending;
   hasUnsavedChanges: boolean;
   leases: ReturnType<typeof useDraftCertificateLeases>;
@@ -56,7 +58,7 @@ export function useListenerPersistence({
   }
 
   async function save() {
-    if (!workspace || !selected || pending) return;
+    if (!workspace || !selected || snapshotLocked || pending) return;
     await runPending("save", async () => {
       const result = await validateListener(workspace, selected);
       setValidation(result);

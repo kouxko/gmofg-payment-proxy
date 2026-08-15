@@ -438,6 +438,12 @@ async fn disabled_or_fresh_compile_failure_is_rejected_before_listener_runtime_s
         .await
         .unwrap_err();
     assert_eq!(error_code(&error), "PROTOCOL_PACKAGE_DISABLED");
+    assert!(
+        error
+            .view_model
+            .field_errors
+            .contains_key("listener.data_plane.socket.processing.package")
+    );
     assert!(runtime.statuses().await.unwrap().is_empty());
 
     services.insert(record(target.clone(), true));
@@ -452,5 +458,11 @@ async fn disabled_or_fresh_compile_failure_is_rejected_before_listener_runtime_s
         .await
         .unwrap_err();
     assert_eq!(error_code(&error), "SCRIPT_INVALID");
+    assert!(
+        error
+            .view_model
+            .field_errors
+            .contains_key("listener.data_plane.socket.processing.package")
+    );
     assert!(runtime.statuses().await.unwrap().is_empty());
 }

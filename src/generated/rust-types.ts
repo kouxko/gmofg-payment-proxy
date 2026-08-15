@@ -65,6 +65,7 @@ export const commands = {
 	listenerTestUpstreamConnection: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamConnectionTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_connection", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	listenerTestUpstreamTls: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	protocolPackageList: () => typedError<ProtocolPackageGroupViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_list")),
+	listenerProtocolPackageCatalog: () => typedError<ListenerProtocolPackageCatalogViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_protocol_package_catalog")),
 	protocolPackageDetail: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_detail", { packageRef })),
 	protocolPackageImport: () => typedError<{
 	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
@@ -885,6 +886,31 @@ export type ListenerOverviewViewModel = {
 	active_count: number,
 	faulted_count: number,
 	rows: ListenerMonitorRowViewModel[],
+};
+
+/**
+ *  Listener 协议包选择器的一次权威目录快照。
+ *
+ *  `options` 只包含当前可选版本；停用、历史校验无效、无法由当前 Host 描述或返回错包
+ *  描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
+ */
+export type ListenerProtocolPackageCatalogViewModel = {
+	options: ListenerProtocolPackageOptionViewModel[],
+	installed_version_count: number,
+	unavailable_version_count: number,
+};
+
+/**
+ *  Listener 编辑器可以绑定的一个精确协议包版本。
+ *
+ *  该模型只由 Rust 在读取启用状态、最近校验结果并重新取得当前编译描述后构造。前端不得
+ *  根据 Host API 数字猜测兼容性，也不需要逐版本发起详情查询。
+ */
+export type ListenerProtocolPackageOptionViewModel = {
+	package: ProtocolPackageRef,
+	name: string,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	schema: ProtocolPackageSchemaViewModel,
 };
 
 export type ListenerRuntimeState = "stopped" | "starting" | "running" | "stopping" | "faulted";

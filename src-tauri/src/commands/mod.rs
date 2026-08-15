@@ -101,6 +101,7 @@ pub fn builder() -> Builder<Wry> {
             listener_test_upstream_connection,
             listener_test_upstream_tls,
             protocol_package_list,
+            listener_protocol_package_catalog,
             protocol_package_detail,
             protocol_package_import,
             protocol_package_import_commit,

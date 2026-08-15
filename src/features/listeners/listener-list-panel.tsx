@@ -28,8 +28,7 @@ export function ListenerListPanel({
     <Alert status="accent"><Alert.Indicator /><Alert.Content>
       <Alert.Title>HTTP 与 Socket 两种数据平面</Alert.Title>
       <Alert.Description>
-        新建监听默认使用 HTTP；Socket Relay 需配置唯一 Server 上游，
-        LocalResponder 配置暂时只支持安全读取。
+        新建监听默认使用 HTTP；Socket 可透明转发到远端目标，也可在本地生成响应。
       </Alert.Description>
     </Alert.Content></Alert>
     <Alert status="warning"><Alert.Indicator /><Alert.Content>
@@ -71,7 +70,7 @@ function ListenerTable({ listeners, selectedIndex, onSelect }: {
 function listenerDestination(listener: ProxyListener) {
   if (listener.data_plane.kind === "socket") {
     const topology = listener.data_plane.settings.topology;
-    if (topology.mode === "local_responder") return "LocalResponder · 无 Server 上游";
+    if (topology.mode === "local_responder") return "LocalResponder · 本地响应";
     const { host, port } = topology.settings.upstream;
     return `${host || "未配置主机"}:${port} · ${topology.settings.security.mode}`;
   }

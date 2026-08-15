@@ -6,6 +6,7 @@ import type {
   CertificateItemViewModel,
   ListenerCertificateDetailViewModel,
   ListenerOverviewViewModel,
+  ListenerProtocolPackageCatalogViewModel,
   ListenerUpstreamConnectionTestViewModel,
   ProxyListener,
   ProxyWorkspace,
@@ -15,7 +16,7 @@ import type {
 import { commands } from "@/generated/rust-types";
 import { useAppEventRefresh, useBootstrap } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
-import { callCommand, errorMessage } from "@/lib/ipc/client";
+import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { ListenerEditor } from "./listener-editor";
 import { ListenerListPanel } from "./listener-list-panel";
@@ -28,12 +29,14 @@ import {
 } from "./listener-workspace-draft";
 import { useListenerCertificates } from "./use-listener-certificates";
 import { useListenerPersistence } from "./use-listener-persistence";
+import { isListenerProtocolPackageCatalog } from "./socket-listener-model";
 
 export function ListenersView() {
   const { navigate } = useWorkspaceNavigation();
   const { bootstrap } = useBootstrap();
   const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>("listener-workspaces", () => callCommand(commands.workspaceList()));
-  const currentId = workspaces.data?.find((item) => item.selected)?.id ?? workspaces.data?.[0]?.id;
+  // Listener 页面只跟随后端明确选中的 Workspace；缺失选择时不读取其他 Workspace。
+  const currentId = workspaces.data?.find((item) => item.selected)?.id;
   const workspaceQuery = useIpcQuery<ProxyWorkspace>(
     `listener-workspace:${currentId ?? "none"}`,
     () => callCommand(commands.workspaceGet(currentId!)),
@@ -52,6 +55,21 @@ export function ListenersView() {
     [],
     { enabled: Boolean(currentId) },
   );
+  const protocolCatalog = useIpcQuery<ListenerProtocolPackageCatalogViewModel>(
+    "listener-protocol-package-catalog",
+    async () => {
+      const catalog: unknown = await callCommand(commands.listenerProtocolPackageCatalog());
+      if (!isListenerProtocolPackageCatalog(catalog)) {
+        // useIpcQuery 统一通过 errorMessage 呈现错误；保留最小结构化边界，
+        // 使本地响应校验失败与 Rust 目录失败走同一个明确 Alert。
+        throw Object.assign(
+          new Error("Listener 协议包目录数据不完整，请刷新后重试。"),
+          { field_errors: {} },
+        );
+      }
+      return catalog;
+    },
+  );
   const [workspace, setWorkspace] = useState<ProxyWorkspace>();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [validation, setValidation] = useState<WorkspaceValidationViewModel>();
@@ -60,30 +78,39 @@ export function ListenersView() {
   const [tlsTestError, setTlsTestError] = useState<string>();
   const [basicUsername, setBasicUsername] = useState("");
   const [basicPassword, setBasicPassword] = useState("");
+  const [operationError, setOperationError] = useState<{
+    message: string;
+    fieldErrors: Record<string, string[]>;
+  }>();
 
   useAppEventRefresh(
     ["workspace_changed", "listener_status_changed", "snapshot_required"],
     listenerOverview.refresh,
+  );
+  useAppEventRefresh(
+    ["workspace_changed", "snapshot_required"],
+    protocolCatalog.refresh,
   );
 
   const effectiveWorkspace = workspace?.id === currentId ? workspace : workspaceQuery.data;
   const effectiveIndex = Math.min(selectedIndex, Math.max(0, (effectiveWorkspace?.listeners.length ?? 1) - 1));
   const selected = effectiveWorkspace?.listeners[effectiveIndex];
   const selectedStatus = listenerOverview.data?.rows.find((row) => row.listener_id === selected?.id);
-  // T18 只让前端安全读取 LocalResponder 配置，运行时数据面要到后续任务才接入。
-  // 即使旧后端状态误报 can_start，也不能向用户暴露一个必然失败的启动操作。
-  const displayedStatus = selectedStatus && isLocalResponder(selected)
-    ? { ...selectedStatus, can_start: false }
-    : selectedStatus;
-  const selectedStatusKnown = Boolean(selectedStatus) && !listenerOverview.error;
+  const selectedStatusKnown = Boolean(selectedStatus)
+    && !listenerOverview.error
+    && !listenerOverview.isLoading;
   const selectedIsPersisted = Boolean(
     selected && workspaceQuery.data?.listeners.some((listener) => listener.id === selected.id),
   );
+  // 已保存 Listener 的运行态配置来自启动快照。状态未知也必须 fail-closed，
+  // 防止把编辑结果误认为已应用到正在工作的连接。
+  const snapshotLocked = selectedIsPersisted
+    && (!selectedStatusKnown || selectedStatus?.state !== "stopped");
+  // 命令进行中也冻结编辑器，避免 deferred save/start 返回后覆盖用户刚输入的新草稿。
+  const editorLocked = snapshotLocked || Boolean(pending);
   const selectedCanDelete = Boolean(selected) && (
     !selectedIsPersisted
-    || (selectedStatusKnown
-      && selectedStatus?.can_start === true
-      && selectedStatus?.can_stop === false)
+    || (!snapshotLocked && selectedStatus?.state === "stopped")
   );
   const hasUnsavedChanges = workspace !== undefined
     && workspace.id === currentId
@@ -105,6 +132,7 @@ export function ListenersView() {
     selected,
     status: selectedStatus,
     statusKnown: selectedStatusKnown,
+    snapshotLocked,
     pending,
     hasUnsavedChanges,
     leases: certificateActions.leases,
@@ -127,10 +155,21 @@ export function ListenersView() {
     setValidation(undefined);
     setTlsTest(undefined);
     setTlsTestError(undefined);
+    setOperationError(undefined);
+  }
+
+  function changeBasicUsername(value: string) {
+    setBasicUsername(value);
+    clearDerivedResults();
+  }
+
+  function changeBasicPassword(value: string) {
+    setBasicPassword(value);
+    clearDerivedResults();
   }
 
   function replaceSelected(changes: Partial<ProxyListener>) {
-    if (!effectiveWorkspace || !selected) return;
+    if (!effectiveWorkspace || !selected || editorLocked) return;
     certificateActions.applyDraftWorkspace({
       ...effectiveWorkspace,
       listeners: effectiveWorkspace.listeners.map((listener, index) =>
@@ -151,13 +190,16 @@ export function ListenersView() {
   }
 
   async function copySelectedListener() {
-    if (!effectiveWorkspace || !selected || isLocalResponder(selected) || pending) return;
+    if (!effectiveWorkspace || !selected || pending) return;
+    const copiedLocalResponder = isLocalResponder(selected);
     await withPending("save", async () => {
       const draft = await callCommand(commands.listenerCopy(selected));
       setWorkspace({ ...effectiveWorkspace, listeners: [...effectiveWorkspace.listeners, draft] });
       setSelectedIndex(effectiveWorkspace.listeners.length);
       clearDerivedResults();
-      toast("已创建独立监听副本，请修改监听端口和转发目标。", { variant: "success" });
+      toast(copiedLocalResponder
+        ? "已创建独立监听副本，请检查监听端口、协议包和响应规则。"
+        : "已创建独立监听副本，请修改监听端口和转发目标。", { variant: "success" });
     });
   }
 
@@ -207,7 +249,7 @@ export function ListenersView() {
   }
 
   async function testUpstreamTls() {
-    if (!effectiveWorkspace || !selected || !hasUpstream(selected) || pending) return;
+    if (!effectiveWorkspace || !selected || !hasUpstream(selected) || snapshotLocked || pending) return;
     setTlsTest(undefined);
     setTlsTestError(undefined);
     await withPending("tls-test", async () => {
@@ -246,13 +288,30 @@ export function ListenersView() {
   }
 
   async function withPending(kind: ListenerPending, action: () => Promise<void>, onError?: (reason: unknown) => void) {
+    setOperationError(undefined);
     setPending(kind);
     try { await action(); }
-    catch (reason) { onError?.(reason); toast(errorMessage(reason), { variant: "danger" }); }
+    catch (reason) {
+      onError?.(reason);
+      const appError = appErrorViewModel(reason);
+      const fieldErrors = appError && isFieldErrorRecord(appError.field_errors)
+        ? appError.field_errors
+        : undefined;
+      if (appError && fieldErrors && Object.keys(fieldErrors).length > 0) {
+        // 保存/启动错误不是 WorkspaceValidation，独立保存 Rust 原始字段路径与消息。
+        setOperationError({ message: appError.message, fieldErrors });
+      }
+      toast(appError && !fieldErrors
+        ? "应用核心返回的错误结构不完整，请刷新后重试。"
+        : errorMessage(reason), { variant: "danger" });
+    }
     finally { setPending(undefined); }
   }
 
   const errors = Object.entries(validation?.field_errors ?? {});
+  const editorFieldErrors = selected?.data_plane.kind === "socket"
+    ? operationError?.fieldErrors ?? validation?.field_errors
+    : validation?.field_errors;
 
   return (
     <section className="grid h-full grid-cols-[420px_minmax(0,1fr)] max-[900px]:grid-cols-1">
@@ -263,18 +322,22 @@ export function ListenersView() {
         error={workspaceQuery.error}
         disabled={!effectiveWorkspace || Boolean(pending)}
         onAdd={() => void addListener()}
-        onSelect={(index) => { setSelectedIndex(index); setTlsTest(undefined); setTlsTestError(undefined); }}
+        onSelect={(index) => { setSelectedIndex(index); clearDerivedResults(); }}
         onNavigate={navigate}
       />
       <main className="min-w-0 space-y-5 overflow-auto p-5">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-xl font-semibold">监听配置</h2>
           {selected && <Chip color="accent" variant="soft">{listenerKind(selected)}</Chip>}
-          <div className="ml-auto flex flex-wrap gap-2"><Button variant="outline" isDisabled={!selected || isLocalResponder(selected) || Boolean(pending)} onPress={() => void copySelectedListener()}>复制监听</Button><Button variant="danger-soft" isDisabled={!selected || !selectedCanDelete || Boolean(pending)} onPress={() => void removeSelectedListener()}>{pending === "delete" ? "删除中…" : "删除监听"}</Button><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void persistenceActions.validate()}>{pending === "validate" ? "校验中…" : "校验当前监听"}</Button><Button variant="primary" isDisabled={!selected || Boolean(pending)} onPress={() => void persistenceActions.save()}>{pending === "save" ? "保存中…" : "保存当前监听"}</Button></div>
+          <div className="ml-auto flex flex-wrap gap-2"><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void copySelectedListener()}>复制监听</Button><Button variant="danger-soft" isDisabled={!selected || !selectedCanDelete || snapshotLocked || Boolean(pending)} onPress={() => void removeSelectedListener()}>{pending === "delete" ? "删除中…" : "删除监听"}</Button><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void persistenceActions.validate()}>{pending === "validate" ? "校验中…" : "校验当前监听"}</Button><Button variant="primary" isDisabled={!selected || snapshotLocked || Boolean(pending)} onPress={() => void persistenceActions.save()}>{pending === "save" ? "保存中…" : "保存当前监听"}</Button></div>
         </div>
-        {validation && (validation.valid ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验通过</Alert.Title><Alert.Description>{isLocalResponder(selected) ? "配置结构有效并可保存；LocalResponder 运行时将在后续任务接入。" : "当前监听可保存、启动或执行上游 TLS 测试。"}</Alert.Description></Alert.Content></Alert> : <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验未通过</Alert.Title><Alert.Description>{errors.map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description></Alert.Content></Alert>)}
+        {validation && (validation.valid ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验通过</Alert.Title><Alert.Description>{isLocalResponder(selected) ? "配置结构有效，可保存并启动；LocalResponder 将向 App 本地响应。" : "当前监听可保存、启动或执行上游 TLS 测试。"}</Alert.Description></Alert.Content></Alert> : <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验未通过</Alert.Title><Alert.Description>{selected?.data_plane.kind === "socket" ? "请按下方 Socket 配置分类修正 Rust 返回的字段错误。" : errors.map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description></Alert.Content></Alert>)}
+        {operationError && <Alert status="danger"><Alert.Indicator /><Alert.Content>
+          <Alert.Title>{operationError.message}</Alert.Title>
+          <Alert.Description>{Object.entries(operationError.fieldErrors).map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description>
+        </Alert.Content></Alert>}
         {certificateDetails.error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>证书详情读取失败</Alert.Title><Alert.Description>{certificateDetails.error}</Alert.Description></Alert.Content></Alert>}
-        {!selected ? <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">选择一个代理监听进行编辑。</p> : <><ListenerRuntimeCard status={displayedStatus} isLoading={listenerOverview.isLoading} error={listenerOverview.error} pending={pending} onToggle={persistenceActions.toggleRuntime} onRetry={listenerOverview.refresh} /><ListenerEditor listener={selected} certificateReferences={effectiveWorkspace.certificate_references} certificateDetails={effectiveCertificateDetails} installationRoot={installationRoot} pending={pending} tlsTest={tlsTest} tlsTestError={tlsTestError} basicUsername={basicUsername} basicPassword={basicPassword} onBasicUsernameChange={setBasicUsername} onBasicPasswordChange={setBasicPassword} onChange={replaceSelected} onStoreBasicCredential={storeBasicCredential} onImportDownstreamServerIdentity={certificateActions.importDownstreamIdentity} onImportDownstreamClientTrust={certificateActions.importDownstreamTrust} onImportClientIdentity={certificateActions.importUpstreamIdentity} onImportServerTrust={certificateActions.importUpstreamTrust} onTestUpstreamTls={testUpstreamTls} /></>}
+        {!selected ? <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">选择一个代理监听进行编辑。</p> : <><ListenerRuntimeCard status={selectedStatus} isLoading={listenerOverview.isLoading} error={listenerOverview.error} pending={pending} onToggle={persistenceActions.toggleRuntime} onRetry={listenerOverview.refresh} /><ListenerEditor listener={selected} protocolCatalog={{ data: protocolCatalog.data, error: protocolCatalog.error, loading: protocolCatalog.isLoading, refresh: protocolCatalog.refresh }} locked={editorLocked} fieldErrors={editorFieldErrors} certificateReferences={effectiveWorkspace.certificate_references} certificateDetails={effectiveCertificateDetails} installationRoot={installationRoot} pending={pending} tlsTest={tlsTest} tlsTestError={tlsTestError} basicUsername={basicUsername} basicPassword={basicPassword} onBasicUsernameChange={changeBasicUsername} onBasicPasswordChange={changeBasicPassword} onChange={replaceSelected} onStoreBasicCredential={storeBasicCredential} onImportDownstreamServerIdentity={certificateActions.importDownstreamIdentity} onImportDownstreamClientTrust={certificateActions.importDownstreamTrust} onImportClientIdentity={certificateActions.importUpstreamIdentity} onImportServerTrust={certificateActions.importUpstreamTrust} onTestUpstreamTls={testUpstreamTls} /></>}
       </main>
     </section>
   );
@@ -297,7 +360,16 @@ function listenerKind(listener: ProxyListener) {
     const topology = listener.data_plane.settings.topology;
     return topology.mode === "relay"
       ? `Socket · ${topology.settings.security.mode}`
-      : "Socket · LocalResponder（当前不可运行）";
+      : "Socket · LocalResponder";
   }
   return listener.data_plane.settings.fixed_server ? "HTTP · 固定 Server" : "HTTP · 按请求目标";
+}
+
+function isFieldErrorRecord(value: unknown): value is Record<string, string[]> {
+  return typeof value === "object"
+    && value !== null
+    && !Array.isArray(value)
+    && Object.entries(value).every(([field, messages]) => field.length > 0
+      && Array.isArray(messages)
+      && messages.every((message) => typeof message === "string"));
 }

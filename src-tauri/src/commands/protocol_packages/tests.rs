@@ -27,9 +27,10 @@ mod tests {
     use zip::{ZipWriter, write::SimpleFileOptions};
 
     use super::{
-        protocol_package_delete, protocol_package_detail, protocol_package_disable,
-        protocol_package_enable, protocol_package_import, protocol_package_import_commit,
-        protocol_package_import_discard, protocol_package_list, protocol_package_usage,
+        listener_protocol_package_catalog, protocol_package_delete, protocol_package_detail,
+        protocol_package_disable, protocol_package_enable, protocol_package_import,
+        protocol_package_import_commit, protocol_package_import_discard, protocol_package_list,
+        protocol_package_usage,
     };
     use crate::app_state::AppState;
 
@@ -177,6 +178,16 @@ fn display(document, context) { "<p>ok</p>" }
             json!({ "packageRef": package }),
         );
         assert_eq!(enabled["enabled"], true);
+        let catalog: Value = invoke_ok(
+            &webview,
+            "listener_protocol_package_catalog",
+            json!({}),
+        );
+        assert_eq!(catalog["installed_version_count"], 1);
+        assert_eq!(catalog["unavailable_version_count"], 0);
+        assert_eq!(catalog["options"][0]["package"], package);
+        assert_eq!(catalog["options"][0]["schema"]["id"], "example-message");
+        assert_no_source_fields(&catalog);
         let disabled: Value = invoke_ok(
             &webview,
             "protocol_package_disable",

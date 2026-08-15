@@ -29,10 +29,9 @@ impl Application {
     /// 复制一条尚未保存或已经保存的 Listener 草稿。
     ///
     /// 复制动作必须经过 Rust：新 ID 由领域类型生成，运行状态强制关闭，避免前端复制
-    /// 旧 ID 或把一个正在运行的监听器误认为第二个独立运行实例。端口和上游配置保留，
-    /// 便于用户以现有映射为模板，再修改为另一条本地端口 -> 上游 origin 映射。
+    /// 旧 ID 或把一个正在运行的监听器误认为第二个独立运行实例。Relay 会保留端口和
+    /// 上游配置；`LocalResponder` 会保留端口、协议包与本地响应配置，便于按原拓扑修改。
     pub fn listener_copy(&self, source: ProxyListener) -> AppResult<ProxyListener> {
-        reject_unavailable_local_responder(&source)?;
         Ok(copy_listener_draft(source))
     }
 
@@ -349,18 +348,19 @@ fn has_fixed_target(listener: &ProxyListener) -> bool {
     }
 }
 
-/// T21 允许 `LocalResponder` 通过保存和启动前校验，但真实数据面仍留给 T22。
-/// 复制入口继续隐藏这种尚不能由 UI 创建的拓扑；两个上游探测入口也在 runtime 前调用
-/// 此门禁，保证 `LocalResponder` 永远不会误触发 DNS、连接或 upstream TLS。
-fn reject_unavailable_local_responder(listener: &ProxyListener) -> AppResult<()> {
+/// `LocalResponder` 没有 Server 上游。两个探测入口在证书与 runtime 端口前调用此门禁，
+/// 保证这种拓扑永远不会误触发 DNS、连接或 upstream TLS。
+fn reject_local_responder_upstream_probe(listener: &ProxyListener) -> AppResult<()> {
     if matches!(
         &listener.data_plane,
         ListenerDataPlane::Socket(settings)
             if matches!(settings.topology, SocketTopology::LocalResponder(_))
     ) {
+        // 该稳定码早于 LocalResponder runtime 落地并已进入公开 IPC 契约；这里仅表示
+        // “上游探测不适用”，不表示 LocalResponder 监听本身不可启动。
         return Err(AppError::new(
             "LOCAL_RESPONDER_NOT_AVAILABLE",
-            "LocalResponder 当前不能复制或测试上游；运行计划由启动路径单独校验。",
+            "LocalResponder 没有 Server 上游，不能执行连接或 TLS 探测。",
         )
         .entity(listener.id.to_string()));
     }
@@ -384,7 +384,7 @@ fn reject_local_responder_after_revision_check(
             .revision
             .verify(DomainRevision::new(expected_workspace_revision))
             .map_err(AppError::from)?;
-        reject_unavailable_local_responder(listener)?;
+        reject_local_responder_upstream_probe(listener)?;
     }
     Ok(())
 }
