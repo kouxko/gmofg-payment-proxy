@@ -127,6 +127,22 @@ pub(super) async fn start_scripted_runtime_with_capture(
         }),
         ..ProxyListener::default()
     };
+    start_scripted_runtime_from_listener(id, script, listener, include_display, None, true).await
+}
+
+pub(super) async fn start_scripted_runtime_from_listener(
+    id: &str,
+    script: &str,
+    listener: ProxyListener,
+    include_display: bool,
+    events: Option<Arc<intercept_proxy_application::EventHub>>,
+    publish_captures: bool,
+) -> (
+    ListenerRuntimeAdapter,
+    ProxyListener,
+    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
+) {
+    let package = package_ref(id);
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
@@ -143,7 +159,12 @@ pub(super) async fn start_scripted_runtime_with_capture(
         Arc::clone(&store),
     ));
     let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
-    runtime.set_socket_capture_repository(Arc::clone(&captures));
+    if publish_captures {
+        runtime.set_socket_capture_repository(Arc::clone(&captures));
+    }
+    if let Some(events) = events {
+        runtime.set_socket_diagnostic_events(events);
+    }
     runtime.start(workspace, listener.clone()).await.unwrap();
     (runtime, listener, captures)
 }

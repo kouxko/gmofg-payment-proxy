@@ -15,6 +15,10 @@ mod settings;
 mod socket_rules;
 mod workspace;
 
+#[cfg(test)]
+#[path = "e2e_tests/mod.rs"]
+mod e2e_tests;
+
 pub use android::*;
 pub use app::*;
 pub use capture::*;

@@ -17,7 +17,7 @@ export function ProtocolPackageRow({
     <Button
       ref={triggerRef}
       variant="ghost"
-      className="grid w-full cursor-pointer grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_7rem_7rem_7rem] items-center gap-3 border-b border-[var(--telemetry-line)] px-4 py-3 text-left outline-none last:border-b-0 hover:bg-[var(--telemetry-table-head)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--telemetry-accent)] max-[760px]:grid-cols-2"
+      className="grid h-auto min-h-16 w-full cursor-pointer grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_7rem_7rem_7rem] items-center gap-3 border-b border-[var(--telemetry-line)] px-4 py-3 text-left outline-none last:border-b-0 hover:bg-[var(--telemetry-table-head)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--telemetry-accent)] max-[760px]:grid-cols-2"
       aria-label={`查看协议包 ${group.name}`}
       onPress={() => {
         if (triggerRef.current) onOpen(triggerRef.current);

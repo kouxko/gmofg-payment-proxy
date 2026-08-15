@@ -360,6 +360,8 @@ fn package_zip() -> Vec<u8> {
 mod captures;
 #[path = "scripted_relay_runtime/failures.rs"]
 mod failures;
+#[path = "scripted_relay_runtime/flow_control.rs"]
+mod flow_control;
 #[path = "scripted_relay_runtime/isolation.rs"]
 mod isolation;
 #[path = "scripted_relay_runtime/support.rs"]
