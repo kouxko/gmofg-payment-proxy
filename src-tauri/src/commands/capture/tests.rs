@@ -23,7 +23,7 @@ use intercept_proxy_product_api::InterceptProxyProfile;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tauri::{
-    WebviewUrl, WebviewWindowBuilder, http::HeaderMap, ipc::InvokeBody, test::MockRuntime,
+    Manager, WebviewUrl, WebviewWindowBuilder, http::HeaderMap, ipc::InvokeBody, test::MockRuntime,
 };
 use tempfile::TempDir;
 
@@ -132,7 +132,7 @@ fn clear_rejects_an_unconfirmed_request_through_real_tauri_ipc() {
     let error = invoke_error(
         &webview,
         "socket_capture_clear",
-        json!({ "confirmed": false }),
+        json!({ "workspaceId": selected_workspace_id(&app), "confirmed": false }),
     );
 
     assert_eq!(error.code, "CONFIRMATION_REQUIRED");
@@ -144,11 +144,12 @@ fn clear_confirmed_returns_success_and_removes_completed_socket_captures() {
     let expected = record();
     let app = test_app(fixture.path(), Some(&expected));
     let webview = test_webview(&app);
+    let workspace_id = selected_workspace_id(&app);
 
     let result: OperationResultViewModel = invoke_ok(
         &webview,
         "socket_capture_clear",
-        json!({ "confirmed": true }),
+        json!({ "workspaceId": workspace_id, "confirmed": true }),
     );
     let page: SocketCapturePageViewModel = invoke_ok(
         &webview,
@@ -159,6 +160,35 @@ fn clear_confirmed_returns_success_and_removes_completed_socket_captures() {
     assert!(result.success);
     assert!(!result.cancelled);
     assert_eq!(page.total, 0);
+}
+
+#[test]
+fn clear_rejects_a_workspace_switched_after_confirmation_without_deleting_records() {
+    let fixture = TempDir::new().unwrap();
+    let expected = record();
+    let app = test_app(fixture.path(), Some(&expected));
+    let originally_selected = selected_workspace_id(&app);
+    let state = app.state::<AppState>();
+    let replacement =
+        tauri::async_runtime::block_on(state.application.workspace_create("Replacement".into()))
+            .unwrap();
+    tauri::async_runtime::block_on(state.application.workspace_select(replacement.id)).unwrap();
+    let webview = test_webview(&app);
+
+    let error = invoke_error(
+        &webview,
+        "socket_capture_clear",
+        json!({ "workspaceId": originally_selected, "confirmed": true }),
+    );
+    let page: SocketCapturePageViewModel = invoke_ok(
+        &webview,
+        "socket_capture_query",
+        json!({ "query": query() }),
+    );
+
+    assert_eq!(error.code, "WORKSPACE_SELECTION_CHANGED");
+    assert_eq!(error.entity_id, Some(originally_selected.to_string()));
+    assert_eq!(page.total, 1, "拒绝错误目标后不得删除任何记录");
 }
 
 #[derive(Debug)]
@@ -228,6 +258,16 @@ fn test_webview(app: &tauri::App<MockRuntime>) -> tauri::WebviewWindow<MockRunti
     WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .build()
         .unwrap()
+}
+
+fn selected_workspace_id(app: &tauri::App<MockRuntime>) -> WorkspaceId {
+    let state = app.state::<AppState>();
+    tauri::async_runtime::block_on(state.application.workspace_list())
+        .unwrap()
+        .into_iter()
+        .find(|workspace| workspace.selected)
+        .expect("test app has one selected workspace")
+        .id
 }
 
 fn invoke_ok<T: DeserializeOwned>(

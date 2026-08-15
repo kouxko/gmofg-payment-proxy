@@ -2,7 +2,7 @@
 
 /** 实时抓包页面容器：仅管理 Rust 查询、游标、选择和详情生命周期。 */
 import { useEffect, useMemo, useState } from "react";
-import { toast } from "@heroui/react";
+import { Tabs, toast } from "@heroui/react";
 import type {
   CaptureDetailViewModel,
   CapturePageViewModel,
@@ -18,6 +18,7 @@ import {
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import { CaptureDetailPanel } from "./capture-detail-panel";
 import { CaptureListPanel } from "./capture-list-panel";
+import { SocketCaptureView } from "./socket-capture-view";
 
 export const defaultCaptureQuery: CaptureQuery = {
   keyword: null,
@@ -51,6 +52,40 @@ export function CaptureView({
 }: {
   initialPage?: CapturePageViewModel;
 }) {
+  const [mode, setMode] = useState<"http" | "socket">("http");
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <Tabs
+        className="min-h-0 flex-1"
+        selectedKey={mode}
+        onSelectionChange={(key) => setMode(key as "http" | "socket")}
+      >
+        <Tabs.ListContainer className="border-b border-[var(--telemetry-line)] px-5 pt-3">
+          <Tabs.List aria-label="抓包类型">
+            <Tabs.Tab id="http">
+              HTTP 抓包
+              <Tabs.Indicator />
+            </Tabs.Tab>
+            <Tabs.Tab id="socket">
+              Socket 抓包
+              <Tabs.Indicator />
+            </Tabs.Tab>
+          </Tabs.List>
+        </Tabs.ListContainer>
+        <Tabs.Panel id={mode} className="h-full min-h-0">
+          {mode === "http" ? (
+            <HttpCaptureView initialPage={initialPage} />
+          ) : (
+            <SocketCaptureView />
+          )}
+        </Tabs.Panel>
+      </Tabs>
+    </div>
+  );
+}
+
+/** HTTP 抓包保持原有查询与详情行为；只有选中 HTTP 页签时才挂载。 */
+function HttpCaptureView({ initialPage }: { initialPage?: CapturePageViewModel }) {
   const { navigate } = useWorkspaceNavigation();
   const { bootstrap } = useBootstrap();
   const [paused, setPaused] = useState(false);

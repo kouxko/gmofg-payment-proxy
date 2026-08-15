@@ -65,6 +65,7 @@ const themeStorageFiles = new Set([
 ]);
 const iconCloseTriggerFiles = new Set([
   "src/features/capture/capture-detail-panel.tsx",
+  "src/features/capture/socket-capture-detail.tsx",
   "src/features/sessions/session-actions.tsx",
 ]);
 
@@ -135,6 +136,7 @@ for (const file of sourceFiles(sourceRoot)) {
 
 for (const [path, label] of [
   ["src/features/capture/capture-detail-panel.tsx", "关闭详情并释放报文"],
+  ["src/features/capture/socket-capture-detail.tsx", "关闭 Socket 抓包详情"],
   ["src/features/sessions/session-actions.tsx", "关闭会话详情并释放报文"],
 ]) {
   const source = readFileSync(join(root, path), "utf8");
@@ -335,6 +337,54 @@ const captureSourceForResume = captureSource;
 if (/after_event_id:\s*pauseCursor/.test(captureSourceForResume)) {
   failures.push(
     "src/features/capture/capture-view.tsx: 恢复滚动必须请求完整 Rust 显示快照，不能永久切换到增量游标",
+  );
+}
+
+// Socket 抓包有独立 Rust DTO 和查询面，不能重新借用 HTTP Message 控件。
+// Display HTML 永远是不可信输入：应用 DOM 不直接注入，只允许进入无能力 iframe，
+// 并由 iframe 内层 deny-by-default CSP 再封一层外链和应用 API 边界。
+const socketCaptureFiles = readdirSync(join(sourceRoot, "features", "capture"))
+  .filter(
+    (name) =>
+      /^socket-.*\.(?:ts|tsx)$/.test(name) &&
+      !/\.(?:test|spec)\.(?:ts|tsx)$/.test(name),
+  );
+const socketCaptureSource = socketCaptureFiles
+  .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
+  .join("\n");
+for (const contract of [
+  "commands.socketCaptureQuery",
+  "commands.socketCaptureGetDetail",
+  "commands.socketCaptureClear(targetWorkspaceId, true)",
+  'sandbox=""',
+  'referrerPolicy="no-referrer"',
+  "default-src 'none'",
+  "connect-src 'none'",
+  "frame-src 'none'",
+]) {
+  if (!socketCaptureSource.includes(contract)) {
+    failures.push(
+      `src/features/capture/socket-*: 缺少 Socket 抓包或安全 Display 契约 ${contract}`,
+    );
+  }
+}
+if (/dangerouslySetInnerHTML/.test(socketCaptureSource)) {
+  failures.push(
+    "src/features/capture/socket-*: 不可信 Display 禁止注入应用 DOM，必须使用无能力 sandbox iframe",
+  );
+}
+if (/allow-(?:scripts|same-origin|forms|popups|top-navigation|downloads)/.test(socketCaptureSource)) {
+  failures.push(
+    "src/features/capture/socket-*: Display sandbox 禁止获得脚本、同源、表单、弹窗、顶层导航或下载能力",
+  );
+}
+const socketCaptureUiSource = socketCaptureFiles
+  .filter((name) => name !== "socket-safe-display.tsx")
+  .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
+  .join("\n");
+if (/\.headers\b|\.http_status\b|\.method\b|\.target\b|JSONPath|HTTP 状态码|Cookie/.test(socketCaptureUiSource)) {
+  failures.push(
+    "src/features/capture/socket-*: Socket 抓包 UI 禁止消费 Header、Cookie、Status、Method、Target 或 JSONPath",
   );
 }
 
