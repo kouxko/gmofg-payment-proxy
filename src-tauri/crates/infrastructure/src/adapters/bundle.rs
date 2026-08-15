@@ -15,8 +15,8 @@ use super::{
     ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
     ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageRepositoryAdapter,
     ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, SettingsRepositoryAdapter,
-    WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
-    WorkspaceRuntimePolicyResolver,
+    SocketCaptureRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter,
+    WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
 };
 
 #[derive(Debug)]
@@ -57,7 +57,11 @@ impl InfrastructureServiceBundle {
             InMemorySessionStore::DEFAULT_MAX_SESSIONS,
             Arc::clone(&capacity),
         ));
-        let capture = Arc::new(CaptureRepositoryAdapter::new(sessions.clone()));
+        let socket_capture = Arc::new(SocketCaptureRepositoryAdapter::new(Arc::clone(&store)));
+        let capture = Arc::new(
+            CaptureRepositoryAdapter::new(sessions.clone())
+                .with_socket_store(Arc::clone(&socket_capture)),
+        );
         let rules = Arc::new(RuleRepositoryAdapter::new(
             Arc::clone(&store),
             Arc::clone(&dialog),
@@ -108,6 +112,7 @@ impl InfrastructureServiceBundle {
                 .with_protected_secrets(protected_secrets.clone())
                 .with_managed_listener_certificates(listener_certificates.clone()),
         );
+        listener_runtime.set_socket_capture_repository(socket_capture);
         let protocol_package_usage = Arc::new(ProtocolPackageUsageQueryAdapter::new(
             workspaces.clone(),
             listener_runtime.clone(),

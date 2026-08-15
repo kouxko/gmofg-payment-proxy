@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn schema_has_no_payload_storage() {
+fn schema_keeps_http_payload_storage_absent_and_socket_capture_explicit() {
     let store = SqliteStore::in_memory().expect("store");
     let tables = store.table_names().expect("tables");
     assert_eq!(
@@ -16,13 +16,15 @@ fn schema_has_no_payload_storage() {
             "rules",
             "schema_migrations",
             "settings",
+            "socket_captures",
+            "sqlite_sequence",
             "workspace_state",
             "workspaces"
         ]
     );
-    assert!(!tables.iter().any(|name| {
-        name.contains("payload") || name.contains("session") || name.contains("breakpoint")
-    }));
+    assert!(!tables.iter().any(|name| name.contains("http_capture")
+        || name.contains("http_session")
+        || name.contains("breakpoint")));
     let secret_columns = store
         .connection
         .lock()
@@ -186,6 +188,25 @@ fn application_data_reset_atomically_removes_persisted_user_data() {
                 params!["listener_identity", vec![4_u8, 5], "{}", Utc::now().to_rfc3339()],
             )
             .expect("seed certificate");
+        connection
+            .execute(
+                "INSERT INTO socket_captures(
+                    capture_id, runtime_epoch, workspace_id, listener_id, session_id,
+                    connection_id, occurred_at, completed_at, kind, direction,
+                    package_id, package_version, logical_bytes, payload_json
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7, 'relay_frame',
+                           'upstream_receive', 'example', '1.0.0', 1, '{}')",
+                params![
+                    Uuid::new_v4().to_string(),
+                    Uuid::new_v4().to_string(),
+                    old_id.to_string(),
+                    Uuid::new_v4().to_string(),
+                    Uuid::new_v4().to_string(),
+                    Uuid::new_v4().to_string(),
+                    Utc::now().to_rfc3339(),
+                ],
+            )
+            .expect("seed socket capture");
     }
 
     let clean_id = Uuid::new_v4();
@@ -221,7 +242,7 @@ fn application_data_reset_atomically_removes_persisted_user_data() {
             .is_none()
     );
     let connection = store.connection.lock();
-    for table in ["rules", "certificate_material"] {
+    for table in ["rules", "certificate_material", "socket_captures"] {
         let count: i64 = connection
             .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
                 row.get(0)

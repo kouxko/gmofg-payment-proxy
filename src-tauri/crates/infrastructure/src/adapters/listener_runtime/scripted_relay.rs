@@ -1,32 +1,41 @@
 //! 冻结协议包到 Proxy Scripted Relay processor 的连接级适配。
 
-use std::{panic::AssertUnwindSafe, time::Duration};
-
 use async_trait::async_trait;
 use bytes::Bytes;
+use chrono::{DateTime, Utc};
+use intercept_proxy_application::SocketCaptureSchemaRef;
 use intercept_proxy_domain::SocketDirection;
 use intercept_proxy_protocol_scripting::{
     DirectionExecutionPlan, ProtocolDirection, ProtocolDirectionExecutor,
-    ProtocolExecutionCancellation, ProtocolFrameInspection, ProtocolFrameInspector,
-    ProtocolFrameOutput, ProtocolFramingError, ProtocolFramingLimits, ProtocolRuntimeError,
-    ProtocolRuntimeLimits,
+    ProtocolExecutionCancellation, ProtocolFrameInspector, ProtocolFramingLimits,
+    ProtocolRuntimeError, ProtocolRuntimeLimits,
 };
 use intercept_proxy_runtime::{
     FrameBoundary, ScriptedRelayProcessorFactory, SocketConnectionIdentity, SocketFrameProcessor,
-    SocketFramePumpLimits, SocketPayloadDirection, SocketProcessingFailure,
-    SocketProcessingFailureKind,
+    SocketPayloadDirection, SocketProcessingFailure,
 };
 use tokio::sync::{mpsc, oneshot};
 
 use super::{
     SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory,
     scripted_snapshot::ScriptedSocketRuntimeSnapshot,
+    socket_capture_publisher::{SocketCaptureContext, SocketCapturePublishTicket},
 };
 use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackageSnapshot;
 
 use limiter::{BlockingCommandSlots, acquire_command_permits};
 
+mod capture;
+mod failure;
 pub(super) mod limiter;
+mod limits;
+use failure::{
+    frame_boundary, framing_failure, invalid_limits, processing_failure, runtime_failure,
+    worker_failure,
+};
+#[cfg(test)]
+use limits::processing_budget_ms;
+pub(super) use limits::{frame_pump_limits, frame_pump_limits_for_entry_calls};
 
 /// 同一次 Listener 启动快照派生的双方向 processor factory。
 pub(super) struct ScriptedRelayProcessorFactoryAdapter {
@@ -38,6 +47,8 @@ pub(super) struct ScriptedRelayProcessorFactoryAdapter {
     runtime_limits: ProtocolRuntimeLimits,
     framing_limits: ProtocolFramingLimits,
     blocking_slots: BlockingCommandSlots,
+    capture: SocketCaptureContext,
+    schema: SocketCaptureSchemaRef,
 }
 
 impl ScriptedRelayProcessorFactoryAdapter {
@@ -45,7 +56,9 @@ impl ScriptedRelayProcessorFactoryAdapter {
         snapshot: &ScriptedSocketRuntimeSnapshot,
         listener_id: String,
         framing_limits: ProtocolFramingLimits,
+        capture: SocketCaptureContext,
     ) -> Self {
+        let schema = snapshot.package().compiled().schema();
         Self {
             package: snapshot.package().clone(),
             upstream: snapshot.upstream(),
@@ -55,6 +68,11 @@ impl ScriptedRelayProcessorFactoryAdapter {
             runtime_limits: snapshot.runtime_limits(),
             framing_limits,
             blocking_slots: BlockingCommandSlots::new_relay(snapshot.maximum_connections()),
+            capture,
+            schema: SocketCaptureSchemaRef {
+                id: schema.id().clone(),
+                version: schema.version(),
+            },
         }
     }
 
@@ -101,7 +119,7 @@ impl ScriptedRelayProcessorFactoryAdapter {
             cancellation.clone(),
         )
         .map_err(|_| processing_failure("protocol direction executor construction failed"))?;
-        let rules = self.rules.connection(connection, rule_direction);
+        let rules = self.rules.connection(connection.clone(), rule_direction);
         Ok(ScriptedRelayFrameProcessor::spawn(
             DirectionWorkerState {
                 inspector,
@@ -109,63 +127,18 @@ impl ScriptedRelayProcessorFactoryAdapter {
                 rules,
                 package: self.package.compiled().package().clone(),
                 pending_output: None,
+                connection,
+                direction: rule_direction,
+                decode_enabled: plan.decode_enabled(),
+                encode_enabled: plan.encode_enabled(),
+                capture: self.capture.clone(),
+                schema: self.schema.clone(),
                 cancellation: cancellation.clone(),
             },
             self.blocking_slots.clone(),
             cancellation,
         ))
     }
-}
-
-pub(super) fn frame_pump_limits(
-    runtime: ProtocolRuntimeLimits,
-    framing: ProtocolFramingLimits,
-    upstream: DirectionExecutionPlan,
-    downstream: DirectionExecutionPlan,
-) -> Result<SocketFramePumpLimits, SocketProcessingFailure> {
-    let entry_calls = [upstream, downstream]
-        .into_iter()
-        .map(|plan| u64::from(plan.decode_enabled()) + u64::from(plan.encode_enabled()))
-        .max()
-        .unwrap_or(0)
-        .max(1);
-    frame_pump_limits_for_entry_calls(runtime, framing, entry_calls)
-}
-
-pub(super) fn frame_pump_limits_for_entry_calls(
-    runtime: ProtocolRuntimeLimits,
-    framing: ProtocolFramingLimits,
-    entry_calls: u64,
-) -> Result<SocketFramePumpLimits, SocketProcessingFailure> {
-    const READ_CHUNK_BYTES: usize = 16 * 1024;
-
-    let processing_ms =
-        processing_budget_ms(runtime.max_wall_time_ms(), entry_calls).ok_or_else(invalid_limits)?;
-    let max_buffer_bytes =
-        usize::try_from(framing.max_fifo_bytes()).map_err(|_| invalid_limits())?;
-    let max_output_bytes = usize::try_from(framing.max_frame_bytes().max(runtime.max_blob_bytes()))
-        .map_err(|_| invalid_limits())?;
-    SocketFramePumpLimits::new(
-        max_buffer_bytes,
-        max_output_bytes,
-        READ_CHUNK_BYTES.min(max_buffer_bytes),
-        Duration::from_millis(processing_ms),
-    )
-}
-
-fn processing_budget_ms(max_wall_time_ms: u64, entry_calls: u64) -> Option<u64> {
-    const RULE_AND_SCHEDULING_BUDGET_MS: u64 = 250;
-
-    let frame_process_ms = max_wall_time_ms
-        .checked_mul(entry_calls.max(1))?
-        .checked_add(RULE_AND_SCHEDULING_BUDGET_MS)?;
-    // Display 在上一 Frame 完整 write + flush 后才排入同一方向 worker。下一次 inspect 的
-    // timeout 从 mailbox send 开始，因此必须同时覆盖“上一 Display + 当前 Frame”两次 Rhai
-    // 墙钟上限；否则 encode-only 配置中的合法慢 Display 会把下一 Frame 误判为超时。
-    let frame_after_display_ms = max_wall_time_ms
-        .checked_mul(2)?
-        .checked_add(RULE_AND_SCHEDULING_BUDGET_MS)?;
-    Some(frame_process_ms.max(frame_after_display_ms))
 }
 
 impl ScriptedRelayProcessorFactory for ScriptedRelayProcessorFactoryAdapter {
@@ -184,6 +157,7 @@ impl ScriptedRelayProcessorFactory for ScriptedRelayProcessorFactoryAdapter {
 struct ScriptedRelayFrameProcessor {
     commands: mpsc::Sender<DirectionCommand>,
     cancellation: ProtocolExecutionCancellation,
+    capture: SocketCaptureContext,
 }
 
 impl ScriptedRelayFrameProcessor {
@@ -193,6 +167,7 @@ impl ScriptedRelayFrameProcessor {
         cancellation: ProtocolExecutionCancellation,
     ) -> Self {
         let (commands, receiver) = mpsc::channel(1);
+        let capture = state.capture.clone();
         // 每方向一个轻量 async mailbox；真正的 Rhai 调用通过共享 blocking pool 执行。
         // Sender 全部释放后，receiver 会先排空已经提交的 Display，再自然退出。
         std::mem::drop(tokio::spawn(run_direction_worker(
@@ -203,6 +178,7 @@ impl ScriptedRelayFrameProcessor {
         Self {
             commands,
             cancellation,
+            capture,
         }
     }
 
@@ -256,14 +232,24 @@ impl SocketFrameProcessor for ScriptedRelayFrameProcessor {
     }
 
     async fn process(&mut self, origin: Bytes) -> Result<Bytes, SocketProcessingFailure> {
-        self.send(|reply| DirectionCommand::Process { origin, reply })
-            .await?
+        let occurred_at = Utc::now();
+        self.send(|reply| DirectionCommand::Process {
+            origin,
+            occurred_at,
+            reply,
+        })
+        .await?
     }
 
     fn output_committed(&mut self) {
         // Pump 保证该方法紧跟当前 processor 的 Process/write/flush，且在下一次 inspect 之前调用；
-        // 因此容量 1 mailbox 此刻必有空间。异常只丢弃旁路 Display，不能反写已提交线路。
-        let _ = self.commands.try_send(DirectionCommand::CommitDisplay);
+        // 此处先冻结 Workspace generation，再把同一票交给所有 Display 结果。容量 1 mailbox
+        // 此刻必有空间；异常只丢弃旁路 Display，不能反写已提交线路。
+        let ticket = self.capture.ticket();
+        let _ = self.commands.try_send(DirectionCommand::CommitDisplay {
+            completed_at: Utc::now(),
+            ticket,
+        });
     }
 }
 
@@ -292,9 +278,13 @@ enum DirectionCommand {
     },
     Process {
         origin: Bytes,
+        occurred_at: DateTime<Utc>,
         reply: oneshot::Sender<Result<Bytes, SocketProcessingFailure>>,
     },
-    CommitDisplay,
+    CommitDisplay {
+        completed_at: DateTime<Utc>,
+        ticket: Option<SocketCapturePublishTicket>,
+    },
 }
 
 struct DirectionWorkerState {
@@ -302,7 +292,13 @@ struct DirectionWorkerState {
     executor: ProtocolDirectionExecutor,
     rules: SocketDocumentRuleConnection,
     package: intercept_proxy_domain::ProtocolPackageRef,
-    pending_output: Option<ProtocolFrameOutput>,
+    pending_output: Option<capture::PendingRelayCapture>,
+    connection: SocketConnectionIdentity,
+    direction: SocketDirection,
+    decode_enabled: bool,
+    encode_enabled: bool,
+    capture: SocketCaptureContext,
+    schema: SocketCaptureSchemaRef,
     cancellation: ProtocolExecutionCancellation,
 }
 
@@ -316,7 +312,26 @@ async fn run_direction_worker(
             // Inspect/Process 的 None 表示等待 reply 的 Pump future 已取消；CommitDisplay
             // 的 None 表示当前无阻塞许可。两者都不进入 blocking pool，但 Display 必须
             // 同时消费上一帧的待展示状态，否则下一帧会被误判为“尚未提交”。
-            discard_skipped_command(&mut state.pending_output, &command);
+            if let DirectionCommand::CommitDisplay {
+                completed_at,
+                ticket,
+            } = command
+                && let Some(pending) = state.pending_output.take()
+            {
+                capture::commit(
+                    None,
+                    pending,
+                    ticket,
+                    &state.capture,
+                    &state.connection,
+                    completed_at,
+                    state.direction,
+                    state.package.clone(),
+                    state.schema.clone(),
+                    state.decode_enabled,
+                    state.encode_enabled,
+                );
+            }
             continue;
         };
         let result = tokio::task::spawn_blocking(move || {
@@ -333,12 +348,6 @@ async fn run_direction_worker(
     }
 }
 
-fn discard_skipped_command<T>(pending_output: &mut Option<T>, command: &DirectionCommand) {
-    if matches!(command, DirectionCommand::CommitDisplay) {
-        let _ = pending_output.take();
-    }
-}
-
 fn run_command(mut state: DirectionWorkerState, command: DirectionCommand) -> DirectionWorkerState {
     match command {
         DirectionCommand::Inspect { buffered, reply } => {
@@ -349,17 +358,34 @@ fn run_command(mut state: DirectionWorkerState, command: DirectionCommand) -> Di
                 .map_err(|error| framing_failure(&error));
             let _ = reply.send(result);
         }
-        DirectionCommand::Process { origin, reply } => {
-            let result = process_frame(&mut state, &origin);
+        DirectionCommand::Process {
+            origin,
+            occurred_at,
+            reply,
+        } => {
+            let result = process_frame(&mut state, &origin, occurred_at);
             let _ = reply.send(result);
         }
-        DirectionCommand::CommitDisplay => {
-            if let Some(output) = state.pending_output.take() {
+        DirectionCommand::CommitDisplay {
+            completed_at,
+            ticket,
+        } => {
+            if let Some(pending) = state.pending_output.take() {
                 // Display 是 write/flush 后的旁路。脚本错误已由 render_display 降级；额外隔离
                 // Rust panic，保证下一 Frame 仍可继续使用同一连接方向 worker。
-                let _ = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                    let _ = state.executor.render_display(&output);
-                }));
+                capture::commit(
+                    Some(&mut state.executor),
+                    pending,
+                    ticket,
+                    &state.capture,
+                    &state.connection,
+                    completed_at,
+                    state.direction,
+                    state.package.clone(),
+                    state.schema.clone(),
+                    state.decode_enabled,
+                    state.encode_enabled,
+                );
             }
         }
     }
@@ -369,6 +395,7 @@ fn run_command(mut state: DirectionWorkerState, command: DirectionCommand) -> Di
 fn process_frame(
     state: &mut DirectionWorkerState,
     origin: &Bytes,
+    occurred_at: DateTime<Utc>,
 ) -> Result<Bytes, SocketProcessingFailure> {
     if state.pending_output.is_some() {
         return Err(processing_failure(
@@ -377,6 +404,7 @@ fn process_frame(
     }
     let package = state.package.clone();
     let cancellation = state.cancellation.clone();
+    let mut matched_rule_ids = Vec::new();
     let output = state
         .executor
         .execute_frame_with_document_transform(origin.to_vec(), |document| {
@@ -385,84 +413,23 @@ fn process_frame(
                 .execute_with_cancellation(state.rules.bind_document(document), || {
                     cancellation.is_cancelled()
                 })
-                .map(intercept_proxy_domain::SocketDocumentRuleExecution::into_document)
+                .map(|execution| {
+                    let (document, ids) = execution.into_parts();
+                    matched_rule_ids = ids;
+                    document
+                })
                 .map_err(|_| ProtocolRuntimeError::DocumentTransformFailed {
                     package: package.clone(),
                 })
         })
         .map_err(|error| runtime_failure(&error))?;
     let written = Bytes::from_owner(output.written_owner());
-    state.pending_output = Some(output);
+    state.pending_output = Some(capture::PendingRelayCapture::new(
+        output,
+        matched_rule_ids,
+        occurred_at,
+    ));
     Ok(written)
-}
-
-fn frame_boundary(inspection: ProtocolFrameInspection) -> FrameBoundary {
-    match inspection {
-        ProtocolFrameInspection::NeedMore { total } => FrameBoundary::NeedMore { total },
-        ProtocolFrameInspection::Complete { bytes } => FrameBoundary::Complete { bytes },
-        ProtocolFrameInspection::Reject { reason } => FrameBoundary::Reject { reason },
-    }
-}
-
-fn framing_failure(error: &ProtocolFramingError) -> SocketProcessingFailure {
-    let kind = match error {
-        ProtocolFramingError::FrameTooLarge { .. }
-        | ProtocolFramingError::FifoLimitExceeded { .. } => {
-            SocketProcessingFailureKind::BufferLimitExceeded
-        }
-        ProtocolFramingError::InvalidLimit { .. }
-        | ProtocolFramingError::FifoSmallerThanFrame { .. } => {
-            SocketProcessingFailureKind::InvalidLimits
-        }
-        ProtocolFramingError::InvalidDecisionLength
-        | ProtocolFramingError::InvalidRejectReason
-        | ProtocolFramingError::NeedMoreWithoutProgress
-        | ProtocolFramingError::CompleteEmpty
-        | ProtocolFramingError::CompleteOutOfBounds => {
-            SocketProcessingFailureKind::InvalidFrameBoundary
-        }
-        ProtocolFramingError::Rejected { .. } => SocketProcessingFailureKind::FrameRejected,
-        ProtocolFramingError::TruncatedFrame { .. } => SocketProcessingFailureKind::TruncatedFrame,
-        ProtocolFramingError::ReaderOutOfBounds
-        | ProtocolFramingError::EmptyFindPattern
-        | ProtocolFramingError::InvalidFindStart
-        | ProtocolFramingError::FrameEntryFailed { .. } => {
-            SocketProcessingFailureKind::ProcessingFailed
-        }
-        ProtocolFramingError::FrameExecutionCancelled { .. } => {
-            SocketProcessingFailureKind::Cancelled
-        }
-    };
-    SocketProcessingFailure::new(kind, "protocol frame inspection failed")
-}
-
-fn runtime_failure(error: &ProtocolRuntimeError) -> SocketProcessingFailure {
-    if matches!(error, ProtocolRuntimeError::ExecutionCancelled { .. }) {
-        SocketProcessingFailure::new(
-            SocketProcessingFailureKind::Cancelled,
-            "protocol frame execution cancelled",
-        )
-    } else {
-        processing_failure("protocol frame processing failed")
-    }
-}
-
-fn processing_failure(message: &'static str) -> SocketProcessingFailure {
-    SocketProcessingFailure::new(SocketProcessingFailureKind::ProcessingFailed, message)
-}
-
-fn worker_failure() -> SocketProcessingFailure {
-    SocketProcessingFailure::new(
-        SocketProcessingFailureKind::ProcessorPanicked,
-        "scripted direction worker stopped",
-    )
-}
-
-fn invalid_limits() -> SocketProcessingFailure {
-    SocketProcessingFailure::new(
-        SocketProcessingFailureKind::InvalidLimits,
-        "scripted frame limits cannot be represented safely",
-    )
 }
 
 #[cfg(test)]

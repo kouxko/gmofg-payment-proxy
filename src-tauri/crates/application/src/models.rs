@@ -13,8 +13,13 @@ mod fault;
 mod protocol_package;
 mod rule;
 mod session;
+mod socket_capture;
+mod socket_capture_diagnostics;
 mod socket_rule;
 mod workspace;
+
+#[cfg(test)]
+mod socket_capture_tests;
 
 pub use breakpoint::*;
 pub use capture::*;
@@ -26,5 +31,7 @@ pub use fault::*;
 pub use protocol_package::*;
 pub use rule::*;
 pub use session::*;
+pub use socket_capture::*;
+pub use socket_capture_diagnostics::*;
 pub use socket_rule::*;
 pub use workspace::*;

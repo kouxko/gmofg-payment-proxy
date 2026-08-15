@@ -122,7 +122,11 @@ async fn run_case(upstream_state: State, downstream_state: State) {
     ));
     repository.install_zip(&package_zip()).unwrap();
     repository.set_enabled(&package(), true).unwrap();
+    let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
+        Arc::clone(&store),
+    ));
     let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    runtime.set_socket_capture_repository(Arc::clone(&captures));
     runtime.start(workspace, listener.clone()).await.unwrap();
 
     let mut client = TcpStream::connect(("127.0.0.1", listener_port))
@@ -135,6 +139,56 @@ async fn run_case(upstream_state: State, downstream_state: State) {
     assert_eq!(response, expected_downstream);
 
     upstream_task.await.unwrap();
+    let page = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let page = captures.query(&captures::query()).unwrap();
+            if page.rows.len() == 2 {
+                break page;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("two committed relay captures should persist within the bounded wait");
+    for row in page.rows {
+        let detail = captures.get_detail(row.capture_id).unwrap().record;
+        let intercept_proxy_application::SocketCapturePayload::RelayFrame(frame) = detail.payload
+        else {
+            panic!("expected relay frame")
+        };
+        let (state, origin, written) = match frame.direction {
+            SocketDirection::Upstream => (upstream_state, vec![2, 11], expected_upstream.to_vec()),
+            SocketDirection::Downstream => {
+                (downstream_state, vec![2, 22], expected_downstream.to_vec())
+            }
+        };
+        assert_eq!(frame.origin, origin);
+        assert_eq!(frame.written, written);
+        assert_eq!(frame.document.is_some(), state.decode);
+        assert_eq!(
+            frame.write_kind,
+            if state.encode {
+                intercept_proxy_application::SocketWriteKind::Encoded
+            } else {
+                intercept_proxy_application::SocketWriteKind::Original
+            }
+        );
+        assert!(if state.encode {
+            matches!(
+                frame.display,
+                intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
+            )
+        } else {
+            matches!(
+                frame.display,
+                intercept_proxy_application::SocketDisplayResult::HexFallback {
+                    reason:
+                        intercept_proxy_application::SocketDisplayFallbackReason::EncodeDisabled,
+                    ..
+                }
+            )
+        });
+    }
     runtime.stop(listener.id).await.unwrap();
 }
 
@@ -302,6 +356,8 @@ fn package_zip() -> Vec<u8> {
     writer.finish().unwrap().into_inner()
 }
 
+#[path = "scripted_relay_runtime/captures.rs"]
+mod captures;
 #[path = "scripted_relay_runtime/failures.rs"]
 mod failures;
 #[path = "scripted_relay_runtime/isolation.rs"]

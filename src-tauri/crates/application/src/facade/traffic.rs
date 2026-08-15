@@ -14,6 +14,7 @@ use crate::{
     BreakpointId, BreakpointSummaryViewModel, BreakpointValidationViewModel,
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, OperationResultViewModel,
     RuntimeEpoch, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
+    SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel, SocketCaptureQuery,
     UiEventPayload,
 };
 
@@ -36,6 +37,51 @@ impl Application {
 
     pub async fn capture_clear_view(&self, current_cursor: u64) -> AppResult<u64> {
         self.capture.clear_view(current_cursor).await
+    }
+
+    /// 查询 Socket Frame/LocalExchange；该路径不会触碰旧 HTTP capture DTO。
+    pub async fn socket_capture_query(
+        &self,
+        mut query: SocketCaptureQuery,
+    ) -> AppResult<SocketCapturePageViewModel> {
+        query.page = query.page.normalized();
+        self.capture.query_socket(query).await
+    }
+
+    pub async fn socket_capture_get_detail(
+        &self,
+        capture_id: SocketCaptureId,
+    ) -> AppResult<SocketCaptureDetailViewModel> {
+        self.capture.get_socket_detail(capture_id).await
+    }
+
+    pub async fn socket_capture_clear(
+        &self,
+        confirmed: bool,
+    ) -> AppResult<OperationResultViewModel> {
+        if !confirmed {
+            return Err(AppError::new(
+                "CONFIRMATION_REQUIRED",
+                "清空 Socket 抓包需要确认。",
+            ));
+        }
+        let _gate = self.mutation_gate.lock().await;
+        let selected = self
+            .workspaces
+            .list()
+            .await?
+            .into_iter()
+            .find(|workspace| workspace.selected)
+            .ok_or_else(|| {
+                AppError::new(
+                    "WORKSPACE_SELECTION_REQUIRED",
+                    "请先选择要清空 Socket 抓包的 Workspace。",
+                )
+            })?;
+        let count = self.capture.clear_socket_completed(selected.id).await?;
+        Ok(OperationResultViewModel::success(format!(
+            "已清空 {count} 条 Socket 抓包记录。"
+        )))
     }
 
     pub async fn session_query(&self, mut query: SessionQuery) -> AppResult<SessionListViewModel> {

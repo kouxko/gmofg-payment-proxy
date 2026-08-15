@@ -1,5 +1,11 @@
 //! Scripted Relay 的旁路 Display 与 Frame/Decode/Encode 失败原子性。
 
+use std::sync::Arc;
+
+use intercept_proxy_application::{
+    SocketCapturePayload, SocketDisplayFallbackReason, SocketDisplayResult,
+};
+
 use super::{support::*, *};
 
 const DISPLAY_FAILURE_SCRIPT: &str = r#"
@@ -33,11 +39,12 @@ async fn display_failure_keeps_wire_open_for_the_next_frame() {
         stream.write_all(&[2, 21, 2, 22]).await.unwrap();
         stream.shutdown().await.unwrap();
     });
-    let (runtime, listener) = start_scripted_runtime(
+    let (runtime, listener, captures) = start_scripted_runtime_with_capture(
         "display-failure",
         DISPLAY_FAILURE_SCRIPT,
         listener_port,
         upstream_port,
+        true,
     )
     .await;
 
@@ -51,6 +58,7 @@ async fn display_failure_keeps_wire_open_for_the_next_frame() {
     assert_eq!(responses, [209, 21, 209, 22]);
     assert!(read_to_end_bounded(&mut client).await.is_empty());
     upstream_task.await.unwrap();
+    assert_four_display_fallbacks(&captures, SocketDisplayFallbackReason::EntryPointFailed).await;
     runtime.stop(listener.id).await.unwrap();
 }
 
@@ -67,11 +75,12 @@ async fn missing_display_keeps_wire_open_for_the_next_frame() {
         stream.write_all(&[2, 41, 2, 42]).await.unwrap();
         stream.shutdown().await.unwrap();
     });
-    let (runtime, listener) = start_scripted_runtime_without_display(
+    let (runtime, listener, captures) = start_scripted_runtime_with_capture(
         "missing-display",
         DISPLAY_FAILURE_SCRIPT,
         listener_port,
         upstream_port,
+        false,
     )
     .await;
 
@@ -84,7 +93,50 @@ async fn missing_display_keeps_wire_open_for_the_next_frame() {
 
     assert_eq!(responses, [209, 41, 209, 42]);
     upstream_task.await.unwrap();
+    assert_four_display_fallbacks(&captures, SocketDisplayFallbackReason::NotDeclared).await;
     runtime.stop(listener.id).await.unwrap();
+}
+
+async fn assert_four_display_fallbacks(
+    captures: &Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
+    expected_reason: SocketDisplayFallbackReason,
+) {
+    let page = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let page = captures.query(&captures::query()).unwrap();
+            if page.total == 4 {
+                break page;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| {
+        let page = captures.query(&captures::query()).unwrap();
+        let observed = page
+            .rows
+            .into_iter()
+            .map(|row| {
+                let detail = captures.get_detail(row.capture_id).unwrap();
+                let SocketCapturePayload::RelayFrame(frame) = detail.record.payload else {
+                    panic!("expected relay frame capture")
+                };
+                format!("{:?}:{:?}", frame.direction, frame.origin)
+            })
+            .collect::<Vec<_>>();
+        panic!("four committed relay captures should persist; observed {observed:?}")
+    });
+
+    for row in page.rows {
+        let detail = captures.get_detail(row.capture_id).unwrap();
+        let SocketCapturePayload::RelayFrame(frame) = detail.record.payload else {
+            panic!("expected relay frame capture")
+        };
+        assert!(matches!(
+            frame.display,
+            SocketDisplayResult::HexFallback { reason, .. } if reason == expected_reason
+        ));
+    }
 }
 
 #[tokio::test]

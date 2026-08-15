@@ -73,8 +73,9 @@ pub struct ListenerRuntimeAdapter {
     protected_secrets: Option<Arc<ProtectedSecretAdapter>>,
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
     protocol_packages: Option<Arc<ProtocolPackageRepositoryAdapter>>,
+    socket_capture_publisher: RwLock<Option<socket_capture_publisher::SocketCapturePublisher>>,
     pipeline_ports: RwLock<Option<Arc<dyn PipelinePorts>>>,
-    socket_diagnostic_events: RwLock<Arc<EventHub>>,
+    socket_diagnostic_events: Arc<RwLock<Arc<EventHub>>>,
 }
 
 impl ListenerRuntimeAdapter {
@@ -89,8 +90,9 @@ impl ListenerRuntimeAdapter {
             protected_secrets: None,
             managed_listener_certificates: None,
             protocol_packages: None,
+            socket_capture_publisher: RwLock::new(None),
             pipeline_ports: RwLock::new(None),
-            socket_diagnostic_events: RwLock::new(Arc::new(EventHub::default())),
+            socket_diagnostic_events: Arc::new(RwLock::new(Arc::new(EventHub::default()))),
         }
     }
 
@@ -156,6 +158,33 @@ impl ListenerRuntimeAdapter {
         *self.socket_diagnostic_events.write() = events;
     }
 
+    /// 注入正式 Socket capture 仓储，并在 infrastructure 内建立有界 drain worker。
+    ///
+    /// 连接与 Rhai worker 只持有非阻塞 publisher；SQLite I/O 永远不会进入网络数据面。
+    pub fn set_socket_capture_repository(
+        &self,
+        repository: Arc<super::SocketCaptureRepositoryAdapter>,
+    ) {
+        *self.socket_capture_publisher.write() =
+            Some(socket_capture_publisher::SocketCapturePublisher::new(
+                repository,
+                Arc::clone(&self.socket_diagnostic_events),
+            ));
+    }
+
+    #[cfg(test)]
+    fn block_next_socket_capture_display_for_test(
+        &self,
+        entered: std::sync::mpsc::SyncSender<()>,
+        release: std::sync::mpsc::Receiver<()>,
+    ) {
+        self.socket_capture_publisher
+            .read()
+            .as_ref()
+            .expect("socket capture publisher must be configured")
+            .block_next_display(entered, release);
+    }
+
     fn runtime_epoch_for_start(&self, workspace_id: WorkspaceId) -> Uuid {
         let mut epochs = self.runtime_epochs.write();
         *epochs.entry(workspace_id).or_insert_with(Uuid::new_v4)
@@ -197,6 +226,7 @@ mod plan;
 mod port;
 mod scripted_relay;
 mod scripted_snapshot;
+mod socket_capture_publisher;
 mod socket_diagnostics;
 mod socket_plan;
 mod tls_material;

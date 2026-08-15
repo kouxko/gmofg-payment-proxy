@@ -28,6 +28,8 @@ impl SqliteStore {
             .map_err(|source| InfrastructureError::Database { source })?;
         let store = Self {
             connection: Mutex::new(connection),
+            capture_coordination:
+                super::socket_capture_coordination::SocketCaptureCoordination::default(),
         };
         store.migrate()?;
         Ok(store)
@@ -39,6 +41,7 @@ impl SqliteStore {
             .transaction()
             .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
         create_schema(&transaction)?;
+        super::socket_captures::create_schema(&transaction)?;
         let certificate_revision = stored_certificate_revision(&transaction)?;
         initialize_singleton_state(&transaction, certificate_revision)?;
         record_schema_migration(&transaction)?;

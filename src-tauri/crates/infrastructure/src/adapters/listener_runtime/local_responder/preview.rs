@@ -5,18 +5,37 @@ use std::fmt::Write as _;
 use intercept_proxy_domain::{Document, DocumentValue};
 use intercept_proxy_protocol_scripting::LocalRequestOutput;
 use intercept_proxy_runtime::{
-    SocketDocumentFieldPreview, SocketDocumentPreview, SocketLocalRequestPreview,
+    LocalResponderDiagnostics, SocketDocumentFieldPreview, SocketDocumentPreview,
+    SocketLocalRequestPreview,
 };
 use uuid::Uuid;
 
 const DOCUMENT_PREVIEW_MAX_BYTES: usize = 16 * 1024;
 
-pub(super) fn request_preview(request: &LocalRequestOutput) -> SocketLocalRequestPreview {
+pub(super) fn request_preview(
+    exchange_id: Uuid,
+    request: &LocalRequestOutput,
+) -> SocketLocalRequestPreview {
     SocketLocalRequestPreview::new(
-        Uuid::new_v4(),
+        exchange_id,
         request.origin(),
         request.document().map(document_preview),
     )
+}
+
+pub(super) fn publish_request_parsed(
+    diagnostics: Option<&LocalResponderDiagnostics>,
+    exchange_id: intercept_proxy_application::SocketExchangeId,
+    request: &LocalRequestOutput,
+) {
+    let Some(diagnostics) = diagnostics else {
+        return;
+    };
+    let preview = request_preview(exchange_id.as_uuid(), request);
+    // Observer 是可丢旁路；宿主 panic 不能改变 response 或关闭连接。
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        diagnostics.request_parsed(preview);
+    }));
 }
 
 fn document_preview(document: &Document) -> SocketDocumentPreview {
@@ -114,3 +133,7 @@ fn truncate_utf8(value: &str, maximum_bytes: usize) -> String {
     }
     value[..boundary].to_owned()
 }
+
+#[cfg(test)]
+#[path = "preview/tests.rs"]
+mod tests;

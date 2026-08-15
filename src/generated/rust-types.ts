@@ -103,6 +103,15 @@ export const commands = {
 	captureQuery: (query: CaptureQuery) => typedError<CapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_query", { query })),
 	captureGetDetail: (sessionId: string, runtimeEpoch: string) => typedError<CaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_get_detail", { sessionId, runtimeEpoch })),
 	captureClearView: (currentCursor: number) => typedError<number, AppErrorViewModel>(__TAURI_INVOKE("capture_clear_view", { currentCursor })),
+	/**
+	 *  查询独立的 Socket Frame/LocalExchange 时间线。
+	 *
+	 *  该命令不返回 HTTP start line、Header、status 或 JSONPath；T28 只需消费这一套
+	 *  协议中立 DTO，不必从 HTTP 抓包字段推断 Socket 语义。
+	 */
+	socketCaptureQuery: (query: SocketCaptureQuery) => typedError<SocketCapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_query", { query })),
+	socketCaptureGetDetail: (captureId: SocketCaptureId) => typedError<SocketCaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_get_detail", { captureId })),
+	socketCaptureClear: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_clear", { confirmed })),
 	sessionQuery: (query: SessionQuery) => typedError<SessionListViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_query", { query })),
 	sessionGet: (sessionId: string) => typedError<SessionDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_get", { sessionId })),
 	sessionClear: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_clear", { confirmed })),
@@ -655,11 +664,61 @@ field: DocumentFieldName;
 value: DocumentValue };
 
 /**
+ *  一个可由协议脚本赋值、UI 展示并被 Socket 规则引用的字段声明。
+ *
+ *  此类型只声明允许的名称和类型，不表达字段是否必须出现；协议条件完整性属于脚本。
+ */
+export type DocumentField = DocumentFieldWire;
+
+/**
  *  Schema 字段名，同时也是脚本和 Socket 规则使用的稳定变量名。
  *  名称必须匹配 `[a-z][a-z0-9_]*`，并拒绝全部 Rhai active/reserved 关键字，
  *  防止同一个字段在 Schema 中合法、注册到脚本时却无法使用。
  */
 export type DocumentFieldName = string;
+
+/**
+ *  Host API v1 支持的协议无关字段类型。
+ *
+ *  serde 形式固定为 `string`、`int`、`bool`、`blob`，不根据 JSON 数字或文本进行隐式转换。
+ */
+export type DocumentFieldType =
+/**  UTF-8 文本或编码后标识符。 */
+"string" |
+/**  有符号 64 位整数，金额通常用最小货币单位表达。 */
+"int" |
+/**  布尔标志。 */
+"bool" |
+/**  必须逐字节保真的未解释二进制值。 */
+"blob";
+
+export type DocumentFieldWire = {
+	name: DocumentFieldName,
+	type: DocumentFieldType,
+	label: string,
+};
+
+/**
+ *  协议包提前声明的有序 Document 字段契约。
+ *
+ *  字段顺序是 wire/UI 稳定契约，也是 [`crate::Document`] 值槽的索引来源。Schema 至少包含一个
+ *  字段，且同一 Schema 内字段名不能重复。
+ */
+export type DocumentSchema = DocumentSchemaWire;
+
+/**
+ *  协议包内 Document Schema 的稳定 ID。
+ *
+ *  Wire 形式是匹配 `[a-z][a-z0-9-]*` 的字符串。它标识字段契约，不等同于协议包 ID。
+ */
+export type DocumentSchemaId = string;
+
+export type DocumentSchemaWire = {
+	id: DocumentSchemaId,
+	version: number,
+	title: string,
+	fields: DocumentField[],
+};
 
 /**
  *  当前 Frame 中某个已声明字段的实际值。
@@ -1409,10 +1468,137 @@ export type SettingsViewModel = {
 	payload_policy_text: string,
 };
 
+/**  完整详情；`record` 是网络写出成功后的原子证据。 */
+export type SocketCaptureDetailViewModel = {
+	record: SocketCaptureRecord,
+};
+
+/**  捕获时的完整 Schema 与稀疏值槽；值顺序与 Schema 字段顺序严格一致。 */
+export type SocketCaptureDocument = {
+	/**  捕获时冻结的完整 Schema。 */
+	schema: DocumentSchema,
+	/**  与 Schema 字段顺序一一对应的可选值槽。 */
+	values: (SocketCaptureDocumentValue | null)[],
+};
+
+/**  Capture Document 的类型化值；整数使用十进制字符串保持 `i64` 精度。 */
+export type SocketCaptureDocumentValue =
+/**  UTF-8 文本值。 */
+{ type: "string"; value: string } |
+/**  使用规范十进制字符串承载的完整 `i64`。 */
+{ type: "int"; value: SocketCaptureInteger } |
+/**  布尔值。 */
+{ type: "bool"; value: boolean } |
+/**  原始字节值。 */
+{ type: "blob"; value: number[] };
+
+/**  已脱敏的 capture 失败证据；不携带 Document、原始帧或部分 written bytes。 */
+export type SocketCaptureFailureDiagnostic = {
+	stage: SocketCaptureFailureStage,
+	code: string,
+};
+
+export type SocketCaptureFailureStage = "frame" | "decode" | "rule" | "encode" | "write";
+
+/** 一条已完成 Socket capture 的稳定标识。 */
+export type SocketCaptureId = string;
+
+/**  一个规范、可无损往返的 `i64` 十进制文本。 */
+export type SocketCaptureInteger = string;
+
+export type SocketCaptureKind = "relay_frame" | "local_exchange";
+
+export type SocketCapturePageViewModel = {
+	rows: SocketCaptureRowViewModel[],
+	total: number,
+	page: number,
+	page_size: number,
+	total_pages: number,
+	empty_message: string,
+};
+
+/**  Socket capture 的封闭联合类型；本地 exchange 不伪装为 Server frame。 */
+export type SocketCapturePayload = { kind: "relay_frame"; capture: SocketRelayFrameCapture } | { kind: "local_exchange"; capture: SocketLocalExchangeCapture };
+
+/**  Socket 页面专用查询；刻意不接受 HTTP stage、status、Header 或 `JSONPath` 条件。 */
+export type SocketCaptureQuery = {
+	workspace_id: WorkspaceId | null,
+	listener_id: ListenerId | null,
+	session_id: string | null,
+	connection_id: SocketConnectionId | null,
+	package: ProtocolPackageRef | null,
+	direction: SocketDirection | null,
+	kind: SocketCaptureKind | null,
+	occurred_from: string | null,
+	occurred_to: string | null,
+	sort: SocketCaptureSort,
+	direction_sort: SortDirection,
+	page: PageRequest,
+};
+
+/**  仓储保存的完整 Socket capture 聚合根。 */
+export type SocketCaptureRecord = {
+	capture_id: SocketCaptureId,
+	runtime_epoch: string,
+	workspace_id: WorkspaceId,
+	listener_id: ListenerId,
+	session_id: string,
+	connection_id: SocketConnectionId,
+	peer_address: string,
+	occurred_at: string,
+	completed_at: string,
+	payload: SocketCapturePayload,
+};
+
+/**  分页列表中的轻量行，不重复返回 Document、HTML 或完整字节。 */
+export type SocketCaptureRowViewModel = {
+	capture_id: SocketCaptureId,
+	runtime_epoch: string,
+	session_id: string,
+	connection_id: SocketConnectionId,
+	listener_id: ListenerId,
+	occurred_at: string,
+	completed_at: string,
+	kind: SocketCaptureKind,
+	direction: SocketDirection | null,
+	package: ProtocolPackageRef,
+	schema: SocketCaptureSchemaRef,
+	origin_size_bytes: number,
+	written_size_bytes: number,
+	logical_size_bytes: number,
+	matched_rule_ids: SocketDocumentRuleId[],
+};
+
+/**  捕获时实际使用的精确 Schema 身份。 */
+export type SocketCaptureSchemaRef = {
+	id: DocumentSchemaId,
+	version: number,
+};
+
+export type SocketCaptureSort = "occurred_at" | "completed_at" | "size";
+
+/** 一条 Socket 连接的稳定标识；同一运行周期内不得复用。 */
+export type SocketConnectionId = string;
+
+/**  连接建立时的模式化路由证据；LocalResponder 分支不存在可伪造的上游字段。 */
+export type SocketConnectionRouteViewModel = {
+	topology: "relay",
+} & SocketRelayRouteEvidenceViewModel | { topology: "local_responder"; downstream_tls_peer: string | null };
+
+/**  一次上游连接测试的脱敏结果。 */
+export type SocketConnectionTestEvidenceViewModel = {
+	resolved_address: string,
+	transport: string,
+	tls: SocketTlsEvidenceViewModel | null,
+	elapsed_millis: number,
+};
+
 export type SocketDiagnosticContextViewModel = {
 	connection_id: string | null,
 	workspace_runtime_epoch: string,
 	listener_run_epoch: string,
+	route: SocketConnectionRouteViewModel | null,
+	capture_failure: SocketCaptureFailureDiagnostic | null,
 	stage: SocketDiagnosticStage,
 	direction: SocketDiagnosticDirection | null,
 	client_to_server_read_bytes: number,
@@ -1423,7 +1609,7 @@ export type SocketDiagnosticContextViewModel = {
 
 export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_server" | "server_to_client" | "local_exchange";
 
-export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "frame_inspect" | "frame_process" | "relay_write" | "shutdown";
+export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "frame_inspect" | "decode" | "rule" | "encode" | "frame_process" | "relay_write" | "shutdown";
 
 /**  Socket Frame 相对于代理的稳定数据方向。 */
 export type SocketDirection =
@@ -1431,6 +1617,18 @@ export type SocketDirection =
 "upstream" |
 /**  Server 到 App，或 `LocalResponder` 的响应方向。 */
 "downstream";
+
+/**  Display 失败时允许持久化的脱敏诊断。 */
+export type SocketDisplayDiagnostic = {
+	code: string,
+	message: string,
+};
+
+/**  Hex fallback 的稳定原因；不保存脚本异常文本或原始 payload。 */
+export type SocketDisplayFallbackReason = "encode_disabled" | "not_declared" | "entry_point_failed" | "resource_limit_exceeded";
+
+/**  协议展示结果。HTML 即使经过脚本生成也仍按不可信内容处理。 */
+export type SocketDisplayResult = { type: "untrusted_html"; html: string } | { type: "hex_fallback"; reason: SocketDisplayFallbackReason; diagnostic: SocketDisplayDiagnostic | null };
 
 /**
  *  可持久化的 Socket Document 规则实体。
@@ -1467,6 +1665,27 @@ export type SocketEndpoint = {
 	port: number,
 };
 
+/** 一次 `LocalResponder` request/response 原子交换的稳定标识。 */
+export type SocketExchangeId = string;
+
+/**  `LocalResponder` 中一次完整、已写出的 request/response exchange。 */
+export type SocketLocalExchangeCapture = {
+	exchange_id: SocketExchangeId,
+	package: ProtocolPackageRef,
+	schema: SocketCaptureSchemaRef,
+	request_decode_enabled: boolean,
+	response_encode_enabled: boolean,
+	request_origin: number[],
+	/**  Decode 关闭时必须保持 `None`，不得合成空 Document 冒充解析结果。 */
+	request_document: SocketCaptureDocument | null,
+	/**  规则只修改该响应 Document，不得覆盖 request Document。 */
+	response_document: SocketCaptureDocument,
+	matched_downstream_rule_ids: SocketDocumentRuleId[],
+	written_response: number[],
+	response_write_kind: SocketWriteKind,
+	response_display: SocketDisplayResult,
+};
+
 /**  不连接 Server、而是由协议包在本机生成响应的 Socket 拓扑。 */
 export type SocketLocalResponderTopology = {
 	downstream_security: SocketDownstreamSecurity,
@@ -1481,6 +1700,32 @@ export type SocketLocalResponderTopology = {
  *  脚本字段。旧 Socket 配置缺少整个 `processing` 字段时由 [`SocketRelaySettings`] 迁移为 Direct。
  */
 export type SocketPayloadProcessing = { mode: "direct" } | { mode: "scripted"; settings: ScriptedSocketProcessing };
+
+/**  Relay 中一个方向已成功写出的完整 Frame。 */
+export type SocketRelayFrameCapture = {
+	direction: SocketDirection,
+	package: ProtocolPackageRef,
+	schema: SocketCaptureSchemaRef,
+	decode_enabled: boolean,
+	encode_enabled: boolean,
+	/**  网络读取到的完整原始 Frame；Decode 关闭或失败时仍必须保留。 */
+	origin: number[],
+	/**  规则执行所使用的 Document。Decode 关闭时必须为 `None`。 */
+	document: SocketCaptureDocument | null,
+	matched_rule_ids: SocketDocumentRuleId[],
+	/**  实际成功写入另一端的完整字节；不得记录部分写入缓冲区。 */
+	written: number[],
+	write_kind: SocketWriteKind,
+	display: SocketDisplayResult,
+};
+
+export type SocketRelayRouteEvidenceViewModel = {
+	configured_address: string | null,
+	resolved_address: string | null,
+	downstream_tls_peer: string | null,
+	upstream_tls: SocketTlsEvidenceViewModel | null,
+	connection_test: SocketConnectionTestEvidenceViewModel | null,
+};
 
 export type SocketRelaySecurity = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsSettings; upstream_tls: SocketUpstreamTlsSettings };
 
@@ -1535,6 +1780,16 @@ export type SocketRuleSaveInput = {
 	actions: DocumentAction[],
 };
 
+/**  上游 TLS 握手的结构化证据；不保存证书原文。 */
+export type SocketTlsEvidenceViewModel = {
+	tls_version: string,
+	cipher_suite: string,
+	peer_subject: string,
+	peer_sha256_fingerprint: string,
+	hostname_verification_enabled: boolean,
+	client_identity_configured: boolean,
+};
+
 /**  Socket Listener 的网络拓扑。变体自身拥有且只拥有该模式可用的字段。 */
 export type SocketTopology = { mode: "relay"; settings: SocketRelayTopology } | { mode: "local_responder"; settings: SocketLocalResponderTopology };
 
@@ -1545,6 +1800,9 @@ export type SocketUpstreamTlsSettings = {
 	server_trust: CertificateReferenceId | null,
 	client_identity: CertificateReferenceId | null,
 };
+
+/**  `written` 字节来自原文还是 Encode；UI 不通过比较字节猜测处理路径。 */
+export type SocketWriteKind = "original" | "encoded";
 
 export type SortDirection = "asc" | "desc";
 
@@ -1569,7 +1827,12 @@ export type UiEventEnvelope = {
 };
 
 /**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
-export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
+export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } |
+/**
+ *  一个 Socket Frame 或 `LocalExchange` 已完整写出并进入正式 capture 仓储。
+ *  `RequestParsed` 仍只走有界诊断事件，不能构造此完成事件。
+ */
+{ type: "socket_capture_completed"; data: SocketCaptureRowViewModel } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
 	message: string,
 } } | { type: "operation_failed"; data: AppErrorViewModel } | { type: "snapshot_required"; data: {
 	reason: string,

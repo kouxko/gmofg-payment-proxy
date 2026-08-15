@@ -53,8 +53,15 @@ async fn four_valid_decode_encode_states_use_the_real_local_response_chain() {
             Vec::new()
         };
         let workspace = workspace(listener.clone(), rules);
-        let runtime =
-            start_local_runtime(&id, BASIC_SCHEMA, BASIC_SCRIPT, workspace, &listener).await;
+        let (runtime, captures) = start_local_runtime_with_capture(
+            &id,
+            BASIC_SCHEMA,
+            BASIC_SCRIPT,
+            workspace,
+            &listener,
+            Arc::new(intercept_proxy_application::EventHub::default()),
+        )
+        .await;
 
         let response = request_once(listener_port, &[2, 11]).await;
         let expected = if state.encode {
@@ -63,6 +70,40 @@ async fn four_valid_decode_encode_states_use_the_real_local_response_chain() {
             vec![2, 11]
         };
         assert_eq!(response, expected, "failed state: {state:?}");
+        let row = captures::wait_for_rows(&captures, 1).await.rows.remove(0);
+        let detail = captures.get_detail(row.capture_id).unwrap().record;
+        let intercept_proxy_application::SocketCapturePayload::LocalExchange(exchange) =
+            detail.payload
+        else {
+            panic!("expected LocalExchange")
+        };
+        assert_eq!(exchange.request_document.is_some(), state.decode);
+        assert_eq!(exchange.request_origin, [2, 11]);
+        assert_eq!(exchange.written_response, expected);
+        assert_eq!(exchange.response_encode_enabled, state.encode);
+        assert_eq!(
+            exchange.response_write_kind,
+            if state.encode {
+                intercept_proxy_application::SocketWriteKind::Encoded
+            } else {
+                intercept_proxy_application::SocketWriteKind::Original
+            }
+        );
+        assert!(if state.encode {
+            matches!(
+                exchange.response_display,
+                intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
+            )
+        } else {
+            matches!(
+                exchange.response_display,
+                intercept_proxy_application::SocketDisplayResult::HexFallback {
+                    reason:
+                        intercept_proxy_application::SocketDisplayFallbackReason::EncodeDisabled,
+                    ..
+                }
+            )
+        });
 
         runtime.stop(listener.id).await.unwrap();
     }
@@ -288,6 +329,8 @@ fn set_amount_rule(
     .unwrap()
 }
 
+#[path = "local_responder_runtime/captures.rs"]
+mod captures;
 #[path = "local_responder_runtime/failures.rs"]
 mod failures;
 #[path = "local_responder_runtime/request_parsed.rs"]

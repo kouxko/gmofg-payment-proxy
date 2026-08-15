@@ -24,6 +24,7 @@ mod protocol_packages;
 mod retired_proxy;
 mod rules;
 mod settings;
+mod socket_capture;
 mod workspace_policies;
 mod workspaces;
 
@@ -56,5 +57,6 @@ pub use protocol_packages::{
 pub use retired_proxy::RetiredProxyAdapter;
 pub use rules::RuleRepositoryAdapter;
 pub use settings::SettingsRepositoryAdapter;
+pub use socket_capture::SocketCaptureRepositoryAdapter;
 pub use workspace_policies::WorkspaceRuntimePolicyResolver;
 pub use workspaces::{WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter};

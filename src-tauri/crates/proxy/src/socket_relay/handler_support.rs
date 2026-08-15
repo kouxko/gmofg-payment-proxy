@@ -126,6 +126,9 @@ pub(super) fn processing_failure(failure: &SocketProcessingFailure) -> SocketRel
         SocketProcessingFailureKind::ReadFailed | SocketProcessingFailureKind::ReadTimeout => {
             SocketRelayStage::RelayRead
         }
+        SocketProcessingFailureKind::DecodeFailed => SocketRelayStage::Decode,
+        SocketProcessingFailureKind::RuleFailed => SocketRelayStage::Rule,
+        SocketProcessingFailureKind::EncodeFailed => SocketRelayStage::Encode,
         SocketProcessingFailureKind::WriteFailed | SocketProcessingFailureKind::WriteTimeout => {
             SocketRelayStage::RelayWrite
         }
@@ -147,5 +150,32 @@ pub(super) fn normalize_cancelled(error: ProxyError) -> ProxyError {
         ProxyError::new(ErrorCode::SocketRelayCancelled, error.message)
     } else {
         error
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_processing_kinds_keep_distinct_terminal_stages() {
+        for (kind, expected_stage) in [
+            (
+                SocketProcessingFailureKind::DecodeFailed,
+                SocketRelayStage::Decode,
+            ),
+            (
+                SocketProcessingFailureKind::RuleFailed,
+                SocketRelayStage::Rule,
+            ),
+            (
+                SocketProcessingFailureKind::EncodeFailed,
+                SocketRelayStage::Encode,
+            ),
+        ] {
+            let mapped = processing_failure(&SocketProcessingFailure::new(kind, "private detail"));
+            assert_eq!(mapped.stage, expected_stage);
+            assert_eq!(mapped.code, kind.as_str());
+        }
     }
 }

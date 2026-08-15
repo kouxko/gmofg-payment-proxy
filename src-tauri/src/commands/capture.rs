@@ -7,6 +7,7 @@ use intercept_proxy_application::{
     BreakpointSummaryViewModel, BreakpointValidationViewModel, CaptureDetailViewModel,
     CapturePageViewModel, CaptureQuery, OperationResultViewModel, RuntimeEpoch,
     SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
+    SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel, SocketCaptureQuery,
 };
 use tauri::State;
 
@@ -49,6 +50,49 @@ pub async fn capture_clear_view(
     state
         .application
         .capture_clear_view(current_cursor)
+        .await
+        .map_err(command_error)
+}
+
+/// 查询独立的 Socket Frame/LocalExchange 时间线。
+///
+/// 该命令不返回 HTTP start line、Header、status 或 JSONPath；T28 只需消费这一套
+/// 协议中立 DTO，不必从 HTTP 抓包字段推断 Socket 语义。
+#[tauri::command]
+#[specta::specta]
+pub async fn socket_capture_query(
+    state: State<'_, AppState>,
+    query: SocketCaptureQuery,
+) -> CommandResult<SocketCapturePageViewModel> {
+    state
+        .application
+        .socket_capture_query(query)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn socket_capture_get_detail(
+    state: State<'_, AppState>,
+    capture_id: SocketCaptureId,
+) -> CommandResult<SocketCaptureDetailViewModel> {
+    state
+        .application
+        .socket_capture_get_detail(capture_id)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn socket_capture_clear(
+    state: State<'_, AppState>,
+    confirmed: bool,
+) -> CommandResult<OperationResultViewModel> {
+    state
+        .application
+        .socket_capture_clear(confirmed)
         .await
         .map_err(command_error)
 }
@@ -170,3 +214,7 @@ pub async fn breakpoint_resolve(
         })?
         .map_err(command_error)
 }
+
+#[cfg(test)]
+#[path = "capture/tests.rs"]
+mod tests;

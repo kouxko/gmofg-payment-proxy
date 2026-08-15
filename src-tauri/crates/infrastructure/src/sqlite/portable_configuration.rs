@@ -157,6 +157,14 @@ impl SqliteStore {
         if records.len() != 1 || records[0].id != selected_id {
             return Err(InfrastructureError::RevisionConflict);
         }
+        let _completion_gate = self.capture_coordination.completion_gate.write();
+        let _capture_gate = self.capture_coordination.mutation_gate.lock();
+        self.capture_coordination.bump_reset().map_err(|message| {
+            InfrastructureError::PersistenceCorrupt {
+                entity: "socket_capture",
+                message: message.to_owned(),
+            }
+        })?;
         let mut connection = self.connection.lock();
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -168,12 +176,14 @@ impl SqliteStore {
                  DELETE FROM protected_secrets;
                  DELETE FROM certificate_material;
                  UPDATE certificate_state SET revision = revision + 1 WHERE singleton_id = 1;
+                 DELETE FROM socket_captures;
                  DELETE FROM protocol_packages;
                  DELETE FROM workspaces;",
             )
             .map_err(database_error)?;
         replace_workspaces_and_settings(&transaction, selected_id, records, settings)?;
-        transaction.commit().map_err(database_error)
+        transaction.commit().map_err(database_error)?;
+        Ok(())
     }
 }
 
