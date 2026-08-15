@@ -139,6 +139,14 @@ async fn local_handles_chunked_and_sticky_frames_in_fifo_order() {
 }
 
 #[tokio::test]
+async fn default_commit_notification_preserves_existing_processor_behavior() {
+    let input = [1, b'a', 1, b'b'];
+    let (output, result, _) = run_local(&input, Box::new(LengthProcessor), limits()).await;
+    assert_eq!(output, input);
+    result.unwrap();
+}
+
+#[tokio::test]
 async fn complete_frame_is_written_before_truncated_tail_is_reported() {
     let input = [2, b'a', b'b', 3, b'x'];
     let (output, result, bytes) = run_local(&input, Box::new(LengthProcessor), limits()).await;

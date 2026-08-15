@@ -8,8 +8,8 @@ use intercept_proxy_domain::{DirectionProcessingOptions, Document, ProtocolPacka
 use rhai::{Blob, Engine, EvalAltResult, ImmutableString, Scope};
 
 use crate::{
-    CompiledProtocolPackage, ProtocolDirection, ProtocolEntryPoint, ProtocolResourceLimit,
-    ProtocolRuntimeError, ProtocolRuntimeLimits, ProtocolRuntimeResult,
+    CompiledProtocolPackage, ProtocolDirection, ProtocolEntryPoint, ProtocolExecutionCancellation,
+    ProtocolResourceLimit, ProtocolRuntimeError, ProtocolRuntimeLimits, ProtocolRuntimeResult,
     compiler::{CompiledDirection, CompiledEntry, build_engine},
     host::{
         ProtocolHostApi,
@@ -40,6 +40,7 @@ pub struct ProtocolDirectionExecutor {
     listener_id: String,
     limits: ProtocolRuntimeLimits,
     output_owner: Arc<()>,
+    cancellation: ProtocolExecutionCancellation,
 }
 
 impl fmt::Debug for ProtocolDirectionExecutor {
@@ -65,6 +66,28 @@ impl ProtocolDirectionExecutor {
         listener_id: impl Into<String>,
         limits: ProtocolRuntimeLimits,
     ) -> ProtocolRuntimeResult<Self> {
+        Self::new_with_cancellation(
+            package,
+            plan,
+            connection_id,
+            listener_id,
+            limits,
+            ProtocolExecutionCancellation::new(),
+        )
+    }
+
+    /// 使用调用方提供的共享取消句柄构造执行器。
+    ///
+    /// 同一连接方向可将该句柄同时注入 Frame Inspector，从而统一取消 Frame、Decode、Encode
+    /// 和 Display；句柄 reset 后只允许之后开始的新调用，不能复活已经运行的旧调用。
+    pub fn new_with_cancellation(
+        package: &CompiledProtocolPackage,
+        plan: DirectionExecutionPlan,
+        connection_id: impl Into<String>,
+        listener_id: impl Into<String>,
+        limits: ProtocolRuntimeLimits,
+        cancellation: ProtocolExecutionCancellation,
+    ) -> ProtocolRuntimeResult<Self> {
         // DirectionExecutionPlan 是轻量不可变值，调用方可能误把由另一个包派生的计划传进来。必须用
         // 实际执行包重新验证可选入口能力，不能依赖之后的 `expect` 或静默关闭 Encode/Display。
         let plan = DirectionExecutionPlan::new(
@@ -78,7 +101,7 @@ impl ProtocolDirectionExecutor {
         let host = ProtocolHostApi::for_package(package);
         let mut engine = build_engine(limits);
         host.register(&mut engine);
-        let deadline = CallDeadline::install(&mut engine);
+        let deadline = CallDeadline::install(&mut engine, cancellation.clone());
         let direction = compiled_direction(package, plan.direction());
         Ok(Self {
             engine,
@@ -93,7 +116,14 @@ impl ProtocolDirectionExecutor {
             listener_id: listener_id.into(),
             limits,
             output_owner: Arc::new(()),
+            cancellation,
         })
+    }
+
+    /// 返回该方向 Frame/Decode/Encode/Display 可共享的取消句柄克隆。
+    #[must_use]
+    pub fn cancellation(&self) -> ProtocolExecutionCancellation {
+        self.cancellation.clone()
     }
 
     /// 按当前四态计划执行完整 Frame，不对 Document 应用额外规则。
@@ -110,17 +140,31 @@ impl ProtocolDirectionExecutor {
         origin: Vec<u8>,
         rules: impl FnOnce(&mut Document) -> ProtocolRuntimeResult<()>,
     ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
+        self.execute_frame_with_document_transform(origin, |mut document| {
+            rules(&mut document)?;
+            Ok(document)
+        })
+    }
+
+    /// 按 owned Document 边界在 Decode 后、Encode 前执行一次宿主变换。
+    ///
+    /// 变换只在 Decode 开启时调用；Decode 关闭时 Encode 仍收到当前 Schema 的空 Document。
+    /// owned 输入使宿主可以原子地执行整组规则：失败时不会把半修改对象写回执行器。
+    pub fn execute_frame_with_document_transform(
+        &mut self,
+        origin: Vec<u8>,
+        transform: impl FnOnce(Document) -> ProtocolRuntimeResult<Document>,
+    ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
         let mut document = if self.plan.decode_enabled() {
             self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
-            let mut decoded = self.call_decode(&origin)?;
+            let decoded = self.call_decode(&origin)?;
             validate_document_schema(&decoded, self.host.create_document().schema()).map_err(
                 |()| ProtocolRuntimeError::EntryPointFailed {
                     package: self.package.clone(),
                     entry: ProtocolEntryPoint::Decode,
                 },
             )?;
-            rules(&mut decoded)?;
-            decoded
+            transform(decoded)?
         } else {
             self.host.create_document()
         };
@@ -177,7 +221,7 @@ impl ProtocolDirectionExecutor {
     fn call_decode(&mut self, origin: &[u8]) -> ProtocolRuntimeResult<Document> {
         let context = self.context(ProtocolStage::Receive);
         let entry = self.decode.clone();
-        let started = self.arm_deadline();
+        let started = self.arm_deadline(ProtocolEntryPoint::Decode)?;
         let result = self.engine.call_fn::<Document>(
             &mut Scope::new(),
             entry.ast(),
@@ -201,7 +245,7 @@ impl ProtocolDirectionExecutor {
                     entry: ProtocolEntryPoint::Encode,
                 })?;
         let context = self.context(ProtocolStage::Send);
-        let started = self.arm_deadline();
+        let started = self.arm_deadline(ProtocolEntryPoint::Encode)?;
         let result = self.engine.call_fn::<Blob>(
             &mut Scope::new(),
             entry.ast(),
@@ -222,7 +266,7 @@ impl ProtocolDirectionExecutor {
                 entry: ProtocolEntryPoint::Display,
             })?;
         let context = self.context(ProtocolStage::Display);
-        let started = self.arm_deadline();
+        let started = self.arm_deadline(ProtocolEntryPoint::Display)?;
         let result = self.engine.call_fn::<ImmutableString>(
             &mut Scope::new(),
             entry.ast(),
@@ -248,9 +292,10 @@ impl ProtocolDirectionExecutor {
         )
     }
 
-    fn arm_deadline(&self) -> Instant {
+    fn arm_deadline(&self, entry: ProtocolEntryPoint) -> ProtocolRuntimeResult<Instant> {
         self.deadline
             .arm(Duration::from_millis(self.limits.max_wall_time_ms()))
+            .map_err(|()| self.cancellation_error(entry))
     }
 
     fn finish_call<T>(
@@ -259,7 +304,11 @@ impl ProtocolDirectionExecutor {
         started: Instant,
         result: Result<T, Box<EvalAltResult>>,
     ) -> ProtocolRuntimeResult<T> {
+        let cancelled = self.deadline.was_cancelled();
         self.deadline.disarm();
+        if cancelled {
+            return Err(self.cancellation_error(entry));
+        }
         match result {
             Err(error) => Err(self.map_eval_error(entry, &error)),
             Ok(_) if started.elapsed() > Duration::from_millis(self.limits.max_wall_time_ms()) => {
@@ -312,6 +361,13 @@ impl ProtocolDirectionExecutor {
             package: self.package.clone(),
             entry,
             limit,
+        }
+    }
+
+    fn cancellation_error(&self, entry: ProtocolEntryPoint) -> ProtocolRuntimeError {
+        ProtocolRuntimeError::ExecutionCancelled {
+            package: self.package.clone(),
+            entry,
         }
     }
 }
@@ -367,83 +423,4 @@ fn find_resource_limit(error: &EvalAltResult) -> Option<ProtocolResourceLimit> {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::Arc;
-
-    use intercept_proxy_domain::{
-        DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema, DocumentSchemaId,
-    };
-    use rhai::{Dynamic, EvalAltResult, Position};
-
-    use crate::ProtocolResourceLimit;
-
-    use super::{find_resource_limit, validate_document_schema};
-
-    #[test]
-    fn document_schema_identity_is_checked_at_runtime_boundary() {
-        let expected = DocumentSchema::new(
-            DocumentSchemaId::new("expected").unwrap(),
-            1,
-            "Expected",
-            vec![
-                DocumentField::new(
-                    DocumentFieldName::new("amount").unwrap(),
-                    DocumentFieldType::Int,
-                    "Amount",
-                )
-                .unwrap(),
-            ],
-        )
-        .unwrap();
-        let other = DocumentSchema::new(
-            DocumentSchemaId::new("other").unwrap(),
-            1,
-            "Other",
-            vec![
-                DocumentField::new(
-                    DocumentFieldName::new("trace").unwrap(),
-                    DocumentFieldType::String,
-                    "Trace",
-                )
-                .unwrap(),
-            ],
-        )
-        .unwrap();
-        let document = intercept_proxy_domain::Document::new(Arc::new(other));
-
-        assert!(validate_document_schema(&document, &expected).is_err());
-    }
-
-    #[test]
-    fn nested_rhai_resource_errors_map_without_using_display_text() {
-        let string =
-            EvalAltResult::ErrorDataTooLarge("Length of string".to_owned(), Position::NONE);
-        let nested = EvalAltResult::ErrorInFunctionCall(
-            "helper".to_owned(),
-            "safe-source".to_owned(),
-            Box::new(string),
-            Position::NONE,
-        );
-        assert_eq!(
-            find_resource_limit(&nested),
-            Some(ProtocolResourceLimit::StringBytes)
-        );
-
-        let nested_module = EvalAltResult::ErrorInModule(
-            "module".to_owned(),
-            Box::new(EvalAltResult::ErrorTerminated(
-                Dynamic::UNIT,
-                Position::NONE,
-            )),
-            Position::NONE,
-        );
-        assert_eq!(
-            find_resource_limit(&nested_module),
-            Some(ProtocolResourceLimit::WallTimeMs)
-        );
-        assert_eq!(
-            find_resource_limit(&EvalAltResult::ErrorRuntime(Dynamic::UNIT, Position::NONE)),
-            None
-        );
-    }
-}
+mod tests;

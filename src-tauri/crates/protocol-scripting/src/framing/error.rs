@@ -102,6 +102,16 @@ pub enum ProtocolFramingError {
         /// 失败包的精确 ID 与版本。
         package: ProtocolPackageRef,
     },
+    /// 调用方取消了正在运行或即将开始的 `frame()` 入口。
+    #[error(
+        "协议包 {id}@{version} 的 frame 入口执行已取消",
+        id = .package.id,
+        version = .package.version
+    )]
+    FrameExecutionCancelled {
+        /// 被取消包的精确 ID 与版本。
+        package: ProtocolPackageRef,
+    },
     /// 对端 EOF 时 FIFO 仍保留不完整 Frame。
     #[error("连接结束时仍有 {buffered_bytes} 字节未组成完整 Frame")]
     TruncatedFrame {
@@ -142,6 +152,8 @@ pub enum ProtocolFramingErrorCode {
     Rejected,
     /// frame 入口执行失败。
     FrameEntryFailed,
+    /// frame 入口被调用方取消。
+    FrameExecutionCancelled,
     /// EOF 时残留截断 Frame。
     TruncatedFrame,
 }
@@ -165,6 +177,9 @@ impl ProtocolFramingError {
             Self::FifoLimitExceeded { .. } => ProtocolFramingErrorCode::FifoLimitExceeded,
             Self::Rejected { .. } => ProtocolFramingErrorCode::Rejected,
             Self::FrameEntryFailed { .. } => ProtocolFramingErrorCode::FrameEntryFailed,
+            Self::FrameExecutionCancelled { .. } => {
+                ProtocolFramingErrorCode::FrameExecutionCancelled
+            }
             Self::TruncatedFrame { .. } => ProtocolFramingErrorCode::TruncatedFrame,
         }
     }

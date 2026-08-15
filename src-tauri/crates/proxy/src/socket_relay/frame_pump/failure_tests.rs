@@ -1,7 +1,10 @@
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -69,6 +72,11 @@ struct FixedProcessor {
 
 struct CancellingProcessor(CancellationToken);
 
+struct CommitCountingProcessor {
+    output: Bytes,
+    committed: Arc<AtomicUsize>,
+}
+
 #[async_trait]
 impl SocketFrameProcessor for CancellingProcessor {
     async fn inspect(
@@ -81,6 +89,24 @@ impl SocketFrameProcessor for CancellingProcessor {
     async fn process(&mut self, _origin: Bytes) -> Result<Bytes, SocketProcessingFailure> {
         self.0.cancel();
         Ok(Bytes::from_static(b"blocked"))
+    }
+}
+
+#[async_trait]
+impl SocketFrameProcessor for CommitCountingProcessor {
+    async fn inspect(
+        &mut self,
+        _buffered: Bytes,
+    ) -> Result<FrameBoundary, SocketProcessingFailure> {
+        Ok(FrameBoundary::Complete { bytes: 1 })
+    }
+
+    async fn process(&mut self, _origin: Bytes) -> Result<Bytes, SocketProcessingFailure> {
+        Ok(self.output.clone())
+    }
+
+    fn output_committed(&mut self) {
+        self.committed.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -302,10 +328,10 @@ impl AsyncWrite for PartialThenError {
 #[tokio::test]
 async fn partial_reset_preserves_successful_byte_count() {
     let progress = Arc::new(RelayProgress::default());
-    let factory = Factory::new(Box::new(FixedProcessor {
-        boundary: FrameBoundary::Complete { bytes: 1 },
+    let committed = Arc::new(AtomicUsize::new(0));
+    let factory = Factory::new(Box::new(CommitCountingProcessor {
         output: Bytes::from_static(b"response"),
-        panic_in_inspect: false,
+        committed: Arc::clone(&committed),
     }));
     let failure = respond_framed_locally(
         Box::new(PartialThenError {
@@ -325,6 +351,34 @@ async fn partial_reset_preserves_successful_byte_count() {
     assert_eq!(failure.bytes(), progress.snapshot());
     assert_eq!(progress.io_snapshot().read.client_to_server, 1);
     assert_eq!(failure.bytes().server_to_client, 3);
+    assert_eq!(committed.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn output_validation_failure_never_notifies_commit() {
+    let committed = Arc::new(AtomicUsize::new(0));
+    let factory = Factory::new(Box::new(CommitCountingProcessor {
+        output: Bytes::new(),
+        committed: Arc::clone(&committed),
+    }));
+    let (mut app, pump_io) = tokio::io::duplex(32);
+    let task = tokio::spawn(async move {
+        respond_framed_locally(
+            Box::new(pump_io),
+            identity(),
+            &factory,
+            limits(),
+            timeouts(),
+            CancellationToken::new(),
+            Arc::new(RelayProgress::default()),
+        )
+        .await
+    });
+    app.write_all(&[1]).await.unwrap();
+    app.shutdown().await.unwrap();
+    let failure = task.await.unwrap().unwrap_err();
+    assert_eq!(failure.kind, SocketProcessingFailureKind::EmptyOutput);
+    assert_eq!(committed.load(Ordering::SeqCst), 0);
 }
 
 #[test]

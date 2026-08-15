@@ -199,8 +199,14 @@ fn framing_errors_cover_every_stable_code_display_and_wire_shape() {
             ProtocolFramingErrorCode::Rejected,
         ),
         (
-            ProtocolFramingError::FrameEntryFailed { package },
+            ProtocolFramingError::FrameEntryFailed {
+                package: package.clone(),
+            },
             ProtocolFramingErrorCode::FrameEntryFailed,
+        ),
+        (
+            ProtocolFramingError::FrameExecutionCancelled { package },
+            ProtocolFramingErrorCode::FrameExecutionCancelled,
         ),
         (
             ProtocolFramingError::TruncatedFrame { buffered_bytes: 3 },

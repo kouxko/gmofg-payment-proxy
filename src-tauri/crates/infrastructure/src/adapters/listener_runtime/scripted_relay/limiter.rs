@@ -1,0 +1,149 @@
+//! Scripted 阻塞命令的进程级与单 Listener 双层许可。
+
+use std::sync::{Arc, OnceLock};
+
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, oneshot};
+
+use super::DirectionCommand;
+
+const GLOBAL_SCRIPTED_BLOCKING_COMMAND_LIMIT: usize = 64;
+
+#[derive(Clone)]
+pub(super) struct BlockingCommandSlots {
+    global: Arc<Semaphore>,
+    listener: Arc<Semaphore>,
+}
+
+impl BlockingCommandSlots {
+    pub(super) fn new(maximum_connections: u16) -> Self {
+        static GLOBAL: OnceLock<Arc<Semaphore>> = OnceLock::new();
+        let global = Arc::clone(
+            GLOBAL.get_or_init(|| Arc::new(Semaphore::new(GLOBAL_SCRIPTED_BLOCKING_COMMAND_LIMIT))),
+        );
+        Self::from_global(maximum_connections, global)
+    }
+
+    #[cfg(test)]
+    pub(super) fn with_global(maximum_connections: u16, global: Arc<Semaphore>) -> Self {
+        Self::from_global(maximum_connections, global)
+    }
+
+    fn from_global(maximum_connections: u16, global: Arc<Semaphore>) -> Self {
+        // 每连接恰有 upstream/downstream 两个方向；u16 * 2 在所有支持的 usize 上均安全。
+        let listener_limit = usize::from(maximum_connections).max(1) * 2;
+        Self {
+            global,
+            listener: Arc::new(Semaphore::new(listener_limit)),
+        }
+    }
+
+    async fn acquire(&self) -> Option<BlockingCommandPermits> {
+        // 所有调用统一先拿 Listener、再拿全局许可，避免跨 Listener 的反向锁序。
+        let listener = Arc::clone(&self.listener).acquire_owned().await.ok()?;
+        let global = Arc::clone(&self.global).acquire_owned().await.ok()?;
+        Some(BlockingCommandPermits {
+            _listener: listener,
+            _global: global,
+        })
+    }
+
+    fn try_acquire(&self) -> Option<BlockingCommandPermits> {
+        let listener = Arc::clone(&self.listener).try_acquire_owned().ok()?;
+        let global = Arc::clone(&self.global).try_acquire_owned().ok()?;
+        Some(BlockingCommandPermits {
+            _listener: listener,
+            _global: global,
+        })
+    }
+}
+
+pub(super) struct BlockingCommandPermits {
+    _listener: OwnedSemaphorePermit,
+    _global: OwnedSemaphorePermit,
+}
+
+pub(super) async fn acquire_command_permits(
+    slots: &BlockingCommandSlots,
+    command: &mut DirectionCommand,
+) -> Option<BlockingCommandPermits> {
+    match command {
+        DirectionCommand::Inspect { reply, .. } => acquire_for_reply(slots, reply).await,
+        DirectionCommand::Process { reply, .. } => acquire_for_reply(slots, reply).await,
+        // Display 已在线路提交之后，只是旁路结果；资源繁忙时直接丢弃本次展示，不能让已关闭
+        // 连接留下无界等待任务，也不能反向阻塞下一 Frame。
+        DirectionCommand::CommitDisplay => slots.try_acquire(),
+    }
+}
+
+async fn acquire_for_reply<T>(
+    slots: &BlockingCommandSlots,
+    reply: &mut oneshot::Sender<T>,
+) -> Option<BlockingCommandPermits> {
+    tokio::select! {
+        biased;
+        () = reply.closed() => None,
+        permits = slots.acquire() => permits,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{sync::Arc, time::Duration};
+
+    use tokio::sync::{Semaphore, oneshot};
+
+    use super::{BlockingCommandSlots, acquire_command_permits, acquire_for_reply};
+    use crate::adapters::listener_runtime::scripted_relay::DirectionCommand;
+
+    #[tokio::test]
+    async fn global_and_listener_limits_bound_detached_blocking_work() {
+        let global = Arc::new(Semaphore::new(2));
+        let first_listener = BlockingCommandSlots::with_global(1, Arc::clone(&global));
+        let second_listener = BlockingCommandSlots::with_global(1, Arc::clone(&global));
+        let first = first_listener.acquire().await.unwrap();
+        let second = first_listener.acquire().await.unwrap();
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), second_listener.acquire())
+                .await
+                .is_err(),
+            "跨 Listener 的第三条阻塞命令必须等待进程级许可"
+        );
+        drop(first);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(200), second_listener.acquire())
+                .await
+                .unwrap()
+                .is_some()
+        );
+        drop(second);
+    }
+
+    #[tokio::test]
+    async fn dropped_reply_skips_the_blocking_pool_before_taking_a_slot() {
+        let global = Arc::new(Semaphore::new(1));
+        let slots = BlockingCommandSlots::with_global(1, Arc::clone(&global));
+        let (mut reply, receive) = oneshot::channel::<()>();
+        drop(receive);
+
+        assert!(acquire_for_reply(&slots, &mut reply).await.is_none());
+        assert_eq!(global.available_permits(), 1);
+    }
+
+    #[tokio::test]
+    async fn display_is_skipped_when_the_global_blocking_limit_is_full() {
+        let global = Arc::new(Semaphore::new(1));
+        let slots = BlockingCommandSlots::with_global(1, Arc::clone(&global));
+        let permit = global.clone().acquire_owned().await.unwrap();
+        let mut command = DirectionCommand::CommitDisplay;
+
+        assert!(
+            acquire_command_permits(&slots, &mut command)
+                .await
+                .is_none()
+        );
+
+        drop(permit);
+        assert_eq!(global.available_permits(), 1);
+    }
+}

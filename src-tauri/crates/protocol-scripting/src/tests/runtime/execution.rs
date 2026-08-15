@@ -124,6 +124,47 @@ fn document_rules_run_only_after_decode_and_before_encode() {
 }
 
 #[test]
+fn owned_document_transform_is_atomic_and_skipped_when_decode_is_disabled() {
+    let package = package_with_all_entries();
+    let mut enabled = executor(&package, ProtocolDirection::Upstream, true, true);
+    let output = enabled
+        .execute_frame_with_document_transform(vec![1], |mut document| {
+            document.set("amount", DocumentValue::Int(42)).unwrap();
+            Ok(document)
+        })
+        .unwrap();
+    assert_eq!(output.written(), &[0x55, 42]);
+
+    let mut decode_off = executor(&package, ProtocolDirection::Upstream, false, true);
+    let output = decode_off
+        .execute_frame_with_document_transform(vec![1], |_| {
+            Err(ProtocolRuntimeError::DocumentTransformFailed {
+                package: package.package().clone(),
+            })
+        })
+        .unwrap();
+    assert_eq!(output.written(), &[0x55, 0]);
+}
+
+#[test]
+fn frame_output_debug_exposes_shape_without_payload_or_document_values() {
+    let package = package_with_all_entries();
+    let mut executor = executor(&package, ProtocolDirection::Upstream, true, true);
+    let output = executor
+        .execute_frame_with_document_transform(vec![0xde, 0xad], |mut document| {
+            document.set("amount", DocumentValue::Int(0x55aa)).unwrap();
+            Ok(document)
+        })
+        .unwrap();
+
+    let debug = format!("{output:?}");
+    assert!(debug.contains("origin_bytes: 2"));
+    assert!(!debug.contains("222"));
+    assert!(!debug.contains("173"));
+    assert!(!debug.contains("21930"));
+}
+
+#[test]
 fn rules_cannot_replace_the_document_with_another_package_schema() {
     let package = package_with_all_entries();
     let other_schema = DocumentSchema::new(

@@ -1,3 +1,5 @@
+//! Frame Rhai 入口独占的单调时钟截止控制。
+
 use std::{
     sync::{
         Arc,
@@ -10,11 +12,8 @@ use rhai::{Dynamic, Engine};
 
 use crate::{ProtocolExecutionCancellation, cancellation::ProtocolCancellationSnapshot};
 
-/// 每个 Engine 独占的单调时钟截止控制器。
-///
-/// 回调不能捕获某次调用的 `Instant` 引用，因此用 Engine 创建时的锚点加原子纳秒数表达当前截止
-/// 时间。入口开始前重新武装，结束后解除；回调不加锁，也不共享跨 Engine 的全局状态。
-pub(super) struct CallDeadline {
+/// Frame Engine 的 deadline 不与 Decode/Encode Engine 共享，避免两个方向或两个入口互相解除截止时间。
+pub(super) struct FrameCallDeadline {
     anchor: Instant,
     deadline_ns: Arc<AtomicU64>,
     armed: Arc<AtomicBool>,
@@ -22,7 +21,7 @@ pub(super) struct CallDeadline {
     cancellation: ProtocolExecutionCancellation,
 }
 
-impl CallDeadline {
+impl FrameCallDeadline {
     pub(super) fn install(
         engine: &mut Engine,
         cancellation: ProtocolExecutionCancellation,
@@ -41,11 +40,11 @@ impl CallDeadline {
             }
             let snapshot = ProtocolCancellationSnapshot(callback_expected.load(Ordering::Acquire));
             if callback_cancellation.changed_since(snapshot) {
-                // 终止载荷固定为 Unit，不把取消来源、脚本状态或输入数据带入 Rhai 错误文本。
                 return Some(Dynamic::UNIT);
             }
             let deadline = callback_deadline.load(Ordering::Relaxed);
             if deadline != 0 && elapsed_ns(anchor) >= deadline {
+                // 固定 Unit 只负责中断解释器，公开错误不会包含动态终止文本。
                 Some(Dynamic::UNIT)
             } else {
                 None
@@ -69,10 +68,9 @@ impl CallDeadline {
         let deadline = elapsed_ns(self.anchor).saturating_add(duration_ns(duration));
         self.expected_cancellation_state
             .store(snapshot.0, Ordering::Release);
-        // 0 保留为“未武装”；即使锚点极早，允许的 duration 也至少是 1ms。
+        // 0 专门表示未武装；运行时限制已经保证 duration 至少为 1ms。
         self.deadline_ns.store(deadline.max(1), Ordering::Relaxed);
         self.armed.store(true, Ordering::Release);
-        // snapshot 读取与武装之间发生的 cancel/reset 会让当前状态不同，调用开始前直接失败。
         if self.cancellation.changed_since(snapshot) {
             self.disarm();
             Err(())

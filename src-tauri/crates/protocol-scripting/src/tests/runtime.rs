@@ -7,8 +7,9 @@ use intercept_proxy_domain::{
 
 use crate::{
     DirectionExecutionPlan, DisplayFallbackReason, ProtocolDirection, ProtocolDirectionExecutor,
-    ProtocolDisplayResult, ProtocolEntryPoint, ProtocolResourceLimit, ProtocolRuntimeError,
-    ProtocolRuntimeLimits, test_support::CompiledProtocolPackageTestBuilder,
+    ProtocolDisplayResult, ProtocolEntryPoint, ProtocolExecutionCancellation,
+    ProtocolResourceLimit, ProtocolRuntimeError, ProtocolRuntimeLimits,
+    test_support::CompiledProtocolPackageTestBuilder,
 };
 
 const VALID_SCRIPT: &str = r#"
@@ -77,3 +78,4 @@ fn executor(
 include!("runtime/execution.rs");
 include!("runtime/resource_limits.rs");
 include!("runtime/contracts.rs");
+include!("runtime/cancellation.rs");

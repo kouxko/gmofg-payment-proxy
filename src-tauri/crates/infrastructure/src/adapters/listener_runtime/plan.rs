@@ -5,7 +5,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     DownstreamClientAuthentication, HttpListenerSettings, ListenerDataPlane, ProxyListener,
-    ProxyWorkspace, SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketPayloadProcessing,
+    ProxyWorkspace, SocketDownstreamTlsSettings, SocketPayloadProcessing,
     SocketRelaySecurity as DomainSocketSecurity, SocketRelaySettings, SocketTopology,
     SocketUpstreamTlsSettings,
 };
@@ -19,13 +19,12 @@ use intercept_proxy_runtime::{
 };
 
 use super::{
-    ListenerRuntimeAdapter,
-    helpers::ensure_snapshot_matches,
-    parse_bind_address,
-    scripted_snapshot::{ScriptedSocketRuntimeSnapshot, ScriptedSocketSecuritySnapshot},
-    socket_diagnostics::SocketDiagnosticObserver,
+    ListenerRuntimeAdapter, helpers::ensure_snapshot_matches, parse_bind_address,
+    scripted_snapshot::ScriptedSocketRuntimeSnapshot, socket_diagnostics::SocketDiagnosticObserver,
     socket_plan,
 };
+
+mod scripted;
 
 pub(super) enum PreparedListenerRuntime {
     HttpForward {
@@ -40,10 +39,11 @@ pub(super) enum PreparedListenerRuntime {
         bind_addr: SocketAddr,
         service: Arc<SocketRelayService>,
     },
-    /// T21 冻结校验完成；T22 Frame Pump 接线前真实 start 必须 fail-closed。
+    /// Scripted Relay 已装配真实服务；LocalResponder 在 T25 接入前保持无服务计划。
     ScriptedSocket {
         bind_addr: SocketAddr,
         snapshot: Arc<ScriptedSocketRuntimeSnapshot>,
+        service: Option<Arc<SocketRelayService>>,
     },
 }
 impl PreparedListenerRuntime {
@@ -235,38 +235,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             return self.build_socket_probe(workspace, listener, socket, bind_addr);
         }
         if matches!(&socket.processing, SocketPayloadProcessing::Scripted(_)) {
-            let security = match &socket.topology {
-                SocketTopology::Relay(relay) => ScriptedSocketSecuritySnapshot::Relay(
-                    self.socket_security(workspace, &relay.security)?,
-                ),
-                SocketTopology::LocalResponder(local) => {
-                    ScriptedSocketSecuritySnapshot::LocalResponder {
-                        downstream_tls: match &local.downstream_security {
-                            SocketDownstreamSecurity::Tcp => None,
-                            SocketDownstreamSecurity::Tls { downstream_tls } => {
-                                Some(self.socket_downstream_tls(workspace, downstream_tls)?)
-                            }
-                        },
-                    }
-                }
-            };
-            let snapshot = ScriptedSocketRuntimeSnapshot::prepare(
-                self.adapter,
-                workspace,
-                listener,
-                security,
-            )?
-            .ok_or_else(|| {
-                AppError::new(
-                    "SCRIPTED_SOCKET_PLAN_INVALID",
-                    "Scripted Socket 未能生成不可变运行计划。",
-                )
-                .entity(listener.id.to_string())
-            })?;
-            return Ok(PreparedListenerRuntime::ScriptedSocket {
-                bind_addr,
-                snapshot,
-            });
+            return self.build_scripted_socket(workspace, listener, socket, bind_addr);
         }
         let SocketTopology::Relay(relay) = &socket.topology else {
             return Err(AppError::new(

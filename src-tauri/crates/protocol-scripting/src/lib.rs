@@ -13,6 +13,7 @@
 #![deny(missing_docs)]
 
 mod archive;
+mod cancellation;
 mod compiled;
 mod compiler;
 mod declaration_name;
@@ -34,6 +35,7 @@ pub use archive::{
     ProtocolArchiveErrorCode, ProtocolArchiveLimits, ProtocolPackageFiles,
     read_protocol_package_zip, restore_protocol_package_files,
 };
+pub use cancellation::ProtocolExecutionCancellation;
 pub use compiled::CompiledProtocolPackage;
 pub use compiler::{
     ProtocolPackageCompilationError, ProtocolPackageCompiler, ProtocolScriptCompileError,
@@ -48,8 +50,8 @@ pub use error::{
 };
 pub use framing::{
     DEFAULT_MAX_FRAME_BYTES, DEFAULT_MAX_FRAME_FIFO_BYTES, MAX_FRAME_BYTES_LIMIT,
-    MAX_FRAME_FIFO_BYTES_LIMIT, ProtocolFramingError, ProtocolFramingErrorCode,
-    ProtocolFramingLimit, ProtocolFramingLimits,
+    MAX_FRAME_FIFO_BYTES_LIMIT, ProtocolFrameInspection, ProtocolFrameInspector,
+    ProtocolFramingError, ProtocolFramingErrorCode, ProtocolFramingLimit, ProtocolFramingLimits,
 };
 pub use host::context::ProtocolDirection;
 pub use limits::{

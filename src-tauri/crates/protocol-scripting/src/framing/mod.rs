@@ -7,26 +7,29 @@
 #![allow(dead_code)]
 
 mod buffer;
+mod deadline;
 mod decision;
 mod error;
 mod framer;
+mod inspector;
 mod limits;
 mod reader;
 mod script;
 
 use buffer::FrameBuffer;
+use deadline::FrameCallDeadline;
 use decision::{FramingDecision, validate_decision};
 use error::ProtocolFramingResult;
 pub use error::{ProtocolFramingError, ProtocolFramingErrorCode, ProtocolFramingLimit};
 use framer::FrameDecider;
 #[cfg(test)]
 pub(crate) use framer::SingleDirectionFramer;
+pub use inspector::{ProtocolFrameInspection, ProtocolFrameInspector};
 pub use limits::{
     DEFAULT_MAX_FRAME_BYTES, DEFAULT_MAX_FRAME_FIFO_BYTES, MAX_FRAME_BYTES_LIMIT,
     MAX_FRAME_FIFO_BYTES_LIMIT, ProtocolFramingLimits,
 };
 use reader::{ProtocolReader, ReaderSegment};
-#[cfg(test)]
 pub(crate) use script::RhaiFrameDecider;
 
 pub(crate) fn register(engine: &mut rhai::Engine) {

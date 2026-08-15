@@ -69,6 +69,20 @@ impl SocketDocumentRuleProgram {
     /// 条件不匹配。命中规则的动作按声明顺序执行，后续规则因此可以观察并覆盖前序规则的值。
     /// 传入值由本方法独占，任一步失败时整个工作副本被丢弃，不会返回半修改结果。
     pub fn execute(&self, document: Document) -> Result<SocketDocumentRuleExecution, DomainError> {
+        self.execute_with_cancellation(document, || false)
+    }
+
+    /// 在可取消边界上执行全部规则。
+    ///
+    /// `is_cancelled` 在 Schema 校验前、每条规则、每个条件、每个动作以及成功提交前调用。
+    /// 调用方可以把连接级取消令牌适配为该闭包，Domain 本身仍不依赖异步运行时或网络身份。
+    /// 一旦闭包返回 `true`，当前 owned 工作副本立即丢弃，并返回稳定的取消错误。
+    pub fn execute_with_cancellation(
+        &self,
+        document: Document,
+        mut is_cancelled: impl FnMut() -> bool,
+    ) -> Result<SocketDocumentRuleExecution, DomainError> {
+        ensure_not_cancelled(&mut is_cancelled)?;
         if document.schema() != &self.schema {
             return Err(
                 rule_program_error("Document 与规则程序绑定的 Schema 不一致")
@@ -81,12 +95,16 @@ impl SocketDocumentRuleProgram {
         let mut working = document;
         let mut matched_rule_ids = Vec::new();
         for rule in &self.rules {
-            if !rule.enabled() || !matches_rule(rule, &working)? {
+            ensure_not_cancelled(&mut is_cancelled)?;
+            if !rule.enabled() || !matches_rule(rule, &working, &mut is_cancelled)? {
                 continue;
             }
-            apply_actions(rule.actions(), &mut working)?;
+            apply_actions(rule.actions(), &mut working, &mut is_cancelled)?;
             matched_rule_ids.push(rule.rule_id());
         }
+        // 最后一次检查是提交边界：即使取消恰好发生在最后一个动作完成后，也不会把该工作副本
+        // 作为成功结果泄漏出去。
+        ensure_not_cancelled(&mut is_cancelled)?;
 
         Ok(SocketDocumentRuleExecution {
             document: working,
@@ -216,8 +234,10 @@ fn validate_rule_snapshot(
 fn matches_rule(
     rule: &SocketDocumentRuleDefinition,
     document: &Document,
+    is_cancelled: &mut impl FnMut() -> bool,
 ) -> Result<bool, DomainError> {
     for condition in rule.conditions() {
+        ensure_not_cancelled(is_cancelled)?;
         match condition {
             DocumentCondition::Equals { field, value } => match document.get(field.as_str()) {
                 Ok(actual) if actual == value => {}
@@ -235,8 +255,13 @@ fn matches_rule(
     Ok(true)
 }
 
-fn apply_actions(actions: &[DocumentAction], document: &mut Document) -> Result<(), DomainError> {
+fn apply_actions(
+    actions: &[DocumentAction],
+    document: &mut Document,
+    is_cancelled: &mut impl FnMut() -> bool,
+) -> Result<(), DomainError> {
     for action in actions {
+        ensure_not_cancelled(is_cancelled)?;
         match action {
             // 所有命中规则都会在规则动作完整成功后记录一次 ID；RecordMatch 的领域意义是
             // 允许一条规则显式声明“只观察、不修改”，因此这里没有额外 Document 副作用。
@@ -248,6 +273,17 @@ fn apply_actions(actions: &[DocumentAction], document: &mut Document) -> Result<
         }
     }
     Ok(())
+}
+
+fn ensure_not_cancelled(is_cancelled: &mut impl FnMut() -> bool) -> Result<(), DomainError> {
+    if is_cancelled() {
+        Err(DomainError::new(
+            ErrorCode::RuleExecutionCancelled,
+            "Socket Document 规则执行已取消",
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 fn rule_program_error(message: &str) -> DomainError {

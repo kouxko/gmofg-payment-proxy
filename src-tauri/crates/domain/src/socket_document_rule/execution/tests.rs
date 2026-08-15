@@ -5,6 +5,8 @@ use crate::{
 };
 use uuid::Uuid;
 
+mod cancellation;
+
 fn package(version: &str) -> ProtocolPackageRef {
     ProtocolPackageRef {
         id: ProtocolPackageId::new("binary-demo").unwrap(),

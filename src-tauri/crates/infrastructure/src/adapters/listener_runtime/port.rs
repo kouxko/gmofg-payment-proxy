@@ -71,17 +71,13 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         let plan = ListenerRuntimePlanBuilder::new(self)
             .build(&workspace, &listener, runtime_epoch)
             .await?;
-        if let Some(snapshot) = plan.scripted_snapshot() {
-            let (code, message) = match snapshot.topology() {
-                DomainSocketTopology::Relay(_) => (
-                    "SCRIPTED_SOCKET_RUNTIME_NOT_AVAILABLE",
-                    "Scripted Relay 已完成运行计划校验，Frame Pump 将在后续任务接入。",
-                ),
-                DomainSocketTopology::LocalResponder(_) => (
-                    "LOCAL_RESPONDER_NOT_AVAILABLE",
-                    "LocalResponder 已完成运行计划校验，响应字节泵将在后续任务接入。",
-                ),
-            };
+        if let Some(snapshot) = plan.scripted_snapshot()
+            && matches!(snapshot.topology(), DomainSocketTopology::LocalResponder(_))
+        {
+            let (code, message) = (
+                "LOCAL_RESPONDER_NOT_AVAILABLE",
+                "LocalResponder 已完成运行计划校验，响应字节泵将在后续任务接入。",
+            );
             return Err(AppError::new(code, message).entity(listener_id.to_string()));
         }
         let listen_address = plan.bind_addr().to_string();
@@ -91,42 +87,22 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         let fault = Arc::new(RwLock::new(None));
         let task_fault = Arc::clone(&fault);
         let socket_service = match &plan {
-            PreparedListenerRuntime::Socket { service, .. } => Some(Arc::clone(service)),
+            PreparedListenerRuntime::Socket { service, .. }
+            | PreparedListenerRuntime::ScriptedSocket {
+                service: Some(service),
+                ..
+            } => Some(Arc::clone(service)),
             _ => None,
         };
         let task = tokio::spawn(async move {
-            let result = match plan {
-                PreparedListenerRuntime::HttpForward { service, .. } => {
-                    service
-                        .serve_listener(tcp_listener, task_cancellation)
-                        .await
-                }
-                PreparedListenerRuntime::HttpFixed { service, .. } => {
-                    service
-                        .serve_listener_with_epoch(tcp_listener, runtime_epoch, task_cancellation)
-                        .await
-                }
-                PreparedListenerRuntime::Socket { service, .. } => {
-                    let listener_run_epoch = uuid::Uuid::new_v4();
-                    service
-                        .serve_listener_with_context(
-                            tcp_listener,
-                            intercept_proxy_runtime::SocketRelayRunContext {
-                                listener_id: listener_id.to_string(),
-                                workspace_runtime_epoch: runtime_epoch,
-                                listener_run_epoch,
-                            },
-                            task_cancellation,
-                        )
-                        .await
-                }
-                PreparedListenerRuntime::ScriptedSocket { .. } => {
-                    Err(intercept_proxy_runtime::ProxyError::new(
-                        intercept_proxy_runtime::ErrorCode::Internal,
-                        "staged Scripted Socket plan escaped the start gate",
-                    ))
-                }
-            };
+            let result = serve_prepared_listener(
+                plan,
+                tcp_listener,
+                listener_id,
+                runtime_epoch,
+                task_cancellation,
+            )
+            .await;
             if let Err(error) = result
                 && !is_orderly_stop(error.code)
             {
@@ -254,6 +230,48 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 "该代理监听未配置固定 Server，没有上游连接可测试。",
             )
             .entity(listener.id.to_string())),
+        }
+    }
+}
+
+async fn serve_prepared_listener(
+    plan: PreparedListenerRuntime,
+    tcp_listener: tokio::net::TcpListener,
+    listener_id: ListenerId,
+    runtime_epoch: uuid::Uuid,
+    cancellation: CancellationToken,
+) -> Result<(), intercept_proxy_runtime::ProxyError> {
+    match plan {
+        PreparedListenerRuntime::HttpForward { service, .. } => {
+            service.serve_listener(tcp_listener, cancellation).await
+        }
+        PreparedListenerRuntime::HttpFixed { service, .. } => {
+            service
+                .serve_listener_with_epoch(tcp_listener, runtime_epoch, cancellation)
+                .await
+        }
+        PreparedListenerRuntime::Socket { service, .. }
+        | PreparedListenerRuntime::ScriptedSocket {
+            service: Some(service),
+            ..
+        } => {
+            service
+                .serve_listener_with_context(
+                    tcp_listener,
+                    intercept_proxy_runtime::SocketRelayRunContext {
+                        listener_id: listener_id.to_string(),
+                        workspace_runtime_epoch: runtime_epoch,
+                        listener_run_epoch: uuid::Uuid::new_v4(),
+                    },
+                    cancellation,
+                )
+                .await
+        }
+        PreparedListenerRuntime::ScriptedSocket { service: None, .. } => {
+            Err(intercept_proxy_runtime::ProxyError::new(
+                intercept_proxy_runtime::ErrorCode::Internal,
+                "unavailable LocalResponder plan escaped the start gate",
+            ))
         }
     }
 }
