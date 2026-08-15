@@ -70,6 +70,11 @@ pub(in crate::requirements_tests) struct FakePorts {
     pub(in crate::requirements_tests) settings: parking_lot::Mutex<SettingsViewModel>,
     pub(in crate::requirements_tests) certificate_overview:
         parking_lot::Mutex<CertificateOverviewViewModel>,
+    pub(in crate::requirements_tests) socket_capture_queries:
+        parking_lot::Mutex<Vec<SocketCaptureQuery>>,
+    pub(in crate::requirements_tests) socket_capture_clear_calls: AtomicUsize,
+    pub(in crate::requirements_tests) socket_capture_clear_workspaces:
+        parking_lot::Mutex<Vec<WorkspaceId>>,
 }
 
 impl Default for FakePorts {
@@ -96,6 +101,9 @@ impl Default for FakePorts {
             discarded_certificate_references: parking_lot::Mutex::new(BTreeSet::new()),
             settings: parking_lot::Mutex::new(fake_settings_view()),
             certificate_overview: parking_lot::Mutex::new(fake_certificate_overview()),
+            socket_capture_queries: parking_lot::Mutex::new(Vec::new()),
+            socket_capture_clear_calls: AtomicUsize::new(0),
+            socket_capture_clear_workspaces: parking_lot::Mutex::new(Vec::new()),
         }
     }
 }
@@ -152,6 +160,28 @@ impl CaptureRepositoryPort for FakePorts {
     }
     async fn clear_view(&self, _: u64) -> AppResult<u64> {
         unused()
+    }
+    async fn query_socket(
+        &self,
+        query: SocketCaptureQuery,
+    ) -> AppResult<SocketCapturePageViewModel> {
+        self.socket_capture_queries.lock().push(query.clone());
+        Ok(SocketCapturePageViewModel {
+            rows: Vec::new(),
+            total: 0,
+            page: query.page.page,
+            page_size: query.page.page_size,
+            total_pages: 0,
+            empty_message: "暂无 Socket 抓包记录。".into(),
+        })
+    }
+    async fn clear_socket_completed(&self, workspace_id: WorkspaceId) -> AppResult<usize> {
+        self.socket_capture_clear_calls
+            .fetch_add(1, Ordering::SeqCst);
+        self.socket_capture_clear_workspaces
+            .lock()
+            .push(workspace_id);
+        Ok(3)
     }
 }
 

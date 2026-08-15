@@ -179,7 +179,9 @@ pub(super) async fn start_local_runtime(
     workspace: ProxyWorkspace,
     listener: &ProxyListener,
 ) -> ListenerRuntimeAdapter {
-    start_local_runtime_inner(id, schema, script, workspace, listener, None).await
+    start_local_runtime_inner(id, schema, script, workspace, listener, None)
+        .await
+        .0
 }
 
 pub(super) async fn start_local_runtime_with_events(
@@ -190,6 +192,22 @@ pub(super) async fn start_local_runtime_with_events(
     listener: &ProxyListener,
     events: Arc<intercept_proxy_application::EventHub>,
 ) -> ListenerRuntimeAdapter {
+    start_local_runtime_inner(id, schema, script, workspace, listener, Some(events))
+        .await
+        .0
+}
+
+pub(super) async fn start_local_runtime_with_capture(
+    id: &str,
+    schema: &str,
+    script: &str,
+    workspace: ProxyWorkspace,
+    listener: &ProxyListener,
+    events: Arc<intercept_proxy_application::EventHub>,
+) -> (
+    ListenerRuntimeAdapter,
+    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
+) {
     start_local_runtime_inner(id, schema, script, workspace, listener, Some(events)).await
 }
 
@@ -200,7 +218,10 @@ async fn start_local_runtime_inner(
     workspace: ProxyWorkspace,
     listener: &ProxyListener,
     events: Option<Arc<intercept_proxy_application::EventHub>>,
-) -> ListenerRuntimeAdapter {
+) -> (
+    ListenerRuntimeAdapter,
+    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
+) {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
         Arc::clone(&store),
@@ -209,12 +230,16 @@ async fn start_local_runtime_inner(
         .install_zip(&package_zip(id, schema, script))
         .unwrap();
     repository.set_enabled(&package_ref(id), true).unwrap();
+    let capture = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
+        Arc::clone(&store),
+    ));
     let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    runtime.set_socket_capture_repository(Arc::clone(&capture));
     if let Some(events) = events {
         runtime.set_socket_diagnostic_events(events);
     }
     runtime.start(workspace, listener.clone()).await.unwrap();
-    runtime
+    (runtime, capture)
 }
 
 pub(super) async fn request_once(port: u16, request: &[u8]) -> Vec<u8> {

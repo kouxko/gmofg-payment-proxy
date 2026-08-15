@@ -83,25 +83,22 @@ pub(super) async fn start_scripted_runtime(
     listener_port: u16,
     upstream_port: u16,
 ) -> (ListenerRuntimeAdapter, ProxyListener) {
-    start_scripted_runtime_with_display(id, script, listener_port, upstream_port, true).await
+    let (runtime, listener, _) =
+        start_scripted_runtime_with_capture(id, script, listener_port, upstream_port, true).await;
+    (runtime, listener)
 }
 
-pub(super) async fn start_scripted_runtime_without_display(
-    id: &str,
-    script: &str,
-    listener_port: u16,
-    upstream_port: u16,
-) -> (ListenerRuntimeAdapter, ProxyListener) {
-    start_scripted_runtime_with_display(id, script, listener_port, upstream_port, false).await
-}
-
-async fn start_scripted_runtime_with_display(
+pub(super) async fn start_scripted_runtime_with_capture(
     id: &str,
     script: &str,
     listener_port: u16,
     upstream_port: u16,
     include_display: bool,
-) -> (ListenerRuntimeAdapter, ProxyListener) {
+) -> (
+    ListenerRuntimeAdapter,
+    ProxyListener,
+    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
+) {
     let package = package_ref(id);
     let listener = ProxyListener {
         name: format!("T24 {id}"),
@@ -142,9 +139,13 @@ async fn start_scripted_runtime_with_display(
         .install_zip(&package_zip(id, script, include_display))
         .unwrap();
     repository.set_enabled(&package, true).unwrap();
+    let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
+        Arc::clone(&store),
+    ));
     let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    runtime.set_socket_capture_repository(Arc::clone(&captures));
     runtime.start(workspace, listener.clone()).await.unwrap();
-    (runtime, listener)
+    (runtime, listener, captures)
 }
 
 pub(super) async fn read_to_end_bounded(stream: &mut TcpStream) -> Vec<u8> {

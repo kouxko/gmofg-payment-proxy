@@ -116,12 +116,13 @@ async fn downstream_display_failure_happens_after_committed_response_and_is_non_
         "fn display(document, context) { \"<p>local response</p>\" }",
         "fn display(document, context) { throw \"display failed\"; }",
     );
-    let runtime = start_local_runtime(
+    let (runtime, captures) = start_local_runtime_with_capture(
         id,
         BASIC_SCHEMA,
         &script,
         workspace(listener.clone(), Vec::new()),
         &listener,
+        Arc::new(intercept_proxy_application::EventHub::default()),
     )
     .await;
 
@@ -131,6 +132,22 @@ async fn downstream_display_failure_happens_after_committed_response_and_is_non_
     let mut response = Vec::new();
     client.read_to_end(&mut response).await.unwrap();
     assert_eq!(response, [209, 51, 209, 52]);
+    let page = super::captures::wait_for_rows(&captures, 2).await;
+    for row in page.rows {
+        let detail = captures.get_detail(row.capture_id).unwrap().record;
+        let intercept_proxy_application::SocketCapturePayload::LocalExchange(exchange) =
+            detail.payload
+        else {
+            panic!("expected LocalExchange")
+        };
+        assert!(matches!(
+            exchange.response_display,
+            intercept_proxy_application::SocketDisplayResult::HexFallback {
+                reason: intercept_proxy_application::SocketDisplayFallbackReason::EntryPointFailed,
+                ..
+            }
+        ));
+    }
 
     runtime.stop(listener.id).await.unwrap();
 }

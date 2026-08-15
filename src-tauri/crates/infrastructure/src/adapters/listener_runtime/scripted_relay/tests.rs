@@ -2,7 +2,7 @@
 
 use intercept_proxy_protocol_scripting::ProtocolExecutionCancellation;
 
-use super::{CancelOnDrop, DirectionCommand, discard_skipped_command, processing_budget_ms};
+use super::{CancelOnDrop, processing_budget_ms};
 
 #[test]
 fn command_future_drop_cancels_only_while_the_guard_is_armed() {
@@ -28,13 +28,4 @@ fn processing_budget_covers_display_then_frame_and_decode_then_encode() {
 fn processing_budget_overflow_fails_closed() {
     assert_eq!(processing_budget_ms(u64::MAX, 1), None);
     assert_eq!(processing_budget_ms(u64::MAX / 2 + 1, 2), None);
-}
-
-#[test]
-fn skipped_display_consumes_pending_output_without_running_script() {
-    let mut pending_output = Some("committed frame");
-
-    discard_skipped_command(&mut pending_output, &DirectionCommand::CommitDisplay);
-
-    assert_eq!(pending_output, None);
 }

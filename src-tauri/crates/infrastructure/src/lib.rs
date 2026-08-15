@@ -23,9 +23,9 @@ pub use adapters::{
     ProtocolPackageStorageErrorCode, ProtocolPackageSummary, ProtocolPackageUsageQueryAdapter,
     ProtocolPackageValidationStatus, RetiredProxyAdapter, RuleRepositoryAdapter,
     RuntimePipelineAdapter, RuntimePipelineProductHooks, RuntimeRuleRepository,
-    SettingsRepositoryAdapter, SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory,
-    WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter,
-    WorkspaceRuntimePolicyResolver,
+    SettingsRepositoryAdapter, SocketCaptureRepositoryAdapter, SocketDocumentRuleConnection,
+    SocketDocumentRuleConnectionFactory, WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter,
+    WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
 };
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,

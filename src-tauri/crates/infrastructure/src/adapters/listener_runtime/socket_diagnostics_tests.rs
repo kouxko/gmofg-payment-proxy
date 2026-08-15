@@ -1,6 +1,8 @@
 use std::{net::SocketAddr, time::SystemTime};
 
-use intercept_proxy_application::UiEventPayload;
+use intercept_proxy_application::{
+    SocketCaptureFailureStage, SocketDiagnosticDirection, SocketDiagnosticStage, UiEventPayload,
+};
 use intercept_proxy_runtime::{
     SocketConnectionTarget, SocketOpenedEvidence, SocketRelayBytes, SocketRelayRunContext,
     SocketRelayStage, SocketTransportMode,
@@ -127,6 +129,14 @@ fn typed_sequence_keeps_order_epochs_direction_and_partial_bytes() {
     assert_eq!(context.client_to_server_bytes, 37);
     assert_eq!(context.server_to_client_read_bytes, 17);
     assert_eq!(context.server_to_client_bytes, 11);
+    assert_eq!(
+        context.capture_failure.as_ref().unwrap().stage,
+        SocketCaptureFailureStage::Write
+    );
+    assert_eq!(
+        context.capture_failure.as_ref().unwrap().code,
+        "SOCKET_WRITE_FAILED"
+    );
     let detail = closed.detail.as_deref().unwrap();
     assert!(detail.contains("客户端读取：43 字节"), "{detail}");
     assert!(detail.contains("客户端→上游：37 字节"), "{detail}");
@@ -185,6 +195,10 @@ fn local_responder_diagnostics_never_invent_upstream_evidence() {
         })
         .collect::<Vec<_>>();
     assert_eq!(entries[1].summary, "Socket 本地应答已就绪");
+    assert!(matches!(
+        &entries[1].socket_context.as_ref().unwrap().route,
+        Some(SocketConnectionRouteViewModel::LocalResponder { .. })
+    ));
     assert_eq!(
         entries[1].socket_context.as_ref().unwrap().stage,
         SocketDiagnosticStage::Admission
@@ -285,6 +299,75 @@ fn frame_processing_and_local_exchange_keep_typed_diagnostic_values() {
         application_direction(SocketRelayDirection::LocalExchange),
         SocketDiagnosticDirection::LocalExchange
     );
+}
+
+#[test]
+fn capture_failures_keep_distinct_sanitized_stages() {
+    for (runtime_stage, expected, code) in [
+        (
+            SocketRelayStage::FrameInspect,
+            SocketCaptureFailureStage::Frame,
+            "FRAME_REJECTED",
+        ),
+        (
+            SocketRelayStage::Decode,
+            SocketCaptureFailureStage::Decode,
+            "DECODE_FAILED",
+        ),
+        (
+            SocketRelayStage::Rule,
+            SocketCaptureFailureStage::Rule,
+            "RULE_FAILED",
+        ),
+        (
+            SocketRelayStage::Encode,
+            SocketCaptureFailureStage::Encode,
+            "ENCODE_FAILED",
+        ),
+        (
+            SocketRelayStage::RelayWrite,
+            SocketCaptureFailureStage::Write,
+            "SOCKET_WRITE_FAILED",
+        ),
+    ] {
+        let failure = capture_failure(&SocketRelayFailure {
+            stage: runtime_stage,
+            direction: Some(SocketRelayDirection::LocalExchange),
+            code,
+        })
+        .unwrap();
+        assert_eq!(failure.stage, expected);
+        assert_eq!(failure.code, code);
+    }
+}
+
+#[test]
+fn opened_relay_route_preserves_resolved_and_tls_evidence() {
+    let entry = opened_entry(
+        &run(),
+        Uuid::new_v4(),
+        &SocketOpenedEvidence::Relay {
+            resolved_address: "192.0.2.20:443".parse().unwrap(),
+            downstream_tls_peer: Some("sha256:client".into()),
+            upstream_tls: Some(intercept_proxy_runtime::SocketTlsEvidence {
+                tls_version: "TLSv1.3".into(),
+                cipher_suite: "TLS_AES_256_GCM_SHA384".into(),
+                peer_subject: "CN=example.test".into(),
+                peer_sha256_fingerprint: "sha256:server".into(),
+                hostname_verification_enabled: true,
+                client_identity_configured: false,
+            }),
+        },
+    );
+    let Some(SocketConnectionRouteViewModel::Relay(route)) = entry.socket_context.unwrap().route
+    else {
+        panic!("expected typed relay route");
+    };
+    assert_eq!(route.configured_address, None);
+    assert_eq!(route.resolved_address.as_deref(), Some("192.0.2.20:443"));
+    assert_eq!(route.downstream_tls_peer.as_deref(), Some("sha256:client"));
+    assert_eq!(route.upstream_tls.unwrap().tls_version, "TLSv1.3");
+    assert_eq!(route.connection_test, None);
 }
 
 #[test]

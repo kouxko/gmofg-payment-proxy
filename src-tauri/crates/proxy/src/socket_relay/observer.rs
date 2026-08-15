@@ -111,6 +111,12 @@ pub enum SocketRelayStage {
     RelayRead,
     /// 已读取字节正在等待处理器确认完整 Frame 边界。
     FrameInspect,
+    /// 完整 Frame 的 Decode 阶段。
+    Decode,
+    /// Document 规则阶段。
+    Rule,
+    /// 下一跳字节的 Encode 阶段。
+    Encode,
     /// 完整 Frame 正由处理器生成下一跳输出。
     FrameProcess,
     RelayWrite,

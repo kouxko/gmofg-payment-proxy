@@ -185,6 +185,24 @@ fn product_contract_scan_recognizes_split_test_modules() {
     assert!(!is_test_source(Path::new("src/facade/listeners.rs")));
 }
 
+#[test]
+fn product_contract_scan_removes_cfg_test_struct_fields() {
+    let source = r"
+struct ProductionState {
+    value: u64,
+    #[cfg(test)]
+    test_gate: Option<String>,
+}
+
+fn production_value() -> u64 { 7 }
+";
+
+    let production = remove_cfg_test_items(source);
+    assert!(production.contains("value: u64"));
+    assert!(production.contains("production_value"));
+    assert!(!production.contains("test_gate"));
+}
+
 fn crates_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -300,7 +318,9 @@ fn cfg_test_item_end(source: &str, after_attribute: usize) -> Option<usize> {
                 brackets = brackets.checked_sub(1)?;
                 index += 1;
             }
-            b';' if braces == 0 && parentheses == 0 && brackets == 0 => {
+            b';' | b',' if braces == 0 && parentheses == 0 && brackets == 0 => {
+                // `#[cfg(test)]` 也可修饰 struct/enum 字段。字段以逗号结束，必须像
+                // 分号结尾的 test-only item 一样完整剥离，否则后续生产源码会漏扫。
                 return Some(index + 1);
             }
             _ => index += 1,

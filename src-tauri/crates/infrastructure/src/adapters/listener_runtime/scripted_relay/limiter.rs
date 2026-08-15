@@ -86,7 +86,7 @@ pub(super) async fn acquire_command_permits(
         DirectionCommand::Process { reply, .. } => acquire_for_reply(slots, reply).await,
         // Display 已在线路提交之后，只是旁路结果；资源繁忙时直接丢弃本次展示，不能让已关闭
         // 连接留下无界等待任务，也不能反向阻塞下一 Frame。
-        DirectionCommand::CommitDisplay => slots.try_acquire(),
+        DirectionCommand::CommitDisplay { .. } => slots.try_acquire(),
     }
 }
 
@@ -150,7 +150,10 @@ mod tests {
         let global = Arc::new(Semaphore::new(1));
         let slots = BlockingCommandSlots::with_global(1, Arc::clone(&global));
         let permit = global.clone().acquire_owned().await.unwrap();
-        let mut command = DirectionCommand::CommitDisplay;
+        let mut command = DirectionCommand::CommitDisplay {
+            completed_at: chrono::Utc::now(),
+            ticket: None,
+        };
 
         assert!(
             acquire_command_permits(&slots, &mut command)

@@ -25,6 +25,7 @@ pub struct CaptureRepositoryAdapter {
     sessions: Arc<InMemorySessionStore>,
     view_floor: AtomicU64,
     latest_runtime_epoch: RwLock<Option<RuntimeEpoch>>,
+    socket: Option<Arc<super::SocketCaptureRepositoryAdapter>>,
 }
 
 impl CaptureRepositoryAdapter {
@@ -37,7 +38,21 @@ impl CaptureRepositoryAdapter {
             sessions,
             view_floor: AtomicU64::new(0),
             latest_runtime_epoch: RwLock::new(None),
+            socket: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_socket_store(mut self, socket: Arc<super::SocketCaptureRepositoryAdapter>) -> Self {
+        self.socket = Some(socket);
+        self
+    }
+
+    pub fn record_socket(
+        &self,
+        record: intercept_proxy_application::SocketCaptureRecord,
+    ) -> AppResult<intercept_proxy_application::SocketCaptureRowViewModel> {
+        self.socket_store()?.record(record)
     }
 
     pub fn push_for_epoch(&self, row: CaptureRowViewModel, runtime_epoch: RuntimeEpoch) {
@@ -214,6 +229,38 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
             .unwrap_or(current_cursor);
         self.view_floor.store(latest, AtomicOrdering::Release);
         Ok(latest)
+    }
+
+    async fn query_socket(
+        &self,
+        query: intercept_proxy_application::SocketCaptureQuery,
+    ) -> AppResult<intercept_proxy_application::SocketCapturePageViewModel> {
+        self.socket_store()?.query(&query)
+    }
+
+    async fn get_socket_detail(
+        &self,
+        capture_id: intercept_proxy_application::SocketCaptureId,
+    ) -> AppResult<intercept_proxy_application::SocketCaptureDetailViewModel> {
+        self.socket_store()?.get_detail(capture_id)
+    }
+
+    async fn clear_socket_completed(
+        &self,
+        workspace_id: intercept_proxy_application::WorkspaceId,
+    ) -> AppResult<usize> {
+        self.socket_store()?.clear_completed(workspace_id)
+    }
+}
+
+impl CaptureRepositoryAdapter {
+    fn socket_store(&self) -> AppResult<&super::SocketCaptureRepositoryAdapter> {
+        self.socket.as_deref().ok_or_else(|| {
+            AppError::new(
+                "SOCKET_CAPTURE_STORE_UNAVAILABLE",
+                "当前 Host 尚未提供 Socket 抓包存储。",
+            )
+        })
     }
 }
 

@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::UiTone;
+use super::{SocketCaptureFailureDiagnostic, SocketConnectionRouteViewModel, UiTone};
 use sanitization::{sanitize_optional, sanitize_text};
 
 mod sanitization;
@@ -103,6 +103,8 @@ pub struct SocketDiagnosticContextViewModel {
     pub connection_id: Option<String>,
     pub workspace_runtime_epoch: String,
     pub listener_run_epoch: String,
+    pub route: Option<SocketConnectionRouteViewModel>,
+    pub capture_failure: Option<SocketCaptureFailureDiagnostic>,
     pub stage: SocketDiagnosticStage,
     pub direction: Option<SocketDiagnosticDirection>,
     pub client_to_server_read_bytes: u64,
@@ -121,6 +123,9 @@ pub enum SocketDiagnosticStage {
     UpstreamTls,
     RelayRead,
     FrameInspect,
+    Decode,
+    Rule,
+    Encode,
     FrameProcess,
     RelayWrite,
     Shutdown,

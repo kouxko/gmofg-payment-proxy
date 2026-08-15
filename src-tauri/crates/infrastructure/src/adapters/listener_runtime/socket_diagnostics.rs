@@ -3,8 +3,8 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{
     DiagnosticLogEntryViewModel, DiagnosticLogLevel, DiagnosticLogStage, EventHub,
-    SocketDiagnosticContextViewModel, SocketDiagnosticDirection, SocketDiagnosticStage,
-    UiEventPayload,
+    SocketCaptureFailureDiagnostic, SocketConnectionRouteViewModel,
+    SocketDiagnosticContextViewModel, SocketRelayRouteEvidenceViewModel, UiEventPayload,
 };
 use intercept_proxy_runtime::{
     BoundedSocketConnectionObserver, SocketConnectionEvent, SocketConnectionObserver,
@@ -14,6 +14,13 @@ use intercept_proxy_runtime::{
 
 const DEFAULT_SOCKET_DIAGNOSTIC_CAPACITY: usize = 256;
 const SOCKET_DIAGNOSTIC_LOGICAL_BYTES: usize = 1024 * 1024;
+
+#[path = "socket_diagnostics/mapping.rs"]
+mod mapping;
+use mapping::{
+    application_direction, application_stage, capture_failure, diagnostic_stage, route_from_target,
+    tls_evidence,
+};
 
 #[derive(Debug)]
 pub(super) struct SocketDiagnosticObserver {
@@ -101,6 +108,8 @@ fn diagnostic_entry(
                 socket_context: Some(socket_context(
                     run,
                     Some(*connection_id),
+                    Some(route_from_target(target)),
+                    None,
                     SocketRelayStage::Admission,
                     None,
                     SocketRelayBytes::default(),
@@ -189,6 +198,10 @@ fn request_parsed_entry(
         socket_context: Some(socket_context(
             run,
             Some(connection_id),
+            Some(SocketConnectionRouteViewModel::LocalResponder {
+                downstream_tls_peer: None,
+            }),
+            None,
             SocketRelayStage::FrameProcess,
             Some(SocketRelayDirection::LocalExchange),
             SocketRelayBytes::default(),
@@ -221,7 +234,7 @@ fn opened_entry(
     connection_id: uuid::Uuid,
     evidence: &SocketOpenedEvidence,
 ) -> DiagnosticLogEntryViewModel {
-    let (summary, detail, stage) = match evidence {
+    let (summary, detail, stage, route) = match evidence {
         SocketOpenedEvidence::Relay {
             resolved_address,
             downstream_tls_peer,
@@ -237,6 +250,13 @@ fn opened_entry(
                     .map_or("未启用", |tls| tls.tls_version.as_str())
             ),
             SocketRelayStage::Connect,
+            SocketConnectionRouteViewModel::Relay(Box::new(SocketRelayRouteEvidenceViewModel {
+                configured_address: None,
+                resolved_address: Some(resolved_address.to_string()),
+                downstream_tls_peer: downstream_tls_peer.clone(),
+                upstream_tls: upstream_tls.as_ref().map(tls_evidence),
+                connection_test: None,
+            })),
         ),
         SocketOpenedEvidence::LocalResponder {
             downstream_tls_peer,
@@ -254,6 +274,9 @@ fn opened_entry(
                     downstream_tls_peer.as_deref().unwrap_or("未启用")
                 ),
                 stage,
+                SocketConnectionRouteViewModel::LocalResponder {
+                    downstream_tls_peer: downstream_tls_peer.clone(),
+                },
             )
         }
     };
@@ -268,6 +291,8 @@ fn opened_entry(
         socket_context: Some(socket_context(
             run,
             Some(connection_id),
+            Some(route),
+            None,
             stage,
             None,
             SocketRelayBytes::default(),
@@ -302,6 +327,8 @@ fn rejected_entry(
         profile_id: None,
         socket_context: Some(socket_context(
             run,
+            None,
+            None,
             None,
             SocketRelayStage::Admission,
             None,
@@ -343,6 +370,8 @@ fn closed_entry(
         socket_context: Some(socket_context(
             run,
             Some(connection_id),
+            Some(route_from_target(target)),
+            failure.and_then(capture_failure),
             failure.map_or(SocketRelayStage::Shutdown, |failure| failure.stage),
             failure.and_then(|failure| failure.direction),
             bytes,
@@ -353,6 +382,8 @@ fn closed_entry(
 fn socket_context(
     run: &SocketRelayRunContext,
     connection_id: Option<uuid::Uuid>,
+    route: Option<SocketConnectionRouteViewModel>,
+    capture_failure: Option<SocketCaptureFailureDiagnostic>,
     stage: SocketRelayStage,
     direction: Option<SocketRelayDirection>,
     bytes: SocketRelayBytes,
@@ -361,52 +392,14 @@ fn socket_context(
         connection_id: connection_id.map(|id| id.to_string()),
         workspace_runtime_epoch: run.workspace_runtime_epoch.to_string(),
         listener_run_epoch: run.listener_run_epoch.to_string(),
+        route,
+        capture_failure,
         stage: application_stage(stage),
         direction: direction.map(application_direction),
         client_to_server_read_bytes: bytes.client_to_server_read,
         client_to_server_bytes: bytes.client_to_server,
         server_to_client_read_bytes: bytes.server_to_client_read,
         server_to_client_bytes: bytes.server_to_client,
-    }
-}
-
-const fn application_stage(stage: SocketRelayStage) -> SocketDiagnosticStage {
-    match stage {
-        SocketRelayStage::Admission => SocketDiagnosticStage::Admission,
-        SocketRelayStage::DownstreamTls => SocketDiagnosticStage::DownstreamTls,
-        SocketRelayStage::Dns => SocketDiagnosticStage::Dns,
-        SocketRelayStage::Connect => SocketDiagnosticStage::Connect,
-        SocketRelayStage::UpstreamTls => SocketDiagnosticStage::UpstreamTls,
-        SocketRelayStage::RelayRead => SocketDiagnosticStage::RelayRead,
-        SocketRelayStage::FrameInspect => SocketDiagnosticStage::FrameInspect,
-        SocketRelayStage::FrameProcess => SocketDiagnosticStage::FrameProcess,
-        SocketRelayStage::RelayWrite => SocketDiagnosticStage::RelayWrite,
-        SocketRelayStage::Shutdown => SocketDiagnosticStage::Shutdown,
-    }
-}
-
-const fn application_direction(direction: SocketRelayDirection) -> SocketDiagnosticDirection {
-    match direction {
-        SocketRelayDirection::Downstream => SocketDiagnosticDirection::Downstream,
-        SocketRelayDirection::Upstream => SocketDiagnosticDirection::Upstream,
-        SocketRelayDirection::ClientToServer => SocketDiagnosticDirection::ClientToServer,
-        SocketRelayDirection::ServerToClient => SocketDiagnosticDirection::ServerToClient,
-        SocketRelayDirection::LocalExchange => SocketDiagnosticDirection::LocalExchange,
-    }
-}
-
-fn diagnostic_stage(failure: SocketRelayFailure) -> DiagnosticLogStage {
-    match failure.stage {
-        SocketRelayStage::DownstreamTls => DiagnosticLogStage::DownstreamTls,
-        SocketRelayStage::UpstreamTls => DiagnosticLogStage::UpstreamTls,
-        SocketRelayStage::Admission
-        | SocketRelayStage::Dns
-        | SocketRelayStage::Connect
-        | SocketRelayStage::RelayRead
-        | SocketRelayStage::FrameInspect
-        | SocketRelayStage::FrameProcess
-        | SocketRelayStage::RelayWrite
-        | SocketRelayStage::Shutdown => DiagnosticLogStage::Socket,
     }
 }
 

@@ -6,7 +6,8 @@ use super::{
     BreakpointSummaryViewModel, CapturePageViewModel, CaptureRowViewModel,
     CertificateOverviewViewModel, ChannelPresentationViewModel, ChannelStatusViewModel,
     ListenerStatusViewModel, ProxyStatusViewModel, Revision, RuleSummaryViewModel, RuntimeEpoch,
-    SessionSummaryViewModel, SettingsViewModel, WorkspaceChangedViewModel,
+    SessionSummaryViewModel, SettingsViewModel, SocketCaptureRowViewModel,
+    WorkspaceChangedViewModel,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -39,6 +40,9 @@ pub enum UiEventPayload {
     RuntimeStatusChanged(Box<ProxyStatusViewModel>),
     ChannelStatusChanged(ChannelStatusViewModel),
     CaptureRowsAdded(Vec<CaptureRowViewModel>),
+    /// 一个 Socket Frame 或 `LocalExchange` 已完整写出并进入正式 capture 仓储。
+    /// `RequestParsed` 仍只走有界诊断事件，不能构造此完成事件。
+    SocketCaptureCompleted(SocketCaptureRowViewModel),
     DiagnosticLogAdded(crate::DiagnosticLogEntryViewModel),
     SessionUpdated(SessionSummaryViewModel),
     BreakpointQueued(BreakpointSummaryViewModel),
@@ -47,9 +51,13 @@ pub enum UiEventPayload {
     AndroidVpnStatusChanged(crate::AndroidNetworkStatusViewModel),
     CertificateStatusChanged(CertificateOverviewViewModel),
     SettingsChanged(Box<SettingsViewModel>),
-    ResourceWarning { message: String },
+    ResourceWarning {
+        message: String,
+    },
     OperationFailed(crate::AppErrorViewModel),
-    SnapshotRequired { reason: String },
+    SnapshotRequired {
+        reason: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]

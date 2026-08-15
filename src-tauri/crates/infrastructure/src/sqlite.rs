@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::InfrastructureError;
 
-const LATEST_SCHEMA_VERSION: i64 = 6;
+const LATEST_SCHEMA_VERSION: i64 = 7;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredSettings {
@@ -92,14 +92,15 @@ pub struct ProtectedSecretRecord {
 #[derive(Debug)]
 pub struct SqliteStore {
     // rusqlite 的 Connection 不是并发事务池；单锁明确规定本进程内只有一个事务所有者。
-    // 不要在持锁期间调用外部 async 服务，否则会把一次慢 I/O 放大成所有持久化阻塞。
     connection: Mutex<Connection>,
+    capture_coordination: socket_capture_coordination::SocketCaptureCoordination,
 }
-
 mod core;
 mod portable_configuration;
 pub(crate) mod protocol_packages;
 mod rules_and_certificates;
+pub(crate) mod socket_capture_coordination;
+pub(crate) mod socket_captures;
 mod workspaces;
 
 fn create_schema(transaction: &Transaction<'_>) -> Result<(), InfrastructureError> {

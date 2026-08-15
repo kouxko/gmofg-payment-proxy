@@ -26,7 +26,8 @@ use crate::{
     ProxyListener, ProxyStatusViewModel, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
     RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
     SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
-    SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    SettingsViewModel, SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel,
+    SocketCaptureQuery, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
 #[async_trait]
@@ -235,6 +236,38 @@ pub trait CaptureRepositoryPort: Send + Sync + std::fmt::Debug {
         runtime_epoch: RuntimeEpoch,
     ) -> AppResult<CaptureDetailViewModel>;
     async fn clear_view(&self, current_cursor: u64) -> AppResult<u64>;
+
+    /// 查询独立的 Socket capture 时间线。默认实现保持旧 HTTP 仓储源兼容，并明确报告
+    /// Host 尚未接线，而不是让 Socket 数据进入 HTTP DTO。
+    async fn query_socket(
+        &self,
+        _query: SocketCaptureQuery,
+    ) -> AppResult<SocketCapturePageViewModel> {
+        Err(AppError::new(
+            "SOCKET_CAPTURE_STORE_UNAVAILABLE",
+            "当前 Host 尚未提供 Socket 抓包存储。",
+        ))
+    }
+
+    /// 按 capture id 加载完整 Socket 详情；与 HTTP 的 session/epoch 详情键分离。
+    async fn get_socket_detail(
+        &self,
+        _capture_id: SocketCaptureId,
+    ) -> AppResult<SocketCaptureDetailViewModel> {
+        Err(AppError::new(
+            "SOCKET_CAPTURE_STORE_UNAVAILABLE",
+            "当前 Host 尚未提供 Socket 抓包存储。",
+        ))
+    }
+
+    /// 清除已完成 Socket capture。实时 `RequestParsed` preview 由 observer 自己淘汰，
+    /// 不属于该持久化视图，也不计入返回数量。
+    async fn clear_socket_completed(&self, _workspace_id: WorkspaceId) -> AppResult<usize> {
+        Err(AppError::new(
+            "SOCKET_CAPTURE_STORE_UNAVAILABLE",
+            "当前 Host 尚未提供 Socket 抓包存储。",
+        ))
+    }
 }
 
 #[async_trait]
