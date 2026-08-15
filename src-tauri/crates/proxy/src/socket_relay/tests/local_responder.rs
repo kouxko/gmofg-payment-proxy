@@ -266,3 +266,6 @@ async fn assert_local_failure(outcome: ProcessorOutcome, expected_code: &'static
     assert_eq!(failure.direction, Some(SocketRelayDirection::LocalExchange));
     assert_eq!(failure.code, expected_code);
 }
+
+#[path = "local_responder/tls.rs"]
+mod tls;

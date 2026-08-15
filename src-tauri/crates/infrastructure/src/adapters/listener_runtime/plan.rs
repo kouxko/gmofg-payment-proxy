@@ -39,7 +39,8 @@ pub(super) enum PreparedListenerRuntime {
         bind_addr: SocketAddr,
         service: Arc<SocketRelayService>,
     },
-    /// Scripted Relay 已装配真实服务；LocalResponder 在 T25 接入前保持无服务计划。
+    /// Scripted Relay 与 `LocalResponder` 共用冻结快照，但各自装配拓扑专用服务。
+    /// `None` 只保留为反序列化之外的内部防御状态，启动门禁会在 bind 前拒绝它。
     ScriptedSocket {
         bind_addr: SocketAddr,
         snapshot: Arc<ScriptedSocketRuntimeSnapshot>,

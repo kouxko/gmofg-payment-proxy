@@ -20,10 +20,12 @@ pub use config::{
     SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig, SocketUpstreamTransport,
 };
 pub use observer::{
-    BoundedSocketConnectionObserver, NoopSocketConnectionObserver, SocketConnectionEvent,
-    SocketConnectionObserver, SocketConnectionTarget, SocketOpenedEvidence, SocketRejectionReason,
-    SocketRelayBytes, SocketRelayDirection, SocketRelayFailure, SocketRelayMetricsSnapshot,
-    SocketRelayRunContext, SocketRelayStage, SocketTlsEvidence, SocketTransportMode,
+    BoundedSocketConnectionObserver, LocalResponderDiagnostics, NoopSocketConnectionObserver,
+    SocketConnectionEvent, SocketConnectionObserver, SocketConnectionTarget,
+    SocketDocumentFieldPreview, SocketDocumentPreview, SocketLocalRequestPreview,
+    SocketOpenedEvidence, SocketRejectionReason, SocketRelayBytes, SocketRelayDirection,
+    SocketRelayFailure, SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelayStage,
+    SocketTlsEvidence, SocketTransportMode,
 };
 pub use processing::{
     FrameBoundary, LocalResponderProcessorFactory, ScriptedRelayProcessorFactory,

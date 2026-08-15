@@ -15,7 +15,7 @@ use crate::{ErrorCode, ProxyError, Result};
 
 use super::connector::PreparedSocketSecurity;
 use super::frame_pump::{
-    SocketFramePumpTimeouts, relay_framed_bidirectional, respond_framed_locally,
+    SocketFramePumpTimeouts, relay_framed_bidirectional, respond_framed_locally_observed,
 };
 use super::handler_support::{
     SocketHandlerConfig, SocketHandlerProcessing, connection_identity, normalize_cancelled,
@@ -276,10 +276,15 @@ impl SocketConnectionHandler {
                 downstream_tls_peer: accepted.downstream_tls_peer,
             },
         );
-        let result = respond_framed_locally(
+        let result = respond_framed_locally_observed(
             accepted.downstream,
             connection_identity(&run, connection_id, peer),
             factory,
+            super::LocalResponderDiagnostics::new(
+                run.clone(),
+                connection_id,
+                Arc::clone(&self.observer),
+            ),
             limits,
             SocketFramePumpTimeouts::new(config.read_timeout, config.write_timeout),
             cancellation,

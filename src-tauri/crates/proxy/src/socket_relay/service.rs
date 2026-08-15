@@ -461,7 +461,8 @@ impl SocketConnectionObserver for SocketEventCoordinator {
             SocketConnectionEvent::Closed { connection_id, .. } => {
                 self.take_unclosed(*connection_id);
             }
-            SocketConnectionEvent::Rejected { .. } => {}
+            SocketConnectionEvent::Rejected { .. }
+            | SocketConnectionEvent::RequestParsed { .. } => {}
         }
         self.observer.record(event);
     }

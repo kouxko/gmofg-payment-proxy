@@ -155,7 +155,7 @@ impl ProtocolDirectionExecutor {
         origin: Vec<u8>,
         transform: impl FnOnce(Document) -> ProtocolRuntimeResult<Document>,
     ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
-        let mut document = if self.plan.decode_enabled() {
+        let document = if self.plan.decode_enabled() {
             self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
             let decoded = self.call_decode(&origin)?;
             validate_document_schema(&decoded, self.host.create_document().schema()).map_err(
@@ -169,6 +169,27 @@ impl ProtocolDirectionExecutor {
             self.host.create_document()
         };
 
+        self.finish_frame(origin, document, self.plan.decode_enabled())
+    }
+
+    /// 跳过 Decode，以调用方提供的同 Schema owned Document 直接完成 Encode/Echo。
+    ///
+    /// `LocalResponder` 的 response 没有真实 downstream 输入流，所以不能调用 downstream Frame/Decode。
+    /// 此入口只对 crate 内协调器开放，并再次验证 Document 身份，防止规则闭包替换 Schema。
+    pub(super) fn execute_predecoded_document(
+        &mut self,
+        origin: Vec<u8>,
+        document: Document,
+    ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
+        self.finish_frame(origin, document, false)
+    }
+
+    fn finish_frame(
+        &mut self,
+        origin: Vec<u8>,
+        mut document: Document,
+        decoded: bool,
+    ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
         // 规则实现也只能通过 Domain API 修改 Document；这里再次验证身份，防止未来闭包边界扩展后
         // 把其他包的 Document 带入 Encode。
         validate_document_schema(&document, self.host.create_document().schema()).map_err(
@@ -177,7 +198,7 @@ impl ProtocolDirectionExecutor {
                 entry: ProtocolEntryPoint::Decode,
             },
         )?;
-        let decoded_document = self.plan.decode_enabled().then(|| document.clone());
+        let decoded_document = decoded.then(|| document.clone());
         let written = if self.plan.encode_enabled() {
             self.ensure_blob_input(ProtocolEntryPoint::Encode, origin.len())?;
             self.call_encode(&origin, &mut document)?

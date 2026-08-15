@@ -12,6 +12,13 @@ use uuid::Uuid;
 
 use crate::transport::relay::{RelayBytes, RelayIoBytes, RelayProgress};
 
+mod local_request;
+
+pub use local_request::{
+    LocalResponderDiagnostics, SocketDocumentFieldPreview, SocketDocumentPreview,
+    SocketLocalRequestPreview,
+};
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SocketRelayBytes {
     /// 从 App 侧实际读取、准备发往处理端/上游的 origin 字节数。
@@ -155,6 +162,13 @@ pub enum SocketConnectionEvent {
         evidence: SocketOpenedEvidence,
         at: SystemTime,
     },
+    /// `LocalResponder` 已完成 request Frame 与可选 Decode，但尚未生成或提交 response。
+    RequestParsed {
+        run: SocketRelayRunContext,
+        connection_id: Uuid,
+        preview: SocketLocalRequestPreview,
+        at: SystemTime,
+    },
     Closed {
         run: SocketRelayRunContext,
         connection_id: Uuid,
@@ -188,16 +202,26 @@ impl SocketConnectionObserver for NoopSocketConnectionObserver {
 #[derive(Debug)]
 pub struct BoundedSocketConnectionObserver {
     capacity: usize,
+    max_logical_bytes: usize,
     retained: Mutex<VecDeque<SocketConnectionEvent>>,
+    retained_logical_bytes: Mutex<usize>,
     dropped: AtomicU64,
 }
 
 impl BoundedSocketConnectionObserver {
     #[must_use]
     pub fn new(capacity: usize) -> Self {
+        Self::with_limits(capacity, usize::MAX)
+    }
+
+    /// 创建同时受事件条数和逻辑字节数约束的内存观察队列。
+    #[must_use]
+    pub fn with_limits(capacity: usize, max_logical_bytes: usize) -> Self {
         Self {
             capacity: capacity.max(1),
+            max_logical_bytes: max_logical_bytes.max(1),
             retained: Mutex::new(VecDeque::with_capacity(capacity.max(1))),
+            retained_logical_bytes: Mutex::new(0),
             dropped: AtomicU64::new(0),
         }
     }
@@ -215,14 +239,29 @@ impl BoundedSocketConnectionObserver {
 
 impl SocketConnectionObserver for BoundedSocketConnectionObserver {
     fn record(&self, event: SocketConnectionEvent) {
+        let event_bytes = event.logical_bytes();
         let mut retained = self
             .retained
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if retained.len() == self.capacity {
-            retained.pop_front();
+        let mut retained_bytes = self
+            .retained_logical_bytes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while retained.len() == self.capacity
+            || retained_bytes.saturating_add(event_bytes) > self.max_logical_bytes
+        {
+            let Some(removed) = retained.pop_front() else {
+                break;
+            };
+            *retained_bytes = retained_bytes.saturating_sub(removed.logical_bytes());
             self.dropped.fetch_add(1, Ordering::Relaxed);
         }
+        if event_bytes > self.max_logical_bytes {
+            self.dropped.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        *retained_bytes = retained_bytes.saturating_add(event_bytes);
         retained.push_back(event);
     }
 
@@ -231,11 +270,29 @@ impl SocketConnectionObserver for BoundedSocketConnectionObserver {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clear();
+        *self
+            .retained_logical_bytes
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = 0;
         self.dropped.store(0, Ordering::Relaxed);
     }
 
     fn retained_diagnostic_evictions(&self) -> u64 {
         self.dropped.load(Ordering::Relaxed)
+    }
+}
+
+impl SocketConnectionEvent {
+    fn logical_bytes(&self) -> usize {
+        match self {
+            Self::RequestParsed { preview, .. } => preview.logical_bytes(),
+            // 连接生命周期事件只保留短标识和固定统计。使用稳定上界避免为了内存计量
+            // 序列化数据面事件，也不会低估真正占大头的 request preview。
+            Self::Rejected { .. }
+            | Self::Admitted { .. }
+            | Self::Opened { .. }
+            | Self::Closed { .. } => 512,
+        }
     }
 }
 

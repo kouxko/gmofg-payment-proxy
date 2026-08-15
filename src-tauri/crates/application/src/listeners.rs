@@ -41,17 +41,6 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
                     .entity(id.to_string()),
             );
         }
-        if matches!(
-            &listener.data_plane,
-            ListenerDataPlane::Socket(settings)
-                if matches!(settings.topology, SocketTopology::LocalResponder(_))
-        ) {
-            return Err(AppError::new(
-                "LOCAL_RESPONDER_NOT_AVAILABLE",
-                "LocalResponder 数据面尚未接入当前运行时。",
-            )
-            .entity(id.to_string()));
-        }
         let (address, port) = listener.bind_endpoint();
         let status = ListenerStatusViewModel {
             listener_id: id,
@@ -276,7 +265,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn local_responder_in_memory_start_is_stably_unavailable() {
+    async fn local_responder_in_memory_start_tracks_running_status() {
         let settings = SocketRelaySettings {
             topology: SocketTopology::LocalResponder(SocketLocalResponderTopology::default()),
             ..SocketRelaySettings::default()
@@ -290,11 +279,11 @@ mod tests {
             ..ProxyWorkspace::default()
         };
 
-        let error = InMemoryListenerRuntime::default()
-            .start(workspace, listener)
-            .await
-            .unwrap_err();
-        assert_eq!(error.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+        let runtime = InMemoryListenerRuntime::default();
+        let status = runtime.start(workspace, listener).await.unwrap();
+
+        assert_eq!(status.state, ListenerRuntimeState::Running);
+        assert_eq!(runtime.statuses().await.unwrap(), vec![status]);
     }
 
     #[test]

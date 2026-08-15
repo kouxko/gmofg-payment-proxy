@@ -12,7 +12,8 @@ use intercept_proxy_runtime::{
     SocketRelayFailure, SocketRelayRunContext, SocketRelayStage, SocketTransportMode,
 };
 
-const DEFAULT_SOCKET_DIAGNOSTIC_CAPACITY: usize = 4_096;
+const DEFAULT_SOCKET_DIAGNOSTIC_CAPACITY: usize = 256;
+const SOCKET_DIAGNOSTIC_LOGICAL_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug)]
 pub(super) struct SocketDiagnosticObserver {
@@ -27,7 +28,10 @@ impl SocketDiagnosticObserver {
 
     pub(super) fn with_capacity(events: Arc<EventHub>, capacity: usize) -> Self {
         Self {
-            retained: BoundedSocketConnectionObserver::new(capacity),
+            retained: BoundedSocketConnectionObserver::with_limits(
+                capacity,
+                SOCKET_DIAGNOSTIC_LOGICAL_BYTES,
+            ),
             events,
         }
     }
@@ -114,6 +118,17 @@ fn diagnostic_entry(
             Some(connection_id.to_string()),
             opened_entry(run, *connection_id, evidence),
         ),
+        SocketConnectionEvent::RequestParsed {
+            run,
+            connection_id,
+            preview,
+            at,
+        } => (
+            run,
+            (*at).into(),
+            Some(connection_id.to_string()),
+            request_parsed_entry(run, *connection_id, preview),
+        ),
         SocketConnectionEvent::Closed {
             run,
             target,
@@ -135,6 +150,49 @@ fn diagnostic_entry(
                 failure.as_ref(),
             ),
         ),
+    }
+}
+
+fn request_parsed_entry(
+    run: &SocketRelayRunContext,
+    connection_id: uuid::Uuid,
+    preview: &intercept_proxy_runtime::SocketLocalRequestPreview,
+) -> DiagnosticLogEntryViewModel {
+    let document_shape = preview.document.as_ref().map_or_else(
+        || "Hex（request Decode 关闭）".to_owned(),
+        |document| {
+            format!(
+                "Schema {}@{}，{} 个预览字段，截断：{}",
+                document.schema_id,
+                document.schema_version,
+                document.fields.len(),
+                document.truncated
+            )
+        },
+    );
+    DiagnosticLogEntryViewModel {
+        level: DiagnosticLogLevel::Info,
+        stage: DiagnosticLogStage::Socket,
+        summary: "Socket 本地请求已解析".into(),
+        // 通用诊断日志只保留有界形状元数据；字段值仍只存在 Proxy 的有界 RequestParsed
+        // observer 事件中，避免复制到第二个无关队列。
+        detail: Some(format!(
+            "listener-run：{}；连接：{connection_id}；交换：{}；request：{} 字节；原始预览：{} 字节；{document_shape}",
+            run.listener_run_epoch,
+            preview.exchange_id,
+            preview.origin_len,
+            preview.origin_preview.len()
+        )),
+        device_serial: None,
+        listener_id: Some(run.listener_id.clone()),
+        profile_id: None,
+        socket_context: Some(socket_context(
+            run,
+            Some(connection_id),
+            SocketRelayStage::FrameProcess,
+            Some(SocketRelayDirection::LocalExchange),
+            SocketRelayBytes::default(),
+        )),
     }
 }
 

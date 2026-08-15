@@ -37,9 +37,8 @@ async fn direct_listener_gates_never_touch_protocol_package_ports() {
     assert_eq!(services.usage_calls.load(Ordering::SeqCst), 0);
 }
 
-/// T21 移除的只是 Application Facade 的一律 unavailable。当前内存 runtime 仍代表尚未
-/// 接入 T22 的 Host，因此最终返回同一稳定错误；fresh compile 调用数证明请求已经穿过
-/// Application 的包/Schema/方向门禁并真正到达 runtime。
+/// `LocalResponder` 启动前仍 fresh compile 精确包版本；通过门禁后与其他 Listener 一样
+/// 进入 runtime，并把持久化 enabled 状态与实际运行态一起提交。
 #[tokio::test]
 async fn local_responder_reaches_runtime_after_fresh_script_validation() {
     let (application, services, workspaces, runtime) = fixture();
@@ -77,20 +76,16 @@ async fn local_responder_reaches_runtime_after_fresh_script_validation() {
         .await
         .unwrap();
     let before_start_compile_calls = services.compile_calls.load(Ordering::SeqCst);
-    let error = application
+    let status = application
         .listener_start(workspace.id, workspace.revision.get(), listener_id)
         .await
-        .unwrap_err();
+        .unwrap();
 
-    assert_eq!(error_code(&error), "LOCAL_RESPONDER_NOT_AVAILABLE");
-    assert_eq!(
-        error.view_model.message,
-        "LocalResponder 数据面尚未接入当前运行时。"
-    );
+    assert_eq!(status.state, ListenerRuntimeState::Running);
     assert_eq!(
         services.compile_calls.load(Ordering::SeqCst),
         before_start_compile_calls + 1
     );
-    assert!(runtime.statuses().await.unwrap().is_empty());
-    assert!(!workspaces.get(workspace.id).await.unwrap().listeners[0].enabled);
+    assert_eq!(runtime.statuses().await.unwrap(), vec![status]);
+    assert!(workspaces.get(workspace.id).await.unwrap().listeners[0].enabled);
 }
