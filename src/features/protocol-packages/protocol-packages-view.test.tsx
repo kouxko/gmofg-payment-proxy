@@ -59,6 +59,7 @@ describe("ProtocolPackagesView list", () => {
     render(<ProtocolPackagesView />);
 
     const row = await screen.findByRole("button", { name: "查看协议包 ISO 8583" });
+    expect(row).toHaveClass("h-auto", "min-h-16");
     expect(row).toHaveTextContent("2.0.0");
     expect(row).toHaveTextContent("3 个版本");
     expect(row).toHaveTextContent("3 个引用");
