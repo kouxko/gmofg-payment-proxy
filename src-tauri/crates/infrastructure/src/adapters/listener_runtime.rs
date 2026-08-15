@@ -192,6 +192,7 @@ impl Drop for ListenerRuntimeAdapter {
 
 mod document_rules;
 mod helpers;
+mod local_responder;
 mod plan;
 mod port;
 mod scripted_relay;

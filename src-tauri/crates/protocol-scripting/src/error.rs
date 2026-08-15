@@ -6,6 +6,33 @@ use thiserror::Error;
 
 use crate::ProtocolDirection;
 
+/// `LocalResponder` 在 request/response bridge 上拒绝的所有权维度。
+///
+/// 该值只描述身份边界，不包含 Document 字段值、连接载荷或脚本源码，可安全进入结构化诊断。
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalResponseOwnershipViolation {
+    /// request/response 来自另一个精确协议包版本。
+    Package,
+    /// request/response 绑定了另一个 Document Schema。
+    Schema,
+    /// request/response 来自另一个 Socket 连接。
+    Connection,
+    /// request/response 虽有相同公开身份，但不是由当前协调器实例创建。
+    Output,
+}
+
+impl fmt::Display for LocalResponseOwnershipViolation {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Package => "package",
+            Self::Schema => "schema",
+            Self::Connection => "connection",
+            Self::Output => "output",
+        })
+    }
+}
+
 /// 可被资源门禁拒绝的脚本执行维度。
 ///
 /// 该枚举同时用于限制配置错误和运行时超限错误，调用方不需要解析消息文本来判断是哪一项门禁。
@@ -126,6 +153,38 @@ pub enum ProtocolRuntimeError {
         /// 失败包的精确 ID 与版本。
         package: ProtocolPackageRef,
     },
+    /// `LocalResponder` 收到了不属于当前包、Schema、连接或协调器的桥接对象。
+    #[error(
+        "协议包 {id}@{version} 的 LocalResponder 拒绝外部 {violation} 对象",
+        id = .package.id,
+        version = .package.version
+    )]
+    LocalResponseOwnershipViolation {
+        /// 当前协调器绑定的精确包版本。
+        package: ProtocolPackageRef,
+        /// 被拒绝的身份维度。
+        violation: LocalResponseOwnershipViolation,
+    },
+    /// `LocalResponder` 在写入前得到空 response。
+    #[error(
+        "协议包 {id}@{version} 的 LocalResponder 生成了空 response",
+        id = .package.id,
+        version = .package.version
+    )]
+    LocalResponseEmpty {
+        /// 生成空 response 的精确包版本。
+        package: ProtocolPackageRef,
+    },
+    /// `LocalResponder` 在规则或 Echo 阶段观察到连接取消。
+    #[error(
+        "协议包 {id}@{version} 的 LocalResponder 执行已取消",
+        id = .package.id,
+        version = .package.version
+    )]
+    LocalResponseCancelled {
+        /// 被取消的精确包版本。
+        package: ProtocolPackageRef,
+    },
     /// 调用方取消了正在运行或即将开始的协议入口。
     #[error(
         "协议包 {id}@{version} 的 {entry} 入口执行已取消",
@@ -164,6 +223,9 @@ impl ProtocolRuntimeError {
             Self::EntryPointUnavailable { .. } => "ENTRY_POINT_UNAVAILABLE",
             Self::EntryPointFailed { .. } => "ENTRY_POINT_FAILED",
             Self::DocumentTransformFailed { .. } => "DOCUMENT_TRANSFORM_FAILED",
+            Self::LocalResponseOwnershipViolation { .. } => "LOCAL_RESPONSE_OWNERSHIP_VIOLATION",
+            Self::LocalResponseEmpty { .. } => "LOCAL_RESPONSE_EMPTY",
+            Self::LocalResponseCancelled { .. } => "LOCAL_RESPONSE_CANCELLED",
             Self::ExecutionCancelled { .. } => "EXECUTION_CANCELLED",
             Self::ResourceLimitExceeded { .. } => "RESOURCE_LIMIT_EXCEEDED",
         }

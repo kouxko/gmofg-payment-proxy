@@ -42,17 +42,18 @@ pub use reverse::{
     UpstreamTransport,
 };
 pub use socket_relay::{
-    BoundedSocketConnectionObserver, FrameBoundary, LocalResponderProcessorFactory,
-    NoopSocketConnectionObserver, ScriptedRelayProcessorFactory, SocketConnectionEvent,
-    SocketConnectionIdentity, SocketConnectionObserver, SocketConnectionTarget,
+    BoundedSocketConnectionObserver, FrameBoundary, LocalResponderDiagnostics,
+    LocalResponderProcessorFactory, NoopSocketConnectionObserver, ScriptedRelayProcessorFactory,
+    SocketConnectionEvent, SocketConnectionIdentity, SocketConnectionObserver,
+    SocketConnectionTarget, SocketDocumentFieldPreview, SocketDocumentPreview,
     SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint, SocketFrameProcessor,
-    SocketFramePumpLimits, SocketLocalResponderConfig, SocketOpenedEvidence,
-    SocketPayloadDirection, SocketProcessingFailure, SocketProcessingFailureKind,
-    SocketRejectionReason, SocketRelayBytes, SocketRelayConfig, SocketRelayDirection,
-    SocketRelayFailure, SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity,
-    SocketRelayService, SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity,
-    SocketTransportMode, SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig,
-    SocketUpstreamTransport,
+    SocketFramePumpLimits, SocketLocalRequestPreview, SocketLocalResponderConfig,
+    SocketOpenedEvidence, SocketPayloadDirection, SocketProcessingFailure,
+    SocketProcessingFailureKind, SocketRejectionReason, SocketRelayBytes, SocketRelayConfig,
+    SocketRelayDirection, SocketRelayFailure, SocketRelayMetricsSnapshot, SocketRelayRunContext,
+    SocketRelaySecurity, SocketRelayService, SocketRelayStage, SocketTlsEvidence,
+    SocketTlsIdentity, SocketTransportMode, SocketUpstreamConnectionTestResult,
+    SocketUpstreamTlsConfig, SocketUpstreamTransport,
 };
 pub use supervisor::{
     ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,

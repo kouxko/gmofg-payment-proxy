@@ -73,12 +73,18 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             .await?;
         if let Some(snapshot) = plan.scripted_snapshot()
             && matches!(snapshot.topology(), DomainSocketTopology::LocalResponder(_))
+            && matches!(
+                &plan,
+                PreparedListenerRuntime::ScriptedSocket { service: None, .. }
+            )
         {
-            let (code, message) = (
-                "LOCAL_RESPONDER_NOT_AVAILABLE",
-                "LocalResponder 已完成运行计划校验，响应字节泵将在后续任务接入。",
-            );
-            return Err(AppError::new(code, message).entity(listener_id.to_string()));
+            // T25 之后 LocalResponder 必须在 bind 前已经持有专用本地 service。继续保留这个
+            // 防御门禁，避免未来计划重构时把“已校验但不可服务”的旧占位状态重新暴露为 Running。
+            return Err(AppError::new(
+                "LOCAL_RESPONDER_PLAN_INVALID",
+                "LocalResponder 未能构造本地应答运行服务。",
+            )
+            .entity(listener_id.to_string()));
         }
         let listen_address = plan.bind_addr().to_string();
         let tcp_listener = bind_tcp_listener(plan.bind_addr(), listener_id).await?;
@@ -270,7 +276,7 @@ async fn serve_prepared_listener(
         PreparedListenerRuntime::ScriptedSocket { service: None, .. } => {
             Err(intercept_proxy_runtime::ProxyError::new(
                 intercept_proxy_runtime::ErrorCode::Internal,
-                "unavailable LocalResponder plan escaped the start gate",
+                "scripted socket plan reached serve without a runtime service",
             ))
         }
     }

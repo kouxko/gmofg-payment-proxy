@@ -8,6 +8,8 @@ use uuid::Uuid;
 
 use crate::transport::relay::RelayBytes;
 
+use super::LocalResponderDiagnostics;
+
 /// 一条完整 Frame 在 Socket 拓扑中的处理方向。
 ///
 /// `LocalExchange` 是本地 request-response 交换，不应被解释成一次上游发送。
@@ -217,6 +219,12 @@ pub trait SocketFrameProcessor: Send {
 
     /// 处理一个完整 origin，返回一次且仅一次写出的完整输出 Blob。
     async fn process(&mut self, origin: Bytes) -> Result<Bytes, SocketProcessingFailure>;
+
+    /// 注入 `LocalResponder` request 的协议中立旁路观察句柄。
+    ///
+    /// Relay 与既有 fake processor 使用默认空实现；LocalResponder processor 只保存句柄，
+    /// 并在 request Frame/可选 Decode 成功后发布有界预览。
+    fn set_local_diagnostics(&mut self, _diagnostics: LocalResponderDiagnostics) {}
 
     /// 通知 processor：上一次 `process` 的输出已经完整写入并 flush 成功。
     ///

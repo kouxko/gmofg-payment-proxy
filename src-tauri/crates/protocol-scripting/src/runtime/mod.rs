@@ -6,9 +6,13 @@
 
 mod deadline;
 mod executor;
+mod local_responder;
 mod output;
 mod plan;
 
 pub use executor::ProtocolDirectionExecutor;
+pub use local_responder::{
+    LocalRequestOutput, LocalResponderCoordinator, LocalResponseDisplayHandle, LocalResponseOutput,
+};
 pub use output::{DisplayFallbackReason, ProtocolDisplayResult, ProtocolFrameOutput};
 pub use plan::DirectionExecutionPlan;

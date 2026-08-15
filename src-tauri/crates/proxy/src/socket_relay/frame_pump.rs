@@ -10,16 +10,21 @@ use tokio_util::sync::CancellationToken;
 use crate::transport::BoxIo;
 use crate::transport::relay::{RelayBytes, RelayDirection, RelayProgress};
 
+#[cfg(test)]
+use super::processing::LocalResponderProcessorFactory;
 use super::processing::{
-    FrameBoundary, LocalResponderProcessorFactory, ScriptedRelayProcessorFactory,
-    SocketConnectionIdentity, SocketFrameProcessor, SocketFramePumpLimits, SocketPayloadDirection,
-    SocketProcessingFailure, SocketProcessingFailureKind,
+    FrameBoundary, ScriptedRelayProcessorFactory, SocketConnectionIdentity, SocketFrameProcessor,
+    SocketFramePumpLimits, SocketPayloadDirection, SocketProcessingFailure,
+    SocketProcessingFailureKind,
 };
-use control::{
-    choose_relay_result, create_local_processor, create_relay_processor, pump_and_cancel,
-};
+use control::{choose_relay_result, create_relay_processor, pump_and_cancel};
 
 mod control;
+mod local;
+
+#[cfg(test)]
+pub(crate) use local::respond_framed_locally;
+pub(crate) use local::respond_framed_locally_observed;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct SocketFramePumpTimeouts {
@@ -91,34 +96,6 @@ pub(crate) async fn relay_framed_bidirectional(
         .take();
     recorded
         .map_or_else(|| choose_relay_result(first, second, bytes), Err)
-        .map_err(|failure| failure.with_bytes(bytes))
-}
-
-pub(crate) async fn respond_framed_locally(
-    app: BoxIo,
-    connection: SocketConnectionIdentity,
-    factory: &dyn LocalResponderProcessorFactory,
-    limits: SocketFramePumpLimits,
-    timeouts: SocketFramePumpTimeouts,
-    cancellation: CancellationToken,
-    progress: Arc<RelayProgress>,
-) -> Result<RelayBytes, SocketProcessingFailure> {
-    let (reader, writer) = tokio::io::split(app);
-    let processor = create_local_processor(factory, connection)?;
-    let result = pump_direction(
-        reader,
-        writer,
-        processor,
-        SocketPayloadDirection::LocalExchange,
-        limits,
-        timeouts,
-        cancellation,
-        Arc::clone(&progress),
-    )
-    .await;
-    let bytes = progress.snapshot();
-    result
-        .map(|()| bytes)
         .map_err(|failure| failure.with_bytes(bytes))
 }
 

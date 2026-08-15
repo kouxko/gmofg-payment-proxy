@@ -2,7 +2,10 @@ use std::error::Error;
 
 use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion};
 
-use crate::{ProtocolDirection, ProtocolEntryPoint, ProtocolResourceLimit, ProtocolRuntimeError};
+use crate::{
+    LocalResponseOwnershipViolation, ProtocolDirection, ProtocolEntryPoint, ProtocolResourceLimit,
+    ProtocolRuntimeError,
+};
 
 fn package() -> ProtocolPackageRef {
     ProtocolPackageRef {
@@ -51,6 +54,24 @@ fn runtime_error_codes_display_and_source_behavior_are_stable() {
             "协议包 iso8583-standard@1.2.3 的 Document 变换失败",
         ),
         (
+            ProtocolRuntimeError::LocalResponseOwnershipViolation {
+                package: package(),
+                violation: LocalResponseOwnershipViolation::Connection,
+            },
+            "LOCAL_RESPONSE_OWNERSHIP_VIOLATION",
+            "协议包 iso8583-standard@1.2.3 的 LocalResponder 拒绝外部 connection 对象",
+        ),
+        (
+            ProtocolRuntimeError::LocalResponseEmpty { package: package() },
+            "LOCAL_RESPONSE_EMPTY",
+            "协议包 iso8583-standard@1.2.3 的 LocalResponder 生成了空 response",
+        ),
+        (
+            ProtocolRuntimeError::LocalResponseCancelled { package: package() },
+            "LOCAL_RESPONSE_CANCELLED",
+            "协议包 iso8583-standard@1.2.3 的 LocalResponder 执行已取消",
+        ),
+        (
             ProtocolRuntimeError::ExecutionCancelled {
                 package: package(),
                 entry: ProtocolEntryPoint::Decode,
@@ -96,6 +117,12 @@ fn runtime_errors_have_strict_unambiguous_serde_contracts() {
             entry: ProtocolEntryPoint::Frame,
         },
         ProtocolRuntimeError::DocumentTransformFailed { package: package() },
+        ProtocolRuntimeError::LocalResponseOwnershipViolation {
+            package: package(),
+            violation: LocalResponseOwnershipViolation::Schema,
+        },
+        ProtocolRuntimeError::LocalResponseEmpty { package: package() },
+        ProtocolRuntimeError::LocalResponseCancelled { package: package() },
         ProtocolRuntimeError::ExecutionCancelled {
             package: package(),
             entry: ProtocolEntryPoint::Display,
@@ -160,4 +187,19 @@ fn entry_points_and_resource_limits_cover_every_wire_value() {
     }
     assert!(serde_json::from_value::<ProtocolEntryPoint>("send".into()).is_err());
     assert!(serde_json::from_value::<ProtocolResourceLimit>("unbounded".into()).is_err());
+
+    for (violation, wire) in [
+        (LocalResponseOwnershipViolation::Package, "package"),
+        (LocalResponseOwnershipViolation::Schema, "schema"),
+        (LocalResponseOwnershipViolation::Connection, "connection"),
+        (LocalResponseOwnershipViolation::Output, "output"),
+    ] {
+        assert_eq!(violation.to_string(), wire);
+        assert_eq!(serde_json::to_value(violation).unwrap(), wire);
+        assert_eq!(
+            serde_json::from_value::<LocalResponseOwnershipViolation>(wire.into()).unwrap(),
+            violation
+        );
+    }
+    assert!(serde_json::from_value::<LocalResponseOwnershipViolation>("document".into()).is_err());
 }

@@ -248,6 +248,7 @@ async fn cancellation_emits_one_terminal_event_and_resets_active_metrics() {
         assert!(events.iter().all(|event| match event {
             SocketConnectionEvent::Admitted { run, .. }
             | SocketConnectionEvent::Opened { run, .. }
+            | SocketConnectionEvent::RequestParsed { run, .. }
             | SocketConnectionEvent::Closed { run, .. }
             | SocketConnectionEvent::Rejected { run, .. } => run == &expected_run,
         }));

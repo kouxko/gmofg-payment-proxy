@@ -26,7 +26,7 @@ use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackage
 
 use limiter::{BlockingCommandSlots, acquire_command_permits};
 
-mod limiter;
+pub(super) mod limiter;
 
 /// 同一次 Listener 启动快照派生的双方向 processor factory。
 pub(super) struct ScriptedRelayProcessorFactoryAdapter {
@@ -54,7 +54,7 @@ impl ScriptedRelayProcessorFactoryAdapter {
             listener_id,
             runtime_limits: snapshot.runtime_limits(),
             framing_limits,
-            blocking_slots: BlockingCommandSlots::new(snapshot.maximum_connections()),
+            blocking_slots: BlockingCommandSlots::new_relay(snapshot.maximum_connections()),
         }
     }
 
@@ -123,14 +123,22 @@ pub(super) fn frame_pump_limits(
     upstream: DirectionExecutionPlan,
     downstream: DirectionExecutionPlan,
 ) -> Result<SocketFramePumpLimits, SocketProcessingFailure> {
-    const READ_CHUNK_BYTES: usize = 16 * 1024;
-
     let entry_calls = [upstream, downstream]
         .into_iter()
         .map(|plan| u64::from(plan.decode_enabled()) + u64::from(plan.encode_enabled()))
         .max()
         .unwrap_or(0)
         .max(1);
+    frame_pump_limits_for_entry_calls(runtime, framing, entry_calls)
+}
+
+pub(super) fn frame_pump_limits_for_entry_calls(
+    runtime: ProtocolRuntimeLimits,
+    framing: ProtocolFramingLimits,
+    entry_calls: u64,
+) -> Result<SocketFramePumpLimits, SocketProcessingFailure> {
+    const READ_CHUNK_BYTES: usize = 16 * 1024;
+
     let processing_ms =
         processing_budget_ms(runtime.max_wall_time_ms(), entry_calls).ok_or_else(invalid_limits)?;
     let max_buffer_bytes =

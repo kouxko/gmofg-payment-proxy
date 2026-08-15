@@ -76,6 +76,7 @@ fn executor(
 }
 
 include!("runtime/execution.rs");
+include!("runtime/local_responder.rs");
 include!("runtime/resource_limits.rs");
 include!("runtime/contracts.rs");
 include!("runtime/cancellation.rs");

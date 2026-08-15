@@ -46,7 +46,8 @@ pub use declaration_name::{
     ProtocolFunctionName,
 };
 pub use error::{
-    ProtocolEntryPoint, ProtocolResourceLimit, ProtocolRuntimeError, ProtocolRuntimeResult,
+    LocalResponseOwnershipViolation, ProtocolEntryPoint, ProtocolResourceLimit,
+    ProtocolRuntimeError, ProtocolRuntimeResult,
 };
 pub use framing::{
     DEFAULT_MAX_FRAME_BYTES, DEFAULT_MAX_FRAME_FIFO_BYTES, MAX_FRAME_BYTES_LIMIT,
@@ -68,7 +69,8 @@ pub use parse_error::{
     ProtocolPackageFile, ProtocolPackageParseError, ProtocolPackageParseErrorCode,
 };
 pub use runtime::{
-    DirectionExecutionPlan, DisplayFallbackReason, ProtocolDirectionExecutor,
+    DirectionExecutionPlan, DisplayFallbackReason, LocalRequestOutput, LocalResponderCoordinator,
+    LocalResponseDisplayHandle, LocalResponseOutput, ProtocolDirectionExecutor,
     ProtocolDisplayResult, ProtocolFrameOutput,
 };
 pub use schema_parser::{MAX_DOCUMENT_SCHEMA_TOML_BYTES, parse_document_schema};

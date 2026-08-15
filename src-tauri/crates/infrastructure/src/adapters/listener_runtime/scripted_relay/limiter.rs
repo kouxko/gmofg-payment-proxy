@@ -9,28 +9,41 @@ use super::DirectionCommand;
 const GLOBAL_SCRIPTED_BLOCKING_COMMAND_LIMIT: usize = 64;
 
 #[derive(Clone)]
-pub(super) struct BlockingCommandSlots {
+pub(in crate::adapters::listener_runtime) struct BlockingCommandSlots {
     global: Arc<Semaphore>,
     listener: Arc<Semaphore>,
 }
 
 impl BlockingCommandSlots {
-    pub(super) fn new(maximum_connections: u16) -> Self {
+    pub(in crate::adapters::listener_runtime) fn new_relay(maximum_connections: u16) -> Self {
+        Self::new(maximum_connections, 2)
+    }
+
+    pub(in crate::adapters::listener_runtime) fn new_local(maximum_connections: u16) -> Self {
+        Self::new(maximum_connections, 1)
+    }
+
+    fn new(maximum_connections: u16, directions_per_connection: usize) -> Self {
         static GLOBAL: OnceLock<Arc<Semaphore>> = OnceLock::new();
         let global = Arc::clone(
             GLOBAL.get_or_init(|| Arc::new(Semaphore::new(GLOBAL_SCRIPTED_BLOCKING_COMMAND_LIMIT))),
         );
-        Self::from_global(maximum_connections, global)
+        Self::from_global(maximum_connections, directions_per_connection, global)
     }
 
     #[cfg(test)]
     pub(super) fn with_global(maximum_connections: u16, global: Arc<Semaphore>) -> Self {
-        Self::from_global(maximum_connections, global)
+        Self::from_global(maximum_connections, 2, global)
     }
 
-    fn from_global(maximum_connections: u16, global: Arc<Semaphore>) -> Self {
-        // 每连接恰有 upstream/downstream 两个方向；u16 * 2 在所有支持的 usize 上均安全。
-        let listener_limit = usize::from(maximum_connections).max(1) * 2;
+    fn from_global(
+        maximum_connections: u16,
+        directions_per_connection: usize,
+        global: Arc<Semaphore>,
+    ) -> Self {
+        // Relay 每连接两个方向，LocalResponder 每连接一个 exchange；二者分别只允许当前
+        // maximum_connections 对应的阻塞脚本数，避免关闭连接后的协作取消期间继续积压。
+        let listener_limit = usize::from(maximum_connections).max(1) * directions_per_connection;
         Self {
             global,
             listener: Arc::new(Semaphore::new(listener_limit)),
@@ -47,7 +60,9 @@ impl BlockingCommandSlots {
         })
     }
 
-    fn try_acquire(&self) -> Option<BlockingCommandPermits> {
+    pub(in crate::adapters::listener_runtime) fn try_acquire(
+        &self,
+    ) -> Option<BlockingCommandPermits> {
         let listener = Arc::clone(&self.listener).try_acquire_owned().ok()?;
         let global = Arc::clone(&self.global).try_acquire_owned().ok()?;
         Some(BlockingCommandPermits {
@@ -57,7 +72,7 @@ impl BlockingCommandSlots {
     }
 }
 
-pub(super) struct BlockingCommandPermits {
+pub(in crate::adapters::listener_runtime) struct BlockingCommandPermits {
     _listener: OwnedSemaphorePermit,
     _global: OwnedSemaphorePermit,
 }
@@ -75,7 +90,7 @@ pub(super) async fn acquire_command_permits(
     }
 }
 
-async fn acquire_for_reply<T>(
+pub(in crate::adapters::listener_runtime) async fn acquire_for_reply<T>(
     slots: &BlockingCommandSlots,
     reply: &mut oneshot::Sender<T>,
 ) -> Option<BlockingCommandPermits> {

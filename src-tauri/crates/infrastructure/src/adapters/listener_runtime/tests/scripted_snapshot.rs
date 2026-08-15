@@ -164,15 +164,19 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts
 }
 
 #[tokio::test]
-async fn local_responder_plan_has_no_upstream_security_or_probe_and_remains_fail_closed() {
+async fn local_responder_plan_has_no_upstream_security_or_probe_and_starts_locally() {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
         Arc::clone(&store),
     ));
     install_enabled(&repository);
-    let listener = scripted_listener(SocketTopology::LocalResponder(
+    let reservation = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener_port = reservation.local_addr().unwrap().port();
+    drop(reservation);
+    let mut listener = scripted_listener(SocketTopology::LocalResponder(
         SocketLocalResponderTopology::default(),
     ));
+    listener.port = listener_port;
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
@@ -198,8 +202,25 @@ async fn local_responder_plan_has_no_upstream_security_or_probe_and_remains_fail
         .err()
         .expect("LocalResponder has no upstream probe");
     assert_eq!(probe.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
-    let start = runtime.start(workspace, listener).await.unwrap_err();
-    assert_eq!(start.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+    let start = runtime.start(workspace, listener.clone()).await.unwrap();
+    assert_eq!(start.state, ListenerRuntimeState::Running);
+
+    let mut client = tokio::net::TcpStream::connect(("127.0.0.1", listener_port))
+        .await
+        .unwrap();
+    tokio::io::AsyncWriteExt::write_all(&mut client, b"x")
+        .await
+        .unwrap();
+    tokio::io::AsyncWriteExt::shutdown(&mut client)
+        .await
+        .unwrap();
+    let mut response = Vec::new();
+    tokio::io::AsyncReadExt::read_to_end(&mut client, &mut response)
+        .await
+        .unwrap();
+    assert_eq!(response, b"x");
+
+    runtime.stop(listener.id).await.unwrap();
 }
 
 #[tokio::test]
