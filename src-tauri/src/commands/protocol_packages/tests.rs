@@ -397,29 +397,39 @@ fn display(document, context) { "<p>ok</p>" }
             .code,
             "PROTOCOL_PACKAGE_REFERENCE_IN_USE"
         );
-        let start = tauri::async_runtime::block_on(application.listener_start(
+        let running = tauri::async_runtime::block_on(application.listener_start(
             workspace.id,
             workspace.revision.get(),
             listener_id,
         ))
-        .unwrap_err();
+        .unwrap();
         assert_eq!(
-            start.view_model.code,
-            "SCRIPTED_SOCKET_RUNTIME_NOT_AVAILABLE"
+            running.state,
+            intercept_proxy_application::ListenerRuntimeState::Running
         );
-        // T21 已完成完整运行计划校验，但 Scripted Frame Pump 要到 T22 才能真正进入
-        // Running。此时仍是 Stopped 引用，因此允许停用；真正 Running/Faulted/Stopping
-        // 的停用门禁由 Application requirement tests 使用受控 runtime 状态覆盖。
+        assert_eq!(
+            invoke_error(
+                &webview,
+                "protocol_package_disable",
+                json!({ "packageRef": package_json }),
+            )
+            .code,
+            "PROTOCOL_PACKAGE_RUNTIME_IN_USE"
+        );
+        let running_workspace =
+            tauri::async_runtime::block_on(application.workspace_get(workspace.id)).unwrap();
+        tauri::async_runtime::block_on(application.listener_stop(
+            running_workspace.id,
+            running_workspace.revision.get(),
+            listener_id,
+        ))
+        .unwrap();
         let disabled: Value = invoke_ok(
             &webview,
             "protocol_package_disable",
             json!({ "packageRef": package_json }),
         );
-        assert_eq!(
-            disabled["enabled"],
-            false,
-            "staged-but-not-running Listener must not invent runtime usage"
-        );
+        assert_eq!(disabled["enabled"], false);
         let latest = tauri::async_runtime::block_on(application.workspace_get(workspace.id)).unwrap();
         tauri::async_runtime::block_on(
             application.workspace_delete(latest.id, latest.revision.get()),

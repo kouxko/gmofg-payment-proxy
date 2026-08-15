@@ -118,6 +118,17 @@ impl SocketDocumentRuleConnection {
         &self,
         document: BoundSocketDocument,
     ) -> Result<SocketDocumentRuleExecution, DomainError> {
+        self.execute_with_cancellation(document, || false)
+    }
+
+    /// 复核归属后，以调用方提供的同步取消检查执行规则。
+    ///
+    /// 取消检查由 Domain 在每条规则、条件和动作边界调用；失败时 owned Document 被整体丢弃。
+    pub fn execute_with_cancellation(
+        &self,
+        document: BoundSocketDocument,
+        is_cancelled: impl FnMut() -> bool,
+    ) -> Result<SocketDocumentRuleExecution, DomainError> {
         if document.connection != self.connection {
             return Err(binding_error(
                 "binding.connection",
@@ -142,7 +153,8 @@ impl SocketDocumentRuleConnection {
                 "Document 不属于当前处理方向",
             ));
         }
-        self.program.execute(document.document)
+        self.program
+            .execute_with_cancellation(document.document, is_cancelled)
     }
 }
 

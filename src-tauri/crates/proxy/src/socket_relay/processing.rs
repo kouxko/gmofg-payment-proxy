@@ -217,6 +217,12 @@ pub trait SocketFrameProcessor: Send {
 
     /// 处理一个完整 origin，返回一次且仅一次写出的完整输出 Blob。
     async fn process(&mut self, origin: Bytes) -> Result<Bytes, SocketProcessingFailure>;
+
+    /// 通知 processor：上一次 `process` 的输出已经完整写入并 flush 成功。
+    ///
+    /// 默认实现为空，现有 Direct/fake processor 无需感知。通知发生在 Writing 之后，因而只能
+    /// 用于 Display、捕获等旁路工作；实现不得再修改线路输出，也不得把失败升级为连接失败。
+    fn output_committed(&mut self) {}
 }
 
 /// 为 Scripted Relay 的两个方向分别创建连接级 processor。

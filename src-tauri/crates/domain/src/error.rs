@@ -33,6 +33,8 @@ pub enum ErrorCode {
     BodyEncodeFailed,
     JsonInvalid,
     RuleInvalid,
+    /// Socket Document 规则执行被调用方显式取消。
+    RuleExecutionCancelled,
     RuleConflictWarning,
     /// 协议包 ID 或 `SemVer` 不符合稳定身份约束。
     ProtocolPackageInvalid,
@@ -82,6 +84,7 @@ impl ErrorCode {
             Self::BodyEncodeFailed => "BODY_ENCODE_FAILED",
             Self::JsonInvalid => "JSON_INVALID",
             Self::RuleInvalid => "RULE_INVALID",
+            Self::RuleExecutionCancelled => "RULE_EXECUTION_CANCELLED",
             Self::RuleConflictWarning => "RULE_CONFLICT_WARNING",
             Self::ProtocolPackageInvalid => "PROTOCOL_PACKAGE_INVALID",
             Self::DocumentSchemaInvalid => "DOCUMENT_SCHEMA_INVALID",
@@ -194,6 +197,10 @@ mod tests {
             (ErrorCode::BodyEncodeFailed, "BODY_ENCODE_FAILED"),
             (ErrorCode::JsonInvalid, "JSON_INVALID"),
             (ErrorCode::RuleInvalid, "RULE_INVALID"),
+            (
+                ErrorCode::RuleExecutionCancelled,
+                "RULE_EXECUTION_CANCELLED",
+            ),
             (ErrorCode::RuleConflictWarning, "RULE_CONFLICT_WARNING"),
             (
                 ErrorCode::ProtocolPackageInvalid,

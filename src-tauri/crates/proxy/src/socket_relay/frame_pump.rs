@@ -182,6 +182,11 @@ where
                 // 已提交前缀后被 drop，并在上层重试时重复写同一 response。
                 begin_writing(&cancellation, direction)?;
                 write_output(&mut writer, &output, direction, timeouts.write, &progress).await?;
+                // Display/捕获只能在线路完整 write + flush 后收到提交通知。旁路实现即使 panic
+                // 也不能把已经成功提交的网络输出反写成连接失败。
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    processor.output_committed();
+                }));
             }
             FrameBoundary::Complete { .. } | FrameBoundary::NeedMore { total: 0 } => {
                 return fail(

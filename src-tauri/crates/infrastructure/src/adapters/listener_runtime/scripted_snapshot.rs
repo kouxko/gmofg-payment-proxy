@@ -10,9 +10,9 @@ use intercept_proxy_domain::{
     SocketRelaySecurity as DomainSecurity, SocketTopology, SocketUpstreamTlsSettings,
     sort_socket_document_rules,
 };
-#[cfg(test)]
-use intercept_proxy_protocol_scripting::ProtocolRuntimeLimits;
-use intercept_proxy_protocol_scripting::{DirectionExecutionPlan, ProtocolDirection};
+use intercept_proxy_protocol_scripting::{
+    DirectionExecutionPlan, ProtocolDirection, ProtocolRuntimeLimits,
+};
 use intercept_proxy_runtime::{SocketDownstreamTlsConfig, SocketRelaySecurity};
 
 use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackageSnapshot;
@@ -137,17 +137,14 @@ impl ScriptedSocketRuntimeSnapshot {
         &self.topology
     }
 
-    #[cfg(test)]
     pub(super) fn package(&self) -> &RuntimeProtocolPackageSnapshot {
         &self.package
     }
 
-    #[cfg(test)]
     pub(super) const fn upstream(&self) -> DirectionExecutionPlan {
         self.upstream
     }
 
-    #[cfg(test)]
     pub(super) const fn downstream(&self) -> DirectionExecutionPlan {
         self.downstream
     }
@@ -189,14 +186,16 @@ impl ScriptedSocketRuntimeSnapshot {
         &self.certificate_references
     }
 
-    #[cfg(test)]
     pub(super) const fn security(&self) -> &ScriptedSocketSecuritySnapshot {
         &self.security
     }
 
-    #[cfg(test)]
     pub(super) const fn runtime_limits(&self) -> ProtocolRuntimeLimits {
         self.package.runtime_limits()
+    }
+
+    pub(super) const fn maximum_connections(&self) -> u16 {
+        self.maximum_connections
     }
 }
 

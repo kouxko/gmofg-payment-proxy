@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use intercept_proxy_domain::Document;
 
@@ -8,11 +8,11 @@ use crate::ProtocolResourceLimit;
 ///
 /// Decode 关闭时，执行器内部仍创建一个 Schema 绑定空 Document 供 Encode/Display 使用，但
 /// [`ProtocolFrameOutput::decoded_document`] 返回 `None`，避免调用方误判为真正执行过 Decode。
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ProtocolFrameOutput {
     owner: Arc<()>,
     origin: Vec<u8>,
-    written: Vec<u8>,
+    written: Arc<[u8]>,
     decoded_document: Option<Document>,
     execution_document: Document,
 }
@@ -28,7 +28,7 @@ impl ProtocolFrameOutput {
         Self {
             owner,
             origin,
-            written,
+            written: written.into(),
             decoded_document,
             execution_document,
         }
@@ -46,6 +46,12 @@ impl ProtocolFrameOutput {
         &self.written
     }
 
+    /// 返回最终线路字节的共享 owner，供异步写入在不复制 payload 的前提下持有。
+    #[must_use]
+    pub fn written_owner(&self) -> Arc<[u8]> {
+        Arc::clone(&self.written)
+    }
+
     /// Decode 开启时返回其 Schema 绑定 Document；关闭时返回 `None`。
     #[must_use]
     pub const fn decoded_document(&self) -> Option<&Document> {
@@ -58,6 +64,22 @@ impl ProtocolFrameOutput {
 
     pub(super) fn belongs_to(&self, owner: &Arc<()>) -> bool {
         Arc::ptr_eq(&self.owner, owner)
+    }
+}
+
+impl fmt::Debug for ProtocolFrameOutput {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProtocolFrameOutput")
+            .field("origin_bytes", &self.origin.len())
+            .field("written_bytes", &self.written.len())
+            .field("decoded", &self.decoded_document.is_some())
+            .field("schema_id", &self.execution_document.schema().id())
+            .field(
+                "schema_version",
+                &self.execution_document.schema().version(),
+            )
+            .finish_non_exhaustive()
     }
 }
 

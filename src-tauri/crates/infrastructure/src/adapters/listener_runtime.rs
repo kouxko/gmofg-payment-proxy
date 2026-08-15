@@ -194,6 +194,7 @@ mod document_rules;
 mod helpers;
 mod plan;
 mod port;
+mod scripted_relay;
 mod scripted_snapshot;
 mod socket_diagnostics;
 mod socket_plan;

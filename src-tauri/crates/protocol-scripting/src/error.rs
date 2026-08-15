@@ -114,6 +114,30 @@ pub enum ProtocolRuntimeError {
         /// 失败的入口阶段。
         entry: ProtocolEntryPoint,
     },
+    /// Decode 后交给宿主的 Document 变换阶段失败。
+    ///
+    /// 该阶段用于类型安全的 Socket 规则；错误不携带字段值、规则内容或第三方文本。
+    #[error(
+        "协议包 {id}@{version} 的 Document 变换失败",
+        id = .package.id,
+        version = .package.version
+    )]
+    DocumentTransformFailed {
+        /// 失败包的精确 ID 与版本。
+        package: ProtocolPackageRef,
+    },
+    /// 调用方取消了正在运行或即将开始的协议入口。
+    #[error(
+        "协议包 {id}@{version} 的 {entry} 入口执行已取消",
+        id = .package.id,
+        version = .package.version
+    )]
+    ExecutionCancelled {
+        /// 被取消包的精确 ID 与版本。
+        package: ProtocolPackageRef,
+        /// 被取消的入口阶段。
+        entry: ProtocolEntryPoint,
+    },
     /// 某个入口触发操作数、深度、数据大小或时间硬门禁。
     #[error(
         "协议包 {id}@{version} 的 {entry} 入口超过 {limit} 限制",
@@ -139,6 +163,8 @@ impl ProtocolRuntimeError {
             Self::CompilationFailed { .. } => "COMPILATION_FAILED",
             Self::EntryPointUnavailable { .. } => "ENTRY_POINT_UNAVAILABLE",
             Self::EntryPointFailed { .. } => "ENTRY_POINT_FAILED",
+            Self::DocumentTransformFailed { .. } => "DOCUMENT_TRANSFORM_FAILED",
+            Self::ExecutionCancelled { .. } => "EXECUTION_CANCELLED",
             Self::ResourceLimitExceeded { .. } => "RESOURCE_LIMIT_EXCEEDED",
         }
     }

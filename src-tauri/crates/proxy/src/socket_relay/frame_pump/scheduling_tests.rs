@@ -115,7 +115,10 @@ async fn slow_processing_applies_backpressure_and_preserves_fifo() {
     task.await.unwrap().unwrap();
 }
 
-struct CountingProcessor(Arc<AtomicUsize>);
+struct CountingProcessor {
+    processed: Arc<AtomicUsize>,
+    committed: Arc<AtomicUsize>,
+}
 
 #[async_trait]
 impl SocketFrameProcessor for CountingProcessor {
@@ -127,8 +130,12 @@ impl SocketFrameProcessor for CountingProcessor {
     }
 
     async fn process(&mut self, origin: Bytes) -> Result<Bytes, SocketProcessingFailure> {
-        self.0.fetch_add(1, Ordering::SeqCst);
+        self.processed.fetch_add(1, Ordering::SeqCst);
         Ok(origin)
+    }
+
+    fn output_committed(&mut self) {
+        self.committed.fetch_add(1, Ordering::SeqCst);
     }
 }
 
@@ -181,11 +188,15 @@ impl AsyncWrite for FlushGateIo {
 #[tokio::test]
 async fn local_waits_for_response_flush_before_processing_the_next_request() {
     let calls = Arc::new(AtomicUsize::new(0));
+    let committed = Arc::new(AtomicUsize::new(0));
     let output = Arc::new(Mutex::new(Vec::new()));
     let flush_released = Arc::new(AtomicBool::new(false));
     let flush_waker = Arc::new(Mutex::new(None));
     let factory = Factory {
-        processors: Mutex::new(vec![Box::new(CountingProcessor(Arc::clone(&calls)))]),
+        processors: Mutex::new(vec![Box::new(CountingProcessor {
+            processed: Arc::clone(&calls),
+            committed: Arc::clone(&committed),
+        })]),
     };
     let task = tokio::spawn({
         let output = Arc::clone(&output);
@@ -218,6 +229,7 @@ async fn local_waits_for_response_flush_before_processing_the_next_request() {
     .await
     .expect("first response must reach the flush gate");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert_eq!(committed.load(Ordering::SeqCst), 0);
     assert_eq!(&*output.lock().unwrap(), &[1]);
 
     flush_released.store(true, Ordering::SeqCst);
@@ -226,6 +238,7 @@ async fn local_waits_for_response_flush_before_processing_the_next_request() {
     }
     task.await.unwrap().unwrap();
     assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(committed.load(Ordering::SeqCst), 2);
     assert_eq!(&*output.lock().unwrap(), &[1, 2]);
 }
 

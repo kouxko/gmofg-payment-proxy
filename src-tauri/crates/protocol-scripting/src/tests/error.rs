@@ -46,6 +46,19 @@ fn runtime_error_codes_display_and_source_behavior_are_stable() {
             "协议包 iso8583-standard@1.2.3 的 decode 入口执行失败",
         ),
         (
+            ProtocolRuntimeError::DocumentTransformFailed { package: package() },
+            "DOCUMENT_TRANSFORM_FAILED",
+            "协议包 iso8583-standard@1.2.3 的 Document 变换失败",
+        ),
+        (
+            ProtocolRuntimeError::ExecutionCancelled {
+                package: package(),
+                entry: ProtocolEntryPoint::Decode,
+            },
+            "EXECUTION_CANCELLED",
+            "协议包 iso8583-standard@1.2.3 的 decode 入口执行已取消",
+        ),
+        (
             ProtocolRuntimeError::ResourceLimitExceeded {
                 package: package(),
                 entry: ProtocolEntryPoint::Encode,
@@ -81,6 +94,11 @@ fn runtime_errors_have_strict_unambiguous_serde_contracts() {
         ProtocolRuntimeError::EntryPointFailed {
             package: package(),
             entry: ProtocolEntryPoint::Frame,
+        },
+        ProtocolRuntimeError::DocumentTransformFailed { package: package() },
+        ProtocolRuntimeError::ExecutionCancelled {
+            package: package(),
+            entry: ProtocolEntryPoint::Display,
         },
         ProtocolRuntimeError::ResourceLimitExceeded {
             package: package(),

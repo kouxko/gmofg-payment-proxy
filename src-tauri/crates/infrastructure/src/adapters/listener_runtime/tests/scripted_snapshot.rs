@@ -69,7 +69,7 @@ fn encode(origin, document, context) { origin }
 ";
 
 #[tokio::test]
-async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_without_starting_direct() {
+async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts() {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let limits = ProtocolRuntimeLimits::new(77_777, 24, 32_768, 131_072, 125).unwrap();
     let repository = Arc::new(ProtocolPackageRepositoryAdapter::new(
@@ -111,7 +111,9 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_without_sta
         .build(&workspace, &listener, Uuid::new_v4())
         .await
         .unwrap();
-    let snapshot = plan.scripted_snapshot().expect("Scripted plan is staged");
+    let snapshot = plan
+        .scripted_snapshot()
+        .expect("Scripted plan contains its frozen snapshot");
 
     assert_eq!(snapshot.package().compiled().package(), &snapshot_package());
     assert_ne!(snapshot.package().generation(), Uuid::nil());
@@ -148,17 +150,17 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_without_sta
         ScriptedSocketSecuritySnapshot::Relay(_)
     ));
 
-    let error = runtime
-        .start(workspace, listener.clone())
-        .await
-        .unwrap_err();
-    assert_eq!(
-        error.view_model.code,
-        "SCRIPTED_SOCKET_RUNTIME_NOT_AVAILABLE"
+    let running = runtime.start(workspace, listener.clone()).await.unwrap();
+    assert_eq!(running.state, ListenerRuntimeState::Running);
+    assert!(
+        TcpListener::bind(("127.0.0.1", listener.port))
+            .await
+            .is_err()
     );
+    runtime.stop(listener.id).await.unwrap();
     TcpListener::bind(("127.0.0.1", listener.port))
         .await
-        .expect("staged Scripted plan must not bind a transparent listener");
+        .expect("stopped Scripted Relay must release its listener port");
 }
 
 #[tokio::test]
@@ -337,14 +339,10 @@ async fn historical_compile_failure_is_revalidated_but_persistence_corruption_st
     };
     let runtime = ListenerRuntimeAdapter::new(Arc::clone(&store))
         .with_protocol_packages(Arc::clone(&repository));
-    let error = runtime
-        .start(workspace, listener)
-        .await
-        .expect_err("fresh compile must pass before the staged T21 runtime gate");
-    assert_eq!(
-        error.view_model.code,
-        "SCRIPTED_SOCKET_RUNTIME_NOT_AVAILABLE"
-    );
+    let listener_id = listener.id;
+    let running = runtime.start(workspace, listener).await.unwrap();
+    assert_eq!(running.state, ListenerRuntimeState::Running);
+    runtime.stop(listener_id).await.unwrap();
 
     assert!(
         store
