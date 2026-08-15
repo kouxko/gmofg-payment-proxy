@@ -130,6 +130,13 @@ export const commands = {
 	ruleExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_export")),
 	socketRuleList: () => typedError<SocketDocumentRuleDefinition[], AppErrorViewModel>(__TAURI_INVOKE("socket_rule_list")),
 	socketRuleCapabilities: (listenerId: ListenerId, direction: SocketDirection) => typedError<SocketRuleCapabilityCatalog, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_capabilities", { listenerId, direction })),
+	/**
+	 *  把规则编辑器文本解析为 Rust/Schema 认可的类型化值。
+	 *
+	 *  该纯命令不依赖当前 Workspace；前端切换字段时只需提交公开字段类型，不能自行解释
+	 *  UTF-8 字节、JavaScript 安全整数或 Blob Hex。
+	 */
+	socketRuleParseValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_parse_value", { fieldType, raw })),
 	socketRuleSave: (input: SocketRuleSaveInput) => typedError<SocketDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_save", { input })),
 	socketRuleToggle: (ruleId: SocketDocumentRuleId, expectedRevision: number, enabled: boolean) => typedError<SocketDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_toggle", { ruleId, expectedRevision, enabled })),
 	socketRuleDelete: (ruleId: SocketDocumentRuleId, expectedRevision: number, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_delete", { ruleId, expectedRevision, confirmed })),

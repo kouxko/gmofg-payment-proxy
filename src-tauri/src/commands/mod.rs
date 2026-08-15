@@ -145,6 +145,7 @@ pub fn builder() -> Builder<Wry> {
             rule_export,
             socket_rule_list,
             socket_rule_capabilities,
+            socket_rule_parse_value,
             socket_rule_save,
             socket_rule_toggle,
             socket_rule_delete,

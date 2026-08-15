@@ -41,6 +41,12 @@ export default defineConfig({
           functions: 90,
           lines: 90,
         },
+        "src/features/rules/socket-rule*": {
+          statements: 90,
+          branches: 90,
+          functions: 90,
+          lines: 90,
+        },
       },
     },
   },
