@@ -98,7 +98,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
   "/capture": {
     title: "实时抓包",
     summary:
-      "实时查看经过 Proxy 的请求、响应和终态事件，适合在操作客户端应用的同时观察链路和规则结果。",
+      "分别查看经过 Proxy 的 HTTP 事件与已完成写出的 Socket Frame/LocalResponder 交换，适合在操作客户端应用的同时观察链路和规则结果。",
     recommendedFor:
       "定位某次请求经过了哪个通道、命中了哪些规则、在哪个阶段失败，以及请求和响应的最终内容。",
     sections: [
@@ -107,6 +107,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "开始抓包与读取列表",
         steps: [
           "先在“入口配置”启动目标入口，再进入本页；页面会持续接收批量实时事件。",
+          "页面顶部按协议分为“HTTP 抓包”和“Socket 抓包”；切换页签时只挂载当前协议的列表与详情，不会把 HTTP Header、状态码或 Body 控件混入 Socket 证据。",
           "在客户端应用上执行操作后，表格会显示事件时间、终端 IP、通道、方向、方法、路径/请求类型、结果、耗时、匹配规则数量和大小。",
           "默认按时间倒序显示。使用“上一页/下一页”查看分页结果。",
           "点击任意表格行，在右侧打开该事件详情；窄窗口会自动滚动到下方详情区域。",
@@ -144,6 +145,8 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "“概览”查看请求 ID、终端、通道、TLS、时间、最终结果和规则执行轨迹。",
           "“请求”查看完整请求 Header 与 Shift-JIS 解码 Body；“响应”查看 HTTP 状态码、完整响应 Header 与解码 Body。",
+          "Socket Relay 详情分别展示 Origin、Document、命中规则和 Written；LocalResponder 在同一详情内分开显示 Request 与 Response，并明确 Raw Echo 或 Encoded。",
+          "Socket 的协议视图来自不可信脚本输出，只在无脚本能力的 sandbox iframe 中展示；Hex 页签按 4 KiB 分页且可到达全部字节，超长协议视图会拒绝渲染并回退 Hex。",
           "规则轨迹按真实执行顺序显示匹配、跳过、修改、终止或暂停结果。",
           "使用复制按钮复制当前文本；关闭详情后页面会释放完整报文引用。",
           "如果详情读取失败，点击详情错误条中的“重试”；切换到另一行时旧请求的迟到结果不会覆盖新详情。",

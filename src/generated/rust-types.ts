@@ -111,7 +111,7 @@ export const commands = {
 	 */
 	socketCaptureQuery: (query: SocketCaptureQuery) => typedError<SocketCapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_query", { query })),
 	socketCaptureGetDetail: (captureId: SocketCaptureId) => typedError<SocketCaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_get_detail", { captureId })),
-	socketCaptureClear: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_clear", { confirmed })),
+	socketCaptureClear: (workspaceId: WorkspaceId, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_clear", { workspaceId, confirmed })),
 	sessionQuery: (query: SessionQuery) => typedError<SessionListViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_query", { query })),
 	sessionGet: (sessionId: string) => typedError<SessionDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_get", { sessionId })),
 	sessionClear: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_clear", { confirmed })),

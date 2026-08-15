@@ -15,7 +15,7 @@ use crate::{
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, OperationResultViewModel,
     RuntimeEpoch, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
     SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel, SocketCaptureQuery,
-    UiEventPayload,
+    UiEventPayload, WorkspaceId,
 };
 
 impl Application {
@@ -57,6 +57,7 @@ impl Application {
 
     pub async fn socket_capture_clear(
         &self,
+        workspace_id: WorkspaceId,
         confirmed: bool,
     ) -> AppResult<OperationResultViewModel> {
         if !confirmed {
@@ -71,14 +72,23 @@ impl Application {
             .list()
             .await?
             .into_iter()
-            .find(|workspace| workspace.selected)
-            .ok_or_else(|| {
-                AppError::new(
-                    "WORKSPACE_SELECTION_REQUIRED",
-                    "请先选择要清空 Socket 抓包的 Workspace。",
-                )
-            })?;
-        let count = self.capture.clear_socket_completed(selected.id).await?;
+            .filter(|workspace| workspace.selected)
+            .collect::<Vec<_>>();
+        let [selected] = selected.as_slice() else {
+            return Err(AppError::new(
+                "WORKSPACE_SELECTION_REQUIRED",
+                "必须唯一选择一个 Workspace，才能清空 Socket 抓包。",
+            )
+            .entity(workspace_id.to_string()));
+        };
+        if selected.id != workspace_id {
+            return Err(AppError::new(
+                "WORKSPACE_SELECTION_CHANGED",
+                "Workspace 已切换，请重新确认后再清空 Socket 抓包。",
+            )
+            .entity(workspace_id.to_string()));
+        }
+        let count = self.capture.clear_socket_completed(workspace_id).await?;
         Ok(OperationResultViewModel::success(format!(
             "已清空 {count} 条 Socket 抓包记录。"
         )))

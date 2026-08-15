@@ -60,6 +60,14 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
         },
 }));
 
+vi.mock("./socket-capture-view", () => ({
+  SocketCaptureView: () => (
+    <section aria-label="Socket 抓包工作区">
+      <button type="button">Socket 专用操作</button>
+    </section>
+  ),
+}));
+
 const page = (): CapturePageViewModel => ({
   rows: [
     {
@@ -102,6 +110,29 @@ describe("CaptureView live controls", () => {
     captureState.page = page();
     queryMocks.pageRefresh.mockResolvedValue(undefined);
     commandMocks.captureClearView.mockResolvedValue(99);
+  });
+
+  it("uses keyboard tabs and conditionally mounts only the selected protocol workspace", async () => {
+    const user = userEvent.setup();
+    render(<CaptureView />);
+
+    const httpTab = screen.getByRole("tab", { name: "HTTP 抓包" });
+    expect(httpTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("grid", { name: "实时抓包事件" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Socket 抓包工作区" })).toBeNull();
+
+    httpTab.focus();
+    await user.keyboard("{ArrowRight}");
+
+    expect(screen.getByRole("tab", { name: "Socket 抓包" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("region", { name: "Socket 抓包工作区" })).toBeVisible();
+    expect(screen.queryByRole("grid", { name: "实时抓包事件" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "清空当前显示" })).toBeNull();
+
+    await user.keyboard("{ArrowLeft}");
+
+    expect(screen.getByRole("grid", { name: "实时抓包事件" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Socket 抓包工作区" })).toBeNull();
   });
 
   it("pauses and resumes the display, then clears the current Rust cursor", async () => {

@@ -55,11 +55,17 @@ async fn t27_socket_clear_requires_confirmation_and_reports_completed_count() {
         Arc::new(InMemoryWorkspaceDocumentStore::default()),
     );
 
-    let error = application.socket_capture_clear(false).await.unwrap_err();
+    let error = application
+        .socket_capture_clear(second.id, false)
+        .await
+        .unwrap_err();
     assert_eq!(error.view_model.code, "CONFIRMATION_REQUIRED");
     assert_eq!(ports.socket_capture_clear_calls.load(Ordering::SeqCst), 0);
 
-    let result = application.socket_capture_clear(true).await.unwrap();
+    let result = application
+        .socket_capture_clear(second.id, true)
+        .await
+        .unwrap();
     assert!(result.success);
     assert_eq!(result.message, "已清空 3 条 Socket 抓包记录。");
     assert_eq!(ports.socket_capture_clear_calls.load(Ordering::SeqCst), 1);
@@ -68,4 +74,30 @@ async fn t27_socket_clear_requires_confirmation_and_reports_completed_count() {
         &[second.id]
     );
     assert_ne!(first.id, second.id);
+}
+
+#[tokio::test]
+async fn t28_socket_clear_rejects_a_workspace_that_is_no_longer_selected() {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(InMemoryWorkspaceStore::default());
+    let first = workspaces.list().await.unwrap().remove(0);
+    let second = workspaces.create("Second".into()).await.unwrap();
+    workspaces.select(second.id).await.unwrap();
+    let application = application_with_workspace_ports(
+        ports.clone(),
+        workspaces,
+        Arc::new(InMemoryWorkspaceDocumentStore::default()),
+    );
+
+    // UI 对 first 完成确认后，Workspace 已经切换为 second。Application 必须以确认时的
+    // first.id 重新校验选择状态，不能把删除目标静默替换成当前选中的 second。
+    let error = application
+        .socket_capture_clear(first.id, true)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.view_model.code, "WORKSPACE_SELECTION_CHANGED");
+    assert_eq!(error.view_model.entity_id, Some(first.id.to_string()));
+    assert_eq!(ports.socket_capture_clear_calls.load(Ordering::SeqCst), 0);
+    assert!(ports.socket_capture_clear_workspaces.lock().is_empty());
 }

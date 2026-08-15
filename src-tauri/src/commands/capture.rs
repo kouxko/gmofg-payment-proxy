@@ -8,6 +8,7 @@ use intercept_proxy_application::{
     CapturePageViewModel, CaptureQuery, OperationResultViewModel, RuntimeEpoch,
     SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
     SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel, SocketCaptureQuery,
+    WorkspaceId,
 };
 use tauri::State;
 
@@ -88,11 +89,12 @@ pub async fn socket_capture_get_detail(
 #[specta::specta]
 pub async fn socket_capture_clear(
     state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
     confirmed: bool,
 ) -> CommandResult<OperationResultViewModel> {
     state
         .application
-        .socket_capture_clear(confirmed)
+        .socket_capture_clear(workspace_id, confirmed)
         .await
         .map_err(command_error)
 }
