@@ -308,14 +308,14 @@ describe("统一代理监听编辑器", () => {
     expect(mocks.listenerStart).not.toHaveBeenCalled();
   });
 
-  it("Rust 未授予启停 capability 时不从 stopped 状态自行推断启动", async () => {
+  it("Rust 未授予启停 capability 时不推断启动但仍允许删除已确认 stopped 的配置", async () => {
     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
       listenerStatus("listener-1", "stopped", { canStart: false, canStop: false }),
     ])));
     render(<ListenersView />);
 
     expect(await screen.findByRole("button", { name: "无可用操作" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "删除监听" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "删除监听" })).toBeEnabled();
     expect(mocks.listenerStart).not.toHaveBeenCalled();
     expect(mocks.listenerStop).not.toHaveBeenCalled();
   });
@@ -374,28 +374,29 @@ describe("统一代理监听编辑器", () => {
     const user = userEvent.setup();
     render(<ListenersView />);
 
-    const testButton = await screen.findByRole("button", { name: "测试 Socket 上游连接" });
+    const testButton = await screen.findByRole("button", { name: "测试 Server 连接" });
     await user.click(testButton);
 
-    expect(await screen.findByRole("button", { name: "正在探测 Socket 上游…" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "正在探测 Server…" })).toBeDisabled();
     expect(mocks.listenerValidate).toHaveBeenCalledOnce();
     expect(mocks.listenerTestUpstreamConnection).toHaveBeenCalledOnce();
   });
 
-  it("LocalResponder 列表与编辑页不读取或探测不存在的 Server 上游", async () => {
+  it("LocalResponder 可启动和复制且不读取或探测不存在的 Server 上游", async () => {
     const local = localResponderListener();
     mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [local] }));
     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus(local.id)])));
+    const user = userEvent.setup();
     render(<ListenersView />);
 
-    expect(await screen.findByText("→ LocalResponder · 无 Server 上游")).toBeVisible();
-    expect(screen.getByText("Socket · LocalResponder（当前不可运行）")).toBeVisible();
-    expect(screen.getByText("LocalResponder 数据面将在后续任务接入")).toBeVisible();
-    expect(screen.getByRole("button", { name: "无可用操作" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "复制监听" })).toBeDisabled();
-    expect(screen.queryByRole("textbox", { name: "Socket 上游主机" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "测试 Socket 上游连接" })).not.toBeInTheDocument();
-    expect(mocks.listenerCopy).not.toHaveBeenCalled();
+    expect(await screen.findByText("→ LocalResponder · 本地响应")).toBeVisible();
+    expect(screen.getByText("Socket · LocalResponder")).toBeVisible();
+    expect(screen.getByRole("button", { name: "启动监听" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "复制监听" })).toBeEnabled();
+    expect(screen.queryByRole("textbox", { name: "Socket Server 主机" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "测试 Server 连接" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "复制监听" }));
+    expect(mocks.listenerCopy).toHaveBeenCalledWith(local);
     expect(mocks.listenerTestUpstreamConnection).not.toHaveBeenCalled();
   });
 

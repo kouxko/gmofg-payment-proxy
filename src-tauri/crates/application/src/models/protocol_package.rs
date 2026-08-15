@@ -135,6 +135,29 @@ pub struct ProtocolPackageDescriptionViewModel {
     pub schema: ProtocolPackageSchemaViewModel,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// Listener 编辑器可以绑定的一个精确协议包版本。
+///
+/// 该模型只由 Rust 在读取启用状态、最近校验结果并重新取得当前编译描述后构造。前端不得
+/// 根据 Host API 数字猜测兼容性，也不需要逐版本发起详情查询。
+pub struct ListenerProtocolPackageOptionViewModel {
+    pub package: ProtocolPackageRef,
+    pub name: String,
+    pub capabilities: ProtocolPackageCapabilitiesViewModel,
+    pub schema: ProtocolPackageSchemaViewModel,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// Listener 协议包选择器的一次权威目录快照。
+///
+/// `options` 只包含当前可选版本；停用、历史校验无效、无法由当前 Host 描述或返回错包
+/// 描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
+pub struct ListenerProtocolPackageCatalogViewModel {
+    pub options: Vec<ListenerProtocolPackageOptionViewModel>,
+    pub installed_version_count: usize,
+    pub unavailable_version_count: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 /// 原生 ZIP 导入是新安装，还是相同身份和内容的幂等复用。

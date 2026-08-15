@@ -15,21 +15,26 @@ export function CertificateReferenceSelect({
   value,
   emptyLabel,
   references,
+  isDisabled = false,
   onChange,
 }: {
   label: string;
   value: string | null;
   emptyLabel: string;
   references: CertificateReference[];
+  isDisabled?: boolean;
   onChange: (value: string | null) => void;
 }) {
   return (
     <Select
       aria-label={label}
       selectedKey={value ?? NONE}
-      onSelectionChange={(key) =>
-        onChange(String(key) === NONE ? null : String(key))
-      }
+      isDisabled={isDisabled}
+      onSelectionChange={(key) => {
+        // HeroUI 清空选择时可能传入 null；锁定态或空选择都不能污染证书引用。
+        if (key === null || isDisabled) return;
+        onChange(String(key) === NONE ? null : String(key));
+      }}
     >
       <Label>{label}</Label>
       <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>

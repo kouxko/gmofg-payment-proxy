@@ -1,6 +1,119 @@
 use super::*;
 
 #[tokio::test]
+async fn listener_catalog_only_returns_enabled_valid_current_descriptions_in_stable_order() {
+    let (application, services, _, _) = fixture();
+    let first = package("alpha", "1.0.0");
+    let second = package("alpha", "2.0.0");
+    let disabled = package("beta", "1.0.0");
+    let invalid = package("gamma", "1.0.0");
+    let wrong_description = package("omega", "1.0.0");
+
+    for item in [second.clone(), wrong_description.clone(), first.clone()] {
+        services.insert(record(item, true));
+    }
+    services.insert(record(disabled, false));
+    let mut invalid_record = record(invalid, true);
+    invalid_record.validation = ProtocolPackageValidationViewModel::Invalid {
+        code: "SCRIPT_SYNTAX_INVALID".into(),
+    };
+    services.insert(invalid_record);
+    services.set_description(first.clone(), description(first.clone()));
+    services.set_description(second.clone(), description(second.clone()));
+    services.set_description(wrong_description, description(package("other", "1.0.0")));
+
+    let catalog = application
+        .listener_protocol_package_catalog()
+        .await
+        .unwrap();
+
+    assert_eq!(catalog.installed_version_count, 5);
+    assert_eq!(catalog.unavailable_version_count, 3);
+    assert_eq!(
+        catalog
+            .options
+            .iter()
+            .map(|option| option.package.clone())
+            .collect::<Vec<_>>(),
+        [first.clone(), second.clone()]
+    );
+    assert_eq!(catalog.options[0].name, format!("alpha {}", first.version));
+    assert_eq!(catalog.options[0].schema.id, "payments");
+    assert!(catalog.options[0].capabilities.upstream.encode);
+    assert_eq!(services.describe_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(services.compile_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(services.installed_preflight_calls.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn listener_catalog_fails_closed_for_store_error_and_hides_compiler_errors() {
+    let (application, services, _, _) = fixture();
+    services.failures.lock().list = Some(AppError::new("STORE_LIST_FAILED", "list"));
+    assert_eq!(
+        error_code(
+            &application
+                .listener_protocol_package_catalog()
+                .await
+                .unwrap_err()
+        ),
+        "STORE_LIST_FAILED"
+    );
+
+    services.failures.lock().list = None;
+    let target = package("iso-8583", "1.0.0");
+    services.insert(record(target, true));
+    services.failures.lock().installed_preflight = Some(AppError::new(
+        "SENSITIVE_COMPILER_FAILURE",
+        "must not cross the catalog boundary",
+    ));
+    let catalog = application
+        .listener_protocol_package_catalog()
+        .await
+        .unwrap();
+    assert!(catalog.options.is_empty());
+    assert_eq!(catalog.installed_version_count, 1);
+    assert_eq!(catalog.unavailable_version_count, 1);
+}
+
+#[tokio::test]
+async fn listener_catalog_holds_the_mutation_gate_through_fresh_preflight() {
+    let (application, services, _, _) = fixture();
+    let application = Arc::new(application);
+    let target = package("iso-8583", "1.0.0");
+    services.insert(record(target.clone(), true));
+    services.set_description(target.clone(), description(target.clone()));
+    services
+        .block_installed_preflight
+        .store(true, Ordering::SeqCst);
+
+    let catalog_application = application.clone();
+    let catalog = tokio::spawn(async move {
+        catalog_application
+            .listener_protocol_package_catalog()
+            .await
+    });
+    services.installed_preflight_entered.notified().await;
+
+    let disable_application = application.clone();
+    let disable_target = target.clone();
+    let mut disable = tokio::spawn(async move {
+        disable_application
+            .protocol_package_disable(disable_target)
+            .await
+    });
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(50), &mut disable)
+            .await
+            .is_err(),
+        "目录快照完成前，启停写操作必须等待同一个 mutation gate"
+    );
+
+    services.continue_installed_preflight.notify_one();
+    assert_eq!(catalog.await.unwrap().unwrap().options.len(), 1);
+    assert!(!disable.await.unwrap().unwrap().enabled);
+}
+
+#[tokio::test]
 async fn list_groups_versions_by_id_and_detail_uses_the_exact_version() {
     let (application, services, _, _) = fixture();
     let iso_v1 = package("iso-8583", "1.0.0");

@@ -8,14 +8,98 @@ use std::collections::{BTreeMap, HashMap};
 
 use super::Application;
 use crate::{
-    AppError, AppResult, OperationResultViewModel, ProtocolPackageDetailViewModel,
-    ProtocolPackageGroupViewModel, ProtocolPackageImportPreviewViewModel,
-    ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
-    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel, SocketPayloadProcessing,
+    AppError, AppResult, ListenerProtocolPackageCatalogViewModel,
+    ListenerProtocolPackageOptionViewModel, OperationResultViewModel,
+    ProtocolPackageDetailViewModel, ProtocolPackageGroupViewModel,
+    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
+    ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageViewModel,
+    ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel, SocketPayloadProcessing,
     UiTone,
 };
 
 impl Application {
+    /// 返回 Listener 编辑器当前可以安全选择的精确协议包版本。
+    ///
+    /// 这是只读目录：不会切换启用状态，也不会把历史 `Valid` 当作当前兼容性证明。
+    /// 单个版本恢复或描述失败时只排除该版本，避免一个损坏包让其他健康版本无法配置；
+    /// Listener 保存和启动仍会在 mutation 用例中对最终精确绑定重新完整校验。
+    pub async fn listener_protocol_package_catalog(
+        &self,
+    ) -> AppResult<ListenerProtocolPackageCatalogViewModel> {
+        // 目录必须与启停、删除和重装串行，否则 list 的名称/状态可能与随后 fresh
+        // 编译得到的 Schema/能力来自不同一代持久化内容。
+        let _gate = self.mutation_gate.lock().await;
+        let mut installed = self.protocol_package_store.list().await?;
+        installed.sort_by(|left, right| {
+            left.package
+                .id
+                .cmp(&right.package.id)
+                .then_with(|| left.package.version.semantic_cmp(&right.package.version))
+                .then_with(|| {
+                    left.package
+                        .version
+                        .as_str()
+                        .cmp(right.package.version.as_str())
+                })
+        });
+        if installed
+            .windows(2)
+            .any(|pair| pair[0].package == pair[1].package)
+        {
+            return Err(AppError::new(
+                "PROTOCOL_PACKAGE_CATALOG_INVALID",
+                "协议包目录包含重复的精确版本，已拒绝展示选择器。",
+            ));
+        }
+
+        let installed_version_count = installed.len();
+        let mut options = Vec::with_capacity(installed_version_count);
+        for version in installed {
+            if !version.enabled
+                || !matches!(
+                    version.validation,
+                    ProtocolPackageValidationViewModel::Valid
+                )
+            {
+                continue;
+            }
+            // 使用 portability 的纯读 preflight，从规范持久化文件重新恢复和编译；
+            // 不能复用 compiler.describe 的暖 AST 缓存，也不能更新 validation/cache。
+            let Ok(descriptions) = self
+                .protocol_package_portability
+                .preflight_installed_packages(std::slice::from_ref(&version.package))
+                .await
+            else {
+                continue;
+            };
+            let [description] = descriptions.as_slice() else {
+                continue;
+            };
+            if ensure_description_identity(&version.package, description).is_err() {
+                continue;
+            }
+            options.push(ListenerProtocolPackageOptionViewModel {
+                package: version.package,
+                name: version.name,
+                capabilities: description.capabilities,
+                schema: description.schema.clone(),
+            });
+        }
+        let unavailable_version_count = installed_version_count
+            .checked_sub(options.len())
+            .ok_or_else(|| {
+                AppError::new(
+                    "PROTOCOL_PACKAGE_CATALOG_INVALID",
+                    "协议包目录计数不一致，已拒绝展示选择器。",
+                )
+            })?;
+        Ok(ListenerProtocolPackageCatalogViewModel {
+            options,
+            installed_version_count,
+            unavailable_version_count,
+        })
+    }
+
     /// 按稳定 ID 分组列出所有精确版本，不隐式编译或改变启用状态。
     pub async fn protocol_package_list(&self) -> AppResult<Vec<ProtocolPackageGroupViewModel>> {
         let versions = self.protocol_package_store.list().await?;
@@ -263,30 +347,39 @@ impl Application {
         let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
             return Ok(());
         };
-        let version = self.require_protocol_package(&scripted.package).await?;
+        let version = self
+            .require_protocol_package(&scripted.package)
+            .await
+            .map_err(listener_package_error)?;
         if require_enabled && !version.enabled {
-            return Err(AppError::new(
-                "PROTOCOL_PACKAGE_DISABLED",
-                "Listener 引用的协议包版本已停用，请先在协议包页面启用。",
-            )
-            .entity(package_entity(&scripted.package)));
+            return Err(listener_package_error(
+                AppError::new(
+                    "PROTOCOL_PACKAGE_DISABLED",
+                    "Listener 引用的协议包版本已停用，请先在协议包页面启用。",
+                )
+                .entity(package_entity(&scripted.package)),
+            ));
         }
         // validation 列是导入/上次编译的历史快照，不能代替当前 Host API
         // 下的 fresh 恢复与编译。真实的可加载性只由下面的 compiler receipt 决定。
         let receipt = self
             .protocol_package_compiler
             .validate_for_enable(&scripted.package)
-            .await?;
-        ensure_compilation_receipt(&scripted.package, version.host_api, &receipt)?;
+            .await
+            .map_err(listener_package_error)?;
+        ensure_compilation_receipt(&scripted.package, version.host_api, &receipt)
+            .map_err(listener_package_error)?;
         let description = self
             .protocol_package_compiler
             .describe(&scripted.package)
-            .await?;
+            .await
+            .map_err(listener_package_error)?;
         super::protocol_package_portability::validate_listener_protocol_binding(
             workspace,
             listener_id,
             &description,
-        )?;
+        )
+        .map_err(listener_processing_error)?;
         Ok(())
     }
 
@@ -326,6 +419,24 @@ fn protocol_package_not_found(package: &ProtocolPackageRef) -> AppError {
 
 fn package_entity(package: &ProtocolPackageRef) -> String {
     format!("{}@{}", package.id, package.version)
+}
+
+fn listener_package_error(error: AppError) -> AppError {
+    listener_error_field(error, "listener.data_plane.socket.processing.package")
+}
+
+fn listener_processing_error(error: AppError) -> AppError {
+    listener_error_field(error, "listener.data_plane.socket.processing")
+}
+
+fn listener_error_field(mut error: AppError, field: &str) -> AppError {
+    if error.view_model.field_errors.is_empty() {
+        error
+            .view_model
+            .field_errors
+            .insert(field.into(), vec![error.view_model.message.clone()]);
+    }
+    error
 }
 
 pub(super) fn ensure_description_identity(

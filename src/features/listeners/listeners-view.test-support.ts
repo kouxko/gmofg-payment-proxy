@@ -37,6 +37,7 @@ export const mocks = {
   listenerTestUpstreamConnection: vi.fn(), listenerImportUpstreamClientIdentity: vi.fn(), listenerImportUpstreamServerTrust: vi.fn(),
   listenerImportDownstreamServerIdentity: vi.fn(), listenerImportDownstreamClientTrust: vi.fn(),
   listenerCertificateOverview: vi.fn(), listenerCertificateDiscard: vi.fn(),
+  listenerProtocolPackageCatalog: vi.fn(),
   workspaceSecretStoreBasic: vi.fn(),
 };
 
@@ -190,13 +191,13 @@ export function certificateDetail(reference: ReturnType<typeof certificateRefere
 
 export function ok<T>(data: T) { return Promise.resolve({ status: "ok" as const, data }); }
 
-export function commandError(message: string) {
+export function commandError(message: string, fieldErrors: Record<string, string[]> = {}) {
   return Promise.resolve({
     status: "error" as const,
     error: {
       code: "LISTENER_OVERVIEW_FAILED",
       message,
-      field_errors: {},
+      field_errors: fieldErrors,
       retryable: true,
       suggested_action: "请重试。",
     },
@@ -283,7 +284,18 @@ export function setupListenerMocks() {
     mocks.listenerDelete.mockReturnValue(ok({ success: true, cancelled: false, message: "Listener 已删除。", ui_tone: "positive", entity_id: null, revision: 2, requires_restart: false }));
     mocks.listenerNew.mockReturnValue(ok(dynamicListener("listener-new", "新建代理监听", 8081)));
     mocks.listenerCopy.mockImplementation((source) => ok({ ...source, id: "listener-copy", name: `${source.name} 副本`, enabled: false }));
-    mocks.listenerOverview.mockReturnValue(ok(listenerOverview()));
+    // 页面现在对缺失 runtime 行的持久化 Listener fail-closed 锁定。通用 fixture
+    // 覆盖各测试文件常用 id，避免与测试目标无关的“未知状态”误锁表单。
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
+      "listener-1",
+      "fixed-1",
+      "socket-1",
+      "local-responder-1",
+      "listener-a",
+      "listener-b",
+      "transaction",
+      "dll",
+    ].map((id) => listenerStatus(id)))));
     mocks.listenerStart.mockImplementation((_workspaceId, _revision, listenerId) => ok(listenerStatus(listenerId, "running")));
     mocks.listenerStop.mockImplementation((_workspaceId, _revision, listenerId) => ok(listenerStatus(listenerId, "stopped")));
     mocks.listenerTestUpstreamConnection.mockReturnValue(ok({
@@ -303,6 +315,11 @@ export function setupListenerMocks() {
     mocks.listenerImportDownstreamServerIdentity.mockReturnValue(ok({ reference: downstreamIdentity, detail: certificateDetail(downstreamIdentity, "CN=proxy.test") }));
     mocks.listenerImportDownstreamClientTrust.mockReturnValue(ok({ reference: downstreamTrust, detail: certificateDetail(downstreamTrust, "CN=终端客户端 CA") }));
     mocks.listenerCertificateOverview.mockReturnValue(ok([]));
+    mocks.listenerProtocolPackageCatalog.mockReturnValue(ok({
+      options: [],
+      installed_version_count: 0,
+      unavailable_version_count: 0,
+    }));
     mocks.listenerCertificateDiscard.mockReturnValue(ok({
       success: true,
       cancelled: false,

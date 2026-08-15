@@ -85,10 +85,19 @@ async fn local_responder_start_uses_package_gate_but_upstream_tests_remain_unava
         .unwrap();
     let listener = local_responder_listener(workspace.listeners[0].clone());
 
-    let copy_error = application
+    let copied = application
         .listener_copy(listener.clone())
-        .expect_err("T18 must not expose a LocalResponder creation path through copy");
-    assert_eq!(copy_error.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+        .expect("T29 exposes LocalResponder as a normal Scripted Listener topology");
+    assert_ne!(copied.id, listener.id);
+    assert!(!copied.enabled);
+    assert!(matches!(
+        copied.data_plane,
+        ListenerDataPlane::Socket(SocketRelaySettings {
+            topology: SocketTopology::LocalResponder(_),
+            processing: SocketPayloadProcessing::Scripted(_),
+            ..
+        })
+    ));
 
     workspace.listeners[0] = listener.clone();
     let workspace = application.workspace_save(workspace).await.unwrap();

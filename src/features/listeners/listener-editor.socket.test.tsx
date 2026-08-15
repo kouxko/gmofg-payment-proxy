@@ -19,6 +19,8 @@ function props(
 ): ComponentProps<typeof ListenerEditor> {
   return {
     listener,
+    protocolCatalog: { loading: false, refresh: vi.fn(), data: { options: [], installed_version_count: 0, unavailable_version_count: 0 } },
+    locked: false,
     certificateReferences: [],
     certificateDetails: [],
     basicUsername: "",
@@ -67,34 +69,34 @@ describe("Socket listener editor", () => {
   it("Transparent 仅显示目标与容量，不显示任何证书控件", () => {
     render(<ListenerEditor {...props()} />);
 
-    expect(screen.getByRole("textbox", { name: "Socket 上游主机" })).toHaveValue("server.test");
-    expect(screen.getByRole("textbox", { name: /Socket 上游端口/ })).toHaveValue("9,443");
-    expect(screen.getByText(/双向字节保持 opaque/)).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Socket Server 主机" })).toHaveValue("server.test");
+    expect(screen.getByRole("textbox", { name: /Socket Server 端口/ })).toHaveValue("9,443");
+    expect(screen.getByText(/不加载 Rhai、不切分 Frame/)).toBeVisible();
     expect(screen.queryByRole("button", { name: /导入.*身份|导入.*CA/ })).not.toBeInTheDocument();
   });
 
   it.each([
     ["transparent", []],
-    ["tcp_to_tls", ["导入上游 Server CA", "导入上游客户端身份"]],
-    ["tls_to_tcp", ["导入服务端身份 PEM"]],
-    ["tls_to_tls", ["导入服务端身份 PEM", "导入上游 Server CA", "导入上游客户端身份"]],
+    ["tcp_to_tls", ["导入 Server CA", "导入客户端身份"]],
+    ["tls_to_tcp", ["导入服务端身份"]],
+    ["tls_to_tls", ["导入服务端身份", "导入 Server CA", "导入客户端身份"]],
   ] as const)("%s 只显示该模式真正使用的证书控件", (mode, expectedButtons) => {
     render(<ListenerEditor {...props(socketListener("socket-1", "Socket", 9000, mode))} />);
 
     const certificateButtons = [
-      "导入服务端身份 PEM",
-      "导入下游客户端 CA",
-      "导入上游 Server CA",
-      "导入上游客户端身份",
+      "导入服务端身份",
+      "导入客户端 CA",
+      "导入 Server CA",
+      "导入客户端身份",
     ];
     for (const button of certificateButtons) {
       const shouldExist = expectedButtons.includes(button as never);
       expect(Boolean(screen.queryByRole("button", { name: button }))).toBe(shouldExist);
     }
-    expect(Boolean(screen.queryByText("客户端 → Relay TLS"))).toBe(
+    expect(Boolean(screen.queryByLabelText("App 侧服务端身份"))).toBe(
       mode === "tls_to_tcp" || mode === "tls_to_tls",
     );
-    expect(Boolean(screen.queryByText("Relay → Server TLS"))).toBe(
+    expect(Boolean(screen.queryByLabelText("Server CA"))).toBe(
       mode === "tcp_to_tls" || mode === "tls_to_tls",
     );
   });
@@ -138,7 +140,7 @@ describe("Socket listener editor", () => {
 
       render(<ListenerEditor {...props(withMtls)} />);
 
-      expect(screen.getByRole("button", { name: "导入下游客户端 CA" })).toBeVisible();
+      expect(screen.getByRole("button", { name: "导入客户端 CA" })).toBeVisible();
     },
   );
 
@@ -168,17 +170,17 @@ describe("Socket listener editor", () => {
 
     expect(screen.getByText(/192\.0\.2\.5:9443 · 9 ms/)).toBeVisible();
     expect(screen.getByText(/TLS 1\.3 · TLS_AES_128_GCM_SHA256/)).toBeVisible();
-    expect(screen.getByText("桥接：TCP → TLS")).toBeVisible();
+    expect(screen.getByText("传输：TCP + TLS")).toBeVisible();
   });
 
   it("LocalResponder 安全渲染且不挂载任何 Server 上游控件", () => {
     const editor = props(localResponderListener() as ProxyListener);
     render(<ListenerEditor {...editor} />);
 
-    expect(screen.getByText("LocalResponder 数据面将在后续任务接入")).toBeVisible();
-    expect(screen.getByText(/不会读取或探测 Server 上游，也不能启动运行/)).toBeVisible();
-    expect(screen.queryByRole("textbox", { name: "Socket 上游主机" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "测试 Socket 上游连接" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /导入上游/ })).not.toBeInTheDocument();
+    expect(screen.getByText("2. App 接入安全")).toBeVisible();
+    expect(screen.getByText("4. Scripted 协议处理")).toBeVisible();
+    expect(screen.queryByRole("textbox", { name: "Socket Server 主机" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "测试 Server 连接" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Server CA|客户端身份/ })).not.toBeInTheDocument();
   });
 });

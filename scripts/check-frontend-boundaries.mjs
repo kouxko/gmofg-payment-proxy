@@ -20,6 +20,12 @@ function sourceFiles(directory) {
     .filter((path) => !path.endsWith("generated/rust-types.ts"));
 }
 
+// 测试夹具与测试套件都不会进入 WebView bundle。夹具使用明确的 `.test-support`
+// 后缀，避免伪装成会被 Vitest 收集的 `.test` 文件或为单个文件增加绕过白名单。
+function isTestArtifact(path) {
+  return /\.(?:test|spec|test-support)\.(?:ts|tsx)$/.test(path);
+}
+
 // 页面按职责拆分后，一个功能契约可能由 facade、列表面板和详情面板共同消费。
 // 架构门禁应检查整个 feature，而不是迫使所有契约重新堆回单个超长组件。
 function featureModuleSource(featureName) {
@@ -28,7 +34,7 @@ function featureModuleSource(featureName) {
     .filter(
       (name) =>
         /\.(?:ts|tsx)$/.test(name) &&
-        !/\.(?:test|spec)\.(?:ts|tsx)$/.test(name),
+        !isTestArtifact(name),
     )
     .map((name) => readFileSync(join(directory, name), "utf8"))
     .join("\n");
@@ -73,7 +79,7 @@ const failures = [];
 for (const file of sourceFiles(sourceRoot)) {
   const content = readFileSync(file, "utf8");
   const relativePath = relative(root, file);
-  const isTestFile = /\.(?:test|spec)\.(?:ts|tsx)$/.test(file);
+  const isTestFile = isTestArtifact(file);
   for (const [pattern, message] of forbidden) {
     // 架构测试需要读取源码来验证 HeroUI 组合方式；Node.js API 禁令只约束会进入
     // WebView 的生产展示代码，不能反过来禁止测试工具检查这些代码。

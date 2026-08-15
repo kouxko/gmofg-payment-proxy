@@ -19,6 +19,7 @@ import {
 } from "./listener-data-plane";
 import { RequestRoutingCard } from "./request-routing-card";
 import { SocketListenerSettings } from "./socket-listener-settings";
+import type { ProtocolCatalogState } from "./socket-processing-card";
 
 const timeoutFields = [
   { key: "connect", field: "connect_timeout_ms", label: "连接超时" },
@@ -28,6 +29,9 @@ const timeoutFields = [
 
 type Props = {
   listener: ProxyListener;
+  protocolCatalog?: ProtocolCatalogState;
+  locked?: boolean;
+  fieldErrors?: Record<string, string[]>;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   installationRoot?: CertificateItemViewModel;
@@ -49,6 +53,11 @@ type Props = {
 
 export function ListenerEditor(props: Props): ReactNode {
   const { listener } = props;
+  const locked = props.locked ?? false;
+  const protocolCatalog = props.protocolCatalog ?? {
+    loading: false,
+    refresh: async () => undefined,
+  };
   const http = listener.data_plane.kind === "http" ? listener.data_plane.settings : undefined;
   const socket = listener.data_plane.kind === "socket" ? listener.data_plane.settings : undefined;
   const changeHttp = (changes: Partial<HttpListenerSettings>) => {
@@ -58,13 +67,16 @@ export function ListenerEditor(props: Props): ReactNode {
   return (
     <Card>
       <Card.Content className="grid grid-cols-2 gap-4 p-5 max-[700px]:grid-cols-1">
-        <CommonFields listener={listener} onChange={props.onChange} />
+        <CommonFields listener={listener} locked={locked} onChange={props.onChange} />
         <Select
           aria-label="监听数据平面"
+          isDisabled={locked}
           selectedKey={listener.data_plane.kind}
-          onSelectionChange={(key) => props.onChange(
-            changeDataPlaneKind(listener, String(key) as "http" | "socket"),
-          )}
+          onSelectionChange={(key) => {
+            if (key === "http" || key === "socket") {
+              props.onChange(changeDataPlaneKind(listener, key));
+            }
+          }}
         >
           <Label>数据平面</Label>
           <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
@@ -73,12 +85,17 @@ export function ListenerEditor(props: Props): ReactNode {
             <ListBox.Item id="socket" textValue="Socket 转发">Socket 转发</ListBox.Item>
           </ListBox></Select.Popover>
         </Select>
-        {http && <HttpSettings {...props} settings={http} onSettingsChange={changeHttp} />}
+        {http && <fieldset disabled={locked} className="contents">
+          <HttpSettings {...props} settings={http} onSettingsChange={changeHttp} />
+        </fieldset>}
         {socket && (
           <SocketListenerSettings
             settings={socket}
             certificateReferences={props.certificateReferences}
             certificateDetails={props.certificateDetails}
+            protocolCatalog={protocolCatalog}
+            locked={locked}
+            fieldErrors={props.fieldErrors}
             busy={Boolean(props.pending)}
             testing={props.pending === "tls-test"}
             testResult={props.tlsTest}
@@ -96,12 +113,13 @@ export function ListenerEditor(props: Props): ReactNode {
   );
 }
 
-function CommonFields({ listener, onChange }: Pick<Props, "listener" | "onChange">): ReactNode {
+function CommonFields({ listener, locked = false, onChange }: Pick<Props, "listener" | "locked" | "onChange">): ReactNode {
   return <>
     <div className="grid gap-1">
       <Label>监听名称</Label>
       <Input
         aria-label="代理监听名称"
+        disabled={locked}
         value={listener.name}
         onChange={(event) => onChange({ name: event.target.value })}
       />
@@ -110,6 +128,7 @@ function CommonFields({ listener, onChange }: Pick<Props, "listener" | "onChange
       <Label>绑定地址</Label>
       <Input
         aria-label="绑定地址"
+        disabled={locked}
         value={listener.bind_address}
         onChange={(event) => onChange({ bind_address: event.target.value })}
       />
@@ -118,6 +137,7 @@ function CommonFields({ listener, onChange }: Pick<Props, "listener" | "onChange
       aria-label="监听端口"
       minValue={0}
       maxValue={65535}
+      isDisabled={locked}
       value={listener.port}
       onChange={(port) => onChange({ port })}
     >
@@ -133,10 +153,11 @@ function CommonFields({ listener, onChange }: Pick<Props, "listener" | "onChange
         key={key}
         label={label}
         value={listener[field]}
+        disabled={locked}
         onChange={(value) => onChange({ [field]: value })}
       />
     ))}
-    <CidrField listener={listener} onChange={onChange} />
+    <CidrField listener={listener} locked={locked} onChange={onChange} />
   </>;
 }
 
@@ -294,19 +315,19 @@ function TextInput({ label, ariaLabel, value, onChange, password = false }: {
     onChange={(event) => onChange(event.target.value)} /></div>;
 }
 
-function TimeoutField({ label, value, onChange }: {
-  label: string; value: number; onChange: (value: number) => void;
+function TimeoutField({ label, value, disabled, onChange }: {
+  label: string; value: number; disabled: boolean; onChange: (value: number) => void;
 }): ReactNode {
-  return <NumberField aria-label={`${label}毫秒`} minValue={0} value={value} onChange={onChange}>
+  return <NumberField aria-label={`${label}毫秒`} minValue={0} value={value} isDisabled={disabled} onChange={onChange}>
     <Label>{label}（ms）</Label><NumberField.Group><NumberField.DecrementButton />
       <NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
   </NumberField>;
 }
 
-function CidrField({ listener, onChange }: Pick<Props, "listener" | "onChange">): ReactNode {
+function CidrField({ listener, locked, onChange }: Pick<Props, "listener" | "locked" | "onChange">): ReactNode {
   return <div className="col-span-2 grid gap-1 max-[700px]:col-span-1">
     <Label>允许的客户端 CIDR</Label>
-    <Input aria-label="允许的客户端 CIDR" value={listener.allowed_client_cidrs.join(", ")}
+    <Input aria-label="允许的客户端 CIDR" value={listener.allowed_client_cidrs.join(", ")} disabled={locked}
       onChange={(event) => onChange({ allowed_client_cidrs: splitValues(event.target.value) })}
       placeholder="留空允许所有设备连接" />
     <p className="text-xs text-[var(--telemetry-muted)]">留空时允许任意客户端地址连接。</p>

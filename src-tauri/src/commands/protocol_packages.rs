@@ -4,10 +4,11 @@
 //! 有界读取、完整编译、引用约束和启停约束都在 Rust Application/Infrastructure 中执行。
 
 use intercept_proxy_application::{
-    AppError, OperationResultViewModel, ProtocolPackageDetailViewModel,
-    ProtocolPackageGroupViewModel, ProtocolPackageImportPreviewViewModel,
-    ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
-    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel,
+    AppError, ListenerProtocolPackageCatalogViewModel, OperationResultViewModel,
+    ProtocolPackageDetailViewModel, ProtocolPackageGroupViewModel,
+    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
+    ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageViewModel,
+    ProtocolPackageVersionViewModel,
 };
 use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageVersion};
 use serde::Deserialize;
@@ -46,6 +47,18 @@ pub async fn protocol_package_list(
     state
         .application
         .protocol_package_list()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_protocol_package_catalog(
+    state: State<'_, AppState>,
+) -> CommandResult<ListenerProtocolPackageCatalogViewModel> {
+    state
+        .application
+        .listener_protocol_package_catalog()
         .await
         .map_err(command_error)
 }
