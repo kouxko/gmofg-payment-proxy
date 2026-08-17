@@ -108,9 +108,7 @@ jobs:
 
       - name: Verify frontend and architecture boundaries
         run: |
-          node scripts/check-runtime-architecture.mjs --require-zero-debt
-          node scripts/check-socket-relay-boundaries.mjs
-          pnpm scan:frontend-boundaries
+          pnpm scan:architecture
           pnpm scan:source-size
           pnpm lint
           pnpm typecheck

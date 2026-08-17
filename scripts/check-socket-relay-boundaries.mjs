@@ -1,5 +1,6 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { productionRustSource } from "./rust-lexical-scan.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const socketRoot = path.join(
@@ -18,7 +19,6 @@ const forbidden = [
     "SOCKET_CAPTURE_SESSION",
     /\b(?:Capture|CapturedRequest|CapturedResponse|CaptureSession|SessionRecord|SessionStore)\b/u,
   ],
-  ["SOCKET_RULE", /\b(?:Rule|RuleSet|RuleAction|RuleEngine)\b/u],
   [
     "SOCKET_BREAKPOINT",
     /\b(?:Breakpoint|BreakpointDecision)\b/u,
@@ -32,6 +32,21 @@ const forbidden = [
 
 const fixtures = [
   ["tokio transport is allowed", "use tokio::net::TcpStream;", []],
+  ["Socket Rule stage is allowed", "let stage = SocketRelayStage::Rule;", []],
+  ["test-only Hyper is ignored", "#[cfg(test)] mod tests { use hyper::Request; }", []],
+  ["cfg test array return semicolon is ignored", "#[cfg(test)] fn hidden() -> [u8; 1] { let _ = hyper::Request::new(()); [0] }", []],
+  ["cfg test const array return is ignored", "#[cfg(test)] fn hidden() -> [u8; { 1 }] { let _ = hyper::Request::new(()); [0] }", []],
+  ["cfg test less-than const stops before production", "#[cfg(test)] const LESS: bool = 1 < 2;\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test less-than static stops before production", "#[cfg(test)] static LESS: bool = 1 < 2;\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test const-generic unit struct stops before production", "#[cfg(test)] struct Hidden<const B: bool = { 1 < 2 }>;\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test extern ABI fn stops before production", "#[cfg(test)] extern \"C\" fn hidden(_: crate::Arg) {}\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test unsafe extern block stops before production", "#[cfg(test)] unsafe extern \"C\" { fn hidden(_: crate::Arg); }\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test const unsafe fn stops before production", "#[cfg(test)] const unsafe fn hidden() {}\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test const extern ABI fn stops before production", "#[cfg(test)] const extern \"C\" fn hidden() {}\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test macro_rules stops before production", "#[cfg(test)] macro_rules! hidden { () => { hyper::Request::new(()) }; }\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test braced item macro stops before production", "#[cfg(test)] hidden! { hyper::Request }\nuse hyper::Request;", ["SOCKET_HYPER"]],
+  ["cfg test return type macro is ignored", "#[cfg(test)] fn hidden() -> ty!{} { let _ = hyper::Request::new(()); }\nuse tokio::net::TcpStream;", []],
+  ["comment cannot forge cfg test masking", "// #[cfg(test)]\nuse hyper::Request;", ["SOCKET_HYPER"]],
   [
     "neutral transport and TLS are allowed",
     "use crate::{tls::TlsEvidence, transport::relay::RelayBytes};",
@@ -53,7 +68,6 @@ const fixtures = [
     "let _: CaptureSession; let _: SessionStore;",
     ["SOCKET_CAPTURE_SESSION"],
   ],
-  ["rules are rejected", "let _: RuleEngine;", ["SOCKET_RULE"]],
   [
     "breakpoints are rejected",
     "let _: BreakpointDecision;",
@@ -67,14 +81,8 @@ const fixtures = [
   ],
 ];
 
-function stripComments(source) {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//gu, " ")
-    .replace(/\/\/.*$/gmu, " ");
-}
-
 function violations(source) {
-  const inspected = stripComments(source);
+  const inspected = productionRustSource(source);
   return forbidden
     .filter(([, pattern]) => pattern.test(inspected))
     .map(([code]) => code);
@@ -113,7 +121,7 @@ async function rustFiles(directory) {
 async function scanProduction() {
   const failures = [];
   for (const absolute of await rustFiles(socketRoot)) {
-    if (/(?:^|\/)tests?(?:\/|\.rs$)/u.test(absolute)) continue;
+    if (/(?:^|\/)(?:tests?|[^/]+_tests)(?:\/|\.rs$)/u.test(absolute)) continue;
     const source = await readFile(absolute, "utf8");
     for (const code of violations(source)) {
       failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
