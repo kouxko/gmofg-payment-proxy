@@ -76,6 +76,7 @@ pub fn builder() -> Builder<Wry> {
             device_network_stop,
             device_network_emergency_restore,
             device_network_status,
+            device_network_runtime_owner,
             workspace_list,
             workspace_get,
             workspace_component_new,

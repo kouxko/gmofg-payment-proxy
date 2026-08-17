@@ -6,7 +6,12 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use intercept_proxy_application::AppError;
+use chrono::Utc;
+use intercept_proxy_application::{
+    AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource, AndroidRuntimeOwnerState,
+    AndroidRuntimeOwnerViewModel, AppError,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::Mutex;
 
@@ -16,27 +21,52 @@ use super::{
 };
 
 impl AndroidAdbAdapter {
-    #[must_use]
-    pub fn new(companion_apk: Option<PathBuf>) -> Self {
+    pub fn new(
+        companion_apk: Option<PathBuf>,
+        runtime_store: Arc<crate::SqliteStore>,
+    ) -> Result<Self, crate::InfrastructureError> {
         // 优先使用桌面外壳解析的安装资源；无界面测试和其他 Host 再按约定位置回退发现。
         let companion_apk = companion_apk
             .filter(|path| path.is_file())
             .or_else(discover_companion_apk);
-        Self {
+        let persisted = runtime_store.load_android_runtime_owner()?.map(|mut record| {
+            record.owner.source = AndroidRuntimeOwnerSource::Recovery;
+            record.owner.transition_reason =
+                intercept_proxy_application::AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage;
+            record.owner.updated_at = Utc::now();
+            record
+        });
+        if let Some(record) = persisted.as_ref() {
+            runtime_store.save_android_runtime_owner(record)?;
+        }
+        Ok(Self {
             adb_path: discover_adb(),
             companion_apk,
             selected_serial: RwLock::new(None),
             network_operation: Mutex::new(()),
-            active_reverse: Mutex::new(None),
+            active_reverse: Mutex::new(persisted.as_ref().and_then(|record| {
+                (!record.reverse_ports.is_empty()).then(|| ActiveReverseOwnership {
+                    epoch: record.owner.epoch,
+                    serial: record.owner.serial.clone(),
+                    profile_id: record.owner.profile_id.clone(),
+                    ports: record.reverse_ports.clone(),
+                })
+            })),
             active_runtime: Mutex::new(None),
+            runtime_resume_state: Mutex::new(
+                persisted.as_ref().and_then(|record| record.resume_state),
+            ),
+            runtime_owner: Mutex::new(persisted.map(|record| record.owner)),
+            runtime_store,
             runner: Arc::new(SystemAdbCommandRunner),
             lan_address: Arc::new(SystemDeviceLanAddressProvider),
-        }
+        })
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ActiveReverseOwnership {
+    pub(super) epoch: uuid::Uuid,
     pub(super) serial: String,
     pub(super) profile_id: String,
     pub(super) ports: Vec<u16>,
@@ -47,8 +77,9 @@ pub(super) struct ActiveReverseOwnership {
 /// 不能从可持久化 Profile 重新推导该值，因为实际端点包含本次 ADB reverse 端口与
 /// DNS 解析结果。桌面进程重启后该事实自然丢失，状态核对会 fail-closed，要求重新
 /// apply，而不是假定设备仍连接旧端点。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ActiveRuntimeFacts {
+    pub(super) epoch: uuid::Uuid,
     pub(super) serial: String,
     pub(super) profile_id: String,
     pub(super) profile_fingerprint: String,
@@ -63,6 +94,32 @@ pub(super) struct PreparedUsbProxyRuntime {
     pub(super) payload: Value,
     pub(super) reverse: Option<ActiveReverseOwnership>,
     pub(super) runtime: ActiveRuntimeFacts,
+    pub(super) owner: AndroidRuntimeOwnerViewModel,
+    pub(super) previous_owner: Option<AndroidRuntimeOwnerViewModel>,
+    pub(super) previous_resume_state: Option<AndroidRuntimeOwnerState>,
+    pub(super) previous_reverse: Option<ActiveReverseOwnership>,
+    pub(super) previous_runtime: Option<ActiveRuntimeFacts>,
+}
+
+impl ActiveRuntimeFacts {
+    pub(super) fn owner(
+        &self,
+        mode: AndroidRuntimeOwnerMode,
+        source: AndroidRuntimeOwnerSource,
+        state: AndroidRuntimeOwnerState,
+        reason: intercept_proxy_application::AndroidRuntimeOwnerTransitionReason,
+    ) -> AndroidRuntimeOwnerViewModel {
+        AndroidRuntimeOwnerViewModel {
+            serial: self.serial.clone(),
+            epoch: self.epoch,
+            mode,
+            profile_id: self.profile_id.clone(),
+            state,
+            source,
+            transition_reason: reason,
+            updated_at: Utc::now(),
+        }
+    }
 }
 
 #[derive(Debug)]

@@ -12,6 +12,10 @@ use uuid::Uuid;
 
 use crate::{AppError, AppResult, UiTone};
 
+#[path = "android/runtime_owner.rs"]
+mod runtime_owner;
+pub use runtime_owner::*;
+
 pub const ANDROID_CONTROL_PROTOCOL_VERSION: u16 = 1;
 pub const ANDROID_CONTROL_MAX_FRAME_BYTES: usize = 1024 * 1024;
 

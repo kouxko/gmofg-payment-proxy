@@ -7,6 +7,7 @@ fn schema_keeps_http_payload_storage_absent_and_socket_capture_explicit() {
     assert_eq!(
         tables,
         vec![
+            "android_runtime_owner",
             "certificate_material",
             "certificate_state",
             "protected_secrets",

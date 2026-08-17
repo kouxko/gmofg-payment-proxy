@@ -12,6 +12,13 @@ import type {
   AndroidAdbViewModel,
   AndroidDeviceViewModel,
 } from "@/generated/rust-types";
+import {
+  isForeignRuntimeOwner,
+  runtimeOwnerModeText,
+  runtimeOwnerStateText,
+  runtimeOwnerTransitionText,
+  type RuntimeOwnerDisplay,
+} from "./android-runtime-owner-model";
 
 interface DeviceControlCardProps {
   adb?: AndroidAdbViewModel;
@@ -19,6 +26,7 @@ interface DeviceControlCardProps {
   devices: AndroidDeviceViewModel[];
   devicesLoading: boolean;
   selectedSerial?: string | null;
+  runtimeOwner?: RuntimeOwnerDisplay | null;
   busy: boolean;
   onRefreshDevices: () => void;
   onSelectDevice: (serial: string) => void;
@@ -26,6 +34,7 @@ interface DeviceControlCardProps {
   onUpdate: () => void;
   onConsent: () => void;
   onRefreshStatus: () => void;
+  onStop: () => void;
   onEmergencyRestore: () => void;
 }
 
@@ -35,6 +44,7 @@ export function DeviceControlCard({
   devices,
   devicesLoading,
   selectedSerial,
+  runtimeOwner,
   busy,
   onRefreshDevices,
   onSelectDevice,
@@ -42,9 +52,14 @@ export function DeviceControlCard({
   onUpdate,
   onConsent,
   onRefreshStatus,
+  onStop,
   onEmergencyRestore,
 }: DeviceControlCardProps): ReactElement {
   const selectedDevice = devices.find((device) => device.serial === selectedSerial);
+  const foreignRuntimeOwner = isForeignRuntimeOwner(
+    selectedSerial,
+    runtimeOwner?.serial,
+  );
 
   return (
     <Card className="h-fit border border-[var(--telemetry-line)] shadow-sm">
@@ -120,12 +135,39 @@ export function DeviceControlCard({
           </p>
         </div>
 
-        <div className="grid grid-cols-5 gap-2 max-[1100px]:grid-cols-3 max-[680px]:grid-cols-1">
+        <div
+          className="grid gap-1 rounded-xl border border-[var(--telemetry-line)] px-4 py-3"
+          aria-label="设备网络运行所有者"
+        >
+          <p className="text-sm font-medium">实际运行设备</p>
+          {runtimeOwner ? (
+            <>
+              <p className="font-mono text-xs">{runtimeOwner.serial}</p>
+              <p className="text-xs text-[var(--telemetry-muted)]">
+                {runtimeOwnerModeText(runtimeOwner.mode)} · {runtimeOwnerStateText(runtimeOwner)}
+              </p>
+              <p className="text-xs text-[var(--telemetry-muted)]">
+                最近变化：{runtimeOwnerTransitionText(runtimeOwner.transition_reason)}
+              </p>
+              {foreignRuntimeOwner && (
+                <p className="text-xs text-[var(--telemetry-warning)]">
+                  当前选择的是 {selectedSerial ?? "无"}；停止、状态查询和紧急恢复只作用于实际运行设备。
+                  请先停止 {runtimeOwner.serial}，再在当前选择的设备上启动或应用方案。
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-[var(--telemetry-muted)]">当前没有设备网络接管运行记录。</p>
+          )}
+        </div>
+
+        <div className="grid grid-cols-6 gap-2 max-[1200px]:grid-cols-3 max-[680px]:grid-cols-1">
           <DeviceAction label="安装设备端组件" disabled={!selectedSerial || busy} onPress={onInstall} />
           <DeviceAction label="更新设备端组件" disabled={!selectedSerial || busy} onPress={onUpdate} />
           <DeviceAction label="授权网络接管" disabled={!selectedSerial || busy} onPress={onConsent} />
-          <DeviceAction label="刷新运行状态" disabled={!selectedSerial || busy} onPress={onRefreshStatus} />
-          <DeviceAction label="紧急恢复网络" disabled={!selectedSerial || busy} onPress={onEmergencyRestore} danger />
+          <DeviceAction label="刷新运行状态" disabled={!runtimeOwner || busy} onPress={onRefreshStatus} />
+          <DeviceAction label="停止网络接管" disabled={!runtimeOwner || busy} onPress={onStop} />
+          <DeviceAction label="紧急恢复网络" disabled={!runtimeOwner || busy} onPress={onEmergencyRestore} danger />
         </div>
       </Card.Content>
     </Card>

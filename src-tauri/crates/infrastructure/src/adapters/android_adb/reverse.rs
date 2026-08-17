@@ -4,21 +4,22 @@
 //! 旧映射。设备已接受请求但最终状态不确定时，同时保留新旧映射，避免晚到的设备启动
 //! 使用一个已被桌面端撤销的端口。Android 数据面自身遵循 fail-open，不承诺无中断切换。
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    net::{IpAddr, Ipv4Addr},
+use std::net::Ipv4Addr;
+
+use intercept_proxy_application::{
+    AndroidNetworkActivation, AndroidRuntimeOwnerMode, AndroidRuntimeOwnerState,
+    AndroidRuntimeOwnerTransitionReason, AppError, AppResult,
 };
 
-use intercept_proxy_application::{AndroidNetworkActivation, AppError, AppResult};
-use serde_json::json;
-
+use super::owner::runtime_mode;
 use super::{
-    ActiveReverseOwnership, ActiveRuntimeFacts, AndroidAdbAdapter, COMMAND_TIMEOUT,
-    PreparedUsbProxyRuntime, ReverseCleanupOutcome, sha256_json,
+    ActiveReverseOwnership, AndroidAdbAdapter, COMMAND_TIMEOUT, PreparedUsbProxyRuntime,
+    ReverseCleanupOutcome,
 };
 use crate::adapters::android_adb::command::is_missing_adb_listener_error;
 
 mod lan;
+mod preparation;
 mod support;
 
 pub(super) use lan::lan_endpoint_is_eligible;
@@ -34,6 +35,33 @@ pub(super) use support::{
 };
 
 impl AndroidAdbAdapter {
+    pub(super) async fn cleanup_owner_reverse(
+        &self,
+        owner: &intercept_proxy_application::AndroidRuntimeOwnerViewModel,
+    ) -> AppResult<()> {
+        let active = self.active_reverse.lock().await.clone();
+        if let Some(active) =
+            active.filter(|active| active.serial == owner.serial && active.epoch == owner.epoch)
+        {
+            let outcome = self
+                .remove_reverse_ports(&active.serial, active.ports)
+                .await;
+            if !outcome.remaining_ports.is_empty() {
+                *self.active_reverse.lock().await = Some(ActiveReverseOwnership {
+                    ports: outcome.remaining_ports,
+                    ..active
+                });
+                self.save_owner(owner.clone()).await?;
+            }
+            return outcome.error.map_or(Ok(()), Err);
+        }
+        if owner.mode == AndroidRuntimeOwnerMode::AdbReverse {
+            self.run_for_serial(&owner.serial, &["reverse", "--remove-all"], COMMAND_TIMEOUT)
+                .await?;
+        }
+        Ok(())
+    }
+
     pub(super) async fn remove_reverse_ports(
         &self,
         serial: &str,
@@ -64,6 +92,7 @@ impl AndroidAdbAdapter {
         }
     }
 
+    #[cfg(test)]
     pub(super) async fn clear_active_reverse_ports(&self) -> AppResult<()> {
         // 清理成功前保留所有权；失败端口继续登记，后续 stop/紧急恢复可以重试。
         // 锁跨越 adb 调用，避免另一次 start 在清理期间覆盖所有权。
@@ -85,171 +114,6 @@ impl AndroidAdbAdapter {
             });
         }
         outcome.error.map_or(Ok(()), Err)
-    }
-
-    async fn create_reverse_mappings(
-        &self,
-        serial: &str,
-        activation: &AndroidNetworkActivation,
-        listener_ports: &BTreeMap<String, u16>,
-    ) -> AppResult<Vec<u16>> {
-        let mut created = Vec::new();
-        for (listener_id, device_port) in listener_ports {
-            let desktop_listener_port = activation
-                .proxy_routes
-                .iter()
-                .find(|route| route.listener_id == *listener_id)
-                .map(|route| route.desktop_listener_port)
-                .expect("allocated listener comes from activation route");
-            let result = self
-                .run_for_serial(
-                    serial,
-                    &[
-                        "reverse",
-                        &format!("tcp:{device_port}"),
-                        &format!("tcp:{desktop_listener_port}"),
-                    ],
-                    COMMAND_TIMEOUT,
-                )
-                .await;
-            if let Err(error) = result {
-                let error = reverse_create_error(&error, *device_port, desktop_listener_port);
-                let cleanup = self.remove_reverse_ports(serial, created).await;
-                if !cleanup.remaining_ports.is_empty() {
-                    self.retain_reverse_ownership(ActiveReverseOwnership {
-                        serial: serial.to_owned(),
-                        profile_id: activation.profile.id.clone(),
-                        ports: cleanup.remaining_ports,
-                    })
-                    .await;
-                }
-                return Err(cleanup.error.map_or(error.clone(), |cleanup_error| {
-                    combine_operation_and_cleanup(error, &cleanup_error)
-                }));
-            }
-            created.push(*device_port);
-        }
-        Ok(created)
-    }
-
-    async fn retain_reverse_ownership(&self, ownership: ActiveReverseOwnership) {
-        if ownership.ports.is_empty() {
-            return;
-        }
-        let mut active = self.active_reverse.lock().await;
-        match active.as_mut() {
-            Some(current) if current.serial == ownership.serial => {
-                current.ports.extend(ownership.ports);
-                current.ports.sort_unstable();
-                current.ports.dedup();
-            }
-            None => *active = Some(ownership),
-            Some(current) => debug_assert_eq!(current.serial, ownership.serial),
-        }
-    }
-
-    pub(super) async fn prepare_usb_proxy_runtime(
-        &self,
-        activation: &AndroidNetworkActivation,
-    ) -> AppResult<PreparedUsbProxyRuntime> {
-        let serial = self.selected_serial()?;
-        let profile_fingerprint = sha256_json(&activation.profile)?;
-        let route_count = activation.proxy_routes.len();
-        let reserved_ports = self
-            .active_reverse
-            .lock()
-            .await
-            .as_ref()
-            .map_or_else(Vec::new, |ownership| ownership.ports.clone());
-
-        // 先完成所有可能失败的 DNS 解析，再创建 reverse；失败不会影响旧 TUN。
-        let mut resolved_routes = Vec::with_capacity(activation.proxy_routes.len());
-        for route in &activation.proxy_routes {
-            let destination = route.original_destination.trim();
-            let resolved_original_ips =
-                if destination.parse::<IpAddr>().is_ok() || destination.contains('/') {
-                    Vec::new()
-                } else {
-                    let addresses = tokio::net::lookup_host((destination, 0))
-                        .await
-                        .map_err(|error| {
-                            AppError::new(
-                                "ANDROID_PROXY_DESTINATION_RESOLVE_FAILED",
-                                format!("透明代理原始域名 {destination} 无法解析：{error}"),
-                            )
-                        })?
-                        .map(|address| address.ip())
-                        .collect::<BTreeSet<_>>();
-                    if addresses.is_empty() {
-                        return Err(AppError::new(
-                            "ANDROID_PROXY_DESTINATION_RESOLVE_FAILED",
-                            format!("透明代理原始域名 {destination} 没有 A/AAAA 记录。"),
-                        ));
-                    }
-                    addresses.into_iter().collect()
-                };
-            resolved_routes.push((route, resolved_original_ips));
-        }
-
-        let lan_host = self.preferred_lan_proxy_host(&serial, activation).await;
-        let uses_adb_reverse = lan_host.is_none();
-        let listener_ports = if uses_adb_reverse {
-            allocated_reverse_ports_avoiding(
-                &activation.proxy_routes,
-                reserved_ports.iter().copied(),
-            )
-        } else {
-            BTreeMap::new()
-        };
-        let created = if listener_ports.is_empty() {
-            Vec::new()
-        } else {
-            self.create_reverse_mappings(&serial, activation, &listener_ports)
-                .await?
-        };
-
-        let routes = resolved_routes
-            .into_iter()
-            .map(|(route, resolved_original_ips)| {
-                let (proxy_host, proxy_port) = lan_host.map_or_else(
-                    || ("127.0.0.1".to_owned(), listener_ports[&route.listener_id]),
-                    |host| (host.to_string(), route.desktop_listener_port),
-                );
-                json!({
-                    "listener_id": route.listener_id,
-                    "original_destination": route.original_destination,
-                    "original_ports": route.original_ports,
-                    "resolved_original_ips": resolved_original_ips,
-                    "proxy_host": proxy_host,
-                    "proxy_port": proxy_port,
-                })
-            })
-            .collect::<Vec<_>>();
-        let route_fingerprint = sha256_json(&routes)?;
-        let reverse = (!created.is_empty()).then(|| ActiveReverseOwnership {
-            serial: serial.clone(),
-            profile_id: activation.profile.id.clone(),
-            ports: created,
-        });
-        Ok(PreparedUsbProxyRuntime {
-            payload: json!({
-                "routes": routes,
-                "route_source": activation.proxy_routes,
-                "profile_fingerprint": profile_fingerprint,
-                "route_fingerprint": route_fingerprint,
-                "route_count": route_count,
-            }),
-            reverse,
-            runtime: ActiveRuntimeFacts {
-                serial,
-                profile_id: activation.profile.id.clone(),
-                profile_fingerprint,
-                route_fingerprint,
-                route_count,
-                listener_ports,
-                uses_adb_reverse,
-            },
-        })
     }
 
     /// 同网段 LAN 可用时直接连接桌面 Listener。部分定制 Android 固件会让
@@ -307,10 +171,13 @@ impl AndroidAdbAdapter {
         prepared: PreparedUsbProxyRuntime,
         error: AppError,
     ) -> AppResult<T> {
-        if let Some(reverse) = prepared.reverse {
-            self.retain_reverse_ownership(reverse).await;
-        }
-        *self.active_runtime.lock().await = Some(prepared.runtime);
+        *self.active_runtime.lock().await = Some(prepared.runtime.clone());
+        self.publish_prepared_owner(
+            &prepared,
+            AndroidRuntimeOwnerState::Uncertain,
+            AndroidRuntimeOwnerTransitionReason::ActivationUncertain,
+        )
+        .await?;
         Err(error
             .retryable("设备最终状态尚未确认；已保留代理映射。请刷新运行状态，或执行停止后重试。"))
     }
@@ -319,44 +186,99 @@ impl AndroidAdbAdapter {
         &self,
         prepared: PreparedUsbProxyRuntime,
     ) -> AppResult<()> {
-        let Some(reverse) = prepared.reverse else {
-            return Ok(());
+        let outcome = if let Some(reverse) = prepared.reverse.as_ref() {
+            self.remove_reverse_ports(&reverse.serial, reverse.ports.clone())
+                .await
+        } else {
+            ReverseCleanupOutcome {
+                remaining_ports: Vec::new(),
+                error: None,
+            }
         };
-        let outcome = self
-            .remove_reverse_ports(&reverse.serial, reverse.ports)
-            .await;
-        if !outcome.remaining_ports.is_empty() {
-            self.retain_reverse_ownership(ActiveReverseOwnership {
-                ports: outcome.remaining_ports,
-                ..reverse
-            })
-            .await;
+        if outcome.remaining_ports.is_empty() {
+            return self.restore_previous_owner(&prepared).await;
         }
-        outcome.error.map_or(Ok(()), Err)
+        let persistence = self
+            .persist_cleanup_required(&prepared, outcome.remaining_ports.clone())
+            .await;
+        match (outcome.error, persistence) {
+            (Some(error), Err(persistence)) => {
+                Err(combine_operation_and_cleanup(error, &persistence))
+            }
+            (Some(error), Ok(())) => Err(error),
+            (None, result) => result,
+        }
     }
 
     async fn commit_prepared_network_update(
         &self,
         prepared: PreparedUsbProxyRuntime,
     ) -> AppResult<()> {
-        let previous = {
-            let mut active = self.active_reverse.lock().await;
-            std::mem::replace(&mut *active, prepared.reverse)
+        *self.active_runtime.lock().await = Some(prepared.runtime.clone());
+        // 清理旧端口前，磁盘必须已经记录新旧端口全集和新 epoch。
+        self.publish_prepared_owner(
+            &prepared,
+            AndroidRuntimeOwnerState::Active,
+            AndroidRuntimeOwnerTransitionReason::ActivationConfirmed,
+        )
+        .await?;
+        let outcome = if let Some(previous) = prepared.previous_reverse.as_ref() {
+            self.remove_reverse_ports(&previous.serial, previous.ports.clone())
+                .await
+        } else {
+            ReverseCleanupOutcome {
+                remaining_ports: Vec::new(),
+                error: None,
+            }
         };
-        *self.active_runtime.lock().await = Some(prepared.runtime);
-        let Some(previous) = previous else {
-            return Ok(());
+        let final_ports = prepared.committed_ports_with(outcome.remaining_ports.clone());
+        let mut owner = prepared.owner.clone();
+        owner.state = if outcome.remaining_ports.is_empty() {
+            AndroidRuntimeOwnerState::Active
+        } else {
+            AndroidRuntimeOwnerState::CleanupRequired
         };
-        let outcome = self
-            .remove_reverse_ports(&previous.serial, previous.ports)
-            .await;
-        if !outcome.remaining_ports.is_empty() {
-            self.retain_reverse_ownership(ActiveReverseOwnership {
-                ports: outcome.remaining_ports,
-                ..previous
+        owner.transition_reason = if outcome.remaining_ports.is_empty() {
+            AndroidRuntimeOwnerTransitionReason::ActivationConfirmed
+        } else {
+            AndroidRuntimeOwnerTransitionReason::ReverseCleanupRequired
+        };
+        let replaced = self.replace_owner_if_epoch(owner, final_ports).await;
+        let persistence = replaced.and_then(|replaced| {
+            replaced.then_some(()).ok_or_else(|| {
+                AppError::new(
+                    "ANDROID_RUNTIME_OWNER_STALE_EPOCH",
+                    "Android 运行设备记录已被更新，本次清理结果未覆盖新记录。",
+                )
             })
-            .await;
+        });
+        match (outcome.error, persistence) {
+            (Some(error), Err(persistence)) => {
+                Err(combine_operation_and_cleanup(error, &persistence))
+            }
+            (Some(error), Ok(())) => Err(error),
+            (None, result) => result,
         }
-        outcome.error.map_or(Ok(()), Err)
+    }
+
+    async fn persist_cleanup_required(
+        &self,
+        prepared: &PreparedUsbProxyRuntime,
+        remaining_new_ports: Vec<u16>,
+    ) -> AppResult<()> {
+        let mut owner = prepared.owner.clone();
+        owner.state = AndroidRuntimeOwnerState::CleanupRequired;
+        owner.transition_reason = AndroidRuntimeOwnerTransitionReason::ReverseCleanupRequired;
+        let ports = prepared.cleanup_ports_with(remaining_new_ports);
+        self.replace_owner_if_epoch(owner, ports)
+            .await
+            .and_then(|updated| {
+                updated.then_some(()).ok_or_else(|| {
+                    AppError::new(
+                        "ANDROID_RUNTIME_OWNER_STALE_EPOCH",
+                        "Android 运行设备记录已被更新，本次回滚结果未覆盖新记录。",
+                    )
+                })
+            })
     }
 }

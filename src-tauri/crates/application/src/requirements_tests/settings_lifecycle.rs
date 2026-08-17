@@ -1,5 +1,68 @@
 use super::*;
 
+#[derive(Debug)]
+struct FailingShutdownAndroid {
+    owner: AndroidRuntimeOwnerViewModel,
+    stop_calls: AtomicUsize,
+}
+
+#[async_trait]
+impl AndroidControlPort for FailingShutdownAndroid {
+    async fn adb_get(&self) -> AppResult<AndroidAdbViewModel> {
+        unused()
+    }
+    async fn adb_select(&self, _: String) -> AppResult<AndroidAdbViewModel> {
+        unused()
+    }
+    async fn device_list(&self) -> AppResult<Vec<AndroidDeviceViewModel>> {
+        unused()
+    }
+    async fn package_list(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
+        unused()
+    }
+    async fn package_get(&self, _: String) -> AppResult<AndroidPackageViewModel> {
+        unused()
+    }
+    async fn companion_install(&self, _: bool) -> AppResult<AndroidCompanionInstallViewModel> {
+        unused()
+    }
+    async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_start(
+        &self,
+        _: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_apply(
+        &self,
+        _: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_runtime_ready(
+        &self,
+        _: &AndroidNetworkActivation,
+        _: &AndroidNetworkStatusViewModel,
+    ) -> AppResult<bool> {
+        unused()
+    }
+    async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        self.stop_calls.fetch_add(1, Ordering::SeqCst);
+        Err(AppError::new("ANDROID_OWNER_OFFLINE", "owner offline"))
+    }
+    async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
+        Ok(Some(self.owner.clone()))
+    }
+}
+
 #[tokio::test]
 async fn settings_use_case_accepts_safe_defaults_and_normalizes_before_port_validation() {
     let ports = Arc::new(FakePorts::default());
@@ -251,6 +314,46 @@ async fn application_shutdown_stops_runtime_clears_effective_settings_and_is_ide
         .expect("idempotent shutdown");
     assert_eq!(stopped_again.state, ProxyState::Stopped);
     assert_eq!(ports.stop_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn application_shutdown_reports_owner_stop_failure_but_completes_other_cleanup() {
+    let ports = Arc::new(FakePorts::default());
+    *ports.proxy_state.lock() = ProxyState::Running;
+    let android = Arc::new(FailingShutdownAndroid {
+        owner: AndroidRuntimeOwnerViewModel {
+            serial: "DEVICE-A".into(),
+            epoch: Uuid::new_v4(),
+            mode: AndroidRuntimeOwnerMode::AdbReverse,
+            profile_id: "profile-a".into(),
+            state: AndroidRuntimeOwnerState::Active,
+            source: AndroidRuntimeOwnerSource::Recovery,
+            transition_reason: AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage,
+            updated_at: Utc::now(),
+        },
+        stop_calls: AtomicUsize::new(0),
+    });
+    let application = application_with_fake_ports_and_android(ports.clone(), android.clone());
+    assert_eq!(
+        application
+            .device_network_runtime_owner()
+            .await
+            .unwrap()
+            .unwrap()
+            .serial,
+        "DEVICE-A"
+    );
+
+    let error = application
+        .app_shutdown()
+        .await
+        .expect_err("owner failure stays visible");
+
+    assert_eq!(error.view_model.code, "APP_SHUTDOWN_FAILED");
+    assert!(error.view_model.message.contains("DEVICE-A"));
+    assert_eq!(android.stop_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(ports.stop_calls.load(Ordering::SeqCst), 1);
+    assert!(ports.settings.lock().effective.is_none());
 }
 
 #[tokio::test]

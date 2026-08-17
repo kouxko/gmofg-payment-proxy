@@ -37,7 +37,7 @@ pub use files::{AtomicFileExporter, ExportOutcome};
 #[cfg(target_os = "macos")]
 pub use keychain::MacKeychainProtector;
 pub use sqlite::{
-    CertificateMaterialRecord, CertificateMaterialSnapshot, ProtectedSecretRecord,
-    RuleCollectionSnapshot, RuleRecord, SqliteStore, StoredSettings, WorkspaceCollectionSnapshot,
-    WorkspaceRecord,
+    AndroidRuntimeOwnerRecord, CertificateMaterialRecord, CertificateMaterialSnapshot,
+    ProtectedSecretRecord, RuleCollectionSnapshot, RuleRecord, SqliteStore, StoredSettings,
+    WorkspaceCollectionSnapshot, WorkspaceRecord,
 };

@@ -21,6 +21,27 @@ const policies = [
     activationFile: resolve(repositoryRoot, "src-tauri/crates/protocol-scripting/Cargo.toml"),
     thresholds: { functions: 90, lines: 90, regions: 90 },
   },
+  {
+    package: "intercept-proxy-application",
+    required: true,
+    filePolicies: [
+      {
+        suffix: "crates/application/src/facade/android/runtime_owner.rs",
+        thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+    ],
+  },
+  {
+    package: "intercept-proxy-infrastructure",
+    required: true,
+    filePolicies: [
+      { suffix: "adapters/android_adb/owner.rs", thresholds: { lines: 90 } },
+      { suffix: "adapters/android_adb/reverse.rs", thresholds: { lines: 90 } },
+      { suffix: "adapters/android_adb/reverse/preparation.rs", thresholds: { lines: 90 } },
+      { suffix: "adapters/android_adb/runtime.rs", thresholds: { lines: 90 } },
+      { suffix: "sqlite/android_runtime_owner.rs", thresholds: { lines: 90 } },
+    ],
+  },
 ];
 
 function runCargo(arguments_, options = {}) {
@@ -61,6 +82,12 @@ function isActive(policy) {
   }
 }
 
+function metricsFromSummary(summary) {
+  return Object.fromEntries(
+    Object.entries(summary).map(([name, value]) => [name, value.percent]),
+  );
+}
+
 function collectPackageCoverage(policy) {
   const reportArguments = [
     "llvm-cov",
@@ -75,15 +102,21 @@ function collectPackageCoverage(policy) {
     { capture: true },
   );
   const report = JSON.parse(json);
-  const totals = report?.data?.[0]?.totals;
+  const data = report?.data?.[0];
+  const totals = data?.totals;
   if (!totals) {
     throw new Error(`${policy.package}: cargo-llvm-cov report did not contain totals`);
   }
-  const metrics = Object.fromEntries(
-    Object.entries(totals).map(([name, value]) => [name, value.percent]),
-  );
-  assertCoverage(policy.package, metrics, policy.thresholds);
-  return { package: policy.package, thresholds: policy.thresholds, metrics };
+  const metrics = metricsFromSummary(totals);
+  if (policy.thresholds) assertCoverage(policy.package, metrics, policy.thresholds);
+  const files = (policy.filePolicies ?? []).map((filePolicy) => {
+    const file = data.files?.find((candidate) => candidate.filename.endsWith(filePolicy.suffix));
+    if (!file) throw new Error(`${policy.package}: coverage file missing: ${filePolicy.suffix}`);
+    const fileMetrics = metricsFromSummary(file.summary);
+    assertCoverage(`${policy.package}:${filePolicy.suffix}`, fileMetrics, filePolicy.thresholds);
+    return { ...filePolicy, metrics: fileMetrics };
+  });
+  return { package: policy.package, thresholds: policy.thresholds, metrics, files };
 }
 
 verifyToolVersion();
@@ -99,6 +132,11 @@ for (const policy of policies) {
     `${summary.package}: functions ${summary.metrics.functions.toFixed(2)}%, ` +
       `lines ${summary.metrics.lines.toFixed(2)}%, regions ${summary.metrics.regions.toFixed(2)}%\n`,
   );
+  for (const file of summary.files) {
+    process.stdout.write(
+      `${summary.package}:${file.suffix}: lines ${file.metrics.lines.toFixed(2)}%\n`,
+    );
+  }
 }
 
 const outputPath = resolve(repositoryRoot, "coverage/rust-summary.json");

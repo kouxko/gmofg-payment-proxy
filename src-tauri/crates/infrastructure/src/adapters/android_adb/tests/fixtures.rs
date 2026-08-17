@@ -3,6 +3,7 @@ use super::*;
 impl AndroidAdbAdapter {
     /// 为单元测试注入可记录、可编排的 ADB 执行器，避免启动真实 adb 进程。
     pub(super) fn with_runner(data_dir: &Path, runner: Arc<dyn AdbCommandRunner>) -> Self {
+        let runtime_store = Arc::new(crate::SqliteStore::in_memory().expect("runtime store"));
         Self {
             adb_path: Some(PathBuf::from("adb")),
             companion_apk: Some(data_dir.join("android-companion.apk")),
@@ -10,6 +11,29 @@ impl AndroidAdbAdapter {
             network_operation: Mutex::new(()),
             active_reverse: Mutex::new(None),
             active_runtime: Mutex::new(None),
+            runtime_owner: Mutex::new(None),
+            runtime_resume_state: Mutex::new(None),
+            runtime_store,
+            runner,
+            lan_address: Arc::new(NoLanAddressProvider),
+        }
+    }
+
+    pub(super) fn with_store_and_runner(
+        data_dir: &Path,
+        runtime_store: Arc<crate::SqliteStore>,
+        runner: Arc<dyn AdbCommandRunner>,
+    ) -> Self {
+        Self {
+            adb_path: Some(PathBuf::from("adb")),
+            companion_apk: Some(data_dir.join("android-companion.apk")),
+            selected_serial: RwLock::new(None),
+            network_operation: Mutex::new(()),
+            active_reverse: Mutex::new(None),
+            active_runtime: Mutex::new(None),
+            runtime_owner: Mutex::new(None),
+            runtime_resume_state: Mutex::new(None),
+            runtime_store,
             runner,
             lan_address: Arc::new(NoLanAddressProvider),
         }
@@ -112,12 +136,15 @@ pub(super) async fn seed_active_runtime(
     serial: &str,
     ports: Vec<u16>,
 ) -> (ActiveReverseOwnership, ActiveRuntimeFacts) {
+    let epoch = uuid::Uuid::new_v4();
     let reverse = ActiveReverseOwnership {
+        epoch,
         serial: serial.into(),
         profile_id: "profile-old".into(),
         ports,
     };
     let runtime = ActiveRuntimeFacts {
+        epoch,
         serial: serial.into(),
         profile_id: "profile-old".into(),
         profile_fingerprint: "old-profile".into(),
@@ -128,6 +155,15 @@ pub(super) async fn seed_active_runtime(
     };
     *adapter.active_reverse.lock().await = Some(reverse.clone());
     *adapter.active_runtime.lock().await = Some(runtime.clone());
+    adapter
+        .save_owner(runtime.owner(
+            AndroidRuntimeOwnerMode::AdbReverse,
+            AndroidRuntimeOwnerSource::Start,
+            AndroidRuntimeOwnerState::Active,
+            AndroidRuntimeOwnerTransitionReason::ActivationConfirmed,
+        ))
+        .await
+        .unwrap();
     (reverse, runtime)
 }
 
@@ -157,6 +193,7 @@ pub(super) fn activation_status(
 
 pub(super) fn activation_runtime() -> ActiveRuntimeFacts {
     ActiveRuntimeFacts {
+        epoch: uuid::Uuid::new_v4(),
         serial: "2740072778".into(),
         profile_id: "profile-new".into(),
         profile_fingerprint: "profile-fingerprint".into(),

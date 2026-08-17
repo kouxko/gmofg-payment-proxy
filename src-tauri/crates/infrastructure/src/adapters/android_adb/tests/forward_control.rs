@@ -7,7 +7,7 @@ async fn force_stop_companion_closes_tun_without_control_socket() {
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
     *adapter.selected_serial.write().unwrap() = Some("SER123".into());
 
-    let status = adapter.force_stop_companion().await.unwrap();
+    let status = adapter.force_stop_companion("SER123").await.unwrap();
 
     assert_eq!(status.state, AndroidNetworkState::Stopped);
     assert!(status.verified);
@@ -87,7 +87,7 @@ async fn wake_control_server_does_not_wait_for_activity_completion() {
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
     *adapter.selected_serial.write().unwrap() = Some("2740072778".into());
 
-    adapter.wake_control_server().await.unwrap();
+    adapter.wake_control_server("2740072778").await.unwrap();
 
     assert_eq!(
         *runner.calls.lock().unwrap(),

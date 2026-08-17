@@ -9,6 +9,33 @@ pub(in crate::requirements_tests) fn application_with_fake_ports(
     )
 }
 
+pub(in crate::requirements_tests) fn application_with_fake_ports_and_android(
+    ports: Arc<FakePorts>,
+    android: Arc<dyn AndroidControlPort>,
+) -> Application {
+    Application::new_with_android(
+        "Test Product".into(),
+        ApplicationDependencies {
+            proxy: ports.clone(),
+            capture: ports.clone(),
+            sessions: ports.clone(),
+            breakpoints: Arc::new(BreakpointCoordinator::default()),
+            breakpoint_validation: ports.clone(),
+            rules: ports.clone(),
+            faults: ports.clone(),
+            certificates: ports.clone(),
+            settings: ports.clone(),
+            listener_certificates: ports,
+            workspaces: Arc::new(InMemoryWorkspaceStore::default()),
+            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
+            listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
+            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
+            events: Arc::new(EventHub::default()),
+        },
+        android,
+    )
+}
+
 pub(in crate::requirements_tests) fn application_with_fake_ports_and_listener_runtime(
     ports: Arc<FakePorts>,
     listener_runtime: Arc<dyn ListenerRuntimePort>,

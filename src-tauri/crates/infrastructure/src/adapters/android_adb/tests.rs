@@ -12,6 +12,10 @@ use fixtures::*;
 
 #[path = "tests/forward_control.rs"]
 mod forward_control;
+#[path = "tests/owner_crash_safety.rs"]
+mod owner_crash_safety;
+#[path = "tests/owner_lifecycle.rs"]
+mod owner_lifecycle;
 
 #[test]
 fn canonical_fingerprint_matches_android_for_cidr_and_url() {

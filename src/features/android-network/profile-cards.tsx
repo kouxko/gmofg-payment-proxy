@@ -4,6 +4,7 @@ import type {
   AndroidNetworkProfile,
   AndroidNetworkProfileSummary,
 } from "@/generated/rust-types";
+import { isForeignRuntimeOwner } from "./android-runtime-owner-model";
 
 interface ProfileSelectorCardProps {
   profiles: AndroidNetworkProfileSummary[];
@@ -141,24 +142,30 @@ export function ProfileBasicsCard({
 interface ProfileActionsProps {
   busy: boolean;
   selectedSerial?: string | null;
+  runtimeOwnerSerial?: string | null;
+  runtimeOwnerReady: boolean;
   dangerousConfirmed: boolean;
   onDangerousConfirmedChange: (confirmed: boolean) => void;
   onSave: () => void;
   onStart: () => void;
   onApply: () => void;
-  onStop: () => void;
 }
 
 export function ProfileActions({
   busy,
   selectedSerial,
+  runtimeOwnerSerial,
+  runtimeOwnerReady,
   dangerousConfirmed,
   onDangerousConfirmedChange,
   onSave,
   onStart,
   onApply,
-  onStop,
 }: ProfileActionsProps): ReactElement {
+  const foreignRuntimeOwner = isForeignRuntimeOwner(
+    selectedSerial,
+    runtimeOwnerSerial,
+  );
   return (
     <div className="flex flex-wrap items-center gap-2 pb-5">
       <Switch isSelected={dangerousConfirmed} onChange={onDangerousConfirmedChange}>
@@ -168,9 +175,26 @@ export function ProfileActions({
         </Switch.Content>
       </Switch>
       <Button variant="outline" isDisabled={busy} onPress={onSave}>保存方案</Button>
-      <Button variant="primary" isDisabled={busy || !selectedSerial} onPress={onStart}>启动</Button>
-      <Button variant="outline" isDisabled={busy || !selectedSerial} onPress={onApply}>应用修改</Button>
-      <Button variant="danger-soft" isDisabled={busy || !selectedSerial} onPress={onStop}>停止网络接管</Button>
+      <Button
+        variant="primary"
+        isDisabled={busy || !selectedSerial || !runtimeOwnerReady || foreignRuntimeOwner}
+        onPress={onStart}
+      >启动</Button>
+      <Button
+        variant="outline"
+        isDisabled={busy || !selectedSerial || !runtimeOwnerReady || foreignRuntimeOwner}
+        onPress={onApply}
+      >应用修改</Button>
+      {foreignRuntimeOwner && (
+        <p className="basis-full text-xs text-[var(--telemetry-warning)]">
+          实际运行设备为 {runtimeOwnerSerial}，请先停止它，再对当前选择设备启动或应用方案。
+        </p>
+      )}
+      {!runtimeOwnerReady && (
+        <p className="basis-full text-xs text-[var(--telemetry-warning)]">
+          正在确认实际运行设备；确认完成前不能启动或应用方案。
+        </p>
+      )}
     </div>
   );
 }

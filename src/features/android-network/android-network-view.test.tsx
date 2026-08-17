@@ -9,6 +9,7 @@ import { AndroidNetworkView } from "./android-network-view";
 const mocks = vi.hoisted(() => ({
   androidAdbGet: vi.fn(), androidDeviceList: vi.fn(), androidAdbSelect: vi.fn(),
   androidPackageList: vi.fn(), androidPackageRefresh: vi.fn(), androidPackageQuery: vi.fn(), deviceNetworkProfileList: vi.fn(), deviceNetworkStatus: vi.fn(),
+  deviceNetworkRuntimeOwner: vi.fn(),
   deviceNetworkProfileNew: vi.fn(), deviceNetworkProfileGet: vi.fn(), deviceNetworkProfileApplyIntent: vi.fn(), deviceNetworkProfileSave: vi.fn(),
   androidCompanionInstall: vi.fn(), androidCompanionUpdate: vi.fn(), androidVpnOpenConsent: vi.fn(),
   deviceNetworkStart: vi.fn(), deviceNetworkApply: vi.fn(), deviceNetworkStop: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
 }));
 function ok<T>(data: T) { return Promise.resolve({ status: "ok" as const, data }); }
+function owner(serial = "device-1") { return { serial, epoch: "11111111-1111-4111-8111-111111111111", mode: "adb_reverse", profile_id: "profile-1", state: "active", source: "start", transition_reason: "activation_confirmed", updated_at: "2026-08-17T00:00:00Z" }; }
 
 const profile = {
   id: "profile-1", name: "移动网络丢包", target_applications: [], destination_targets: [], proxy_routes: [], confirmed_shared_uids: [], auto_resume_after_reboot: false,
@@ -62,6 +64,7 @@ describe("Android targeted network page", () => {
       metadata_extractors: [], response_assertions: [], fault_presets: [], certificate_references: [], android_network_profiles: [],
     }));
     mocks.deviceNetworkStatus.mockReturnValue(ok({ serial: "device-1", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null }));
+    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(null));
     mocks.deviceNetworkProfileNew.mockReturnValue(ok(profile));
     mocks.deviceNetworkProfileApplyIntent.mockImplementation((value, intent) => {
       if (intent.kind === "toggle_package") {
@@ -131,6 +134,7 @@ describe("Android targeted network page", () => {
   });
 
   it("uses a wrapping profile flow and marks the profile currently executed by VPN", async () => {
+    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(owner()));
     mocks.deviceNetworkProfileList.mockReturnValue(ok([
       {
         id: "profile-1",
@@ -168,6 +172,7 @@ describe("Android targeted network page", () => {
   });
 
   it("keeps showing a running profile that belongs to another Workspace", async () => {
+    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(owner()));
     mocks.deviceNetworkStatus.mockReturnValue(ok({
       serial: "device-1",
       state: "running",
@@ -189,6 +194,7 @@ describe("Android targeted network page", () => {
   });
 
   it("waits for the previous runtime poll before scheduling the next one", async () => {
+    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(owner()));
     vi.useFakeTimers();
     let resolvePoll: (() => void) | undefined;
     mocks.deviceNetworkStatus
