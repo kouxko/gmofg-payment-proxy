@@ -78,7 +78,7 @@ export function SocketServerCard(props: CommonProps & {
     props.onChange({ ...props.settings, topology: { mode: "relay", settings: { ...relay, ...changes } } });
   }
   return <Card><Card.Header><Card.Title>3. Server 上游</Card.Title>
-    <Card.Description>仅 Relay 建立 Server 连接；LocalResponder 不保留此卡的任何字段。</Card.Description>
+    <Card.Description>仅转发到远端时建立 Server 连接；本地应答不会保留此卡字段。</Card.Description>
   </Card.Header><Card.Content className="space-y-4">
     <div className="grid gap-4 md:grid-cols-2">
       <div className="grid gap-1"><Label>Server 主机</Label><Input aria-label="Socket Server 主机" disabled={props.locked}

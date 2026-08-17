@@ -70,9 +70,9 @@ function ListenerTable({ listeners, selectedIndex, onSelect }: {
 function listenerDestination(listener: ProxyListener) {
   if (listener.data_plane.kind === "socket") {
     const topology = listener.data_plane.settings.topology;
-    if (topology.mode === "local_responder") return "LocalResponder · 本地响应";
+    if (topology.mode === "local_responder") return "本地应答";
     const { host, port } = topology.settings.upstream;
-    return `${host || "未配置主机"}:${port} · ${topology.settings.security.mode}`;
+    return `${host || "未配置主机"}:${port}`;
   }
   return listener.data_plane.settings.fixed_server?.upstream_url || "请求中的目标地址";
 }
