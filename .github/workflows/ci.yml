@@ -157,10 +157,8 @@ jobs:
 
       - name: Verify frontend
         run: |
-          # 先跑 Rust-only 架构门禁，再跑普通 lint/typecheck/test/build；两类检查关注点不同。
-          node scripts/check-runtime-architecture.mjs --require-zero-debt
-          node scripts/check-socket-relay-boundaries.mjs
-          pnpm scan:frontend-boundaries
+          # 架构聚合门禁包含文档、跨平面、runtime、Socket 与 Rust-only frontend 边界。
+          pnpm scan:architecture
           pnpm scan:source-size
           pnpm lint
           pnpm typecheck

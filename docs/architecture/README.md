@@ -1,4 +1,36 @@
-# Intercept Proxy 系统设计与实现原理
+# Intercept Proxy 架构索引
+
+状态：Active R01 baseline（2026-08-17）。本目录明确区分当前事实、已接受目标与开放决策；R01 只交付
+能阻止错误实现的首批基线，不表示 `TODO-ARCH-001` 的十类完整设计已经完成。
+
+`scripts/check-architecture-docs.mjs` 在不新增依赖的前提下确定性校验本批文档使用的 Mermaid
+`flowchart`/`sequenceDiagram` 子集、配对结构和语句；它不是图片渲染器，文档不把该检查表述为 PNG/SVG 渲染证明。
+
+## R01 阻塞基线
+
+- [系统上下文与容器边界](system-context.md)：UI、host、application、domain、adapter、runtime、存储和外部系统。
+- [HTTP、Socket 与协议包边界](protocol-boundaries.md)：严格 data-plane 语义、协议包当前边界与禁止依赖。
+- [HTTP 与 Socket 数据平面](data-planes.md)：当前关键路径、失败前零输出和证据模型。
+- [生命周期、持久化与信任边界](lifecycle-persistence-security.md)：task ownership、迁移、ZIP 所有权和敏感数据流。
+- [架构可追溯矩阵](traceability.md)：场景到 domain/application/runtime/IPC/page/test 的可扩展骨架。
+
+## 已接受决策
+
+- [ADR-001：HTTP 与 Socket 只共享中立内核](decisions/ADR-001-http-socket-boundary.md)
+- [ADR-002：当前协议包 ABI 不扩展到 HTTP](decisions/ADR-002-protocol-packages-http.md)
+- [ADR-003：统一 application ZIP 的所有权与版本](decisions/ADR-003-application-zip-ownership.md)
+
+## 既有专题文档
+
+- [请求生命周期](request-lifecycle.md)
+- [规则与状态](rules-and-state.md)
+- [Workspace 与安全](workspace-and-security.md)
+- [Android VPN 透明路由](android-vpn-transparent-routing.md)
+- [开发指南](development-guide.md)
+
+下文保留既有入门说明；若与上述 R01 边界冲突，以 R01 文档和 ADR 为准。
+
+## 既有 HTTP 入门说明
 
 本文档面向第一次接触项目的开发者。它回答四个问题：
 

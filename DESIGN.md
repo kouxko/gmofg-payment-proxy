@@ -2,8 +2,9 @@
 
 ## Source of truth
 
-- Status: Draft
-- Last refreshed: 2026-08-13
+- Status: Active baseline
+- Last refreshed: 2026-08-17
+- Architecture boundary: [R01 architecture index](docs/architecture/README.md)
 - Primary product surfaces: Tauri desktop application, persistent Next.js workspace shell, Rust-owned proxy configuration and runtime state.
 - Evidence reviewed: `docs/requirements.md`, `docs/user-operation-guide.md`, `design-qa.md`, `docs/assets/ui/*.png`, `src/app/globals.css`, `src/features/shell/app-shell.tsx`, `src/features/shell/workspace-navigation.tsx`, `src/features/listeners/listeners-view.tsx`, `src/features/listeners/socket-listener-settings.tsx`.
 - Feature contract: `.omx/plans/socket-protocol-scripting.md`, `templates/socket-protocol/API.md`, `templates/socket-protocol/AUTHORING.md`.
@@ -15,6 +16,10 @@
 - Avoid: decorative dashboards, hidden automation, protocol auto-detection claims, unexplained abbreviations and HTTP-specific controls on Socket screens.
 
 ## Product goals
+
+The protocol-package and Socket surfaces below describe the active product. Future application-wide ZIP,
+Android owner/epoch corrections, HTTP package support, MCP, and certificate-format expansion are not current
+capabilities; their ownership and decisions live in `docs/architecture/**` and the Rxx plan.
 
 - Goals: let test engineers import versioned Socket protocol packages, inspect their declared capabilities and bind one exact package version to a Scripted Socket Listener.
 - Goals: make Direct byte forwarding and Scripted parsing visibly different modes without weakening the existing Direct path.
@@ -31,16 +36,22 @@
 ## Information architecture
 
 - Primary navigation: retain the persistent left navigation and add `协议包` immediately after `入口配置`.
-- Core route: proposed `/protocol-packages`, application-scoped rather than Workspace-scoped because multiple Workspaces may reference the same immutable `package_id + version`.
+- Core route: `/protocol-packages`, application-scoped rather than Workspace-scoped because multiple Workspaces may reference the same immutable `package_id + version`.
 - Core screens: protocol package list with version-detail Dialog, ZIP import validation Dialog, Socket Listener processing card, Socket Document/Hex inspection, Schema-driven rule field selection.
 - Content hierarchy: identity/status first, then installed versions, capabilities, Schema, validation diagnostics and usage references. Source content is not an application surface.
 
 ### Package ownership and portability
 
+Current facts: installed protocol packages are application-scoped; Workspace/config documents carry exact
+package references and bounded portable package data through the existing strict document formats. Target only:
+the unified application archive v1 and its atomic whole-application restore are deferred to R07 under
+[ADR-003](docs/architecture/decisions/ADR-003-application-zip-ownership.md).
+
 - Installed protocol packages are application-scoped and immutable by `package_id + version`.
 - Protocol packages have no content digest or digital-signature contract. An installed `package_id + version` is reused and cannot be overwritten; changed content requires a new version.
 - `.intercept-workspace` embeds every exact package version referenced by that Workspace's Listeners.
-- `.intercept-config` embeds all installed packages and their application-level enabled/disabled state.
+- `.intercept-config` embeds all installed packages and their application-level enabled/disabled state; this is
+  the existing configuration document, not the deferred unified application archive v1.
 - Workspace import installs missing embedded packages globally but leaves newly installed scripts disabled until explicit review and enablement.
 - Workspace configuration stores only package ID/version references; package enablement is not a Workspace-owned field.
 - Target machines revalidate and recompile packages. Compiled ASTs, caches, installation paths and runtime connections are never portable artifacts.
@@ -190,7 +201,7 @@ Socket 数据处理
 
 - Framework/styling system: Next.js 16 static export, React 19, HeroUI 3, Tailwind CSS 4 and Gravity UI icons.
 - Architecture: Rust owns ZIP I/O, validation, package persistence, Rhai compilation, capability state and usage lookup; frontend only displays generated ViewModels and submits commands.
-- Navigation: add the route to the in-memory `WorkspaceNavigation`/`WorkspaceContent` path union; do not force a WebView reload.
+- Navigation: keep the route in the in-memory `WorkspaceNavigation`/`WorkspaceContent` path union; do not force a WebView reload.
 - Design-token constraints: reuse `telemetry-*`; do not create a protocol-package-only color system or custom replacements for HeroUI controls.
 - Performance constraints: package list uses summaries; version detail/Schema/usage load on selection. Never send source, the ZIP or compiled AST to the frontend.
 - Compatibility constraints: Direct Socket relay remains the default and must not depend on Rhai availability.
@@ -201,3 +212,10 @@ Socket 数据处理
 
 - Package details do not include a source viewer. Protocol source stays in the author-owned ZIP and is never part of the frontend ViewModel.
 - Display has no Listener switch of its own; it follows Encode independently for Upstream and Downstream.
+
+## Open decisions and deferred delivery
+
+- Unified application archive v1 UX and atomic restore are target behavior, not a current screen. Owner: R07a-R07e.
+- Android runtime owner/epoch correctness and endpoint drift UI remain separate deliveries. Owner: R02 and R10.
+- HTTP protocol-package support is rejected for the current ABI; any reconsideration requires a new ADR. Owner: R01 follow-up.
+- Expanded serverAuth certificate import and MCP surfaces are not current capabilities. Owner: R09 and R11a.

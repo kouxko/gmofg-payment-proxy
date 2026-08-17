@@ -16,6 +16,9 @@
     "test:ui-contracts": "vitest run src/test/overlay-contracts.test.tsx src/features/help/page-help.test.tsx src/features/protocol-packages/protocol-package-model.test.ts src/features/protocol-packages/protocol-packages-view.test.tsx src/features/protocol-packages/protocol-package-dialog.test.tsx src/features/protocol-packages/protocol-package-import-model.test.ts src/features/protocol-packages/protocol-package-import-dialog.test.tsx src/features/settings/settings-view.test.tsx src/features/rules/rules-view.test.tsx src/features/rules/rule-editor-async.test.tsx src/features/rules/socket-rule-model.test.ts src/features/rules/socket-rule-editor.test.tsx src/features/rules/socket-rule-value-editor.test.tsx src/features/rules/socket-rules-list.test.tsx src/features/rules/socket-rules-view.test.tsx src/features/rules/socket-rules-tabs.test.tsx src/features/sessions/sessions-view.test.ts src/features/shell/navigation.test.tsx src/features/shell/workspace-navigation.test.tsx src/features/shell/bootstrap-context.test.tsx src/lib/ipc/use-ipc-query.test.tsx src/features/console/console-view.test.tsx src/features/capture/capture-view.test.ts src/features/capture/capture-view-ui.test.tsx src/features/capture/socket-capture-model.test.ts src/features/capture/socket-capture-page-model.test.ts src/features/capture/socket-safe-display.test.tsx src/features/capture/socket-byte-viewer.test.tsx src/features/capture/socket-capture-list.test.tsx src/features/capture/socket-capture-detail.test.tsx src/features/capture/socket-capture-view.test.tsx src/features/breakpoints/breakpoints-view.test.ts src/features/rules/rule-editor.test.ts src/features/faults/faults-view.test.tsx src/features/listeners/socket-listener-model.test.ts src/features/listeners/socket-processing-card.test.tsx src/features/listeners/socket-listener-settings.test.tsx src/features/listeners/socket-security-cards.test.tsx src/features/listeners/socket-protocol-package-dialog.test.tsx src/features/listeners/listeners-view.socket-contracts.test.tsx",
     "test:watch": "vitest",
     "scan:frontend-boundaries": "node scripts/check-frontend-boundaries.mjs",
+    "scan:architecture-boundaries": "node scripts/check-architecture-boundaries.mjs",
+    "scan:architecture-docs": "node scripts/check-architecture-docs.mjs",
+    "scan:architecture": "pnpm scan:architecture-docs && pnpm scan:architecture-boundaries && node scripts/check-runtime-architecture.mjs --require-zero-debt && node scripts/check-socket-relay-boundaries.mjs && pnpm scan:frontend-boundaries",
     "scan:bundle-branding": "node scripts/check-bundle-branding.mjs",
     "scan:source-size": "node scripts/check-source-file-sizes.mjs",
     "verify:android-companion": "bash scripts/verify-android-companion.sh src-tauri/resources/android-companion.apk",
@@ -27,7 +30,7 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
     "tauri:build": "pnpm build:android-companion && tauri build",
-    "check": "pnpm bindings && pnpm scan:frontend-boundaries && pnpm scan:source-size && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm scan:bundle-branding && pnpm check:rust:fmt && pnpm check:rust:clippy && pnpm check:rust:windows && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
+    "check": "pnpm bindings && pnpm scan:architecture && pnpm scan:source-size && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm scan:bundle-branding && pnpm check:rust:fmt && pnpm check:rust:clippy && pnpm check:rust:windows && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
   },
   "dependencies": {
     "@gravity-ui/icons": "2.21.0",

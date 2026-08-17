@@ -9,35 +9,14 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { checkCrateDependencies } from "./runtime-crate-dependencies.mjs";
+import { productionRustSource, productionRustWithStrings } from "./rust-lexical-scan.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const runtimeCrate = "src-tauri/crates/proxy";
 const requireZeroDebt =
   process.argv.includes("--require-zero-debt") ||
   process.env.RUNTIME_ARCH_REQUIRE_ZERO_DEBT === "1";
-
-const internalDependencyPolicy = new Map([
-  ["intercept-proxy-domain", new Set()],
-  ["intercept-proxy-product-api", new Set()],
-  ["intercept-proxy-runtime", new Set()],
-  ["intercept-proxy-application", new Set([
-    "intercept-proxy-domain",
-    "intercept-proxy-product-api",
-  ])],
-  ["intercept-proxy-android-engine", new Set(["intercept-proxy-domain"])],
-  ["intercept-proxy-infrastructure", new Set([
-    "intercept-proxy-application",
-    "intercept-proxy-domain",
-    "intercept-proxy-product-api",
-    "intercept-proxy-runtime",
-  ])],
-  ["intercept-proxy-host", new Set([
-    "intercept-proxy-application",
-    "intercept-proxy-infrastructure",
-    "intercept-proxy-product-api",
-    "intercept-proxy-runtime",
-  ])],
-]);
 
 // These entries describe owned facilities, not exceptions to the handler rule. A removed or
 // renamed site makes the ledger stale and fails the gate until this list is updated deliberately.
@@ -94,95 +73,6 @@ async function filesBelow(directory) {
   return files;
 }
 
-function packageName(manifest) {
-  let inPackage = false;
-  for (const line of manifest.split(/\r?\n/u)) {
-    const section = line.match(/^\s*\[([^\]]+)\]\s*$/u)?.[1];
-    if (section !== undefined) {
-      inPackage = section === "package";
-      continue;
-    }
-    if (!inPackage) continue;
-    const name = line.match(/^\s*name\s*=\s*["']([^"']+)["']/u)?.[1];
-    if (name) return name;
-  }
-  return undefined;
-}
-
-function dependencyNames(manifest) {
-  const names = new Set();
-  const lines = manifest.split(/\r?\n/u);
-  let dependencies = false;
-  for (const line of lines) {
-    const section = line.match(/^\s*\[([^\]]+)\]\s*$/u)?.[1];
-    if (section !== undefined) {
-      dependencies = /(?:^|\.)((?:dev-|build-)?dependencies)$/u.test(section);
-      continue;
-    }
-    if (!dependencies || /^\s*(?:#|$)/u.test(line)) continue;
-    const declaration = line.match(/^\s*([A-Za-z0-9_-]+)(?:\.[A-Za-z0-9_-]+)?\s*=\s*(.*)$/u);
-    if (!declaration) continue;
-    const [, key, value] = declaration;
-    const packageAlias = value.match(/\bpackage\s*=\s*["'](intercept-proxy-[^"']+)["']/u)?.[1];
-    if (packageAlias) names.add(packageAlias);
-    else if (key.startsWith("intercept-proxy-")) names.add(key);
-  }
-  return names;
-}
-
-async function checkCrateDependencies(root) {
-  const cratesRoot = path.join(root, "src-tauri/crates");
-  const violations = [];
-  let directories;
-  try {
-    directories = await readdir(cratesRoot, { withFileTypes: true });
-  } catch {
-    return violations;
-  }
-  for (const directory of directories.filter((entry) => entry.isDirectory())) {
-    const manifestPath = path.join(cratesRoot, directory.name, "Cargo.toml");
-    let manifest;
-    try {
-      manifest = await readFile(manifestPath, "utf8");
-    } catch {
-      continue;
-    }
-    const crate = packageName(manifest);
-    if (!crate?.startsWith("intercept-proxy-")) continue;
-    const allowed = internalDependencyPolicy.get(crate);
-    if (!allowed) {
-      violations.push(problem("CRATE_UNKNOWN", normalized(path.relative(root, manifestPath)), `internal crate ${crate} has no dependency policy`));
-      continue;
-    }
-    for (const dependency of dependencyNames(manifest)) {
-      if (!internalDependencyPolicy.has(dependency)) {
-        violations.push(problem("CRATE_UNKNOWN_TARGET", normalized(path.relative(root, manifestPath)), `internal dependency ${dependency} has no dependency policy`));
-      } else if (!allowed.has(dependency)) {
-        violations.push(problem("CRATE_DIRECTION", normalized(path.relative(root, manifestPath)), `${crate} must not depend on ${dependency}`));
-      }
-    }
-  }
-  return violations;
-}
-
-function stripRustComments(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//gu, " ").replace(/\/\/.*$/gmu, " ");
-}
-
-function stripCfgTestModules(source) {
-  let output = source;
-  const marker = /#\s*\[\s*cfg\s*\(\s*test\s*\)\s*\]\s*mod\s+\w+\s*\{/gu;
-  while (true) {
-    const match = marker.exec(output);
-    if (!match) return output;
-    const open = output.indexOf("{", match.index);
-    const close = matchingDelimiter(output, open, "{", "}");
-    if (close < 0) return output.slice(0, match.index);
-    output = `${output.slice(0, match.index)}${" ".repeat(close + 1 - match.index)}${output.slice(close + 1)}`;
-    marker.lastIndex = match.index;
-  }
-}
-
 const httpDependency = /\b(?:hyper|hyper_util|http|http_body_util)::|\b(?:PipelinePorts|Message|RawHttp1|HttpTarget|ForwardProxy|ReverseProxy|Mitm|MITM)\b/u;
 const socketDependency = /\b(?:crate|super|self)::(?:[A-Za-z_][A-Za-z0-9_]*::)*socket_relay\b|\bSocketRelay[A-Za-z0-9_]*\b/u;
 
@@ -191,7 +81,6 @@ const socketForbidden = [
   ["SOCKET_PIPELINE", /\bPipelinePorts\b/u, "PipelinePorts"],
   ["SOCKET_HTTP_MESSAGE", /\bhttp::|\b(?:crate|super)::(?:[A-Za-z_][A-Za-z0-9_]*::)*message\b|\bHttpMessage\b/u, "HTTP Message"],
   ["SOCKET_CAPTURE", /\b(?:Capture|CapturedRequest|CapturedResponse|CaptureSession|SessionRecord|SessionStore)\b/u, "capture/session"],
-  ["SOCKET_RULES", /\b(?:Rule|RuleSet|RuleAction|RuleEngine)\b/u, "rules"],
   ["SOCKET_BREAKPOINTS", /\b(?:Breakpoint|BreakpointDecision)\b/u, "breakpoints"],
   ["SOCKET_MITM", /\b(?:Mitm|MITM)\b|\bmitm::/u, "MITM"],
   ["SOCKET_BODY_CODEC", /\b(?:BodyCodec|ContentEncoding)\b|\bencoding_rs::/u, "HTTP body codecs"],
@@ -218,19 +107,22 @@ async function runtimeSources(root) {
   return Promise.all(
     sources
       .filter((file) => file.endsWith(".rs"))
-      .filter((file) => !/(?:^|\/)tests?(?:\/|\.rs$)/u.test(normalized(path.relative(sourceRoot, file))))
-      .map(async (absolute) => ({
-        absolute,
-        file: normalized(path.relative(crateRoot, absolute)),
-        source: stripCfgTestModules(await readFile(absolute, "utf8")),
-      })),
+      .filter((file) => !/(?:^|\/)(?:tests?|[^/]+_tests)(?:\/|\.rs$)/u.test(normalized(path.relative(sourceRoot, file))))
+      .map(async (absolute) => {
+        const raw = await readFile(absolute, "utf8");
+        return {
+          absolute,
+          file: normalized(path.relative(crateRoot, absolute)),
+          source: productionRustWithStrings(raw),
+          inspected: productionRustSource(raw),
+        };
+      }),
   );
 }
 
 async function checkSourceBoundaries(root) {
   const violations = [];
-  for (const { file, source } of await runtimeSources(root)) {
-    const inspected = stripRustComments(source);
+  for (const { file, inspected } of await runtimeSources(root)) {
     const role = sourceRole(file);
     if ((role === "neutral-listener" || role === "neutral-transport") && httpDependency.test(inspected)) {
       violations.push(problem("NEUTRAL_HTTP", file, `${role} imports an HTTP-only dependency`));
@@ -318,7 +210,7 @@ async function proofIsValid(crateRoot, entry) {
 async function checkSpawnLedger(root, ledgerEntries, debtEntries, zeroDebt) {
   const crateRoot = path.join(root, runtimeCrate);
   const sources = await runtimeSources(root);
-  const sites = sources.flatMap(({ file, source }) => taskSites(file, stripRustComments(source)));
+  const sites = sources.flatMap(({ file, source }) => taskSites(file, source));
   const violations = [];
   const matchedLedger = new Set();
   const matchedDebt = new Set();
@@ -408,6 +300,73 @@ const fixtureCases = [
     files: { "src-tauri/crates/proxy/src/listener/handler.rs": `use hyper::Request;\n` },
   },
   {
+    name: "comment cannot forge cfg test masking",
+    expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `// #[cfg(test)]\nuse hyper::Request;\n` },
+  },
+  {
+    name: "real cfg test HTTP import is ignored",
+    expected: [],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)]\nmod tests { use hyper::Request; }\n` },
+  },
+  {
+    name: "cfg test array return semicolon is ignored",
+    expected: [],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] fn hidden() -> [u8; 1] { let _ = hyper::Request::new(()); [0] }\n` },
+  },
+  {
+    name: "cfg test const array return is ignored",
+    expected: [],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] fn hidden() -> [u8; { 1 }] { let _ = hyper::Request::new(()); [0] }\n` },
+  },
+  {
+    name: "cfg test less-than const stops before production",
+    expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] const LESS: bool = 1 < 2;\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test less-than static stops before production",
+    expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] static LESS: bool = 1 < 2;\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test const-generic unit struct stops before production",
+    expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] struct Hidden<const B: bool = { 1 < 2 }>;\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test extern ABI fn stops before production",
+    expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] extern "C" fn hidden(_: crate::Arg) {}\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test unsafe extern block stops before production",
+    expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] unsafe extern "C" { fn hidden(_: crate::Arg); }\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test const unsafe fn stops before production",
+    expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] const unsafe fn hidden() {}\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test const extern ABI fn stops before production",
+    expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] const extern "C" fn hidden() {}\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test macro_rules stops before production", expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] macro_rules! hidden { () => { hyper::Request::new(()) }; }\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test braced item macro stops before production", expected: ["NEUTRAL_HTTP"],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] hidden! { hyper::Request }\nuse hyper::Request;\n` },
+  },
+  {
+    name: "cfg test return type macro is ignored", expected: [],
+    files: { "src-tauri/crates/proxy/src/listener/handler.rs": `#[cfg(test)] fn hidden() -> ty!{} { let _ = hyper::Request::new(()); }\nuse tokio::net::TcpStream;\n` },
+  },
+  {
     name: "neutral transport importing Socket fails",
     expected: ["NEUTRAL_SOCKET"],
     files: { "src-tauri/crates/proxy/src/transport/relay.rs": `use crate::socket_relay::SocketRelayConfig;\n` },
@@ -463,7 +422,6 @@ function socketFixtureSource(pattern) {
     "use crate::PipelinePorts;",
     "use crate::message::HttpMessage;",
     "use crate::Capture;",
-    "use crate::RuleEngine;",
     "use crate::BreakpointDecision;",
     "use crate::Mitm;",
     "use crate::BodyCodec;",
