@@ -68,9 +68,8 @@ function setupScriptedSocket() {
 
 function expectSocketEditorLocked() {
   expect(screen.getByRole("textbox", { name: "代理监听名称" })).toBeDisabled();
-  expect(screen.getByLabelText("Socket 数据处理模式")).toBeDisabled();
-  expect(screen.getByLabelText("Socket 连接拓扑")).toBeDisabled();
-  expect(screen.getByLabelText("Socket 精确协议包版本")).toBeDisabled();
+  expect(screen.getByLabelText("Socket 工作方式")).toBeDisabled();
+  expect(screen.getByLabelText("Socket 协议处理方案")).toBeDisabled();
   expect(screen.getByLabelText("App 接入传输")).toBeDisabled();
   expect(screen.getByLabelText("App 侧服务端身份")).toBeDisabled();
   expect(screen.getByLabelText("Server 传输")).toBeDisabled();
@@ -90,7 +89,7 @@ describe("Listener Socket integration contracts", () => {
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(uiMocks.toast).toHaveBeenCalledWith(
-      "协议包版本已不可用。：当前精确协议包版本未启用或已失效。", { variant: "danger" },
+      "操作未完成，请按页面提示修正 Socket 配置。", { variant: "danger" },
     ));
     expect(await screen.findAllByText((text) => text.includes(field)
       && text.includes("当前精确协议包版本未启用或已失效"))).toHaveLength(2);
@@ -106,11 +105,11 @@ describe("Listener Socket integration contracts", () => {
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "启动监听" }));
     await waitFor(() => expect(uiMocks.toast).toHaveBeenCalledWith(
-      "LocalResponder 规则能力不兼容。：当前包未声明 upstream Decode。", { variant: "danger" },
+      "操作未完成，请按页面提示修正 Socket 配置。", { variant: "danger" },
     ));
     expect(await screen.findAllByText((text) => text.includes(field)
       && text.includes("当前包未声明 upstream Decode"))).toHaveLength(2);
-    expect(screen.getByText("方向能力需要修正")).toBeVisible();
+    expect(screen.getByText("处理选项需要修正")).toBeVisible();
   });
 
   it("rejects a malformed catalog without rendering candidates or causing mutations", async () => {

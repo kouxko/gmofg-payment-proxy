@@ -389,8 +389,8 @@ describe("统一代理监听编辑器", () => {
     const user = userEvent.setup();
     render(<ListenersView />);
 
-    expect(await screen.findByText("→ LocalResponder · 本地响应")).toBeVisible();
-    expect(screen.getByText("Socket · LocalResponder")).toBeVisible();
+    expect(await screen.findByText("→ 本地应答")).toBeVisible();
+    expect(screen.getByText("Socket · 本地应答")).toBeVisible();
     expect(screen.getByRole("button", { name: "启动监听" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "复制监听" })).toBeEnabled();
     expect(screen.queryByRole("textbox", { name: "Socket Server 主机" })).not.toBeInTheDocument();

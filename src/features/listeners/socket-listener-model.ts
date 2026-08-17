@@ -12,6 +12,31 @@ import type {
 } from "@/generated/rust-types";
 import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
 
+export type SocketWorkingMode = "raw_relay" | "protocol_relay" | "local_response";
+export type SocketWorkingModeState = SocketWorkingMode | "incompatible";
+
+export function socketWorkingMode(settings: SocketRelaySettings): SocketWorkingModeState {
+  if (settings.topology.mode === "local_responder") {
+    return settings.processing?.mode === "scripted" ? "local_response" : "incompatible";
+  }
+  return settings.processing?.mode === "scripted" ? "protocol_relay" : "raw_relay";
+}
+
+export function setSocketWorkingMode(
+  settings: SocketRelaySettings,
+  mode: SocketWorkingMode,
+): SocketRelaySettings {
+  if (socketWorkingMode(settings) === mode) return settings;
+  if (mode === "raw_relay") return setProcessingMode(settings, "direct");
+  if (mode === "protocol_relay") {
+    return setProcessingMode(setSocketTopology(settings, "relay"), "scripted");
+  }
+  if (mode === "local_response") {
+    return setSocketTopology(setProcessingMode(settings, "scripted"), "local_responder");
+  }
+  return settings;
+}
+
 export function exactPackageKey(value: ProtocolPackageRef): string {
   return `${value.id}\u0000${value.version}`;
 }
