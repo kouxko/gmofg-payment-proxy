@@ -7,6 +7,7 @@ async fn reverse_cleanup_uses_the_device_that_created_the_mapping() {
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
     *adapter.selected_serial.write().unwrap() = Some("DEVICE-B".into());
     *adapter.active_reverse.lock().await = Some(ActiveReverseOwnership {
+        epoch: uuid::Uuid::new_v4(),
         serial: "DEVICE-A".into(),
         profile_id: "profile-a".into(),
         ports: vec![31_627],
@@ -22,7 +23,66 @@ async fn reverse_cleanup_uses_the_device_that_created_the_mapping() {
 }
 
 #[tokio::test]
-async fn preparing_apply_keeps_active_reverse_until_control_succeeds() {
+async fn owner_cleanup_persists_partial_failure_and_fallback_remove_all() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(SequenceRunner {
+        calls: std::sync::Mutex::new(Vec::new()),
+        outputs: std::sync::Mutex::new(std::collections::VecDeque::from([AdbOutput {
+            success: false,
+            stdout: String::new(),
+            stderr: "cannot remove".into(),
+        }])),
+    });
+    let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner);
+    let epoch = seed_active_runtime(&adapter, "DEVICE-A", vec![31_627])
+        .await
+        .0
+        .epoch;
+    let owner = adapter.required_runtime_owner().await.unwrap();
+
+    adapter.cleanup_owner_reverse(&owner).await.unwrap_err();
+
+    assert_eq!(
+        adapter
+            .runtime_store
+            .load_android_runtime_owner()
+            .unwrap()
+            .unwrap()
+            .reverse_ports,
+        vec![31_627]
+    );
+    assert_eq!(adapter.required_runtime_owner().await.unwrap().epoch, epoch);
+
+    let fallback = Arc::new(RecordingRunner::default());
+    let adapter = AndroidAdbAdapter::with_runner(temp.path(), fallback.clone());
+    let mut owner = owner;
+    owner.epoch = uuid::Uuid::new_v4();
+    adapter.save_owner(owner.clone()).await.unwrap();
+    *adapter.active_reverse.lock().await = None;
+    adapter.cleanup_owner_reverse(&owner).await.unwrap();
+    assert!(
+        fallback
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|args| { args.ends_with(&["reverse".into(), "--remove-all".into()]) })
+    );
+}
+
+#[tokio::test]
+async fn empty_active_reverse_cleanup_is_idempotent() {
+    let temp = tempfile::tempdir().unwrap();
+    let adapter = AndroidAdbAdapter::with_runner(temp.path(), Arc::new(FakeRunner));
+    *adapter.active_runtime.lock().await = Some(activation_runtime());
+
+    adapter.clear_active_reverse_ports().await.unwrap();
+
+    assert!(adapter.active_runtime.lock().await.is_none());
+}
+
+#[tokio::test]
+async fn preparing_apply_persists_both_generations_without_removing_old_runtime() {
     let temp = tempfile::tempdir().unwrap();
     let runner = Arc::new(RecordingRunner::default());
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
@@ -34,15 +94,22 @@ async fn preparing_apply_keeps_active_reverse_until_control_succeeds() {
         seed_active_runtime(&adapter, "DEVICE-A", vec![old_port]).await;
 
     let prepared = adapter
-        .prepare_usb_proxy_runtime(&activation)
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Apply)
         .await
         .unwrap();
 
-    assert_eq!(
-        *adapter.active_reverse.lock().await,
-        Some(old_reverse.clone()),
-        "preparing a replacement must not publish or remove it before Android accepts apply",
-    );
+    let staged = adapter.active_reverse.lock().await.clone().unwrap();
+    let mut expected_ports = vec![old_port, prepared.reverse.as_ref().unwrap().ports[0]];
+    expected_ports.sort_unstable();
+    assert_eq!(staged.epoch, prepared.owner.epoch);
+    assert_eq!(staged.ports, expected_ports);
+    let persisted = adapter
+        .runtime_store
+        .load_android_runtime_owner()
+        .unwrap()
+        .unwrap();
+    assert_eq!(persisted.owner.epoch, prepared.owner.epoch);
+    assert_eq!(persisted.reverse_ports, expected_ports);
     assert_eq!(
         *adapter.active_runtime.lock().await,
         Some(old_runtime.clone())
@@ -98,7 +165,7 @@ async fn accepted_but_unconfirmed_apply_retains_both_reverse_generations() {
     let old_port = allocated_reverse_ports(&activation.proxy_routes)[&listener_id.to_string()];
     let (_, old_runtime) = seed_active_runtime(&adapter, "DEVICE-A", vec![old_port]).await;
     let prepared = adapter
-        .prepare_usb_proxy_runtime(&activation)
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Apply)
         .await
         .unwrap();
     let staged_port = prepared.reverse.as_ref().unwrap().ports[0];
@@ -149,7 +216,7 @@ async fn successful_apply_publishes_staged_mapping_before_retiring_old_mapping()
     let old_port = allocated_reverse_ports(&activation.proxy_routes)[&listener_id.to_string()];
     seed_active_runtime(&adapter, "DEVICE-A", vec![old_port]).await;
     let prepared = adapter
-        .prepare_usb_proxy_runtime(&activation)
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Apply)
         .await
         .unwrap();
     let staged_port = prepared.reverse.as_ref().unwrap().ports[0];
@@ -198,6 +265,7 @@ async fn failed_reverse_cleanup_retains_only_failed_ports_for_retry() {
     });
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
     *adapter.active_reverse.lock().await = Some(ActiveReverseOwnership {
+        epoch: uuid::Uuid::new_v4(),
         serial: "DEVICE-A".into(),
         profile_id: "profile-a".into(),
         ports: vec![31_627, 31_628],
@@ -253,6 +321,7 @@ async fn missing_reverse_listener_is_an_idempotent_cleanup_success() {
     });
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
     *adapter.active_reverse.lock().await = Some(ActiveReverseOwnership {
+        epoch: uuid::Uuid::new_v4(),
         serial: "DEVICE-A".into(),
         profile_id: "profile-a".into(),
         ports: vec![40_163],
@@ -282,21 +351,39 @@ async fn missing_reverse_listener_is_an_idempotent_cleanup_success() {
 }
 
 #[tokio::test]
-async fn device_switch_is_rejected_while_reverse_mapping_is_active() {
+async fn device_selection_can_change_without_transferring_runtime_ownership() {
     let temp = tempfile::tempdir().unwrap();
-    let runner = Arc::new(RecordingRunner::default());
+    let runner = Arc::new(SequenceRunner {
+        calls: std::sync::Mutex::new(Vec::new()),
+        outputs: std::sync::Mutex::new(std::collections::VecDeque::from([
+            AdbOutput {
+                success: true,
+                stdout: "List of devices attached\nDEVICE-B device model:A920MAX\n".into(),
+                stderr: String::new(),
+            },
+            AdbOutput {
+                success: true,
+                stdout: "Android Debug Bridge version 1.0.41".into(),
+                stderr: String::new(),
+            },
+        ])),
+    });
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
     *adapter.active_reverse.lock().await = Some(ActiveReverseOwnership {
+        epoch: uuid::Uuid::new_v4(),
         serial: "DEVICE-A".into(),
         profile_id: "profile-a".into(),
         ports: vec![31_627],
     });
 
-    let error = adapter
+    let selected = adapter
         .adb_select("DEVICE-B".into())
         .await
-        .expect_err("活动映射期间不能切换设备");
+        .expect("选择设备只改变编辑上下文");
 
-    assert_eq!(error.view_model.code, "ANDROID_DEVICE_SWITCH_REQUIRES_STOP");
-    assert!(runner.calls.lock().unwrap().is_empty());
+    assert_eq!(selected.selected_serial.as_deref(), Some("DEVICE-B"));
+    assert_eq!(
+        adapter.active_reverse.lock().await.as_ref().unwrap().serial,
+        "DEVICE-A"
+    );
 }

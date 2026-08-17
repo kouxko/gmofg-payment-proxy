@@ -73,6 +73,21 @@ impl Application {
 
     pub(super) async fn app_shutdown_inner(&self) -> AppResult<ProxyStatusViewModel> {
         let mut listener_cleanup_errors = Vec::new();
+        match self.android.runtime_owner().await {
+            Ok(Some(owner)) => {
+                if let Err(error) = self.android.network_stop().await {
+                    listener_cleanup_errors.push(format!(
+                        "Android 运行设备 {} 停止失败 [{}] {}",
+                        owner.serial, error.view_model.code, error.view_model.message
+                    ));
+                }
+            }
+            Ok(None) => {}
+            Err(error) => listener_cleanup_errors.push(format!(
+                "Android 运行设备读取失败 [{}] {}",
+                error.view_model.code, error.view_model.message
+            )),
+        }
         match self.listener_runtime.statuses().await {
             Ok(statuses) => {
                 for status in statuses {
@@ -138,12 +153,12 @@ impl Application {
             match legacy_result {
                 Ok(_) => Err(AppError::new(
                     "APP_SHUTDOWN_FAILED",
-                    format!("动态代理入口清理失败：{listener_detail}。"),
+                    format!("退出资源清理失败：{listener_detail}。"),
                 )),
                 Err(error) => Err(AppError::new(
                     "APP_SHUTDOWN_FAILED",
                     format!(
-                        "动态代理入口清理失败：{listener_detail}；其他退出清理失败 [{}] {}。",
+                        "退出资源清理失败：{listener_detail}；其他退出清理失败 [{}] {}。",
                         error.view_model.code, error.view_model.message
                     ),
                 )),

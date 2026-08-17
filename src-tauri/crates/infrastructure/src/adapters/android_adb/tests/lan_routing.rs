@@ -26,7 +26,7 @@ async fn same_subnet_listener_uses_lan_without_creating_reverse() {
     let activation = test_activation("lan-profile", "203.0.113.10", ListenerId::new(), 16_127);
 
     let prepared = adapter
-        .prepare_usb_proxy_runtime(&activation)
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Start)
         .await
         .unwrap();
 

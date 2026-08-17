@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::InfrastructureError;
 
-const LATEST_SCHEMA_VERSION: i64 = 7;
+const LATEST_SCHEMA_VERSION: i64 = 9;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredSettings {
@@ -95,99 +95,28 @@ pub struct SqliteStore {
     connection: Mutex<Connection>,
     capture_coordination: socket_capture_coordination::SocketCaptureCoordination,
 }
+
+#[cfg(test)]
+impl SqliteStore {
+    pub(crate) fn execute_test_batch(&self, sql: &str) -> Result<(), InfrastructureError> {
+        self.connection
+            .lock()
+            .execute_batch(sql)
+            .map_err(|source| InfrastructureError::Database { source })
+    }
+}
+mod android_runtime_owner;
 mod core;
+pub use android_runtime_owner::AndroidRuntimeOwnerRecord;
 mod portable_configuration;
 pub(crate) mod protocol_packages;
 mod rules_and_certificates;
+mod schema;
 pub(crate) mod socket_capture_coordination;
 pub(crate) mod socket_captures;
 mod workspaces;
 
-fn create_schema(transaction: &Transaction<'_>) -> Result<(), InfrastructureError> {
-    transaction
-        .execute_batch(
-            "
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                version INTEGER PRIMARY KEY,
-                applied_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS settings (
-                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                revision INTEGER NOT NULL,
-                json TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS rules (
-                id TEXT PRIMARY KEY,
-                revision INTEGER NOT NULL,
-                enabled INTEGER NOT NULL,
-                json TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS rule_state (
-                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                revision INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS certificate_material (
-                kind TEXT PRIMARY KEY,
-                protected_blob BLOB NOT NULL,
-                metadata_json TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS certificate_state (
-                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                revision INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS workspaces (
-                id TEXT PRIMARY KEY,
-                revision INTEGER NOT NULL,
-                json TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS workspace_state (
-                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                selected_id TEXT NULL,
-                FOREIGN KEY(selected_id) REFERENCES workspaces(id) ON DELETE SET NULL
-            );
-            CREATE TABLE IF NOT EXISTS protected_secrets (
-                provider TEXT NOT NULL,
-                secret_key TEXT NOT NULL,
-                protected_blob BLOB NOT NULL,
-                updated_at TEXT NOT NULL,
-                PRIMARY KEY(provider, secret_key)
-            );
-            CREATE TABLE IF NOT EXISTS protocol_packages (
-                package_id TEXT NOT NULL,
-                version TEXT NOT NULL,
-                name TEXT NOT NULL,
-                host_api INTEGER NOT NULL,
-                enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
-                validation_state TEXT NOT NULL,
-                validation_error_code TEXT NULL,
-                installed_at TEXT NOT NULL,
-                generation TEXT NOT NULL,
-                PRIMARY KEY(package_id, version),
-                CHECK(validation_state IN ('valid', 'invalid')),
-                CHECK(
-                    (validation_state = 'valid' AND validation_error_code IS NULL)
-                    OR
-                    (validation_state = 'invalid' AND validation_error_code IS NOT NULL)
-                )
-            );
-            CREATE TABLE IF NOT EXISTS protocol_package_files (
-                package_id TEXT NOT NULL,
-                version TEXT NOT NULL,
-                path TEXT NOT NULL,
-                contents BLOB NOT NULL,
-                PRIMARY KEY(package_id, version, path),
-                FOREIGN KEY(package_id, version)
-                    REFERENCES protocol_packages(package_id, version)
-                    ON DELETE CASCADE
-            );
-            ",
-        )
-        .map_err(|source| InfrastructureError::DatabaseMigration { source })
-}
+use schema::create_schema;
 
 fn stored_certificate_revision(transaction: &Transaction<'_>) -> Result<u64, InfrastructureError> {
     let mut statement = transaction

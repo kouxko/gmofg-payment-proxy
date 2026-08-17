@@ -2,8 +2,8 @@ use async_trait::async_trait;
 
 use crate::{
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidDeviceViewModel,
-    AndroidNetworkActivation, AndroidNetworkStatusViewModel, AndroidPackageViewModel, AppError,
-    AppResult,
+    AndroidNetworkActivation, AndroidNetworkStatusViewModel, AndroidPackageViewModel,
+    AndroidRuntimeOwnerViewModel, AppError, AppResult,
 };
 
 #[async_trait]
@@ -31,6 +31,9 @@ pub trait AndroidControlPort: Send + Sync + std::fmt::Debug {
     async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel>;
     async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel>;
     async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel>;
+    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -95,5 +98,8 @@ impl AndroidControlPort for UnavailableAndroidControlPort {
     }
     async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         Self::unavailable()
+    }
+    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
+        Ok(None)
     }
 }

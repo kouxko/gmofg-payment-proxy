@@ -29,16 +29,18 @@ impl AndroidAdbAdapter {
     ///
     /// 这是优雅 stop 控制协议失效时的安全兜底：进程退出会关闭 TUN 文件描述符，
     /// 因而目标应用恢复系统网络。ADB reverse 的桌面端所有权由调用者随后统一清理。
-    pub(super) async fn force_stop_companion(&self) -> AppResult<AndroidNetworkStatusViewModel> {
-        let serial = self.selected_serial()?;
+    pub(super) async fn force_stop_companion(
+        &self,
+        serial: &str,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         self.run_for_serial(
-            &serial,
+            serial,
             &["shell", "am", "force-stop", ANDROID_COMPANION_PACKAGE],
             COMMAND_TIMEOUT,
         )
         .await?;
         Ok(AndroidNetworkStatusViewModel {
-            serial,
+            serial: serial.to_owned(),
             state: AndroidNetworkState::Stopped,
             state_text: "已停止".into(),
             ui_tone: UiTone::Neutral,
@@ -57,14 +59,14 @@ impl AndroidAdbAdapter {
 
     pub(super) async fn protocol_request(
         &self,
+        serial: &str,
         operation: &str,
         payload: Value,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
-        let serial = self.selected_serial()?;
         let request = AndroidControlRequest::new(operation, payload)?;
         let port = reserve_loopback_port()?;
         self.run_forward_for_serial(
-            &serial,
+            serial,
             &[
                 "forward",
                 &format!("tcp:{port}"),
@@ -72,14 +74,14 @@ impl AndroidAdbAdapter {
             ],
         )
         .await?;
-        let response_serial = serial.clone();
+        let response_serial = serial.to_owned();
         let result = self.exchange_frame(port, request).await.map(|mut status| {
             // ADB serial 属于桌面选择上下文，只能在协议校验完成后补回。
             status.serial = response_serial;
             status
         });
         let cleanup = self
-            .run_forward_for_serial(&serial, &["forward", "--remove", &format!("tcp:{port}")])
+            .run_forward_for_serial(serial, &["forward", "--remove", &format!("tcp:{port}")])
             .await;
         reconcile_forward_cleanup(result, cleanup)
     }
@@ -181,10 +183,9 @@ impl AndroidAdbAdapter {
     }
 
     /// Activity 只负责唤醒 Companion 进程；最终成功仍由版本化控制协议证明。
-    pub(super) async fn wake_control_server(&self) -> AppResult<()> {
-        let serial = self.selected_serial()?;
+    pub(super) async fn wake_control_server(&self, serial: &str) -> AppResult<()> {
         self.run_for_serial(
-            &serial,
+            serial,
             &[
                 "shell",
                 "am",
@@ -203,15 +204,18 @@ impl AndroidAdbAdapter {
 
     pub(super) async fn protocol_request_after_wake(
         &self,
+        serial: &str,
         operation: &str,
         payload: Value,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
-        let _wake_result = self.wake_control_server().await;
+        let _wake_result = self.wake_control_server(serial).await;
         for attempt in 0..3 {
             if attempt > 0 {
                 tokio::time::sleep(Duration::from_millis(150 * attempt)).await;
             }
-            let result = self.protocol_request(operation, payload.clone()).await;
+            let result = self
+                .protocol_request(serial, operation, payload.clone())
+                .await;
             if !(attempt < 2 && result.as_ref().is_err_and(is_socket_unavailable)) {
                 return result;
             }
@@ -235,7 +239,9 @@ impl AndroidAdbAdapter {
             if attempt > 0 {
                 tokio::time::sleep(ACTIVATION_STATUS_INTERVAL).await;
             }
-            let status = self.protocol_request("status", json!({})).await?;
+            let status = self
+                .protocol_request(&runtime.serial, "status", json!({}))
+                .await?;
             match classify_activation_status(runtime, &status) {
                 ActivationObservation::Confirmed => return Ok(status),
                 ActivationObservation::Faulted => return Err(activation_failed_error(&status)),

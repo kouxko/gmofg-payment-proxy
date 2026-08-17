@@ -178,6 +178,7 @@ impl ApplicationHostBuilder {
             .secret_protector_override
             .unwrap_or_else(|| platform_secret_protector(self.product.storage()));
         let capacity = Arc::new(CapacityLedger::default());
+        let android_store = Arc::clone(&store);
         let services = InfrastructureServiceBundle::new(
             store,
             secret_protector,
@@ -211,7 +212,10 @@ impl ApplicationHostBuilder {
             // 永远停止的兼容适配器，保证任何遗漏调用都不能偷偷启动第二套监听器。
             Arc::new(RetiredProxyAdapter::new(stored_settings))
         });
-        let android = Arc::new(AndroidAdbAdapter::new(self.android_companion_apk));
+        let android = Arc::new(AndroidAdbAdapter::new(
+            self.android_companion_apk,
+            android_store,
+        )?);
         let protocol_packages = ProtocolPackageApplicationServices {
             store: services.protocol_packages.clone(),
             compiler: services.protocol_packages.clone(),

@@ -1,4 +1,13 @@
+use super::super::runtime::SystemDeviceLanAddressProvider;
 use super::super::*;
+
+#[test]
+fn system_lan_provider_rejects_loopback_route() {
+    assert_eq!(
+        SystemDeviceLanAddressProvider.local_ipv4_for(std::net::Ipv4Addr::LOCALHOST),
+        None
+    );
+}
 
 #[tokio::test]
 async fn usb_runtime_creates_reverse_and_keeps_endpoint_out_of_profile() {
@@ -38,7 +47,7 @@ async fn usb_runtime_creates_reverse_and_keeps_endpoint_out_of_profile() {
     };
 
     let prepared = adapter
-        .prepare_usb_proxy_runtime(&activation)
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Start)
         .await
         .unwrap();
     let runtime = prepared.payload;
@@ -108,7 +117,7 @@ async fn normalized_route_fingerprint_changes_when_runtime_endpoint_changes() {
     };
 
     let prepared = adapter
-        .prepare_usb_proxy_runtime(&activation)
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Start)
         .await
         .unwrap();
     let runtime = prepared.payload;
@@ -134,7 +143,7 @@ async fn destination_resolution_failure_does_not_create_reverse_mapping() {
     );
 
     let error = adapter
-        .prepare_usb_proxy_runtime(&activation)
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Start)
         .await
         .expect_err("非法域名必须解析失败");
 
@@ -171,7 +180,7 @@ async fn reverse_creation_failure_keeps_active_mapping_and_runtime() {
     let activation = test_activation("profile-new", "203.0.113.10", ListenerId::new(), 8_443);
 
     let error = adapter
-        .prepare_usb_proxy_runtime(&activation)
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Start)
         .await
         .expect_err("staged reverse creation must fail");
 

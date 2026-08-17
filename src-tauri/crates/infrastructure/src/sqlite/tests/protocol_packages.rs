@@ -68,10 +68,10 @@ fn failed_protocol_schema_migration_rolls_back_new_tables_and_version_record() {
             .execute_batch(
                 "DROP TABLE protocol_package_files;
                  DROP TABLE protocol_packages;
-                 DELETE FROM schema_migrations WHERE version = 7;
+                 DELETE FROM schema_migrations WHERE version = 9;
                  CREATE TRIGGER reject_protocol_migration
                  BEFORE INSERT ON schema_migrations
-                 WHEN NEW.version = 7
+                 WHEN NEW.version = 9
                  BEGIN SELECT RAISE(ABORT, 'reject protocol migration'); END;",
             )
             .unwrap();
@@ -88,7 +88,7 @@ fn failed_protocol_schema_migration_rolls_back_new_tables_and_version_record() {
         .connection
         .lock()
         .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 7",
+            "SELECT COUNT(*) FROM schema_migrations WHERE version = 9",
             [],
             |row| row.get(0),
         )
@@ -243,7 +243,7 @@ fn corrupted_file_aggregates_are_rejected_before_blob_loading() {
     );
 }
 
-fn assert_protocol_tables_and_version(store: &SqliteStore, expected_v7_rows: i64) {
+fn assert_protocol_tables_and_version(store: &SqliteStore, expected_latest_rows: i64) {
     let tables = store.table_names().unwrap();
     assert!(tables.contains(&"protocol_packages".to_owned()));
     assert!(tables.contains(&"protocol_package_files".to_owned()));
@@ -251,10 +251,10 @@ fn assert_protocol_tables_and_version(store: &SqliteStore, expected_v7_rows: i64
         .connection
         .lock()
         .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 7",
+            "SELECT COUNT(*) FROM schema_migrations WHERE version = 9",
             [],
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(version, expected_v7_rows);
+    assert_eq!(version, expected_latest_rows);
 }

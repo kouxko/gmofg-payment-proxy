@@ -8,13 +8,15 @@ use async_trait::async_trait;
 use intercept_proxy_application::{
     ANDROID_COMPANION_PACKAGE, AndroidAdbViewModel, AndroidCompanionInstallViewModel,
     AndroidControlPort, AndroidDeviceState, AndroidDeviceViewModel, AndroidNetworkActivation,
-    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AppError, AppResult,
+    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidRuntimeOwnerSource,
+    AndroidRuntimeOwnerState, AndroidRuntimeOwnerViewModel, AppError, AppResult,
 };
 use serde_json::json;
 use tokio::sync::Mutex;
 
 mod command;
 mod fingerprint;
+mod owner;
 mod protocol;
 mod reverse;
 mod runtime;
@@ -23,14 +25,15 @@ mod status;
 use command::{AdbCommandRunner, parse_devices, parse_package_version, parse_packages};
 use fingerprint::sha256_json;
 use protocol::is_socket_unavailable;
-use reverse::{combine_operation_and_cleanup, combine_stop_failures, reverse_mapping_present};
+use reverse::{combine_stop_failures, reverse_mapping_present};
 use runtime::{
     ActiveReverseOwnership, ActiveRuntimeFacts, DeviceLanAddressProvider, PreparedUsbProxyRuntime,
     ReverseCleanupOutcome,
 };
 use status::{
     adb_view_model, companion_install_view_model, consent_opened_status,
-    control_unavailable_status, normalize_packages,
+    control_unavailable_status, no_runtime_owner_status, normalize_packages,
+    owner_disconnected_status,
 };
 
 #[cfg(test)]
@@ -38,7 +41,10 @@ use command::{AdbOutput, bundled_companion_apk_candidates};
 #[cfg(test)]
 use fingerprint::canonical_json;
 #[cfg(test)]
-use intercept_proxy_application::{AndroidControlTransport, AndroidNetworkState};
+use intercept_proxy_application::{
+    AndroidControlTransport, AndroidNetworkState, AndroidRuntimeOwnerMode,
+    AndroidRuntimeOwnerTransitionReason,
+};
 #[cfg(test)]
 use protocol::{ActivationObservation, classify_activation_status, reconcile_forward_cleanup};
 #[cfg(test)]
@@ -57,6 +63,9 @@ pub struct AndroidAdbAdapter {
     network_operation: Mutex<()>,
     active_reverse: Mutex<Option<ActiveReverseOwnership>>,
     active_runtime: Mutex<Option<ActiveRuntimeFacts>>,
+    runtime_owner: Mutex<Option<AndroidRuntimeOwnerViewModel>>,
+    runtime_resume_state: Mutex<Option<AndroidRuntimeOwnerState>>,
+    runtime_store: Arc<crate::SqliteStore>,
     runner: Arc<dyn AdbCommandRunner>,
     lan_address: Arc<dyn DeviceLanAddressProvider>,
 }
@@ -89,18 +98,6 @@ impl AndroidControlPort for AndroidAdbAdapter {
 
     async fn adb_select(&self, serial: String) -> AppResult<AndroidAdbViewModel> {
         let _operation = self.network_operation.lock().await;
-        if let Some(ownership) = self.active_reverse.lock().await.as_ref()
-            && ownership.serial != serial
-        {
-            return Err(AppError::new(
-                "ANDROID_DEVICE_SWITCH_REQUIRES_STOP",
-                format!(
-                    "设备 {} 的方案 {} 仍持有透明代理转发；切换设备前必须先停止设备网络接管。",
-                    ownership.serial, ownership.profile_id
-                ),
-            )
-            .retryable("请先停止当前设备网络方案，再选择其他设备。"));
-        }
         let devices = self.device_list().await?;
         let device = devices
             .iter()
@@ -217,13 +214,20 @@ impl AndroidControlPort for AndroidAdbAdapter {
         activation: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         let _operation = self.network_operation.lock().await;
-        let prepared = self.prepare_usb_proxy_runtime(&activation).await?;
+        let prepared = self
+            .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Start)
+            .await?;
+        let serial = prepared.runtime.serial.clone();
         let payload =
             json!({"profile": activation.profile, "proxy_runtime": prepared.payload.clone()});
-        let accepted = match self.protocol_request("start", payload.clone()).await {
+        let accepted = match self
+            .protocol_request(&serial, "start", payload.clone())
+            .await
+        {
             Ok(status) => Ok(status),
             Err(error) if is_socket_unavailable(&error) => {
-                self.protocol_request_after_wake("start", payload).await
+                self.protocol_request_after_wake(&serial, "start", payload)
+                    .await
             }
             Err(error) => Err(error),
         };
@@ -256,13 +260,20 @@ impl AndroidControlPort for AndroidAdbAdapter {
         activation: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         let _operation = self.network_operation.lock().await;
-        let prepared = self.prepare_usb_proxy_runtime(&activation).await?;
+        let prepared = self
+            .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Apply)
+            .await?;
+        let serial = prepared.runtime.serial.clone();
         let payload =
             json!({"profile": activation.profile, "proxy_runtime": prepared.payload.clone()});
-        let accepted = match self.protocol_request("apply", payload.clone()).await {
+        let accepted = match self
+            .protocol_request(&serial, "apply", payload.clone())
+            .await
+        {
             Ok(status) => Ok(status),
             Err(error) if is_socket_unavailable(&error) => {
-                self.protocol_request_after_wake("apply", payload).await
+                self.protocol_request_after_wake(&serial, "apply", payload)
+                    .await
             }
             Err(error) => Err(error),
         };
@@ -293,7 +304,8 @@ impl AndroidControlPort for AndroidAdbAdapter {
         activation: &AndroidNetworkActivation,
         status: &AndroidNetworkStatusViewModel,
     ) -> AppResult<bool> {
-        let serial = self.selected_serial()?;
+        let owner = self.required_runtime_owner().await?;
+        let serial = owner.serial;
         let active_runtime = self.active_runtime.lock().await.clone();
         let Some(active_runtime) = active_runtime.filter(|runtime| {
             runtime.serial == serial && runtime.profile_id == activation.profile.id
@@ -332,46 +344,83 @@ impl AndroidControlPort for AndroidAdbAdapter {
 
     async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         let _operation = self.network_operation.lock().await;
-        let graceful = match self.protocol_request("stop", json!({})).await {
+        let Some(owner) = self.runtime_owner_snapshot().await else {
+            return Ok(no_runtime_owner_status());
+        };
+        let graceful = match self
+            .protocol_request(&owner.serial, "stop", json!({}))
+            .await
+        {
             Ok(status) => Ok(status),
             Err(error) if is_socket_unavailable(&error) => {
-                self.protocol_request_after_wake("stop", json!({})).await
+                self.protocol_request_after_wake(&owner.serial, "stop", json!({}))
+                    .await
             }
             Err(error) => Err(error),
         };
         let result = match graceful {
             Ok(status) => Ok(status),
-            Err(graceful_error) => match self.force_stop_companion().await {
+            Err(graceful_error) => match self.force_stop_companion(&owner.serial).await {
                 Ok(status) => Ok(status),
                 Err(force_error) => Err(combine_stop_failures(graceful_error, &force_error)),
             },
         };
-        let cleanup = self.clear_active_reverse_ports().await;
-        match result {
-            Ok(status) => cleanup.map(|()| status),
-            Err(error) => Err(cleanup.err().map_or(error.clone(), |cleanup_error| {
-                combine_operation_and_cleanup(error, &cleanup_error)
-            })),
+        let combined = match result {
+            Ok(status) => self.cleanup_owner_reverse(&owner).await.map(|()| status),
+            Err(error) => Err(error),
+        };
+        match combined {
+            Ok(status) => {
+                self.clear_owner_if_epoch(owner.epoch).await?;
+                Ok(status)
+            }
+            Err(error) => {
+                self.mark_owner_stop_failed(owner.epoch, error.view_model.message.clone())
+                    .await?;
+                Err(error)
+            }
         }
     }
 
     async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         let _operation = self.network_operation.lock().await;
-        let force_stop = self.force_stop_companion().await;
-        let cleanup = self.clear_active_reverse_ports().await;
-        match force_stop {
-            Ok(status) => cleanup.map(|()| status),
-            Err(error) => Err(cleanup.err().map_or(error.clone(), |cleanup_error| {
-                combine_operation_and_cleanup(error, &cleanup_error)
-            })),
+        let Some(owner) = self.runtime_owner_snapshot().await else {
+            return Ok(no_runtime_owner_status());
+        };
+        let force_stop = self.force_stop_companion(&owner.serial).await;
+        let combined = match force_stop {
+            Ok(status) => self.cleanup_owner_reverse(&owner).await.map(|()| status),
+            Err(error) => Err(error),
+        };
+        match combined {
+            Ok(status) => {
+                self.clear_owner_if_epoch(owner.epoch).await?;
+                Ok(status)
+            }
+            Err(error) => {
+                self.mark_owner_stop_failed(owner.epoch, error.view_model.message.clone())
+                    .await?;
+                Err(error)
+            }
         }
     }
 
     async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
-        match self.protocol_request("status", json!({})).await {
-            Ok(status) => Ok(status),
+        let _operation = self.network_operation.lock().await;
+        let Some(owner) = self.runtime_owner_snapshot().await else {
+            return Ok(no_runtime_owner_status());
+        };
+        match self
+            .protocol_request(&owner.serial, "status", json!({}))
+            .await
+        {
+            Ok(status) => {
+                self.mark_owner_reconnected(owner.epoch, Some(status.state))
+                    .await?;
+                Ok(status)
+            }
             Err(error) if is_socket_unavailable(&error) => {
-                let serial = self.selected_serial()?;
+                let serial = owner.serial;
                 let output = self
                     .run_for_serial(
                         &serial,
@@ -379,14 +428,43 @@ impl AndroidControlPort for AndroidAdbAdapter {
                         COMMAND_TIMEOUT,
                     )
                     .await;
-                let running = output
-                    .as_ref()
-                    .is_ok_and(|output| !output.stdout.trim().is_empty());
-                Ok(control_unavailable_status(serial, running))
+                match output {
+                    Ok(output) => {
+                        self.mark_owner_reconnected(owner.epoch, None).await?;
+                        Ok(control_unavailable_status(
+                            serial,
+                            !output.stdout.trim().is_empty(),
+                        ))
+                    }
+                    Err(error) if is_owner_unreachable(&error) => {
+                        self.mark_owner_waiting_reconnect(owner.epoch).await?;
+                        Ok(owner_disconnected_status(serial))
+                    }
+                    Err(error) => Err(error),
+                }
+            }
+            Err(error) if is_owner_unreachable(&error) => {
+                self.mark_owner_waiting_reconnect(owner.epoch).await?;
+                Ok(owner_disconnected_status(owner.serial))
             }
             Err(error) => Err(error),
         }
     }
+
+    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
+        Ok(self.runtime_owner_snapshot().await)
+    }
+}
+
+fn is_owner_unreachable(error: &AppError) -> bool {
+    matches!(
+        error.view_model.code.as_str(),
+        "ANDROID_ADB_NOT_FOUND"
+            | "ANDROID_ADB_TIMEOUT"
+            | "ANDROID_ADB_EXEC_FAILED"
+            | "ANDROID_ADB_COMMAND_FAILED"
+            | "ANDROID_ADB_SELECTED_TRANSPORT_STALE"
+    )
 }
 
 #[cfg(test)]

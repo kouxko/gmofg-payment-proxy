@@ -93,3 +93,41 @@ pub(super) fn control_unavailable_status(
         stats: None,
     }
 }
+
+pub(super) fn no_runtime_owner_status() -> AndroidNetworkStatusViewModel {
+    AndroidNetworkStatusViewModel {
+        serial: String::new(),
+        state: AndroidNetworkState::Stopped,
+        state_text: "已停止".into(),
+        ui_tone: UiTone::Neutral,
+        verified: true,
+        transport: AndroidControlTransport::Unavailable,
+        active_profile_id: None,
+        active_profile_fingerprint: None,
+        active_route_fingerprint: None,
+        active_route_count: 0,
+        companion_process_running: None,
+        message: "当前没有登记中的设备网络运行态。".into(),
+        unsupported_fields: Vec::new(),
+        stats: None,
+    }
+}
+
+pub(super) fn owner_disconnected_status(serial: String) -> AndroidNetworkStatusViewModel {
+    AndroidNetworkStatusViewModel {
+        serial,
+        state: AndroidNetworkState::Unknown,
+        state_text: "等待设备重连".into(),
+        ui_tone: UiTone::Warning,
+        verified: false,
+        transport: AndroidControlTransport::Unavailable,
+        active_profile_id: None,
+        active_profile_fingerprint: None,
+        active_route_fingerprint: None,
+        active_route_count: 0,
+        companion_process_running: None,
+        message: "运行设备当前不可达；已保留设备所有权和代理端口，重连后可继续查询或停止。".into(),
+        unsupported_fields: fallback_unsupported_fields(),
+        stats: None,
+    }
+}

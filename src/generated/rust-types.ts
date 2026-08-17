@@ -36,6 +36,16 @@ export const commands = {
 	deviceNetworkStop: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_stop")),
 	deviceNetworkEmergencyRestore: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_emergency_restore")),
 	deviceNetworkStatus: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_status")),
+	deviceNetworkRuntimeOwner: () => typedError<{
+	serial: string,
+	epoch: string,
+	mode: AndroidRuntimeOwnerMode,
+	profile_id: string,
+	state: AndroidRuntimeOwnerState,
+	source: AndroidRuntimeOwnerSource,
+	transition_reason: AndroidRuntimeOwnerTransitionReason,
+	updated_at: string,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("device_network_runtime_owner")),
 	workspaceList: () => typedError<WorkspaceSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("workspace_list")),
 	workspaceGet: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_get", { workspaceId })),
 	workspaceComponentNew: (workspace: ProxyWorkspace, kind: string) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_component_new", { workspace, kind })),
@@ -286,6 +296,29 @@ export type AndroidProxyRoute = {
 	destination: string,
 	ports: number[],
 	listener_id: ListenerId,
+};
+
+/**
+ *  Android 网络运行态的实际设备所有者。
+ *  它与 UI 当前选择的设备完全独立；停止、状态查询和恢复只能以这里记录的 serial 为目标。
+ */
+export type AndroidRuntimeOwnerMode = "device_only" | "lan" | "adb_reverse";
+
+export type AndroidRuntimeOwnerSource = "start" | "apply" | "recovery";
+
+export type AndroidRuntimeOwnerState = "active" | "uncertain" | "waiting_reconnect" | "cleanup_required" | "stop_failed";
+
+export type AndroidRuntimeOwnerTransitionReason = "activation_confirmed" | "activation_uncertain" | "reverse_preparation" | "reverse_cleanup_required" | "device_disconnected" | "device_reconnected" | "stop_failed" | "recovered_from_storage";
+
+export type AndroidRuntimeOwnerViewModel = {
+	serial: string,
+	epoch: string,
+	mode: AndroidRuntimeOwnerMode,
+	profile_id: string,
+	state: AndroidRuntimeOwnerState,
+	source: AndroidRuntimeOwnerSource,
+	transition_reason: AndroidRuntimeOwnerTransitionReason,
+	updated_at: string,
 };
 
 /**

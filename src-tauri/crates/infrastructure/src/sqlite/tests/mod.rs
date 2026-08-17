@@ -4,6 +4,7 @@ use serde_json::json;
 
 use super::*;
 
+mod android_runtime_owner;
 mod corruption_and_certificates;
 mod protocol_packages;
 mod rules;
