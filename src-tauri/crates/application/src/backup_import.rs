@@ -169,6 +169,15 @@ pub struct ApplicationBackupImportPreview {
     pub warnings: Vec<String>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
+pub struct ApplicationBackupImportCommitOutcome {
+    pub workspace_count: usize,
+    pub protocol_package_count: usize,
+    pub enabled_protocol_package_count: usize,
+    pub portable_material_count: usize,
+    pub requires_restart: bool,
+}
+
 #[async_trait]
 pub trait ApplicationBackupImportPreparePort: Send + Sync + fmt::Debug {
     async fn read(&self, bytes: Vec<u8>) -> AppResult<ApplicationBackupImportCandidate>;
@@ -179,4 +188,9 @@ pub trait ApplicationBackupImportPreparePort: Send + Sync + fmt::Debug {
     ) -> AppResult<(ApplicationBackupImportToken, Duration)>;
 
     async fn discard(&self, token: ApplicationBackupImportToken) -> AppResult<()>;
+
+    async fn take(
+        &self,
+        token: ApplicationBackupImportToken,
+    ) -> AppResult<PreparedApplicationBackup>;
 }

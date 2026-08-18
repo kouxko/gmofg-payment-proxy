@@ -195,7 +195,6 @@ impl ProtocolPackageStorePort for UnavailableProtocolPackageServices {
     async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
         unavailable_protocol_packages()
     }
-
 }
 
 #[async_trait]

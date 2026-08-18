@@ -11,11 +11,20 @@ mod socket_portability;
 #[derive(Debug, Default)]
 struct RecordingConfigurationStore {
     document: parking_lot::Mutex<Option<ApplicationConfigurationDocument>>,
+    replace_calls: AtomicUsize,
+    fail_replace: AtomicBool,
 }
 
 #[async_trait]
 impl ApplicationConfigurationStorePort for RecordingConfigurationStore {
     async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
+        self.replace_calls.fetch_add(1, Ordering::SeqCst);
+        if self.fail_replace.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                "ATOMIC_COMMIT_FAILED",
+                "测试注入：原子替换失败。",
+            ));
+        }
         *self.document.lock() = Some(document);
         Ok(())
     }

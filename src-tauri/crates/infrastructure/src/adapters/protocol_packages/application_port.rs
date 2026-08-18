@@ -5,12 +5,11 @@
 use async_trait::async_trait;
 use intercept_proxy_application::{
     AppError, AppErrorDiagnosticViewModel, AppResult, ProtocolPackageCapabilitiesViewModel,
-    ProtocolPackageCompilationReceipt,
-    ProtocolPackageCompilerPort, ProtocolPackageDescriptionViewModel,
-    ProtocolPackageDirectionCapabilitiesViewModel, ProtocolPackageSchemaFieldTypeViewModel,
-    ProtocolPackageSchemaFieldViewModel, ProtocolPackageSchemaViewModel, ProtocolPackageStorePort,
-    ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
-    is_builtin_protocol_package,
+    ProtocolPackageCompilationReceipt, ProtocolPackageCompilerPort,
+    ProtocolPackageDescriptionViewModel, ProtocolPackageDirectionCapabilitiesViewModel,
+    ProtocolPackageSchemaFieldTypeViewModel, ProtocolPackageSchemaFieldViewModel,
+    ProtocolPackageSchemaViewModel, ProtocolPackageStorePort, ProtocolPackageValidationViewModel,
+    ProtocolPackageVersionViewModel, is_builtin_protocol_package,
 };
 use intercept_proxy_protocol_scripting::CompiledProtocolPackage;
 
@@ -46,7 +45,6 @@ impl ProtocolPackageStorePort for ProtocolPackageRepositoryAdapter {
         ProtocolPackageRepositoryAdapter::delete(self, package)
             .map_err(|error| protocol_package_app_error(&error))
     }
-
 }
 
 #[async_trait]

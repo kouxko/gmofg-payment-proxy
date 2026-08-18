@@ -144,7 +144,6 @@ impl ProtocolPackageStorePort for FakeProtocolPackagePortability {
     async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
         Err(AppError::new("TEST_READ_ONLY", "测试替身只读。"))
     }
-
 }
 
 #[async_trait]

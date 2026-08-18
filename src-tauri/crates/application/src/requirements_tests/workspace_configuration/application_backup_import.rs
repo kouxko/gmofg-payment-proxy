@@ -6,48 +6,9 @@ use super::protocol_package_portability::{
     description, package, portable_package, scripted_workspace,
 };
 use super::*;
-#[derive(Debug)]
-struct FakeBackupPrepareSource {
-    candidate: ApplicationBackupImportCandidate,
-    retain_calls: AtomicUsize,
-    discard_calls: AtomicUsize,
-    retained: parking_lot::Mutex<Vec<PreparedApplicationBackup>>,
-}
-
-impl FakeBackupPrepareSource {
-    fn new(candidate: ApplicationBackupImportCandidate) -> Self {
-        Self {
-            candidate,
-            retain_calls: AtomicUsize::new(0),
-            discard_calls: AtomicUsize::new(0),
-            retained: parking_lot::Mutex::new(Vec::new()),
-        }
-    }
-}
-
-#[async_trait]
-impl ApplicationBackupImportPreparePort for FakeBackupPrepareSource {
-    async fn read(&self, _: Vec<u8>) -> AppResult<ApplicationBackupImportCandidate> {
-        Ok(self.candidate.clone())
-    }
-
-    async fn retain(
-        &self,
-        prepared: PreparedApplicationBackup,
-    ) -> AppResult<(ApplicationBackupImportToken, Duration)> {
-        self.retain_calls.fetch_add(1, Ordering::SeqCst);
-        self.retained.lock().push(prepared);
-        Ok((
-            ApplicationBackupImportToken::from_uuid(uuid::Uuid::from_u128(77)),
-            Duration::from_mins(5),
-        ))
-    }
-
-    async fn discard(&self, _: ApplicationBackupImportToken) -> AppResult<()> {
-        self.discard_calls.fetch_add(1, Ordering::SeqCst);
-        Ok(())
-    }
-}
+mod commit;
+mod source;
+use source::FakeBackupPrepareSource;
 
 #[tokio::test]
 async fn discard_facade_releases_the_exact_preview_token_without_authoritative_writes() {

@@ -216,7 +216,7 @@ impl Application {
         Ok((source_version, document))
     }
 
-    async fn workspaces_before_replacement(&self) -> AppResult<Vec<ProxyWorkspace>> {
+    pub(super) async fn workspaces_before_replacement(&self) -> AppResult<Vec<ProxyWorkspace>> {
         let mut has_android_network_profiles = false;
         let mut old_workspaces = Vec::new();
         for summary in self.workspaces.list().await? {
@@ -233,7 +233,7 @@ impl Application {
         Ok(old_workspaces)
     }
 
-    async fn restore_and_replace_configuration(
+    pub(super) async fn restore_and_replace_configuration(
         &self,
         source_version: u16,
         mut document: ApplicationConfigurationDocument,
