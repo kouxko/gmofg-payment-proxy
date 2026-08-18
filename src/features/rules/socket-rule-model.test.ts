@@ -153,6 +153,7 @@ describe("Socket rule model", () => {
     expect(newSocketRuleDraft(listener("relay"), "upstream", catalog)).toEqual({
       rule_id: null,
       expected_revision: null,
+      name: "新规则",
       enabled: true,
       priority: 100,
       listener_id: "relay",
@@ -168,6 +169,7 @@ describe("Socket rule model", () => {
     const draft = draftFromRule({
       rule_id: "rule-1",
       revision: 9,
+      name: "现有规则",
       enabled: false,
       priority: 20,
       created_order: 3,
@@ -234,7 +236,7 @@ describe("Socket rule model", () => {
 
   it("accepts a complete rule response shape", () => {
     expect(isSocketRuleDefinition({
-      rule_id: "rule-1", revision: 1, enabled: true, priority: 10, created_order: 1,
+      rule_id: "rule-1", revision: 1, name: "金额规则", enabled: true, priority: 10, created_order: 1,
       listener_id: "relay", package: packageRef, schema_version: 7, direction: "upstream",
       conditions: [{ operator: "equals", field: "amount", value: { type: "int", value: 100 } }],
       actions: [{ type: "set_field", field: "approved", value: { type: "bool", value: true } }],
@@ -260,7 +262,7 @@ describe("Socket rule model", () => {
 
   it("requires toggle responses to change only enabled and revision", () => {
     const before = {
-      rule_id: "rule-1", revision: 3, enabled: true, priority: 10, created_order: 4,
+      rule_id: "rule-1", revision: 3, name: "启停规则", enabled: true, priority: 10, created_order: 4,
       listener_id: "relay", package: packageRef, schema_version: 7, direction: "upstream" as const,
       conditions: [], actions: [{ type: "record_match" as const }],
     };

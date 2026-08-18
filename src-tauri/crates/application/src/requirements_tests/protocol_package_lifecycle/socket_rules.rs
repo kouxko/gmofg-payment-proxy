@@ -35,6 +35,7 @@ fn input(
     SocketRuleSaveInput {
         rule_id: None,
         expected_revision: None,
+        name: "测试规则".into(),
         enabled: true,
         priority,
         listener_id,

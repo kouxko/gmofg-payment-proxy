@@ -150,7 +150,7 @@ function ImportPreview({
       </section>
       <DispositionNotice disposition={preview.disposition} />
       <p className="text-xs text-[var(--telemetry-muted)]">预览仅包含声明与校验结果，不会把 ZIP、脚本源码、本机文件路径或 AST 发送到 WebView。</p>
-      <p className="text-xs text-[var(--telemetry-muted)]">新安装的协议包默认停用，不会修改或重绑任何 Listener。</p>
+      <p className="text-xs text-[var(--telemetry-muted)]">新安装的协议包默认停用，不会修改或重绑任何入口。</p>
     </div>
   );
 }

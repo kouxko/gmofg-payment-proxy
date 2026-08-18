@@ -20,7 +20,7 @@ fn official_template_exposes_complete_v1_capabilities() {
         manifest.package().package().version,
         ProtocolPackageVersion::new("1.0.0").unwrap()
     );
-    assert_eq!(manifest.package().name(), "ISO 8583 ASCII Standard");
+    assert_eq!(manifest.package().name(), "ISO 8583:1987 ASCII Profile");
     assert_eq!(manifest.document().schema().as_str(), "document.toml");
 
     let display = manifest.document().display().unwrap();

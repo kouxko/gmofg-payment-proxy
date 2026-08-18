@@ -14,6 +14,7 @@ const listener = {
 const rule: SocketDocumentRuleDefinition = {
   rule_id: "rule-1",
   revision: 2,
+  name: "金额修正规则",
   enabled: true,
   priority: 10,
   created_order: 1,

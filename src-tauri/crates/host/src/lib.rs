@@ -386,8 +386,7 @@ fn build_runtime_pipeline(
             events,
             services.capture.clone(),
         )
-        .with_body_codec_resolver(services.workspace_body_codecs.clone())
-        .with_workspace_policy_resolver(services.workspace_runtime_policies.clone()),
+        .with_body_codec_resolver(services.workspace_body_codecs.clone()),
     )
 }
 

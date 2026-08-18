@@ -132,14 +132,18 @@ export function setServerTls(settings: SocketRelaySettings, tls: SocketUpstreamT
   } } };
 }
 
-export function setSocketTopology(settings: SocketRelaySettings, mode: "relay" | "local_responder"): SocketRelaySettings {
+export function setSocketTopology(
+  settings: SocketRelaySettings,
+  mode: "relay" | "local_responder",
+  recommendedPackage?: ProtocolPackageRef | null,
+): SocketRelaySettings {
   if (mode !== "relay" && mode !== "local_responder") return settings;
   if (settings.topology.mode === mode) return settings;
   if (mode === "local_responder") {
     const security = appSecurity(settings);
     const current = settings.processing.mode === "scripted"
       ? settings.processing.settings
-      : emptyScripted();
+      : emptyScripted(recommendedPackage ?? undefined);
     return {
       ...settings,
       topology: { mode: "local_responder", settings: { downstream_security: security } },
@@ -190,13 +194,13 @@ export function bindPackage(
     package: option.package,
     upstream: {
       ...current.upstream,
-      decode_enabled: current.upstream.decode_enabled && option.capabilities.upstream.decode,
-      encode_enabled: !local && current.upstream.encode_enabled && option.capabilities.upstream.encode,
+      decode_enabled: option.capabilities.upstream.decode,
+      encode_enabled: !local && option.capabilities.upstream.encode,
     },
     downstream: {
       ...current.downstream,
-      decode_enabled: !local && current.downstream.decode_enabled && option.capabilities.downstream.decode,
-      encode_enabled: current.downstream.encode_enabled && option.capabilities.downstream.encode,
+      decode_enabled: !local && option.capabilities.downstream.decode,
+      encode_enabled: option.capabilities.downstream.encode,
     },
   } };
 }

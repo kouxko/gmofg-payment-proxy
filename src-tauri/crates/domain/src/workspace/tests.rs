@@ -29,7 +29,6 @@ fn default_workspace_is_empty_safe_and_serializable() {
     assert_eq!(http(listener).request_body_codec, BodyCodecKind::Auto);
     assert_eq!(http(listener).response_body_codec, BodyCodecKind::Auto);
     assert!(workspace.rules.is_empty());
-    assert!(workspace.fault_presets.is_empty());
     workspace.validate().expect("safe draft must validate");
     let json = serde_json::to_string(&workspace).unwrap();
     for forbidden in ["private_key", "password", "pkcs12"] {

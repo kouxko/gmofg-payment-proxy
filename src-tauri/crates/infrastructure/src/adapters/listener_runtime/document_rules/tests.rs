@@ -102,11 +102,25 @@ fn program(listener_id: ListenerId) -> Arc<SocketDocumentRuleProgram> {
     )
 }
 
+fn factory(listener_id: ListenerId) -> SocketDocumentRuleConnectionFactory {
+    let upstream = Arc::new(
+        SocketDocumentRuleProgram::new(
+            listener_id,
+            package(),
+            schema(),
+            SocketDirection::Upstream,
+            Vec::new(),
+        )
+        .unwrap(),
+    );
+    SocketDocumentRuleConnectionFactory::new(upstream, program(listener_id)).unwrap()
+}
+
 #[test]
 fn local_empty_document_allows_static_assignment_but_field_condition_is_non_match() {
     let listener_id = ListenerId::new();
-    let runtime =
-        SocketDocumentRuleConnection::new(connection(Uuid::from_u128(10)), program(listener_id));
+    let runtime = factory(listener_id)
+        .connection(connection(Uuid::from_u128(10)), SocketDirection::Downstream);
 
     let result = runtime.execute(runtime.empty_document()).unwrap();
 
@@ -121,12 +135,9 @@ fn local_empty_document_allows_static_assignment_but_field_condition_is_non_matc
 #[test]
 fn runtime_rejects_cross_connection_and_every_frozen_binding_mismatch() {
     let listener_id = ListenerId::new();
-    let first =
-        SocketDocumentRuleConnection::new(connection(Uuid::from_u128(11)), program(listener_id));
-    let second = SocketDocumentRuleConnection::new(
-        connection(Uuid::from_u128(12)),
-        Arc::clone(&first.program),
-    );
+    let factory = factory(listener_id);
+    let first = factory.connection(connection(Uuid::from_u128(11)), SocketDirection::Downstream);
+    let second = factory.connection(connection(Uuid::from_u128(12)), SocketDirection::Downstream);
 
     assert_eq!(
         second.execute(first.empty_document()).unwrap_err().code,
@@ -167,9 +178,8 @@ fn runtime_rejects_cross_connection_and_every_frozen_binding_mismatch() {
 #[test]
 fn successive_frames_and_concurrent_connections_share_no_document_state() {
     let listener_id = ListenerId::new();
-    let shared = program(listener_id);
-    let first =
-        SocketDocumentRuleConnection::new(connection(Uuid::from_u128(20)), Arc::clone(&shared));
+    let shared = factory(listener_id);
+    let first = shared.connection(connection(Uuid::from_u128(20)), SocketDirection::Downstream);
     let mut decoded = Document::new(schema());
     decoded
         .set("request", DocumentValue::String("sale".into()))
@@ -183,10 +193,10 @@ fn successive_frames_and_concurrent_connections_share_no_document_state() {
 
     let handles = (30_u128..34)
         .map(|id| {
-            let program = Arc::clone(&shared);
+            let factory = shared.clone();
             thread::spawn(move || {
-                let runtime =
-                    SocketDocumentRuleConnection::new(connection(Uuid::from_u128(id)), program);
+                let runtime = factory
+                    .connection(connection(Uuid::from_u128(id)), SocketDirection::Downstream);
                 runtime.execute(runtime.empty_document()).unwrap()
             })
         })
@@ -201,8 +211,8 @@ fn successive_frames_and_concurrent_connections_share_no_document_state() {
 #[test]
 fn runtime_debug_exposes_binding_shape_but_never_document_values() {
     let listener_id = ListenerId::new();
-    let runtime =
-        SocketDocumentRuleConnection::new(connection(Uuid::from_u128(40)), program(listener_id));
+    let runtime = factory(listener_id)
+        .connection(connection(Uuid::from_u128(40)), SocketDirection::Downstream);
     let mut document = Document::new(schema());
     document
         .set("request", DocumentValue::String("secret-sale".into()))
@@ -265,5 +275,61 @@ fn factory_accepts_only_matching_directional_programs_and_creates_connections() 
         )
         .is_err(),
         "programs from different listeners must be rejected"
+    );
+}
+
+#[test]
+fn existing_connection_reads_replaced_rules_on_the_next_document() {
+    let listener_id = ListenerId::new();
+    let factory = factory(listener_id);
+    let runtime = factory.connection(connection(Uuid::from_u128(60)), SocketDirection::Downstream);
+    assert_eq!(
+        runtime
+            .execute(runtime.empty_document())
+            .unwrap()
+            .document()
+            .get("response")
+            .unwrap(),
+        &DocumentValue::String("approved".into())
+    );
+
+    let upstream = Arc::new(
+        SocketDocumentRuleProgram::new(
+            listener_id,
+            package(),
+            schema(),
+            SocketDirection::Upstream,
+            Vec::new(),
+        )
+        .unwrap(),
+    );
+    let downstream = Arc::new(
+        SocketDocumentRuleProgram::new(
+            listener_id,
+            package(),
+            schema(),
+            SocketDirection::Downstream,
+            vec![rule(
+                listener_id,
+                1,
+                Vec::new(),
+                vec![DocumentAction::SetField {
+                    field: DocumentFieldName::new("response").unwrap(),
+                    value: DocumentValue::String("declined".into()),
+                }],
+            )],
+        )
+        .unwrap(),
+    );
+    factory.replace(SocketDocumentRuleConnectionFactory::new(upstream, downstream).unwrap());
+
+    assert_eq!(
+        runtime
+            .execute(runtime.empty_document())
+            .unwrap()
+            .document()
+            .get("response")
+            .unwrap(),
+        &DocumentValue::String("declined".into())
     );
 }

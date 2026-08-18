@@ -185,6 +185,14 @@ impl ListenerRuntimePort for FailingRuntime {
         runtime_failure()
     }
 
+    async fn replace_socket_rules(
+        &self,
+        _: ProxyWorkspace,
+        _: intercept_proxy_domain::ListenerId,
+    ) -> AppResult<()> {
+        runtime_failure()
+    }
+
     async fn test_upstream_connection(
         &self,
         _: ProxyWorkspace,

@@ -42,7 +42,7 @@ export function RuntimeEndpointsCard({
             snapshot.configured.map((endpoint) => (
               <div key={`${endpoint.listener_id}:${endpoint.original_destination}`} className="space-y-1 rounded-lg bg-[var(--telemetry-soft)] p-3 text-xs">
                 <p><strong>目标：</strong>{formatDestination(endpoint.original_destination, endpoint.original_ports)}</p>
-                <p><strong>Listener：</strong>{endpoint.listener_name}（{endpoint.listener_id}）</p>
+                <p><strong>入口：</strong>{endpoint.listener_name}（{endpoint.listener_id}）</p>
                 <p><strong>配置监听：</strong>{formatHostPort(endpoint.listener_bind_address, endpoint.listener_port)}</p>
               </div>
             ))
@@ -65,7 +65,7 @@ export function RuntimeEndpointsCard({
                 </div>
                 <p><strong>运行设备：</strong><span className="font-mono">{endpoint.serial}</span></p>
                 <p><strong>代理地址：</strong>{formatHostPort(endpoint.proxy_host, endpoint.proxy_port)}</p>
-                <p><strong>Listener：</strong>{endpoint.listener_name}（{endpoint.listener_id}）· 桌面端口 {endpoint.desktop_listener_port}</p>
+                <p><strong>入口：</strong>{endpoint.listener_name}（{endpoint.listener_id}）· 桌面端口 {endpoint.desktop_listener_port}</p>
                 <p><strong>原始目标：</strong>{formatDestination(endpoint.original_destination, endpoint.original_ports)}</p>
                 <p><strong>解析地址：</strong>{endpoint.resolved_original_ips.join("、") || "无"}</p>
                 <p><strong>解析时间：</strong><time dateTime={endpoint.resolved_at}>{endpoint.resolved_at}</time></p>
@@ -78,7 +78,7 @@ export function RuntimeEndpointsCard({
             <p className="text-xs text-[var(--telemetry-success)]">LAN 地址变化后，实际运行端点已重新应用。</p>
           )}
           {snapshot?.runtime_owner?.transition_reason === "lan_endpoint_faulted" && (
-            <p className="text-xs text-[var(--telemetry-danger)]">LAN 地址变化后无法恢复实际运行端点；请检查桌面网络、Listener 与设备可达性。</p>
+            <p className="text-xs text-[var(--telemetry-danger)]">LAN 地址变化后无法恢复实际运行端点；请检查桌面网络、入口与设备可达性。</p>
           )}
         </EndpointSection>
       </Card.Content>

@@ -67,9 +67,43 @@ fn official_iso8583_request_sample_runs_frame_decode_encode_and_display() {
     let ProtocolDisplayResult::UntrustedHtml(html) = executor.render_display(&output) else {
         panic!("official template declares Display and must return untrusted HTML");
     };
-    for expected in ["ISO 8583 Message", "0200", "1000", "TERM0001", "392"] {
+    for expected in ["ISO 8583:1987 Message", "0200", "1000", "TERM0001", "392"] {
         assert!(html.contains(expected), "HTML does not contain {expected}");
     }
+}
+
+#[test]
+fn official_iso8583_secondary_bitmap_field_round_trips() {
+    let package = compile_official_template();
+    let mut payload = b"0800".to_vec();
+    payload.extend_from_slice(&[0xe0, 0, 0, 0, 0, 0, 0x02, 0]); // secondary + DE2/3/55
+    payload.extend_from_slice(&[0x04, 0, 0, 0, 0, 0, 0, 0]); // DE70
+    payload.extend_from_slice(b"164761739001010010000000004");
+    payload.extend_from_slice(&[0x9f, 0x02, 0x06, 0x00]);
+    payload.extend_from_slice(b"301");
+    let mut frame = u16::try_from(payload.len()).unwrap().to_be_bytes().to_vec();
+    frame.extend_from_slice(&payload);
+
+    let mut executor = executor(&package, ProtocolDirection::Upstream);
+    let output = executor.execute_frame(frame.clone()).unwrap();
+    let document = output.decoded_document().unwrap();
+    assert_eq!(
+        document.get("primary_account_number").unwrap(),
+        &DocumentValue::String("4761739001010010".to_owned())
+    );
+    assert_eq!(
+        document.get("processing_code").unwrap(),
+        &DocumentValue::String("000000".to_owned())
+    );
+    assert_eq!(
+        document.get("network_management_code").unwrap(),
+        &DocumentValue::String("301".to_owned())
+    );
+    assert_eq!(
+        document.get("icc_data").unwrap(),
+        &DocumentValue::Blob(vec![0x9f, 0x02, 0x06, 0x00])
+    );
+    assert_eq!(output.written(), frame);
 }
 
 #[test]

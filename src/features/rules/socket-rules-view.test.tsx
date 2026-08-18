@@ -116,6 +116,7 @@ function rule(revision = 3): SocketDocumentRuleDefinition {
   return {
     rule_id: "rule-1",
     revision,
+    name: "测试规则",
     enabled: true,
     priority: 10,
     created_order: 1,

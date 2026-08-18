@@ -81,6 +81,14 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
         })
     }
 
+    async fn replace_socket_rules(
+        &self,
+        _workspace: ProxyWorkspace,
+        _listener_id: ListenerId,
+    ) -> AppResult<()> {
+        Ok(())
+    }
+
     async fn test_upstream_tls(
         &self,
         _workspace: ProxyWorkspace,

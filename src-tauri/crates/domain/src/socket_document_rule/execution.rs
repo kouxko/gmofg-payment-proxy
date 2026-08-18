@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeSet, fmt};
 
+use super::SocketRuleStage;
 use super::{
     DocumentAction, DocumentCondition, MAX_SOCKET_DOCUMENT_RULES, SocketDirection,
     SocketDocumentRuleDefinition, sort_socket_document_rules,
@@ -21,7 +22,7 @@ pub struct SocketDocumentRuleProgram {
     listener_id: ListenerId,
     package: ProtocolPackageRef,
     schema: DocumentSchema,
-    direction: SocketDirection,
+    stage: SocketRuleStage,
     rules: Vec<SocketDocumentRuleDefinition>,
 }
 
@@ -33,7 +34,7 @@ impl fmt::Debug for SocketDocumentRuleProgram {
             .field("package", &self.package)
             .field("schema_id", &self.schema.id())
             .field("schema_version", &self.schema.version())
-            .field("direction", &self.direction)
+            .field("stage", &self.stage)
             .field("rule_count", &self.rules.len())
             .finish()
     }
@@ -50,15 +51,30 @@ impl SocketDocumentRuleProgram {
         package: ProtocolPackageRef,
         schema: DocumentSchema,
         direction: SocketDirection,
+        rules: Vec<SocketDocumentRuleDefinition>,
+    ) -> Result<Self, DomainError> {
+        let stage = match direction {
+            SocketDirection::Upstream => SocketRuleStage::ProxyToUpstream,
+            SocketDirection::Downstream => SocketRuleStage::ProxyToApp,
+        };
+        Self::new_for_stage(listener_id, package, schema, stage, rules)
+    }
+
+    /// 创建绑定到明确处理阶段的不可变程序。
+    pub fn new_for_stage(
+        listener_id: ListenerId,
+        package: ProtocolPackageRef,
+        schema: DocumentSchema,
+        stage: SocketRuleStage,
         mut rules: Vec<SocketDocumentRuleDefinition>,
     ) -> Result<Self, DomainError> {
-        validate_rule_snapshot(listener_id, &package, &schema, direction, &rules)?;
+        validate_rule_snapshot(listener_id, &package, &schema, stage, &rules)?;
         sort_socket_document_rules(&mut rules);
         Ok(Self {
             listener_id,
             package,
             schema,
-            direction,
+            stage,
             rules,
         })
     }
@@ -133,7 +149,12 @@ impl SocketDocumentRuleProgram {
     /// 返回程序绑定的数据方向。
     #[must_use]
     pub const fn direction(&self) -> SocketDirection {
-        self.direction
+        self.stage.direction()
+    }
+
+    #[must_use]
+    pub const fn stage(&self) -> SocketRuleStage {
+        self.stage
     }
 
     /// 返回已经按稳定执行顺序冻结的规则。
@@ -194,7 +215,7 @@ fn validate_rule_snapshot(
     listener_id: ListenerId,
     package: &ProtocolPackageRef,
     schema: &DocumentSchema,
-    direction: SocketDirection,
+    stage: SocketRuleStage,
     rules: &[SocketDocumentRuleDefinition],
 ) -> Result<(), DomainError> {
     if rules.len() > MAX_SOCKET_DOCUMENT_RULES {
@@ -212,7 +233,7 @@ fn validate_rule_snapshot(
         if rule.listener_id() != listener_id
             || rule.package() != package
             || rule.schema_version() != schema.version()
-            || rule.direction() != direction
+            || rule.stage() != stage
         {
             return Err(
                 rule_program_error("规则与程序的精确绑定不一致").with_field_error(
@@ -268,6 +289,9 @@ fn apply_actions(
             DocumentAction::RecordMatch => {}
             DocumentAction::SetField { field, value } => {
                 document.set(field.as_str(), value.clone())?;
+            }
+            DocumentAction::ClearField { field } => {
+                document.clear_field(field.as_str())?;
             }
             DocumentAction::ClearDocument => document.clear(),
         }

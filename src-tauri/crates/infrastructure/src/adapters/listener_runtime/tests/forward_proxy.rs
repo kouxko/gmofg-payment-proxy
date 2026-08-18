@@ -129,11 +129,9 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
         name: "test".into(),
         revision: Revision::INITIAL,
         listeners: vec![listener.clone()],
-        response_assertions: Vec::new(),
         rules: Vec::new(),
         socket_rules: Vec::new(),
         socket_rule_created_order_high_water: 0,
-        fault_presets: Vec::new(),
         certificate_references: Vec::new(),
         android_network_profiles: Vec::new(),
     };

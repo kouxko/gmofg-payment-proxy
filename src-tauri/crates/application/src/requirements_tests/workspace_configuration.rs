@@ -146,19 +146,3 @@ async fn workspace_save_rejects_direct_certificate_reference_mutation() {
         "WORKSPACE_CERTIFICATE_IMPORT_REQUIRED"
     );
 }
-
-#[tokio::test]
-async fn workspace_rejects_arbitrary_certificate_path_reference_creation() {
-    let ports = Arc::new(FakePorts::default());
-    let application = application_with_fake_ports(ports);
-    let workspace = application.workspace_create("Lab".into()).await.unwrap();
-
-    let error = application
-        .workspace_component_new(workspace, "certificate_reference")
-        .expect_err("certificate references must be created by a managed import");
-
-    assert_eq!(
-        error.view_model.code,
-        "WORKSPACE_CERTIFICATE_IMPORT_REQUIRED"
-    );
-}

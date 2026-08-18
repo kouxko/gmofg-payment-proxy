@@ -9,9 +9,8 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    CertificateReferenceId, ChannelId, DownstreamClientAuthentication, FaultPresetId,
-    ListenerDataPlane, ListenerId, ResponseAssertionId, Revision, RuleId, SocketDownstreamSecurity,
-    SocketRelaySecurity, SocketTopology,
+    CertificateReferenceId, ChannelId, DownstreamClientAuthentication, ListenerDataPlane,
+    ListenerId, Revision, RuleId, SocketDownstreamSecurity, SocketRelaySecurity, SocketTopology,
 };
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -44,13 +43,6 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
         remap_listener_certificates(listener, &certificate_ids)?;
     }
 
-    for assertion in &mut workspace.response_assertions {
-        assertion.id = ResponseAssertionId::new();
-        remap_listener_references(&mut assertion.listener_ids, &listener_ids)?;
-    }
-    for preset in &mut workspace.fault_presets {
-        preset.id = FaultPresetId::new();
-    }
     for rule in &mut workspace.rules {
         rule.id = RuleId::new();
         if let Some(channel) = &rule.channel
@@ -184,16 +176,6 @@ fn remap_optional(
     label: &str,
 ) -> AppResult<Option<CertificateReferenceId>> {
     value.map(|id| mapped(mapping, id, label)).transpose()
-}
-
-fn remap_listener_references(
-    ids: &mut [ListenerId],
-    mapping: &BTreeMap<ListenerId, ListenerId>,
-) -> AppResult<()> {
-    for id in ids {
-        *id = mapped(mapping, *id, "Listener reference")?;
-    }
-    Ok(())
 }
 
 fn mapped<K: Copy + Ord, V: Copy>(mapping: &BTreeMap<K, V>, id: K, label: &str) -> AppResult<V> {

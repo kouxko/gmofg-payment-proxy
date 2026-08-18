@@ -8,13 +8,11 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use specta::Type;
 
 use crate::{
-    AndroidNetworkProfile, CertificateReferenceId, DomainError, ErrorCode, FaultPresetId,
-    ListenerId, ResponseAssertionId, Revision, Rule, RuleAction, SocketDocumentRuleDefinition,
-    WorkspaceId,
+    AndroidNetworkProfile, CertificateReferenceId, DomainError, ErrorCode, ListenerId, Revision,
+    Rule, SocketDocumentRuleDefinition, WorkspaceId,
 };
 
 mod listener_model;
@@ -29,42 +27,6 @@ use validation::{push_field_error, unique_ids, validate_listener, validate_works
 /// 首次启动创建的正向代理草稿端口。
 /// 监听器默认禁用，因此不会在用户确认前打开端口。
 pub const DEFAULT_FORWARD_PROXY_PORT: u16 = 8080;
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ResponseAssertionKind {
-    HttpStatusEquals {
-        expected: u16,
-    },
-    HeaderEquals {
-        name: String,
-        expected: String,
-    },
-    JsonPathEquals {
-        path: String,
-        #[specta(type = specta_typescript::Unknown<Value>)]
-        expected: Value,
-    },
-    BodyTextContains {
-        expected: String,
-    },
-    BodyLengthEquals {
-        expected: u64,
-    },
-    BodySha256Equals {
-        expected_hex: String,
-    },
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-/// 用户可配置的响应断言。核心只比较通用 HTTP 数据，不包含任何业务返回码。
-pub struct ResponseAssertion {
-    pub id: ResponseAssertionId,
-    pub name: String,
-    pub listener_ids: Vec<ListenerId>,
-    pub enabled: bool,
-    pub assertion: ResponseAssertionKind,
-}
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -86,36 +48,12 @@ pub struct CertificateReference {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ConnectionFaultAction {
-    Delay { milliseconds: u64 },
-    Reject,
-    RateLimit { bytes_per_second: u64 },
-    CloseAfterBytes { bytes: u64 },
-    HalfCloseAfterBytes { bytes: u64 },
-    IdleTimeout { milliseconds: u64 },
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub struct FaultPreset {
-    pub id: FaultPresetId,
-    pub name: String,
-    pub description: String,
-    pub connection_actions: Vec<ConnectionFaultAction>,
-    /// 规则编辑使用独立、已生成 TypeScript 的 Rule DTO；Workspace 编辑页不直接修改
-    /// 动作联合类型，因此这里在 Specta Workspace DTO 中省略，Serde 持久化仍完整保留。
-    #[specta(skip)]
-    pub http_actions: Vec<RuleAction>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct ProxyWorkspace {
     pub id: WorkspaceId,
     pub name: String,
     pub revision: Revision,
     pub listeners: Vec<ProxyListener>,
-    pub response_assertions: Vec<ResponseAssertion>,
     /// 规则通过 rule_* 用例维护，避免前端在 Workspace 表单中复制第二套规则编辑器。
     /// 字段仍属于领域聚合并参与导入导出，只不重复进入 Workspace 的 TypeScript DTO。
     #[specta(skip)]
@@ -126,7 +64,6 @@ pub struct ProxyWorkspace {
     /// Socket 规则 `created_order` 的单调高水位；删除规则不会降低此值。
     #[specta(skip)]
     pub socket_rule_created_order_high_water: u64,
-    pub fault_presets: Vec<FaultPreset>,
     pub certificate_references: Vec<CertificateReference>,
     /// 与该 Workspace 一起迁移的 Android 设备网络方案。
     /// 设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，
@@ -141,11 +78,9 @@ impl Default for ProxyWorkspace {
             name: "Untitled Workspace".into(),
             revision: Revision::INITIAL,
             listeners: vec![ProxyListener::default()],
-            response_assertions: Vec::new(),
             rules: Vec::new(),
             socket_rules: Vec::new(),
             socket_rule_created_order_high_water: 0,
-            fault_presets: Vec::new(),
             certificate_references: Vec::new(),
             android_network_profiles: Vec::new(),
         }

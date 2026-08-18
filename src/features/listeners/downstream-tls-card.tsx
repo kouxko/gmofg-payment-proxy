@@ -159,11 +159,11 @@ export function DownstreamTlsCard({
                 onSelectionChange={(key) => changeAuthentication(String(key))}
               >
                 <Label>客户端证书要求</Label>
-                <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+                <Select.Trigger className="h-10 min-h-10"><Select.Value className="truncate" /><Select.Indicator /></Select.Trigger>
                 <Select.Popover><ListBox>
-                  <ListBox.Item id="disabled" textValue="不要求客户端证书">不要求客户端证书（普通 TLS）</ListBox.Item>
-                  <ListBox.Item id="optional" textValue="客户端证书可选">客户端证书可选；出示时验证证书链</ListBox.Item>
-                  <ListBox.Item id="required" textValue="必须验证客户端证书">必须出示并验证客户端证书（mTLS）</ListBox.Item>
+                  <ListBox.Item id="disabled" textValue="不要求客户端证书">不要求客户端证书</ListBox.Item>
+                  <ListBox.Item id="optional" textValue="客户端证书可选">客户端证书可选</ListBox.Item>
+                  <ListBox.Item id="required" textValue="必须验证客户端证书">必须验证客户端证书</ListBox.Item>
                 </ListBox></Select.Popover>
               </Select>
               {authentication.mode !== "disabled" && (

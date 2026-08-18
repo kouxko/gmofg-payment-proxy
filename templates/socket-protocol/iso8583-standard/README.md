@@ -1,6 +1,7 @@
-# ISO 8583 Socket 协议包模板
+# ISO 8583:1987 ASCII Socket 协议包模板
 
-这是一个用于验证协议包结构的目录模板，不是 ZIP 成品，也不是完整的 ISO 8583 方言实现。
+这是应用内置、可直接导出为 ZIP 的 ISO 8583:1987 ASCII 基线 Profile。它完整声明并可编解码
+DE2-DE128；DE1 和 DE65 分别作为第二、第三位图指示位，不作为业务字段。
 
 通用协议作者应先阅读：
 
@@ -69,11 +70,16 @@ TCP bytes
 ## 这个模板采用的 ISO 8583 Profile
 
 - Socket Frame：2 字节大端长度头，长度不包含头本身。
-- ISO 8583 报文：4 字节 ASCII MTI + 8 字节二进制主位图。
-- 已实现字段：DE3、DE4、DE7、DE11、DE41、DE49。
-- 暂不支持第二位图和其他字段；遇到未实现内容会明确失败，避免悄悄错位解析。
+- ISO 8583 报文：4 字节 ASCII MTI + 8 字节二进制主位图，可选 8 字节二进制第二位图。
+- 字段范围：DE2-DE64 和 DE66-DE128；设置 DE65（第三位图）会明确失败。
+- 字段编码：ASCII 定长、2 位 LLVAR、3 位 LLLVAR；长度前缀本身为 ASCII 数字。
+- 二进制字段：DE52 PIN、DE55 ICC、DE64/DE128 MAC、DE96 Message Security Code。
+- `amount`（DE4）保持 `int`，方便现有金额规则；其他数字域使用 `string` 保存前导零。
 
 2 字节长度头属于此示例的传输 Profile，并非 ISO 8583 标准强制格式。接入真实系统时，应根据对端规格修改 `frame()` 与 `encode()`。
+
+ISO 8583 的保留域、国家域和私有域没有跨网络统一内容。本模板将它们作为不透明 ASCII
+LLLVAR 字段保存；真实接入必须根据收单机构或交换网络规范调整长度、编码以及内部子域结构。
 
 ## Document 与规则变量
 
@@ -84,7 +90,7 @@ let document = document::create();
 document.set("amount", 1000);
 ```
 
-因此应用在收到报文前就知道这些规则变量：
+因此应用在收到报文前就知道 MTI 和全部 DE2-DE128 规则变量。例如：
 
 ```text
 message_type      string
@@ -94,6 +100,10 @@ transmission_time string
 stan              string
 terminal_id       string
 currency          string
+pin_data          blob
+icc_data          blob
+reserved_private_127 string
+message_authentication_code_2 blob
 ```
 
 模板实际使用到的宿主对象 API 为：

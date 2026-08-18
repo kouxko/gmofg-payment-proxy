@@ -29,11 +29,6 @@ impl RuntimePipelineAdapter {
                 .max(0),
         )
         .unwrap_or(u64::MAX);
-        let assertion_failed = record
-            .detail
-            .response_assertions
-            .iter()
-            .any(|assertion| !assertion.passed);
         {
             let summary = &mut record.detail.summary;
             summary.completed_at = Some(now);
@@ -42,19 +37,17 @@ impl RuntimePipelineAdapter {
             summary.revision = summary.revision.saturating_add(1);
             match result {
                 Ok(()) => {
-                    if assertion_failed {
-                        summary.result = "响应断言失败".into();
-                        summary.ui_tone = UiTone::Danger;
-                        record.detail.final_action =
-                            "响应已原样返回客户端，但至少一个 Workspace 断言失败".into();
-                    } else {
-                        summary.result = "成功".into();
-                        summary.ui_tone = UiTone::Positive;
-                        record.detail.final_action = "响应已返回客户端".into();
-                    }
+                    summary.result = "成功".into();
+                    summary.ui_tone = UiTone::Positive;
+                    record.detail.final_action = "响应已返回客户端".into();
                 }
                 Err(error) => {
-                    summary.result = result_text(error.code).into();
+                    summary.result = format!(
+                        "{} · {} · {}",
+                        result_text(error.code),
+                        error.code,
+                        error.message
+                    );
                     summary.ui_tone = result_tone(error.code);
                     record.detail.final_action.clone_from(&error.message);
                 }

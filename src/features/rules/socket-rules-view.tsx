@@ -4,9 +4,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { toast } from "@heroui/react";
 import type {
   ProxyWorkspace,
-  SocketDirection,
   SocketDocumentRuleDefinition,
   SocketRuleCapabilityCatalog,
+  SocketRuleStage,
   WorkspaceSummaryViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
@@ -20,7 +20,7 @@ import {
   directionDecodeEnabled,
   draftFromRule,
   isSocketRuleList,
-  listenerDirections,
+  listenerStages,
   newSocketRuleDraft,
   saveResponseMatches,
   scriptedSocketListeners,
@@ -55,7 +55,7 @@ export function SocketRulesView() {
   const [selectedId, setSelectedId] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [listenerId, setListenerId] = useState<string>();
-  const [direction, setDirection] = useState<SocketDirection>("upstream");
+  const [stage, setStage] = useState<SocketRuleStage>("app_to_proxy");
   const [draft, setDraft] = useState<SocketRuleDraft>();
   const [editorWorkspaceId, setEditorWorkspaceId] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -68,8 +68,8 @@ export function SocketRulesView() {
   const activeListenerId = editorContextCurrent ? listenerId : undefined;
   const selectedListener = listeners.find((listener) => listener.id === activeListenerId);
   const capabilities = useIpcQuery<SocketRuleCapabilityCatalog>(
-    `socket-rule-capabilities:${activeListenerId ?? "none"}:${direction}`,
-    () => callCommand(commands.socketRuleCapabilities(activeListenerId!, direction)),
+    `socket-rule-capabilities:${activeListenerId ?? "none"}:${stage}`,
+    () => callCommand(commands.socketRuleCapabilities(activeListenerId!, stage)),
     undefined,
     { enabled: Boolean(activeListenerId) },
   );
@@ -95,15 +95,15 @@ export function SocketRulesView() {
   const usableCatalog = !receivedCatalogValidation && capabilityMatchesSelection(
     capabilities.data,
     selectedListener,
-    direction,
+    stage,
   ) ? capabilities.data : undefined;
   const bindingError = capabilities.data && !receivedCatalogValidation && !usableCatalog
-    ? "规则能力与当前 Listener 的精确包版本或方向不一致。"
+    ? "规则能力与当前入口的协议版本或数据方向不一致。"
     : undefined;
 
   const preparedDraft = draft ?? (
     creating && selectedListener && usableCatalog
-      ? newSocketRuleDraft(selectedListener, direction, usableCatalog)
+      ? newSocketRuleDraft(selectedListener, stage, usableCatalog)
       : undefined
   );
   const valueParsing = Object.values(valueStates).some((state) => state.pending);
@@ -112,11 +112,11 @@ export function SocketRulesView() {
     editorWorkspaceId,
     selectedId,
     listenerId,
-    direction,
+    stage,
     draft: preparedDraft,
     listener: selectedListener,
     catalog: usableCatalog,
-  }), [direction, editorWorkspaceId, listenerId, preparedDraft, selectedId, selectedListener, usableCatalog, workspaceId]);
+  }), [editorWorkspaceId, listenerId, preparedDraft, selectedId, selectedListener, stage, usableCatalog, workspaceId]);
   const mutationContextRef = useRef(mutationContext);
   const mutationContextKey = JSON.stringify(mutationContext);
   useLayoutEffect(() => {
@@ -146,7 +146,7 @@ export function SocketRulesView() {
     setEditorWorkspaceId(workspaceId);
     setSelectedId(rule.rule_id);
     setListenerId(rule.listener_id);
-    setDirection(rule.direction);
+    setStage(rule.stage);
     setDraft(draftFromRule(rule));
     resetDerivedState();
   }
@@ -155,13 +155,13 @@ export function SocketRulesView() {
     if (sourceBlocked || valueParsing) return;
     const listener = listeners[0];
     if (!listener) return;
-    const nextDirection = listenerDirections(listener)[0];
+    const nextStage = listenerStages(listener)[0];
     editorGeneration.current += 1;
     setCreating(true);
     setEditorWorkspaceId(workspaceId);
     setSelectedId(undefined);
     setListenerId(listener.id);
-    setDirection(nextDirection);
+    setStage(nextStage);
     setDraft(undefined);
     resetDerivedState();
     requestAnimationFrame(() => editorHeadingRef.current?.focus());
@@ -173,21 +173,29 @@ export function SocketRulesView() {
     if (!listener) return;
     editorGeneration.current += 1;
     setListenerId(nextId);
-    setDirection(listenerDirections(listener)[0]);
+    setStage(listenerStages(listener)[0]);
     setDraft(undefined);
     resetDerivedState();
   }
 
-  function changeDirection(nextDirection: SocketDirection) {
+  function changeStage(nextStage: SocketRuleStage) {
     if (sourceBlocked || valueParsing) return;
     editorGeneration.current += 1;
-    setDirection(nextDirection);
+    setStage(nextStage);
     setDraft(undefined);
     resetDerivedState();
   }
 
   async function save() {
     if (sourceBlocked || !preparedDraft || mutationLock.current || Object.keys(valueStates).length > 0) return;
+    const validationError = usableCatalog
+      ? validateSocketRuleDraft(preparedDraft, usableCatalog)
+      : "规则配置尚未准备完成。";
+    if (validationError) {
+      setFieldErrors({ general: [validationError] });
+      toast(validationError, { variant: "danger" });
+      return;
+    }
     mutationLock.current = true;
     const request = mutationRequest(editorGeneration.current, mutationContextRef.current);
     setPending(true);
@@ -202,12 +210,16 @@ export function SocketRulesView() {
       setCreating(false);
       setSelectedId(saved.rule_id);
       setListenerId(saved.listener_id);
-      setDirection(saved.direction);
+      setStage(saved.stage);
       setDraft(draftFromRule(saved));
       await rules.refresh();
       toast("Socket 规则已保存。", { variant: "success" });
     } catch (reason) {
-      setFieldErrors(appErrorViewModel(reason)?.field_errors ?? { general: [errorMessage(reason)] });
+      const appError = appErrorViewModel(reason);
+      const message = errorMessage(reason);
+      const backendFields = appError?.field_errors ?? {};
+      setFieldErrors(Object.keys(backendFields).length > 0 ? backendFields : { general: [message] });
+      toast(message, { variant: "danger" });
     } finally {
       mutationLock.current = false;
       setPending(false);
@@ -284,7 +296,7 @@ export function SocketRulesView() {
   const draftValidation = effectiveDraft && usableCatalog
     ? validateSocketRuleDraft(effectiveDraft, usableCatalog)
     : undefined;
-  const editorError = capabilities.error ?? receivedCatalogValidation ?? bindingError ?? draftValidation;
+  const editorError = capabilities.error ?? receivedCatalogValidation ?? bindingError;
   return (
     <div className="grid h-full grid-cols-[minmax(520px,1fr)_620px] max-[1280px]:h-auto max-[1280px]:grid-cols-1">
       <SocketRulesList
@@ -305,7 +317,7 @@ export function SocketRulesView() {
           blocked={sourceBlocked}
           catalog={editorError ? undefined : usableCatalog}
           creating={creating}
-          decodeEnabled={editingListener ? directionDecodeEnabled(editingListener, direction) : false}
+          decodeEnabled={editingListener ? directionDecodeEnabled(editingListener, stage) : false}
           draft={effectiveDraft}
           error={editorError}
           fieldErrors={fieldErrors}
@@ -314,13 +326,14 @@ export function SocketRulesView() {
           loading={Boolean(listenerId) && capabilities.isLoading}
           onChange={(next) => { editorGeneration.current += 1; setDraft(next); setFieldErrors({}); }}
           onDelete={() => void remove()}
-          onDirectionChange={changeDirection}
+          onStageChange={changeStage}
           onListenerChange={changeListener}
           onReload={() => void capabilities.refresh()}
           onReloadRule={() => void reloadSelectedRule()}
           onResetInvalidValues={() => setValueStates({})}
           onSave={() => void save()}
           pending={pending}
+          validationError={draftValidation}
           valueStates={valueStates}
           onValueStateChange={(key, state) => setValueStates((current) => {
             const next = { ...current };
@@ -338,7 +351,7 @@ type MutationContext = {
   editorWorkspaceId?: string;
   selectedId?: string;
   listenerId?: string;
-  direction: SocketDirection;
+  stage: SocketRuleStage;
   draft?: SocketRuleDraft;
   listener?: ProxyWorkspace["listeners"][number];
   catalog?: SocketRuleCapabilityCatalog;
@@ -359,9 +372,9 @@ function mutationRequestCurrent(
 function capabilityMatchesSelection(
   catalog: SocketRuleCapabilityCatalog | undefined,
   listener: ProxyWorkspace["listeners"][number] | undefined,
-  direction: SocketDirection,
+  stage: SocketRuleStage,
 ) {
-  if (!catalog || !listener || catalog.direction !== direction) return false;
+  if (!catalog || !listener || catalog.stage !== stage) return false;
   if (listener.data_plane.kind !== "socket" || listener.data_plane.settings.processing?.mode !== "scripted") return false;
   const packageRef = listener.data_plane.settings.processing.settings.package;
   return catalog.package.id === packageRef.id && catalog.package.version === packageRef.version;

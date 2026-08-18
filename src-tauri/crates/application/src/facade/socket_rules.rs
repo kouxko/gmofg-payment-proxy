@@ -19,7 +19,7 @@ use crate::{
     SocketDocumentRuleDefinition, SocketDocumentRuleDraft, SocketDocumentRuleId,
     SocketPayloadProcessing, SocketRuleCapabilityCatalog, SocketRuleCommonActionCapability,
     SocketRuleFieldActionCapability, SocketRuleFieldCapability, SocketRuleFieldOperatorCapability,
-    SocketRuleSaveInput, SocketTopology, UiTone, WorkspaceChangeKind,
+    SocketRuleSaveInput, SocketRuleStage, SocketTopology, UiTone, WorkspaceChangeKind,
 };
 
 impl Application {
@@ -34,12 +34,12 @@ impl Application {
     pub async fn socket_rule_capabilities(
         &self,
         listener_id: ListenerId,
-        direction: SocketDirection,
+        stage: SocketRuleStage,
     ) -> AppResult<SocketRuleCapabilityCatalog> {
         let workspace = self.selected_socket_rule_workspace().await?;
         let listener = find_listener(&workspace, listener_id)?;
-        let context = self.socket_rule_context(listener, direction).await?;
-        Ok(capability_catalog(context, direction))
+        let context = self.socket_rule_context(listener, stage).await?;
+        Ok(capability_catalog(context, stage))
     }
 
     /// 新建或乐观锁更新规则。更新不能改变 Listener/包/Schema/方向绑定。
@@ -72,9 +72,8 @@ impl Application {
             }
         }
 
-        self.ensure_workspace_not_running(&workspace).await?;
         let listener = find_listener(&workspace, input.listener_id)?.clone();
-        let context = self.socket_rule_context(&listener, input.direction).await?;
+        let context = self.socket_rule_context(&listener, input.stage).await?;
         ensure_requested_binding(&input, &context.package, context.schema.version())?;
 
         let saved_rule_id = match (input.rule_id, input.expected_revision) {
@@ -84,15 +83,16 @@ impl Application {
                     workspace.socket_rule_created_order_high_water,
                 )?;
                 let rule_id = SocketDocumentRuleId::new();
-                let rule = SocketDocumentRuleDefinition::new(
+                let rule = SocketDocumentRuleDefinition::new_named_for_stage(
                     rule_id,
+                    input.name,
                     input.enabled,
                     input.priority,
                     created_order,
                     input.listener_id,
                     input.package,
                     input.schema_version,
-                    input.direction,
+                    input.stage,
                     input.conditions,
                     input.actions,
                 )?;
@@ -109,12 +109,13 @@ impl Application {
                     .ok_or_else(|| socket_rule_not_found(rule_id))?;
                 ensure_immutable_binding(current, &input)?;
                 let values = SocketDocumentRuleDraft {
+                    name: input.name,
                     enabled: input.enabled,
                     priority: input.priority,
                     listener_id: input.listener_id,
                     package: input.package,
                     schema_version: input.schema_version,
-                    direction: input.direction,
+                    stage: input.stage,
                     conditions: input.conditions,
                     actions: input.actions,
                 };
@@ -128,6 +129,9 @@ impl Application {
         sort_socket_document_rules(&mut workspace.socket_rules);
         workspace.validate()?;
         let saved = self.workspaces.save(workspace).await?;
+        self.listener_runtime
+            .replace_socket_rules(saved.clone(), input.listener_id)
+            .await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
         saved
             .socket_rules
@@ -144,7 +148,6 @@ impl Application {
     ) -> AppResult<SocketDocumentRuleDefinition> {
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.selected_socket_rule_workspace().await?;
-        self.ensure_workspace_not_running(&workspace).await?;
         let current = workspace
             .socket_rules
             .iter_mut()
@@ -154,6 +157,9 @@ impl Application {
         let result = current.clone();
         sort_socket_document_rules(&mut workspace.socket_rules);
         let saved = self.workspaces.save(workspace).await?;
+        self.listener_runtime
+            .replace_socket_rules(saved.clone(), result.listener_id())
+            .await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
         Ok(result)
     }
@@ -167,7 +173,6 @@ impl Application {
         let _gate = self.mutation_gate.lock().await;
         require_confirmation(confirmed, "删除 Socket 规则需要确认。")?;
         let mut workspace = self.selected_socket_rule_workspace().await?;
-        self.ensure_workspace_not_running(&workspace).await?;
         let index = workspace
             .socket_rules
             .iter()
@@ -179,8 +184,12 @@ impl Application {
         workspace.socket_rule_created_order_high_water = workspace
             .socket_rule_created_order_high_water
             .max(workspace.socket_rules[index].created_order());
+        let listener_id = workspace.socket_rules[index].listener_id();
         workspace.socket_rules.remove(index);
         let saved = self.workspaces.save(workspace).await?;
+        self.listener_runtime
+            .replace_socket_rules(saved.clone(), listener_id)
+            .await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
         Ok(OperationResultViewModel {
             success: true,
@@ -207,19 +216,19 @@ impl Application {
     async fn socket_rule_context(
         &self,
         listener: &ProxyListener,
-        direction: SocketDirection,
+        stage: SocketRuleStage,
     ) -> AppResult<SocketRuleContext> {
         let ListenerDataPlane::Socket(settings) = &listener.data_plane else {
             return Err(AppError::new(
                 "SOCKET_RULE_LISTENER_REQUIRED",
-                "Socket 规则只能绑定 Socket Listener。",
+                "Socket 规则只能绑定 Socket 入口。",
             )
             .entity(listener.id.to_string()));
         };
         let SocketPayloadProcessing::Scripted(scripted) = &settings.processing else {
             return Err(AppError::new(
                 "SOCKET_RULE_SCRIPTED_LISTENER_REQUIRED",
-                "Socket 规则只能绑定已选择协议包的 Scripted Listener。",
+                "Socket 规则只能绑定已选择协议方案的 Socket 入口。",
             )
             .entity(listener.id.to_string()));
         };
@@ -234,7 +243,7 @@ impl Application {
             scripted.upstream,
             scripted.downstream,
             description.capabilities,
-            direction,
+            stage,
         )?;
         let schema = domain_schema(&description)?;
         Ok(SocketRuleContext {
@@ -272,8 +281,9 @@ fn validate_direction(
     upstream: DirectionProcessingOptions,
     downstream: DirectionProcessingOptions,
     capabilities: ProtocolPackageCapabilitiesViewModel,
-    direction: SocketDirection,
+    stage: SocketRuleStage,
 ) -> AppResult<bool> {
+    let direction = stage.direction();
     let (options, manifest) = match direction {
         SocketDirection::Upstream => (upstream, capabilities.upstream),
         SocketDirection::Downstream => (downstream, capabilities.downstream),
@@ -287,10 +297,15 @@ fn validate_direction(
                 ));
             }
         }
-        SocketTopology::LocalResponder(_) if direction != SocketDirection::Downstream => {
+        SocketTopology::LocalResponder(_)
+            if !matches!(
+                stage,
+                SocketRuleStage::AppToProxy | SocketRuleStage::ProxyToApp
+            ) =>
+        {
             return Err(AppError::new(
                 "SOCKET_RULE_DIRECTION_INVALID",
-                "LocalResponder 只允许 downstream 响应规则。",
+                "本机应答只允许配置“应用 → 代理”和“代理 → 应用”阶段。",
             ));
         }
         SocketTopology::LocalResponder(_) => {}
@@ -326,13 +341,16 @@ fn domain_schema(description: &ProtocolPackageDescriptionViewModel) -> AppResult
 
 fn capability_catalog(
     context: SocketRuleContext,
-    direction: SocketDirection,
+    stage: SocketRuleStage,
 ) -> SocketRuleCapabilityCatalog {
-    let field_actions = context
-        .can_modify
-        .then_some(SocketRuleFieldActionCapability::SetField)
-        .into_iter()
-        .collect::<Vec<_>>();
+    let field_actions = if context.can_modify {
+        vec![
+            SocketRuleFieldActionCapability::SetField,
+            SocketRuleFieldActionCapability::ClearField,
+        ]
+    } else {
+        Vec::new()
+    };
     let fields = context
         .description
         .schema
@@ -353,7 +371,7 @@ fn capability_catalog(
     SocketRuleCapabilityCatalog {
         package: context.package,
         schema_version: context.schema.version(),
-        direction,
+        stage,
         fields,
         common_actions,
     }
@@ -386,13 +404,13 @@ fn ensure_immutable_binding(
     if current.listener_id() == input.listener_id
         && current.package() == &input.package
         && current.schema_version() == input.schema_version
-        && current.direction() == input.direction
+        && current.stage() == input.stage
     {
         return Ok(());
     }
     Err(AppError::new(
         "SOCKET_RULE_BINDING_IMMUTABLE",
-        "更新规则不能改变 Listener、协议包、Schema 或方向绑定。",
+        "更新规则不能改变入口、协议包、Schema 或处理阶段绑定。",
     )
     .entity(current.rule_id().to_string()))
 }
@@ -404,7 +422,7 @@ fn validate_rule(
     if rule.modifies_document() && !context.can_modify {
         return Err(AppError::new(
             "SOCKET_RULE_ENCODE_REQUIRED",
-            "SetField 或 ClearDocument 要求所选方向同时开启并声明 Encode。",
+            "修改字段动作要求所选阶段支持编码。",
         )
         .entity(rule.rule_id().to_string()));
     }

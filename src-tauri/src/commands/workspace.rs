@@ -36,45 +36,6 @@ pub async fn workspace_get(
 
 #[tauri::command]
 #[specta::specta]
-// Tauri passes deserialized command values by ownership; changing these to references would make
-// the generated IPC command incompatible with its extractor.
-#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
-pub fn workspace_component_new(
-    state: State<'_, AppState>,
-    workspace: ProxyWorkspace,
-    kind: String,
-) -> CommandResult<ProxyWorkspace> {
-    state
-        .application
-        .workspace_component_new(workspace, &kind)
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
-pub fn workspace_component_apply_intent(
-    state: State<'_, AppState>,
-    workspace: ProxyWorkspace,
-    component_kind: String,
-    component_id: String,
-    operation: String,
-    value: String,
-) -> CommandResult<ProxyWorkspace> {
-    state
-        .application
-        .workspace_component_apply_intent(
-            workspace,
-            &component_kind,
-            &component_id,
-            &operation,
-            &value,
-        )
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn workspace_secret_store_basic(
     state: State<'_, AppState>,
     username: String,

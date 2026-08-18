@@ -15,26 +15,27 @@ fn official_iso8583_schema_preserves_declared_field_order() {
     let schema = parse_document_schema(TEMPLATE_SCHEMA).unwrap();
     assert_eq!(schema.id().as_str(), "iso8583-financial-message");
     assert_eq!(schema.version(), 1);
-    assert_eq!(schema.title(), "ISO 8583 Financial Message");
+    assert_eq!(schema.title(), "ISO 8583:1987 Financial Message");
     let names: Vec<_> = schema
         .fields()
         .iter()
         .map(|field| field.name().as_str())
         .collect();
+    assert_eq!(names.len(), 127);
     assert_eq!(
-        names,
+        &names[..4],
         [
             "message_type",
+            "primary_account_number",
             "processing_code",
             "amount",
-            "transmission_time",
-            "stan",
-            "terminal_id",
-            "currency",
         ]
     );
-    assert_eq!(schema.fields()[2].field_type(), DocumentFieldType::Int);
-    assert_eq!(schema.fields()[2].label(), "Amount");
+    assert_eq!(names[63], "message_authentication_code");
+    assert_eq!(names[64], "settlement_code");
+    assert_eq!(names[126], "message_authentication_code_2");
+    assert_eq!(schema.fields()[3].field_type(), DocumentFieldType::Int);
+    assert_eq!(schema.fields()[3].label(), "DE4 Transaction Amount");
 }
 
 #[test]

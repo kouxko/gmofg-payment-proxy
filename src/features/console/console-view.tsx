@@ -42,7 +42,7 @@ export function ConsoleView({
     <section className="space-y-4 p-5">
       <div className="flex flex-wrap items-center gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">运行监控</h1>
+          <h1 className="sr-only">运行监控</h1>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
             当前工作区的代理入口状态与最近流量事件
           </p>

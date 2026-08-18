@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::SocketCaptureSchemaRef;
-use intercept_proxy_domain::SocketDirection;
+use intercept_proxy_domain::{SocketDirection, SocketRuleStage};
 use intercept_proxy_protocol_scripting::{
     DirectionExecutionPlan, ProtocolDirection, ProtocolDirectionExecutor,
     ProtocolExecutionCancellation, ProtocolFrameInspector, ProtocolFramingLimits,
@@ -81,15 +81,20 @@ impl ScriptedRelayProcessorFactoryAdapter {
         connection: SocketConnectionIdentity,
         direction: SocketPayloadDirection,
     ) -> Result<ScriptedRelayFrameProcessor, SocketProcessingFailure> {
-        let (protocol_direction, rule_direction, plan) = match direction {
+        let (protocol_direction, rule_direction, first_stage, second_stage, plan) = match direction
+        {
             SocketPayloadDirection::AppToUpstream => (
                 ProtocolDirection::Upstream,
                 SocketDirection::Upstream,
+                SocketRuleStage::AppToProxy,
+                SocketRuleStage::ProxyToUpstream,
                 self.upstream,
             ),
             SocketPayloadDirection::UpstreamToApp => (
                 ProtocolDirection::Downstream,
                 SocketDirection::Downstream,
+                SocketRuleStage::UpstreamToProxy,
+                SocketRuleStage::ProxyToApp,
                 self.downstream,
             ),
             SocketPayloadDirection::LocalExchange => {
@@ -119,12 +124,14 @@ impl ScriptedRelayProcessorFactoryAdapter {
             cancellation.clone(),
         )
         .map_err(|_| processing_failure("protocol direction executor construction failed"))?;
-        let rules = self.rules.connection(connection.clone(), rule_direction);
+        let first_rules = self.rules.connection(connection.clone(), first_stage);
+        let second_rules = self.rules.connection(connection.clone(), second_stage);
         Ok(ScriptedRelayFrameProcessor::spawn(
             DirectionWorkerState {
                 inspector,
                 executor,
-                rules,
+                first_rules,
+                second_rules,
                 package: self.package.compiled().package().clone(),
                 pending_output: None,
                 connection,
@@ -290,7 +297,8 @@ enum DirectionCommand {
 struct DirectionWorkerState {
     inspector: ProtocolFrameInspector,
     executor: ProtocolDirectionExecutor,
-    rules: SocketDocumentRuleConnection,
+    first_rules: SocketDocumentRuleConnection,
+    second_rules: SocketDocumentRuleConnection,
     package: intercept_proxy_domain::ProtocolPackageRef,
     pending_output: Option<capture::PendingRelayCapture>,
     connection: SocketConnectionIdentity,
@@ -409,14 +417,24 @@ fn process_frame(
         .executor
         .execute_frame_with_document_transform(origin.to_vec(), |document| {
             state
-                .rules
-                .execute_with_cancellation(state.rules.bind_document(document), || {
+                .first_rules
+                .execute_with_cancellation(state.first_rules.bind_document(document), || {
                     cancellation.is_cancelled()
                 })
-                .map(|execution| {
-                    let (document, ids) = execution.into_parts();
-                    matched_rule_ids = ids;
-                    document
+                .and_then(|execution| {
+                    let (document, mut first_ids) = execution.into_parts();
+                    state
+                        .second_rules
+                        .execute_with_cancellation(
+                            state.second_rules.bind_document(document),
+                            || cancellation.is_cancelled(),
+                        )
+                        .map(|execution| {
+                            let (document, second_ids) = execution.into_parts();
+                            first_ids.extend(second_ids);
+                            matched_rule_ids = first_ids;
+                            document
+                        })
                 })
                 .map_err(|_| ProtocolRuntimeError::DocumentTransformFailed {
                     package: package.clone(),

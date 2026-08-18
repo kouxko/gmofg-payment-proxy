@@ -8,7 +8,7 @@ use specta::Type;
 
 use super::{
     DocumentAction, DocumentCondition, ListenerId, ProtocolPackageRef,
-    ProtocolPackageSchemaFieldTypeViewModel, SocketDirection, SocketDocumentRuleId,
+    ProtocolPackageSchemaFieldTypeViewModel, SocketDocumentRuleId, SocketRuleStage,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -21,6 +21,7 @@ pub enum SocketRuleFieldOperatorCapability {
 #[serde(rename_all = "snake_case")]
 pub enum SocketRuleFieldActionCapability {
     SetField,
+    ClearField,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -46,7 +47,7 @@ pub struct SocketRuleFieldCapability {
 pub struct SocketRuleCapabilityCatalog {
     pub package: ProtocolPackageRef,
     pub schema_version: u32,
-    pub direction: SocketDirection,
+    pub stage: SocketRuleStage,
     pub fields: Vec<SocketRuleFieldCapability>,
     pub common_actions: Vec<SocketRuleCommonActionCapability>,
 }
@@ -57,12 +58,13 @@ pub struct SocketRuleSaveInput {
     /// `None` 表示创建；更新时必须同时提供规则 ID 与期望 revision。
     pub rule_id: Option<SocketDocumentRuleId>,
     pub expected_revision: Option<u64>,
+    pub name: String,
     pub enabled: bool,
     pub priority: i32,
     pub listener_id: ListenerId,
     pub package: ProtocolPackageRef,
     pub schema_version: u32,
-    pub direction: SocketDirection,
+    pub stage: SocketRuleStage,
     pub conditions: Vec<DocumentCondition>,
     pub actions: Vec<DocumentAction>,
 }

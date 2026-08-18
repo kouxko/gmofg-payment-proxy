@@ -58,8 +58,6 @@ uuid_id!(CertificateId);
 uuid_id!(EventId);
 uuid_id!(WorkspaceId);
 uuid_id!(ListenerId);
-uuid_id!(ResponseAssertionId);
-uuid_id!(FaultPresetId);
 uuid_id!(CertificateReferenceId);
 
 #[cfg(test)]

@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{SocketCaptureSchemaRef, SocketExchangeId};
-use intercept_proxy_domain::SocketDirection;
+use intercept_proxy_domain::SocketRuleStage;
 use intercept_proxy_protocol_scripting::{
     LocalResponderCoordinator, ProtocolDirection, ProtocolExecutionCancellation,
     ProtocolFrameInspector, ProtocolFramingLimits, ProtocolRuntimeError, ProtocolRuntimeLimits,
@@ -103,14 +103,18 @@ impl LocalResponderProcessorFactoryAdapter {
             cancellation.clone(),
         )
         .map_err(|error| request_runtime_failure(&error))?;
-        let rules = self
+        let request_rules = self
             .rules
-            .connection(connection.clone(), SocketDirection::Downstream);
+            .connection(connection.clone(), SocketRuleStage::AppToProxy);
+        let response_rules = self
+            .rules
+            .connection(connection.clone(), SocketRuleStage::ProxyToApp);
         Ok(LocalResponderFrameProcessor::spawn(
             LocalWorkerState {
                 inspector,
                 coordinator,
-                rules,
+                request_rules,
+                response_rules,
                 package: self.package.compiled().package().clone(),
                 pending_response: None,
                 diagnostics: None,
@@ -284,7 +288,8 @@ enum LocalCommand {
 struct LocalWorkerState {
     inspector: ProtocolFrameInspector,
     coordinator: LocalResponderCoordinator,
-    rules: SocketDocumentRuleConnection,
+    request_rules: SocketDocumentRuleConnection,
+    response_rules: SocketDocumentRuleConnection,
     package: intercept_proxy_domain::ProtocolPackageRef,
     pending_response: Option<capture::PendingLocalCapture>,
     diagnostics: Option<LocalResponderDiagnostics>,
@@ -420,14 +425,24 @@ fn process_exchange(
         .coordinator
         .build_response(&request, |document| {
             state
-                .rules
-                .execute_with_cancellation(state.rules.bind_document(document), || {
+                .request_rules
+                .execute_with_cancellation(state.request_rules.bind_document(document), || {
                     cancellation.is_cancelled()
                 })
-                .map(|execution| {
-                    let (document, ids) = execution.into_parts();
-                    matched_rule_ids = ids;
-                    document
+                .and_then(|execution| {
+                    let (document, mut request_ids) = execution.into_parts();
+                    state
+                        .response_rules
+                        .execute_with_cancellation(
+                            state.response_rules.bind_document(document),
+                            || cancellation.is_cancelled(),
+                        )
+                        .map(|execution| {
+                            let (document, response_ids) = execution.into_parts();
+                            request_ids.extend(response_ids);
+                            matched_rule_ids = request_ids;
+                            document
+                        })
                 })
                 .map_err(|_| ProtocolRuntimeError::DocumentTransformFailed {
                     package: package.clone(),

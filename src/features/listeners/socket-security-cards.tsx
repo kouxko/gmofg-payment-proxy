@@ -41,7 +41,7 @@ export function SocketAppSecurityCard(props: CommonProps & {
   const security = appSecurity(props.settings);
   const tls = security.mode === "tls" ? security.downstream_tls : undefined;
   return <Card><Card.Header><Card.Title>2. App 接入安全</Card.Title>
-    <Card.Description>Listener 面向 App 的接入方式；TLS 可选择客户端证书认证。</Card.Description>
+    <Card.Description>入口面向 App 的接入方式；TLS 可选择客户端证书认证。</Card.Description>
   </Card.Header><Card.Content className="space-y-4">
     <TransportSelect label="App 接入传输" value={security.mode} disabled={props.locked}
       onChange={(mode) => props.onChange(setAppTransport(props.settings, mode))} />
@@ -54,8 +54,8 @@ export function SocketAppSecurityCard(props: CommonProps & {
       onOpenChange={(open) => { if (!open) { setPassword(""); setModal(undefined); } }}
       onLabelChange={setLabel} onPasswordChange={setPassword}
       title="导入 App 侧服务端身份"
-      description="选择 .p12 / .pfx，或同时包含服务端证书链与匹配私钥的 .pem。Listener 接受 App TLS 连接时出示它；它必须具备 serverAuth，而不是上游 mTLS 使用的 clientAuth 身份。"
-      detail="文件经系统对话框读取并保存为受保护引用。输入的密码仅用于本次解密，不写入 Listener、Workspace 或诊断信息。"
+      description="选择 .p12 / .pfx，或同时包含服务端证书链与匹配私钥的 .pem。入口接受 App TLS 连接时出示它；它必须具备 serverAuth，而不是上游 mTLS 使用的 clientAuth 身份。"
+      detail="文件经系统对话框读取并保存为受保护引用。输入的密码仅用于本次解密，不写入入口、工作区或诊断信息。"
       buttonLabel="选择服务端身份（.p12 / .pfx / .pem）"
       buttonAriaLabel="选择服务端身份（.p12 / .pfx / .pem）"
       onImport={async () => { const ok = await props.onImportIdentity(label, password); setPassword(""); if (ok) setModal(undefined); }} />}
@@ -158,7 +158,7 @@ function TransportSelect({ label, value, disabled, onChange }: { label: string; 
   return <Select aria-label={label} selectedKey={value} isDisabled={disabled} onSelectionChange={(key) => {
     // 只接受组件声明过的精确枚举，避免 null/未知 key 被强转为非法配置。
     if (key === "tcp" || key === "tls") onChange(key);
-  }}><Label>{label}</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="tcp" textValue="TCP">TCP</ListBox.Item><ListBox.Item id="tls" textValue="TLS">TLS</ListBox.Item></ListBox></Select.Popover></Select>;
+  }}><Label>{label}</Label><Select.Trigger className="h-10 min-h-10"><Select.Value className="truncate" /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="tcp" textValue="TCP">TCP</ListBox.Item><ListBox.Item id="tls" textValue="TLS">TLS</ListBox.Item></ListBox></Select.Popover></Select>;
 }
 
 function CertificateRow({ label, value, emptyLabel, references, button, disabled, onChange, onImport }: {
@@ -175,7 +175,7 @@ function ClientAuthentication({ value, trusts, disabled, onChange }: {
   return <Select aria-label="App 客户端证书要求" selectedKey={value.mode} isDisabled={disabled} onSelectionChange={(key) => {
     if (key === "required" || key === "optional") onChange({ mode: key, trust });
     else if (key === "disabled") onChange({ mode: "disabled" });
-  }}><Label>App 客户端证书要求</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="disabled" textValue="不要求客户端证书">不要求客户端证书</ListBox.Item><ListBox.Item id="optional" textValue="客户端证书可选">客户端证书可选</ListBox.Item><ListBox.Item id="required" textValue="必须验证客户端证书">必须验证客户端证书</ListBox.Item></ListBox></Select.Popover></Select>;
+  }}><Label>App 客户端证书要求</Label><Select.Trigger className="h-10 min-h-10"><Select.Value className="truncate" /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox><ListBox.Item id="disabled" textValue="不要求客户端证书">不要求客户端证书</ListBox.Item><ListBox.Item id="optional" textValue="客户端证书可选">客户端证书可选</ListBox.Item><ListBox.Item id="required" textValue="必须验证客户端证书">必须验证客户端证书</ListBox.Item></ListBox></Select.Popover></Select>;
 }
 
 function detail(details: ListenerCertificateDetailViewModel[], id?: string): ListenerCertificateDetailViewModel | undefined {

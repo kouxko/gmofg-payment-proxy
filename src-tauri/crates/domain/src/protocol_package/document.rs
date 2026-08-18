@@ -130,6 +130,13 @@ impl Document {
         Ok(self.values[index].is_some())
     }
 
+    /// 清除一个已声明字段的值，保留其他字段以及当前 Schema。
+    pub fn clear_field(&mut self, name: &str) -> Result<(), DomainError> {
+        let index = self.field_index(name)?;
+        self.values[index] = None;
+        Ok(())
+    }
+
     /// 清空当前 Document 的全部字段值，但保留原 Schema 身份、版本、字段顺序和共享关系。
     ///
     /// 规则的 `ClearDocument` 动作使用此方法生成同一协议下的空响应骨架。它不会把字段从

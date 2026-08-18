@@ -47,6 +47,7 @@ pub(super) fn content_view(
     let json = if metadata.content_kind == intercept_proxy_application::MessageContentKind::Json {
         body_text
             .as_deref()
+            .filter(|text| !text.trim().is_empty())
             .and_then(|text| match serde_json::from_str(text) {
                 Ok(value) => Some(value),
                 Err(error) => {

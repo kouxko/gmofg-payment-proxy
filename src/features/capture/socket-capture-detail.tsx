@@ -60,7 +60,7 @@ function CommonMetadata({ row, detail }: { row: SocketCaptureRowViewModel; detai
       <dt>Schema</dt><dd><code className="text-xs">{schemaLabel(row.schema)}</code></dd>
       <dt>连接</dt><dd className="break-all font-mono text-xs">{row.connection_id}</dd>
       <dt>Session</dt><dd className="break-all font-mono text-xs">{row.session_id}</dd>
-      <dt>Listener</dt><dd className="break-all font-mono text-xs">{row.listener_id}</dd>
+      <dt>入口</dt><dd className="break-all font-mono text-xs">{row.listener_id}</dd>
       <dt>数据量</dt><dd>Origin {formatBytes(row.origin_size_bytes)} · Written {formatBytes(row.written_size_bytes)} · Logical {formatBytes(row.logical_size_bytes)}</dd>
     </dl>
   );

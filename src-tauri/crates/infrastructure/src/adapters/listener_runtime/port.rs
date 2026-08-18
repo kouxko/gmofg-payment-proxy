@@ -71,6 +71,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         let plan = ListenerRuntimePlanBuilder::new(self)
             .build(&workspace, &listener, runtime_epoch)
             .await?;
+        let scripted_snapshot = plan.scripted_snapshot();
         if let Some(snapshot) = plan.scripted_snapshot()
             && matches!(snapshot.topology(), DomainSocketTopology::LocalResponder(_))
             && matches!(
@@ -133,9 +134,46 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 fault,
                 workspace,
                 socket_service,
+                scripted_snapshot,
             },
         );
         Ok(running_status(listener_id, listen_address))
+    }
+
+    async fn replace_socket_rules(
+        &self,
+        workspace: ProxyWorkspace,
+        listener_id: ListenerId,
+    ) -> AppResult<()> {
+        let snapshot = self
+            .running
+            .lock()
+            .await
+            .get(&listener_id)
+            .and_then(|running| running.scripted_snapshot.clone());
+        let Some(snapshot) = snapshot else {
+            return Ok(());
+        };
+        let listener = workspace
+            .listeners
+            .iter()
+            .find(|listener| listener.id == listener_id)
+            .ok_or_else(|| {
+                AppError::new("LISTENER_NOT_FOUND", "入口配置不存在。")
+                    .entity(listener_id.to_string())
+            })?;
+        snapshot.replace_document_rules(&workspace, listener)?;
+
+        for running in self
+            .running
+            .lock()
+            .await
+            .values_mut()
+            .filter(|running| running.workspace.id == workspace.id)
+        {
+            running.workspace = workspace.clone();
+        }
+        Ok(())
     }
 
     async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel> {

@@ -4,17 +4,15 @@ use uuid::Uuid;
 
 pub use intercept_proxy_domain::{
     BodyCodecKind, CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    ChannelId, ConnectionFaultAction, DirectionProcessingOptions, DocumentAction,
-    DocumentCondition, DocumentFieldName, DocumentValue, DownstreamClientAuthentication,
-    DownstreamTlsSettings, FaultPreset, FaultPresetId, FixedServerSettings,
+    ChannelId, DirectionProcessingOptions, DocumentAction, DocumentCondition, DocumentFieldName,
+    DocumentValue, DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings,
     ForwardProxyAuthentication, HttpListenerSettings, ListenerDataPlane, ListenerId, MitmSettings,
     ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyWorkspace,
-    ResponseAssertion, ResponseAssertionId, ResponseAssertionKind, ScriptedSocketProcessing,
-    SecretReference, SocketDirection, SocketDocumentRuleDefinition, SocketDocumentRuleDraft,
-    SocketDocumentRuleId, SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketEndpoint,
-    SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
-    SocketRelaySettings, SocketRelayTopology, SocketTopology, SocketUpstreamTlsSettings,
-    UpstreamTlsSettings, WorkspaceId,
+    ScriptedSocketProcessing, SecretReference, SocketDirection, SocketDocumentRuleDefinition,
+    SocketDocumentRuleDraft, SocketDocumentRuleId, SocketDownstreamSecurity,
+    SocketDownstreamTlsSettings, SocketEndpoint, SocketLocalResponderTopology,
+    SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings, SocketRelayTopology,
+    SocketRuleStage, SocketTopology, SocketUpstreamTlsSettings, UpstreamTlsSettings, WorkspaceId,
 };
 
 /// 标识一次代理启动周期。代理重启后旧周期的事件和断点不得继续操作。

@@ -37,20 +37,40 @@ impl SqliteStore {
 
     fn ensure_current_schema(&self) -> Result<(), InfrastructureError> {
         let mut connection = self.connection.lock();
-        let transaction = connection
-            .transaction()
-            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-        if database_is_empty(&transaction)? {
-            create_current_schema(&transaction)?;
-            super::socket_captures::create_schema(&transaction)?;
-            let certificate_revision = stored_certificate_revision(&transaction)?;
-            initialize_singleton_state(&transaction, certificate_revision)?;
-        } else {
-            validate_current_schema_marker(&transaction)?;
+        let database_is_empty = database_is_empty(&connection)?;
+        let reset_required = !database_is_empty
+            && validate_current_schema_marker(&connection)? == SchemaState::Older;
+
+        if reset_required {
+            connection
+                .execute_batch("PRAGMA foreign_keys = OFF;")
+                .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
         }
-        transaction
-            .commit()
-            .map_err(|source| InfrastructureError::DatabaseSchema { source })
+
+        let result = (|| {
+            let transaction = connection
+                .transaction()
+                .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+            if reset_required {
+                drop_all_user_tables(&transaction)?;
+            }
+            if database_is_empty || reset_required {
+                create_current_schema(&transaction)?;
+                super::socket_captures::create_schema(&transaction)?;
+                let certificate_revision = stored_certificate_revision(&transaction)?;
+                initialize_singleton_state(&transaction, certificate_revision)?;
+            }
+            transaction
+                .commit()
+                .map_err(|source| InfrastructureError::DatabaseSchema { source })
+        })();
+
+        if reset_required {
+            connection
+                .execute_batch("PRAGMA foreign_keys = ON;")
+                .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+        }
+        result
     }
 
     pub fn load_settings(&self) -> Result<Option<StoredSettings>, InfrastructureError> {
@@ -180,8 +200,8 @@ impl SqliteStore {
     }
 }
 
-fn database_is_empty(transaction: &rusqlite::Transaction<'_>) -> Result<bool, InfrastructureError> {
-    transaction
+fn database_is_empty(connection: &Connection) -> Result<bool, InfrastructureError> {
+    connection
         .query_row(
             "SELECT NOT EXISTS(
                 SELECT 1 FROM sqlite_master
@@ -193,10 +213,16 @@ fn database_is_empty(transaction: &rusqlite::Transaction<'_>) -> Result<bool, In
         .map_err(|source| InfrastructureError::DatabaseSchema { source })
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SchemaState {
+    Current,
+    Older,
+}
+
 fn validate_current_schema_marker(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), InfrastructureError> {
-    let marker_exists = transaction
+    connection: &Connection,
+) -> Result<SchemaState, InfrastructureError> {
+    let marker_exists = connection
         .query_row(
             "SELECT EXISTS(
                 SELECT 1 FROM sqlite_master
@@ -207,13 +233,10 @@ fn validate_current_schema_marker(
         )
         .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     if !marker_exists {
-        return Err(InfrastructureError::DatabaseSchemaInvalid {
-            current: CURRENT_SCHEMA_VERSION,
-            found: Vec::new(),
-        });
+        return Ok(SchemaState::Older);
     }
 
-    let markers = transaction
+    let markers = connection
         .prepare("SELECT singleton_id, version FROM application_schema ORDER BY singleton_id")
         .and_then(|mut statement| {
             statement
@@ -221,11 +244,36 @@ fn validate_current_schema_marker(
                 .collect::<Result<Vec<_>, _>>()
         })
         .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-    if markers.as_slice() != [(1, CURRENT_SCHEMA_VERSION)] {
-        return Err(InfrastructureError::DatabaseSchemaInvalid {
+    match markers.as_slice() {
+        [(1, version)] if *version == CURRENT_SCHEMA_VERSION => Ok(SchemaState::Current),
+        [(1, version)] if *version < CURRENT_SCHEMA_VERSION => Ok(SchemaState::Older),
+        _ => Err(InfrastructureError::DatabaseSchemaInvalid {
             current: CURRENT_SCHEMA_VERSION,
             found: markers,
-        });
+        }),
+    }
+}
+
+fn drop_all_user_tables(
+    transaction: &rusqlite::Transaction<'_>,
+) -> Result<(), InfrastructureError> {
+    let tables = transaction
+        .prepare(
+            "SELECT name FROM sqlite_master
+             WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+             ORDER BY name",
+        )
+        .and_then(|mut statement| {
+            statement
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+    for table in tables {
+        let quoted = table.replace('"', "\"\"");
+        transaction
+            .execute_batch(&format!("DROP TABLE \"{quoted}\";"))
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     }
     Ok(())
 }

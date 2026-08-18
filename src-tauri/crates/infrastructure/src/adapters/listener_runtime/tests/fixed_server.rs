@@ -135,11 +135,9 @@ async fn multiple_fixed_server_listeners_route_to_their_own_upstream_origins() {
         name: "multiple mappings".into(),
         revision: Revision::INITIAL,
         listeners: vec![transaction.clone(), webhook.clone()],
-        response_assertions: Vec::new(),
         rules: Vec::new(),
         socket_rules: Vec::new(),
         socket_rule_created_order_high_water: 0,
-        fault_presets: Vec::new(),
         certificate_references: Vec::new(),
         android_network_profiles: Vec::new(),
     };

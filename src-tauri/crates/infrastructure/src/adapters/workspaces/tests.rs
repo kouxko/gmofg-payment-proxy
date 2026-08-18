@@ -4,10 +4,9 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{
     AndroidNetworkProfile, AndroidProxyRoute, AndroidTargetApplication, BodyCodecKind,
     CertificateReference, CertificateReferenceId, CertificateReferenceKind, ChannelId,
-    ConnectionFaultAction, DownstreamClientAuthentication, DownstreamTlsSettings, FaultPreset,
-    FaultPresetId, FixedServerSettings, HttpListenerSettings, ListenerDataPlane, ListenerId,
-    MatchCondition, MessageStage, ProxyListener, ResponseAssertion, ResponseAssertionId,
-    ResponseAssertionKind, Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings,
+    DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings,
+    HttpListenerSettings, ListenerDataPlane, ListenerId, MatchCondition, MessageStage,
+    ProxyListener, Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings,
     WeakNetworkProfile,
 };
 use std::collections::BTreeSet;
@@ -77,12 +76,7 @@ fn copy_identity_remaps_nested_ids_and_references() {
     assert_ne!(workspace.id, original.id);
     assert_eq!(workspace.revision, DomainRevision::INITIAL);
     assert_ne!(workspace.listeners[0].id, original.listeners[0].id);
-    assert_ne!(
-        workspace.response_assertions[0].id,
-        original.response_assertions[0].id
-    );
     assert_ne!(workspace.rules[0].id, original.rules[0].id);
-    assert_ne!(workspace.fault_presets[0].id, original.fault_presets[0].id);
     assert_ne!(
         workspace.android_network_profiles[0].id,
         original.android_network_profiles[0].id
@@ -177,13 +171,6 @@ fn referenced_workspace() -> ProxyWorkspace {
             }),
             ..ProxyListener::default()
         }],
-        response_assertions: vec![ResponseAssertion {
-            id: ResponseAssertionId::new(),
-            name: "Assertion".into(),
-            listener_ids: vec![listener_id],
-            enabled: true,
-            assertion: ResponseAssertionKind::HttpStatusEquals { expected: 200 },
-        }],
         rules: vec![Rule {
             id: RuleId::new(),
             revision: DomainRevision::INITIAL,
@@ -202,13 +189,6 @@ fn referenced_workspace() -> ProxyWorkspace {
         }],
         socket_rules: Vec::new(),
         socket_rule_created_order_high_water: 0,
-        fault_presets: vec![FaultPreset {
-            id: FaultPresetId::new(),
-            name: "Fault".into(),
-            description: String::new(),
-            connection_actions: vec![ConnectionFaultAction::Delay { milliseconds: 1 }],
-            http_actions: Vec::new(),
-        }],
         certificate_references: certificates,
         android_network_profiles: vec![AndroidNetworkProfile {
             id: "android-profile".into(),

@@ -3,6 +3,7 @@ import type {
   ProxyListener,
   SocketDocumentRuleDefinition,
 } from "@/generated/rust-types";
+import { socketRuleStageLabel } from "./socket-rule-model";
 
 export function SocketRulesList({
   rules,
@@ -29,13 +30,13 @@ export function SocketRulesList({
   onToggle: (rule: SocketDocumentRuleDefinition, enabled: boolean) => void;
   onRetry: () => void;
 }) {
-  const names = new Map(listeners.map((listener) => [listener.id, listener.name]));
+  const listenerById = new Map(listeners.map((listener) => [listener.id, listener]));
   return (
     <section className="min-w-0 space-y-4 overflow-auto p-5">
       <div className="flex items-center gap-3">
         <div>
           <h2 className="text-lg font-semibold">Socket 报文规则</h2>
-          <p className="text-sm text-[var(--telemetry-muted)]">规则按优先级与创建顺序执行。</p>
+          <p className="text-sm text-[var(--telemetry-muted)]">规则按优先级数值从小到大逐条匹配；同优先级按创建顺序执行。</p>
         </div>
         <Button className="ml-auto" isDisabled={pending || listeners.length === 0} onPress={onNew} variant="primary">
           新建 Socket 规则
@@ -56,8 +57,8 @@ export function SocketRulesList({
         <Alert status="warning">
           <Alert.Indicator />
           <Alert.Content>
-            <Alert.Title>当前 Workspace 没有 Scripted Socket Listener</Alert.Title>
-            <Alert.Description>请先为 Socket Listener 绑定精确协议包。</Alert.Description>
+            <Alert.Title>当前工作区没有可配置规则的 Socket 入口</Alert.Title>
+            <Alert.Description>请先在入口配置中选择一个协议处理方案。</Alert.Description>
           </Alert.Content>
         </Alert>
       )}
@@ -65,7 +66,7 @@ export function SocketRulesList({
         <div className="rounded-lg border border-dashed p-8 text-center text-[var(--telemetry-muted)]">
           <p>暂无 Socket 规则</p>
           <p className="mt-1 text-sm">
-            选择新建规则后绑定一个按协议处理的 Socket Listener
+            每个链路阶段单独配置，规则只在所选阶段执行。
           </p>
         </div>
       )}
@@ -86,15 +87,17 @@ export function SocketRulesList({
               <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control></Switch.Content>
             </Switch>
             <Button className="min-w-0 flex-1 justify-start text-left" isDisabled={pending} onPress={() => onSelect(rule)} variant="ghost">
-              <span className="block truncate font-medium">{names.get(rule.listener_id) ?? rule.listener_id}</span>
+              <span className="block truncate font-medium">{rule.name}</span>
               <span className="block truncate text-xs text-[var(--telemetry-muted)]">
-                {rule.package.id}@{rule.package.version} · Schema v{rule.schema_version}
+                {listenerById.get(rule.listener_id)?.name ?? rule.listener_id} · {rule.package.id}@{rule.package.version}
               </span>
               <span className="block truncate text-xs text-[var(--telemetry-muted)]">
                 #{rule.rule_id.slice(0, 8)} · {rule.conditions.length} 个条件 · {rule.actions.length} 个动作
               </span>
             </Button>
-            <Chip size="sm" variant="soft">{rule.direction === "upstream" ? "upstream" : "downstream"}</Chip>
+            <Chip size="sm" variant="soft">
+              {socketRuleStageLabel(rule.stage)}
+            </Chip>
             <span className="text-sm">P{rule.priority}</span>
           </div>
         ))}

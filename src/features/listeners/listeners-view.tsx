@@ -63,7 +63,7 @@ export function ListenersView() {
         // useIpcQuery 统一通过 errorMessage 呈现错误；保留最小结构化边界，
         // 使本地响应校验失败与 Rust 目录失败走同一个明确 Alert。
         throw Object.assign(
-          new Error("Listener 协议包目录数据不完整，请刷新后重试。"),
+          new Error("入口协议包目录数据不完整，请刷新后重试。"),
           { field_errors: {} },
         );
       }

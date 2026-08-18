@@ -27,7 +27,7 @@ pub use adapters::{
     RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
     RuntimeRuleRepository, SettingsRepositoryAdapter, SocketCaptureRepositoryAdapter,
     SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory, WorkspaceBodyCodecResolver,
-    WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
+    WorkspaceRepositoryAdapter,
 };
 pub use application_backup::{
     ApplicationBackupArchive, ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode,

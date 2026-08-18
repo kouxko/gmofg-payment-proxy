@@ -120,6 +120,18 @@ impl ProtocolPackageRepositoryAdapter {
 
 #[async_trait]
 impl BuiltinProtocolPackagePort for ProtocolPackageRepositoryAdapter {
+    async fn builtin_archive(&self) -> AppResult<Vec<u8>> {
+        self.builtin_archive
+            .as_deref()
+            .map(<[u8]>::to_vec)
+            .ok_or_else(|| {
+                AppError::new(
+                    "BUILTIN_PROTOCOL_PACKAGE_UNAVAILABLE",
+                    "当前宿主未提供官方 ISO 8583 起始示例。",
+                )
+            })
+    }
+
     async fn restore_builtin(&self) -> AppResult<ProtocolPackageImportViewModel> {
         let prepared = self.prepare_builtin()?;
         let description = application_description(&prepared.compiled);

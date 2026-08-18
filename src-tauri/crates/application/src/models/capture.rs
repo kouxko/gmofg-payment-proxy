@@ -6,9 +6,8 @@ use serde_json::Value;
 use specta::Type;
 
 use super::{
-    BreakpointId, ChannelId, DisabledReason, MessageStage, PageRequest,
-    ResponseAssertionResultViewModel, Revision, RuleId, RuntimeEpoch, SessionId, SortDirection,
-    UiTone,
+    BreakpointId, ChannelId, DisabledReason, MessageStage, PageRequest, Revision, RuleId,
+    RuntimeEpoch, SessionId, SortDirection, UiTone,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -249,6 +248,5 @@ pub struct CaptureDetailViewModel {
     pub tls_summary: String,
     pub timings_ms: BTreeMap<String, u64>,
     pub rule_trace: Vec<String>,
-    pub response_assertions: Vec<ResponseAssertionResultViewModel>,
     pub revision: Revision,
 }

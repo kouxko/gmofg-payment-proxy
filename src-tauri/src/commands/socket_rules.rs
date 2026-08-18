@@ -2,8 +2,8 @@
 
 use intercept_proxy_application::{
     DocumentValue, ListenerId, OperationResultViewModel, ProtocolPackageSchemaFieldTypeViewModel,
-    SocketDirection, SocketDocumentRuleDefinition, SocketDocumentRuleId,
-    SocketRuleCapabilityCatalog, SocketRuleSaveInput, parse_socket_rule_value,
+    SocketDocumentRuleDefinition, SocketDocumentRuleId, SocketRuleCapabilityCatalog,
+    SocketRuleSaveInput, SocketRuleStage, parse_socket_rule_value,
 };
 use tauri::State;
 
@@ -42,11 +42,11 @@ pub async fn socket_rule_list(
 pub async fn socket_rule_capabilities(
     state: State<'_, AppState>,
     listener_id: ListenerId,
-    direction: SocketDirection,
+    stage: SocketRuleStage,
 ) -> CommandResult<SocketRuleCapabilityCatalog> {
     state
         .application
-        .socket_rule_capabilities(listener_id, direction)
+        .socket_rule_capabilities(listener_id, stage)
         .await
         .map_err(command_error)
 }

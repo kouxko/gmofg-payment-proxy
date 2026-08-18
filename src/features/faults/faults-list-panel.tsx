@@ -51,7 +51,7 @@ export function FaultsListPanel({
 }: FaultsListPanelProps) {
   return (
     <div className="min-w-0 space-y-4 overflow-auto p-5">
-      <h1 className="text-2xl font-semibold">故障模拟</h1>
+      <h1 className="sr-only">故障模拟</h1>
       <Alert status="accent">
         <Alert.Indicator />
         <Alert.Content>

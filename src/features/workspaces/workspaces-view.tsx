@@ -5,7 +5,6 @@ import {
   Alert,
   AlertDialog,
   Button,
-  Card,
   Chip,
   Input,
   Label,
@@ -23,11 +22,6 @@ import type {
 import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
-import { WorkspaceComponentsEditor } from "./workspace-components-editor";
-import type {
-  ComponentKind,
-  ComponentOperation,
-} from "./workspace-components-editor-model";
 
 export function WorkspacesView() {
   const list = useIpcQuery<WorkspaceSummaryViewModel[]>("workspace-list", () =>
@@ -120,31 +114,6 @@ export function WorkspacesView() {
     refreshState(saved.id);
   }
 
-  async function addComponent(kind: Parameters<typeof commands.workspaceComponentNew>[1]) {
-    if (!effectiveDraft) return;
-    const updated = await callCommand(commands.workspaceComponentNew(effectiveDraft, kind));
-    setDraft(updated);
-  }
-
-  async function applyComponentIntent(
-    componentKind: ComponentKind,
-    componentId: string,
-    operation: ComponentOperation,
-    value: string,
-  ) {
-    if (!effectiveDraft) return;
-    const updated = await callCommand(
-      commands.workspaceComponentApplyIntent(
-        effectiveDraft,
-        componentKind,
-        componentId,
-        operation,
-        value,
-      ),
-    );
-    setDraft(updated);
-  }
-
   async function selectCurrentWorkspace() {
     if (!effectiveDraft) return;
     await callCommand(commands.workspaceSelect(effectiveDraft.id));
@@ -175,7 +144,7 @@ export function WorkspacesView() {
       <div className="min-w-0 space-y-4 overflow-x-hidden overflow-y-auto p-5">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <div className="min-w-64">
-            <h1 className="text-2xl font-semibold">Workspace</h1>
+            <h1 className="sr-only">Workspace</h1>
             <p className="mt-1 text-sm text-[var(--telemetry-muted)]">在此创建、复制、选择及导入导出 Workspace。</p>
           </div>
           <div data-testid="workspace-toolbar" className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto overflow-y-hidden max-[720px]:w-full max-[720px]:justify-start">
@@ -244,28 +213,6 @@ export function WorkspacesView() {
           </Table.ScrollContainer>
         </Table>
         {list.isLoading && <Spinner aria-label="正在读取 Workspace" />}
-        {effectiveDraft && (
-          <Card>
-            <Card.Content className="p-4">
-              <div className="mb-4">
-                <Card.Title>Workspace 策略与安全引用</Card.Title>
-                <Card.Description>组件 ID 自动创建；保存前会统一校验配置。</Card.Description>
-              </div>
-              <WorkspaceComponentsEditor
-                workspace={effectiveDraft}
-                onChange={setDraft}
-                onAdd={(kind) => void run(`add-${kind}`, () => addComponent(kind))}
-                onIntent={(kind, id, operation, value) =>
-                  void run(
-                    `${operation}-${id}`,
-                    () => applyComponentIntent(kind, id, operation, value),
-                  )
-                }
-                disabled={Boolean(pendingAction)}
-              />
-            </Card.Content>
-          </Card>
-        )}
       </div>
       <aside className="min-w-0 space-y-4 overflow-auto border-l border-[var(--telemetry-line)] p-5 max-[1000px]:border-l-0 max-[1000px]:border-t">
         <h2 className="text-lg font-semibold">所选 Workspace</h2>

@@ -60,6 +60,7 @@ struct RunningListener {
     /// ownership explicit and prevents later Workspace edits from silently changing live traffic.
     workspace: ProxyWorkspace,
     socket_service: Option<Arc<SocketRelayService>>,
+    scripted_snapshot: Option<Arc<scripted_snapshot::ScriptedSocketRuntimeSnapshot>>,
 }
 
 #[derive(Debug)]

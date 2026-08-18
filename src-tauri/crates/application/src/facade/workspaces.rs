@@ -205,7 +205,7 @@ impl Application {
         }) {
             return Err(AppError::new(
                 "WORKSPACE_RUNTIME_ACTIVE",
-                "Workspace 存在运行中的 Listener；请停止后再保存或删除配置。",
+                "工作区存在运行中的入口；请停止后再保存或删除配置。",
             )
             .entity(status.listener_id.to_string()));
         }
@@ -266,6 +266,3 @@ impl Application {
         );
     }
 }
-
-mod components;
-mod support;

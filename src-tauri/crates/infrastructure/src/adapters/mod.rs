@@ -23,7 +23,6 @@ mod protocol_packages;
 mod rules;
 mod settings;
 mod socket_capture;
-mod workspace_policies;
 mod workspaces;
 
 pub use android_adb::AndroidAdbAdapter;
@@ -54,5 +53,4 @@ pub use protocol_packages::{
 pub use rules::RuleRepositoryAdapter;
 pub use settings::SettingsRepositoryAdapter;
 pub use socket_capture::SocketCaptureRepositoryAdapter;
-pub use workspace_policies::WorkspaceRuntimePolicyResolver;
 pub use workspaces::WorkspaceRepositoryAdapter;
