@@ -4,8 +4,7 @@
 //! 不会把敏感内容直接暴露给 `WebView`。
 
 use intercept_proxy_application::{
-    AppError, AppResult, MigrationSourceKind, ProxyWorkspace, WORKSPACE_PERSISTENCE_VERSION,
-    migrate_workspace_value,
+    AppError, AppResult, ProxyWorkspace, WORKSPACE_PERSISTENCE_VERSION,
 };
 
 use crate::{InfrastructureError, InfrastructureErrorCode, WorkspaceRecord};
@@ -19,26 +18,13 @@ pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWo
     let indexed_revision = record.revision;
     let mut value = record.value;
     let version = take_workspace_persistence_version(&mut value)?;
-    let source_version = match version {
-        Some(version @ (3..=5)) => u16::try_from(version).expect("bounded persistence version"),
-        None => 2,
-        Some(other) => {
-            return Err(format!(
-                "Workspace {indexed_id} 持久化版本 {other} 不受支持"
-            ));
-        }
-    };
-    let (workspace, _) = migrate_workspace_value(
-        value,
-        MigrationSourceKind::WorkspacePersistence,
-        source_version,
-    )
-    .map_err(|error| {
-        format!(
-            "Workspace {indexed_id} v{source_version} 结构无效：{}",
-            error.view_model.message
-        )
-    })?;
+    if version != u64::from(WORKSPACE_PERSISTENCE_VERSION) {
+        return Err(format!(
+            "Workspace {indexed_id} 持久化版本 {version} 不受支持；当前仅支持版本 {WORKSPACE_PERSISTENCE_VERSION}"
+        ));
+    }
+    let workspace = serde_json::from_value::<ProxyWorkspace>(value)
+        .map_err(|error| format!("Workspace {indexed_id} v{version} 结构无效：{error}"))?;
     if workspace.id.as_uuid() != indexed_id || workspace.revision.get() != indexed_revision {
         return Err(format!(
             "Workspace {indexed_id} 的索引 ID/revision 与 JSON 内容不一致"
@@ -65,27 +51,22 @@ pub(crate) fn encode_workspace_record(
     Ok(value)
 }
 
-fn take_workspace_persistence_version(
-    value: &mut serde_json::Value,
-) -> Result<Option<u64>, String> {
+fn take_workspace_persistence_version(value: &mut serde_json::Value) -> Result<u64, String> {
     let object = value
         .as_object_mut()
         .ok_or_else(|| "Workspace 持久化值不是 JSON object".to_owned())?;
     object
         .remove("_persistence_version")
-        .map(|version| {
-            version
-                .as_u64()
-                .ok_or_else(|| "Workspace _persistence_version 必须是整数".to_owned())
-        })
-        .transpose()
+        .ok_or_else(|| "Workspace _persistence_version 缺失".to_owned())?
+        .as_u64()
+        .ok_or_else(|| "Workspace _persistence_version 必须是整数".to_owned())
 }
 
 #[allow(clippy::needless_pass_by_value)]
 pub(crate) fn app_error(error: InfrastructureError) -> AppError {
     let (code, message) = match error.code() {
-        InfrastructureErrorCode::DatabaseMigrationFailed => {
-            ("DATABASE_MIGRATION_FAILED", "数据库初始化失败。")
+        InfrastructureErrorCode::DatabaseSchemaFailed => {
+            ("DATABASE_SCHEMA_INVALID", "数据库结构初始化或校验失败。")
         }
         InfrastructureErrorCode::DatabaseWriteFailed => ("INTERNAL_ERROR", "数据库操作失败。"),
         InfrastructureErrorCode::RevisionConflict => {

@@ -10,11 +10,9 @@ use std::{
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_application::{
-    APPLICATION_CONFIGURATION_FORMAT_VERSION, AppError, AppResult,
-    ApplicationBackupImportCandidate, ApplicationBackupImportPreparePort,
-    ApplicationBackupImportToken, MigrationReport, MigrationSourceKind,
-    PortableApplicationProtocolPackage, PortableCertificateMaterial, PortableProtocolPackageFile,
-    PreparedApplicationBackup, portable_material_sha256,
+    AppError, AppResult, ApplicationBackupImportCandidate, ApplicationBackupImportPreparePort,
+    ApplicationBackupImportToken, PortableApplicationProtocolPackage, PortableCertificateMaterial,
+    PortableProtocolPackageFile, PreparedApplicationBackup, portable_material_sha256,
 };
 use parking_lot::Mutex;
 use uuid::Uuid;
@@ -321,10 +319,6 @@ fn reconstruct(
         settings: document.application.settings,
         protocol_packages: packages,
         certificate_materials: materials,
-        migration_report: MigrationReport::unchanged(
-            MigrationSourceKind::ApplicationConfigurationDocument,
-            APPLICATION_CONFIGURATION_FORMAT_VERSION,
-        ),
     })
 }
 

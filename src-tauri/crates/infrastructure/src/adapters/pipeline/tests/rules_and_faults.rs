@@ -19,7 +19,7 @@ fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message()
         Arc::new(InMemorySessionStore::new(10, 64 * 1024 * 1024)),
         Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(128)),
-        Arc::new(CaptureRepositoryAdapter::default()),
+        test_capture_repository(),
     );
     let epoch = Uuid::new_v4();
     let context = test_context(epoch, Uuid::new_v4(), transaction_channel());

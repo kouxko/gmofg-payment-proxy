@@ -4,17 +4,15 @@ use specta::Type;
 
 use super::{
     BreakpointSummaryViewModel, CapturePageViewModel, CaptureRowViewModel,
-    CertificateOverviewViewModel, ChannelPresentationViewModel, ChannelStatusViewModel,
-    ListenerStatusViewModel, ProxyStatusViewModel, Revision, RuleSummaryViewModel, RuntimeEpoch,
-    SessionSummaryViewModel, SettingsViewModel, SocketCaptureRowViewModel,
-    WorkspaceChangedViewModel,
+    CertificateOverviewViewModel, ChannelPresentationViewModel, ListenerStatusViewModel, Revision,
+    RuleSummaryViewModel, RuntimeEpoch, SessionSummaryViewModel, SettingsViewModel,
+    SocketCaptureRowViewModel, WorkspaceChangedViewModel,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 /// 应用启动时一次返回的首屏快照，避免界面自行拼接不一致状态。
 pub struct AppBootstrapViewModel {
     pub product_name: String,
-    pub proxy: ProxyStatusViewModel,
     pub channel_catalog: Vec<ChannelPresentationViewModel>,
     pub recent_capture: CapturePageViewModel,
     pub pending_breakpoints: Vec<BreakpointSummaryViewModel>,
@@ -37,8 +35,6 @@ pub struct SubscriptionAckViewModel {
 pub enum UiEventPayload {
     WorkspaceChanged(WorkspaceChangedViewModel),
     ListenerStatusChanged(ListenerStatusViewModel),
-    RuntimeStatusChanged(Box<ProxyStatusViewModel>),
-    ChannelStatusChanged(ChannelStatusViewModel),
     CaptureRowsAdded(Vec<CaptureRowViewModel>),
     /// 一个 Socket Frame 或 `LocalExchange` 已完整写出并进入正式 capture 仓储。
     /// `RequestParsed` 仍只走有界诊断事件，不能构造此完成事件。

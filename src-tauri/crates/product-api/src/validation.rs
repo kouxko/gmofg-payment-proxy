@@ -1,15 +1,14 @@
 use std::{collections::BTreeSet, net::IpAddr};
 
 use crate::{
-    ProductError, ProductLabels, ProductPersistenceMigrations, ProductProfile,
-    ProductStorageNamespace, STANDARD_FAULT_CAPABILITY_IDS,
+    ProductError, ProductLabels, ProductProfile, ProductStorageNamespace,
+    STANDARD_FAULT_CAPABILITY_IDS,
 };
 
 /// 在 Host 打开存储或启动后台任务前验证静态宿主契约。
 pub fn validate_product_profile(product: &dyn ProductProfile) -> Result<(), ProductError> {
     let channel_ids = validate_channels(product)?;
     validate_storage(product.storage())?;
-    validate_migrations(product.persistence_migrations(), &channel_ids)?;
     validate_fault_templates(product, &channel_ids)?;
     validate_labels(product.labels())
 }
@@ -69,38 +68,6 @@ fn validate_fault_templates(
                 "fault template {:?} references unknown channel {:?}",
                 template.id, template.default_channel_id
             ));
-        }
-    }
-    Ok(())
-}
-
-fn validate_migrations(
-    migrations: ProductPersistenceMigrations,
-    channel_ids: &BTreeSet<&str>,
-) -> Result<(), ProductError> {
-    let mut settings_fields = BTreeSet::new();
-    for mapping in migrations.settings_channels {
-        if !channel_ids.contains(mapping.channel_id) {
-            return invalid(format!(
-                "legacy settings mapping references unknown channel {:?}",
-                mapping.channel_id
-            ));
-        }
-        for field in [
-            mapping.enabled_field,
-            mapping.port_field,
-            mapping.upstream_url_field,
-        ] {
-            if field.trim().is_empty() || !settings_fields.insert(field) {
-                return invalid("legacy settings field names must be non-empty and unique");
-            }
-        }
-    }
-
-    let mut terminal_fields = BTreeSet::new();
-    for field in migrations.terminal_body_fields {
-        if field.trim().is_empty() || !terminal_fields.insert(*field) || *field == "body_bytes" {
-            return invalid("legacy terminal body fields must be non-empty, unique aliases");
         }
     }
     Ok(())

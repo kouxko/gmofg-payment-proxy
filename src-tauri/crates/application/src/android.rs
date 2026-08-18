@@ -170,23 +170,18 @@ pub struct AndroidNetworkStatusViewModel {
     pub serial: String,
     pub state: AndroidNetworkState,
     /// Rust 根据状态机生成的稳定中文文案，展示层不得重复维护状态映射。
-    #[serde(default)]
     pub state_text: String,
     /// Rust 生成的视觉语义；HeroUI 只负责把语义映射到组件颜色。
-    #[serde(default = "default_android_status_tone")]
     pub ui_tone: UiTone,
     /// True only when the Companion protocol or a process-level emergency restore proved state.
     pub verified: bool,
     pub transport: AndroidControlTransport,
     pub active_profile_id: Option<String>,
     /// Companion 当前实际运行的 Profile 内容指纹；用于识别 Service 重启后的陈旧状态。
-    #[serde(default)]
     pub active_profile_fingerprint: Option<String>,
     /// Companion 当前实际装载的透明代理路由指纹。
-    #[serde(default)]
     pub active_route_fingerprint: Option<String>,
     /// Companion 当前实际装载的透明代理路由数量。
-    #[serde(default)]
     pub active_route_count: usize,
     pub companion_process_running: Option<bool>,
     pub message: String,
@@ -195,16 +190,11 @@ pub struct AndroidNetworkStatusViewModel {
     pub stats: Option<Value>,
 }
 
-fn default_android_status_tone() -> UiTone {
-    UiTone::Warning
-}
-
 impl AndroidNetworkStatusViewModel {
     /// 设备端协议只上报稳定状态码；最终中文展示文案由 Rust 统一生成。
     ///
-    /// `state_text` 保留在公开 DTO 中，让 TypeScript 只负责渲染。这里同时兼容尚未携带
-    /// 该字段的 Companion 响应，避免 Kotlin 与 Rust DTO 演进时把成功响应误判成无效
-    /// JSON。
+    /// `state_text` 保留在公开 DTO 中，让 TypeScript 只负责渲染。Companion 必须按
+    /// 当前协议返回完整字段，缺失字段直接拒绝。
     #[must_use]
     pub fn with_rust_state_text(mut self) -> Self {
         let (state_text, ui_tone) = match self.state {

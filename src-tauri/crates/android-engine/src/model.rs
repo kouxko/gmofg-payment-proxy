@@ -52,7 +52,6 @@ pub struct ResolvedProxyRoute {
     pub listener_id: String,
     pub original_destination: String,
     pub original_ports: Vec<u16>,
-    #[serde(default)]
     pub resolved_original_ips: Vec<std::net::IpAddr>,
     pub proxy_host: String,
     pub proxy_port: u16,
@@ -61,7 +60,6 @@ pub struct ResolvedProxyRoute {
 /// 一次 Android 数据面启动所需的临时透明代理配置。
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ProxyRuntimeConfiguration {
-    #[serde(default)]
     pub routes: Vec<ResolvedProxyRoute>,
 }
 
@@ -71,10 +69,8 @@ pub struct NetworkProfile {
     pub id: String,
     pub name: String,
     pub target_applications: Vec<TargetApplication>,
-    #[serde(default)]
     pub destination_targets: Vec<DestinationTarget>,
     /// 为空表示只做弱网、不透明转发到桌面代理。
-    #[serde(default)]
     pub proxy_routes: Vec<ProxyRoute>,
     /// shared UID 组必须整体选中，并由用户显式确认后把 UID 写入此集合。
     pub confirmed_shared_uids: BTreeSet<u32>,

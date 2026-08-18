@@ -208,7 +208,7 @@ pub(super) fn create_schema(transaction: &Transaction<'_>) -> Result<(), Infrast
             CREATE INDEX IF NOT EXISTS socket_captures_connection_sequence
                 ON socket_captures(connection_id, sequence DESC);",
         )
-        .map_err(|source| InfrastructureError::DatabaseMigration { source })
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })
 }
 
 impl SqliteStore {

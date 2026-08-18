@@ -164,15 +164,6 @@ describe("SocketListenerSettings", () => {
     expect(screen.getByLabelText("Server 传输")).toBeEnabled();
   });
 
-  it("renders a legacy missing processing field as raw relay without crashing", () => {
-    const legacy = { ...relayTlsSettings(), processing: undefined } as unknown as SocketRelaySettings;
-
-    renderSettings(legacy);
-
-    expect(screen.getByLabelText("Socket 工作方式")).toHaveTextContent("透明转发");
-    expect(screen.getByText("4. 透明转发")).toBeVisible();
-  });
-
   it("switches protocol relay to local response and back without hook-order errors or stale Server fields", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const user = userEvent.setup();
@@ -317,19 +308,6 @@ describe("SocketListenerSettings", () => {
     expect(accessibleText).not.toMatch(
       /\b(?:Direct|Scripted|Relay|LocalResponder|Frame|Document|Decode|Encode|Display)\b/i,
     );
-  });
-
-  it("fails closed for an incompatible local legacy wire", () => {
-    const invalid = {
-      ...localTlsSettings(),
-      processing: { mode: "direct" as const },
-    };
-
-    renderSettings(invalid);
-
-    expect(screen.getByText("当前工作方式不兼容")).toBeVisible();
-    expect(screen.queryByLabelText("Socket 协议处理方案")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Socket 工作方式")).toBeEnabled();
   });
 
   it("locks the work mode and every mounted snapshot control", () => {

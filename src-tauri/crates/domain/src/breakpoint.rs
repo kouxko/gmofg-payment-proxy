@@ -79,7 +79,7 @@ impl Breakpoint {
         expected_revision: Revision,
         decision: BreakpointDecision,
     ) -> Result<Revision, DomainError> {
-        // 先检查版本，再检查状态和动作兼容性。顺序很重要：旧界面提交必须得到版本冲突，
+        // 先检查版本，再检查状态和动作兼容性。顺序很重要：陈旧编辑器提交必须得到版本冲突，
         // 不能覆盖或模糊掉另一个操作者已经完成的处理结果。
         self.revision.verify(expected_revision)?;
         if self.state != BreakpointState::Pending {

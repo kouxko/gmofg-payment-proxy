@@ -17,11 +17,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type {
-  AppBootstrapViewModel,
-  ProxyStatusViewModel,
-  UiEventEnvelope,
-} from "@/generated/rust-types";
+import type { AppBootstrapViewModel, UiEventEnvelope } from "@/generated/rust-types";
 import {
   appBootstrap,
   errorMessage,
@@ -30,7 +26,6 @@ import {
 
 type BootstrapState = {
   bootstrap?: AppBootstrapViewModel;
-  proxy?: ProxyStatusViewModel;
   isLoading: boolean;
   error?: string;
   refresh: () => Promise<void>;
@@ -43,7 +38,6 @@ export function BootstrapProvider({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const [bootstrap, setBootstrap] = useState<AppBootstrapViewModel>();
-  const [proxy, setProxy] = useState<ProxyStatusViewModel>();
   const [error, setError] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
   const listeners = useRef(new Set<(event: UiEventEnvelope) => void>());
@@ -60,7 +54,6 @@ export function BootstrapProvider({
       const next = await appBootstrap();
       if (generation !== refreshGeneration.current) return;
       setBootstrap(next);
-      setProxy(next.proxy);
     } catch (reason) {
       if (generation === refreshGeneration.current) {
         setError(errorMessage(reason));
@@ -102,27 +95,6 @@ export function BootstrapProvider({
       refreshGeneration.current += 1;
       setIsLoading(false);
       listeners.current.forEach((listener) => listener(event));
-      if (event.payload.type === "runtime_status_changed") {
-        // 高频且体积小的状态直接补丁更新，顶部栏可以立即响应。
-        const status = event.payload.data;
-        setProxy(status);
-        setBootstrap((current) =>
-          current ? { ...current, proxy: status } : current,
-        );
-      }
-      if (event.payload.type === "channel_status_changed") {
-        const channelStatus = event.payload.data;
-        setProxy((current) =>
-          current
-            ? {
-                ...current,
-                channels: current.channels.map((channel) =>
-                  channel.id === channelStatus.id ? channelStatus : channel,
-                ),
-              }
-            : current,
-        );
-      }
       if (event.payload.type === "certificate_status_changed") {
         const certificate = event.payload.data;
         setBootstrap((current) =>
@@ -149,7 +121,6 @@ export function BootstrapProvider({
       }
       if (
         [
-          "channel_status_changed",
           "session_updated",
           "breakpoint_queued",
           "breakpoint_resolved",
@@ -181,8 +152,8 @@ export function BootstrapProvider({
   }, [eventCursor, refresh]);
 
   const value = useMemo(
-    () => ({ bootstrap, proxy, isLoading, error, refresh, subscribe }),
-    [bootstrap, proxy, isLoading, error, refresh, subscribe],
+    () => ({ bootstrap, isLoading, error, refresh, subscribe }),
+    [bootstrap, isLoading, error, refresh, subscribe],
   );
 
   return (

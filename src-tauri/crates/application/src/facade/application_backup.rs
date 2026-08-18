@@ -10,7 +10,7 @@ use crate::{
     ApplicationBackupDocument, ApplicationBackupExportOutcome, ApplicationBackupExportPort,
     ApplicationBackupExportSnapshot, ApplicationBackupPortableMaterial,
     ApplicationBackupProtocolPackage, PortableArchivePath, PortableSettings,
-    retain_reachable_certificate_references, validate_configuration_package_references,
+    validate_configuration_package_references,
 };
 
 impl Application {
@@ -36,9 +36,7 @@ impl Application {
             .ok_or_else(|| AppError::new("WORKSPACE_NOT_SELECTED", "请先选择一个 Workspace。"))?;
         let mut workspaces = Vec::with_capacity(summaries.len());
         for summary in summaries {
-            let mut workspace = self.workspaces.get(summary.id).await?;
-            retain_reachable_certificate_references(&mut workspace);
-            workspaces.push(workspace);
+            workspaces.push(self.workspaces.get(summary.id).await?);
         }
 
         let settings = self.settings.get().await?;

@@ -250,7 +250,6 @@ impl Application {
 
     pub async fn rule_save(&self, mut draft: RuleDraft) -> AppResult<RuleViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        self.ensure_rule_or_fault_write_allowed().await?;
         draft.name = draft.name.trim().to_owned();
         draft.description = draft.description.trim().to_owned();
         let validation = self.rules.validate(&draft).await?;
@@ -260,7 +259,6 @@ impl Application {
 
     pub async fn rule_copy(&self, rule_id: RuleId) -> AppResult<RuleViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        self.ensure_rule_or_fault_write_allowed().await?;
         self.rules.copy(rule_id).await
     }
 
@@ -272,7 +270,6 @@ impl Application {
     ) -> AppResult<OperationResultViewModel> {
         let _gate = self.mutation_gate.lock().await;
         require_confirmation(confirmed, "删除规则需要确认。")?;
-        self.ensure_rule_or_fault_write_allowed().await?;
         self.rules.delete(rule_id, expected_revision).await
     }
 
@@ -283,13 +280,11 @@ impl Application {
         enabled: bool,
     ) -> AppResult<RuleViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        self.ensure_rule_or_fault_write_allowed().await?;
         self.rules.toggle(rule_id, expected_revision, enabled).await
     }
 
     pub async fn rule_import(&self) -> AppResult<OperationResultViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        self.ensure_rule_or_fault_write_allowed().await?;
         self.rules.import().await
     }
 
@@ -323,7 +318,6 @@ impl Application {
         draft: FaultConfigurationDraft,
     ) -> AppResult<ActiveFaultViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        self.ensure_rule_or_fault_write_allowed().await?;
         self.faults.configure(draft).await
     }
 
@@ -341,7 +335,6 @@ impl Application {
     ) -> AppResult<ActiveFaultViewModel> {
         let _gate = self.mutation_gate.lock().await;
         require_confirmation(confirmed, "停止活动故障需要确认。")?;
-        self.ensure_rule_or_fault_write_allowed().await?;
         self.faults.stop(rule_id, expected_revision).await
     }
 }

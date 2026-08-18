@@ -1,7 +1,7 @@
 use std::{
     collections::VecDeque,
     io::{Cursor, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
@@ -148,11 +148,11 @@ impl CrossLayerFixture {
     pub(super) fn new() -> Self {
         let directory = TempDir::new().unwrap();
         let zip_path = directory.path().join("t30-iso.zip");
-        let export_path = directory.path().join("round-trip.intercept-workspace");
+        let unused_save_path = directory.path().join("unused-save-target");
         std::fs::write(&zip_path, package_zip()).unwrap();
         let dialog = Arc::new(TestDialog {
-            open_paths: Mutex::new(VecDeque::from([zip_path, export_path.clone()])),
-            save_path: export_path,
+            open_paths: Mutex::new(VecDeque::from([zip_path])),
+            save_path: unused_save_path,
             calls: Mutex::new(Vec::new()),
         });
         let host = tauri::async_runtime::block_on(
@@ -169,8 +169,6 @@ impl CrossLayerFixture {
             .invoke_handler(tauri::generate_handler![
                 workspace_list,
                 workspace_get,
-                workspace_import,
-                workspace_export,
                 listener_new,
                 listener_save,
                 listener_start,
@@ -214,18 +212,10 @@ impl CrossLayerFixture {
             .unwrap()
     }
 
-    pub(super) fn export_path(&self) -> &Path {
-        &self.dialog.save_path
-    }
-
     pub(super) fn assert_dialog_boundaries(&self) {
         assert_eq!(
             self.dialog.calls.lock().unwrap().as_slice(),
-            &[
-                ("protocol_package_zip".into(), "open"),
-                ("intercept_workspace".into(), "save"),
-                ("intercept_workspace".into(), "open"),
-            ]
+            &[("protocol_package_zip".into(), "open")]
         );
     }
 }

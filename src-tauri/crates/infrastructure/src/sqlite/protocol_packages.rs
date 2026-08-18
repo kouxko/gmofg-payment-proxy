@@ -359,7 +359,7 @@ fn load_protocol_package_header(
 mod bundle;
 pub(crate) use bundle::{
     StoredProtocolPackageBundleError, StoredProtocolPackageWrite,
-    compare_or_insert_protocol_package, require_existing_protocol_package,
+    compare_or_insert_protocol_package,
 };
 use bundle::{insert_protocol_package, same_immutable_content};
 #[path = "protocol_packages/builtin.rs"]

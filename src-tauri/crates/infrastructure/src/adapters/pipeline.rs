@@ -104,8 +104,8 @@ pub struct RuntimePipelineProductHooks {
 
 /// 根据动态 Listener 和消息阶段选择 Body 编解码器。
 ///
-/// 旧 supervisor 没有 Workspace Listener ID 时可以返回 `None`，运行时会使用通用产品
-/// fallback；动态 Listener 结合 Workspace 兼容设置与当前消息 Content-Type 解析编码。
+/// Resolver 返回 `None` 时使用产品的通用 Body codec；动态 Listener 可结合当前消息
+/// Content-Type 选择更精确的编码器。
 pub trait RuntimeBodyCodecResolver: std::fmt::Debug + Send + Sync {
     fn resolve(
         &self,

@@ -78,7 +78,6 @@ pub struct SessionDetailViewModel {
     pub response: Option<MessageContentViewModel>,
     pub rule_trace: Vec<String>,
     /// 对最终响应执行的通用断言结果；失败只影响会话结论，不篡改线上响应。
-    #[serde(default)]
     pub response_assertions: Vec<ResponseAssertionResultViewModel>,
 }
 

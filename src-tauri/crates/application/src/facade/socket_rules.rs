@@ -48,7 +48,6 @@ impl Application {
         input: SocketRuleSaveInput,
     ) -> AppResult<SocketDocumentRuleDefinition> {
         let _gate = self.mutation_gate.lock().await;
-        self.ensure_rule_or_fault_write_allowed().await?;
         let mut workspace = self.selected_socket_rule_workspace().await?;
 
         // 更新先验证本地实体、revision 与冻结绑定，不能让伪造绑定提前触发另一个包的编译查询。
@@ -144,7 +143,6 @@ impl Application {
         enabled: bool,
     ) -> AppResult<SocketDocumentRuleDefinition> {
         let _gate = self.mutation_gate.lock().await;
-        self.ensure_rule_or_fault_write_allowed().await?;
         let mut workspace = self.selected_socket_rule_workspace().await?;
         self.ensure_workspace_not_running(&workspace).await?;
         let current = workspace
@@ -168,7 +166,6 @@ impl Application {
     ) -> AppResult<OperationResultViewModel> {
         let _gate = self.mutation_gate.lock().await;
         require_confirmation(confirmed, "删除 Socket 规则需要确认。")?;
-        self.ensure_rule_or_fault_write_allowed().await?;
         let mut workspace = self.selected_socket_rule_workspace().await?;
         self.ensure_workspace_not_running(&workspace).await?;
         let index = workspace

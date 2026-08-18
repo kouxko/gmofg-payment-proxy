@@ -198,7 +198,7 @@ function HttpRulesView() {
   }
 
   async function toggle(rule: RuleSummaryViewModel, enabled: boolean) {
-    // 启停也带 revision，防止两个窗口用旧版本互相覆盖。
+    // 启停也带 revision，防止两个窗口用陈旧快照互相覆盖。
     if (writePending) return;
     setPendingAction(`toggle:${rule.rule_id}`);
     try {

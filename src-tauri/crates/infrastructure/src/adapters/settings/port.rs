@@ -41,25 +41,4 @@ impl SettingsRepositoryPort for SettingsRepositoryAdapter {
         infra(self.store.save_settings(expected, &value))?;
         self.view()
     }
-
-    async fn restore(&self, settings: SettingsViewModel) -> AppResult<SettingsViewModel> {
-        let (_, current_revision) = self.load_stored()?;
-        let mut restored = settings.stored;
-        restored.expected_revision = Some(current_revision.saturating_add(1));
-        let value = serialize_settings(&restored)
-            .map_err(|error| json_error("设置回滚序列化失败", error))?;
-        infra(self.store.save_settings(current_revision, &value))?;
-        *self.effective.write() = settings.effective;
-        self.view()
-    }
-
-    async fn apply_effective(&self, settings: SettingsDraft) -> AppResult<SettingsViewModel> {
-        *self.effective.write() = Some(settings);
-        self.view()
-    }
-
-    async fn clear_effective(&self) -> AppResult<SettingsViewModel> {
-        *self.effective.write() = None;
-        self.view()
-    }
 }

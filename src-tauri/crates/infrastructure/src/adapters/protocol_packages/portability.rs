@@ -9,9 +9,9 @@ use intercept_proxy_application::{
     AppError, AppResult, ApplicationBackupProtocolPackageBaseline,
     ApplicationConfigurationDocument, MAX_PORTABLE_PACKAGE_FILE_BYTES, MAX_PORTABLE_PACKAGE_FILES,
     MAX_PORTABLE_PACKAGE_TOTAL_BYTES, MAX_PORTABLE_PROTOCOL_PACKAGES,
-    PortableApplicationProtocolPackage, PortableProtocolPackage, PortableProtocolPackageFile,
-    ProtocolPackageDescriptionViewModel, ProtocolPackagePortabilityPort, ProxyWorkspace,
-    validate_portable_certificate_references, validate_portable_protocol_bindings,
+    PortableApplicationProtocolPackage, PortableProtocolPackageFile,
+    ProtocolPackageDescriptionViewModel, ProtocolPackagePortabilityPort,
+    validate_portable_protocol_bindings,
 };
 use intercept_proxy_domain::ProtocolPackageRef;
 use intercept_proxy_protocol_scripting::{ProtocolPackageFiles, restore_protocol_package_files};
@@ -52,25 +52,6 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
             .map_err(|error| protocol_package_app_error(&error))
     }
 
-    async fn export_workspace_packages(
-        &self,
-        packages: &[ProtocolPackageRef],
-    ) -> AppResult<Vec<PortableProtocolPackage>> {
-        require_unique_identities(packages)?;
-        let mut exported = packages
-            .iter()
-            .map(|package| {
-                let (files, _) = self.export_one(package)?;
-                Ok(PortableProtocolPackage {
-                    package: package.clone(),
-                    files,
-                })
-            })
-            .collect::<AppResult<Vec<_>>>()?;
-        exported.sort_by(|left, right| compare_identities(&left.package, &right.package));
-        Ok(exported)
-    }
-
     async fn export_application_packages(
         &self,
     ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
@@ -94,15 +75,6 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
         Ok(exported)
     }
 
-    async fn preflight_workspace_packages(
-        &self,
-        packages: &[PortableProtocolPackage],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        self.prepare_workspace_packages(packages)
-            .map(|prepared| application_descriptions(&prepared))
-            .map_err(|error| protocol_package_app_error(&error))
-    }
-
     async fn preflight_application_packages(
         &self,
         packages: &[PortableApplicationProtocolPackage],
@@ -117,59 +89,9 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
         packages: &[ProtocolPackageRef],
     ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
         require_unique_identities(packages)?;
-        legacy::prepare_installed_references(self, packages.to_vec())
+        installed_references::prepare_installed_references(self, packages.to_vec())
             .map(|prepared| application_descriptions(&prepared))
             .map_err(|error| protocol_package_app_error(&error))
-    }
-
-    async fn commit_workspace_bundle(
-        &self,
-        packages: Vec<PortableProtocolPackage>,
-        workspace: ProxyWorkspace,
-    ) -> AppResult<()> {
-        workspace.validate().map_err(AppError::from)?;
-        require_workspace_exact_packages(&workspace, &packages)?;
-        let expected = packages
-            .iter()
-            .map(|package| package.package.clone())
-            .collect::<Vec<_>>();
-        let prepared = self
-            .prepare_workspace_packages(&packages)
-            .map_err(|error| protocol_package_app_error(&error))?;
-        let descriptions = application_descriptions(&prepared);
-        validate_portable_protocol_bindings(
-            std::slice::from_ref(&workspace),
-            &expected,
-            &descriptions,
-        )?;
-        let writes = prepared_into_writes(prepared, false);
-        let record = WorkspaceRepositoryAdapter::record(&workspace)?;
-        let mut cache = self.cache.lock();
-        self.store
-            .insert_workspace_bundle(&record, &writes)
-            .map_err(bundle_app_error)?;
-        cache.clear();
-        Ok(())
-    }
-
-    async fn commit_legacy_workspace(&self, workspace: ProxyWorkspace) -> AppResult<()> {
-        workspace.validate().map_err(AppError::from)?;
-        validate_portable_certificate_references(&workspace)?;
-        let expected = legacy::referenced_packages(std::slice::from_ref(&workspace));
-        let prepared = legacy::prepare_installed_references(self, expected.clone())
-            .map_err(|error| protocol_package_app_error(&error))?;
-        let descriptions = application_descriptions(&prepared);
-        validate_portable_protocol_bindings(
-            std::slice::from_ref(&workspace),
-            &expected,
-            &descriptions,
-        )?;
-        let writes = prepared_into_writes(prepared, false);
-        let record = WorkspaceRepositoryAdapter::record(&workspace)?;
-        let _cache = self.cache.lock();
-        self.store
-            .insert_legacy_workspace(&record, &writes)
-            .map_err(bundle_app_error)
     }
 
     async fn replace_application_bundle(
@@ -214,29 +136,6 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
             .map_err(bundle_app_error)?;
         cache.clear();
         Ok(())
-    }
-
-    async fn replace_legacy_application_configuration(
-        &self,
-        document: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        legacy::validate_application_document(&document)?;
-        let expected = legacy::referenced_packages(&document.workspaces);
-        let prepared = legacy::prepare_installed_references(self, expected.clone())
-            .map_err(|error| protocol_package_app_error(&error))?;
-        let descriptions = application_descriptions(&prepared);
-        validate_portable_protocol_bindings(&document.workspaces, &expected, &descriptions)?;
-        let writes = prepared_into_writes(prepared, false);
-        let (records, settings) = application_records(&document)?;
-        let _cache = self.cache.lock();
-        self.store
-            .replace_legacy_application_configuration(
-                document.selected_workspace_id.as_uuid(),
-                &records,
-                &settings,
-                &writes,
-            )
-            .map_err(bundle_app_error)
     }
 
     async fn reset_application_bundle(
@@ -294,18 +193,6 @@ impl ProtocolPackageRepositoryAdapter {
         Ok((portable_files(&prepared.files), stored.header.enabled))
     }
 
-    fn prepare_workspace_packages(
-        &self,
-        packages: &[PortableProtocolPackage],
-    ) -> Result<Vec<PreparedProtocolPackage>, ProtocolPackageStorageError> {
-        require_package_count(packages.len())?;
-        require_unique_identities_storage(packages.iter().map(|package| &package.package))?;
-        packages
-            .iter()
-            .map(|package| self.prepare_rows(&package.package, decode_files(&package.files)?))
-            .collect()
-    }
-
     fn prepare_application_packages(
         &self,
         packages: &[PortableApplicationProtocolPackage],
@@ -351,16 +238,6 @@ fn application_records(
         )
     })?;
     Ok((records, settings))
-}
-
-fn prepared_into_writes(
-    packages: Vec<PreparedProtocolPackage>,
-    enabled: bool,
-) -> Vec<StoredProtocolPackageWrite> {
-    packages
-        .into_iter()
-        .map(|package| prepared_into_write(package, enabled))
-        .collect()
 }
 
 fn prepared_into_write(
@@ -433,27 +310,6 @@ fn require_unique_identities(packages: &[ProtocolPackageRef]) -> AppResult<()> {
         .map_err(|error| protocol_package_app_error(&error))
 }
 
-fn require_workspace_exact_packages(
-    workspace: &ProxyWorkspace,
-    packages: &[PortableProtocolPackage],
-) -> AppResult<()> {
-    let referenced = legacy::referenced_packages(std::slice::from_ref(workspace))
-        .into_iter()
-        .collect::<HashSet<_>>();
-    let embedded = packages
-        .iter()
-        .map(|package| package.package.clone())
-        .collect::<HashSet<_>>();
-    if referenced == embedded {
-        Ok(())
-    } else {
-        Err(AppError::new(
-            "PORTABLE_PROTOCOL_PACKAGE_INVALID",
-            "Workspace 协议包集合必须恰好等于 Listener 和 Socket 规则的精确引用。",
-        ))
-    }
-}
-
 fn sort_application_packages(packages: &mut [PortableApplicationProtocolPackage]) {
     packages.sort_by(|left, right| compare_identities(&left.package, &right.package));
 }
@@ -491,17 +347,14 @@ pub(super) fn bundle_app_error(error: StoredProtocolPackageBundleError) -> AppEr
         StoredProtocolPackageBundleError::IdentityConflict(package) => {
             protocol_package_app_error(&ProtocolPackageStorageError::IdentityConflict { package })
         }
-        StoredProtocolPackageBundleError::NotFound(package) => {
-            protocol_package_app_error(&ProtocolPackageStorageError::NotFound { package })
-        }
         StoredProtocolPackageBundleError::Infrastructure(error) => {
             protocol_package_app_error(&ProtocolPackageStorageError::Infrastructure(error))
         }
     }
 }
 
-#[path = "portability/legacy.rs"]
-mod legacy;
+#[path = "portability/installed_references.rs"]
+mod installed_references;
 
 #[cfg(test)]
 #[path = "portability_tests.rs"]

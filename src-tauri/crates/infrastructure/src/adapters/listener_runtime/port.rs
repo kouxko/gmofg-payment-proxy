@@ -358,8 +358,8 @@ fn socket_probe_view(
     };
     let DomainSocketTopology::Relay(relay) = &settings.topology else {
         return Err(AppError::new(
-            "LOCAL_RESPONDER_NOT_AVAILABLE",
-            "LocalResponder 没有可测试的 Server 上游。",
+            "LISTENER_UPSTREAM_NOT_APPLICABLE",
+            "本地应答没有可测试的 Server 上游。",
         )
         .entity(listener.id.to_string()));
     };
@@ -438,8 +438,8 @@ fn ensure_upstream_tls_enabled(listener: &ProxyListener) -> AppResult<()> {
             ),
             DomainSocketTopology::LocalResponder(_) => {
                 return Err(AppError::new(
-                    "LOCAL_RESPONDER_NOT_AVAILABLE",
-                    "LocalResponder 没有可测试的 Server 上游 TLS。",
+                    "LISTENER_UPSTREAM_NOT_APPLICABLE",
+                    "本地应答没有可测试的 Server 上游 TLS。",
                 )
                 .entity(listener.id.to_string()));
             }

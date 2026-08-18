@@ -74,6 +74,15 @@ impl AndroidControlPort for RunningAndroidControl {
     async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
         Ok(self.status.clone())
     }
+    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
+        Ok(None)
+    }
+    async fn network_runtime_endpoints(
+        &self,
+        _: Option<AndroidNetworkActivation>,
+    ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
+        Ok(Vec::new())
+    }
 }
 
 #[derive(Debug)]
@@ -120,7 +129,6 @@ struct RunningVpnFixture {
     application: Application,
     android: Arc<RunningAndroidControl>,
     workspaces: Arc<InMemoryWorkspaceStore>,
-    documents: Arc<InMemoryWorkspaceDocumentStore>,
     original_id: WorkspaceId,
     profile_id: String,
     listener_id: ListenerId,
@@ -228,11 +236,9 @@ async fn running_vpn_fixture_with_listener_state(
             .into_iter()
             .collect(),
     });
-    let documents = Arc::new(InMemoryWorkspaceDocumentStore::default());
-    let application = Application::new_with_android(
+    let application = Application::new(
         "Test Product".into(),
         ApplicationDependencies {
-            proxy: ports.clone(),
             capture: ports.clone(),
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
@@ -243,19 +249,18 @@ async fn running_vpn_fixture_with_listener_state(
             settings: ports.clone(),
             listener_certificates: ports.clone(),
             workspaces: workspaces.clone(),
-            workspace_documents: documents.clone(),
             listener_runtime,
-            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
+            protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
         },
         android.clone(),
+        Arc::new(UnusedProtectedSecretPort),
     );
 
     RunningVpnFixture {
         application,
         android,
         workspaces,
-        documents,
         original_id,
         profile_id,
         listener_id,

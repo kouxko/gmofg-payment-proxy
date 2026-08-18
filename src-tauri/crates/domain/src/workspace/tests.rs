@@ -17,28 +17,6 @@ fn http_mut(listener: &mut ProxyListener) -> &mut HttpListenerSettings {
     }
 }
 
-fn v2_listener() -> ProxyListenerV2 {
-    let listener = ProxyListener::default();
-    let http = http(&listener);
-    ProxyListenerV2 {
-        id: listener.id,
-        name: listener.name.clone(),
-        enabled: listener.enabled,
-        bind_address: listener.bind_address.clone(),
-        port: listener.port,
-        authentication: http.authentication.clone(),
-        allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
-        mitm: http.mitm.clone(),
-        connect_timeout_ms: listener.connect_timeout_ms,
-        read_timeout_ms: listener.read_timeout_ms,
-        write_timeout_ms: listener.write_timeout_ms,
-        downstream_tls: Some(http.downstream_tls.clone()),
-        request_body_codec: http.request_body_codec,
-        response_body_codec: http.response_body_codec,
-        fixed_server: http.fixed_server.clone(),
-    }
-}
-
 #[test]
 fn default_workspace_is_empty_safe_and_serializable() {
     let workspace = ProxyWorkspace::default();
@@ -60,7 +38,7 @@ fn default_workspace_is_empty_safe_and_serializable() {
 }
 
 #[test]
-fn legacy_listener_body_codec_values_remain_deserializable() {
+fn listener_body_codec_values_are_deserializable() {
     for (serialized, expected) in [
         ("raw", BodyCodecKind::Raw),
         ("utf8", BodyCodecKind::Utf8),
@@ -69,34 +47,6 @@ fn legacy_listener_body_codec_values_remain_deserializable() {
         let codec: BodyCodecKind = serde_json::from_value(serialized.into()).unwrap();
         assert_eq!(codec, expected);
     }
-}
-
-#[test]
-fn listener_documents_without_body_codec_use_header_driven_auto() {
-    let mut document = serde_json::to_value(v2_listener()).unwrap();
-    let listener = document.as_object_mut().unwrap();
-    listener.remove("request_body_codec");
-    listener.remove("response_body_codec");
-
-    let listener: ProxyListener = serde_json::from_value::<ProxyListenerV2>(document)
-        .unwrap()
-        .into();
-
-    assert_eq!(http(&listener).request_body_codec, BodyCodecKind::Auto);
-    assert_eq!(http(&listener).response_body_codec, BodyCodecKind::Auto);
-}
-
-#[test]
-fn dynamic_listener_without_new_optional_downstream_tls_still_loads() {
-    let mut document = serde_json::to_value(v2_listener()).unwrap();
-    document.as_object_mut().unwrap().remove("downstream_tls");
-
-    let listener: ProxyListener = serde_json::from_value::<ProxyListenerV2>(document)
-        .unwrap()
-        .into();
-
-    assert!(!http(&listener).downstream_tls.enabled);
-    assert!(http(&listener).fixed_server.is_none());
 }
 
 #[test]

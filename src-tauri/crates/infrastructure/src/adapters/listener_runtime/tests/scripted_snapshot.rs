@@ -106,7 +106,7 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts
     ];
     workspace.socket_rule_created_order_high_water = 3;
     workspace.validate().unwrap();
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     let plan = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
         .await
@@ -182,7 +182,7 @@ async fn local_responder_plan_has_no_upstream_security_or_probe_and_starts_local
         ..ProxyWorkspace::default()
     };
     workspace.validate().unwrap();
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     let plan = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
         .await
@@ -201,7 +201,7 @@ async fn local_responder_plan_has_no_upstream_security_or_probe_and_starts_local
         .await
         .err()
         .expect("LocalResponder has no upstream probe");
-    assert_eq!(probe.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+    assert_eq!(probe.view_model.code, "LISTENER_UPSTREAM_NOT_APPLICABLE");
     let start = runtime.start(workspace, listener.clone()).await.unwrap();
     assert_eq!(start.state, ListenerRuntimeState::Running);
 
@@ -248,7 +248,7 @@ async fn runtime_plan_rejects_an_enabled_encode_switch_without_manifest_entry() 
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     let error = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
         .await
@@ -283,7 +283,7 @@ async fn runtime_plan_rejects_rule_schema_drift_even_when_called_below_applicati
         ..ProxyWorkspace::default()
     };
     workspace.validate().unwrap();
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     let error = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
         .await
@@ -358,8 +358,7 @@ async fn historical_compile_failure_is_revalidated_but_persistence_corruption_st
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(Arc::clone(&store))
-        .with_protocol_packages(Arc::clone(&repository));
+    let runtime = test_listener_runtime_with_packages(Arc::clone(&store), Arc::clone(&repository));
     let listener_id = listener.id;
     let running = runtime.start(workspace, listener).await.unwrap();
     assert_eq!(running.state, ListenerRuntimeState::Running);

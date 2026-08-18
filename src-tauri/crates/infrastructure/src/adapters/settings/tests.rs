@@ -33,13 +33,38 @@ fn adapter_with_address(address: Option<Ipv4Addr>) -> SettingsRepositoryAdapter 
     SettingsRepositoryAdapter::with_local_address_provider(
         Arc::new(SqliteStore::in_memory().expect("store")),
         test_defaults(),
-        &[],
         Arc::new(FixedLocalAddressProvider(address)),
     )
 }
 
 fn valid_draft() -> SettingsDraft {
     test_defaults()
+}
+
+#[test]
+fn current_settings_persistence_round_trips_strictly() {
+    let value = serialize_settings(&valid_draft()).expect("serialize current settings");
+
+    let decoded = deserialize_settings(value).expect("deserialize current settings");
+
+    assert_eq!(decoded, valid_draft());
+}
+
+#[test]
+fn settings_persistence_rejects_unversioned_and_unknown_fields() {
+    let mut unversioned = serialize_settings(&valid_draft()).expect("serialize settings");
+    unversioned
+        .as_object_mut()
+        .expect("settings object")
+        .remove(PERSISTENCE_VERSION_FIELD);
+    assert!(deserialize_settings(unversioned).is_err());
+
+    let mut unknown = serialize_settings(&valid_draft()).expect("serialize settings");
+    unknown
+        .as_object_mut()
+        .expect("settings object")
+        .insert("proxy_enabled".into(), Value::Bool(true));
+    assert!(deserialize_settings(unknown).is_err());
 }
 
 #[tokio::test]
@@ -74,27 +99,17 @@ async fn unavailable_address_detection_keeps_the_leaf_san_empty() {
     assert!(settings.stored.leaf_sans.is_empty());
 }
 
-// SETTINGS-010~013, ENGINE-008, TEST-SETTINGS
 #[tokio::test]
-async fn persists_revision_and_tracks_effective_snapshot_separately() {
+async fn persists_revision_for_each_saved_snapshot() {
     let adapter = adapter_with_address(None);
     let saved = adapter.save(valid_draft()).await.expect("save");
     assert_eq!(saved.revision, 1);
-    assert!(saved.effective.is_none());
-    let applied = adapter
-        .apply_effective(saved.stored.clone())
-        .await
-        .expect("apply");
-    assert!(!applied.requires_restart);
 
-    let mut changed = applied.stored;
+    let mut changed = saved.stored;
     changed.channels[0].port = 20_003;
     let changed = adapter.save(changed).await.expect("change");
-    assert!(changed.requires_restart);
-    assert_eq!(
-        changed.effective.expect("effective").channels[0].port,
-        20_001
-    );
+    assert_eq!(changed.revision, 2);
+    assert_eq!(changed.stored.channels[0].port, 20_003);
 }
 
 #[tokio::test]

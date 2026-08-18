@@ -7,7 +7,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deferred,
   mocks,
-  ok,
   setupWorkspaceMocks,
   workspace,
   workspaceSummary,
@@ -277,26 +276,4 @@ describe("Workspace CRUD surface", () => {
     expect(mocks.workspaceList).toHaveBeenCalledTimes(initialListCalls);
   });
 
-  it("keeps legacy imports folded with explicit replacement and additive scopes", async () => {
-    const user = userEvent.setup();
-    await renderLoadedView();
-    await user.click(screen.getByRole("button", { name: "导入旧版文件（兼容）" }));
-    expect(screen.getByText(/旧版完整配置会替换应用配置/)).toBeVisible();
-    expect(screen.getByText(/旧版 Workspace 只新增一个 Workspace/)).toBeVisible();
-  });
-
-  it("previews the legacy migration report and commits the explicitly selected kind", async () => {
-    const user = userEvent.setup();
-    await renderLoadedView();
-    await user.click(screen.getByRole("button", { name: "导入旧版文件（兼容）" }));
-    await user.click(screen.getByRole("button", { name: "导入旧版完整配置" }));
-    expect(await screen.findByRole("heading", { name: "确认导入旧版文件？" })).toBeVisible();
-    expect(screen.getByText("替换全部应用配置")).toBeVisible();
-    expect(screen.getByText(/源版本 4；已移除 2 个旧元数据提取器/)).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "确认导入" }));
-    await waitFor(() =>
-      expect(mocks.legacyApplicationConfigurationImportCommit).toHaveBeenCalledWith("legacy-token"),
-    );
-    expect(mocks.legacyWorkspaceImportCommit).not.toHaveBeenCalled();
-  });
 });

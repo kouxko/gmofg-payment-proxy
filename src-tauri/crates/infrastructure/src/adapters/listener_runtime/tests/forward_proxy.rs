@@ -43,7 +43,7 @@ async fn forward_absolute_form_http_enters_shared_pipeline() {
         })
         .unwrap();
     let pipeline = Arc::new(CountingPipeline::default());
-    let runtime = ListenerRuntimeAdapter::new(store);
+    let runtime = test_listener_runtime(store);
     runtime.set_pipeline_ports(pipeline.clone());
     runtime
         .start(workspace.clone(), listener.clone())
@@ -147,7 +147,7 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
             updated_at: Utc::now(),
         })
         .unwrap();
-    let runtime = ListenerRuntimeAdapter::new(store);
+    let runtime = test_listener_runtime(store);
     runtime.set_pipeline_ports(Arc::new(NoopPipelinePorts));
     let status = runtime
         .start(workspace.clone(), listener.clone())

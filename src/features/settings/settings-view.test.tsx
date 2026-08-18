@@ -63,10 +63,6 @@ const draft: SettingsDraft = {
 
 const settings: SettingsViewModel = {
   stored: draft,
-  effective: draft,
-  pending_changes: false,
-  requires_restart: false,
-  restart_reason: null,
   revision: 1,
   can_write: true,
   disabled_reason: null,
@@ -107,7 +103,6 @@ describe("production SettingsView overlay", () => {
     commandMocks.settingsSave.mockResolvedValue({
       ...settings,
       stored: { ...draft, max_sessions: 501 },
-      effective: { ...draft, max_sessions: 501 },
     });
   });
 
@@ -254,12 +249,10 @@ describe("production SettingsView overlay", () => {
     expect(screen.getByText("监听地址由入口配置管理")).toBeVisible();
   });
 
-  it("shows compact saved, dirty, and restart-required draft states", async () => {
+  it("shows compact saved and dirty draft states", async () => {
     commandMocks.settingsSave.mockResolvedValue({
       ...settings,
       stored: { ...draft, connect_timeout_seconds: 71 },
-      effective: { ...draft, connect_timeout_seconds: 71 },
-      requires_restart: true,
     });
     const user = userEvent.setup();
     render(<SettingsView />);
@@ -269,7 +262,7 @@ describe("production SettingsView overlay", () => {
     );
     expect(screen.getByText("有未保存更改")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "保存设置" }));
-    expect(await screen.findByText("重启后生效")).toBeVisible();
+    expect(await screen.findByText("已保存")).toBeVisible();
   });
 
   it("disables Rust-backed fields while save validation is pending", async () => {

@@ -6,11 +6,7 @@ fn fake_settings_view() -> SettingsViewModel {
         ..valid_settings_draft()
     };
     SettingsViewModel {
-        stored: stored.clone(),
-        effective: Some(stored),
-        pending_changes: false,
-        requires_restart: false,
-        restart_reason: None,
+        stored,
         revision: 1,
         can_write: true,
         disabled_reason: None,
@@ -49,14 +45,6 @@ pub(in crate::requirements_tests) struct FakePorts {
     pub(in crate::requirements_tests) settings_validations: AtomicUsize,
     pub(in crate::requirements_tests) settings_validation_override:
         parking_lot::Mutex<Option<SettingsValidationViewModel>>,
-    pub(in crate::requirements_tests) proxy_state: parking_lot::Mutex<ProxyState>,
-    pub(in crate::requirements_tests) start_results:
-        parking_lot::Mutex<VecDeque<AppResult<ProxyStatusViewModel>>>,
-    pub(in crate::requirements_tests) start_calls: AtomicUsize,
-    pub(in crate::requirements_tests) stop_calls: AtomicUsize,
-    pub(in crate::requirements_tests) block_start: AtomicBool,
-    pub(in crate::requirements_tests) start_entered: tokio::sync::Notify,
-    pub(in crate::requirements_tests) continue_start: tokio::sync::Notify,
     pub(in crate::requirements_tests) settings_save_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_import_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_status_calls: AtomicUsize,
@@ -86,13 +74,6 @@ impl Default for FakePorts {
         Self {
             settings_validations: AtomicUsize::new(0),
             settings_validation_override: parking_lot::Mutex::new(None),
-            proxy_state: parking_lot::Mutex::new(ProxyState::Stopped),
-            start_results: parking_lot::Mutex::new(VecDeque::new()),
-            start_calls: AtomicUsize::new(0),
-            stop_calls: AtomicUsize::new(0),
-            block_start: AtomicBool::new(false),
-            start_entered: tokio::sync::Notify::new(),
-            continue_start: tokio::sync::Notify::new(),
             settings_save_calls: AtomicUsize::new(0),
             certificate_import_calls: AtomicUsize::new(0),
             certificate_status_calls: AtomicUsize::new(0),
@@ -119,30 +100,91 @@ pub(in crate::requirements_tests) fn unused<T>() -> AppResult<T> {
     Err(AppError::new("UNUSED_FAKE_PORT", "测试未使用此端口。"))
 }
 
+#[derive(Debug, Default)]
+pub(in crate::requirements_tests) struct NoopApplicationConfigurationStore;
+
 #[async_trait]
-impl ProxySupervisorPort for FakePorts {
-    async fn status(&self) -> AppResult<ProxyStatusViewModel> {
-        Ok(proxy_status(*self.proxy_state.lock()))
+impl ApplicationConfigurationStorePort for NoopApplicationConfigurationStore {
+    async fn replace_all(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
+        Ok(())
     }
-    async fn start(&self, _: SettingsDraft) -> AppResult<ProxyStatusViewModel> {
-        self.start_calls.fetch_add(1, Ordering::SeqCst);
-        if self.block_start.load(Ordering::SeqCst) {
-            self.start_entered.notify_one();
-            self.continue_start.notified().await;
-        }
-        if let Some(result) = self.start_results.lock().pop_front() {
-            if let Ok(status) = &result {
-                *self.proxy_state.lock() = status.state;
-            }
-            return result;
-        }
-        *self.proxy_state.lock() = ProxyState::Running;
-        Ok(proxy_status(ProxyState::Running))
+}
+
+#[derive(Debug, Default)]
+pub(in crate::requirements_tests) struct UnusedProtectedSecretPort;
+
+#[async_trait]
+impl ProtectedSecretPort for UnusedProtectedSecretPort {
+    async fn store_basic_auth(&self, _: String, _: String) -> AppResult<SecretReference> {
+        unused()
     }
-    async fn stop(&self) -> AppResult<ProxyStatusViewModel> {
-        self.stop_calls.fetch_add(1, Ordering::SeqCst);
-        *self.proxy_state.lock() = ProxyState::Stopped;
-        Ok(proxy_status(ProxyState::Stopped))
+}
+
+#[derive(Debug, Default)]
+pub(in crate::requirements_tests) struct UnusedAndroidControlPort;
+
+#[async_trait]
+impl AndroidControlPort for UnusedAndroidControlPort {
+    async fn adb_get(&self) -> AppResult<AndroidAdbViewModel> {
+        unused()
+    }
+    async fn adb_select(&self, _: String) -> AppResult<AndroidAdbViewModel> {
+        unused()
+    }
+    async fn device_list(&self) -> AppResult<Vec<AndroidDeviceViewModel>> {
+        unused()
+    }
+    async fn package_list(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
+        unused()
+    }
+    async fn package_get(&self, _: String) -> AppResult<AndroidPackageViewModel> {
+        unused()
+    }
+    async fn companion_install(&self, _: bool) -> AppResult<AndroidCompanionInstallViewModel> {
+        unused()
+    }
+    async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_start(
+        &self,
+        _: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_apply(
+        &self,
+        _: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_runtime_ready(
+        &self,
+        _: &AndroidNetworkActivation,
+        _: &AndroidNetworkStatusViewModel,
+    ) -> AppResult<bool> {
+        unused()
+    }
+    async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+        Err(AppError::new(
+            "ANDROID_DEVICE_NOT_SELECTED",
+            "测试场景没有选择 Android 设备。",
+        ))
+    }
+    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
+        Ok(None)
+    }
+    async fn network_runtime_endpoints(
+        &self,
+        _: Option<AndroidNetworkActivation>,
+    ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
+        Ok(Vec::new())
     }
 }
 
@@ -163,6 +205,12 @@ impl CaptureRepositoryPort for FakePorts {
         })
     }
     async fn get_detail(&self, _: SessionId, _: RuntimeEpoch) -> AppResult<CaptureDetailViewModel> {
+        unused()
+    }
+    async fn get_socket_detail(
+        &self,
+        _: SocketCaptureId,
+    ) -> AppResult<SocketCaptureDetailViewModel> {
         unused()
     }
     async fn clear_view(&self, _: u64) -> AppResult<u64> {
@@ -373,69 +421,6 @@ impl SettingsRepositoryPort for FakePorts {
         settings.revision = settings.revision.saturating_add(1);
         draft.expected_revision = Some(settings.revision);
         settings.stored = draft;
-        settings.pending_changes = settings
-            .effective
-            .as_ref()
-            .is_some_and(|effective| effective != &settings.stored);
-        settings.requires_restart = settings.pending_changes;
         Ok(settings.clone())
-    }
-    async fn restore(&self, settings: SettingsViewModel) -> AppResult<SettingsViewModel> {
-        *self.settings.lock() = settings.clone();
-        Ok(settings)
-    }
-    async fn apply_effective(&self, effective: SettingsDraft) -> AppResult<SettingsViewModel> {
-        let mut settings = self.settings.lock();
-        settings.effective = Some(effective);
-        settings.pending_changes = false;
-        settings.requires_restart = false;
-        Ok(settings.clone())
-    }
-    async fn clear_effective(&self) -> AppResult<SettingsViewModel> {
-        let mut settings = self.settings.lock();
-        settings.effective = None;
-        settings.pending_changes = false;
-        settings.requires_restart = false;
-        Ok(settings.clone())
-    }
-}
-
-pub(in crate::requirements_tests) fn proxy_status(state: ProxyState) -> ProxyStatusViewModel {
-    let (state_text, ui_tone) = state.display_zh();
-    ProxyStatusViewModel {
-        state,
-        state_text: state_text.into(),
-        ui_tone,
-        runtime_epoch: (state == ProxyState::Running).then(|| Uuid::from_u128(20)),
-        revision: 1,
-        channels: Vec::new(),
-        app_to_proxy_health: ConnectionHealthViewModel {
-            state: ConnectionHealthState::Unavailable,
-            state_text: "未监听".into(),
-            detail: "测试状态".into(),
-            ui_tone: UiTone::Neutral,
-        },
-        proxy_to_server_health: ConnectionHealthViewModel {
-            state: ConnectionHealthState::Unavailable,
-            state_text: "尚未连接".into(),
-            detail: "测试状态".into(),
-            ui_tone: UiTone::Neutral,
-        },
-        active_sessions: 0,
-        pending_breakpoints: 0,
-        logical_memory_bytes: 0,
-        logical_memory_text: "0 B".into(),
-        memory_capacity_bytes: 256 * 1024 * 1024,
-        memory_capacity_text: "256.0 MiB".into(),
-        memory_usage_percent: 0,
-        session_capacity: 500,
-        default_timeout_seconds: 70,
-        can_start: state == ProxyState::Stopped,
-        start_disabled_reason: None,
-        can_stop: state == ProxyState::Running,
-        stop_disabled_reason: None,
-        can_restart: false,
-        restart_disabled_reason: None,
-        fault_reason: None,
     }
 }

@@ -33,7 +33,6 @@ vi.mock("./bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
   useBootstrap: () => ({
     bootstrap: undefined,
-    proxy: undefined,
     isLoading: false,
     error: undefined,
     refresh: vi.fn(),

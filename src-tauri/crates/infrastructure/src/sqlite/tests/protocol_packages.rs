@@ -6,30 +6,25 @@ use crate::sqlite::protocol_packages::{
 };
 
 #[test]
-fn empty_database_records_protocol_package_schema_once_and_reopen_is_idempotent() {
+fn empty_database_creates_current_schema_once_and_reopen_is_read_only() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.sqlite");
     let store = SqliteStore::open(&path).unwrap();
-    assert_protocol_tables_and_version(&store, 1);
+    assert_protocol_tables_and_current_marker(&store);
     drop(store);
 
     let reopened = SqliteStore::open(&path).unwrap();
-    assert_protocol_tables_and_version(&reopened, 1);
+    assert_protocol_tables_and_current_marker(&reopened);
 }
 
 #[test]
-fn version_five_database_upgrades_without_losing_old_rows() {
+fn database_without_current_marker_is_rejected_without_adding_tables() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.sqlite");
     let connection = Connection::open(&path).unwrap();
     connection
         .execute_batch(
-            "CREATE TABLE schema_migrations (
-                 version INTEGER PRIMARY KEY,
-                 applied_at TEXT NOT NULL
-             );
-             INSERT INTO schema_migrations(version, applied_at) VALUES (5, '2026-08-13T00:00:00Z');
-             CREATE TABLE settings (
+            "CREATE TABLE settings (
                  singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
                  revision INTEGER NOT NULL,
                  json TEXT NOT NULL,
@@ -41,59 +36,47 @@ fn version_five_database_upgrades_without_losing_old_rows() {
         .unwrap();
     drop(connection);
 
-    let store = SqliteStore::open(&path).unwrap();
-    assert_protocol_tables_and_version(&store, 1);
-    assert_eq!(
-        store.load_settings().unwrap().unwrap().value,
-        serde_json::json!({"kept": true})
-    );
-    let old_version: i64 = store
-        .connection
-        .lock()
+    assert!(matches!(
+        SqliteStore::open(&path),
+        Err(InfrastructureError::DatabaseSchemaInvalid { found, .. }) if found.is_empty()
+    ));
+    let connection = Connection::open(&path).unwrap();
+    let protocol_tables: i64 = connection
         .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 5",
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'table' AND name IN ('protocol_packages', 'protocol_package_files')",
             [],
             |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(old_version, 1);
+    assert_eq!(protocol_tables, 0);
 }
 
 #[test]
-fn failed_protocol_schema_migration_rolls_back_new_tables_and_version_record() {
-    let store = SqliteStore::in_memory().unwrap();
-    {
-        let connection = store.connection.lock();
-        connection
-            .execute_batch(
-                "DROP TABLE protocol_package_files;
-                 DROP TABLE protocol_packages;
-                 DELETE FROM schema_migrations WHERE version = 10;
-                 CREATE TRIGGER reject_protocol_migration
-                 BEFORE INSERT ON schema_migrations
-                 WHEN NEW.version = 10
-                 BEGIN SELECT RAISE(ABORT, 'reject protocol migration'); END;",
-            )
-            .unwrap();
-    }
-
-    assert!(matches!(
-        store.migrate(),
-        Err(InfrastructureError::DatabaseMigration { .. })
-    ));
-    let tables = store.table_names().unwrap();
-    assert!(!tables.contains(&"protocol_packages".to_owned()));
-    assert!(!tables.contains(&"protocol_package_files".to_owned()));
-    let version: i64 = store
+fn old_or_unknown_schema_marker_is_rejected() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("state.sqlite");
+    let store = SqliteStore::open(&path).unwrap();
+    store
         .connection
         .lock()
-        .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 10",
-            [],
-            |row| row.get(0),
-        )
+        .execute("UPDATE application_schema SET version = 9", [])
         .unwrap();
-    assert_eq!(version, 0);
+    drop(store);
+    assert!(matches!(
+        SqliteStore::open(&path),
+        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
+
+    let connection = Connection::open(&path).unwrap();
+    connection
+        .execute("UPDATE application_schema SET version = 999", [])
+        .unwrap();
+    drop(connection);
+    assert!(matches!(
+        SqliteStore::open(&path),
+        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
 }
 
 #[test]
@@ -243,18 +226,18 @@ fn corrupted_file_aggregates_are_rejected_before_blob_loading() {
     );
 }
 
-fn assert_protocol_tables_and_version(store: &SqliteStore, expected_latest_rows: i64) {
+fn assert_protocol_tables_and_current_marker(store: &SqliteStore) {
     let tables = store.table_names().unwrap();
     assert!(tables.contains(&"protocol_packages".to_owned()));
     assert!(tables.contains(&"protocol_package_files".to_owned()));
-    let version: i64 = store
+    let marker: (i64, i64) = store
         .connection
         .lock()
         .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 10",
+            "SELECT singleton_id, version FROM application_schema",
             [],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(version, expected_latest_rows);
+    assert_eq!(marker, (1, 10));
 }

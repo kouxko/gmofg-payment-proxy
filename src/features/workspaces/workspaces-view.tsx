@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import {
-  Accordion,
   Alert,
   AlertDialog,
   Button,
@@ -18,12 +17,10 @@ import {
 import { ArrowUpFromLine, Copy, Plus, TrashBin } from "@gravity-ui/icons";
 import type {
   ApplicationBackupImportPreview,
-  LegacyImportPreview,
   ProxyWorkspace,
   WorkspaceSummaryViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
-import { toneColor } from "@/lib/format";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { WorkspaceComponentsEditor } from "./workspace-components-editor";
@@ -42,7 +39,6 @@ export function WorkspacesView() {
   const [pendingAction, setPendingAction] = useState<string>();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [backupPreview, setBackupPreview] = useState<ApplicationBackupImportPreview>();
-  const [legacyPreview, setLegacyPreview] = useState<LegacyImportPreview>();
   const importRequest = useRef(0);
   const effectiveSelectedId = selectedId ?? list.data?.find((item) => item.selected)?.id ?? list.data?.[0]?.id;
   const selectedSummary = list.data?.find((item) => item.id === effectiveSelectedId);
@@ -78,41 +74,6 @@ export function WorkspacesView() {
     setNewName("");
     setSelectedId(created.id);
     await list.refresh();
-  }
-
-  async function prepareLegacyImport(kind: "application_configuration" | "workspace") {
-    const preview = await callCommand(
-      kind === "application_configuration"
-        ? commands.legacyApplicationConfigurationImportPrepare()
-        : commands.legacyWorkspaceImportPrepare(),
-    );
-    if (preview) setLegacyPreview(preview);
-  }
-
-  async function commitLegacyImport() {
-    const preview = legacyPreview;
-    if (!preview) return;
-    const result = await callCommand(
-      preview.kind === "application_configuration"
-        ? commands.legacyApplicationConfigurationImportCommit(preview.token)
-        : commands.legacyWorkspaceImportCommit(preview.token),
-    );
-    toast(result.message, { variant: result.cancelled ? "default" : toneColor(result.ui_tone) });
-    setLegacyPreview(undefined);
-    setSelectedId(undefined);
-    setDraft(undefined);
-    await list.refresh();
-  }
-
-  async function discardLegacyImport() {
-    const preview = legacyPreview;
-    if (!preview) return;
-    setLegacyPreview(undefined);
-    await callCommand(
-      preview.kind === "application_configuration"
-        ? commands.legacyApplicationConfigurationImportDiscard(preview.token)
-        : commands.legacyWorkspaceImportDiscard(preview.token),
-    );
   }
 
   async function exportApplicationData() {
@@ -249,36 +210,12 @@ export function WorkspacesView() {
                 <Modal.Body className="space-y-2">
                   <p>将替换全部 Workspace、当前选择、全局设置和协议包注册表。</p>
                   <p>{backupPreview?.workspace_count} 个 Workspace · {backupPreview?.protocol_package_count} 个协议包版本（启用 {backupPreview?.enabled_protocol_package_count}）· {backupPreview?.portable_material_count} 份证书材料</p>
-                  <p>迁移报告：源版本 {backupPreview?.migration_report.source_version}；已移除 {backupPreview?.migration_report.removed_metadata_extractors} 个旧元数据提取器。</p>
-                  {backupPreview?.warnings.map((warning) => <p key={warning}>{warning}</p>)}
                 </Modal.Body>
                 <Modal.Footer><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-discard", discardApplicationImport)}>取消</Button><Button variant="danger" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-commit", commitApplicationImport)}>确认替换</Button></Modal.Footer>
               </Modal.Dialog></Modal.Container></Modal.Backdrop>
             </Modal>
           </div>
         </div>
-        <Accordion>
-          <Accordion.Item id="legacy-import">
-            <Accordion.Heading><Accordion.Trigger>导入旧版文件（兼容）<Accordion.Indicator /></Accordion.Trigger></Accordion.Heading>
-            <Accordion.Panel><Accordion.Body className="space-y-3">
-              <p className="text-sm text-[var(--telemetry-muted)]">旧版完整配置会替换应用配置；旧版 Workspace 只新增一个 Workspace。不会自动猜测文件格式。</p>
-              <div className="flex gap-2"><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("legacy-config-prepare", () => prepareLegacyImport("application_configuration"))}>导入旧版完整配置</Button><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("legacy-workspace-prepare", () => prepareLegacyImport("workspace"))}>导入旧版 Workspace</Button></div>
-            </Accordion.Body></Accordion.Panel>
-          </Accordion.Item>
-        </Accordion>
-        <Modal isOpen={Boolean(legacyPreview)} onOpenChange={(open) => { if (!open && legacyPreview && !pendingAction) void run("legacy-discard", discardLegacyImport); }}>
-          <Button className="hidden" aria-hidden="true">打开旧版文件导入预览</Button>
-          <Modal.Backdrop isDismissable={!pendingAction}><Modal.Container><Modal.Dialog>
-            <Modal.Header><Modal.Heading>确认导入旧版文件？</Modal.Heading></Modal.Header>
-            <Modal.Body className="space-y-2">
-              <p>{legacyPreview?.kind === "application_configuration" ? "替换全部应用配置" : "新增一个 Workspace"}</p>
-              <p>{legacyPreview?.workspace_count} 个 Workspace · {legacyPreview?.portable_material_count} 份证书材料</p>
-              <p>迁移报告：源版本 {legacyPreview?.source_version}；已移除 {legacyPreview?.migration_report.removed_metadata_extractors} 个旧元数据提取器。</p>
-              {legacyPreview?.warnings.map((warning) => <p key={warning}>{warning}</p>)}
-            </Modal.Body>
-            <Modal.Footer><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("legacy-discard", discardLegacyImport)}>取消</Button><Button variant="danger" isDisabled={Boolean(pendingAction)} onPress={() => void run("legacy-commit", commitLegacyImport)}>确认导入</Button></Modal.Footer>
-          </Modal.Dialog></Modal.Container></Modal.Backdrop>
-        </Modal>
         <Alert status="accent">
           <Alert.Indicator />
           <Alert.Content>

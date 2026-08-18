@@ -10,26 +10,35 @@ pub(super) fn persisted_rule_error(message: String) -> AppError {
     })
 }
 
-pub(super) fn deserialize_persisted_rule(
-    mut value: Value,
-    legacy_terminal_body_fields: &[&str],
-) -> Result<Rule, String> {
+pub(super) fn serialize_persisted_rule(rule: &Rule) -> Result<Value, serde_json::Error> {
+    let mut value = serde_json::to_value(rule)?;
+    value
+        .as_object_mut()
+        .expect("Rule always serializes as an object")
+        .insert(
+            PERSISTENCE_VERSION_FIELD.into(),
+            Value::from(RULE_PERSISTENCE_VERSION),
+        );
+    Ok(value)
+}
+
+pub(super) fn deserialize_persisted_rule(mut value: Value) -> Result<Rule, String> {
     let object = value
         .as_object_mut()
         .ok_or_else(|| "rule root must be an object".to_owned())?;
-    let version = take_rule_persistence_version(object)?;
-    let has_legacy_body = has_legacy_terminal_body(object, legacy_terminal_body_fields);
-
-    match (version, has_legacy_body) {
-        (Some(RULE_PERSISTENCE_VERSION) | None, false) => {}
-        (None, true) => {
-            migrate_legacy_terminal_bodies(object, legacy_terminal_body_fields)?;
-        }
-        (Some(version), _) => {
+    match take_rule_persistence_version(object)? {
+        Some(RULE_PERSISTENCE_VERSION) => {}
+        Some(version) => {
             return Err(format!("unsupported rule persistence version {version}"));
         }
+        None => return Err("rule persistence version is required".into()),
     }
-    serde_json::from_value(value).map_err(|error| error.to_string())
+    let rule: Rule = serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
+    let current = serde_json::to_value(&rule).map_err(|error| error.to_string())?;
+    if current != value {
+        return Err("rule contains unknown or non-current fields".into());
+    }
+    Ok(rule)
 }
 
 pub(super) fn take_rule_persistence_version(
@@ -43,74 +52,6 @@ pub(super) fn take_rule_persistence_version(
                 .ok_or_else(|| "rule persistence version must be an unsigned integer".to_owned())
         })
         .transpose()
-}
-
-pub(super) fn has_legacy_terminal_body(rule: &Map<String, Value>, legacy_fields: &[&str]) -> bool {
-    terminal_action_objects(rule).any(|action| {
-        legacy_fields
-            .iter()
-            .any(|field| action.contains_key(*field))
-    })
-}
-
-pub(super) fn migrate_legacy_terminal_bodies(
-    rule: &mut Map<String, Value>,
-    legacy_fields: &[&str],
-) -> Result<(), String> {
-    for action in terminal_action_objects_mut(rule) {
-        let mut legacy_body = None;
-        for field in legacy_fields {
-            let Some(value) = action.remove(*field) else {
-                continue;
-            };
-            if legacy_body.replace(value).is_some() {
-                return Err("terminal action contains multiple legacy body fields".into());
-            }
-        }
-        let Some(legacy_body) = legacy_body else {
-            continue;
-        };
-        if action.insert("body_bytes".into(), legacy_body).is_some() {
-            return Err("terminal action contains both legacy and current body fields".into());
-        }
-    }
-    Ok(())
-}
-
-pub(super) fn terminal_action_objects(
-    rule: &Map<String, Value>,
-) -> impl Iterator<Item = &Map<String, Value>> {
-    rule.get("actions")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|action| action.get("Terminal"))
-        .filter_map(Value::as_object)
-        .filter_map(|terminal| {
-            terminal
-                .get("MockResponse")
-                .or_else(|| terminal.get("InvalidJson"))
-        })
-        .filter_map(Value::as_object)
-}
-
-pub(super) fn terminal_action_objects_mut(
-    rule: &mut Map<String, Value>,
-) -> impl Iterator<Item = &mut Map<String, Value>> {
-    rule.get_mut("actions")
-        .and_then(Value::as_array_mut)
-        .into_iter()
-        .flatten()
-        .filter_map(|action| action.get_mut("Terminal"))
-        .filter_map(Value::as_object_mut)
-        .filter_map(|terminal| {
-            if terminal.contains_key("MockResponse") {
-                terminal.get_mut("MockResponse")
-            } else {
-                terminal.get_mut("InvalidJson")
-            }
-        })
-        .filter_map(Value::as_object_mut)
 }
 
 pub(super) fn validate_persisted_rule(

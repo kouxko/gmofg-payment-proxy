@@ -34,17 +34,6 @@ async fn production_host_covers_queries_and_settings_without_ui() {
     assert_eq!(bootstrap.channel_catalog.len(), 1);
     assert_eq!(bootstrap.channel_catalog[0].display_name, "默认代理监听");
     assert!(uuid::Uuid::parse_str(bootstrap.channel_catalog[0].id.as_str()).is_ok());
-    let status = application
-        .proxy_get_status()
-        .await
-        .expect("retired compatibility status");
-    assert!(status.channels.is_empty());
-    assert!(!status.can_start);
-    assert_eq!(
-        status.start_disabled_reason.expect("retired reason").code,
-        "LEGACY_PROXY_RETIRED"
-    );
-
     let capture = application
         .capture_query(capture_query())
         .await

@@ -356,11 +356,9 @@ fn reject_local_responder_upstream_probe(listener: &ProxyListener) -> AppResult<
         ListenerDataPlane::Socket(settings)
             if matches!(settings.topology, SocketTopology::LocalResponder(_))
     ) {
-        // 该稳定码早于 LocalResponder runtime 落地并已进入公开 IPC 契约；这里仅表示
-        // “上游探测不适用”，不表示 LocalResponder 监听本身不可启动。
         return Err(AppError::new(
-            "LOCAL_RESPONDER_NOT_AVAILABLE",
-            "LocalResponder 没有 Server 上游，不能执行连接或 TLS 探测。",
+            "LISTENER_UPSTREAM_NOT_APPLICABLE",
+            "本地应答没有 Server 上游，不能执行连接或 TLS 探测。",
         )
         .entity(listener.id.to_string()));
     }
@@ -368,7 +366,7 @@ fn reject_local_responder_upstream_probe(listener: &ProxyListener) -> AppResult<
 }
 
 /// 保留 Workspace identity/revision 作为所有写入和探测入口的第一层并发门禁；通过后再
-/// 返回稳定 unavailable。这样 stale draft 仍报告 revision conflict，而当前 draft
+/// 返回不适用错误。这样 stale draft 仍报告 revision conflict，而当前 draft
 /// 不会进入证书、协议包或 runtime ports。
 fn reject_local_responder_after_revision_check(
     workspace: &ProxyWorkspace,

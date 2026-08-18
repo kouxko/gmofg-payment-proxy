@@ -120,6 +120,7 @@ describe("统一代理监听编辑器", () => {
         downstream_tls: {
           enabled: true,
           server_identity: null,
+          dynamic_sni_allowlist: [],
           client_authentication: { mode: "disabled" as const },
         },
       },
@@ -157,6 +158,7 @@ describe("统一代理监听编辑器", () => {
         downstream_tls: {
           enabled: true,
           server_identity: null,
+          dynamic_sni_allowlist: [],
           client_authentication: { mode: "disabled" as const },
         },
       })],
@@ -185,6 +187,7 @@ describe("统一代理监听编辑器", () => {
       downstream_tls: {
         enabled: true,
         server_identity: null,
+        dynamic_sni_allowlist: [],
         client_authentication: { mode: "disabled" as const },
       },
     });
@@ -256,6 +259,7 @@ describe("统一代理监听编辑器", () => {
       downstream_tls: {
         enabled: true,
         server_identity: downstreamIdentity.id,
+        dynamic_sni_allowlist: [],
         client_authentication: { mode: "disabled" as const },
       },
       fixed_server: {
@@ -273,6 +277,7 @@ describe("统一代理监听编辑器", () => {
       downstream_tls: {
         enabled: true,
         server_identity: otherIdentity.id,
+        dynamic_sni_allowlist: [],
         client_authentication: { mode: "disabled" as const },
       },
     });

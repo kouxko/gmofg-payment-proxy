@@ -49,10 +49,6 @@ export function SocketListenerSettings(props: Props): ReactNode {
         </Alert.Content></Alert>
       )}
       <SocketFieldErrors errors={props.fieldErrors} />
-      {workingMode === "incompatible" && <Alert status="danger"><Alert.Indicator /><Alert.Content>
-        <Alert.Title>当前工作方式不兼容</Alert.Title>
-        <Alert.Description>保存的数据组合无法安全解释，请重新选择一种工作方式。</Alert.Description>
-      </Alert.Content></Alert>}
       <Card>
         <Card.Header><Card.Title>1. 工作方式</Card.Title>
           <Card.Description>选择数据是原样送到远端、按协议处理后送到远端，还是由本机直接返回结果。</Card.Description>

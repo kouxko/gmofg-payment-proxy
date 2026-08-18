@@ -14,9 +14,9 @@ mod validation;
 pub use certificates::{CertificateLabels, ProductCertificatePolicy};
 pub use codec::BodyCodec;
 pub use contracts::{
-    ClassifiedRequest, LegacySettingsChannelMapping, ProductChannel, ProductFaultTemplate,
-    ProductHeader, ProductLabels, ProductMessageContext, ProductPersistenceMigrations,
-    ProductStorageNamespace, RequestClassifier, STANDARD_FAULT_CAPABILITY_IDS,
+    ClassifiedRequest, ProductChannel, ProductFaultTemplate, ProductHeader, ProductLabels,
+    ProductMessageContext, ProductStorageNamespace, RequestClassifier,
+    STANDARD_FAULT_CAPABILITY_IDS,
 };
 pub use error::ProductError;
 pub use intercept_profile::InterceptProxyProfile;

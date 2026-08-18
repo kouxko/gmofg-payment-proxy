@@ -8,13 +8,13 @@ pub use intercept_proxy_domain::{
     DocumentCondition, DocumentFieldName, DocumentValue, DownstreamClientAuthentication,
     DownstreamTlsSettings, FaultPreset, FaultPresetId, FixedServerSettings,
     ForwardProxyAuthentication, HttpListenerSettings, ListenerDataPlane, ListenerId, MitmSettings,
-    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyListenerV2,
-    ProxyWorkspace, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
-    ScriptedSocketProcessing, SecretReference, SocketDirection, SocketDocumentRuleDefinition,
-    SocketDocumentRuleDraft, SocketDocumentRuleId, SocketDownstreamSecurity,
-    SocketDownstreamTlsSettings, SocketEndpoint, SocketLocalResponderTopology,
-    SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings, SocketRelayTopology,
-    SocketTopology, SocketUpstreamTlsSettings, UpstreamTlsSettings, WorkspaceId,
+    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyWorkspace,
+    ResponseAssertion, ResponseAssertionId, ResponseAssertionKind, ScriptedSocketProcessing,
+    SecretReference, SocketDirection, SocketDocumentRuleDefinition, SocketDocumentRuleDraft,
+    SocketDocumentRuleId, SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketEndpoint,
+    SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
+    SocketRelaySettings, SocketRelayTopology, SocketTopology, SocketUpstreamTlsSettings,
+    UpstreamTlsSettings, WorkspaceId,
 };
 
 /// 标识一次代理启动周期。代理重启后旧周期的事件和断点不得继续操作。
@@ -46,122 +46,10 @@ pub struct DisabledReason {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum ProxyState {
-    Stopped,
-    Starting,
-    Running,
-    Stopping,
-    Faulted,
-}
-
-impl ProxyState {
-    pub fn display_zh(self) -> (&'static str, UiTone) {
-        match self {
-            Self::Stopped => ("已停止", UiTone::Neutral),
-            Self::Starting => ("正在启动", UiTone::Info),
-            Self::Running => ("运行中", UiTone::Positive),
-            Self::Stopping => ("正在停止", UiTone::Warning),
-            Self::Faulted => ("故障", UiTone::Danger),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum ChannelState {
-    Disabled,
-    Stopped,
-    Starting,
-    Listening,
-    Stopping,
-    Faulted,
-}
-
-impl ChannelState {
-    pub fn display_zh(self) -> (&'static str, UiTone) {
-        match self {
-            Self::Disabled => ("已禁用", UiTone::Neutral),
-            Self::Stopped => ("已停止", UiTone::Neutral),
-            Self::Starting => ("正在启动", UiTone::Info),
-            Self::Listening => ("正在监听", UiTone::Positive),
-            Self::Stopping => ("正在停止", UiTone::Warning),
-            Self::Faulted => ("故障", UiTone::Danger),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct ChannelStatusViewModel {
-    pub id: ChannelId,
-    pub display_name: String,
-    pub state: ChannelState,
-    pub state_text: String,
-    pub ui_tone: UiTone,
-    pub listen_address: String,
-    pub mtls_enabled: bool,
-    pub connected_clients: u32,
-    pub request_count: u64,
-    pub error_count: u64,
-    pub enabled: bool,
-    pub upstream_url: String,
-    pub upstream_state_text: String,
-    pub upstream_ui_tone: UiTone,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct ChannelPresentationViewModel {
     pub id: ChannelId,
     pub display_name: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum ConnectionHealthState {
-    Unavailable,
-    Waiting,
-    Healthy,
-    Degraded,
-    Faulted,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct ConnectionHealthViewModel {
-    pub state: ConnectionHealthState,
-    pub state_text: String,
-    pub detail: String,
-    pub ui_tone: UiTone,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 顶部状态栏和控制台所需的完整代理状态。
-/// `can_*` 与 `*_disabled_reason` 已包含业务权限判断，展示层不能自行推导。
-pub struct ProxyStatusViewModel {
-    pub state: ProxyState,
-    pub state_text: String,
-    pub ui_tone: UiTone,
-    pub runtime_epoch: Option<RuntimeEpoch>,
-    pub revision: Revision,
-    pub channels: Vec<ChannelStatusViewModel>,
-    pub app_to_proxy_health: ConnectionHealthViewModel,
-    pub proxy_to_server_health: ConnectionHealthViewModel,
-    pub active_sessions: usize,
-    pub pending_breakpoints: usize,
-    pub logical_memory_bytes: u64,
-    pub logical_memory_text: String,
-    pub memory_capacity_bytes: u64,
-    pub memory_capacity_text: String,
-    pub memory_usage_percent: u8,
-    pub session_capacity: usize,
-    pub default_timeout_seconds: u64,
-    pub can_start: bool,
-    pub start_disabled_reason: Option<DisabledReason>,
-    pub can_stop: bool,
-    pub stop_disabled_reason: Option<DisabledReason>,
-    pub can_restart: bool,
-    pub restart_disabled_reason: Option<DisabledReason>,
-    pub fault_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]

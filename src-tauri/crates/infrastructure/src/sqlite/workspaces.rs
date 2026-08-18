@@ -322,9 +322,7 @@ impl SqliteStore {
 
         transaction
             .execute_batch(
-                "DELETE FROM rules;
-                 UPDATE rule_state SET revision = revision + 1 WHERE singleton_id = 1;
-                 DELETE FROM protected_secrets;
+                "DELETE FROM protected_secrets;
                  DELETE FROM certificate_material;
                  UPDATE certificate_state SET revision = revision + 1 WHERE singleton_id = 1;
                  DELETE FROM android_runtime_owner;

@@ -125,7 +125,7 @@ async fn run_case(upstream_state: State, downstream_state: State) {
     let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
         Arc::clone(&store),
     ));
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     runtime.set_socket_capture_repository(Arc::clone(&captures));
     runtime.start(workspace, listener.clone()).await.unwrap();
 

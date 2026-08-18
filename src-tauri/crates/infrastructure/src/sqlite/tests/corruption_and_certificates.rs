@@ -1,46 +1,6 @@
 use super::*;
 
 #[test]
-fn corrupt_rule_id_json_and_time_use_persistence_error_classification() {
-    for (column, value) in [
-        ("id", "not-a-uuid"),
-        ("json", "{not-json"),
-        ("updated_at", "not-a-time"),
-    ] {
-        let store = SqliteStore::in_memory().expect("store");
-        let id = Uuid::new_v4().to_string();
-        let json = json!({"name": "rule"}).to_string();
-        let updated_at = Utc::now().to_rfc3339();
-        let (id, json, updated_at) = match column {
-            "id" => (value.to_owned(), json, updated_at),
-            "json" => (id, value.to_owned(), updated_at),
-            "updated_at" => (id, json, value.to_owned()),
-            _ => unreachable!(),
-        };
-        store
-            .connection
-            .lock()
-            .execute(
-                "INSERT INTO rules(id, revision, enabled, json, updated_at)
-                 VALUES (?1, 1, 1, ?2, ?3)",
-                params![id, json, updated_at],
-            )
-            .expect("insert corrupt rule");
-
-        let error = store.list_rules().expect_err("corrupt rule must fail");
-        assert_eq!(
-            error.code(),
-            crate::InfrastructureErrorCode::PersistenceCorrupt,
-            "wrong classification for {column}"
-        );
-        assert!(!matches!(
-            error,
-            InfrastructureError::CertificateInvalid { .. }
-        ));
-    }
-}
-
-#[test]
 fn certificate_batch_write_rolls_back_on_failure() {
     let store = SqliteStore::in_memory().expect("store");
     store

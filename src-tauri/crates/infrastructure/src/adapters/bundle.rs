@@ -15,15 +15,14 @@ use super::{
     ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
     ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageRepositoryAdapter,
     ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, SettingsRepositoryAdapter,
-    SocketCaptureRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter,
-    WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
+    SocketCaptureRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter,
+    WorkspaceRuntimePolicyResolver,
 };
 
 #[derive(Debug)]
 pub struct InfrastructureServiceBundle {
     pub settings: Arc<SettingsRepositoryAdapter>,
     pub workspaces: Arc<WorkspaceRepositoryAdapter>,
-    pub workspace_documents: Arc<WorkspaceDocumentAdapter>,
     pub workspace_body_codecs: Arc<WorkspaceBodyCodecResolver>,
     pub workspace_runtime_policies: Arc<WorkspaceRuntimePolicyResolver>,
     pub listener_runtime: Arc<ListenerRuntimeAdapter>,
@@ -59,16 +58,15 @@ impl InfrastructureServiceBundle {
             Arc::clone(&capacity),
         ));
         let socket_capture = Arc::new(SocketCaptureRepositoryAdapter::new(Arc::clone(&store)));
-        let capture = Arc::new(
-            CaptureRepositoryAdapter::new(sessions.clone())
-                .with_socket_store(Arc::clone(&socket_capture)),
-        );
+        let capture = Arc::new(CaptureRepositoryAdapter::new(
+            sessions.clone(),
+            Arc::clone(&socket_capture),
+        ));
         let rules = Arc::new(RuleRepositoryAdapter::new(
             Arc::clone(&store),
             Arc::clone(&dialog),
             sessions.clone(),
             product.channels(),
-            product.persistence_migrations().terminal_body_fields,
         ));
         let settings = Arc::new(SettingsRepositoryAdapter::new(
             Arc::clone(&store),
@@ -110,12 +108,14 @@ impl InfrastructureServiceBundle {
         let workspace_runtime_policies =
             Arc::new(WorkspaceRuntimePolicyResolver::new(Arc::clone(&store)));
         let listener_runtime = Arc::new(
-            ListenerRuntimeAdapter::new(store)
-                .with_protocol_packages(protocol_packages.clone())
-                .with_mitm_certificate_authority(certificates.clone())
-                .with_installation_server_identity(certificates.clone())
-                .with_protected_secrets(protected_secrets.clone())
-                .with_managed_listener_certificates(listener_certificates.clone()),
+            ListenerRuntimeAdapter::new(
+                store,
+                protected_secrets.clone(),
+                protocol_packages.clone(),
+            )
+            .with_mitm_certificate_authority(certificates.clone())
+            .with_installation_server_identity(certificates.clone())
+            .with_managed_listener_certificates(listener_certificates.clone()),
         );
         listener_runtime.set_socket_capture_repository(socket_capture);
         let protocol_package_usage = Arc::new(ProtocolPackageUsageQueryAdapter::new(
@@ -124,7 +124,6 @@ impl InfrastructureServiceBundle {
         ));
         Self {
             workspaces,
-            workspace_documents: Arc::new(WorkspaceDocumentAdapter::new(dialog)),
             workspace_body_codecs,
             workspace_runtime_policies,
             listener_runtime,

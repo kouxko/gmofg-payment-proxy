@@ -3,20 +3,14 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub(in crate::requirements_tests) struct FakeProtocolPackagePortability {
-    workspaces: Arc<dyn WorkspaceRepositoryPort>,
     configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
     pub(in crate::requirements_tests) descriptions:
         parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageDescriptionViewModel>>,
-    pub(in crate::requirements_tests) workspace_packages:
-        parking_lot::Mutex<HashMap<ProtocolPackageRef, PortableProtocolPackage>>,
     pub(in crate::requirements_tests) application_packages:
         parking_lot::Mutex<Vec<PortableApplicationProtocolPackage>>,
     pub(in crate::requirements_tests) preflight_calls: AtomicUsize,
     pub(in crate::requirements_tests) installed_preflight_calls: AtomicUsize,
-    pub(in crate::requirements_tests) commit_calls: AtomicUsize,
-    pub(in crate::requirements_tests) legacy_commit_calls: AtomicUsize,
     pub(in crate::requirements_tests) replace_calls: AtomicUsize,
-    pub(in crate::requirements_tests) legacy_replace_calls: AtomicUsize,
     pub(in crate::requirements_tests) reset_calls: AtomicUsize,
     pub(in crate::requirements_tests) compiler_validate_calls: AtomicUsize,
     pub(in crate::requirements_tests) compiler_describe_calls: AtomicUsize,
@@ -29,9 +23,6 @@ pub(in crate::requirements_tests) struct FakeProtocolPackagePortability {
     pub(in crate::requirements_tests) block_backup_baseline: AtomicBool,
     pub(in crate::requirements_tests) backup_baseline_entered: tokio::sync::Notify,
     pub(in crate::requirements_tests) continue_backup_baseline: tokio::sync::Notify,
-    pub(in crate::requirements_tests) block_workspace_export: AtomicBool,
-    pub(in crate::requirements_tests) workspace_export_entered: tokio::sync::Notify,
-    pub(in crate::requirements_tests) continue_workspace_export: tokio::sync::Notify,
     pub(in crate::requirements_tests) block_application_export: AtomicBool,
     pub(in crate::requirements_tests) application_export_entered: tokio::sync::Notify,
     pub(in crate::requirements_tests) continue_application_export: tokio::sync::Notify,
@@ -39,21 +30,15 @@ pub(in crate::requirements_tests) struct FakeProtocolPackagePortability {
 
 impl FakeProtocolPackagePortability {
     pub(in crate::requirements_tests) fn new(
-        workspaces: Arc<dyn WorkspaceRepositoryPort>,
         configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
     ) -> Self {
         Self {
-            workspaces,
             configuration_store,
             descriptions: parking_lot::Mutex::new(HashMap::new()),
-            workspace_packages: parking_lot::Mutex::new(HashMap::new()),
             application_packages: parking_lot::Mutex::new(Vec::new()),
             preflight_calls: AtomicUsize::new(0),
             installed_preflight_calls: AtomicUsize::new(0),
-            commit_calls: AtomicUsize::new(0),
-            legacy_commit_calls: AtomicUsize::new(0),
             replace_calls: AtomicUsize::new(0),
-            legacy_replace_calls: AtomicUsize::new(0),
             reset_calls: AtomicUsize::new(0),
             compiler_validate_calls: AtomicUsize::new(0),
             compiler_describe_calls: AtomicUsize::new(0),
@@ -66,9 +51,6 @@ impl FakeProtocolPackagePortability {
             block_backup_baseline: AtomicBool::new(false),
             backup_baseline_entered: tokio::sync::Notify::new(),
             continue_backup_baseline: tokio::sync::Notify::new(),
-            block_workspace_export: AtomicBool::new(false),
-            workspace_export_entered: tokio::sync::Notify::new(),
-            continue_workspace_export: tokio::sync::Notify::new(),
             block_application_export: AtomicBool::new(false),
             application_export_entered: tokio::sync::Notify::new(),
             continue_application_export: tokio::sync::Notify::new(),
@@ -80,13 +62,6 @@ impl FakeProtocolPackagePortability {
         package: PortableApplicationProtocolPackage,
         description: ProtocolPackageDescriptionViewModel,
     ) {
-        self.workspace_packages.lock().insert(
-            package.package.clone(),
-            PortableProtocolPackage {
-                package: package.package.clone(),
-                files: package.files.clone(),
-            },
-        );
         self.descriptions
             .lock()
             .insert(package.package.clone(), description);
@@ -148,7 +123,7 @@ impl ProtocolPackageStorePort for FakeProtocolPackagePortability {
 
 #[async_trait]
 impl ProtocolPackageCompilerPort for FakeProtocolPackagePortability {
-    async fn validate_for_enable(
+    async fn compile_fresh(
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageCompilationReceipt> {
@@ -184,6 +159,45 @@ impl ProtocolPackageCompilerPort for FakeProtocolPackagePortability {
 }
 
 #[async_trait]
+impl ProtocolPackageImportPort for FakeProtocolPackagePortability {
+    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
+        unused()
+    }
+
+    async fn commit_zip(
+        &self,
+        _: ProtocolPackageImportToken,
+    ) -> AppResult<ProtocolPackageImportViewModel> {
+        unused()
+    }
+
+    async fn discard_zip(&self, _: ProtocolPackageImportToken) -> AppResult<()> {
+        unused()
+    }
+}
+
+#[async_trait]
+impl BuiltinProtocolPackagePort for FakeProtocolPackagePortability {
+    async fn restore_builtin(&self) -> AppResult<ProtocolPackageImportViewModel> {
+        unused()
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageUsageQueryPort for FakeProtocolPackagePortability {
+    async fn usages(
+        &self,
+        _: &ProtocolPackageRef,
+    ) -> AppResult<Vec<ProtocolPackageUsageViewModel>> {
+        Ok(Vec::new())
+    }
+
+    async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>> {
+        Ok(Vec::new())
+    }
+}
+
+#[async_trait]
 impl ProtocolPackagePortabilityPort for FakeProtocolPackagePortability {
     async fn application_backup_baseline(
         &self,
@@ -204,28 +218,6 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackagePortability {
             .collect())
     }
 
-    async fn export_workspace_packages(
-        &self,
-        packages: &[ProtocolPackageRef],
-    ) -> AppResult<Vec<PortableProtocolPackage>> {
-        if self.block_workspace_export.load(Ordering::SeqCst) {
-            self.workspace_export_entered.notify_one();
-            self.continue_workspace_export.notified().await;
-        }
-        let registry = self.workspace_packages.lock();
-        packages
-            .iter()
-            .map(|package| {
-                registry.get(package).cloned().ok_or_else(|| {
-                    AppError::new(
-                        "PROTOCOL_PACKAGE_NOT_FOUND",
-                        "Workspace 引用的测试协议包未安装。",
-                    )
-                })
-            })
-            .collect()
-    }
-
     async fn export_application_packages(
         &self,
     ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
@@ -234,14 +226,6 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackagePortability {
             self.continue_application_export.notified().await;
         }
         Ok(self.application_packages.lock().clone())
-    }
-
-    async fn preflight_workspace_packages(
-        &self,
-        packages: &[PortableProtocolPackage],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        self.preflight_calls.fetch_add(1, Ordering::SeqCst);
-        self.descriptions_for(packages, |package| &package.package)
     }
 
     async fn preflight_application_packages(
@@ -265,36 +249,6 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackagePortability {
         self.descriptions_for(packages, |package| package)
     }
 
-    async fn commit_workspace_bundle(
-        &self,
-        _: Vec<PortableProtocolPackage>,
-        workspace: ProxyWorkspace,
-    ) -> AppResult<()> {
-        self.commit_calls.fetch_add(1, Ordering::SeqCst);
-        if self.fail_commit.load(Ordering::SeqCst) {
-            return Err(AppError::new(
-                "ATOMIC_COMMIT_FAILED",
-                "测试注入：提交失败。",
-            ));
-        }
-        // 内存 Workspace fake 仍会重映射一次；生产 adapter 接收的是 facade 已重映射的聚合。
-        // 需求测试只用它观察是否发生写入，不依赖导入结果的具体 UUID。
-        self.workspaces.import_workspace(workspace).await?;
-        Ok(())
-    }
-
-    async fn commit_legacy_workspace(&self, workspace: ProxyWorkspace) -> AppResult<()> {
-        self.legacy_commit_calls.fetch_add(1, Ordering::SeqCst);
-        if self.fail_commit.load(Ordering::SeqCst) {
-            return Err(AppError::new(
-                "ATOMIC_COMMIT_FAILED",
-                "测试注入：历史 Workspace 提交失败。",
-            ));
-        }
-        self.workspaces.import_workspace(workspace).await?;
-        Ok(())
-    }
-
     async fn replace_application_bundle(
         &self,
         _: Vec<PortableApplicationProtocolPackage>,
@@ -307,22 +261,6 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackagePortability {
                 "测试注入：替换失败。",
             ));
         }
-        self.configuration_store.replace_all(document).await
-    }
-
-    async fn replace_legacy_application_configuration(
-        &self,
-        mut document: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        self.legacy_replace_calls.fetch_add(1, Ordering::SeqCst);
-        if self.fail_commit.load(Ordering::SeqCst) {
-            return Err(AppError::new(
-                "ATOMIC_COMMIT_FAILED",
-                "测试注入：历史完整配置替换失败。",
-            ));
-        }
-        // 生产事务保留 registry；测试 store 用完整文档记录这一可观察语义。
-        document.protocol_packages = self.application_packages.lock().clone();
         self.configuration_store.replace_all(document).await
     }
 

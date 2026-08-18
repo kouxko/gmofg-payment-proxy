@@ -10,16 +10,13 @@ use async_trait::async_trait;
 use chrono::Utc;
 use intercept_proxy_application::{
     AppError, AppResult, ApplicationConfigurationDocument, ApplicationConfigurationStorePort,
-    MAX_APPLICATION_CONFIGURATION_BYTES, MAX_WORKSPACE_DOCUMENT_BYTES, OperationResultViewModel,
-    ProxyWorkspace, UiTone, WorkspaceDocumentPort, WorkspaceId, WorkspaceRepositoryPort,
-    WorkspaceSummaryViewModel, WorkspaceValidationViewModel, parse_workspace_document,
-    remap_workspace_identity, serialize_workspace_document,
+    OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceId, WorkspaceRepositoryPort,
+    WorkspaceSummaryViewModel, WorkspaceValidationViewModel, remap_workspace_identity,
 };
 
-use crate::{AtomicFileExporter, SqliteStore, WorkspaceRecord};
+use crate::{SqliteStore, WorkspaceRecord};
 
 use super::{
-    NativeFileDialog,
     common::{app_error, decode_workspace_record, encode_workspace_record, infra},
     settings::serialize_settings,
 };
@@ -27,84 +24,6 @@ use super::{
 #[derive(Debug)]
 pub struct WorkspaceRepositoryAdapter {
     store: Arc<SqliteStore>,
-}
-
-/// 原生 Dialog/文件系统到应用文档端口的薄适配器。
-#[derive(Debug)]
-pub struct WorkspaceDocumentAdapter {
-    dialog: Arc<dyn NativeFileDialog>,
-    exporter: AtomicFileExporter,
-}
-
-impl WorkspaceDocumentAdapter {
-    #[must_use]
-    pub fn new(dialog: Arc<dyn NativeFileDialog>) -> Self {
-        Self {
-            dialog,
-            exporter: AtomicFileExporter,
-        }
-    }
-}
-
-#[async_trait]
-impl WorkspaceDocumentPort for WorkspaceDocumentAdapter {
-    async fn pick_import_document(&self) -> AppResult<Option<Vec<u8>>> {
-        let Some(path) = self.dialog.choose_open_file("intercept_workspace")? else {
-            return Ok(None);
-        };
-        infra(
-            self.exporter
-                .read_bounded(&path, MAX_WORKSPACE_DOCUMENT_BYTES as u64),
-        )
-        .map(Some)
-    }
-
-    async fn save_export_document(
-        &self,
-        suggested_file_name: String,
-        document: Vec<u8>,
-    ) -> AppResult<bool> {
-        let Some(selection) = self
-            .dialog
-            .choose_save_file("intercept_workspace", &suggested_file_name)?
-        else {
-            return Ok(false);
-        };
-        infra(
-            self.exporter
-                .write(&selection.path, &document, selection.overwrite_confirmed),
-        )?;
-        Ok(true)
-    }
-
-    async fn pick_import_application_configuration(&self) -> AppResult<Option<Vec<u8>>> {
-        let Some(path) = self.dialog.choose_open_file("intercept_configuration")? else {
-            return Ok(None);
-        };
-        infra(
-            self.exporter
-                .read_bounded(&path, MAX_APPLICATION_CONFIGURATION_BYTES as u64),
-        )
-        .map(Some)
-    }
-
-    async fn save_export_application_configuration(
-        &self,
-        suggested_file_name: String,
-        document: Vec<u8>,
-    ) -> AppResult<bool> {
-        let Some(selection) = self
-            .dialog
-            .choose_save_file("intercept_configuration", &suggested_file_name)?
-        else {
-            return Ok(false);
-        };
-        infra(
-            self.exporter
-                .write(&selection.path, &document, selection.overwrite_confirmed),
-        )?;
-        Ok(true)
-    }
 }
 
 impl WorkspaceRepositoryAdapter {
@@ -277,20 +196,6 @@ impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
             entity_id: Some(workspace_id.to_string()),
             revision: Some(expected_revision),
             requires_restart: false,
-        })
-    }
-
-    async fn import_document(&self, document: Vec<u8>) -> AppResult<ProxyWorkspace> {
-        self.import_workspace(parse_workspace_document(&document)?.workspace)
-            .await
-    }
-
-    async fn export_document(&self, workspace_id: WorkspaceId) -> AppResult<Vec<u8>> {
-        serialize_workspace_document(&intercept_proxy_application::WorkspaceDocument {
-            format_version: intercept_proxy_application::WORKSPACE_DOCUMENT_FORMAT_VERSION,
-            workspace: self.get_stored(workspace_id)?,
-            certificate_materials: Vec::new(),
-            protocol_packages: Vec::new(),
         })
     }
 }

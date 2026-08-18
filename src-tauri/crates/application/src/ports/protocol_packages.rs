@@ -1,14 +1,13 @@
-//! 协议包生命周期的应用端口与缺省 Host 实现。
+//! 协议包生命周期的应用端口。
 
 use async_trait::async_trait;
 
 use crate::{
-    AppError, AppResult, ApplicationBackupProtocolPackageBaseline,
-    ApplicationConfigurationDocument, PortableApplicationProtocolPackage, PortableProtocolPackage,
-    ProtocolPackageCompilationReceipt, ProtocolPackageDescriptionViewModel,
-    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
-    ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageCount,
-    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel, ProxyWorkspace,
+    AppResult, ApplicationBackupProtocolPackageBaseline, ApplicationConfigurationDocument,
+    PortableApplicationProtocolPackage, ProtocolPackageCompilationReceipt,
+    ProtocolPackageDescriptionViewModel, ProtocolPackageImportPreviewViewModel,
+    ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
+    ProtocolPackageUsageCount, ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel,
 };
 
 #[async_trait]
@@ -31,10 +30,9 @@ pub trait ProtocolPackageStorePort: Send + Sync + std::fmt::Debug {
 /// 编译与 Host API 兼容性校验。
 ///
 /// 每次调用都必须从已安装的规范文件 fresh 构建结果，不能只信任
-/// 导入时或列表中的历史 `Valid` 状态。方法名保留 `validate_for_enable`
-/// 以维持已有 Host 端口兼容，但其语义是可安全加载的 fresh receipt。
+/// 导入时或列表中的历史 `Valid` 状态。
 pub trait ProtocolPackageCompilerPort: Send + Sync + std::fmt::Debug {
-    async fn validate_for_enable(
+    async fn compile_fresh(
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageCompilationReceipt>;
@@ -89,20 +87,10 @@ pub trait ProtocolPackagePortabilityPort: Send + Sync + std::fmt::Debug {
     async fn application_backup_baseline(
         &self,
     ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>>;
-    /// 导出 Workspace 精确引用的包，不携带本机启用状态。
-    async fn export_workspace_packages(
-        &self,
-        packages: &[ProtocolPackageRef],
-    ) -> AppResult<Vec<PortableProtocolPackage>>;
     /// 导出整个应用注册表，并保留每个精确版本的启用状态。
     async fn export_application_packages(
         &self,
     ) -> AppResult<Vec<PortableApplicationProtocolPackage>>;
-    /// 对 Workspace 文档内嵌包执行无副作用的完整恢复与编译。
-    async fn preflight_workspace_packages(
-        &self,
-        packages: &[PortableProtocolPackage],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>>;
     /// 对完整配置内嵌包执行无副作用的完整恢复与编译。
     async fn preflight_application_packages(
         &self,
@@ -113,23 +101,10 @@ pub trait ProtocolPackagePortabilityPort: Send + Sync + std::fmt::Debug {
         &self,
         packages: &[ProtocolPackageRef],
     ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>>;
-    /// 原子安装 Workspace 缺少的包（默认停用）并插入已重映射的 Workspace。
-    async fn commit_workspace_bundle(
-        &self,
-        packages: Vec<PortableProtocolPackage>,
-        workspace: ProxyWorkspace,
-    ) -> AppResult<()>;
-    /// 导入无协议包载荷的历史 Workspace；只验证其本机精确引用并插入 Workspace。
-    async fn commit_legacy_workspace(&self, workspace: ProxyWorkspace) -> AppResult<()>;
     /// 原子替换协议包注册表、全部 Workspace、当前选择和 Settings。
     async fn replace_application_bundle(
         &self,
         packages: Vec<PortableApplicationProtocolPackage>,
-        document: ApplicationConfigurationDocument,
-    ) -> AppResult<()>;
-    /// 恢复历史完整配置；只验证实际引用，保留整个本机注册表及全部启用状态。
-    async fn replace_legacy_application_configuration(
-        &self,
         document: ApplicationConfigurationDocument,
     ) -> AppResult<()>;
     /// 原子清除协议包和其他用户数据并写入干净默认配置；成功后清空编译缓存。
@@ -148,181 +123,4 @@ pub struct ProtocolPackageApplicationServices {
     pub builtin: std::sync::Arc<dyn BuiltinProtocolPackagePort>,
     pub usage_query: std::sync::Arc<dyn ProtocolPackageUsageQueryPort>,
     pub portability: std::sync::Arc<dyn ProtocolPackagePortabilityPort>,
-}
-
-impl ProtocolPackageApplicationServices {
-    #[must_use]
-    pub fn unavailable() -> Self {
-        let unavailable = std::sync::Arc::new(UnavailableProtocolPackageServices);
-        Self {
-            store: unavailable.clone(),
-            compiler: unavailable.clone(),
-            importer: unavailable.clone(),
-            builtin: unavailable.clone(),
-            usage_query: unavailable,
-            portability: std::sync::Arc::new(UnavailableProtocolPackageServices),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct UnavailableProtocolPackageServices;
-
-fn unavailable_protocol_packages<T>() -> AppResult<T> {
-    Err(AppError::new(
-        "PROTOCOL_PACKAGE_SERVICES_UNAVAILABLE",
-        "当前 Host 未提供协议包生命周期服务。",
-    ))
-}
-
-#[async_trait]
-impl ProtocolPackageStorePort for UnavailableProtocolPackageServices {
-    async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn get(
-        &self,
-        _: &ProtocolPackageRef,
-    ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
-        unavailable_protocol_packages()
-    }
-
-    async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
-        unavailable_protocol_packages()
-    }
-}
-
-#[async_trait]
-impl ProtocolPackageCompilerPort for UnavailableProtocolPackageServices {
-    async fn validate_for_enable(
-        &self,
-        _: &ProtocolPackageRef,
-    ) -> AppResult<ProtocolPackageCompilationReceipt> {
-        unavailable_protocol_packages()
-    }
-
-    async fn describe(
-        &self,
-        _: &ProtocolPackageRef,
-    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
-        unavailable_protocol_packages()
-    }
-}
-
-#[async_trait]
-impl ProtocolPackageImportPort for UnavailableProtocolPackageServices {
-    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn commit_zip(
-        &self,
-        _: ProtocolPackageImportToken,
-    ) -> AppResult<ProtocolPackageImportViewModel> {
-        unavailable_protocol_packages()
-    }
-
-    async fn discard_zip(&self, _: ProtocolPackageImportToken) -> AppResult<()> {
-        unavailable_protocol_packages()
-    }
-}
-
-#[async_trait]
-impl BuiltinProtocolPackagePort for UnavailableProtocolPackageServices {
-    async fn restore_builtin(&self) -> AppResult<ProtocolPackageImportViewModel> {
-        unavailable_protocol_packages()
-    }
-}
-
-#[async_trait]
-impl ProtocolPackageUsageQueryPort for UnavailableProtocolPackageServices {
-    async fn usages(
-        &self,
-        _: &ProtocolPackageRef,
-    ) -> AppResult<Vec<ProtocolPackageUsageViewModel>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>> {
-        unavailable_protocol_packages()
-    }
-}
-
-#[async_trait]
-impl ProtocolPackagePortabilityPort for UnavailableProtocolPackageServices {
-    async fn application_backup_baseline(
-        &self,
-    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn export_workspace_packages(
-        &self,
-        _: &[ProtocolPackageRef],
-    ) -> AppResult<Vec<PortableProtocolPackage>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn export_application_packages(
-        &self,
-    ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn preflight_workspace_packages(
-        &self,
-        _: &[PortableProtocolPackage],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn preflight_application_packages(
-        &self,
-        _: &[PortableApplicationProtocolPackage],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn preflight_installed_packages(
-        &self,
-        _: &[ProtocolPackageRef],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        unavailable_protocol_packages()
-    }
-
-    async fn commit_workspace_bundle(
-        &self,
-        _: Vec<PortableProtocolPackage>,
-        _: ProxyWorkspace,
-    ) -> AppResult<()> {
-        unavailable_protocol_packages()
-    }
-
-    async fn commit_legacy_workspace(&self, _: ProxyWorkspace) -> AppResult<()> {
-        unavailable_protocol_packages()
-    }
-
-    async fn replace_application_bundle(
-        &self,
-        _: Vec<PortableApplicationProtocolPackage>,
-        _: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        unavailable_protocol_packages()
-    }
-
-    async fn replace_legacy_application_configuration(
-        &self,
-        _: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        unavailable_protocol_packages()
-    }
-
-    async fn reset_application_bundle(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
-        unavailable_protocol_packages()
-    }
 }

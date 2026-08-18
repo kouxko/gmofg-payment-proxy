@@ -20,30 +20,8 @@ pub(crate) struct StoredProtocolPackageWrite {
 pub(crate) enum StoredProtocolPackageBundleError {
     #[error("相同协议包身份的内容不同")]
     IdentityConflict(ProtocolPackageRef),
-    #[error("协议包未安装")]
-    NotFound(ProtocolPackageRef),
     #[error(transparent)]
     Infrastructure(#[from] InfrastructureError),
-}
-
-/// 历史文档只能复用本机已经存在且内容仍与事务前编译结果一致的精确包。
-/// 本函数不更新 validation/enabled，也不允许缺失时补装。
-pub(crate) fn require_existing_protocol_package(
-    transaction: &Transaction<'_>,
-    package: &StoredProtocolPackageWrite,
-) -> Result<(), StoredProtocolPackageBundleError> {
-    let Some(existing) = load_protocol_package(transaction, &package.header.package)? else {
-        return Err(StoredProtocolPackageBundleError::NotFound(
-            package.header.package.clone(),
-        ));
-    };
-    if same_immutable_content(&existing, package) {
-        Ok(())
-    } else {
-        Err(StoredProtocolPackageBundleError::IdentityConflict(
-            package.header.package.clone(),
-        ))
-    }
 }
 
 /// 在调用者持有的组合事务内比较或安装一个协议包。

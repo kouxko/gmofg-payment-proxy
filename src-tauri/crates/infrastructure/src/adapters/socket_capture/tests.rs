@@ -174,7 +174,10 @@ fn semantically_contradictory_payload_fails_on_write_and_restore() {
 async fn socket_records_never_enter_http_capture_query() {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let socket = Arc::new(SocketCaptureRepositoryAdapter::new(store));
-    let adapter = CaptureRepositoryAdapter::default().with_socket_store(socket);
+    let adapter = CaptureRepositoryAdapter::new(
+        Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
+        socket,
+    );
     let workspace_id = WorkspaceId::new();
     adapter
         .record_socket(record(1, workspace_id))

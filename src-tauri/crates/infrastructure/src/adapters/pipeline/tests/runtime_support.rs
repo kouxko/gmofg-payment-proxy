@@ -242,7 +242,7 @@ fn adapter(views: Vec<RuleViewModel>, max_sessions: usize) -> Arc<RuntimePipelin
         Arc::new(InMemorySessionStore::new(max_sessions, 64 * 1024 * 1024)),
         Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(128)),
-        Arc::new(CaptureRepositoryAdapter::default()),
+        test_capture_repository(),
     ))
 }
 

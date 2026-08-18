@@ -86,10 +86,8 @@ pub struct RawHttpHeaderViewModel {
     /// 字段值的精确字节，不含可选空白和 CRLF。
     pub value_bytes: Vec<u8>,
     /// 冒号与实际字段值之间的原始可选空白。
-    #[serde(default)]
     pub leading_ows_bytes: Vec<u8>,
     /// 实际字段值之后的原始可选空白。
-    #[serde(default)]
     pub trailing_ows_bytes: Vec<u8>,
 }
 
@@ -109,10 +107,8 @@ pub enum MessageContentKind {
 pub struct MessageContentViewModel {
     pub http_status: Option<u16>,
     /// 精确起始行字节，避免把展示字符串误作报文重建来源。
-    #[serde(default)]
     pub start_line_bytes: Vec<u8>,
     /// 保留名称、值、大小写、重复项和原始顺序的 Header。
-    #[serde(default)]
     pub raw_headers: Vec<RawHttpHeaderViewModel>,
     /// 仅供展示和表单编辑的有损分组投影。
     pub headers: BTreeMap<String, Vec<String>>,
@@ -121,17 +117,11 @@ pub struct MessageContentViewModel {
     #[specta(type = Option<specta_typescript::Unknown<Value>>)]
     pub json: Option<Value>,
     pub content_length: usize,
-    #[serde(default)]
     pub media_type: Option<String>,
-    #[serde(default)]
     pub charset: Option<String>,
-    #[serde(default)]
     pub content_kind: MessageContentKind,
-    #[serde(default)]
     pub codec_id: Option<String>,
-    #[serde(default)]
     pub decode_error: Option<String>,
-    #[serde(default)]
     pub query_string: Option<String>,
 }
 
@@ -198,8 +188,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn legacy_message_content_document_defaults_new_http_metadata() {
-        let content: MessageContentViewModel = serde_json::from_value(serde_json::json!({
+    fn message_content_rejects_missing_current_http_metadata() {
+        let error = serde_json::from_value::<MessageContentViewModel>(serde_json::json!({
             "http_status": null,
             "start_line_bytes": [],
             "raw_headers": [],
@@ -209,15 +199,9 @@ mod tests {
             "json": null,
             "content_length": 2
         }))
-        .unwrap();
+        .expect_err("current message content fields are required");
 
-        assert_eq!(content.content_kind, MessageContentKind::Unknown);
-        assert!(content.media_type.is_none());
-        assert!(content.charset.is_none());
-        assert!(content.codec_id.is_none());
-        assert!(content.decode_error.is_none());
-        assert!(content.query_string.is_none());
-        assert_eq!(content.body_bytes, [0, 255]);
+        assert!(error.to_string().contains("media_type"));
     }
 
     #[test]
@@ -228,7 +212,15 @@ mod tests {
             "body_text": "D48",
             "body_bytes": [68, 52, 56],
             "json": {"code": "D48"},
-            "content_length": 3
+            "content_length": 3,
+            "start_line_bytes": [],
+            "raw_headers": [],
+            "media_type": null,
+            "charset": null,
+            "content_kind": "unknown",
+            "codec_id": null,
+            "decode_error": null,
+            "query_string": null
         }))
         .unwrap();
         let without_json = {

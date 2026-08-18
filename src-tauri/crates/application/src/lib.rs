@@ -18,15 +18,13 @@ mod document_security;
 mod error;
 mod events;
 mod facade;
-mod legacy_import;
 mod listeners;
 mod models;
 mod portable_certificates;
 mod portable_protocol_packages;
 mod ports;
 mod sessions;
-mod workspace_documents;
-mod workspace_migration;
+mod workspace_persistence;
 mod workspaces;
 
 pub use android::*;
@@ -43,25 +41,14 @@ pub use facade::{
     Application, ApplicationDependencies, parse_socket_rule_value,
     validate_portable_protocol_bindings,
 };
-pub use legacy_import::*;
 pub use listeners::InMemoryListenerRuntime;
 pub use models::*;
 pub use portable_certificates::*;
 pub use portable_protocol_packages::*;
 pub use ports::*;
 pub use sessions::{InMemorySessionStore, SessionStore};
-pub use workspace_documents::{
-    MAX_WORKSPACE_DOCUMENT_BYTES, ParsedWorkspaceDocument, WORKSPACE_DOCUMENT_FORMAT_VERSION,
-    WORKSPACE_DOCUMENT_V2_FORMAT_VERSION, WORKSPACE_DOCUMENT_V3_FORMAT_VERSION,
-    WORKSPACE_DOCUMENT_V4_FORMAT_VERSION, WorkspaceDocument, parse_workspace_document,
-    parse_workspace_document_with_source, serialize_workspace_document,
-};
-pub use workspace_migration::{
-    MigrationReport, MigrationSourceKind, WORKSPACE_PERSISTENCE_VERSION, migrate_workspace_value,
-};
-pub use workspaces::{
-    InMemoryWorkspaceDocumentStore, InMemoryWorkspaceStore, remap_workspace_identity,
-};
+pub use workspace_persistence::WORKSPACE_PERSISTENCE_VERSION;
+pub use workspaces::{InMemoryWorkspaceStore, remap_workspace_identity};
 
 #[cfg(test)]
 mod requirements_tests;

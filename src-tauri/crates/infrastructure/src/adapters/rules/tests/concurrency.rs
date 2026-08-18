@@ -50,7 +50,6 @@ async fn import_rejects_cross_process_changes_instead_of_replacing_them() {
         }),
         Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
         &[],
-        &[],
     );
 
     let error = adapter.import().await.expect_err("stale import");
@@ -59,7 +58,6 @@ async fn import_rejects_cross_process_changes_instead_of_replacing_them() {
         primary_store,
         Arc::new(NoDialog),
         Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
-        &[],
         &[],
     )
     .load()
@@ -104,7 +102,6 @@ async fn malformed_persisted_rule_maps_to_persistence_corrupt() {
         store,
         Arc::new(NoDialog),
         Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
-        &[],
         &[],
     );
 

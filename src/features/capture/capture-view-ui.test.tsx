@@ -35,7 +35,6 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
   useBootstrap: () => ({
     bootstrap: { channel_catalog: [] },
-    proxy: { state_text: "运行中", ui_tone: "positive" },
   }),
 }));
 

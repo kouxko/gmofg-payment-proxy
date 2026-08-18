@@ -81,7 +81,7 @@ impl ProtocolPackageRepositoryAdapter {
             ));
         }
         // 除持久化元数据损坏外，validation 只是上一次编译留下的历史结果。启动边界必须
-        // 用当前 Host/compiler 对规范文件重新验证，不能让旧版本的失败永久压过 fresh compile。
+        // 用当前 Host/compiler 对规范文件重新验证，不能让缓存的失败状态压过 fresh compile。
         if matches!(
             stored.header.validation,
             StoredProtocolPackageValidation::Invalid(ref code) if code == "PERSISTENCE_CORRUPT"

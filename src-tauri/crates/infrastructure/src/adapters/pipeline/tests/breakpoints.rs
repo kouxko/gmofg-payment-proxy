@@ -94,7 +94,7 @@ async fn one_shot_action_is_not_returned_when_runtime_commit_fails() {
         Arc::new(InMemorySessionStore::new(10, 64 * 1024 * 1024)),
         Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(128)),
-        Arc::new(CaptureRepositoryAdapter::default()),
+        test_capture_repository(),
     );
     let epoch = Uuid::new_v4();
     let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
@@ -135,7 +135,7 @@ async fn concurrent_rule_hits_commit_without_lost_updates() {
         Arc::new(InMemorySessionStore::new(32, 64 * 1024 * 1024)),
         Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(512)),
-        Arc::new(CaptureRepositoryAdapter::default()),
+        test_capture_repository(),
     ));
     let epoch = Uuid::new_v4();
     let mut tasks = Vec::new();

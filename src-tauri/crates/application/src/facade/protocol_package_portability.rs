@@ -11,25 +11,11 @@ use intercept_proxy_domain::{
     ProtocolPackageRef, ProxyWorkspace, SocketDirection, SocketPayloadProcessing, SocketTopology,
 };
 
-use super::{Application, protocol_packages::ensure_description_identity};
+use super::protocol_packages::ensure_description_identity;
 use crate::{
     AppError, AppResult, DirectionProcessingOptions, ProtocolPackageDescriptionViewModel,
     ProtocolPackageDirectionCapabilitiesViewModel, ProtocolPackageSchemaFieldTypeViewModel,
 };
-
-impl Application {
-    /// v2/v3 没有协议包载荷，只能引用本机已经安装的精确版本。端口从持久化文件执行
-    /// 无副作用恢复与编译；不能信任历史 Valid 标志，也不能在后续校验失败前写编译缓存。
-    pub(super) async fn describe_installed_portable_references(
-        &self,
-        workspaces: &[ProxyWorkspace],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        let packages = referenced_protocol_packages(workspaces);
-        self.protocol_package_portability
-            .preflight_installed_packages(&packages)
-            .await
-    }
-}
 
 /// 校验 fresh portability 编译描述与待提交聚合的一致性。
 ///
@@ -118,32 +104,6 @@ pub(super) fn validate_listener_protocol_binding(
         validate_rule_binding(socket, scripted, rule, description, &schema)?;
     }
     Ok(())
-}
-
-pub(super) fn referenced_protocol_packages(
-    workspaces: &[ProxyWorkspace],
-) -> Vec<ProtocolPackageRef> {
-    let mut seen = HashSet::new();
-    let mut packages = Vec::new();
-    for workspace in workspaces {
-        for listener in &workspace.listeners {
-            let ListenerDataPlane::Socket(socket) = &listener.data_plane else {
-                continue;
-            };
-            let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
-                continue;
-            };
-            if seen.insert(scripted.package.clone()) {
-                packages.push(scripted.package.clone());
-            }
-        }
-        for rule in &workspace.socket_rules {
-            if seen.insert(rule.package().clone()) {
-                packages.push(rule.package().clone());
-            }
-        }
-    }
-    packages
 }
 
 fn validate_workspace_bindings(

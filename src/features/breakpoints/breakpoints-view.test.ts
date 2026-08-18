@@ -17,11 +17,19 @@ const draft: BreakpointDraft = {
   expected_revision: 7,
   message: {
     http_status: null,
+    start_line_bytes: [],
+    raw_headers: [],
     headers: { "content-type": ["application/json"] },
     body_text: '{"amount":100}',
     body_bytes: [123, 125],
     json: { amount: 100 },
     content_length: 14,
+    media_type: "application/json",
+    charset: "utf-8",
+    content_kind: "json",
+    codec_id: "utf-8",
+    decode_error: null,
+    query_string: null,
   },
 };
 

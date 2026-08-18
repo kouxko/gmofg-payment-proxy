@@ -92,6 +92,7 @@ export function AndroidNetworkView(): ReactElement {
     `android-endpoints:${draft?.id ?? "none"}:${runtimeTargetKey ?? "none"}`,
     () => callCommand(commands.deviceNetworkEndpoints(draft?.id ?? null)),
   );
+  const refreshEndpoints = endpoints.refresh;
   const runtimeRefreshInFlight = useRef<Promise<void> | null>(null);
   const runtimeRefreshQueued = useRef(false);
   const refreshRuntimeSerially = useCallback((): Promise<void> => {
@@ -115,9 +116,9 @@ export function AndroidNetworkView(): ReactElement {
     await Promise.all([
       refreshRuntimeOwner(),
       refreshRuntimeSerially(),
-      endpoints.refresh(),
+      refreshEndpoints(),
     ]);
-  }, [endpoints.refresh, refreshRuntimeOwner, refreshRuntimeSerially]);
+  }, [refreshEndpoints, refreshRuntimeOwner, refreshRuntimeSerially]);
   useAppEventRefresh(
     ["android_vpn_status_changed"],
     refreshRuntimeEvent,

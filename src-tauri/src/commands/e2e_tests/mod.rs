@@ -9,13 +9,13 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    DocumentAction, DocumentFieldName, DocumentValue, OperationResultViewModel, PageRequest,
-    ProtocolPackageDetailViewModel, ProtocolPackageImportPreviewViewModel,
-    ProtocolPackageImportViewModel, ProtocolPackageVersionViewModel, ProxyListener, ProxyWorkspace,
-    SocketCaptureDetailViewModel, SocketCaptureDocumentValue, SocketCaptureKind,
-    SocketCapturePageViewModel, SocketCapturePayload, SocketCaptureQuery, SocketCaptureSort,
-    SocketDirection, SocketDisplayResult, SocketDocumentRuleDefinition, SocketRuleSaveInput,
-    SocketWriteKind, SortDirection, WorkspaceSummaryViewModel,
+    DocumentAction, DocumentFieldName, DocumentValue, PageRequest, ProtocolPackageDetailViewModel,
+    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportViewModel,
+    ProtocolPackageVersionViewModel, ProxyListener, ProxyWorkspace, SocketCaptureDetailViewModel,
+    SocketCaptureDocumentValue, SocketCaptureKind, SocketCapturePageViewModel,
+    SocketCapturePayload, SocketCaptureQuery, SocketCaptureSort, SocketDirection,
+    SocketDisplayResult, SocketDocumentRuleDefinition, SocketRuleSaveInput, SocketWriteKind,
+    SortDirection, WorkspaceSummaryViewModel,
 };
 use intercept_proxy_domain::{
     DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
@@ -32,7 +32,7 @@ const RESPONSE: &[u8; 20] = b"02101234560000100000";
 #[test]
 // 一条测试刻意保留单一 host/SQLite/runtime 所有权，拆成多个测试会把跨层证据降级为孤立断言。
 #[allow(clippy::too_many_lines)]
-fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_capture_and_portability() {
+fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
     let fixture = CrossLayerFixture::new();
     let webview = fixture.webview();
     let package = package_ref();
@@ -180,46 +180,6 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_capture_and_portability(
             "listenerId": listener.id,
         }),
     );
-    let exported: OperationResultViewModel = fixture.invoke_ok(
-        &webview,
-        "workspace_export",
-        json!({ "workspaceId": selected.id }),
-    );
-    assert!(exported.success);
-    assert!(fixture.export_path().is_file());
-    let imported_workspace: OperationResultViewModel =
-        fixture.invoke_ok(&webview, "workspace_import", json!({}));
-    assert!(imported_workspace.success);
-    let imported_id = imported_workspace.entity_id.expect("imported workspace ID");
-    let workspaces: Vec<WorkspaceSummaryViewModel> =
-        fixture.invoke_ok(&webview, "workspace_list", json!({}));
-    let portable = workspaces
-        .into_iter()
-        .find(|workspace| workspace.id.to_string() == imported_id)
-        .expect("round-tripped workspace");
-    let round_trip: ProxyWorkspace = fixture.invoke_ok(
-        &webview,
-        "workspace_get",
-        json!({ "workspaceId": portable.id }),
-    );
-    assert_eq!(round_trip.listeners.len(), saved.listeners.len());
-    assert_eq!(round_trip.socket_rules.len(), 1);
-    let round_trip_listener = round_trip
-        .listeners
-        .iter()
-        .find(|candidate| candidate.name == listener.name)
-        .expect("round-tripped LocalResponder listener");
-    assert_eq!(
-        round_trip.socket_rules[0].listener_id(),
-        round_trip_listener.id
-    );
-    assert_eq!(round_trip.socket_rules[0].package(), &package);
-    let SocketPayloadProcessing::Scripted(round_trip_processing) =
-        &round_trip_listener.socket().unwrap().processing
-    else {
-        panic!("round-tripped listener must remain scripted")
-    };
-    assert_eq!(round_trip_processing.package, package);
     fixture.assert_dialog_boundaries();
 }
 

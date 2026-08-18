@@ -2,9 +2,6 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
-use super::protocol_package_portability::{
-    description, package, portable_package, scripted_workspace,
-};
 use super::*;
 mod commit;
 mod source;
@@ -13,10 +10,7 @@ use source::FakeBackupPrepareSource;
 #[tokio::test]
 async fn discard_facade_releases_the_exact_preview_token_without_authoritative_writes() {
     let (application, portability, ports, _) = prepared_application();
-    let prepared = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let prepared = two_package_backup();
     register_packages(&portability, &prepared);
     let source = FakeBackupPrepareSource::new(prepared);
     let preview = application
@@ -39,10 +33,7 @@ async fn discard_facade_releases_the_exact_preview_token_without_authoritative_w
 async fn baseline_capture_holds_one_gate_against_all_authoritative_mutation_facades() {
     let (application, portability, ports, _) = prepared_application();
     let application = Arc::new(application);
-    let prepared = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let prepared = two_package_backup();
     register_packages(&portability, &prepared);
     portability
         .block_backup_baseline
@@ -118,10 +109,7 @@ async fn baseline_capture_holds_one_gate_against_all_authoritative_mutation_faca
 async fn pure_preflight_does_not_hold_gate_and_baseline_observes_completed_mutation() {
     let (application, portability, _, _) = prepared_application();
     let application = Arc::new(application);
-    let prepared = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let prepared = two_package_backup();
     register_packages(&portability, &prepared);
     portability.block_preflight.store(true, Ordering::SeqCst);
     let source = Arc::new(FakeBackupPrepareSource::new(prepared));
@@ -153,13 +141,9 @@ async fn pure_preflight_does_not_hold_gate_and_baseline_observes_completed_mutat
 }
 
 #[tokio::test]
-async fn preview_reports_exact_counts_identities_scope_and_migration_warning() {
+async fn preview_reports_exact_counts_identities_and_scope() {
     let (application, portability, ports, workspaces) = prepared_application();
-    let prepared = two_package_backup(MigrationReport {
-        removed_metadata_extractors: 3,
-        source_kind: MigrationSourceKind::ApplicationConfigurationDocument,
-        source_version: 4,
-    });
+    let prepared = two_package_backup();
     register_packages(&portability, &prepared);
     let source = FakeBackupPrepareSource::new(prepared.clone());
 
@@ -185,13 +169,9 @@ async fn preview_reports_exact_counts_identities_scope_and_migration_warning() {
     assert!(preview.replacement_scope.replaces_selected_workspace);
     assert!(preview.replacement_scope.replaces_portable_settings);
     assert!(preview.replacement_scope.replaces_protocol_package_registry);
-    assert_eq!(preview.migration_report, prepared.migration_report);
-    assert_eq!(preview.warnings.len(), 1);
-    assert!(preview.warnings[0].contains("3 个元数据提取器已移除"));
     assert_eq!(source.retain_calls.load(Ordering::SeqCst), 1);
     assert_eq!(ports.settings_save_calls.load(Ordering::SeqCst), 0);
     assert_eq!(portability.replace_calls.load(Ordering::SeqCst), 0);
-    assert_eq!(portability.commit_calls.load(Ordering::SeqCst), 0);
     assert_eq!(ports.certificate_restore_calls.load(Ordering::SeqCst), 0);
     let authoritative_workspaces = workspaces.list().await.unwrap();
     let retained = source.retained.lock();
@@ -234,10 +214,7 @@ async fn preview_reports_exact_counts_identities_scope_and_migration_warning() {
 async fn first_and_last_package_compile_failures_retain_nothing_and_write_nothing() {
     for failure_index in [0, 1] {
         let (application, portability, ports, workspaces) = prepared_application();
-        let prepared = two_package_backup(MigrationReport::unchanged(
-            MigrationSourceKind::ApplicationConfigurationDocument,
-            5,
-        ));
+        let prepared = two_package_backup();
         register_packages(&portability, &prepared);
         *portability.fail_preflight_at.lock() = Some(failure_index);
         let before_workspaces = workspaces.list().await.unwrap();
@@ -251,7 +228,6 @@ async fn first_and_last_package_compile_failures_retain_nothing_and_write_nothin
 
         assert_eq!(error.view_model.code, "SCRIPT_SYNTAX_INVALID");
         assert_eq!(source.retain_calls.load(Ordering::SeqCst), 0);
-        assert_eq!(portability.commit_calls.load(Ordering::SeqCst), 0);
         assert_eq!(portability.replace_calls.load(Ordering::SeqCst), 0);
         assert_eq!(ports.certificate_restore_calls.load(Ordering::SeqCst), 0);
         assert_eq!(ports.settings_save_calls.load(Ordering::SeqCst), 0);
@@ -263,10 +239,7 @@ async fn first_and_last_package_compile_failures_retain_nothing_and_write_nothin
 #[tokio::test]
 async fn schema_rule_mismatch_fails_before_token_retention_or_writes() {
     let (application, portability, ports, workspaces) = prepared_application();
-    let prepared = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let prepared = two_package_backup();
     register_packages(&portability, &prepared);
     let first = prepared.protocol_packages[0].package.clone();
     portability
@@ -294,10 +267,7 @@ async fn schema_rule_mismatch_fails_before_token_retention_or_writes() {
 #[tokio::test]
 async fn invalid_settings_fail_before_certificate_preflight_or_retention() {
     let (application, portability, ports, _) = prepared_application();
-    let prepared = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let prepared = two_package_backup();
     register_packages(&portability, &prepared);
     *ports.settings_validation_override.lock() = Some(FieldValidationViewModel {
         valid: false,
@@ -391,15 +361,14 @@ fn prepared_application() -> (
     let (application, portability) = application_with_workspace_configuration_and_packages(
         ports.clone(),
         workspaces.clone(),
-        Arc::new(InMemoryWorkspaceDocumentStore::default()),
-        Arc::new(UnavailableApplicationConfigurationStore),
+        Arc::new(NoopApplicationConfigurationStore),
     );
     (application, portability, ports, workspaces)
 }
 
-fn two_package_backup(migration_report: MigrationReport) -> ApplicationBackupImportCandidate {
-    let alpha = package("alpha", "1.0.0");
-    let omega = package("omega", "2.0.0");
+fn two_package_backup() -> ApplicationBackupImportCandidate {
+    let alpha = protocol_package("alpha", "1.0.0");
+    let omega = protocol_package("omega", "2.0.0");
     let first = scripted_workspace(alpha.clone(), false);
     let second = scripted_workspace(omega.clone(), true);
     ApplicationBackupImportCandidate {
@@ -407,16 +376,15 @@ fn two_package_backup(migration_report: MigrationReport) -> ApplicationBackupImp
         workspaces: vec![first, second],
         settings: PortableSettings::from(&SettingsDraft::default()),
         protocol_packages: vec![
-            portable_package(alpha, true),
-            portable_package(omega, false),
+            portable_protocol_package(alpha, true),
+            portable_protocol_package(omega, false),
         ],
         certificate_materials: Vec::new(),
-        migration_report,
     }
 }
 
 async fn certificate_backup(ports: &FakePorts) -> ApplicationBackupImportCandidate {
-    let exact = package("cert-package", "1.0.0");
+    let exact = protocol_package("cert-package", "1.0.0");
     let mut workspace = scripted_workspace(exact.clone(), false);
     let reference = CertificateReference {
         id: CertificateReferenceId::new(),
@@ -442,12 +410,8 @@ async fn certificate_backup(ports: &FakePorts) -> ApplicationBackupImportCandida
         selected_workspace_id: workspace.id,
         workspaces: vec![workspace],
         settings: PortableSettings::from(&SettingsDraft::default()),
-        protocol_packages: vec![portable_package(exact, true)],
+        protocol_packages: vec![portable_protocol_package(exact, true)],
         certificate_materials: vec![material],
-        migration_report: MigrationReport::unchanged(
-            MigrationSourceKind::ApplicationConfigurationDocument,
-            5,
-        ),
     }
 }
 
@@ -456,6 +420,9 @@ fn register_packages(
     prepared: &ApplicationBackupImportCandidate,
 ) {
     for portable in &prepared.protocol_packages {
-        portability.register(portable.clone(), description(portable.package.clone()));
+        portability.register(
+            portable.clone(),
+            protocol_package_description(portable.package.clone()),
+        );
     }
 }

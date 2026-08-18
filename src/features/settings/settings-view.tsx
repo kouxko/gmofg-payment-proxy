@@ -39,7 +39,6 @@ export function SettingsView() {
   const [pendingAction, setPendingAction] = useState<"save">();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
-  const [savedRequiresRestart, setSavedRequiresRestart] = useState(false);
   const draft = draftState ?? settings.data?.stored;
   const draftDirty = useMemo(
     () => Boolean(draft && settings.data && JSON.stringify(draft) !== JSON.stringify(settings.data.stored)),
@@ -79,14 +78,8 @@ export function SettingsView() {
       }
       setValidation(undefined);
       const result = await callCommand(commands.settingsSave(draft));
-      toast(
-        result.requires_restart
-          ? result.restart_reason ?? "设置已保存，需要重新打开应用后生效。"
-          : "设置已保存并生效。",
-        { variant: result.requires_restart ? "warning" : "success" },
-      );
+      toast("设置已保存。", { variant: "success" });
       settings.setData(result);
-      setSavedRequiresRestart(result.requires_restart);
       setDraft(result.stored);
     } catch (reason) {
       const appError = appErrorViewModel(reason);
@@ -212,7 +205,7 @@ export function SettingsView() {
         </AlertDialog>
         <ApplicationDataResetDialog isDisabled={writePending} />
         <span className="ml-4 text-sm text-[var(--telemetry-muted)]">
-          {draftDirty ? "有未保存更改" : savedRequiresRestart || settings.data.requires_restart ? "重启后生效" : "已保存"}
+          {draftDirty ? "有未保存更改" : "已保存"}
         </span>
         <div className="ml-auto flex gap-3">
           <Button

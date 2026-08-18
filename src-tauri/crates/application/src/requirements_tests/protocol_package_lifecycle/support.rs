@@ -41,9 +41,7 @@ pub(super) struct FakeProtocolPackageServices {
     pub usage_count_calls: AtomicUsize,
     pub set_enabled_calls: AtomicUsize,
     pub delete_calls: AtomicUsize,
-    pub workspace_export_calls: AtomicUsize,
     pub application_export_calls: AtomicUsize,
-    pub exported_workspace_refs: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
     pub exact_calls: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
     pub block_compile: AtomicBool,
     pub compile_entered: tokio::sync::Notify,
@@ -164,7 +162,7 @@ impl ProtocolPackageStorePort for FakeProtocolPackageServices {
 
 #[async_trait]
 impl ProtocolPackageCompilerPort for FakeProtocolPackageServices {
-    async fn validate_for_enable(
+    async fn compile_fresh(
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageCompilationReceipt> {
@@ -394,7 +392,6 @@ pub(super) fn application_with_proxy_ports(
     Application::new(
         "Protocol lifecycle test".into(),
         ApplicationDependencies {
-            proxy: ports.clone(),
             capture: ports.clone(),
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
@@ -404,19 +401,20 @@ pub(super) fn application_with_proxy_ports(
             certificates: ports.clone(),
             settings: ports.clone(),
             workspaces,
-            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: runtime,
             listener_certificates: ports,
             protocol_packages: ProtocolPackageApplicationServices {
                 store: services.clone(),
                 compiler: services.clone(),
                 importer: services.clone(),
-                builtin: ProtocolPackageApplicationServices::unavailable().builtin,
+                builtin: unused_protocol_package_services().builtin,
                 usage_query: services.clone(),
                 portability: services,
             },
             events: Arc::new(EventHub::default()),
         },
+        Arc::new(UnusedAndroidControlPort),
+        Arc::new(UnusedProtectedSecretPort),
     )
 }
 pub(super) fn error_code(error: &AppError) -> &str {

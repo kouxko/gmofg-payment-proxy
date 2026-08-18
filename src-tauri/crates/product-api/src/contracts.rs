@@ -20,22 +20,6 @@ pub struct ProductStorageNamespace {
     pub secret_aad: &'static [u8],
 }
 
-/// 旧版本写入设置时使用的字段别名。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct LegacySettingsChannelMapping {
-    pub channel_id: &'static str,
-    pub enabled_field: &'static str,
-    pub port_field: &'static str,
-    pub upstream_url_field: &'static str,
-}
-
-/// 持久化数据的兼容迁移元数据。
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct ProductPersistenceMigrations {
-    pub settings_channels: &'static [LegacySettingsChannelMapping],
-    pub terminal_body_fields: &'static [&'static str],
-}
-
 /// 通用适配器展示时使用的宿主术语。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProductLabels {

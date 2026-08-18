@@ -16,8 +16,8 @@ use std::{
 use intercept_proxy_application::{
     AppError, AppResult, Application, ApplicationDependencies, BreakpointCoordinator,
     BreakpointValidator, CapacityLedger, CertificateServicePort, EventHub,
-    ProtocolPackageApplicationServices, ProxyStatusViewModel, ProxySupervisorPort, SettingsDraft,
-    SettingsRepositoryPort, WorkspaceRepositoryPort,
+    OperationResultViewModel, ProtocolPackageApplicationServices, SettingsRepositoryPort,
+    WorkspaceRepositoryPort,
 };
 #[cfg(not(target_os = "macos"))]
 use intercept_proxy_infrastructure::DpapiProtector;
@@ -25,9 +25,8 @@ use intercept_proxy_infrastructure::DpapiProtector;
 use intercept_proxy_infrastructure::MacKeychainProtector;
 use intercept_proxy_infrastructure::{
     AndroidAdbAdapter, ApplicationBackupImportPreparer, HeaderBodyCodecResolver,
-    InfrastructureError, InfrastructureServiceBundle, LegacyImportPreparer, NativeFileDialog,
-    RetiredProxyAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector,
-    SqliteStore,
+    InfrastructureError, InfrastructureServiceBundle, NativeFileDialog, RuntimePipelineAdapter,
+    RuntimePipelineProductHooks, SecretProtector, SqliteStore,
 };
 use intercept_proxy_product_api::{
     ProductError, ProductProfile, ProductStorageNamespace, validate_product_profile,
@@ -47,6 +46,12 @@ pub enum HostBuildError {
         #[source]
         source: io::Error,
     },
+    #[error("无法清空 schema 早于 1.0 的应用数据 {path}: {source}")]
+    ResetIncompatibleData {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error(transparent)]
     Infrastructure(#[from] InfrastructureError),
     #[error(transparent)]
@@ -56,6 +61,7 @@ pub enum HostBuildError {
 /// 刻意由最外层适配器提供的平台服务。
 ///
 /// 文件对话框可以来自 Tauri、无界面测试脚本或未来终端提示，而无需修改任何应用用例。
+#[derive(Clone)]
 pub struct HostPlatformServices {
     secret_protector_override: Option<Arc<dyn SecretProtector>>,
     pub file_dialog: Arc<dyn NativeFileDialog>,
@@ -109,14 +115,13 @@ impl HostPlatformServices {
 /// 使用数据目录和平台边界实现装配完整 Rust 应用。
 ///
 /// Tauri 或 `WebView` 类型不允许跨过该边界。
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ApplicationHostBuilder {
     data_dir: PathBuf,
     android_companion_apk: Option<PathBuf>,
     builtin_protocol_package: Option<Arc<[u8]>>,
     platform: HostPlatformServices,
     product: Arc<dyn ProductProfile>,
-    proxy_override: Option<Arc<dyn ProxySupervisorPort>>,
     breakpoint_coordinator: Option<Arc<BreakpointCoordinator>>,
 }
 
@@ -133,7 +138,6 @@ impl ApplicationHostBuilder {
             builtin_protocol_package: None,
             platform,
             product,
-            proxy_override: None,
             breakpoint_coordinator: None,
         }
     }
@@ -155,15 +159,6 @@ impl ApplicationHostBuilder {
         self
     }
 
-    /// 只替换网络监督器，同时保留真实应用、仓储、规则、证书和设置适配器。
-    ///
-    /// 用于确定性的纯 Rust 集成测试和其他进程 Host；生产调用者使用默认 runtime。
-    #[must_use]
-    pub fn with_proxy_supervisor(mut self, proxy: Arc<dyn ProxySupervisorPort>) -> Self {
-        self.proxy_override = Some(proxy);
-        self
-    }
-
     /// 注入 application 与 runtime 管线共用的断点协调器。
     ///
     /// 测试可保留同一个 `Arc` 来创建处理中断点，无需在 Host 构建后暴露应用内部字段。
@@ -178,11 +173,26 @@ impl ApplicationHostBuilder {
         // 不应在磁盘留下任何新状态。
         validate_product_profile(self.product.as_ref())?;
         create_data_directory(&self.data_dir)?;
-        let store = Arc::new(SqliteStore::open(
-            &self
-                .data_dir
-                .join(self.product.storage().database_file_name),
-        )?);
+        let database_path = self
+            .data_dir
+            .join(self.product.storage().database_file_name);
+
+        match self.clone().build_once(&database_path).await {
+            Ok(host) => Ok(host),
+            Err(error) if incompatible_persisted_data(&error) => {
+                tracing::warn!(
+                    path = %database_path.display(),
+                    "database schema older than the 1.0 baseline was cleared"
+                );
+                remove_sqlite_database(&database_path)?;
+                self.build_once(&database_path).await
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn build_once(self, database_path: &Path) -> Result<ApplicationHost, HostBuildError> {
+        let store = Arc::new(SqliteStore::open(database_path)?);
         let secret_protector = self
             .platform
             .secret_protector_override
@@ -198,7 +208,7 @@ impl ApplicationHostBuilder {
             Arc::clone(&capacity),
             self.builtin_protocol_package,
         );
-        let stored_settings = initialize_installation_state(&services).await?;
+        initialize_installation_state(&services).await?;
 
         let breakpoints = self
             .breakpoint_coordinator
@@ -219,11 +229,6 @@ impl ApplicationHostBuilder {
         services
             .listener_runtime
             .set_socket_diagnostic_events(events.clone());
-        let proxy: Arc<dyn ProxySupervisorPort> = self.proxy_override.unwrap_or_else(|| {
-            // 生产环境只能由 ListenerRuntime 管理动态 Workspace 入口。旧端口注入一个
-            // 永远停止的兼容适配器，保证任何遗漏调用都不能偷偷启动第二套监听器。
-            Arc::new(RetiredProxyAdapter::new(stored_settings))
-        });
         let android = Arc::new(AndroidAdbAdapter::new(
             self.android_companion_apk,
             android_store,
@@ -236,10 +241,9 @@ impl ApplicationHostBuilder {
             usage_query: services.protocol_package_usage.clone(),
             portability: services.protocol_packages.clone(),
         };
-        let application = Arc::new(Application::new_with_platform_services(
+        let application = Arc::new(Application::new(
             self.product.name().to_owned(),
             ApplicationDependencies {
-                proxy,
                 capture: services.capture,
                 sessions: services.sessions,
                 breakpoints,
@@ -251,7 +255,6 @@ impl ApplicationHostBuilder {
                 certificates: services.certificates,
                 settings: services.settings,
                 workspaces: services.workspaces,
-                workspace_documents: services.workspace_documents,
                 listener_runtime: services.listener_runtime,
                 listener_certificates: services.listener_certificates,
                 protocol_packages,
@@ -269,7 +272,6 @@ impl ApplicationHostBuilder {
             application,
             file_dialog,
             application_backup_importer: Arc::new(ApplicationBackupImportPreparer::new()),
-            legacy_importer: Arc::new(LegacyImportPreparer::new()),
             background_cancellation,
             event_task: Mutex::new(Some(event_task)),
             shutdown_started: AtomicBool::new(false),
@@ -278,9 +280,42 @@ impl ApplicationHostBuilder {
     }
 }
 
-async fn initialize_installation_state(
-    services: &InfrastructureServiceBundle,
-) -> AppResult<SettingsDraft> {
+fn incompatible_persisted_data(error: &HostBuildError) -> bool {
+    match error {
+        HostBuildError::Infrastructure(InfrastructureError::DatabaseSchemaInvalid {
+            current,
+            found,
+        }) => found.is_empty() || matches!(found.as_slice(), [(1, version)] if version < current),
+        HostBuildError::InvalidProductProfile(_)
+        | HostBuildError::CreateDataDirectory { .. }
+        | HostBuildError::ResetIncompatibleData { .. }
+        | HostBuildError::Application(_)
+        | HostBuildError::Infrastructure(_) => false,
+    }
+}
+
+fn remove_sqlite_database(database_path: &Path) -> Result<(), HostBuildError> {
+    for path in [
+        database_path.to_path_buf(),
+        sqlite_sidecar(database_path, "-wal"),
+        sqlite_sidecar(database_path, "-shm"),
+    ] {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(source) => return Err(HostBuildError::ResetIncompatibleData { path, source }),
+        }
+    }
+    Ok(())
+}
+
+fn sqlite_sidecar(database_path: &Path, suffix: &str) -> PathBuf {
+    let mut path = database_path.as_os_str().to_owned();
+    path.push(suffix);
+    PathBuf::from(path)
+}
+
+async fn initialize_installation_state(services: &InfrastructureServiceBundle) -> AppResult<()> {
     // feature marker 与官方精确身份在同一 SQLite 事务提交。marker 已存在时
     // 这一调用不会重建用户删除或损坏的包，只能由显式恢复用例处理。
     services.protocol_packages.ensure_builtin_seeded()?;
@@ -314,7 +349,7 @@ async fn initialize_installation_state(
     services
         .sessions
         .set_limits(stored.max_sessions, stored.max_memory_bytes)?;
-    Ok(stored)
+    Ok(())
 }
 
 fn is_recoverable_secret_store_error(error: &AppError) -> bool {
@@ -365,7 +400,6 @@ pub struct ApplicationHost {
     application: Arc<Application>,
     file_dialog: Arc<dyn NativeFileDialog>,
     application_backup_importer: Arc<ApplicationBackupImportPreparer>,
-    legacy_importer: Arc<LegacyImportPreparer>,
     background_cancellation: CancellationToken,
     event_task: Mutex<Option<JoinHandle<()>>>,
     shutdown_started: AtomicBool,
@@ -388,11 +422,6 @@ impl ApplicationHost {
         Arc::clone(&self.application_backup_importer)
     }
 
-    #[must_use]
-    pub fn legacy_importer(&self) -> Arc<LegacyImportPreparer> {
-        Arc::clone(&self.legacy_importer)
-    }
-
     /// 争抢唯一的优雅关闭执行权。
     ///
     /// 展示运行时可能重复收到退出通知，只有拿到 `true` 的调用者应启动关闭任务。
@@ -407,7 +436,7 @@ impl ApplicationHost {
     }
 
     /// 停止网络、完成应用关闭状态，并等待所有与 UI 无关的后台任务退出。
-    pub async fn shutdown(&self) -> AppResult<ProxyStatusViewModel> {
+    pub async fn shutdown(&self) -> AppResult<OperationResultViewModel> {
         let result = self.application.app_shutdown().await;
         self.stop_background_tasks().await;
         self.shutdown_completed.store(true, Ordering::Release);

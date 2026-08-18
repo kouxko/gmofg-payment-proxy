@@ -1,88 +1,9 @@
 use super::*;
 
-#[derive(Debug, Default)]
-struct FakeLegacyImportSource {
-    retained: parking_lot::Mutex<Option<LegacyImportCandidate>>,
-}
-
-#[async_trait]
-impl LegacyImportPreparePort for FakeLegacyImportSource {
-    async fn retain(
-        &self,
-        candidate: LegacyImportCandidate,
-    ) -> AppResult<(LegacyImportToken, Duration)> {
-        *self.retained.lock() = Some(candidate);
-        Ok((
-            LegacyImportToken::from_uuid(uuid::Uuid::from_u128(91)),
-            Duration::from_mins(5),
-        ))
-    }
-
-    async fn take(&self, _: LegacyImportToken) -> AppResult<LegacyImportCandidate> {
-        self.retained
-            .lock()
-            .take()
-            .ok_or_else(|| AppError::new("LEGACY_IMPORT_TOKEN_INVALID", "测试令牌无效。"))
-    }
-
-    async fn discard(&self, _: LegacyImportToken) -> AppResult<()> {
-        self.retained.lock().take();
-        Ok(())
-    }
-}
-
-#[tokio::test]
-async fn legacy_configuration_baseline_change_rejects_commit_before_writes() {
-    let (application, portability, ports, store, _) = commit_application();
-    let candidate = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        4,
-    ));
-    register_packages(&portability, &candidate);
-    let document = ApplicationConfigurationDocument {
-        format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
-        selected_workspace_id: candidate.selected_workspace_id,
-        workspaces: candidate.workspaces,
-        settings: candidate.settings,
-        certificate_materials: candidate.certificate_materials,
-        protocol_packages: candidate.protocol_packages,
-    };
-    let mut wire = serde_json::to_value(document).unwrap();
-    wire["format_version"] = serde_json::json!(4);
-    for workspace in wire["workspaces"].as_array_mut().unwrap() {
-        workspace
-            .as_object_mut()
-            .unwrap()
-            .insert("metadata_extractors".into(), serde_json::json!([]));
-    }
-    let source = FakeLegacyImportSource::default();
-    let preview = application
-        .legacy_application_configuration_import_prepare(
-            &source,
-            serde_json::to_vec(&wire).unwrap(),
-        )
-        .await
-        .unwrap();
-
-    ports.settings.lock().revision += 1;
-    let error = application
-        .legacy_application_configuration_import_commit(&source, preview.token)
-        .await
-        .unwrap_err();
-
-    assert_eq!(error.view_model.code, "APPLICATION_BACKUP_IMPORT_STALE");
-    assert_eq!(store.replace_calls.load(Ordering::SeqCst), 0);
-    assert_eq!(portability.replace_calls.load(Ordering::SeqCst), 0);
-    assert!(store.document.lock().is_none());
-}
-
 #[tokio::test]
 async fn successful_commit_replaces_exact_candidate_and_consumes_token_once() {
     let (application, portability, ports, store, _) = commit_application();
-    let candidate = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let candidate = two_package_backup();
     register_packages(&portability, &candidate);
     let source = FakeBackupPrepareSource::new(candidate.clone());
     let preview = application
@@ -137,10 +58,7 @@ async fn every_authoritative_baseline_change_rejects_commit_before_writes() {
         } else {
             None
         };
-        let candidate = two_package_backup(MigrationReport::unchanged(
-            MigrationSourceKind::ApplicationConfigurationDocument,
-            5,
-        ));
+        let candidate = two_package_backup();
         register_packages(&portability, &candidate);
         let source = FakeBackupPrepareSource::new(candidate);
         let preview = application
@@ -183,10 +101,7 @@ async fn every_authoritative_baseline_change_rejects_commit_before_writes() {
 #[tokio::test]
 async fn fresh_package_revalidation_failure_consumes_token_without_writes() {
     let (application, portability, _, store, _) = commit_application();
-    let candidate = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let candidate = two_package_backup();
     register_packages(&portability, &candidate);
     let source = FakeBackupPrepareSource::new(candidate);
     let preview = application
@@ -222,10 +137,7 @@ async fn running_listener_blocks_commit_before_revalidation_or_writes() {
         .listener_start(current.id, current.revision.get(), current.listeners[0].id)
         .await
         .unwrap();
-    let candidate = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let candidate = two_package_backup();
     register_packages(&portability, &candidate);
     let source = FakeBackupPrepareSource::new(candidate);
     let preview = application
@@ -273,10 +185,7 @@ async fn atomic_store_failure_compensates_certificates_and_persists_nothing() {
 #[tokio::test]
 async fn fresh_rule_schema_revalidation_failure_writes_nothing() {
     let (application, portability, _, store, _) = commit_application();
-    let candidate = two_package_backup(MigrationReport::unchanged(
-        MigrationSourceKind::ApplicationConfigurationDocument,
-        5,
-    ));
+    let candidate = two_package_backup();
     register_packages(&portability, &candidate);
     let source = FakeBackupPrepareSource::new(candidate.clone());
     let preview = application
@@ -359,7 +268,6 @@ fn commit_application() -> (
     let (application, portability) = application_with_workspace_configuration_and_packages(
         ports.clone(),
         workspaces.clone(),
-        Arc::new(InMemoryWorkspaceDocumentStore::default()),
         store.clone(),
     );
     (application, portability, ports, store, workspaces)

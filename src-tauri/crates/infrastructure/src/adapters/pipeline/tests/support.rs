@@ -13,6 +13,15 @@ use intercept_proxy_runtime::{RawHeader, TlsPeerIdentity};
 use serde_json::json;
 
 use super::*;
+use crate::{SocketCaptureRepositoryAdapter, SqliteStore};
+
+fn test_capture_repository() -> Arc<CaptureRepositoryAdapter> {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    Arc::new(CaptureRepositoryAdapter::new(
+        Arc::new(InMemorySessionStore::default()),
+        Arc::new(SocketCaptureRepositoryAdapter::new(store)),
+    ))
+}
 
 #[derive(Debug)]
 struct Utf8BodyCodec;

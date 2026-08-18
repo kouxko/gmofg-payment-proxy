@@ -1,6 +1,6 @@
-//! Socket Listener 的显式网络拓扑与历史 Wire 迁移。
+//! Socket Listener 的显式网络拓扑。
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use super::{
@@ -45,14 +45,14 @@ impl Default for SocketTopology {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(deny_unknown_fields)]
 pub struct SocketRelaySettings {
     /// 网络拓扑。Relay 才拥有 Server 上游；LocalResponder 只拥有 App 侧安全设置。
     pub topology: SocketTopology,
     /// Listener 同时接受的最大 Socket 连接数。
     pub maximum_connections: u16,
-    /// Frame/payload 处理方式。历史配置没有该字段时必须保持透明直通。
-    #[serde(default)]
+    /// Frame/payload 处理方式。
     pub processing: SocketPayloadProcessing,
 }
 
@@ -88,57 +88,5 @@ impl SocketRelaySettings {
             SocketTopology::Relay(relay) => Some(relay),
             SocketTopology::LocalResponder(_) => None,
         }
-    }
-}
-
-impl<'de> Deserialize<'de> for SocketRelaySettings {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        /// 当前格式。严格拒绝跨拓扑字段，避免 `LocalResponder` 悄悄吞掉伪造的 upstream/TLS。
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Current {
-            topology: SocketTopology,
-            maximum_connections: u16,
-            #[serde(default)]
-            processing: SocketPayloadProcessing,
-        }
-
-        /// T18 之前的格式。它总是具有真实 upstream，因此只能迁移为 Relay，绝不能猜成
-        /// LocalResponder。缺少 processing 的更早配置继续按原义迁移为 Direct。
-        #[derive(Deserialize)]
-        #[serde(deny_unknown_fields)]
-        struct Legacy {
-            upstream: SocketEndpoint,
-            security: SocketRelaySecurity,
-            maximum_connections: u16,
-            #[serde(default)]
-            processing: SocketPayloadProcessing,
-        }
-
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum Wire {
-            Current(Current),
-            Legacy(Legacy),
-        }
-
-        Ok(match Wire::deserialize(deserializer)? {
-            Wire::Current(value) => Self {
-                topology: value.topology,
-                maximum_connections: value.maximum_connections,
-                processing: value.processing,
-            },
-            Wire::Legacy(value) => Self {
-                topology: SocketTopology::Relay(SocketRelayTopology {
-                    upstream: value.upstream,
-                    security: value.security,
-                }),
-                maximum_connections: value.maximum_connections,
-                processing: value.processing,
-            },
-        })
     }
 }

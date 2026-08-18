@@ -1,7 +1,7 @@
 use intercept_proxy_domain::{ConnectionFaultAction, ListenerId, ResponseAssertionKind};
 use uuid::Uuid;
 
-use super::{AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone};
+use super::{AppError, AppResult, ProxyWorkspace};
 
 pub(super) fn find_mut<'a, T>(
     items: &'a mut [T],
@@ -122,35 +122,4 @@ pub(super) fn retain_removed<T>(
     let before = items.len();
     items.retain(|item| id(item) != component_id);
     items.len() != before
-}
-
-pub(super) fn cancelled(message: &str) -> OperationResultViewModel {
-    OperationResultViewModel {
-        success: false,
-        cancelled: true,
-        message: message.into(),
-        ui_tone: UiTone::Neutral,
-        entity_id: None,
-        revision: None,
-        requires_restart: false,
-    }
-}
-
-pub(super) fn safe_file_stem(name: &str) -> String {
-    let value = name
-        .trim()
-        .chars()
-        .map(|character| {
-            if character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.') {
-                character
-            } else {
-                '_'
-            }
-        })
-        .collect::<String>();
-    if value.is_empty() {
-        "workspace".into()
-    } else {
-        value
-    }
 }

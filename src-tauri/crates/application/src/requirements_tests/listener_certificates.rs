@@ -282,7 +282,6 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
     let application = Application::new(
         "Test Product".into(),
         ApplicationDependencies {
-            proxy: ports.clone(),
             capture: ports.clone(),
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
@@ -293,11 +292,12 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
             settings: ports.clone(),
             listener_certificates: ports.clone(),
             workspaces,
-            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),
-            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
+            protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
         },
+        Arc::new(UnusedAndroidControlPort),
+        Arc::new(UnusedProtectedSecretPort),
     );
     let workspace = application.workspace_create("Live".into()).await.unwrap();
     let listener = workspace.listeners[0].clone();
@@ -349,7 +349,6 @@ async fn running_workspace_listener_allows_saving_and_starting_a_stopped_listene
     let application = Application::new(
         "Test Product".into(),
         ApplicationDependencies {
-            proxy: ports.clone(),
             capture: ports.clone(),
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
@@ -360,11 +359,12 @@ async fn running_workspace_listener_allows_saving_and_starting_a_stopped_listene
             settings: ports.clone(),
             listener_certificates: ports.clone(),
             workspaces,
-            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),
-            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
+            protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
         },
+        Arc::new(UnusedAndroidControlPort),
+        Arc::new(UnusedProtectedSecretPort),
     );
     let mut workspace = application.workspace_create("Live".into()).await.unwrap();
     let running_listener = workspace.listeners[0].clone();
@@ -431,7 +431,6 @@ async fn running_workspace_listener_allows_device_network_profile_persistence() 
     let application = Application::new(
         "Test Product".into(),
         ApplicationDependencies {
-            proxy: ports.clone(),
             capture: ports.clone(),
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
@@ -442,11 +441,12 @@ async fn running_workspace_listener_allows_device_network_profile_persistence() 
             settings: ports.clone(),
             listener_certificates: ports.clone(),
             workspaces,
-            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),
-            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
+            protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
         },
+        Arc::new(UnusedAndroidControlPort),
+        Arc::new(UnusedProtectedSecretPort),
     );
     let mut workspace = application.workspace_create("Live".into()).await.unwrap();
     let listener = workspace.listeners[0].clone();

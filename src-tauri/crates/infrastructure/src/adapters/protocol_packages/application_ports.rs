@@ -36,7 +36,7 @@ async fn application_store_and_compiler_ports_preserve_exact_versions_and_safe_m
     assert_eq!(versions[1].package, package("2.0.0"));
     assert!(!versions[1].enabled);
 
-    let receipt = ProtocolPackageCompilerPort::validate_for_enable(&repository, &first.package)
+    let receipt = ProtocolPackageCompilerPort::compile_fresh(&repository, &first.package)
         .await
         .unwrap();
     assert_eq!(receipt.package, first.package);
@@ -58,7 +58,7 @@ async fn application_ports_map_missing_and_invalid_storage_to_stable_errors() {
     );
     let restarted = ProtocolPackageRepositoryAdapter::with_default_limits(store);
 
-    let invalid = ProtocolPackageCompilerPort::validate_for_enable(&restarted, &package("1.0.0"))
+    let invalid = ProtocolPackageCompilerPort::compile_fresh(&restarted, &package("1.0.0"))
         .await
         .unwrap_err();
     assert_eq!(invalid.view_model.code, "SCRIPT_SYNTAX_INVALID");
@@ -102,7 +102,7 @@ async fn enable_validation_bypasses_a_warm_ast_cache_and_keeps_enabled_false_on_
     assert!(repository.compiled(&target).is_ok());
     store.replace_protocol_package_file_for_test(&target, "protocol.rhai", b"fn frame( {");
 
-    let error = ProtocolPackageCompilerPort::validate_for_enable(&repository, &target)
+    let error = ProtocolPackageCompilerPort::compile_fresh(&repository, &target)
         .await
         .unwrap_err();
 

@@ -11,6 +11,8 @@ import {
 
 const jsonMessage: MessageContentViewModel = {
   http_status: null,
+  start_line_bytes: [],
+  raw_headers: [],
   headers: { "content-type": ["application/json; charset=utf-8"] },
   body_text: '{"result":{"code":"D48"}}',
   body_bytes: [123, 34, 114, 101, 115, 117, 108, 116, 34, 58, 123, 125, 125],
@@ -21,6 +23,7 @@ const jsonMessage: MessageContentViewModel = {
   content_kind: "json",
   codec_id: "utf-8",
   decode_error: null,
+  query_string: null,
 };
 
 describe("HTTP 报文共享查看器", () => {

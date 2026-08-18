@@ -61,6 +61,12 @@ impl AndroidControlPort for FailingShutdownAndroid {
     async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
         Ok(Some(self.owner.clone()))
     }
+    async fn network_runtime_endpoints(
+        &self,
+        _: Option<AndroidNetworkActivation>,
+    ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
+        Ok(Vec::new())
+    }
 }
 
 #[tokio::test]
@@ -166,160 +172,8 @@ async fn empty_pkcs12_password_is_forwarded_to_the_rust_certificate_parser() {
 }
 
 #[tokio::test]
-async fn settings_restart_preserves_candidate_error_after_successful_rollback() {
-    let ports = Arc::new(FakePorts::default());
-    *ports.proxy_state.lock() = ProxyState::Running;
-    ports.start_results.lock().extend([
-        Err(AppError::new("PORT_IN_USE", "候选端口已被占用。")),
-        Ok(proxy_status(ProxyState::Running)),
-    ]);
-    let original = ports.settings.lock().clone();
-    let application = application_with_fake_ports(ports.clone());
-    let mut candidate = original.stored.clone();
-    candidate.channels[0].port = 20_003;
-
-    let error = application
-        .settings_save_and_restart(candidate)
-        .await
-        .expect_err("candidate must fail and roll back");
-
-    assert_eq!(error.view_model.code, "PORT_IN_USE");
-    assert!(error.view_model.message.contains("已恢复"));
-    assert_eq!(ports.start_calls.load(Ordering::SeqCst), 2);
-    assert_eq!(*ports.proxy_state.lock(), ProxyState::Running);
-    let restored = ports.settings.lock();
-    assert_eq!(restored.stored, original.stored);
-    assert_eq!(restored.effective, original.effective);
-}
-
-#[tokio::test]
-async fn starting_and_stopping_block_every_rule_and_fault_write() {
-    for state in [ProxyState::Starting, ProxyState::Stopping] {
-        let ports = Arc::new(FakePorts::default());
-        *ports.proxy_state.lock() = state;
-        let application = application_with_fake_ports(ports);
-        let draft = application
-            .rule_new_draft()
-            .await
-            .expect("draft is read-only");
-        assert_eq!(
-            application
-                .rule_save(draft)
-                .await
-                .expect_err("rule save is gated")
-                .view_model
-                .code,
-            "OPERATION_IN_PROGRESS"
-        );
-        assert_eq!(
-            application
-                .rule_toggle(Uuid::new_v4(), 1, false)
-                .await
-                .expect_err("rule toggle is gated")
-                .view_model
-                .code,
-            "OPERATION_IN_PROGRESS"
-        );
-        assert_eq!(
-            application
-                .fault_configure(FaultConfigurationDraft {
-                    template_id: "delay".into(),
-                    existing_rule_id: None,
-                    expected_revision: None,
-                    channel: None,
-                    terminal: None,
-                    target: None,
-                    nth_hit: None,
-                    one_shot: false,
-                    priority: 1,
-                    parameters: BTreeMap::new(),
-                })
-                .await
-                .expect_err("fault configure is gated")
-                .view_model
-                .code,
-            "OPERATION_IN_PROGRESS"
-        );
-    }
-}
-
-#[tokio::test]
-async fn lifecycle_mutations_serialize_settings_and_certificate_writes() {
-    let ports = Arc::new(FakePorts::default());
-    ports.block_start.store(true, Ordering::SeqCst);
-    let application = Arc::new(application_with_fake_ports(ports.clone()));
-
-    let starting = {
-        let application = application.clone();
-        tokio::spawn(async move { application.proxy_start().await })
-    };
-    ports.start_entered.notified().await;
-
-    let draft = ports.settings.lock().stored.clone();
-    let mut saving = {
-        let application = application.clone();
-        tokio::spawn(async move { application.settings_save(draft).await })
-    };
-    let mut importing = {
-        let application = application.clone();
-        tokio::spawn(async move { application.certificate_import_pkcs12(String::new()).await })
-    };
-
-    assert!(
-        tokio::time::timeout(Duration::from_millis(20), &mut saving)
-            .await
-            .is_err(),
-        "settings save must wait for the lifecycle mutation"
-    );
-    assert!(
-        tokio::time::timeout(Duration::from_millis(20), &mut importing)
-            .await
-            .is_err(),
-        "certificate import must wait for the lifecycle mutation"
-    );
-
-    ports.continue_start.notify_one();
-    assert_eq!(
-        starting.await.expect("start task").expect("start").state,
-        ProxyState::Running
-    );
-    saving
-        .await
-        .expect("settings task")
-        .expect("settings remain writable while running");
-    let import_error = importing
-        .await
-        .expect("certificate task")
-        .expect_err("certificate mutation requires a stopped proxy");
-
-    assert_eq!(import_error.view_model.code, "OPERATION_IN_PROGRESS");
-    assert_eq!(ports.settings_save_calls.load(Ordering::SeqCst), 1);
-    assert_eq!(ports.certificate_import_calls.load(Ordering::SeqCst), 0);
-}
-
-#[tokio::test]
-async fn application_shutdown_stops_runtime_clears_effective_settings_and_is_idempotent() {
-    let ports = Arc::new(FakePorts::default());
-    *ports.proxy_state.lock() = ProxyState::Running;
-    let application = application_with_fake_ports(ports.clone());
-
-    let stopped = application.app_shutdown().await.expect("shutdown");
-    assert_eq!(stopped.state, ProxyState::Stopped);
-    assert_eq!(ports.stop_calls.load(Ordering::SeqCst), 1);
-    assert!(ports.settings.lock().effective.is_none());
-
-    let stopped_again = application
-        .app_shutdown()
-        .await
-        .expect("idempotent shutdown");
-    assert_eq!(stopped_again.state, ProxyState::Stopped);
-    assert_eq!(ports.stop_calls.load(Ordering::SeqCst), 1);
-}
-
-#[tokio::test]
 async fn application_shutdown_reports_owner_stop_failure_but_completes_other_cleanup() {
     let ports = Arc::new(FakePorts::default());
-    *ports.proxy_state.lock() = ProxyState::Running;
     let android = Arc::new(FailingShutdownAndroid {
         owner: AndroidRuntimeOwnerViewModel {
             serial: "DEVICE-A".into(),
@@ -352,8 +206,6 @@ async fn application_shutdown_reports_owner_stop_failure_but_completes_other_cle
     assert_eq!(error.view_model.code, "APP_SHUTDOWN_FAILED");
     assert!(error.view_model.message.contains("DEVICE-A"));
     assert_eq!(android.stop_calls.load(Ordering::SeqCst), 1);
-    assert_eq!(ports.stop_calls.load(Ordering::SeqCst), 1);
-    assert!(ports.settings.lock().effective.is_none());
 }
 
 #[tokio::test]
@@ -374,7 +226,6 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
     let application = Application::new(
         "Test Product".into(),
         ApplicationDependencies {
-            proxy: ports.clone(),
             capture: ports.clone(),
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
@@ -385,11 +236,12 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
             settings: ports.clone(),
             listener_certificates: ports.clone(),
             workspaces: Arc::new(InMemoryWorkspaceStore::default()),
-            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: listener_runtime.clone(),
-            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
+            protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
         },
+        Arc::new(UnusedAndroidControlPort),
+        Arc::new(UnusedProtectedSecretPort),
     );
 
     application.app_shutdown().await.expect("shutdown");

@@ -1,9 +1,9 @@
 use super::{
     Connection, DateTime, InfrastructureError, Mutex, OptionalExtension, Path,
-    ProtectedSecretRecord, SqliteStore, StoredSettings, Utc, create_schema,
-    initialize_singleton_state, params, parse_settings_row, record_schema_migration,
-    stored_certificate_revision,
+    ProtectedSecretRecord, SqliteStore, StoredSettings, Utc, create_current_schema,
+    initialize_singleton_state, params, parse_settings_row, stored_certificate_revision,
 };
+use crate::sqlite::schema::CURRENT_SCHEMA_VERSION;
 
 impl SqliteStore {
     pub fn open(path: &Path) -> Result<Self, InfrastructureError> {
@@ -31,24 +31,26 @@ impl SqliteStore {
             capture_coordination:
                 super::socket_capture_coordination::SocketCaptureCoordination::default(),
         };
-        store.migrate()?;
+        store.ensure_current_schema()?;
         Ok(store)
     }
 
-    pub(super) fn migrate(&self) -> Result<(), InfrastructureError> {
+    fn ensure_current_schema(&self) -> Result<(), InfrastructureError> {
         let mut connection = self.connection.lock();
         let transaction = connection
             .transaction()
-            .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-        create_schema(&transaction)?;
-        super::schema::migrate_workspaces_to_v5(&transaction)?;
-        super::socket_captures::create_schema(&transaction)?;
-        let certificate_revision = stored_certificate_revision(&transaction)?;
-        initialize_singleton_state(&transaction, certificate_revision)?;
-        record_schema_migration(&transaction)?;
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+        if database_is_empty(&transaction)? {
+            create_current_schema(&transaction)?;
+            super::socket_captures::create_schema(&transaction)?;
+            let certificate_revision = stored_certificate_revision(&transaction)?;
+            initialize_singleton_state(&transaction, certificate_revision)?;
+        } else {
+            validate_current_schema_marker(&transaction)?;
+        }
         transaction
             .commit()
-            .map_err(|source| InfrastructureError::DatabaseMigration { source })
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })
     }
 
     pub fn load_settings(&self) -> Result<Option<StoredSettings>, InfrastructureError> {
@@ -176,6 +178,56 @@ impl SqliteStore {
         fingerprint.copy_from_slice(bytes.as_ref());
         Ok(fingerprint)
     }
+}
+
+fn database_is_empty(transaction: &rusqlite::Transaction<'_>) -> Result<bool, InfrastructureError> {
+    transaction
+        .query_row(
+            "SELECT NOT EXISTS(
+                SELECT 1 FROM sqlite_master
+                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+            )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })
+}
+
+fn validate_current_schema_marker(
+    transaction: &rusqlite::Transaction<'_>,
+) -> Result<(), InfrastructureError> {
+    let marker_exists = transaction
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sqlite_master
+                WHERE type = 'table' AND name = 'application_schema'
+            )",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+    if !marker_exists {
+        return Err(InfrastructureError::DatabaseSchemaInvalid {
+            current: CURRENT_SCHEMA_VERSION,
+            found: Vec::new(),
+        });
+    }
+
+    let markers = transaction
+        .prepare("SELECT singleton_id, version FROM application_schema ORDER BY singleton_id")
+        .and_then(|mut statement| {
+            statement
+                .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))?
+                .collect::<Result<Vec<_>, _>>()
+        })
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+    if markers.as_slice() != [(1, CURRENT_SCHEMA_VERSION)] {
+        return Err(InfrastructureError::DatabaseSchemaInvalid {
+            current: CURRENT_SCHEMA_VERSION,
+            found: markers,
+        });
+    }
+    Ok(())
 }
 
 fn update_length_prefixed(context: &mut ring::digest::Context, bytes: &[u8]) {

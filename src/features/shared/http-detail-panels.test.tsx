@@ -7,14 +7,17 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   CaptureDetailViewModel,
   CaptureRowViewModel,
+  MessageContentViewModel,
   SessionDetailViewModel,
   SessionSummaryViewModel,
 } from "@/generated/rust-types";
 import { CaptureDetailPanel } from "@/features/capture/capture-detail-panel";
 import { SessionDetailContent } from "@/features/sessions/session-detail-content";
 
-const message = {
+const message: MessageContentViewModel = {
   http_status: null,
+  start_line_bytes: [],
+  raw_headers: [],
   headers: { "content-type": ["application/xml; charset=utf-8"] },
   body_text: "<request><code>D48</code></request>",
   body_bytes: [60, 114, 101, 113, 117, 101, 115, 116, 62],
@@ -25,9 +28,10 @@ const message = {
   content_kind: "xml",
   codec_id: "utf-8",
   decode_error: null,
+  query_string: "code=D48&name=A%2BB",
 };
 
-const summary = {
+const summary: SessionSummaryViewModel = {
   session_id: "session-1",
   request_id: "request-1",
   started_at: "2026-08-11T00:00:00Z",
@@ -37,7 +41,6 @@ const summary = {
   channel_text: "交易",
   method: "QUERY",
   target: "/pay?code=D48&name=A%2BB",
-  query_string: "code=D48&name=A%2BB",
   http_status: null,
   result: "处理中",
   ui_tone: "info",
@@ -47,12 +50,12 @@ const summary = {
   response_size_bytes: 0,
   pending_breakpoint: false,
   revision: 1,
-} as SessionSummaryViewModel;
+};
 
 describe("抓包与会话正文接入共享查看器", () => {
   it("抓包请求页展示任意 method、原始 query 与 XML", async () => {
     const user = userEvent.setup();
-    const selected = {
+    const selected: CaptureRowViewModel = {
       event_id: 1,
       runtime_epoch: "epoch-1",
       occurred_at: "2026-08-11T00:00:00Z",
@@ -63,8 +66,7 @@ describe("抓包与会话正文接入共享查看器", () => {
       can_go_to_breakpoint: false,
       breakpoint_disabled_reason: null,
       ...summary,
-      query_string: "code=D48&name=A%2BB",
-    } as CaptureRowViewModel;
+    };
     const detail = {
       data: {
         session_id: "session-1",
@@ -77,10 +79,9 @@ describe("抓包与会话正文接入共享查看器", () => {
         tls_summary: "TLS 1.2",
         timings_ms: {},
         rule_trace: [],
-        extracted_metadata: { legacy_key: "must-not-render" },
         response_assertions: [],
         revision: 1,
-      } as CaptureDetailViewModel,
+      } satisfies CaptureDetailViewModel,
       isLoading: false,
       refresh: vi.fn(),
       invalidate: vi.fn(),
@@ -103,8 +104,6 @@ describe("抓包与会话正文接入共享查看器", () => {
     expect(screen.getByText("QUERY")).toBeVisible();
     expect(screen.getByText("code=D48&name=A%2BB")).toBeVisible();
     expect(screen.getByText("XML")).toBeVisible();
-    expect(screen.queryByText("Workspace 提取结果")).not.toBeInTheDocument();
-    expect(screen.queryByText("must-not-render")).not.toBeInTheDocument();
   });
 
   it("会话请求页展示同一套 method、query 与正文元数据", async () => {
@@ -123,8 +122,8 @@ describe("抓包与会话正文接入共享查看器", () => {
         request: message,
         response: null,
         rule_trace: [],
-        extracted_metadata: { legacy_key: "must-not-render" },
-      } as SessionDetailViewModel,
+        response_assertions: [],
+      } satisfies SessionDetailViewModel,
       isLoading: false,
       refresh: vi.fn(),
     };
@@ -135,7 +134,5 @@ describe("抓包与会话正文接入共享查看器", () => {
     expect(screen.getByText("QUERY")).toBeVisible();
     expect(screen.getByText("code=D48&name=A%2BB")).toBeVisible();
     expect(screen.getByText("XML")).toBeVisible();
-    expect(screen.queryByText("Workspace 提取结果")).not.toBeInTheDocument();
-    expect(screen.queryByText("must-not-render")).not.toBeInTheDocument();
   });
 });

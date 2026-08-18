@@ -3,8 +3,9 @@ use super::{
     FieldValidationViewModel, MatchCondition, OperationResultViewModel, RULE_IMPORT_MAX_BYTES,
     Rule, RuleEngine, RuleRepositoryAdapter, RuleRepositoryPort, RuleSummaryViewModel,
     RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SessionId, Value, app_draft, async_trait,
-    cancelled, condition_to_app, deserialize_persisted_rule, infra, json_error, summary,
-    to_domain_draft, validate_persisted_rule, validate_rule_draft, validation_from_domain, view,
+    cancelled, condition_to_app, deserialize_persisted_rule, infra, json_error,
+    serialize_persisted_rule, summary, to_domain_draft, validate_persisted_rule,
+    validate_rule_draft, validation_from_domain, view,
 };
 
 #[async_trait]
@@ -162,7 +163,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
             .map_err(|error| json_error("规则导入文件无效", error))?;
         let rules = values
             .into_iter()
-            .map(|value| deserialize_persisted_rule(value, self.legacy_terminal_body_fields))
+            .map(deserialize_persisted_rule)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| json_error("规则导入文件无效", error))?;
         for rule in &rules {
@@ -190,7 +191,13 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         let Some(selection) = self.dialog.choose_save_file("rules_json", "rules.json")? else {
             return Ok(cancelled("已取消规则导出。"));
         };
-        let bytes = serde_json::to_vec_pretty(&self.load()?)
+        let rules = self
+            .load()?
+            .iter()
+            .map(serialize_persisted_rule)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|error| json_error("规则导出序列化失败", error))?;
+        let bytes = serde_json::to_vec_pretty(&rules)
             .map_err(|error| json_error("规则导出序列化失败", error))?;
         infra(
             self.exporter

@@ -59,14 +59,14 @@ fn local_responder_listener(bind: SocketAddr) -> ProxyListener {
 }
 
 #[tokio::test]
-async fn local_responder_plan_requires_package_services_but_upstream_probe_stays_unavailable() {
+async fn local_responder_plan_requires_exact_package_but_upstream_probe_is_not_applicable() {
     let listener = local_responder_listener("127.0.0.1:19079".parse().unwrap());
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
     };
     workspace.validate().expect("valid LocalResponder fixture");
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
     let builder = ListenerRuntimePlanBuilder::new(&runtime);
 
     let start_error = builder
@@ -76,7 +76,7 @@ async fn local_responder_plan_requires_package_services_but_upstream_probe_stays
         .expect("T21 LocalResponder plan must fresh-load its exact package");
     assert_eq!(
         start_error.view_model.code,
-        "PROTOCOL_PACKAGE_SERVICES_UNAVAILABLE"
+        "PROTOCOL_PACKAGE_NOT_FOUND"
     );
     let probe_error = builder
         .build_probe(&workspace, &listener, Uuid::new_v4())
@@ -85,7 +85,7 @@ async fn local_responder_plan_requires_package_services_but_upstream_probe_stays
         .expect("LocalResponder has no upstream probe");
     assert_eq!(
         probe_error.view_model.code,
-        "LOCAL_RESPONDER_NOT_AVAILABLE"
+        "LISTENER_UPSTREAM_NOT_APPLICABLE"
     );
 }
 
@@ -119,7 +119,7 @@ async fn socket_probe_does_not_load_downstream_tls_identity() {
         }],
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
 
     ListenerRuntimePlanBuilder::new(&runtime)
         .build_probe(&workspace, &listener, Uuid::new_v4())
@@ -155,7 +155,7 @@ async fn transparent_socket_listener_starts_relays_metrics_and_releases_port() {
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
 
     runtime
         .start(workspace, listener.clone())
@@ -195,7 +195,7 @@ async fn socket_plan_resolves_only_references_selected_by_its_tls_mode() {
         }],
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
     let transparent_workspace = workspace_with(listener.clone());
     ListenerRuntimePlanBuilder::new(&runtime)
         .build(&transparent_workspace, &listener, Uuid::new_v4())
@@ -256,7 +256,7 @@ async fn socket_connection_probe_reports_plain_transport_and_mode() {
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
 
     let result = runtime
         .test_upstream_connection(workspace, listener)

@@ -58,10 +58,6 @@ export const commands = {
 	workspaceValidate: (workspace: ProxyWorkspace) => typedError<WorkspaceValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_validate", { workspace })),
 	workspaceSave: (workspace: ProxyWorkspace) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_save", { workspace })),
 	workspaceDelete: (workspaceId: WorkspaceId, expectedRevision: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_delete", { workspaceId, expectedRevision })),
-	workspaceImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_import")),
-	workspaceExport: (workspaceId: WorkspaceId) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_export", { workspaceId })),
-	applicationConfigurationImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_configuration_import")),
-	applicationConfigurationExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_configuration_export")),
 	applicationBackupExport: () => typedError<{
 	bytes_written: number,
 	replaced_existing: boolean,
@@ -75,35 +71,9 @@ export const commands = {
 	portable_material_count: number,
 	protocol_packages: ApplicationBackupPackagePreview[],
 	replacement_scope: ApplicationBackupReplacementScope,
-	migration_report: MigrationReport,
-	warnings: string[],
 } | null, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_prepare")),
 	applicationBackupImportCommit: (token: ApplicationBackupImportToken) => typedError<ApplicationBackupImportCommitOutcome, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_commit", { token })),
 	applicationBackupImportDiscard: (token: ApplicationBackupImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_discard", { token })),
-	legacyApplicationConfigurationImportPrepare: () => typedError<{
-	token: LegacyImportToken,
-	expires_in_seconds: number,
-	kind: LegacyImportKind,
-	source_version: number,
-	workspace_count: number,
-	portable_material_count: number,
-	migration_report: MigrationReport,
-	warnings: string[],
-} | null, AppErrorViewModel>(__TAURI_INVOKE("legacy_application_configuration_import_prepare")),
-	legacyApplicationConfigurationImportCommit: (token: LegacyImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("legacy_application_configuration_import_commit", { token })),
-	legacyApplicationConfigurationImportDiscard: (token: LegacyImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("legacy_application_configuration_import_discard", { token })),
-	legacyWorkspaceImportPrepare: () => typedError<{
-	token: LegacyImportToken,
-	expires_in_seconds: number,
-	kind: LegacyImportKind,
-	source_version: number,
-	workspace_count: number,
-	portable_material_count: number,
-	migration_report: MigrationReport,
-	warnings: string[],
-} | null, AppErrorViewModel>(__TAURI_INVOKE("legacy_workspace_import_prepare")),
-	legacyWorkspaceImportCommit: (token: LegacyImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("legacy_workspace_import_commit", { token })),
-	legacyWorkspaceImportDiscard: (token: LegacyImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("legacy_workspace_import_discard", { token })),
 	listenerList: (workspaceId: WorkspaceId) => typedError<ProxyListener[], AppErrorViewModel>(__TAURI_INVOKE("listener_list", { workspaceId })),
 	listenerNew: () => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_new")),
 	listenerCopy: (source: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_copy", { source })),
@@ -294,9 +264,9 @@ export type AndroidNetworkProfile = {
 	name: string,
 	target_applications: AndroidTargetApplication[],
 	/**  空列表表示目标应用的全部远端地址都进入弱网引擎。 */
-	destination_targets?: AndroidDestinationTarget[],
+	destination_targets: AndroidDestinationTarget[],
 	/**  空列表表示不将流量透明转交桌面代理，只执行设备端弱网。 */
-	proxy_routes?: AndroidProxyRoute[],
+	proxy_routes: AndroidProxyRoute[],
 	confirmed_shared_uids: number[],
 	auto_resume_after_reboot: boolean,
 	weak_network: WeakNetworkProfile,
@@ -315,19 +285,19 @@ export type AndroidNetworkStatusViewModel = {
 	serial: string,
 	state: AndroidNetworkState,
 	/**  Rust 根据状态机生成的稳定中文文案，展示层不得重复维护状态映射。 */
-	state_text?: string,
+	state_text: string,
 	/**  Rust 生成的视觉语义；HeroUI 只负责把语义映射到组件颜色。 */
-	ui_tone?: UiTone,
+	ui_tone: UiTone,
 	/**  True only when the Companion protocol or a process-level emergency restore proved state. */
 	verified: boolean,
 	transport: AndroidControlTransport,
 	active_profile_id: string | null,
 	/**  Companion 当前实际运行的 Profile 内容指纹；用于识别 Service 重启后的陈旧状态。 */
-	active_profile_fingerprint?: string | null,
+	active_profile_fingerprint: string | null,
 	/**  Companion 当前实际装载的透明代理路由指纹。 */
-	active_route_fingerprint?: string | null,
+	active_route_fingerprint: string | null,
 	/**  Companion 当前实际装载的透明代理路由数量。 */
-	active_route_count?: number,
+	active_route_count: number,
 	companion_process_running: boolean | null,
 	message: string,
 	unsupported_fields: string[],
@@ -413,7 +383,6 @@ export type AndroidTargetApplication = {
 /**  应用启动时一次返回的首屏快照，避免界面自行拼接不一致状态。 */
 export type AppBootstrapViewModel = {
 	product_name: string,
-	proxy: ProxyStatusViewModel,
 	channel_catalog: ChannelPresentationViewModel[],
 	recent_capture: CapturePageViewModel,
 	pending_breakpoints: BreakpointSummaryViewModel[],
@@ -470,8 +439,6 @@ export type ApplicationBackupImportPreview = {
 	portable_material_count: number,
 	protocol_packages: ApplicationBackupPackagePreview[],
 	replacement_scope: ApplicationBackupReplacementScope,
-	migration_report: MigrationReport,
-	warnings: string[],
 };
 
 export type ApplicationBackupImportToken = string;
@@ -697,35 +664,7 @@ export type ChannelSettingsDraft = {
 	upstream_url: string,
 };
 
-export type ChannelState = "disabled" | "stopped" | "starting" | "listening" | "stopping" | "faulted";
-
-export type ChannelStatusViewModel = {
-	id: ChannelId,
-	display_name: string,
-	state: ChannelState,
-	state_text: string,
-	ui_tone: UiTone,
-	listen_address: string,
-	mtls_enabled: boolean,
-	connected_clients: number,
-	request_count: number,
-	error_count: number,
-	enabled: boolean,
-	upstream_url: string,
-	upstream_state_text: string,
-	upstream_ui_tone: UiTone,
-};
-
 export type ConnectionFaultAction = { kind: "delay"; milliseconds: number } | { kind: "reject" } | { kind: "rate_limit"; bytes_per_second: number } | { kind: "close_after_bytes"; bytes: number } | { kind: "half_close_after_bytes"; bytes: number } | { kind: "idle_timeout"; milliseconds: number };
-
-export type ConnectionHealthState = "unavailable" | "waiting" | "healthy" | "degraded" | "faulted";
-
-export type ConnectionHealthViewModel = {
-	state: ConnectionHealthState,
-	state_text: string,
-	detail: string,
-	ui_tone: UiTone,
-};
 
 /**  生产者提交的脱敏日志。禁止写入报文正文、密码、私钥或 PKCS12 字节。 */
 export type DiagnosticLogEntryViewModel = {
@@ -894,7 +833,7 @@ export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "opt
 export type DownstreamTlsSettings = {
 	enabled: boolean,
 	server_identity: CertificateReferenceId | null,
-	dynamic_sni_allowlist?: string[],
+	dynamic_sni_allowlist: string[],
 	client_authentication: DownstreamClientAuthentication,
 };
 
@@ -974,21 +913,6 @@ export type HttpListenerSettings = {
 	response_body_codec: BodyCodecKind,
 	fixed_server: FixedServerSettings | null,
 };
-
-export type LegacyImportKind = "application_configuration" | "workspace";
-
-export type LegacyImportPreview = {
-	token: LegacyImportToken,
-	expires_in_seconds: number,
-	kind: LegacyImportKind,
-	source_version: number,
-	workspace_count: number,
-	portable_material_count: number,
-	migration_report: MigrationReport,
-	warnings: string[],
-};
-
-export type LegacyImportToken = string;
 
 /**
  *  代理监听页面使用的证书引用详情。
@@ -1151,32 +1075,24 @@ export type MessageContentKind = "json" | "xml" | "text" | "binary" | "unknown";
 export type MessageContentViewModel = {
 	http_status: number | null,
 	/**  精确起始行字节，避免把展示字符串误作报文重建来源。 */
-	start_line_bytes?: number[],
+	start_line_bytes: number[],
 	/**  保留名称、值、大小写、重复项和原始顺序的 Header。 */
-	raw_headers?: RawHttpHeaderViewModel[],
+	raw_headers: RawHttpHeaderViewModel[],
 	/**  仅供展示和表单编辑的有损分组投影。 */
 	headers: { [key in string]: string[] },
 	body_text: string | null,
 	body_bytes: number[],
 	json: unknown | null,
 	content_length: number,
-	media_type?: string | null,
-	charset?: string | null,
-	content_kind?: MessageContentKind,
-	codec_id?: string | null,
-	decode_error?: string | null,
-	query_string?: string | null,
+	media_type: string | null,
+	charset: string | null,
+	content_kind: MessageContentKind,
+	codec_id: string | null,
+	decode_error: string | null,
+	query_string: string | null,
 };
 
 export type MessageStage = "tls_handshake" | "request" | "response" | "terminal";
-
-export type MigrationReport = {
-	removed_metadata_extractors: number,
-	source_kind: MigrationSourceKind,
-	source_version: number,
-};
-
-export type MigrationSourceKind = "workspace_document" | "application_configuration_document" | "workspace_persistence";
 
 export type MitmSettings = {
 	enabled: boolean,
@@ -1391,39 +1307,6 @@ export type ProxyListener = {
 	data_plane: ListenerDataPlane,
 };
 
-export type ProxyState = "stopped" | "starting" | "running" | "stopping" | "faulted";
-
-/**
- *  顶部状态栏和控制台所需的完整代理状态。
- *  `can_*` 与 `*_disabled_reason` 已包含业务权限判断，展示层不能自行推导。
- */
-export type ProxyStatusViewModel = {
-	state: ProxyState,
-	state_text: string,
-	ui_tone: UiTone,
-	runtime_epoch: string | null,
-	revision: number,
-	channels: ChannelStatusViewModel[],
-	app_to_proxy_health: ConnectionHealthViewModel,
-	proxy_to_server_health: ConnectionHealthViewModel,
-	active_sessions: number,
-	pending_breakpoints: number,
-	logical_memory_bytes: number,
-	logical_memory_text: string,
-	memory_capacity_bytes: number,
-	memory_capacity_text: string,
-	memory_usage_percent: number,
-	session_capacity: number,
-	default_timeout_seconds: number,
-	can_start: boolean,
-	start_disabled_reason: DisabledReason | null,
-	can_stop: boolean,
-	stop_disabled_reason: DisabledReason | null,
-	can_restart: boolean,
-	restart_disabled_reason: DisabledReason | null,
-	fault_reason: string | null,
-};
-
 export type ProxyWorkspace = {
 	id: WorkspaceId,
 	name: string,
@@ -1437,7 +1320,7 @@ export type ProxyWorkspace = {
 	 *  设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，
 	 *  不属于此字段。
 	 */
-	android_network_profiles?: AndroidNetworkProfile[],
+	android_network_profiles: AndroidNetworkProfile[],
 };
 
 /**
@@ -1450,9 +1333,9 @@ export type RawHttpHeaderViewModel = {
 	/**  字段值的精确字节，不含可选空白和 CRLF。 */
 	value_bytes: number[],
 	/**  冒号与实际字段值之间的原始可选空白。 */
-	leading_ows_bytes?: number[],
+	leading_ows_bytes: number[],
 	/**  实际字段值之后的原始可选空白。 */
-	trailing_ows_bytes?: number[],
+	trailing_ows_bytes: number[],
 };
 
 /**  用户可配置的响应断言。核心只比较通用 HTTP 数据，不包含任何业务返回码。 */
@@ -1582,7 +1465,7 @@ export type SessionDetailViewModel = {
 	response: MessageContentViewModel | null,
 	rule_trace: string[],
 	/**  对最终响应执行的通用断言结果；失败只影响会话结论，不篡改线上响应。 */
-	response_assertions?: ResponseAssertionResultViewModel[],
+	response_assertions: ResponseAssertionResultViewModel[],
 };
 
 export type SessionListViewModel = {
@@ -1642,13 +1525,9 @@ export type SettingsDraft = {
 	leaf_sans: string[],
 };
 
-/**  设置页展示模型，同时区分已保存值、当前生效值和操作权限。 */
+/**  设置页展示模型。 */
 export type SettingsViewModel = {
 	stored: SettingsDraft,
-	effective: SettingsDraft | null,
-	pending_changes: boolean,
-	requires_restart: boolean,
-	restart_reason: string | null,
 	revision: number,
 	can_write: boolean,
 	disabled_reason: DisabledReason | null,
@@ -1887,7 +1766,7 @@ export type SocketLocalResponderTopology = {
  *  协议包切分完整 Frame，并分别应用两个方向的处理开关。
  *  Wire 结构使用 `mode` + `settings`，例如 Direct 是 `{"mode":"direct"}`，Scripted 是
  *  `{"mode":"scripted","settings":{...}}`。额外字段会被拒绝，防止 Direct 配置中夹带不会生效的
- *  脚本字段。旧 Socket 配置缺少整个 `processing` 字段时由 [`SocketRelaySettings`] 迁移为 Direct。
+ *  脚本字段。
  */
 export type SocketPayloadProcessing = { mode: "direct" } | { mode: "scripted"; settings: ScriptedSocketProcessing };
 
@@ -1924,8 +1803,8 @@ export type SocketRelaySettings = {
 	topology: SocketTopology,
 	/**  Listener 同时接受的最大 Socket 连接数。 */
 	maximum_connections: number,
-	/**  Frame/payload 处理方式。历史配置没有该字段时必须保持透明直通。 */
-	processing?: SocketPayloadProcessing,
+	/**  Frame/payload 处理方式。 */
+	processing: SocketPayloadProcessing,
 };
 
 /**  具有真实 Server 上游的 Socket 转发拓扑。 */
@@ -2017,7 +1896,7 @@ export type UiEventEnvelope = {
 };
 
 /**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
-export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } |
+export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } |
 /**
  *  一个 Socket Frame 或 `LocalExchange` 已完整写出并进入正式 capture 仓储。
  *  `RequestParsed` 仍只走有界诊断事件，不能构造此完成事件。

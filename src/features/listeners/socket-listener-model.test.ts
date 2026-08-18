@@ -299,7 +299,7 @@ describe("Socket Listener model", () => {
 
   it("turns off capabilities unsupported by a newly bound exact package version", () => {
     const settings = relaySettings();
-    if (settings.processing?.mode !== "scripted") throw new Error("expected scripted settings");
+    if (settings.processing.mode !== "scripted") throw new Error("expected scripted settings");
     settings.processing.settings.upstream = { decode_enabled: true, encode_enabled: true };
     settings.processing.settings.downstream = { decode_enabled: true, encode_enabled: true };
 
@@ -319,7 +319,7 @@ describe("Socket Listener model", () => {
 
   it("keeps LocalResponder forced directions off even when a package supports them", () => {
     const settings = localSettings();
-    if (settings.processing?.mode !== "scripted") throw new Error("expected scripted settings");
+    if (settings.processing.mode !== "scripted") throw new Error("expected scripted settings");
     settings.processing.settings.upstream.encode_enabled = true;
     settings.processing.settings.downstream.decode_enabled = true;
 
@@ -468,29 +468,4 @@ describe("Socket Listener model", () => {
     expect(setAppTransport(current, null as never)).toEqual(current);
   });
 
-  it("migrates a legacy missing processing field to an explicit strict Scripted payload", () => {
-    const legacy = { ...relaySettings(), processing: undefined } as unknown as SocketRelaySettings;
-
-    expect(setProcessingMode(legacy, "scripted").processing).toEqual({
-      mode: "scripted",
-      settings: {
-        package: { id: "", version: "" },
-        upstream: { decode_enabled: false, encode_enabled: false },
-        downstream: { decode_enabled: false, encode_enabled: false },
-      },
-    });
-  });
-
-  it("migrates a legacy missing processing field to LocalResponder with forced directions disabled", () => {
-    const legacy = { ...relaySettings(), processing: undefined } as unknown as SocketRelaySettings;
-
-    expect(setSocketTopology(legacy, "local_responder").processing).toEqual({
-      mode: "scripted",
-      settings: {
-        package: { id: "", version: "" },
-        upstream: { decode_enabled: false, encode_enabled: false },
-        downstream: { decode_enabled: false, encode_enabled: false },
-      },
-    });
-  });
 });
