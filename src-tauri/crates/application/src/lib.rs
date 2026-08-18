@@ -9,6 +9,7 @@
 mod android;
 mod application_backup;
 mod backup_export;
+mod backup_import;
 mod breakpoint_validation;
 mod breakpoints;
 mod capacity;
@@ -30,6 +31,7 @@ mod workspaces;
 pub use android::*;
 pub use application_backup::*;
 pub use backup_export::*;
+pub use backup_import::*;
 pub use breakpoint_validation::{BreakpointBodyCodecResolver, BreakpointValidator};
 pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket};
 pub use capacity::CapacityLedger;

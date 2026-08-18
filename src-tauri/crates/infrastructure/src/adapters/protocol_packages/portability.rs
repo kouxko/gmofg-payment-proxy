@@ -6,7 +6,8 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use intercept_proxy_application::{
-    AppError, AppResult, ApplicationConfigurationDocument, MAX_PORTABLE_PACKAGE_FILE_BYTES,
+    AppError, AppResult, ApplicationBackupProtocolPackageBaseline,
+    ApplicationConfigurationDocument, MAX_PORTABLE_PACKAGE_FILE_BYTES,
     MAX_PORTABLE_PACKAGE_FILES, MAX_PORTABLE_PACKAGE_TOTAL_BYTES, MAX_PORTABLE_PROTOCOL_PACKAGES,
     PortableApplicationProtocolPackage, PortableProtocolPackage, PortableProtocolPackageFile,
     ProtocolPackageDescriptionViewModel, ProtocolPackagePortabilityPort, ProxyWorkspace,
@@ -32,6 +33,25 @@ use super::{
 
 #[async_trait]
 impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        self.store
+            .list_protocol_package_headers()
+            .map(|headers| {
+                headers
+                    .into_iter()
+                    .map(|header| ApplicationBackupProtocolPackageBaseline {
+                        package: header.package,
+                        enabled: header.enabled,
+                        generation: header.generation,
+                    })
+                    .collect()
+            })
+            .map_err(ProtocolPackageStorageError::from)
+            .map_err(|error| protocol_package_app_error(&error))
+    }
+
     async fn export_workspace_packages(
         &self,
         packages: &[ProtocolPackageRef],

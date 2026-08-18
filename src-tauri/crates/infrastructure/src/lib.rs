@@ -7,6 +7,7 @@
 pub mod adapters;
 pub mod application_backup;
 mod application_backup_export;
+mod application_backup_import;
 pub mod certificates;
 pub mod dpapi;
 pub mod error;
@@ -34,6 +35,12 @@ pub use application_backup::{
     ApplicationBackupArchiveLimits,
 };
 pub use application_backup_export::{ApplicationBackupFileExporter, build_application_backup_zip};
+pub use application_backup_import::{
+    ApplicationBackupImportClock, ApplicationBackupImportPreparer,
+    ApplicationBackupImportTokenGenerator, DEFAULT_APPLICATION_BACKUP_PENDING_BYTES,
+    DEFAULT_APPLICATION_BACKUP_PENDING_CAPACITY, DEFAULT_APPLICATION_BACKUP_PENDING_TTL,
+    RandomApplicationBackupImportTokenGenerator, SystemApplicationBackupImportClock,
+};
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,
     ParsedPkcs12,

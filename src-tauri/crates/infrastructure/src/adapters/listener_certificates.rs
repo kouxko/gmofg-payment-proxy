@@ -424,23 +424,7 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         &self,
         material: PortableCertificateMaterial,
     ) -> AppResult<CertificateReference> {
-        material.validate_shape()?;
-        let bytes = STANDARD.decode(&material.material_base64).map_err(|_| {
-            AppError::new(
-                "PORTABLE_CERTIFICATE_INVALID",
-                "配置文件中的证书材料不是有效的 Base64。",
-            )
-            .entity(material.reference_id.to_string())
-        })?;
-        if bytes.is_empty() || bytes.len() > MAX_PORTABLE_MATERIAL_BYTES {
-            return Err(AppError::new(
-                "PORTABLE_CERTIFICATE_INVALID",
-                "配置文件中的证书材料为空或超过 16 MiB 上限。",
-            )
-            .entity(material.reference_id.to_string()));
-        }
-
-        let (stored_kind, password, stored_bytes) = validate_portable_material(&material, &bytes)?;
+        let (stored_kind, password, stored_bytes) = decode_portable_material(&material)?;
         let key = self.persist(stored_kind, password.as_bytes(), &stored_bytes)?;
         Ok(CertificateReference {
             id: material.reference_id,
@@ -448,6 +432,14 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
             kind: material.kind,
             reference: format!("{REFERENCE_PREFIX}{key}"),
         })
+    }
+
+    async fn preflight_portable(&self, material: &PortableCertificateMaterial) -> AppResult<()> {
+        decode_portable_material(material).map(|_| ())
+    }
+
+    async fn application_backup_baseline(&self) -> AppResult<[u8; 32]> {
+        infra(self.store.protected_secret_fingerprint(PROVIDER))
     }
 
     async fn discard(&self, reference: CertificateReference) -> AppResult<()> {
@@ -468,6 +460,27 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         }
         Ok(())
     }
+}
+
+fn decode_portable_material(
+    material: &PortableCertificateMaterial,
+) -> AppResult<(u8, String, Vec<u8>)> {
+    material.validate_shape()?;
+    let bytes = STANDARD.decode(&material.material_base64).map_err(|_| {
+        AppError::new(
+            "PORTABLE_CERTIFICATE_INVALID",
+            "配置文件中的证书材料不是有效的 Base64。",
+        )
+        .entity(material.reference_id.to_string())
+    })?;
+    if bytes.is_empty() || bytes.len() > MAX_PORTABLE_MATERIAL_BYTES {
+        return Err(AppError::new(
+            "PORTABLE_CERTIFICATE_INVALID",
+            "配置文件中的证书材料为空或超过 16 MiB 上限。",
+        )
+        .entity(material.reference_id.to_string()));
+    }
+    validate_portable_material(material, &bytes)
 }
 
 #[cfg(test)]
