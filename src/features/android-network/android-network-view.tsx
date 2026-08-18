@@ -34,6 +34,7 @@ import {
 } from "./profile-cards";
 import { TargetApplicationsCard } from "./target-applications-card";
 import { ProxyRoutesCard } from "./proxy-routes-card";
+import { RuntimeEndpointsCard } from "./runtime-endpoints-card";
 import { useCurrentWorkspaceListeners } from "./use-current-workspace-listeners";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import {
@@ -86,6 +87,11 @@ export function AndroidNetworkView(): ReactElement {
   );
   const runtimeData = runtime.data;
   const refreshRuntime = runtime.refresh;
+  const [draft, setDraft] = useState<AndroidNetworkProfile>();
+  const endpoints = useIpcQuery(
+    `android-endpoints:${draft?.id ?? "none"}:${runtimeTargetKey ?? "none"}`,
+    () => callCommand(commands.deviceNetworkEndpoints(draft?.id ?? null)),
+  );
   const runtimeRefreshInFlight = useRef<Promise<void> | null>(null);
   const runtimeRefreshQueued = useRef(false);
   const refreshRuntimeSerially = useCallback((): Promise<void> => {
@@ -106,8 +112,12 @@ export function AndroidNetworkView(): ReactElement {
     return task;
   }, [refreshRuntime]);
   const refreshRuntimeEvent = useCallback(async (): Promise<void> => {
-    await Promise.all([refreshRuntimeOwner(), refreshRuntimeSerially()]);
-  }, [refreshRuntimeOwner, refreshRuntimeSerially]);
+    await Promise.all([
+      refreshRuntimeOwner(),
+      refreshRuntimeSerially(),
+      endpoints.refresh(),
+    ]);
+  }, [endpoints.refresh, refreshRuntimeOwner, refreshRuntimeSerially]);
   useAppEventRefresh(
     ["android_vpn_status_changed"],
     refreshRuntimeEvent,
@@ -151,7 +161,6 @@ export function AndroidNetworkView(): ReactElement {
       lastActiveProfileIds.current.set(runtimeTargetSerial, runtimeData.active_profile_id);
     }
   }, [runtimeData, runtimeTargetSerial]);
-  const [draft, setDraft] = useState<AndroidNetworkProfile>();
   const [pending, setPending] = useState<string>();
   const [dangerousConfirmed, setDangerousConfirmed] = useState(false);
   const selectedSerialRef = useRef<string | null | undefined>(selectedSerial);
@@ -247,7 +256,7 @@ export function AndroidNetworkView(): ReactElement {
       : await callCommand(commands.deviceNetworkApply(saved.id, dangerousConfirmed));
     runtime.setData(result);
     runtimeOwner.invalidate();
-    await runtimeOwner.refresh();
+    await Promise.all([runtimeOwner.refresh(), endpoints.refresh()]);
     toast(result.message, { variant: toneColor(result.ui_tone!) });
   }
 
@@ -316,6 +325,12 @@ export function AndroidNetworkView(): ReactElement {
               </Alert.Content>
             </Alert>
           )}
+
+          <RuntimeEndpointsCard
+            snapshot={endpoints.data}
+            loading={endpoints.isLoading}
+            error={endpoints.error}
+          />
 
           <ProfileSelectorCard
             profiles={profiles.data ?? []}
@@ -412,7 +427,7 @@ export function AndroidNetworkView(): ReactElement {
     runtimeOwner.invalidate();
     runtimeOwner.setData(null);
     await adb.refresh();
-    await runtimeOwner.refresh();
+    await Promise.all([runtimeOwner.refresh(), endpoints.refresh()]);
   }
 
   async function saveAndNotify(): Promise<void> {
@@ -427,7 +442,7 @@ export function AndroidNetworkView(): ReactElement {
     runtimeOwner.invalidate();
     runtimeOwner.setData(null);
     await adb.refresh();
-    await runtimeOwner.refresh();
+    await Promise.all([runtimeOwner.refresh(), endpoints.refresh()]);
   }
 }
 

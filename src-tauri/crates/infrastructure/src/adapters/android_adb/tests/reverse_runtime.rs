@@ -38,6 +38,7 @@ async fn usb_runtime_creates_reverse_and_keeps_endpoint_out_of_profile() {
         profile: profile.clone(),
         proxy_routes: vec![AndroidProxyRouteActivation {
             listener_id: listener_id.to_string(),
+            listener_name: "Test listener".into(),
             original_destination: "203.0.113.10".into(),
             original_ports: vec![16_127],
             desktop_listener_bind_address: "0.0.0.0".into(),
@@ -108,6 +109,7 @@ async fn normalized_route_fingerprint_changes_when_runtime_endpoint_changes() {
         },
         proxy_routes: vec![AndroidProxyRouteActivation {
             listener_id: listener_id.to_string(),
+            listener_name: "Test listener".into(),
             original_destination: "203.0.113.10".into(),
             original_ports: vec![16_127],
             desktop_listener_bind_address: "0.0.0.0".into(),

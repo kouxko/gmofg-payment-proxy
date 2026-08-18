@@ -49,6 +49,7 @@ describe("Android runtime owner model", () => {
     ["waiting_reconnect", "设备已断开，等待同一序列号 device-a 重连；仍可停止或紧急恢复"],
     ["cleanup_required", "遗留连接需要清理；请让同一序列号 device-a 重连后停止或紧急恢复"],
     ["stop_failed", "上次停止失败，仍需停止或紧急恢复"],
+    ["faulted", "LAN 实际运行端点故障，仍保留运行所有权"],
   ] as const)("maps %s owner state", (state, text) => {
     expect(runtimeOwnerStateText({ ...owner, state })).toBe(text);
   });
@@ -77,6 +78,8 @@ describe("Android runtime owner model", () => {
     ["device_reconnected", "同序列号设备已重连"],
     ["stop_failed", "停止失败"],
     ["recovered_from_storage", "从本机恢复运行记录"],
+    ["lan_endpoint_reapplied", "LAN 实际运行端点已重新应用"],
+    ["lan_endpoint_faulted", "LAN 实际运行端点恢复失败"],
   ] as const)("maps %s owner transition", (reason, text) => {
     expect(runtimeOwnerTransitionText(reason)).toBe(text);
   });

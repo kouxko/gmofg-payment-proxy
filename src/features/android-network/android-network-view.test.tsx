@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   androidAdbGet: vi.fn(), androidDeviceList: vi.fn(), androidAdbSelect: vi.fn(),
   androidPackageList: vi.fn(), androidPackageRefresh: vi.fn(), androidPackageQuery: vi.fn(), deviceNetworkProfileList: vi.fn(), deviceNetworkStatus: vi.fn(),
   deviceNetworkRuntimeOwner: vi.fn(),
+  deviceNetworkEndpoints: vi.fn(),
   deviceNetworkProfileNew: vi.fn(), deviceNetworkProfileGet: vi.fn(), deviceNetworkProfileApplyIntent: vi.fn(), deviceNetworkProfileSave: vi.fn(),
   androidCompanionInstall: vi.fn(), androidCompanionUpdate: vi.fn(), androidVpnOpenConsent: vi.fn(),
   deviceNetworkStart: vi.fn(), deviceNetworkApply: vi.fn(), deviceNetworkStop: vi.fn(),
@@ -65,6 +66,12 @@ describe("Android targeted network page", () => {
     }));
     mocks.deviceNetworkStatus.mockReturnValue(ok({ serial: "device-1", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null }));
     mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(null));
+    mocks.deviceNetworkEndpoints.mockReturnValue(ok({
+      configured_profile_id: null,
+      configured: [],
+      runtime_owner: null,
+      runtime: [],
+    }));
     mocks.deviceNetworkProfileNew.mockReturnValue(ok(profile));
     mocks.deviceNetworkProfileApplyIntent.mockImplementation((value, intent) => {
       if (intent.kind === "toggle_package") {

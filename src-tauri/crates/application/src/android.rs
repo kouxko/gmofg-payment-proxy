@@ -15,6 +15,9 @@ use crate::{AppError, AppResult, UiTone};
 #[path = "android/runtime_owner.rs"]
 mod runtime_owner;
 pub use runtime_owner::*;
+#[path = "android/runtime_endpoint.rs"]
+mod runtime_endpoint;
+pub use runtime_endpoint::*;
 
 pub const ANDROID_CONTROL_PROTOCOL_VERSION: u16 = 1;
 pub const ANDROID_CONTROL_MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -117,6 +120,7 @@ pub struct AndroidNetworkProfileSummary {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct AndroidProxyRouteActivation {
     pub listener_id: String,
+    pub listener_name: String,
     pub original_destination: String,
     pub original_ports: Vec<u16>,
     pub desktop_listener_bind_address: String,

@@ -8,8 +8,8 @@ use std::{
 
 use chrono::Utc;
 use intercept_proxy_application::{
-    AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource, AndroidRuntimeOwnerState,
-    AndroidRuntimeOwnerViewModel, AppError,
+    AndroidRuntimeEndpointViewModel, AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource,
+    AndroidRuntimeOwnerState, AndroidRuntimeOwnerViewModel, AppError,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -53,6 +53,11 @@ impl AndroidAdbAdapter {
                 })
             })),
             active_runtime: Mutex::new(None),
+            runtime_endpoints: Mutex::new(
+                persisted
+                    .as_ref()
+                    .map_or_else(Vec::new, |record| record.runtime_endpoints.clone()),
+            ),
             runtime_resume_state: Mutex::new(
                 persisted.as_ref().and_then(|record| record.resume_state),
             ),
@@ -73,10 +78,6 @@ pub(super) struct ActiveReverseOwnership {
 }
 
 /// 桌面端为当前 Android start/apply 解析出的运行事实。
-///
-/// 不能从可持久化 Profile 重新推导该值，因为实际端点包含本次 ADB reverse 端口与
-/// DNS 解析结果。桌面进程重启后该事实自然丢失，状态核对会 fail-closed，要求重新
-/// apply，而不是假定设备仍连接旧端点。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct ActiveRuntimeFacts {
     pub(super) epoch: uuid::Uuid,
@@ -87,6 +88,7 @@ pub(super) struct ActiveRuntimeFacts {
     pub(super) route_count: usize,
     pub(super) listener_ports: BTreeMap<String, u16>,
     pub(super) uses_adb_reverse: bool,
+    pub(super) endpoints: Vec<AndroidRuntimeEndpointViewModel>,
 }
 
 #[derive(Debug)]
@@ -99,6 +101,7 @@ pub(super) struct PreparedUsbProxyRuntime {
     pub(super) previous_resume_state: Option<AndroidRuntimeOwnerState>,
     pub(super) previous_reverse: Option<ActiveReverseOwnership>,
     pub(super) previous_runtime: Option<ActiveRuntimeFacts>,
+    pub(super) previous_endpoints: Vec<AndroidRuntimeEndpointViewModel>,
 }
 
 impl ActiveRuntimeFacts {

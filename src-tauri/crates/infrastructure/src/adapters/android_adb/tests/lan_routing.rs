@@ -46,6 +46,7 @@ async fn same_subnet_listener_uses_lan_without_creating_reverse() {
 fn lan_selection_requires_same_subnet_and_lan_listener() {
     let route = AndroidProxyRouteActivation {
         listener_id: "listener".into(),
+        listener_name: "Test listener".into(),
         original_destination: "example.test".into(),
         original_ports: vec![443],
         desktop_listener_bind_address: "0.0.0.0".into(),

@@ -16,6 +16,8 @@ mod forward_control;
 mod owner_crash_safety;
 #[path = "tests/owner_lifecycle.rs"]
 mod owner_lifecycle;
+#[path = "tests/runtime_endpoints.rs"]
+mod runtime_endpoints;
 
 #[test]
 fn canonical_fingerprint_matches_android_for_cidr_and_url() {
@@ -56,6 +58,7 @@ fn parses_devices_and_packages_with_shared_uid_inputs() {
 fn reverse_runtime_mapping_accepts_adb_serial_prefix() {
     let routes = vec![AndroidProxyRouteActivation {
         listener_id: "listener-a".into(),
+        listener_name: "Listener A".into(),
         original_destination: "203.0.113.10".into(),
         original_ports: vec![16_127],
         desktop_listener_bind_address: "0.0.0.0".into(),

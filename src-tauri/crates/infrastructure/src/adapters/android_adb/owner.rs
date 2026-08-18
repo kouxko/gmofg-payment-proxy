@@ -1,7 +1,8 @@
 use chrono::Utc;
 use intercept_proxy_application::{
-    AndroidNetworkState, AndroidRuntimeOwnerMode, AndroidRuntimeOwnerState,
-    AndroidRuntimeOwnerTransitionReason, AndroidRuntimeOwnerViewModel, AppError, AppResult,
+    AndroidNetworkState, AndroidRuntimeEndpointViewModel, AndroidRuntimeOwnerMode,
+    AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason, AndroidRuntimeOwnerViewModel,
+    AppError, AppResult,
 };
 use uuid::Uuid;
 
@@ -64,12 +65,18 @@ impl AndroidAdbAdapter {
             owner: owner.clone(),
             reverse_ports: cleanup_ports.clone(),
             resume_state: None,
+            runtime_endpoints: prepared.runtime.endpoints.clone(),
         };
         self.runtime_store
             .save_android_runtime_owner(&record)
             .map_err(|error| owner_store_error(&error))?;
-        self.publish_record_in_memory(owner, cleanup_ports, None)
-            .await;
+        self.publish_record_in_memory(
+            owner,
+            cleanup_ports,
+            None,
+            prepared.runtime.endpoints.clone(),
+        )
+        .await;
         Ok(())
     }
 
@@ -88,6 +95,7 @@ impl AndroidAdbAdapter {
                 owner,
                 reverse_ports,
                 resume_state: *self.runtime_resume_state.lock().await,
+                runtime_endpoints: self.runtime_endpoints.lock().await.clone(),
             })
             .map_err(|error| owner_store_error(&error))?;
         Ok(())
@@ -103,6 +111,31 @@ impl AndroidAdbAdapter {
             .await
     }
 
+    pub(super) async fn replace_owner_endpoints_if_epoch(
+        &self,
+        owner: AndroidRuntimeOwnerViewModel,
+        endpoints: Vec<AndroidRuntimeEndpointViewModel>,
+    ) -> AppResult<bool> {
+        let expected_epoch = owner.epoch;
+        let reverse_ports = self.current_reverse_ports(expected_epoch).await;
+        let resume_state = *self.runtime_resume_state.lock().await;
+        let record = AndroidRuntimeOwnerRecord {
+            owner: owner.clone(),
+            reverse_ports: reverse_ports.clone(),
+            resume_state,
+            runtime_endpoints: endpoints.clone(),
+        };
+        let replaced = self
+            .runtime_store
+            .replace_android_runtime_owner_if_epoch(expected_epoch, &record)
+            .map_err(|error| owner_store_error(&error))?;
+        if replaced {
+            self.publish_record_in_memory(owner, reverse_ports, resume_state, endpoints)
+                .await;
+        }
+        Ok(replaced)
+    }
+
     async fn replace_owner_with_resume(
         &self,
         owner: AndroidRuntimeOwnerViewModel,
@@ -114,13 +147,15 @@ impl AndroidAdbAdapter {
             owner: owner.clone(),
             reverse_ports: reverse_ports.clone(),
             resume_state,
+            runtime_endpoints: self.runtime_endpoints.lock().await.clone(),
         };
         let replaced = self
             .runtime_store
             .replace_android_runtime_owner_if_epoch(expected_epoch, &record)
             .map_err(|error| owner_store_error(&error))?;
         if replaced {
-            self.publish_record_in_memory(owner, reverse_ports, resume_state)
+            let endpoints = record.runtime_endpoints.clone();
+            self.publish_record_in_memory(owner, reverse_ports, resume_state, endpoints)
                 .await;
         }
         Ok(replaced)
@@ -140,10 +175,16 @@ impl AndroidAdbAdapter {
                     owner: owner.clone(),
                     reverse_ports: ports.clone(),
                     resume_state: prepared.previous_resume_state,
+                    runtime_endpoints: prepared.previous_endpoints.clone(),
                 })
                 .map_err(|error| owner_store_error(&error))?;
-            self.publish_record_in_memory(owner, ports, prepared.previous_resume_state)
-                .await;
+            self.publish_record_in_memory(
+                owner,
+                ports,
+                prepared.previous_resume_state,
+                prepared.previous_endpoints.clone(),
+            )
+            .await;
         } else if self.clear_owner_if_epoch(prepared.owner.epoch).await? {
             *self.active_reverse.lock().await = None;
         }
@@ -238,6 +279,7 @@ impl AndroidAdbAdapter {
         owner: AndroidRuntimeOwnerViewModel,
         reverse_ports: Vec<u16>,
         resume_state: Option<AndroidRuntimeOwnerState>,
+        runtime_endpoints: Vec<AndroidRuntimeEndpointViewModel>,
     ) {
         let reverse = (!reverse_ports.is_empty()).then(|| super::ActiveReverseOwnership {
             epoch: owner.epoch,
@@ -248,6 +290,7 @@ impl AndroidAdbAdapter {
         *self.runtime_owner.lock().await = Some(owner);
         *self.runtime_resume_state.lock().await = resume_state;
         *self.active_reverse.lock().await = reverse;
+        *self.runtime_endpoints.lock().await = runtime_endpoints;
     }
 
     pub(super) async fn clear_owner_if_epoch(&self, expected_epoch: Uuid) -> AppResult<bool> {
@@ -263,6 +306,7 @@ impl AndroidAdbAdapter {
             {
                 *owner = None;
                 *self.runtime_resume_state.lock().await = None;
+                self.runtime_endpoints.lock().await.clear();
             }
             let mut runtime = self.active_runtime.lock().await;
             if runtime

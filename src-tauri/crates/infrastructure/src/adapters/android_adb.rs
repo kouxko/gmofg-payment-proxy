@@ -8,13 +8,15 @@ use async_trait::async_trait;
 use intercept_proxy_application::{
     ANDROID_COMPANION_PACKAGE, AndroidAdbViewModel, AndroidCompanionInstallViewModel,
     AndroidControlPort, AndroidDeviceState, AndroidDeviceViewModel, AndroidNetworkActivation,
-    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidRuntimeOwnerSource,
-    AndroidRuntimeOwnerState, AndroidRuntimeOwnerViewModel, AppError, AppResult,
+    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidRuntimeEndpointViewModel,
+    AndroidRuntimeOwnerSource, AndroidRuntimeOwnerState, AndroidRuntimeOwnerViewModel, AppError,
+    AppResult,
 };
 use serde_json::json;
 use tokio::sync::Mutex;
 
 mod command;
+mod endpoint_reconciliation;
 mod fingerprint;
 mod owner;
 mod protocol;
@@ -63,6 +65,7 @@ pub struct AndroidAdbAdapter {
     network_operation: Mutex<()>,
     active_reverse: Mutex<Option<ActiveReverseOwnership>>,
     active_runtime: Mutex<Option<ActiveRuntimeFacts>>,
+    runtime_endpoints: Mutex<Vec<AndroidRuntimeEndpointViewModel>>,
     runtime_owner: Mutex<Option<AndroidRuntimeOwnerViewModel>>,
     runtime_resume_state: Mutex<Option<AndroidRuntimeOwnerState>>,
     runtime_store: Arc<crate::SqliteStore>,
@@ -324,7 +327,7 @@ impl AndroidControlPort for AndroidAdbAdapter {
             return Ok(true);
         }
         if !active_runtime.uses_adb_reverse {
-            return Ok(true);
+            return Ok(owner.state == AndroidRuntimeOwnerState::Active);
         }
         let listing = self
             .run_for_serial(&serial, &["reverse", "--list"], COMMAND_TIMEOUT)
@@ -453,6 +456,13 @@ impl AndroidControlPort for AndroidAdbAdapter {
 
     async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
         Ok(self.runtime_owner_snapshot().await)
+    }
+
+    async fn network_runtime_endpoints(
+        &self,
+        activation: Option<AndroidNetworkActivation>,
+    ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
+        self.reconcile_runtime_endpoints(activation).await
     }
 }
 

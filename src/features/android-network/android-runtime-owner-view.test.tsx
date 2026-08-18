@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   deviceNetworkProfileApplyIntent: vi.fn(),
   deviceNetworkProfileSave: vi.fn(),
   deviceNetworkRuntimeOwner: vi.fn(),
+  deviceNetworkEndpoints: vi.fn(),
   deviceNetworkStatus: vi.fn(),
   androidCompanionInstall: vi.fn(),
   androidCompanionUpdate: vi.fn(),
@@ -118,6 +119,34 @@ describe("Android runtime owner view", () => {
     mocks.deviceNetworkProfileGet.mockReturnValue(ok(profile));
     mocks.deviceNetworkProfileSave.mockImplementation((value) => ok(value));
     mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(ownerA));
+    mocks.deviceNetworkEndpoints.mockImplementation((profileId) => ok({
+      configured_profile_id: profileId,
+      configured: profileId ? [{
+        profile_id: profileId,
+        original_destination: "payments.example.test",
+        original_ports: [443],
+        listener_id: "listener-selected",
+        listener_name: "当前方案入口",
+        listener_bind_address: "0.0.0.0",
+        listener_port: 16627,
+      }] : [],
+      runtime_owner: ownerA,
+      runtime: [{
+        serial: "device-a",
+        epoch: ownerA.epoch,
+        mode: "adb_reverse",
+        original_destination: "owner.example.test",
+        original_ports: [443],
+        resolved_original_ips: ["203.0.113.8"],
+        listener_id: "listener-owner",
+        listener_name: "实际运行入口",
+        desktop_listener_port: 16627,
+        proxy_host: "127.0.0.1",
+        proxy_port: 16627,
+        resolved_at: "2026-08-18T01:02:03Z",
+        health: "healthy",
+      }],
+    }));
     mocks.deviceNetworkStatus.mockReturnValue(ok(runningA));
     mocks.workspaceList.mockReturnValue(ok([{
       id: "workspace-1",
@@ -149,7 +178,12 @@ describe("Android runtime owner view", () => {
     expect(await screen.findByText("设备 A 正在运行。")).toBeVisible();
     expect(screen.getByLabelText("目标设备")).toHaveTextContent("A8700");
     expect(screen.getByLabelText("设备网络运行所有者")).toHaveTextContent("device-a");
+    expect(screen.getByLabelText("实际运行端点")).toHaveTextContent("device-a");
     await user.click(screen.getByRole("button", { name: /设备 A 方案/ }));
+    await waitFor(() =>
+      expect(mocks.deviceNetworkEndpoints).toHaveBeenCalledWith("profile-a"),
+    );
+    expect(screen.getByLabelText("方案配置端点")).toHaveTextContent("当前方案入口");
     expect(await screen.findByRole("button", { name: "启动" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "应用修改" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "停止网络接管" })).toBeEnabled();

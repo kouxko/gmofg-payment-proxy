@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use crate::{
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidDeviceViewModel,
     AndroidNetworkActivation, AndroidNetworkStatusViewModel, AndroidPackageViewModel,
-    AndroidRuntimeOwnerViewModel, AppError, AppResult,
+    AndroidRuntimeEndpointViewModel, AndroidRuntimeOwnerViewModel, AppError, AppResult,
 };
 
 #[async_trait]
@@ -33,6 +33,12 @@ pub trait AndroidControlPort: Send + Sync + std::fmt::Debug {
     async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel>;
     async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
         Ok(None)
+    }
+    async fn network_runtime_endpoints(
+        &self,
+        _: Option<AndroidNetworkActivation>,
+    ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
+        Ok(Vec::new())
     }
 }
 
