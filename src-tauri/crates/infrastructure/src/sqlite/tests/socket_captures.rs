@@ -474,6 +474,7 @@ fn configuration_replace_preserves_captures_but_explicit_application_reset_delet
             second_id,
             std::slice::from_ref(&second),
             &json!({"generation": 3}),
+            None,
         )
         .expect("explicit reset");
     assert!(

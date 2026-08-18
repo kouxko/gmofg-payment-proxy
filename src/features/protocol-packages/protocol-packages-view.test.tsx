@@ -10,12 +10,14 @@ import { deferred, detail, group, version } from "./protocol-packages-test-suppo
 const mocks = vi.hoisted(() => ({
   protocolPackageList: vi.fn(),
   protocolPackageDetail: vi.fn(),
+  protocolPackageRestoreBuiltin: vi.fn(),
 }));
 
 vi.mock("@/generated/rust-types", () => ({
   commands: {
     protocolPackageList: mocks.protocolPackageList,
     protocolPackageDetail: mocks.protocolPackageDetail,
+    protocolPackageRestoreBuiltin: mocks.protocolPackageRestoreBuiltin,
   },
 }));
 
@@ -31,6 +33,17 @@ describe("ProtocolPackagesView list", () => {
     mocks.protocolPackageDetail.mockImplementation(async (packageRef) =>
       detail(version(packageRef.version)),
     );
+    mocks.protocolPackageRestoreBuiltin.mockResolvedValue({
+      outcome: "reused",
+      version: version("1.0.0", {
+        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
+        name: "ISO 8583 ASCII 示例",
+        built_in: true,
+        enabled: true,
+      }),
+      capabilities: detail().capabilities,
+      schema: detail().schema,
+    });
   });
 
   it("loads through protocolPackageList and renders loading then empty state", async () => {
@@ -42,6 +55,71 @@ describe("ProtocolPackagesView list", () => {
     expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
     pending.resolve([]);
     expect(await screen.findByText("尚未安装协议包")).toBeVisible();
+    expect(screen.getByText("内置 ISO 8583 是可修改的起始示例")).toBeVisible();
+    expect(screen.getByText(/2 字节大端长度头、ASCII MTI、主位图和有限字段子集/)).toBeVisible();
+  });
+
+  it("restores the built-in ISO example from the empty state, refreshes, and opens the exact version", async () => {
+    const builtInVersion = version("1.0.0", {
+      package: { id: "iso8583-ascii-standard", version: "1.0.0" },
+      name: "ISO 8583 ASCII 示例",
+      built_in: true,
+      enabled: true,
+    });
+    const builtInGroup = group({
+      id: "iso8583-ascii-standard",
+      name: "ISO 8583 ASCII 示例",
+      versions: [builtInVersion],
+      reference_count: 0,
+      active_reference_count: 0,
+    });
+    mocks.protocolPackageList.mockResolvedValueOnce([]).mockResolvedValueOnce([builtInGroup]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(builtInVersion));
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+
+    await screen.findByText("尚未安装协议包");
+    await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
+
+    expect(mocks.protocolPackageRestoreBuiltin).toHaveBeenCalledTimes(1);
+    expect(mocks.protocolPackageList).toHaveBeenCalledTimes(2);
+    expect(await screen.findByRole("dialog", { name: "ISO 8583 ASCII 示例" })).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("官方 ISO 8583 示例已存在并通过重新校验。");
+    expect(screen.getByText("内置示例", { selector: "dd" })).toBeVisible();
+  });
+
+  it("does not report success or refresh when the restore command fails", async () => {
+    mocks.protocolPackageRestoreBuiltin.mockRejectedValue({
+      code: "PROTOCOL_PACKAGE_BUILTIN_INVALID",
+      message: "内置资产校验失败",
+      field_errors: {},
+      diagnostic: null,
+    });
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+
+    await screen.findByText("尚未安装协议包");
+    await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
+
+    expect(await screen.findByText("内置示例恢复失败")).toBeVisible();
+    expect(screen.getByText("内置资产校验失败")).toBeVisible();
+    expect(screen.queryByText(/已恢复并启用|已存在并通过/)).not.toBeInTheDocument();
+    expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed for a mismatched restore response", async () => {
+    mocks.protocolPackageRestoreBuiltin.mockResolvedValue({
+      outcome: "installed",
+      version: version("9.0.0", { built_in: true }),
+    });
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+
+    await screen.findByText("尚未安装协议包");
+    await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
+
+    expect(await screen.findByText("内置示例恢复结果不完整，请刷新列表后重试。")).toBeVisible();
+    expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
   });
 
   it("shows a recoverable list error", async () => {
@@ -65,6 +143,16 @@ describe("ProtocolPackagesView list", () => {
     expect(row).toHaveTextContent("3 个引用");
     expect(row).toHaveTextContent("部分启用 1/3");
     expect(row).toHaveTextContent("1 个运行中");
+  });
+
+  it("marks a built-in example in the package list", async () => {
+    mocks.protocolPackageList.mockResolvedValue([group({
+      versions: [version("1.0.0", { built_in: true })],
+    })]);
+    render(<ProtocolPackagesView />);
+
+    expect(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }))
+      .toHaveTextContent("内置示例");
   });
 
   it("opens by click, Enter and Space, then restores focus after closing", async () => {

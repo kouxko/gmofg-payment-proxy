@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  builtInRestoreResultError,
   packageStatus,
   sortPackageVersions,
   validationText,
@@ -42,5 +43,33 @@ describe("protocol package presentation model", () => {
   it("formats validation errors with and without a backend code", () => {
     expect(validationText({ state: "invalid", code: "SCHEMA_INVALID" })).toBe("校验失败：SCHEMA_INVALID");
     expect(validationText({ state: "invalid", code: "" })).toBe("校验失败：未知错误");
+  });
+
+  it("accepts only the protected built-in exact identity as a restore result", () => {
+    expect(builtInRestoreResultError({
+      outcome: "installed",
+      version: version("1.0.0", {
+        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
+        built_in: true,
+        enabled: true,
+      }),
+      capabilities: {
+        upstream: { frame: true, decode: true, encode: true },
+        downstream: { frame: true, decode: true, encode: true },
+        display: true,
+      },
+      schema: { id: "iso8583", version: 1, title: "ISO", fields: [] },
+    })).toBeUndefined();
+    expect(builtInRestoreResultError({
+      outcome: "installed",
+      version: version("1.0.0", { built_in: true }),
+    })).toBe("内置示例恢复结果不完整，请刷新列表后重试。");
+    expect(builtInRestoreResultError({
+      outcome: "installed",
+      version: version("1.0.0", {
+        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
+        built_in: false,
+      }),
+    })).toBe("内置示例恢复结果不完整，请刷新列表后重试。");
   });
 });

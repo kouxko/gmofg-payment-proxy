@@ -9,7 +9,7 @@ use intercept_proxy_application::{
     ProtocolPackageDescriptionViewModel, ProtocolPackageDirectionCapabilitiesViewModel,
     ProtocolPackageSchemaFieldTypeViewModel, ProtocolPackageSchemaFieldViewModel,
     ProtocolPackageSchemaViewModel, ProtocolPackageStorePort, ProtocolPackageValidationViewModel,
-    ProtocolPackageVersionViewModel,
+    ProtocolPackageVersionViewModel, is_builtin_protocol_package,
 };
 use intercept_proxy_protocol_scripting::CompiledProtocolPackage;
 
@@ -78,10 +78,12 @@ impl ProtocolPackageCompilerPort for ProtocolPackageRepositoryAdapter {
 pub(in crate::adapters) fn application_summary(
     summary: ProtocolPackageSummary,
 ) -> ProtocolPackageVersionViewModel {
+    let built_in = is_builtin_protocol_package(&summary.package);
     ProtocolPackageVersionViewModel {
         package: summary.package,
         name: summary.name,
         host_api: summary.host_api,
+        built_in,
         enabled: summary.enabled,
         validation: match summary.validation {
             ProtocolPackageValidationStatus::Valid => ProtocolPackageValidationViewModel::Valid,

@@ -5,6 +5,23 @@ import type {
   ProtocolPackageValidationViewModel,
   ProtocolPackageVersionViewModel,
 } from "@/generated/rust-types";
+import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
+
+export function builtInRestoreResultError(value: unknown): string | undefined {
+  if (!isRecord(value)
+    || (value.outcome !== "installed" && value.outcome !== "reused")
+    || !isProtocolPackageVersion(value.version)
+    || value.version.built_in !== true
+    || value.version.enabled !== true
+    || value.version.validation.state !== "valid"
+    || value.version.package.id !== BUILT_IN_ISO_8583_PACKAGE.id
+    || value.version.package.version !== BUILT_IN_ISO_8583_PACKAGE.version
+    || !isCapabilities(value.capabilities)
+    || !isSchema(value.schema)) {
+    return "内置示例恢复结果不完整，请刷新列表后重试。";
+  }
+  return undefined;
+}
 
 /**
  * Rust 已使用 `semver::Version` 将分组内版本按从旧到新排序。前端只反转这个
@@ -144,6 +161,7 @@ function isProtocolPackageVersion(
     && typeof value.name === "string"
     && value.name.length > 0
     && isCounter(value.host_api)
+    && typeof value.built_in === "boolean"
     && typeof value.enabled === "boolean"
     && typeof value.installed_at === "string"
     && isRecord(validation)

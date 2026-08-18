@@ -21,6 +21,7 @@ function detail() {
       package: { id: "iso-8583", version: "2.0.0" },
       name: "ISO 8583 v2",
       host_api: 1,
+      built_in: false,
       enabled: true,
       validation: { state: "valid" as const },
       installed_at: "2026-08-15T00:00:00Z",

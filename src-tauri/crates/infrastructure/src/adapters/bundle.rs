@@ -51,6 +51,7 @@ impl InfrastructureServiceBundle {
         dialog: Arc<dyn NativeFileDialog>,
         product: Arc<dyn ProductProfile>,
         capacity: Arc<CapacityLedger>,
+        builtin_protocol_package: Option<Arc<[u8]>>,
     ) -> Self {
         let body_codec = product.body_codec();
         let sessions = Arc::new(InMemorySessionStore::with_capacity_ledger(
@@ -89,9 +90,13 @@ impl InfrastructureServiceBundle {
             Arc::clone(&protector),
         ));
         let workspaces = Arc::new(WorkspaceRepositoryAdapter::new(Arc::clone(&store)));
-        let protocol_packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
-            Arc::clone(&store),
-        ));
+        let protocol_packages =
+            ProtocolPackageRepositoryAdapter::with_default_limits(Arc::clone(&store));
+        let protocol_packages = match builtin_protocol_package {
+            Some(archive) => protocol_packages.with_builtin_archive(archive),
+            None => protocol_packages,
+        };
+        let protocol_packages = Arc::new(protocol_packages);
         let protocol_package_import = Arc::new(ProtocolPackageImportAdapter::new(
             protocol_packages.clone(),
             Arc::clone(&dialog),

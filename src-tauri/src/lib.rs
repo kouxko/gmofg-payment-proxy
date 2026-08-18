@@ -16,6 +16,11 @@ use tauri::{Manager, path::BaseDirectory};
 
 use crate::{app_state::AppState, native_dialog::TauriNativeFileDialog};
 
+const BUILTIN_ISO8583_ARCHIVE: &[u8] = include_bytes!(concat!(
+    env!("OUT_DIR"),
+    "/iso8583-ascii-standard-1.0.0.zip"
+));
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct ExitRequestPlan {
     prevent_exit: bool,
@@ -90,6 +95,7 @@ fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> 
     if let Some(companion_apk) = companion_apk {
         host_builder = host_builder.with_android_companion_apk(companion_apk);
     }
+    host_builder = host_builder.with_builtin_protocol_package(Arc::from(BUILTIN_ISO8583_ARCHIVE));
     let host = tauri::async_runtime::block_on(host_builder.build())?;
     Ok(AppState::new(host))
 }

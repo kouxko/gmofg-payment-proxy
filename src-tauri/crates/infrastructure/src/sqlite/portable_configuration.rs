@@ -153,6 +153,7 @@ impl SqliteStore {
         selected_id: Uuid,
         records: &[WorkspaceRecord],
         settings: &Value,
+        builtin_package: Option<&StoredProtocolPackageWrite>,
     ) -> Result<(), InfrastructureError> {
         if records.len() != 1 || records[0].id != selected_id {
             return Err(InfrastructureError::RevisionConflict);
@@ -183,6 +184,37 @@ impl SqliteStore {
             )
             .map_err(database_error)?;
         replace_workspaces_and_settings(&transaction, selected_id, records, settings)?;
+        if let Some(package) = builtin_package {
+            super::protocol_packages::compare_or_insert_protocol_package(
+                &transaction,
+                package,
+                Some(true),
+            )
+            .map_err(|error| match error {
+                super::protocol_packages::StoredProtocolPackageBundleError::Infrastructure(
+                    error,
+                ) => error,
+                super::protocol_packages::StoredProtocolPackageBundleError::IdentityConflict(_)
+                | super::protocol_packages::StoredProtocolPackageBundleError::NotFound(_) => {
+                    InfrastructureError::PersistenceCorrupt {
+                        entity: "builtin_protocol_package",
+                        message: "重置事务无法写入官方协议包".into(),
+                    }
+                }
+            })?;
+            transaction
+                .execute(
+                    "INSERT INTO application_feature_state(feature_key, initialized_at)
+                     VALUES (?1, ?2)
+                     ON CONFLICT(feature_key) DO UPDATE
+                     SET initialized_at = excluded.initialized_at",
+                    params![
+                        super::protocol_packages::BUILTIN_ISO8583_FEATURE_KEY,
+                        chrono::Utc::now().to_rfc3339()
+                    ],
+                )
+                .map_err(database_error)?;
+        }
         transaction.commit().map_err(database_error)?;
         Ok(())
     }

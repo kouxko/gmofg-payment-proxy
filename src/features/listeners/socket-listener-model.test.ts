@@ -74,6 +74,7 @@ describe("Socket Listener model", () => {
       options: [candidate],
       installed_version_count: 2,
       unavailable_version_count: 1,
+      recommended_package: null,
     })).toBe(true);
   });
 
@@ -86,50 +87,78 @@ describe("Socket Listener model", () => {
     candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
 
     expect(isListenerProtocolPackageCatalog({
-      options: [candidate], installed_version_count: 1, unavailable_version_count: 0,
+      options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
     })).toBe(true);
+  });
+
+  it("accepts only a recommended exact package that exists in the available options", () => {
+    const candidate = option();
+    candidate.package = { id: "iso8583-ascii-standard", version: "1.0.0" };
+    candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+
+    expect(isListenerProtocolPackageCatalog({
+      options: [candidate],
+      installed_version_count: 1,
+      unavailable_version_count: 0,
+      recommended_package: candidate.package,
+    })).toBe(true);
+    expect(isListenerProtocolPackageCatalog({
+      options: [candidate],
+      installed_version_count: 1,
+      unavailable_version_count: 0,
+      recommended_package: { id: candidate.package.id, version: "9.0.0" },
+    })).toBe(false);
+    const userCandidate = option();
+    userCandidate.package = { id: "user-package", version: "1.0.0" };
+    userCandidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+    expect(isListenerProtocolPackageCatalog({
+      options: [candidate, userCandidate],
+      installed_version_count: 2,
+      unavailable_version_count: 0,
+      recommended_package: userCandidate.package,
+    })).toBe(false);
   });
 
   it.each([
     ["non-object", null],
     ["missing field", { options: [], installed_version_count: 0 }],
-    ["negative count", { options: [], installed_version_count: -1, unavailable_version_count: -1 }],
-    ["fractional count", { options: [], installed_version_count: 0.5, unavailable_version_count: 0.5 }],
-    ["inconsistent counts", { options: [], installed_version_count: 1, unavailable_version_count: 0 }],
+    ["negative count", { options: [], installed_version_count: -1, unavailable_version_count: -1, recommended_package: null }],
+    ["fractional count", { options: [], installed_version_count: 0.5, unavailable_version_count: 0.5, recommended_package: null }],
+    ["inconsistent counts", { options: [], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null }],
     ["duplicate exact identity", (() => {
       const candidate = option();
       candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      return { options: [candidate, candidate], installed_version_count: 2, unavailable_version_count: 0 };
+      return { options: [candidate, candidate], installed_version_count: 2, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid package identity", (() => {
       const candidate = option();
       candidate.package.id = "";
       candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0 };
+      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid Schema", (() => {
       const candidate = option();
       candidate.schema.version = 0;
       candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0 };
+      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid capabilities", (() => {
       const candidate = option();
       candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
       candidate.capabilities.upstream.decode = "yes" as never;
-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0 };
+      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["missing required Frame capability", (() => {
       const candidate = option();
       candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
       candidate.capabilities.downstream.frame = false;
-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0 };
+      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["missing required Decode capability", (() => {
       const candidate = option();
       candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
       candidate.capabilities.upstream.decode = false;
-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0 };
+      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
   ])("rejects the entire catalog for %s", (_case, value) => {
     expect(isListenerProtocolPackageCatalog(value)).toBe(false);
@@ -307,6 +336,7 @@ describe("Socket Listener model", () => {
       options: [option("1.0.0"), option("2.0.0")],
       installed_version_count: 2,
       unavailable_version_count: 0,
+      recommended_package: null,
     };
 
     expect(matchingOption(catalog, { id: "iso-8583", version: "1.0.0" })?.package.version).toBe("1.0.0");
@@ -415,7 +445,7 @@ describe("Socket Listener model", () => {
     candidate.schema.fields = fields as never;
 
     expect(isListenerProtocolPackageCatalog({
-      options: [candidate], installed_version_count: 1, unavailable_version_count: 0,
+      options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
     })).toBe(false);
   });
 

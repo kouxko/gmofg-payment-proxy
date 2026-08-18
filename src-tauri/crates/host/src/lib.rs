@@ -112,6 +112,7 @@ impl HostPlatformServices {
 pub struct ApplicationHostBuilder {
     data_dir: PathBuf,
     android_companion_apk: Option<PathBuf>,
+    builtin_protocol_package: Option<Arc<[u8]>>,
     platform: HostPlatformServices,
     product: Arc<dyn ProductProfile>,
     proxy_override: Option<Arc<dyn ProxySupervisorPort>>,
@@ -128,6 +129,7 @@ impl ApplicationHostBuilder {
         Self {
             data_dir: data_dir.into(),
             android_companion_apk: None,
+            builtin_protocol_package: None,
             platform,
             product,
             proxy_override: None,
@@ -142,6 +144,13 @@ impl ApplicationHostBuilder {
     #[must_use]
     pub fn with_android_companion_apk(mut self, path: impl Into<PathBuf>) -> Self {
         self.android_companion_apk = Some(path.into());
+        self
+    }
+
+    /// 提供由桌面构建系统生成并嵌入的官方协议包 ZIP。
+    #[must_use]
+    pub fn with_builtin_protocol_package(mut self, archive: Arc<[u8]>) -> Self {
+        self.builtin_protocol_package = Some(archive);
         self
     }
 
@@ -185,6 +194,7 @@ impl ApplicationHostBuilder {
             self.platform.file_dialog,
             Arc::clone(&self.product),
             Arc::clone(&capacity),
+            self.builtin_protocol_package,
         );
         let stored_settings = initialize_installation_state(&services).await?;
 
@@ -220,6 +230,7 @@ impl ApplicationHostBuilder {
             store: services.protocol_packages.clone(),
             compiler: services.protocol_packages.clone(),
             importer: services.protocol_package_import.clone(),
+            builtin: services.protocol_packages.clone(),
             usage_query: services.protocol_package_usage.clone(),
             portability: services.protocol_packages.clone(),
         };
@@ -265,6 +276,9 @@ impl ApplicationHostBuilder {
 async fn initialize_installation_state(
     services: &InfrastructureServiceBundle,
 ) -> AppResult<SettingsDraft> {
+    // feature marker 与官方精确身份在同一 SQLite 事务提交。marker 已存在时
+    // 这一调用不会重建用户删除或损坏的包，只能由显式恢复用例处理。
+    services.protocol_packages.ensure_builtin_seeded()?;
     // 每次启动都执行幂等同步：全新安装写入包内固定测试 Root；旧安装如果仍保存
     // 每机器随机 Root，则原子替换 Root 并按原 SAN 重签叶子证书。密钥库拒绝或用户
     // 取消授权仍是可恢复状态，Host 必须继续启动并由 UI 展示证书未就绪原因。

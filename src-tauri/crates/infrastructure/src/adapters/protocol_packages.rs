@@ -150,6 +150,7 @@ pub struct ProtocolPackageRepositoryAdapter {
     archive_limits: ProtocolArchiveLimits,
     runtime_limits: ProtocolRuntimeLimits,
     compiler: ProtocolPackageCompiler,
+    builtin_archive: Option<Arc<[u8]>>,
     cache: Mutex<HashMap<ProtocolPackageRef, CachedCompiledPackage>>,
 }
 
@@ -172,6 +173,7 @@ impl ProtocolPackageRepositoryAdapter {
             archive_limits,
             runtime_limits,
             compiler: ProtocolPackageCompiler::new(runtime_limits),
+            builtin_archive: None,
             cache: Mutex::new(HashMap::new()),
         }
     }
@@ -183,13 +185,6 @@ impl ProtocolPackageRepositoryAdapter {
             ProtocolArchiveLimits::default(),
             ProtocolRuntimeLimits::default(),
         )
-    }
-
-    /// 返回原生文件读取必须遵守的压缩 ZIP 字节上限，避免文件适配器读取注定被拒绝的超大文件。
-    /// 其他 Archive 限额仍由协议脚本 crate 执行。
-    #[must_use]
-    pub const fn max_archive_bytes(&self) -> u64 {
-        self.archive_limits.max_archive_bytes()
     }
 
     /// 完整校验 ZIP 后原子安装。新包默认停用；相同内容重入不改变已有启用状态和安装时间。
@@ -484,6 +479,8 @@ pub(super) use application_port::{
 #[path = "protocol_packages/disposition.rs"]
 mod disposition;
 pub(in crate::adapters) use disposition::PreparedProtocolPackageDisposition;
+#[path = "protocol_packages/builtin.rs"]
+mod builtin;
 #[path = "protocol_packages/prepared.rs"]
 mod prepared;
 pub(super) use prepared::PreparedProtocolPackage;

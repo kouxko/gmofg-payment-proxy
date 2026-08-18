@@ -302,7 +302,7 @@ fn parse_header(row: HeaderRow) -> Result<StoredProtocolPackageHeader, Infrastru
     })
 }
 
-fn load_protocol_package(
+pub(super) fn load_protocol_package(
     transaction: &Transaction<'_>,
     package: &ProtocolPackageRef,
 ) -> Result<Option<StoredProtocolPackage>, InfrastructureError> {
@@ -361,6 +361,10 @@ pub(crate) use bundle::{
     StoredProtocolPackageBundleError, StoredProtocolPackageWrite,
     compare_or_insert_protocol_package, require_existing_protocol_package,
 };
+use bundle::{insert_protocol_package, same_immutable_content};
+#[path = "protocol_packages/builtin.rs"]
+mod builtin;
+pub(crate) use builtin::{BUILTIN_ISO8583_FEATURE_KEY, StoredBuiltinSeedOutcome};
 
 fn preflight_protocol_package_files(
     transaction: &Transaction<'_>,
@@ -417,7 +421,7 @@ fn valid_display_name(name: &str) -> bool {
     !name.trim().is_empty() && name.chars().count() <= 128 && !name.chars().any(char::is_control)
 }
 
-fn database_error(source: rusqlite::Error) -> InfrastructureError {
+pub(super) fn database_error(source: rusqlite::Error) -> InfrastructureError {
     InfrastructureError::Database { source }
 }
 

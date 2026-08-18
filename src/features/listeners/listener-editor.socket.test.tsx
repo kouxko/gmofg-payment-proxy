@@ -19,7 +19,7 @@ function props(
 ): ComponentProps<typeof ListenerEditor> {
   return {
     listener,
-    protocolCatalog: { loading: false, refresh: vi.fn(), data: { options: [], installed_version_count: 0, unavailable_version_count: 0 } },
+    protocolCatalog: { loading: false, refresh: vi.fn(), data: { options: [], installed_version_count: 0, unavailable_version_count: 0, recommended_package: null } },
     locked: false,
     certificateReferences: [],
     certificateDetails: [],

@@ -20,6 +20,7 @@ import {
 } from "./protocol-package-import-model";
 import { ProtocolPackageRow } from "./protocol-package-row";
 import {
+  builtInRestoreResultError,
   isProtocolPackageGroupList,
   sortPackageVersions,
 } from "./protocol-package-model";
@@ -34,10 +35,13 @@ export function ProtocolPackagesView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importState, setImportState] = useState<ProtocolPackageImportState>({ kind: "closed" });
   const [importNotice, setImportNotice] = useState<string>();
+  const [restoreError, setRestoreError] = useState<string>();
+  const [restorePending, setRestorePending] = useState(false);
   // state 更新发生在下一次渲染；ref 在事件入口同步上锁，阻止同一帧的重复点击。
   const prepareLock = useRef(false);
   const commitLock = useRef(false);
   const discardLock = useRef(false);
+  const restoreLock = useRef(false);
   const importGeneration = useRef(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const importTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -73,7 +77,7 @@ export function ProtocolPackagesView() {
   }
 
   async function chooseZip() {
-    if (prepareLock.current || commitLock.current) return;
+    if (prepareLock.current || commitLock.current || restoreLock.current) return;
     triggerRef.current = importTriggerRef.current;
     const generation = importGeneration.current + 1;
     importGeneration.current = generation;
@@ -107,6 +111,50 @@ export function ProtocolPackagesView() {
       }
     } finally {
       prepareLock.current = false;
+    }
+  }
+
+  async function restoreBuiltInExample() {
+    if (restoreLock.current || prepareLock.current || commitLock.current || discardLock.current) return;
+    restoreLock.current = true;
+    setRestorePending(true);
+    setRestoreError(undefined);
+    setImportNotice(undefined);
+    try {
+      const result = await callCommand(commands.protocolPackageRestoreBuiltin());
+      const resultError = builtInRestoreResultError(result);
+      if (resultError) {
+        setRestoreError(resultError);
+        return;
+      }
+      const refreshed = await callCommand(commands.protocolPackageList());
+      if (!isProtocolPackageGroupList(refreshed)) {
+        setRestoreError("内置示例已恢复，但刷新后的协议包列表数据不完整。");
+        return;
+      }
+      const packageRef = result.version.package;
+      const exactGroup = refreshed.find((item) => item.id === packageRef.id);
+      const exactVersion = exactGroup?.versions.find((item) =>
+        item.package.version === packageRef.version
+        && item.built_in
+        && item.enabled
+        && item.validation.state === "valid");
+      if (!exactGroup || !exactVersion) {
+        setRestoreError("内置示例已恢复，但列表中未找到官方精确版本。");
+        return;
+      }
+      packages.setData(refreshed);
+      setSelectedGroup(exactGroup);
+      setSelectedVersion(exactVersion);
+      setImportNotice(result.outcome === "reused"
+        ? "官方 ISO 8583 示例已存在并通过重新校验。"
+        : "官方 ISO 8583 示例已恢复并启用。");
+      setDialogOpen(true);
+    } catch (reason) {
+      setRestoreError(presentImportError(reason).message);
+    } finally {
+      restoreLock.current = false;
+      setRestorePending(false);
     }
   }
 
@@ -222,16 +270,44 @@ export function ProtocolPackagesView() {
           <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-semibold">协议包</h1>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">查看已安装 Socket 协议包、精确版本、能力与 Schema。</p>
         </div>
-        <Button
-          ref={importTriggerRef}
-          variant="primary"
-          isDisabled={prepareLock.current || commitLock.current}
-          onPress={() => void chooseZip()}
-        >
-          导入协议包 ZIP
-        </Button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            variant="outline"
+            isDisabled={restorePending || importState.kind !== "closed"}
+            onPress={() => void restoreBuiltInExample()}
+          >
+            {restorePending ? "正在恢复…" : "恢复 ISO 8583 示例包"}
+          </Button>
+          <Button
+            ref={importTriggerRef}
+            variant="primary"
+            isDisabled={prepareLock.current || commitLock.current || restorePending}
+            onPress={() => void chooseZip()}
+          >
+            导入协议包 ZIP
+          </Button>
+        </div>
       </div>
       {importNotice && <p role="status" className="text-sm text-success">{importNotice}</p>}
+      {restoreError && (
+        <Alert status="danger">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>内置示例恢复失败</Alert.Title>
+            <Alert.Description>{restoreError}</Alert.Description>
+          </Alert.Content>
+          <Button size="sm" variant="outline" onPress={() => void restoreBuiltInExample()}>重试</Button>
+        </Alert>
+      )}
+      <Alert status="accent">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Title>内置 ISO 8583 是可修改的起始示例</Alert.Title>
+          <Alert.Description>
+            示例采用 2 字节大端长度头、ASCII MTI、主位图和有限字段子集。接入真实系统前，必须按对端长度头、位图、字段编码和私有域规格修改。
+          </Alert.Description>
+        </Alert.Content>
+      </Alert>
       {listError && (
         <Alert status="danger">
           <Alert.Indicator />
@@ -248,6 +324,11 @@ export function ProtocolPackagesView() {
         <div className="rounded-xl border border-dashed border-[var(--telemetry-line)] p-10 text-center">
           <p className="font-medium">尚未安装协议包</p>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">安装后可在此查看版本、能力与 Schema。</p>
+          <Button className="mt-4" variant="primary"
+            isDisabled={restorePending || importState.kind !== "closed"}
+            onPress={() => void restoreBuiltInExample()}>
+            {restorePending ? "正在恢复…" : "恢复 ISO 8583 示例包"}
+          </Button>
         </div>
       ) : !listError ? (
         <div className="overflow-hidden rounded-xl border border-[var(--telemetry-line)]">

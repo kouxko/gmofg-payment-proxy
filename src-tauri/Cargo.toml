@@ -96,6 +96,7 @@ required-features = ["export-bindings"]
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
+zip.workspace = true
 
 [dependencies]
 intercept-proxy-application = { path = "crates/application" }

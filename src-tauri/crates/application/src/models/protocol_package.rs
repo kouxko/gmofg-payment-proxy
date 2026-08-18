@@ -11,6 +11,25 @@ use uuid::Uuid;
 
 use super::{ListenerId, ListenerRuntimeState, ProtocolPackageId, ProtocolPackageRef, WorkspaceId};
 
+pub const BUILTIN_ISO8583_PACKAGE_ID: &str = "iso8583-ascii-standard";
+pub const BUILTIN_ISO8583_PACKAGE_VERSION: &str = "1.0.0";
+
+#[must_use]
+pub fn builtin_iso8583_package_ref() -> ProtocolPackageRef {
+    ProtocolPackageRef {
+        id: ProtocolPackageId::new(BUILTIN_ISO8583_PACKAGE_ID)
+            .expect("built-in protocol package id is compile-time validated"),
+        version: crate::ProtocolPackageVersion::new(BUILTIN_ISO8583_PACKAGE_VERSION)
+            .expect("built-in protocol package version is compile-time validated"),
+    }
+}
+
+#[must_use]
+pub fn is_builtin_protocol_package(package: &ProtocolPackageRef) -> bool {
+    package.id.as_str() == BUILTIN_ISO8583_PACKAGE_ID
+        && package.version.as_str() == BUILTIN_ISO8583_PACKAGE_VERSION
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "state", rename_all = "snake_case")]
 /// 最近一次持久化校验的无源码结果。
@@ -25,6 +44,8 @@ pub struct ProtocolPackageVersionViewModel {
     pub package: ProtocolPackageRef,
     pub name: String,
     pub host_api: u32,
+    /// 由应用精确身份保护的官方起始示例。
+    pub built_in: bool,
     pub enabled: bool,
     pub validation: ProtocolPackageValidationViewModel,
     pub installed_at: DateTime<Utc>,
@@ -154,6 +175,8 @@ pub struct ListenerProtocolPackageOptionViewModel {
 /// 描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
 pub struct ListenerProtocolPackageCatalogViewModel {
     pub options: Vec<ListenerProtocolPackageOptionViewModel>,
+    /// 新建按协议转发/本地应答可采用的官方精确版本。
+    pub recommended_package: Option<ProtocolPackageRef>,
     pub installed_version_count: usize,
     pub unavailable_version_count: usize,
 }
