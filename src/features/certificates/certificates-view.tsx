@@ -125,7 +125,7 @@ export function CertificatesView() {
 
   return (
     <section className="space-y-4 p-5">
-      <h1 className="text-2xl font-semibold">证书管理</h1>
+      <h1 className="sr-only">证书管理</h1>
       <CertificateSafetyAlerts leafSansAvailable={leafSans != null} />
       {overview.error && (
         <Alert status="danger">

@@ -219,7 +219,7 @@ export function SocketCaptureView() {
           <AlertDialog.Container>
             <AlertDialog.Dialog>
               <AlertDialog.Header><AlertDialog.Heading>清空当前工作区的 Socket 抓包？</AlertDialog.Heading></AlertDialog.Header>
-              <AlertDialog.Body>将删除当前选中工作区的全部 Socket 抓包详情。此操作不会停止 Listener，也不会删除 HTTP 抓包。</AlertDialog.Body>
+              <AlertDialog.Body>将删除当前选中工作区的全部 Socket 抓包详情。此操作不会停止入口，也不会删除 HTTP 抓包。</AlertDialog.Body>
               <AlertDialog.Footer>
                 <Button slot="close" variant="outline" isDisabled={clearPending}>取消</Button>
                 <Button variant="danger" isDisabled={clearPending} onPress={() => void clearCaptures()}>{clearPending ? "正在清空…" : "确认清空"}</Button>

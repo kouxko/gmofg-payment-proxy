@@ -1,4 +1,5 @@
 import { Button, Modal } from "@heroui/react";
+import { Xmark } from "@gravity-ui/icons";
 import type {
   ProtocolPackageDetailViewModel,
   ProtocolPackageGroupViewModel,
@@ -51,6 +52,9 @@ export function ProtocolPackageDialog({
                 {group?.name || group?.id || "协议包详情"}
               </Modal.Heading>
               <p className="max-w-full break-all text-left font-mono text-xs text-[var(--telemetry-muted)]">{group?.id ?? ""}</p>
+              <Modal.CloseTrigger aria-label="关闭协议包详情">
+                <Xmark className="size-4" />
+              </Modal.CloseTrigger>
             </Modal.Header>
             <Modal.Body className="min-h-0 overflow-y-auto">
               {announcement && <p role="status" className="mb-4 text-sm text-success">{announcement}</p>}
@@ -63,9 +67,6 @@ export function ProtocolPackageDialog({
                 <ProtocolPackageDetail detail={visibleDetail} />
               </div>
             </Modal.Body>
-            <Modal.Footer className="shrink-0 border-t border-[var(--telemetry-line)] pt-4">
-              <Button slot="close" variant="outline">关闭协议包详情</Button>
-            </Modal.Footer>
           </Modal.Dialog>
         </Modal.Container>
       </Modal.Backdrop>

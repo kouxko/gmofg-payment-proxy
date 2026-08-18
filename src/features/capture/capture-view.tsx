@@ -60,7 +60,6 @@ export function CaptureView({
   return (
     <ProtocolWorkspaceTabs
       ariaLabel="抓包协议"
-      pageTitle="实时抓包"
       selectedKey={mode}
       onSelectionChange={setMode}
     >

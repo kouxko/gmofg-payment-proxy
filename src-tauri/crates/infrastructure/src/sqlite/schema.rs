@@ -2,7 +2,7 @@ use rusqlite::Transaction;
 
 use super::InfrastructureError;
 
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 10;
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 13;
 
 pub(super) fn create_current_schema(
     transaction: &Transaction<'_>,

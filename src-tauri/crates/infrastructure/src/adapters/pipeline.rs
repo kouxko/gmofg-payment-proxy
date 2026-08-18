@@ -19,9 +19,8 @@ use intercept_proxy_application::{
     AppError, AppResult, BreakpointCoordinator, BreakpointDecision, BreakpointDecisionKind,
     BreakpointDetailViewModel, BreakpointOutcome, BreakpointState, BreakpointSummaryViewModel,
     CaptureRowViewModel, ChannelId as AppChannelId, DisabledReason, EventHub, InMemorySessionStore,
-    MessageContentViewModel, MessageStage as AppMessageStage, ResponseAssertionResultViewModel,
-    SessionDetailViewModel, SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload,
-    UiTone,
+    MessageContentViewModel, MessageStage as AppMessageStage, SessionDetailViewModel,
+    SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone,
 };
 use intercept_proxy_domain::{
     ChannelId as DomainChannelId, MessageStage as DomainMessageStage, Rule, RuleAction,
@@ -115,30 +114,11 @@ pub trait RuntimeBodyCodecResolver: std::fmt::Debug + Send + Sync {
     ) -> ProxyResult<Option<Arc<dyn BodyCodec>>>;
 }
 
-#[derive(Debug, Default)]
-pub struct RuntimeWorkspacePolicyEvaluation {
-    pub assertions: Vec<ResponseAssertionResultViewModel>,
-}
-
-/// 动态 Workspace 中响应断言的运行时边界。
-///
-/// 适配器只能读取当前选中 Workspace 的快照；网络管线不依赖 SQLite、Tauri 或前端。
-pub trait RuntimeWorkspacePolicyResolver: std::fmt::Debug + Send + Sync {
-    fn evaluate(
-        &self,
-        context: &ConnectionContext,
-        stage: DomainMessageStage,
-        message: &Message,
-        body_codec: &dyn BodyCodec,
-    ) -> ProxyResult<RuntimeWorkspacePolicyEvaluation>;
-}
-
 /// One adapter instance is shared by both listeners for the lifetime of the app.
 #[derive(Debug)]
 pub struct RuntimePipelineAdapter {
     body_codec: Arc<dyn BodyCodec>,
     body_codec_resolver: Option<Arc<dyn RuntimeBodyCodecResolver>>,
-    workspace_policy_resolver: Option<Arc<dyn RuntimeWorkspacePolicyResolver>>,
     request_classifier: Arc<dyn RequestClassifier>,
     channel_labels: BTreeMap<String, String>,
     sessions: Arc<InMemorySessionStore>,

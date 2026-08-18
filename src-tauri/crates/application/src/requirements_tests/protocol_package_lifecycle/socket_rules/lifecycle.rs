@@ -276,7 +276,7 @@ async fn listener_start_rechecks_revision_enabled_and_fresh_compilation() {
 }
 
 #[tokio::test]
-async fn active_scripted_listener_freezes_listener_rules_and_package() {
+async fn active_scripted_listener_accepts_live_rule_changes_but_freezes_other_configuration() {
     let (application, services, workspaces, _) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let listener_id = configure_relay(
@@ -320,7 +320,7 @@ async fn active_scripted_listener_freezes_listener_rules_and_package() {
         "LISTENER_RUNTIME_ACTIVE"
     );
 
-    let save_error = application
+    let added = application
         .socket_rule_save(input(
             listener_id,
             package.clone(),
@@ -328,18 +328,16 @@ async fn active_scripted_listener_freezes_listener_rules_and_package() {
             1,
         ))
         .await
-        .unwrap_err();
-    assert_eq!(error_code(&save_error), "WORKSPACE_RUNTIME_ACTIVE");
-    let toggle_error = application
+        .unwrap();
+    let toggled = application
         .socket_rule_toggle(rule.rule_id(), rule.revision().get(), false)
         .await
-        .unwrap_err();
-    assert_eq!(error_code(&toggle_error), "WORKSPACE_RUNTIME_ACTIVE");
-    let delete_error = application
-        .socket_rule_delete(rule.rule_id(), rule.revision().get(), true)
+        .unwrap();
+    assert!(!toggled.enabled());
+    application
+        .socket_rule_delete(added.rule_id(), added.revision().get(), true)
         .await
-        .unwrap_err();
-    assert_eq!(error_code(&delete_error), "WORKSPACE_RUNTIME_ACTIVE");
+        .unwrap();
     services.set_usages(
         package.clone(),
         vec![usage(
@@ -371,9 +369,5 @@ async fn active_scripted_listener_freezes_listener_rules_and_package() {
             ListenerRuntimeState::Stopped,
         )],
     );
-    application
-        .socket_rule_toggle(rule.rule_id(), rule.revision().get(), false)
-        .await
-        .unwrap();
     application.protocol_package_disable(package).await.unwrap();
 }

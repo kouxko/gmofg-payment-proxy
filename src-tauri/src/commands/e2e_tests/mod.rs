@@ -103,6 +103,7 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
             "input": SocketRuleSaveInput {
                 rule_id: None,
                 expected_revision: None,
+                name: "本机应答".into(),
                 enabled: true,
                 priority: 10,
                 listener_id: listener.id,

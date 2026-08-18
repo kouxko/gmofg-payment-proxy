@@ -49,8 +49,6 @@ export const commands = {
 } | null, AppErrorViewModel>(__TAURI_INVOKE("device_network_runtime_owner")),
 	workspaceList: () => typedError<WorkspaceSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("workspace_list")),
 	workspaceGet: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_get", { workspaceId })),
-	workspaceComponentNew: (workspace: ProxyWorkspace, kind: string) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_component_new", { workspace, kind })),
-	workspaceComponentApplyIntent: (workspace: ProxyWorkspace, componentKind: string, componentId: string, operation: string, value: string) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_component_apply_intent", { workspace, componentKind, componentId, operation, value })),
 	workspaceSecretStoreBasic: (username: string, password: string) => typedError<SecretReference, AppErrorViewModel>(__TAURI_INVOKE("workspace_secret_store_basic", { username, password })),
 	workspaceCreate: (name: string) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_create", { name })),
 	workspaceCopy: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_copy", { workspaceId })),
@@ -103,6 +101,10 @@ export const commands = {
 	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
 	protocolPackageImportDiscard: (token: ProtocolPackageImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_discard", { token })),
 	protocolPackageRestoreBuiltin: () => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_restore_builtin")),
+	protocolPackageExportBuiltin: () => typedError<{
+	bytes_written: number,
+	replaced_existing: boolean,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_export_builtin")),
 	protocolPackageEnable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_enable", { packageRef })),
 	protocolPackageDisable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_disable", { packageRef })),
 	protocolPackageDelete: (packageRef: ProtocolPackageIdentityInput) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_delete", { packageRef })),
@@ -163,7 +165,7 @@ export const commands = {
 	ruleImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_import")),
 	ruleExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_export")),
 	socketRuleList: () => typedError<SocketDocumentRuleDefinition[], AppErrorViewModel>(__TAURI_INVOKE("socket_rule_list")),
-	socketRuleCapabilities: (listenerId: ListenerId, direction: SocketDirection) => typedError<SocketRuleCapabilityCatalog, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_capabilities", { listenerId, direction })),
+	socketRuleCapabilities: (listenerId: ListenerId, stage: SocketRuleStage) => typedError<SocketRuleCapabilityCatalog, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_capabilities", { listenerId, stage })),
 	/**
 	 *  把规则编辑器文本解析为 Rust/Schema 认可的类型化值。
 	 *
@@ -550,7 +552,6 @@ export type CaptureDetailViewModel = {
 	tls_summary: string,
 	timings_ms: { [key in string]: number },
 	rule_trace: string[],
-	response_assertions: ResponseAssertionResultViewModel[],
 	revision: number,
 };
 
@@ -664,8 +665,6 @@ export type ChannelSettingsDraft = {
 	upstream_url: string,
 };
 
-export type ConnectionFaultAction = { kind: "delay"; milliseconds: number } | { kind: "reject" } | { kind: "rate_limit"; bytes_per_second: number } | { kind: "close_after_bytes"; bytes: number } | { kind: "half_close_after_bytes"; bytes: number } | { kind: "idle_timeout"; milliseconds: number };
-
 /**  生产者提交的脱敏日志。禁止写入报文正文、密码、私钥或 PKCS12 字节。 */
 export type DiagnosticLogEntryViewModel = {
 	level: DiagnosticLogLevel,
@@ -743,6 +742,10 @@ export type DocumentAction =
 field: DocumentFieldName;
 /**  与字段声明类型严格一致的新值。 */
 value: DocumentValue } |
+/**  清除一个 Schema 已声明字段的值。 */
+{ type: "clear_field";
+/**  Schema 中声明的目标字段。 */
+field: DocumentFieldName } |
 /**  清空所有字段值槽，但保留当前 Schema 身份和结构。 */
 { type: "clear_document" };
 
@@ -864,15 +867,6 @@ export type FaultParameterFieldViewModel = {
 export type FaultParameterKind = "boolean" | "integer" | "text" | "json";
 
 export type FaultParameterValue = { kind: "boolean"; value: boolean } | { kind: "integer"; value: number } | { kind: "text"; value: string } | { kind: "json"; value: string };
-
-export type FaultPreset = {
-	id: FaultPresetId,
-	name: string,
-	description: string,
-	connection_actions: ConnectionFaultAction[],
-};
-
-export type FaultPresetId = string;
 
 /**  故障模拟页展示的产品化模板及参数 schema。 */
 export type FaultTemplateViewModel = {
@@ -1163,6 +1157,12 @@ export type ProtocolPackageDirectionCapabilitiesViewModel = {
 	encode: boolean,
 };
 
+/**  内置协议包 ZIP 写入用户所选文件后的结果。 */
+export type ProtocolPackageExportOutcomeViewModel = {
+	bytes_written: number,
+	replaced_existing: boolean,
+};
+
 /**  列表按协议包 ID 聚合，但每个版本仍保留自己的名称、状态和精确身份。 */
 export type ProtocolPackageGroupViewModel = {
 	id: ProtocolPackageId,
@@ -1287,7 +1287,7 @@ export type ProtocolPackageVersionViewModel = {
 	package: ProtocolPackageRef,
 	name: string,
 	host_api: number,
-	/**  由应用精确身份保护的官方起始示例。 */
+	/**  由应用精确身份保护的官方 ISO 8583:1987 ASCII Profile。 */
 	built_in: boolean,
 	enabled: boolean,
 	validation: ProtocolPackageValidationViewModel,
@@ -1312,8 +1312,6 @@ export type ProxyWorkspace = {
 	name: string,
 	revision: Revision,
 	listeners: ProxyListener[],
-	response_assertions: ResponseAssertion[],
-	fault_presets: FaultPreset[],
 	certificate_references: CertificateReference[],
 	/**
 	 *  与该 Workspace 一起迁移的 Android 设备网络方案。
@@ -1336,26 +1334,6 @@ export type RawHttpHeaderViewModel = {
 	leading_ows_bytes: number[],
 	/**  实际字段值之后的原始可选空白。 */
 	trailing_ows_bytes: number[],
-};
-
-/**  用户可配置的响应断言。核心只比较通用 HTTP 数据，不包含任何业务返回码。 */
-export type ResponseAssertion = {
-	id: ResponseAssertionId,
-	name: string,
-	listener_ids: ListenerId[],
-	enabled: boolean,
-	assertion: ResponseAssertionKind,
-};
-
-export type ResponseAssertionId = string;
-
-export type ResponseAssertionKind = { kind: "http_status_equals"; expected: number } | { kind: "header_equals"; name: string; expected: string } | { kind: "json_path_equals"; path: string; expected: unknown } | { kind: "body_text_contains"; expected: string } | { kind: "body_length_equals"; expected: number } | { kind: "body_sha256_equals"; expected_hex: string };
-
-export type ResponseAssertionResultViewModel = {
-	assertion_id: ResponseAssertionId,
-	name: string,
-	passed: boolean,
-	message: string,
 };
 
 export type Revision = number;
@@ -1464,8 +1442,6 @@ export type SessionDetailViewModel = {
 	request: MessageContentViewModel | null,
 	response: MessageContentViewModel | null,
 	rule_trace: string[],
-	/**  对最终响应执行的通用断言结果；失败只影响会话结论，不篡改线上响应。 */
-	response_assertions: ResponseAssertionResultViewModel[],
 };
 
 export type SessionListViewModel = {
@@ -1708,13 +1684,14 @@ export type SocketDisplayResult = { type: "untrusted_html"; html: string } | { t
 export type SocketDocumentRuleDefinition = {
 	rule_id: SocketDocumentRuleId,
 	revision: Revision,
+	name: string,
 	enabled: boolean,
 	priority: number,
 	created_order: number,
 	listener_id: ListenerId,
 	package: ProtocolPackageRef,
 	schema_version: number,
-	direction: SocketDirection,
+	stage: SocketRuleStage,
 	conditions: DocumentCondition[],
 	actions: DocumentAction[],
 };
@@ -1816,14 +1793,14 @@ export type SocketRelayTopology = {
 export type SocketRuleCapabilityCatalog = {
 	package: ProtocolPackageRef,
 	schema_version: number,
-	direction: SocketDirection,
+	stage: SocketRuleStage,
 	fields: SocketRuleFieldCapability[],
 	common_actions: SocketRuleCommonActionCapability[],
 };
 
 export type SocketRuleCommonActionCapability = "record_match" | "clear_document";
 
-export type SocketRuleFieldActionCapability = "set_field";
+export type SocketRuleFieldActionCapability = "set_field" | "clear_field";
 
 export type SocketRuleFieldCapability = {
 	name: string,
@@ -1839,15 +1816,27 @@ export type SocketRuleSaveInput = {
 	/**  `None` 表示创建；更新时必须同时提供规则 ID 与期望 revision。 */
 	rule_id: SocketDocumentRuleId | null,
 	expected_revision: number | null,
+	name: string,
 	enabled: boolean,
 	priority: number,
 	listener_id: ListenerId,
 	package: ProtocolPackageRef,
 	schema_version: number,
-	direction: SocketDirection,
+	stage: SocketRuleStage,
 	conditions: DocumentCondition[],
 	actions: DocumentAction[],
 };
+
+/**  Socket 报文经过代理时可独立配置的处理阶段。 */
+export type SocketRuleStage =
+/**  应用发出的报文刚进入代理。 */
+"app_to_proxy" |
+/**  代理即将把报文发送给上游服务。 */
+"proxy_to_upstream" |
+/**  上游服务返回的报文刚进入代理。 */
+"upstream_to_proxy" |
+/**  代理即将把报文返回给应用。 */
+"proxy_to_app";
 
 /**  上游 TLS 握手的结构化证据；不保存证书原文。 */
 export type SocketTlsEvidenceViewModel = {

@@ -17,13 +17,17 @@ describe("SocketSafeDisplay", () => {
   it("keeps only the protocol-display allowlist and harmless table attributes", async () => {
     render(
       <SocketSafeDisplay
-        html={'<article title="summary"><table><tbody><tr><td colspan="2">OK</td></tr></tbody></table><unknown>kept text</unknown></article>'}
+        html={'<article title="summary"><table class="package-owned"><thead><tr><th>Field</th></tr></thead><tbody><tr><td colspan="2">OK</td></tr></tbody></table><unknown>kept text</unknown></article>'}
       />,
     );
 
     const source = await renderedSource();
     expect(source).toContain('<article title="summary">');
-    expect(source).toContain('<td colspan="2">OK</td>');
+    expect(source).toContain('<table class="protocol-display-table">');
+    expect(source).toContain('<thead class="protocol-display-head">');
+    expect(source).toContain('<th class="protocol-display-header">Field</th>');
+    expect(source).toContain('<td class="protocol-display-cell" colspan="2">OK</td>');
+    expect(source).not.toContain("package-owned");
     expect(source).toContain("kept text");
     expect(source).not.toContain("<unknown");
   });

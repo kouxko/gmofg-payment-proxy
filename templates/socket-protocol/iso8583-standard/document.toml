@@ -1,42 +1,135 @@
-# Document Schema 是规则变量的稳定契约。
-# 字段名称必须匹配 [a-z][a-z0-9_]*，并且不能在脚本中动态增加未知字段。
-# v1 支持 string/int/bool/blob；字段是否必须出现由具体 MTI/处理码对应的脚本逻辑校验。
+# ISO 8583:1987 ASCII profile. DE1 and DE65 are bitmap indicators, not Document fields.
+# Only DE4 keeps int semantics for existing rules; numeric identifiers remain strings to preserve leading zeroes.
 id = "iso8583-financial-message"
 version = 1
-title = "ISO 8583 Financial Message"
+title = "ISO 8583:1987 Financial Message"
 
-[[fields]]
-name = "message_type"
-label = "Message Type"
-type = "string"
-
-[[fields]]
-name = "processing_code"
-label = "Processing Code"
-type = "string"
-
-[[fields]]
-# 金额使用最小货币单位。例如 JPY 1000 表示 1000 日元。
-name = "amount"
-label = "Amount"
-type = "int"
-
-[[fields]]
-name = "transmission_time"
-label = "Transmission Time"
-type = "string"
-
-[[fields]]
-name = "stan"
-label = "System Trace Audit Number"
-type = "string"
-
-[[fields]]
-name = "terminal_id"
-label = "Terminal ID"
-type = "string"
-
-[[fields]]
-name = "currency"
-label = "Currency Code"
-type = "string"
+fields = [
+  { name = "message_type", label = "MTI", type = "string" },
+  { name = "primary_account_number", label = "DE2 Primary Account Number", type = "string" },
+  { name = "processing_code", label = "DE3 Processing Code", type = "string" },
+  { name = "amount", label = "DE4 Transaction Amount", type = "int" },
+  { name = "settlement_amount", label = "DE5 Settlement Amount", type = "string" },
+  { name = "cardholder_billing_amount", label = "DE6 Cardholder Billing Amount", type = "string" },
+  { name = "transmission_time", label = "DE7 Transmission Date And Time", type = "string" },
+  { name = "cardholder_billing_fee_amount", label = "DE8 Cardholder Billing Fee Amount", type = "string" },
+  { name = "settlement_conversion_rate", label = "DE9 Settlement Conversion Rate", type = "string" },
+  { name = "cardholder_billing_conversion_rate", label = "DE10 Cardholder Billing Conversion Rate", type = "string" },
+  { name = "stan", label = "DE11 System Trace Audit Number", type = "string" },
+  { name = "local_transaction_time", label = "DE12 Local Transaction Time", type = "string" },
+  { name = "local_transaction_date", label = "DE13 Local Transaction Date", type = "string" },
+  { name = "expiration_date", label = "DE14 Expiration Date", type = "string" },
+  { name = "settlement_date", label = "DE15 Settlement Date", type = "string" },
+  { name = "currency_conversion_date", label = "DE16 Currency Conversion Date", type = "string" },
+  { name = "capture_date", label = "DE17 Capture Date", type = "string" },
+  { name = "merchant_type", label = "DE18 Merchant Type", type = "string" },
+  { name = "acquiring_country_code", label = "DE19 Acquiring Country Code", type = "string" },
+  { name = "pan_extended_country_code", label = "DE20 PAN Extended Country Code", type = "string" },
+  { name = "forwarding_country_code", label = "DE21 Forwarding Country Code", type = "string" },
+  { name = "pos_entry_mode", label = "DE22 POS Entry Mode", type = "string" },
+  { name = "card_sequence_number", label = "DE23 Card Sequence Number", type = "string" },
+  { name = "network_international_id", label = "DE24 Network International ID", type = "string" },
+  { name = "pos_condition_code", label = "DE25 POS Condition Code", type = "string" },
+  { name = "pos_capture_code", label = "DE26 POS Capture Code", type = "string" },
+  { name = "authorizing_id_response_length", label = "DE27 Authorizing ID Response Length", type = "string" },
+  { name = "transaction_fee_amount", label = "DE28 Transaction Fee Amount", type = "string" },
+  { name = "settlement_fee_amount", label = "DE29 Settlement Fee Amount", type = "string" },
+  { name = "transaction_processing_fee_amount", label = "DE30 Transaction Processing Fee Amount", type = "string" },
+  { name = "settlement_processing_fee_amount", label = "DE31 Settlement Processing Fee Amount", type = "string" },
+  { name = "acquiring_institution_id", label = "DE32 Acquiring Institution ID", type = "string" },
+  { name = "forwarding_institution_id", label = "DE33 Forwarding Institution ID", type = "string" },
+  { name = "pan_extended", label = "DE34 PAN Extended", type = "string" },
+  { name = "track_2_data", label = "DE35 Track 2 Data", type = "string" },
+  { name = "track_3_data", label = "DE36 Track 3 Data", type = "string" },
+  { name = "retrieval_reference_number", label = "DE37 Retrieval Reference Number", type = "string" },
+  { name = "authorization_id_response", label = "DE38 Authorization ID Response", type = "string" },
+  { name = "response_code", label = "DE39 Response Code", type = "string" },
+  { name = "service_restriction_code", label = "DE40 Service Restriction Code", type = "string" },
+  { name = "terminal_id", label = "DE41 Terminal ID", type = "string" },
+  { name = "card_acceptor_id", label = "DE42 Card Acceptor ID", type = "string" },
+  { name = "card_acceptor_name_location", label = "DE43 Card Acceptor Name And Location", type = "string" },
+  { name = "additional_response_data", label = "DE44 Additional Response Data", type = "string" },
+  { name = "track_1_data", label = "DE45 Track 1 Data", type = "string" },
+  { name = "additional_data_iso", label = "DE46 Additional Data ISO", type = "string" },
+  { name = "additional_data_national", label = "DE47 Additional Data National", type = "string" },
+  { name = "additional_data_private", label = "DE48 Additional Data Private", type = "string" },
+  { name = "currency", label = "DE49 Transaction Currency", type = "string" },
+  { name = "settlement_currency", label = "DE50 Settlement Currency", type = "string" },
+  { name = "cardholder_billing_currency", label = "DE51 Cardholder Billing Currency", type = "string" },
+  { name = "pin_data", label = "DE52 PIN Data", type = "blob" },
+  { name = "security_control_information", label = "DE53 Security Control Information", type = "string" },
+  { name = "additional_amounts", label = "DE54 Additional Amounts", type = "string" },
+  { name = "icc_data", label = "DE55 ICC Data", type = "blob" },
+  { name = "reserved_iso_56", label = "DE56 Reserved ISO", type = "string" },
+  { name = "reserved_national_57", label = "DE57 Reserved National", type = "string" },
+  { name = "reserved_national_58", label = "DE58 Reserved National", type = "string" },
+  { name = "reserved_national_59", label = "DE59 Reserved National", type = "string" },
+  { name = "reserved_private_60", label = "DE60 Reserved Private", type = "string" },
+  { name = "reserved_private_61", label = "DE61 Reserved Private", type = "string" },
+  { name = "reserved_private_62", label = "DE62 Reserved Private", type = "string" },
+  { name = "reserved_private_63", label = "DE63 Reserved Private", type = "string" },
+  { name = "message_authentication_code", label = "DE64 Message Authentication Code", type = "blob" },
+  { name = "settlement_code", label = "DE66 Settlement Code", type = "string" },
+  { name = "extended_payment_code", label = "DE67 Extended Payment Code", type = "string" },
+  { name = "receiving_country_code", label = "DE68 Receiving Country Code", type = "string" },
+  { name = "settlement_country_code", label = "DE69 Settlement Country Code", type = "string" },
+  { name = "network_management_code", label = "DE70 Network Management Code", type = "string" },
+  { name = "message_number", label = "DE71 Message Number", type = "string" },
+  { name = "last_message_number", label = "DE72 Last Message Number", type = "string" },
+  { name = "action_date", label = "DE73 Action Date", type = "string" },
+  { name = "credits_number", label = "DE74 Credits Number", type = "string" },
+  { name = "credits_reversal_number", label = "DE75 Credits Reversal Number", type = "string" },
+  { name = "debits_number", label = "DE76 Debits Number", type = "string" },
+  { name = "debits_reversal_number", label = "DE77 Debits Reversal Number", type = "string" },
+  { name = "transfer_number", label = "DE78 Transfer Number", type = "string" },
+  { name = "transfer_reversal_number", label = "DE79 Transfer Reversal Number", type = "string" },
+  { name = "inquiries_number", label = "DE80 Inquiries Number", type = "string" },
+  { name = "authorizations_number", label = "DE81 Authorizations Number", type = "string" },
+  { name = "credits_processing_fee_amount", label = "DE82 Credits Processing Fee Amount", type = "string" },
+  { name = "credits_transaction_fee_amount", label = "DE83 Credits Transaction Fee Amount", type = "string" },
+  { name = "debits_processing_fee_amount", label = "DE84 Debits Processing Fee Amount", type = "string" },
+  { name = "debits_transaction_fee_amount", label = "DE85 Debits Transaction Fee Amount", type = "string" },
+  { name = "credits_amount", label = "DE86 Credits Amount", type = "string" },
+  { name = "credits_reversal_amount", label = "DE87 Credits Reversal Amount", type = "string" },
+  { name = "debits_amount", label = "DE88 Debits Amount", type = "string" },
+  { name = "debits_reversal_amount", label = "DE89 Debits Reversal Amount", type = "string" },
+  { name = "original_data_elements", label = "DE90 Original Data Elements", type = "string" },
+  { name = "file_update_code", label = "DE91 File Update Code", type = "string" },
+  { name = "file_security_code", label = "DE92 File Security Code", type = "string" },
+  { name = "response_indicator", label = "DE93 Response Indicator", type = "string" },
+  { name = "service_indicator", label = "DE94 Service Indicator", type = "string" },
+  { name = "replacement_amounts", label = "DE95 Replacement Amounts", type = "string" },
+  { name = "message_security_code", label = "DE96 Message Security Code", type = "blob" },
+  { name = "net_settlement_amount", label = "DE97 Net Settlement Amount", type = "string" },
+  { name = "payee", label = "DE98 Payee", type = "string" },
+  { name = "settlement_institution_id", label = "DE99 Settlement Institution ID", type = "string" },
+  { name = "receiving_institution_id", label = "DE100 Receiving Institution ID", type = "string" },
+  { name = "file_name", label = "DE101 File Name", type = "string" },
+  { name = "account_id_1", label = "DE102 Account ID 1", type = "string" },
+  { name = "account_id_2", label = "DE103 Account ID 2", type = "string" },
+  { name = "transaction_description", label = "DE104 Transaction Description", type = "string" },
+  { name = "reserved_iso_105", label = "DE105 Reserved ISO", type = "string" },
+  { name = "reserved_iso_106", label = "DE106 Reserved ISO", type = "string" },
+  { name = "reserved_iso_107", label = "DE107 Reserved ISO", type = "string" },
+  { name = "reserved_iso_108", label = "DE108 Reserved ISO", type = "string" },
+  { name = "reserved_iso_109", label = "DE109 Reserved ISO", type = "string" },
+  { name = "reserved_iso_110", label = "DE110 Reserved ISO", type = "string" },
+  { name = "reserved_iso_111", label = "DE111 Reserved ISO", type = "string" },
+  { name = "reserved_national_112", label = "DE112 Reserved National", type = "string" },
+  { name = "reserved_national_113", label = "DE113 Reserved National", type = "string" },
+  { name = "reserved_national_114", label = "DE114 Reserved National", type = "string" },
+  { name = "reserved_national_115", label = "DE115 Reserved National", type = "string" },
+  { name = "reserved_national_116", label = "DE116 Reserved National", type = "string" },
+  { name = "reserved_national_117", label = "DE117 Reserved National", type = "string" },
+  { name = "reserved_national_118", label = "DE118 Reserved National", type = "string" },
+  { name = "reserved_national_119", label = "DE119 Reserved National", type = "string" },
+  { name = "reserved_private_120", label = "DE120 Reserved Private", type = "string" },
+  { name = "reserved_private_121", label = "DE121 Reserved Private", type = "string" },
+  { name = "reserved_private_122", label = "DE122 Reserved Private", type = "string" },
+  { name = "reserved_private_123", label = "DE123 Reserved Private", type = "string" },
+  { name = "info_text", label = "DE124 Information Text", type = "string" },
+  { name = "network_management_information", label = "DE125 Network Management Information", type = "string" },
+  { name = "issuer_trace_id", label = "DE126 Issuer Trace ID", type = "string" },
+  { name = "reserved_private_127", label = "DE127 Reserved Private", type = "string" },
+  { name = "message_authentication_code_2", label = "DE128 Message Authentication Code", type = "blob" },
+]

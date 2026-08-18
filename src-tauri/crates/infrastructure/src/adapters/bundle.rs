@@ -16,7 +16,6 @@ use super::{
     ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageRepositoryAdapter,
     ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, SettingsRepositoryAdapter,
     SocketCaptureRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter,
-    WorkspaceRuntimePolicyResolver,
 };
 
 #[derive(Debug)]
@@ -24,7 +23,6 @@ pub struct InfrastructureServiceBundle {
     pub settings: Arc<SettingsRepositoryAdapter>,
     pub workspaces: Arc<WorkspaceRepositoryAdapter>,
     pub workspace_body_codecs: Arc<WorkspaceBodyCodecResolver>,
-    pub workspace_runtime_policies: Arc<WorkspaceRuntimePolicyResolver>,
     pub listener_runtime: Arc<ListenerRuntimeAdapter>,
     pub listener_certificates: Arc<ManagedListenerCertificateAdapter>,
     pub protected_secrets: Arc<ProtectedSecretAdapter>,
@@ -105,8 +103,6 @@ impl InfrastructureServiceBundle {
             Arc::clone(&dialog),
         ));
         let workspace_body_codecs = Arc::new(WorkspaceBodyCodecResolver::new(Arc::clone(&store)));
-        let workspace_runtime_policies =
-            Arc::new(WorkspaceRuntimePolicyResolver::new(Arc::clone(&store)));
         let listener_runtime = Arc::new(
             ListenerRuntimeAdapter::new(
                 store,
@@ -125,7 +121,6 @@ impl InfrastructureServiceBundle {
         Self {
             workspaces,
             workspace_body_codecs,
-            workspace_runtime_policies,
             listener_runtime,
             listener_certificates,
             protected_secrets,

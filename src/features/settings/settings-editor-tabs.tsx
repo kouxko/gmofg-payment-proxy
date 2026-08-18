@@ -20,6 +20,8 @@ type SettingsEditorTabsProps = {
   fieldError: (field: string) => string | undefined;
   onDraftChange: (draft: SettingsDraft) => void;
   isDisabled: boolean;
+  selectedSection: "capacity" | "app";
+  onSectionChange: (section: "capacity" | "app") => void;
 };
 
 export function SettingsEditorTabs({
@@ -27,13 +29,15 @@ export function SettingsEditorTabs({
   fieldError,
   onDraftChange,
   isDisabled,
+  selectedSection,
+  onSectionChange,
 }: SettingsEditorTabsProps) {
   return (
     <div className="min-w-0">
-      <h1 className="mb-4 text-2xl font-semibold">系统设置</h1>
+      <h1 className="sr-only">系统设置</h1>
       <Card className="border border-[var(--telemetry-line)] shadow-sm">
         <Card.Content className="p-0">
-          <Tabs defaultSelectedKey="capacity">
+          <Tabs selectedKey={selectedSection} onSelectionChange={(key) => onSectionChange(key as "capacity" | "app")}>
             <Tabs.ListContainer>
               <Tabs.List aria-label="系统设置分类" className="px-3 pt-2">
                 <Tabs.Tab id="capacity" isDisabled={isDisabled}>
@@ -59,9 +63,6 @@ export function SettingsEditorTabs({
                 系统设置只管理全局行为；入口配置、证书和规则分别在对应页面管理。
               </Alert>
               <ThemeSettings />
-              <p className="text-sm">
-                应用启动和诊断日志由桌面端管理；外观主题仅保存在本机浏览器存储中。
-              </p>
             </Tabs.Panel>
           </Tabs>
         </Card.Content>

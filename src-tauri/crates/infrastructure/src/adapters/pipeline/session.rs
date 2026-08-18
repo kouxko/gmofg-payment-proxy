@@ -1,10 +1,9 @@
 use super::{
-    BTreeMap, BodyCodec, ConnectionContext, DomainMessageStage, ErrorCode, EvaluatedRules,
-    LiveSession, Message, MessageContentViewModel, ProxyError, ProxyResult, RuntimeEpoch,
-    RuntimePipelineAdapter, SessionDetailViewModel, SessionRecord, SessionStore,
-    SessionSummaryViewModel, UiEventPayload, UiTone, Utc, Uuid, app_channel, app_to_proxy,
-    classify_request, content_view, fingerprint, header_value, message_method, message_target,
-    tls_summary,
+    BTreeMap, BodyCodec, ConnectionContext, ErrorCode, EvaluatedRules, LiveSession, Message,
+    MessageContentViewModel, ProxyError, ProxyResult, RuntimeEpoch, RuntimePipelineAdapter,
+    SessionDetailViewModel, SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload,
+    UiTone, Utc, Uuid, app_channel, app_to_proxy, classify_request, content_view, fingerprint,
+    header_value, message_method, message_target, tls_summary,
 };
 
 impl RuntimePipelineAdapter {
@@ -81,7 +80,6 @@ impl RuntimePipelineAdapter {
             request: Some(request),
             response: None,
             rule_trace: Vec::new(),
-            response_assertions: Vec::new(),
         };
         let record = SessionRecord {
             detail,
@@ -150,12 +148,6 @@ impl RuntimePipelineAdapter {
         breakpoint_draft: Option<MessageContentViewModel>,
         body_codec: &dyn BodyCodec,
     ) -> ProxyResult<SessionRecord> {
-        let policy = self.evaluate_workspace_policies(
-            context,
-            DomainMessageStage::Response,
-            effective,
-            body_codec,
-        )?;
         self.update_live_session(context, move |record| {
             let summary = &mut record.detail.summary;
             for id in &rules.matched_ids {
@@ -179,16 +171,6 @@ impl RuntimePipelineAdapter {
             summary.revision = summary.revision.saturating_add(1);
             record.detail.response = Some(content_view(body_codec, effective));
             record.detail.rule_trace.extend(rules.traces.clone());
-            record.detail.response_assertions = policy.assertions;
-            if record
-                .detail
-                .response_assertions
-                .iter()
-                .any(|assertion| !assertion.passed)
-            {
-                summary.result = "响应断言失败".into();
-                summary.ui_tone = UiTone::Danger;
-            }
             record.breakpoint_draft = breakpoint_draft;
         })
     }
@@ -213,7 +195,6 @@ impl RuntimePipelineAdapter {
             summary.revision = summary.revision.saturating_add(1);
             record.detail.response = None;
             record.detail.rule_trace.extend(rules.traces.clone());
-            record.detail.response_assertions.clear();
             record.breakpoint_draft = None;
         })
     }

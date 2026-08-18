@@ -38,7 +38,6 @@ export function RulesView() {
   return (
     <ProtocolWorkspaceTabs
       ariaLabel="规则协议"
-      pageTitle="规则"
       selectedKey={mode}
       onSelectionChange={setMode}
     >

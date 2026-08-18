@@ -52,9 +52,9 @@ export function ProtocolPackageDetail({ detail }: { detail: DetailState }) {
         <Alert status="warning">
           <Alert.Indicator />
           <Alert.Content>
-            <Alert.Title>这是 ISO 8583 起始示例</Alert.Title>
+            <Alert.Title>ISO 8583:1987 ASCII Profile</Alert.Title>
             <Alert.Description>
-              示例使用 2 字节大端长度头、ASCII MTI、主位图和有限字段子集。接入真实系统前，必须按对端长度头、位图、字段编码和私有域规格修改；它不是适用于所有机构的即插即用标准包。
+              模板覆盖主位图、次位图和 DE2–DE128 字段结构。2 字节大端长度头属于当前 Socket 传输约定；接入真实系统前，仍需按对端的字段编码和私有域规格调整。
             </Alert.Description>
           </Alert.Content>
         </Alert>
@@ -74,12 +74,12 @@ export function ProtocolPackageDetail({ detail }: { detail: DetailState }) {
       <section aria-labelledby="package-usages-heading">
         <h3 id="package-usages-heading" className="mb-2 font-semibold">使用者</h3>
         {usages.length === 0 ? (
-          <p className="text-sm text-[var(--telemetry-muted)]">当前没有 Listener 引用此版本。</p>
+          <p className="text-sm text-[var(--telemetry-muted)]">当前没有入口引用此版本。</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {usages.map((usage) => (
               <li key={`${usage.workspace_id}:${usage.listener_id}`} className="min-w-0 rounded-lg bg-[var(--telemetry-table-head)] p-3">
-                <span className="block break-words font-medium">{usage.workspace_name || "未命名 Workspace"} / {usage.listener_name || "未命名 Listener"}</span>
+                <span className="block break-words font-medium">{usage.workspace_name || "未命名工作区"} / {usage.listener_name || "未命名入口"}</span>
                 <span className="block break-all font-mono text-xs text-[var(--telemetry-muted)]">
                   {usage.workspace_id} / {usage.listener_id}
                 </span>

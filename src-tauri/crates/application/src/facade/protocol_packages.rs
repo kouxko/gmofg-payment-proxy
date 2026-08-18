@@ -246,6 +246,11 @@ impl Application {
         self.protocol_package_builtin.restore_builtin().await
     }
 
+    /// 读取编译期内置的官方起始示例 ZIP，不访问或修改安装库。
+    pub async fn protocol_package_builtin_archive(&self) -> AppResult<Vec<u8>> {
+        self.protocol_package_builtin.builtin_archive().await
+    }
+
     /// 单独查询精确版本的全部使用者，供详情刷新和删除确认 Dialog 复用。
     pub async fn protocol_package_usage(
         &self,

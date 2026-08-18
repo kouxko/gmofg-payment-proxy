@@ -19,25 +19,25 @@ export function ThemeSettings() {
 
   return (
     <Card className="border border-[var(--telemetry-line)] shadow-none">
-      <Card.Header className="flex items-center gap-3">
-        <div>
-          <Card.Title>外观主题</Card.Title>
+      <div className="p-5">
+        <div className="flex items-start gap-4">
+          <div className="min-w-0">
+            <h2 className="font-semibold">外观主题</h2>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
             主题保存在本机，切换后立即生效，不会写入 Workspace 或应用设置。
           </p>
+          </div>
+          <Chip className="ml-auto shrink-0" size="sm" variant="soft">
+            当前{resolvedTheme === "dark" ? "深色" : "浅色"}
+          </Chip>
         </div>
-        <Chip className="ml-auto" size="sm" variant="soft">
-          当前{resolvedTheme === "dark" ? "深色" : "浅色"}
-        </Chip>
-      </Card.Header>
-      <Card.Content>
-        <div className="grid grid-cols-3 gap-3 max-[760px]:grid-cols-1" role="group" aria-label="外观主题">
+        <div className="mt-5 grid grid-cols-3 gap-3 max-[760px]:grid-cols-1" role="group" aria-label="外观主题">
           {options.map((option) => {
             const selected = preference === option.value;
             return (
               <Button
                 key={option.value}
-                className="h-auto min-h-16 items-start justify-start px-4 py-3 text-left"
+                className="h-auto min-h-16 w-full items-start justify-start px-4 py-3 text-left"
                 variant={selected ? "primary" : "outline"}
                 aria-pressed={selected}
                 onPress={() => setPreference(option.value)}
@@ -50,7 +50,7 @@ export function ThemeSettings() {
             );
           })}
         </div>
-      </Card.Content>
+      </div>
     </Card>
   );
 }

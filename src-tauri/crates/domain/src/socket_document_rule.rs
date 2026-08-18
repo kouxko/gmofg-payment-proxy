@@ -31,6 +31,8 @@ pub const MAX_SOCKET_DOCUMENT_RULE_ACTIONS: usize = 64;
 pub const MAX_SOCKET_DOCUMENT_RULE_STRING_BYTES: usize = 16 * 1_024;
 /// 规则中单个 Blob 值的最大字节数（64 KiB）。
 pub const MAX_SOCKET_DOCUMENT_RULE_BLOB_BYTES: usize = 64 * 1_024;
+/// 规则名称的最大 UTF-8 字节数。
+pub const MAX_SOCKET_DOCUMENT_RULE_NAME_BYTES: usize = 128;
 
 /// Socket Frame 相对于代理的稳定数据方向。
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
@@ -40,6 +42,30 @@ pub enum SocketDirection {
     Upstream,
     /// Server 到 App，或 `LocalResponder` 的响应方向。
     Downstream,
+}
+
+/// Socket 报文经过代理时可独立配置的处理阶段。
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum SocketRuleStage {
+    /// 应用发出的报文刚进入代理。
+    AppToProxy,
+    /// 代理即将把报文发送给上游服务。
+    ProxyToUpstream,
+    /// 上游服务返回的报文刚进入代理。
+    UpstreamToProxy,
+    /// 代理即将把报文返回给应用。
+    ProxyToApp,
+}
+
+impl SocketRuleStage {
+    #[must_use]
+    pub const fn direction(self) -> SocketDirection {
+        match self {
+            Self::AppToProxy | Self::ProxyToUpstream => SocketDirection::Upstream,
+            Self::UpstreamToProxy | Self::ProxyToApp => SocketDirection::Downstream,
+        }
+    }
 }
 
 /// v1 Document 条件。多个条件按声明顺序读取并执行 AND；空列表恒匹配。
@@ -106,6 +132,11 @@ pub enum DocumentAction {
         /// 与字段声明类型严格一致的新值。
         value: DocumentValue,
     },
+    /// 清除一个 Schema 已声明字段的值。
+    ClearField {
+        /// Schema 中声明的目标字段。
+        field: DocumentFieldName,
+    },
     /// 清空所有字段值槽，但保留当前 Schema 身份和结构。
     ClearDocument,
 }
@@ -123,6 +154,9 @@ impl<'de> Deserialize<'de> for DocumentAction {
                 field: DocumentFieldName,
                 value: StrictDocumentValue,
             },
+            ClearField {
+                field: DocumentFieldName,
+            },
             ClearDocument {},
         }
         Ok(match Wire::deserialize(deserializer)? {
@@ -131,6 +165,7 @@ impl<'de> Deserialize<'de> for DocumentAction {
                 field,
                 value: value.into(),
             },
+            Wire::ClearField { field } => Self::ClearField { field },
             Wire::ClearDocument {} => Self::ClearDocument,
         })
     }
@@ -143,6 +178,8 @@ impl<'de> Deserialize<'de> for DocumentAction {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct SocketDocumentRuleDraft {
+    /// 用户可编辑的规则名称。
+    pub name: String,
     /// 新规则是否启用。
     pub enabled: bool,
     /// 越小越先执行的显式优先级。
@@ -153,8 +190,8 @@ pub struct SocketDocumentRuleDraft {
     pub package: ProtocolPackageRef,
     /// 冻结绑定的正整数 Schema 版本。
     pub schema_version: u32,
-    /// 冻结绑定的数据方向。
-    pub direction: SocketDirection,
+    /// 冻结绑定的处理阶段。
+    pub stage: SocketRuleStage,
     /// 按声明顺序执行 AND 的条件；允许为空。
     pub conditions: Vec<DocumentCondition>,
     /// 按声明顺序执行的非空动作。
@@ -165,13 +202,16 @@ impl DocumentAction {
     #[must_use]
     /// 是否会修改 Document；Workspace 用它强制要求对应方向开启 Encode。
     pub const fn modifies_document(&self) -> bool {
-        matches!(self, Self::SetField { .. } | Self::ClearDocument)
+        matches!(
+            self,
+            Self::SetField { .. } | Self::ClearField { .. } | Self::ClearDocument
+        )
     }
 
     fn field_and_value(&self) -> Option<(&DocumentFieldName, &DocumentValue)> {
         match self {
             Self::SetField { field, value } => Some((field, value)),
-            Self::RecordMatch | Self::ClearDocument => None,
+            Self::RecordMatch | Self::ClearField { .. } | Self::ClearDocument => None,
         }
     }
 }
@@ -184,13 +224,14 @@ impl DocumentAction {
 pub struct SocketDocumentRuleDefinition {
     rule_id: SocketDocumentRuleId,
     revision: Revision,
+    name: String,
     enabled: bool,
     priority: i32,
     created_order: u64,
     listener_id: ListenerId,
     package: ProtocolPackageRef,
     schema_version: u32,
-    direction: SocketDirection,
+    stage: SocketRuleStage,
     conditions: Vec<DocumentCondition>,
     actions: Vec<DocumentAction>,
 }
@@ -198,15 +239,16 @@ pub struct SocketDocumentRuleDefinition {
 impl SocketDocumentRuleDefinition {
     /// 从 Draft 创建具有新稳定身份和初始 revision 的规则。
     pub fn create(draft: SocketDocumentRuleDraft, created_order: u64) -> Result<Self, DomainError> {
-        Self::new(
+        Self::new_named_for_stage(
             SocketDocumentRuleId::new(),
+            draft.name,
             draft.enabled,
             draft.priority,
             created_order,
             draft.listener_id,
             draft.package,
             draft.schema_version,
-            draft.direction,
+            draft.stage,
             draft.conditions,
             draft.actions,
         )
@@ -226,9 +268,9 @@ impl SocketDocumentRuleDefinition {
         conditions: Vec<DocumentCondition>,
         actions: Vec<DocumentAction>,
     ) -> Result<Self, DomainError> {
-        Self::from_wire(SocketDocumentRuleWire {
+        Self::new_named(
             rule_id,
-            revision: Revision::INITIAL,
+            format!("规则 {created_order}"),
             enabled,
             priority,
             created_order,
@@ -236,6 +278,71 @@ impl SocketDocumentRuleDefinition {
             package,
             schema_version,
             direction,
+            conditions,
+            actions,
+        )
+    }
+
+    /// 创建带用户名称、revision 为 1 的规则。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_named(
+        rule_id: SocketDocumentRuleId,
+        name: String,
+        enabled: bool,
+        priority: i32,
+        created_order: u64,
+        listener_id: ListenerId,
+        package: ProtocolPackageRef,
+        schema_version: u32,
+        direction: SocketDirection,
+        conditions: Vec<DocumentCondition>,
+        actions: Vec<DocumentAction>,
+    ) -> Result<Self, DomainError> {
+        let stage = match direction {
+            SocketDirection::Upstream => SocketRuleStage::ProxyToUpstream,
+            SocketDirection::Downstream => SocketRuleStage::ProxyToApp,
+        };
+        Self::new_named_for_stage(
+            rule_id,
+            name,
+            enabled,
+            priority,
+            created_order,
+            listener_id,
+            package,
+            schema_version,
+            stage,
+            conditions,
+            actions,
+        )
+    }
+
+    /// 创建绑定到明确处理阶段的规则。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_named_for_stage(
+        rule_id: SocketDocumentRuleId,
+        name: String,
+        enabled: bool,
+        priority: i32,
+        created_order: u64,
+        listener_id: ListenerId,
+        package: ProtocolPackageRef,
+        schema_version: u32,
+        stage: SocketRuleStage,
+        conditions: Vec<DocumentCondition>,
+        actions: Vec<DocumentAction>,
+    ) -> Result<Self, DomainError> {
+        Self::from_wire(SocketDocumentRuleWire {
+            rule_id,
+            revision: Revision::INITIAL,
+            name,
+            enabled,
+            priority,
+            created_order,
+            listener_id,
+            package,
+            schema_version,
+            stage,
             conditions,
             actions,
         })
@@ -251,7 +358,7 @@ impl SocketDocumentRuleDefinition {
         if self.listener_id != draft.listener_id
             || self.package != draft.package
             || self.schema_version != draft.schema_version
-            || self.direction != draft.direction
+            || self.stage != draft.stage
         {
             return Err(
                 rule_error("规则更新不能切换 Listener、协议包、Schema 或方向")
@@ -261,13 +368,14 @@ impl SocketDocumentRuleDefinition {
         let next = Self::from_wire(SocketDocumentRuleWire {
             rule_id: self.rule_id,
             revision: next_rule_revision(self.revision)?,
+            name: draft.name,
             enabled: draft.enabled,
             priority: draft.priority,
             created_order: self.created_order,
             listener_id: self.listener_id,
             package: self.package.clone(),
             schema_version: self.schema_version,
-            direction: self.direction,
+            stage: self.stage,
             conditions: draft.conditions,
             actions: draft.actions,
         })?;
@@ -307,6 +415,7 @@ impl SocketDocumentRuleDefinition {
         new_listener_id: ListenerId,
     ) -> Result<(), DomainError> {
         validate_structure(
+            &self.name,
             self.revision,
             self.created_order,
             self.schema_version,
@@ -345,6 +454,14 @@ impl SocketDocumentRuleDefinition {
                     &format!("actions.{index}"),
                     &mut error,
                 );
+            } else if let DocumentAction::ClearField { field } = action
+                && schema.field_index(field.as_str()).is_none()
+            {
+                add_error(
+                    &mut error,
+                    format!("actions.{index}.field"),
+                    "字段未在绑定 Schema 中声明",
+                );
             }
         }
         if error.field_errors.is_empty() {
@@ -361,6 +478,10 @@ impl SocketDocumentRuleDefinition {
     #[must_use]
     pub const fn revision(&self) -> Revision {
         self.revision
+    }
+    #[must_use]
+    pub fn name(&self) -> &str {
+        &self.name
     }
     #[must_use]
     pub const fn enabled(&self) -> bool {
@@ -388,7 +509,11 @@ impl SocketDocumentRuleDefinition {
     }
     #[must_use]
     pub const fn direction(&self) -> SocketDirection {
-        self.direction
+        self.stage.direction()
+    }
+    #[must_use]
+    pub const fn stage(&self) -> SocketRuleStage {
+        self.stage
     }
     #[must_use]
     pub fn conditions(&self) -> &[DocumentCondition] {
@@ -407,12 +532,13 @@ impl SocketDocumentRuleDefinition {
     /// 返回不携带身份、revision 和创建顺序的可编辑 Draft。
     pub fn to_draft(&self) -> SocketDocumentRuleDraft {
         SocketDocumentRuleDraft {
+            name: self.name.clone(),
             enabled: self.enabled,
             priority: self.priority,
             listener_id: self.listener_id,
             package: self.package.clone(),
             schema_version: self.schema_version,
-            direction: self.direction,
+            stage: self.stage,
             conditions: self.conditions.clone(),
             actions: self.actions.clone(),
         }
@@ -420,6 +546,7 @@ impl SocketDocumentRuleDefinition {
 
     fn from_wire(value: SocketDocumentRuleWire) -> Result<Self, DomainError> {
         validate_structure(
+            &value.name,
             value.revision,
             value.created_order,
             value.schema_version,
@@ -429,13 +556,14 @@ impl SocketDocumentRuleDefinition {
         Ok(Self {
             rule_id: value.rule_id,
             revision: value.revision,
+            name: value.name,
             enabled: value.enabled,
             priority: value.priority,
             created_order: value.created_order,
             listener_id: value.listener_id,
             package: value.package,
             schema_version: value.schema_version,
-            direction: value.direction,
+            stage: value.stage,
             conditions: value.conditions,
             actions: value.actions,
         })

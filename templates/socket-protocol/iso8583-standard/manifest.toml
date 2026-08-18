@@ -4,7 +4,7 @@ api = 1
 [package]
 # Listener 通过 id + version 明确选择协议包，不做自动识别。
 id = "iso8583-ascii-standard"
-name = "ISO 8583 ASCII Standard"
+name = "ISO 8583:1987 ASCII Profile"
 version = "1.0.0"
 
 [document]

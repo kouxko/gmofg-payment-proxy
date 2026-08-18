@@ -100,7 +100,7 @@ export function SessionsListPanel(props: SessionsListPanelProps) {
   return (
     <>
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">会话记录</h1>
+        <h1 className="sr-only">会话记录</h1>
         <Chip color="warning" variant="soft">
           报文仅保存在内存中，重启后清空
         </Chip>

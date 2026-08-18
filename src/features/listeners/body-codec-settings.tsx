@@ -69,8 +69,8 @@ function CodecSelect({
       onSelectionChange={(key) => onChange(String(key) as BodyCodecKind)}
     >
       <Label>{label}</Label>
-      <Select.Trigger>
-        <Select.Value />
+      <Select.Trigger className="h-10 min-h-10">
+        <Select.Value className="truncate" />
         <Select.Indicator />
       </Select.Trigger>
       <Select.Popover>

@@ -39,6 +39,7 @@ export function SettingsView() {
   const [pendingAction, setPendingAction] = useState<"save">();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
+  const [selectedSection, setSelectedSection] = useState<"capacity" | "app">("capacity");
   const draft = draftState ?? settings.data?.stored;
   const draftDirty = useMemo(
     () => Boolean(draft && settings.data && JSON.stringify(draft) !== JSON.stringify(settings.data.stored)),
@@ -150,6 +151,8 @@ export function SettingsView() {
           fieldError={fieldError}
           onDraftChange={setDraft}
           isDisabled={writePending}
+          selectedSection={selectedSection}
+          onSectionChange={setSelectedSection}
         />
         {globalErrors.length > 0 && (
           <Alert status="danger">
@@ -204,26 +207,28 @@ export function SettingsView() {
           </AlertDialog.Backdrop>
         </AlertDialog>
         <ApplicationDataResetDialog isDisabled={writePending} />
-        <span className="ml-4 text-sm text-[var(--telemetry-muted)]">
-          {draftDirty ? "有未保存更改" : "已保存"}
-        </span>
-        <div className="ml-auto flex gap-3">
-          <Button
-            variant="outline"
-            isDisabled={writePending}
-            onPress={() => setDraft(settings.data?.stored)}
-          >
-            放弃更改
-          </Button>
-          <Button
-            variant="outline"
-            isDisabled={!settings.data.can_write || writePending}
-            onPress={() => void save()}
-          >
-            <FloppyDisk className="size-4" />
-            {pendingAction === "save" ? "正在保存…" : "保存设置"}
-          </Button>
-        </div>
+        {selectedSection === "capacity" && <>
+          <span className="ml-4 text-sm text-[var(--telemetry-muted)]">
+            {draftDirty ? "有未保存更改" : "已保存"}
+          </span>
+          <div className="ml-auto flex gap-3">
+            <Button
+              variant="outline"
+              isDisabled={writePending}
+              onPress={() => setDraft(settings.data?.stored)}
+            >
+              放弃更改
+            </Button>
+            <Button
+              variant="outline"
+              isDisabled={!settings.data.can_write || writePending}
+              onPress={() => void save()}
+            >
+              <FloppyDisk className="size-4" />
+              {pendingAction === "save" ? "正在保存…" : "保存设置"}
+            </Button>
+          </div>
+        </>}
       </footer>
     </section>
   );

@@ -3,6 +3,7 @@ import {
   AlertDialog,
   Button,
   Chip,
+  Input,
   Label,
   ListBox,
   NumberField,
@@ -15,14 +16,16 @@ import type {
   DocumentAction,
   DocumentCondition,
   ProxyListener,
-  SocketDirection,
   SocketRuleCapabilityCatalog,
   SocketRuleFieldCapability,
+  SocketRuleStage,
 } from "@/generated/rust-types";
 import {
+  clearActionFor,
   conditionFor,
-  listenerDirections,
+  listenerStages,
   setActionFor,
+  socketRuleStageLabel,
   type SocketRuleDraft,
 } from "./socket-rule-model";
 import { SocketRuleValueEditor, type SocketValueAsyncState } from "./socket-rule-value-editor";
@@ -38,12 +41,13 @@ export function SocketRuleEditor(props: {
   fieldErrors: Record<string, string[]>;
   pending: boolean;
   blocked?: boolean;
+  validationError?: string;
   decodeEnabled: boolean;
   valueStates: Record<string, SocketValueAsyncState>;
   onValueStateChange: (key: string, state?: SocketValueAsyncState) => void;
   onResetInvalidValues: () => void;
   onListenerChange: (listenerId: string) => void;
-  onDirectionChange: (direction: SocketDirection) => void;
+  onStageChange: (stage: SocketRuleStage) => void;
   onChange: (draft: SocketRuleDraft) => void;
   onSave: () => void;
   onReload: () => void;
@@ -69,15 +73,26 @@ export function SocketRuleEditor(props: {
   const errors = unmappedFieldErrors(props.fieldErrors);
   return (
     <EditorShell>
-      <h2 className="text-lg font-semibold">{props.creating ? "新建 Socket 规则" : "编辑 Socket 规则"}</h2>
+      <h2 className="text-lg font-semibold">{props.creating ? "新建规则" : "编辑规则"}</h2>
+      <div className="grid gap-1">
+        <Label>规则名称</Label>
+        <Input
+          aria-label="规则名称"
+          disabled={draftDisabled}
+          maxLength={128}
+          value={draft.name}
+          onChange={(event) => props.onChange({ ...draft, name: event.target.value })}
+        />
+        <InlineErrors errors={fieldErrorsFor(props.fieldErrors, ["name"])} />
+      </div>
       {props.creating ? (
         <>
           <CreationBinding
-            direction={draft.direction}
+            stage={draft.stage}
             listener={listener}
             listeners={props.listeners}
             pending={draftDisabled}
-            onDirectionChange={props.onDirectionChange}
+            onStageChange={props.onStageChange}
             onListenerChange={props.onListenerChange}
           />
           <div aria-label="新规则能力绑定" className="flex flex-wrap gap-2">
@@ -90,7 +105,7 @@ export function SocketRuleEditor(props: {
           <Chip variant="soft">{listener.name}</Chip>
           <Chip variant="soft">{draft.package.id}@{draft.package.version}</Chip>
           <Chip variant="soft">Schema v{draft.schema_version}</Chip>
-          <Chip variant="soft">{draft.direction}</Chip>
+          <Chip variant="soft">{socketRuleStageLabel(draft.stage)}</Chip>
         </div>
       )}
       <div className="flex flex-wrap gap-5">
@@ -102,7 +117,7 @@ export function SocketRuleEditor(props: {
           <NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
         </NumberField>
       </div>
-      <InlineErrors errors={fieldErrorsFor(props.fieldErrors, ["priority", "listener_id", "package", "schema_version", "direction"])} />
+      <InlineErrors errors={fieldErrorsFor(props.fieldErrors, ["priority", "listener_id", "package", "schema_version", "stage"])} />
       {!props.decodeEnabled && isLocal && (
         <Alert status="warning"><Alert.Indicator /><Alert.Content>
           <Alert.Title>请求 Decode 已关闭</Alert.Title>
@@ -124,14 +139,17 @@ export function SocketRuleEditor(props: {
       <ConditionsSection {...props} catalog={catalog} draft={draft} />
       <ActionsSection {...props} catalog={catalog} draft={draft} />
       {catalog.fields.length === 0 && (
-        <Alert status="warning"><Alert.Indicator /><Alert.Content><Alert.Title>Schema 没有声明字段</Alert.Title><Alert.Description>仍可保存无条件 RecordMatch 规则。</Alert.Description></Alert.Content></Alert>
+        <Alert status="warning"><Alert.Indicator /><Alert.Content><Alert.Title>协议没有可配置字段</Alert.Title><Alert.Description>只能添加“仅记录命中”动作。</Alert.Description></Alert.Content></Alert>
       )}
       {errors.length > 0 && (
         <Alert role="alert" status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>规则保存失败</Alert.Title><Alert.Description>{errors.join("；")}</Alert.Description></Alert.Content></Alert>
       )}
+      {props.validationError && (
+        <Alert role="alert" status="warning"><Alert.Indicator /><Alert.Content><Alert.Title>规则尚不能保存</Alert.Title><Alert.Description>{props.validationError}</Alert.Description></Alert.Content></Alert>
+      )}
       <div className="flex gap-3">
         <Button
-          isDisabled={props.pending || props.blocked || Object.keys(props.valueStates).length > 0 || draft.actions.length === 0}
+          isDisabled={props.pending || props.blocked || Boolean(props.validationError) || Object.keys(props.valueStates).length > 0 || draft.actions.length === 0}
           onPress={props.onSave}
           variant="primary"
         >{props.pending ? "正在保存…" : "保存 Socket 规则"}</Button>
@@ -149,15 +167,14 @@ function EditorShell({ children }: { children: React.ReactNode }) {
 function CreationBinding(props: {
   listener: ProxyListener;
   listeners: ProxyListener[];
-  direction: SocketDirection;
+  stage: SocketRuleStage;
   onListenerChange: (id: string) => void;
-  onDirectionChange: (direction: SocketDirection) => void;
+  onStageChange: (stage: SocketRuleStage) => void;
   pending?: boolean;
 }) {
-  const directions = listenerDirections(props.listener);
-  const isLocal = directions.length === 1;
+  const stages = listenerStages(props.listener);
   return <div className="grid gap-4 sm:grid-cols-2">
-    <div className="grid gap-1"><Label>Listener</Label><Select aria-label="Socket Listener" isDisabled={props.pending} selectedKey={props.listener.id} onSelectionChange={(key) => props.onListenerChange(String(key))}>
+    <div className="grid gap-1"><Label>入口</Label><Select aria-label="Socket 入口" isDisabled={props.pending} selectedKey={props.listener.id} onSelectionChange={(key) => props.onListenerChange(String(key))}>
       <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>
         {props.listeners.map((listener) => {
           const details = socketListenerDescription(listener);
@@ -165,17 +182,17 @@ function CreationBinding(props: {
         })}
       </ListBox></Select.Popover>
     </Select></div>
-    {isLocal ? <div><Label>方向</Label><p className="mt-2 font-mono text-sm">downstream</p></div> : <div className="grid gap-1"><Label>方向</Label><Select aria-label="Socket 方向" isDisabled={props.pending} selectedKey={props.direction} onSelectionChange={(key) => props.onDirectionChange(key as SocketDirection)}>
+    <div className="grid gap-1"><Label>处理阶段</Label><Select aria-label="Socket 处理阶段" isDisabled={props.pending} selectedKey={props.stage} onSelectionChange={(key) => props.onStageChange(key as SocketRuleStage)}>
       <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>
-        <ListBox.Item id="upstream" textValue="upstream">upstream</ListBox.Item><ListBox.Item id="downstream" textValue="downstream">downstream</ListBox.Item>
+        {stages.map((stage) => <ListBox.Item id={stage} key={stage} textValue={socketRuleStageLabel(stage)}>{socketRuleStageLabel(stage)}</ListBox.Item>)}
       </ListBox></Select.Popover>
-    </Select></div>}
+    </Select></div>
   </div>;
 }
 
 function socketListenerDescription(listener: ProxyListener) {
   if (listener.data_plane.kind !== "socket" || listener.data_plane.settings.processing?.mode !== "scripted") return "";
-  const topology = listener.data_plane.settings.topology.mode === "local_responder" ? "LocalResponder" : "Relay";
+  const topology = listener.data_plane.settings.topology.mode === "local_responder" ? "本机应答" : "转发至上游";
   const packageRef = listener.data_plane.settings.processing.settings.package;
   return `${topology} · ${packageRef.id}@${packageRef.version}`;
 }
@@ -187,7 +204,7 @@ function ConditionsSection(props: SectionProps) {
   const used = new Set(props.draft.conditions.map((condition) => condition.field));
   const available = props.catalog.fields.filter((field) => !used.has(field.name));
   return <section className="space-y-3" aria-labelledby="socket-conditions-heading">
-    <div className="flex items-center"><h3 id="socket-conditions-heading" className="font-semibold">条件（AND）</h3>
+    <div className="flex items-center"><h3 id="socket-conditions-heading" className="font-semibold">条件（AND） · {socketRuleStageLabel(props.draft.stage)}</h3>
       <Button className="ml-auto" isDisabled={disabled || available.length === 0 || props.draft.conditions.length >= 64} size="sm" variant="outline" onPress={() => {
         if (available[0]) props.onChange({ ...props.draft, conditions: [...props.draft.conditions, conditionFor(available[0])] });
       }}>添加条件</Button>
@@ -214,16 +231,21 @@ function ConditionRow(props: SectionProps & { condition: DocumentCondition; inde
 
 function ActionsSection(props: SectionProps) {
   const setFields = props.catalog.fields.filter((field) => field.actions.includes("set_field"));
+  const clearFields = props.catalog.fields.filter((field) => field.actions.includes("clear_field"));
   const disabled = draftControlsDisabled(props);
   return <section className="space-y-3" aria-labelledby="socket-actions-heading">
-    <h3 id="socket-actions-heading" className="font-semibold">动作（按顺序执行）</h3>
+    <div>
+      <h3 id="socket-actions-heading" className="font-semibold">动作（从上到下执行）</h3>
+    </div>
     <InlineErrors errors={fieldErrorsFor(props.fieldErrors, ["actions"])} />
     <div className="flex flex-wrap gap-2">
-      {props.catalog.common_actions.includes("record_match") && <Button isDisabled={disabled || props.draft.actions.length >= 64} size="sm" variant="outline" onPress={() => props.onChange({ ...props.draft, actions: [...props.draft.actions, { type: "record_match" }] })}>添加 RecordMatch</Button>}
-      {props.catalog.common_actions.includes("clear_document") && <Button isDisabled={disabled || props.draft.actions.length >= 64} size="sm" variant="outline" onPress={() => props.onChange({ ...props.draft, actions: [...props.draft.actions, { type: "clear_document" }] })}>添加 ClearDocument</Button>}
-      {setFields.length > 0 && <Button isDisabled={disabled || props.draft.actions.length >= 64} size="sm" variant="outline" onPress={() => props.onChange({ ...props.draft, actions: [...props.draft.actions, setActionFor(setFields[0])] })}>添加 SetField</Button>}
+      {props.catalog.common_actions.includes("clear_document") && <Button isDisabled={disabled || props.draft.actions.length >= 64} size="sm" variant="outline" onPress={() => props.onChange({ ...props.draft, actions: [...props.draft.actions, { type: "clear_document" }] })}>添加：清空全部字段</Button>}
+      {clearFields.length > 0 && <Button isDisabled={disabled || props.draft.actions.length >= 64} size="sm" variant="outline" onPress={() => props.onChange({ ...props.draft, actions: [...props.draft.actions, clearActionFor(clearFields[0])] })}>添加：清除字段</Button>}
+      {setFields.length > 0 && <Button isDisabled={disabled || props.draft.actions.length >= 64} size="sm" variant="outline" onPress={() => props.onChange({ ...props.draft, actions: [...props.draft.actions, setActionFor(setFields[0])] })}>添加：设置字段</Button>}
+      {props.catalog.common_actions.includes("record_match") && <Button isDisabled={disabled || props.draft.actions.length >= 64} size="sm" variant="outline" onPress={() => props.onChange({ ...props.draft, actions: [...props.draft.actions, { type: "record_match" }] })}>添加：记录命中</Button>}
     </div>
-    {props.draft.actions.map((action, index) => <ActionRow action={action} index={index} key={`${action.type}-${action.type === "set_field" ? action.field : "common"}-${index}`} {...props} />)}
+    {props.draft.actions.length === 0 && <p className="text-sm text-[var(--telemetry-muted)]">请至少添加一个要执行的动作。</p>}
+    {props.draft.actions.map((action, index) => <ActionRow action={action} index={index} key={`${action.type}-${"field" in action ? action.field : "common"}-${index}`} {...props} />)}
   </section>;
 }
 
@@ -239,7 +261,7 @@ function ActionRow(props: SectionProps & { action: DocumentAction; index: number
   };
   const remove = () => { props.onResetInvalidValues(); props.onChange({ ...props.draft, actions: props.draft.actions.filter((_, index) => index !== props.index) }); };
   return <div className="grid gap-3 rounded-lg border border-[var(--telemetry-line)] p-3 sm:grid-cols-[1fr_auto]">
-    <div>{props.action.type === "set_field" ? <SetFieldAction {...props} action={props.action} /> : <p className="font-mono text-sm">{props.action.type === "record_match" ? "RecordMatch" : "ClearDocument"}</p>}</div>
+    <div><p className="mb-2 text-xs font-medium text-[var(--telemetry-muted)]">第 {props.index + 1} 步</p>{props.action.type === "set_field" ? <SetFieldAction {...props} action={props.action} /> : props.action.type === "clear_field" ? <ClearFieldAction {...props} action={props.action} /> : <div><p className="text-sm font-medium">{props.action.type === "record_match" ? "记录命中" : "清空全部字段"}</p><p className="mt-1 text-xs text-[var(--telemetry-muted)]">{props.action.type === "record_match" ? "保留报文内容，只在抓包记录中标记本规则已命中。" : "移除当前报文中的全部字段值，后续步骤可重新构造应答。"}</p></div>}</div>
     <div className="flex gap-1">
       <Button aria-label={`动作 ${props.index + 1} 上移`} isDisabled={disabled || props.index === 0} size="sm" variant="ghost" onPress={() => move(-1)}>上移</Button>
       <Button aria-label={`动作 ${props.index + 1} 下移`} isDisabled={disabled || props.index === props.draft.actions.length - 1} size="sm" variant="ghost" onPress={() => move(1)}>下移</Button>
@@ -259,6 +281,13 @@ function SetFieldAction(props: SectionProps & { action: Extract<DocumentAction, 
   </div>;
 }
 
+function ClearFieldAction(props: SectionProps & { action: Extract<DocumentAction, { type: "clear_field" }>; index: number }) {
+  const fields = props.catalog.fields.filter((field) => field.actions.includes("clear_field"));
+  const field = fields.find((item) => item.name === props.action.field);
+  if (!field) return <InlineErrors errors={[`动作 ${props.index + 1} 引用了不可清除字段。`]} />;
+  return <FieldSelect disabled={draftControlsDisabled(props)} label="清除字段" field={field} fields={fields} onChange={(next) => { props.onResetInvalidValues(); replaceAction(props, props.index, clearActionFor(next)); }} />;
+}
+
 function FieldSelect({ disabled, field, fields, label, onChange }: { disabled: boolean; field: SocketRuleFieldCapability; fields: SocketRuleFieldCapability[]; label: string; onChange: (field: SocketRuleFieldCapability) => void }) {
   return <div className="grid gap-1"><Label>{label}</Label><Select aria-label={label} isDisabled={disabled} selectedKey={field.name} onSelectionChange={(key) => { const next = fields.find((item) => item.name === key); if (next) onChange(next); }}>
     <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>
@@ -274,7 +303,7 @@ function fieldErrorsFor(fieldErrors: Record<string, string[]>, prefixes: string[
 }
 
 function unmappedFieldErrors(fieldErrors: Record<string, string[]>) {
-  const mapped = ["priority", "listener_id", "package", "schema_version", "direction", "conditions", "actions"];
+  const mapped = ["name", "priority", "listener_id", "package", "schema_version", "stage", "conditions", "actions"];
   return Object.entries(fieldErrors)
     .filter(([field]) => !mapped.some((prefix) => field === prefix || field.startsWith(`${prefix}.`) || field.startsWith(`${prefix}[`)))
     .flatMap(([, messages]) => messages);
@@ -304,7 +333,7 @@ function DeleteRuleButton({ listener, draft, pending, onDelete }: { listener: Pr
   const [open, setOpen] = useState(false);
   return <AlertDialog isOpen={open} onOpenChange={(next) => { if (!pending) setOpen(next); }}><Button isDisabled={pending} onPress={() => setOpen(true)} variant="danger-soft">删除规则</Button><AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>
     <AlertDialog.Header><AlertDialog.Heading>删除此 Socket 规则？</AlertDialog.Heading></AlertDialog.Header>
-    <AlertDialog.Body>{listener.name} · {draft.direction} · {draft.rule_id}</AlertDialog.Body>
+    <AlertDialog.Body>{listener.name} · {socketRuleStageLabel(draft.stage)} · {draft.rule_id}</AlertDialog.Body>
     <AlertDialog.Footer><Button slot="close" isDisabled={pending} variant="outline">取消</Button><Button isDisabled={pending} onPress={onDelete} variant="danger">确认删除</Button></AlertDialog.Footer>
   </AlertDialog.Dialog></AlertDialog.Container></AlertDialog.Backdrop></AlertDialog>;
 }

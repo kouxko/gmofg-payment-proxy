@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Xmark } from "@gravity-ui/icons";
 import { Button, Modal } from "@heroui/react";
 import type { ProtocolPackageDetailViewModel, ProtocolPackageRef } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
@@ -33,24 +34,24 @@ export function SocketProtocolPackageDialog({ packageRef, disabled }: {
         setOpen(next);
         if (!next) requestAnimationFrame(() => document.getElementById(triggerId)?.focus());
       }}>
-        <Button className="hidden" aria-hidden="true">打开 Listener 协议包详情</Button>
+        <Button className="hidden" aria-hidden="true">打开入口协议包详情</Button>
         <Modal.Backdrop isDismissable>
           <Modal.Container size="cover" scroll="inside">
             <Modal.Dialog>
               <Modal.Header className="items-start gap-1 pr-12 text-left">
-                <Modal.Heading className="text-left text-lg font-semibold">Listener 协议包详情</Modal.Heading>
+                <Modal.Heading className="text-left text-lg font-semibold">入口协议包详情</Modal.Heading>
                 <p className="break-all text-left font-mono text-xs text-[var(--telemetry-muted)]">
                   {packageRef.id}@{packageRef.version}
                 </p>
+                <Modal.CloseTrigger aria-label="关闭协议包详情">
+                  <Xmark className="size-4" />
+                </Modal.CloseTrigger>
               </Modal.Header>
               <Modal.Body className="min-h-0 overflow-y-auto">
                 <ProtocolPackageDetail detail={responseError
                   ? { data: undefined, error: responseError, isLoading: false }
                   : detail} />
               </Modal.Body>
-              <Modal.Footer className="border-t border-[var(--telemetry-line)] pt-4">
-                <Button slot="close" variant="outline">关闭协议包详情</Button>
-              </Modal.Footer>
             </Modal.Dialog>
           </Modal.Container>
         </Modal.Backdrop>

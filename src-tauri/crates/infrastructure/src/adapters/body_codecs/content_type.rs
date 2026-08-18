@@ -52,6 +52,9 @@ pub(crate) fn decode_message_body(
         metadata.content_kind,
         MessageContentKind::Json | MessageContentKind::Xml | MessageContentKind::Text
     );
+    if message.body.is_empty() {
+        return (metadata, Some(String::new()), None, None);
+    }
     if body_codec.id().ends_with("raw") || (automatic && !declared_text) {
         return (metadata, None, None, None);
     }

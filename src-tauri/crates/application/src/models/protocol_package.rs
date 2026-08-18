@@ -44,7 +44,7 @@ pub struct ProtocolPackageVersionViewModel {
     pub package: ProtocolPackageRef,
     pub name: String,
     pub host_api: u32,
-    /// 由应用精确身份保护的官方起始示例。
+    /// 由应用精确身份保护的官方 ISO 8583:1987 ASCII Profile。
     pub built_in: bool,
     pub enabled: bool,
     pub validation: ProtocolPackageValidationViewModel,
@@ -239,6 +239,13 @@ pub struct ProtocolPackageImportViewModel {
     pub version: ProtocolPackageVersionViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
     pub schema: ProtocolPackageSchemaViewModel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 内置协议包 ZIP 写入用户所选文件后的结果。
+pub struct ProtocolPackageExportOutcomeViewModel {
+    pub bytes_written: u64,
+    pub replaced_existing: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

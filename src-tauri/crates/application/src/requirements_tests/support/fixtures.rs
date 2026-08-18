@@ -116,7 +116,6 @@ pub(in crate::requirements_tests) fn session(
             request: Some(content(body)),
             response: None,
             rule_trace: vec!["规则轨迹".into()],
-            response_assertions: Vec::new(),
         },
         breakpoint_draft: pending.then(|| content(b"draft")),
     }

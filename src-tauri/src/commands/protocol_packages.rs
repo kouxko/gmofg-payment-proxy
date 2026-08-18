@@ -5,18 +5,22 @@
 
 use intercept_proxy_application::{
     AppError, ListenerProtocolPackageCatalogViewModel, OperationResultViewModel,
-    ProtocolPackageDetailViewModel, ProtocolPackageGroupViewModel,
-    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
-    ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageViewModel,
-    ProtocolPackageVersionViewModel,
+    ProtocolPackageDetailViewModel, ProtocolPackageExportOutcomeViewModel,
+    ProtocolPackageGroupViewModel, ProtocolPackageImportPreviewViewModel,
+    ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
+    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel,
 };
 use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageVersion};
+use intercept_proxy_infrastructure::{AtomicFileExporter, InfrastructureError};
 use serde::Deserialize;
 use specta::Type;
 use tauri::State;
 
 use super::{CommandResult, command_error};
 use crate::app_state::AppState;
+
+const PROTOCOL_PACKAGE_EXPORT_DIALOG_PURPOSE: &str = "protocol_package_export_zip";
+const BUILTIN_PROTOCOL_PACKAGE_FILE_NAME: &str = "iso8583-ascii-standard-1.0.0.zip";
 
 /// `WebView` 提交的未验证协议包身份。
 /// IPC 先反序列化普通字符串，再在命令内部调用领域构造器，因此恶意或过期前端提交的
@@ -129,6 +133,44 @@ pub async fn protocol_package_restore_builtin(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn protocol_package_export_builtin(
+    state: State<'_, AppState>,
+) -> CommandResult<Option<ProtocolPackageExportOutcomeViewModel>> {
+    let host = state.host();
+    let dialog = host.file_dialog();
+    let selection = tokio::task::spawn_blocking(move || {
+        dialog.choose_save_file(
+            PROTOCOL_PACKAGE_EXPORT_DIALOG_PURPOSE,
+            BUILTIN_PROTOCOL_PACKAGE_FILE_NAME,
+        )
+    })
+    .await
+    .map_err(|_| command_error(export_task_failed()))?
+    .map_err(command_error)?;
+    let Some(selection) = selection else {
+        return Ok(None);
+    };
+
+    let archive = state
+        .application
+        .protocol_package_builtin_archive()
+        .await
+        .map_err(command_error)?;
+    let outcome = tokio::task::spawn_blocking(move || {
+        AtomicFileExporter.write(&selection.path, &archive, selection.overwrite_confirmed)
+    })
+    .await
+    .map_err(|_| command_error(export_task_failed()))?
+    .map_err(|error| command_error(export_failed(&error)))?;
+
+    Ok(Some(ProtocolPackageExportOutcomeViewModel {
+        bytes_written: outcome.bytes_written,
+        replaced_existing: outcome.replaced_existing,
+    }))
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn protocol_package_enable(
     state: State<'_, AppState>,
     package_ref: ProtocolPackageIdentityInput,
@@ -181,6 +223,30 @@ pub async fn protocol_package_usage(
         .protocol_package_usage(package_ref)
         .await
         .map_err(command_error)
+}
+
+fn export_task_failed() -> AppError {
+    AppError::new(
+        "PROTOCOL_PACKAGE_EXPORT_FAILED",
+        "协议包 ZIP 后台写入任务未能完成。",
+    )
+}
+
+fn export_failed(error: &InfrastructureError) -> AppError {
+    match error {
+        InfrastructureError::ExportTargetExists { .. } => AppError::new(
+            "PROTOCOL_PACKAGE_EXPORT_TARGET_EXISTS",
+            "目标文件已存在，未执行覆盖。",
+        ),
+        InfrastructureError::ExportParentSync { .. } => AppError::new(
+            "PROTOCOL_PACKAGE_EXPORT_DURABILITY_UNCERTAIN",
+            "目标文件已替换，但目录持久化状态无法确认。",
+        ),
+        _ => AppError::new(
+            "PROTOCOL_PACKAGE_EXPORT_FAILED",
+            "协议包 ZIP 写入失败，原目标未被修改。",
+        ),
+    }
 }
 
 #[cfg(test)]

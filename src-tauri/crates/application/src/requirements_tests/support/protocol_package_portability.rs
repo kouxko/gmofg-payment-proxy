@@ -178,6 +178,10 @@ impl ProtocolPackageImportPort for FakeProtocolPackagePortability {
 
 #[async_trait]
 impl BuiltinProtocolPackagePort for FakeProtocolPackagePortability {
+    async fn builtin_archive(&self) -> AppResult<Vec<u8>> {
+        unused()
+    }
+
     async fn restore_builtin(&self) -> AppResult<ProtocolPackageImportViewModel> {
         unused()
     }

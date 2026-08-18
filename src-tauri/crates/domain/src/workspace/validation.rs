@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use super::{
     DirectionProcessingOptions, DomainError, ListenerDataPlane, ListenerId, ProxyWorkspace,
-    ResponseAssertion, ResponseAssertionKind, SocketPayloadProcessing, SocketTopology,
+    SocketPayloadProcessing, SocketTopology,
 };
 use crate::{
     MAX_JAVASCRIPT_SAFE_INTEGER, MAX_SOCKET_DOCUMENT_RULES, SocketDirection,
@@ -22,27 +22,6 @@ pub(super) fn validate_workspace_references(
     listener_ids: &BTreeSet<ListenerId>,
     error: &mut DomainError,
 ) {
-    unique_ids(
-        workspace.response_assertions.iter().map(|item| item.id),
-        "response_assertions",
-        error,
-    );
-    for (index, assertion) in workspace.response_assertions.iter().enumerate() {
-        validate_named_listener_refs(
-            &assertion.name,
-            &assertion.listener_ids,
-            listener_ids,
-            &format!("response_assertions.{index}"),
-            error,
-        );
-        validate_assertion(assertion, index, error);
-    }
-
-    unique_ids(
-        workspace.fault_presets.iter().map(|item| item.id),
-        "fault_presets",
-        error,
-    );
     unique_ids(workspace.rules.iter().map(|item| item.id), "rules", error);
     for (index, rule) in workspace.rules.iter().enumerate() {
         if let Some(channel) = &rule.channel
@@ -225,49 +204,6 @@ fn validate_android_profiles(
                 );
             }
         }
-    }
-}
-
-fn validate_named_listener_refs(
-    name: &str,
-    listener_ids: &[ListenerId],
-    existing: &BTreeSet<ListenerId>,
-    prefix: &str,
-    error: &mut DomainError,
-) {
-    if name.trim().is_empty() {
-        push_field_error(error, format!("{prefix}.name"), "名称不能为空");
-    }
-    for (index, id) in listener_ids.iter().enumerate() {
-        if !existing.contains(id) {
-            push_field_error(
-                error,
-                format!("{prefix}.listener_ids.{index}"),
-                "引用的监听器不存在",
-            );
-        }
-    }
-}
-
-fn validate_assertion(assertion: &ResponseAssertion, index: usize, error: &mut DomainError) {
-    let prefix = format!("response_assertions.{index}.assertion");
-    match &assertion.assertion {
-        ResponseAssertionKind::HttpStatusEquals { expected } if !(100..=599).contains(expected) => {
-            push_field_error(error, prefix, "HTTP 状态码必须在 100..=599");
-        }
-        ResponseAssertionKind::HeaderEquals { name, .. } if name.trim().is_empty() => {
-            push_field_error(error, prefix, "Header 名称不能为空");
-        }
-        ResponseAssertionKind::JsonPathEquals { path, .. } if path.trim().is_empty() => {
-            push_field_error(error, prefix, "JSONPath 不能为空");
-        }
-        ResponseAssertionKind::BodySha256Equals { expected_hex }
-            if expected_hex.len() != 64
-                || !expected_hex.bytes().all(|byte| byte.is_ascii_hexdigit()) =>
-        {
-            push_field_error(error, prefix, "SHA-256 必须是 64 位十六进制字符串");
-        }
-        _ => {}
     }
 }
 

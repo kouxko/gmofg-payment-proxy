@@ -37,7 +37,7 @@ export function CertificateReferenceSelect({
       }}
     >
       <Label>{label}</Label>
-      <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+      <Select.Trigger className="h-10 min-h-10"><Select.Value className="truncate" /><Select.Indicator /></Select.Trigger>
       <Select.Popover>
         <ListBox>
           <ListBox.Item id={NONE} textValue={emptyLabel}>{emptyLabel}</ListBox.Item>

@@ -3,7 +3,7 @@
 use super::{
     DocumentAction, DocumentCondition, MAX_SOCKET_DOCUMENT_RULE_ACTIONS,
     MAX_SOCKET_DOCUMENT_RULE_BLOB_BYTES, MAX_SOCKET_DOCUMENT_RULE_CONDITIONS,
-    MAX_SOCKET_DOCUMENT_RULE_STRING_BYTES,
+    MAX_SOCKET_DOCUMENT_RULE_NAME_BYTES, MAX_SOCKET_DOCUMENT_RULE_STRING_BYTES,
 };
 use crate::{
     DocumentFieldName, DocumentSchema, DocumentValue, DomainError, ErrorCode,
@@ -13,6 +13,7 @@ use crate::{
 const MAX_JAVASCRIPT_SAFE_SIGNED_INTEGER: i64 = 9_007_199_254_740_991;
 
 pub(super) fn validate_structure(
+    name: &str,
     revision: Revision,
     created_order: u64,
     schema_version: u32,
@@ -20,6 +21,9 @@ pub(super) fn validate_structure(
     actions: &[DocumentAction],
 ) -> Result<(), DomainError> {
     let mut error = rule_error("Socket Document 规则结构无效");
+    if name.trim().is_empty() || name.len() > MAX_SOCKET_DOCUMENT_RULE_NAME_BYTES {
+        add_error(&mut error, "name", "规则名称不能为空且不能超过 128 字节");
+    }
     if !(1..=MAX_JAVASCRIPT_SAFE_INTEGER).contains(&revision.get()) {
         add_error(
             &mut error,

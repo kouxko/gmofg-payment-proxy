@@ -4,7 +4,7 @@ import type {
   DocumentValue,
   OperationResultViewModel,
   ProxyListener,
-  SocketDirection,
+  SocketRuleStage,
   SocketDocumentRuleDefinition,
   SocketRuleCapabilityCatalog,
   SocketRuleFieldCapability,
@@ -23,19 +23,28 @@ export function scriptedSocketListeners(listeners: ProxyListener[]) {
   );
 }
 
-export function listenerDirections(listener: ProxyListener): SocketDirection[] {
+export function listenerStages(listener: ProxyListener): SocketRuleStage[] {
   if (
     listener.data_plane.kind === "socket" &&
     listener.data_plane.settings.topology.mode === "local_responder"
   ) {
-    return ["downstream"];
+    return ["app_to_proxy", "proxy_to_app"];
   }
-  return ["upstream", "downstream"];
+  return ["app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app"];
+}
+
+export function socketRuleStageLabel(stage: SocketRuleStage) {
+  switch (stage) {
+    case "app_to_proxy": return "应用 → 代理";
+    case "proxy_to_upstream": return "代理 → 上游服务";
+    case "upstream_to_proxy": return "上游服务 → 代理";
+    case "proxy_to_app": return "代理 → 应用";
+  }
 }
 
 export function directionDecodeEnabled(
   listener: ProxyListener,
-  direction: SocketDirection,
+  stage: SocketRuleStage,
 ) {
   if (
     listener.data_plane.kind !== "socket" ||
@@ -43,6 +52,9 @@ export function directionDecodeEnabled(
   ) {
     return false;
   }
+  const direction = stage === "app_to_proxy" || stage === "proxy_to_upstream"
+    ? "upstream"
+    : "downstream";
   if (listener.data_plane.settings.topology.mode === "local_responder") {
     return listener.data_plane.settings.processing.settings.upstream.decode_enabled;
   }
@@ -52,20 +64,25 @@ export function directionDecodeEnabled(
 
 export function newSocketRuleDraft(
   listener: ProxyListener,
-  direction: SocketDirection,
+  stage: SocketRuleStage,
   catalog: SocketRuleCapabilityCatalog,
 ): SocketRuleDraft {
+  const localResponse = listener.data_plane.kind === "socket"
+    && listener.data_plane.settings.topology.mode === "local_responder";
   return {
     rule_id: null,
     expected_revision: null,
+    name: "新规则",
     enabled: true,
     priority: 100,
     listener_id: listener.id,
     package: catalog.package,
     schema_version: catalog.schema_version,
-    direction,
+    stage,
     conditions: [],
-    actions: [{ type: "record_match" }],
+    actions: localResponse && catalog.common_actions.includes("clear_document")
+      ? [{ type: "clear_document" }]
+      : [{ type: "record_match" }],
   };
 }
 
@@ -73,12 +90,13 @@ export function draftFromRule(rule: SocketDocumentRuleDefinition): SocketRuleDra
   return {
     rule_id: rule.rule_id,
     expected_revision: rule.revision,
+    name: rule.name,
     enabled: rule.enabled,
     priority: rule.priority,
     listener_id: rule.listener_id,
     package: rule.package,
     schema_version: rule.schema_version,
-    direction: rule.direction,
+    stage: rule.stage,
     conditions: rule.conditions,
     actions: rule.actions,
   };
@@ -103,6 +121,10 @@ export function conditionFor(field: SocketRuleFieldCapability): DocumentConditio
 
 export function setActionFor(field: SocketRuleFieldCapability): DocumentAction {
   return { type: "set_field", field: field.name, value: emptyValue(field) };
+}
+
+export function clearActionFor(field: SocketRuleFieldCapability): DocumentAction {
+  return { type: "clear_field", field: field.name };
 }
 
 export function parseSocketRuleValue(
@@ -135,7 +157,7 @@ export function validateCapabilityCatalog(catalog: SocketRuleCapabilityCatalog) 
   if (!catalog || typeof catalog !== "object") return "规则能力数据无效。";
   if (!catalog.package || typeof catalog.package.id !== "string" || typeof catalog.package.version !== "string") return "规则能力缺少精确协议包身份。";
   if (!Number.isSafeInteger(catalog.schema_version) || catalog.schema_version < 0) return "规则能力包含无效 Schema 版本。";
-  if (catalog.direction !== "upstream" && catalog.direction !== "downstream") return "规则能力包含未知方向。";
+  if (!["app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app"].includes(catalog.stage)) return "规则能力包含未知处理阶段。";
   if (!Array.isArray(catalog.fields) || !Array.isArray(catalog.common_actions)) return "规则能力字段或动作目录无效。";
   const names = new Set<string>();
   for (const field of catalog.fields) {
@@ -145,7 +167,7 @@ export function validateCapabilityCatalog(catalog: SocketRuleCapabilityCatalog) 
     names.add(field.name);
     if (!["string", "int", "bool", "blob"].includes(field.type)) return "规则能力包含未知字段类型。";
     if (field.operators.some((operator) => operator !== "equals")) return "规则能力包含未知操作符。";
-    if (field.actions.some((action) => action !== "set_field")) return "规则能力包含未知字段动作。";
+    if (field.actions.some((action) => action !== "set_field" && action !== "clear_field")) return "规则能力包含未知字段动作。";
   }
   if (catalog.common_actions.some((action) => action !== "record_match" && action !== "clear_document")) {
     return "规则能力包含未知公共动作。";
@@ -156,12 +178,14 @@ export function isSocketRuleDefinition(value: unknown): value is SocketDocumentR
   if (!value || typeof value !== "object") return false;
   const rule = value as Partial<SocketDocumentRuleDefinition>;
   return typeof rule.rule_id === "string" && rule.rule_id.length > 0
+    && typeof rule.name === "string" && rule.name.trim().length > 0 && new TextEncoder().encode(rule.name).length <= 128
     && Number.isSafeInteger(rule.revision) && rule.revision! >= 1 && Number.isSafeInteger(rule.priority)
     && Number.isSafeInteger(rule.created_order) && rule.created_order! >= 1 && typeof rule.enabled === "boolean"
     && typeof rule.listener_id === "string" && rule.listener_id.length > 0
     && Boolean(rule.package) && typeof rule.package?.id === "string" && typeof rule.package?.version === "string"
     && Number.isSafeInteger(rule.schema_version) && rule.schema_version! >= 1
-    && (rule.direction === "upstream" || rule.direction === "downstream")
+    && typeof rule.stage === "string"
+    && ["app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app"].includes(rule.stage)
     && Array.isArray(rule.conditions) && rule.conditions.length <= 64
     && Array.isArray(rule.actions) && rule.actions.length >= 1 && rule.actions.length <= 64
     && rule.conditions.every(isDocumentConditionShape)
@@ -192,6 +216,7 @@ export function saveResponseMatches(
       && response.rule_id === request.rule_id
       && response.created_order === previous.created_order;
   return identityMatches
+    && response.name === request.name
     && response.enabled === request.enabled
     && response.priority === request.priority
     && sameDocuments(response.conditions, request.conditions)
@@ -208,6 +233,7 @@ export function toggleResponseMatches(
   return Number.isSafeInteger(expectedRevision)
     && response.revision === expectedRevision
     && response.rule_id === request.rule_id
+    && response.name === request.name
     && response.enabled === enabled
     && response.priority === request.priority
     && response.created_order === request.created_order
@@ -233,13 +259,13 @@ export function deleteResponseMatches(
 
 function sameRuleBinding(
   response: SocketDocumentRuleDefinition,
-  expected: Pick<SocketRuleDraft, "listener_id" | "package" | "schema_version" | "direction">,
+  expected: Pick<SocketRuleDraft, "listener_id" | "package" | "schema_version" | "stage">,
 ) {
   return response.listener_id === expected.listener_id
     && response.package.id === expected.package.id
     && response.package.version === expected.package.version
     && response.schema_version === expected.schema_version
-    && response.direction === expected.direction;
+    && response.stage === expected.stage;
 }
 
 function sameDocuments(left: unknown, right: unknown) {
@@ -257,6 +283,7 @@ function isDocumentActionShape(value: unknown) {
   if (!value || typeof value !== "object") return false;
   const action = value as Partial<DocumentAction>;
   if (action.type === "record_match" || action.type === "clear_document") return true;
+  if (action.type === "clear_field") return typeof action.field === "string";
   return action.type === "set_field" && typeof action.field === "string"
     && isDocumentValueShape(action.value);
 }
@@ -283,6 +310,9 @@ export function validateSocketRuleDraft(
   draft: SocketRuleDraft,
   catalog: SocketRuleCapabilityCatalog,
 ) {
+  if (draft.name.trim().length === 0 || new TextEncoder().encode(draft.name).length > 128) {
+    return "规则名称不能为空且不能超过 128 字节。";
+  }
   const fields = new Map(catalog.fields.map((field) => [field.name, field]));
   const conditionFields = new Set<string>();
   if (draft.conditions.length > 64 || draft.actions.length === 0 || draft.actions.length > 64) {
@@ -292,7 +322,7 @@ export function validateSocketRuleDraft(
     draft.package.id !== catalog.package.id ||
     draft.package.version !== catalog.package.version ||
     draft.schema_version !== catalog.schema_version ||
-    draft.direction !== catalog.direction
+    draft.stage !== catalog.stage
   ) return "规则绑定与当前能力目录不一致。";
   for (const condition of draft.conditions) {
     const field = fields.get(condition.field);
@@ -308,6 +338,11 @@ export function validateSocketRuleDraft(
     }
     if (action.type === "clear_document") {
       if (!catalog.common_actions.includes("clear_document")) return "ClearDocument 不可用。";
+      continue;
+    }
+    if (action.type === "clear_field") {
+      const field = fields.get(action.field);
+      if (!field?.actions.includes("clear_field")) return "清除字段与 Schema 能力不兼容。";
       continue;
     }
     if (action.type !== "set_field") return "规则包含未知动作。";

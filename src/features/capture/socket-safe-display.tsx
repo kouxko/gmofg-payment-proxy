@@ -13,12 +13,28 @@ const DROP_WITH_CONTENT = new Set([
   "script", "style", "iframe", "object", "embed", "svg", "math", "template", "noscript", "form",
   "input", "button", "select", "textarea", "video", "audio", "canvas", "link", "meta", "base",
 ]);
+const DISPLAY_CLASSES: Partial<Record<string, string>> = {
+  table: "protocol-display-table",
+  caption: "protocol-display-caption",
+  thead: "protocol-display-head",
+  tbody: "protocol-display-body",
+  tfoot: "protocol-display-foot",
+  tr: "protocol-display-row",
+  th: "protocol-display-header",
+  td: "protocol-display-cell",
+};
 const CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; media-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; style-src 'unsafe-inline'";
 const HOST_STYLE = `
 :root{color-scheme:light dark;font:14px/1.55 system-ui,sans-serif}body{margin:0;padding:16px;color:#172033;background:transparent}
-table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccd3df;padding:6px 8px;text-align:left;vertical-align:top}
+.protocol-display-table{border-collapse:separate;border-spacing:0;width:100%;overflow:hidden;border:1px solid #d5dbe5;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.protocol-display-caption{padding:0 0 10px;text-align:left;font-weight:650;color:#334155}
+.protocol-display-header,.protocol-display-cell{padding:10px 12px;text-align:left;vertical-align:top;border:0;border-bottom:1px solid #e2e7ef}
+.protocol-display-header{background:#f4f6f9;color:#334155;font-weight:650}
+.protocol-display-row>:not(:first-child){border-left:1px solid #e2e7ef}
+.protocol-display-body .protocol-display-row:nth-child(even) .protocol-display-cell{background:#f8fafc}
+.protocol-display-body .protocol-display-row:last-child .protocol-display-cell,.protocol-display-foot .protocol-display-row:last-child>*{border-bottom:0}
 pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-@media(prefers-color-scheme:dark){body{color:#e7ecf3}th,td{border-color:#4c5668}}
+@media(prefers-color-scheme:dark){body{color:#e7ecf3}.protocol-display-table{border-color:#3a414d;background:#171a1f;box-shadow:none}.protocol-display-caption{color:#d8dee8}.protocol-display-header{background:#23272f;color:#f1f4f8}.protocol-display-header,.protocol-display-cell{border-bottom-color:#353b46}.protocol-display-row>:not(:first-child){border-left-color:#353b46}.protocol-display-body .protocol-display-row:nth-child(even) .protocol-display-cell{background:#1d2128}}
 `;
 
 export function displayHtmlIsTooLarge(html: string): boolean {
@@ -32,6 +48,8 @@ function cloneSafeNode(node: Node, output: Document): Node | undefined {
   if (DROP_WITH_CONTENT.has(tag)) return undefined;
   const container = SAFE_ELEMENTS.has(tag) ? output.createElement(tag) : output.createDocumentFragment();
   if (container instanceof HTMLElement) {
+    const displayClass = DISPLAY_CLASSES[tag];
+    if (displayClass) container.className = displayClass;
     const title = node.getAttribute("title");
     if (title) container.setAttribute("title", title.slice(0, 512));
     if (tag === "td" || tag === "th") {

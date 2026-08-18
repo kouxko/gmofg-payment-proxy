@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{DocumentAction, DocumentCondition, SocketDirection, SocketDocumentRuleDefinition};
+use super::{DocumentAction, DocumentCondition, SocketDocumentRuleDefinition, SocketRuleStage};
 use crate::{DocumentValue, ListenerId, ProtocolPackageRef, Revision, SocketDocumentRuleId};
 
 #[derive(Deserialize)]
@@ -35,13 +35,14 @@ impl From<StrictDocumentValue> for DocumentValue {
 pub(super) struct SocketDocumentRuleWire {
     pub(super) rule_id: SocketDocumentRuleId,
     pub(super) revision: Revision,
+    pub(super) name: String,
     pub(super) enabled: bool,
     pub(super) priority: i32,
     pub(super) created_order: u64,
     pub(super) listener_id: ListenerId,
     pub(super) package: ProtocolPackageRef,
     pub(super) schema_version: u32,
-    pub(super) direction: SocketDirection,
+    pub(super) stage: SocketRuleStage,
     pub(super) conditions: Vec<DocumentCondition>,
     pub(super) actions: Vec<DocumentAction>,
 }
@@ -80,13 +81,14 @@ impl From<SocketDocumentRuleDefinition> for SocketDocumentRuleWire {
         Self {
             rule_id: value.rule_id,
             revision: value.revision,
+            name: value.name,
             enabled: value.enabled,
             priority: value.priority,
             created_order: value.created_order,
             listener_id: value.listener_id,
             package: value.package,
             schema_version: value.schema_version,
-            direction: value.direction,
+            stage: value.stage,
             conditions: value.conditions,
             actions: value.actions,
         }

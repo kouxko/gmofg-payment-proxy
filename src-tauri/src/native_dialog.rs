@@ -78,6 +78,9 @@ impl TauriNativeFileDialog {
             "application_backup_zip" => builder
                 .set_title("导出 Intercept Proxy 应用备份")
                 .add_filter("应用备份 ZIP", APPLICATION_BACKUP_EXTENSIONS),
+            "protocol_package_export_zip" => builder
+                .set_title("导出 ISO 8583 协议包模板")
+                .add_filter("协议包 ZIP", PROTOCOL_PACKAGE_EXTENSIONS),
             _ => builder.set_title("保存文件"),
         };
         builder.set_file_name(safe_suggested_file_name(purpose, suggested_file_name))
@@ -137,6 +140,7 @@ fn default_file_name(purpose: &str) -> &'static str {
         "rules_json" => "rules.json",
         "root_ca" => "intercept-proxy-root-ca.crt",
         "application_backup_zip" => "intercept-proxy-backup.zip",
+        "protocol_package_export_zip" => "iso8583-ascii-standard-1.0.0.zip",
         _ => "export",
     }
 }

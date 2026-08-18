@@ -79,7 +79,7 @@ export function ListenerEditor(props: Props): ReactNode {
           }}
         >
           <Label>数据平面</Label>
-          <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+          <Select.Trigger className="h-10 min-h-10"><Select.Value className="truncate" /><Select.Indicator /></Select.Trigger>
           <Select.Popover><ListBox>
             <ListBox.Item id="http" textValue="HTTP 代理">HTTP 代理</ListBox.Item>
             <ListBox.Item id="socket" textValue="Socket 转发">Socket 转发</ListBox.Item>

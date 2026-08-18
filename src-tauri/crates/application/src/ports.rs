@@ -155,6 +155,12 @@ pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
         listener: ProxyListener,
     ) -> AppResult<ListenerStatusViewModel>;
     async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel>;
+    /// 将已保存的 Socket 规则替换到正在运行的入口；入口未运行时保持无操作。
+    async fn replace_socket_rules(
+        &self,
+        workspace: ProxyWorkspace,
+        listener_id: ListenerId,
+    ) -> AppResult<()>;
     /// 使用固定 Server 的 scheme 执行 DNS/TCP 或 DNS/TCP/TLS 连接测试。
     async fn test_upstream_connection(
         &self,

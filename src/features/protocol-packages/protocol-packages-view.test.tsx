@@ -55,8 +55,8 @@ describe("ProtocolPackagesView list", () => {
     expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
     pending.resolve([]);
     expect(await screen.findByText("尚未安装协议包")).toBeVisible();
-    expect(screen.getByText("内置 ISO 8583 是可修改的起始示例")).toBeVisible();
-    expect(screen.getByText(/2 字节大端长度头、ASCII MTI、主位图和有限字段子集/)).toBeVisible();
+    expect(screen.getByText("内置 ISO 8583:1987 ASCII Profile")).toBeVisible();
+    expect(screen.getByText(/覆盖主位图、次位图和 DE2–DE128 字段结构/)).toBeVisible();
   });
 
   it("restores the built-in ISO example from the empty state, refreshes, and opens the exact version", async () => {

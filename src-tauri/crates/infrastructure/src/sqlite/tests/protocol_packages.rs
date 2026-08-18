@@ -4,6 +4,7 @@ use super::*;
 use crate::sqlite::protocol_packages::{
     StoredProtocolPackageValidation, protocol_package_preflight_error_code,
 };
+use crate::sqlite::schema::CURRENT_SCHEMA_VERSION;
 
 #[test]
 fn empty_database_creates_current_schema_once_and_reopen_is_read_only() {
@@ -18,7 +19,7 @@ fn empty_database_creates_current_schema_once_and_reopen_is_read_only() {
 }
 
 #[test]
-fn database_without_current_marker_is_rejected_without_adding_tables() {
+fn database_without_current_marker_is_cleared_and_recreated() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.sqlite");
     let connection = Connection::open(&path).unwrap();
@@ -36,37 +37,31 @@ fn database_without_current_marker_is_rejected_without_adding_tables() {
         .unwrap();
     drop(connection);
 
-    assert!(matches!(
-        SqliteStore::open(&path),
-        Err(InfrastructureError::DatabaseSchemaInvalid { found, .. }) if found.is_empty()
-    ));
-    let connection = Connection::open(&path).unwrap();
-    let protocol_tables: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master
-             WHERE type = 'table' AND name IN ('protocol_packages', 'protocol_package_files')",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(protocol_tables, 0);
+    let store = SqliteStore::open(&path).unwrap();
+    assert_protocol_tables_and_current_marker(&store);
+    assert!(store.load_settings().unwrap().is_none());
 }
 
 #[test]
-fn old_or_unknown_schema_marker_is_rejected() {
+fn old_schema_is_cleared_and_unknown_newer_schema_is_rejected() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.sqlite");
     let store = SqliteStore::open(&path).unwrap();
     store
         .connection
         .lock()
-        .execute("UPDATE application_schema SET version = 9", [])
+        .execute_batch(
+            "INSERT INTO workspaces(id, revision, json, updated_at)
+             VALUES ('old', 1, '{}', '2026-08-18T00:00:00Z');
+             UPDATE application_schema SET version = 11;",
+        )
         .unwrap();
     drop(store);
-    assert!(matches!(
-        SqliteStore::open(&path),
-        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
-    ));
+
+    let reopened = SqliteStore::open(&path).unwrap();
+    assert_protocol_tables_and_current_marker(&reopened);
+    assert!(reopened.load_workspaces().unwrap().records.is_empty());
+    drop(reopened);
 
     let connection = Connection::open(&path).unwrap();
     connection
@@ -239,5 +234,5 @@ fn assert_protocol_tables_and_current_marker(store: &SqliteStore) {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap();
-    assert_eq!(marker, (1, 10));
+    assert_eq!(marker, (1, CURRENT_SCHEMA_VERSION));
 }

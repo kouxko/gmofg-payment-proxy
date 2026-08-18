@@ -280,7 +280,7 @@ export function AndroidNetworkView(): ReactElement {
     <section className="h-full min-h-0 overflow-hidden p-5">
       <div className="mx-auto flex h-full w-full max-w-[1680px] flex-col gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">应用网络接管</h1>
+          <h1 className="sr-only">应用网络接管</h1>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
             设备端 VPN 只接管所选应用，可将指定目标透明转交代理入口，并按需实施 TCP/IP 弱网。
           </p>

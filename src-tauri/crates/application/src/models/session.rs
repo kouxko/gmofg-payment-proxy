@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use super::{
-    ChannelId, MessageContentViewModel, ResponseAssertionId, Revision, RuleId, RuntimeEpoch,
-    SessionId, SortDirection, UiTone,
+    ChannelId, MessageContentViewModel, Revision, RuleId, RuntimeEpoch, SessionId, SortDirection,
+    UiTone,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -77,16 +77,6 @@ pub struct SessionDetailViewModel {
     pub request: Option<MessageContentViewModel>,
     pub response: Option<MessageContentViewModel>,
     pub rule_trace: Vec<String>,
-    /// 对最终响应执行的通用断言结果；失败只影响会话结论，不篡改线上响应。
-    pub response_assertions: Vec<ResponseAssertionResultViewModel>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct ResponseAssertionResultViewModel {
-    pub assertion_id: ResponseAssertionId,
-    pub name: String,
-    pub passed: bool,
-    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -123,8 +113,6 @@ impl SessionRecord {
             + self.detail.final_action.len();
         let rule_trace_bytes =
             serde_json::to_vec(&self.detail.rule_trace).map_or(0, |bytes| bytes.len());
-        let policy_result_bytes =
-            serde_json::to_vec(&self.detail.response_assertions).map_or(0, |bytes| bytes.len());
         let messages = self
             .detail
             .request
@@ -142,7 +130,6 @@ impl SessionRecord {
         Self::ENTITY_FIXED_OVERHEAD_BYTES
             + fixed_strings as u64
             + rule_trace_bytes as u64
-            + policy_result_bytes as u64
             + messages
     }
 }

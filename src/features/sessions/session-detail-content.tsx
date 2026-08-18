@@ -126,36 +126,6 @@ export function SessionDetailContent({
                 <dt>代理 → 上游</dt>
                 <dd>{detail.data?.proxy_to_server_tls ?? "—"}</dd>
               </dl>
-              {(detail.data?.response_assertions?.length ?? 0) > 0 && (
-                <div>
-                  <h2 className="mb-2 font-semibold">响应断言</h2>
-                  <ul className="space-y-2 text-sm">
-                    {(detail.data?.response_assertions ?? []).map(
-                      (assertion) => (
-                        <li
-                          key={assertion.assertion_id}
-                          className="flex items-start gap-2"
-                        >
-                          <Chip
-                            size="sm"
-                            color={assertion.passed ? "success" : "danger"}
-                            variant="soft"
-                          >
-                            {assertion.passed ? "通过" : "失败"}
-                          </Chip>
-                          <span>
-                            <strong>{assertion.name}</strong>
-                            <br />
-                            <span className="text-xs text-[var(--telemetry-muted)]">
-                              {assertion.message}
-                            </span>
-                          </span>
-                        </li>
-                      ),
-                    )}
-                  </ul>
-                </div>
-              )}
               <div>
                 <h2 className="mb-2 font-semibold">规则轨迹</h2>
                 <div className="space-y-2 text-sm">

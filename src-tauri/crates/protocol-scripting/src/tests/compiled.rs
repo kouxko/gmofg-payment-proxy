@@ -14,7 +14,7 @@ fn compiled_package_test_builder_preserves_exact_identity_and_shared_schema() {
     let schema = DocumentSchema::new(
         DocumentSchemaId::new("iso8583-message").unwrap(),
         2,
-        "ISO 8583 Message",
+        "ISO 8583:1987 Message",
         vec![
             DocumentField::new(
                 DocumentFieldName::new("mti").unwrap(),

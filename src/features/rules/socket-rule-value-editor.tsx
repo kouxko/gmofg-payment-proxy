@@ -77,6 +77,7 @@ export function SocketRuleValueEditor({
       {field.type === "blob" ? <TextArea
         aria-description="使用两位十六进制表示每个字节，最多 64 KiB"
         className="min-h-24 font-mono"
+        placeholder="例如：9F 26 08 A1 B2 C3 D4 E5 F6 07 08"
         value={raw}
         onChange={(event) => updateRaw(event.target.value)}
       /> : <Input
@@ -86,6 +87,7 @@ export function SocketRuleValueEditor({
         onChange={(event) => updateRaw(event.target.value)}
       />}
       {field.type === "int" && <p className="text-xs text-[var(--telemetry-muted)]">十进制整数，范围 −9,007,199,254,740,991 至 9,007,199,254,740,991。</p>}
+      {field.type === "blob" && <p className="text-xs text-[var(--telemetry-muted)]">使用两位 Hex 表示一个字节，可用空格、冒号或连字符分隔；当前 {value.type === "blob" ? value.value.length : 0} 字节。</p>}
       {pending && <Spinner aria-label={`正在解析${label}`} size="sm" />}
       {parseError && <FieldError>{parseError}</FieldError>}
     </TextField>
