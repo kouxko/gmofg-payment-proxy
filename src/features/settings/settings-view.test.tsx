@@ -3,6 +3,7 @@
 /** 验证设置草稿、字段错误、保存/重启门禁与恢复默认值确认。 */
 
 import "@testing-library/jest-dom/vitest";
+import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -76,13 +77,19 @@ const settings: SettingsViewModel = {
 };
 
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
-  useIpcQuery: () => ({
-    data: settings,
-    error: undefined,
-    isLoading: false,
-    refresh: vi.fn(),
-    setData: commandMocks.settingsSetData,
-  }),
+  useIpcQuery: () => {
+    const [data, setData] = useState(settings);
+    return {
+      data,
+      error: undefined,
+      isLoading: false,
+      refresh: vi.fn(),
+      setData: (next: SettingsViewModel) => {
+        commandMocks.settingsSetData(next);
+        setData(next);
+      },
+    };
+  },
 }));
 
 vi.mock("@/features/shell/bootstrap-context", () => ({
@@ -104,17 +111,10 @@ describe("production SettingsView overlay", () => {
     });
   });
 
-  it("submits the current draft to Rust validation and renders its result", async () => {
-    const user = userEvent.setup();
+  it("does not expose manual validation controls or validation-result landmarks", () => {
     render(<SettingsView />);
-
-    await user.click(screen.getByRole("button", { name: "校验结果" }));
-    await user.click(screen.getByRole("button", { name: "校验设置" }));
-
-    await waitFor(() =>
-      expect(commandMocks.settingsValidate).toHaveBeenCalledWith(draft),
-    );
-    expect(screen.getByText("Rust 校验警告")).toBeVisible();
+    expect(screen.queryByText("校验结果")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "校验设置" })).not.toBeInTheDocument();
   });
 
   it("saves through Rust and replaces the displayed stored snapshot", async () => {
@@ -126,6 +126,7 @@ describe("production SettingsView overlay", () => {
     await waitFor(() =>
       expect(commandMocks.settingsSave).toHaveBeenCalledWith(draft),
     );
+    expect(commandMocks.settingsValidate).toHaveBeenCalledWith(draft);
     expect(commandMocks.settingsSetData).toHaveBeenCalledWith(
       expect.objectContaining({
         stored: expect.objectContaining({ max_sessions: 501 }),
@@ -212,16 +213,76 @@ describe("production SettingsView overlay", () => {
     expect(screen.getByText(/代理入口的监听地址、端口、上游和 TLS/)).toBeVisible();
   });
 
-  it("switches setting tabs without replacing the page document", async () => {
+  it("keeps only the capacity and application tabs without the summary sidebar", () => {
+    render(<SettingsView />);
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "超时与容量",
+      "应用",
+    ]);
+    expect(screen.queryByText("数据与导出")).not.toBeInTheDocument();
+    expect(screen.queryByText("配置摘要与校验")).not.toBeInTheDocument();
+  });
+
+  it("does not write when Rust validation rejects the current draft", async () => {
+    commandMocks.settingsValidate.mockResolvedValue({
+      valid: false,
+      field_errors: { max_sessions: ["最大会话数无效"] },
+      warnings: [],
+    });
     const user = userEvent.setup();
-    const { container } = render(<SettingsView />);
-    const viewRoot = container.firstElementChild;
-    const locationBefore = window.location.href;
+    render(<SettingsView />);
 
-    await user.click(screen.getByRole("tab", { name: "数据与导出" }));
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
 
-    expect(screen.getByText(settings.payload_policy_text)).toBeVisible();
-    expect(container.firstElementChild).toBe(viewRoot);
-    expect(window.location.href).toBe(locationBefore);
+    await waitFor(() =>
+      expect(screen.getByText("最大会话数无效")).toBeVisible(),
+    );
+    expect(commandMocks.settingsSave).not.toHaveBeenCalled();
+  });
+
+  it("shows only unmapped validation errors in the page-level alert", async () => {
+    commandMocks.settingsValidate.mockResolvedValue({
+      valid: false,
+      field_errors: { bind_address: ["监听地址由入口配置管理"] },
+      warnings: [],
+    });
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+    expect(await screen.findByText("设置无法保存")).toBeVisible();
+    expect(screen.getByText("监听地址由入口配置管理")).toBeVisible();
+  });
+
+  it("shows compact saved, dirty, and restart-required draft states", async () => {
+    commandMocks.settingsSave.mockResolvedValue({
+      ...settings,
+      stored: { ...draft, connect_timeout_seconds: 71 },
+      effective: { ...draft, connect_timeout_seconds: 71 },
+      requires_restart: true,
+    });
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    expect(screen.getByText("已保存")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Increase 连接超时（秒）" }),
+    );
+    expect(screen.getByText("有未保存更改")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+    expect(await screen.findByText("重启后生效")).toBeVisible();
+  });
+
+  it("disables Rust-backed fields while save validation is pending", async () => {
+    let finish!: (value: { valid: boolean; field_errors: object; warnings: string[] }) => void;
+    commandMocks.settingsValidate.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+    expect(screen.getByRole("textbox", { name: "连接超时（秒）" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Host 头重写为目标主机" })).toBeDisabled();
+    finish({ valid: false, field_errors: {}, warnings: [] });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "保存设置" })).toBeEnabled(),
+    );
   });
 });

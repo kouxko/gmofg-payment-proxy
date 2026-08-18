@@ -224,6 +224,8 @@ describe("Workspace CRUD surface", () => {
 
     expect(importButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "新建" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "新 Workspace 名称" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "导出应用数据" })).toBeDisabled();
     await user.click(importButton);
     expect(mocks.applicationBackupImportPrepare).toHaveBeenCalledTimes(1);
 
@@ -232,6 +234,14 @@ describe("Workspace CRUD surface", () => {
       data: null,
     });
     await waitFor(() => expect(importButton).toBeEnabled());
+  });
+
+  it("keeps the four controls on one local horizontal-scroll toolbar", async () => {
+    await renderLoadedView();
+    const toolbar = screen.getByTestId("workspace-toolbar");
+    expect(toolbar).toHaveClass("flex-nowrap", "overflow-x-auto", "overflow-y-hidden");
+    expect(toolbar.parentElement).toHaveClass("min-w-0");
+    expect(toolbar.parentElement?.parentElement).toHaveClass("overflow-x-hidden");
   });
 
   it("waits for ZIP export to finish before showing success", async () => {

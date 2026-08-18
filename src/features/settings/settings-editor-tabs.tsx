@@ -17,34 +17,30 @@ export function bytesToMib(bytes: number) {
 
 type SettingsEditorTabsProps = {
   draft: SettingsDraft;
-  payloadPolicyText: string;
   fieldError: (field: string) => string | undefined;
   onDraftChange: (draft: SettingsDraft) => void;
+  isDisabled: boolean;
 };
 
 export function SettingsEditorTabs({
   draft,
-  payloadPolicyText,
   fieldError,
   onDraftChange,
+  isDisabled,
 }: SettingsEditorTabsProps) {
   return (
-    <div className="min-w-0 overflow-auto max-[1280px]:overflow-visible">
+    <div className="min-w-0">
       <h1 className="mb-4 text-2xl font-semibold">系统设置</h1>
       <Card className="border border-[var(--telemetry-line)] shadow-sm">
         <Card.Content className="p-0">
           <Tabs defaultSelectedKey="capacity">
             <Tabs.ListContainer>
               <Tabs.List aria-label="系统设置分类" className="px-3 pt-2">
-                <Tabs.Tab id="capacity">
+                <Tabs.Tab id="capacity" isDisabled={isDisabled}>
                   超时与容量
                   <Tabs.Indicator />
                 </Tabs.Tab>
-                <Tabs.Tab id="data">
-                  数据与导出
-                  <Tabs.Indicator />
-                </Tabs.Tab>
-                <Tabs.Tab id="app">
+                <Tabs.Tab id="app" isDisabled={isDisabled}>
                   应用
                   <Tabs.Indicator />
                 </Tabs.Tab>
@@ -55,18 +51,8 @@ export function SettingsEditorTabs({
                 draft={draft}
                 fieldError={fieldError}
                 onDraftChange={onDraftChange}
+                isDisabled={isDisabled}
               />
-            </Tabs.Panel>
-            <Tabs.Panel id="data" className="space-y-4 p-4">
-              <Alert status="accent">{payloadPolicyText}</Alert>
-              <p className="text-sm">
-                Payload 仅内存保存；规则与设置持久化；敏感导出需要确认；诊断日志不记录
-                Payload、密码、私钥或 PKCS12 原始数据。
-              </p>
-              <Alert status="warning">
-                如旧版本数据不兼容，可在页面底部清除全部配置与测试数据。此操作会停止入口、
-                删除工作区、规则、设备方案、会话、抓包及导入证书，并自动重启应用。
-              </Alert>
             </Tabs.Panel>
             <Tabs.Panel id="app" className="space-y-4 p-4">
               <Alert status="accent">
@@ -87,12 +73,13 @@ export function SettingsEditorTabs({
 type CapacitySettingsProps = Pick<
   SettingsEditorTabsProps,
   "draft" | "fieldError" | "onDraftChange"
->;
+> & { isDisabled: boolean };
 
 function CapacitySettings({
   draft,
   fieldError,
   onDraftChange,
+  isDisabled,
 }: CapacitySettingsProps) {
   const timeoutFields = [
     ["连接超时（秒）", "connect_timeout_seconds"],
@@ -112,6 +99,7 @@ function CapacitySettings({
             isInvalid={fieldError(key) != null}
             value={draft[key]}
             minValue={1}
+            isDisabled={isDisabled}
             onChange={(value) => onDraftChange({ ...draft, [key]: value })}
           >
             <Label>{label}</Label>
@@ -129,6 +117,7 @@ function CapacitySettings({
           isInvalid={fieldError("max_sessions") != null}
           value={draft.max_sessions}
           minValue={1}
+          isDisabled={isDisabled}
           onChange={(max_sessions) =>
             onDraftChange({ ...draft, max_sessions })
           }
@@ -150,6 +139,7 @@ function CapacitySettings({
           draft={draft}
           fieldError={fieldError}
           onDraftChange={onDraftChange}
+          isDisabled={isDisabled}
         />
         <MemoryLimitField
           label="请求体大小限制 MiB"
@@ -158,9 +148,11 @@ function CapacitySettings({
           draft={draft}
           fieldError={fieldError}
           onDraftChange={onDraftChange}
+          isDisabled={isDisabled}
         />
         <Switch
           aria-label="Host 头重写为目标主机"
+          isDisabled={isDisabled}
           isSelected={draft.rewrite_host}
           onChange={(rewrite_host) =>
             onDraftChange({ ...draft, rewrite_host })
@@ -194,12 +186,14 @@ function MemoryLimitField({
   draft,
   fieldError,
   onDraftChange,
+  isDisabled,
 }: MemoryLimitFieldProps) {
   return (
     <NumberField
       isInvalid={fieldError(field) != null}
       value={bytesToMib(bytes)}
       minValue={1}
+      isDisabled={isDisabled}
       onChange={(value) =>
         onDraftChange({ ...draft, [field]: value * 1024 * 1024 })
       }
