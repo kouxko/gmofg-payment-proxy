@@ -401,7 +401,7 @@ fn version_six_database_migrates_to_socket_capture_schema_without_losing_history
         .unwrap()
         .collect::<Result<_, _>>()
         .unwrap();
-    assert_eq!(versions, vec![6, 9]);
+    assert_eq!(versions, vec![6, 10]);
     let table_exists: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master

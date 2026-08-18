@@ -77,7 +77,7 @@ describe("抓包与会话正文接入共享查看器", () => {
         tls_summary: "TLS 1.2",
         timings_ms: {},
         rule_trace: [],
-        extracted_metadata: {},
+        extracted_metadata: { legacy_key: "must-not-render" },
         response_assertions: [],
         revision: 1,
       } as CaptureDetailViewModel,
@@ -103,6 +103,8 @@ describe("抓包与会话正文接入共享查看器", () => {
     expect(screen.getByText("QUERY")).toBeVisible();
     expect(screen.getByText("code=D48&name=A%2BB")).toBeVisible();
     expect(screen.getByText("XML")).toBeVisible();
+    expect(screen.queryByText("Workspace 提取结果")).not.toBeInTheDocument();
+    expect(screen.queryByText("must-not-render")).not.toBeInTheDocument();
   });
 
   it("会话请求页展示同一套 method、query 与正文元数据", async () => {
@@ -121,6 +123,7 @@ describe("抓包与会话正文接入共享查看器", () => {
         request: message,
         response: null,
         rule_trace: [],
+        extracted_metadata: { legacy_key: "must-not-render" },
       } as SessionDetailViewModel,
       isLoading: false,
       refresh: vi.fn(),
@@ -132,5 +135,7 @@ describe("抓包与会话正文接入共享查看器", () => {
     expect(screen.getByText("QUERY")).toBeVisible();
     expect(screen.getByText("code=D48&name=A%2BB")).toBeVisible();
     expect(screen.getByText("XML")).toBeVisible();
+    expect(screen.queryByText("Workspace 提取结果")).not.toBeInTheDocument();
+    expect(screen.queryByText("must-not-render")).not.toBeInTheDocument();
   });
 });

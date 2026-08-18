@@ -13,8 +13,8 @@ use specta::Type;
 
 use crate::{
     AndroidNetworkProfile, CertificateReferenceId, DomainError, ErrorCode, FaultPresetId,
-    ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, Rule, RuleAction,
-    SocketDocumentRuleDefinition, WorkspaceId,
+    ListenerId, ResponseAssertionId, Revision, Rule, RuleAction, SocketDocumentRuleDefinition,
+    WorkspaceId,
 };
 
 mod listener_model;
@@ -29,24 +29,6 @@ use validation::{push_field_error, unique_ids, validate_listener, validate_works
 /// 首次启动创建的正向代理草稿端口。
 /// 监听器默认禁用，因此不会在用户确认前打开端口。
 pub const DEFAULT_FORWARD_PROXY_PORT: u16 = 8080;
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum MetadataExtractorSource {
-    Header { name: String },
-    JsonPath { path: String },
-    BodyText,
-    FixedValue { value: String },
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-/// 从通用 HTTP 报文提取列表/规则所需的少量元数据。
-pub struct MetadataExtractor {
-    pub id: MetadataExtractorId,
-    pub name: String,
-    pub listener_ids: Vec<ListenerId>,
-    pub source: MetadataExtractorSource,
-}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -133,7 +115,6 @@ pub struct ProxyWorkspace {
     pub name: String,
     pub revision: Revision,
     pub listeners: Vec<ProxyListener>,
-    pub metadata_extractors: Vec<MetadataExtractor>,
     pub response_assertions: Vec<ResponseAssertion>,
     /// 规则通过 rule_* 用例维护，避免前端在 Workspace 表单中复制第二套规则编辑器。
     /// 字段仍属于领域聚合并参与导入导出，只不重复进入 Workspace 的 TypeScript DTO。
@@ -156,44 +137,6 @@ pub struct ProxyWorkspace {
     pub android_network_profiles: Vec<AndroidNetworkProfile>,
 }
 
-/// v2 文件和 `SQLite` JSON 的严格兼容结构。
-///
-/// 仅此结构保留历史 Listener 扁平字段与三个历史默认；迁移后运行时只处理 v3 模型。
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProxyWorkspaceV2 {
-    pub id: WorkspaceId,
-    pub name: String,
-    pub revision: Revision,
-    pub listeners: Vec<ProxyListenerV2>,
-    pub metadata_extractors: Vec<MetadataExtractor>,
-    pub response_assertions: Vec<ResponseAssertion>,
-    pub rules: Vec<Rule>,
-    pub fault_presets: Vec<FaultPreset>,
-    pub certificate_references: Vec<CertificateReference>,
-    #[serde(default)]
-    pub android_network_profiles: Vec<AndroidNetworkProfile>,
-}
-
-impl From<ProxyWorkspaceV2> for ProxyWorkspace {
-    fn from(value: ProxyWorkspaceV2) -> Self {
-        Self {
-            id: value.id,
-            name: value.name,
-            revision: value.revision,
-            listeners: value.listeners.into_iter().map(Into::into).collect(),
-            metadata_extractors: value.metadata_extractors,
-            response_assertions: value.response_assertions,
-            rules: value.rules,
-            socket_rules: Vec::new(),
-            socket_rule_created_order_high_water: 0,
-            fault_presets: value.fault_presets,
-            certificate_references: value.certificate_references,
-            android_network_profiles: value.android_network_profiles,
-        }
-    }
-}
-
 impl Default for ProxyWorkspace {
     fn default() -> Self {
         Self {
@@ -201,7 +144,6 @@ impl Default for ProxyWorkspace {
             name: "Untitled Workspace".into(),
             revision: Revision::INITIAL,
             listeners: vec![ProxyListener::default()],
-            metadata_extractors: Vec::new(),
             response_assertions: Vec::new(),
             rules: Vec::new(),
             socket_rules: Vec::new(),

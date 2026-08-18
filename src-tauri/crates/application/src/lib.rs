@@ -19,10 +19,10 @@ mod listeners;
 mod models;
 mod portable_certificates;
 mod portable_protocol_packages;
-mod portable_socket_rules;
 mod ports;
 mod sessions;
 mod workspace_documents;
+mod workspace_migration;
 mod workspaces;
 
 pub use android::*;
@@ -44,9 +44,12 @@ pub use ports::*;
 pub use sessions::{InMemorySessionStore, SessionStore};
 pub use workspace_documents::{
     MAX_WORKSPACE_DOCUMENT_BYTES, ParsedWorkspaceDocument, WORKSPACE_DOCUMENT_FORMAT_VERSION,
-    WORKSPACE_DOCUMENT_V2_FORMAT_VERSION, WORKSPACE_DOCUMENT_V3_FORMAT_VERSION, WorkspaceDocument,
-    WorkspaceDocumentV2, parse_workspace_document, parse_workspace_document_with_source,
-    serialize_workspace_document,
+    WORKSPACE_DOCUMENT_V2_FORMAT_VERSION, WORKSPACE_DOCUMENT_V3_FORMAT_VERSION,
+    WORKSPACE_DOCUMENT_V4_FORMAT_VERSION, WorkspaceDocument, parse_workspace_document,
+    parse_workspace_document_with_source, serialize_workspace_document,
+};
+pub use workspace_migration::{
+    MigrationReport, MigrationSourceKind, WORKSPACE_PERSISTENCE_VERSION, migrate_workspace_value,
 };
 pub use workspaces::{
     InMemoryWorkspaceDocumentStore, InMemoryWorkspaceStore, remap_workspace_identity,

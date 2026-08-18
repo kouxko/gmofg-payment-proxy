@@ -242,6 +242,10 @@ async fn legacy_atomic_replace_failure_rolls_back_restored_certificate() {
     value["workspaces"][0]
         .as_object_mut()
         .unwrap()
+        .insert("metadata_extractors".into(), serde_json::json!([]));
+    value["workspaces"][0]
+        .as_object_mut()
+        .unwrap()
         .remove("socket_rules");
     value["workspaces"][0]
         .as_object_mut()

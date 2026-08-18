@@ -68,10 +68,10 @@ fn failed_protocol_schema_migration_rolls_back_new_tables_and_version_record() {
             .execute_batch(
                 "DROP TABLE protocol_package_files;
                  DROP TABLE protocol_packages;
-                 DELETE FROM schema_migrations WHERE version = 9;
+                 DELETE FROM schema_migrations WHERE version = 10;
                  CREATE TRIGGER reject_protocol_migration
                  BEFORE INSERT ON schema_migrations
-                 WHEN NEW.version = 9
+                 WHEN NEW.version = 10
                  BEGIN SELECT RAISE(ABORT, 'reject protocol migration'); END;",
             )
             .unwrap();
@@ -88,7 +88,7 @@ fn failed_protocol_schema_migration_rolls_back_new_tables_and_version_record() {
         .connection
         .lock()
         .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 9",
+            "SELECT COUNT(*) FROM schema_migrations WHERE version = 10",
             [],
             |row| row.get(0),
         )
@@ -251,7 +251,7 @@ fn assert_protocol_tables_and_version(store: &SqliteStore, expected_latest_rows:
         .connection
         .lock()
         .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 9",
+            "SELECT COUNT(*) FROM schema_migrations WHERE version = 10",
             [],
             |row| row.get(0),
         )

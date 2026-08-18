@@ -1,6 +1,4 @@
-use intercept_proxy_domain::{
-    ConnectionFaultAction, ListenerId, MetadataExtractorSource, ResponseAssertionKind,
-};
+use intercept_proxy_domain::{ConnectionFaultAction, ListenerId, ResponseAssertionKind};
 use uuid::Uuid;
 
 use super::{AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone};
@@ -37,22 +35,6 @@ pub(super) fn parse_listener_ids(raw: &str) -> AppResult<Vec<ListenerId>> {
                 })
         })
         .collect()
-}
-
-pub(super) fn metadata_source(kind: &str) -> AppResult<MetadataExtractorSource> {
-    match kind {
-        "header" => Ok(MetadataExtractorSource::Header {
-            name: String::new(),
-        }),
-        "json_path" => Ok(MetadataExtractorSource::JsonPath {
-            path: "$.field".into(),
-        }),
-        "body_text" => Ok(MetadataExtractorSource::BodyText),
-        "fixed_value" => Ok(MetadataExtractorSource::FixedValue {
-            value: String::new(),
-        }),
-        _ => Err(component_variant_error()),
-    }
 }
 
 pub(super) fn response_assertion(kind: &str) -> AppResult<ResponseAssertionKind> {
@@ -106,11 +88,6 @@ pub(super) fn delete_component(
     component_id: &str,
 ) -> AppResult<()> {
     let removed = match component_kind {
-        "metadata_extractor" => {
-            retain_removed(&mut workspace.metadata_extractors, component_id, |item| {
-                item.id.to_string()
-            })
-        }
         "response_assertion" => {
             retain_removed(&mut workspace.response_assertions, component_id, |item| {
                 item.id.to_string()

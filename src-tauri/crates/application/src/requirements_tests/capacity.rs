@@ -17,12 +17,9 @@ fn logical_byte_accounting_is_exact_and_repeatable() {
     let trace_bytes = serde_json::to_vec(&record.detail.rule_trace)
         .expect("serializable trace")
         .len() as u64;
-    let policy_result_bytes = serde_json::to_vec(&(
-        &record.detail.extracted_metadata,
-        &record.detail.response_assertions,
-    ))
-    .expect("serializable workspace policy results")
-    .len() as u64;
+    let policy_result_bytes = serde_json::to_vec(&record.detail.response_assertions)
+        .expect("serializable workspace policy results")
+        .len() as u64;
     let summary = &record.detail.summary;
     let strings = summary.request_id.len()
         + summary.terminal_ip.len()

@@ -369,14 +369,10 @@ async fn legacy_v3_requires_pure_fresh_local_preflight_and_preserves_registry() 
     .unwrap();
     value["format_version"] = serde_json::json!(WORKSPACE_DOCUMENT_V3_FORMAT_VERSION);
     value.as_object_mut().unwrap().remove("protocol_packages");
-    value["workspace"]
-        .as_object_mut()
-        .unwrap()
-        .remove("socket_rules");
-    value["workspace"]
-        .as_object_mut()
-        .unwrap()
-        .remove("socket_rule_created_order_high_water");
+    let workspace = value["workspace"].as_object_mut().unwrap();
+    workspace.insert("metadata_extractors".into(), serde_json::json!([]));
+    workspace.remove("socket_rules");
+    workspace.remove("socket_rule_created_order_high_water");
     documents.set_next_import(serde_json::to_vec(&value).unwrap());
     let (application, _, portability) = app_fixture(
         workspaces,

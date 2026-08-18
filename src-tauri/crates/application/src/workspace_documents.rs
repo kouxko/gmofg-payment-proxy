@@ -8,12 +8,14 @@ use serde_json::Value;
 use specta::Type;
 
 use crate::{
-    AppError, AppResult, PortableCertificateMaterial, PortableProtocolPackage, ProxyWorkspace,
-    ProxyWorkspaceV2, document_security::is_secret_field, validate_certificate_materials,
+    AppError, AppResult, MigrationReport, MigrationSourceKind, PortableCertificateMaterial,
+    PortableProtocolPackage, ProxyWorkspace, document_security::is_secret_field,
+    migrate_workspace_value, validate_certificate_materials,
     validate_portable_certificate_references, validate_workspace_package_references,
 };
 
-pub const WORKSPACE_DOCUMENT_FORMAT_VERSION: u16 = 4;
+pub const WORKSPACE_DOCUMENT_FORMAT_VERSION: u16 = 5;
+pub const WORKSPACE_DOCUMENT_V4_FORMAT_VERSION: u16 = 4;
 pub const WORKSPACE_DOCUMENT_V3_FORMAT_VERSION: u16 = 3;
 pub const WORKSPACE_DOCUMENT_V2_FORMAT_VERSION: u16 = 2;
 pub const MAX_WORKSPACE_DOCUMENT_BYTES: usize = 64 * 1024 * 1024;
@@ -27,59 +29,28 @@ pub struct WorkspaceDocument {
     pub protocol_packages: Vec<PortableProtocolPackage>,
 }
 
-/// v3 已支持显式 Socket 拓扑，但尚未定义协议包和 Socket 规则可移植性。
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct WorkspaceDocumentV3 {
+struct LegacyWorkspaceDocument {
     pub format_version: u16,
-    pub workspace: ProxyWorkspace,
+    pub workspace: Value,
     pub certificate_materials: Vec<PortableCertificateMaterial>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct WorkspaceDocumentV2 {
+struct WorkspaceDocumentV4 {
     pub format_version: u16,
-    pub workspace: ProxyWorkspaceV2,
+    pub workspace: Value,
     pub certificate_materials: Vec<PortableCertificateMaterial>,
-}
-
-impl TryFrom<WorkspaceDocumentV2> for WorkspaceDocument {
-    type Error = AppError;
-
-    fn try_from(value: WorkspaceDocumentV2) -> Result<Self, Self::Error> {
-        if value.format_version != WORKSPACE_DOCUMENT_V2_FORMAT_VERSION {
-            return Err(unsupported_version(value.format_version));
-        }
-        Ok(Self {
-            format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
-            workspace: value.workspace.into(),
-            certificate_materials: value.certificate_materials,
-            protocol_packages: Vec::new(),
-        })
-    }
-}
-
-impl TryFrom<WorkspaceDocumentV3> for WorkspaceDocument {
-    type Error = AppError;
-
-    fn try_from(value: WorkspaceDocumentV3) -> Result<Self, Self::Error> {
-        if value.format_version != WORKSPACE_DOCUMENT_V3_FORMAT_VERSION {
-            return Err(unsupported_version(value.format_version));
-        }
-        Ok(Self {
-            format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
-            workspace: value.workspace,
-            certificate_materials: value.certificate_materials,
-            protocol_packages: Vec::new(),
-        })
-    }
+    pub protocol_packages: Vec<PortableProtocolPackage>,
 }
 
 /// 已迁移到当前模型的 Workspace 文档及其原始 wire 版本。
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParsedWorkspaceDocument {
     pub source_version: u16,
+    pub migration_report: MigrationReport,
     pub document: WorkspaceDocument,
 }
 
@@ -125,21 +96,50 @@ pub fn parse_workspace_document_with_source(document: &[u8]) -> AppResult<Parsed
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("Workspace JSON 无效：{error}")))?;
     reject_workspace_fields_outside_certificate_materials(&value)?;
     let version = read_format_version(&value)?;
-    if version == WORKSPACE_DOCUMENT_V3_FORMAT_VERSION {
-        crate::portable_socket_rules::reject_workspace_fields(value.get("workspace"))?;
-    }
-    let parsed = match version {
-        WORKSPACE_DOCUMENT_FORMAT_VERSION => serde_json::from_value::<WorkspaceDocument>(value)
-            .map_err(|error| invalid_workspace_structure(&error))?,
-        WORKSPACE_DOCUMENT_V3_FORMAT_VERSION => {
-            let legacy = serde_json::from_value::<WorkspaceDocumentV3>(value)
+    let (parsed, migration_report) = match version {
+        WORKSPACE_DOCUMENT_FORMAT_VERSION => {
+            let document = serde_json::from_value::<WorkspaceDocument>(value)
                 .map_err(|error| invalid_workspace_structure(&error))?;
-            legacy.try_into()?
+            (
+                document,
+                MigrationReport::unchanged(MigrationSourceKind::WorkspaceDocument, version),
+            )
         }
-        WORKSPACE_DOCUMENT_V2_FORMAT_VERSION => {
-            let legacy = serde_json::from_value::<WorkspaceDocumentV2>(value)
+        WORKSPACE_DOCUMENT_V4_FORMAT_VERSION => {
+            let legacy = serde_json::from_value::<WorkspaceDocumentV4>(value)
                 .map_err(|error| invalid_workspace_structure(&error))?;
-            legacy.try_into()?
+            let (workspace, report) = migrate_workspace_value(
+                legacy.workspace,
+                MigrationSourceKind::WorkspaceDocument,
+                version,
+            )?;
+            (
+                WorkspaceDocument {
+                    format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
+                    workspace,
+                    certificate_materials: legacy.certificate_materials,
+                    protocol_packages: legacy.protocol_packages,
+                },
+                report,
+            )
+        }
+        WORKSPACE_DOCUMENT_V2_FORMAT_VERSION | WORKSPACE_DOCUMENT_V3_FORMAT_VERSION => {
+            let legacy = serde_json::from_value::<LegacyWorkspaceDocument>(value)
+                .map_err(|error| invalid_workspace_structure(&error))?;
+            let (workspace, report) = migrate_workspace_value(
+                legacy.workspace,
+                MigrationSourceKind::WorkspaceDocument,
+                version,
+            )?;
+            (
+                WorkspaceDocument {
+                    format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
+                    workspace,
+                    certificate_materials: legacy.certificate_materials,
+                    protocol_packages: Vec::new(),
+                },
+                report,
+            )
         }
         _ => return Err(unsupported_version(version)),
     };
@@ -147,10 +147,11 @@ pub fn parse_workspace_document_with_source(document: &[u8]) -> AppResult<Parsed
     validate_workspace_package_references(
         &parsed.workspace,
         &parsed.protocol_packages,
-        version == WORKSPACE_DOCUMENT_FORMAT_VERSION,
+        version >= WORKSPACE_DOCUMENT_V4_FORMAT_VERSION,
     )?;
     Ok(ParsedWorkspaceDocument {
         source_version: version,
+        migration_report,
         document: parsed,
     })
 }
@@ -171,7 +172,7 @@ fn unsupported_version(version: u16) -> AppError {
     AppError::new(
         "WORKSPACE_DOCUMENT_VERSION_UNSUPPORTED",
         format!(
-            "Workspace 文档版本 {version} 不受支持；当前支持版本 2、3 和 \
+            "Workspace 文档版本 {version} 不受支持；当前支持版本 2、3、4 和 \
              {WORKSPACE_DOCUMENT_FORMAT_VERSION}。"
         ),
     )
@@ -225,8 +226,8 @@ mod tests {
     use intercept_proxy_domain::{
         BodyCodecKind, CertificateReference, CertificateReferenceId, CertificateReferenceKind,
         DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings,
-        ForwardProxyAuthentication, MitmSettings, ProxyListenerV2, ProxyWorkspaceV2,
-        SecretReference, UpstreamTlsSettings,
+        ForwardProxyAuthentication, MitmSettings, ProxyListenerV2, SecretReference,
+        UpstreamTlsSettings,
     };
     use serde_json::json;
 
@@ -394,25 +395,25 @@ mod tests {
         ]
     }
 
-    fn checked_v2_document() -> WorkspaceDocumentV2 {
+    fn checked_v2_document() -> Value {
         let ids = FixtureIds::new();
         let workspace = ProxyWorkspace::default();
-        WorkspaceDocumentV2 {
-            format_version: WORKSPACE_DOCUMENT_V2_FORMAT_VERSION,
-            workspace: ProxyWorkspaceV2 {
-                id: workspace.id,
-                name: "v2 fixture".into(),
-                revision: workspace.revision,
-                listeners: vec![checked_v2_listener(workspace.listeners[0].id, &ids)],
-                metadata_extractors: Vec::new(),
-                response_assertions: Vec::new(),
-                rules: Vec::new(),
-                fault_presets: Vec::new(),
-                certificate_references: checked_v2_references(&ids),
-                android_network_profiles: Vec::new(),
+        json!({
+            "format_version": WORKSPACE_DOCUMENT_V2_FORMAT_VERSION,
+            "workspace": {
+                "id": workspace.id,
+                "name": "v2 fixture",
+                "revision": workspace.revision,
+                "listeners": [checked_v2_listener(workspace.listeners[0].id, &ids)],
+                "metadata_extractors": [],
+                "response_assertions": [],
+                "rules": [],
+                "fault_presets": [],
+                "certificate_references": checked_v2_references(&ids),
+                "android_network_profiles": [],
             },
-            certificate_materials: checked_v2_materials(&ids),
-        }
+            "certificate_materials": checked_v2_materials(&ids),
+        })
     }
 
     #[test]
@@ -432,21 +433,23 @@ mod tests {
     #[test]
     fn v2_workspace_migrates_every_http_field_and_exports_v4() {
         let v2 = checked_v2_document();
-        let expected_listener = v2.workspace.listeners[0].clone();
+        let expected_listener: ProxyListenerV2 =
+            serde_json::from_value(v2["workspace"]["listeners"][0].clone()).unwrap();
+        let expected_references: Vec<CertificateReference> =
+            serde_json::from_value(v2["workspace"]["certificate_references"].clone()).unwrap();
+        let expected_materials: Vec<PortableCertificateMaterial> =
+            serde_json::from_value(v2["certificate_materials"].clone()).unwrap();
         let parsed = parse_workspace_document(&serde_json::to_vec(&v2).unwrap()).unwrap();
 
         assert_eq!(parsed.format_version, WORKSPACE_DOCUMENT_FORMAT_VERSION);
         assert_eq!(parsed.workspace.listeners[0], expected_listener.into());
-        assert_eq!(
-            parsed.workspace.certificate_references,
-            v2.workspace.certificate_references
-        );
-        assert_eq!(parsed.certificate_materials, v2.certificate_materials);
+        assert_eq!(parsed.workspace.certificate_references, expected_references);
+        assert_eq!(parsed.certificate_materials, expected_materials);
         assert!(parsed.protocol_packages.is_empty());
 
         let exported = serialize_workspace_document(&parsed).unwrap();
         let exported_value: Value = serde_json::from_slice(&exported).unwrap();
-        assert_eq!(exported_value["format_version"], 4);
+        assert_eq!(exported_value["format_version"], 5);
         assert_eq!(
             exported_value["workspace"]["listeners"][0]["data_plane"]["kind"],
             "http"
@@ -457,9 +460,9 @@ mod tests {
     #[test]
     fn v2_minimal_historical_defaults_are_exact_and_unknown_fields_fail() {
         let mut v2 = checked_v2_document();
-        v2.workspace.certificate_references.clear();
-        v2.certificate_materials.clear();
-        let mut value = serde_json::to_value(v2).unwrap();
+        v2["workspace"]["certificate_references"] = json!([]);
+        v2["certificate_materials"] = json!([]);
+        let mut value = v2;
         let listener = value["workspace"]["listeners"][0].as_object_mut().unwrap();
         listener["mitm"] = serde_json::to_value(MitmSettings::default()).unwrap();
         listener["authentication"] = serde_json::json!({"mode": "none"});

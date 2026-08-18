@@ -129,7 +129,6 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
         name: "test".into(),
         revision: Revision::INITIAL,
         listeners: vec![listener.clone()],
-        metadata_extractors: Vec::new(),
         response_assertions: Vec::new(),
         rules: Vec::new(),
         socket_rules: Vec::new(),

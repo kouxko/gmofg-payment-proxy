@@ -41,6 +41,7 @@ impl SqliteStore {
             .transaction()
             .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
         create_schema(&transaction)?;
+        super::schema::migrate_workspaces_to_v5(&transaction)?;
         super::socket_captures::create_schema(&transaction)?;
         let certificate_revision = stored_certificate_revision(&transaction)?;
         initialize_singleton_state(&transaction, certificate_revision)?;

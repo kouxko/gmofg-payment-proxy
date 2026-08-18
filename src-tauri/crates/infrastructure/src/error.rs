@@ -34,6 +34,8 @@ pub enum InfrastructureError {
         #[source]
         source: rusqlite::Error,
     },
+    #[error("数据库迁移数据无效：{message}")]
+    DatabaseMigrationInvalid { message: String },
     #[error("数据库操作失败")]
     Database {
         #[source]
@@ -86,7 +88,9 @@ impl InfrastructureError {
     #[must_use]
     pub const fn code(&self) -> InfrastructureErrorCode {
         match self {
-            Self::DatabaseMigration { .. } => InfrastructureErrorCode::DatabaseMigrationFailed,
+            Self::DatabaseMigration { .. } | Self::DatabaseMigrationInvalid { .. } => {
+                InfrastructureErrorCode::DatabaseMigrationFailed
+            }
             Self::Database { .. } => InfrastructureErrorCode::DatabaseWriteFailed,
             Self::RevisionConflict => InfrastructureErrorCode::RevisionConflict,
             Self::DpapiUnsupported => InfrastructureErrorCode::DpapiUnsupported,

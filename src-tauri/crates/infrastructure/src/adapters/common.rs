@@ -3,7 +3,10 @@
 //! 集中映射可保持前端错误码稳定，并保证底层错误链
 //! 不会把敏感内容直接暴露给 `WebView`。
 
-use intercept_proxy_application::{AppError, AppResult, ProxyWorkspace, ProxyWorkspaceV2};
+use intercept_proxy_application::{
+    AppError, AppResult, MigrationSourceKind, ProxyWorkspace, WORKSPACE_PERSISTENCE_VERSION,
+    migrate_workspace_value,
+};
 
 use crate::{InfrastructureError, InfrastructureErrorCode, WorkspaceRecord};
 
@@ -16,23 +19,26 @@ pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWo
     let indexed_revision = record.revision;
     let mut value = record.value;
     let version = take_workspace_persistence_version(&mut value)?;
-    let workspace = match version {
-        Some(4) => {
-            require_v4_socket_rule_fields(&value)?;
-            serde_json::from_value::<ProxyWorkspace>(value)
-                .map_err(|error| format!("Workspace {indexed_id} v4 结构无效：{error}"))?
-        }
-        Some(3) => serde_json::from_value::<ProxyWorkspace>(value)
-            .map_err(|error| format!("Workspace {indexed_id} v3 结构无效：{error}"))?,
-        None => serde_json::from_value::<ProxyWorkspaceV2>(value)
-            .map(Into::into)
-            .map_err(|error| format!("Workspace {indexed_id} v2 结构无效：{error}"))?,
+    let source_version = match version {
+        Some(version @ (3..=5)) => u16::try_from(version).expect("bounded persistence version"),
+        None => 2,
         Some(other) => {
             return Err(format!(
                 "Workspace {indexed_id} 持久化版本 {other} 不受支持"
             ));
         }
     };
+    let (workspace, _) = migrate_workspace_value(
+        value,
+        MigrationSourceKind::WorkspacePersistence,
+        source_version,
+    )
+    .map_err(|error| {
+        format!(
+            "Workspace {indexed_id} v{source_version} 结构无效：{}",
+            error.view_model.message
+        )
+    })?;
     if workspace.id.as_uuid() != indexed_id || workspace.revision.get() != indexed_revision {
         return Err(format!(
             "Workspace {indexed_id} 的索引 ID/revision 与 JSON 内容不一致"
@@ -44,22 +50,6 @@ pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWo
     Ok(workspace)
 }
 
-/// v4 是 Socket 规则首次进入本地持久化的版本，两个字段都必须显式存在。
-///
-/// `ProxyWorkspace` 上的 serde default 只服务于历史 v3 迁移；若把它同样用于 v4，
-/// 数据库行丢失规则字段时会被静默解释为空规则，掩盖持久化损坏。
-fn require_v4_socket_rule_fields(value: &serde_json::Value) -> Result<(), String> {
-    let object = value
-        .as_object()
-        .ok_or_else(|| "Workspace v4 持久化值不是 JSON object".to_owned())?;
-    for field in ["socket_rules", "socket_rule_created_order_high_water"] {
-        if !object.contains_key(field) {
-            return Err(format!("Workspace v4 缺少必需字段 {field}"));
-        }
-    }
-    Ok(())
-}
-
 pub(crate) fn encode_workspace_record(
     workspace: &ProxyWorkspace,
 ) -> Result<serde_json::Value, String> {
@@ -68,7 +58,10 @@ pub(crate) fn encode_workspace_record(
     let object = value
         .as_object_mut()
         .ok_or_else(|| "Workspace 序列化结果不是 JSON object".to_owned())?;
-    object.insert("_persistence_version".into(), serde_json::json!(4));
+    object.insert(
+        "_persistence_version".into(),
+        serde_json::json!(WORKSPACE_PERSISTENCE_VERSION),
+    );
     Ok(value)
 }
 

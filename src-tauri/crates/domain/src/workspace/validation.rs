@@ -23,21 +23,6 @@ pub(super) fn validate_workspace_references(
     error: &mut DomainError,
 ) {
     unique_ids(
-        workspace.metadata_extractors.iter().map(|item| item.id),
-        "metadata_extractors",
-        error,
-    );
-    for (index, extractor) in workspace.metadata_extractors.iter().enumerate() {
-        validate_named_listener_refs(
-            &extractor.name,
-            &extractor.listener_ids,
-            listener_ids,
-            &format!("metadata_extractors.{index}"),
-            error,
-        );
-    }
-
-    unique_ids(
         workspace.response_assertions.iter().map(|item| item.id),
         "response_assertions",
         error,

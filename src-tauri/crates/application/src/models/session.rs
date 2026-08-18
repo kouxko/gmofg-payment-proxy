@@ -77,9 +77,6 @@ pub struct SessionDetailViewModel {
     pub request: Option<MessageContentViewModel>,
     pub response: Option<MessageContentViewModel>,
     pub rule_trace: Vec<String>,
-    /// Workspace 元数据提取器生成的少量文本，不包含额外 Payload 副本。
-    #[serde(default)]
-    pub extracted_metadata: BTreeMap<String, String>,
     /// 对最终响应执行的通用断言结果；失败只影响会话结论，不篡改线上响应。
     #[serde(default)]
     pub response_assertions: Vec<ResponseAssertionResultViewModel>,
@@ -127,11 +124,8 @@ impl SessionRecord {
             + self.detail.final_action.len();
         let rule_trace_bytes =
             serde_json::to_vec(&self.detail.rule_trace).map_or(0, |bytes| bytes.len());
-        let policy_result_bytes = serde_json::to_vec(&(
-            &self.detail.extracted_metadata,
-            &self.detail.response_assertions,
-        ))
-        .map_or(0, |bytes| bytes.len());
+        let policy_result_bytes =
+            serde_json::to_vec(&self.detail.response_assertions).map_or(0, |bytes| bytes.len());
         let messages = self
             .detail
             .request

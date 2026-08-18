@@ -117,11 +117,10 @@ pub trait RuntimeBodyCodecResolver: std::fmt::Debug + Send + Sync {
 
 #[derive(Debug, Default)]
 pub struct RuntimeWorkspacePolicyEvaluation {
-    pub metadata: BTreeMap<String, String>,
     pub assertions: Vec<ResponseAssertionResultViewModel>,
 }
 
-/// 动态 Workspace 中元数据提取器与响应断言的运行时边界。
+/// 动态 Workspace 中响应断言的运行时边界。
 ///
 /// 适配器只能读取当前选中 Workspace 的快照；网络管线不依赖 SQLite、Tauri 或前端。
 pub trait RuntimeWorkspacePolicyResolver: std::fmt::Debug + Send + Sync {

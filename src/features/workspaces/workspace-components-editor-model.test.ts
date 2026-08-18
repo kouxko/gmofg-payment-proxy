@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  extractorSourceValue,
   faultActionLabel,
   faultActionValue,
   updateAtIndex,
-  updateExtractorSource,
   updateFaultAction,
 } from "./workspace-components-editor-model";
 
@@ -15,31 +13,6 @@ describe("workspace component editor helpers", () => {
       "B",
       "c",
     ]);
-  });
-
-  it("keeps extractor source value mapping symmetric for editable variants", () => {
-    const header = { kind: "header" as const, name: "X-Test" };
-    const path = { kind: "json_path" as const, path: "$.data" };
-    const fixed = { kind: "fixed_value" as const, value: "ready" };
-
-    expect(extractorSourceValue(header)).toBe("X-Test");
-    expect(extractorSourceValue(path)).toBe("$.data");
-    expect(extractorSourceValue(fixed)).toBe("ready");
-    expect(updateExtractorSource(header, "X-New")).toEqual({
-      kind: "header",
-      name: "X-New",
-    });
-    expect(updateExtractorSource(path, "$.value")).toEqual({
-      kind: "json_path",
-      path: "$.value",
-    });
-    expect(updateExtractorSource(fixed, "done")).toEqual({
-      kind: "fixed_value",
-      value: "done",
-    });
-    const bodyText = { kind: "body_text" as const };
-    expect(extractorSourceValue(bodyText)).toBe("");
-    expect(updateExtractorSource(bodyText, "ignored")).toBe(bodyText);
   });
 
   it.each([

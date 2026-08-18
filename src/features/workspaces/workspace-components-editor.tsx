@@ -12,7 +12,6 @@ import { Tabs } from "@heroui/react";
 import type { ProxyWorkspace } from "@/generated/rust-types";
 import { CertificateReferencesSection } from "./workspace-components-editor-certificate-section";
 import { FaultPresetsSection } from "./workspace-components-editor-fault-section";
-import { MetadataExtractorsSection } from "./workspace-components-editor-metadata-section";
 import type {
   ComponentKind,
   ComponentOperation,
@@ -40,17 +39,15 @@ export function WorkspaceComponentsEditor({
   const sectionProps = { workspace, onChange, onAdd, onIntent, disabled };
 
   return (
-    <Tabs aria-label="Workspace 策略配置" defaultSelectedKey="extractors">
+    <Tabs aria-label="Workspace 策略配置" defaultSelectedKey="assertions">
       <Tabs.ListContainer>
         <Tabs.List>
-          <Tabs.Tab id="extractors">元数据提取</Tabs.Tab>
           <Tabs.Tab id="assertions">响应断言</Tabs.Tab>
           <Tabs.Tab id="certificates">证书引用</Tabs.Tab>
           <Tabs.Tab id="faults">连接故障预设</Tabs.Tab>
         </Tabs.List>
       </Tabs.ListContainer>
 
-      <MetadataExtractorsSection {...sectionProps} />
       <ResponseAssertionsSection {...sectionProps} />
       <CertificateReferencesSection {...sectionProps} />
       <FaultPresetsSection {...sectionProps} />

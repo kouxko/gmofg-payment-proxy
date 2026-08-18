@@ -10,8 +10,8 @@ use std::collections::BTreeMap;
 use async_trait::async_trait;
 use intercept_proxy_domain::{
     CertificateReferenceId, ChannelId, DownstreamClientAuthentication, FaultPresetId,
-    ListenerDataPlane, ListenerId, MetadataExtractorId, ResponseAssertionId, Revision, RuleId,
-    SocketDownstreamSecurity, SocketRelaySecurity, SocketTopology,
+    ListenerDataPlane, ListenerId, ResponseAssertionId, Revision, RuleId, SocketDownstreamSecurity,
+    SocketRelaySecurity, SocketTopology,
 };
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -45,10 +45,6 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
         remap_listener_certificates(listener, &certificate_ids)?;
     }
 
-    for extractor in &mut workspace.metadata_extractors {
-        extractor.id = MetadataExtractorId::new();
-        remap_listener_references(&mut extractor.listener_ids, &listener_ids)?;
-    }
     for assertion in &mut workspace.response_assertions {
         assertion.id = ResponseAssertionId::new();
         remap_listener_references(&mut assertion.listener_ids, &listener_ids)?;

@@ -132,6 +132,7 @@ fn v3_socket_workspace_round_trip_preserves_the_tagged_variant() {
         "certificate_materials": []
     });
     let workspace_wire = wire["workspace"].as_object_mut().unwrap();
+    workspace_wire.insert("metadata_extractors".into(), json!([]));
     workspace_wire.remove("socket_rules");
     workspace_wire.remove("socket_rule_created_order_high_water");
     let bytes = serde_json::to_vec_pretty(&wire).unwrap();
@@ -150,12 +151,12 @@ fn v3_socket_workspace_round_trip_preserves_the_tagged_variant() {
 
     wire["workspace"]["socket_rules"] = json!([]);
     let error = parse_workspace_document(&serde_json::to_vec(&wire).unwrap()).unwrap_err();
-    assert_eq!(error.view_model.code, "SOCKET_RULE_PORTABILITY_REQUIRES_V4");
+    assert_eq!(error.view_model.code, "IMPORT_FAILED");
     wire["workspace"]
         .as_object_mut()
         .unwrap()
         .remove("socket_rules");
     wire["workspace"]["socket_rule_created_order_high_water"] = json!(0);
     let error = parse_workspace_document(&serde_json::to_vec(&wire).unwrap()).unwrap_err();
-    assert_eq!(error.view_model.code, "SOCKET_RULE_PORTABILITY_REQUIRES_V4");
+    assert_eq!(error.view_model.code, "IMPORT_FAILED");
 }

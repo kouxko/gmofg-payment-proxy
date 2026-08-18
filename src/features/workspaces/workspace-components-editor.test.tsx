@@ -11,19 +11,11 @@ import type {
 import type { ComponentKind } from "./workspace-components-editor-model";
 import { WorkspaceComponentsEditor } from "./workspace-components-editor";
 
-const workspace: ProxyWorkspace = {
+const workspace = {
   id: "workspace-1",
   name: "API Lab",
   revision: 3,
   listeners: [],
-  metadata_extractors: [
-    {
-      id: "extractor-1",
-      name: "request-id",
-      listener_ids: ["listener-a", "listener-b"],
-      source: { kind: "header", name: "X-Request-Id" },
-    },
-  ],
   response_assertions: [
     {
       id: "assertion-1",
@@ -55,7 +47,7 @@ const workspace: ProxyWorkspace = {
       connection_actions: [{ kind: "delay", milliseconds: 200 }],
     },
   ],
-};
+} as unknown as ProxyWorkspace;
 
 type EditorSpies = {
   onChange: ReturnType<typeof vi.fn<(next: ProxyWorkspace) => void>>;
@@ -103,8 +95,19 @@ async function openTab(user: ReturnType<typeof userEvent.setup>, name: string) {
 }
 
 describe("WorkspaceComponentsEditor", () => {
+  it("only exposes the three supported Workspace strategy tabs", () => {
+    renderEditor();
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "响应断言",
+      "证书引用",
+      "连接故障预设",
+    ]);
+    expect(screen.queryByText("元数据提取")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "新增提取器" })).not.toBeInTheDocument();
+  });
+
   it.each([
-    ["元数据提取", "新增提取器", "metadata_extractor"],
     ["响应断言", "新增响应断言", "response_assertion"],
     ["连接故障预设", "新增连接故障预设", "fault_preset"],
   ] as const)("adds a component from the %s tab", async (tab, button, kind) => {
@@ -119,7 +122,6 @@ describe("WorkspaceComponentsEditor", () => {
   });
 
   it.each([
-    ["元数据提取", "删除提取器 1", "metadata_extractor", "extractor-1"],
     ["响应断言", "删除响应断言 1", "response_assertion", "assertion-1"],
     ["证书引用", "删除证书引用 1", "certificate_reference", "certificate-1"],
     ["连接故障预设", "删除故障预设 1", "fault_preset", "fault-1"],
@@ -135,7 +137,6 @@ describe("WorkspaceComponentsEditor", () => {
   });
 
   it.each([
-    ["元数据提取", "提取器 1 来源", "JSONPath", "metadata_extractor", "extractor-1", "json_path"],
     ["响应断言", "响应断言 1 类型", "Header 等于", "response_assertion", "assertion-1", "header_equals"],
     ["连接故障预设", "故障预设 1 动作", "拒绝连接", "fault_preset", "fault-1", "reject"],
   ] as const)(
@@ -152,20 +153,6 @@ describe("WorkspaceComponentsEditor", () => {
       expect(onIntent).toHaveBeenCalledWith(kind, id, "variant", variant);
     },
   );
-
-  it("maps an edited extractor parameter back to its source value", () => {
-    const { onChange } = renderEditor();
-
-    fireEvent.change(screen.getByDisplayValue("X-Request-Id"), {
-      target: { value: "X-Correlation-Id" },
-    });
-
-    expect(onChange).toHaveBeenCalledOnce();
-    expect(onChange.mock.calls[0][0].metadata_extractors[0].source).toEqual({
-      kind: "header",
-      name: "X-Correlation-Id",
-    });
-  });
 
   it("maps an edited assertion value back to the selected assertion", async () => {
     const user = userEvent.setup();
@@ -274,7 +261,6 @@ describe("WorkspaceComponentsEditor", () => {
   });
 
   it.each([
-    ["元数据提取", "listener-a, listener-b", "metadata_extractor", "extractor-1"],
     ["响应断言", "listener-a", "response_assertion", "assertion-1"],
   ] as const)(
     "submits listener IDs only when the %s input loses focus",
@@ -299,7 +285,6 @@ describe("WorkspaceComponentsEditor", () => {
   );
 
   it.each([
-    ["元数据提取", "新增提取器"],
     ["响应断言", "新增响应断言"],
     ["连接故障预设", "新增连接故障预设"],
   ] as const)("disables adding from the %s tab while busy", async (tab, button) => {
@@ -315,13 +300,6 @@ describe("WorkspaceComponentsEditor", () => {
     const user = userEvent.setup();
     renderEditor({ disabled: true });
 
-    expect(screen.getByDisplayValue("request-id")).toBeDisabled();
-    expect(screen.getByDisplayValue("listener-a, listener-b")).toBeDisabled();
-    expect(screen.getByLabelText("提取器 1 来源")).toBeDisabled();
-    expect(screen.getByDisplayValue("X-Request-Id")).toBeDisabled();
-    expect(screen.getByRole("button", { name: "删除提取器 1" })).toBeDisabled();
-
-    await openTab(user, "响应断言");
     expect(screen.getByRole("switch", { name: "启用" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "删除响应断言 1" })).toBeDisabled();
 
