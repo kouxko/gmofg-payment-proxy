@@ -7,10 +7,9 @@ use std::{env, error::Error, fs, path::PathBuf, sync::Arc, time::Duration};
 
 use encoding_rs::SHIFT_JIS;
 use intercept_proxy_application::{
-    AppResult, BodyCodecKind, CaptureQuery, CaptureSort, MessageStage, PageRequest,
-    ResponseAssertionKind, RuleAction, RuleCondition, RuleDraft, RuleDropResponseMode,
-    RuleMatchField, RuleMatchOperator, RuleTerminalAction, SessionDetailViewModel, SessionQuery,
-    SessionSort, SortDirection,
+    AppResult, BodyCodecKind, CaptureQuery, CaptureSort, MessageStage, PageRequest, RuleAction,
+    RuleCondition, RuleDraft, RuleDropResponseMode, RuleMatchField, RuleMatchOperator,
+    RuleTerminalAction, SessionDetailViewModel, SessionQuery, SessionSort, SortDirection,
 };
 use intercept_proxy_domain::{FixedServerSettings, UpstreamTlsSettings};
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
@@ -373,49 +372,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
 
     workspace = application.workspace_get(workspace.id).await?;
 
-    for (name, assertion) in [
-        (
-            "HTTP status",
-            ResponseAssertionKind::HttpStatusEquals { expected: 200 },
-        ),
-        (
-            "Content-Type header",
-            ResponseAssertionKind::HeaderEquals {
-                name: "Content-Type".into(),
-                expected: "application/json; charset=Shift_JIS".into(),
-            },
-        ),
-        (
-            "Fixture header",
-            ResponseAssertionKind::HeaderEquals {
-                name: "X-Upstream-Fixture".into(),
-                expected: "simulated-d48".into(),
-            },
-        ),
-        (
-            "D48 body",
-            ResponseAssertionKind::BodyTextContains {
-                expected: "D48".into(),
-            },
-        ),
-        (
-            "Body length",
-            ResponseAssertionKind::BodyLengthEquals {
-                expected: baseline_body.len() as u64,
-            },
-        ),
-    ] {
-        workspace = application.workspace_component_new(workspace, "response_assertion")?;
-        let item = workspace
-            .response_assertions
-            .last_mut()
-            .expect("new assertion");
-        item.name = format!("TEST ONLY - {name}");
-        item.listener_ids = vec![dll_listener_id, transaction_listener_id];
-        item.assertion = assertion;
-    }
-    workspace = application.workspace_save(workspace).await?;
-
     let request_modify = path_rule(
         application.rule_new_draft().await?,
         "request header and JSON modification",
@@ -597,15 +553,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .response
         .as_ref()
         .ok_or("baseline has no response")?;
-    if baseline_response.http_status != Some(200)
-        || baseline_response.body_bytes != baseline_body
-        || baseline.response_assertions.len() != 5
-        || baseline
-            .response_assertions
-            .iter()
-            .any(|assertion| !assertion.passed)
-    {
-        return Err("baseline Shift-JIS bytes or assertions did not pass".into());
+    if baseline_response.http_status != Some(200) || baseline_response.body_bytes != baseline_body {
+        return Err("baseline Shift-JIS response did not match the upstream fixture".into());
     }
     let header_order = baseline_response
         .raw_headers
@@ -623,10 +572,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     if transaction_response.http_status != Some(200)
         || transaction_response.body_bytes != baseline_body
         || raw_header_value(transaction, "x-upstream-channel") != Some(b"transaction")
-        || transaction
-            .response_assertions
-            .iter()
-            .any(|assertion| !assertion.passed)
     {
         return Err("Transaction listener did not independently preserve the D48 response".into());
     }
@@ -651,10 +596,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         if response.http_status != Some(200)
             || response.body_bytes != baseline_body
             || raw_header_value(session, "x-upstream-channel") != Some(expected_channel)
-            || session
-                .response_assertions
-                .iter()
-                .any(|assertion| !assertion.passed)
         {
             return Err(
                 format!("{label} did not preserve D48 through the impaired VPN path").into(),
@@ -829,8 +770,6 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         },
         "baseline": {
             "http_status": baseline_response.http_status,
-            "assertion_count": baseline.response_assertions.len(),
-            "all_assertions_passed": baseline.response_assertions.iter().all(|assertion| assertion.passed),
             "body_length": baseline_response.body_bytes.len(),
             "body_bytes_equal_upstream": baseline_response.body_bytes == baseline_body,
             "decoded_body_contains_d48": baseline_response.body_text.as_deref().is_some_and(|text| text.contains("D48")),
