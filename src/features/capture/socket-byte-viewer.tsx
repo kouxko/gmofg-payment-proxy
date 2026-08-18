@@ -59,22 +59,32 @@ export function PaginatedHex({ bytes, label }: { bytes: number[]; label: string 
 
 export function SocketDocumentView({ document }: { document: SocketCaptureDocument }) {
   return (
-    <dl className="grid grid-cols-[minmax(120px,max-content)_minmax(0,1fr)] gap-x-4 gap-y-3 text-sm">
-      {document.schema.fields.map((field, index) => {
-        const value = document.values[index];
-        return (
-          <div className="contents" key={field.name}>
-            <dt><span className="font-medium">{field.label}</span><br /><code className="text-xs text-[var(--telemetry-muted)]">{field.name} · {field.type}</code></dt>
-            <dd className="min-w-0 break-all">
-              {value === null ? <span className="text-[var(--telemetry-muted)]">未设置</span>
-                : value.type === "blob" ? <PaginatedHex bytes={value.value} label={`${field.label} Blob 字节`} />
-                  : value.type === "bool" ? String(value.value)
-                    : <code className="text-xs">{value.value}</code>}
-            </dd>
-          </div>
-        );
-      })}
-    </dl>
+    <div className="overflow-hidden rounded-xl border border-[var(--telemetry-line)]">
+      <table className="w-full table-fixed border-collapse text-sm">
+        <tbody>
+          {document.schema.fields.map((field, index) => {
+            const value = document.values[index];
+            return (
+              <tr className="border-b border-[var(--telemetry-line)] last:border-b-0" key={field.name}>
+                <th
+                  className="w-1/2 border-r border-[var(--telemetry-line)] bg-[var(--telemetry-panel)] px-3 py-2 text-left align-top font-medium"
+                  scope="row"
+                >
+                  <span>{field.label}</span><br />
+                  <code className="text-xs font-normal text-[var(--telemetry-muted)]">{field.name} · {field.type}</code>
+                </th>
+                <td className="min-w-0 break-all px-3 py-2 align-top">
+                  {value === null ? <span className="text-[var(--telemetry-muted)]">未设置</span>
+                    : value.type === "blob" ? <PaginatedHex bytes={value.value} label={`${field.label} Blob 字节`} />
+                      : value.type === "bool" ? String(value.value)
+                        : <code className="text-xs">{value.value}</code>}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
