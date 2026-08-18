@@ -17,8 +17,7 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{
     CapacitySettings, ChannelSettings, Revision, Settings, TimeoutSettings, TlsVersion,
 };
-use intercept_proxy_product_api::{LegacySettingsChannelMapping, ProductProfile};
-use parking_lot::RwLock;
+use intercept_proxy_product_api::ProductProfile;
 use serde_json::{Map, Value};
 
 use crate::SqliteStore;
@@ -60,8 +59,6 @@ fn is_usable_lan_ipv4(address: Ipv4Addr) -> bool {
 pub struct SettingsRepositoryAdapter {
     store: Arc<SqliteStore>,
     defaults: SettingsDraft,
-    legacy_settings_channels: &'static [LegacySettingsChannelMapping],
-    effective: RwLock<Option<SettingsDraft>>,
     local_address: Arc<dyn LocalAddressProvider>,
 }
 
@@ -71,7 +68,6 @@ impl SettingsRepositoryAdapter {
         Self::with_local_address_provider(
             store,
             default_settings(product),
-            product.persistence_migrations().settings_channels,
             Arc::new(SystemLocalAddressProvider),
         )
     }
@@ -79,14 +75,11 @@ impl SettingsRepositoryAdapter {
     fn with_local_address_provider(
         store: Arc<SqliteStore>,
         defaults: SettingsDraft,
-        legacy_settings_channels: &'static [LegacySettingsChannelMapping],
         local_address: Arc<dyn LocalAddressProvider>,
     ) -> Self {
         Self {
             store,
             defaults,
-            legacy_settings_channels,
-            effective: RwLock::new(None),
             local_address,
         }
     }
@@ -94,12 +87,8 @@ impl SettingsRepositoryAdapter {
     fn load_stored(&self) -> AppResult<(SettingsDraft, u64)> {
         let (mut draft, revision) = match infra(self.store.load_settings())? {
             Some(stored) => {
-                let mut draft = deserialize_settings(
-                    stored.value,
-                    &self.defaults,
-                    self.legacy_settings_channels,
-                )
-                .map_err(|error| json_error("持久化设置无效", error))?;
+                let mut draft = deserialize_settings(stored.value)
+                    .map_err(|error| json_error("持久化设置无效", error))?;
                 self.canonicalize_catalog(&mut draft)?;
                 draft.expected_revision = Some(stored.revision);
                 (draft, stored.revision)
@@ -116,15 +105,8 @@ impl SettingsRepositoryAdapter {
 
     fn view(&self) -> AppResult<SettingsViewModel> {
         let (stored, revision) = self.load_stored()?;
-        let effective = self.effective.read().clone();
-        let pending_changes = effective.as_ref().is_some_and(|value| value != &stored);
         Ok(SettingsViewModel {
             stored,
-            effective,
-            pending_changes,
-            requires_restart: pending_changes,
-            restart_reason: pending_changes
-                .then(|| "全局运行参数已变更，需要重新打开应用后生效。".into()),
             revision,
             can_write: true,
             disabled_reason: None,
@@ -155,18 +137,8 @@ impl SettingsRepositoryAdapter {
         let Ok(bind_address) = draft.bind_address.parse::<IpAddr>() else {
             return;
         };
-        let effective = self.effective.read();
         for channel in &draft.channels {
-            let unchanged = effective.as_ref().is_some_and(|settings| {
-                settings.bind_address == draft.bind_address
-                    && settings.channels.iter().any(|effective_channel| {
-                        effective_channel.id == channel.id
-                            && effective_channel.enabled
-                            && effective_channel.port == channel.port
-                    })
-            });
             if channel.enabled
-                && !unchanged
                 && TcpListener::bind(SocketAddr::new(bind_address, channel.port)).is_err()
             {
                 validation.valid = false;

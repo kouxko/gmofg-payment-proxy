@@ -45,7 +45,6 @@ pub struct RuleRepositoryAdapter {
     exporter: AtomicFileExporter,
     operations: Mutex<()>,
     channel_names: BTreeMap<ChannelId, String>,
-    legacy_terminal_body_fields: &'static [&'static str],
 }
 
 impl RuleRepositoryAdapter {
@@ -55,7 +54,6 @@ impl RuleRepositoryAdapter {
         dialog: Arc<dyn NativeFileDialog>,
         sessions: Arc<dyn SessionQueryPort>,
         channels: &[ProductChannel],
-        legacy_terminal_body_fields: &'static [&'static str],
     ) -> Self {
         Self {
             store,
@@ -73,7 +71,6 @@ impl RuleRepositoryAdapter {
                     )
                 })
                 .collect(),
-            legacy_terminal_body_fields,
         }
     }
 
@@ -309,7 +306,10 @@ pub(crate) use conversion::condition_to_domain;
 use conversion::{
     app_draft, runtime_rules, summary, to_domain_draft, validation_from_domain, view,
 };
-use persistence::{deserialize_persisted_rule, persisted_rule_error, validate_persisted_rule};
+use persistence::{
+    deserialize_persisted_rule, persisted_rule_error, serialize_persisted_rule,
+    validate_persisted_rule,
+};
 
 #[cfg(test)]
 #[path = "rules/tests/mod.rs"]

@@ -264,7 +264,7 @@ impl Application {
         let stored = self.require_protocol_package(&package).await?;
         let receipt = self
             .protocol_package_compiler
-            .validate_for_enable(&package)
+            .compile_fresh(&package)
             .await?;
         ensure_compilation_receipt(&package, stored.host_api, &receipt)?;
         self.protocol_package_store
@@ -378,7 +378,7 @@ impl Application {
         // 下的 fresh 恢复与编译。真实的可加载性只由下面的 compiler receipt 决定。
         let receipt = self
             .protocol_package_compiler
-            .validate_for_enable(&scripted.package)
+            .compile_fresh(&scripted.package)
             .await
             .map_err(listener_package_error)?;
         ensure_compilation_receipt(&scripted.package, version.host_api, &receipt)

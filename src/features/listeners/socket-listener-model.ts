@@ -14,13 +14,12 @@ import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
 import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
 
 export type SocketWorkingMode = "raw_relay" | "protocol_relay" | "local_response";
-export type SocketWorkingModeState = SocketWorkingMode | "incompatible";
 
-export function socketWorkingMode(settings: SocketRelaySettings): SocketWorkingModeState {
+export function socketWorkingMode(settings: SocketRelaySettings): SocketWorkingMode {
   if (settings.topology.mode === "local_responder") {
-    return settings.processing?.mode === "scripted" ? "local_response" : "incompatible";
+    return "local_response";
   }
-  return settings.processing?.mode === "scripted" ? "protocol_relay" : "raw_relay";
+  return settings.processing.mode === "scripted" ? "protocol_relay" : "raw_relay";
 }
 
 export function setSocketWorkingMode(
@@ -138,7 +137,7 @@ export function setSocketTopology(settings: SocketRelaySettings, mode: "relay" |
   if (settings.topology.mode === mode) return settings;
   if (mode === "local_responder") {
     const security = appSecurity(settings);
-    const current = settings.processing?.mode === "scripted"
+    const current = settings.processing.mode === "scripted"
       ? settings.processing.settings
       : emptyScripted();
     return {
@@ -173,7 +172,7 @@ export function setProcessingMode(
       : setSocketTopology(settings, "relay");
     return { ...relaySettings, processing: { mode: "direct" } };
   }
-  if (settings.processing?.mode === "scripted") return settings;
+  if (settings.processing.mode === "scripted") return settings;
   return {
     ...settings,
     processing: { mode: "scripted", settings: emptyScripted(recommendedPackage ?? undefined) },
@@ -181,11 +180,11 @@ export function setProcessingMode(
 }
 
 export function bindPackage(
-  processing: SocketPayloadProcessing | undefined,
+  processing: SocketPayloadProcessing,
   option: ListenerProtocolPackageOptionViewModel,
   local: boolean,
 ): SocketPayloadProcessing {
-  const current = processing?.mode === "scripted" ? processing.settings : emptyScripted();
+  const current = processing.mode === "scripted" ? processing.settings : emptyScripted();
   return { mode: "scripted", settings: {
     ...current,
     package: option.package,

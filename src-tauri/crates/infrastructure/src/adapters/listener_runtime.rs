@@ -70,9 +70,9 @@ pub struct ListenerRuntimeAdapter {
     _store: Arc<SqliteStore>,
     mitm_certificate_authority: Option<Arc<dyn MitmCertificateAuthority>>,
     installation_server_identity: Option<Arc<dyn InstallationServerIdentityProvider>>,
-    protected_secrets: Option<Arc<ProtectedSecretAdapter>>,
+    protected_secrets: Arc<ProtectedSecretAdapter>,
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
-    protocol_packages: Option<Arc<ProtocolPackageRepositoryAdapter>>,
+    protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
     socket_capture_publisher: RwLock<Option<socket_capture_publisher::SocketCapturePublisher>>,
     pipeline_ports: RwLock<Option<Arc<dyn PipelinePorts>>>,
     socket_diagnostic_events: Arc<RwLock<Arc<EventHub>>>,
@@ -80,16 +80,20 @@ pub struct ListenerRuntimeAdapter {
 
 impl ListenerRuntimeAdapter {
     #[must_use]
-    pub fn new(store: Arc<SqliteStore>) -> Self {
+    pub fn new(
+        store: Arc<SqliteStore>,
+        protected_secrets: Arc<ProtectedSecretAdapter>,
+        protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
+    ) -> Self {
         Self {
             running: tokio::sync::Mutex::new(BTreeMap::new()),
             runtime_epochs: RwLock::new(BTreeMap::new()),
             _store: store,
             mitm_certificate_authority: None,
             installation_server_identity: None,
-            protected_secrets: None,
+            protected_secrets,
             managed_listener_certificates: None,
-            protocol_packages: None,
+            protocol_packages,
             socket_capture_publisher: RwLock::new(None),
             pipeline_ports: RwLock::new(None),
             socket_diagnostic_events: Arc::new(RwLock::new(Arc::new(EventHub::default()))),
@@ -105,31 +109,12 @@ impl ListenerRuntimeAdapter {
         self
     }
 
-    /// 注入协议包注册表，仅 Scripted Socket 启动计划会访问；Direct 分支不会触碰它。
-    #[must_use]
-    pub fn with_protocol_packages(
-        mut self,
-        protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
-    ) -> Self {
-        self.protocol_packages = Some(protocol_packages);
-        self
-    }
-
     #[must_use]
     pub(crate) fn with_installation_server_identity(
         mut self,
         provider: Arc<dyn InstallationServerIdentityProvider>,
     ) -> Self {
         self.installation_server_identity = Some(provider);
-        self
-    }
-
-    #[must_use]
-    pub fn with_protected_secrets(
-        mut self,
-        protected_secrets: Arc<ProtectedSecretAdapter>,
-    ) -> Self {
-        self.protected_secrets = Some(protected_secrets);
         self
     }
 

@@ -1,3 +1,34 @@
+#[derive(Debug)]
+struct ListenerRuntimeTestProtector;
+
+impl crate::SecretProtector for ListenerRuntimeTestProtector {
+    fn protect(&self, plaintext: &[u8]) -> Result<Vec<u8>, crate::InfrastructureError> {
+        Ok(plaintext.to_vec())
+    }
+
+    fn unprotect(&self, ciphertext: &[u8]) -> Result<Vec<u8>, crate::InfrastructureError> {
+        Ok(ciphertext.to_vec())
+    }
+}
+
+fn test_listener_runtime(store: Arc<SqliteStore>) -> ListenerRuntimeAdapter {
+    let protocol_packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
+        Arc::clone(&store),
+    ));
+    test_listener_runtime_with_packages(store, protocol_packages)
+}
+
+fn test_listener_runtime_with_packages(
+    store: Arc<SqliteStore>,
+    protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
+) -> ListenerRuntimeAdapter {
+    let protected_secrets = Arc::new(ProtectedSecretAdapter::new(
+        Arc::clone(&store),
+        Arc::new(ListenerRuntimeTestProtector),
+    ));
+    ListenerRuntimeAdapter::new(store, protected_secrets, protocol_packages)
+}
+
 include!("tests/certificate_policy.rs");
 include!("tests/forward_proxy.rs");
 include!("tests/fixed_server.rs");

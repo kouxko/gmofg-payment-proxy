@@ -17,9 +17,8 @@ use parking_lot::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceDocumentPort,
-    WorkspaceId, WorkspaceRepositoryPort, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
-    parse_workspace_document, serialize_workspace_document,
+    AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceId,
+    WorkspaceRepositoryPort, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
 /// 为复制或导入的 Workspace 生成完全独立的聚合身份。
@@ -358,67 +357,6 @@ impl WorkspaceRepositoryPort for InMemoryWorkspaceStore {
             revision: Some(expected_revision),
             requires_restart: false,
         })
-    }
-
-    async fn import_document(&self, document: Vec<u8>) -> AppResult<ProxyWorkspace> {
-        self.import_workspace(parse_workspace_document(&document)?.workspace)
-            .await
-    }
-
-    async fn export_document(&self, workspace_id: WorkspaceId) -> AppResult<Vec<u8>> {
-        let workspace = Self::get_stored(&self.state.read(), workspace_id)?;
-        serialize_workspace_document(&crate::WorkspaceDocument {
-            format_version: crate::WORKSPACE_DOCUMENT_FORMAT_VERSION,
-            workspace,
-            certificate_materials: Vec::new(),
-            protocol_packages: Vec::new(),
-        })
-    }
-}
-
-#[derive(Debug, Default)]
-/// 无界面测试使用的文档端口；不会访问真实文件系统。
-pub struct InMemoryWorkspaceDocumentStore {
-    next_import: RwLock<Option<Vec<u8>>>,
-    last_export: RwLock<Option<(String, Vec<u8>)>>,
-}
-
-impl InMemoryWorkspaceDocumentStore {
-    pub fn set_next_import(&self, document: Vec<u8>) {
-        *self.next_import.write() = Some(document);
-    }
-
-    pub fn take_last_export(&self) -> Option<(String, Vec<u8>)> {
-        self.last_export.write().take()
-    }
-}
-
-#[async_trait]
-impl WorkspaceDocumentPort for InMemoryWorkspaceDocumentStore {
-    async fn pick_import_document(&self) -> AppResult<Option<Vec<u8>>> {
-        Ok(self.next_import.write().take())
-    }
-
-    async fn save_export_document(
-        &self,
-        suggested_file_name: String,
-        document: Vec<u8>,
-    ) -> AppResult<bool> {
-        *self.last_export.write() = Some((suggested_file_name, document));
-        Ok(true)
-    }
-
-    async fn pick_import_application_configuration(&self) -> AppResult<Option<Vec<u8>>> {
-        Ok(self.next_import.write().take())
-    }
-
-    async fn save_export_application_configuration(
-        &self,
-        suggested_file_name: String,
-        document: Vec<u8>,
-    ) -> AppResult<bool> {
-        *self.last_export.write() = Some((suggested_file_name, document));
-        Ok(true)
     }
 }
 

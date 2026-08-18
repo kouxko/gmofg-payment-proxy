@@ -11,90 +11,12 @@ use super::{
     InfrastructureError, SqliteStore, Utc, Uuid, Value, WorkspaceRecord, current_revision,
     protocol_packages::{
         StoredProtocolPackageBundleError, StoredProtocolPackageWrite,
-        compare_or_insert_protocol_package, require_existing_protocol_package,
+        compare_or_insert_protocol_package,
     },
     revision_to_i64,
 };
 
 impl SqliteStore {
-    /// 历史 Workspace 只复用事务内仍存在且内容一致的本机包；注册表保持只读。
-    pub(crate) fn insert_legacy_workspace(
-        &self,
-        record: &WorkspaceRecord,
-        referenced_packages: &[StoredProtocolPackageWrite],
-    ) -> Result<(), StoredProtocolPackageBundleError> {
-        let mut connection = self.connection.lock();
-        let transaction = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(database_error)?;
-        for package in referenced_packages {
-            require_existing_protocol_package(&transaction, package)?;
-        }
-        let inserted = transaction
-            .execute(
-                "INSERT OR IGNORE INTO workspaces(id, revision, json, updated_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![
-                    record.id.to_string(),
-                    revision_to_i64(record.revision)?,
-                    record.value.to_string(),
-                    record.updated_at.to_rfc3339(),
-                ],
-            )
-            .map_err(database_error)?;
-        if inserted != 1 {
-            return Err(InfrastructureError::RevisionConflict.into());
-        }
-        transaction
-            .execute(
-                "UPDATE workspace_state SET selected_id = ?1
-                 WHERE singleton_id = 1 AND selected_id IS NULL",
-                [record.id.to_string()],
-            )
-            .map_err(database_error)?;
-        transaction.commit().map_err(database_error)?;
-        Ok(())
-    }
-
-    /// 安装 Workspace 引用的精确包并插入 Workspace。已有相同包保留本机启用位。
-    pub(crate) fn insert_workspace_bundle(
-        &self,
-        record: &WorkspaceRecord,
-        packages: &[StoredProtocolPackageWrite],
-    ) -> Result<(), StoredProtocolPackageBundleError> {
-        let mut connection = self.connection.lock();
-        let transaction = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(database_error)?;
-        for package in packages {
-            compare_or_insert_protocol_package(&transaction, package, None)?;
-        }
-        let inserted = transaction
-            .execute(
-                "INSERT OR IGNORE INTO workspaces(id, revision, json, updated_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![
-                    record.id.to_string(),
-                    revision_to_i64(record.revision)?,
-                    record.value.to_string(),
-                    record.updated_at.to_rfc3339(),
-                ],
-            )
-            .map_err(database_error)?;
-        if inserted != 1 {
-            return Err(InfrastructureError::RevisionConflict.into());
-        }
-        transaction
-            .execute(
-                "UPDATE workspace_state SET selected_id = ?1
-                 WHERE singleton_id = 1 AND selected_id IS NULL",
-                [record.id.to_string()],
-            )
-            .map_err(database_error)?;
-        transaction.commit().map_err(database_error)?;
-        Ok(())
-    }
-
     /// 用文档内容替换整个协议包注册表、Workspace 集合、选择状态和 Settings。
     pub(crate) fn replace_application_bundle(
         &self,
@@ -126,27 +48,6 @@ impl SqliteStore {
         Ok(())
     }
 
-    /// 历史完整配置替换 Workspace/Settings，但完整本机协议包注册表保持只读。
-    pub(crate) fn replace_legacy_application_configuration(
-        &self,
-        selected_id: Uuid,
-        records: &[WorkspaceRecord],
-        settings: &Value,
-        referenced_packages: &[StoredProtocolPackageWrite],
-    ) -> Result<(), StoredProtocolPackageBundleError> {
-        require_selected_workspace(selected_id, records)?;
-        let mut connection = self.connection.lock();
-        let transaction = connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(database_error)?;
-        for package in referenced_packages {
-            require_existing_protocol_package(&transaction, package)?;
-        }
-        replace_workspaces_and_settings(&transaction, selected_id, records, settings)?;
-        transaction.commit().map_err(database_error)?;
-        Ok(())
-    }
-
     /// 清理所有协议包与用户数据并写入唯一默认 Workspace。
     pub(crate) fn reset_application_bundle(
         &self,
@@ -172,9 +73,7 @@ impl SqliteStore {
             .map_err(database_error)?;
         transaction
             .execute_batch(
-                "DELETE FROM rules;
-                 UPDATE rule_state SET revision = revision + 1 WHERE singleton_id = 1;
-                 DELETE FROM protected_secrets;
+                "DELETE FROM protected_secrets;
                  DELETE FROM certificate_material;
                  UPDATE certificate_state SET revision = revision + 1 WHERE singleton_id = 1;
                  DELETE FROM android_runtime_owner;
@@ -194,8 +93,7 @@ impl SqliteStore {
                 super::protocol_packages::StoredProtocolPackageBundleError::Infrastructure(
                     error,
                 ) => error,
-                super::protocol_packages::StoredProtocolPackageBundleError::IdentityConflict(_)
-                | super::protocol_packages::StoredProtocolPackageBundleError::NotFound(_) => {
+                super::protocol_packages::StoredProtocolPackageBundleError::IdentityConflict(_) => {
                     InfrastructureError::PersistenceCorrupt {
                         entity: "builtin_protocol_package",
                         message: "重置事务无法写入官方协议包".into(),

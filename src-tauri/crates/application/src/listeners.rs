@@ -170,8 +170,8 @@ fn connection_target(listener: &ProxyListener) -> AppResult<TestTarget> {
         ListenerDataPlane::Socket(settings) => {
             let SocketTopology::Relay(relay) = &settings.topology else {
                 return Err(AppError::new(
-                    "LOCAL_RESPONDER_NOT_AVAILABLE",
-                    "LocalResponder 数据面尚未接入，且没有可测试的 Server 上游。",
+                    "LISTENER_UPSTREAM_NOT_APPLICABLE",
+                    "本地应答没有可测试的 Server 上游。",
                 )
                 .entity(listener.id.to_string()));
             };
@@ -250,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    fn local_responder_connection_probe_is_stably_unavailable() {
+    fn local_responder_connection_probe_is_not_applicable() {
         let settings = SocketRelaySettings {
             topology: SocketTopology::LocalResponder(SocketLocalResponderTopology::default()),
             ..SocketRelaySettings::default()
@@ -261,7 +261,7 @@ mod tests {
         };
 
         let error = connection_target(&listener).unwrap_err();
-        assert_eq!(error.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+        assert_eq!(error.view_model.code, "LISTENER_UPSTREAM_NOT_APPLICABLE");
     }
 
     #[tokio::test]

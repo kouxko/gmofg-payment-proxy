@@ -24,7 +24,7 @@ async fn frozen_snapshot_ignores_later_package_reinstall_and_workspace_edits() {
         ..ProxyWorkspace::default()
     };
     workspace.validate().unwrap();
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository.clone());
+    let runtime = test_listener_runtime_with_packages(store, repository.clone());
     let snapshot = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
         .await

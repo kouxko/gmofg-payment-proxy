@@ -9,14 +9,12 @@ fn schema_keeps_http_payload_storage_absent_and_socket_capture_explicit() {
         vec![
             "android_runtime_owner",
             "application_feature_state",
+            "application_schema",
             "certificate_material",
             "certificate_state",
             "protected_secrets",
             "protocol_package_files",
             "protocol_packages",
-            "rule_state",
-            "rules",
-            "schema_migrations",
             "settings",
             "socket_captures",
             "sqlite_sequence",
@@ -180,12 +178,6 @@ fn application_data_reset_atomically_removes_persisted_user_data() {
         let connection = store.connection.lock();
         connection
             .execute(
-                "INSERT INTO rules(id, revision, enabled, json, updated_at) VALUES (?1, 1, 1, ?2, ?3)",
-                params![Uuid::new_v4().to_string(), "{}", Utc::now().to_rfc3339()],
-            )
-            .expect("seed rule");
-        connection
-            .execute(
                 "INSERT INTO certificate_material(kind, protected_blob, metadata_json, updated_at) VALUES (?1, ?2, ?3, ?4)",
                 params!["listener_identity", vec![4_u8, 5], "{}", Utc::now().to_rfc3339()],
             )
@@ -244,7 +236,7 @@ fn application_data_reset_atomically_removes_persisted_user_data() {
             .is_none()
     );
     let connection = store.connection.lock();
-    for table in ["rules", "certificate_material", "socket_captures"] {
+    for table in ["certificate_material", "socket_captures"] {
         let count: i64 = connection
             .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
                 row.get(0)

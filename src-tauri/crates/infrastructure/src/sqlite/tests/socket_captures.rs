@@ -376,44 +376,6 @@ fn captures_recover_after_reopen_and_clear_is_workspace_scoped() {
 }
 
 #[test]
-fn version_six_database_migrates_to_socket_capture_schema_without_losing_history() {
-    let directory = tempdir().expect("tempdir");
-    let path = directory.path().join("version-six.sqlite3");
-    {
-        let connection = rusqlite::Connection::open(&path).unwrap();
-        connection
-            .execute_batch(
-                "CREATE TABLE schema_migrations (
-                    version INTEGER PRIMARY KEY,
-                    applied_at TEXT NOT NULL
-                 );
-                 INSERT INTO schema_migrations(version, applied_at)
-                 VALUES (6, '2026-08-14T00:00:00Z');",
-            )
-            .unwrap();
-    }
-    let store = SqliteStore::open(&path).expect("migrate v6");
-    let connection = store.connection.lock();
-    let versions: Vec<i64> = connection
-        .prepare("SELECT version FROM schema_migrations ORDER BY version")
-        .unwrap()
-        .query_map([], |row| row.get(0))
-        .unwrap()
-        .collect::<Result<_, _>>()
-        .unwrap();
-    assert_eq!(versions, vec![6, 10]);
-    let table_exists: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM sqlite_master
-             WHERE type = 'table' AND name = 'socket_captures'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap();
-    assert_eq!(table_exists, 1);
-}
-
-#[test]
 fn configuration_replace_preserves_captures_but_explicit_application_reset_deletes_them() {
     let store = SqliteStore::in_memory().expect("store");
     let capture_workspace = Uuid::new_v4();

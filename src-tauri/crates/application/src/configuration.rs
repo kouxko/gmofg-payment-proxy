@@ -1,8 +1,7 @@
 //! 整个应用的可移植配置文档。
 //!
-//! `.intercept-config` 与单个 `.intercept-workspace` 文档分工明确：前者用于完整备份与
-//! 恢复，后者用于分享一个 Workspace。用户明确要求测试配置可在单个 JSON 文件中携带
-//! 证书、PKCS#12 和密码；运行时仍只保存本机受保护引用。
+//! 该结构是当前应用备份 ZIP 中 `application.json` 的唯一配置模型。
+//! 证书与协议包原始文件由 ZIP 的独立受限路径承载，运行时只保存本机受保护引用。
 
 use std::collections::BTreeSet;
 
@@ -13,16 +12,12 @@ use crate::document_security::{canonical_field_name, is_secret_field};
 use specta::Type;
 
 use crate::{
-    AppError, AppResult, ChannelSettingsDraft, MigrationReport, MigrationSourceKind,
-    PortableApplicationProtocolPackage, PortableCertificateMaterial, ProxyWorkspace, SettingsDraft,
-    WorkspaceId, migrate_workspace_value, validate_certificate_materials,
-    validate_configuration_package_references,
+    AppError, AppResult, ChannelSettingsDraft, PortableApplicationProtocolPackage,
+    PortableCertificateMaterial, ProxyWorkspace, SettingsDraft, WorkspaceId,
+    validate_certificate_materials, validate_configuration_package_references,
 };
 
 pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 5;
-pub const APPLICATION_CONFIGURATION_V4_FORMAT_VERSION: u16 = 4;
-pub const APPLICATION_CONFIGURATION_V3_FORMAT_VERSION: u16 = 3;
-pub const APPLICATION_CONFIGURATION_V2_FORMAT_VERSION: u16 = 2;
 pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 128 * 1024 * 1024;
 /// 监听证书只能引用应用受保护存储中的材料，不能携带文件路径或环境变量密码。
 pub const MANAGED_LISTENER_CERTIFICATE_PREFIX: &str = "managed:listener-tls:";
@@ -123,35 +118,6 @@ pub struct ApplicationConfigurationDocument {
     pub protocol_packages: Vec<PortableApplicationProtocolPackage>,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct LegacyApplicationConfigurationDocument {
-    pub format_version: u16,
-    pub selected_workspace_id: WorkspaceId,
-    pub workspaces: Vec<Value>,
-    pub settings: PortableSettings,
-    pub certificate_materials: Vec<PortableCertificateMaterial>,
-}
-
-#[derive(Clone, Debug, PartialEq, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ApplicationConfigurationDocumentV4 {
-    pub format_version: u16,
-    pub selected_workspace_id: WorkspaceId,
-    pub workspaces: Vec<Value>,
-    pub settings: PortableSettings,
-    pub certificate_materials: Vec<PortableCertificateMaterial>,
-    pub protocol_packages: Vec<PortableApplicationProtocolPackage>,
-}
-
-/// 已迁移到当前模型的完整配置及其原始 wire 版本。
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ParsedApplicationConfigurationDocument {
-    pub source_version: u16,
-    pub migration_report: MigrationReport,
-    pub document: ApplicationConfigurationDocument,
-}
-
 impl ApplicationConfigurationDocument {
     pub fn validate(&self) -> AppResult<()> {
         if self.format_version != APPLICATION_CONFIGURATION_FORMAT_VERSION {
@@ -201,13 +167,6 @@ impl ApplicationConfigurationDocument {
 pub fn parse_application_configuration(
     document: &[u8],
 ) -> AppResult<ApplicationConfigurationDocument> {
-    Ok(parse_application_configuration_with_source(document)?.document)
-}
-
-/// 解析完整配置并保留来源版本，供恢复用例区分 legacy 文档。
-pub fn parse_application_configuration_with_source(
-    document: &[u8],
-) -> AppResult<ParsedApplicationConfigurationDocument> {
     if document.len() > MAX_APPLICATION_CONFIGURATION_BYTES {
         return Err(AppError::new(
             "IMPORT_FAILED",
@@ -218,92 +177,13 @@ pub fn parse_application_configuration_with_source(
         .map_err(|error| AppError::new("IMPORT_FAILED", format!("完整配置 JSON 无效：{error}")))?;
     reject_configuration_fields_outside_certificate_materials(&value)?;
     let version = read_configuration_format_version(&value)?;
-    let (parsed, migration_report) = match version {
-        APPLICATION_CONFIGURATION_FORMAT_VERSION => {
-            let document = serde_json::from_value::<ApplicationConfigurationDocument>(value)
-                .map_err(|error| invalid_configuration_structure(&error))?;
-            (
-                document,
-                MigrationReport::unchanged(
-                    MigrationSourceKind::ApplicationConfigurationDocument,
-                    version,
-                ),
-            )
-        }
-        APPLICATION_CONFIGURATION_V4_FORMAT_VERSION => {
-            let legacy = serde_json::from_value::<ApplicationConfigurationDocumentV4>(value)
-                .map_err(|error| invalid_configuration_structure(&error))?;
-            migrate_configuration(
-                version,
-                legacy.selected_workspace_id,
-                legacy.workspaces,
-                legacy.settings,
-                legacy.certificate_materials,
-                legacy.protocol_packages,
-            )?
-        }
-        APPLICATION_CONFIGURATION_V2_FORMAT_VERSION
-        | APPLICATION_CONFIGURATION_V3_FORMAT_VERSION => {
-            let legacy = serde_json::from_value::<LegacyApplicationConfigurationDocument>(value)
-                .map_err(|error| invalid_configuration_structure(&error))?;
-            migrate_configuration(
-                version,
-                legacy.selected_workspace_id,
-                legacy.workspaces,
-                legacy.settings,
-                legacy.certificate_materials,
-                Vec::new(),
-            )?
-        }
-        _ => return Err(unsupported_configuration_version(version)),
-    };
-    parsed.validate_common()?;
-    validate_configuration_package_references(
-        &parsed.workspaces,
-        &parsed.protocol_packages,
-        version >= APPLICATION_CONFIGURATION_V4_FORMAT_VERSION,
-    )?;
-    Ok(ParsedApplicationConfigurationDocument {
-        source_version: version,
-        migration_report,
-        document: parsed,
-    })
-}
-
-fn migrate_configuration(
-    version: u16,
-    selected_workspace_id: WorkspaceId,
-    values: Vec<Value>,
-    settings: PortableSettings,
-    certificate_materials: Vec<PortableCertificateMaterial>,
-    protocol_packages: Vec<PortableApplicationProtocolPackage>,
-) -> AppResult<(ApplicationConfigurationDocument, MigrationReport)> {
-    let mut removed_metadata_extractors = 0;
-    let mut workspaces = Vec::with_capacity(values.len());
-    for value in values {
-        let (workspace, report) = migrate_workspace_value(
-            value,
-            MigrationSourceKind::ApplicationConfigurationDocument,
-            version,
-        )?;
-        removed_metadata_extractors += report.removed_metadata_extractors;
-        workspaces.push(workspace);
+    if version != APPLICATION_CONFIGURATION_FORMAT_VERSION {
+        return Err(unsupported_configuration_version(version));
     }
-    Ok((
-        ApplicationConfigurationDocument {
-            format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
-            selected_workspace_id,
-            workspaces,
-            settings,
-            certificate_materials,
-            protocol_packages,
-        },
-        MigrationReport {
-            removed_metadata_extractors,
-            source_kind: MigrationSourceKind::ApplicationConfigurationDocument,
-            source_version: version,
-        },
-    ))
+    let parsed = serde_json::from_value::<ApplicationConfigurationDocument>(value)
+        .map_err(|error| invalid_configuration_structure(&error))?;
+    parsed.validate()?;
+    Ok(parsed)
 }
 
 fn read_configuration_format_version(value: &Value) -> AppResult<u16> {
@@ -322,7 +202,7 @@ fn unsupported_configuration_version(version: u16) -> AppError {
     AppError::new(
         "APPLICATION_CONFIGURATION_VERSION_UNSUPPORTED",
         format!(
-            "配置文档版本 {version} 不受支持；当前支持版本 2、3、4 和 \
+            "配置文档版本 {version} 不受支持；当前仅支持版本 \
              {APPLICATION_CONFIGURATION_FORMAT_VERSION}。"
         ),
     )

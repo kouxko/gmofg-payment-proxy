@@ -7,7 +7,6 @@ use async_trait::async_trait;
 
 mod android;
 pub use android::AndroidControlPort;
-pub(crate) use android::UnavailableAndroidControlPort;
 
 mod protocol_packages;
 pub use protocol_packages::{
@@ -17,14 +16,14 @@ pub use protocol_packages::{
 };
 
 use crate::{
-    ActiveFaultViewModel, AppError, AppResult, ApplicationConfigurationDocument,
-    BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft, BreakpointValidationViewModel,
+    ActiveFaultViewModel, AppResult, ApplicationConfigurationDocument, BreakpointDecision,
+    BreakpointDetailViewModel, BreakpointDraft, BreakpointValidationViewModel,
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, CertificateItemViewModel,
     CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
     FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
     ListenerId, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
-    ProxyListener, ProxyStatusViewModel, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
+    ProxyListener, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
     RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
     SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
     SettingsViewModel, SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel,
@@ -104,23 +103,6 @@ pub trait ProtectedSecretPort: Send + Sync + std::fmt::Debug {
     ) -> AppResult<SecretReference>;
 }
 
-#[derive(Debug)]
-pub(crate) struct UnavailableProtectedSecretPort;
-
-#[async_trait]
-impl ProtectedSecretPort for UnavailableProtectedSecretPort {
-    async fn store_basic_auth(
-        &self,
-        _username: String,
-        _password: String,
-    ) -> AppResult<SecretReference> {
-        Err(crate::AppError::new(
-            "SECRET_PROTECTOR_UNAVAILABLE",
-            "当前宿主没有提供系统密钥保护能力。",
-        ))
-    }
-}
-
 #[async_trait]
 /// Workspace 的应用层持久化边界。
 ///
@@ -141,30 +123,6 @@ pub trait WorkspaceRepositoryPort: Send + Sync + std::fmt::Debug {
         workspace_id: WorkspaceId,
         expected_revision: u64,
     ) -> AppResult<OperationResultViewModel>;
-    /// 解析并保存由文档端口读取的内容。
-    async fn import_document(&self, document: Vec<u8>) -> AppResult<ProxyWorkspace>;
-    /// 序列化不含秘密材料的 `.intercept-workspace` 文档。
-    async fn export_document(&self, workspace_id: WorkspaceId) -> AppResult<Vec<u8>>;
-}
-
-#[async_trait]
-/// Workspace 文件选择与字节 I/O 的平台边界。
-///
-/// Tauri 实现可使用系统 Dialog，CLI 实现可使用命令行路径；前端既不接触路径，也不接触
-/// 文件字节。`None`/`false` 表示用户取消，不是失败。
-pub trait WorkspaceDocumentPort: Send + Sync + std::fmt::Debug {
-    async fn pick_import_document(&self) -> AppResult<Option<Vec<u8>>>;
-    async fn save_export_document(
-        &self,
-        suggested_file_name: String,
-        document: Vec<u8>,
-    ) -> AppResult<bool>;
-    async fn pick_import_application_configuration(&self) -> AppResult<Option<Vec<u8>>>;
-    async fn save_export_application_configuration(
-        &self,
-        suggested_file_name: String,
-        document: Vec<u8>,
-    ) -> AppResult<bool>;
 }
 
 #[async_trait]
@@ -181,19 +139,6 @@ pub trait ApplicationConfigurationStorePort: Send + Sync + std::fmt::Debug {
     /// 适配器必须覆盖并清理其他持久化表。
     async fn reset_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
         self.replace_all(document).await
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct UnavailableApplicationConfigurationStore;
-
-#[async_trait]
-impl ApplicationConfigurationStorePort for UnavailableApplicationConfigurationStore {
-    async fn replace_all(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
-        Err(AppError::new(
-            "APPLICATION_CONFIGURATION_STORE_UNAVAILABLE",
-            "当前 Host 未提供完整配置原子存储能力。",
-        ))
     }
 }
 
@@ -225,16 +170,6 @@ pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
-/// 启停和查询代理运行时的端口。
-///
-/// application 只发送已经校验的配置，不知道监听器、Tokio 任务或 TLS 的具体实现。
-pub trait ProxySupervisorPort: Send + Sync + std::fmt::Debug {
-    async fn status(&self) -> AppResult<ProxyStatusViewModel>;
-    async fn start(&self, effective_settings: SettingsDraft) -> AppResult<ProxyStatusViewModel>;
-    async fn stop(&self) -> AppResult<ProxyStatusViewModel>;
-}
-
-#[async_trait]
 /// 抓包列表与详情的只读数据端口。
 pub trait CaptureRepositoryPort: Send + Sync + std::fmt::Debug {
     async fn query(&self, query: CaptureQuery) -> AppResult<CapturePageViewModel>;
@@ -245,37 +180,21 @@ pub trait CaptureRepositoryPort: Send + Sync + std::fmt::Debug {
     ) -> AppResult<CaptureDetailViewModel>;
     async fn clear_view(&self, current_cursor: u64) -> AppResult<u64>;
 
-    /// 查询独立的 Socket capture 时间线。默认实现保持旧 HTTP 仓储源兼容，并明确报告
-    /// Host 尚未接线，而不是让 Socket 数据进入 HTTP DTO。
+    /// 查询独立的 Socket capture 时间线。
     async fn query_socket(
         &self,
-        _query: SocketCaptureQuery,
-    ) -> AppResult<SocketCapturePageViewModel> {
-        Err(AppError::new(
-            "SOCKET_CAPTURE_STORE_UNAVAILABLE",
-            "当前 Host 尚未提供 Socket 抓包存储。",
-        ))
-    }
+        query: SocketCaptureQuery,
+    ) -> AppResult<SocketCapturePageViewModel>;
 
     /// 按 capture id 加载完整 Socket 详情；与 HTTP 的 session/epoch 详情键分离。
     async fn get_socket_detail(
         &self,
-        _capture_id: SocketCaptureId,
-    ) -> AppResult<SocketCaptureDetailViewModel> {
-        Err(AppError::new(
-            "SOCKET_CAPTURE_STORE_UNAVAILABLE",
-            "当前 Host 尚未提供 Socket 抓包存储。",
-        ))
-    }
+        capture_id: SocketCaptureId,
+    ) -> AppResult<SocketCaptureDetailViewModel>;
 
     /// 清除已完成 Socket capture。实时 `RequestParsed` preview 由 observer 自己淘汰，
     /// 不属于该持久化视图，也不计入返回数量。
-    async fn clear_socket_completed(&self, _workspace_id: WorkspaceId) -> AppResult<usize> {
-        Err(AppError::new(
-            "SOCKET_CAPTURE_STORE_UNAVAILABLE",
-            "当前 Host 尚未提供 Socket 抓包存储。",
-        ))
-    }
+    async fn clear_socket_completed(&self, workspace_id: WorkspaceId) -> AppResult<usize>;
 }
 
 #[async_trait]
@@ -351,15 +270,12 @@ pub trait CertificateServicePort: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
-/// 保存配置与维护“已保存/已生效”双快照的端口。
+/// 保存和校验全局配置的端口。
 pub trait SettingsRepositoryPort: Send + Sync + std::fmt::Debug {
     async fn defaults(&self) -> AppResult<SettingsDraft>;
     async fn get(&self) -> AppResult<SettingsViewModel>;
     async fn validate(&self, draft: &SettingsDraft) -> AppResult<SettingsValidationViewModel>;
     async fn save(&self, draft: SettingsDraft) -> AppResult<SettingsViewModel>;
-    async fn restore(&self, settings: SettingsViewModel) -> AppResult<SettingsViewModel>;
-    async fn apply_effective(&self, settings: SettingsDraft) -> AppResult<SettingsViewModel>;
-    async fn clear_effective(&self) -> AppResult<SettingsViewModel>;
 }
 
 #[async_trait]

@@ -121,11 +121,9 @@ pub struct ProxyWorkspace {
     #[specta(skip)]
     pub rules: Vec<Rule>,
     /// Schema 驱动的 Socket 规则；与 HTTP `rules` 使用完全独立的类型和维护入口。
-    #[serde(default)]
     #[specta(skip)]
     pub socket_rules: Vec<SocketDocumentRuleDefinition>,
     /// Socket 规则 `created_order` 的单调高水位；删除规则不会降低此值。
-    #[serde(default)]
     #[specta(skip)]
     pub socket_rule_created_order_high_water: u64,
     pub fault_presets: Vec<FaultPreset>,
@@ -133,7 +131,6 @@ pub struct ProxyWorkspace {
     /// 与该 Workspace 一起迁移的 Android 设备网络方案。
     /// 设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，
     /// 不属于此字段。
-    #[serde(default)]
     pub android_network_profiles: Vec<AndroidNetworkProfile>,
 }
 

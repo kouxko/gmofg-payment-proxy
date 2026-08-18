@@ -1,7 +1,7 @@
-//! 单文件配置中的可移植 Listener TLS 材料。
+//! 应用备份 ZIP 中的可移植 Listener TLS 材料。
 //!
 //! Workspace 运行时仍只保存 `managed:listener-tls:*` 引用；该结构仅存在于用户主动
-//! 导入或导出的 JSON 文档中。导入后 infrastructure 会校验证书格式、写入当前系统的
+//! 导入或导出的备份中。导入后 infrastructure 会校验证书格式、写入当前系统的
 //! 受保护存储，并用新的本机托管引用替换文档中的旧引用。
 
 use std::{
@@ -11,9 +11,7 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_domain::{
-    CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    DownstreamClientAuthentication, ListenerDataPlane, ProxyWorkspace, SocketDownstreamSecurity,
-    SocketRelaySecurity, SocketTopology,
+    CertificateReference, CertificateReferenceId, CertificateReferenceKind, ProxyWorkspace,
 };
 use ring::digest::{SHA256, digest};
 use serde::{Deserialize, Serialize};
@@ -99,87 +97,6 @@ pub fn portable_material_sha256(bytes: &[u8]) -> String {
             write!(output, "{byte:02x}").expect("writing SHA-256 to String cannot fail");
             output
         })
-}
-
-/// 只保留 Listener 实际使用的证书引用。
-///
-/// 旧版 Workspace 可能遗留已脱离 Listener 的文件路径或托管引用。它们不是
-/// 当前配置的一部分，也不应该让已丢失的临时文件阻断导出。
-pub fn retain_reachable_certificate_references(workspace: &mut ProxyWorkspace) {
-    let mut reachable = BTreeSet::new();
-    for listener in &workspace.listeners {
-        match &listener.data_plane {
-            ListenerDataPlane::Http(settings) => {
-                reachable.extend(settings.mitm.root_ca);
-                reachable.extend(settings.downstream_tls.server_identity);
-                collect_client_trust(
-                    &settings.downstream_tls.client_authentication,
-                    &mut reachable,
-                );
-                if let Some(fixed_server) = &settings.fixed_server {
-                    reachable.extend(fixed_server.upstream_tls.server_trust);
-                    reachable.extend(fixed_server.upstream_tls.client_identity);
-                }
-            }
-            ListenerDataPlane::Socket(settings) => match &settings.topology {
-                SocketTopology::Relay(relay) => match &relay.security {
-                    SocketRelaySecurity::Transparent => {}
-                    SocketRelaySecurity::TcpToTls { upstream_tls } => {
-                        collect_socket_upstream(upstream_tls, &mut reachable);
-                    }
-                    SocketRelaySecurity::TlsToTcp { downstream_tls } => {
-                        collect_socket_downstream(downstream_tls, &mut reachable);
-                    }
-                    SocketRelaySecurity::TlsToTls {
-                        downstream_tls,
-                        upstream_tls,
-                    } => {
-                        collect_socket_downstream(downstream_tls, &mut reachable);
-                        collect_socket_upstream(upstream_tls, &mut reachable);
-                    }
-                },
-                SocketTopology::LocalResponder(local) => {
-                    if let SocketDownstreamSecurity::Tls { downstream_tls } =
-                        &local.downstream_security
-                    {
-                        collect_socket_downstream(downstream_tls, &mut reachable);
-                    }
-                }
-            },
-        }
-    }
-    workspace
-        .certificate_references
-        .retain(|reference| reachable.contains(&reference.id));
-}
-
-fn collect_client_trust(
-    authentication: &DownstreamClientAuthentication,
-    reachable: &mut BTreeSet<CertificateReferenceId>,
-) {
-    match authentication {
-        DownstreamClientAuthentication::Disabled => {}
-        DownstreamClientAuthentication::Optional { trust }
-        | DownstreamClientAuthentication::Required { trust } => {
-            reachable.insert(*trust);
-        }
-    }
-}
-
-fn collect_socket_downstream(
-    settings: &intercept_proxy_domain::SocketDownstreamTlsSettings,
-    reachable: &mut BTreeSet<CertificateReferenceId>,
-) {
-    reachable.insert(settings.server_identity);
-    collect_client_trust(&settings.client_authentication, reachable);
-}
-
-fn collect_socket_upstream(
-    settings: &intercept_proxy_domain::SocketUpstreamTlsSettings,
-    reachable: &mut BTreeSet<CertificateReferenceId>,
-) {
-    reachable.extend(settings.server_trust);
-    reachable.extend(settings.client_identity);
 }
 
 /// 确保证书材料与 Workspace 中的引用一一对应。
@@ -363,82 +280,5 @@ mod tests {
 
         let error = material.validate_shape().unwrap_err();
         assert_eq!(error.view_model.code, "PORTABLE_CERTIFICATE_HASH_MISMATCH");
-    }
-
-    #[test]
-    fn socket_bridge_references_are_reachable_but_transparent_uses_none() {
-        let server_identity = CertificateReferenceId::new();
-        let client_trust = CertificateReferenceId::new();
-        let server_trust = CertificateReferenceId::new();
-        let client_identity = CertificateReferenceId::new();
-        let orphan = CertificateReferenceId::new();
-        let mut workspace = ProxyWorkspace::default();
-        workspace.listeners[0].data_plane =
-            ListenerDataPlane::Socket(intercept_proxy_domain::SocketRelaySettings::relay(
-                intercept_proxy_domain::SocketEndpoint {
-                    host: "socket.example.test".into(),
-                    port: 443,
-                },
-                SocketRelaySecurity::TlsToTls {
-                    downstream_tls: intercept_proxy_domain::SocketDownstreamTlsSettings {
-                        server_identity,
-                        client_authentication: DownstreamClientAuthentication::Required {
-                            trust: client_trust,
-                        },
-                    },
-                    upstream_tls: intercept_proxy_domain::SocketUpstreamTlsSettings {
-                        verify_hostname: true,
-                        server_trust: Some(server_trust),
-                        client_identity: Some(client_identity),
-                    },
-                },
-                500,
-                intercept_proxy_domain::SocketPayloadProcessing::Direct,
-            ));
-        workspace.certificate_references = [
-            (
-                server_identity,
-                CertificateReferenceKind::ReverseServerIdentity,
-            ),
-            (
-                client_trust,
-                CertificateReferenceKind::DownstreamClientTrust,
-            ),
-            (server_trust, CertificateReferenceKind::UpstreamServerTrust),
-            (
-                client_identity,
-                CertificateReferenceKind::UpstreamClientIdentity,
-            ),
-            (orphan, CertificateReferenceKind::UpstreamServerTrust),
-        ]
-        .into_iter()
-        .map(|(id, kind)| CertificateReference {
-            id,
-            label: id.to_string(),
-            kind,
-            reference: format!("managed:listener-tls:{id}"),
-        })
-        .collect();
-
-        retain_reachable_certificate_references(&mut workspace);
-        let retained = workspace
-            .certificate_references
-            .iter()
-            .map(|reference| reference.id)
-            .collect::<BTreeSet<_>>();
-        assert_eq!(
-            retained,
-            BTreeSet::from([server_identity, client_trust, server_trust, client_identity])
-        );
-
-        let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane else {
-            unreachable!()
-        };
-        let SocketTopology::Relay(relay) = &mut settings.topology else {
-            unreachable!()
-        };
-        relay.security = SocketRelaySecurity::Transparent;
-        retain_reachable_certificate_references(&mut workspace);
-        assert!(workspace.certificate_references.is_empty());
     }
 }

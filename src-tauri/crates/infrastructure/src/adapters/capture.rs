@@ -25,34 +25,31 @@ pub struct CaptureRepositoryAdapter {
     sessions: Arc<InMemorySessionStore>,
     view_floor: AtomicU64,
     latest_runtime_epoch: RwLock<Option<RuntimeEpoch>>,
-    socket: Option<Arc<super::SocketCaptureRepositoryAdapter>>,
+    socket: Arc<super::SocketCaptureRepositoryAdapter>,
 }
 
 impl CaptureRepositoryAdapter {
     const MAX_ROWS: usize = 4_096;
 
     #[must_use]
-    pub fn new(sessions: Arc<InMemorySessionStore>) -> Self {
+    pub fn new(
+        sessions: Arc<InMemorySessionStore>,
+        socket: Arc<super::SocketCaptureRepositoryAdapter>,
+    ) -> Self {
         Self {
             rows: RwLock::new(Vec::new()),
             sessions,
             view_floor: AtomicU64::new(0),
             latest_runtime_epoch: RwLock::new(None),
-            socket: None,
+            socket,
         }
-    }
-
-    #[must_use]
-    pub fn with_socket_store(mut self, socket: Arc<super::SocketCaptureRepositoryAdapter>) -> Self {
-        self.socket = Some(socket);
-        self
     }
 
     pub fn record_socket(
         &self,
         record: intercept_proxy_application::SocketCaptureRecord,
     ) -> AppResult<intercept_proxy_application::SocketCaptureRowViewModel> {
-        self.socket_store()?.record(record)
+        self.socket.record(record)
     }
 
     pub fn push_for_epoch(&self, row: CaptureRowViewModel, runtime_epoch: RuntimeEpoch) {
@@ -80,12 +77,6 @@ impl CaptureRepositoryAdapter {
     pub fn push(&self, row: CaptureRowViewModel) {
         let runtime_epoch = row.runtime_epoch;
         self.push_for_epoch(row, runtime_epoch);
-    }
-}
-
-impl Default for CaptureRepositoryAdapter {
-    fn default() -> Self {
-        Self::new(Arc::new(InMemorySessionStore::default()))
     }
 }
 
@@ -234,32 +225,21 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
         &self,
         query: intercept_proxy_application::SocketCaptureQuery,
     ) -> AppResult<intercept_proxy_application::SocketCapturePageViewModel> {
-        self.socket_store()?.query(&query)
+        self.socket.query(&query)
     }
 
     async fn get_socket_detail(
         &self,
         capture_id: intercept_proxy_application::SocketCaptureId,
     ) -> AppResult<intercept_proxy_application::SocketCaptureDetailViewModel> {
-        self.socket_store()?.get_detail(capture_id)
+        self.socket.get_detail(capture_id)
     }
 
     async fn clear_socket_completed(
         &self,
         workspace_id: intercept_proxy_application::WorkspaceId,
     ) -> AppResult<usize> {
-        self.socket_store()?.clear_completed(workspace_id)
-    }
-}
-
-impl CaptureRepositoryAdapter {
-    fn socket_store(&self) -> AppResult<&super::SocketCaptureRepositoryAdapter> {
-        self.socket.as_deref().ok_or_else(|| {
-            AppError::new(
-                "SOCKET_CAPTURE_STORE_UNAVAILABLE",
-                "当前 Host 尚未提供 Socket 抓包存储。",
-            )
-        })
+        self.socket.clear_completed(workspace_id)
     }
 }
 
@@ -299,6 +279,14 @@ mod tests {
 
     use super::*;
 
+    fn test_adapter() -> CaptureRepositoryAdapter {
+        let store = Arc::new(crate::SqliteStore::in_memory().unwrap());
+        CaptureRepositoryAdapter::new(
+            Arc::new(InMemorySessionStore::default()),
+            Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(store)),
+        )
+    }
+
     fn row(event_id: u64, terminal: &str) -> CaptureRowViewModel {
         CaptureRowViewModel {
             event_id,
@@ -337,7 +325,7 @@ mod tests {
     // CAPTURE-003~006, TEST-EVENT
     #[tokio::test]
     async fn query_and_clear_are_deterministic_without_deleting_rows() {
-        let adapter = CaptureRepositoryAdapter::default();
+        let adapter = test_adapter();
         adapter.push(row(2, "10.0.0.2"));
         adapter.push(row(1, "10.0.0.1"));
         let query = CaptureQuery {
@@ -369,7 +357,7 @@ mod tests {
 
     #[tokio::test]
     async fn resume_cursor_is_epoch_scoped_and_reports_retention_gap() {
-        let adapter = CaptureRepositoryAdapter::default();
+        let adapter = test_adapter();
         let epoch = Uuid::new_v4();
         for event_id in 1..=4_097 {
             let mut row = row(event_id, "10.0.0.1");

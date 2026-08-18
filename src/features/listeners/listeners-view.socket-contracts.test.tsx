@@ -45,7 +45,12 @@ function scriptedSocketWorkspace(): ProxyWorkspace {
   if (topology.mode !== "relay" || topology.settings.security.mode !== "tls_to_tls") throw new Error("expected TLS Relay fixture");
   topology.settings.security.downstream_tls.server_identity = "app-id";
   topology.settings.security.upstream_tls.server_trust = "server-ca";
-  return { ...workspace, listeners: [listener], certificate_references: references };
+  return {
+    ...workspace,
+    listeners: [listener],
+    certificate_references: references,
+    android_network_profiles: [],
+  };
 }
 
 function setupScriptedSocket() {

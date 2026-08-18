@@ -2400,6 +2400,7 @@ dependencies = [
  "intercept-proxy-product-api",
  "intercept-proxy-runtime",
  "parking_lot",
+ "rusqlite",
  "tempfile",
  "thiserror 2.0.19",
  "tokio",

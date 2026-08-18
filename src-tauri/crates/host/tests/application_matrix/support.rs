@@ -1,15 +1,8 @@
-use std::{collections::BTreeMap, net::TcpListener, path::PathBuf, sync::Arc};
-
-use async_trait::async_trait;
-use chrono::Utc;
+use std::{net::TcpListener, path::PathBuf, sync::Arc};
 use intercept_proxy_application::{
-    AppResult, BreakpointCoordinator, BreakpointDecision, BreakpointDecisionKind,
-    BreakpointDetailViewModel, BreakpointDraft, BreakpointOutcome, BreakpointState,
-    BreakpointSummaryViewModel, CaptureQuery, CaptureSort, ChannelId, ChannelSettingsDraft,
-    ConnectionHealthState, ConnectionHealthViewModel, FaultConfigurationDraft,
-    MessageContentViewModel, MessageStage, PageRequest, ProxyState, ProxyStatusViewModel,
-    ProxySupervisorPort, RuleAction, SessionQuery, SessionSort, SettingsDraft, SortDirection,
-    UiTone,
+    AppResult, CaptureQuery, CaptureSort, ChannelId, ChannelSettingsDraft,
+    FaultConfigurationDraft, PageRequest, RuleAction, SessionQuery, SessionSort, SettingsDraft,
+    SortDirection,
 };
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::{
@@ -21,8 +14,6 @@ use intercept_proxy_product_api::{
     ProductError, ProductFaultTemplate, ProductLabels, ProductMessageContext, ProductProfile,
     ProductStorageNamespace, RequestClassifier,
 };
-use parking_lot::Mutex;
-use uuid::Uuid;
 
 #[derive(Debug)]
 struct NoFileDialog;
@@ -250,38 +241,6 @@ impl ProductProfile for InvalidProfile {
 
     fn body_codec(&self) -> Arc<dyn BodyCodec> {
         self.0.body_codec()
-    }
-}
-
-#[derive(Debug)]
-struct LifecycleProxy {
-    state: Mutex<ProxyState>,
-    epoch: Uuid,
-}
-
-impl LifecycleProxy {
-    fn new(epoch: Uuid) -> Self {
-        Self {
-            state: Mutex::new(ProxyState::Stopped),
-            epoch,
-        }
-    }
-}
-
-#[async_trait]
-impl ProxySupervisorPort for LifecycleProxy {
-    async fn status(&self) -> AppResult<ProxyStatusViewModel> {
-        Ok(proxy_status(*self.state.lock(), self.epoch))
-    }
-
-    async fn start(&self, _effective_settings: SettingsDraft) -> AppResult<ProxyStatusViewModel> {
-        *self.state.lock() = ProxyState::Running;
-        Ok(proxy_status(ProxyState::Running, self.epoch))
-    }
-
-    async fn stop(&self) -> AppResult<ProxyStatusViewModel> {
-        *self.state.lock() = ProxyState::Stopped;
-        Ok(proxy_status(ProxyState::Stopped, self.epoch))
     }
 }
 

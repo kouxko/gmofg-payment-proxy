@@ -233,7 +233,7 @@ async fn start_local_runtime_inner(
     let capture = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
         Arc::clone(&store),
     ));
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     runtime.set_socket_capture_repository(Arc::clone(&capture));
     if let Some(events) = events {
         runtime.set_socket_diagnostic_events(events);

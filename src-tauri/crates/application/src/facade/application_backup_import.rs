@@ -50,8 +50,7 @@ impl Application {
             portable_material_count: document.certificate_materials.len(),
             requires_restart: true,
         };
-        self.restore_and_replace_configuration(APPLICATION_CONFIGURATION_FORMAT_VERSION, document)
-            .await?;
+        self.restore_and_replace_configuration(document).await?;
         *self.android_package_cache.lock().await = None;
         Ok(outcome)
     }
@@ -70,7 +69,6 @@ impl Application {
             settings,
             protocol_packages,
             certificate_materials,
-            migration_report,
         } = candidate;
         let document = ApplicationConfigurationDocument {
             format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
@@ -92,7 +90,6 @@ impl Application {
                 enabled: package.enabled,
             })
             .collect::<Vec<_>>();
-        let warnings = migration_report.warning_message().into_iter().collect();
         let preview_data = (
             document.workspaces.len(),
             document.protocol_packages.len(),
@@ -102,7 +99,6 @@ impl Application {
                 .filter(|package| package.enabled)
                 .count(),
             document.certificate_materials.len(),
-            migration_report.clone(),
         );
         let baseline = self.application_backup_import_baseline().await?;
         let candidate = crate::ApplicationBackupImportCandidate {
@@ -111,7 +107,6 @@ impl Application {
             settings: document.settings,
             protocol_packages: document.protocol_packages,
             certificate_materials: document.certificate_materials,
-            migration_report,
         };
         let (token, expires_in) = source
             .retain(PreparedApplicationBackup {
@@ -133,8 +128,6 @@ impl Application {
                 replaces_portable_settings: true,
                 replaces_protocol_package_registry: true,
             },
-            migration_report: preview_data.4,
-            warnings,
         })
     }
 

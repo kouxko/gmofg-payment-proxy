@@ -204,7 +204,7 @@ async fn startup_synchronization_is_idempotent_for_the_fixed_test_root() {
 }
 
 #[tokio::test]
-async fn startup_synchronization_migrates_a_legacy_random_root_and_preserves_leaf_sans() {
+async fn startup_synchronization_rejects_non_current_root_material() {
     let adapter = CertificateServiceAdapter::new(
         Arc::new(SqliteStore::in_memory().expect("store")),
         Arc::new(XorProtector),
@@ -236,26 +236,22 @@ async fn startup_synchronization_migrates_a_legacy_random_root_and_preserves_lea
         .commit_snapshot(legacy_snapshot)
         .expect("store legacy installation");
 
-    adapter
+    let error = adapter
         .synchronize_installation_ca(vec!["127.0.0.1".into()])
         .await
-        .expect("migrate to fixed root");
-
-    let migrated = adapter.load_snapshot(&[ROOT, LEAF]).expect("migrated snapshot");
-    let root = migrated.materials.get(ROOT).expect("fixed root");
-    let leaf = migrated.materials.get(LEAF).expect("reissued leaf");
+        .expect_err("non-current root must be rejected");
     assert_eq!(
-        root.fingerprint,
-        "B4:72:77:A5:8D:81:AD:EB:3C:CE:59:7A:15:58:85:4D:AB:3D:0B:30:AB:CE:15:06:5A:FB:73:33:9B:CB:D7:4C"
+        error.view_model.code,
+        "CERTIFICATE_INSTALLATION_STATE_INVALID"
     );
-    assert_eq!(leaf.sans, vec!["DNS:proxy.test", "IP:10.0.34.50"]);
-    adapter
-        .certificates
-        .validate_leaf(
-            &root.certificate_der,
-            &leaf.certificate_der,
-            &leaf.private_key_der,
-            &["10.0.34.50".into(), "proxy.test".into()],
-        )
-        .expect("migrated leaf chains to fixed root");
+
+    let unchanged = adapter.load_snapshot(&[ROOT, LEAF]).expect("unchanged snapshot");
+    assert_eq!(
+        unchanged.materials.get(ROOT).expect("stored root").fingerprint,
+        legacy_root.metadata.fingerprint_sha256
+    );
+    assert_eq!(
+        unchanged.materials.get(LEAF).expect("stored leaf").fingerprint,
+        legacy_leaf.metadata.fingerprint_sha256
+    );
 }

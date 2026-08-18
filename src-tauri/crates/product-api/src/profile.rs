@@ -2,7 +2,7 @@ use std::{fmt, sync::Arc};
 
 use crate::{
     BodyCodec, ProductCertificatePolicy, ProductChannel, ProductFaultTemplate, ProductLabels,
-    ProductPersistenceMigrations, ProductStorageNamespace, RequestClassifier,
+    ProductStorageNamespace, RequestClassifier,
 };
 
 /// 注入到 UI 无关 Rust Host 中的宿主配置总契约。
@@ -18,10 +18,6 @@ pub trait ProductProfile: fmt::Debug + Send + Sync {
 
     /// 数据库与系统密钥存储的隔离命名空间。
     fn storage(&self) -> ProductStorageNamespace;
-
-    fn persistence_migrations(&self) -> ProductPersistenceMigrations {
-        ProductPersistenceMigrations::default()
-    }
 
     fn labels(&self) -> ProductLabels;
 

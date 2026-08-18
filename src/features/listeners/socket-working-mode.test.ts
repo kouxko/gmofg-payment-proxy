@@ -89,7 +89,7 @@ describe("Socket user working mode", () => {
     const result = setSocketWorkingMode(fixtures.raw_relay, mode);
 
     expect(result.topology.mode).toBe(topology);
-    expect(result.processing?.mode).toBe(processing);
+    expect(result.processing.mode).toBe(processing);
     expect(socketWorkingMode(result)).toBe(mode);
   });
 
@@ -123,22 +123,6 @@ describe("Socket user working mode", () => {
     expect(socketWorkingMode(result)).toBe(target);
     if (source === target) expect(result).toBe(fixtures[source]);
   });
-
-  it("maps supported legacy wire without mutating it", () => {
-    const legacyRaw = { ...fixtures.raw_relay, processing: undefined } as SocketRelaySettings;
-
-    expect(socketWorkingMode(legacyRaw)).toBe("raw_relay");
-    expect(socketWorkingMode(fixtures.protocol_relay)).toBe("protocol_relay");
-    expect(socketWorkingMode(fixtures.local_response)).toBe("local_response");
-    expect(legacyRaw.processing).toBeUndefined();
-  });
-
-  it.each([undefined, { mode: "direct" } as const])(
-    "fails closed for a local legacy wire with processing %j",
-    (processing) => {
-      expect(socketWorkingMode(local(processing))).toBe("incompatible");
-    },
-  );
 
   it("ignores an unknown work mode instead of creating a partial wire", () => {
     expect(setSocketWorkingMode(fixtures.protocol_relay, "future_mode" as SocketWorkingMode))

@@ -62,7 +62,7 @@ fn installation_root_enables_allowlisted_sni_dynamic_signing() {
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()))
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()))
         .with_installation_server_identity(Arc::new(StaticInstallationIdentity))
         .with_mitm_certificate_authority(Arc::new(StaticDynamicAuthority));
 

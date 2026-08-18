@@ -1,4 +1,4 @@
-//! 工作区与配置导入导出命令适配层：保持 IPC 契约，持久化与校验仍由 application 门面负责。
+//! 工作区命令适配层：保持 IPC 契约，持久化与校验仍由 application 门面负责。
 
 use intercept_proxy_application::{
     OperationResultViewModel, ProxyWorkspace, SecretReference, WorkspaceId,
@@ -162,55 +162,6 @@ pub async fn workspace_delete(
     state
         .application
         .workspace_delete(workspace_id, expected_revision)
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn workspace_import(
-    state: State<'_, AppState>,
-) -> CommandResult<OperationResultViewModel> {
-    state
-        .application
-        .workspace_import()
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn workspace_export(
-    state: State<'_, AppState>,
-    workspace_id: WorkspaceId,
-) -> CommandResult<OperationResultViewModel> {
-    state
-        .application
-        .workspace_export(workspace_id)
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn application_configuration_import(
-    state: State<'_, AppState>,
-) -> CommandResult<OperationResultViewModel> {
-    state
-        .application
-        .application_configuration_import()
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn application_configuration_export(
-    state: State<'_, AppState>,
-) -> CommandResult<OperationResultViewModel> {
-    state
-        .application
-        .application_configuration_export()
         .await
         .map_err(command_error)
 }

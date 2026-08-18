@@ -157,12 +157,9 @@ fn breakpoint_query_reclaims_waiters_dropped_by_listener_shutdown() {
     );
 }
 
-// BREAKPOINT-016: dynamic Listener breakpoints do not depend on the retired
-// single-proxy compatibility state.
 #[tokio::test]
 async fn dynamic_listener_breakpoint_resolve_normalizes_without_reformatting_body() {
     let ports = Arc::new(FakePorts::default());
-    assert_eq!(*ports.proxy_state.lock(), ProxyState::Stopped);
     let coordinator = Arc::new(BreakpointCoordinator::default());
     let epoch = Uuid::from_u128(20);
     let id = Uuid::from_u128(30);
@@ -172,7 +169,6 @@ async fn dynamic_listener_breakpoint_resolve_normalizes_without_reformatting_bod
     let application = Application::new(
         "Test Product".into(),
         ApplicationDependencies {
-            proxy: ports.clone(),
             capture: ports.clone(),
             sessions: ports.clone(),
             breakpoints: coordinator,
@@ -183,11 +179,12 @@ async fn dynamic_listener_breakpoint_resolve_normalizes_without_reformatting_bod
             settings: ports.clone(),
             listener_certificates: ports.clone(),
             workspaces: Arc::new(InMemoryWorkspaceStore::default()),
-            workspace_documents: Arc::new(InMemoryWorkspaceDocumentStore::default()),
             listener_runtime: Arc::new(InMemoryListenerRuntime::default()),
-            protocol_packages: ProtocolPackageApplicationServices::unavailable(),
+            protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
         },
+        Arc::new(UnusedAndroidControlPort),
+        Arc::new(UnusedProtectedSecretPort),
     );
 
     application

@@ -83,7 +83,7 @@ async fn relay_records_each_direction_only_after_commit_with_exact_documents_and
     let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
         Arc::clone(&store),
     ));
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(packages);
+    let runtime = test_listener_runtime_with_packages(store, packages);
     runtime.set_socket_capture_repository(Arc::clone(&captures));
     runtime.start(workspace, listener.clone()).await.unwrap();
 
@@ -175,7 +175,7 @@ async fn clear_after_output_commit_cannot_revive_a_blocked_relay_capture() {
     let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
         Arc::clone(&store),
     ));
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(packages);
+    let runtime = test_listener_runtime_with_packages(store, packages);
     runtime.set_socket_capture_repository(Arc::clone(&captures));
     runtime.start(workspace, listener.clone()).await.unwrap();
     let (entered_sender, entered_receiver) = std::sync::mpsc::sync_channel(1);

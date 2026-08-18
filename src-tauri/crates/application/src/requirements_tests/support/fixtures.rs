@@ -182,4 +182,151 @@ pub(in crate::requirements_tests) fn capture_row(event_id: u64) -> CaptureRowVie
     }
 }
 
+pub(in crate::requirements_tests) fn protocol_package(
+    id: &str,
+    version: &str,
+) -> ProtocolPackageRef {
+    ProtocolPackageRef {
+        id: ProtocolPackageId::new(id).unwrap(),
+        version: ProtocolPackageVersion::new(version).unwrap(),
+    }
+}
+
+pub(in crate::requirements_tests) fn portable_protocol_package(
+    package: ProtocolPackageRef,
+    enabled: bool,
+) -> PortableApplicationProtocolPackage {
+    PortableApplicationProtocolPackage {
+        package,
+        files: vec![PortableProtocolPackageFile {
+            path: "manifest.toml".into(),
+            contents_base64: "bWFuaWZlc3Q=".into(),
+        }],
+        enabled,
+    }
+}
+
+pub(in crate::requirements_tests) fn protocol_package_description(
+    package: ProtocolPackageRef,
+) -> ProtocolPackageDescriptionViewModel {
+    ProtocolPackageDescriptionViewModel {
+        package,
+        capabilities: ProtocolPackageCapabilitiesViewModel {
+            upstream: ProtocolPackageDirectionCapabilitiesViewModel {
+                frame: true,
+                decode: true,
+                encode: true,
+            },
+            downstream: ProtocolPackageDirectionCapabilitiesViewModel {
+                frame: true,
+                decode: true,
+                encode: true,
+            },
+            display: true,
+        },
+        schema: ProtocolPackageSchemaViewModel {
+            id: "portable-message".into(),
+            version: 7,
+            title: "Portable Message".into(),
+            fields: [
+                ("text", ProtocolPackageSchemaFieldTypeViewModel::String),
+                ("amount", ProtocolPackageSchemaFieldTypeViewModel::Int),
+                ("approved", ProtocolPackageSchemaFieldTypeViewModel::Bool),
+                ("raw", ProtocolPackageSchemaFieldTypeViewModel::Blob),
+            ]
+            .into_iter()
+            .map(|(name, field_type)| ProtocolPackageSchemaFieldViewModel {
+                name: name.into(),
+                label: name.into(),
+                field_type,
+            })
+            .collect(),
+        },
+    }
+}
+
+pub(in crate::requirements_tests) fn scripted_workspace(
+    package: ProtocolPackageRef,
+    local_responder: bool,
+) -> ProxyWorkspace {
+    let mut workspace = ProxyWorkspace::default();
+    let listener = &mut workspace.listeners[0];
+    let topology = if local_responder {
+        SocketTopology::LocalResponder(SocketLocalResponderTopology {
+            downstream_security: SocketDownstreamSecurity::Tcp,
+        })
+    } else {
+        SocketTopology::Relay(SocketRelayTopology {
+            upstream: SocketEndpoint {
+                host: "127.0.0.1".into(),
+                port: 9_001,
+            },
+            security: SocketRelaySecurity::Transparent,
+        })
+    };
+    listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
+        topology,
+        maximum_connections: 8,
+        processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
+            package: package.clone(),
+            upstream: DirectionProcessingOptions {
+                decode_enabled: true,
+                encode_enabled: !local_responder,
+            },
+            downstream: DirectionProcessingOptions {
+                decode_enabled: !local_responder,
+                encode_enabled: true,
+            },
+        }),
+    });
+    let direction = if local_responder {
+        SocketDirection::Downstream
+    } else {
+        SocketDirection::Upstream
+    };
+    workspace.socket_rules.push(
+        SocketDocumentRuleDefinition::new(
+            SocketDocumentRuleId::new(),
+            true,
+            -10,
+            41,
+            listener.id,
+            package,
+            7,
+            direction,
+            vec![
+                document_equals("text", DocumentValue::String("sale".into())),
+                document_equals("amount", DocumentValue::Int(1234)),
+                document_equals("approved", DocumentValue::Bool(true)),
+                document_equals("raw", DocumentValue::Blob(vec![0, 1, 2, 255])),
+            ],
+            vec![
+                DocumentAction::RecordMatch,
+                document_set("text", DocumentValue::String("reply".into())),
+                document_set("amount", DocumentValue::Int(4321)),
+                document_set("approved", DocumentValue::Bool(false)),
+                document_set("raw", DocumentValue::Blob(vec![9, 8, 7])),
+            ],
+        )
+        .unwrap(),
+    );
+    workspace.socket_rule_created_order_high_water = 41;
+    workspace.validate().unwrap();
+    workspace
+}
+
+fn document_equals(name: &str, value: DocumentValue) -> DocumentCondition {
+    DocumentCondition::Equals {
+        field: DocumentFieldName::new(name).unwrap(),
+        value,
+    }
+}
+
+fn document_set(name: &str, value: DocumentValue) -> DocumentAction {
+    DocumentAction::SetField {
+        field: DocumentFieldName::new(name).unwrap(),
+        value,
+    }
+}
+
 // DATA-008, TEST-CAPACITY: logical bytes are deterministic and use lengths, not allocations.

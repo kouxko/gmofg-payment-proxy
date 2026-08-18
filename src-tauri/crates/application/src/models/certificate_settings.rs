@@ -96,13 +96,9 @@ impl Default for SettingsDraft {
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 设置页展示模型，同时区分已保存值、当前生效值和操作权限。
+/// 设置页展示模型。
 pub struct SettingsViewModel {
     pub stored: SettingsDraft,
-    pub effective: Option<SettingsDraft>,
-    pub pending_changes: bool,
-    pub requires_restart: bool,
-    pub restart_reason: Option<String>,
     pub revision: Revision,
     pub can_write: bool,
     pub disabled_reason: Option<DisabledReason>,

@@ -66,11 +66,8 @@ struct MaterialStatus {
     revision: u64,
     subject: String,
     fingerprint: String,
-    #[serde(default)]
     sans: Vec<String>,
-    #[serde(default)]
     not_before: Option<String>,
-    #[serde(default)]
     not_after: Option<String>,
 }
 

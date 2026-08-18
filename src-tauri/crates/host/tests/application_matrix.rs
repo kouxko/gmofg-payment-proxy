@@ -8,4 +8,3 @@ include!("application_matrix/support.rs");
 include!("application_matrix/validation_and_queries.rs");
 include!("application_matrix/rules_and_faults.rs");
 include!("application_matrix/certificates.rs");
-include!("application_matrix/lifecycle.rs");

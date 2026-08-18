@@ -4,7 +4,7 @@
 //! 再写入当前系统的受保护存储并替换 Workspace 引用。任何后续持久化失败都会清理本次
 //! 已恢复的材料，避免留下不可达的秘密记录。
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use super::Application;
 use crate::{
@@ -100,47 +100,6 @@ impl Application {
                 format!("恢复失败后的证书清理未全部完成：{}", failures.join("；")),
             )
             .retryable("请重新导入配置；若仍失败，请重新启动应用后检查受保护证书存储。"))
-        }
-    }
-
-    /// 完整配置替换成功后，删除旧配置独占且新配置不再引用的托管材料。
-    pub(super) async fn discard_replaced_certificate_materials(
-        &self,
-        old_workspaces: &[ProxyWorkspace],
-        new_workspaces: &[ProxyWorkspace],
-    ) -> AppResult<()> {
-        let retained = new_workspaces
-            .iter()
-            .flat_map(|workspace| &workspace.certificate_references)
-            .map(|reference| reference.reference.as_str())
-            .collect::<BTreeSet<_>>();
-        let mut seen = BTreeSet::new();
-        let mut failures = Vec::new();
-        for reference in old_workspaces
-            .iter()
-            .flat_map(|workspace| &workspace.certificate_references)
-        {
-            if reference.kind == CertificateReferenceKind::MitmRootCa
-                || retained.contains(reference.reference.as_str())
-                || !seen.insert(reference.reference.clone())
-            {
-                continue;
-            }
-            if let Err(error) = self.listener_certificates.discard(reference.clone()).await {
-                failures.push(format!("{}：{}", reference.label, error.view_model.message));
-            }
-        }
-        if failures.is_empty() {
-            Ok(())
-        } else {
-            Err(AppError::new(
-                "CERTIFICATE_CLEANUP_FAILED",
-                format!(
-                    "配置已导入，但旧证书材料未全部清理：{}",
-                    failures.join("；")
-                ),
-            )
-            .retryable("请重新启动应用并再次导入完整配置，以重试旧证书清理。"))
         }
     }
 }

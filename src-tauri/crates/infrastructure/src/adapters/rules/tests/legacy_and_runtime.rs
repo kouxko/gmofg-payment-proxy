@@ -1,90 +1,37 @@
 use super::*;
 
-#[tokio::test]
-async fn legacy_global_rule_table_is_not_a_runtime_or_crud_source() {
-    let store = Arc::new(SqliteStore::in_memory().expect("store"));
-    seed_workspace(&store, Vec::new());
-    let legacy = Rule::create(
-        to_domain_draft(&request_delay_draft("legacy global row", false), 1).expect("legacy draft"),
+#[test]
+fn current_rule_persistence_round_trips_strictly() {
+    let rule = Rule::create(
+        to_domain_draft(&request_delay_draft("current", false), 1).expect("current draft"),
     )
-    .expect("legacy rule");
-    let mut value = serde_json::to_value(&legacy).expect("legacy value");
-    value.as_object_mut().expect("rule object").insert(
-        PERSISTENCE_VERSION_FIELD.into(),
-        Value::from(RULE_PERSISTENCE_VERSION),
-    );
-    store
-        .insert_rule(&crate::RuleRecord {
-            id: legacy.id.as_uuid(),
-            revision: legacy.revision.get(),
-            enabled: legacy.enabled,
-            value,
-            updated_at: Utc::now(),
-        })
-        .expect("seed legacy global row");
+    .expect("current rule");
+    let value = serialize_persisted_rule(&rule).expect("serialize current rule");
 
-    let adapter = adapter_with(store, Arc::new(NoDialog));
-    assert!(adapter.list().await.expect("workspace rules").is_empty());
-    assert!(runtime_snapshot(&adapter).rules.is_empty());
-}
+    let decoded = deserialize_persisted_rule(value).expect("deserialize current rule");
 
-#[tokio::test]
-async fn legacy_rule_json_import_migrates_shift_jis_body() {
-    let directory = tempfile::tempdir().expect("temp directory");
-    let import = directory.path().join("legacy-rules.json");
-    let id = uuid::Uuid::new_v4();
-    let legacy = legacy_rule_json(
-        id,
-        &serde_json::json!({
-            "MockResponse": {
-                "status": 200,
-                "headers": [],
-                "shift_jis_body": [123, 125]
-            }
-        }),
-    );
-    std::fs::write(
-        &import,
-        serde_json::to_vec_pretty(&vec![legacy]).expect("legacy JSON"),
-    )
-    .expect("write legacy JSON");
-    let store = Arc::new(SqliteStore::in_memory().expect("store"));
-    seed_workspace(&store, Vec::new());
-    let adapter = RuleRepositoryAdapter::new(
-        store,
-        Arc::new(StaticOpenDialog { path: import }),
-        Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
-        &[],
-        &["shift_jis_body"],
-    );
-
-    let result = adapter.import().await.expect("import legacy JSON");
-    assert!(result.success);
-    let loaded = adapter.get(id).await.expect("imported legacy rule");
-    assert!(matches!(
-        loaded.draft.actions.as_slice(),
-        [AppRuleAction::Terminal {
-            action: AppRuleTerminalAction::MockResponse { body_bytes, .. }
-        }] if body_bytes == b"{}"
-    ));
+    assert_eq!(decoded, rule);
 }
 
 #[test]
-fn legacy_invalid_json_terminal_body_has_an_explicit_v0_compatibility_path() {
-    let id = uuid::Uuid::new_v4();
-    let rule = deserialize_persisted_rule(
-        legacy_rule_json(
-            id,
-            &serde_json::json!({"InvalidJson": {"shift_jis_body": [123]}}),
-        ),
-        &["shift_jis_body"],
+fn rule_persistence_rejects_unversioned_and_unknown_fields() {
+    let rule = Rule::create(
+        to_domain_draft(&request_delay_draft("current", false), 1).expect("current draft"),
     )
-    .expect("migrate legacy InvalidJson body");
-    assert!(matches!(
-        rule.actions.as_slice(),
-        [RuleAction::Terminal(TerminalAction::InvalidJson { body_bytes })]
-            if body_bytes == b"{"
-    ));
+    .expect("current rule");
+    let mut unversioned = serialize_persisted_rule(&rule).expect("serialize rule");
+    unversioned
+        .as_object_mut()
+        .expect("rule object")
+        .remove(PERSISTENCE_VERSION_FIELD);
+    assert!(deserialize_persisted_rule(unversioned).is_err());
+
+    let mut unknown = serialize_persisted_rule(&rule).expect("serialize rule");
+    unknown
+        .as_object_mut()
+        .expect("rule object")
+        .insert("shift_jis_body".into(), serde_json::json!([123]));
+    assert!(deserialize_persisted_rule(unknown).is_err());
 }
 
 #[tokio::test]

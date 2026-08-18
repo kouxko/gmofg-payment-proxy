@@ -1,17 +1,13 @@
 //! 应用启动、事件订阅与退出清理用例。
 
-use chrono::Utc;
-
 use super::Application;
 use crate::{
     AppBootstrapViewModel, AppError, AppResult, CaptureQuery, EventSubscription,
-    ListenerRuntimeState, OperationResultViewModel, PageRequest, ProxyState, ProxyStatusViewModel,
-    UiEventEnvelope, UiEventPayload,
+    ListenerRuntimeState, OperationResultViewModel, PageRequest, UiEventEnvelope,
 };
 
 impl Application {
     pub async fn app_bootstrap(&self) -> AppResult<AppBootstrapViewModel> {
-        let proxy = self.proxy.status().await?;
         let recent_capture = self
             .capture_query(CaptureQuery {
                 keyword: None,
@@ -36,13 +32,11 @@ impl Application {
         // Keychain/DPAPI 授权，否则用户取消系统提示会让整个展示层无法启动。
         let certificate = self.certificates.status().await?;
         let settings = self.settings.get().await?;
-        // 规则和故障动作的通道必须引用当前 Workspace 的 Listener UUID。
-        // 旧产品设置中的静态通道只服务于兼容状态展示，不能再作为可提交的配置来源；
-        // 否则 UI 会生成领域层必然拒绝、且永远无法命中动态 Listener 的规则。
+        // 规则和故障动作的通道必须引用当前 Workspace 的 Listener UUID，避免 UI
+        // 生成领域层必然拒绝、且永远无法命中动态 Listener 的规则。
         let channel_catalog = self.selected_workspace_channel_catalog().await?;
         Ok(AppBootstrapViewModel {
             product_name: self.product_name.clone(),
-            proxy,
             channel_catalog,
             recent_capture,
             pending_breakpoints,
@@ -66,12 +60,12 @@ impl Application {
     }
 
     /// Stops the runtime on exit after waiting for any in-flight mutation.
-    pub async fn app_shutdown(&self) -> AppResult<ProxyStatusViewModel> {
+    pub async fn app_shutdown(&self) -> AppResult<OperationResultViewModel> {
         let _gate = self.mutation_gate.lock().await;
         self.app_shutdown_inner().await
     }
 
-    pub(super) async fn app_shutdown_inner(&self) -> AppResult<ProxyStatusViewModel> {
+    pub(super) async fn app_shutdown_inner(&self) -> AppResult<OperationResultViewModel> {
         let mut listener_cleanup_errors = Vec::new();
         match self.android.runtime_owner().await {
             Ok(Some(owner)) => {
@@ -107,62 +101,13 @@ impl Application {
                 error.view_model.code, error.view_model.message
             )),
         }
-        let before = self.proxy.status().await?;
-        let stop_result = if before.state == ProxyState::Stopped {
-            Ok(before.clone())
-        } else {
-            self.proxy.stop().await
-        };
-        if let Some(epoch) = before.runtime_epoch {
-            for summary in self.breakpoints.proxy_stopped(epoch) {
-                self.events.publish(
-                    Some(epoch),
-                    Utc::now(),
-                    Some(summary.breakpoint_id.to_string()),
-                    Some(summary.revision),
-                    UiEventPayload::BreakpointResolved(summary),
-                );
-            }
-        }
-        let clear_result = self.settings.clear_effective().await;
-        let legacy_result = match (stop_result, clear_result) {
-            (Ok(status), Ok(_)) => {
-                self.publish_runtime(&status);
-                Ok(status)
-            }
-            (Err(stop_error), Ok(_)) => Err(stop_error),
-            (Ok(status), Err(clear_error)) => {
-                self.publish_runtime(&status);
-                Err(clear_error)
-            }
-            (Err(stop_error), Err(clear_error)) => Err(AppError::new(
-                "APP_SHUTDOWN_FAILED",
-                format!(
-                    "Proxy 停止失败 [{}] {}；生效设置清理失败 [{}] {}。",
-                    stop_error.view_model.code,
-                    stop_error.view_model.message,
-                    clear_error.view_model.code,
-                    clear_error.view_model.message
-                ),
-            )),
-        };
         if listener_cleanup_errors.is_empty() {
-            legacy_result
+            Ok(OperationResultViewModel::success("应用资源已清理。"))
         } else {
-            let listener_detail = listener_cleanup_errors.join("；");
-            match legacy_result {
-                Ok(_) => Err(AppError::new(
-                    "APP_SHUTDOWN_FAILED",
-                    format!("退出资源清理失败：{listener_detail}。"),
-                )),
-                Err(error) => Err(AppError::new(
-                    "APP_SHUTDOWN_FAILED",
-                    format!(
-                        "退出资源清理失败：{listener_detail}；其他退出清理失败 [{}] {}。",
-                        error.view_model.code, error.view_model.message
-                    ),
-                )),
-            }
+            Err(AppError::new(
+                "APP_SHUTDOWN_FAILED",
+                format!("退出资源清理失败：{}。", listener_cleanup_errors.join("；")),
+            ))
         }
     }
 }

@@ -10,8 +10,7 @@ use std::{
 use intercept_proxy_application::{
     ApplicationBackupImportBaseline, ApplicationBackupImportCandidate,
     ApplicationBackupImportPreparePort, ApplicationBackupProtocolPackageBaseline,
-    ApplicationBackupWorkspaceBaseline, MigrationReport, MigrationSourceKind, PortableSettings,
-    PreparedApplicationBackup, SettingsDraft,
+    ApplicationBackupWorkspaceBaseline, PortableSettings, PreparedApplicationBackup, SettingsDraft,
 };
 use intercept_proxy_domain::{ProxyWorkspace, Revision};
 use intercept_proxy_infrastructure::{
@@ -80,10 +79,6 @@ async fn strict_archive_reconstruction_preserves_raw_payloads_and_reports_canoni
         )
         .unwrap(),
         certificate_bytes
-    );
-    assert_eq!(
-        candidate.migration_report.source_version,
-        intercept_proxy_application::APPLICATION_CONFIGURATION_FORMAT_VERSION
     );
 }
 
@@ -235,10 +230,6 @@ fn prepared() -> PreparedApplicationBackup {
             settings: PortableSettings::from(&SettingsDraft::default()),
             protocol_packages: Vec::new(),
             certificate_materials: Vec::new(),
-            migration_report: MigrationReport::unchanged(
-                MigrationSourceKind::ApplicationConfigurationDocument,
-                1,
-            ),
         },
         baseline: ApplicationBackupImportBaseline {
             selected_workspace_id: workspace.id,

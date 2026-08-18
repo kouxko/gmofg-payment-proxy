@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   BreakpointDetailViewModel,
   BreakpointSummaryViewModel,
+  MessageContentViewModel,
 } from "@/generated/rust-types";
 import { BreakpointsView } from "./breakpoints-view";
 
@@ -65,13 +66,21 @@ vi.mock("@/features/shell/workspace-navigation", () => ({
   }),
 }));
 
-const message = (bodyText: string) => ({
+const message = (bodyText: string): MessageContentViewModel => ({
   http_status: null,
+  start_line_bytes: [],
+  raw_headers: [],
   headers: { "content-type": ["application/json"] },
   body_text: bodyText,
   body_bytes: [123, 125],
   json: {},
   content_length: bodyText.length,
+  media_type: "application/json",
+  charset: "utf-8",
+  content_kind: "json",
+  codec_id: "utf-8",
+  decode_error: null,
+  query_string: null,
 });
 
 const summary = (
@@ -242,14 +251,14 @@ describe("BreakpointsView queue controls", () => {
         json: null,
         content_kind: "xml",
         media_type: "application/xml",
-      } as BreakpointDetailViewModel["original"],
+      },
       effective: {
         ...message("<request><code>D48</code></request>"),
         headers: { "content-type": ["application/xml"] },
         json: null,
         content_kind: "xml",
         media_type: "application/xml",
-      } as BreakpointDetailViewModel["effective"],
+      },
     };
 
     render(<BreakpointsView />);
@@ -266,7 +275,7 @@ describe("BreakpointsView queue controls", () => {
 
   it("uses the shared code surface for editable plain text", () => {
     navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
-    const textMessage = {
+    const textMessage: MessageContentViewModel = {
       ...message("ErrorCode=D48&ResponseID=A"),
       headers: { "content-type": ["text/plain; charset=shift_jis"] },
       json: null,
@@ -274,7 +283,7 @@ describe("BreakpointsView queue controls", () => {
       media_type: "text/plain",
       charset: "shift_jis",
       codec_id: "shift-jis",
-    } as BreakpointDetailViewModel["original"];
+    };
     details.A = {
       ...detail(summaries[0]),
       original: textMessage,
@@ -294,7 +303,7 @@ describe("BreakpointsView queue controls", () => {
 
   it("formats original and effective vendor JSON consistently", () => {
     navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
-    const vendorMessage = {
+    const vendorMessage: MessageContentViewModel = {
       ...message('{"ErrorCode":"D48","ResponseID":"A"}'),
       headers: { "content-type": ["text/csv; charset=shift_jis"] },
       json: { ErrorCode: "D48", ResponseID: "A" },
@@ -302,7 +311,7 @@ describe("BreakpointsView queue controls", () => {
       media_type: "text/csv",
       charset: "shift_jis",
       codec_id: "shift-jis",
-    } as BreakpointDetailViewModel["original"];
+    };
     details.A = {
       ...detail(summaries[0]),
       original: vendorMessage,

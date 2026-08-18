@@ -54,7 +54,7 @@ pub enum ErrorCode {
     EventCursorExpired,
     ExportFailed,
     ImportFailed,
-    DatabaseMigrationFailed,
+    DatabaseSchemaInvalid,
     InvalidStateTransition,
     InternalError,
 }
@@ -99,7 +99,7 @@ impl ErrorCode {
             Self::EventCursorExpired => "EVENT_CURSOR_EXPIRED",
             Self::ExportFailed => "EXPORT_FAILED",
             Self::ImportFailed => "IMPORT_FAILED",
-            Self::DatabaseMigrationFailed => "DATABASE_MIGRATION_FAILED",
+            Self::DatabaseSchemaInvalid => "DATABASE_SCHEMA_INVALID",
             Self::InvalidStateTransition => "INVALID_STATE_TRANSITION",
             Self::InternalError => "INTERNAL_ERROR",
         }
@@ -236,10 +236,7 @@ mod tests {
             (ErrorCode::EventCursorExpired, "EVENT_CURSOR_EXPIRED"),
             (ErrorCode::ExportFailed, "EXPORT_FAILED"),
             (ErrorCode::ImportFailed, "IMPORT_FAILED"),
-            (
-                ErrorCode::DatabaseMigrationFailed,
-                "DATABASE_MIGRATION_FAILED",
-            ),
+            (ErrorCode::DatabaseSchemaInvalid, "DATABASE_SCHEMA_INVALID"),
             (ErrorCode::InternalError, "INTERNAL_ERROR"),
         ];
         for (code, expected) in cases {

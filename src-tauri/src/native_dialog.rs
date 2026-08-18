@@ -36,12 +36,6 @@ impl TauriNativeFileDialog {
     fn open_builder(&self, purpose: &str) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
         let builder = self.app.dialog().file();
         match purpose {
-            "intercept_workspace" => builder
-                .set_title("导入 Intercept Proxy Workspace")
-                .add_filter("Intercept Workspace", &["intercept-workspace"]),
-            "intercept_configuration" => builder
-                .set_title("导入 Intercept Proxy 完整配置")
-                .add_filter("Intercept Config", &["intercept-config"]),
             "rules_json" => builder
                 .set_title("导入规则")
                 .add_filter("JSON 规则", &["json"]),
@@ -77,12 +71,6 @@ impl TauriNativeFileDialog {
     ) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
         let builder = self.app.dialog().file();
         let builder = match purpose {
-            "intercept_workspace" => builder
-                .set_title("导出 Intercept Proxy Workspace")
-                .add_filter("Intercept Workspace", &["intercept-workspace"]),
-            "intercept_configuration" => builder
-                .set_title("导出 Intercept Proxy 完整配置")
-                .add_filter("Intercept Config", &["intercept-config"]),
             "rules_json" => builder.set_title("导出规则").add_filter("JSON", &["json"]),
             "root_ca" => builder
                 .set_title("导出 Intercept Proxy Root CA 公开证书")
@@ -146,8 +134,6 @@ fn safe_suggested_file_name<'a>(purpose: &str, suggested_file_name: &'a str) -> 
 
 fn default_file_name(purpose: &str) -> &'static str {
     match purpose {
-        "intercept_workspace" => "workspace.intercept-workspace",
-        "intercept_configuration" => "intercept-proxy.intercept-config",
         "rules_json" => "rules.json",
         "root_ca" => "intercept-proxy-root-ca.crt",
         "application_backup_zip" => "intercept-proxy-backup.zip",
@@ -159,7 +145,7 @@ fn default_file_name(purpose: &str) -> &'static str {
 mod tests {
     use super::{
         APPLICATION_BACKUP_EXTENSIONS, PKCS12_EXTENSIONS, PROTOCOL_PACKAGE_EXTENSIONS,
-        SERVER_IDENTITY_EXTENSIONS, TRUST_CERTIFICATE_EXTENSIONS, safe_suggested_file_name,
+        SERVER_IDENTITY_EXTENSIONS, TRUST_CERTIFICATE_EXTENSIONS,
     };
 
     #[test]
@@ -169,21 +155,5 @@ mod tests {
         assert_eq!(TRUST_CERTIFICATE_EXTENSIONS, ["cer", "crt", "pem", "der"]);
         assert_eq!(PROTOCOL_PACKAGE_EXTENSIONS, ["zip"]);
         assert_eq!(APPLICATION_BACKUP_EXTENSIONS, ["zip"]);
-    }
-
-    #[test]
-    fn save_dialog_uses_safe_suggestion_and_rejects_path_components() {
-        assert_eq!(
-            safe_suggested_file_name("intercept_workspace", "Lab_Updated.intercept-workspace"),
-            "Lab_Updated.intercept-workspace"
-        );
-        assert_eq!(
-            safe_suggested_file_name("intercept_workspace", "../escaped.intercept-workspace"),
-            "workspace.intercept-workspace"
-        );
-        assert_eq!(
-            safe_suggested_file_name("intercept_workspace", "..\\escaped.intercept-workspace"),
-            "workspace.intercept-workspace"
-        );
     }
 }

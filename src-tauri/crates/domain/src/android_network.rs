@@ -170,10 +170,8 @@ pub struct AndroidNetworkProfile {
     pub name: String,
     pub target_applications: Vec<AndroidTargetApplication>,
     /// 空列表表示目标应用的全部远端地址都进入弱网引擎。
-    #[serde(default)]
     pub destination_targets: Vec<AndroidDestinationTarget>,
     /// 空列表表示不将流量透明转交桌面代理，只执行设备端弱网。
-    #[serde(default)]
     pub proxy_routes: Vec<AndroidProxyRoute>,
     pub confirmed_shared_uids: BTreeSet<u32>,
     pub auto_resume_after_reboot: bool,

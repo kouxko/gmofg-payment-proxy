@@ -75,7 +75,7 @@ fn local_responder_listener(mut listener: ProxyListener) -> ProxyListener {
 }
 
 #[tokio::test]
-async fn local_responder_start_uses_package_gate_but_upstream_tests_remain_unavailable() {
+async fn local_responder_start_uses_package_gate_but_upstream_tests_are_not_applicable() {
     let ports = Arc::new(FakePorts::default());
     let runtime = Arc::new(CountingNetworkRuntime::default());
     let application = application_with_fake_ports_and_listener_runtime(ports, runtime.clone());
@@ -113,10 +113,7 @@ async fn local_responder_start_uses_package_gate_but_upstream_tests_remain_unava
         .listener_start(workspace.id, workspace.revision.get(), listener.id)
         .await
         .expect_err("T21 must pass LocalResponder through the scripted package gate");
-    assert_eq!(
-        start_error.view_model.code,
-        "PROTOCOL_PACKAGE_SERVICES_UNAVAILABLE"
-    );
+    assert_eq!(start_error.view_model.code, "PROTOCOL_PACKAGE_NOT_FOUND");
 
     let stale_connection = application
         .listener_test_upstream_connection(
@@ -153,7 +150,7 @@ async fn local_responder_start_uses_package_gate_but_upstream_tests_remain_unava
         .expect_err("LocalResponder has no upstream connection probe");
     assert_eq!(
         connection_error.view_model.code,
-        "LOCAL_RESPONDER_NOT_AVAILABLE"
+        "LISTENER_UPSTREAM_NOT_APPLICABLE"
     );
 
     let tls_error = application
@@ -165,7 +162,10 @@ async fn local_responder_start_uses_package_gate_but_upstream_tests_remain_unava
         )
         .await
         .expect_err("LocalResponder has no upstream TLS probe");
-    assert_eq!(tls_error.view_model.code, "LOCAL_RESPONDER_NOT_AVAILABLE");
+    assert_eq!(
+        tls_error.view_model.code,
+        "LISTENER_UPSTREAM_NOT_APPLICABLE"
+    );
     assert_eq!(runtime.start.load(Ordering::SeqCst), 0);
     assert_eq!(runtime.connection.load(Ordering::SeqCst), 0);
     assert_eq!(runtime.upstream_tls.load(Ordering::SeqCst), 0);

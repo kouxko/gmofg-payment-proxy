@@ -31,7 +31,7 @@ async fn relay_rule_capability_matrix_is_enforced_by_the_real_snapshot_builder()
             socket_rule_created_order_high_water: 1,
             ..ProxyWorkspace::default()
         };
-        let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+        let runtime = test_listener_runtime_with_packages(store, repository);
         let result = ListenerRuntimePlanBuilder::new(&runtime)
             .build(&workspace, &listener, Uuid::new_v4())
             .await;
@@ -77,7 +77,7 @@ async fn snapshot_partitions_both_directions_without_changing_stable_rule_order(
         socket_rule_created_order_high_water: 4,
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     let plan = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
         .await
@@ -116,7 +116,7 @@ async fn local_decode_off_executes_static_response_from_the_frozen_snapshot_fact
         socket_rule_created_order_high_water: 1,
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     let plan = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
         .await

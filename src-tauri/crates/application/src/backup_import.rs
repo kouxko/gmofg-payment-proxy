@@ -9,8 +9,7 @@ use specta::Type;
 use uuid::Uuid;
 
 use crate::{
-    AppResult, MigrationReport, PortableApplicationProtocolPackage, PortableCertificateMaterial,
-    PortableSettings,
+    AppResult, PortableApplicationProtocolPackage, PortableCertificateMaterial, PortableSettings,
 };
 
 #[derive(
@@ -38,7 +37,6 @@ pub struct ApplicationBackupImportCandidate {
     pub settings: PortableSettings,
     pub protocol_packages: Vec<PortableApplicationProtocolPackage>,
     pub certificate_materials: Vec<PortableCertificateMaterial>,
-    pub migration_report: MigrationReport,
 }
 
 impl ApplicationBackupImportCandidate {
@@ -52,7 +50,6 @@ impl ApplicationBackupImportCandidate {
                 &self.settings,
                 &self.protocol_packages,
                 &self.certificate_materials,
-                &self.migration_report,
             ),
         )
         .map_err(|_| {
@@ -93,7 +90,6 @@ impl fmt::Debug for ApplicationBackupImportCandidate {
                 "certificate_material_count",
                 &self.certificate_materials.len(),
             )
-            .field("migration_report", &self.migration_report)
             .finish_non_exhaustive()
     }
 }
@@ -165,8 +161,6 @@ pub struct ApplicationBackupImportPreview {
     pub portable_material_count: usize,
     pub protocol_packages: Vec<ApplicationBackupPackagePreview>,
     pub replacement_scope: ApplicationBackupReplacementScope,
-    pub migration_report: MigrationReport,
-    pub warnings: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]

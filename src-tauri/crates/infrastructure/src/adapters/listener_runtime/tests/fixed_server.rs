@@ -39,7 +39,7 @@ async fn fixed_server_connect_cannot_escape_to_request_authority() {
         listeners: vec![listener.clone()],
         ..ProxyWorkspace::default()
     };
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
     runtime.set_pipeline_ports(Arc::new(NoopPipelinePorts));
     runtime
         .start(workspace.clone(), listener.clone())
@@ -153,7 +153,7 @@ async fn multiple_fixed_server_listeners_route_to_their_own_upstream_origins() {
             updated_at: Utc::now(),
         })
         .unwrap();
-    let runtime = ListenerRuntimeAdapter::new(store);
+    let runtime = test_listener_runtime(store);
     runtime.set_pipeline_ports(Arc::new(NoopPipelinePorts));
 
     for listener in [transaction.clone(), webhook.clone()] {

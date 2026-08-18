@@ -105,7 +105,6 @@ impl<'de> Deserialize<'de> for DownstreamClientAuthentication {
 pub struct DownstreamTlsSettings {
     pub enabled: bool,
     pub server_identity: Option<CertificateReferenceId>,
-    #[serde(default)]
     pub dynamic_sni_allowlist: Vec<String>,
     pub client_authentication: DownstreamClientAuthentication,
 }
@@ -322,7 +321,7 @@ pub struct ScriptedSocketProcessing {
 /// 协议包切分完整 Frame，并分别应用两个方向的处理开关。
 /// Wire 结构使用 `mode` + `settings`，例如 Direct 是 `{"mode":"direct"}`，Scripted 是
 /// `{"mode":"scripted","settings":{...}}`。额外字段会被拒绝，防止 Direct 配置中夹带不会生效的
-/// 脚本字段。旧 Socket 配置缺少整个 `processing` 字段时由 [`SocketRelaySettings`] 迁移为 Direct。
+/// 脚本字段。
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(
     tag = "mode",
@@ -423,53 +422,6 @@ impl ProxyListener {
         match &self.data_plane {
             ListenerDataPlane::Http(_) => None,
             ListenerDataPlane::Socket(settings) => Some(settings),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ProxyListenerV2 {
-    pub id: ListenerId,
-    pub name: String,
-    pub enabled: bool,
-    pub bind_address: String,
-    pub port: u16,
-    pub authentication: ForwardProxyAuthentication,
-    pub allowed_client_cidrs: Vec<String>,
-    pub mitm: MitmSettings,
-    pub connect_timeout_ms: u64,
-    pub read_timeout_ms: u64,
-    pub write_timeout_ms: u64,
-    #[serde(default)]
-    pub downstream_tls: Option<DownstreamTlsSettings>,
-    #[serde(default)]
-    pub request_body_codec: BodyCodecKind,
-    #[serde(default)]
-    pub response_body_codec: BodyCodecKind,
-    pub fixed_server: Option<FixedServerSettings>,
-}
-
-impl From<ProxyListenerV2> for ProxyListener {
-    fn from(value: ProxyListenerV2) -> Self {
-        Self {
-            id: value.id,
-            name: value.name,
-            enabled: value.enabled,
-            bind_address: value.bind_address,
-            port: value.port,
-            allowed_client_cidrs: value.allowed_client_cidrs,
-            connect_timeout_ms: value.connect_timeout_ms,
-            read_timeout_ms: value.read_timeout_ms,
-            write_timeout_ms: value.write_timeout_ms,
-            data_plane: ListenerDataPlane::Http(HttpListenerSettings {
-                authentication: value.authentication,
-                mitm: value.mitm,
-                downstream_tls: value.downstream_tls.unwrap_or_default(),
-                request_body_codec: value.request_body_codec,
-                response_body_codec: value.response_body_codec,
-                fixed_server: value.fixed_server,
-            }),
         }
     }
 }

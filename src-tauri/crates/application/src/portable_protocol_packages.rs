@@ -156,29 +156,6 @@ fn validate_basic_path(path: &str) -> AppResult<()> {
     Ok(())
 }
 
-pub(crate) fn validate_workspace_package_references<T: PortablePackageEntry>(
-    workspace: &ProxyWorkspace,
-    packages: &[T],
-    require_exact_set: bool,
-) -> AppResult<()> {
-    validate_portable_packages(packages)?;
-    if !require_exact_set {
-        return Ok(());
-    }
-
-    let referenced = referenced_packages(std::slice::from_ref(workspace));
-    let embedded = packages
-        .iter()
-        .map(|package| package.package().clone())
-        .collect::<HashSet<_>>();
-    if referenced != embedded {
-        return Err(invalid(
-            "Workspace 内嵌协议包集合必须恰好等于 Scripted Listener 和 Socket 规则引用集合。",
-        ));
-    }
-    Ok(())
-}
-
 pub(crate) fn validate_configuration_package_references<T: PortablePackageEntry>(
     workspaces: &[ProxyWorkspace],
     packages: &[T],
@@ -397,14 +374,12 @@ mod tests {
     }
 
     #[test]
-    fn workspace_requires_exact_set_but_application_allows_unreferenced_installed_packages() {
+    fn application_requires_referenced_packages_and_allows_unreferenced_installed_packages() {
         let value = package();
         let workspace = scripted_workspace(value.package.clone());
-        validate_workspace_package_references(&workspace, std::slice::from_ref(&value), true)
-            .unwrap();
         assert!(
-            validate_workspace_package_references(
-                &workspace,
+            validate_configuration_package_references(
+                std::slice::from_ref(&workspace),
                 &[] as &[PortableProtocolPackage],
                 true,
             )

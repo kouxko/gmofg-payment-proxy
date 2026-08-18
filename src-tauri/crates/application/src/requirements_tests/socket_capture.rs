@@ -49,11 +49,7 @@ async fn t27_socket_clear_requires_confirmation_and_reports_completed_count() {
         .unwrap();
     let second = workspaces.create("Second".into()).await.unwrap();
     workspaces.select(second.id).await.unwrap();
-    let application = application_with_workspace_ports(
-        ports.clone(),
-        workspaces,
-        Arc::new(InMemoryWorkspaceDocumentStore::default()),
-    );
+    let application = application_with_workspace_ports(ports.clone(), workspaces);
 
     let error = application
         .socket_capture_clear(second.id, false)
@@ -83,11 +79,7 @@ async fn t28_socket_clear_rejects_a_workspace_that_is_no_longer_selected() {
     let first = workspaces.list().await.unwrap().remove(0);
     let second = workspaces.create("Second".into()).await.unwrap();
     workspaces.select(second.id).await.unwrap();
-    let application = application_with_workspace_ports(
-        ports.clone(),
-        workspaces,
-        Arc::new(InMemoryWorkspaceDocumentStore::default()),
-    );
+    let application = application_with_workspace_ports(ports.clone(), workspaces);
 
     // UI 对 first 完成确认后，Workspace 已经切换为 second。Application 必须以确认时的
     // first.id 重新校验选择状态，不能把删除目标静默替换成当前选中的 second。

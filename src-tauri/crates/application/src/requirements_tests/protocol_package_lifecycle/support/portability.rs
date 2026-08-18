@@ -30,27 +30,6 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackageServices {
         Ok(baseline)
     }
 
-    async fn export_workspace_packages(
-        &self,
-        packages: &[ProtocolPackageRef],
-    ) -> AppResult<Vec<PortableProtocolPackage>> {
-        self.workspace_export_calls.fetch_add(1, Ordering::SeqCst);
-        *self.exported_workspace_refs.lock() = packages.to_vec();
-        let records = self.records.lock();
-        packages
-            .iter()
-            .map(|package| {
-                records.get(package).ok_or_else(|| {
-                    AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试记录不存在。")
-                })?;
-                Ok(PortableProtocolPackage {
-                    package: package.clone(),
-                    files: vec![portable_file()],
-                })
-            })
-            .collect()
-    }
-
     async fn export_application_packages(
         &self,
     ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
@@ -65,13 +44,6 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackageServices {
                 enabled: record.enabled,
             })
             .collect())
-    }
-
-    async fn preflight_workspace_packages(
-        &self,
-        packages: &[PortableProtocolPackage],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        self.preflight(packages, |package| &package.package)
     }
 
     async fn preflight_application_packages(
@@ -97,28 +69,9 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackageServices {
         self.preflight(packages, |package| package)
     }
 
-    async fn commit_workspace_bundle(
-        &self,
-        _: Vec<PortableProtocolPackage>,
-        _: ProxyWorkspace,
-    ) -> AppResult<()> {
-        unused()
-    }
-
-    async fn commit_legacy_workspace(&self, _: ProxyWorkspace) -> AppResult<()> {
-        unused()
-    }
-
     async fn replace_application_bundle(
         &self,
         _: Vec<PortableApplicationProtocolPackage>,
-        _: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        unused()
-    }
-
-    async fn replace_legacy_application_configuration(
-        &self,
         _: ApplicationConfigurationDocument,
     ) -> AppResult<()> {
         unused()

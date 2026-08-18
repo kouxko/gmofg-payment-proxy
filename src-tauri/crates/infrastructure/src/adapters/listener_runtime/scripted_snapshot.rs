@@ -58,14 +58,9 @@ impl ScriptedSocketRuntimeSnapshot {
         let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
             return Ok(None);
         };
-        let repository = adapter.protocol_packages.as_ref().ok_or_else(|| {
-            AppError::new(
-                "PROTOCOL_PACKAGE_SERVICES_UNAVAILABLE",
-                "Scripted Socket 运行时没有装配协议包注册表。",
-            )
-            .entity(listener.id.to_string())
-        })?;
-        let package = repository.freeze_for_listener_start(&scripted.package)?;
+        let package = adapter
+            .protocol_packages
+            .freeze_for_listener_start(&scripted.package)?;
         let upstream = DirectionExecutionPlan::new(
             package.compiled(),
             ProtocolDirection::Upstream,

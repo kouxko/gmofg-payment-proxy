@@ -55,9 +55,20 @@ impl CertificateServicePort for CertificateServiceAdapter {
             if snapshot.materials.contains_key(ROOT) && snapshot.materials.contains_key(LEAF) {
                 return self.overview_locked();
             }
+            if snapshot.materials.contains_key(ROOT) || snapshot.materials.contains_key(LEAF) {
+                return Err(AppError::new(
+                    "CERTIFICATE_INSTALLATION_STATE_INVALID",
+                    "本机证书材料不完整，请清除全部配置与数据后重新初始化。",
+                ));
+            }
             self.generate_locked(&fallback_sans, snapshot)?;
             return self.overview_locked();
         };
+
+        if snapshot.materials.is_empty() {
+            self.generate_locked(&fallback_sans, snapshot)?;
+            return self.overview_locked();
+        }
 
         let root_is_current = snapshot.materials.get(ROOT).is_some_and(|stored| {
             stored.certificate_der == fixed_root.certificate_der
@@ -69,26 +80,10 @@ impl CertificateServicePort for CertificateServiceAdapter {
         if root_is_current && snapshot.materials.contains_key(LEAF) {
             return self.overview_locked();
         }
-
-        // 升级旧安装时保留原叶子证书覆盖的 IP/DNS，只替换签发链。这样 Windows、
-        // macOS 更新后无需重新填写监听 SAN，同时测试客户端只需信任一张固定 Root。
-        let existing_sans = snapshot
-            .materials
-            .get(LEAF)
-            .map(|leaf| {
-                leaf.sans
-                    .iter()
-                    .map(|san| {
-                        san.trim_start_matches("DNS:")
-                            .trim_start_matches("IP:")
-                            .to_owned()
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .filter(|sans| !sans.is_empty())
-            .unwrap_or(fallback_sans);
-        self.generate_locked(&existing_sans, snapshot)?;
-        self.overview_locked()
+        Err(AppError::new(
+            "CERTIFICATE_INSTALLATION_STATE_INVALID",
+            "本机证书材料不属于当前安装版本，请清除全部配置与数据后重新初始化。",
+        ))
     }
 
     async fn overview(&self) -> AppResult<CertificateOverviewViewModel> {

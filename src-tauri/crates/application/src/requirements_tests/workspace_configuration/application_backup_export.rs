@@ -2,7 +2,6 @@ use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
-use super::protocol_package_portability::{description, package};
 use super::*;
 
 #[derive(Debug, Default)]
@@ -54,8 +53,7 @@ async fn backup_snapshot_holds_mutation_gate_across_all_authoritative_reads() {
     let (application, portability) = application_with_workspace_configuration_and_packages(
         ports.clone(),
         workspaces,
-        Arc::new(InMemoryWorkspaceDocumentStore::default()),
-        Arc::new(UnavailableApplicationConfigurationStore),
+        Arc::new(NoopApplicationConfigurationStore),
     );
     let application = Arc::new(application);
     let destination = Arc::new(RecordingBackupExport::default());
@@ -88,7 +86,7 @@ async fn backup_snapshot_holds_mutation_gate_across_all_authoritative_reads() {
             application.settings_save(draft).await
         })
     };
-    let exact_package = package("concurrent", "1.0.0");
+    let exact_package = protocol_package("concurrent", "1.0.0");
     let (package_started, package_attempting) = tokio::sync::oneshot::channel();
     let package_mutation = {
         let application = application.clone();
@@ -143,8 +141,7 @@ async fn concurrent_exports_release_mutation_gate_before_destination_write() {
     let (application, _) = application_with_workspace_configuration_and_packages(
         Arc::new(FakePorts::default()),
         Arc::new(InMemoryWorkspaceStore::default()),
-        Arc::new(InMemoryWorkspaceDocumentStore::default()),
-        Arc::new(UnavailableApplicationConfigurationStore),
+        Arc::new(NoopApplicationConfigurationStore),
     );
     let application = Arc::new(application);
     let destination = Arc::new(BlockingBackupExport::default());
@@ -216,10 +213,9 @@ async fn backup_snapshot_includes_portable_configuration_and_raw_iso_package_fil
     let (application, portability) = application_with_workspace_configuration_and_packages(
         ports,
         workspaces,
-        Arc::new(InMemoryWorkspaceDocumentStore::default()),
-        Arc::new(UnavailableApplicationConfigurationStore),
+        Arc::new(NoopApplicationConfigurationStore),
     );
-    let exact_package = package("iso8583-standard", "1.0.0");
+    let exact_package = protocol_package("iso8583-standard", "1.0.0");
     let raw_files = iso_package_files();
     portability.register(
         PortableApplicationProtocolPackage {
@@ -233,7 +229,7 @@ async fn backup_snapshot_includes_portable_configuration_and_raw_iso_package_fil
                 })
                 .collect(),
         },
-        description(exact_package),
+        protocol_package_description(exact_package),
     );
     let destination = RecordingBackupExport::default();
 

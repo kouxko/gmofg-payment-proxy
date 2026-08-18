@@ -4,7 +4,6 @@
 //! 重新定义领域规则。
 
 mod android_adb;
-mod application_proxy;
 mod body_codecs;
 mod bundle;
 mod capture;
@@ -21,7 +20,6 @@ mod protected_secrets;
 mod protocol_package_import;
 mod protocol_package_usage;
 mod protocol_packages;
-mod retired_proxy;
 mod rules;
 mod settings;
 mod socket_capture;
@@ -29,7 +27,6 @@ mod workspace_policies;
 mod workspaces;
 
 pub use android_adb::AndroidAdbAdapter;
-pub use application_proxy::ApplicationProxyAdapter;
 pub use body_codecs::{HeaderBodyCodecResolver, WorkspaceBodyCodecResolver};
 pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;
@@ -54,9 +51,8 @@ pub use protocol_packages::{
     ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError, ProtocolPackageStorageErrorCode,
     ProtocolPackageSummary, ProtocolPackageValidationStatus,
 };
-pub use retired_proxy::RetiredProxyAdapter;
 pub use rules::RuleRepositoryAdapter;
 pub use settings::SettingsRepositoryAdapter;
 pub use socket_capture::SocketCaptureRepositoryAdapter;
 pub use workspace_policies::WorkspaceRuntimePolicyResolver;
-pub use workspaces::{WorkspaceDocumentAdapter, WorkspaceRepositoryAdapter};
+pub use workspaces::WorkspaceRepositoryAdapter;

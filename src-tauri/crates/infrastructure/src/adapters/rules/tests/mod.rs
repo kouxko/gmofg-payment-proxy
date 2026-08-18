@@ -109,7 +109,6 @@ fn adapter_with(
         dialog,
         Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
         &[],
-        &[],
     ))
 }
 
@@ -128,25 +127,6 @@ fn runtime_snapshot(adapter: &RuleRepositoryAdapter) -> RuleRuntimeSnapshot {
     adapter
         .runtime_snapshot(&channel)
         .expect("runtime snapshot")
-}
-
-fn legacy_rule_json(rule_id: uuid::Uuid, terminal_action: &Value) -> Value {
-    serde_json::json!({
-        "id": rule_id,
-        "revision": 3,
-        "name": "legacy Shift-JIS rule",
-        "description": "persisted by the pre-generic Payment proxy",
-        "enabled": true,
-        "priority": 10,
-        "created_order": 1,
-        "channel": null,
-        "stage": "Request",
-        "conditions": [],
-        "actions": [{"Terminal": terminal_action}],
-        "one_shot": false,
-        "hit_count": 0,
-        "last_hit_at": null
-    })
 }
 
 mod concurrency;

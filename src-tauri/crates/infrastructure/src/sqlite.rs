@@ -1,4 +1,4 @@
-//! `SQLite` 持久化边界：保存设置、规则运行态和加密后的证书材料。
+//! `SQLite` 持久化边界：保存设置、Workspace、Socket 抓包和加密后的证书材料。
 //!
 //! 本模块用单连接互斥锁串行化事务，并用 revision 做 CAS（比较后更新）：调用方必须带上
 //! 自己读到的版本，版本不一致就返回冲突，避免两个窗口或后台任务静默覆盖彼此的数据。
@@ -15,38 +15,11 @@ use uuid::Uuid;
 
 use crate::InfrastructureError;
 
-const LATEST_SCHEMA_VERSION: i64 = 10;
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredSettings {
     pub revision: u64,
     pub value: Value,
     pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RuleRecord {
-    pub id: Uuid,
-    pub revision: u64,
-    pub enabled: bool,
-    pub value: Value,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RuleCollectionSnapshot {
-    pub revision: u64,
-    pub records: Vec<RuleRecord>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RuleRuntimeUpdate {
-    pub id: Uuid,
-    pub expected_revision: u64,
-    pub revision: u64,
-    pub enabled: bool,
-    pub hit_count: u64,
-    pub last_hit_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -106,28 +79,28 @@ impl SqliteStore {
     }
 }
 mod android_runtime_owner;
+mod certificates;
 mod core;
 pub use android_runtime_owner::AndroidRuntimeOwnerRecord;
 mod portable_configuration;
 pub(crate) mod protocol_packages;
-mod rules_and_certificates;
 mod schema;
 pub(crate) mod socket_capture_coordination;
 pub(crate) mod socket_captures;
 mod workspaces;
 
-use schema::create_schema;
+use schema::create_current_schema;
 
 fn stored_certificate_revision(transaction: &Transaction<'_>) -> Result<u64, InfrastructureError> {
     let mut statement = transaction
         .prepare("SELECT metadata_json FROM certificate_material")
-        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     let metadata = statement
         .query_map([], |row| row.get::<_, String>(0))
-        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     let mut revision = 0;
     for value in metadata {
-        let value = value.map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+        let value = value.map_err(|source| InfrastructureError::DatabaseSchema { source })?;
         let candidate = serde_json::from_str::<Value>(&value)
             .ok()
             .and_then(|value| value.get("revision").and_then(Value::as_u64))
@@ -143,34 +116,18 @@ fn initialize_singleton_state(
 ) -> Result<(), InfrastructureError> {
     transaction
         .execute(
-            "INSERT OR IGNORE INTO rule_state(singleton_id, revision) VALUES (1, 0)",
-            [],
-        )
-        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-    transaction
-        .execute(
             "INSERT OR IGNORE INTO certificate_state(singleton_id, revision) VALUES (1, ?1)",
             [revision_to_i64(certificate_revision)?],
         )
-        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     transaction
         .execute(
             "INSERT OR IGNORE INTO workspace_state(singleton_id, selected_id)
              VALUES (1, NULL)",
             [],
         )
-        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     Ok(())
-}
-
-fn record_schema_migration(transaction: &Transaction<'_>) -> Result<(), InfrastructureError> {
-    transaction
-        .execute(
-            "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?1, ?2)",
-            params![LATEST_SCHEMA_VERSION, Utc::now().to_rfc3339()],
-        )
-        .map(|_| ())
-        .map_err(|source| InfrastructureError::DatabaseMigration { source })
 }
 
 fn put_certificate_material(
@@ -248,94 +205,6 @@ fn current_revision(
         .transpose()
 }
 
-fn rule_signature(transaction: &Transaction<'_>) -> Result<Vec<(Uuid, u64)>, InfrastructureError> {
-    let mut statement = transaction
-        .prepare("SELECT id, revision FROM rules ORDER BY id ASC")
-        .map_err(|source| InfrastructureError::Database { source })?;
-    statement
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })
-        .map_err(|source| InfrastructureError::Database { source })?
-        .map(|row| {
-            let (id, revision) = row.map_err(|source| InfrastructureError::Database { source })?;
-            Ok((
-                Uuid::parse_str(&id)
-                    .map_err(|error| rule_record_corrupt(format!("ID 无效：{error}")))?,
-                rule_revision_from_i64(revision)?,
-            ))
-        })
-        .collect()
-}
-
-fn load_rule_records(connection: &Connection) -> Result<Vec<RuleRecord>, InfrastructureError> {
-    let mut statement = connection
-        .prepare(
-            "SELECT id, revision, enabled, json, updated_at
-             FROM rules ORDER BY updated_at DESC, id ASC",
-        )
-        .map_err(|source| InfrastructureError::Database { source })?;
-    let rows = statement
-        .query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, bool>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-            ))
-        })
-        .map_err(|source| InfrastructureError::Database { source })?;
-    rows.map(|row| {
-        let (id, revision, enabled, json, updated_at) =
-            row.map_err(|source| InfrastructureError::Database { source })?;
-        Ok(RuleRecord {
-            id: Uuid::parse_str(&id)
-                .map_err(|error| rule_record_corrupt(format!("ID 无效：{error}")))?,
-            revision: rule_revision_from_i64(revision)?,
-            enabled,
-            value: serde_json::from_str(&json)
-                .map_err(|error| rule_record_corrupt(format!("JSON 无效：{error}")))?,
-            updated_at: DateTime::parse_from_rfc3339(&updated_at)
-                .map_err(|error| rule_record_corrupt(format!("时间无效：{error}")))?
-                .with_timezone(&Utc),
-        })
-    })
-    .collect()
-}
-
-fn insert_rule(connection: &Connection, record: &RuleRecord) -> Result<usize, InfrastructureError> {
-    connection
-        .execute(
-            "INSERT OR IGNORE INTO rules(id, revision, enabled, json, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                record.id.to_string(),
-                revision_to_i64(record.revision)?,
-                record.enabled,
-                record.value.to_string(),
-                record.updated_at.to_rfc3339()
-            ],
-        )
-        .map_err(|source| InfrastructureError::Database { source })
-}
-
-fn advance_rule_collection_revision(
-    transaction: &Transaction<'_>,
-) -> Result<(), InfrastructureError> {
-    let affected = transaction
-        .execute(
-            "UPDATE rule_state SET revision = revision + 1
-             WHERE singleton_id = 1 AND revision < 9223372036854775807",
-            [],
-        )
-        .map_err(|source| InfrastructureError::Database { source })?;
-    if affected != 1 {
-        return Err(InfrastructureError::RevisionConflict);
-    }
-    Ok(())
-}
-
 fn parse_settings_row(
     (revision, json, updated_at): (i64, String, String),
 ) -> Result<StoredSettings, InfrastructureError> {
@@ -356,17 +225,6 @@ fn revision_to_i64(revision: u64) -> Result<i64, InfrastructureError> {
 
 fn revision_from_i64(revision: i64) -> Result<u64, InfrastructureError> {
     u64::try_from(revision).map_err(|_| InfrastructureError::RevisionConflict)
-}
-
-fn rule_revision_from_i64(revision: i64) -> Result<u64, InfrastructureError> {
-    u64::try_from(revision).map_err(|_| rule_record_corrupt("revision 不能为负数"))
-}
-
-fn rule_record_corrupt(message: impl Into<String>) -> InfrastructureError {
-    InfrastructureError::PersistenceCorrupt {
-        entity: "rule",
-        message: message.into(),
-    }
 }
 
 fn settings_record_corrupt(message: impl Into<String>) -> InfrastructureError {

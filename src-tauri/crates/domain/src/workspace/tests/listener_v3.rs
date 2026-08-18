@@ -142,10 +142,7 @@ fn socket_tls_roles_are_exhaustive_and_round_trip() {
 }
 
 #[test]
-fn current_listener_rejects_legacy_flat_or_unknown_fields() {
-    let legacy = serde_json::to_value(v2_listener()).unwrap();
-    assert!(serde_json::from_value::<ProxyListener>(legacy).is_err());
-
+fn current_listener_rejects_unknown_fields() {
     let mut current = serde_json::to_value(ProxyListener::default()).unwrap();
     current["unexpected"] = serde_json::json!(true);
     assert!(serde_json::from_value::<ProxyListener>(current).is_err());
@@ -212,7 +209,7 @@ fn socket_processing_all_sixteen_switch_combinations_round_trip_without_directio
 }
 
 #[test]
-fn socket_processing_defaults_and_historical_settings_are_direct() {
+fn socket_processing_default_is_direct_and_current_wire_is_strict() {
     assert_eq!(
         SocketPayloadProcessing::default(),
         SocketPayloadProcessing::Direct
@@ -222,33 +219,24 @@ fn socket_processing_defaults_and_historical_settings_are_direct() {
         SocketPayloadProcessing::Direct
     );
 
-    // T04 之前保存的 Socket settings 只有 upstream/security/maximum_connections。
-    // 它们没有 topology tag，必须按原义迁移为 Relay + Direct，不能猜成 LocalResponder。
-    let historical = serde_json::json!({
+    let legacy = serde_json::json!({
         "upstream": { "host": "legacy.example.test", "port": 8123 },
         "security": { "mode": "transparent" },
         "maximum_connections": 12
     });
-    let migrated: SocketRelaySettings = serde_json::from_value(historical).unwrap();
-    assert_eq!(migrated.processing, SocketPayloadProcessing::Direct);
-    assert_eq!(
-        migrated.topology,
-        relay_topology(
-            SocketEndpoint {
-                host: "legacy.example.test".into(),
-                port: 8123,
-            },
-            SocketRelaySecurity::Transparent,
-        )
-    );
-    assert_eq!(
-        serde_json::to_value(&migrated).unwrap()["processing"],
-        serde_json::json!({"mode": "direct"})
-    );
-    assert_eq!(
-        serde_json::to_value(migrated).unwrap()["topology"]["mode"],
-        "relay"
-    );
+    assert!(serde_json::from_value::<SocketRelaySettings>(legacy).is_err());
+
+    let missing_processing = serde_json::json!({
+        "topology": {
+            "mode": "relay",
+            "settings": {
+                "upstream": { "host": "server.example.test", "port": 8123 },
+                "security": { "mode": "transparent" }
+            }
+        },
+        "maximum_connections": 12
+    });
+    assert!(serde_json::from_value::<SocketRelaySettings>(missing_processing).is_err());
 }
 
 #[test]

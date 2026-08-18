@@ -10,7 +10,7 @@ use thiserror::Error;
 /// Stable infrastructure error categories mapped to application error codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InfrastructureErrorCode {
-    DatabaseMigrationFailed,
+    DatabaseSchemaFailed,
     DatabaseWriteFailed,
     RevisionConflict,
     DpapiProtectFailed,
@@ -29,13 +29,16 @@ pub enum InfrastructureErrorCode {
 /// Infrastructure failures deliberately omit secret data and payload bytes.
 #[derive(Debug, Error)]
 pub enum InfrastructureError {
-    #[error("数据库迁移失败")]
-    DatabaseMigration {
+    #[error("数据库结构初始化或校验失败")]
+    DatabaseSchema {
         #[source]
         source: rusqlite::Error,
     },
-    #[error("数据库迁移数据无效：{message}")]
-    DatabaseMigrationInvalid { message: String },
+    #[error("数据库结构版本无效：当前版本 {current}，实际标记 {found:?}")]
+    DatabaseSchemaInvalid {
+        current: i64,
+        found: Vec<(i64, i64)>,
+    },
     #[error("数据库操作失败")]
     Database {
         #[source]
@@ -94,8 +97,8 @@ impl InfrastructureError {
     #[must_use]
     pub const fn code(&self) -> InfrastructureErrorCode {
         match self {
-            Self::DatabaseMigration { .. } | Self::DatabaseMigrationInvalid { .. } => {
-                InfrastructureErrorCode::DatabaseMigrationFailed
+            Self::DatabaseSchema { .. } | Self::DatabaseSchemaInvalid { .. } => {
+                InfrastructureErrorCode::DatabaseSchemaFailed
             }
             Self::Database { .. } => InfrastructureErrorCode::DatabaseWriteFailed,
             Self::RevisionConflict => InfrastructureErrorCode::RevisionConflict,

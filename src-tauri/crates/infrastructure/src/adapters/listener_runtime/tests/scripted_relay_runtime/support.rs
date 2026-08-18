@@ -158,7 +158,7 @@ pub(super) async fn start_scripted_runtime_from_listener(
     let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
         Arc::clone(&store),
     ));
-    let runtime = ListenerRuntimeAdapter::new(store).with_protocol_packages(repository);
+    let runtime = test_listener_runtime_with_packages(store, repository);
     if publish_captures {
         runtime.set_socket_capture_repository(Arc::clone(&captures));
     }

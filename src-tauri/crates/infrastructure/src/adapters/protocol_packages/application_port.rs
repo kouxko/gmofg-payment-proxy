@@ -49,7 +49,7 @@ impl ProtocolPackageStorePort for ProtocolPackageRepositoryAdapter {
 
 #[async_trait]
 impl ProtocolPackageCompilerPort for ProtocolPackageRepositoryAdapter {
-    async fn validate_for_enable(
+    async fn compile_fresh(
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageCompilationReceipt> {

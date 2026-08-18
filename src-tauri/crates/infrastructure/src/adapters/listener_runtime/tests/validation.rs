@@ -1,6 +1,6 @@
 #[tokio::test]
 async fn upstream_tls_probe_requires_a_fixed_https_server() {
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
     let dynamic = ProxyListener::default();
     let dynamic_workspace = ProxyWorkspace {
         listeners: vec![dynamic.clone()],
@@ -38,7 +38,7 @@ async fn upstream_connection_probe_accepts_a_fixed_http_server() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
     let accepted = tokio::spawn(async move { upstream.accept().await.unwrap() });
-    let runtime = ListenerRuntimeAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
+    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
     let listener = ProxyListener {
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
             fixed_server: Some(FixedServerSettings {

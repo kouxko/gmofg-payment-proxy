@@ -8,11 +8,8 @@ use chrono::Utc;
 use super::Application;
 use crate::{
     AndroidNetworkState, AppError, AppResult, OperationResultViewModel, ProxyWorkspace,
-    UiEventPayload, UiTone, WORKSPACE_DOCUMENT_FORMAT_VERSION,
-    WORKSPACE_DOCUMENT_V4_FORMAT_VERSION, WorkspaceChangeKind, WorkspaceChangedViewModel,
-    WorkspaceDocument, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
-    parse_workspace_document_with_source, remap_workspace_identity,
-    retain_reachable_certificate_references, serialize_workspace_document,
+    UiEventPayload, WorkspaceChangeKind, WorkspaceChangedViewModel, WorkspaceId,
+    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
 impl Application {
@@ -162,10 +159,7 @@ impl Application {
             Ok(status) => status,
             Err(error)
                 if !observation_required
-                    && matches!(
-                        error.view_model.code.as_str(),
-                        "ANDROID_CONTROL_UNAVAILABLE" | "ANDROID_DEVICE_NOT_SELECTED"
-                    ) =>
+                    && error.view_model.code == "ANDROID_DEVICE_NOT_SELECTED" =>
             {
                 return Ok(());
             }
@@ -242,147 +236,6 @@ impl Application {
         self.ensure_workspace_not_running(current).await
     }
 
-    /// 打开系统文件选择器并导入 Workspace；路径和文档字节不会进入前端。
-    pub async fn workspace_import(&self) -> AppResult<OperationResultViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        let Some(document) = self.workspace_documents.pick_import_document().await? else {
-            return Ok(cancelled("已取消导入 Workspace。"));
-        };
-        let parsed = parse_workspace_document_with_source(&document)?;
-        let migration_warning = parsed.migration_report.warning_message();
-        let portable = parsed.document;
-        let protocol_packages = portable.protocol_packages;
-        let expected_packages = protocol_packages
-            .iter()
-            .map(|package| package.package.clone())
-            .collect::<Vec<_>>();
-        let has_package_payload = parsed.source_version >= WORKSPACE_DOCUMENT_V4_FORMAT_VERSION;
-        let descriptions = if has_package_payload {
-            self.protocol_package_portability
-                .preflight_workspace_packages(&protocol_packages)
-                .await?
-        } else {
-            self.describe_installed_portable_references(std::slice::from_ref(&portable.workspace))
-                .await?
-        };
-        let expected_packages = if has_package_payload {
-            expected_packages
-        } else {
-            super::protocol_package_portability::referenced_protocol_packages(std::slice::from_ref(
-                &portable.workspace,
-            ))
-        };
-        crate::validate_portable_protocol_bindings(
-            std::slice::from_ref(&portable.workspace),
-            &expected_packages,
-            &descriptions,
-        )?;
-        let mut workspaces = vec![portable.workspace];
-        let restored = self
-            .restore_certificate_materials(&mut workspaces, portable.certificate_materials)
-            .await?;
-        let mut workspace = workspaces.remove(0);
-        if let Err(error) = remap_workspace_identity(&mut workspace) {
-            return Err(match self.rollback_restored_certificates(&restored).await {
-                Ok(()) => error,
-                Err(cleanup) => {
-                    super::certificate_portability::certificate_operation_cleanup_error(
-                        error, cleanup,
-                    )
-                }
-            });
-        }
-        let imported = workspace.clone();
-        let commit = if has_package_payload {
-            self.protocol_package_portability
-                .commit_workspace_bundle(protocol_packages, workspace)
-                .await
-        } else {
-            self.protocol_package_portability
-                .commit_legacy_workspace(workspace)
-                .await
-        };
-        if let Err(error) = commit {
-            return Err(match self.rollback_restored_certificates(&restored).await {
-                Ok(()) => error,
-                Err(cleanup) => {
-                    super::certificate_portability::certificate_operation_cleanup_error(
-                        error, cleanup,
-                    )
-                }
-            });
-        }
-        let workspace = imported;
-        let selected = self
-            .workspaces
-            .list()
-            .await?
-            .iter()
-            .any(|summary| summary.id == workspace.id && summary.selected);
-        self.publish_workspace(&workspace, selected, WorkspaceChangeKind::Imported);
-        Ok(OperationResultViewModel {
-            success: true,
-            cancelled: false,
-            message: migration_warning
-                .unwrap_or_else(|| "Workspace 与证书材料已从单个文件导入。".into()),
-            ui_tone: if parsed.migration_report.removed_metadata_extractors > 0 {
-                UiTone::Warning
-            } else {
-                UiTone::Positive
-            },
-            entity_id: Some(workspace.id.to_string()),
-            revision: Some(workspace.revision.get()),
-            requires_restart: false,
-        })
-    }
-
-    /// 生成安全文档并打开系统保存对话框；前端不会收到路径或文档字节。
-    pub async fn workspace_export(
-        &self,
-        workspace_id: WorkspaceId,
-    ) -> AppResult<OperationResultViewModel> {
-        // 同一把门禁覆盖所有快照读取及序列化，避免跨多个 await 拼出混合版本文档。
-        // 文件对话框可能长时间等待用户，因此字节完成后必须先释放门禁。
-        let gate = self.mutation_gate.lock().await;
-        let mut workspace = self.workspaces.get(workspace_id).await?;
-        retain_reachable_certificate_references(&mut workspace);
-        let certificate_materials = self
-            .export_certificate_materials(std::slice::from_ref(&workspace))
-            .await?;
-        let package_references = super::protocol_package_portability::referenced_protocol_packages(
-            std::slice::from_ref(&workspace),
-        );
-        let protocol_packages = self
-            .protocol_package_portability
-            .export_workspace_packages(&package_references)
-            .await?;
-        let document = serialize_workspace_document(&WorkspaceDocument {
-            format_version: WORKSPACE_DOCUMENT_FORMAT_VERSION,
-            workspace: workspace.clone(),
-            certificate_materials,
-            protocol_packages,
-        })?;
-        let suggested_file_name =
-            format!("{}.intercept-workspace", safe_file_stem(&workspace.name));
-        drop(gate);
-        if !self
-            .workspace_documents
-            .save_export_document(suggested_file_name, document)
-            .await?
-        {
-            return Ok(cancelled("已取消导出 Workspace。"));
-        }
-        Ok(OperationResultViewModel {
-            success: true,
-            cancelled: false,
-            message: "Workspace 与证书材料已导出到单个文件。".into(),
-            ui_tone: UiTone::Positive,
-            entity_id: Some(workspace.id.to_string()),
-            revision: Some(workspace.revision.get()),
-            requires_restart: false,
-        })
-    }
-
     pub(crate) fn publish_workspace(
         &self,
         workspace: &ProxyWorkspace,
@@ -416,8 +269,3 @@ impl Application {
 
 mod components;
 mod support;
-use support::{cancelled, safe_file_stem};
-
-#[cfg(test)]
-#[path = "workspaces_tests.rs"]
-mod tests;

@@ -171,7 +171,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             .entity(listener.id.to_string()));
         }
 
-        let (authentication, authenticator) = self.authentication(listener, http)?;
+        let (authentication, authenticator) = self.authentication(http)?;
         let mut service = ForwardProxyService::new(
             ForwardProxyConfig {
                 bind_addr,
@@ -281,8 +281,8 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
     ) -> AppResult<PreparedListenerRuntime> {
         let SocketTopology::Relay(relay) = &socket.topology else {
             return Err(AppError::new(
-                "LOCAL_RESPONDER_NOT_AVAILABLE",
-                "LocalResponder 没有上游连接、DNS 或 TLS 探测能力。",
+                "LISTENER_UPSTREAM_NOT_APPLICABLE",
+                "本地应答没有上游连接、DNS 或 TLS 探测能力。",
             )
             .entity(listener.id.to_string()));
         };
@@ -298,7 +298,6 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
 
     fn authentication(
         &self,
-        listener: &ProxyListener,
         http: &HttpListenerSettings,
     ) -> AppResult<(
         ForwardAuthenticationMode,
@@ -309,19 +308,12 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             ForwardProxyAuthentication::None => {
                 Ok((ForwardAuthenticationMode::None, Arc::new(NoAuthentication)))
             }
-            ForwardProxyAuthentication::Basic { credential } => {
-                let resolver = self.adapter.protected_secrets.as_ref().ok_or_else(|| {
-                    AppError::new(
-                        "SECRET_PROTECTOR_UNAVAILABLE",
-                        "当前宿主没有提供代理认证安全引用解析能力。",
-                    )
-                    .entity(listener.id.to_string())
-                })?;
-                Ok((
-                    ForwardAuthenticationMode::Required,
-                    resolver.resolve_basic_authenticator(credential)?,
-                ))
-            }
+            ForwardProxyAuthentication::Basic { credential } => Ok((
+                ForwardAuthenticationMode::Required,
+                self.adapter
+                    .protected_secrets
+                    .resolve_basic_authenticator(credential)?,
+            )),
         }
     }
 
