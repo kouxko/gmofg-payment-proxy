@@ -5,6 +5,7 @@
 //! DPAPI/Keychain 或证书库失败时可以被统一映射，而不会污染领域模型。
 
 pub mod adapters;
+pub mod application_backup;
 pub mod certificates;
 pub mod dpapi;
 pub mod error;
@@ -26,6 +27,10 @@ pub use adapters::{
     SettingsRepositoryAdapter, SocketCaptureRepositoryAdapter, SocketDocumentRuleConnection,
     SocketDocumentRuleConnectionFactory, WorkspaceBodyCodecResolver, WorkspaceDocumentAdapter,
     WorkspaceRepositoryAdapter, WorkspaceRuntimePolicyResolver,
+};
+pub use application_backup::{
+    ApplicationBackupArchive, ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode,
+    ApplicationBackupArchiveLimits,
 };
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,
