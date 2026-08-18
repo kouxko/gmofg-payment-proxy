@@ -18,6 +18,7 @@ mod document_security;
 mod error;
 mod events;
 mod facade;
+mod legacy_import;
 mod listeners;
 mod models;
 mod portable_certificates;
@@ -42,6 +43,7 @@ pub use facade::{
     Application, ApplicationDependencies, parse_socket_rule_value,
     validate_portable_protocol_bindings,
 };
+pub use legacy_import::*;
 pub use listeners::InMemoryListenerRuntime;
 pub use models::*;
 pub use portable_certificates::*;

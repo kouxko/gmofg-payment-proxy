@@ -3,6 +3,8 @@
 use std::{collections::BTreeMap, fmt};
 
 use async_trait::async_trait;
+use serde::Serialize;
+use specta::Type;
 
 use crate::{AppResult, ApplicationBackupDocument, PortableArchivePath};
 
@@ -28,7 +30,7 @@ impl fmt::Debug for ApplicationBackupExportSnapshot {
 }
 
 /// Safe result of writing a caller-selected backup target.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Type)]
 pub struct ApplicationBackupExportOutcome {
     pub bytes_written: u64,
     pub replaced_existing: bool,

@@ -184,14 +184,14 @@ impl Application {
         source.discard(token).await
     }
 
-    async fn application_backup_import_baseline(
+    pub(super) async fn application_backup_import_baseline(
         &self,
     ) -> AppResult<ApplicationBackupImportBaseline> {
         let _gate = self.mutation_gate.lock().await;
         self.application_backup_import_baseline_locked().await
     }
 
-    async fn application_backup_import_baseline_locked(
+    pub(super) async fn application_backup_import_baseline_locked(
         &self,
     ) -> AppResult<ApplicationBackupImportBaseline> {
         let summaries = self.workspaces.list().await?;

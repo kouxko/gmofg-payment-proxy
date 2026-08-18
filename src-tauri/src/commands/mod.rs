@@ -5,6 +5,7 @@
 
 mod android;
 mod app;
+mod application_backup;
 mod capture;
 mod certificates;
 mod diagnostics;
@@ -21,6 +22,7 @@ mod e2e_tests;
 
 pub use android::*;
 pub use app::*;
+pub use application_backup::*;
 pub use capture::*;
 pub use certificates::*;
 pub use diagnostics::*;
@@ -92,6 +94,16 @@ pub fn builder() -> Builder<Wry> {
             workspace_export,
             application_configuration_import,
             application_configuration_export,
+            application_backup_export,
+            application_backup_import_prepare,
+            application_backup_import_commit,
+            application_backup_import_discard,
+            legacy_application_configuration_import_prepare,
+            legacy_application_configuration_import_commit,
+            legacy_application_configuration_import_discard,
+            legacy_workspace_import_prepare,
+            legacy_workspace_import_commit,
+            legacy_workspace_import_discard,
             listener_list,
             listener_new,
             listener_copy,

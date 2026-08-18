@@ -15,6 +15,7 @@ const CLIENT_IDENTITY_EXTENSIONS: &[&str] = &["p12", "pfx", "pem"];
 const SERVER_IDENTITY_EXTENSIONS: &[&str] = &["p12", "pfx", "pem"];
 const TRUST_CERTIFICATE_EXTENSIONS: &[&str] = &["cer", "crt", "pem", "der"];
 const PROTOCOL_PACKAGE_EXTENSIONS: &[&str] = &["zip"];
+const APPLICATION_BACKUP_EXTENSIONS: &[&str] = &["zip"];
 
 /// Desktop-native file picker used by infrastructure adapters.
 ///
@@ -47,6 +48,9 @@ impl TauriNativeFileDialog {
             "protocol_package_zip" => builder
                 .set_title("导入 Socket 协议包")
                 .add_filter("协议包 ZIP", PROTOCOL_PACKAGE_EXTENSIONS),
+            "application_backup_zip" => builder
+                .set_title("导入 Intercept Proxy 应用备份")
+                .add_filter("应用备份 ZIP", APPLICATION_BACKUP_EXTENSIONS),
             "pkcs12" => builder
                 .set_title("导入上游 PKCS12")
                 .add_filter("PKCS12", PKCS12_EXTENSIONS),
@@ -83,6 +87,9 @@ impl TauriNativeFileDialog {
             "root_ca" => builder
                 .set_title("导出 Intercept Proxy Root CA 公开证书")
                 .add_filter("X.509 证书", &["crt", "cer", "pem"]),
+            "application_backup_zip" => builder
+                .set_title("导出 Intercept Proxy 应用备份")
+                .add_filter("应用备份 ZIP", APPLICATION_BACKUP_EXTENSIONS),
             _ => builder.set_title("保存文件"),
         };
         builder.set_file_name(safe_suggested_file_name(purpose, suggested_file_name))
@@ -143,6 +150,7 @@ fn default_file_name(purpose: &str) -> &'static str {
         "intercept_configuration" => "intercept-proxy.intercept-config",
         "rules_json" => "rules.json",
         "root_ca" => "intercept-proxy-root-ca.crt",
+        "application_backup_zip" => "intercept-proxy-backup.zip",
         _ => "export",
     }
 }
@@ -150,8 +158,8 @@ fn default_file_name(purpose: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        PKCS12_EXTENSIONS, PROTOCOL_PACKAGE_EXTENSIONS, SERVER_IDENTITY_EXTENSIONS,
-        TRUST_CERTIFICATE_EXTENSIONS, safe_suggested_file_name,
+        APPLICATION_BACKUP_EXTENSIONS, PKCS12_EXTENSIONS, PROTOCOL_PACKAGE_EXTENSIONS,
+        SERVER_IDENTITY_EXTENSIONS, TRUST_CERTIFICATE_EXTENSIONS, safe_suggested_file_name,
     };
 
     #[test]
@@ -160,6 +168,7 @@ mod tests {
         assert_eq!(SERVER_IDENTITY_EXTENSIONS, ["p12", "pfx", "pem"]);
         assert_eq!(TRUST_CERTIFICATE_EXTENSIONS, ["cer", "crt", "pem", "der"]);
         assert_eq!(PROTOCOL_PACKAGE_EXTENSIONS, ["zip"]);
+        assert_eq!(APPLICATION_BACKUP_EXTENSIONS, ["zip"]);
     }
 
     #[test]

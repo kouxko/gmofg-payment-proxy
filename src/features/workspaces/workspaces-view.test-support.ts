@@ -13,6 +13,16 @@ export const mocks = {
   workspaceDelete: vi.fn(),
   applicationConfigurationImport: vi.fn(),
   applicationConfigurationExport: vi.fn(),
+  applicationBackupExport: vi.fn(),
+  applicationBackupImportPrepare: vi.fn(),
+  applicationBackupImportCommit: vi.fn(),
+  applicationBackupImportDiscard: vi.fn(),
+  legacyApplicationConfigurationImportPrepare: vi.fn(),
+  legacyApplicationConfigurationImportCommit: vi.fn(),
+  legacyApplicationConfigurationImportDiscard: vi.fn(),
+  legacyWorkspaceImportPrepare: vi.fn(),
+  legacyWorkspaceImportCommit: vi.fn(),
+  legacyWorkspaceImportDiscard: vi.fn(),
   toast: vi.fn(),
 };
 
@@ -86,4 +96,68 @@ export function setupWorkspaceMocks() {
       ui_tone: "positive",
     }),
   );
+  mocks.applicationBackupExport.mockReturnValue(
+    ok({ bytes_written: 2048, replaced_existing: false }),
+  );
+  mocks.applicationBackupImportPrepare.mockReturnValue(
+    ok({
+      token: "backup-token",
+      expires_in_seconds: 300,
+      workspace_count: 2,
+      protocol_package_count: 3,
+      enabled_protocol_package_count: 2,
+      portable_material_count: 1,
+      protocol_packages: [],
+      replacement_scope: {
+        replaces_all_workspaces: true,
+        replaces_selected_workspace: true,
+        replaces_portable_settings: true,
+        replaces_protocol_package_registry: true,
+      },
+      migration_report: {
+        removed_metadata_extractors: 0,
+        source_kind: "application_configuration_document",
+        source_version: 5,
+      },
+      warnings: [],
+    }),
+  );
+  mocks.applicationBackupImportCommit.mockReturnValue(
+    ok({
+      workspace_count: 2,
+      protocol_package_count: 3,
+      enabled_protocol_package_count: 2,
+      portable_material_count: 1,
+      requires_restart: true,
+    }),
+  );
+  mocks.applicationBackupImportDiscard.mockReturnValue(
+    ok({ message: "应用备份预览已丢弃。" }),
+  );
+  const legacyPreview = {
+    token: "legacy-token",
+    expires_in_seconds: 300,
+    kind: "application_configuration",
+    source_version: 4,
+    workspace_count: 2,
+    portable_material_count: 1,
+    migration_report: {
+      removed_metadata_extractors: 2,
+      source_kind: "application_configuration_document",
+      source_version: 4,
+    },
+    warnings: ["2 个旧元数据提取器已移除"],
+  };
+  mocks.legacyApplicationConfigurationImportPrepare.mockReturnValue(ok(legacyPreview));
+  mocks.legacyWorkspaceImportPrepare.mockReturnValue(
+    ok({ ...legacyPreview, kind: "workspace", workspace_count: 1 }),
+  );
+  mocks.legacyApplicationConfigurationImportCommit.mockReturnValue(
+    ok({ message: "旧版配置已导入", cancelled: false, ui_tone: "warning" }),
+  );
+  mocks.legacyWorkspaceImportCommit.mockReturnValue(
+    ok({ message: "旧版 Workspace 已导入", cancelled: false, ui_tone: "warning" }),
+  );
+  mocks.legacyApplicationConfigurationImportDiscard.mockReturnValue(ok({ message: "已取消" }));
+  mocks.legacyWorkspaceImportDiscard.mockReturnValue(ok({ message: "已取消" }));
 }

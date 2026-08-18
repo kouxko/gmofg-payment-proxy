@@ -27,6 +27,7 @@ mod certificate_portability;
 mod certificates;
 mod configuration;
 mod diagnostics;
+mod legacy_import;
 mod lifecycle;
 mod listener_certificates;
 mod listeners;

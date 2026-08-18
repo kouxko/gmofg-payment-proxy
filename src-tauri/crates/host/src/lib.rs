@@ -24,9 +24,10 @@ use intercept_proxy_infrastructure::DpapiProtector;
 #[cfg(target_os = "macos")]
 use intercept_proxy_infrastructure::MacKeychainProtector;
 use intercept_proxy_infrastructure::{
-    AndroidAdbAdapter, HeaderBodyCodecResolver, InfrastructureError, InfrastructureServiceBundle,
-    NativeFileDialog, RetiredProxyAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
-    SecretProtector, SqliteStore,
+    AndroidAdbAdapter, ApplicationBackupImportPreparer, HeaderBodyCodecResolver,
+    InfrastructureError, InfrastructureServiceBundle, LegacyImportPreparer, NativeFileDialog,
+    RetiredProxyAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector,
+    SqliteStore,
 };
 use intercept_proxy_product_api::{
     ProductError, ProductProfile, ProductStorageNamespace, validate_product_profile,
@@ -188,6 +189,7 @@ impl ApplicationHostBuilder {
             .unwrap_or_else(|| platform_secret_protector(self.product.storage()));
         let capacity = Arc::new(CapacityLedger::default());
         let android_store = Arc::clone(&store);
+        let file_dialog = Arc::clone(&self.platform.file_dialog);
         let services = InfrastructureServiceBundle::new(
             store,
             secret_protector,
@@ -265,6 +267,9 @@ impl ApplicationHostBuilder {
 
         Ok(ApplicationHost {
             application,
+            file_dialog,
+            application_backup_importer: Arc::new(ApplicationBackupImportPreparer::new()),
+            legacy_importer: Arc::new(LegacyImportPreparer::new()),
             background_cancellation,
             event_task: Mutex::new(Some(event_task)),
             shutdown_started: AtomicBool::new(false),
@@ -358,6 +363,9 @@ fn build_runtime_pipeline(
 #[derive(Debug)]
 pub struct ApplicationHost {
     application: Arc<Application>,
+    file_dialog: Arc<dyn NativeFileDialog>,
+    application_backup_importer: Arc<ApplicationBackupImportPreparer>,
+    legacy_importer: Arc<LegacyImportPreparer>,
     background_cancellation: CancellationToken,
     event_task: Mutex<Option<JoinHandle<()>>>,
     shutdown_started: AtomicBool,
@@ -368,6 +376,21 @@ impl ApplicationHost {
     #[must_use]
     pub fn application(&self) -> Arc<Application> {
         Arc::clone(&self.application)
+    }
+
+    #[must_use]
+    pub fn file_dialog(&self) -> Arc<dyn NativeFileDialog> {
+        Arc::clone(&self.file_dialog)
+    }
+
+    #[must_use]
+    pub fn application_backup_importer(&self) -> Arc<ApplicationBackupImportPreparer> {
+        Arc::clone(&self.application_backup_importer)
+    }
+
+    #[must_use]
+    pub fn legacy_importer(&self) -> Arc<LegacyImportPreparer> {
+        Arc::clone(&self.legacy_importer)
     }
 
     /// 争抢唯一的优雅关闭执行权。

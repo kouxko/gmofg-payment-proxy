@@ -61,6 +61,48 @@ export const commands = {
 	workspaceExport: (workspaceId: WorkspaceId) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_export", { workspaceId })),
 	applicationConfigurationImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_configuration_import")),
 	applicationConfigurationExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_configuration_export")),
+	applicationBackupExport: () => typedError<{
+	bytes_written: number,
+	replaced_existing: boolean,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("application_backup_export")),
+	applicationBackupImportPrepare: () => typedError<{
+	token: ApplicationBackupImportToken,
+	expires_in_seconds: number,
+	workspace_count: number,
+	protocol_package_count: number,
+	enabled_protocol_package_count: number,
+	portable_material_count: number,
+	protocol_packages: ApplicationBackupPackagePreview[],
+	replacement_scope: ApplicationBackupReplacementScope,
+	migration_report: MigrationReport,
+	warnings: string[],
+} | null, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_prepare")),
+	applicationBackupImportCommit: (token: ApplicationBackupImportToken) => typedError<ApplicationBackupImportCommitOutcome, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_commit", { token })),
+	applicationBackupImportDiscard: (token: ApplicationBackupImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_discard", { token })),
+	legacyApplicationConfigurationImportPrepare: () => typedError<{
+	token: LegacyImportToken,
+	expires_in_seconds: number,
+	kind: LegacyImportKind,
+	source_version: number,
+	workspace_count: number,
+	portable_material_count: number,
+	migration_report: MigrationReport,
+	warnings: string[],
+} | null, AppErrorViewModel>(__TAURI_INVOKE("legacy_application_configuration_import_prepare")),
+	legacyApplicationConfigurationImportCommit: (token: LegacyImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("legacy_application_configuration_import_commit", { token })),
+	legacyApplicationConfigurationImportDiscard: (token: LegacyImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("legacy_application_configuration_import_discard", { token })),
+	legacyWorkspaceImportPrepare: () => typedError<{
+	token: LegacyImportToken,
+	expires_in_seconds: number,
+	kind: LegacyImportKind,
+	source_version: number,
+	workspace_count: number,
+	portable_material_count: number,
+	migration_report: MigrationReport,
+	warnings: string[],
+} | null, AppErrorViewModel>(__TAURI_INVOKE("legacy_workspace_import_prepare")),
+	legacyWorkspaceImportCommit: (token: LegacyImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("legacy_workspace_import_commit", { token })),
+	legacyWorkspaceImportDiscard: (token: LegacyImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("legacy_workspace_import_discard", { token })),
 	listenerList: (workspaceId: WorkspaceId) => typedError<ProxyListener[], AppErrorViewModel>(__TAURI_INVOKE("listener_list", { workspaceId })),
 	listenerNew: () => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_new")),
 	listenerCopy: (source: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_copy", { source })),
@@ -367,6 +409,47 @@ export type AppErrorViewModel = {
 	entity_id: string | null,
 	runtime_epoch: string | null,
 	diagnostic: AppErrorDiagnosticViewModel | null,
+};
+
+/**  Safe result of writing a caller-selected backup target. */
+export type ApplicationBackupExportOutcome = {
+	bytes_written: number,
+	replaced_existing: boolean,
+};
+
+export type ApplicationBackupImportCommitOutcome = {
+	workspace_count: number,
+	protocol_package_count: number,
+	enabled_protocol_package_count: number,
+	portable_material_count: number,
+	requires_restart: boolean,
+};
+
+export type ApplicationBackupImportPreview = {
+	token: ApplicationBackupImportToken,
+	expires_in_seconds: number,
+	workspace_count: number,
+	protocol_package_count: number,
+	enabled_protocol_package_count: number,
+	portable_material_count: number,
+	protocol_packages: ApplicationBackupPackagePreview[],
+	replacement_scope: ApplicationBackupReplacementScope,
+	migration_report: MigrationReport,
+	warnings: string[],
+};
+
+export type ApplicationBackupImportToken = string;
+
+export type ApplicationBackupPackagePreview = {
+	package: ProtocolPackageRef,
+	enabled: boolean,
+};
+
+export type ApplicationBackupReplacementScope = {
+	replaces_all_workspaces: boolean,
+	replaces_selected_workspace: boolean,
+	replaces_portable_settings: boolean,
+	replaces_protocol_package_registry: boolean,
 };
 
 /**  TCP/UDP Payload 位翻转配置。 */
@@ -856,6 +939,21 @@ export type HttpListenerSettings = {
 	fixed_server: FixedServerSettings | null,
 };
 
+export type LegacyImportKind = "application_configuration" | "workspace";
+
+export type LegacyImportPreview = {
+	token: LegacyImportToken,
+	expires_in_seconds: number,
+	kind: LegacyImportKind,
+	source_version: number,
+	workspace_count: number,
+	portable_material_count: number,
+	migration_report: MigrationReport,
+	warnings: string[],
+};
+
+export type LegacyImportToken = string;
+
 /**
  *  代理监听页面使用的证书引用详情。
  *  Workspace 只保存安全引用；证书的主题、SAN、有效期和指纹必须由 Rust 重新解析。
@@ -1035,6 +1133,14 @@ export type MessageContentViewModel = {
 };
 
 export type MessageStage = "tls_handshake" | "request" | "response" | "terminal";
+
+export type MigrationReport = {
+	removed_metadata_extractors: number,
+	source_kind: MigrationSourceKind,
+	source_version: number,
+};
+
+export type MigrationSourceKind = "workspace_document" | "application_configuration_document" | "workspace_persistence";
 
 export type MitmSettings = {
 	enabled: boolean,
