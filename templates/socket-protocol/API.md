@@ -2,8 +2,8 @@
 
 本文是协议包作者的接口契约。示例中的具体协议格式不属于 Host API。
 
-> 实现状态：ZIP/Manifest/Schema 校验、Rhai 编译以及 Document/Context Host API 已在 Rust 中实现并
-> 通过契约测试。Reader/Framing 与入口执行链仍在后续任务中，因此当前模板尚未接入产品 Socket 数据面。
+> 实现状态：ZIP/Manifest/Schema 校验、Rhai 编译、Reader/Framing、Document/Context Host API 与
+> 运行时入口链均已接入产品，并由真实 TCP、四阶段规则和抓包测试覆盖。
 
 ## 1. 包结构和路径
 
@@ -13,19 +13,19 @@
 custom-protocol-1.0.0.zip
 ├── manifest.toml              必需
 ├── document.toml              必需
-├── protocol.rhai              文件名由 Manifest 决定
-├── display.rhai               可选
+├── protocol.rhai              必需，固定文件名
+├── display.rhai               必需，固定文件名
 ├── libraries/                 可选
 └── samples/                   可选，仅作为说明和测试向量
 ```
 
 路径规则：
 
-- `script` 和 `schema` 都是相对包根目录的 UTF-8 路径。
+- `schema` 是相对包根目录的 UTF-8 路径；主脚本固定为根目录下的 `protocol.rhai` 和 `display.rhai`。
 - 不允许绝对路径、`..`、符号链接逃逸或访问包外文件。
 - Rhai 模块使用 `import "libraries/parser" as parser`；规范写法省略 `.rhai`。
 - 导入路径仍受包根目录限制，不能加载系统或用户目录中的模块。
-- Manifest 声明的脚本、所有递归导入模块和入口函数在写入注册表前统一编译验证。任意 Rhai 语法错误、
+- 两个固定主脚本、所有递归导入模块和 Manifest 声明的入口函数在写入注册表前统一编译验证。任意 Rhai 语法错误、
   模块解析错误、入口缺失、参数数量或返回类型错误都会拒绝导入。
 
 ### 1.1 安装范围、身份与可移植性
@@ -36,43 +36,30 @@ custom-protocol-1.0.0.zip
 - 同一个 `id + version` 已安装时直接复用现有版本；新导入内容不能覆盖它。作者修改包内容时必须提升版本号。
 - 编译 AST、缓存和本机安装路径不进入任何导出文件；目标机器重新校验并编译脚本。
 
-可移植文件规则：
-
-| 文件 | 协议包内容 |
-| --- | --- |
-| `.intercept-workspace` | 嵌入该 Workspace 的 Listener 精确引用的全部 `id + version` 包 |
-| `.intercept-config` | 嵌入应用已安装的全部协议包，并保存应用级启用/停用状态 |
-
-导入 Workspace 时：
-
-1. Rust 在修改 Workspace 前校验全部需要安装的嵌入包、Manifest、Schema、模块和入口函数。
-2. 已安装的精确 ID/版本直接复用，不比较或覆盖内容；缺失版本安装到应用级注册表。
-3. 任一缺失版本校验失败都会让整个 Workspace 导入失败，不留下部分 Workspace 或部分协议包。
-4. 从 Workspace 新安装的协议包默认停用；用户在协议包页面检查并显式启用后，相关 Scripted Listener 才能启动。
-5. Workspace 只保存 Listener 的 `package_id + package_version` 引用，不保存全局启用状态。
-
-导入整个应用配置时，Rust 原子校验并恢复全部协议包和它们的启用状态；仍不会恢复编译缓存或运行中的连接。
+统一的应用数据 ZIP 会嵌入全部已安装协议包及启用状态。导入先完成 ZIP、Manifest、字段结构、
+模块、入口、证书引用和配置一致性预检，再使用一次性 token 原子替换应用数据；不会恢复编译缓存
+或运行中的连接。1.0 不读取旧 JSON 配置格式，也不迁移旧数据库 schema。
 
 ### 1.2 启用、停用与删除
 
 协议包启用状态属于应用级注册表：
 
 ```text
-启用   -> 通过校验且 API 兼容的包可以被 Scripted Listener 启动使用
-停用   -> 包和 Listener 引用保留，但不能启动新的 Scripted Listener Runtime
+启用   -> 通过校验且 API 兼容的包可以被按协议处理入口使用
+停用   -> 包和入口引用保留，但不能启动新的按协议处理运行时
 删除   -> 从应用级注册表移除该精确 id + version
 ```
 
 引用约束：
 
-- 只要有运行中的 Listener 引用该版本，就拒绝停用；现有连接不会在运行中失去脚本。
-- 只有已停止 Listener 引用时允许停用；Listener 配置继续保留精确 ID/版本。
-- 启动引用已停用包的 Listener 时失败，并返回包 ID/版本和“前往协议包页面启用”的建议操作。
-- 只要任何已保存 Listener 仍引用该版本，无论是否运行，都拒绝删除。
+- 只要有运行中的入口引用该版本，就拒绝停用；现有连接不会在运行中失去脚本。
+- 只有已停止入口引用时允许停用；入口配置继续保留精确 ID/版本。
+- 启动引用已停用包的入口时失败，并返回包 ID/版本和“前往协议包页面启用”的建议操作。
+- 只要任何已保存入口仍引用该版本，无论是否运行，都拒绝删除。
 - 删除前必须由 Rust 再次查询引用，不能只相信前端已显示的使用者列表。
-- 包启用、停用和删除不自动修改、重绑定或升级任何 Listener。
+- 包启用、停用和删除不自动修改、重绑定或升级任何入口。
 
-UI 应展示阻止操作的 Workspace/Listener 使用者，并提供跳转；是否允许操作及稳定错误码由 Rust ViewModel/Command 决定。
+UI 应展示阻止操作的工作区/入口使用者，并提供跳转；是否允许操作及稳定错误码由 Rust ViewModel/Command 决定。
 
 ### 1.3 导入与应用详情
 
@@ -98,64 +85,52 @@ id = "custom-protocol"
 name = "Custom Protocol"
 version = "1.0.0"
 
-[document]
-schema = "document.toml"
+[document.upstream]
+schema = "schemas/upstream.toml"
+display = "display_upstream"
 
-# 可选；两个方向共用一个 Document 展示入口。
-[document.display]
-script = "display.rhai"
-function = "display"
+[document.downstream]
+schema = "schemas/downstream.toml"
+display = "display_downstream"
 
-# App -> Proxy
-[hooks.upstream.receive]
-script = "protocol.rhai"
-frame = "frame"
-decode = "decode"
+# App -> Server。Socket 包声明 frame；HTTP 包省略 frame。
+[hooks.upstream]
+frame = "frame_upstream"
+decode = "decode_upstream"
+encode = "encode_upstream"
 
-# Proxy -> Server；整个区块可省略。
-[hooks.upstream.send]
-script = "protocol.rhai"
-encode = "encode"
-
-# Server -> Proxy
-[hooks.downstream.receive]
-script = "protocol.rhai"
-frame = "frame"
-decode = "decode"
-
-# Proxy -> App；整个区块可省略。
-[hooks.downstream.send]
-script = "protocol.rhai"
-encode = "encode"
+# Server -> App。Socket 包声明 frame；HTTP 包省略 frame。
+[hooks.downstream]
+frame = "frame_downstream"
+decode = "decode_downstream"
+encode = "encode_downstream"
 ```
 
 约束：
 
 - `api` 必须是宿主支持的整数版本，目前只有 `1`。
 - `package.id` 使用小写字母、数字和连字符，匹配 `[a-z][a-z0-9-]*`。
-- `package.version` 使用 SemVer；Listener 固定引用 `id + version`。
-- 两个 `receive` 区块及其中的 `frame/decode` 都是必需的。
-- `document.display` 和两个 `send` 区块是可选能力。
-- 两个方向可以指向不同脚本和不同函数名；示例复用同一函数不是限制。
+- `package.version` 使用 SemVer；入口固定引用 `id + version`。
+- 两个方向的 schema/display/decode/encode 都是必需的；脚本路径固定为 `document.toml`、`protocol.rhai` 和 `display.rhai`。
+- 两个方向同时声明 `frame` 时严格识别为 Socket 包；两个方向都不声明时严格识别为 HTTP 包；只声明一个方向会拒绝导入。
+- 两个方向可以使用不同字段结构和不同函数名；示例复用同一文件与函数不是限制。
 - 入口必须是脚本顶层函数，函数名和参数数量必须与声明匹配。
 
-方向始终以 Proxy 为观察者：
+方向表示完整数据流：
 
 ```text
-hooks.upstream.receive    App -> Proxy
-hooks.upstream.send       Proxy -> Server
-hooks.downstream.receive  Server -> Proxy
-hooks.downstream.send     Proxy -> App
+hooks.upstream    App -> Proxy -> Server
+hooks.downstream  Server -> Proxy -> App
 ```
 
 ## 3. 入口函数
 
 | 入口 | 函数形式 | 必需 | 返回值 |
 | --- | --- | --- | --- |
-| `frame` | `frame(reader, context)` | receive 必需 | `FramingDecision` |
-| `decode` | `decode(origin, context)` | receive 必需 | 当前 Schema 的 `Document` |
-| `display` | `display(document, context)` | 可选 | HTML `string` |
-| `encode` | `encode(origin, document, context)` | send 可选 | 一条完整 Frame `Blob` |
+| `frame` | `frame(reader, context)` | Socket 两方向必需；HTTP 禁止 | `FramingDecision` |
+| `decode` | `decode(origin, context)` | 两方向必需 | 当前方向 Schema 的 `Document` |
+| `display` | `display(document, context)` | 两方向必需 | HTML `string` |
+| `encode` | `encode(origin, document, context)` | 两方向必需 | Socket 返回完整 Frame `Blob`；HTTP 返回 Body `string` |
 
 调用约定：
 
@@ -166,33 +141,16 @@ hooks.downstream.send     Proxy -> App
 - `encode()` 返回完整 Frame，不只是 payload；宿主不会自动补长度头或校验和。
 - `display()` 只读 Document，不参与网络转发。Encode 先确定写出 bytes；网络写出不等待 Display 完成。
 
-### 3.1 Listener 独立开关
+### 3.1 固定完整处理链
 
-Manifest 声明协议包能够提供的入口；Listener 决定每个方向是否调用 Decode/Encode：
+绑定协议包即表示按当前方向执行完整处理链，不提供独立 Decode/Encode/Display 开关：
 
 ```text
-upstream.decode_enabled
-upstream.encode_enabled
-downstream.decode_enabled
-downstream.encode_enabled
+Socket: frame -> decode -> first boundary rules -> second boundary rules -> encode -> display
+HTTP:   UTF-8 Body -> decode -> first boundary rules -> second boundary rules -> encode(if changed) -> display
 ```
 
-- `frame` 在 Scripted 模式始终调用，没有开关。
-- 两方向的 `decode_enabled`、`encode_enabled` 独立保存，共有 16 种合法组合。
-- Display 没有独立开关，跟随同方向 `encode_enabled`。
-- Manifest 未声明该方向 Encode 时，Listener 不能开启对应 `encode_enabled`；伪造配置由 Rust 拒绝。
-- Decode 关闭时不调用 Decode、不执行 Document 规则；宿主为 Encode 创建空的当前 Schema 绑定 Document。
-- Encode 关闭时不调用 Encode 或 Display，发出字节逐字节等于 origin，应用显示 origin Hex。
-- Encode 开启时调用 Encode；若 Manifest 声明 Display，也调用 Display。Display 缺失或失败只回退 Hex。
-
-单方向四态：
-
-| Decode | Encode | Document/规则 | 发出字节 | 展示 |
-| --- | --- | --- | --- | --- |
-| 关 | 关 | 不调用 Decode/规则 | origin | Hex |
-| 开 | 关 | Decode + 只读匹配；修改不进入线路 | origin | Hex |
-| 关 | 开 | 空 Schema Document，不执行规则 | Encode 结果 | Display 若声明，否则 Hex |
-| 开 | 开 | Decode + 规则匹配/修改 | Encode 结果 | Display 若声明，否则 Hex |
+Socket 转发有应用到代理、代理到上游、上游到代理、代理到应用四个独立规则边界；本机应答只使用应用到代理和代理到应用。HTTP 普通 Header/Status/Body 规则先执行，文本 Body 协议链随后执行。没有字段修改的 HTTP Body 保留原始字节；修改后只编码一次并更新 Content-Length。
 
 ## 4. Rhai 运行环境
 
@@ -339,8 +297,7 @@ document.fields()               -> Array<Map>
 - `get()` 返回已赋值字段；字段未赋值或未知时会抛错。可能未赋值的字段应先调用 `has()`。
 - `fields()` 按 Schema 声明顺序返回全部字段，便于通用 Display。
 
-Decode 关闭但 Encode 开启时，宿主创建同一种 Schema 绑定 Document，但所有字段初始未赋值。`has()` 返回 false，
-`get()` 仍按未赋值规则报错；Encode 脚本可以忽略 Document、只处理 origin。
+decode 创建当前方向 Schema 绑定的 Document。可选字段未赋值时 `has()` 返回 false，`get()` 按未赋值规则报错；encode 必须在读取可选字段前检查其是否存在。
 
 `fields()` 每一项是：
 
@@ -376,12 +333,11 @@ context.listener_id()     -> string
 | 场景 | 固定行为 |
 | --- | --- |
 | ZIP、Manifest、Schema、Rhai 语法、导入模块或入口无效 | 拒绝导入，不留下部分状态 |
-| Scripted Listener 找不到精确包版本 | Listener 启动失败 |
+| 按协议处理入口找不到精确包版本 | 入口启动失败 |
 | `frame` 抛错、reject、无进展、超时或超限 | 关闭当前连接 |
 | EOF 时存在不完整 Frame | 关闭当前连接并记录截断错误 |
 | `decode` 失败 | 不发送半成品，关闭当前连接并记录错误 |
-| `display` 未声明、随 Encode 关闭或失败 | 显示 origin Hex；Display 失败不影响网络 |
-| `encode` 未声明或关闭 | 原样发送 origin |
+| `display` 失败 | 显示 origin Hex；Display 失败不影响网络 |
 | `encode` 失败、返回非 Blob 或返回超限数据 | 不发送半成品，关闭当前连接 |
 
 Display 返回值作为不可信 HTML，由宿主在隔离区域中清洗和渲染。脚本不能依赖 `<script>`、事件属性、外部资源、应用 API 或任意内联执行能力。

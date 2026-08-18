@@ -197,7 +197,7 @@ async fn fresh_rule_schema_revalidation_failure_writes_nothing() {
         .lock()
         .get_mut(&candidate.protocol_packages[0].package)
         .unwrap()
-        .schema
+        .upstream_schema
         .version += 1;
 
     let error = application

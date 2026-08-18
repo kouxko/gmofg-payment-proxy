@@ -104,23 +104,22 @@ fn capture_document_preserves_every_value_type_and_sparse_slots() {
 
 #[test]
 fn both_capture_payload_variants_round_trip_and_account_logical_bytes() {
-    let relay_payload = SocketCapturePayload::RelayFrame(relay(true, true));
+    let relay_payload = SocketCapturePayload::RelayFrame(Box::new(relay()));
     let response = document();
-    let local_payload = SocketCapturePayload::LocalExchange(SocketLocalExchangeCapture {
+    let local_payload = SocketCapturePayload::LocalExchange(Box::new(SocketLocalExchangeCapture {
         exchange_id: SocketExchangeId::new(),
         package: package(),
-        schema: schema_ref(),
-        request_decode_enabled: false,
-        response_encode_enabled: false,
+        request_schema: schema_ref(),
+        response_schema: schema_ref(),
         request_origin: b"0200".to_vec(),
-        request_document: None,
-        request_display: None,
+        request_document: SocketCaptureDocument::from_document(&response),
+        request_display: display(),
         response_document: SocketCaptureDocument::from_document(&response),
-        matched_downstream_rule_ids: Vec::new(),
+        matched_request_rule_ids: Vec::new(),
+        matched_response_rule_ids: Vec::new(),
         written_response: b"0200".to_vec(),
-        response_write_kind: SocketWriteKind::Original,
-        response_display: display(true),
-    });
+        response_display: display(),
+    }));
 
     for payload in [relay_payload, local_payload] {
         let logical_bytes = payload.logical_bytes();

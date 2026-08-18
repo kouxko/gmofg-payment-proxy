@@ -1,4 +1,4 @@
-//! 每连接绑定的 Socket Document 规则运行时外壳。
+//! 每连接绑定的 协议 Document 规则运行时外壳。
 //!
 //! Domain Program 负责纯规则语义；本模块只补齐 Domain 不应认识的网络连接身份。这样未来
 //! T24/T25 可以把 Decode 产生的 owned Document 交给规则程序，同时在真正执行前拒绝跨连接、
@@ -7,8 +7,8 @@
 use std::{fmt, sync::Arc};
 
 use intercept_proxy_domain::{
-    Document, DomainError, ErrorCode, ListenerId, ProtocolPackageRef, SocketDocumentRuleExecution,
-    SocketDocumentRuleProgram, SocketRuleStage,
+    Document, DomainError, ErrorCode, ListenerId, ProtocolDocumentRuleExecution,
+    ProtocolDocumentRuleProgram, ProtocolPackageRef, ProtocolRuleStage,
 };
 use intercept_proxy_runtime::SocketConnectionIdentity;
 use parking_lot::RwLock;
@@ -18,26 +18,26 @@ use parking_lot::RwLock;
 /// 每组 Program 都不可变；保存规则时一次性替换整组。每个连接、每条报文执行前读取当前组，
 /// 因此已有连接也能使用新规则，同时不会共享任何报文 Document 状态。
 #[derive(Clone)]
-pub struct SocketDocumentRuleConnectionFactory {
-    programs: Arc<RwLock<SocketDocumentRulePrograms>>,
+pub struct ProtocolDocumentRuleConnectionFactory {
+    programs: Arc<RwLock<ProtocolDocumentRulePrograms>>,
 }
 
 #[derive(Clone)]
-struct SocketDocumentRulePrograms {
-    app_to_proxy: Arc<SocketDocumentRuleProgram>,
-    proxy_to_upstream: Arc<SocketDocumentRuleProgram>,
-    upstream_to_proxy: Arc<SocketDocumentRuleProgram>,
-    proxy_to_app: Arc<SocketDocumentRuleProgram>,
+struct ProtocolDocumentRulePrograms {
+    app_to_proxy: Arc<ProtocolDocumentRuleProgram>,
+    proxy_to_upstream: Arc<ProtocolDocumentRuleProgram>,
+    upstream_to_proxy: Arc<ProtocolDocumentRuleProgram>,
+    proxy_to_app: Arc<ProtocolDocumentRuleProgram>,
 }
 
 /// 一个连接、一个方向独占的规则执行入口。
 ///
 /// Program 自身不可变，可在不同连接间共享；Connection 只保存无 payload 的 owner identity，
 /// 每次调用的 Document 和命中列表都属于返回值，因此没有跨 Frame 的可变状态。
-pub struct SocketDocumentRuleConnection {
+pub struct ProtocolDocumentRuleConnection {
     connection: SocketConnectionIdentity,
-    programs: Arc<RwLock<SocketDocumentRulePrograms>>,
-    stage: SocketRuleStage,
+    programs: Arc<RwLock<ProtocolDocumentRulePrograms>>,
+    stage: ProtocolRuleStage,
 }
 
 /// Decode 后等待规则处理的 owned Document 及其完整运行时归属。
@@ -48,15 +48,15 @@ pub struct BoundSocketDocument {
     connection: SocketConnectionIdentity,
     listener_id: ListenerId,
     package: ProtocolPackageRef,
-    stage: SocketRuleStage,
+    stage: ProtocolRuleStage,
     document: Document,
 }
 
-impl fmt::Debug for SocketDocumentRuleConnectionFactory {
+impl fmt::Debug for ProtocolDocumentRuleConnectionFactory {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let programs = self.programs.read();
         formatter
-            .debug_struct("SocketDocumentRuleConnectionFactory")
+            .debug_struct("ProtocolDocumentRuleConnectionFactory")
             .field("listener_id", &programs.app_to_proxy.listener_id())
             .field("package", programs.app_to_proxy.package())
             .field("schema_id", &programs.app_to_proxy.schema().id())
@@ -75,16 +75,16 @@ impl fmt::Debug for SocketDocumentRuleConnectionFactory {
     }
 }
 
-impl fmt::Debug for SocketDocumentRuleConnection {
+impl fmt::Debug for ProtocolDocumentRuleConnection {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let program = self.program();
         formatter
-            .debug_struct("SocketDocumentRuleConnection")
+            .debug_struct("ProtocolDocumentRuleConnection")
             .field("connection", &self.connection)
             .field("stage", &self.stage)
             .field("listener_id", &program.listener_id())
             .field("package", program.package())
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -103,12 +103,12 @@ impl fmt::Debug for BoundSocketDocument {
     }
 }
 
-impl SocketDocumentRuleConnection {
+impl ProtocolDocumentRuleConnection {
     /// 为一个不可变规则 Program 绑定精确 Socket 连接身份。
     fn new(
         connection: SocketConnectionIdentity,
-        programs: Arc<RwLock<SocketDocumentRulePrograms>>,
-        stage: SocketRuleStage,
+        programs: Arc<RwLock<ProtocolDocumentRulePrograms>>,
+        stage: ProtocolRuleStage,
     ) -> Self {
         Self {
             connection,
@@ -117,13 +117,13 @@ impl SocketDocumentRuleConnection {
         }
     }
 
-    fn program(&self) -> Arc<SocketDocumentRuleProgram> {
+    fn program(&self) -> Arc<ProtocolDocumentRuleProgram> {
         let programs = self.programs.read();
         match self.stage {
-            SocketRuleStage::AppToProxy => Arc::clone(&programs.app_to_proxy),
-            SocketRuleStage::ProxyToUpstream => Arc::clone(&programs.proxy_to_upstream),
-            SocketRuleStage::UpstreamToProxy => Arc::clone(&programs.upstream_to_proxy),
-            SocketRuleStage::ProxyToApp => Arc::clone(&programs.proxy_to_app),
+            ProtocolRuleStage::AppToProxy => Arc::clone(&programs.app_to_proxy),
+            ProtocolRuleStage::ProxyToUpstream => Arc::clone(&programs.proxy_to_upstream),
+            ProtocolRuleStage::UpstreamToProxy => Arc::clone(&programs.upstream_to_proxy),
+            ProtocolRuleStage::ProxyToApp => Arc::clone(&programs.proxy_to_app),
         }
     }
 
@@ -139,7 +139,7 @@ impl SocketDocumentRuleConnection {
         }
     }
 
-    /// 为 Decode 关闭的 `LocalResponder` 创建 Schema-bound 空 Document。
+    /// 为没有下行输入 Frame 的 `LocalResponder` response 创建 Schema-bound 空 Document。
     ///
     /// 每次调用都创建新的值槽，Always + `SetField` 可以生成静态响应，而带字段条件的规则会因
     /// 未赋值稳定 non-match；上一 request 的值不会被复用。
@@ -147,11 +147,15 @@ impl SocketDocumentRuleConnection {
         self.bind_document(Document::new(self.program().schema().clone()))
     }
 
+    pub const fn stage(&self) -> ProtocolRuleStage {
+        self.stage
+    }
+
     /// 复核运行时归属后执行整组规则，并只返回一个聚合结果。
     pub fn execute(
         &self,
         document: BoundSocketDocument,
-    ) -> Result<SocketDocumentRuleExecution, DomainError> {
+    ) -> Result<ProtocolDocumentRuleExecution, DomainError> {
         self.execute_with_cancellation(document, || false)
     }
 
@@ -162,7 +166,7 @@ impl SocketDocumentRuleConnection {
         &self,
         document: BoundSocketDocument,
         is_cancelled: impl FnMut() -> bool,
-    ) -> Result<SocketDocumentRuleExecution, DomainError> {
+    ) -> Result<ProtocolDocumentRuleExecution, DomainError> {
         let program = self.program();
         if document.connection != self.connection {
             return Err(binding_error(
@@ -192,13 +196,13 @@ impl SocketDocumentRuleConnection {
     }
 }
 
-impl SocketDocumentRuleConnectionFactory {
-    /// 组合同一入口、协议包和完整 Schema 的四阶段 Program。
+impl ProtocolDocumentRuleConnectionFactory {
+    /// 组合同一入口和协议包的四阶段 Program。每个方向各自绑定一个 Schema。
     pub(crate) fn new(
-        app_to_proxy: Arc<SocketDocumentRuleProgram>,
-        proxy_to_upstream: Arc<SocketDocumentRuleProgram>,
-        upstream_to_proxy: Arc<SocketDocumentRuleProgram>,
-        proxy_to_app: Arc<SocketDocumentRuleProgram>,
+        app_to_proxy: Arc<ProtocolDocumentRuleProgram>,
+        proxy_to_upstream: Arc<ProtocolDocumentRuleProgram>,
+        upstream_to_proxy: Arc<ProtocolDocumentRuleProgram>,
+        proxy_to_app: Arc<ProtocolDocumentRuleProgram>,
     ) -> Result<Self, DomainError> {
         let programs = [
             &app_to_proxy,
@@ -207,10 +211,10 @@ impl SocketDocumentRuleConnectionFactory {
             &proxy_to_app,
         ];
         let expected = [
-            SocketRuleStage::AppToProxy,
-            SocketRuleStage::ProxyToUpstream,
-            SocketRuleStage::UpstreamToProxy,
-            SocketRuleStage::ProxyToApp,
+            ProtocolRuleStage::AppToProxy,
+            ProtocolRuleStage::ProxyToUpstream,
+            ProtocolRuleStage::UpstreamToProxy,
+            ProtocolRuleStage::ProxyToApp,
         ];
         for (program, stage) in programs.iter().zip(expected) {
             if program.stage() != stage {
@@ -221,16 +225,23 @@ impl SocketDocumentRuleConnectionFactory {
             }
             if program.listener_id() != app_to_proxy.listener_id()
                 || program.package() != app_to_proxy.package()
-                || program.schema() != app_to_proxy.schema()
             {
                 return Err(binding_error(
                     "factory.binding",
-                    "四个处理阶段必须绑定同一入口、协议包和 Schema",
+                    "四个处理阶段必须绑定同一入口和协议包",
                 ));
             }
         }
+        if app_to_proxy.schema() != proxy_to_upstream.schema()
+            || upstream_to_proxy.schema() != proxy_to_app.schema()
+        {
+            return Err(binding_error(
+                "factory.schema",
+                "同一数据方向的两个处理阶段必须绑定同一 Schema",
+            ));
+        }
         Ok(Self {
-            programs: Arc::new(RwLock::new(SocketDocumentRulePrograms {
+            programs: Arc::new(RwLock::new(ProtocolDocumentRulePrograms {
                 app_to_proxy,
                 proxy_to_upstream,
                 upstream_to_proxy,
@@ -243,32 +254,32 @@ impl SocketDocumentRuleConnectionFactory {
     pub fn connection(
         &self,
         connection: SocketConnectionIdentity,
-        stage: SocketRuleStage,
-    ) -> SocketDocumentRuleConnection {
-        SocketDocumentRuleConnection::new(connection, Arc::clone(&self.programs), stage)
+        stage: ProtocolRuleStage,
+    ) -> ProtocolDocumentRuleConnection {
+        ProtocolDocumentRuleConnection::new(connection, Arc::clone(&self.programs), stage)
     }
 
     /// 返回当前指定方向 Program。
     #[cfg(test)]
-    pub(crate) fn program(&self, stage: SocketRuleStage) -> Arc<SocketDocumentRuleProgram> {
+    pub(crate) fn program(&self, stage: ProtocolRuleStage) -> Arc<ProtocolDocumentRuleProgram> {
         let programs = self.programs.read();
         match stage {
-            SocketRuleStage::AppToProxy => Arc::clone(&programs.app_to_proxy),
-            SocketRuleStage::ProxyToUpstream => Arc::clone(&programs.proxy_to_upstream),
-            SocketRuleStage::UpstreamToProxy => Arc::clone(&programs.upstream_to_proxy),
-            SocketRuleStage::ProxyToApp => Arc::clone(&programs.proxy_to_app),
+            ProtocolRuleStage::AppToProxy => Arc::clone(&programs.app_to_proxy),
+            ProtocolRuleStage::ProxyToUpstream => Arc::clone(&programs.proxy_to_upstream),
+            ProtocolRuleStage::UpstreamToProxy => Arc::clone(&programs.upstream_to_proxy),
+            ProtocolRuleStage::ProxyToApp => Arc::clone(&programs.proxy_to_app),
         }
     }
 
     /// 原子替换双方向规则；已有连接下一条报文会读取新 Program。
-    pub(crate) fn replace(&self, replacement: Self) {
+    pub(crate) fn replace(&self, replacement: &Self) {
         let replacement = replacement.programs.read().clone();
         *self.programs.write() = replacement;
     }
 }
 
 fn binding_error(field: &str, message: &str) -> DomainError {
-    DomainError::new(ErrorCode::RuleInvalid, "Socket Document 运行时绑定不一致")
+    DomainError::new(ErrorCode::RuleInvalid, "协议 Document 运行时绑定不一致")
         .with_field_error(field, message)
 }
 

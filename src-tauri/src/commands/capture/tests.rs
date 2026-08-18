@@ -6,13 +6,13 @@ use intercept_proxy_application::{
     AppErrorViewModel, AppResult, OperationResultViewModel, PageRequest, RuntimeEpoch,
     SocketCaptureDetailViewModel, SocketCaptureDocument, SocketCaptureId,
     SocketCapturePageViewModel, SocketCapturePayload, SocketCaptureQuery, SocketCaptureRecord,
-    SocketCaptureSchemaRef, SocketCaptureSort, SocketDisplayFallbackReason, SocketDisplayResult,
-    SocketRelayFrameCapture, SocketWriteKind, SortDirection,
+    SocketCaptureSchemaRef, SocketCaptureSort, SocketDisplayResult, SocketRelayFrameCapture,
+    SocketRelayRuleStageCapture, SortDirection,
 };
 use intercept_proxy_domain::{
     Document, DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema,
-    DocumentSchemaId, DocumentValue, ListenerId, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, SocketDirection, WorkspaceId,
+    DocumentSchemaId, DocumentValue, ListenerId, ProtocolDirection, ProtocolPackageId,
+    ProtocolPackageRef, ProtocolPackageVersion, ProtocolRuleStage, WorkspaceId,
 };
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::{
@@ -80,11 +80,11 @@ fn detail_preserves_integers_beyond_javascript_safe_range_through_real_tauri_ipc
     );
 
     assert_eq!(
-        detail.pointer("/record/payload/capture/document/values/0/value"),
+        detail.pointer("/record/payload/capture/stages/1/document/values/0/value"),
         Some(&json!("9007199254740993"))
     );
     assert_eq!(
-        detail.pointer("/record/payload/capture/document/values/1/value"),
+        detail.pointer("/record/payload/capture/stages/1/document/values/1/value"),
         Some(&json!("-9007199254740993"))
     );
 }
@@ -343,8 +343,8 @@ fn record() -> SocketCaptureRecord {
         peer_address: "127.0.0.1:43100".to_owned(),
         occurred_at,
         completed_at: "2026-08-15T10:00:00.005Z".parse().unwrap(),
-        payload: SocketCapturePayload::RelayFrame(SocketRelayFrameCapture {
-            direction: SocketDirection::Upstream,
+        payload: SocketCapturePayload::RelayFrame(Box::new(SocketRelayFrameCapture {
+            direction: ProtocolDirection::Upstream,
             package: ProtocolPackageRef {
                 id: ProtocolPackageId::new("iso8583").unwrap(),
                 version: ProtocolPackageVersion::new("1.0.0").unwrap(),
@@ -353,19 +353,43 @@ fn record() -> SocketCaptureRecord {
                 id: DocumentSchemaId::new("payment").unwrap(),
                 version: 1,
             },
-            decode_enabled: false,
-            encode_enabled: false,
             origin: vec![0x02, 0x10, 0x03],
-            document: None,
-            matched_rule_ids: Vec::new(),
+            stages: vec![
+                SocketRelayRuleStageCapture {
+                    stage: ProtocolRuleStage::AppToProxy,
+                    matched_rule_ids: Vec::new(),
+                    document: capture_document(),
+                },
+                SocketRelayRuleStageCapture {
+                    stage: ProtocolRuleStage::ProxyToUpstream,
+                    matched_rule_ids: Vec::new(),
+                    document: capture_document(),
+                },
+            ],
             written: vec![0x02, 0x10, 0x03],
-            write_kind: SocketWriteKind::Original,
-            display: SocketDisplayResult::HexFallback {
-                reason: SocketDisplayFallbackReason::EncodeDisabled,
-                diagnostic: None,
+            display: SocketDisplayResult::UntrustedHtml {
+                html: "<p>capture</p>".into(),
             },
-        }),
+        })),
     }
+}
+
+fn capture_document() -> SocketCaptureDocument {
+    let schema = DocumentSchema::new(
+        DocumentSchemaId::new("payment").unwrap(),
+        1,
+        "Payment",
+        vec![
+            DocumentField::new(
+                DocumentFieldName::new("amount").unwrap(),
+                DocumentFieldType::Int,
+                "Amount",
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    SocketCaptureDocument::from_document(&Document::new(schema))
 }
 
 fn record_with_lossless_integers() -> SocketCaptureRecord {
@@ -405,8 +429,9 @@ fn record_with_lossless_integers() -> SocketCaptureRecord {
         id: schema.id().clone(),
         version: schema.version(),
     };
-    frame.decode_enabled = true;
-    frame.document = Some(SocketCaptureDocument::from_document(&document));
+    for stage in &mut frame.stages {
+        stage.document = SocketCaptureDocument::from_document(&document);
+    }
     record
 }
 

@@ -1,16 +1,15 @@
 use std::{collections::BTreeMap, fmt::Write};
 
 use intercept_proxy_domain::{
-    DirectionProcessingOptions, DocumentField, DocumentFieldName, DocumentFieldType,
-    DocumentSchema, DocumentSchemaId, DocumentValue,
+    DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema, DocumentSchemaId,
+    DocumentValue,
 };
 use serde::Deserialize;
 
 use crate::{
-    DirectionExecutionPlan, DisplayFallbackReason, PackageFilePath, ProtocolDirection,
-    ProtocolDirectionExecutor, ProtocolDisplayResult, ProtocolFramingLimits,
-    ProtocolPackageCompilationError, ProtocolPackageCompiler, ProtocolPackageFiles,
-    ProtocolRuntimeLimits,
+    DirectionExecutionPlan, PackageFilePath, ProtocolDirection, ProtocolDirectionExecutor,
+    ProtocolDisplayResult, ProtocolFramingLimits, ProtocolPackageCompilationError,
+    ProtocolPackageCompiler, ProtocolPackageFiles, ProtocolRuntimeLimits,
     framing::{RhaiFrameDecider, SingleDirectionFramer},
     test_support::CompiledProtocolPackageTestBuilder,
     tests::fixtures::{
@@ -273,7 +272,7 @@ fn non_iso_length_prefixed_tlv_uses_the_same_host_contract() {
     assert_eq!(output.written(), frames[0]);
     assert_eq!(
         executor.render_display(&output),
-        ProtocolDisplayResult::HexFallback(DisplayFallbackReason::NotDeclared)
+        ProtocolDisplayResult::UntrustedHtml("<p>ok</p>".to_owned())
     );
 }
 
@@ -361,15 +360,7 @@ fn executor(
     package: &crate::CompiledProtocolPackage,
     direction: ProtocolDirection,
 ) -> ProtocolDirectionExecutor {
-    let plan = DirectionExecutionPlan::new(
-        package,
-        direction,
-        DirectionProcessingOptions {
-            decode_enabled: true,
-            encode_enabled: true,
-        },
-    )
-    .unwrap();
+    let plan = DirectionExecutionPlan::new(direction);
     ProtocolDirectionExecutor::new(
         package,
         plan,

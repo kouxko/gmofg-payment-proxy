@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use intercept_proxy_domain::{DirectionProcessingOptions, Document, ProtocolPackageRef};
+use intercept_proxy_domain::{Document, ProtocolPackageRef};
 use rhai::{Blob, Engine, EvalAltResult, ImmutableString, Scope};
 
 use crate::{
@@ -16,6 +16,10 @@ use crate::{
         context::{ProtocolCallContext, ProtocolStage},
     },
 };
+
+mod helpers;
+
+use helpers::{compiled_direction, exceeds_limit, find_resource_limit, validate_document_schema};
 
 use super::{
     DirectionExecutionPlan, DisplayFallbackReason, ProtocolDisplayResult, ProtocolFrameOutput,
@@ -34,8 +38,8 @@ pub struct ProtocolDirectionExecutor {
     plan: DirectionExecutionPlan,
     host: ProtocolHostApi,
     decode: CompiledEntry,
-    encode: Option<CompiledEntry>,
-    display: Option<CompiledEntry>,
+    encode: CompiledEntry,
+    display: CompiledEntry,
     connection_id: String,
     listener_id: String,
     limits: ProtocolRuntimeLimits,
@@ -90,15 +94,8 @@ impl ProtocolDirectionExecutor {
     ) -> ProtocolRuntimeResult<Self> {
         // DirectionExecutionPlan 是轻量不可变值，调用方可能误把由另一个包派生的计划传进来。必须用
         // 实际执行包重新验证可选入口能力，不能依赖之后的 `expect` 或静默关闭 Encode/Display。
-        let plan = DirectionExecutionPlan::new(
-            package,
-            plan.direction(),
-            DirectionProcessingOptions {
-                decode_enabled: plan.decode_enabled(),
-                encode_enabled: plan.encode_enabled(),
-            },
-        )?;
-        let host = ProtocolHostApi::for_package(package);
+        let plan = DirectionExecutionPlan::new(plan.direction());
+        let host = ProtocolHostApi::for_package(package, plan.direction());
         let mut engine = build_engine(limits);
         host.register(&mut engine);
         let deadline = CallDeadline::install(&mut engine, cancellation.clone());
@@ -110,8 +107,8 @@ impl ProtocolDirectionExecutor {
             plan,
             host,
             decode: direction.decode().clone(),
-            encode: direction.encode().cloned(),
-            display: package.display().cloned(),
+            encode: direction.encode().clone(),
+            display: package.display(plan.direction()).clone(),
             connection_id: connection_id.into(),
             listener_id: listener_id.into(),
             limits,
@@ -126,15 +123,14 @@ impl ProtocolDirectionExecutor {
         self.cancellation.clone()
     }
 
-    /// 按当前四态计划执行完整 Frame，不对 Document 应用额外规则。
+    /// 执行完整 Frame，不对 Document 应用额外规则。
     pub fn execute_frame(&mut self, origin: Vec<u8>) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
         self.execute_frame_with_rules(origin, |_| Ok(()))
     }
 
-    /// 按当前四态计划执行完整 Frame，并在 Decode 后、Encode 前应用 Document 规则。
+    /// 执行完整 Frame，并在 Decode 后、Encode 前应用 Document 规则。
     ///
-    /// `rules` 只在 Decode 开启且成功时调用；Decode 关闭的 Encode-only 状态使用空 Document，且绝不
-    /// 调用规则。闭包允许未来 Socket 规则引擎原位修改 Document，而无需把 Rhai 或 AST 暴露给外层。
+    /// 闭包允许规则引擎原位修改 Document，而无需把 Rhai 或 AST 暴露给外层。
     pub fn execute_frame_with_rules(
         &mut self,
         origin: Vec<u8>,
@@ -148,28 +144,93 @@ impl ProtocolDirectionExecutor {
 
     /// 按 owned Document 边界在 Decode 后、Encode 前执行一次宿主变换。
     ///
-    /// 变换只在 Decode 开启时调用；Decode 关闭时 Encode 仍收到当前 Schema 的空 Document。
     /// owned 输入使宿主可以原子地执行整组规则：失败时不会把半修改对象写回执行器。
     pub fn execute_frame_with_document_transform(
         &mut self,
         origin: Vec<u8>,
         transform: impl FnOnce(Document) -> ProtocolRuntimeResult<Document>,
     ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
-        let document = if self.plan.decode_enabled() {
-            self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
-            let decoded = self.call_decode(&origin)?;
-            validate_document_schema(&decoded, self.host.create_document().schema()).map_err(
-                |()| ProtocolRuntimeError::EntryPointFailed {
-                    package: self.package.clone(),
-                    entry: ProtocolEntryPoint::Decode,
-                },
-            )?;
-            transform(decoded)?
-        } else {
-            self.host.create_document()
-        };
+        self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
+        let decoded = self.call_decode(&origin)?;
+        validate_document_schema(&decoded, self.host.create_document().schema()).map_err(|()| {
+            ProtocolRuntimeError::EntryPointFailed {
+                package: self.package.clone(),
+                entry: ProtocolEntryPoint::Decode,
+            }
+        })?;
+        self.finish_frame(origin, transform(decoded)?, true)
+    }
 
-        self.finish_frame(origin, document, self.plan.decode_enabled())
+    /// 仅执行接收侧 Decode 与宿主 Document 变换，不调用同方向 Encode。
+    ///
+    /// 本地应答的请求不会继续发往远端；其 upstream Encode 不属于该处理流程。返回值仍保留
+    /// 原始字节和变换后的 Document，供抓包与 Display 使用。
+    pub(super) fn decode_frame_with_document_transform(
+        &mut self,
+        origin: Vec<u8>,
+        transform: impl FnOnce(Document) -> ProtocolRuntimeResult<Document>,
+    ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
+        self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
+        let decoded = self.call_decode(&origin)?;
+        validate_document_schema(&decoded, self.host.create_document().schema()).map_err(|()| {
+            ProtocolRuntimeError::EntryPointFailed {
+                package: self.package.clone(),
+                entry: ProtocolEntryPoint::Decode,
+            }
+        })?;
+        let transformed = transform(decoded)?;
+        validate_document_schema(&transformed, self.host.create_document().schema()).map_err(
+            |()| ProtocolRuntimeError::EntryPointFailed {
+                package: self.package.clone(),
+                entry: ProtocolEntryPoint::Decode,
+            },
+        )?;
+        Ok(ProtocolFrameOutput::new(
+            Arc::clone(&self.output_owner),
+            origin.clone(),
+            origin,
+            Some(transformed.clone()),
+            transformed,
+        ))
+    }
+
+    /// 解码文本承载的协议报文并执行 Document 变换；仅在 Document 实际改变时调用 Encode。
+    ///
+    /// HTTP Body 使用该入口保证“没有规则改变 Document”时逐字节保留原文。调用方负责在进入
+    /// 本方法前确认输入为 UTF-8，并在采用 `written` 前确认 Encode 输出仍是 UTF-8。
+    pub fn execute_message_with_document_transform(
+        &mut self,
+        origin: Vec<u8>,
+        transform: impl FnOnce(Document) -> ProtocolRuntimeResult<Document>,
+    ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
+        self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
+        let decoded = self.call_decode(&origin)?;
+        validate_document_schema(&decoded, self.host.create_document().schema()).map_err(|()| {
+            ProtocolRuntimeError::EntryPointFailed {
+                package: self.package.clone(),
+                entry: ProtocolEntryPoint::Decode,
+            }
+        })?;
+        let mut transformed = transform(decoded.clone())?;
+        validate_document_schema(&transformed, self.host.create_document().schema()).map_err(
+            |()| ProtocolRuntimeError::EntryPointFailed {
+                package: self.package.clone(),
+                entry: ProtocolEntryPoint::Decode,
+            },
+        )?;
+        let written = if transformed == decoded {
+            origin.clone()
+        } else {
+            self.ensure_blob_input(ProtocolEntryPoint::Encode, origin.len())?;
+            self.call_encode(&origin, &mut transformed)?
+        };
+        Ok(ProtocolFrameOutput::new(
+            Arc::clone(&self.output_owner),
+            origin,
+            written,
+            Some(decoded),
+            transformed,
+        ))
     }
 
     /// 跳过 Decode，以调用方提供的同 Schema owned Document 直接完成 Encode/Echo。
@@ -199,12 +260,8 @@ impl ProtocolDirectionExecutor {
             },
         )?;
         let decoded_document = decoded.then(|| document.clone());
-        let written = if self.plan.encode_enabled() {
-            self.ensure_blob_input(ProtocolEntryPoint::Encode, origin.len())?;
-            self.call_encode(&origin, &mut document)?
-        } else {
-            origin.clone()
-        };
+        self.ensure_blob_input(ProtocolEntryPoint::Encode, origin.len())?;
+        let written = self.call_encode(&origin, &mut document)?;
         Ok(ProtocolFrameOutput::new(
             Arc::clone(&self.output_owner),
             origin,
@@ -222,13 +279,10 @@ impl ProtocolDirectionExecutor {
         if !output.belongs_to(&self.output_owner) {
             return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed);
         }
-        if !self.plan.decode_enabled() && !self.plan.encode_enabled() {
-            return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EncodeDisabled);
-        }
         self.render_output_document_display(output)
     }
 
-    /// 对已经成功 Decode 的输入 Document 调用公共 Display，不要求该方向启用 Encode。
+    /// 对已经成功 Decode 的输入 Document 调用公共 Display。
     #[must_use]
     pub fn render_decoded_display(
         &mut self,
@@ -240,7 +294,7 @@ impl ProtocolDirectionExecutor {
         self.render_output_document_display(output)
     }
 
-    /// 对该执行器产生的 Document 调用公共 Display，不受 Decode/Encode 开关影响。
+    /// 对该执行器产生的 Document 调用公共 Display。
     #[must_use]
     pub fn render_output_document_display(
         &mut self,
@@ -249,10 +303,27 @@ impl ProtocolDirectionExecutor {
         if !output.belongs_to(&self.output_owner) {
             return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed);
         }
-        if self.display.is_none() {
-            return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::NotDeclared);
-        }
         match self.call_display(output.execution_document()) {
+            Ok(html) => ProtocolDisplayResult::UntrustedHtml(html),
+            Err(ProtocolRuntimeError::ResourceLimitExceeded { limit, .. }) => {
+                ProtocolDisplayResult::HexFallback(DisplayFallbackReason::ResourceLimitExceeded(
+                    limit,
+                ))
+            }
+            Err(_) => ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed),
+        }
+    }
+
+    /// 对当前方向、当前 Schema 的中间 Document 生成 UI HTML。
+    ///
+    /// HTTP 会在同一网络方向内顺序执行两段规则；该入口让调用方分别冻结每段规则执行后的
+    /// Document 与 Display，而不会把中间状态误当作最终网络输出。
+    #[must_use]
+    pub fn render_document_display(&mut self, document: &Document) -> ProtocolDisplayResult {
+        if validate_document_schema(document, self.host.create_document().schema()).is_err() {
+            return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed);
+        }
+        match self.call_display(document) {
             Ok(html) => ProtocolDisplayResult::UntrustedHtml(html),
             Err(ProtocolRuntimeError::ResourceLimitExceeded { limit, .. }) => {
                 ProtocolDisplayResult::HexFallback(DisplayFallbackReason::ResourceLimitExceeded(
@@ -281,14 +352,7 @@ impl ProtocolDirectionExecutor {
         origin: &[u8],
         document: &mut Document,
     ) -> ProtocolRuntimeResult<Vec<u8>> {
-        let entry =
-            self.encode
-                .clone()
-                .ok_or_else(|| ProtocolRuntimeError::EntryPointUnavailable {
-                    package: self.package.clone(),
-                    direction: self.plan.direction(),
-                    entry: ProtocolEntryPoint::Encode,
-                })?;
+        let entry = self.encode.clone();
         let context = self.context(ProtocolStage::Send);
         let started = self.arm_deadline(ProtocolEntryPoint::Encode)?;
         let result = self.engine.call_fn::<Blob>(
@@ -303,13 +367,7 @@ impl ProtocolDirectionExecutor {
     }
 
     fn call_display(&mut self, document: &Document) -> ProtocolRuntimeResult<String> {
-        let entry = self
-            .display
-            .clone()
-            .ok_or_else(|| ProtocolRuntimeError::EntryPointFailed {
-                package: self.package.clone(),
-                entry: ProtocolEntryPoint::Display,
-            })?;
+        let entry = self.display.clone();
         let context = self.context(ProtocolStage::Display);
         let started = self.arm_deadline(ProtocolEntryPoint::Display)?;
         let result = self.engine.call_fn::<ImmutableString>(
@@ -414,56 +472,6 @@ impl ProtocolDirectionExecutor {
             package: self.package.clone(),
             entry,
         }
-    }
-}
-
-fn compiled_direction(
-    package: &CompiledProtocolPackage,
-    direction: ProtocolDirection,
-) -> &CompiledDirection {
-    match direction {
-        ProtocolDirection::Upstream => package.upstream(),
-        ProtocolDirection::Downstream => package.downstream(),
-    }
-}
-
-fn exceeds_limit(length: usize, limit: u64) -> bool {
-    u64::try_from(length).map_or(true, |length| length > limit)
-}
-
-fn validate_document_schema(
-    document: &Document,
-    expected: &intercept_proxy_domain::DocumentSchema,
-) -> Result<(), ()> {
-    if document.schema() != expected {
-        return Err(());
-    }
-    // Document 的字段槽只能经类型安全 Domain API 或已校验反序列化创建；遍历仍在执行边界重新
-    // 核对，避免未来新增构造路径时让错误字段类型进入规则或 Encode。
-    if document.fields().any(|state| {
-        state
-            .value
-            .is_some_and(|value| value.field_type() != state.field.field_type())
-    }) {
-        return Err(());
-    }
-    Ok(())
-}
-
-fn find_resource_limit(error: &EvalAltResult) -> Option<ProtocolResourceLimit> {
-    match error {
-        EvalAltResult::ErrorTooManyOperations(_) => Some(ProtocolResourceLimit::Operations),
-        EvalAltResult::ErrorStackOverflow(_) => Some(ProtocolResourceLimit::CallDepth),
-        EvalAltResult::ErrorDataTooLarge(kind, _)
-            if kind.to_ascii_lowercase().contains("string") =>
-        {
-            Some(ProtocolResourceLimit::StringBytes)
-        }
-        EvalAltResult::ErrorDataTooLarge(_, _) => Some(ProtocolResourceLimit::BlobBytes),
-        EvalAltResult::ErrorTerminated(_, _) => Some(ProtocolResourceLimit::WallTimeMs),
-        EvalAltResult::ErrorInFunctionCall(_, _, inner, _)
-        | EvalAltResult::ErrorInModule(_, inner, _) => find_resource_limit(inner),
-        _ => None,
     }
 }
 

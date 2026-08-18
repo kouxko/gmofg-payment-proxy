@@ -16,6 +16,8 @@ const draft: BreakpointDraft = {
   breakpoint_id: "breakpoint-1",
   expected_revision: 7,
   message: {
+    protocol: null,
+    protocol_failure: null,
     http_status: null,
     start_line_bytes: [],
     raw_headers: [],

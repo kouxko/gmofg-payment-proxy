@@ -173,7 +173,7 @@ pub(crate) fn validate_configuration_package_references<T: PortablePackageEntry>
         Ok(())
     } else {
         Err(invalid(
-            "完整配置中的全部 Scripted Listener 和 Socket 规则都必须引用内嵌协议包。",
+            "完整配置中的全部 Scripted Listener 和 协议报文规则都必须引用内嵌协议包。",
         ))
     }
 }
@@ -192,7 +192,7 @@ fn referenced_packages(workspaces: &[ProxyWorkspace]) -> HashSet<ProtocolPackage
     });
     let rules = workspaces.iter().flat_map(|workspace| {
         workspace
-            .socket_rules
+            .protocol_rules
             .iter()
             .map(|rule| rule.package().clone())
     });
@@ -207,9 +207,9 @@ fn invalid(message: impl Into<String>) -> AppError {
 mod tests {
     use super::*;
     use intercept_proxy_domain::{
-        DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageVersion,
-        ProxyListener, ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing,
-        SocketRelaySecurity, SocketRelaySettings,
+        ListenerDataPlane, ProtocolPackageId, ProtocolPackageVersion, ProxyListener,
+        ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
+        SocketRelaySettings,
     };
 
     fn package() -> PortableProtocolPackage {
@@ -234,17 +234,7 @@ mod tests {
                 },
                 SocketRelaySecurity::Transparent,
                 1_000,
-                SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
-                    package,
-                    upstream: DirectionProcessingOptions {
-                        decode_enabled: true,
-                        encode_enabled: false,
-                    },
-                    downstream: DirectionProcessingOptions {
-                        decode_enabled: true,
-                        encode_enabled: false,
-                    },
-                }),
+                SocketPayloadProcessing::Scripted(ScriptedSocketProcessing { package }),
             )),
             ..ProxyListener::default()
         };

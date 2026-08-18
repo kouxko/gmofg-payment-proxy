@@ -22,12 +22,46 @@ const policies = [
     thresholds: { functions: 90, lines: 90, regions: 90 },
   },
   {
+    package: "intercept-proxy-domain",
+    required: true,
+    filePolicies: [
+      {
+        suffix: "crates/domain/src/protocol_document_rule.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "crates/domain/src/protocol_document_rule/validation.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "crates/domain/src/protocol_package/document.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "crates/domain/src/protocol_package/identity.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "crates/domain/src/protocol_package/schema.rs",
+        thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+    ],
+  },
+  {
     package: "intercept-proxy-application",
     required: true,
     filePolicies: [
       {
         suffix: "crates/application/src/facade/android/runtime_owner.rs",
         thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+      {
+        suffix: "crates/application/src/facade/protocol_rule_values.rs",
+        thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+      {
+        suffix: "crates/application/src/facade/protocol_rules.rs",
+        thresholds: { lines: 90 },
       },
     ],
   },
@@ -40,6 +74,48 @@ const policies = [
       { suffix: "adapters/android_adb/reverse/preparation.rs", thresholds: { lines: 90 } },
       { suffix: "adapters/android_adb/runtime.rs", thresholds: { lines: 90 } },
       { suffix: "sqlite/android_runtime_owner.rs", thresholds: { lines: 90 } },
+      {
+        suffix: "adapters/listener_runtime/document_rules.rs",
+        thresholds: { lines: 90 },
+      },
+      {
+        suffix: "adapters/listener_runtime/http_protocol_pipeline/failure.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/listener_runtime/http_protocol_pipeline/programs.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/listener_runtime/local_responder/failure.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/listener_runtime/scripted_relay/failure.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/listener_runtime/socket_capture_publisher.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+    ],
+  },
+  {
+    package: "intercept-proxy",
+    required: true,
+    filePolicies: [
+      {
+        suffix: "src-tauri/src/mcp/catalog.rs",
+        thresholds: { functions: 95, lines: 95, regions: 95 },
+      },
+      {
+        suffix: "src-tauri/src/mcp/query.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "src-tauri/src/mcp/resources.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
     ],
   },
 ];

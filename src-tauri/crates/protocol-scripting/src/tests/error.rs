@@ -3,7 +3,7 @@ use std::error::Error;
 use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion};
 
 use crate::{
-    LocalResponseOwnershipViolation, ProtocolDirection, ProtocolEntryPoint, ProtocolResourceLimit,
+    LocalResponseOwnershipViolation, ProtocolEntryPoint, ProtocolResourceLimit,
     ProtocolRuntimeError,
 };
 
@@ -30,15 +30,6 @@ fn runtime_error_codes_display_and_source_behavior_are_stable() {
             ProtocolRuntimeError::CompilationFailed { package: package() },
             "COMPILATION_FAILED",
             "协议包 iso8583-standard@1.2.3 编译失败",
-        ),
-        (
-            ProtocolRuntimeError::EntryPointUnavailable {
-                package: package(),
-                direction: ProtocolDirection::Downstream,
-                entry: ProtocolEntryPoint::Encode,
-            },
-            "ENTRY_POINT_UNAVAILABLE",
-            "协议包 iso8583-standard@1.2.3 的 downstream 方向未声明 encode 入口",
         ),
         (
             ProtocolRuntimeError::EntryPointFailed {
@@ -107,11 +98,6 @@ fn runtime_errors_have_strict_unambiguous_serde_contracts() {
             maximum: 30_000,
         },
         ProtocolRuntimeError::CompilationFailed { package: package() },
-        ProtocolRuntimeError::EntryPointUnavailable {
-            package: package(),
-            direction: ProtocolDirection::Upstream,
-            entry: ProtocolEntryPoint::Encode,
-        },
         ProtocolRuntimeError::EntryPointFailed {
             package: package(),
             entry: ProtocolEntryPoint::Frame,

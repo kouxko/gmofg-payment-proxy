@@ -19,8 +19,8 @@ async fn frozen_snapshot_ignores_later_package_reinstall_and_workspace_edits() {
     }));
     let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        socket_rules: vec![rule(&listener, 20, 2), rule(&listener, 10, 1)],
-        socket_rule_created_order_high_water: 2,
+        protocol_rules: vec![rule(&listener, 20, 2), rule(&listener, 10, 1)],
+        protocol_rule_created_order_high_water: 2,
         ..ProxyWorkspace::default()
     };
     workspace.validate().unwrap();
@@ -43,8 +43,8 @@ async fn frozen_snapshot_ignores_later_package_reinstall_and_workspace_edits() {
     let replacement = repository
         .freeze_for_listener_start(&snapshot_package())
         .unwrap();
-    workspace.socket_rules.clear();
-    workspace.socket_rule_created_order_high_water = 0;
+    workspace.protocol_rules.clear();
+    workspace.protocol_rule_created_order_high_water = 0;
     workspace.listeners[0].name = "edited draft".into();
 
     assert_ne!(replacement.generation(), frozen_generation);
@@ -53,7 +53,14 @@ async fn frozen_snapshot_ignores_later_package_reinstall_and_workspace_edits() {
         replacement.compiled()
     ));
     assert_eq!(snapshot.package().generation(), frozen_generation);
-    assert_eq!(snapshot.package().compiled().schema().version(), 7);
+    assert_eq!(
+        snapshot
+            .package()
+            .compiled()
+            .schema(intercept_proxy_protocol_scripting::ProtocolDirection::Upstream)
+            .version(),
+        7
+    );
     assert_eq!(snapshot.runtime_limits(), limits);
     assert_eq!(
         snapshot
@@ -64,9 +71,12 @@ async fn frozen_snapshot_ignores_later_package_reinstall_and_workspace_edits() {
         vec![(10, 1), (20, 2)]
     );
     assert!(snapshot.certificate_references().is_empty());
-    assert_eq!(snapshot.upstream().direction(), ProtocolDirection::Upstream);
+    assert_eq!(
+        snapshot.upstream().direction(),
+        ScriptProtocolDirection::Upstream
+    );
     assert_eq!(
         snapshot.downstream().direction(),
-        ProtocolDirection::Downstream
+        ScriptProtocolDirection::Downstream
     );
 }

@@ -6,9 +6,11 @@ import type {
   ProtocolPackageVersionViewModel,
 } from "@/generated/rust-types";
 import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
+import { isProtocolPackageSchema } from "@/lib/protocol-package-schema";
 
 export function builtInRestoreResultError(value: unknown): string | undefined {
   if (!isRecord(value)
+    || !hasOnly(value, ["outcome", "version", "kind", "capabilities", "upstream_schema", "downstream_schema"])
     || (value.outcome !== "installed" && value.outcome !== "reused")
     || !isProtocolPackageVersion(value.version)
     || value.version.built_in !== true
@@ -16,8 +18,11 @@ export function builtInRestoreResultError(value: unknown): string | undefined {
     || value.version.validation.state !== "valid"
     || value.version.package.id !== BUILT_IN_ISO_8583_PACKAGE.id
     || value.version.package.version !== BUILT_IN_ISO_8583_PACKAGE.version
-    || !isCapabilities(value.capabilities)
-    || !isSchema(value.schema)) {
+    || value.version.kind !== "socket"
+    || value.kind !== "socket"
+    || !isCapabilities(value.capabilities, "socket")
+    || !isProtocolPackageSchema(value.upstream_schema)
+    || !isProtocolPackageSchema(value.downstream_schema)) {
     return "内置示例恢复结果不完整，请刷新列表后重试。";
   }
   return undefined;
@@ -86,6 +91,10 @@ export function capabilityItems(capabilities: ProtocolPackageCapabilitiesViewMod
   ] as const;
 }
 
+export function protocolPackageKindText(kind: "http" | "socket"): string {
+  return kind === "http" ? "HTTP" : "Socket";
+}
+
 /**
  * IPC 类型通常由 Rust 保证，但运行时边界仍可能遇到旧前端缓存、损坏响应或测试
  * 适配器。列表必需字段缺失时整页报错，不能把缺计数伪装成 0 或把缺版本伪装为空包。
@@ -97,11 +106,13 @@ export function isProtocolPackageGroupList(
   const groupIds = new Set<string>();
   for (const group of value) {
     if (!isRecord(group)
+      || !hasOnly(group, ["id", "name", "kind", "versions", "reference_count", "active_reference_count"])
       || typeof group.id !== "string"
       || group.id.length === 0
       || groupIds.has(group.id)
       || typeof group.name !== "string"
       || group.name.length === 0
+      || (group.kind !== "http" && group.kind !== "socket")
       || !Array.isArray(group.versions)
       || group.versions.length === 0
       || !isCounter(group.reference_count)
@@ -114,6 +125,7 @@ export function isProtocolPackageGroupList(
     for (const version of group.versions) {
       if (!isProtocolPackageVersion(version)
         || version.package.id !== group.id
+        || version.kind !== group.kind
         || versions.has(version.package.version)) {
         return false;
       }
@@ -130,8 +142,11 @@ export function isProtocolPackageGroupList(
 export function protocolPackageDetailError(
   value: unknown,
   expected: ProtocolPackageRef,
+  expectedKind?: "http" | "socket",
 ): string | undefined {
-  if (!isRecord(value) || !isProtocolPackageVersion(value.version)) {
+  if (!isRecord(value)
+    || !hasOnly(value, ["version", "kind", "capabilities", "upstream_schema", "downstream_schema", "usages"])
+    || !isProtocolPackageVersion(value.version)) {
     return "协议包详情数据不完整。";
   }
   if (
@@ -140,8 +155,12 @@ export function protocolPackageDetailError(
   ) {
     return "协议包详情身份与当前选择不一致。";
   }
-  if (!isCapabilities(value.capabilities)
-    || !isSchema(value.schema)
+  if ((value.kind !== "http" && value.kind !== "socket")
+    || value.version.kind !== value.kind
+    || (expectedKind !== undefined && value.kind !== expectedKind)
+    || !isCapabilities(value.capabilities, value.kind)
+    || !isProtocolPackageSchema(value.upstream_schema)
+    || !isProtocolPackageSchema(value.downstream_schema)
     || !Array.isArray(value.usages)
     || !value.usages.every(isUsage)) {
     return "协议包详情数据不完整。";
@@ -152,7 +171,10 @@ export function protocolPackageDetailError(
 function isProtocolPackageVersion(
   value: unknown,
 ): value is ProtocolPackageVersionViewModel {
-  if (!isRecord(value) || !isRecord(value.package)) return false;
+  if (!isRecord(value)
+    || !hasOnly(value, ["package", "name", "host_api", "kind", "built_in", "enabled", "validation", "installed_at"])
+    || !isRecord(value.package)
+    || !hasOnly(value.package, ["id", "version"])) return false;
   const validation = value.validation;
   return typeof value.package.id === "string"
     && value.package.id.length > 0
@@ -161,47 +183,43 @@ function isProtocolPackageVersion(
     && typeof value.name === "string"
     && value.name.length > 0
     && isCounter(value.host_api)
+    && (value.kind === "http" || value.kind === "socket")
     && typeof value.built_in === "boolean"
     && typeof value.enabled === "boolean"
     && typeof value.installed_at === "string"
     && isRecord(validation)
-    && (validation.state === "valid"
-      || (validation.state === "invalid" && typeof validation.code === "string"));
+    && ((validation.state === "valid" && hasOnly(validation, ["state"]))
+      || (validation.state === "invalid"
+        && hasOnly(validation, ["state", "code"])
+        && typeof validation.code === "string"));
 }
 
-function isCapabilities(value: unknown): boolean {
-  if (!isRecord(value) || !isRecord(value.upstream) || !isRecord(value.downstream)) {
-    return false;
-  }
-  return [
-    value.upstream.frame,
-    value.upstream.decode,
-    value.upstream.encode,
-    value.downstream.frame,
-    value.downstream.decode,
-    value.downstream.encode,
-    value.display,
-  ].every((capability) => typeof capability === "boolean");
+function isCapabilities(value: unknown, kind: "http" | "socket"): boolean {
+  if (!isRecord(value) || !hasOnly(value, ["upstream", "downstream", "display"])) return false;
+  return isDirectionCapabilities(value.upstream, kind)
+    && isDirectionCapabilities(value.downstream, kind)
+    && value.display === true;
 }
 
-function isSchema(value: unknown): boolean {
+function isDirectionCapabilities(value: unknown, kind: "http" | "socket"): boolean {
   return isRecord(value)
-    && typeof value.id === "string"
-    && isCounter(value.version)
-    && typeof value.title === "string"
-    && Array.isArray(value.fields)
-    && value.fields.every((field) => isRecord(field)
-      && typeof field.name === "string"
-      && typeof field.label === "string"
-      && ["string", "int", "bool", "blob"].includes(String(field.type)));
+    && hasOnly(value, ["frame", "decode", "encode"])
+    && value.frame === (kind === "socket")
+    && value.decode === true
+    && value.encode === true;
 }
 
 function isUsage(value: unknown): boolean {
   return isRecord(value)
+    && hasOnly(value, ["workspace_id", "workspace_name", "listener_id", "listener_name", "listener_enabled", "runtime_state"])
     && typeof value.workspace_id === "string"
+    && value.workspace_id.length > 0
     && typeof value.workspace_name === "string"
+    && value.workspace_name.length > 0
     && typeof value.listener_id === "string"
+    && value.listener_id.length > 0
     && typeof value.listener_name === "string"
+    && value.listener_name.length > 0
     && typeof value.listener_enabled === "boolean"
     && ["stopped", "starting", "running", "stopping", "faulted"].includes(
       String(value.runtime_state),
@@ -210,6 +228,11 @@ function isUsage(value: unknown): boolean {
 
 function isCounter(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function hasOnly(value: Record<string, unknown>, keys: string[]): boolean {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => actual.includes(key));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

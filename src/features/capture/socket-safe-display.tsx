@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { Alert, Spinner } from "@heroui/react";
 
 const DISPLAY_SOURCE_LIMIT = 128 * 1024;
+const DISPLAY_NODE_LIMIT = 4_096;
+const DISPLAY_DEPTH_LIMIT = 128;
 const SAFE_ELEMENTS = new Set([
   "article", "section", "div", "span", "p", "br", "hr", "strong", "em", "b", "i", "code", "pre",
   "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "dl", "dt", "dd",
@@ -41,34 +43,27 @@ export function displayHtmlIsTooLarge(html: string): boolean {
   return new Blob([html]).size > DISPLAY_SOURCE_LIMIT;
 }
 
-function cloneSafeNode(node: Node, output: Document): Node | undefined {
-  if (node.nodeType === Node.TEXT_NODE) return output.createTextNode(node.textContent ?? "");
-  if (!(node instanceof Element)) return undefined;
+function createSafeElement(node: Element, output: Document): HTMLElement | undefined {
   const tag = node.tagName.toLowerCase();
   if (DROP_WITH_CONTENT.has(tag)) return undefined;
-  const container = SAFE_ELEMENTS.has(tag) ? output.createElement(tag) : output.createDocumentFragment();
-  if (container instanceof HTMLElement) {
-    const displayClass = DISPLAY_CLASSES[tag];
-    if (displayClass) container.className = displayClass;
-    const title = node.getAttribute("title");
-    if (title) container.setAttribute("title", title.slice(0, 512));
-    if (tag === "td" || tag === "th") {
-      for (const name of ["colspan", "rowspan"] as const) {
-        const raw = node.getAttribute(name);
-        if (raw && /^\d{1,2}$/.test(raw) && Number(raw) >= 1 && Number(raw) <= 99) {
-          container.setAttribute(name, raw);
-        }
+  if (!SAFE_ELEMENTS.has(tag)) return output.createElement("span");
+  const element = output.createElement(tag);
+  const displayClass = DISPLAY_CLASSES[tag];
+  if (displayClass) element.className = displayClass;
+  const title = node.getAttribute("title");
+  if (title) element.setAttribute("title", title.slice(0, 512));
+  if (tag === "td" || tag === "th") {
+    for (const name of ["colspan", "rowspan"] as const) {
+      const raw = node.getAttribute(name);
+      if (raw && /^\d{1,2}$/.test(raw) && Number(raw) >= 1 && Number(raw) <= 99) {
+        element.setAttribute(name, raw);
       }
     }
   }
-  node.childNodes.forEach((child) => {
-    const safe = cloneSafeNode(child, output);
-    if (safe) container.appendChild(safe);
-  });
-  return container;
+  return element;
 }
 
-function sanitizeDisplay(html: string): string {
+function sanitizeDisplay(html: string): string | undefined {
   const input = new DOMParser().parseFromString(html, "text/html");
   const output = document.implementation.createHTMLDocument("Socket 协议视图");
   output.documentElement.lang = "zh-CN";
@@ -79,23 +74,57 @@ function sanitizeDisplay(html: string): string {
   const style = output.createElement("style");
   style.textContent = HOST_STYLE;
   output.head.appendChild(style);
-  input.body.childNodes.forEach((node) => {
-    const safe = cloneSafeNode(node, output);
-    if (safe) output.body.appendChild(safe);
-  });
+  const pending = Array.from(input.body.childNodes, (node) => ({
+    node,
+    parent: output.body as Node,
+    depth: 1,
+  })).reverse();
+  let visited = 0;
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current) break;
+    visited += 1;
+    if (visited > DISPLAY_NODE_LIMIT || current.depth > DISPLAY_DEPTH_LIMIT) return undefined;
+    if (current.node.nodeType === Node.TEXT_NODE) {
+      current.parent.appendChild(output.createTextNode(current.node.textContent ?? ""));
+      continue;
+    }
+    if (!(current.node instanceof Element)) continue;
+    const tag = current.node.tagName.toLowerCase();
+    if (DROP_WITH_CONTENT.has(tag)) continue;
+    const safe = createSafeElement(current.node, output);
+    const parent = safe ?? current.parent;
+    if (safe) current.parent.appendChild(safe);
+    for (let index = current.node.childNodes.length - 1; index >= 0; index -= 1) {
+      const child = current.node.childNodes.item(index);
+      if (child) pending.push({ node: child, parent, depth: current.depth + 1 });
+    }
+  }
   return `<!doctype html>${output.documentElement.outerHTML}`;
 }
 
-export function SocketSafeDisplay({ html }: { html: string }) {
+export function ProtocolSafeDisplay({ html }: { html: string }) {
   const [state, setState] = useState<
-    { kind: "loading" } | { kind: "too-large"; source: string } | { kind: "ready"; source: string; srcDoc: string }
+    | { kind: "loading" }
+    | { kind: "too-large"; source: string }
+    | { kind: "too-complex"; source: string }
+    | { kind: "ready"; source: string; srcDoc: string }
   >({ kind: "loading" });
 
   useEffect(() => {
     // DOMParser 和 DOM Node 只在挂载后使用，SSR 不生成不同的 iframe 内容。
     const task = window.setTimeout(() => {
       if (displayHtmlIsTooLarge(html)) setState({ kind: "too-large", source: html });
-      else setState({ kind: "ready", source: html, srcDoc: sanitizeDisplay(html) });
+      else {
+        try {
+          const srcDoc = sanitizeDisplay(html);
+          setState(srcDoc
+            ? { kind: "ready", source: html, srcDoc }
+            : { kind: "too-complex", source: html });
+        } catch {
+          setState({ kind: "too-complex", source: html });
+        }
+      }
     }, 0);
     return () => window.clearTimeout(task);
   }, [html]);
@@ -114,13 +143,26 @@ export function SocketSafeDisplay({ html }: { html: string }) {
       </Alert>
     );
   }
+  if (state.kind === "too-complex") {
+    return (
+      <Alert status="warning">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Title>协议视图结构过于复杂，已禁止渲染</Alert.Title>
+          <Alert.Description>完整字节仍可在 Hex 页签逐页查看。</Alert.Description>
+        </Alert.Content>
+      </Alert>
+    );
+  }
   return (
     <iframe
       className="min-h-80 w-full rounded-xl border border-[var(--telemetry-line)] bg-transparent"
       sandbox=""
       referrerPolicy="no-referrer"
-      title="Socket 协议安全展示"
+      title="协议包安全展示"
       srcDoc={state.srcDoc}
     />
   );
 }
+
+export const SocketSafeDisplay = ProtocolSafeDisplay;

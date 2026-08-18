@@ -11,11 +11,9 @@ use crate::{
 
 pub(crate) struct CompiledProtocolPackageTestBuilder {
     package: ProtocolPackageRef,
-    schema: DocumentSchema,
+    upstream_schema: DocumentSchema,
+    downstream_schema: DocumentSchema,
     script: String,
-    upstream_encode: bool,
-    downstream_encode: bool,
-    display: bool,
 }
 
 impl CompiledProtocolPackageTestBuilder {
@@ -25,7 +23,7 @@ impl CompiledProtocolPackageTestBuilder {
                 id: ProtocolPackageId::new("test-protocol").unwrap(),
                 version: ProtocolPackageVersion::new("1.0.0").unwrap(),
             },
-            schema: DocumentSchema::new(
+            upstream_schema: DocumentSchema::new(
                 DocumentSchemaId::new("test-message").unwrap(),
                 1,
                 "Test message",
@@ -39,11 +37,27 @@ impl CompiledProtocolPackageTestBuilder {
                 ],
             )
             .unwrap(),
-            script: "fn frame(reader, context) { () }\nfn decode(origin, context) { document::create() }\n"
-                .to_owned(),
-            upstream_encode: false,
-            downstream_encode: false,
-            display: false,
+            downstream_schema: DocumentSchema::new(
+                DocumentSchemaId::new("test-message").unwrap(),
+                1,
+                "Test message",
+                vec![
+                    DocumentField::new(
+                        DocumentFieldName::new("amount").unwrap(),
+                        DocumentFieldType::Int,
+                        "Amount",
+                    )
+                    .unwrap(),
+                ],
+            )
+            .unwrap(),
+            script: concat!(
+                "fn frame(reader, context) { () }\n",
+                "fn decode(origin, context) { document::create() }\n",
+                "fn encode(origin, document, context) { origin }\n",
+                "fn display(document, context) { \"<p>ok</p>\" }\n",
+            )
+            .to_owned(),
         }
     }
 
@@ -53,7 +67,18 @@ impl CompiledProtocolPackageTestBuilder {
     }
 
     pub(crate) fn with_schema(mut self, schema: DocumentSchema) -> Self {
-        self.schema = schema;
+        self.upstream_schema = schema.clone();
+        self.downstream_schema = schema;
+        self
+    }
+
+    pub(crate) fn with_directional_schemas(
+        mut self,
+        upstream: DocumentSchema,
+        downstream: DocumentSchema,
+    ) -> Self {
+        self.upstream_schema = upstream;
+        self.downstream_schema = downstream;
         self
     }
 
@@ -62,23 +87,20 @@ impl CompiledProtocolPackageTestBuilder {
         self
     }
 
-    pub(crate) const fn with_upstream_encode(mut self) -> Self {
-        self.upstream_encode = true;
+    pub(crate) const fn with_upstream_encode(self) -> Self {
         self
     }
 
-    pub(crate) const fn with_downstream_encode(mut self) -> Self {
-        self.downstream_encode = true;
+    pub(crate) const fn with_downstream_encode(self) -> Self {
         self
     }
 
-    pub(crate) const fn with_display(mut self) -> Self {
-        self.display = true;
+    pub(crate) const fn with_display(self) -> Self {
         self
     }
 
     pub(crate) fn build(self) -> CompiledProtocolPackage {
-        let mut manifest = format!(
+        let manifest = format!(
             r#"api = 1
 
 [package]
@@ -86,39 +108,43 @@ id = "{}"
 name = "Test Protocol"
 version = "{}"
 
-[document]
-schema = "document.toml"
+[document.upstream]
+schema = "upstream.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[document.downstream]
+schema = "downstream.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 "#,
             self.package.id, self.package.version
         );
-        if self.upstream_encode {
-            manifest.push_str(
-                "\n[hooks.upstream.send]\nscript = \"protocol.rhai\"\nencode = \"encode\"\n",
-            );
+        let mut script = self.script;
+        if !script.contains("fn encode(") {
+            script.push_str("\nfn encode(origin, document, context) { origin }\n");
         }
-        if self.downstream_encode {
-            manifest.push_str(
-                "\n[hooks.downstream.send]\nscript = \"protocol.rhai\"\nencode = \"encode\"\n",
-            );
-        }
-        if self.display {
-            manifest.push_str(
-                "\n[document.display]\nscript = \"protocol.rhai\"\nfunction = \"display\"\n",
-            );
-        }
-        let schema = schema_toml(&self.schema);
-        let script = self.script.into_bytes();
-        let total_bytes = manifest.len() + schema.len() + script.len();
+        let display = if script.contains("fn display(") {
+            script.clone()
+        } else {
+            "fn display(document, context) { \"<p>ok</p>\" }\n".to_owned()
+        };
+        let upstream_schema = schema_toml(&self.upstream_schema);
+        let downstream_schema = schema_toml(&self.downstream_schema);
+        let script = script.into_bytes();
+        let total_bytes = manifest.len()
+            + upstream_schema.len()
+            + downstream_schema.len()
+            + script.len()
+            + display.len();
         let files = ProtocolPackageFiles::new(
             BTreeMap::from([
                 (
@@ -126,10 +152,18 @@ decode = "decode"
                     manifest.into_bytes(),
                 ),
                 (
-                    PackageFilePath::new("document.toml").unwrap(),
-                    schema.into_bytes(),
+                    PackageFilePath::new("upstream.toml").unwrap(),
+                    upstream_schema.into_bytes(),
+                ),
+                (
+                    PackageFilePath::new("downstream.toml").unwrap(),
+                    downstream_schema.into_bytes(),
                 ),
                 (PackageFilePath::new("protocol.rhai").unwrap(), script),
+                (
+                    PackageFilePath::new("display.rhai").unwrap(),
+                    display.into_bytes(),
+                ),
             ]),
             u64::try_from(total_bytes).unwrap(),
         );

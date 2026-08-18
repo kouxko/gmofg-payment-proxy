@@ -162,6 +162,10 @@ impl SocketCaptureDocument {
                         .is_none_or(|value| value.field_type() == field.field_type())
                 })
     }
+
+    pub(super) fn logical_bytes(&self) -> u64 {
+        serde_json::to_vec(self).map_or(u64::MAX, |bytes| bytes.len() as u64)
+    }
 }
 
 impl fmt::Debug for SocketCaptureDocument {

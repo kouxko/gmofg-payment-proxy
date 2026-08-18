@@ -58,8 +58,7 @@ pub(super) fn runtime_failure(error: &ProtocolRuntimeError) -> SocketProcessingF
 
 fn entry_failure_kind(error: &ProtocolRuntimeError) -> Option<SocketProcessingFailureKind> {
     let entry = match error {
-        ProtocolRuntimeError::EntryPointUnavailable { entry, .. }
-        | ProtocolRuntimeError::EntryPointFailed { entry, .. }
+        ProtocolRuntimeError::EntryPointFailed { entry, .. }
         | ProtocolRuntimeError::ResourceLimitExceeded { entry, .. } => *entry,
         _ => return None,
     };

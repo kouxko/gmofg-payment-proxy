@@ -15,7 +15,7 @@ use tokio::{
 use super::support::{
     read_to_end_bounded, start_scripted_runtime, start_scripted_runtime_from_listener,
 };
-use super::{SCRIPT, listener, states};
+use super::{SCRIPT, listener};
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -112,14 +112,12 @@ async fn assert_directional_timeout(expected: SocketDiagnosticDirection) {
     let listener_port = super::reserve_port().await;
     let events = Arc::new(EventHub::default());
     let mut subscription = events.subscribe_default(0).unwrap();
-    let state = states()[3];
-    let mut configured = listener(listener_port, upstream_port, state, state);
+    let mut configured = listener(listener_port, upstream_port);
     configured.read_timeout_ms = 100;
     let (runtime, configured, _) = start_scripted_runtime_from_listener(
         "runtime-matrix",
         SCRIPT,
         configured,
-        true,
         Some(Arc::clone(&events)),
         false,
     )

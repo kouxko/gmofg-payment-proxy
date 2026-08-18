@@ -141,42 +141,33 @@ fn encode(origin, document, context) {
 
 如果协议有未知字段，decode 时必须把能够无损回编码的信息保存在 Document 的 `blob` 字段中，或者在 encode 中有意识地返回 origin。
 
-Listener 对每个方向分别控制 Decode 和 Encode。协议作者必须考虑四种运行状态：
-
-```text
-Decode 关 / Encode 关 -> frame 后原样转发 origin
-Decode 开 / Encode 关 -> 可以解析和匹配，但最终仍发送 origin
-Decode 关 / Encode 开 -> encode 收到空的 Schema Document，可只处理 origin
-Decode 开 / Encode 开 -> 完整 decode、规则和 encode 链
-```
-
-因此 Encode 不应假定所有字段一定存在；如果它需要 Decode 产生的字段，应先用 `document.has()` 检查并给出明确错误。
+绑定协议包就表示两个方向始终执行完整 `frame -> decode -> rules -> encode -> display` 链，不存在用户可见的解析、重建或展示开关。Encode 仍不能假定所有可选字段一定存在；读取可选字段前应使用 `document.has()`。
 
 ## 5. 两个方向可以使用不同协议
 
-请求和响应格式不同时，可以分别声明脚本和函数：
+两个方向格式不同时，可以分别声明字段结构、展示函数和处理函数：
 
 ```toml
-[hooks.upstream.receive]
-script = "request.rhai"
-frame = "request_frame"
-decode = "decode_request"
+[document.upstream]
+schema = "schemas/upstream.toml"
+display = "display_upstream"
 
-[hooks.upstream.send]
-script = "request.rhai"
-encode = "encode_request"
+[document.downstream]
+schema = "schemas/downstream.toml"
+display = "display_downstream"
 
-[hooks.downstream.receive]
-script = "response.rhai"
-frame = "response_frame"
-decode = "decode_response"
+[hooks.upstream]
+frame = "frame_upstream"
+decode = "decode_upstream"
+encode = "encode_upstream"
 
-[hooks.downstream.send]
-script = "response.rhai"
-encode = "encode_response"
+[hooks.downstream]
+frame = "frame_downstream"
+decode = "decode_downstream"
+encode = "encode_downstream"
 ```
 
-两个 decode 仍必须返回同一个 `document.toml` 所约束的 Document。方向独有字段在不适用的报文中可以保持未赋值。
+两个 decode 分别返回自己方向字段结构约束的 Document；同一方向的条件、修改和展示只使用该方向字段。
 
 ## 6. Display 不要承担解析职责
 
@@ -189,15 +180,13 @@ fn display(document, context) {
 }
 ```
 
-Display 没有独立 Listener 开关，而是跟随当前方向的 Encode：Encode 关闭时宿主不调用 Display；Encode 开启时，
-Manifest 声明了 Display 才会调用。Decode 关闭/Encode 开启时 Display 可能收到空 Document，所以应使用 `has()`
-保护可能未赋值的字段。任何 Display 错误只使应用回退 Hex。
+Display 是两个方向都必须声明的只读入口。宿主在解析和规则处理后调用它；任何 Display 错误只影响协议视图并回退十六进制，不改变网络写出结果。
 
 ## 7. 从 ISO 8583 示例改成其他协议
 
 | 文件 | 保留什么 | 替换什么 |
 | --- | --- | --- |
-| `manifest.toml` | Hook 层级和 API 版本 | package id/name/version、脚本路径和函数名 |
+| `manifest.toml` | Hook 层级和 API 版本 | package id/name/version、Schema 路径和函数名 |
 | `document.toml` | Schema 文件结构 | 全部业务字段 |
 | `protocol.rhai` | 四入口职责 | Frame 边界、协议头和长度处理 |
 | `libraries/iso8583.rhai` | 边界检查、Document 写入方式 | 整个协议解析和编码算法 |
@@ -209,7 +198,7 @@ Manifest 声明了 Display 才会调用。Decode 关闭/Encode 开启时 Display
 ## 8. 交付前检查
 
 - ZIP 根目录直接包含 Manifest。
-- 两个 receive Hook 都声明可编译的 frame/decode。
+- 两个方向都声明可编译的 frame/decode/encode，且各自声明 schema/display。
 - ZIP 导入前确认主脚本和所有 `import` 模块都能用标准 Rhai 语法编译；语法错误会直接拒绝导入。
 - 所有 Schema 字段名、标签和类型设置正确；协议必填条件由 decode/encode 自己校验。
 - 测试过一个 Frame 被拆成多个 TCP chunk。
@@ -217,7 +206,7 @@ Manifest 声明了 Display 才会调用。Decode 关闭/Encode 开启时 Display
 - 测试过空报文、截断报文、超长报文和非法长度。
 - decode 输出符合 Schema。
 - encode 返回完整 Frame，并重新计算长度和校验和。
-- 分别测试每个方向的 Decode/Encode 四种组合；Decode 关闭时 encode 不得盲读未赋值字段。
-- Encode 关闭时确认 origin 字节完全不变且 Display 不调用。
-- Display 未声明或失败时仍能使用 Hex 查看报文。
+- 分别测试应用到代理、代理到上游、上游到代理、代理到应用四个规则边界的顺序与字段结构。
+- 没有规则修改时确认 encode 可以逐字节保持 origin；有修改时确认完整重建长度和校验和。
+- Display 失败时仍能使用十六进制查看报文，且不影响已经确定的网络写出。
 - 应用只展示 Manifest 声明、Schema 和诊断，不展示协议包源码；源码审查和版本控制由协议作者在外部工具完成。

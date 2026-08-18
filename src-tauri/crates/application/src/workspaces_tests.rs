@@ -39,12 +39,11 @@ async fn create_validate_save_copy_select_and_delete_share_one_revision_contract
 }
 
 #[test]
-fn socket_rule_remap_preserves_rule_identity_revision_and_order_but_rebinds_listener() {
+fn protocol_rule_remap_preserves_rule_identity_revision_and_order_but_rebinds_listener() {
     use intercept_proxy_domain::{
-        DirectionProcessingOptions, DocumentAction, ProtocolPackageId, ProtocolPackageRef,
-        ProtocolPackageVersion, ScriptedSocketProcessing, SocketDirection,
-        SocketDocumentRuleDefinition, SocketDocumentRuleId, SocketEndpoint,
-        SocketPayloadProcessing, SocketRelaySettings,
+        DocumentAction, ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+        ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ScriptedSocketProcessing,
+        SocketEndpoint, SocketPayloadProcessing, SocketRelaySettings,
     };
 
     let package = ProtocolPackageRef {
@@ -62,15 +61,10 @@ fn socket_rule_remap_preserves_rule_identity_revision_and_order_but_rebinds_list
         8,
         SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: package.clone(),
-            upstream: DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: false,
-            },
-            downstream: DirectionProcessingOptions::default(),
         }),
     ));
-    let rule_id = SocketDocumentRuleId::new();
-    let mut rule = SocketDocumentRuleDefinition::new(
+    let rule_id = ProtocolDocumentRuleId::new();
+    let mut rule = ProtocolDocumentRuleDefinition::new(
         rule_id,
         true,
         -7,
@@ -78,19 +72,19 @@ fn socket_rule_remap_preserves_rule_identity_revision_and_order_but_rebinds_list
         old_listener_id,
         package,
         1,
-        SocketDirection::Upstream,
+        ProtocolDirection::Upstream,
         Vec::new(),
         vec![DocumentAction::RecordMatch],
     )
     .unwrap();
     rule.toggle(rule.revision(), false).unwrap();
     let original_revision = rule.revision();
-    workspace.socket_rule_created_order_high_water = rule.created_order();
-    workspace.socket_rules.push(rule);
+    workspace.protocol_rule_created_order_high_water = rule.created_order();
+    workspace.protocol_rules.push(rule);
 
     remap_workspace_identity(&mut workspace).unwrap();
 
-    let remapped = &workspace.socket_rules[0];
+    let remapped = &workspace.protocol_rules[0];
     assert_eq!(remapped.rule_id(), rule_id);
     assert_eq!(remapped.revision(), original_revision);
     assert_eq!(remapped.created_order(), 42);

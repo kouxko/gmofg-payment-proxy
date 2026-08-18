@@ -136,6 +136,29 @@ fn pem_identity_source_is_zeroizing_and_parse_errors_do_not_echo_secret_bytes() 
 
 impl HandshakePolicy for CountingPipeline {}
 
+impl crate::adapters::listener_runtime::http_protocol_pipeline::HttpProtocolObservationSink
+    for CountingPipeline
+{
+    fn record_http_protocol_observation(
+        &self,
+        _context: &ConnectionContext,
+        _direction: intercept_proxy_protocol_scripting::ProtocolDirection,
+        _message: &Message,
+        _observation: intercept_proxy_application::HttpProtocolBodyViewModel,
+    ) -> intercept_proxy_runtime::Result<()> {
+        Ok(())
+    }
+
+    fn record_http_protocol_failure(
+        &self,
+        _context: &ConnectionContext,
+        _message: &Message,
+        _failure: intercept_proxy_application::HttpProtocolFailureViewModel,
+    ) -> intercept_proxy_runtime::Result<()> {
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl PipelinePorts for CountingPipeline {
     async fn request(

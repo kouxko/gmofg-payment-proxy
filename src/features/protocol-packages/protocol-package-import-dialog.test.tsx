@@ -97,10 +97,12 @@ describe("ProtocolPackage ZIP import", () => {
     expect(preview).toHaveTextContent("3.0.0");
     expect(preview).toHaveTextContent("2 个字段");
     expect(preview).toHaveTextContent("iso-message");
+    expect(preview).toHaveTextContent("iso-response");
+    expect(preview).toHaveTextContent("Socket");
     expect(preview).toHaveTextContent("可安装新版本");
     expect(preview).toHaveTextContent("默认停用");
     expect(preview).toHaveTextContent("上行 Encode：支持");
-    expect(preview).toHaveTextContent("下行 Encode：不支持");
+    expect(preview).toHaveTextContent("下行 Encode：支持");
     expect(within(preview).queryByText(/protocol\.rhai|manifest\.toml|脚本内容|absolute_path/i)).not.toBeInTheDocument();
     expect(within(preview).queryByText("018f-import-token")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认安装" })).toBeEnabled();

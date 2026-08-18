@@ -20,15 +20,11 @@ pub(super) fn package_ref(id: &str) -> ProtocolPackageRef {
     }
 }
 
-fn package_zip(id: &str, script: &str, include_display: bool) -> Vec<u8> {
-    let display = if include_display {
-        r#"
-[document.display]
-script = "protocol.rhai"
-function = "display"
-"#
+fn package_zip(id: &str, script: &str) -> Vec<u8> {
+    let display_script = if script.contains("fn display(") {
+        script
     } else {
-        ""
+        r#"fn display(document, context) { "<p>runtime</p>" }"#
     };
     let manifest = format!(
         r#"
@@ -39,27 +35,22 @@ id = "{id}"
 name = "T24 Runtime Test"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
+display = "display"
 
-{display}
+[document.downstream]
+schema = "document.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
 encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.downstream.send]
-script = "protocol.rhai"
 encode = "encode"
 "#
     );
@@ -68,6 +59,7 @@ encode = "encode"
         ("manifest.toml", manifest.as_bytes()),
         ("document.toml", TEST_SCHEMA.as_bytes()),
         ("protocol.rhai", script.as_bytes()),
+        ("display.rhai", display_script.as_bytes()),
     ] {
         writer
             .start_file(path, SimpleFileOptions::default())
@@ -84,7 +76,7 @@ pub(super) async fn start_scripted_runtime(
     upstream_port: u16,
 ) -> (ListenerRuntimeAdapter, ProxyListener) {
     let (runtime, listener, _) =
-        start_scripted_runtime_with_capture(id, script, listener_port, upstream_port, true).await;
+        start_scripted_runtime_with_capture(id, script, listener_port, upstream_port).await;
     (runtime, listener)
 }
 
@@ -93,7 +85,6 @@ pub(super) async fn start_scripted_runtime_with_capture(
     script: &str,
     listener_port: u16,
     upstream_port: u16,
-    include_display: bool,
 ) -> (
     ListenerRuntimeAdapter,
     ProxyListener,
@@ -115,26 +106,17 @@ pub(super) async fn start_scripted_runtime_with_capture(
             maximum_connections: 8,
             processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package: package.clone(),
-                upstream: DirectionProcessingOptions {
-                    decode_enabled: true,
-                    encode_enabled: true,
-                },
-                downstream: DirectionProcessingOptions {
-                    decode_enabled: true,
-                    encode_enabled: true,
-                },
             }),
         }),
         ..ProxyListener::default()
     };
-    start_scripted_runtime_from_listener(id, script, listener, include_display, None, true).await
+    start_scripted_runtime_from_listener(id, script, listener, None, true).await
 }
 
 pub(super) async fn start_scripted_runtime_from_listener(
     id: &str,
     script: &str,
     listener: ProxyListener,
-    include_display: bool,
     events: Option<Arc<intercept_proxy_application::EventHub>>,
     publish_captures: bool,
 ) -> (
@@ -151,9 +133,7 @@ pub(super) async fn start_scripted_runtime_from_listener(
     let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
         Arc::clone(&store),
     ));
-    repository
-        .install_zip(&package_zip(id, script, include_display))
-        .unwrap();
+    repository.install_zip(&package_zip(id, script)).unwrap();
     repository.set_enabled(&package, true).unwrap();
     let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
         Arc::clone(&store),

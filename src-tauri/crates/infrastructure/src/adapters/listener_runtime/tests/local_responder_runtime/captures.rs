@@ -4,7 +4,7 @@ use std::{sync::Arc, time::Duration};
 
 use intercept_proxy_application::{
     EventHub, PageRequest, SocketCaptureDocumentValue, SocketCaptureInteger, SocketCapturePayload,
-    SocketCaptureQuery, SocketCaptureSort, SocketDisplayResult, SocketWriteKind, SortDirection,
+    SocketCaptureQuery, SocketCaptureSort, SocketDisplayResult, SortDirection,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -51,9 +51,9 @@ pub(super) async fn wait_for_rows(
 async fn partial_request_has_no_capture_then_commit_persists_one_exact_exchange() {
     let id = "local-capture-commit";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, true);
-    let rule_id = SocketDocumentRuleId::new();
-    let rule = SocketDocumentRuleDefinition::new(
+    let listener = local_listener(id, port);
+    let rule_id = ProtocolDocumentRuleId::new();
+    let rule = ProtocolDocumentRuleDefinition::new(
         rule_id,
         true,
         10,
@@ -61,7 +61,7 @@ async fn partial_request_has_no_capture_then_commit_persists_one_exact_exchange(
         listener.id,
         package_ref(id),
         1,
-        SocketDirection::Downstream,
+        ProtocolDirection::Downstream,
         Vec::new(),
         vec![DocumentAction::SetField {
             field: DocumentFieldName::new("amount").unwrap(),
@@ -99,19 +99,19 @@ async fn partial_request_has_no_capture_then_commit_persists_one_exact_exchange(
     assert_eq!(exchange.request_origin, [2, 11]);
     assert!(matches!(
         exchange.request_display,
-        Some(SocketDisplayResult::UntrustedHtml { .. })
+        SocketDisplayResult::UntrustedHtml { .. }
     ));
     assert_eq!(
-        exchange.request_document.unwrap().get("amount").unwrap(),
+        exchange.request_document.get("amount").unwrap(),
         &SocketCaptureDocumentValue::Int(SocketCaptureInteger::from_i64(11))
     );
     assert_eq!(
         exchange.response_document.get("amount").unwrap(),
         &SocketCaptureDocumentValue::Int(SocketCaptureInteger::from_i64(42))
     );
-    assert_eq!(exchange.matched_downstream_rule_ids, [rule_id]);
+    assert!(exchange.matched_request_rule_ids.is_empty());
+    assert_eq!(exchange.matched_response_rule_ids, [rule_id]);
     assert_eq!(exchange.written_response, [209, 42]);
-    assert_eq!(exchange.response_write_kind, SocketWriteKind::Encoded);
     assert_eq!(
         exchange.response_display,
         SocketDisplayResult::UntrustedHtml {
@@ -147,10 +147,10 @@ async fn partial_request_has_no_capture_then_commit_persists_one_exact_exchange(
 }
 
 #[tokio::test]
-async fn decode_off_capture_has_no_request_document_and_echo_fallback_is_explicit() {
-    let id = "local-capture-decode-off";
+async fn no_match_capture_still_contains_both_documents_and_encoded_output() {
+    let id = "local-capture-no-match";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, false, false);
+    let listener = local_listener(id, port);
     let (runtime, captures) = start_local_runtime_with_capture(
         id,
         BASIC_SCHEMA,
@@ -161,16 +161,23 @@ async fn decode_off_capture_has_no_request_document_and_echo_fallback_is_explici
     )
     .await;
 
-    assert_eq!(request_once(port, &[2, 9]).await, [2, 9]);
+    assert_eq!(request_once(port, &[2, 9]).await, [209, 0]);
     let row = wait_for_rows(&captures, 1).await.rows.remove(0);
     let detail = captures.get_detail(row.capture_id).unwrap().record;
     let SocketCapturePayload::LocalExchange(exchange) = detail.payload else {
         panic!("expected LocalExchange")
     };
-    assert!(exchange.request_document.is_none());
-    assert!(exchange.request_display.is_none());
-    assert_eq!(exchange.response_write_kind, SocketWriteKind::Original);
-    assert_eq!(exchange.written_response, [2, 9]);
+    assert_eq!(
+        exchange.request_document.schema.id().as_str(),
+        "local-basic"
+    );
+    assert!(matches!(
+        exchange.request_display,
+        SocketDisplayResult::UntrustedHtml { .. }
+    ));
+    assert!(exchange.matched_request_rule_ids.is_empty());
+    assert!(exchange.matched_response_rule_ids.is_empty());
+    assert_eq!(exchange.written_response, [209, 0]);
     assert!(matches!(
         exchange.response_display,
         SocketDisplayResult::UntrustedHtml { .. }
@@ -179,10 +186,145 @@ async fn decode_off_capture_has_no_request_document_and_echo_fallback_is_explici
 }
 
 #[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "single end-to-end contract keeps four-stage wire and capture evidence together"
+)]
+async fn local_response_keeps_directional_schemas_and_stage_evidence_separate() {
+    const UPSTREAM_SCHEMA: &str = r#"
+id = "local-request"
+version = 1
+title = "Local Request"
+
+[[fields]]
+name = "request_amount"
+label = "Request Amount"
+type = "int"
+"#;
+    const DOWNSTREAM_SCHEMA: &str = r#"
+id = "local-response"
+version = 1
+title = "Local Response"
+
+[[fields]]
+name = "response_amount"
+label = "Response Amount"
+type = "int"
+"#;
+    const SCRIPT: &str = r#"
+fn frame(reader, context) {
+    if reader.available() < 2 { framing::need_more(2) }
+    else { framing::complete(2) }
+}
+fn decode(origin, context) {
+    let result = document::create();
+    result.set("request_amount", origin[1].to_int());
+    result
+}
+fn encode(origin, document, context) {
+    let result = blob(2, 0);
+    result[0] = 209;
+    result[1] = if document.has("response_amount") {
+        document.get("response_amount")
+    } else { 0 };
+    result
+}
+fn display(document, context) { "<p>directional local response</p>" }
+"#;
+
+    let id = "local-directional-schemas";
+    let port = reserve_port().await;
+    let listener = local_listener(id, port);
+    let request_rule_id = ProtocolDocumentRuleId::new();
+    let response_rule_id = ProtocolDocumentRuleId::new();
+    let request_rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
+        request_rule_id,
+        "request stage".to_owned(),
+        true,
+        10,
+        1,
+        listener.id,
+        package_ref(id),
+        1,
+        ProtocolRuleStage::AppToProxy,
+        vec![DocumentCondition::Equals {
+            field: DocumentFieldName::new("request_amount").unwrap(),
+            value: DocumentValue::Int(11),
+        }],
+        vec![DocumentAction::SetField {
+            field: DocumentFieldName::new("request_amount").unwrap(),
+            value: DocumentValue::Int(12),
+        }],
+    )
+    .unwrap();
+    let response_rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
+        response_rule_id,
+        "response stage".to_owned(),
+        true,
+        10,
+        2,
+        listener.id,
+        package_ref(id),
+        1,
+        ProtocolRuleStage::ProxyToApp,
+        Vec::new(),
+        vec![DocumentAction::SetField {
+            field: DocumentFieldName::new("response_amount").unwrap(),
+            value: DocumentValue::Int(42),
+        }],
+    )
+    .unwrap();
+    let events = Arc::new(EventHub::default());
+    let (runtime, captures) = start_local_runtime_with_directional_schemas_and_capture(
+        id,
+        UPSTREAM_SCHEMA,
+        DOWNSTREAM_SCHEMA,
+        SCRIPT,
+        workspace(listener.clone(), vec![request_rule, response_rule]),
+        &listener,
+        Arc::clone(&events),
+    )
+    .await;
+
+    let response = request_once(port, &[2, 11]).await;
+    assert_eq!(
+        response,
+        [209, 42],
+        "diagnostics: {:?}",
+        events.replay_after(0).events
+    );
+    let row = wait_for_rows(&captures, 1).await.rows.remove(0);
+    assert_eq!(row.matched_rule_ids, [request_rule_id, response_rule_id]);
+    let detail = captures.get_detail(row.capture_id).unwrap().record;
+    let SocketCapturePayload::LocalExchange(exchange) = detail.payload else {
+        panic!("expected LocalExchange")
+    };
+    assert_eq!(exchange.request_schema.id.as_str(), "local-request");
+    assert_eq!(exchange.response_schema.id.as_str(), "local-response");
+    assert_eq!(exchange.matched_request_rule_ids, [request_rule_id]);
+    assert_eq!(exchange.matched_response_rule_ids, [response_rule_id]);
+    assert_eq!(
+        exchange.request_document.get("request_amount"),
+        Some(&SocketCaptureDocumentValue::Int(
+            SocketCaptureInteger::from_i64(12)
+        ))
+    );
+    assert_eq!(
+        exchange.response_document.get("response_amount"),
+        Some(&SocketCaptureDocumentValue::Int(
+            SocketCaptureInteger::from_i64(42)
+        ))
+    );
+    assert!(exchange.response_document.get("request_amount").is_none());
+
+    runtime.stop(listener.id).await.unwrap();
+}
+
+#[tokio::test]
 async fn decode_failure_writes_and_publishes_no_completed_exchange() {
     let id = "local-capture-failure";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, true);
+    let listener = local_listener(id, port);
     let script = BASIC_SCRIPT.replace(
         "let result = document::create();",
         "throw \"decode failed\"; let result = document::create();",
@@ -212,7 +354,7 @@ async fn decode_failure_writes_and_publishes_no_completed_exchange() {
 async fn clear_after_output_commit_cannot_revive_a_blocked_local_capture() {
     let id = "local-capture-clear-race";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, true);
+    let listener = local_listener(id, port);
     let workspace = workspace(listener.clone(), Vec::new());
     let workspace_id = workspace.id;
     let (runtime, captures) = start_local_runtime_with_capture(
@@ -235,7 +377,7 @@ async fn clear_after_output_commit_cannot_revive_a_blocked_local_capture() {
         .expect("Display worker must stop after output_committed took its ticket");
     assert_eq!(captures.clear_completed(workspace_id).unwrap(), 0);
     release_sender.send(()).unwrap();
-    assert_eq!(request.await.unwrap(), [209, 9]);
+    assert_eq!(request.await.unwrap(), [209, 0]);
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert_eq!(captures.query(&query()).unwrap().total, 0);

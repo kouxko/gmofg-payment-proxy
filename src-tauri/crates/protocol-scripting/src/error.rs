@@ -4,8 +4,6 @@ use intercept_proxy_domain::ProtocolPackageRef;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::ProtocolDirection;
-
 /// `LocalResponder` 在 request/response bridge 上拒绝的所有权维度。
 ///
 /// 该值只描述身份边界，不包含 Document 字段值、连接载荷或脚本源码，可安全进入结构化诊断。
@@ -115,20 +113,6 @@ pub enum ProtocolRuntimeError {
         /// 失败包的精确 ID 与版本。
         package: ProtocolPackageRef,
     },
-    /// 配置启用了某个可选入口，但 Manifest 没有声明该方向的入口。
-    #[error(
-        "协议包 {id}@{version} 的 {direction} 方向未声明 {entry} 入口",
-        id = .package.id,
-        version = .package.version
-    )]
-    EntryPointUnavailable {
-        /// 缺少入口的精确包 ID 与版本。
-        package: ProtocolPackageRef,
-        /// 配置尝试启用的 Socket 方向。
-        direction: ProtocolDirection,
-        /// Manifest 没有声明的入口。
-        entry: ProtocolEntryPoint,
-    },
     /// 某个声明入口执行失败，但未触发资源门禁。
     #[error(
         "协议包 {id}@{version} 的 {entry} 入口执行失败",
@@ -143,7 +127,7 @@ pub enum ProtocolRuntimeError {
     },
     /// Decode 后交给宿主的 Document 变换阶段失败。
     ///
-    /// 该阶段用于类型安全的 Socket 规则；错误不携带字段值、规则内容或第三方文本。
+    /// 该阶段用于类型安全的 协议报文规则；错误不携带字段值、规则内容或第三方文本。
     #[error(
         "协议包 {id}@{version} 的 Document 变换失败",
         id = .package.id,
@@ -220,7 +204,6 @@ impl ProtocolRuntimeError {
         match self {
             Self::InvalidResourceLimit { .. } => "INVALID_RESOURCE_LIMIT",
             Self::CompilationFailed { .. } => "COMPILATION_FAILED",
-            Self::EntryPointUnavailable { .. } => "ENTRY_POINT_UNAVAILABLE",
             Self::EntryPointFailed { .. } => "ENTRY_POINT_FAILED",
             Self::DocumentTransformFailed { .. } => "DOCUMENT_TRANSFORM_FAILED",
             Self::LocalResponseOwnershipViolation { .. } => "LOCAL_RESPONSE_OWNERSHIP_VIOLATION",

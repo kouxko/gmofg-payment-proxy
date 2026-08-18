@@ -34,7 +34,7 @@ mod events;
 mod listener_certificates;
 mod local_responder_topology;
 mod protocol_package_lifecycle;
+mod protocol_rule_values;
 mod settings_lifecycle;
 mod socket_capture;
-mod socket_rule_values;
 mod workspace_configuration;

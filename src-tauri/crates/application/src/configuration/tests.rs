@@ -21,9 +21,9 @@ fn full_configuration_round_trips() {
     let bytes = serialize_application_configuration(&expected).expect("serialize");
     let wire: Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(wire["format_version"], 5);
-    assert_eq!(wire["workspaces"][0]["socket_rules"], json!([]));
+    assert_eq!(wire["workspaces"][0]["protocol_rules"], json!([]));
     assert_eq!(
-        wire["workspaces"][0]["socket_rule_created_order_high_water"],
+        wire["workspaces"][0]["protocol_rule_created_order_high_water"],
         0
     );
     assert_eq!(wire["protocol_packages"], json!([]));

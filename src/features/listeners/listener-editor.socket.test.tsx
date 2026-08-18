@@ -71,7 +71,7 @@ describe("Socket listener editor", () => {
 
     expect(screen.getByRole("textbox", { name: "Socket Server 主机" })).toHaveValue("server.test");
     expect(screen.getByRole("textbox", { name: /Socket Server 端口/ })).toHaveValue("9,443");
-    expect(screen.getByText(/应用发送的数据保持原样送到远端/)).toBeVisible();
+    expect(screen.getByText(/应用与上游之间的数据保持原样转发/)).toBeVisible();
     expect(screen.queryByRole("button", { name: /导入.*身份|导入.*CA/ })).not.toBeInTheDocument();
   });
 
@@ -178,7 +178,7 @@ describe("Socket listener editor", () => {
     render(<ListenerEditor {...editor} />);
 
     expect(screen.getByText("2. App 接入安全")).toBeVisible();
-    expect(screen.getByText("4. 按协议处理")).toBeVisible();
+    expect(screen.getByText("4. 协议处理")).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "Socket Server 主机" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "测试 Server 连接" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Server CA|客户端身份/ })).not.toBeInTheDocument();

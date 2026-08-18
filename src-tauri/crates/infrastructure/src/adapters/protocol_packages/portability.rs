@@ -249,6 +249,7 @@ fn prepared_into_write(
         package: prepared.compiled.package().clone(),
         name: manifest.package().name().to_owned(),
         host_api: manifest.api(),
+        kind: prepared.compiled.kind(),
         enabled,
         validation: StoredProtocolPackageValidation::Valid,
         installed_at: Utc::now(),

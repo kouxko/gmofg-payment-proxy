@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { toast } from "@heroui/react";
+import { Button, toast } from "@heroui/react";
 import type {
   RuleDraft,
   RuleSummaryViewModel,
@@ -31,7 +31,7 @@ import {
 import type { RuleDraftChange } from "./rule-editor";
 import { RuleEditorPanel } from "./rule-editor-panel";
 import { RulesListPanel } from "./rules-list-panel";
-import { SocketRulesView } from "./socket-rules-view";
+import { ProtocolRulesView } from "./protocol-rules-view";
 
 export function RulesView() {
   const [mode, setMode] = useState<ProtocolType>("http");
@@ -41,12 +41,46 @@ export function RulesView() {
       selectedKey={mode}
       onSelectionChange={setMode}
     >
-      {mode === "http" ? <HttpRulesView /> : <SocketRulesView />}
+      {mode === "http" ? <HttpRulesView /> : <ProtocolRulesView kind="socket" />}
     </ProtocolWorkspaceTabs>
   );
 }
 
 function HttpRulesView() {
+  const [ruleKind, setRuleKind] = useState<"standard" | "body">("standard");
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3 p-3">
+      <div
+        aria-label="HTTP 规则类型"
+        className="flex w-fit rounded-lg border border-[var(--telemetry-line)] bg-[var(--telemetry-soft)] p-1"
+        role="group"
+      >
+        {([
+          ["standard", "常规规则"],
+          ["body", "Body 报文规则"],
+        ] as const).map(([key, label]) => (
+          <Button
+            aria-pressed={ruleKind === key}
+            className="min-w-28"
+            key={key}
+            onClick={() => setRuleKind(key)}
+            size="sm"
+            variant={ruleKind === key ? "primary" : "ghost"}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+      <div className="min-h-0 flex-1">
+        {ruleKind === "standard"
+          ? <HttpStandardRulesView />
+          : <ProtocolRulesView kind="http" />}
+      </div>
+    </div>
+  );
+}
+
+function HttpStandardRulesView() {
   const { bootstrap } = useBootstrap();
   const channelCatalog = bootstrap?.channel_catalog ?? [];
   const { navigate, searchParams } = useWorkspaceNavigation();

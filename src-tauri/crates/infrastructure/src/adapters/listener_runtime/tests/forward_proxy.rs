@@ -130,8 +130,8 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
         revision: Revision::INITIAL,
         listeners: vec![listener.clone()],
         rules: Vec::new(),
-        socket_rules: Vec::new(),
-        socket_rule_created_order_high_water: 0,
+        protocol_rules: Vec::new(),
+        protocol_rule_created_order_high_water: 0,
         certificate_references: Vec::new(),
         android_network_profiles: Vec::new(),
     };

@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use intercept_proxy_domain::{
-    DirectionProcessingOptions, Document, DocumentField, DocumentFieldName, DocumentFieldType,
-    DocumentSchema, DocumentSchemaId, DocumentValue,
+    Document, DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema,
+    DocumentSchemaId, DocumentValue,
 };
 
 use crate::{
@@ -40,13 +40,6 @@ fn display(document, context) {
 }
 "#;
 
-fn options(decode_enabled: bool, encode_enabled: bool) -> DirectionProcessingOptions {
-    DirectionProcessingOptions {
-        decode_enabled,
-        encode_enabled,
-    }
-}
-
 fn package_with_all_entries() -> crate::CompiledProtocolPackage {
     CompiledProtocolPackageTestBuilder::new()
         .with_script(VALID_SCRIPT)
@@ -59,12 +52,8 @@ fn package_with_all_entries() -> crate::CompiledProtocolPackage {
 fn executor(
     package: &crate::CompiledProtocolPackage,
     direction: ProtocolDirection,
-    decode_enabled: bool,
-    encode_enabled: bool,
 ) -> ProtocolDirectionExecutor {
-    let plan =
-        DirectionExecutionPlan::new(package, direction, options(decode_enabled, encode_enabled))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(direction);
     ProtocolDirectionExecutor::new(
         package,
         plan,

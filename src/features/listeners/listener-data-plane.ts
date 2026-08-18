@@ -28,6 +28,7 @@ export function defaultHttpDataPlane(): ListenerDataPlane {
       },
       request_body_codec: "auto",
       response_body_codec: "auto",
+      body_processing: { mode: "plain" },
       fixed_server: null,
     },
   };

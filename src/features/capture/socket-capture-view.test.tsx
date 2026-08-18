@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-/** Socket 抓包页面的 Rust 查询、分页、事件、详情与清空确认集成测试。 */
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   SocketCaptureDetailViewModel,
+  SocketCaptureDocument,
   SocketCapturePageViewModel,
   WorkspaceSummaryViewModel,
 } from "@/generated/rust-types";
@@ -35,7 +35,6 @@ const state = vi.hoisted(() => ({
   detailError: undefined as string | undefined,
   detailLoading: false,
 }));
-
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
   callCommand: async <T,>(value: Promise<T> | T) => value,
@@ -47,7 +46,6 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
   useIpcQuery: queryHookMock,
 }));
-
 const workspace = {
   id: "11111111-1111-4111-8111-111111111111",
   name: "Socket workspace",
@@ -82,6 +80,15 @@ const pageFixture = {
   total_pages: 1,
   empty_message: "暂无 Socket 抓包",
 } satisfies SocketCapturePageViewModel;
+const documentFixture = {
+  schema: {
+    id: "message",
+    version: 1,
+    title: "Message",
+    fields: [{ name: "value", type: "string", label: "Value" }],
+  },
+  values: [null],
+} satisfies SocketCaptureDocument;
 const detailFixture = {
   record: {
     capture_id: pageFixture.rows[0].capture_id,
@@ -99,17 +106,16 @@ const detailFixture = {
         direction: "upstream",
         package: pageFixture.rows[0].package,
         schema: pageFixture.rows[0].schema,
-        decode_enabled: false,
-        encode_enabled: false,
         origin: [0x30],
-        document: null,
-        matched_rule_ids: [],
+        stages: [
+          { stage: "app_to_proxy", matched_rule_ids: [], document: documentFixture },
+          { stage: "proxy_to_upstream", matched_rule_ids: [], document: documentFixture },
+        ],
         written: [0x30],
-        write_kind: "original",
         display: {
           type: "hex_fallback",
-          reason: "encode_disabled",
-          diagnostic: null,
+          reason: "entry_point_failed",
+          diagnostic: { code: "DISPLAY_FAILED", message: "协议展示失败" },
         },
       },
     },
@@ -452,7 +458,6 @@ describe("SocketCaptureView", () => {
       requires_restart: false,
     });
     render(<SocketCaptureView />);
-
     await user.click(screen.getByRole("button", { name: "清空 Socket 抓包" }));
     await user.click(screen.getByRole("button", { name: "确认清空" }));
     await waitFor(() => expect(commandMocks.socketCaptureClear).toHaveBeenCalled());
@@ -466,7 +471,6 @@ describe("SocketCaptureView", () => {
     const user = userEvent.setup();
     commandMocks.socketCaptureClear.mockResolvedValue({ message: "not enough" });
     render(<SocketCaptureView />);
-
     await user.click(screen.getByRole("button", { name: "清空 Socket 抓包" }));
     await user.click(screen.getByRole("button", { name: "确认清空" }));
     await waitFor(() => expect(commandMocks.socketCaptureClear).toHaveBeenCalled());
@@ -484,10 +488,8 @@ describe("SocketCaptureView", () => {
       .querySelector<HTMLElement>(`[data-key="${pageFixture.rows[0].capture_id}"]`);
     await user.click(row!);
     expect(screen.getByRole("dialog", { name: "Socket 抓包详情" })).toBeVisible();
-
     state.pageData = { ...pageFixture, rows: [], total: 0 };
     view.rerender(<SocketCaptureView />);
-
     await waitFor(() =>
       expect(screen.queryByRole("dialog", { name: "Socket 抓包详情" })).toBeNull(),
     );

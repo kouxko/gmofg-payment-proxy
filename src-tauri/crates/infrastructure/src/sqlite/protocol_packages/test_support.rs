@@ -107,6 +107,21 @@ impl SqliteStore {
             .expect("corrupt protocol package host API for recovery test");
     }
 
+    pub(crate) fn corrupt_protocol_package_kind_for_test(
+        &self,
+        package: &ProtocolPackageRef,
+        kind: &str,
+    ) {
+        self.connection
+            .lock()
+            .execute(
+                "UPDATE protocol_packages SET kind = ?3
+                 WHERE package_id = ?1 AND version = ?2",
+                params![package.id.as_str(), package.version.as_str(), kind],
+            )
+            .expect("corrupt protocol package kind for recovery test");
+    }
+
     pub(crate) fn replace_protocol_package_file_with_zeroblob_for_test(
         &self,
         package: &ProtocolPackageRef,

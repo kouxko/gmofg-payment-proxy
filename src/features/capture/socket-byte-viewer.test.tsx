@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-/** Socket Document、协议视图和完整 Hex 分页的行为测试。 */
+/** Socket 字段报文、协议视图和完整 Hex 分页的行为测试。 */
 
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -78,7 +78,7 @@ describe("SocketDocumentView", () => {
 });
 
 describe("ProtocolHexViewer", () => {
-  it("defaults successful custom Display to protocol view while keeping Hex reachable", async () => {
+  it("defaults a successful custom protocol view while keeping Hex reachable", async () => {
     const user = userEvent.setup();
     render(
       <ProtocolHexViewer
@@ -88,15 +88,15 @@ describe("ProtocolHexViewer", () => {
       />,
     );
 
-    expect(await screen.findByTitle("Socket 协议安全展示")).toBeVisible();
+    expect(await screen.findByTitle("协议包安全展示")).toBeVisible();
     const hexTab = screen.getByRole("tab", { name: "Hex" });
     expect(hexTab).toBeEnabled();
     await user.click(hexTab);
     expect(screen.getByRole("region", { name: "Relay Origin Hex" })).toBeVisible();
-    expect(screen.queryByTitle("Socket 协议安全展示")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("协议包安全展示")).not.toBeInTheDocument();
   });
 
-  it("defaults a Display fallback to Hex even when a decoded Document exists", async () => {
+  it("defaults a protocol-view fallback to Hex even when parsed fields exist", async () => {
     render(
       <ProtocolHexViewer
         bytes={[0x30, 0x32]}
@@ -104,7 +104,7 @@ describe("ProtocolHexViewer", () => {
         document={documentFixture}
         display={{
           type: "hex_fallback",
-          reason: "not_declared",
+          reason: "entry_point_failed",
           diagnostic: null,
         }}
       />,
@@ -135,7 +135,7 @@ describe("ProtocolHexViewer", () => {
     expect(screen.getByRole("region", { name: "Relay Origin Hex" })).toBeVisible();
   });
 
-  it("allows a Local Request to prefer its built-in decoded Document", () => {
+  it("allows a local request to prefer its built-in parsed fields", () => {
     render(
       <ProtocolHexViewer
         bytes={[0x30]}
@@ -153,7 +153,7 @@ describe("ProtocolHexViewer", () => {
     expect(screen.getByRole("tab", { name: "Hex" })).toBeEnabled();
   });
 
-  it("defaults an oversized custom Display to Hex without mounting its iframe", () => {
+  it("defaults an oversized custom protocol view to Hex without mounting its iframe", () => {
     render(
       <ProtocolHexViewer
         bytes={[0x30]}
@@ -169,7 +169,7 @@ describe("ProtocolHexViewer", () => {
       "aria-selected",
       "true",
     );
-    expect(screen.queryByTitle("Socket 协议安全展示")).toBeNull();
+    expect(screen.queryByTitle("协议包安全展示")).toBeNull();
   });
 
   it("switches tabs with the standard ArrowRight keyboard interaction", async () => {
@@ -177,7 +177,7 @@ describe("ProtocolHexViewer", () => {
     render(
       <ProtocolHexViewer
         bytes={[0x30]}
-        label="Keyboard Frame"
+        label="Keyboard Message"
         display={{ type: "untrusted_html", html: "<p>safe</p>" }}
       />,
     );

@@ -1,5 +1,6 @@
 use intercept_proxy_application::{
-    ProtocolPackageCompilerPort, ProtocolPackageStorePort, ProtocolPackageValidationViewModel,
+    ProtocolPackageCompilerPort, ProtocolPackageKindViewModel, ProtocolPackageStorePort,
+    ProtocolPackageValidationViewModel,
 };
 
 use super::*;
@@ -29,6 +30,7 @@ async fn application_store_and_compiler_ports_preserve_exact_versions_and_safe_m
     assert!(versions[0].enabled);
     assert_eq!(versions[0].name, "Example Protocol");
     assert_eq!(versions[0].host_api, 1);
+    assert_eq!(versions[0].kind, ProtocolPackageKindViewModel::Socket);
     assert_eq!(
         versions[0].validation,
         ProtocolPackageValidationViewModel::Valid
@@ -42,6 +44,44 @@ async fn application_store_and_compiler_ports_preserve_exact_versions_and_safe_m
     assert_eq!(receipt.package, first.package);
     assert_eq!(receipt.host_api, 1);
     assert!(receipt.compatible);
+}
+
+#[tokio::test]
+async fn application_capabilities_project_frame_from_the_strict_manifest_kind() {
+    let repository = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::new(
+        SqliteStore::in_memory().unwrap(),
+    ));
+    let socket = repository
+        .install_zip(&package_zip(MANIFEST, SCRIPT))
+        .unwrap();
+    let socket_package = match socket {
+        ProtocolPackageInstallOutcome::Installed(summary) => summary.package,
+        ProtocolPackageInstallOutcome::Reused(_) => panic!("first socket import must install"),
+    };
+    let http_manifest = MANIFEST
+        .replace("id = \"example-protocol\"", "id = \"example-http\"")
+        .replace("frame = \"frame\"\n", "");
+    let http = repository
+        .install_zip(&package_zip(&http_manifest, SCRIPT))
+        .unwrap();
+    let http_package = match http {
+        ProtocolPackageInstallOutcome::Installed(summary) => summary.package,
+        ProtocolPackageInstallOutcome::Reused(_) => panic!("first HTTP import must install"),
+    };
+
+    let socket = ProtocolPackageCompilerPort::describe(&repository, &socket_package)
+        .await
+        .unwrap();
+    assert!(socket.capabilities.upstream.frame);
+    assert!(socket.capabilities.downstream.frame);
+    let http = ProtocolPackageCompilerPort::describe(&repository, &http_package)
+        .await
+        .unwrap();
+    assert_eq!(http.kind, ProtocolPackageKindViewModel::Http);
+    assert!(!http.capabilities.upstream.frame);
+    assert!(!http.capabilities.downstream.frame);
+    assert!(http.capabilities.upstream.decode);
+    assert!(http.capabilities.downstream.decode);
 }
 
 #[tokio::test]

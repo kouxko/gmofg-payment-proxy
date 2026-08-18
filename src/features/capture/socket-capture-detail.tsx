@@ -4,7 +4,6 @@ import type {
   SocketCaptureDetailViewModel,
   SocketCaptureRowViewModel,
   SocketDisplayFallbackReason,
-  SocketWriteKind,
 } from "@/generated/rust-types";
 import { formatBytes, formatTimestamp } from "@/lib/format";
 import { packageLabel, schemaLabel } from "./socket-capture-model";
@@ -25,15 +24,9 @@ interface SocketCaptureDetailProps {
 }
 
 const fallbackText: Record<SocketDisplayFallbackReason, string> = {
-  encode_disabled: "Encode 未启用，因此未调用 Display",
-  not_declared: "协议包未声明 Display，默认显示 Hex",
-  entry_point_failed: "Display 执行失败，默认显示 Hex",
-  resource_limit_exceeded: "Display 超出脚本资源限制，默认显示 Hex",
+  entry_point_failed: "协议视图生成失败，默认显示 Hex",
+  resource_limit_exceeded: "协议视图超出脚本资源限制，默认显示 Hex",
 };
-
-function WriteKind({ kind }: { kind: SocketWriteKind }) {
-  return <Chip size="sm" color={kind === "encoded" ? "accent" : "default"} variant="soft">{kind === "encoded" ? "Encoded" : "Raw Echo"}</Chip>;
-}
 
 function DisplayFallback({ display }: { display: Extract<import("@/generated/rust-types").SocketDisplayResult, { type: "hex_fallback" }> }) {
   return (
@@ -54,14 +47,14 @@ function CommonMetadata({ row, detail }: { row: SocketCaptureRowViewModel; detai
   return (
     <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
       <dt>时间</dt><dd>{formatTimestamp(row.occurred_at)}</dd>
-      <dt>Capture</dt><dd className="break-all font-mono text-xs">{row.capture_id}</dd>
-      <dt>Peer</dt><dd className="break-all font-mono text-xs">{detail?.record.peer_address ?? "正在读取…"}</dd>
+      <dt>记录 ID</dt><dd className="break-all font-mono text-xs">{row.capture_id}</dd>
+      <dt>对端地址</dt><dd className="break-all font-mono text-xs">{detail?.record.peer_address ?? "正在读取…"}</dd>
       <dt>协议包</dt><dd><code className="text-xs">{packageLabel(row.package)}</code></dd>
-      <dt>Schema</dt><dd><code className="text-xs">{schemaLabel(row.schema)}</code></dd>
+      <dt>字段结构</dt><dd><code className="text-xs">{schemaLabel(row.schema)}</code></dd>
       <dt>连接</dt><dd className="break-all font-mono text-xs">{row.connection_id}</dd>
-      <dt>Session</dt><dd className="break-all font-mono text-xs">{row.session_id}</dd>
+      <dt>会话</dt><dd className="break-all font-mono text-xs">{row.session_id}</dd>
       <dt>入口</dt><dd className="break-all font-mono text-xs">{row.listener_id}</dd>
-      <dt>数据量</dt><dd>Origin {formatBytes(row.origin_size_bytes)} · Written {formatBytes(row.written_size_bytes)} · Logical {formatBytes(row.logical_size_bytes)}</dd>
+      <dt>数据量</dt><dd>原始 {formatBytes(row.origin_size_bytes)} · 写出 {formatBytes(row.written_size_bytes)} · 解析 {formatBytes(row.logical_size_bytes)}</dd>
     </dl>
   );
 }
@@ -73,25 +66,25 @@ function RelayDetail({ detail }: { detail: SocketCaptureDetailViewModel }) {
     <div className="space-y-6">
       <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
         <dt>方向</dt><dd>{frame.direction === "upstream" ? "App → Server" : "Server → App"}</dd>
-        <dt>Decode</dt><dd>{frame.decode_enabled ? "已启用" : "未启用"}</dd>
-        <dt>Encode</dt><dd>{frame.encode_enabled ? "已启用" : "未启用"}</dd>
-        <dt>写出来源</dt><dd><WriteKind kind={frame.write_kind} /></dd>
-        <dt>命中规则</dt><dd><Rules ids={frame.matched_rule_ids} /></dd>
+        <dt>处理链</dt><dd><Chip size="sm" color="accent" variant="soft">Decode → 两段规则 → Encode</Chip></dd>
       </dl>
       <section className="space-y-3">
-        <h2 className="font-semibold">Origin 原始 Frame</h2>
-        <PaginatedHex bytes={frame.origin} label="Relay Origin" />
+        <h2 className="font-semibold">原始报文</h2>
+        <PaginatedHex bytes={frame.origin} label="转发原始报文" />
       </section>
+      {frame.stages.map((stage) => (
+        <section className="space-y-3" key={stage.stage}>
+          <h2 className="font-semibold">{stage.stage === "app_to_proxy" ? "应用 → 代理" : stage.stage === "proxy_to_upstream" ? "代理 → 上游服务" : stage.stage === "upstream_to_proxy" ? "上游服务 → 代理" : "代理 → 应用"}</h2>
+          <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+            <dt>命中规则</dt><dd><Rules ids={stage.matched_rule_ids} /></dd>
+          </dl>
+          <SocketDocumentView document={stage.document} />
+        </section>
+      ))}
       <section className="space-y-3">
-        <h2 className="font-semibold">Document</h2>
-        {frame.document ? <SocketDocumentView document={frame.document} /> : (
-          <p className="text-sm text-[var(--telemetry-muted)]">Decode 未启用，没有 Document。</p>
-        )}
-      </section>
-      <section className="space-y-3">
-        <h2 className="font-semibold">Written 写出字节</h2>
+        <h2 className="font-semibold">写出报文</h2>
         {frame.display.type === "hex_fallback" && <DisplayFallback display={frame.display} />}
-        <ProtocolHexViewer bytes={frame.written} display={frame.display} label="Relay Written" decodeDisabled={!frame.decode_enabled} />
+        <ProtocolHexViewer bytes={frame.written} display={frame.display} label="转发写出报文" />
       </section>
     </div>
   );
@@ -102,22 +95,22 @@ function LocalDetail({ detail }: { detail: SocketCaptureDetailViewModel }) {
   const exchange = detail.record.payload.capture;
   return (
     <div className="space-y-3">
-      <p className="text-sm">关联 Exchange：<code>{exchange.exchange_id}</code></p>
+      <p className="text-sm">关联交换 ID：<code>{exchange.exchange_id}</code></p>
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
-          <div><h2 className="font-semibold">LocalResponder Request</h2><p className="text-xs text-[var(--telemetry-muted)]">App → LocalResponder</p></div>
-          <p className="text-sm">Decode：<span>{exchange.request_decode_enabled ? "已启用" : "未启用（没有 Document）"}</span></p>
-          <ProtocolHexViewer bytes={exchange.request_origin} document={exchange.request_document} display={exchange.request_display ?? undefined} label="Local Request" decodeDisabled={!exchange.request_decode_enabled} />
+          <div><h2 className="font-semibold">本机应答请求</h2><p className="text-xs text-[var(--telemetry-muted)]">应用 → 本机应答</p></div>
+          <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+            <dt>命中规则</dt><dd><Rules ids={exchange.matched_request_rule_ids} /></dd>
+          </dl>
+          <ProtocolHexViewer bytes={exchange.request_origin} document={exchange.request_document} display={exchange.request_display} label="本机应答请求" />
         </section>
         <section className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
-          <div><h2 className="font-semibold">LocalResponder Response</h2><p className="text-xs text-[var(--telemetry-muted)]">LocalResponder → App</p></div>
+          <div><h2 className="font-semibold">本机应答响应</h2><p className="text-xs text-[var(--telemetry-muted)]">本机应答 → 应用</p></div>
           <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
-            <dt>Encode</dt><dd>{exchange.response_encode_enabled ? "已启用" : "未启用"}</dd>
-            <dt>写出来源</dt><dd><WriteKind kind={exchange.response_write_kind} /></dd>
-            <dt>命中规则</dt><dd><Rules ids={exchange.matched_downstream_rule_ids} /></dd>
+            <dt>命中规则</dt><dd><Rules ids={exchange.matched_response_rule_ids} /></dd>
           </dl>
           {exchange.response_display.type === "hex_fallback" && <DisplayFallback display={exchange.response_display} />}
-          <ProtocolHexViewer bytes={exchange.written_response} document={exchange.response_document} display={exchange.response_display} label="Local Response" />
+          <ProtocolHexViewer bytes={exchange.written_response} document={exchange.response_document} display={exchange.response_display} label="本机应答响应" />
         </section>
       </div>
     </div>
@@ -139,7 +132,7 @@ export function SocketCaptureDetail(props: SocketCaptureDetailProps) {
             <Modal.Body className="min-h-0 space-y-6">
               {props.selected && <CommonMetadata row={props.selected} detail={props.detail} />}
               {(props.error || props.malformed) && (
-                <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{props.malformed ? "详情数据校验失败" : "详情读取失败"}</Alert.Title><Alert.Description>{props.malformed ? "返回详情与当前记录、协议包或 Schema 不一致，已停止展示。" : props.error}</Alert.Description></Alert.Content><Button size="sm" variant="outline" onPress={props.onRetry}>重试</Button></Alert>
+                <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{props.malformed ? "详情数据校验失败" : "详情读取失败"}</Alert.Title><Alert.Description>{props.malformed ? "返回详情与当前记录、协议包或字段结构不一致，已停止展示。" : props.error}</Alert.Description></Alert.Content><Button size="sm" variant="outline" onPress={props.onRetry}>重试</Button></Alert>
               )}
               {props.loading && <div className="grid min-h-48 place-items-center"><Spinner aria-label="正在读取 Socket 抓包详情" /></div>}
               {!props.loading && !props.error && !props.malformed && props.detail && (

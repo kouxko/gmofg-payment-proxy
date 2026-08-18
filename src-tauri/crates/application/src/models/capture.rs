@@ -6,8 +6,9 @@ use serde_json::Value;
 use specta::Type;
 
 use super::{
-    BreakpointId, ChannelId, DisabledReason, MessageStage, PageRequest, Revision, RuleId,
-    RuntimeEpoch, SessionId, SortDirection, UiTone,
+    BreakpointId, ChannelId, DisabledReason, Document, MessageStage, PageRequest,
+    ProtocolDocumentRuleId, ProtocolPackageRef, ProtocolRuleStage, Revision, RuleId, RuntimeEpoch,
+    SessionId, SortDirection, UiTone,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -101,6 +102,76 @@ pub enum MessageContentKind {
     Unknown,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+/// 协议包对当前 HTTP Body 的展示结果。HTML 始终是不可信内容，前端只能放入受限沙箱。
+pub enum HttpProtocolDisplayViewModel {
+    UntrustedHtml {
+        html: String,
+    },
+    HexFallback {
+        reason: HttpProtocolDisplayFallbackReason,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+/// Display 无法生成 HTML 时供 UI 稳定展示的原因。
+pub enum HttpProtocolDisplayFallbackReason {
+    EntryPointFailed,
+    ResourceLimitExceeded,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 当前 HTTP 方向内一段独立规则程序的真实命中结果。
+pub struct HttpProtocolRuleStageViewModel {
+    pub stage: ProtocolRuleStage,
+    pub matched_rule_ids: Vec<ProtocolDocumentRuleId>,
+    pub document: Document,
+    pub display: HttpProtocolDisplayViewModel,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// HTTP 文本 Body 经协议包 Decode、两段规则和 Display 后冻结的证据。
+pub struct HttpProtocolBodyViewModel {
+    pub package: ProtocolPackageRef,
+    /// 协议处理前收到的精确 HTTP Body 字节。
+    pub origin_body: Vec<u8>,
+    /// 由 Rust 在 UTF-8 门禁后生成，前端不得再次自行解码字节。
+    pub origin_text: String,
+    /// 协议处理成功后实际写入线路的精确 HTTP Body 字节。
+    pub written_body: Vec<u8>,
+    /// 由 Rust 在 Encode 输出 UTF-8 门禁后生成。
+    pub written_text: String,
+    pub document: Document,
+    pub stages: Vec<HttpProtocolRuleStageViewModel>,
+    pub display: HttpProtocolDisplayViewModel,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+/// HTTP 协议处理失败的稳定分类；不依赖错误文案解析。
+pub enum HttpProtocolFailureKind {
+    InputNotUtf8,
+    DecodeFailed,
+    RuleFailed,
+    EncodeFailed,
+    OutputNotUtf8,
+    WorkerFailed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// HTTP 协议处理在返回错误前冻结的脱敏证据。
+pub struct HttpProtocolFailureViewModel {
+    pub package: ProtocolPackageRef,
+    pub direction: intercept_proxy_domain::ProtocolDirection,
+    pub stage: Option<ProtocolRuleStage>,
+    pub kind: HttpProtocolFailureKind,
+    pub code: String,
+    pub detail: String,
+    pub origin_body: Vec<u8>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
 /// 可供界面查看/编辑，同时可无损重建网络报文的内容模型。
 pub struct MessageContentViewModel {
@@ -122,6 +193,10 @@ pub struct MessageContentViewModel {
     pub codec_id: Option<String>,
     pub decode_error: Option<String>,
     pub query_string: Option<String>,
+    /// 仅当当前入口绑定 HTTP 协议包且 Body 非空时存在。
+    pub protocol: Option<HttpProtocolBodyViewModel>,
+    /// 协议处理失败时在返回错误前保存；与成功证据互斥。
+    pub protocol_failure: Option<HttpProtocolFailureViewModel>,
 }
 
 impl MessageContentViewModel {
@@ -156,13 +231,17 @@ impl MessageContentViewModel {
         .sum::<usize>();
         let derived_body = self.body_text.as_ref().map_or(0, String::len)
             + self.json.as_ref().map_or(0, json_logical_bytes);
+        let protocol = self.protocol.as_ref().map_or(0, |value| {
+            serde_json::to_vec(value).map_or(0, |bytes| bytes.len())
+        });
         Self::ENTITY_FIXED_OVERHEAD_BYTES
             + (self.start_line_bytes.len()
                 + headers
                 + raw_headers
                 + self.body_bytes.len()
                 + derived_body
-                + metadata) as u64
+                + metadata
+                + protocol) as u64
     }
 }
 
@@ -187,7 +266,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn message_content_rejects_missing_current_http_metadata() {
+    fn message_content_rejects_missing_current_http_content_kind() {
         let error = serde_json::from_value::<MessageContentViewModel>(serde_json::json!({
             "http_status": null,
             "start_line_bytes": [],
@@ -196,11 +275,12 @@ mod tests {
             "body_text": null,
             "body_bytes": [0, 255],
             "json": null,
-            "content_length": 2
+            "content_length": 2,
+            "protocol": null
         }))
         .expect_err("current message content fields are required");
 
-        assert!(error.to_string().contains("media_type"));
+        assert!(error.to_string().contains("content_kind"));
     }
 
     #[test]
@@ -219,7 +299,8 @@ mod tests {
             "content_kind": "unknown",
             "codec_id": null,
             "decode_error": null,
-            "query_string": null
+            "query_string": null,
+            "protocol": null
         }))
         .unwrap();
         let without_json = {

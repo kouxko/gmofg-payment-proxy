@@ -13,7 +13,7 @@ mod tests {
         InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
     };
     use intercept_proxy_domain::{
-        DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageRef,
+        ListenerDataPlane, ProtocolPackageRef,
         ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySettings,
     };
     use intercept_proxy_product_api::InterceptProxyProfile;
@@ -42,23 +42,23 @@ id = "example-protocol"
 name = "Example Protocol"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
-display = { script = "protocol.rhai", function = "display" }
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
 encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 "#;
 
     const SCHEMA: &str = r#"
@@ -143,7 +143,14 @@ fn display(document, context) { "<p>ok</p>" }
         let preview: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
         assert_eq!(preview["package"], package);
         assert_eq!(preview["disposition"], "new");
-        assert_eq!(preview["schema"]["fields"][0]["name"], "trace_id");
+        assert_eq!(
+            preview["upstream_schema"]["fields"][0]["name"],
+            "trace_id"
+        );
+        assert_eq!(
+            preview["downstream_schema"]["fields"][0]["name"],
+            "trace_id"
+        );
         let imported: Value = invoke_ok(
             &webview,
             "protocol_package_import_commit",
@@ -161,9 +168,15 @@ fn display(document, context) { "<p>ok</p>" }
             json!({ "packageRef": package }),
         );
         assert_eq!(detail["capabilities"]["upstream"]["encode"], true);
-        assert_eq!(detail["capabilities"]["downstream"]["encode"], false);
-        assert_eq!(detail["schema"]["fields"][0]["name"], "trace_id");
-        assert_eq!(detail["schema"]["fields"][1]["name"], "amount");
+        assert_eq!(detail["capabilities"]["downstream"]["encode"], true);
+        assert_eq!(
+            detail["upstream_schema"]["fields"][0]["name"],
+            "trace_id"
+        );
+        assert_eq!(
+            detail["downstream_schema"]["fields"][1]["name"],
+            "amount"
+        );
         assert_no_source_fields(&detail);
 
         let usages: Value = invoke_ok(
@@ -186,7 +199,10 @@ fn display(document, context) { "<p>ok</p>" }
         assert_eq!(catalog["installed_version_count"], 1);
         assert_eq!(catalog["unavailable_version_count"], 0);
         assert_eq!(catalog["options"][0]["package"], package);
-        assert_eq!(catalog["options"][0]["schema"]["id"], "example-message");
+        assert_eq!(
+            catalog["options"][0]["upstream_schema"]["id"],
+            "example-message"
+        );
         assert_no_source_fields(&catalog);
         let disabled: Value = invoke_ok(
             &webview,
@@ -271,7 +287,7 @@ fn display(document, context) { "<p>ok</p>" }
 
         let error = invoke_error(&webview, "protocol_package_import", json!({}));
         let diagnostic = error.diagnostic.expect("safe compiler diagnostic");
-        assert_eq!(diagnostic.file.as_deref(), Some("protocol.rhai"));
+        assert_eq!(diagnostic.file.as_deref(), Some("display.rhai"));
         assert_eq!(diagnostic.line, Some(2));
         let serialized = serde_json::to_string(&diagnostic).unwrap();
         assert!(!serialized.contains(invalid.to_string_lossy().as_ref()));
@@ -364,7 +380,7 @@ fn display(document, context) { "<p>ok</p>" }
         let _: Value = invoke_ok(
             &webview,
             "protocol_package_enable",
-            // 未声明的 downstream encode 不是命令参数；伪造字段不能改变已编译能力。
+            // 能力不是命令参数；伪造字段不能改变已编译能力。
             json!({ "packageRef": package_json, "downstreamEncode": true }),
         );
         let detail: Value = invoke_ok(
@@ -372,7 +388,7 @@ fn display(document, context) { "<p>ok</p>" }
             "protocol_package_detail",
             json!({ "packageRef": package_json }),
         );
-        assert_eq!(detail["capabilities"]["downstream"]["encode"], false);
+        assert_eq!(detail["capabilities"]["downstream"]["encode"], true);
 
         let package: ProtocolPackageRef = serde_json::from_value(package_json.clone()).unwrap();
         let application = Arc::clone(&app.state::<AppState>().application);
@@ -391,8 +407,6 @@ fn display(document, context) { "<p>ok</p>" }
             intercept_proxy_domain::DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
             SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package,
-                upstream: DirectionProcessingOptions::default(),
-                downstream: DirectionProcessingOptions::default(),
             }),
         ));
         let workspace =

@@ -17,20 +17,14 @@ const appTls: SocketDownstreamTlsSettings = {
 
 const fullProcessing: ScriptedSocketProcessing = {
   package: { id: "iso-8583", version: "2.0.0" },
-  upstream: { decode_enabled: true, encode_enabled: true },
-  downstream: { decode_enabled: true, encode_enabled: true },
 };
 
 const localProcessing: ScriptedSocketProcessing = {
   package: { id: "iso-8583", version: "2.0.0" },
-  upstream: { decode_enabled: true, encode_enabled: false },
-  downstream: { decode_enabled: false, encode_enabled: true },
 };
 
 const emptyProcessing: ScriptedSocketProcessing = {
   package: { id: "", version: "" },
-  upstream: { decode_enabled: false, encode_enabled: false },
-  downstream: { decode_enabled: false, encode_enabled: false },
 };
 
 function relay(processing: SocketRelaySettings["processing"]): SocketRelaySettings {

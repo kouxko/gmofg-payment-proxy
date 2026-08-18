@@ -24,6 +24,10 @@ pub enum InfrastructureError {
         path: PathBuf,
         source: io::Error,
     },
+    ExportParentSync {
+        path: PathBuf,
+        source: io::Error,
+    },
     ExportTargetExists {
         path: PathBuf,
     },

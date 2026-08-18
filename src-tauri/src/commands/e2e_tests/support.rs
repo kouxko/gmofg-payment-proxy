@@ -30,26 +30,22 @@ id = "t30-iso-local"
 name = "T30 ISO LocalResponder"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
-display = { script = "protocol.rhai", function = "display" }
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
 encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.downstream.send]
-script = "protocol.rhai"
 encode = "encode"
 "#;
 
@@ -59,24 +55,9 @@ version = 1
 title = "T30 ISO8583"
 
 [[fields]]
-name = "mti"
-label = "MTI"
-type = "string"
-
-[[fields]]
-name = "trace"
-label = "Trace"
-type = "string"
-
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "string"
-
-[[fields]]
-name = "response_code"
-label = "Response Code"
-type = "string"
+name = "message"
+label = "Message"
+type = "blob"
 "#;
 
 const SCRIPT: &str = r#"
@@ -87,17 +68,12 @@ fn frame(reader, context) {
 
 fn decode(origin, context) {
     let result = document::create();
-    result.set("mti", origin.extract(0, 4).as_string());
-    result.set("trace", origin.extract(4, 6).as_string());
-    result.set("amount", origin.extract(10, 8).as_string());
+    result.set("message", origin);
     result
 }
 
 fn encode(origin, document, context) {
-    document.get("mti").to_blob()
-        + document.get("trace").to_blob()
-        + document.get("amount").to_blob()
-        + document.get("response_code").to_blob()
+    document.get("message")
 }
 
 fn display(document, context) { "<p>T30 ISO response</p>" }
@@ -177,9 +153,10 @@ impl CrossLayerFixture {
                 protocol_package_import_commit,
                 protocol_package_detail,
                 protocol_package_enable,
-                socket_rule_save,
+                protocol_rule_save,
                 socket_capture_query,
                 socket_capture_get_detail,
+                diagnostic_log_query,
             ])
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
@@ -252,6 +229,7 @@ fn package_zip() -> Vec<u8> {
         ("manifest.toml", MANIFEST.as_bytes()),
         ("document.toml", SCHEMA.as_bytes()),
         ("protocol.rhai", SCRIPT.as_bytes()),
+        ("display.rhai", SCRIPT.as_bytes()),
     ] {
         archive
             .start_file(path, SimpleFileOptions::default())

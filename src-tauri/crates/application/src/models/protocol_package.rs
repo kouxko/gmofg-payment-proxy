@@ -44,6 +44,8 @@ pub struct ProtocolPackageVersionViewModel {
     pub package: ProtocolPackageRef,
     pub name: String,
     pub host_api: u32,
+    /// 安装时由严格 Manifest 推断并持久化的数据平面类型。
+    pub kind: ProtocolPackageKindViewModel,
     /// 由应用精确身份保护的官方 ISO 8583:1987 ASCII Profile。
     pub built_in: bool,
     pub enabled: bool,
@@ -57,6 +59,8 @@ pub struct ProtocolPackageGroupViewModel {
     pub id: ProtocolPackageId,
     /// 最新已安装版本声明的名称，作为分组行的稳定展示名称。
     pub name: String,
+    /// 同一 ID 的所有版本必须属于同一数据平面。
+    pub kind: ProtocolPackageKindViewModel,
     pub versions: Vec<ProtocolPackageVersionViewModel>,
     /// 全部精确版本被已保存 Listener 引用的总次数。
     pub reference_count: usize,
@@ -96,15 +100,25 @@ pub struct ProtocolPackageUsageCount {
 /// 精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。
 pub struct ProtocolPackageDetailViewModel {
     pub version: ProtocolPackageVersionViewModel,
+    pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: ProtocolPackageSchemaViewModel,
+    pub downstream_schema: ProtocolPackageSchemaViewModel,
     pub usages: Vec<ProtocolPackageUsageViewModel>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+/// Manifest 结构推导出的协议包数据平面。
+pub enum ProtocolPackageKindViewModel {
+    Http,
+    Socket,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 一个方向在 Manifest 中声明并通过编译校验的能力。
-/// Frame 与 Decode 在 Host API v1 中是必需入口，仍显式返回给 UI，避免前端根据 API
-/// 版本自行推断。Encode 是可选入口；为 `false` 时对应开关必须保持关闭。
+/// 编译后方向能力的只读投影。HTTP 不声明 Frame，Socket 必须声明；Decode 与 Encode
+/// 均由当前严格 Manifest 提供，不再交给入口配置开关选择。
 pub struct ProtocolPackageDirectionCapabilitiesViewModel {
     pub frame: bool,
     pub decode: bool,
@@ -152,8 +166,10 @@ pub struct ProtocolPackageSchemaViewModel {
 pub struct ProtocolPackageDescriptionViewModel {
     /// 描述所属的精确协议包身份。Application 必须与请求身份再次比较，防止缓存串包。
     pub package: ProtocolPackageRef,
+    pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: ProtocolPackageSchemaViewModel,
+    pub downstream_schema: ProtocolPackageSchemaViewModel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -164,8 +180,10 @@ pub struct ProtocolPackageDescriptionViewModel {
 pub struct ListenerProtocolPackageOptionViewModel {
     pub package: ProtocolPackageRef,
     pub name: String,
+    pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: ProtocolPackageSchemaViewModel,
+    pub downstream_schema: ProtocolPackageSchemaViewModel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -226,8 +244,10 @@ pub struct ProtocolPackageImportPreviewViewModel {
     pub package: ProtocolPackageRef,
     pub name: String,
     pub host_api: u32,
+    pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: ProtocolPackageSchemaViewModel,
+    pub downstream_schema: ProtocolPackageSchemaViewModel,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -237,8 +257,10 @@ pub struct ProtocolPackageImportPreviewViewModel {
 pub struct ProtocolPackageImportViewModel {
     pub outcome: ProtocolPackageImportOutcomeViewModel,
     pub version: ProtocolPackageVersionViewModel,
+    pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: ProtocolPackageSchemaViewModel,
+    pub downstream_schema: ProtocolPackageSchemaViewModel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]

@@ -38,7 +38,7 @@ pub use configuration::*;
 pub use error::{AppError, AppErrorDiagnosticViewModel, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
 pub use facade::{
-    Application, ApplicationDependencies, parse_socket_rule_value,
+    Application, ApplicationDependencies, parse_protocol_rule_value,
     validate_portable_protocol_bindings,
 };
 pub use listeners::InMemoryListenerRuntime;

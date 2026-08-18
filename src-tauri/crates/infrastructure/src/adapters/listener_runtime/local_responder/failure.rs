@@ -47,11 +47,12 @@ pub(super) fn framing_failure(error: &ProtocolFramingError) -> SocketProcessingF
 }
 
 pub(super) fn request_runtime_failure(error: &ProtocolRuntimeError) -> SocketProcessingFailure {
-    let kind = if cancelled(error) {
-        SocketProcessingFailureKind::Cancelled
-    } else {
-        // LocalResponder request processing is exclusively the request Decode side.
-        SocketProcessingFailureKind::DecodeFailed
+    let kind = match error {
+        error if cancelled(error) => SocketProcessingFailureKind::Cancelled,
+        ProtocolRuntimeError::DocumentTransformFailed { .. } => {
+            SocketProcessingFailureKind::RuleFailed
+        }
+        _ => SocketProcessingFailureKind::DecodeFailed,
     };
     SocketProcessingFailure::new(kind, "local request processing failed")
 }
@@ -82,8 +83,7 @@ fn cancelled(error: &ProtocolRuntimeError) -> bool {
 
 fn entry_failure_kind(error: &ProtocolRuntimeError) -> Option<SocketProcessingFailureKind> {
     let entry = match error {
-        ProtocolRuntimeError::EntryPointUnavailable { entry, .. }
-        | ProtocolRuntimeError::EntryPointFailed { entry, .. }
+        ProtocolRuntimeError::EntryPointFailed { entry, .. }
         | ProtocolRuntimeError::ExecutionCancelled { entry, .. }
         | ProtocolRuntimeError::ResourceLimitExceeded { entry, .. } => *entry,
         _ => return None,
@@ -108,13 +108,6 @@ pub(super) fn worker_failure() -> SocketProcessingFailure {
     )
 }
 
-pub(super) fn invalid_limits() -> SocketProcessingFailure {
-    SocketProcessingFailure::new(
-        SocketProcessingFailureKind::InvalidLimits,
-        "local responder frame limits cannot be represented safely",
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion};
@@ -135,6 +128,12 @@ mod tests {
             entry: ProtocolEntryPoint::Decode,
         });
         assert_eq!(decode.kind, SocketProcessingFailureKind::DecodeFailed);
+
+        let request_rule =
+            request_runtime_failure(&ProtocolRuntimeError::DocumentTransformFailed {
+                package: package(),
+            });
+        assert_eq!(request_rule.kind, SocketProcessingFailureKind::RuleFailed);
 
         let rule = response_runtime_failure(&ProtocolRuntimeError::DocumentTransformFailed {
             package: package(),

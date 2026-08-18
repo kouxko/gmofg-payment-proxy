@@ -2,10 +2,10 @@
 
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{
-    SocketCaptureDocument, SocketCapturePayload, SocketCaptureSchemaRef, SocketRelayFrameCapture,
-    SocketWriteKind,
+    SocketCapturePayload, SocketCaptureSchemaRef, SocketRelayFrameCapture,
+    SocketRelayRuleStageCapture,
 };
-use intercept_proxy_domain::{ProtocolPackageRef, SocketDirection, SocketDocumentRuleId};
+use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
 use intercept_proxy_protocol_scripting::{DisplayFallbackReason, ProtocolDisplayResult};
 use intercept_proxy_protocol_scripting::{ProtocolDirectionExecutor, ProtocolFrameOutput};
 use intercept_proxy_runtime::SocketConnectionIdentity;
@@ -16,40 +16,41 @@ use super::super::socket_capture_publisher::{
 
 pub(super) struct PendingRelayCapture {
     pub(super) output: ProtocolFrameOutput,
-    pub(super) matched_rule_ids: Vec<SocketDocumentRuleId>,
+    pub(super) stages: Vec<SocketRelayRuleStageCapture>,
     occurred_at: DateTime<Utc>,
+}
+
+pub(super) struct RelayCaptureCommit<'a> {
+    pub(super) ticket: Option<SocketCapturePublishTicket>,
+    pub(super) capture: &'a SocketCaptureContext,
+    pub(super) connection: &'a SocketConnectionIdentity,
+    pub(super) completed_at: DateTime<Utc>,
+    pub(super) direction: ProtocolDirection,
+    pub(super) package: ProtocolPackageRef,
+    pub(super) schema: SocketCaptureSchemaRef,
 }
 
 impl PendingRelayCapture {
     pub(super) fn new(
         output: ProtocolFrameOutput,
-        matched_rule_ids: Vec<SocketDocumentRuleId>,
+        stages: Vec<SocketRelayRuleStageCapture>,
         occurred_at: DateTime<Utc>,
     ) -> Self {
         Self {
             output,
-            matched_rule_ids,
+            stages,
             occurred_at,
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(super) fn commit(
     executor: Option<&mut ProtocolDirectionExecutor>,
     pending: PendingRelayCapture,
-    ticket: Option<SocketCapturePublishTicket>,
-    capture: &SocketCaptureContext,
-    connection: &SocketConnectionIdentity,
-    completed_at: DateTime<Utc>,
-    direction: SocketDirection,
-    package: ProtocolPackageRef,
-    schema: SocketCaptureSchemaRef,
-    decode_enabled: bool,
-    encode_enabled: bool,
+    commit: RelayCaptureCommit<'_>,
 ) {
     #[cfg(test)]
-    capture.wait_before_display();
+    commit.capture.wait_before_display();
     let display = executor.map_or_else(capture_resource_busy, |executor| {
         capture_display(
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -60,31 +61,19 @@ pub(super) fn commit(
             )),
         )
     });
-    let document = pending
-        .output
-        .decoded_document()
-        .map(SocketCaptureDocument::from_document);
-    capture.record(
-        ticket,
-        connection,
+    commit.capture.record(
+        commit.ticket,
+        commit.connection,
         pending.occurred_at,
-        completed_at,
-        SocketCapturePayload::RelayFrame(SocketRelayFrameCapture {
-            direction,
-            package,
-            schema,
-            decode_enabled,
-            encode_enabled,
+        commit.completed_at,
+        SocketCapturePayload::RelayFrame(Box::new(SocketRelayFrameCapture {
+            direction: commit.direction,
+            package: commit.package,
+            schema: commit.schema,
             origin: pending.output.origin().to_vec(),
-            document,
-            matched_rule_ids: pending.matched_rule_ids,
+            stages: pending.stages,
             written: pending.output.written().to_vec(),
-            write_kind: if encode_enabled {
-                SocketWriteKind::Encoded
-            } else {
-                SocketWriteKind::Original
-            },
             display,
-        }),
+        })),
     );
 }

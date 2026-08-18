@@ -1,34 +1,42 @@
-# ADR-002：当前协议包 ABI 不扩展到 HTTP
+# ADR-002：HTTP 与 Socket 使用独立协议包，共享字段处理模型
 
 - Status: Accepted
-- Rejected option: HTTP Body 复用 Socket Document ABI
-- Date: 2026-08-17
-- Scope: R01 architecture baseline
+- Supersedes: 2026-08-17 Socket-only decision
+- Date: 2026-08-19
+- Scope: R12 protocol platform
 
 ## Context
 
-当前协议包的 Frame/Decode/Encode/Display 以原始 Socket 字节、方向和每连接上下文为契约。HTTP 已有
-method/URI/header/status/body、CONNECT/MITM 和内容编码语义。两者仅因都可能有“body/document”而统一，
-会丢失 HTTP 的结构和失败边界。
+HTTP 与 Socket 都需要把线上报文转换为可匹配、可修改的字段集合，再重建报文并生成安全展示；但二者
+不能共用同一个包实例。HTTP 拥有 method、URI、Header、Status、CONNECT/MITM 与文本 Body 语义，
+Socket 拥有字节分帧、half-close、转发或本机应答语义。共享执行模型不等于混合数据平面。
 
 ## Decision
 
-协议包当前只服务 Socket Scripted/LocalResponder。HTTP 不导入 Socket package runtime/contracts，也不把
-HTTP Body 映射为现有 Document。package registry 和 Schema/Document 值对象可以保持中立，但 ABI 与执行器
-必须按协议独立。
+- HTTP 与 Socket 是两类独立协议包，包的 `kind` 是不可变身份的一部分，不能交叉绑定。
+- 两类包共享 `Document` 字段类型、双方向 Schema、四阶段字段规则、Decode/Encode/Display host API、
+  安全展示和包安装生命周期。
+- Manifest 都使用 `document.upstream/downstream` 与 `hooks.upstream/downstream`；Socket 两个方向还必须
+  同时声明 `frame`。不声明 `content_types`，不使用 request/response 后缀函数名。
+- HTTP 包只处理非空 UTF-8 Body。Header、Status、CONNECT、MITM 和普通 HTTP 规则仍由 HTTP 数据面
+  拥有；普通 HTTP 规则先执行，随后 Body 进入 Decode、两个边界规则、条件性 Encode 和 Display。
+- Socket 转发和本机应答继续由 Socket runtime 拥有；两类 runtime 不互相导入协议专属 DTO。
 
 ## Alternatives
 
-- Rejected：HTTP 与 Socket 完全各自复制 package management；registry/identity/安装生命周期值得共享。
-- Rejected：共享管理但立即增加 HTTP ABI；R01 没有已批准的 HTTP 用户场景与行为测试。
-- Rejected：HTTP Body 直接使用 Socket Document；无法表达 Header/Status/streaming/content encoding。
-- Accepted：保持 Socket-only ABI；未来以新 ADR 和独立 HTTP ABI 重新评估。
+- Rejected：HTTP 与 Socket 完全复制包管理、Schema 与规则引擎；会产生两套不可维护的字段语义。
+- Rejected：一个协议包同时服务 HTTP 与 Socket；会混合分帧、文本 Body 和传输生命周期。
+- Rejected：按 Content-Type 自动路由多个 HTTP 包；当前单入口精确绑定一个包更可预测。
+- Accepted：独立包 kind 与 runtime，共享中立的字段处理模型和注册生命周期。
 
 ## Consequences
 
-- 任何 HTTP package 提案必须先给出用户场景、独立 ABI、迁移与 HTTP 回归证据。
-- 当前协议包 ZIP、编译缓存和 host API 不得被描述为通用 HTTP 扩展平台。
+- HTTP 与 Socket 的配置、包筛选、抓包视图和失败诊断保持隔离。
+- 字段规则可以使用同一领域模型，但必须绑定入口、精确包版本、方向 Schema 和四阶段之一。
+- HTTP Body 未变化时逐字节保留 Body，并保持 `Content-Length` 的语义数值一致；
+  HTTP 库可规范化 Header 的空白和序列化形式。Body 变化时只重建一次并更新 `Content-Length`。
+- HTTP 二进制 Body、内容编码解压、按 Content-Type 多包路由需要新的 ADR，不能作为隐式兜底加入。
 
 ## Open items
 
-- 若出现已批准的 HTTP package 用户场景，另立 ADR 和独立 ABI，不修改当前 Socket ABI。Owner: R01 follow-up。
+- 二进制 Body、内容编码解压与按 Content-Type 多包路由留给 future ADR；本决策不提供兼容或自动探测路径。

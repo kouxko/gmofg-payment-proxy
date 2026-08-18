@@ -384,6 +384,8 @@ mod tests {
             codec_id: None,
             decode_error: None,
             query_string: None,
+            protocol: None,
+            protocol_failure: None,
         }
     }
 

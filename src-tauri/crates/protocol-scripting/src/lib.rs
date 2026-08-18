@@ -62,8 +62,8 @@ pub use limits::{
 };
 pub use manifest::{
     DirectionHooks, DisplayDeclaration, DocumentDeclaration, MAX_MANIFEST_TOML_BYTES,
-    ProtocolHooks, ProtocolManifest, ProtocolPackageMetadata, ReceiveHookDeclaration,
-    SUPPORTED_PROTOCOL_HOST_API, SendHookDeclaration, parse_protocol_manifest,
+    ProtocolDocuments, ProtocolHooks, ProtocolManifest, ProtocolPackageKind,
+    ProtocolPackageMetadata, SUPPORTED_PROTOCOL_HOST_API, parse_protocol_manifest,
 };
 pub use parse_error::{
     ProtocolPackageFile, ProtocolPackageParseError, ProtocolPackageParseErrorCode,

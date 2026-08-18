@@ -160,8 +160,10 @@ impl BuiltinProtocolPackagePort for ProtocolPackageRepositoryAdapter {
         Ok(ProtocolPackageImportViewModel {
             outcome: ProtocolPackageImportOutcomeViewModel::Installed,
             version: application_summary(summary),
+            kind: description.kind,
             capabilities: description.capabilities,
-            schema: description.schema,
+            upstream_schema: description.upstream_schema,
+            downstream_schema: description.downstream_schema,
         })
     }
 }
@@ -172,6 +174,7 @@ pub(super) fn builtin_header(prepared: &PreparedProtocolPackage) -> StoredProtoc
         package: prepared.compiled.package().clone(),
         name: manifest.package().name().to_owned(),
         host_api: manifest.api(),
+        kind: prepared.compiled.kind(),
         enabled: true,
         validation: StoredProtocolPackageValidation::Valid,
         installed_at: Utc::now(),
@@ -189,6 +192,7 @@ mod tests {
     };
 
     use intercept_proxy_application::BuiltinProtocolPackagePort;
+    use intercept_proxy_protocol_scripting::ProtocolPackageKind;
     use serde_json::json;
     use tempfile::TempDir;
     use zip::{ZipWriter, write::SimpleFileOptions};
@@ -217,6 +221,7 @@ mod tests {
         let versions = repository.list().unwrap();
         assert_eq!(versions.len(), 1);
         assert_eq!(versions[0].package, builtin_iso8583_package_ref());
+        assert_eq!(versions[0].kind, ProtocolPackageKind::Socket);
         assert!(versions[0].enabled);
         repository.revalidate(&versions[0].package).unwrap();
     }
@@ -275,6 +280,7 @@ mod tests {
             .unwrap();
         let restored = repository.list().unwrap();
         assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].kind, ProtocolPackageKind::Socket);
         assert!(restored[0].enabled);
     }
 

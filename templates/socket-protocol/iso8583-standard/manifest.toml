@@ -2,46 +2,28 @@
 api = 1
 
 [package]
-# Listener 通过 id + version 明确选择协议包，不做自动识别。
 id = "iso8583-ascii-standard"
 name = "ISO 8583:1987 ASCII Profile"
 version = "1.0.0"
 
-[document]
-# Schema 提前声明 decode() 可以产生的字段，也是规则引擎可用的变量。
-schema = "document.toml"
-
-# 可选能力：未声明、被 Listener 关闭或执行失败时，应用显示完整 Frame 的 Hex。
-[document.display]
-script = "display.rhai"
-function = "display"
-
 # Upstream：App -> Proxy -> Server。
-# receive 始终以 Proxy 为主体，这里表示 Proxy 从 App 接收字节。
-# frame(reader, context) -> FramingDecision，decode(origin, context) -> Document。
-[hooks.upstream.receive]
-script = "protocol.rhai"
-frame = "frame"
-decode = "decode"
-
-# Proxy 准备向 Server 发送完整 Frame 前调用。
-# 未声明或被 Listener 关闭时，直接发送 origin。
-# encode(origin, document, context) -> 完整 Frame Blob。
-[hooks.upstream.send]
-script = "protocol.rhai"
-encode = "encode"
+[document.upstream]
+schema = "document.toml"
+display = "display"
 
 # Downstream：Server -> Proxy -> App。
-# receive 始终以 Proxy 为主体，这里表示 Proxy 从 Server 接收字节。
-# frame(reader, context) -> FramingDecision，decode(origin, context) -> Document。
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+# `frame` 同时存在于两个方向，因此宿主严格把本包识别为 Socket 包。
+# Decode/Encode 固定由 protocol.rhai 提供，Display 固定由 display.rhai 提供。
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 
-# Proxy 准备向 App 发送完整 Frame 前调用。
-# 未声明或被 Listener 关闭时，直接发送 origin。
-# encode(origin, document, context) -> 完整 Frame Blob。
-[hooks.downstream.send]
-script = "protocol.rhai"
+[hooks.downstream]
+frame = "frame"
+decode = "decode"
 encode = "encode"

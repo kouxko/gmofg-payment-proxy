@@ -19,6 +19,10 @@ use super::{
     bind_tcp_listener, running_status, upstream_tls_test_error,
 };
 
+mod status;
+
+use status::{http_probe_view, socket_probe_view, status_from_snapshot};
+
 struct StatusSnapshot {
     listener_id: ListenerId,
     finished: bool,
@@ -72,6 +76,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             .build(&workspace, &listener, runtime_epoch)
             .await?;
         let scripted_snapshot = plan.scripted_snapshot();
+        let http_protocol_snapshot = plan.http_protocol_snapshot();
         if let Some(snapshot) = plan.scripted_snapshot()
             && matches!(snapshot.topology(), DomainSocketTopology::LocalResponder(_))
             && matches!(
@@ -135,25 +140,28 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 workspace,
                 socket_service,
                 scripted_snapshot,
+                http_protocol_snapshot,
             },
         );
         Ok(running_status(listener_id, listen_address))
     }
 
-    async fn replace_socket_rules(
+    async fn replace_protocol_rules(
         &self,
         workspace: ProxyWorkspace,
         listener_id: ListenerId,
     ) -> AppResult<()> {
-        let snapshot = self
-            .running
-            .lock()
-            .await
-            .get(&listener_id)
-            .and_then(|running| running.scripted_snapshot.clone());
-        let Some(snapshot) = snapshot else {
-            return Ok(());
-        };
+        let (socket_snapshot, http_snapshot) =
+            self.running
+                .lock()
+                .await
+                .get(&listener_id)
+                .map_or((None, None), |running| {
+                    (
+                        running.scripted_snapshot.clone(),
+                        running.http_protocol_snapshot.clone(),
+                    )
+                });
         let listener = workspace
             .listeners
             .iter()
@@ -162,7 +170,12 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 AppError::new("LISTENER_NOT_FOUND", "入口配置不存在。")
                     .entity(listener_id.to_string())
             })?;
-        snapshot.replace_document_rules(&workspace, listener)?;
+        if let Some(snapshot) = socket_snapshot {
+            snapshot.replace_document_rules(&workspace, listener)?;
+        }
+        if let Some(snapshot) = http_snapshot {
+            snapshot.replace_document_rules(&workspace, listener)?;
+        }
 
         for running in self
             .running
@@ -202,9 +215,9 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         let stopped_epoch = workspace_stopped
             .then(|| self.runtime_epochs.write().remove(&handle.workspace.id))
             .flatten();
-        let pipeline_ports = self.pipeline_ports.read().clone();
-        if let (Some(epoch), Some(ports)) = (stopped_epoch, pipeline_ports) {
-            ports.runtime_stopping(epoch).await;
+        let pipeline_services = self.pipeline_services.read().clone();
+        if let (Some(epoch), Some(services)) = (stopped_epoch, pipeline_services) {
+            services.ports.runtime_stopping(epoch).await;
         }
         if let Some(error) = stop_error {
             return Err(error);
@@ -320,141 +333,6 @@ async fn serve_prepared_listener(
     }
 }
 
-fn status_from_snapshot(
-    snapshot: StatusSnapshot,
-    metrics: SocketRelayMetricsSnapshot,
-) -> ListenerStatusViewModel {
-    let faulted = snapshot.finished || snapshot.fault_reason.is_some();
-    ListenerStatusViewModel {
-        listener_id: snapshot.listener_id,
-        state: if faulted {
-            ListenerRuntimeState::Faulted
-        } else {
-            ListenerRuntimeState::Running
-        },
-        state_text: if faulted { "故障" } else { "运行中" }.into(),
-        ui_tone: if faulted {
-            UiTone::Danger
-        } else {
-            UiTone::Positive
-        },
-        listen_address: snapshot.listen_address,
-        fault_reason: snapshot
-            .fault_reason
-            .or_else(|| faulted.then(|| "Listener 任务已意外结束。".into())),
-        can_start: false,
-        can_stop: true,
-        active_connections: u32::try_from(metrics.active_connections).unwrap_or(u32::MAX),
-        client_to_server_bytes: metrics.client_to_server_bytes,
-        server_to_client_bytes: metrics.server_to_client_bytes,
-        retained_diagnostic_evictions: metrics.retained_diagnostic_evictions,
-    }
-}
-
-fn http_probe_view(
-    listener: &ProxyListener,
-    result: intercept_proxy_runtime::UpstreamConnectionTestResult,
-) -> ListenerUpstreamConnectionTestViewModel {
-    let tls = result.tls.map(tls_evidence_view);
-    let scheme = match result.scheme {
-        UpstreamScheme::Http => "http",
-        UpstreamScheme::Https => "https",
-    };
-    let transport = match result.transport {
-        UpstreamTransport::Tcp => "tcp",
-        UpstreamTransport::Tls => "tls",
-    };
-    let origin = listener
-        .http()
-        .and_then(|http| http.fixed_server.as_ref())
-        .map_or_else(String::new, |fixed| fixed.upstream_url.clone());
-    ListenerUpstreamConnectionTestViewModel {
-        listener_id: listener.id,
-        data_plane: ListenerDataPlaneKind::Http,
-        upstream_origin: origin,
-        resolved_address: result.resolved_address.to_string(),
-        scheme: scheme.into(),
-        transport: transport.into(),
-        tls,
-        socket_transport_mode: None,
-        elapsed_millis: result.elapsed_millis,
-        message: format!("上游 Server {transport} 连接成功。"),
-        ui_tone: UiTone::Positive,
-    }
-}
-
-fn socket_probe_view(
-    listener: &ProxyListener,
-    result: intercept_proxy_runtime::SocketUpstreamConnectionTestResult,
-) -> AppResult<ListenerUpstreamConnectionTestViewModel> {
-    let Some(settings) = listener.socket() else {
-        return Err(AppError::new(
-            "LISTENER_DATA_PLANE_MISMATCH",
-            "Socket 上游测试结果与 Listener 数据面不匹配。",
-        )
-        .entity(listener.id.to_string()));
-    };
-    let DomainSocketTopology::Relay(relay) = &settings.topology else {
-        return Err(AppError::new(
-            "LISTENER_UPSTREAM_NOT_APPLICABLE",
-            "本地应答没有可测试的 Server 上游。",
-        )
-        .entity(listener.id.to_string()));
-    };
-    let transport = match result.transport {
-        intercept_proxy_runtime::SocketUpstreamTransport::Tcp => "tcp",
-        intercept_proxy_runtime::SocketUpstreamTransport::Tls => "tls",
-    };
-    Ok(ListenerUpstreamConnectionTestViewModel {
-        listener_id: listener.id,
-        data_plane: ListenerDataPlaneKind::Socket,
-        upstream_origin: format!("{}:{}", relay.upstream.host, relay.upstream.port),
-        resolved_address: result.resolved_address.to_string(),
-        scheme: "socket".into(),
-        transport: transport.into(),
-        tls: result.tls.map(socket_tls_evidence_view),
-        socket_transport_mode: Some(socket_mode(&relay.security)),
-        elapsed_millis: result.elapsed_millis,
-        message: format!("上游 Socket {transport} 连接成功。"),
-        ui_tone: UiTone::Positive,
-    })
-}
-
-fn tls_evidence_view(
-    evidence: intercept_proxy_runtime::UpstreamTlsHandshakeResult,
-) -> ListenerUpstreamTlsEvidenceViewModel {
-    ListenerUpstreamTlsEvidenceViewModel {
-        tls_version: evidence.tls_version,
-        cipher_suite: evidence.cipher_suite,
-        peer_subject: evidence.peer_subject,
-        peer_sha256_fingerprint: evidence.peer_sha256_fingerprint,
-        hostname_verification_enabled: evidence.hostname_verification_enabled,
-        client_identity_configured: evidence.client_identity_configured,
-    }
-}
-
-fn socket_tls_evidence_view(
-    evidence: intercept_proxy_runtime::SocketTlsEvidence,
-) -> ListenerUpstreamTlsEvidenceViewModel {
-    ListenerUpstreamTlsEvidenceViewModel {
-        tls_version: evidence.tls_version,
-        cipher_suite: evidence.cipher_suite,
-        peer_subject: evidence.peer_subject,
-        peer_sha256_fingerprint: evidence.peer_sha256_fingerprint,
-        hostname_verification_enabled: evidence.hostname_verification_enabled,
-        client_identity_configured: evidence.client_identity_configured,
-    }
-}
-
-fn socket_mode(security: &DomainSocketSecurity) -> ApplicationSocketMode {
-    match security {
-        DomainSocketSecurity::Transparent => ApplicationSocketMode::Transparent,
-        DomainSocketSecurity::TcpToTls { .. } => ApplicationSocketMode::TcpToTls,
-        DomainSocketSecurity::TlsToTcp { .. } => ApplicationSocketMode::TlsToTcp,
-        DomainSocketSecurity::TlsToTls { .. } => ApplicationSocketMode::TlsToTls,
-    }
-}
-
 fn ensure_upstream_tls_enabled(listener: &ProxyListener) -> AppResult<()> {
     let enabled = match &listener.data_plane {
         intercept_proxy_domain::ListenerDataPlane::Http(http) => http
@@ -498,29 +376,4 @@ fn is_orderly_stop(code: &'static str) -> bool {
         code,
         "PROXY_STOPPED" | "BREAKPOINT_PROXY_STOPPED" | "SOCKET_RELAY_CANCELLED"
     )
-}
-
-#[cfg(test)]
-mod status_tests {
-    use super::*;
-
-    #[test]
-    fn socket_diagnostic_drop_count_is_exposed_in_listener_status() {
-        let listener_id = ListenerId::new();
-        let status = status_from_snapshot(
-            StatusSnapshot {
-                listener_id,
-                finished: false,
-                listen_address: "127.0.0.1:1234".into(),
-                fault_reason: None,
-                socket_service: None,
-            },
-            SocketRelayMetricsSnapshot {
-                retained_diagnostic_evictions: 7,
-                ..SocketRelayMetricsSnapshot::default()
-            },
-        );
-        assert_eq!(status.listener_id, listener_id);
-        assert_eq!(status.retained_diagnostic_evictions, 7);
-    }
 }

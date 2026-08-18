@@ -3,8 +3,10 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use intercept_proxy_application::SocketCaptureSchemaRef;
-use intercept_proxy_domain::{SocketDirection, SocketRuleStage};
+use intercept_proxy_application::{
+    SocketCaptureDocument, SocketCaptureSchemaRef, SocketRelayRuleStageCapture,
+};
+use intercept_proxy_domain::{ProtocolDirection as RuleDirection, ProtocolRuleStage};
 use intercept_proxy_protocol_scripting::{
     DirectionExecutionPlan, ProtocolDirection, ProtocolDirectionExecutor,
     ProtocolExecutionCancellation, ProtocolFrameInspector, ProtocolFramingLimits,
@@ -17,7 +19,7 @@ use intercept_proxy_runtime::{
 use tokio::sync::{mpsc, oneshot};
 
 use super::{
-    SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory,
+    ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
     scripted_snapshot::ScriptedSocketRuntimeSnapshot,
     socket_capture_publisher::{SocketCaptureContext, SocketCapturePublishTicket},
 };
@@ -42,13 +44,14 @@ pub(super) struct ScriptedRelayProcessorFactoryAdapter {
     package: RuntimeProtocolPackageSnapshot,
     upstream: DirectionExecutionPlan,
     downstream: DirectionExecutionPlan,
-    rules: SocketDocumentRuleConnectionFactory,
+    rules: ProtocolDocumentRuleConnectionFactory,
     listener_id: String,
     runtime_limits: ProtocolRuntimeLimits,
     framing_limits: ProtocolFramingLimits,
     blocking_slots: BlockingCommandSlots,
     capture: SocketCaptureContext,
-    schema: SocketCaptureSchemaRef,
+    upstream_schema: SocketCaptureSchemaRef,
+    downstream_schema: SocketCaptureSchemaRef,
 }
 
 impl ScriptedRelayProcessorFactoryAdapter {
@@ -58,7 +61,14 @@ impl ScriptedRelayProcessorFactoryAdapter {
         framing_limits: ProtocolFramingLimits,
         capture: SocketCaptureContext,
     ) -> Self {
-        let schema = snapshot.package().compiled().schema();
+        let upstream_schema = snapshot
+            .package()
+            .compiled()
+            .schema(ProtocolDirection::Upstream);
+        let downstream_schema = snapshot
+            .package()
+            .compiled()
+            .schema(ProtocolDirection::Downstream);
         Self {
             package: snapshot.package().clone(),
             upstream: snapshot.upstream(),
@@ -69,9 +79,13 @@ impl ScriptedRelayProcessorFactoryAdapter {
             framing_limits,
             blocking_slots: BlockingCommandSlots::new_relay(snapshot.maximum_connections()),
             capture,
-            schema: SocketCaptureSchemaRef {
-                id: schema.id().clone(),
-                version: schema.version(),
+            upstream_schema: SocketCaptureSchemaRef {
+                id: upstream_schema.id().clone(),
+                version: upstream_schema.version(),
+            },
+            downstream_schema: SocketCaptureSchemaRef {
+                id: downstream_schema.id().clone(),
+                version: downstream_schema.version(),
             },
         }
     }
@@ -81,28 +95,30 @@ impl ScriptedRelayProcessorFactoryAdapter {
         connection: SocketConnectionIdentity,
         direction: SocketPayloadDirection,
     ) -> Result<ScriptedRelayFrameProcessor, SocketProcessingFailure> {
-        let (protocol_direction, rule_direction, first_stage, second_stage, plan) = match direction
-        {
-            SocketPayloadDirection::AppToUpstream => (
-                ProtocolDirection::Upstream,
-                SocketDirection::Upstream,
-                SocketRuleStage::AppToProxy,
-                SocketRuleStage::ProxyToUpstream,
-                self.upstream,
-            ),
-            SocketPayloadDirection::UpstreamToApp => (
-                ProtocolDirection::Downstream,
-                SocketDirection::Downstream,
-                SocketRuleStage::UpstreamToProxy,
-                SocketRuleStage::ProxyToApp,
-                self.downstream,
-            ),
-            SocketPayloadDirection::LocalExchange => {
-                return Err(processing_failure(
-                    "LocalExchange cannot use the Scripted Relay factory",
-                ));
-            }
-        };
+        let (protocol_direction, rule_direction, first_stage, second_stage, plan, schema) =
+            match direction {
+                SocketPayloadDirection::AppToUpstream => (
+                    ProtocolDirection::Upstream,
+                    RuleDirection::Upstream,
+                    ProtocolRuleStage::AppToProxy,
+                    ProtocolRuleStage::ProxyToUpstream,
+                    self.upstream,
+                    self.upstream_schema.clone(),
+                ),
+                SocketPayloadDirection::UpstreamToApp => (
+                    ProtocolDirection::Downstream,
+                    RuleDirection::Downstream,
+                    ProtocolRuleStage::UpstreamToProxy,
+                    ProtocolRuleStage::ProxyToApp,
+                    self.downstream,
+                    self.downstream_schema.clone(),
+                ),
+                SocketPayloadDirection::LocalExchange => {
+                    return Err(processing_failure(
+                        "LocalExchange cannot use the Scripted Relay factory",
+                    ));
+                }
+            };
         let connection_context =
             format!("{}:{}", connection.runtime_epoch, connection.connection_id);
         let cancellation = ProtocolExecutionCancellation::new();
@@ -136,10 +152,8 @@ impl ScriptedRelayProcessorFactoryAdapter {
                 pending_output: None,
                 connection,
                 direction: rule_direction,
-                decode_enabled: plan.decode_enabled(),
-                encode_enabled: plan.encode_enabled(),
                 capture: self.capture.clone(),
-                schema: self.schema.clone(),
+                schema,
                 cancellation: cancellation.clone(),
             },
             self.blocking_slots.clone(),
@@ -297,14 +311,12 @@ enum DirectionCommand {
 struct DirectionWorkerState {
     inspector: ProtocolFrameInspector,
     executor: ProtocolDirectionExecutor,
-    first_rules: SocketDocumentRuleConnection,
-    second_rules: SocketDocumentRuleConnection,
+    first_rules: ProtocolDocumentRuleConnection,
+    second_rules: ProtocolDocumentRuleConnection,
     package: intercept_proxy_domain::ProtocolPackageRef,
     pending_output: Option<capture::PendingRelayCapture>,
     connection: SocketConnectionIdentity,
-    direction: SocketDirection,
-    decode_enabled: bool,
-    encode_enabled: bool,
+    direction: RuleDirection,
     capture: SocketCaptureContext,
     schema: SocketCaptureSchemaRef,
     cancellation: ProtocolExecutionCancellation,
@@ -329,15 +341,15 @@ async fn run_direction_worker(
                 capture::commit(
                     None,
                     pending,
-                    ticket,
-                    &state.capture,
-                    &state.connection,
-                    completed_at,
-                    state.direction,
-                    state.package.clone(),
-                    state.schema.clone(),
-                    state.decode_enabled,
-                    state.encode_enabled,
+                    capture::RelayCaptureCommit {
+                        ticket,
+                        capture: &state.capture,
+                        connection: &state.connection,
+                        completed_at,
+                        direction: state.direction,
+                        package: state.package.clone(),
+                        schema: state.schema.clone(),
+                    },
                 );
             }
             continue;
@@ -384,15 +396,15 @@ fn run_command(mut state: DirectionWorkerState, command: DirectionCommand) -> Di
                 capture::commit(
                     Some(&mut state.executor),
                     pending,
-                    ticket,
-                    &state.capture,
-                    &state.connection,
-                    completed_at,
-                    state.direction,
-                    state.package.clone(),
-                    state.schema.clone(),
-                    state.decode_enabled,
-                    state.encode_enabled,
+                    capture::RelayCaptureCommit {
+                        ticket,
+                        capture: &state.capture,
+                        connection: &state.connection,
+                        completed_at,
+                        direction: state.direction,
+                        package: state.package.clone(),
+                        schema: state.schema.clone(),
+                    },
                 );
             }
         }
@@ -412,7 +424,7 @@ fn process_frame(
     }
     let package = state.package.clone();
     let cancellation = state.cancellation.clone();
-    let mut matched_rule_ids = Vec::new();
+    let mut stages = Vec::with_capacity(2);
     let output = state
         .executor
         .execute_frame_with_document_transform(origin.to_vec(), |document| {
@@ -422,7 +434,12 @@ fn process_frame(
                     cancellation.is_cancelled()
                 })
                 .and_then(|execution| {
-                    let (document, mut first_ids) = execution.into_parts();
+                    let (document, first_ids) = execution.into_parts();
+                    stages.push(SocketRelayRuleStageCapture {
+                        stage: state.first_rules.stage(),
+                        matched_rule_ids: first_ids,
+                        document: SocketCaptureDocument::from_document(&document),
+                    });
                     state
                         .second_rules
                         .execute_with_cancellation(
@@ -431,8 +448,11 @@ fn process_frame(
                         )
                         .map(|execution| {
                             let (document, second_ids) = execution.into_parts();
-                            first_ids.extend(second_ids);
-                            matched_rule_ids = first_ids;
+                            stages.push(SocketRelayRuleStageCapture {
+                                stage: state.second_rules.stage(),
+                                matched_rule_ids: second_ids,
+                                document: SocketCaptureDocument::from_document(&document),
+                            });
                             document
                         })
                 })
@@ -444,7 +464,7 @@ fn process_frame(
     let written = Bytes::from_owner(output.written_owner());
     state.pending_output = Some(capture::PendingRelayCapture::new(
         output,
-        matched_rule_ids,
+        stages,
         occurred_at,
     ));
     Ok(written)

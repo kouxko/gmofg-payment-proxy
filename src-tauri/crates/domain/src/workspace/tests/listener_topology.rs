@@ -1,45 +1,27 @@
 use super::*;
 use crate::{ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion};
 
-fn scripted_processing(
-    upstream: DirectionProcessingOptions,
-    downstream: DirectionProcessingOptions,
-) -> SocketPayloadProcessing {
+fn scripted_processing() -> SocketPayloadProcessing {
     SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
         package: ProtocolPackageRef {
             id: ProtocolPackageId::new("iso8583-standard").unwrap(),
             version: ProtocolPackageVersion::new("1.2.3").unwrap(),
         },
-        upstream,
-        downstream,
     })
 }
 
-fn local_responder(
-    downstream_security: SocketDownstreamSecurity,
-    request_decode: bool,
-    response_encode: bool,
-) -> SocketRelaySettings {
+fn local_responder(downstream_security: SocketDownstreamSecurity) -> SocketRelaySettings {
     SocketRelaySettings {
         topology: SocketTopology::LocalResponder(SocketLocalResponderTopology {
             downstream_security,
         }),
         maximum_connections: 32,
-        processing: scripted_processing(
-            DirectionProcessingOptions {
-                decode_enabled: request_decode,
-                encode_enabled: false,
-            },
-            DirectionProcessingOptions {
-                decode_enabled: false,
-                encode_enabled: response_encode,
-            },
-        ),
+        processing: scripted_processing(),
     }
 }
 
 #[test]
-fn local_responder_tcp_tls_and_two_user_switches_round_trip() {
+fn local_responder_tcp_and_tls_round_trip_without_processing_switches() {
     let server_identity = CertificateReferenceId::new();
     let client_trust = CertificateReferenceId::new();
     let security_modes = [
@@ -54,20 +36,16 @@ fn local_responder_tcp_tls_and_two_user_switches_round_trip() {
         },
     ];
     for downstream_security in security_modes {
-        for mask in 0_u8..4 {
-            let settings = local_responder(
-                downstream_security.clone(),
-                mask & 0b01 != 0,
-                mask & 0b10 != 0,
-            );
-            let json = serde_json::to_value(&settings).unwrap();
-            assert!(json["topology"]["settings"].get("upstream").is_none());
-            assert!(json["topology"]["settings"].get("security").is_none());
-            assert_eq!(
-                serde_json::from_value::<SocketRelaySettings>(json).unwrap(),
-                settings
-            );
-        }
+        let settings = local_responder(downstream_security);
+        let json = serde_json::to_value(&settings).unwrap();
+        assert!(json["topology"]["settings"].get("upstream").is_none());
+        assert!(json["topology"]["settings"].get("security").is_none());
+        assert!(json["processing"]["settings"].get("upstream").is_none());
+        assert!(json["processing"]["settings"].get("downstream").is_none());
+        assert_eq!(
+            serde_json::from_value::<SocketRelaySettings>(json).unwrap(),
+            settings
+        );
     }
 }
 
@@ -92,18 +70,15 @@ fn local_responder_tls_references_are_validated_at_exact_wire_paths() {
         ],
         ..ProxyWorkspace::default()
     };
-    workspace.listeners[0].data_plane = ListenerDataPlane::Socket(local_responder(
-        SocketDownstreamSecurity::Tls {
+    workspace.listeners[0].data_plane =
+        ListenerDataPlane::Socket(local_responder(SocketDownstreamSecurity::Tls {
             downstream_tls: SocketDownstreamTlsSettings {
                 server_identity,
                 client_authentication: DownstreamClientAuthentication::Required {
                     trust: client_trust,
                 },
             },
-        },
-        true,
-        true,
-    ));
+        }));
     workspace.validate().expect("valid App-side TLS references");
 
     workspace.certificate_references[0].kind = CertificateReferenceKind::UpstreamServerTrust;
@@ -121,49 +96,21 @@ fn local_responder_tls_references_are_validated_at_exact_wire_paths() {
 }
 
 #[test]
-fn local_responder_rejects_direct_and_nonexistent_direction_stages() {
-    let valid = local_responder(SocketDownstreamSecurity::Tcp, true, true);
+fn local_responder_requires_protocol_processing() {
+    let valid = local_responder(SocketDownstreamSecurity::Tcp);
     let mut workspace = ProxyWorkspace::default();
     workspace.listeners[0].data_plane = ListenerDataPlane::Socket(valid.clone());
     workspace.validate().expect("valid LocalResponder");
 
-    for invalid_processing in [
-        SocketPayloadProcessing::Direct,
-        scripted_processing(
-            DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: true,
-            },
-            DirectionProcessingOptions {
-                decode_enabled: false,
-                encode_enabled: true,
-            },
-        ),
-        scripted_processing(
-            DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: false,
-            },
-            DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: true,
-            },
-        ),
-    ] {
-        if let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane {
-            settings.processing = invalid_processing;
-        }
-        assert!(workspace.validate().is_err());
-        if let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane {
-            settings.processing = valid.processing.clone();
-        }
+    if let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane {
+        settings.processing = SocketPayloadProcessing::Direct;
     }
+    assert!(workspace.validate().is_err());
 }
 
 #[test]
 fn topology_wire_rejects_unknown_or_cross_mode_fields() {
-    let local =
-        serde_json::to_value(local_responder(SocketDownstreamSecurity::Tcp, true, true)).unwrap();
+    let local = serde_json::to_value(local_responder(SocketDownstreamSecurity::Tcp)).unwrap();
     let mut cases = Vec::new();
     let mut unknown_tag = local.clone();
     unknown_tag["topology"]["mode"] = serde_json::json!("automatic");

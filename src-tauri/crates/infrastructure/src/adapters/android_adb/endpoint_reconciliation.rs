@@ -36,7 +36,6 @@ impl AndroidAdbAdapter {
             .await
         {
             Ok(Some(host)) => host,
-            Ok(None) => return self.fault_lan_endpoints(owner, persisted).await,
             Err(error) if is_owner_unreachable(&error) => {
                 self.mark_owner_waiting_reconnect(owner.epoch).await?;
                 return Ok(endpoints_with_health(
@@ -44,7 +43,7 @@ impl AndroidAdbAdapter {
                     AndroidRuntimeEndpointHealth::WaitingReconnect,
                 ));
             }
-            Err(_) => return self.fault_lan_endpoints(owner, persisted).await,
+            Ok(None) | Err(_) => return self.fault_lan_endpoints(owner, persisted).await,
         };
         let host = lan_host.to_string();
         let has_active_runtime = self
@@ -61,12 +60,11 @@ impl AndroidAdbAdapter {
             return Ok(endpoints_with_owner_health(persisted, owner.state));
         }
 
-        let (proxy_runtime, runtime) = match self
+        let Ok((proxy_runtime, runtime)) = self
             .build_lan_runtime_for_owner(&activation, &owner, lan_host)
             .await
-        {
-            Ok(runtime) => runtime,
-            Err(_) => return self.fault_lan_endpoints(owner, persisted).await,
+        else {
+            return self.fault_lan_endpoints(owner, persisted).await;
         };
         let payload = json!({"profile": activation.profile, "proxy_runtime": proxy_runtime});
         let refreshed = match self.protocol_request(&owner.serial, "apply", payload).await {

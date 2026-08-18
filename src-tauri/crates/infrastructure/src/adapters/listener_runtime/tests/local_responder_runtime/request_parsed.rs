@@ -35,7 +35,7 @@ fn display(document, context) { "unused" }
 async fn request_parsed_reports_bounded_origin_and_document_shape_from_real_decode() {
     let id = "local-request-parsed-large";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, false);
+    let listener = local_listener(id, port);
     let events = Arc::new(EventHub::new(32));
     let runtime = start_local_runtime_with_events(
         id,
@@ -60,10 +60,10 @@ async fn request_parsed_reports_bounded_origin_and_document_shape_from_real_deco
 }
 
 #[tokio::test]
-async fn decode_off_request_parsed_explicitly_reports_hex_without_fake_document() {
-    let id = "local-request-parsed-hex";
+async fn request_parsed_reports_the_required_upstream_document_schema() {
+    let id = "local-request-parsed-schema";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, false, false);
+    let listener = local_listener(id, port);
     let events = Arc::new(EventHub::new(32));
     let runtime = start_local_runtime_with_events(
         id,
@@ -75,10 +75,9 @@ async fn decode_off_request_parsed_explicitly_reports_hex_without_fake_document(
     )
     .await;
 
-    assert_eq!(request_once(port, &[2, 77]).await, [2, 77]);
+    assert_eq!(request_once(port, &[2, 77]).await, [209, 0]);
     let detail = request_parsed_detail(&events);
-    assert!(detail.contains("Hex（request Decode 关闭）"), "{detail}");
-    assert!(!detail.contains("Schema local-basic"), "{detail}");
+    assert!(detail.contains("Schema local-basic@1"), "{detail}");
 
     runtime.stop(listener.id).await.unwrap();
 }
@@ -87,7 +86,7 @@ async fn decode_off_request_parsed_explicitly_reports_hex_without_fake_document(
 async fn retained_request_diagnostics_enforce_the_256_event_bound() {
     let id = "local-request-parsed-capacity";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, false, false);
+    let listener = local_listener(id, port);
     // EventHub 与 Proxy observer 是两个独立边界。这里给 EventHub 足够容量，专门观察
     // Socket observer 自己的 256 条淘汰计数，而不是触发 UI replay 淘汰。
     let events = Arc::new(EventHub::new(1_024));
@@ -107,7 +106,7 @@ async fn retained_request_diagnostics_enforce_the_256_event_bound() {
     client.shutdown().await.unwrap();
     let mut responses = Vec::new();
     client.read_to_end(&mut responses).await.unwrap();
-    assert_eq!(responses, requests);
+    assert_eq!(responses, [209_u8, 0].repeat(request_count));
 
     let status = runtime.statuses().await.unwrap().pop().unwrap();
     assert!(
@@ -121,7 +120,7 @@ async fn retained_request_diagnostics_enforce_the_256_event_bound() {
 async fn retained_request_diagnostics_enforce_the_one_mib_logical_byte_bound() {
     let id = "local-request-parsed-bytes";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, false);
+    let listener = local_listener(id, port);
     let events = Arc::new(EventHub::new(1_024));
     let runtime = start_local_runtime_with_events(
         id,

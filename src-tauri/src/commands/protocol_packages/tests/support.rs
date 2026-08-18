@@ -111,6 +111,7 @@ pub(super) fn package_zip_with_script(script: &str) -> Vec<u8> {
         ("manifest.toml", MANIFEST.as_bytes()),
         ("document.toml", SCHEMA.as_bytes()),
         ("protocol.rhai", script.as_bytes()),
+        ("display.rhai", script.as_bytes()),
     ] {
         archive
             .start_file(path, SimpleFileOptions::default())

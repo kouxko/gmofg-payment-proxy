@@ -5,7 +5,7 @@ use tokio::net::TcpListener;
 
 #[tokio::test]
 async fn frame_decode_and_encode_failures_write_zero_response_bytes() {
-    for (id, script, decode, encode) in [
+    for (id, script) in [
         (
             "local-frame-failure",
             r#"
@@ -14,8 +14,6 @@ fn decode(origin, context) { document::create() }
 fn encode(origin, document, context) { origin }
 fn display(document, context) { "ok" }
 "#,
-            false,
-            false,
         ),
         (
             "local-decode-failure",
@@ -25,8 +23,6 @@ fn decode(origin, context) { throw "decode failed"; }
 fn encode(origin, document, context) { origin }
 fn display(document, context) { "ok" }
 "#,
-            true,
-            false,
         ),
         (
             "local-encode-failure",
@@ -36,11 +32,9 @@ fn decode(origin, context) { document::create() }
 fn encode(origin, document, context) { throw "encode failed"; }
 fn display(document, context) { "ok" }
 "#,
-            false,
-            true,
         ),
     ] {
-        assert_pre_write_failure(id, script, decode, encode, &[2, 33]).await;
+        assert_pre_write_failure(id, script, &[2, 33]).await;
     }
 }
 
@@ -59,7 +53,7 @@ fn encode(origin, document, context) {{ {encode_body} }}
 fn display(document, context) {{ "ok" }}
 "#,
         );
-        assert_pre_write_failure(id, &script, false, true, &[2, 44]).await;
+        assert_pre_write_failure(id, &script, &[2, 44]).await;
     }
 }
 
@@ -73,27 +67,18 @@ fn decode(origin, context) { document::create() }
 fn encode(origin, document, context) { origin }
 fn display(document, context) { "ok" }
 "#,
-        false,
-        false,
         &[1],
     )
     .await;
 
-    assert_pre_write_failure(
-        "local-truncated-request",
-        BASIC_SCRIPT,
-        false,
-        false,
-        &[4, 1],
-    )
-    .await;
+    assert_pre_write_failure("local-truncated-request", BASIC_SCRIPT, &[4, 1]).await;
 }
 
 #[tokio::test]
 async fn empty_connection_produces_no_spontaneous_response() {
     let id = "local-empty-input";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, true);
+    let listener = local_listener(id, port);
     let runtime = start_local_runtime(
         id,
         BASIC_SCHEMA,
@@ -111,7 +96,7 @@ async fn empty_connection_produces_no_spontaneous_response() {
 async fn downstream_display_failure_happens_after_committed_response_and_is_non_fatal() {
     let id = "local-display-failure";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, true);
+    let listener = local_listener(id, port);
     let script = BASIC_SCRIPT.replace(
         "fn display(document, context) { \"<p>local response</p>\" }",
         "fn display(document, context) { throw \"display failed\"; }",
@@ -131,7 +116,7 @@ async fn downstream_display_failure_happens_after_committed_response_and_is_non_
     client.shutdown().await.unwrap();
     let mut response = Vec::new();
     client.read_to_end(&mut response).await.unwrap();
-    assert_eq!(response, [209, 51, 209, 52]);
+    assert_eq!(response, [209, 0, 209, 0]);
     let page = super::captures::wait_for_rows(&captures, 2).await;
     for row in page.rows {
         let detail = captures.get_detail(row.capture_id).unwrap().record;
@@ -156,7 +141,7 @@ async fn downstream_display_failure_happens_after_committed_response_and_is_non_
 async fn stopping_during_decode_cancels_the_blocking_exchange_and_releases_the_listener() {
     let id = "local-stop-during-decode";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, false);
+    let listener = local_listener(id, port);
     let script = r#"
 fn frame(reader, context) { framing::complete(2) }
 fn decode(origin, context) { while true {} }
@@ -195,15 +180,9 @@ fn display(document, context) { "ok" }
         .expect("cancelled LocalResponder must release its listener port");
 }
 
-async fn assert_pre_write_failure(
-    id: &str,
-    script: &str,
-    decode: bool,
-    encode: bool,
-    request: &[u8],
-) {
+async fn assert_pre_write_failure(id: &str, script: &str, request: &[u8]) {
     let port = reserve_port().await;
-    let listener = local_listener(id, port, decode, encode);
+    let listener = local_listener(id, port);
     let runtime = start_local_runtime(
         id,
         BASIC_SCHEMA,

@@ -212,6 +212,8 @@ async fn dynamic_listener_breakpoint_resolve_normalizes_without_reformatting_bod
                     codec_id: Some("utf-8".into()),
                     decode_error: None,
                     query_string: None,
+                    protocol: None,
+                    protocol_failure: None,
                 }),
                 delay_ms: Some(1_000),
                 http_status: Some(503),

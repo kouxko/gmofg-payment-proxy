@@ -12,8 +12,8 @@ use std::sync::Arc;
 use intercept_proxy_domain::DocumentSchema;
 use rhai::Engine;
 
-use crate::CompiledProtocolPackage;
 use crate::framing;
+use crate::{CompiledProtocolPackage, ProtocolDirection};
 
 /// 与一个不可变 Document Schema 绑定的 Host API 注册器。
 ///
@@ -26,9 +26,12 @@ pub(crate) struct ProtocolHostApi {
 
 impl ProtocolHostApi {
     /// 从已通过完整编译校验的协议包建立 Host API。
-    pub(crate) fn for_package(package: &CompiledProtocolPackage) -> Self {
+    pub(crate) fn for_package(
+        package: &CompiledProtocolPackage,
+        direction: ProtocolDirection,
+    ) -> Self {
         Self {
-            schema: package.schema_arc(),
+            schema: package.schema_arc(direction),
         }
     }
 

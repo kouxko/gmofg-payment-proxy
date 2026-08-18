@@ -82,9 +82,8 @@ fn request_and_response_runtime_failures_cover_every_group() {
             SocketProcessingFailureKind::RuleFailed,
         ),
         (
-            ProtocolRuntimeError::EntryPointUnavailable {
+            ProtocolRuntimeError::EntryPointFailed {
                 package: package(),
-                direction: intercept_proxy_protocol_scripting::ProtocolDirection::Downstream,
                 entry: ProtocolEntryPoint::Decode,
             },
             SocketProcessingFailureKind::DecodeFailed,
@@ -123,7 +122,6 @@ fn fixed_failure_helpers_keep_stable_kinds_and_codes() {
             worker_failure(),
             SocketProcessingFailureKind::ProcessorPanicked,
         ),
-        (invalid_limits(), SocketProcessingFailureKind::InvalidLimits),
     ] {
         assert_eq!(failure.kind, kind);
         assert_eq!(failure.stable_code(), kind.as_str());

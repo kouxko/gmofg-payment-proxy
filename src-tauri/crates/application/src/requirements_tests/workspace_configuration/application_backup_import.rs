@@ -247,7 +247,7 @@ async fn schema_rule_mismatch_fails_before_token_retention_or_writes() {
         .lock()
         .get_mut(&first)
         .unwrap()
-        .schema
+        .upstream_schema
         .version = 99;
     let before = workspaces.list().await.unwrap();
     let source = FakeBackupPrepareSource::new(prepared);

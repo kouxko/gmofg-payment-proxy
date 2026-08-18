@@ -7,10 +7,11 @@ use intercept_proxy_application::{
     SettingsDraft,
 };
 use intercept_proxy_domain::{
-    DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, ProxyListener, ProxyWorkspace, ScriptedSocketProcessing,
-    SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings,
+    ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ProxyListener, ProxyWorkspace, ScriptedSocketProcessing, SocketEndpoint,
+    SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings,
 };
+use intercept_proxy_protocol_scripting::ProtocolPackageKind;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 use crate::SqliteStore;
@@ -25,18 +26,23 @@ id = "portable-test"
 name = "Portable Test"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 "#;
 
 const SCHEMA: &str = r#"
@@ -53,7 +59,10 @@ type = "int"
 const SCRIPT: &str = r"
 fn frame(reader, context) { framing::complete(1) }
 fn decode(origin, context) { document::create() }
+fn encode(origin, document, context) { origin }
 ";
+
+const DISPLAY: &str = r#"fn display(document, context) { "<p>ok</p>" }"#;
 
 #[tokio::test]
 async fn application_bundle_restores_enabled_removes_extra_and_clears_cache() {
@@ -85,7 +94,9 @@ async fn application_bundle_restores_enabled_removes_extra_and_clears_cache() {
         .unwrap();
 
     assert_eq!(repository.list().unwrap().len(), 1);
-    assert!(repository.summary(&package()).unwrap().unwrap().enabled);
+    let restored = repository.summary(&package()).unwrap().unwrap();
+    assert_eq!(restored.kind, ProtocolPackageKind::Socket);
+    assert!(restored.enabled);
     assert!(repository.cache.lock().is_empty());
 }
 
@@ -190,16 +201,8 @@ fn workspace_with_package() -> ProxyWorkspace {
     workspace_with_packages(&[package()])
 }
 
-fn workspace_requiring_upstream_encode() -> ProxyWorkspace {
-    let mut workspace = workspace_with_package();
-    let ListenerDataPlane::Socket(socket) = &mut workspace.listeners[0].data_plane else {
-        unreachable!("test helper always creates a Socket listener")
-    };
-    let SocketPayloadProcessing::Scripted(scripted) = &mut socket.processing else {
-        unreachable!("test helper always creates scripted processing")
-    };
-    scripted.upstream.encode_enabled = true;
-    workspace
+fn socket_workspace_with_package() -> ProxyWorkspace {
+    workspace_with_package()
 }
 
 fn workspace_with_packages(packages: &[ProtocolPackageRef]) -> ProxyWorkspace {
@@ -216,17 +219,7 @@ fn workspace_with_packages(packages: &[ProtocolPackageRef]) -> ProxyWorkspace {
                 },
                 SocketRelaySecurity::Transparent,
                 1_000,
-                SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
-                    package,
-                    upstream: DirectionProcessingOptions {
-                        decode_enabled: true,
-                        encode_enabled: false,
-                    },
-                    downstream: DirectionProcessingOptions {
-                        decode_enabled: true,
-                        encode_enabled: false,
-                    },
-                }),
+                SocketPayloadProcessing::Scripted(ScriptedSocketProcessing { package }),
             )),
             ..ProxyListener::default()
         })
@@ -248,6 +241,7 @@ fn package_zip_with_manifest(manifest: &str, script: &str) -> Vec<u8> {
         ("manifest.toml", manifest.as_bytes()),
         ("document.toml", SCHEMA.as_bytes()),
         ("protocol.rhai", script.as_bytes()),
+        ("display.rhai", DISPLAY.as_bytes()),
     ] {
         writer.start_file(path, options).unwrap();
         writer.write_all(bytes).unwrap();

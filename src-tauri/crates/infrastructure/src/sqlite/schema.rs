@@ -2,7 +2,7 @@ use rusqlite::Transaction;
 
 use super::InfrastructureError;
 
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 13;
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 15;
 
 pub(super) fn create_current_schema(
     transaction: &Transaction<'_>,
@@ -39,7 +39,8 @@ pub(super) fn create_current_schema(
             );
             CREATE TABLE protocol_packages (
                 package_id TEXT NOT NULL, version TEXT NOT NULL, name TEXT NOT NULL,
-                host_api INTEGER NOT NULL, enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+                host_api INTEGER NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('http', 'socket')),
+                enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
                 validation_state TEXT NOT NULL, validation_error_code TEXT NULL,
                 installed_at TEXT NOT NULL, generation TEXT NOT NULL,
                 PRIMARY KEY(package_id, version), CHECK(validation_state IN ('valid', 'invalid')),

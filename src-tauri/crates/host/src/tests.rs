@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use intercept_proxy_application::AppResult;
 use intercept_proxy_infrastructure::{
-    InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
+    CURRENT_APPLICATION_SCHEMA_VERSION, InfrastructureError, NativeFileDialog, SecretProtector,
+    adapters::FileSelection,
 };
 use intercept_proxy_product_api::InterceptProxyProfile;
 use rusqlite::Connection;
@@ -191,14 +192,15 @@ async fn newer_schema_is_not_deleted_by_the_1_0_reset_policy() {
     let database = temp.path().join("intercept-proxy.sqlite3");
     let connection = Connection::open(&database).expect("create newer database");
     connection
-        .execute_batch(
+        .execute_batch(&format!(
             "CREATE TABLE application_schema(
                  singleton_id INTEGER PRIMARY KEY,
                  version INTEGER NOT NULL
              );
-             INSERT INTO application_schema(singleton_id, version) VALUES (1, 11);
+             INSERT INTO application_schema(singleton_id, version) VALUES (1, {});
              CREATE TABLE future_sentinel(value TEXT NOT NULL);",
-        )
+            CURRENT_APPLICATION_SCHEMA_VERSION + 1
+        ))
         .expect("write newer schema");
     drop(connection);
 

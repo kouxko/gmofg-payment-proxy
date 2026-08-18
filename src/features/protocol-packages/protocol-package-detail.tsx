@@ -3,7 +3,7 @@ import type {
   ListenerRuntimeState,
   ProtocolPackageDetailViewModel,
 } from "@/generated/rust-types";
-import { capabilityItems, validationText } from "./protocol-package-model";
+import { capabilityItems, protocolPackageKindText, validationText } from "./protocol-package-model";
 
 interface DetailState {
   data?: ProtocolPackageDetailViewModel;
@@ -30,8 +30,7 @@ export function ProtocolPackageDetail({ detail }: { detail: DetailState }) {
     return <p className="p-6 text-center text-sm text-[var(--telemetry-muted)]">选择一个版本查看详情。</p>;
   }
 
-  const { version, capabilities, schema, usages } = detail.data;
-  const fields = schema.fields;
+  const { version, kind, capabilities, upstream_schema, downstream_schema, usages } = detail.data;
   return (
     <div className="min-w-0 space-y-5">
       <section aria-labelledby="package-identity-heading">
@@ -41,6 +40,7 @@ export function ProtocolPackageDetail({ detail }: { detail: DetailState }) {
           <dt className="text-[var(--telemetry-muted)]">包 ID</dt><dd className="min-w-0 break-all font-mono">{version.package.id || "—"}</dd>
           <dt className="text-[var(--telemetry-muted)]">版本</dt><dd className="font-mono">{version.package.version || "—"}</dd>
           <dt className="text-[var(--telemetry-muted)]">Host API</dt><dd>{version.host_api}</dd>
+          <dt className="text-[var(--telemetry-muted)]">适用协议</dt><dd>{protocolPackageKindText(kind)}</dd>
           <dt className="text-[var(--telemetry-muted)]">来源</dt><dd>{version.built_in ? "内置示例" : "用户安装"}</dd>
           <dt className="text-[var(--telemetry-muted)]">校验</dt><dd>{validationText(version.validation)}</dd>
           <dt className="text-[var(--telemetry-muted)]">状态</dt><dd>{version.enabled ? "已启用" : "已停用"}</dd>
@@ -92,33 +92,44 @@ export function ProtocolPackageDetail({ detail }: { detail: DetailState }) {
         )}
       </section>
 
-      <section aria-labelledby="package-schema-heading">
-        <h3 id="package-schema-heading" className="mb-2 font-semibold">Schema</h3>
-        <p className="mb-2 min-w-0 break-words text-sm text-[var(--telemetry-muted)]">
-          {schema.title || "未命名 Schema"} · <span className="font-mono">{schema.id || "—"}</span> · v{schema.version}
-        </p>
-        <Table>
-          <Table.ScrollContainer>
-            <Table.Content aria-label="协议包 Schema 字段" className="min-w-[520px]">
-              <Table.Header>
-                <Table.Column isRowHeader>字段名</Table.Column>
-                <Table.Column>标签</Table.Column>
-                <Table.Column>类型</Table.Column>
-              </Table.Header>
-              <Table.Body renderEmptyState={() => <div className="p-6 text-center text-sm text-[var(--telemetry-muted)]">此 Schema 没有声明字段。</div>}>
-                {fields.map((field, index) => (
-                  <Table.Row key={`${field.name}:${index}`} id={`${field.name}:${index}`}>
-                    <Table.Cell className="max-w-64 break-all font-mono text-xs">{field.name || "—"}</Table.Cell>
-                    <Table.Cell className="max-w-80 break-words">{field.label || "—"}</Table.Cell>
-                    <Table.Cell className="font-mono text-xs">{field.type || "—"}</Table.Cell>
-                  </Table.Row>
-                ))}
-              </Table.Body>
-            </Table.Content>
-          </Table.ScrollContainer>
-        </Table>
-      </section>
+      <SchemaSection id="package-upstream-schema" title={kind === "http" ? "请求 Schema" : "上行 Schema"} schema={upstream_schema} />
+      <SchemaSection id="package-downstream-schema" title={kind === "http" ? "响应 Schema" : "下行 Schema"} schema={downstream_schema} />
     </div>
+  );
+}
+
+function SchemaSection({ id, title, schema }: {
+  id: string;
+  title: string;
+  schema: ProtocolPackageDetailViewModel["upstream_schema"];
+}) {
+  return (
+    <section aria-labelledby={`${id}-heading`}>
+      <h3 id={`${id}-heading`} className="mb-2 font-semibold">{title}</h3>
+      <p className="mb-2 min-w-0 break-words text-sm text-[var(--telemetry-muted)]">
+        {schema.title || "未命名 Schema"} · <span className="font-mono">{schema.id || "—"}</span> · v{schema.version}
+      </p>
+      <Table>
+        <Table.ScrollContainer>
+          <Table.Content aria-label={`${title} 字段`} className="min-w-[520px]">
+            <Table.Header>
+              <Table.Column isRowHeader>字段名</Table.Column>
+              <Table.Column>标签</Table.Column>
+              <Table.Column>类型</Table.Column>
+            </Table.Header>
+            <Table.Body renderEmptyState={() => <div className="p-6 text-center text-sm text-[var(--telemetry-muted)]">此 Schema 没有声明字段。</div>}>
+              {schema.fields.map((field, index) => (
+                <Table.Row key={`${field.name}:${index}`} id={`${id}:${field.name}:${index}`}>
+                  <Table.Cell className="max-w-64 break-all font-mono text-xs">{field.name || "—"}</Table.Cell>
+                  <Table.Cell className="max-w-80 break-words">{field.label || "—"}</Table.Cell>
+                  <Table.Cell className="font-mono text-xs">{field.type || "—"}</Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Content>
+        </Table.ScrollContainer>
+      </Table>
+    </section>
   );
 }
 

@@ -292,8 +292,8 @@ fn snapshot() -> ApplicationBackupExportSnapshot {
                     "revision": 1,
                     "listeners": [],
                     "rules": [],
-                    "socket_rules": [],
-                    "socket_rule_created_order_high_water": 0,
+                    "protocol_rules": [],
+                    "protocol_rule_created_order_high_water": 0,
                     "certificate_references": [],
                     "android_network_profiles": []
                 }],

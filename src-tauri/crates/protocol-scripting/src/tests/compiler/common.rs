@@ -23,43 +23,29 @@ id = "compiler-test"
 name = "Compiler Test"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "upstream.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 
-[hooks.downstream.receive]
-script = "downstream.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 "#
     .to_owned()
 }
 
 pub(super) fn manifest_with_all_optionals() -> String {
-    format!(
-        r#"{}
-[document.display]
-script = "display.rhai"
-function = "display"
-
-[hooks.upstream.send]
-script = "upstream.rhai"
-encode = "encode"
-
-[hooks.downstream.send]
-script = "downstream.rhai"
-encode = "encode"
-"#,
-        minimal_manifest()
-    )
-}
-
-pub(super) fn valid_receive_script() -> &'static str {
-    "fn frame(reader, context) { () }\nfn decode(origin, context) { () }\n"
+    minimal_manifest()
 }
 
 pub(super) fn valid_full_script() -> &'static str {
@@ -77,6 +63,14 @@ pub(super) fn package(
     let mut files = BTreeMap::from([
         (path("manifest.toml"), manifest.into()),
         (path("document.toml"), DOCUMENT_SCHEMA.as_bytes().to_vec()),
+        (
+            path("protocol.rhai"),
+            valid_full_script().as_bytes().to_vec(),
+        ),
+        (
+            path("display.rhai"),
+            b"fn display(document, context) { \"<p>ok</p>\" }".to_vec(),
+        ),
     ]);
     for (name, bytes) in extra_files {
         files.insert(path(name), bytes.to_vec());
@@ -89,8 +83,11 @@ pub(super) fn valid_minimal_package() -> ProtocolPackageFiles {
     package(
         minimal_manifest(),
         &[
-            ("upstream.rhai", valid_receive_script().as_bytes()),
-            ("downstream.rhai", valid_receive_script().as_bytes()),
+            ("protocol.rhai", valid_full_script().as_bytes()),
+            (
+                "display.rhai",
+                b"fn display(document, context) { \"<p>ok</p>\" }",
+            ),
         ],
     )
 }

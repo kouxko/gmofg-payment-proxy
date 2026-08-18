@@ -1,20 +1,21 @@
 //! Workspace 与完整配置导入时的协议包引用校验。
 //!
 //! Wire 层只负责保证内嵌文件集合有界且身份集合正确；本模块在任何证书恢复或数据库写入
-//! 之前，使用真实编译描述交叉校验 Listener 的方向能力与 Socket Document 规则 Schema。
+//! 之前，使用真实编译描述交叉校验 Listener 的方向能力与 协议 Document 规则 Schema。
 //! 这样即使 portability adapter 错误返回了串包描述，导入仍会 fail-closed。
 
 use std::collections::{HashMap, HashSet};
 
 use intercept_proxy_domain::{
-    DocumentField, DocumentFieldType, DocumentSchema, DocumentSchemaId, ListenerDataPlane,
-    ProtocolPackageRef, ProxyWorkspace, SocketDirection, SocketPayloadProcessing, SocketTopology,
+    DocumentField, DocumentFieldType, DocumentSchema, DocumentSchemaId, HttpBodyProcessing,
+    ListenerDataPlane, ProtocolDirection, ProtocolPackageRef, ProxyWorkspace,
+    SocketPayloadProcessing,
 };
 
 use super::protocol_packages::ensure_description_identity;
 use crate::{
-    AppError, AppResult, DirectionProcessingOptions, ProtocolPackageDescriptionViewModel,
-    ProtocolPackageDirectionCapabilitiesViewModel, ProtocolPackageSchemaFieldTypeViewModel,
+    AppError, AppResult, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
+    ProtocolPackageSchemaFieldTypeViewModel, ProtocolPackageSchemaViewModel,
 };
 
 /// 校验 fresh portability 编译描述与待提交聚合的一致性。
@@ -58,12 +59,12 @@ pub fn validate_portable_protocol_bindings(
     Ok(())
 }
 
-/// 校验一个 Scripted Listener 与它当前绑定的全部 Socket 规则。
+/// 校验一个选择协议包的入口与它当前绑定的全部协议报文规则。
 ///
-/// Listener 保存/启动只应重验目标入口，不能因为同一 Workspace 中另一个未修改入口的
+/// 入口保存/启动只应重验目标入口，不能因为同一 Workspace 中另一个未修改入口的
 /// 外部包状态而阻断当前操作。调用方已经用精确包身份取得 fresh 编译描述；这里继续
-/// fail-closed 校验描述身份、双方向入口能力、规则 Schema/方向以及规则与 Listener 的
-/// 精确版本绑定。Direct/HTTP Listener 没有协议包边界，直接返回成功。
+/// fail-closed 校验描述身份、双方向入口能力、规则 Schema/方向以及规则与入口的
+/// 精确版本绑定。HTTP Plain 与 Socket Direct 没有协议包边界，直接返回成功。
 pub(super) fn validate_listener_protocol_binding(
     workspace: &ProxyWorkspace,
     listener_id: crate::ListenerId,
@@ -74,34 +75,17 @@ pub(super) fn validate_listener_protocol_binding(
         .iter()
         .find(|listener| listener.id == listener_id)
         .ok_or_else(|| portability_error("待校验的 Listener 不存在。"))?;
-    let ListenerDataPlane::Socket(socket) = &listener.data_plane else {
+    let Some(package) = listener_protocol_package(listener) else {
         return Ok(());
     };
-    let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
-        return Ok(());
-    };
-
-    ensure_description_identity(&scripted.package, description)?;
-    validate_direction_capabilities(
-        &scripted.package,
-        "upstream",
-        scripted.upstream,
-        description.capabilities.upstream,
-    )?;
-    validate_direction_capabilities(
-        &scripted.package,
-        "downstream",
-        scripted.downstream,
-        description.capabilities.downstream,
-    )?;
-
-    let schema = domain_schema(description)?;
+    ensure_description_identity(package, description)?;
+    ensure_kind(&listener.data_plane, description.kind)?;
     for rule in workspace
-        .socket_rules
+        .protocol_rules
         .iter()
         .filter(|rule| rule.listener_id() == listener_id)
     {
-        validate_rule_binding(socket, scripted, rule, description, &schema)?;
+        validate_rule_binding(package, rule, description)?;
     }
     Ok(())
 }
@@ -111,95 +95,39 @@ fn validate_workspace_bindings(
     descriptions: &HashMap<ProtocolPackageRef, &ProtocolPackageDescriptionViewModel>,
 ) -> AppResult<()> {
     for listener in &workspace.listeners {
-        let ListenerDataPlane::Socket(socket) = &listener.data_plane else {
+        let Some(package) = listener_protocol_package(listener) else {
             continue;
         };
-        let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
-            continue;
-        };
-        let description = required_description(descriptions, &scripted.package)?;
-        ensure_description_identity(&scripted.package, description)?;
-        validate_direction_capabilities(
-            &scripted.package,
-            "upstream",
-            scripted.upstream,
-            description.capabilities.upstream,
-        )?;
-        validate_direction_capabilities(
-            &scripted.package,
-            "downstream",
-            scripted.downstream,
-            description.capabilities.downstream,
-        )?;
+        let description = required_description(descriptions, package)?;
+        ensure_description_identity(package, description)?;
+        ensure_kind(&listener.data_plane, description.kind)?;
     }
 
-    for rule in &workspace.socket_rules {
+    for rule in &workspace.protocol_rules {
         let description = required_description(descriptions, rule.package())?;
         ensure_description_identity(rule.package(), description)?;
         let listener = workspace
             .listeners
             .iter()
             .find(|listener| listener.id == rule.listener_id())
-            .ok_or_else(|| portability_error("Socket 规则引用的 Listener 不存在。"))?;
-        let ListenerDataPlane::Socket(socket) = &listener.data_plane else {
-            return Err(portability_error("Socket 规则不能绑定 HTTP Listener。"));
-        };
-        let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
-            return Err(portability_error("Socket 规则只能绑定 Scripted Listener。"));
-        };
-        let schema = domain_schema(description)?;
-        validate_rule_binding(socket, scripted, rule, description, &schema)?;
+            .ok_or_else(|| portability_error("协议报文规则引用的 Listener 不存在。"))?;
+        let package = listener_protocol_package(listener)
+            .ok_or_else(|| portability_error("报文规则只能绑定已选择协议方案的入口。"))?;
+        ensure_kind(&listener.data_plane, description.kind)?;
+        validate_rule_binding(package, rule, description)?;
     }
     Ok(())
 }
 
 fn validate_rule_binding(
-    socket: &intercept_proxy_domain::SocketRelaySettings,
-    scripted: &intercept_proxy_domain::ScriptedSocketProcessing,
-    rule: &intercept_proxy_domain::SocketDocumentRuleDefinition,
-    description: &ProtocolPackageDescriptionViewModel,
-    schema: &DocumentSchema,
-) -> AppResult<()> {
-    rule.validate_against_schema(schema)?;
-    let manifest = match rule.direction() {
-        SocketDirection::Upstream => description.capabilities.upstream,
-        SocketDirection::Downstream => description.capabilities.downstream,
-    };
-    if matches!(socket.topology, SocketTopology::Relay(_)) && !manifest.decode {
-        return Err(portability_error(
-            "Relay 规则方向未声明 Decode 入口，不能使用。",
-        ));
-    }
-    if rule.modifies_document() && !manifest.encode {
-        return Err(portability_error(
-            "修改 Document 的规则方向未声明 Encode 入口，不能使用。",
-        ));
-    }
-    if scripted.package != *rule.package() {
-        return Err(portability_error(
-            "Socket 规则与 Listener 绑定的精确协议包不一致。",
-        ));
-    }
-    Ok(())
-}
-
-fn validate_direction_capabilities(
     package: &ProtocolPackageRef,
-    direction: &str,
-    options: DirectionProcessingOptions,
-    capabilities: ProtocolPackageDirectionCapabilitiesViewModel,
+    rule: &intercept_proxy_domain::ProtocolDocumentRuleDefinition,
+    description: &ProtocolPackageDescriptionViewModel,
 ) -> AppResult<()> {
-    // Scripted 链首先必须切出完整 Frame；即使 Decode 与 Encode 都关闭，也不能接受一个
-    // 缺失 Frame 的伪造描述。真实 Host API v1 编译器本来也会强制这个入口。
-    if !capabilities.frame
-        || (options.decode_enabled && !capabilities.decode)
-        || (options.encode_enabled && !capabilities.encode)
-    {
-        return Err(AppError::new(
-            "PROTOCOL_PACKAGE_CAPABILITY_MISMATCH",
-            format!("协议包 {direction} 入口能力不能满足 Listener 处理开关。"),
-        )
-        .entity(format!("{}@{}", package.id, package.version)));
+    let schema = domain_schema(schema_for_direction(description, rule.direction()))?;
+    rule.validate_against_schema(&schema)?;
+    if package != rule.package() {
+        return Err(portability_error("规则与入口绑定的精确协议包不一致。"));
     }
     Ok(())
 }
@@ -214,9 +142,53 @@ fn required_description<'a>(
     })
 }
 
-fn domain_schema(description: &ProtocolPackageDescriptionViewModel) -> AppResult<DocumentSchema> {
-    let fields = description
-        .schema
+fn listener_protocol_package(
+    listener: &intercept_proxy_domain::ProxyListener,
+) -> Option<&ProtocolPackageRef> {
+    match &listener.data_plane {
+        ListenerDataPlane::Http(http) => match &http.body_processing {
+            HttpBodyProcessing::Plain => None,
+            HttpBodyProcessing::Protocol { package } => Some(package),
+        },
+        ListenerDataPlane::Socket(socket) => match &socket.processing {
+            SocketPayloadProcessing::Direct => None,
+            SocketPayloadProcessing::Scripted(scripted) => Some(&scripted.package),
+        },
+    }
+}
+
+fn ensure_kind(
+    data_plane: &ListenerDataPlane,
+    kind: ProtocolPackageKindViewModel,
+) -> AppResult<()> {
+    if matches!(
+        (data_plane, kind),
+        (
+            ListenerDataPlane::Http(_),
+            ProtocolPackageKindViewModel::Http
+        ) | (
+            ListenerDataPlane::Socket(_),
+            ProtocolPackageKindViewModel::Socket
+        )
+    ) {
+        Ok(())
+    } else {
+        Err(portability_error("协议包类型与入口数据平面不一致。"))
+    }
+}
+
+fn schema_for_direction(
+    description: &ProtocolPackageDescriptionViewModel,
+    direction: ProtocolDirection,
+) -> &ProtocolPackageSchemaViewModel {
+    match direction {
+        ProtocolDirection::Upstream => &description.upstream_schema,
+        ProtocolDirection::Downstream => &description.downstream_schema,
+    }
+}
+
+fn domain_schema(schema: &ProtocolPackageSchemaViewModel) -> AppResult<DocumentSchema> {
+    let fields = schema
         .fields
         .iter()
         .map(|field| {
@@ -233,9 +205,9 @@ fn domain_schema(description: &ProtocolPackageDescriptionViewModel) -> AppResult
         })
         .collect::<Result<Vec<_>, intercept_proxy_domain::DomainError>>()?;
     Ok(DocumentSchema::new(
-        DocumentSchemaId::new(description.schema.id.clone())?,
-        description.schema.version,
-        description.schema.title.clone(),
+        DocumentSchemaId::new(schema.id.clone())?,
+        schema.version,
+        schema.title.clone(),
         fields,
     )?)
 }

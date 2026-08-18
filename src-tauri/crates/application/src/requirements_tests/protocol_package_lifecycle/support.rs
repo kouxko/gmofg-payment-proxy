@@ -302,6 +302,7 @@ pub(super) fn record(
         name: format!("{} {}", package.id, package.version),
         package,
         host_api: 1,
+        kind: ProtocolPackageKindViewModel::Socket,
         built_in: false,
         enabled,
         validation: ProtocolPackageValidationViewModel::Valid,
@@ -325,8 +326,40 @@ pub(super) fn usage(
 }
 
 pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescriptionViewModel {
+    let upstream_schema = ProtocolPackageSchemaViewModel {
+        id: "payments".into(),
+        version: 1,
+        title: "Payments".into(),
+        fields: [
+            (
+                "trace_id",
+                ProtocolPackageSchemaFieldTypeViewModel::String,
+                "Trace ID",
+            ),
+            (
+                "amount",
+                ProtocolPackageSchemaFieldTypeViewModel::Int,
+                "Amount",
+            ),
+            (
+                "approved",
+                ProtocolPackageSchemaFieldTypeViewModel::Bool,
+                "Approved",
+            ),
+        ]
+        .into_iter()
+        .map(
+            |(name, field_type, label)| ProtocolPackageSchemaFieldViewModel {
+                name: name.into(),
+                label: label.into(),
+                field_type,
+            },
+        )
+        .collect(),
+    };
     ProtocolPackageDescriptionViewModel {
         package,
+        kind: ProtocolPackageKindViewModel::Socket,
         capabilities: ProtocolPackageCapabilitiesViewModel {
             upstream: ProtocolPackageDirectionCapabilitiesViewModel {
                 frame: true,
@@ -340,36 +373,12 @@ pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescrip
             },
             display: true,
         },
-        schema: ProtocolPackageSchemaViewModel {
-            id: "payments".into(),
-            version: 1,
-            title: "Payments".into(),
-            fields: [
-                (
-                    "trace_id",
-                    ProtocolPackageSchemaFieldTypeViewModel::String,
-                    "Trace ID",
-                ),
-                (
-                    "amount",
-                    ProtocolPackageSchemaFieldTypeViewModel::Int,
-                    "Amount",
-                ),
-                (
-                    "approved",
-                    ProtocolPackageSchemaFieldTypeViewModel::Bool,
-                    "Approved",
-                ),
-            ]
-            .into_iter()
-            .map(
-                |(name, field_type, label)| ProtocolPackageSchemaFieldViewModel {
-                    name: name.into(),
-                    label: label.into(),
-                    field_type,
-                },
-            )
-            .collect(),
+        upstream_schema: upstream_schema.clone(),
+        downstream_schema: ProtocolPackageSchemaViewModel {
+            id: "responses".into(),
+            version: 2,
+            title: "Responses".into(),
+            fields: upstream_schema.fields,
         },
     }
 }
@@ -379,6 +388,14 @@ pub(super) fn application(
     workspaces: Arc<InMemoryWorkspaceStore>,
     runtime: Arc<InMemoryListenerRuntime>,
 ) -> Application {
+    application_with_listener_runtime(services, workspaces, runtime)
+}
+
+pub(super) fn application_with_listener_runtime(
+    services: Arc<FakeProtocolPackageServices>,
+    workspaces: Arc<InMemoryWorkspaceStore>,
+    runtime: Arc<dyn ListenerRuntimePort>,
+) -> Application {
     let ports = Arc::new(FakePorts::default());
     application_with_proxy_ports(services, workspaces, runtime, ports)
 }
@@ -386,7 +403,7 @@ pub(super) fn application(
 pub(super) fn application_with_proxy_ports(
     services: Arc<FakeProtocolPackageServices>,
     workspaces: Arc<InMemoryWorkspaceStore>,
-    runtime: Arc<InMemoryListenerRuntime>,
+    runtime: Arc<dyn ListenerRuntimePort>,
     ports: Arc<FakePorts>,
 ) -> Application {
     Application::new(

@@ -90,6 +90,8 @@ fn message(text: &str) -> MessageContentViewModel {
         codec_id: Some("test-prefix".into()),
         decode_error: None,
         query_string: None,
+        protocol: None,
+        protocol_failure: None,
     }
 }
 

@@ -4,8 +4,8 @@ use super::*;
 
 mod support;
 use support::*;
+mod protocol_rules;
 mod queries;
-mod socket_rules;
 
 fn fixture() -> (
     Application,
@@ -423,8 +423,6 @@ async fn disabled_or_fresh_compile_failure_is_rejected_before_listener_runtime_s
         10,
         SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: target.clone(),
-            upstream: DirectionProcessingOptions::default(),
-            downstream: DirectionProcessingOptions::default(),
         }),
     ));
     workspace = application.workspace_save(workspace).await.unwrap();

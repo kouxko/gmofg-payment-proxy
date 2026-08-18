@@ -61,6 +61,13 @@ struct RunningListener {
     workspace: ProxyWorkspace,
     socket_service: Option<Arc<SocketRelayService>>,
     scripted_snapshot: Option<Arc<scripted_snapshot::ScriptedSocketRuntimeSnapshot>>,
+    http_protocol_snapshot: Option<Arc<http_protocol_pipeline::HttpProtocolRuntimeSnapshot>>,
+}
+
+#[derive(Clone, Debug)]
+struct RuntimePipelineServices {
+    ports: Arc<dyn PipelinePorts>,
+    http_protocol_observations: Arc<dyn HttpProtocolObservationSink>,
 }
 
 #[derive(Debug)]
@@ -75,7 +82,7 @@ pub struct ListenerRuntimeAdapter {
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
     protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
     socket_capture_publisher: RwLock<Option<socket_capture_publisher::SocketCapturePublisher>>,
-    pipeline_ports: RwLock<Option<Arc<dyn PipelinePorts>>>,
+    pipeline_services: RwLock<Option<RuntimePipelineServices>>,
     socket_diagnostic_events: Arc<RwLock<Arc<EventHub>>>,
 }
 
@@ -96,7 +103,7 @@ impl ListenerRuntimeAdapter {
             managed_listener_certificates: None,
             protocol_packages,
             socket_capture_publisher: RwLock::new(None),
-            pipeline_ports: RwLock::new(None),
+            pipeline_services: RwLock::new(None),
             socket_diagnostic_events: Arc::new(RwLock::new(Arc::new(EventHub::default()))),
         }
     }
@@ -136,8 +143,14 @@ impl ListenerRuntimeAdapter {
     ///
     /// `InfrastructureServiceBundle` 创建时这些服务尚未全部存在，因此使用一次性显式
     /// setter；运行中的 Listener 会克隆不可变 `Arc`，不会在连接处理中热换实现。
-    pub fn set_pipeline_ports(&self, ports: Arc<dyn PipelinePorts>) {
-        *self.pipeline_ports.write() = Some(ports);
+    pub fn set_pipeline_ports<T>(&self, ports: Arc<T>)
+    where
+        T: PipelinePorts + HttpProtocolObservationSink + 'static,
+    {
+        *self.pipeline_services.write() = Some(RuntimePipelineServices {
+            ports: ports.clone(),
+            http_protocol_observations: ports,
+        });
     }
 
     pub fn set_socket_diagnostic_events(&self, events: Arc<EventHub>) {
@@ -207,6 +220,7 @@ impl Drop for ListenerRuntimeAdapter {
 
 mod document_rules;
 mod helpers;
+mod http_protocol_pipeline;
 mod local_responder;
 mod plan;
 mod port;
@@ -217,8 +231,10 @@ mod socket_diagnostics;
 mod socket_plan;
 mod tls_material;
 
+pub use http_protocol_pipeline::HttpProtocolObservationSink;
+
 pub use document_rules::{
-    BoundSocketDocument, SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory,
+    BoundSocketDocument, ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
 };
 use helpers::{bind_tcp_listener, parse_bind_address, running_status, upstream_tls_test_error};
 use plan::{ListenerRuntimePlanBuilder, PreparedListenerRuntime};

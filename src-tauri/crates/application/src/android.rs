@@ -395,8 +395,8 @@ mod tests {
     }
 
     #[test]
-    fn companion_wire_status_without_display_text_is_normalized_by_rust() {
-        let status: AndroidNetworkStatusViewModel = serde_json::from_value(json!({
+    fn companion_wire_status_without_display_text_is_rejected() {
+        let error = serde_json::from_value::<AndroidNetworkStatusViewModel>(json!({
             "serial": "",
             "state": "running",
             "verified": true,
@@ -407,12 +407,9 @@ mod tests {
             "unsupported_fields": ["serial"],
             "stats": null
         }))
-        .expect("Companion wire response may omit display-only state_text");
+        .expect_err("current companion wire must include the complete status DTO");
 
-        assert!(status.state_text.is_empty());
-        let normalized = status.with_rust_state_text();
-        assert_eq!(normalized.state_text, "运行中");
-        assert_eq!(normalized.ui_tone, UiTone::Positive);
+        assert!(error.to_string().contains("state_text"));
     }
 
     #[test]

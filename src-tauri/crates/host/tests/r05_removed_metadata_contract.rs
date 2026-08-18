@@ -8,7 +8,7 @@ fn production_http_session_and_capture_consumers_do_not_expose_removed_metadata_
     let mut violations = Vec::new();
     for crate_name in ["application", "domain", "infrastructure", "proxy", "host"] {
         for source in rust_sources(&crates.join(crate_name).join("src")) {
-            if is_test_source(&source) || is_legacy_migration_boundary(&source) {
+            if is_test_source(&source) || is_strict_removed_field_boundary(&source) {
                 continue;
             }
             let text = std::fs::read_to_string(&source)
@@ -57,10 +57,10 @@ fn is_test_source(path: &Path) -> bool {
     })
 }
 
-fn is_legacy_migration_boundary(path: &Path) -> bool {
+fn is_strict_removed_field_boundary(path: &Path) -> bool {
     matches!(
         path.file_name().and_then(|name| name.to_str()),
-        Some("workspace_migration.rs" | "workspace_documents.rs")
+        Some("application_backup.rs" | "workspace_migration.rs" | "workspace_documents.rs")
     )
 }
 

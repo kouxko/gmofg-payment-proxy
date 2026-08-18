@@ -187,8 +187,8 @@ fn referenced_workspace() -> ProxyWorkspace {
             hit_count: 0,
             last_hit_at: None,
         }],
-        socket_rules: Vec::new(),
-        socket_rule_created_order_high_water: 0,
+        protocol_rules: Vec::new(),
+        protocol_rule_created_order_high_water: 0,
         certificate_references: certificates,
         android_network_profiles: vec![AndroidNetworkProfile {
             id: "android-profile".into(),

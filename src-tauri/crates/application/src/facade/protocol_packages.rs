@@ -8,9 +8,9 @@ use std::collections::{BTreeMap, HashMap};
 
 use super::Application;
 use crate::{
-    AppError, AppResult, ListenerProtocolPackageCatalogViewModel,
-    ListenerProtocolPackageOptionViewModel, OperationResultViewModel,
-    ProtocolPackageDetailViewModel, ProtocolPackageGroupViewModel,
+    AppError, AppResult, HttpBodyProcessing, ListenerDataPlane,
+    ListenerProtocolPackageCatalogViewModel, ListenerProtocolPackageOptionViewModel,
+    OperationResultViewModel, ProtocolPackageDetailViewModel, ProtocolPackageGroupViewModel,
     ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
     ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageViewModel,
     ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel, SocketPayloadProcessing,
@@ -81,8 +81,10 @@ impl Application {
             options.push(ListenerProtocolPackageOptionViewModel {
                 package: version.package,
                 name: version.name,
+                kind: description.kind,
                 capabilities: description.capabilities,
-                schema: description.schema.clone(),
+                upstream_schema: description.upstream_schema.clone(),
+                downstream_schema: description.downstream_schema.clone(),
             });
         }
         let recommended = builtin_iso8583_package_ref();
@@ -152,6 +154,21 @@ impl Application {
                 let name = versions
                     .last()
                     .map_or_else(|| id.as_str().to_owned(), |version| version.name.clone());
+                let kind = versions
+                    .first()
+                    .map(|version| version.kind)
+                    .ok_or_else(|| {
+                        AppError::new(
+                            "PROTOCOL_PACKAGE_CATALOG_INVALID",
+                            "协议包分组不包含任何精确版本。",
+                        )
+                    })?;
+                if versions.iter().any(|version| version.kind != kind) {
+                    return Err(AppError::new(
+                        "PROTOCOL_PACKAGE_CATALOG_INVALID",
+                        "同一协议包 ID 不能同时包含 HTTP 与 Socket 版本。",
+                    ));
+                }
                 let (reference_count, active_reference_count) = versions.iter().try_fold(
                     (0_usize, 0_usize),
                     |totals, version| -> AppResult<_> {
@@ -177,6 +194,7 @@ impl Application {
                 Ok(ProtocolPackageGroupViewModel {
                     id,
                     name,
+                    kind,
                     versions,
                     reference_count,
                     active_reference_count,
@@ -196,8 +214,10 @@ impl Application {
         let usages = self.protocol_package_usage.usages(&package).await?;
         Ok(ProtocolPackageDetailViewModel {
             version,
+            kind: description.kind,
             capabilities: description.capabilities,
-            schema: description.schema,
+            upstream_schema: description.upstream_schema,
+            downstream_schema: description.downstream_schema,
             usages,
         })
     }
@@ -342,10 +362,10 @@ impl Application {
         })
     }
 
-    /// 对目标 Scripted Listener 执行 fresh 包恢复/编译描述与绑定规则校验。
+    /// 对目标协议处理入口执行 fresh 包恢复、编译描述与绑定规则校验。
     ///
     /// 保存允许引用停用包，以便用户先完成配置再启用；启动则额外要求精确版本当前启用。
-    /// Direct/HTTP 在识别数据面后立即返回，绝不访问包 Store、Compiler 或 Usage 端口。
+    /// HTTP Plain 与 Socket Direct 不引用协议包，绝不访问包 Store、Compiler 或 Usage 端口。
     pub(super) async fn validate_listener_protocol_package(
         &self,
         workspace: &crate::ProxyWorkspace,
@@ -360,45 +380,58 @@ impl Application {
                 AppError::new("LISTENER_NOT_FOUND", "未找到指定的 Listener。")
                     .entity(listener_id.to_string())
             })?;
-        let crate::ListenerDataPlane::Socket(socket) = &listener.data_plane else {
-            return Ok(());
-        };
-        let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
-            return Ok(());
+        let (package, package_field, processing_field) = match &listener.data_plane {
+            ListenerDataPlane::Http(http) => match &http.body_processing {
+                HttpBodyProcessing::Plain => return Ok(()),
+                HttpBodyProcessing::Protocol { package } => (
+                    package,
+                    "listener.data_plane.http.body_processing.package",
+                    "listener.data_plane.http.body_processing",
+                ),
+            },
+            ListenerDataPlane::Socket(socket) => match &socket.processing {
+                SocketPayloadProcessing::Direct => return Ok(()),
+                SocketPayloadProcessing::Scripted(scripted) => (
+                    &scripted.package,
+                    "listener.data_plane.socket.processing.package",
+                    "listener.data_plane.socket.processing",
+                ),
+            },
         };
         let version = self
-            .require_protocol_package(&scripted.package)
+            .require_protocol_package(package)
             .await
-            .map_err(listener_package_error)?;
+            .map_err(|error| listener_error_field(error, package_field))?;
         if require_enabled && !version.enabled {
-            return Err(listener_package_error(
+            return Err(listener_error_field(
                 AppError::new(
                     "PROTOCOL_PACKAGE_DISABLED",
-                    "Listener 引用的协议包版本已停用，请先在协议包页面启用。",
+                    "入口引用的协议包版本已停用，请先在协议包页面启用。",
                 )
-                .entity(package_entity(&scripted.package)),
+                .entity(package_entity(package)),
+                package_field,
             ));
         }
         // validation 列是导入/上次编译的历史快照，不能代替当前 Host API
         // 下的 fresh 恢复与编译。真实的可加载性只由下面的 compiler receipt 决定。
         let receipt = self
             .protocol_package_compiler
-            .compile_fresh(&scripted.package)
+            .compile_fresh(package)
             .await
-            .map_err(listener_package_error)?;
-        ensure_compilation_receipt(&scripted.package, version.host_api, &receipt)
-            .map_err(listener_package_error)?;
+            .map_err(|error| listener_error_field(error, package_field))?;
+        ensure_compilation_receipt(package, version.host_api, &receipt)
+            .map_err(|error| listener_error_field(error, package_field))?;
         let description = self
             .protocol_package_compiler
-            .describe(&scripted.package)
+            .describe(package)
             .await
-            .map_err(listener_package_error)?;
+            .map_err(|error| listener_error_field(error, package_field))?;
         super::protocol_package_portability::validate_listener_protocol_binding(
             workspace,
             listener_id,
             &description,
         )
-        .map_err(listener_processing_error)?;
+        .map_err(|error| listener_error_field(error, processing_field))?;
         Ok(())
     }
 
@@ -438,14 +471,6 @@ fn protocol_package_not_found(package: &ProtocolPackageRef) -> AppError {
 
 fn package_entity(package: &ProtocolPackageRef) -> String {
     format!("{}@{}", package.id, package.version)
-}
-
-fn listener_package_error(error: AppError) -> AppError {
-    listener_error_field(error, "listener.data_plane.socket.processing.package")
-}
-
-fn listener_processing_error(error: AppError) -> AppError {
-    listener_error_field(error, "listener.data_plane.socket.processing")
 }
 
 fn listener_error_field(mut error: AppError, field: &str) -> AppError {

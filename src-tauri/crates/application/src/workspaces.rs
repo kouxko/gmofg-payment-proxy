@@ -53,13 +53,13 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
             rule.channel = Some(ChannelId::new(listener_id.to_string()).map_err(AppError::from)?);
         }
     }
-    for rule in &mut workspace.socket_rules {
+    for rule in &mut workspace.protocol_rules {
         let listener_id = mapped(
             &listener_ids,
             rule.listener_id(),
-            "Socket rule Listener reference",
+            "protocol rule Listener reference",
         )?;
-        // Socket rule ID 的作用域是 Workspace；复制/导入保留规则身份、revision、创建顺序
+        // protocol rule ID 的作用域是 Workspace；复制/导入保留规则身份、revision、创建顺序
         // 与声明顺序，只重绑随聚合一起变化的 Listener ID。
         rule.rebind_listener_for_workspace_remap(listener_id)?;
     }

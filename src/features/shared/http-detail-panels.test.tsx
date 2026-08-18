@@ -15,6 +15,8 @@ import { CaptureDetailPanel } from "@/features/capture/capture-detail-panel";
 import { SessionDetailContent } from "@/features/sessions/session-detail-content";
 
 const message: MessageContentViewModel = {
+  protocol: null,
+  protocol_failure: null,
   http_status: null,
   start_line_bytes: [],
   raw_headers: [],

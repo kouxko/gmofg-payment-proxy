@@ -8,9 +8,9 @@ use intercept_proxy_application::{
     WorkspaceRepositoryPort,
 };
 use intercept_proxy_domain::{
-    DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing,
-    SocketRelaySecurity, SocketRelaySettings,
+    ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
+    SocketRelaySettings,
 };
 
 use super::ProtocolPackageUsageQueryAdapter;
@@ -137,11 +137,7 @@ fn scripted_listener(name: &str, port: u16, package: ProtocolPackageRef) -> Prox
             },
             SocketRelaySecurity::Transparent,
             intercept_proxy_domain::DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
-            SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
-                package,
-                upstream: DirectionProcessingOptions::default(),
-                downstream: DirectionProcessingOptions::default(),
-            }),
+            SocketPayloadProcessing::Scripted(ScriptedSocketProcessing { package }),
         )),
         ..ProxyListener::default()
     }
@@ -185,7 +181,7 @@ impl ListenerRuntimePort for FailingRuntime {
         runtime_failure()
     }
 
-    async fn replace_socket_rules(
+    async fn replace_protocol_rules(
         &self,
         _: ProxyWorkspace,
         _: intercept_proxy_domain::ListenerId,

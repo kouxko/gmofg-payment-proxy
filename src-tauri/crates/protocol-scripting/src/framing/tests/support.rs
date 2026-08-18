@@ -29,7 +29,11 @@ fn assert_state_error(decision: FramingDecision, expected: &ProtocolFramingError
 }
 
 fn valid_fixed_script() -> &'static str {
-    "fn frame(reader, context) { if reader.available() < 1 { framing::need_more(1) } else { framing::complete(1) } }\nfn decode(origin, context) { () }\n"
+    concat!(
+        "fn frame(reader, context) { if reader.available() < 1 { framing::need_more(1) } else { framing::complete(1) } }\n",
+        "fn decode(origin, context) { document::create() }\n",
+        "fn encode(origin, document, context) { origin }\n",
+    )
 }
 
 fn compile_package(
@@ -44,6 +48,19 @@ fn compile_package_with_files(
     downstream_script: &str,
     extra_files: &[(&str, &[u8])],
 ) -> crate::CompiledProtocolPackage {
+    let protocol_script = match (
+        upstream_script == valid_fixed_script(),
+        downstream_script == valid_fixed_script(),
+    ) {
+        (false, true) => upstream_script,
+        (true, false) => downstream_script,
+        _ if upstream_script == downstream_script => upstream_script,
+        _ => panic!("fixed protocol.rhai cannot vary by direction"),
+    };
+    let mut protocol_script = protocol_script.to_owned();
+    if !protocol_script.contains("fn encode(") {
+        protocol_script.push_str("fn encode(origin, document, context) { origin }\n");
+    }
     let manifest = r#"api = 1
 
 [package]
@@ -51,26 +68,31 @@ id = "framing-test"
 name = "Framing Test"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "upstream.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 
-[hooks.downstream.receive]
-script = "downstream.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 "#;
     let mut files = BTreeMap::from([
         (path("manifest.toml"), manifest.as_bytes().to_vec()),
         (path("document.toml"), DOCUMENT_SCHEMA.as_bytes().to_vec()),
-        (path("upstream.rhai"), upstream_script.as_bytes().to_vec()),
+        (path("protocol.rhai"), protocol_script.into_bytes()),
         (
-            path("downstream.rhai"),
-            downstream_script.as_bytes().to_vec(),
+            path("display.rhai"),
+            b"fn display(document, context) { \"<p>ok</p>\" }".to_vec(),
         ),
     ]);
     for (name, bytes) in extra_files {
@@ -84,10 +106,12 @@ decode = "decode"
 fn compile_official_iso8583_package() -> crate::CompiledProtocolPackage {
     let manifest =
         include_str!("../../../../../../templates/socket-protocol/iso8583-standard/manifest.toml");
-    let schema =
-        include_bytes!("../../../../../../templates/socket-protocol/iso8583-standard/document.toml");
-    let protocol =
-        include_bytes!("../../../../../../templates/socket-protocol/iso8583-standard/protocol.rhai");
+    let schema = include_bytes!(
+        "../../../../../../templates/socket-protocol/iso8583-standard/document.toml"
+    );
+    let protocol = include_bytes!(
+        "../../../../../../templates/socket-protocol/iso8583-standard/protocol.rhai"
+    );
     let display =
         include_bytes!("../../../../../../templates/socket-protocol/iso8583-standard/display.rhai");
     let library = include_bytes!(

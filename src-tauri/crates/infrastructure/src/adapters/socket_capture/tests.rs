@@ -1,12 +1,13 @@
 use chrono::{Duration, TimeZone, Utc};
 use intercept_proxy_application::{
-    CaptureQuery, CaptureRepositoryPort, CaptureSort, PageRequest, SocketCaptureSchemaRef,
-    SocketCaptureSort, SocketDisplayFallbackReason, SocketDisplayResult, SocketRelayFrameCapture,
-    SocketWriteKind,
+    CaptureQuery, CaptureRepositoryPort, CaptureSort, PageRequest, SocketCaptureDocument,
+    SocketCaptureSchemaRef, SocketCaptureSort, SocketDisplayResult, SocketRelayFrameCapture,
+    SocketRelayRuleStageCapture,
 };
 use intercept_proxy_domain::{
-    DocumentSchemaId, ListenerId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    SocketDirection, WorkspaceId,
+    Document, DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema,
+    DocumentSchemaId, ListenerId, ProtocolDirection, ProtocolPackageId, ProtocolPackageRef,
+    ProtocolPackageVersion, ProtocolRuleStage, WorkspaceId,
 };
 use uuid::Uuid;
 
@@ -37,26 +38,50 @@ fn record(id: u128, workspace_id: WorkspaceId) -> SocketCaptureRecord {
         peer_address: "127.0.0.1:43100".to_owned(),
         occurred_at,
         completed_at: occurred_at + Duration::milliseconds(milliseconds),
-        payload: SocketCapturePayload::RelayFrame(SocketRelayFrameCapture {
-            direction: SocketDirection::Upstream,
+        payload: SocketCapturePayload::RelayFrame(Box::new(SocketRelayFrameCapture {
+            direction: ProtocolDirection::Upstream,
             package: package(),
             schema: SocketCaptureSchemaRef {
                 id: DocumentSchemaId::new("payment").unwrap(),
                 version: 1,
             },
-            decode_enabled: false,
-            encode_enabled: false,
             origin: vec![0x02, byte, 0x03],
-            document: None,
-            matched_rule_ids: Vec::new(),
+            stages: vec![
+                SocketRelayRuleStageCapture {
+                    stage: ProtocolRuleStage::AppToProxy,
+                    matched_rule_ids: Vec::new(),
+                    document: capture_document(),
+                },
+                SocketRelayRuleStageCapture {
+                    stage: ProtocolRuleStage::ProxyToUpstream,
+                    matched_rule_ids: Vec::new(),
+                    document: capture_document(),
+                },
+            ],
             written: vec![0x02, byte, 0x03],
-            write_kind: SocketWriteKind::Original,
-            display: SocketDisplayResult::HexFallback {
-                reason: SocketDisplayFallbackReason::EncodeDisabled,
-                diagnostic: None,
+            display: SocketDisplayResult::UntrustedHtml {
+                html: "<p>capture</p>".into(),
             },
-        }),
+        })),
     }
+}
+
+fn capture_document() -> SocketCaptureDocument {
+    let schema = DocumentSchema::new(
+        DocumentSchemaId::new("payment").unwrap(),
+        1,
+        "Payment",
+        vec![
+            DocumentField::new(
+                DocumentFieldName::new("amount").unwrap(),
+                DocumentFieldType::Int,
+                "Amount",
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    SocketCaptureDocument::from_document(&Document::new(schema))
 }
 
 fn query(workspace_id: Option<WorkspaceId>) -> SocketCaptureQuery {
@@ -95,7 +120,7 @@ fn record_query_and_detail_round_trip_exact_application_dto() {
     assert_eq!(page.rows[0].capture_id, second.capture_id);
     assert_eq!(page.rows[0].origin_size_bytes, 3);
     assert_eq!(page.rows[0].written_size_bytes, 3);
-    assert_eq!(page.rows[0].direction, Some(SocketDirection::Upstream));
+    assert_eq!(page.rows[0].direction, Some(ProtocolDirection::Upstream));
     assert_eq!(
         adapter.get_detail(first.capture_id).expect("detail").record,
         first
@@ -127,7 +152,7 @@ fn semantically_contradictory_payload_fails_on_write_and_restore() {
     let SocketCapturePayload::RelayFrame(frame) = &mut contradictory.payload else {
         unreachable!();
     };
-    frame.decode_enabled = true;
+    frame.stages.clear();
     assert_eq!(
         adapter
             .record(contradictory.clone())
@@ -142,7 +167,7 @@ fn semantically_contradictory_payload_fails_on_write_and_restore() {
     let SocketCapturePayload::RelayFrame(frame) = &mut persisted.payload else {
         unreachable!();
     };
-    frame.decode_enabled = true;
+    frame.stages.clear();
     insert.payload = serde_json::to_value(&persisted).unwrap();
     store.insert_socket_capture(&insert).unwrap();
     assert_eq!(

@@ -53,7 +53,7 @@ fn old_schema_is_cleared_and_unknown_newer_schema_is_rejected() {
         .execute_batch(
             "INSERT INTO workspaces(id, revision, json, updated_at)
              VALUES ('old', 1, '{}', '2026-08-18T00:00:00Z');
-             UPDATE application_schema SET version = 11;",
+             UPDATE application_schema SET version = 13;",
         )
         .unwrap();
     drop(store);
@@ -82,9 +82,10 @@ fn corrupt_protocol_header_is_isolated_and_enabled_fails_closed() {
         .lock()
         .execute(
             "INSERT INTO protocol_packages(
-                package_id, version, name, host_api, enabled,
+                package_id, version, name, host_api, kind, enabled,
                 validation_state, validation_error_code, installed_at, generation
-             ) VALUES ('example-protocol', '1.0.0', 'name', -1, 0, 'valid', NULL, ?1, ?2)",
+             ) VALUES ('example-protocol', '1.0.0', 'name', -1, 'socket', 0,
+                       'valid', NULL, ?1, ?2)",
             [Utc::now().to_rfc3339(), uuid::Uuid::new_v4().to_string()],
         )
         .unwrap();
@@ -142,9 +143,9 @@ fn remaining_corrupt_header_metadata_is_safely_quarantined() {
         .lock()
         .execute(
             "INSERT INTO protocol_packages(
-                package_id, version, name, host_api, enabled,
+                package_id, version, name, host_api, kind, enabled,
                 validation_state, validation_error_code, installed_at, generation
-             ) VALUES ('example-protocol', '1.0.0', '', 1, 0, 'invalid',
+             ) VALUES ('example-protocol', '1.0.0', '', 1, 'socket', 0, 'invalid',
                        'not_safe', 'not-a-time', 'not-a-generation')",
             [],
         )
@@ -169,9 +170,9 @@ fn unidentifiable_header_returns_a_global_safe_persistence_error() {
             .lock()
             .execute(
                 "INSERT INTO protocol_packages(
-                    package_id, version, name, host_api, enabled,
+                    package_id, version, name, host_api, kind, enabled,
                     validation_state, validation_error_code, installed_at, generation
-                 ) VALUES (?1, ?2, 'name', 1, 0, 'valid', NULL, ?3, ?4)",
+                 ) VALUES (?1, ?2, 'name', 1, 'socket', 0, 'valid', NULL, ?3, ?4)",
                 rusqlite::params![
                     id,
                     version,
