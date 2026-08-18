@@ -52,6 +52,7 @@ jobs:
 
   coverage:
     name: Coverage gates
+    needs: android-companion
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -70,6 +71,14 @@ jobs:
             libwebkit2gtk-4.1-dev \
             libxdo-dev \
             wget
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: intercept-proxy-android-companion
+          path: companion-artifact
+
+      - name: Stage Companion desktop resource
+        run: ./scripts/stage-android-companion.sh companion-artifact/app-release.apk
 
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
