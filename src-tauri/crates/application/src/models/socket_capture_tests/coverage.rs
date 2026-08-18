@@ -114,11 +114,12 @@ fn both_capture_payload_variants_round_trip_and_account_logical_bytes() {
         response_encode_enabled: false,
         request_origin: b"0200".to_vec(),
         request_document: None,
+        request_display: None,
         response_document: SocketCaptureDocument::from_document(&response),
         matched_downstream_rule_ids: Vec::new(),
         written_response: b"0200".to_vec(),
         response_write_kind: SocketWriteKind::Original,
-        response_display: display(false),
+        response_display: display(true),
     });
 
     for payload in [relay_payload, local_payload] {

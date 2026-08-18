@@ -113,6 +113,7 @@ function localDetail(
           response_encode_enabled: true,
           request_origin: [0x30],
           request_document: null,
+          request_display: null,
           response_document: documentFixture,
           matched_downstream_rule_ids: row.matched_rule_ids,
           written_response: [0x31],
@@ -237,6 +238,23 @@ describe("SocketCaptureDetail LocalExchange", () => {
     expect(within(request!).queryByTitle("Socket 协议安全展示")).toBeNull();
     expect(await within(response!).findByTitle("Socket 协议安全展示")).toBeVisible();
     expect(within(response!).getByText("Encoded")).toBeVisible();
+  });
+
+  it("uses the protocol Display for a decoded Request", async () => {
+    const row = localRow();
+    const detail = localDetail(row);
+    if (detail.record.payload.kind !== "local_exchange") throw new Error("expected local exchange");
+    detail.record.payload.capture.request_decode_enabled = true;
+    detail.record.payload.capture.request_document = documentFixture;
+    detail.record.payload.capture.request_display = {
+      type: "untrusted_html",
+      html: "<table><tbody><tr><th>MTI</th><td>0200</td></tr></tbody></table>",
+    };
+    renderDetail(row, detail);
+
+    const request = screen.getByRole("heading", { name: "LocalResponder Request" }).closest("section");
+    expect(await within(request!).findByTitle("Socket 协议安全展示")).toBeVisible();
+    expect(within(request!).queryByRole("table")).toBeNull();
   });
 
   it("shows matched downstream rules only inside the Response region", () => {

@@ -173,7 +173,7 @@ async fn run_case(upstream_state: State, downstream_state: State) {
                 intercept_proxy_application::SocketWriteKind::Original
             }
         );
-        assert!(if state.encode {
+        assert!(if state.decode || state.encode {
             matches!(
                 frame.display,
                 intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }

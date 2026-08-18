@@ -40,7 +40,10 @@ impl SocketCaptureRecord {
                             &frame.origin,
                             &frame.written,
                         )
-                        && display_matches(frame.encode_enabled, &frame.display)
+                        && display_matches_document(
+                            frame.decode_enabled || frame.encode_enabled,
+                            &frame.display,
+                        )
                         && unique_rule_ids(&frame.matched_rule_ids)
                 }
                 SocketCapturePayload::LocalExchange(exchange) => {
@@ -48,10 +51,15 @@ impl SocketCaptureRecord {
                         && !exchange.request_origin.is_empty()
                         && !exchange.written_response.is_empty()
                         && exchange.request_document.is_some() == exchange.request_decode_enabled
+                        && exchange.request_display.is_some() == exchange.request_decode_enabled
                         && exchange
                             .request_document
                             .as_ref()
                             .is_none_or(|document| schema_matches(document, &exchange.schema))
+                        && exchange
+                            .request_display
+                            .as_ref()
+                            .is_none_or(|display| display_matches_document(true, display))
                         && schema_matches(&exchange.response_document, &exchange.schema)
                         && write_kind_matches(
                             exchange.response_encode_enabled,
@@ -62,10 +70,7 @@ impl SocketCaptureRecord {
                             &exchange.request_origin,
                             &exchange.written_response,
                         )
-                        && display_matches(
-                            exchange.response_encode_enabled,
-                            &exchange.response_display,
-                        )
+                        && display_matches_document(true, &exchange.response_display)
                         && unique_rule_ids(&exchange.matched_downstream_rule_ids)
                 }
             }
@@ -88,8 +93,8 @@ fn raw_write_matches(enabled: bool, origin: &[u8], written: &[u8]) -> bool {
     enabled || origin == written
 }
 
-fn display_matches(enabled: bool, display: &SocketDisplayResult) -> bool {
-    if !enabled {
+fn display_matches_document(has_document: bool, display: &SocketDisplayResult) -> bool {
+    if !has_document {
         return matches!(
             display,
             SocketDisplayResult::HexFallback {

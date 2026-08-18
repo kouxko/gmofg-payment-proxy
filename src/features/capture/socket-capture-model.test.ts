@@ -128,6 +128,7 @@ function localDetail(
           response_encode_enabled: true,
           request_origin: [0x30, 0x32],
           request_document: null,
+          request_display: null,
           response_document: documentFixture,
           matched_downstream_rule_ids: row.matched_rule_ids,
           written_response: [0x30, 0x32, 0x31],

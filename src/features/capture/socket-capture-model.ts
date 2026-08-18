@@ -138,9 +138,9 @@ function isDisplay(value: unknown): boolean {
     && isText(value.diagnostic.code) && typeof value.diagnostic.message === "string");
 }
 
-function displayMatchesEncode(value: Record<string, unknown>, enabled: boolean): boolean {
+function displayMatchesDocument(value: Record<string, unknown>, hasDocument: boolean): boolean {
   if (!isRecord(value)) return false;
-  if (!enabled) {
+  if (!hasDocument) {
     return value.type === "hex_fallback"
       && value.reason === "encode_disabled"
       && value.diagnostic === null;
@@ -156,7 +156,7 @@ function isRelayCapture(value: unknown, row: SocketCaptureRowViewModel): boolean
     || !sameRuleIds(value.matched_rule_ids, row.matched_rule_ids) || !isDisplay(value.display)
     || !["original", "encoded"].includes(String(value.write_kind))
     || value.encode_enabled !== (value.write_kind === "encoded")
-    || !displayMatchesEncode(value.display as Record<string, unknown>, value.encode_enabled as boolean)) return false;
+    || !displayMatchesDocument(value.display as Record<string, unknown>, value.decode_enabled === true || value.encode_enabled === true)) return false;
   if (value.origin.length !== row.origin_size_bytes || value.written.length !== row.written_size_bytes) return false;
   if (value.write_kind === "original" && !sameBytes(value.origin, value.written)) return false;
   if (value.decode_enabled === false && (value.matched_rule_ids as string[]).length !== 0) return false;
@@ -166,7 +166,7 @@ function isRelayCapture(value: unknown, row: SocketCaptureRowViewModel): boolean
 }
 
 function isLocalCapture(value: unknown, row: SocketCaptureRowViewModel): boolean {
-  if (!isRecord(value) || !hasOnly(value, ["exchange_id", "package", "schema", "request_decode_enabled", "response_encode_enabled", "request_origin", "request_document", "response_document", "matched_downstream_rule_ids", "written_response", "response_write_kind", "response_display"])
+  if (!isRecord(value) || !hasOnly(value, ["exchange_id", "package", "schema", "request_decode_enabled", "response_encode_enabled", "request_origin", "request_document", "request_display", "response_document", "matched_downstream_rule_ids", "written_response", "response_write_kind", "response_display"])
     || row.direction !== null || !isText(value.exchange_id)
     || !samePackage(value.package, row.package) || !sameSchemaRef(value.schema, row.schema)
     || typeof value.request_decode_enabled !== "boolean" || typeof value.response_encode_enabled !== "boolean"
@@ -174,14 +174,17 @@ function isLocalCapture(value: unknown, row: SocketCaptureRowViewModel): boolean
     || !sameRuleIds(value.matched_downstream_rule_ids, row.matched_rule_ids) || !isDisplay(value.response_display)
     || !["original", "encoded"].includes(String(value.response_write_kind))
     || value.response_encode_enabled !== (value.response_write_kind === "encoded")
-    || !displayMatchesEncode(value.response_display as Record<string, unknown>, value.response_encode_enabled as boolean)
+    || !displayMatchesDocument(value.response_display as Record<string, unknown>, true)
     || !isDocument(value.response_document, row.schema)) return false;
   if (value.request_origin.length !== row.origin_size_bytes
     || value.written_response.length !== row.written_size_bytes) return false;
   if (value.response_write_kind === "original" && !sameBytes(value.request_origin, value.written_response)) return false;
   return value.request_document === null
-    ? value.request_decode_enabled === false
-    : value.request_decode_enabled === true && isDocument(value.request_document, row.schema);
+    ? value.request_decode_enabled === false && value.request_display === null
+    : value.request_decode_enabled === true
+      && isDocument(value.request_document, row.schema)
+      && isDisplay(value.request_display)
+      && displayMatchesDocument(value.request_display as Record<string, unknown>, true);
 }
 
 function isPackage(value: unknown): value is ProtocolPackageRef {

@@ -1724,6 +1724,8 @@ export type SocketLocalExchangeCapture = {
 	request_origin: number[],
 	/**  Decode 关闭时必须保持 `None`，不得合成空 Document 冒充解析结果。 */
 	request_document: SocketCaptureDocument | null,
+	/**  Decode 关闭时为 `None`；成功 Decode 后保存同一协议包的 Display 或明确 Hex 回退。 */
+	request_display: SocketDisplayResult | null,
 	/**  规则只修改该响应 Document，不得覆盖 request Document。 */
 	response_document: SocketCaptureDocument,
 	matched_downstream_rule_ids: SocketDocumentRuleId[],

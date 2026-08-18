@@ -265,6 +265,8 @@ pub struct SocketLocalExchangeCapture {
     pub request_origin: Vec<u8>,
     /// Decode 关闭时必须保持 `None`，不得合成空 Document 冒充解析结果。
     pub request_document: Option<SocketCaptureDocument>,
+    /// Decode 关闭时为 `None`；成功 Decode 后保存同一协议包的 Display 或明确 Hex 回退。
+    pub request_display: Option<SocketDisplayResult>,
     /// 规则只修改该响应 Document，不得覆盖 request Document。
     pub response_document: SocketCaptureDocument,
     pub matched_downstream_rule_ids: Vec<SocketDocumentRuleId>,
@@ -284,6 +286,7 @@ impl fmt::Debug for SocketLocalExchangeCapture {
             .field("response_encode_enabled", &self.response_encode_enabled)
             .field("request_origin_bytes", &self.request_origin.len())
             .field("request_document_present", &self.request_document.is_some())
+            .field("request_display", &self.request_display)
             .field(
                 "response_document_schema",
                 self.response_document.schema.id(),
@@ -309,6 +312,10 @@ impl SocketLocalExchangeCapture {
             + self.request_origin.len() as u64
             + self.written_response.len() as u64
             + document_logical_bytes(self.request_document.as_ref())
+            + self
+                .request_display
+                .as_ref()
+                .map_or(0, SocketDisplayResult::logical_bytes)
             + document_logical_bytes(Some(&self.response_document))
             + (self.matched_downstream_rule_ids.len() as u64 * 16)
             + self.response_display.logical_bytes()

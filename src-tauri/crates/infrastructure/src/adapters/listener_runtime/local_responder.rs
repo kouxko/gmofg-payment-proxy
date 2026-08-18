@@ -417,7 +417,6 @@ fn process_exchange(
         .decode_request(origin.to_vec())
         .map_err(|error| request_runtime_failure(&error))?;
     preview::publish_request_parsed(state.diagnostics.as_ref(), exchange_id, &request);
-    let request_document = request.document().cloned();
     let package = state.package.clone();
     let cancellation = state.cancellation.clone();
     let mut matched_rule_ids = Vec::new();
@@ -453,7 +452,7 @@ fn process_exchange(
     state.pending_response = Some(capture::PendingLocalCapture::new(
         response,
         exchange_id,
-        request_document,
+        request,
         matched_rule_ids,
         occurred_at,
     ));

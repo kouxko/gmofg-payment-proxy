@@ -14,7 +14,7 @@ fn upstream_four_states_have_exact_document_output_and_display_semantics() {
             true,
             false,
             origin.clone(),
-            ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EncodeDisabled),
+            ProtocolDisplayResult::UntrustedHtml("upstream-html".to_owned()),
         ),
         (
             false,
@@ -76,7 +76,7 @@ fn all_sixteen_bidirectional_switch_combinations_are_isolated() {
         assert_eq!(down.written(), expected_down);
         assert_eq!(
             upstream.render_display(&up),
-            if up_encode {
+            if up_decode || up_encode {
                 ProtocolDisplayResult::UntrustedHtml("upstream-html".to_owned())
             } else {
                 ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EncodeDisabled)
@@ -84,7 +84,7 @@ fn all_sixteen_bidirectional_switch_combinations_are_isolated() {
         );
         assert_eq!(
             downstream.render_display(&down),
-            if down_encode {
+            if down_decode || down_encode {
                 ProtocolDisplayResult::UntrustedHtml("downstream-html".to_owned())
             } else {
                 ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EncodeDisabled)

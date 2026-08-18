@@ -222,10 +222,34 @@ impl ProtocolDirectionExecutor {
         if !output.belongs_to(&self.output_owner) {
             return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed);
         }
-        if !self.plan.encode_enabled() {
+        if !self.plan.decode_enabled() && !self.plan.encode_enabled() {
             return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EncodeDisabled);
         }
-        if !self.plan.display_enabled() {
+        self.render_output_document_display(output)
+    }
+
+    /// 对已经成功 Decode 的输入 Document 调用公共 Display，不要求该方向启用 Encode。
+    #[must_use]
+    pub fn render_decoded_display(
+        &mut self,
+        output: &ProtocolFrameOutput,
+    ) -> ProtocolDisplayResult {
+        if !output.belongs_to(&self.output_owner) || output.decoded_document().is_none() {
+            return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed);
+        }
+        self.render_output_document_display(output)
+    }
+
+    /// 对该执行器产生的 Document 调用公共 Display，不受 Decode/Encode 开关影响。
+    #[must_use]
+    pub fn render_output_document_display(
+        &mut self,
+        output: &ProtocolFrameOutput,
+    ) -> ProtocolDisplayResult {
+        if !output.belongs_to(&self.output_owner) {
+            return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed);
+        }
+        if self.display.is_none() {
             return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::NotDeclared);
         }
         match self.call_display(output.execution_document()) {

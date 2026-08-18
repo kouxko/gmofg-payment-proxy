@@ -5,16 +5,14 @@ use crate::{
     ProtocolRuntimeResult,
 };
 
-/// Listener 冻结后的单方向 Decode/Encode/Display 执行计划。
+/// 入口冻结后的单方向 Decode/Encode 执行计划。
 ///
-/// Display 没有独立开关：只有 Encode 已启用且 Manifest 声明了公共 Display 入口时才调用。Encode
-/// 被配置为启用但 Manifest 未声明时，构造计划立即失败，避免运行时静默退化为原样转发。
+/// Display 没有独立开关；只要运行时产生了可展示 Document，就调用协议包声明的公共 Display。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DirectionExecutionPlan {
     direction: ProtocolDirection,
     decode_enabled: bool,
     encode_enabled: bool,
-    display_enabled: bool,
 }
 
 impl DirectionExecutionPlan {
@@ -39,7 +37,6 @@ impl DirectionExecutionPlan {
             direction,
             decode_enabled: options.decode_enabled,
             encode_enabled: options.encode_enabled,
-            display_enabled: options.encode_enabled && package.supports_display(),
         })
     }
 
@@ -59,11 +56,5 @@ impl DirectionExecutionPlan {
     #[must_use]
     pub const fn encode_enabled(self) -> bool {
         self.encode_enabled
-    }
-
-    /// 返回是否在输出确定后调用公共 Display。
-    #[must_use]
-    pub const fn display_enabled(self) -> bool {
-        self.display_enabled
     }
 }
