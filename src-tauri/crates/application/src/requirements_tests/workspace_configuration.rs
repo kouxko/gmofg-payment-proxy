@@ -1,5 +1,6 @@
 use super::*;
 
+mod application_backup_export;
 mod legacy_protocol_portability;
 mod portability_atomicity;
 mod protocol_package_portability;

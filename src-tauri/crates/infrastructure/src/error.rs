@@ -80,6 +80,12 @@ pub enum InfrastructureError {
         #[source]
         source: std::io::Error,
     },
+    #[error("目标文件已替换，但父目录持久化状态无法确认：{path}")]
+    ExportParentSync {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("目标文件已存在：{path}")]
     ExportTargetExists { path: PathBuf },
 }
@@ -103,9 +109,9 @@ impl InfrastructureError {
             Self::ImportTooLarge { .. } => InfrastructureErrorCode::ImportTooLarge,
             Self::PersistenceCorrupt { .. } => InfrastructureErrorCode::PersistenceCorrupt,
             Self::Import { .. } => InfrastructureErrorCode::ImportFailed,
-            Self::Export { .. } | Self::ExportTargetExists { .. } => {
-                InfrastructureErrorCode::ExportFailed
-            }
+            Self::Export { .. }
+            | Self::ExportParentSync { .. }
+            | Self::ExportTargetExists { .. } => InfrastructureErrorCode::ExportFailed,
         }
     }
 }
