@@ -123,7 +123,17 @@ jobs:
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
 
       - name: Verify Rust tests
+        if: runner.os != 'Windows'
         run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets
+
+      - name: Verify Rust tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # The headless Windows runner cannot load the Tauri test executable
+          # (STATUS_ENTRYPOINT_NOT_FOUND). Compile/link it, and execute every
+          # platform-independent workspace test; macOS executes root tests.
+          cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --exclude intercept-proxy
+          cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --all-targets --no-run
 
       - name: Verify independent runtime gates
         run: |
