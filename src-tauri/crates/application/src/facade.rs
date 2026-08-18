@@ -20,6 +20,7 @@ use crate::{
 };
 
 mod android;
+mod application_backup;
 mod bootstrap;
 mod certificate_portability;
 mod certificates;

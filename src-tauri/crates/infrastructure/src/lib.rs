@@ -6,6 +6,7 @@
 
 pub mod adapters;
 pub mod application_backup;
+mod application_backup_export;
 pub mod certificates;
 pub mod dpapi;
 pub mod error;
@@ -32,13 +33,17 @@ pub use application_backup::{
     ApplicationBackupArchive, ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode,
     ApplicationBackupArchiveLimits,
 };
+pub use application_backup_export::{ApplicationBackupFileExporter, build_application_backup_zip};
 pub use certificates::{
     CertificateBundle, CertificateMetadata, CertificateService, LeafCertificateRequest,
     ParsedPkcs12,
 };
 pub use dpapi::{DpapiProtector, SecretProtector};
 pub use error::{InfrastructureError, InfrastructureErrorCode};
-pub use files::{AtomicFileExporter, ExportOutcome};
+pub use files::{
+    ApplicationBackupFileSystem, ApplicationBackupTemporaryFile, AtomicFileExporter, ExportOutcome,
+    SystemApplicationBackupFileSystem,
+};
 #[cfg(target_os = "macos")]
 pub use keychain::MacKeychainProtector;
 pub use sqlite::{
