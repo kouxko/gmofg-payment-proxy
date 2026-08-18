@@ -14,6 +14,7 @@ pub mod error;
 pub mod files;
 #[cfg(target_os = "macos")]
 pub mod keychain;
+mod legacy_import;
 pub mod sqlite;
 mod windows_process;
 
@@ -32,7 +33,7 @@ pub use adapters::{
 };
 pub use application_backup::{
     ApplicationBackupArchive, ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode,
-    ApplicationBackupArchiveLimits,
+    ApplicationBackupArchiveLimits, DEFAULT_MAX_APPLICATION_BACKUP_ARCHIVE_BYTES,
 };
 pub use application_backup_export::{ApplicationBackupFileExporter, build_application_backup_zip};
 pub use application_backup_import::{
@@ -53,6 +54,7 @@ pub use files::{
 };
 #[cfg(target_os = "macos")]
 pub use keychain::MacKeychainProtector;
+pub use legacy_import::LegacyImportPreparer;
 pub use sqlite::{
     AndroidRuntimeOwnerRecord, CertificateMaterialRecord, CertificateMaterialSnapshot,
     ProtectedSecretRecord, RuleCollectionSnapshot, RuleRecord, SqliteStore, StoredSettings,

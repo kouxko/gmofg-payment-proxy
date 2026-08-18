@@ -175,7 +175,7 @@ impl Application {
         })
     }
 
-    async fn prepare_configuration_import(
+    pub(super) async fn prepare_configuration_import(
         &self,
         source_version: u16,
         document: ApplicationConfigurationDocument,
@@ -269,7 +269,7 @@ impl Application {
     }
 }
 
-fn import_result_message(
+pub(super) fn import_result_message(
     cleanup_warning: Option<&AppError>,
     migration_warning: Option<&str>,
 ) -> (String, UiTone) {

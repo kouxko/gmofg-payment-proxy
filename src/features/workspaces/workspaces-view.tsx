@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
+  Accordion,
   Alert,
   AlertDialog,
   Button,
@@ -9,12 +10,18 @@ import {
   Chip,
   Input,
   Label,
+  Modal,
   Spinner,
   Table,
   toast,
 } from "@heroui/react";
 import { ArrowUpFromLine, Copy, Plus, TrashBin } from "@gravity-ui/icons";
-import type { ProxyWorkspace, WorkspaceSummaryViewModel } from "@/generated/rust-types";
+import type {
+  ApplicationBackupImportPreview,
+  LegacyImportPreview,
+  ProxyWorkspace,
+  WorkspaceSummaryViewModel,
+} from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { toneColor } from "@/lib/format";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
@@ -24,7 +31,6 @@ import type {
   ComponentKind,
   ComponentOperation,
 } from "./workspace-components-editor-model";
-import { PortableExportDialog } from "./portable-export-dialog";
 
 export function WorkspacesView() {
   const list = useIpcQuery<WorkspaceSummaryViewModel[]>("workspace-list", () =>
@@ -35,9 +41,9 @@ export function WorkspacesView() {
   const [newName, setNewName] = useState("");
   const [pendingAction, setPendingAction] = useState<string>();
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [fullImportOpen, setFullImportOpen] = useState(false);
-  const [workspaceExportOpen, setWorkspaceExportOpen] = useState(false);
-  const [fullExportOpen, setFullExportOpen] = useState(false);
+  const [backupPreview, setBackupPreview] = useState<ApplicationBackupImportPreview>();
+  const [legacyPreview, setLegacyPreview] = useState<LegacyImportPreview>();
+  const importRequest = useRef(0);
   const effectiveSelectedId = selectedId ?? list.data?.find((item) => item.selected)?.id ?? list.data?.[0]?.id;
   const selectedSummary = list.data?.find((item) => item.id === effectiveSelectedId);
   const detail = useIpcQuery<ProxyWorkspace>(
@@ -74,25 +80,70 @@ export function WorkspacesView() {
     await list.refresh();
   }
 
-  async function importWorkspace() {
-    const result = await callCommand(commands.workspaceImport());
-    toast(result.message, { variant: result.cancelled ? "default" : "success" });
-    await list.refresh();
+  async function prepareLegacyImport(kind: "application_configuration" | "workspace") {
+    const preview = await callCommand(
+      kind === "application_configuration"
+        ? commands.legacyApplicationConfigurationImportPrepare()
+        : commands.legacyWorkspaceImportPrepare(),
+    );
+    if (preview) setLegacyPreview(preview);
   }
 
-  async function importFullConfiguration() {
-    const result = await callCommand(commands.applicationConfigurationImport());
+  async function commitLegacyImport() {
+    const preview = legacyPreview;
+    if (!preview) return;
+    const result = await callCommand(
+      preview.kind === "application_configuration"
+        ? commands.legacyApplicationConfigurationImportCommit(preview.token)
+        : commands.legacyWorkspaceImportCommit(preview.token),
+    );
     toast(result.message, { variant: result.cancelled ? "default" : toneColor(result.ui_tone) });
-    setFullImportOpen(false);
+    setLegacyPreview(undefined);
     setSelectedId(undefined);
     setDraft(undefined);
     await list.refresh();
   }
 
-  async function exportFullConfiguration() {
-    const result = await callCommand(commands.applicationConfigurationExport());
-    toast(result.message, { variant: result.cancelled ? "default" : "success" });
-    setFullExportOpen(false);
+  async function discardLegacyImport() {
+    const preview = legacyPreview;
+    if (!preview) return;
+    setLegacyPreview(undefined);
+    await callCommand(
+      preview.kind === "application_configuration"
+        ? commands.legacyApplicationConfigurationImportDiscard(preview.token)
+        : commands.legacyWorkspaceImportDiscard(preview.token),
+    );
+  }
+
+  async function exportApplicationData() {
+    const result = await callCommand(commands.applicationBackupExport());
+    if (result) toast(`应用数据已导出（${result.bytes_written} 字节）。`, { variant: "success" });
+  }
+
+  async function prepareApplicationImport() {
+    const request = ++importRequest.current;
+    const preview = await callCommand(commands.applicationBackupImportPrepare());
+    if (request !== importRequest.current || !preview) return;
+    setBackupPreview(preview);
+  }
+
+  async function discardApplicationImport() {
+    const preview = backupPreview;
+    if (!preview) return;
+    setBackupPreview(undefined);
+    importRequest.current += 1;
+    await callCommand(commands.applicationBackupImportDiscard(preview.token));
+  }
+
+  async function commitApplicationImport() {
+    const preview = backupPreview;
+    if (!preview) return;
+    const outcome = await callCommand(commands.applicationBackupImportCommit(preview.token));
+    setBackupPreview(undefined);
+    setSelectedId(undefined);
+    setDraft(undefined);
+    toast(`已替换 ${outcome.workspace_count} 个 Workspace 和 ${outcome.protocol_package_count} 个协议包版本。`, { variant: "success" });
+    await list.refresh();
   }
 
   async function saveWorkspace() {
@@ -133,13 +184,6 @@ export function WorkspacesView() {
     setDraft(updated);
   }
 
-  async function exportWorkspace() {
-    if (!effectiveDraft) return;
-    const result = await callCommand(commands.workspaceExport(effectiveDraft.id));
-    toast(result.message, { variant: result.cancelled ? "default" : "success" });
-    setWorkspaceExportOpen(false);
-  }
-
   async function selectCurrentWorkspace() {
     if (!effectiveDraft) return;
     await callCommand(commands.workspaceSelect(effectiveDraft.id));
@@ -168,12 +212,12 @@ export function WorkspacesView() {
   return (
     <section className="grid h-full grid-cols-[minmax(420px,1fr)_380px] max-[1000px]:grid-cols-1">
       <div className="min-w-0 space-y-4 overflow-auto p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-64">
             <h1 className="text-2xl font-semibold">Workspace</h1>
             <p className="mt-1 text-sm text-[var(--telemetry-muted)]">在此创建、复制、选择及导入导出 Workspace。</p>
           </div>
-          <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 max-[720px]:w-full max-[720px]:justify-start">
+          <div className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto max-[720px]:w-full max-[720px]:justify-start">
             <Input
               aria-label="新 Workspace 名称"
               disabled={Boolean(pendingAction)}
@@ -185,38 +229,56 @@ export function WorkspacesView() {
             <Button variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("create", createWorkspace)}>
               <Plus className="size-4" />新建
             </Button>
-            <Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("import", importWorkspace)}>
-              <ArrowUpFromLine className="size-4" />导入单个 Workspace
+            <Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-export", exportApplicationData)}>
+              导出应用数据
             </Button>
-            <PortableExportDialog
-              isOpen={fullExportOpen}
-              onOpenChange={setFullExportOpen}
-              triggerLabel="导出完整应用配置"
-              heading="导出完整应用配置的敏感内容？"
-              description="文件可能包含全部 Workspace 引用的外部证书原文、Listener 服务端私钥、PKCS12/PFX 原文及明文密码。文件不会包含本机 MITM Root CA 私钥、抓包 Payload、系统密钥密文或运行状态。请仅保存在受控测试环境。"
-              confirmLabel="确认导出完整应用配置"
-              isDisabled={Boolean(pendingAction)}
-              onConfirm={() => void run("full-export", exportFullConfiguration)}
-            />
-            <AlertDialog isOpen={fullImportOpen} onOpenChange={setFullImportOpen}>
-              <Button variant="danger-soft" isDisabled={Boolean(pendingAction)}><ArrowUpFromLine className="size-4" />导入完整应用配置</Button>
-              <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>
-                <AlertDialog.Header><AlertDialog.Heading>替换全部应用配置？</AlertDialog.Heading></AlertDialog.Header>
-                <AlertDialog.Body>导入会原子替换全部 Workspace、Android 设备网络方案、当前选择和可移植全局设置。请先导出备份。</AlertDialog.Body>
-                <AlertDialog.Footer><Button slot="close" variant="outline">取消</Button><Button variant="danger" onPress={() => void run("full-import", importFullConfiguration)}>确认选择文件并替换</Button></AlertDialog.Footer>
-              </AlertDialog.Dialog></AlertDialog.Container></AlertDialog.Backdrop>
-            </AlertDialog>
+            <Button variant="danger-soft" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-prepare", prepareApplicationImport)}>
+              <ArrowUpFromLine className="size-4" />导入应用数据
+            </Button>
+            <Modal
+              isOpen={Boolean(backupPreview)}
+              onOpenChange={(open) => {
+                if (!open && backupPreview && !pendingAction) {
+                  void run("backup-discard", discardApplicationImport);
+                }
+              }}
+            >
+              <Button className="hidden" aria-hidden="true">打开应用数据导入预览</Button>
+              <Modal.Backdrop isDismissable={!pendingAction}><Modal.Container><Modal.Dialog>
+                <Modal.Header><Modal.Heading>确认替换应用数据？</Modal.Heading></Modal.Header>
+                <Modal.Body className="space-y-2">
+                  <p>将替换全部 Workspace、当前选择、全局设置和协议包注册表。</p>
+                  <p>{backupPreview?.workspace_count} 个 Workspace · {backupPreview?.protocol_package_count} 个协议包版本（启用 {backupPreview?.enabled_protocol_package_count}）· {backupPreview?.portable_material_count} 份证书材料</p>
+                  <p>迁移报告：源版本 {backupPreview?.migration_report.source_version}；已移除 {backupPreview?.migration_report.removed_metadata_extractors} 个旧元数据提取器。</p>
+                  {backupPreview?.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+                </Modal.Body>
+                <Modal.Footer><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-discard", discardApplicationImport)}>取消</Button><Button variant="danger" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-commit", commitApplicationImport)}>确认替换</Button></Modal.Footer>
+              </Modal.Dialog></Modal.Container></Modal.Backdrop>
+            </Modal>
           </div>
         </div>
-        <Alert status="accent">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>两种可移植配置文件</Alert.Title>
-            <Alert.Description>
-              单个 Workspace 文件包含该工作区的入口、规则、策略与 Android 设备网络方案；完整应用配置还包含全部 Workspace、当前选择和可移植全局设置。为便于测试迁移，文件可能包含 Listener 外部证书、服务端私钥、PKCS12/PFX 原文及明文密码，但绝不包含本机 MITM Root CA 私钥。
-            </Alert.Description>
-          </Alert.Content>
-        </Alert>
+        <Accordion>
+          <Accordion.Item id="legacy-import">
+            <Accordion.Heading><Accordion.Trigger>导入旧版文件（兼容）<Accordion.Indicator /></Accordion.Trigger></Accordion.Heading>
+            <Accordion.Panel><Accordion.Body className="space-y-3">
+              <p className="text-sm text-[var(--telemetry-muted)]">旧版完整配置会替换应用配置；旧版 Workspace 只新增一个 Workspace。不会自动猜测文件格式。</p>
+              <div className="flex gap-2"><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("legacy-config-prepare", () => prepareLegacyImport("application_configuration"))}>导入旧版完整配置</Button><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("legacy-workspace-prepare", () => prepareLegacyImport("workspace"))}>导入旧版 Workspace</Button></div>
+            </Accordion.Body></Accordion.Panel>
+          </Accordion.Item>
+        </Accordion>
+        <Modal isOpen={Boolean(legacyPreview)} onOpenChange={(open) => { if (!open && legacyPreview && !pendingAction) void run("legacy-discard", discardLegacyImport); }}>
+          <Button className="hidden" aria-hidden="true">打开旧版文件导入预览</Button>
+          <Modal.Backdrop isDismissable={!pendingAction}><Modal.Container><Modal.Dialog>
+            <Modal.Header><Modal.Heading>确认导入旧版文件？</Modal.Heading></Modal.Header>
+            <Modal.Body className="space-y-2">
+              <p>{legacyPreview?.kind === "application_configuration" ? "替换全部应用配置" : "新增一个 Workspace"}</p>
+              <p>{legacyPreview?.workspace_count} 个 Workspace · {legacyPreview?.portable_material_count} 份证书材料</p>
+              <p>迁移报告：源版本 {legacyPreview?.source_version}；已移除 {legacyPreview?.migration_report.removed_metadata_extractors} 个旧元数据提取器。</p>
+              {legacyPreview?.warnings.map((warning) => <p key={warning}>{warning}</p>)}
+            </Modal.Body>
+            <Modal.Footer><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("legacy-discard", discardLegacyImport)}>取消</Button><Button variant="danger" isDisabled={Boolean(pendingAction)} onPress={() => void run("legacy-commit", commitLegacyImport)}>确认导入</Button></Modal.Footer>
+          </Modal.Dialog></Modal.Container></Modal.Backdrop>
+        </Modal>
         <Alert status="accent">
           <Alert.Indicator />
           <Alert.Content>
@@ -277,17 +339,6 @@ export function WorkspacesView() {
             <Button fullWidth variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("save", saveWorkspace)}>保存</Button>
             <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("select", selectCurrentWorkspace)}>设为当前 Workspace</Button>
             <Button fullWidth variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("copy", copyWorkspace)}><Copy className="size-4" />复制</Button>
-            <PortableExportDialog
-              isOpen={workspaceExportOpen}
-              onOpenChange={setWorkspaceExportOpen}
-              triggerLabel="导出当前 Workspace"
-              heading="导出当前 Workspace 的敏感配置？"
-              description="文件可能包含当前 Workspace 引用的外部证书原文、Listener 服务端私钥、PKCS12/PFX 原文及明文密码。文件不会包含本机 MITM Root CA 私钥、抓包 Payload、系统密钥密文或运行状态。请仅保存在受控测试环境。"
-              confirmLabel="确认导出当前 Workspace"
-              isDisabled={Boolean(pendingAction)}
-              fullWidth
-              onConfirm={() => void run("export", exportWorkspace)}
-            />
             <AlertDialog isOpen={deleteOpen} onOpenChange={setDeleteOpen}>
               <Button fullWidth variant="danger-soft"><TrashBin className="size-4" />删除</Button>
               <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>

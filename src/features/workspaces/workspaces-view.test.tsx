@@ -93,171 +93,43 @@ describe("Workspace CRUD surface", () => {
     pendingRefresh.resolve({ status: "ok", data: [workspaceSummary] });
   });
 
-  it("imports one Workspace, reports success, then refreshes the list", async () => {
-    const user = userEvent.setup();
+  it("shows exactly the two ordinary application-data migration actions", async () => {
     await renderLoadedView();
-    const initialListCalls = mocks.workspaceList.mock.calls.length;
-
-    await user.click(screen.getByRole("button", { name: "导入单个 Workspace" }));
-
-    await waitFor(() => expect(mocks.workspaceImport).toHaveBeenCalledTimes(1));
-    expect(mocks.toast).toHaveBeenCalledWith("完整 Workspace 已导入", {
-      variant: "success",
-    });
-    await waitFor(() =>
-      expect(mocks.workspaceList).toHaveBeenCalledTimes(initialListCalls + 1),
-    );
-    expect(mocks.toast.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.workspaceList.mock.invocationCallOrder.at(-1)!,
-    );
+    expect(screen.getByRole("button", { name: "导出应用数据" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "导入应用数据" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "导出当前 Workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导入单个 Workspace" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导出完整应用配置" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "导入完整应用配置" })).not.toBeInTheDocument();
   });
 
-  it("reports a cancelled Workspace import without claiming success", async () => {
-    mocks.workspaceImport.mockReturnValue(
-      ok({ message: "未选择 Workspace 文件", cancelled: true }),
-    );
+  it("exports application data through the ZIP command", async () => {
     const user = userEvent.setup();
     await renderLoadedView();
-
-    await user.click(screen.getByRole("button", { name: "导入单个 Workspace" }));
-
-    await waitFor(() =>
-      expect(mocks.toast).toHaveBeenCalledWith("未选择 Workspace 文件", {
-        variant: "default",
-      }),
-    );
-  });
-
-  it("does not export a Workspace when the confirmation is cancelled", async () => {
-    const user = userEvent.setup();
-    await renderLoadedView();
-
-    await user.click(screen.getByRole("button", { name: "导出当前 Workspace" }));
-    expect(
-      await screen.findByRole("heading", {
-        name: "导出当前 Workspace 的敏感配置？",
-      }),
-    ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "取消" }));
-
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("heading", {
-          name: "导出当前 Workspace 的敏感配置？",
-        }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(mocks.workspaceExport).not.toHaveBeenCalled();
-  });
-
-  it("exports the selected Workspace only after confirmation", async () => {
-    const user = userEvent.setup();
-    await renderLoadedView();
-
-    await user.click(screen.getByRole("button", { name: "导出当前 Workspace" }));
-    await user.click(
-      await screen.findByRole("button", {
-        name: "确认导出当前 Workspace",
-      }),
-    );
-
-    await waitFor(() =>
-      expect(mocks.workspaceExport).toHaveBeenCalledWith("workspace-1"),
-    );
-    expect(mocks.toast).toHaveBeenCalledWith("完整 Workspace 已导出", {
+    await user.click(screen.getByRole("button", { name: "导出应用数据" }));
+    await waitFor(() => expect(mocks.applicationBackupExport).toHaveBeenCalledOnce());
+    expect(mocks.toast).toHaveBeenCalledWith("应用数据已导出（2048 字节）。", {
       variant: "success",
     });
   });
 
-  it("does not replace the application configuration when import is cancelled", async () => {
+  it("previews exact replacement scope before committing the ZIP", async () => {
     const user = userEvent.setup();
     await renderLoadedView();
-
-    await user.click(screen.getByRole("button", { name: "导入完整应用配置" }));
-    expect(
-      await screen.findByRole("heading", { name: "替换全部应用配置？" }),
-    ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "取消" }));
-
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("heading", { name: "替换全部应用配置？" }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(mocks.applicationConfigurationImport).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "导入应用数据" }));
+    expect(await screen.findByRole("heading", { name: "确认替换应用数据？" })).toBeVisible();
+    expect(screen.getByText(/2 个 Workspace · 3 个协议包版本/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "确认替换" }));
+    await waitFor(() => expect(mocks.applicationBackupImportCommit).toHaveBeenCalledWith("backup-token"));
   });
 
-  it("imports the full configuration, reports its Rust tone, then refreshes", async () => {
-    mocks.applicationConfigurationImport.mockReturnValue(
-      ok({
-        message: "配置已导入，但旧证书清理不完整",
-        cancelled: false,
-        ui_tone: "warning",
-      }),
-    );
+  it("discards the prepared token when preview is cancelled", async () => {
     const user = userEvent.setup();
     await renderLoadedView();
-    const initialListCalls = mocks.workspaceList.mock.calls.length;
-
-    await user.click(screen.getByRole("button", { name: "导入完整应用配置" }));
-    await user.click(
-      screen.getByRole("button", { name: "确认选择文件并替换" }),
-    );
-
-    await waitFor(() =>
-      expect(mocks.applicationConfigurationImport).toHaveBeenCalledTimes(1),
-    );
-    expect(mocks.toast).toHaveBeenCalledWith(
-      "配置已导入，但旧证书清理不完整",
-      { variant: "warning" },
-    );
-    await waitFor(() =>
-      expect(mocks.workspaceList).toHaveBeenCalledTimes(initialListCalls + 1),
-    );
-    expect(mocks.toast.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.workspaceList.mock.invocationCallOrder.at(-1)!,
-    );
-  });
-
-  it("does not export the full configuration when confirmation is cancelled", async () => {
-    const user = userEvent.setup();
-    await renderLoadedView();
-
-    await user.click(screen.getByRole("button", { name: "导出完整应用配置" }));
-    expect(
-      await screen.findByRole("heading", {
-        name: "导出完整应用配置的敏感内容？",
-      }),
-    ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "取消" }));
-
-    await waitFor(() =>
-      expect(
-        screen.queryByRole("heading", {
-          name: "导出完整应用配置的敏感内容？",
-        }),
-      ).not.toBeInTheDocument(),
-    );
-    expect(mocks.applicationConfigurationExport).not.toHaveBeenCalled();
-  });
-
-  it("exports the full configuration only after confirmation", async () => {
-    const user = userEvent.setup();
-    await renderLoadedView();
-
-    await user.click(screen.getByRole("button", { name: "导出完整应用配置" }));
-    await user.click(
-      await screen.findByRole("button", {
-        name: "确认导出完整应用配置",
-      }),
-    );
-
-    await waitFor(() =>
-      expect(mocks.applicationConfigurationExport).toHaveBeenCalledTimes(1),
-    );
-    expect(mocks.toast).toHaveBeenCalledWith("完整应用配置已导出", {
-      variant: "success",
-    });
+    await user.click(screen.getByRole("button", { name: "导入应用数据" }));
+    await user.click(await screen.findByRole("button", { name: "取消" }));
+    await waitFor(() => expect(mocks.applicationBackupImportDiscard).toHaveBeenCalledWith("backup-token"));
+    expect(mocks.applicationBackupImportCommit).not.toHaveBeenCalled();
   });
 
   it("selects the Workspace without implying running resources were stopped", async () => {
@@ -340,57 +212,42 @@ describe("Workspace CRUD surface", () => {
   });
 
   it("guards against a second action while an IPC command is pending", async () => {
-    const pendingImport = deferred<{
-      status: "ok";
-      data: { message: string; cancelled: boolean };
-    }>();
-    mocks.workspaceImport.mockReturnValue(pendingImport.promise);
+    const pendingImport = deferred<Awaited<ReturnType<typeof mocks.applicationBackupImportPrepare>>>();
+    mocks.applicationBackupImportPrepare.mockReturnValue(pendingImport.promise);
     const user = userEvent.setup();
     await renderLoadedView();
 
     const importButton = screen.getByRole("button", {
-      name: "导入单个 Workspace",
+      name: "导入应用数据",
     });
     await user.click(importButton);
 
     expect(importButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "新建" })).toBeDisabled();
     await user.click(importButton);
-    expect(mocks.workspaceImport).toHaveBeenCalledTimes(1);
+    expect(mocks.applicationBackupImportPrepare).toHaveBeenCalledTimes(1);
 
     pendingImport.resolve({
       status: "ok",
-      data: { message: "完整 Workspace 已导入", cancelled: false },
+      data: null,
     });
     await waitFor(() => expect(importButton).toBeEnabled());
   });
 
-  it("waits for an action to finish before showing its toast and refreshing", async () => {
-    const pendingImport = deferred<{
-      status: "ok";
-      data: { message: string; cancelled: boolean };
-    }>();
-    mocks.workspaceImport.mockReturnValue(pendingImport.promise);
+  it("waits for ZIP export to finish before showing success", async () => {
+    const pendingExport = deferred<Awaited<ReturnType<typeof mocks.applicationBackupExport>>>();
+    mocks.applicationBackupExport.mockReturnValue(pendingExport.promise);
     const user = userEvent.setup();
     await renderLoadedView();
-    const initialListCalls = mocks.workspaceList.mock.calls.length;
 
-    await user.click(screen.getByRole("button", { name: "导入单个 Workspace" }));
+    await user.click(screen.getByRole("button", { name: "导出应用数据" }));
 
     expect(mocks.toast).not.toHaveBeenCalled();
-    expect(mocks.workspaceList).toHaveBeenCalledTimes(initialListCalls);
-
-    pendingImport.resolve({
+    pendingExport.resolve({
       status: "ok",
-      data: { message: "完整 Workspace 已导入", cancelled: false },
+      data: { bytes_written: 2048, replaced_existing: false },
     });
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(mocks.workspaceList).toHaveBeenCalledTimes(initialListCalls + 1),
-    );
-    expect(mocks.toast.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.workspaceList.mock.invocationCallOrder.at(-1)!,
-    );
   });
 
   it("shows IPC failures as danger toasts without refreshing", async () => {
@@ -410,15 +267,26 @@ describe("Workspace CRUD surface", () => {
     expect(mocks.workspaceList).toHaveBeenCalledTimes(initialListCalls);
   });
 
-  it("explains the portable files' sensitive-material boundary", async () => {
+  it("keeps legacy imports folded with explicit replacement and additive scopes", async () => {
+    const user = userEvent.setup();
     await renderLoadedView();
+    await user.click(screen.getByRole("button", { name: "导入旧版文件（兼容）" }));
+    expect(screen.getByText(/旧版完整配置会替换应用配置/)).toBeVisible();
+    expect(screen.getByText(/旧版 Workspace 只新增一个 Workspace/)).toBeVisible();
+  });
 
-    expect(screen.getByText(/完整应用配置还包含全部 Workspace/)).toBeVisible();
-    expect(
-      screen.getByText(
-        /文件可能包含 Listener 外部证书、服务端私钥、PKCS12\/PFX 原文及明文密码/,
-      ),
-    ).toBeVisible();
-    expect(screen.getByText(/绝不包含本机 MITM Root CA 私钥/)).toBeVisible();
+  it("previews the legacy migration report and commits the explicitly selected kind", async () => {
+    const user = userEvent.setup();
+    await renderLoadedView();
+    await user.click(screen.getByRole("button", { name: "导入旧版文件（兼容）" }));
+    await user.click(screen.getByRole("button", { name: "导入旧版完整配置" }));
+    expect(await screen.findByRole("heading", { name: "确认导入旧版文件？" })).toBeVisible();
+    expect(screen.getByText("替换全部应用配置")).toBeVisible();
+    expect(screen.getByText(/源版本 4；已移除 2 个旧元数据提取器/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "确认导入" }));
+    await waitFor(() =>
+      expect(mocks.legacyApplicationConfigurationImportCommit).toHaveBeenCalledWith("legacy-token"),
+    );
+    expect(mocks.legacyWorkspaceImportCommit).not.toHaveBeenCalled();
   });
 });
