@@ -40,6 +40,7 @@ pub trait ListenerCertificateImportPort: Send + Sync + std::fmt::Debug {
     async fn import_downstream_server_identity(
         &self,
         label: String,
+        password: String,
     ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
 
     async fn import_downstream_client_trust(

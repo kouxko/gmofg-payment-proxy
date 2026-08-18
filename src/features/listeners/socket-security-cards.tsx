@@ -32,11 +32,12 @@ interface CommonProps {
 }
 
 export function SocketAppSecurityCard(props: CommonProps & {
-  onImportIdentity: (label: string) => Promise<boolean>;
+  onImportIdentity: (label: string, password: string) => Promise<boolean>;
   onImportTrust: (label: string) => Promise<boolean>;
 }) {
   const [modal, setModal] = useState<"identity" | "trust">();
   const [label, setLabel] = useState("Socket App TLS 证书");
+  const [password, setPassword] = useState("");
   const security = appSecurity(props.settings);
   const tls = security.mode === "tls" ? security.downstream_tls : undefined;
   return <Card><Card.Header><Card.Title>2. App 接入安全</Card.Title>
@@ -49,13 +50,20 @@ export function SocketAppSecurityCard(props: CommonProps & {
       onChange={(next) => props.onChange(setAppTls(props.settings, next))}
       onImportIdentity={() => { setLabel("Socket App 服务端身份"); setModal("identity"); }}
       onImportTrust={() => { setLabel("Socket App 客户端 CA"); setModal("trust"); }} />}
-    {modal && <ImportPemModal open busy={props.busy} label={label}
+    {modal === "identity" && <ImportIdentityModal open busy={props.busy} label={label} password={password}
+      onOpenChange={(open) => { if (!open) { setPassword(""); setModal(undefined); } }}
+      onLabelChange={setLabel} onPasswordChange={setPassword}
+      title="导入 App 侧服务端身份"
+      description="选择 .p12 / .pfx，或同时包含服务端证书链与匹配私钥的 .pem。Listener 接受 App TLS 连接时出示它；它必须具备 serverAuth，而不是上游 mTLS 使用的 clientAuth 身份。"
+      detail="文件经系统对话框读取并保存为受保护引用。输入的密码仅用于本次解密，不写入 Listener、Workspace 或诊断信息。"
+      buttonLabel="选择服务端身份（.p12 / .pfx / .pem）"
+      buttonAriaLabel="选择服务端身份（.p12 / .pfx / .pem）"
+      onImport={async () => { const ok = await props.onImportIdentity(label, password); setPassword(""); if (ok) setModal(undefined); }} />}
+    {modal === "trust" && <ImportPemModal open busy={props.busy} label={label}
       onOpenChange={(open) => { if (!open) setModal(undefined); }} onLabelChange={setLabel}
-      title={modal === "identity" ? "导入 App 侧服务端身份" : "导入 App 客户端 CA"}
-      description={modal === "identity" ? "选择包含服务端证书链与匹配私钥的 PEM identity。" : "选择用于验证 App 客户端证书的 CA。"}
-      detail="文件经系统对话框读取并保存为受保护引用。"
-      buttonLabel={modal === "identity" ? "选择服务端身份 PEM" : "选择客户端 CA"}
-      onImport={async () => { const ok = await (modal === "identity" ? props.onImportIdentity(label) : props.onImportTrust(label)); if (ok) setModal(undefined); }} />}
+      title="导入 App 客户端 CA" description="选择用于验证 App 客户端证书的 CA。"
+      detail="文件经系统对话框读取并保存为受保护引用。" buttonLabel="选择客户端 CA"
+      onImport={async () => { if (await props.onImportTrust(label)) setModal(undefined); }} />}
   </Card.Content></Card>;
 }
 
@@ -100,8 +108,8 @@ export function SocketServerCard(props: CommonProps & {
     {props.testResult && <ConnectionTestResult result={props.testResult} showTlsDetails={Boolean(tls)} />}
     {props.testError && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>Server 连接失败</Alert.Title><Alert.Description>{props.testError}</Alert.Description></Alert.Content></Alert>}
     {modal === "identity" && <ImportIdentityModal open busy={props.busy} label={label} password={password}
-      onOpenChange={(open) => { if (!open) setModal(undefined); }} onLabelChange={setLabel} onPasswordChange={setPassword}
-      onImport={async () => { if (await props.onImportIdentity(label, password)) { setPassword(""); setModal(undefined); } }} />}
+      onOpenChange={(open) => { if (!open) { setPassword(""); setModal(undefined); } }} onLabelChange={setLabel} onPasswordChange={setPassword}
+      onImport={async () => { const ok = await props.onImportIdentity(label, password); setPassword(""); if (ok) setModal(undefined); }} />}
     {modal === "trust" && <ImportTrustModal open busy={props.busy} label={label}
       onOpenChange={(open) => { if (!open) setModal(undefined); }} onLabelChange={setLabel}
       onImport={async () => { if (await props.onImportTrust(label)) setModal(undefined); }} />}
@@ -117,6 +125,7 @@ function DownstreamTlsFields({ tls, references, details, disabled, onChange, onI
   const authentication = tls.client_authentication;
   const trustId = authentication.mode === "disabled" ? undefined : authentication.trust;
   return <div className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
+    <p className="text-xs text-[var(--telemetry-muted)]">App 侧使用 serverAuth 服务端身份；不要选择代理连接上游 Server 时使用的 clientAuth 客户端身份。</p>
     <CertificateRow label="App 侧服务端身份" value={tls.server_identity || null} emptyLabel="请选择服务端 PEM identity"
       references={identities} button="导入服务端身份" disabled={disabled}
       onChange={(server_identity) => onChange({ ...tls, server_identity: server_identity ?? "" })} onImport={onImportIdentity} />
@@ -136,6 +145,7 @@ function UpstreamTlsFields({ tls, references, details, disabled, onChange, onImp
   const trusts = references.filter((item) => item.kind === "upstream_server_trust");
   const identities = references.filter((item) => item.kind === "upstream_client_identity");
   return <div className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
+    <p className="text-xs text-[var(--telemetry-muted)]">这里的身份用于代理连接上游 Server：mTLS 身份必须具备 clientAuth，不是 App 接入时使用的 serverAuth 服务端身份。</p>
     <div className="flex items-center justify-between gap-4"><span>校验 Server 主机名</span><Switch aria-label="校验 Socket Server 主机名" isSelected={tls.verify_hostname} isDisabled={disabled} onChange={(verify_hostname) => onChange({ ...tls, verify_hostname })}><Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control></Switch.Content></Switch></div>
     <CertificateRow label="Server CA" value={tls.server_trust} emptyLabel="使用系统信任根" references={trusts} button="导入 Server CA" disabled={disabled} onChange={(server_trust) => onChange({ ...tls, server_trust })} onImport={onImportTrust} />
     <CertificateDetailPanel reference={trusts.find((item) => item.id === tls.server_trust)} detail={detail(details, tls.server_trust ?? undefined)} emptyText="当前使用系统信任根。" />

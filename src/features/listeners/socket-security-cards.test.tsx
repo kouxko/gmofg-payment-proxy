@@ -7,7 +7,6 @@ import type {
   SocketRelaySettings,
 } from "@/generated/rust-types";
 import { SocketAppSecurityCard, SocketServerCard } from "./socket-security-cards";
-
 const references: CertificateReference[] = [
   { id: "app-id", label: "App Identity", kind: "reverse_server_identity", reference: "managed:app-id" },
   { id: "app-ca", label: "App CA", kind: "downstream_client_trust", reference: "managed:app-ca" },
@@ -250,11 +249,54 @@ describe("Socket security cards", () => {
 
     await user.click(screen.getByRole("button", { name: "导入服务端身份" }));
     const input = await screen.findByRole("textbox", { name: "显示名称" });
-    await user.clear(input);
-    await user.type(input, "Imported App Identity");
-    await user.click(screen.getByRole("button", { name: "选择服务端身份 PEM" }));
+    await user.clear(input); await user.type(input, "Imported App Identity");
+    await user.type(screen.getByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）"), "app-secret");
+    expect(screen.getByText(/必须具备 serverAuth，而不是.*clientAuth/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "选择服务端身份（.p12 / .pfx / .pem）" }));
 
-    expect(props.onImportIdentity).toHaveBeenCalledWith("Imported App Identity");
+    expect(props.onImportIdentity).toHaveBeenCalledWith("Imported App Identity", "app-secret");
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入 App 侧服务端身份" })).not.toBeInTheDocument());
+    expect(document.body).not.toHaveTextContent("app-secret");
+  });
+
+  it("allows an empty App identity password", async () => {
+    const props = renderApp();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "导入服务端身份" }));
+    await user.click(await screen.findByRole("button", { name: "选择服务端身份（.p12 / .pfx / .pem）" }));
+
+    expect(props.onImportIdentity).toHaveBeenCalledWith("Socket App 服务端身份", "");
+  });
+
+  it("clears the App identity password after a rejected import", async () => {
+    const props = renderApp();
+    props.onImportIdentity.mockResolvedValue(false);
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "导入服务端身份" }));
+    const password = await screen.findByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）");
+    await user.type(password, "rejected-secret");
+    await user.click(screen.getByRole("button", { name: "选择服务端身份（.p12 / .pfx / .pem）" }));
+
+    expect(screen.getByRole("dialog", { name: "导入 App 侧服务端身份" })).toBeVisible(); expect(password).toHaveValue("");
+    expect(document.body).not.toHaveTextContent("rejected-secret");
+  });
+
+  it("locks duplicate App identity imports while the picker result is pending", async () => {
+    let resolveImport!: (value: boolean) => void;
+    const props = renderApp();
+    props.onImportIdentity.mockReturnValue(new Promise<boolean>((resolve) => { resolveImport = resolve; }));
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "导入服务端身份" }));
+    const choose = await screen.findByRole("button", { name: "选择服务端身份（.p12 / .pfx / .pem）" });
+    await user.click(choose);
+    fireEvent.click(choose);
+
+    expect(props.onImportIdentity).toHaveBeenCalledTimes(1);
+    expect(choose).toBeDisabled();
+    resolveImport(true);
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入 App 侧服务端身份" })).not.toBeInTheDocument());
   });
 
@@ -275,10 +317,16 @@ describe("Socket security cards", () => {
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: "导入服务端身份" }));
+    await user.type(
+      await screen.findByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）"),
+      "cancel-secret",
+    );
     await user.click(await screen.findByRole("button", { name: "取消" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入 App 侧服务端身份" })).not.toBeInTheDocument());
-    expect(props.onImportIdentity).not.toHaveBeenCalled();
+    expect(props.onImportIdentity).not.toHaveBeenCalled(); expect(document.body).not.toHaveTextContent("cancel-secret");
+    await user.click(screen.getByRole("button", { name: "导入服务端身份" }));
+    expect(await screen.findByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）")).toHaveValue("");
   });
 
   it("renders disabled App TLS without a client trust selector", () => {

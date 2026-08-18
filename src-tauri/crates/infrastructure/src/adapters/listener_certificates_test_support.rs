@@ -35,6 +35,39 @@ pub(super) fn server_identity_pem() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     )
 }
 
+pub(super) fn server_pkcs12_with_password(password: &str) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+    let service = CertificateService;
+    let root = service.generate_root_ca("Listener Server Root").unwrap();
+    let leaf = service
+        .generate_leaf(
+            &root.certificate_der,
+            &root.private_key_pkcs8_der,
+            &LeafCertificateRequest {
+                common_name: "listener.test".into(),
+                dns_names: vec!["listener.test".into()],
+                ip_addresses: Vec::new(),
+            },
+        )
+        .unwrap();
+    let mut keystore = KeyStore::new();
+    keystore.add_entry(
+        "listener-server",
+        KeyStoreEntry::PrivateKeyChain(PrivateKeyChain::new(
+            "listener-server-key",
+            PrivateKey::from_der(&leaf.private_key_pkcs8_der).unwrap(),
+            [
+                Certificate::from_der(&leaf.certificate_der).unwrap(),
+                Certificate::from_der(&root.certificate_der).unwrap(),
+            ],
+        )),
+    );
+    (
+        keystore.writer(password).write().unwrap(),
+        leaf.private_key_pkcs8_der.to_vec(),
+        root.certificate_der.clone(),
+    )
+}
+
 pub(super) fn client_pkcs12() -> (Vec<u8>, Vec<u8>, Vec<u8>) {
     client_pkcs12_with_password("password")
 }

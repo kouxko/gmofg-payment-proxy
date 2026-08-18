@@ -146,7 +146,7 @@ impl ManagedListenerCertificateAdapter {
                         KIND_DOWNSTREAM_SERVER_IDENTITY,
                     ) => {
                         let mut parsed = CertificateService
-                            .parse_server_identity_pem(&material.bytes)
+                            .parse_server_identity_pem(&material.bytes, "")
                             .map_err(app_error)?;
                         Ok(ReverseClientIdentity {
                             certificate_chain_der: std::mem::take(
@@ -199,15 +199,33 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
     async fn import_downstream_server_identity(
         &self,
         label: String,
+        password: String,
     ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
+        let password = Zeroizing::new(password);
         let Some(path) = self.dialog.choose_open_file("server_identity_pem")? else {
             return Ok(None);
         };
         let bytes = read_secret_file(&path)?;
-        let parsed = CertificateService
-            .parse_server_identity_pem(&bytes)
-            .map_err(app_error)?;
-        let key = self.persist(KIND_DOWNSTREAM_SERVER_IDENTITY, &[], &bytes)?;
+        let extension = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(str::to_ascii_lowercase);
+        let parsed = match extension.as_deref() {
+            Some("p12" | "pfx") => CertificateService
+                .parse_server_identity_pkcs12(&bytes, &password)
+                .map_err(app_error)?,
+            Some("pem") => CertificateService
+                .parse_server_identity_pem(&bytes, &password)
+                .map_err(app_error)?,
+            _ => {
+                return Err(AppError::new(
+                    "CERTIFICATE_INVALID",
+                    "下游服务端身份仅支持 .p12、.pfx 或包含证书链与私钥的 .pem。",
+                ));
+            }
+        };
+        let canonical_pem = parsed.canonical_pem();
+        let key = self.persist(KIND_DOWNSTREAM_SERVER_IDENTITY, &[], &canonical_pem)?;
         let reference = reference(label, CertificateReferenceKind::ReverseServerIdentity, &key);
         Ok(Some(imported(
             reference,
@@ -351,7 +369,7 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
             }
             (CertificateReferenceKind::ReverseServerIdentity, KIND_DOWNSTREAM_SERVER_IDENTITY) => {
                 CertificateService
-                    .parse_server_identity_pem(&material.bytes)
+                    .parse_server_identity_pem(&material.bytes, "")
                     .map_err(app_error)?
                     .metadata
                     .clone()

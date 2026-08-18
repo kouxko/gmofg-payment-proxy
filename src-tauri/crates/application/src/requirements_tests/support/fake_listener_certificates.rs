@@ -9,6 +9,7 @@ impl ListenerCertificateImportPort for FakePorts {
     async fn import_downstream_server_identity(
         &self,
         _label: String,
+        _password: String,
     ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
         Ok(None)
     }

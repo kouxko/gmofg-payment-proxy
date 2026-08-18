@@ -43,13 +43,13 @@ pub(super) fn validate_portable_material(
             ))
         }
         CertificateReferenceKind::ReverseServerIdentity => {
-            CertificateService
-                .parse_server_identity_pem(bytes)
+            let parsed = CertificateService
+                .parse_server_identity_pem(bytes, "")
                 .map_err(app_error)?;
             Ok((
                 KIND_DOWNSTREAM_SERVER_IDENTITY,
                 String::new(),
-                bytes.to_vec(),
+                parsed.canonical_pem().to_vec(),
             ))
         }
         CertificateReferenceKind::DownstreamClientTrust => {

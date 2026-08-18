@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Button, Input, Label, Modal, TextField } from "@heroui/react";
 
 type CommonProps = {
@@ -76,11 +77,43 @@ export function ImportIdentityModal({
   onLabelChange,
   onPasswordChange,
   onImport,
+  title = "导入 Proxy → Server 的客户端身份",
+  description,
+  detail,
+  buttonLabel = "选择身份文件",
+  buttonAriaLabel = "选择客户端身份（.p12 / .pfx / .pem）",
+  passwordLabel = "P12 / PFX 密码（PEM 不使用；允许为空）",
 }: CommonProps & {
   password: string;
   onPasswordChange: (value: string) => void;
   onImport: () => Promise<void>;
+  title?: string;
+  description?: string;
+  detail?: string;
+  buttonLabel?: string;
+  buttonAriaLabel?: string;
+  passwordLabel?: string;
 }) {
+  const submittingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+  }, []);
+
+  async function submit() {
+    if (submittingRef.current || busy || !label.trim()) return;
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      await onImport();
+    } finally {
+      submittingRef.current = false;
+      if (mountedRef.current) setSubmitting(false);
+    }
+  }
+
   return (
     <Modal isOpen={open} onOpenChange={onOpenChange}>
       <Button className="hidden" aria-hidden="true">
@@ -90,7 +123,7 @@ export function ImportIdentityModal({
         <Modal.Container size="sm">
           <Modal.Dialog>
             <Modal.Header>
-              <Modal.Heading>导入 Proxy → Server 的客户端身份</Modal.Heading>
+              <Modal.Heading>{title}</Modal.Heading>
             </Modal.Header>
             <Modal.Body className="space-y-3">
               <TextField>
@@ -101,7 +134,7 @@ export function ImportIdentityModal({
                 />
               </TextField>
               <TextField>
-                <Label>P12 / PFX 密码（PEM 不使用；允许为空）</Label>
+                <Label>{passwordLabel}</Label>
                 <Input
                   type="password"
                   value={password}
@@ -110,27 +143,27 @@ export function ImportIdentityModal({
               </TextField>
               <div className="space-y-2 rounded-2xl border border-[var(--telemetry-line)] p-3">
                 <p className="text-sm text-[var(--telemetry-muted)]">
-                  支持 client.p12 / client.pfx，或同时包含客户端证书链与匹配私钥的
-                  client.pem。代理连接上游 Server 时出示它；它不是本入口给
-                  Android/App 使用的服务端证书。
+                  {description ?? <>支持 client.p12 / client.pfx，或同时包含客户端证书链与匹配私钥的
+                    client.pem。代理连接上游 Server 时出示它；它不是本入口给
+                    Android/App 使用的服务端证书。</>}
                 </p>
                 <p className="text-xs text-[var(--telemetry-muted)]">
-                  文件通过系统对话框读取和解析，导入后会显示主题、SAN、
-                  有效期和 SHA-256。私钥与密码由系统保护存储；显式导出可移植
-                  应用配置时会随配置包含。
+                  {detail ?? <>文件通过系统对话框读取和解析，导入后会显示主题、SAN、
+                    有效期和 SHA-256。私钥由系统保护存储，输入的密码仅用于本次解密，
+                    不会保存在 Workspace 或诊断信息中。</>}
                 </p>
               </div>
             </Modal.Body>
             <Modal.Footer className="shrink-0 flex-wrap border-t border-[var(--telemetry-line)] pt-4">
-              <Button slot="close" variant="outline" isDisabled={busy}>取消</Button>
+              <Button slot="close" variant="outline" isDisabled={busy || submitting}>取消</Button>
               <Button
-                aria-label="选择客户端身份（.p12 / .pfx / .pem）"
+                aria-label={buttonAriaLabel}
                 className="min-w-48 flex-1"
                 variant="primary"
-                isDisabled={busy || !label.trim()}
-                onPress={() => void onImport()}
+                isDisabled={busy || submitting || !label.trim()}
+                onPress={() => void submit()}
               >
-                选择身份文件
+                {buttonLabel}
               </Button>
             </Modal.Footer>
           </Modal.Dialog>

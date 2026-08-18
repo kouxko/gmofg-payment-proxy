@@ -1,6 +1,8 @@
 use super::*;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use p12_keystore::{Certificate, KeyStoreEntry, PrivateKey, PrivateKeyChain};
+use p12_keystore::{
+    Certificate, EncryptionAlgorithm, KeyStoreEntry, MacAlgorithm, PrivateKey, PrivateKeyChain,
+};
 
 #[test]
 fn generates_root_and_leaf_with_expected_policies() {

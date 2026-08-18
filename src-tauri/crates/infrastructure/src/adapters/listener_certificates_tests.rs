@@ -11,6 +11,7 @@ mod test_support;
 
 use test_support::{
     client_identity_pem, client_pkcs12, client_pkcs12_with_password, server_identity_pem,
+    server_pkcs12_with_password,
 };
 
 #[derive(Debug)]
@@ -72,7 +73,7 @@ async fn imports_are_independent_protected_references_and_resolve_in_memory() {
     );
 
     let downstream_identity = adapter
-        .import_downstream_server_identity("入口服务端身份".into())
+        .import_downstream_server_identity("入口服务端身份".into(), String::new())
         .await
         .unwrap()
         .unwrap();
@@ -235,6 +236,8 @@ async fn empty_password_pkcs12_remains_importable_after_portable_round_trip() {
     let restored = adapter.restore_portable(portable).await.unwrap();
     assert!(adapter.inspect(restored).await.is_ok());
 }
+
+include!("listener_certificates_tests/server_identity_import.rs");
 
 #[tokio::test]
 async fn pem_client_identity_imports_without_password_and_survives_portable_round_trip() {
@@ -422,7 +425,7 @@ async fn cancelling_native_dialog_returns_none_without_persisting_a_reference() 
 
     assert!(
         adapter
-            .import_downstream_server_identity("server".into())
+            .import_downstream_server_identity("server".into(), "discarded-secret".into())
             .await
             .unwrap()
             .is_none()

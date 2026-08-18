@@ -28,7 +28,7 @@ type Props = {
   testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
   onChange: (changes: Partial<SocketRelaySettings>) => void;
-  onImportDownstreamServerIdentity: (label: string) => Promise<boolean>;
+  onImportDownstreamServerIdentity: (label: string, password: string) => Promise<boolean>;
   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
   onImportServerTrust: (label: string) => Promise<boolean>;
