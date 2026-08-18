@@ -61,7 +61,11 @@ export function SocketListenerSettings(props: Props): ReactNode {
           <Select aria-label="Socket 工作方式" selectedKey={workingMode} isDisabled={props.locked}
             onSelectionChange={(key) => {
               if (!isSocketWorkingMode(key)) return;
-              apply(setSocketWorkingMode(props.settings, key));
+              apply(setSocketWorkingMode(
+                props.settings,
+                key,
+                props.protocolCatalog.data?.recommended_package,
+              ));
               setAnnouncement(workingModeAnnouncement(key));
             }}>
             <Label>工作方式</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>

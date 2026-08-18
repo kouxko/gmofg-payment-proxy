@@ -61,7 +61,7 @@ function setupScriptedSocket() {
       },
       schema: { id: "iso-message", version: 1, title: "ISO", fields: [{ name: "mti", label: "MTI", type: "string" }] },
     }],
-    installed_version_count: 1, unavailable_version_count: 0,
+    installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
   }));
   return current;
 }
@@ -117,7 +117,7 @@ describe("Listener Socket integration contracts", () => {
     mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [local] }));
     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus(local.id)])));
     mocks.listenerProtocolPackageCatalog.mockReturnValue(ok({
-      options: [{ package: { id: "bad", version: "1.0.0" } }], installed_version_count: 1, unavailable_version_count: 0,
+      options: [{ package: { id: "bad", version: "1.0.0" } }], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
     } as never));
     render(<ListenersView />);
     expect(await screen.findByText("协议包目录读取失败")).toBeVisible();

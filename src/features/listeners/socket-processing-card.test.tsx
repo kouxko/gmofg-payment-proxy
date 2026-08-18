@@ -47,6 +47,7 @@ function catalog(
       options,
       installed_version_count: options.length,
       unavailable_version_count: 0,
+      recommended_package: null,
       ...overrides,
     },
   };

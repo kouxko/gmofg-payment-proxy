@@ -41,11 +41,24 @@ export function ProtocolPackageDetail({ detail }: { detail: DetailState }) {
           <dt className="text-[var(--telemetry-muted)]">包 ID</dt><dd className="min-w-0 break-all font-mono">{version.package.id || "—"}</dd>
           <dt className="text-[var(--telemetry-muted)]">版本</dt><dd className="font-mono">{version.package.version || "—"}</dd>
           <dt className="text-[var(--telemetry-muted)]">Host API</dt><dd>{version.host_api}</dd>
+          <dt className="text-[var(--telemetry-muted)]">来源</dt><dd>{version.built_in ? "内置示例" : "用户安装"}</dd>
           <dt className="text-[var(--telemetry-muted)]">校验</dt><dd>{validationText(version.validation)}</dd>
           <dt className="text-[var(--telemetry-muted)]">状态</dt><dd>{version.enabled ? "已启用" : "已停用"}</dd>
           <dt className="text-[var(--telemetry-muted)]">安装时间</dt><dd className="break-all">{version.installed_at || "—"}</dd>
         </dl>
       </section>
+
+      {version.built_in && (
+        <Alert status="warning">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>这是 ISO 8583 起始示例</Alert.Title>
+            <Alert.Description>
+              示例使用 2 字节大端长度头、ASCII MTI、主位图和有限字段子集。接入真实系统前，必须按对端长度头、位图、字段编码和私有域规格修改；它不是适用于所有机构的即插即用标准包。
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
+      )}
 
       <section aria-labelledby="package-capabilities-heading">
         <h3 id="package-capabilities-heading" className="mb-2 font-semibold">能力</h3>

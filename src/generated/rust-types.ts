@@ -89,6 +89,7 @@ export const commands = {
 } | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import")),
 	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
 	protocolPackageImportDiscard: (token: ProtocolPackageImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_discard", { token })),
+	protocolPackageRestoreBuiltin: () => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_restore_builtin")),
 	protocolPackageEnable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_enable", { packageRef })),
 	protocolPackageDisable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_disable", { packageRef })),
 	protocolPackageDelete: (packageRef: ProtocolPackageIdentityInput) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_delete", { packageRef })),
@@ -928,6 +929,8 @@ export type ListenerOverviewViewModel = {
  */
 export type ListenerProtocolPackageCatalogViewModel = {
 	options: ListenerProtocolPackageOptionViewModel[],
+	/**  新建按协议转发/本地应答可采用的官方精确版本。 */
+	recommended_package: ProtocolPackageRef | null,
 	installed_version_count: number,
 	unavailable_version_count: number,
 };
@@ -1226,6 +1229,8 @@ export type ProtocolPackageVersionViewModel = {
 	package: ProtocolPackageRef,
 	name: string,
 	host_api: number,
+	/**  由应用精确身份保护的官方起始示例。 */
+	built_in: boolean,
 	enabled: boolean,
 	validation: ProtocolPackageValidationViewModel,
 	installed_at: string,

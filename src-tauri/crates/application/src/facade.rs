@@ -9,14 +9,14 @@ use chrono::Utc;
 
 use crate::{
     AndroidControlPort, AppError, AppResult, BreakpointCoordinator, BreakpointValidationPort,
-    CertificateOverviewViewModel, CertificateServicePort, CertificateValidationViewModel,
-    ChannelPresentationViewModel, EventHub, FaultServicePort, ListenerCertificateImportPort,
-    ListenerRuntimePort, OperationResultViewModel, ProtectedSecretPort,
-    ProtocolPackageApplicationServices, ProtocolPackageCompilerPort, ProtocolPackageImportPort,
-    ProtocolPackagePortabilityPort, ProtocolPackageStorePort, ProtocolPackageUsageQueryPort,
-    ProxyState, ProxyStatusViewModel, ProxySupervisorPort, RuleRepositoryPort, SessionQueryPort,
-    SettingsRepositoryPort, SettingsViewModel, UiEventPayload, WorkspaceDocumentPort,
-    WorkspaceRepositoryPort,
+    BuiltinProtocolPackagePort, CertificateOverviewViewModel, CertificateServicePort,
+    CertificateValidationViewModel, ChannelPresentationViewModel, EventHub, FaultServicePort,
+    ListenerCertificateImportPort, ListenerRuntimePort, OperationResultViewModel,
+    ProtectedSecretPort, ProtocolPackageApplicationServices, ProtocolPackageCompilerPort,
+    ProtocolPackageImportPort, ProtocolPackagePortabilityPort, ProtocolPackageStorePort,
+    ProtocolPackageUsageQueryPort, ProxyState, ProxyStatusViewModel, ProxySupervisorPort,
+    RuleRepositoryPort, SessionQueryPort, SettingsRepositoryPort, SettingsViewModel,
+    UiEventPayload, WorkspaceDocumentPort, WorkspaceRepositoryPort,
 };
 
 mod android;
@@ -72,6 +72,7 @@ pub struct Application {
     protocol_package_store: Arc<dyn ProtocolPackageStorePort>,
     protocol_package_compiler: Arc<dyn ProtocolPackageCompilerPort>,
     protocol_package_importer: Arc<dyn ProtocolPackageImportPort>,
+    protocol_package_builtin: Arc<dyn BuiltinProtocolPackagePort>,
     protocol_package_usage: Arc<dyn ProtocolPackageUsageQueryPort>,
     protocol_package_portability: Arc<dyn ProtocolPackagePortabilityPort>,
     protected_secrets: Arc<dyn ProtectedSecretPort>,
@@ -160,6 +161,7 @@ impl Application {
             protocol_package_store: dependencies.protocol_packages.store,
             protocol_package_compiler: dependencies.protocol_packages.compiler,
             protocol_package_importer: dependencies.protocol_packages.importer,
+            protocol_package_builtin: dependencies.protocol_packages.builtin,
             protocol_package_usage: dependencies.protocol_packages.usage_query,
             protocol_package_portability: dependencies.protocol_packages.portability,
             protected_secrets,

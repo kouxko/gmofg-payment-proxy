@@ -117,6 +117,18 @@ pub async fn protocol_package_import_discard(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn protocol_package_restore_builtin(
+    state: State<'_, AppState>,
+) -> CommandResult<ProtocolPackageImportViewModel> {
+    state
+        .application
+        .protocol_package_restore_builtin()
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn protocol_package_enable(
     state: State<'_, AppState>,
     package_ref: ProtocolPackageIdentityInput,

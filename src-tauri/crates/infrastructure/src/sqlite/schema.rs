@@ -57,6 +57,9 @@ pub(super) fn create_schema(transaction: &Transaction<'_>) -> Result<(), Infrast
                 FOREIGN KEY(package_id, version) REFERENCES protocol_packages(package_id, version)
                     ON DELETE CASCADE
             );
+            CREATE TABLE IF NOT EXISTS application_feature_state (
+                feature_key TEXT PRIMARY KEY, initialized_at TEXT NOT NULL
+            );
             ",
         )
         .map_err(|source| InfrastructureError::DatabaseMigration { source })?;

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { CertificateReference, SocketRelaySettings } from "@/generated/rust-types";
 import { SocketListenerSettings } from "./socket-listener-settings";
+import type { ProtocolCatalogState } from "./socket-processing-card";
 
 const certificates: CertificateReference[] = [
   { id: "app-identity", label: "App Identity", kind: "reverse_server_identity", reference: "managed:app-identity" },
@@ -73,6 +74,7 @@ function protocolRelaySettings(): SocketRelaySettings {
 function renderSettings(settings: SocketRelaySettings, locked = false, overrides: {
   onChange?: (changes: Partial<SocketRelaySettings>) => void;
   fieldErrors?: Record<string, string[]>;
+  protocolCatalog?: ProtocolCatalogState;
 } = {}) {
   const onChange = overrides.onChange ?? vi.fn<(changes: Partial<SocketRelaySettings>) => void>();
   const view = render(
@@ -80,10 +82,10 @@ function renderSettings(settings: SocketRelaySettings, locked = false, overrides
       settings={settings}
       certificateReferences={certificates}
       certificateDetails={[]}
-      protocolCatalog={{
+      protocolCatalog={overrides.protocolCatalog ?? {
         loading: false,
         refresh: vi.fn().mockResolvedValue(undefined),
-        data: { options: [], installed_version_count: 0, unavailable_version_count: 0 },
+        data: { options: [], installed_version_count: 0, unavailable_version_count: 0, recommended_package: null },
       }}
       locked={locked}
       fieldErrors={overrides.fieldErrors}
@@ -106,7 +108,7 @@ function SettingsHarness() {
     settings={settings}
     certificateReferences={certificates}
     certificateDetails={[]}
-    protocolCatalog={{ loading: false, refresh: vi.fn(), data: { options: [], installed_version_count: 0, unavailable_version_count: 0 } }}
+    protocolCatalog={{ loading: false, refresh: vi.fn(), data: { options: [], installed_version_count: 0, unavailable_version_count: 0, recommended_package: null } }}
     locked={false}
     busy={false}
     testing={false}
@@ -200,6 +202,48 @@ describe("SocketListenerSettings", () => {
       processing: expect.objectContaining({ mode: "scripted" }),
     }));
     expect(screen.getByRole("status")).toHaveTextContent("已切换为按协议转发；请选择处理方案并配置需要执行的步骤。");
+  });
+
+  it("uses the catalog recommendation only when first entering protocol processing", async () => {
+    const recommended = { id: "iso8583-ascii-standard", version: "1.0.0" };
+    const option = {
+      package: recommended,
+      name: "ISO 8583 ASCII 示例",
+      capabilities: {
+        upstream: { frame: true, decode: true, encode: true },
+        downstream: { frame: true, decode: true, encode: true },
+        display: true,
+      },
+      schema: {
+        id: "iso8583-ascii",
+        version: 1,
+        title: "ISO 8583 ASCII",
+        fields: [{ name: "mti", label: "MTI", type: "string" as const }],
+      },
+    };
+    const { onChange } = renderSettings(relayTlsSettings(), false, {
+      protocolCatalog: {
+        loading: false,
+        refresh: vi.fn().mockResolvedValue(undefined),
+        data: {
+          options: [option],
+          installed_version_count: 1,
+          unavailable_version_count: 0,
+          recommended_package: recommended,
+        },
+      },
+    });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByLabelText("Socket 工作方式"));
+    await user.click(await screen.findByRole("option", { name: /按协议转发/ }));
+
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+      processing: expect.objectContaining({
+        mode: "scripted",
+        settings: expect.objectContaining({ package: recommended }),
+      }),
+    }));
   });
 
   it("selects raw relay through HeroUI and announces that protocol processing was cleared", async () => {

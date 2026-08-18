@@ -144,4 +144,31 @@ describe("Socket user working mode", () => {
     expect(setSocketWorkingMode(fixtures.protocol_relay, "future_mode" as SocketWorkingMode))
       .toBe(fixtures.protocol_relay);
   });
+
+  it.each(["protocol_relay", "local_response"] as const)(
+    "binds the recommended exact package when first entering %s",
+    (mode) => {
+      const recommended = { id: "iso8583-ascii-standard", version: "1.0.0" };
+
+      const result = setSocketWorkingMode(fixtures.raw_relay, mode, recommended);
+
+      expect(result.processing).toMatchObject({
+        mode: "scripted",
+        settings: { package: recommended },
+      });
+    },
+  );
+
+  it("does not replace an existing exact binding with the recommendation", () => {
+    const result = setSocketWorkingMode(
+      fixtures.protocol_relay,
+      "local_response",
+      { id: "iso8583-ascii-standard", version: "1.0.0" },
+    );
+
+    expect(result.processing).toMatchObject({
+      mode: "scripted",
+      settings: { package: { id: "iso-8583", version: "2.0.0" } },
+    });
+  });
 });

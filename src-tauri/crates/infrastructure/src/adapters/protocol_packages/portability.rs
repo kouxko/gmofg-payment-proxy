@@ -231,17 +231,11 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
             ));
         }
         let (records, settings) = application_records(&document)?;
-        let mut cache = self.cache.lock();
-        self.store
-            .reset_application_bundle(
-                document.selected_workspace_id.as_uuid(),
-                &records,
-                &settings,
-            )
-            .map_err(ProtocolPackageStorageError::from)
-            .map_err(|error| protocol_package_app_error(&error))?;
-        cache.clear();
-        Ok(())
+        self.reset_with_builtin(
+            document.selected_workspace_id.as_uuid(),
+            &records,
+            &settings,
+        )
     }
 }
 
@@ -472,7 +466,7 @@ fn require_package_count(count: usize) -> Result<(), ProtocolPackageStorageError
     }
 }
 
-fn bundle_app_error(error: StoredProtocolPackageBundleError) -> AppError {
+pub(super) fn bundle_app_error(error: StoredProtocolPackageBundleError) -> AppError {
     match error {
         StoredProtocolPackageBundleError::IdentityConflict(package) => {
             protocol_package_app_error(&ProtocolPackageStorageError::IdentityConflict { package })

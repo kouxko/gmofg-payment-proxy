@@ -25,6 +25,9 @@ export function ProtocolPackageRow({
     >
       <span className="min-w-0">
         <span className="block truncate font-medium">{group.name}</span>
+        {versions.some((version) => version.built_in) && (
+          <Chip size="sm" color="accent" variant="soft">内置示例</Chip>
+        )}
         <span className="block truncate font-mono text-xs text-[var(--telemetry-muted)]">
           {group.id}
         </span>

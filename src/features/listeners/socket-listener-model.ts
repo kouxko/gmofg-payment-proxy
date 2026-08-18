@@ -10,6 +10,7 @@ import type {
   SocketRelaySettings,
   SocketUpstreamTlsSettings,
 } from "@/generated/rust-types";
+import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
 import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
 
 export type SocketWorkingMode = "raw_relay" | "protocol_relay" | "local_response";
@@ -25,14 +26,18 @@ export function socketWorkingMode(settings: SocketRelaySettings): SocketWorkingM
 export function setSocketWorkingMode(
   settings: SocketRelaySettings,
   mode: SocketWorkingMode,
+  recommendedPackage?: ProtocolPackageRef | null,
 ): SocketRelaySettings {
   if (socketWorkingMode(settings) === mode) return settings;
   if (mode === "raw_relay") return setProcessingMode(settings, "direct");
   if (mode === "protocol_relay") {
-    return setProcessingMode(setSocketTopology(settings, "relay"), "scripted");
+    return setProcessingMode(setSocketTopology(settings, "relay"), "scripted", recommendedPackage);
   }
   if (mode === "local_response") {
-    return setSocketTopology(setProcessingMode(settings, "scripted"), "local_responder");
+    return setSocketTopology(
+      setProcessingMode(settings, "scripted", recommendedPackage),
+      "local_responder",
+    );
   }
   return settings;
 }
@@ -156,7 +161,11 @@ export function setSocketTopology(settings: SocketRelaySettings, mode: "relay" |
   };
 }
 
-export function setProcessingMode(settings: SocketRelaySettings, mode: "direct" | "scripted"): SocketRelaySettings {
+export function setProcessingMode(
+  settings: SocketRelaySettings,
+  mode: "direct" | "scripted",
+  recommendedPackage?: ProtocolPackageRef | null,
+): SocketRelaySettings {
   if (mode !== "direct" && mode !== "scripted") return settings;
   if (mode === "direct") {
     const relaySettings = settings.topology.mode === "relay"
@@ -165,7 +174,10 @@ export function setProcessingMode(settings: SocketRelaySettings, mode: "direct" 
     return { ...relaySettings, processing: { mode: "direct" } };
   }
   if (settings.processing?.mode === "scripted") return settings;
-  return { ...settings, processing: { mode: "scripted", settings: emptyScripted() } };
+  return {
+    ...settings,
+    processing: { mode: "scripted", settings: emptyScripted(recommendedPackage ?? undefined) },
+  };
 }
 
 export function bindPackage(
@@ -206,10 +218,11 @@ export function isListenerProtocolPackageCatalog(
   value: unknown,
 ): value is ListenerProtocolPackageCatalogViewModel {
   if (!isRecord(value)
-    || !hasOnly(value, ["options", "installed_version_count", "unavailable_version_count"])
+    || !hasOnly(value, ["options", "installed_version_count", "unavailable_version_count", "recommended_package"])
     || !Array.isArray(value.options)
     || !isCount(value.installed_version_count)
     || !isCount(value.unavailable_version_count)
+    || (value.recommended_package !== null && !isPackageRef(value.recommended_package))
     || value.options.length + value.unavailable_version_count !== value.installed_version_count) {
     return false;
   }
@@ -220,6 +233,9 @@ export function isListenerProtocolPackageCatalog(
     if (identities.has(identity)) return false;
     identities.add(identity);
   }
+  if (value.recommended_package !== null
+    && (exactPackageKey(value.recommended_package) !== exactPackageKey(BUILT_IN_ISO_8583_PACKAGE)
+      || !identities.has(exactPackageKey(value.recommended_package)))) return false;
   return true;
 }
 

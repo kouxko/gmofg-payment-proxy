@@ -77,6 +77,19 @@ describe("ProtocolPackageDialog details", () => {
     expect(within(table).getByText("blob")).toBeVisible();
   });
 
+  it("explains the exact scope and limitations of the built-in ISO example", async () => {
+    mocks.protocolPackageList.mockResolvedValue([group({
+      versions: [version("1.0.0", { built_in: true })],
+    })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(version("1.0.0", { built_in: true })));
+    await openDialog();
+
+    const dialog = screen.getByRole("dialog", { name: "ISO 8583" });
+    expect(within(dialog).getByText("这是 ISO 8583 起始示例")).toBeVisible();
+    expect(within(dialog).getByText(/2 字节大端长度头、ASCII MTI、主位图和有限字段子集/)).toBeVisible();
+    expect(within(dialog).getByText(/不是适用于所有机构的即插即用标准包/)).toBeVisible();
+  });
+
   it("requests exact selected versions and never mixes their details", async () => {
     const user = await openDialog();
     expect(mocks.protocolPackageDetail).toHaveBeenLastCalledWith({ id: "iso-8583", version: "2.0.0" });

@@ -319,6 +319,7 @@ export function setupListenerMocks() {
       options: [],
       installed_version_count: 0,
       unavailable_version_count: 0,
+      recommended_package: null,
     }));
     mocks.listenerCertificateDiscard.mockReturnValue(ok({
       success: true,

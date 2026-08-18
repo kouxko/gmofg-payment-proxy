@@ -60,6 +60,15 @@ pub trait ProtocolPackageImportPort: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
+/// 官方内置协议包的显式恢复边界。
+///
+/// 实现必须把编译期资产重新当作不可信 ZIP，完整执行 Archive、Manifest、
+/// Schema、Rhai 和 Host API 校验后才原子替换官方精确身份。
+pub trait BuiltinProtocolPackagePort: Send + Sync + std::fmt::Debug {
+    async fn restore_builtin(&self) -> AppResult<ProtocolPackageImportViewModel>;
+}
+
+#[async_trait]
 /// 查询所有 Workspace 中对精确协议包版本的已保存引用，并合并 Listener 运行态。
 pub trait ProtocolPackageUsageQueryPort: Send + Sync + std::fmt::Debug {
     async fn usages(
@@ -132,6 +141,7 @@ pub struct ProtocolPackageApplicationServices {
     pub store: std::sync::Arc<dyn ProtocolPackageStorePort>,
     pub compiler: std::sync::Arc<dyn ProtocolPackageCompilerPort>,
     pub importer: std::sync::Arc<dyn ProtocolPackageImportPort>,
+    pub builtin: std::sync::Arc<dyn BuiltinProtocolPackagePort>,
     pub usage_query: std::sync::Arc<dyn ProtocolPackageUsageQueryPort>,
     pub portability: std::sync::Arc<dyn ProtocolPackagePortabilityPort>,
 }
@@ -144,6 +154,7 @@ impl ProtocolPackageApplicationServices {
             store: unavailable.clone(),
             compiler: unavailable.clone(),
             importer: unavailable.clone(),
+            builtin: unavailable.clone(),
             usage_query: unavailable,
             portability: std::sync::Arc::new(UnavailableProtocolPackageServices),
         }
@@ -213,6 +224,13 @@ impl ProtocolPackageImportPort for UnavailableProtocolPackageServices {
     }
 
     async fn discard_zip(&self, _: ProtocolPackageImportToken) -> AppResult<()> {
+        unavailable_protocol_packages()
+    }
+}
+
+#[async_trait]
+impl BuiltinProtocolPackagePort for UnavailableProtocolPackageServices {
+    async fn restore_builtin(&self) -> AppResult<ProtocolPackageImportViewModel> {
         unavailable_protocol_packages()
     }
 }

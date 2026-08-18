@@ -11,8 +11,9 @@ pub(crate) use android::UnavailableAndroidControlPort;
 
 mod protocol_packages;
 pub use protocol_packages::{
-    ProtocolPackageApplicationServices, ProtocolPackageCompilerPort, ProtocolPackageImportPort,
-    ProtocolPackagePortabilityPort, ProtocolPackageStorePort, ProtocolPackageUsageQueryPort,
+    BuiltinProtocolPackagePort, ProtocolPackageApplicationServices, ProtocolPackageCompilerPort,
+    ProtocolPackageImportPort, ProtocolPackagePortabilityPort, ProtocolPackageStorePort,
+    ProtocolPackageUsageQueryPort,
 };
 
 use crate::{

@@ -84,7 +84,7 @@ pub(crate) fn compare_or_insert_protocol_package(
     Ok(())
 }
 
-fn same_immutable_content(
+pub(super) fn same_immutable_content(
     existing: &super::StoredProtocolPackage,
     package: &StoredProtocolPackageWrite,
 ) -> bool {
@@ -104,7 +104,7 @@ fn same_immutable_content(
         && existing.files == StoredProtocolPackageFiles::Valid(expected_files)
 }
 
-fn insert_protocol_package(
+pub(super) fn insert_protocol_package(
     transaction: &Transaction<'_>,
     package: &StoredProtocolPackageWrite,
     enabled: bool,

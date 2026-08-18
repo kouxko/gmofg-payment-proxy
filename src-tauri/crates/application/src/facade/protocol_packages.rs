@@ -14,7 +14,7 @@ use crate::{
     ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
     ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageViewModel,
     ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel, SocketPayloadProcessing,
-    UiTone,
+    UiTone, builtin_iso8583_package_ref,
 };
 
 impl Application {
@@ -85,6 +85,11 @@ impl Application {
                 schema: description.schema.clone(),
             });
         }
+        let recommended = builtin_iso8583_package_ref();
+        let recommended_package = options
+            .iter()
+            .any(|option| option.package == recommended)
+            .then_some(recommended);
         let unavailable_version_count = installed_version_count
             .checked_sub(options.len())
             .ok_or_else(|| {
@@ -95,6 +100,7 @@ impl Application {
             })?;
         Ok(ListenerProtocolPackageCatalogViewModel {
             options,
+            recommended_package,
             installed_version_count,
             unavailable_version_count,
         })
@@ -230,6 +236,14 @@ impl Application {
             revision: None,
             requires_restart: false,
         })
+    }
+
+    /// 从应用内置的不可信 ZIP 重新恢复官方起始示例。
+    pub async fn protocol_package_restore_builtin(
+        &self,
+    ) -> AppResult<ProtocolPackageImportViewModel> {
+        let _gate = self.mutation_gate.lock().await;
+        self.protocol_package_builtin.restore_builtin().await
     }
 
     /// 单独查询精确版本的全部使用者，供详情刷新和删除确认 Dialog 复用。

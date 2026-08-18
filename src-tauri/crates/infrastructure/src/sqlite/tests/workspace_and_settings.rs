@@ -8,6 +8,7 @@ fn schema_keeps_http_payload_storage_absent_and_socket_capture_explicit() {
         tables,
         vec![
             "android_runtime_owner",
+            "application_feature_state",
             "certificate_material",
             "certificate_state",
             "protected_secrets",

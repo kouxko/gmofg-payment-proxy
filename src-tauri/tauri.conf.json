@@ -31,7 +31,8 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "resources/android-companion.apk"
+      "resources/android-companion.apk",
+      "../templates/socket-protocol/iso8583-standard/**/*"
     ],
     "icon": [
       "icons/32x32.png",

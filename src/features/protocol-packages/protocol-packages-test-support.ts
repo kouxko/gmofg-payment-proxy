@@ -14,6 +14,7 @@ export function version(
     package: { id: "iso-8583", version: value },
     name: "ISO 8583 长名称协议包",
     host_api: 1,
+    built_in: false,
     enabled: value === "2.0.0",
     validation: { state: "valid" },
     installed_at: "2026-08-14T08:00:00Z",
