@@ -12,7 +12,7 @@ use tauri_plugin_dialog::DialogExt;
 
 const PKCS12_EXTENSIONS: &[&str] = &["p12", "pfx"];
 const CLIENT_IDENTITY_EXTENSIONS: &[&str] = &["p12", "pfx", "pem"];
-const IDENTITY_PEM_EXTENSIONS: &[&str] = &["pem"];
+const SERVER_IDENTITY_EXTENSIONS: &[&str] = &["p12", "pfx", "pem"];
 const TRUST_CERTIFICATE_EXTENSIONS: &[&str] = &["cer", "crt", "pem", "der"];
 const PROTOCOL_PACKAGE_EXTENSIONS: &[&str] = &["zip"];
 
@@ -55,7 +55,7 @@ impl TauriNativeFileDialog {
                 .add_filter("客户端身份", CLIENT_IDENTITY_EXTENSIONS),
             "server_identity_pem" => builder
                 .set_title("导入本监听服务端身份（证书链 + 私钥）")
-                .add_filter("PEM 服务端身份", IDENTITY_PEM_EXTENSIONS),
+                .add_filter("服务端身份", SERVER_IDENTITY_EXTENSIONS),
             "downstream_client_ca" => builder
                 .set_title("导入用于验证客户端证书的 CA")
                 .add_filter("客户端证书 CA", TRUST_CERTIFICATE_EXTENSIONS),
@@ -150,14 +150,14 @@ fn default_file_name(purpose: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::{
-        IDENTITY_PEM_EXTENSIONS, PKCS12_EXTENSIONS, PROTOCOL_PACKAGE_EXTENSIONS,
+        PKCS12_EXTENSIONS, PROTOCOL_PACKAGE_EXTENSIONS, SERVER_IDENTITY_EXTENSIONS,
         TRUST_CERTIFICATE_EXTENSIONS, safe_suggested_file_name,
     };
 
     #[test]
     fn listener_certificate_picker_formats_match_supported_content_types() {
         assert_eq!(PKCS12_EXTENSIONS, ["p12", "pfx"]);
-        assert_eq!(IDENTITY_PEM_EXTENSIONS, ["pem"]);
+        assert_eq!(SERVER_IDENTITY_EXTENSIONS, ["p12", "pfx", "pem"]);
         assert_eq!(TRUST_CERTIFICATE_EXTENSIONS, ["cer", "crt", "pem", "der"]);
         assert_eq!(PROTOCOL_PACKAGE_EXTENSIONS, ["zip"]);
     }

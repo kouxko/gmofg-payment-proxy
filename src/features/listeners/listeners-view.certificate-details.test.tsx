@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bootstrap, setupListenerMocks, mocks, workspace, fixedListener, certificateReference, certificateDetail, ok, navigationMocks, withHttpSettings } from "./listeners-view.test-support";
@@ -129,7 +129,15 @@ describe("统一代理监听编辑器", () => {
     const user = userEvent.setup();
     render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "导入独立服务端身份" }));
-    await user.click(screen.getByRole("button", { name: "选择服务端身份 PEM" }));
+    await user.type(
+      screen.getByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）"),
+      "server-secret",
+    );
+    await user.click(screen.getByRole("button", { name: "选择服务端身份（.p12 / .pfx / .pem）" }));
+    expect(mocks.listenerImportDownstreamServerIdentity).toHaveBeenCalledWith(
+      "本监听独立服务端身份",
+      "server-secret",
+    );
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
 
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
@@ -137,7 +145,69 @@ describe("统一代理监听编辑器", () => {
       mocks.listenerSave.mock.calls[0][2].data_plane.settings.downstream_tls.server_identity,
     ).toBe("downstream-identity-ref-1");
     expect(mocks.listenerSave.mock.calls[0][3][0].reference).toBe("managed:downstream-identity-ref-1");
+    expect(JSON.stringify(mocks.listenerSave.mock.calls[0])).not.toContain("server-secret");
+    expect(document.body).not.toHaveTextContent("server-secret");
     expect(await screen.findByText("CN=proxy.test")).toBeVisible();
+  });
+
+  it("下游身份文件选择取消后不绑定且清空瞬时密码", async () => {
+    mocks.workspaceGet.mockReturnValue(ok({
+      ...workspace,
+      listeners: [withHttpSettings(fixedListener("fixed-1", "交易", 16627, "https://server.test:443"), {
+        downstream_tls: {
+          enabled: true,
+          server_identity: null,
+          client_authentication: { mode: "disabled" as const },
+        },
+      })],
+    }));
+    mocks.listenerImportDownstreamServerIdentity.mockReturnValue(ok(null));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "导入独立服务端身份" }));
+    const password = screen.getByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）");
+    await user.type(password, "cancelled-secret");
+    await user.click(screen.getByRole("button", { name: "选择服务端身份（.p12 / .pfx / .pem）" }));
+
+    expect(mocks.listenerImportDownstreamServerIdentity).toHaveBeenCalledWith(
+      "本监听独立服务端身份",
+      "cancelled-secret",
+    );
+    expect(screen.getByRole("dialog", { name: "导入本监听独立服务端身份" })).toBeVisible();
+    expect(password).toHaveValue("");
+    expect(mocks.listenerCertificateDiscard).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent("cancelled-secret");
+  });
+
+  it("页面卸载后丢弃迟到的下游身份结果且不再绑定", async () => {
+    const listener = withHttpSettings(fixedListener("fixed-1", "交易", 16627, "https://server.test:443"), {
+      downstream_tls: {
+        enabled: true,
+        server_identity: null,
+        client_authentication: { mode: "disabled" as const },
+      },
+    });
+    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [listener] }));
+    const reference = certificateReference("late-downstream", "迟到的服务端身份", "reverse_server_identity");
+    let resolveImport!: (result: unknown) => void;
+    mocks.listenerImportDownstreamServerIdentity.mockReturnValue(
+      new Promise<unknown>((resolve) => { resolveImport = resolve; }),
+    );
+    const user = userEvent.setup();
+    const { unmount } = render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "导入独立服务端身份" }));
+    const click = user.click(screen.getByRole("button", { name: "选择服务端身份（.p12 / .pfx / .pem）" }));
+    await waitFor(() => expect(mocks.listenerImportDownstreamServerIdentity).toHaveBeenCalledTimes(1));
+    unmount();
+    await act(async () => {
+      resolveImport({ status: "ok", data: { reference, detail: certificateDetail(reference, "CN=late.test") } });
+      await click;
+    });
+
+    await waitFor(() => expect(mocks.listenerCertificateDiscard).toHaveBeenCalledWith(reference));
+    expect(mocks.listenerSave).not.toHaveBeenCalled();
   });
 
   it("导入 mTLS 身份时密码不进入 Workspace", async () => {

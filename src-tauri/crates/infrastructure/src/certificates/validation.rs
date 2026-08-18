@@ -1,7 +1,9 @@
+use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
+
 use super::{
     CertificateBundle, CertificateMetadata, DistinguishedName, DnType, GeneralName,
-    InfrastructureError, KeyPair, PublicKeyData, SHA256, TimeZone, Utc, X509Certificate, Zeroizing,
-    digest, fmt, parse_x509_certificate,
+    InfrastructureError, SHA256, TimeZone, Utc, X509Certificate, Zeroizing, digest, fmt,
+    parse_x509_certificate,
 };
 
 pub(super) fn common_name_dn(common_name: &str) -> DistinguishedName {
@@ -49,8 +51,13 @@ pub(super) fn validate_key_match(
     private_key_der: &[u8],
 ) -> Result<(), InfrastructureError> {
     let certificate = parse_der(certificate_der)?;
-    let key = KeyPair::try_from(private_key_der).map_err(rcgen_error)?;
-    if certificate.public_key().raw == key.subject_public_key_info() {
+    let private_key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(private_key_der));
+    let key = rustls::crypto::ring::sign::any_supported_type(&private_key)
+        .map_err(|_| invalid("私钥格式不受支持或内容无效"))?;
+    if key
+        .public_key()
+        .is_some_and(|public_key| certificate.public_key().raw == public_key.as_ref())
+    {
         Ok(())
     } else {
         Err(invalid("证书与私钥不匹配"))
@@ -212,40 +219,6 @@ pub(super) fn validate_server_end_entity(
         .ok_or_else(|| invalid("PEM 服务端证书缺少 serverAuth EKU"))?;
     if !eku.value.server_auth {
         return Err(invalid("PEM 服务端证书缺少 serverAuth EKU"));
-    }
-    Ok(())
-}
-
-pub(super) fn validate_server_chain(
-    certificate_chain_der: &[Vec<u8>],
-    private_key_der: &[u8],
-) -> Result<(), InfrastructureError> {
-    let leaf = certificate_chain_der
-        .first()
-        .ok_or_else(|| invalid("PEM 服务端身份缺少证书链"))?;
-    validate_server_end_entity(leaf, private_key_der)?;
-
-    for pair in certificate_chain_der.windows(2) {
-        let certificate = parse_der(&pair[0])?;
-        let issuer = parse_der(&pair[1])?;
-        validate_ca(&issuer)?;
-        if certificate.issuer() != issuer.subject()
-            || certificate
-                .verify_signature(Some(issuer.public_key()))
-                .is_err()
-        {
-            return Err(invalid("PEM 服务端证书链签发关系或顺序无效"));
-        }
-    }
-
-    if let Some(last) = certificate_chain_der.last() {
-        let trust_anchor = parse_der(last)?;
-        validate_validity(&trust_anchor)?;
-        if trust_anchor.subject() == trust_anchor.issuer()
-            && trust_anchor.verify_signature(None).is_err()
-        {
-            return Err(invalid("PEM 服务端证书链包含无效的自签名根证书"));
-        }
     }
     Ok(())
 }

@@ -12,9 +12,10 @@ impl Application {
     pub async fn listener_import_downstream_server_identity(
         &self,
         label: String,
+        password: String,
     ) -> AppResult<Option<ListenerCertificateImportViewModel>> {
         self.listener_certificates
-            .import_downstream_server_identity(require_label(&label)?)
+            .import_downstream_server_identity(require_label(&label)?, password)
             .await
     }
 

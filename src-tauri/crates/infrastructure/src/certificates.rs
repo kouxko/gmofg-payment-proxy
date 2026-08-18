@@ -10,7 +10,7 @@ use chrono::{TimeZone, Utc};
 use p12_keystore::{KeyStore, KeyStoreEntry, Pkcs12ImportPolicy};
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
-    Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, PublicKeyData, SanType,
+    Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, SanType,
 };
 use ring::digest::{SHA256, digest};
 use x509_parser::{
@@ -60,8 +60,8 @@ pub struct ParsedPkcs12 {
     pub metadata: CertificateMetadata,
 }
 
-pub type ParsedPemServerIdentity = ParsedPemIdentity;
 pub type ParsedPemClientIdentity = ParsedPemIdentity;
+pub use server_identity::ParsedServerIdentity;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrustedCa {
@@ -236,19 +236,17 @@ impl CertificateService {
     pub fn parse_server_identity_pem(
         &self,
         bytes: &[u8],
-    ) -> Result<ParsedPemServerIdentity, InfrastructureError> {
-        let material = parse_pem_identity(bytes, "PEM 服务端身份")?;
-        let certificate_chain_der = material.certificate_chain_der;
-        let private_key_pkcs8_der = material.private_key_pkcs8_der;
-        let leaf = certificate_chain_der
-            .first()
-            .ok_or_else(|| invalid("PEM 服务端身份缺少证书链"))?;
-        validate_server_chain(&certificate_chain_der, &private_key_pkcs8_der)?;
-        Ok(ParsedPemIdentity {
-            metadata: metadata(&parse_der(leaf)?)?,
-            certificate_chain_der,
-            private_key_pkcs8_der,
-        })
+        password: &str,
+    ) -> Result<ParsedServerIdentity, InfrastructureError> {
+        server_identity::parse_server_pem(bytes, password)
+    }
+
+    pub fn parse_server_identity_pkcs12(
+        &self,
+        bytes: &[u8],
+        password: &str,
+    ) -> Result<ParsedServerIdentity, InfrastructureError> {
+        server_identity::parse_server_pkcs12(bytes, password)
     }
 
     /// 解析包含客户端证书链与匹配私钥的组合 PEM。
@@ -445,12 +443,14 @@ impl CertificateService {
 mod pem_identity;
 use pem_identity::{ParsedPemIdentity, parse_pem_identity};
 
+mod server_identity;
+
 mod validation;
 use validation::{
     bundle, certificate_is_ca, classify_pkcs12_error, common_name_dn, extract_sans, invalid,
     is_explicit_legacy_client_trust_anchor, metadata, normalized_san, parse_der, rcgen_error,
     validate_ca, validate_client_chain, validate_digital_signature_usage, validate_key_match,
-    validate_server_chain, validate_validity, x509_error,
+    validate_server_end_entity, validate_validity, x509_error,
 };
 
 impl Drop for CertificateBundle {

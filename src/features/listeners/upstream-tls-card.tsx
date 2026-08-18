@@ -23,7 +23,7 @@ const SERVER_TRUST_DESCRIPTION = [
 ].join("");
 const CLIENT_IDENTITY_DESCRIPTION = [
   "仅当上游 Server 要求 mTLS 时配置 client.p12 / client.pfx。",
-  "该文件包含代理向 Server 出示的客户端证书和私钥。",
+  "该文件包含代理向 Server 出示的 clientAuth 客户端证书和私钥，不是 App 侧握手使用的 serverAuth 服务端身份。",
 ].join("");
 
 type Props = {

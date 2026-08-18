@@ -33,7 +33,7 @@ type Props = {
   testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
   onChange: (changes: Partial<HttpListenerSettings>) => void;
-  onImportDownstreamServerIdentity: (label: string) => Promise<boolean>;
+  onImportDownstreamServerIdentity: (label: string, password: string) => Promise<boolean>;
   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
   onImportServerTrust: (label: string) => Promise<boolean>;
@@ -43,6 +43,7 @@ type Props = {
 export function FixedServerTlsSettings(props: Props) {
   const [downstreamIdentityOpen, setDownstreamIdentityOpen] = useState(false);
   const [downstreamIdentityLabel, setDownstreamIdentityLabel] = useState("本监听独立服务端身份");
+  const [downstreamIdentityPassword, setDownstreamIdentityPassword] = useState("");
   const [downstreamTrustOpen, setDownstreamTrustOpen] = useState(false);
   const [downstreamTrustLabel, setDownstreamTrustLabel] = useState("客户端证书 CA");
   const [identityOpen, setIdentityOpen] = useState(false);
@@ -52,9 +53,15 @@ export function FixedServerTlsSettings(props: Props) {
   const [trustLabel, setTrustLabel] = useState("上游服务器 CA");
 
   async function importIdentity() {
-    if (!(await props.onImportClientIdentity(identityLabel, identityPassword))) return;
+    const imported = await props.onImportClientIdentity(identityLabel, identityPassword);
     setIdentityPassword("");
+    if (!imported) return;
     setIdentityOpen(false);
+  }
+
+  function changeIdentityOpen(open: boolean) {
+    if (!open) setIdentityPassword("");
+    setIdentityOpen(open);
   }
 
   async function importTrust() {
@@ -63,8 +70,18 @@ export function FixedServerTlsSettings(props: Props) {
   }
 
   async function importDownstreamIdentity() {
-    if (!(await props.onImportDownstreamServerIdentity(downstreamIdentityLabel))) return;
+    const imported = await props.onImportDownstreamServerIdentity(
+      downstreamIdentityLabel,
+      downstreamIdentityPassword,
+    );
+    setDownstreamIdentityPassword("");
+    if (!imported) return;
     setDownstreamIdentityOpen(false);
+  }
+
+  function changeDownstreamIdentityOpen(open: boolean) {
+    if (!open) setDownstreamIdentityPassword("");
+    setDownstreamIdentityOpen(open);
   }
 
   async function importDownstreamTrust() {
@@ -103,7 +120,7 @@ export function FixedServerTlsSettings(props: Props) {
           busy={props.busy}
           label={identityLabel}
           password={identityPassword}
-          onOpenChange={setIdentityOpen}
+          onOpenChange={changeIdentityOpen}
           onLabelChange={setIdentityLabel}
           onPasswordChange={setIdentityPassword}
           onImport={importIdentity}
@@ -120,16 +137,20 @@ export function FixedServerTlsSettings(props: Props) {
         />
       )}
       {downstreamIdentityOpen && (
-        <ImportPemModal
+        <ImportIdentityModal
           open
           busy={props.busy}
           label={downstreamIdentityLabel}
+          password={downstreamIdentityPassword}
           title="导入本监听独立服务端身份"
-          description="选择同时包含服务端证书链与对应私钥的 PEM 文件。本机代理接受客户端 TLS 连接时会出示该身份。一般监听直接使用证书管理页签发的本机叶子证书，无需重复导入。"
-          detail="导入时会校验证书与私钥匹配、有效期、DigitalSignature 和 serverAuth，并将材料保存为受系统密钥保护的引用；原文件路径不会写入 Workspace。"
-          buttonLabel="选择服务端身份 PEM"
-          onOpenChange={setDownstreamIdentityOpen}
+          description="选择 .p12 / .pfx，或同时包含服务端证书链与匹配私钥的 .pem。本机代理接受 App/客户端 TLS 连接时出示此身份；它不是代理连接上游 Server 时使用的客户端身份。"
+          detail="导入时校验证书与私钥匹配、有效期、DigitalSignature 和 serverAuth。文件路径与密码不会写入 Workspace；仅保存受系统保护的安全引用。"
+          buttonLabel="选择服务端身份（.p12 / .pfx / .pem）"
+          buttonAriaLabel="选择服务端身份（.p12 / .pfx / .pem）"
+          passwordLabel="P12 / PFX 密码（PEM 不使用；允许为空）"
+          onOpenChange={changeDownstreamIdentityOpen}
           onLabelChange={setDownstreamIdentityLabel}
+          onPasswordChange={setDownstreamIdentityPassword}
           onImport={importDownstreamIdentity}
         />
       )}

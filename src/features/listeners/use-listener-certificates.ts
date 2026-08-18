@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { toast } from "@heroui/react";
 import type {
   ListenerCertificateDetailViewModel,
@@ -43,6 +43,17 @@ export function useListenerCertificates({
 }) {
   const leases = useDraftCertificateLeases(currentId);
   const [importedDetails, setImportedDetails] = useState<ListenerCertificateDetailViewModel[]>([]);
+  const activeImportContext = useRef({ currentId, workspaceId: workspace?.id, listenerId: selected?.id });
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    activeImportContext.current = { currentId, workspaceId: workspace?.id, listenerId: selected?.id };
+  }, [currentId, selected?.id, workspace?.id]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   function applyDraftWorkspace(next: ProxyWorkspace, previous: ProxyWorkspace) {
     const { workspace: pruned, detached } = pruneDetachedDraftCertificates(
@@ -63,11 +74,24 @@ export function useListenerCertificates({
     bind: (listener: ProxyListener, referenceId: string) => ProxyListener,
   ) {
     if (!workspace || !selected || pending) return false;
+    const context = {
+      currentId,
+      workspaceId: workspace.id,
+      listenerId: selected.id,
+    };
     let importedSuccessfully = false;
     await runPending(kind, async () => {
       const result = await load();
       if (!result) return;
       const { reference, detail } = result;
+      const latest = activeImportContext.current;
+      if (!mounted.current
+        || latest.currentId !== context.currentId
+        || latest.workspaceId !== context.workspaceId
+        || latest.listenerId !== context.listenerId) {
+        leases.discard(reference, false);
+        return;
+      }
       if (!leases.claim(workspace.id, reference)) return;
       applyDraftWorkspace({
         ...workspace,
@@ -90,9 +114,9 @@ export function useListenerCertificates({
     leases,
     importedDetails,
     applyDraftWorkspace,
-    importDownstreamIdentity: (label: string) => importCertificate(
+    importDownstreamIdentity: (label: string, password: string) => importCertificate(
       "import-downstream-identity",
-      () => callCommand(commands.listenerImportDownstreamServerIdentity(label)),
+      () => callCommand(commands.listenerImportDownstreamServerIdentity(label, password)),
       (listener, referenceId) => bindDownstreamIdentity(listener, referenceId),
     ),
     importDownstreamTrust: (label: string) => importCertificate(

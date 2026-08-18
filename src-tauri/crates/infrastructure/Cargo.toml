@@ -17,11 +17,13 @@ intercept-proxy-product-api = { path = "../product-api" }
 intercept-proxy-protocol-scripting = { path = "../protocol-scripting" }
 intercept-proxy-runtime = { path = "../proxy" }
 p12-keystore.workspace = true
+pkcs8.workspace = true
 parking_lot.workspace = true
 rcgen.workspace = true
 ring.workspace = true
 rusqlite.workspace = true
 rustls-pemfile.workspace = true
+rustls.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true

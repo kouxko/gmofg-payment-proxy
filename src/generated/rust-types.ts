@@ -94,10 +94,10 @@ export const commands = {
 	protocolPackageDisable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_disable", { packageRef })),
 	protocolPackageDelete: (packageRef: ProtocolPackageIdentityInput) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_delete", { packageRef })),
 	protocolPackageUsage: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageUsageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_usage", { packageRef })),
-	listenerImportDownstreamServerIdentity: (label: string) => typedError<{
+	listenerImportDownstreamServerIdentity: (label: string, password: string) => typedError<{
 	reference: CertificateReference,
 	detail: ListenerCertificateDetailViewModel,
-} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_downstream_server_identity", { label })),
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_downstream_server_identity", { label, password })),
 	listenerImportDownstreamClientTrust: (label: string) => typedError<{
 	reference: CertificateReference,
 	detail: ListenerCertificateDetailViewModel,

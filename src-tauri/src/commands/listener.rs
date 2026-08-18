@@ -218,10 +218,11 @@ pub async fn listener_test_upstream_connection(
 pub async fn listener_import_downstream_server_identity(
     state: State<'_, AppState>,
     label: String,
+    password: String,
 ) -> CommandResult<Option<ListenerCertificateImportViewModel>> {
     state
         .application
-        .listener_import_downstream_server_identity(label)
+        .listener_import_downstream_server_identity(label, password)
         .await
         .map_err(command_error)
 }
