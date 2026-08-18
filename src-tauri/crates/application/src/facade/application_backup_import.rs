@@ -3,14 +3,59 @@
 use super::Application;
 use crate::{
     APPLICATION_CONFIGURATION_FORMAT_VERSION, AppError, AppResult, ApplicationBackupImportBaseline,
-    ApplicationBackupImportPreparePort, ApplicationBackupImportPreview,
-    ApplicationBackupImportToken, ApplicationBackupPackagePreview,
+    ApplicationBackupImportCommitOutcome, ApplicationBackupImportPreparePort,
+    ApplicationBackupImportPreview, ApplicationBackupImportToken, ApplicationBackupPackagePreview,
     ApplicationBackupReplacementScope, ApplicationBackupWorkspaceBaseline,
     ApplicationConfigurationDocument, PreparedApplicationBackup,
     validate_portable_protocol_bindings,
 };
 
 impl Application {
+    pub async fn application_backup_import_commit(
+        &self,
+        source: &dyn ApplicationBackupImportPreparePort,
+        token: ApplicationBackupImportToken,
+    ) -> AppResult<ApplicationBackupImportCommitOutcome> {
+        let prepared = source.take(token).await?;
+        let _gate = self.mutation_gate.lock().await;
+        let current_baseline = self.application_backup_import_baseline_locked().await?;
+        if current_baseline != prepared.baseline {
+            return Err(AppError::new(
+                "APPLICATION_BACKUP_IMPORT_STALE",
+                "预览后应用数据已变化，请重新选择备份并预览。",
+            ));
+        }
+        self.workspaces_before_replacement().await?;
+
+        let candidate = prepared.candidate;
+        let document = ApplicationConfigurationDocument {
+            format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
+            selected_workspace_id: candidate.selected_workspace_id,
+            workspaces: candidate.workspaces,
+            settings: candidate.settings,
+            certificate_materials: candidate.certificate_materials,
+            protocol_packages: candidate.protocol_packages,
+        };
+        document.validate()?;
+        self.validate_application_backup_candidate(&document)
+            .await?;
+        let outcome = ApplicationBackupImportCommitOutcome {
+            workspace_count: document.workspaces.len(),
+            protocol_package_count: document.protocol_packages.len(),
+            enabled_protocol_package_count: document
+                .protocol_packages
+                .iter()
+                .filter(|package| package.enabled)
+                .count(),
+            portable_material_count: document.certificate_materials.len(),
+            requires_restart: true,
+        };
+        self.restore_and_replace_configuration(APPLICATION_CONFIGURATION_FORMAT_VERSION, document)
+            .await?;
+        *self.android_package_cache.lock().await = None;
+        Ok(outcome)
+    }
+
     /// Performs bulk restore and preflight outside the mutation gate, then briefly
     /// holds it only to freeze an authoritative baseline. Prepare performs no writes.
     pub async fn application_backup_import_prepare(
@@ -143,6 +188,12 @@ impl Application {
         &self,
     ) -> AppResult<ApplicationBackupImportBaseline> {
         let _gate = self.mutation_gate.lock().await;
+        self.application_backup_import_baseline_locked().await
+    }
+
+    async fn application_backup_import_baseline_locked(
+        &self,
+    ) -> AppResult<ApplicationBackupImportBaseline> {
         let summaries = self.workspaces.list().await?;
         let selected_workspace_id = summaries
             .iter()

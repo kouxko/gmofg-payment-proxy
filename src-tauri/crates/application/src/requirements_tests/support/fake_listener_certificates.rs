@@ -93,7 +93,7 @@ impl ListenerCertificateImportPort for FakePorts {
     }
 
     async fn application_backup_baseline(&self) -> AppResult<[u8; 32]> {
-        Ok([0; 32])
+        Ok(*self.certificate_generation.lock())
     }
 
     async fn discard(&self, reference: CertificateReference) -> AppResult<()> {

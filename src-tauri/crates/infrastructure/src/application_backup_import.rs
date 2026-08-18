@@ -262,6 +262,13 @@ impl ApplicationBackupImportPreparePort for ApplicationBackupImportPreparer {
     async fn discard(&self, token: ApplicationBackupImportToken) -> AppResult<()> {
         self.discard_candidate(token)
     }
+
+    async fn take(
+        &self,
+        token: ApplicationBackupImportToken,
+    ) -> AppResult<PreparedApplicationBackup> {
+        ApplicationBackupImportPreparer::take(self, token)
+    }
 }
 
 fn reconstruct(
