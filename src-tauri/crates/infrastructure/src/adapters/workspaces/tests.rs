@@ -8,9 +8,9 @@ use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, CertificateReferenceKind, ChannelId,
     ConnectionFaultAction, DownstreamClientAuthentication, DownstreamTlsSettings, FaultPreset,
     FaultPresetId, FixedServerSettings, HttpListenerSettings, ListenerDataPlane, ListenerId,
-    MatchCondition, MessageStage, MetadataExtractor, MetadataExtractorId, MetadataExtractorSource,
-    ProxyListener, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
-    Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings, WeakNetworkProfile,
+    MatchCondition, MessageStage, ProxyListener, ResponseAssertion, ResponseAssertionId,
+    ResponseAssertionKind, Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings,
+    WeakNetworkProfile,
 };
 use serde_json::Value;
 use std::{collections::BTreeSet, path::PathBuf, sync::Mutex};
@@ -272,10 +272,6 @@ fn copy_identity_remaps_nested_ids_and_references() {
     assert_eq!(workspace.revision, DomainRevision::INITIAL);
     assert_ne!(workspace.listeners[0].id, original.listeners[0].id);
     assert_ne!(
-        workspace.metadata_extractors[0].id,
-        original.metadata_extractors[0].id
-    );
-    assert_ne!(
         workspace.response_assertions[0].id,
         original.response_assertions[0].id
     );
@@ -374,12 +370,6 @@ fn referenced_workspace() -> ProxyWorkspace {
                 ..HttpListenerSettings::default()
             }),
             ..ProxyListener::default()
-        }],
-        metadata_extractors: vec![MetadataExtractor {
-            id: MetadataExtractorId::new(),
-            name: "Extractor".into(),
-            listener_ids: vec![listener_id],
-            source: MetadataExtractorSource::BodyText,
         }],
         response_assertions: vec![ResponseAssertion {
             id: ResponseAssertionId::new(),

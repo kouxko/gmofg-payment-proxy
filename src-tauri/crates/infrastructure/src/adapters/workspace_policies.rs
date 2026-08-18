@@ -1,14 +1,12 @@
-//! 当前 Workspace 的通用元数据提取器与响应断言执行器。
+//! 当前 Workspace 的响应断言策略执行器。
 //!
 //! 该适配器只读取所选 Workspace 的一致性快照。它不会改变网络报文：断言失败只会写入
 //! 会话结果并供测试/界面判断，真实上游响应仍由代理按原始字节返回客户端。
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::sync::Arc;
 
 use intercept_proxy_application::ResponseAssertionResultViewModel;
-use intercept_proxy_domain::{
-    JsonPath, MessageStage, MetadataExtractorSource, ProxyWorkspace, ResponseAssertionKind,
-};
+use intercept_proxy_domain::{JsonPath, MessageStage, ProxyWorkspace, ResponseAssertionKind};
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::{ConnectionContext, ErrorCode, Message, ProxyError, Result};
 use ring::digest::{SHA256, digest};
@@ -88,30 +86,6 @@ impl RuntimeWorkspacePolicyResolver for WorkspaceRuntimePolicyResolver {
             .as_deref()
             .and_then(|text| serde_json::from_str::<Value>(text).ok());
 
-        let mut metadata = BTreeMap::new();
-        for extractor in workspace.metadata_extractors.iter().filter(|extractor| {
-            extractor.listener_ids.is_empty()
-                || extractor
-                    .listener_ids
-                    .iter()
-                    .any(|id| id.to_string() == listener_id)
-        }) {
-            let value = match &extractor.source {
-                MetadataExtractorSource::Header { name } => {
-                    header_values(message, name).into_iter().next()
-                }
-                MetadataExtractorSource::JsonPath { path } => json
-                    .as_ref()
-                    .and_then(|value| JsonPath::parse(path).ok()?.resolve(value))
-                    .map(display_json_value),
-                MetadataExtractorSource::BodyText => decoded.clone(),
-                MetadataExtractorSource::FixedValue { value } => Some(value.clone()),
-            };
-            if let Some(value) = value {
-                metadata.insert(extractor.name.clone(), value);
-            }
-        }
-
         let assertions = if stage == MessageStage::Response {
             workspace
                 .response_assertions
@@ -143,10 +117,7 @@ impl RuntimeWorkspacePolicyResolver for WorkspaceRuntimePolicyResolver {
             Vec::new()
         };
 
-        Ok(RuntimeWorkspacePolicyEvaluation {
-            metadata,
-            assertions,
-        })
+        Ok(RuntimeWorkspacePolicyEvaluation { assertions })
     }
 }
 
@@ -219,13 +190,6 @@ fn header_values(message: &Message, name: &str) -> Vec<String> {
         .collect()
 }
 
-fn display_json_value(value: &Value) -> String {
-    match value {
-        Value::String(value) => value.clone(),
-        other => other.to_string(),
-    }
-}
-
 fn hex_lower(bytes: &[u8]) -> String {
     use std::fmt::Write;
     bytes.iter().fold(
@@ -244,9 +208,8 @@ mod tests {
     use bytes::Bytes;
     use chrono::Utc;
     use intercept_proxy_domain::{
-        FixedServerSettings, HttpListenerSettings, ListenerDataPlane, ListenerId,
-        MetadataExtractor, MetadataExtractorId, ProxyListener, ResponseAssertion,
-        ResponseAssertionId, UpstreamTlsSettings,
+        FixedServerSettings, HttpListenerSettings, ListenerDataPlane, ListenerId, ProxyListener,
+        ResponseAssertion, ResponseAssertionId, UpstreamTlsSettings,
     };
     use intercept_proxy_product_api::ProductError;
     use intercept_proxy_runtime::{ChannelId, RawHeader};
@@ -275,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_workspace_extracts_metadata_and_asserts_final_response_without_mutation() {
+    fn selected_workspace_asserts_final_response_without_mutation() {
         let listener_id = ListenerId::new();
         let workspace = ProxyWorkspace {
             listeners: vec![ProxyListener {
@@ -292,14 +255,6 @@ mod tests {
                     ..HttpListenerSettings::default()
                 }),
                 ..ProxyListener::default()
-            }],
-            metadata_extractors: vec![MetadataExtractor {
-                id: MetadataExtractorId::new(),
-                name: "business_result".into(),
-                listener_ids: vec![listener_id],
-                source: MetadataExtractorSource::JsonPath {
-                    path: "$.result".into(),
-                },
             }],
             response_assertions: vec![ResponseAssertion {
                 id: ResponseAssertionId::new(),
@@ -340,10 +295,6 @@ mod tests {
         let result = resolver
             .evaluate(&context, MessageStage::Response, &message, &Utf8)
             .unwrap();
-        assert_eq!(
-            result.metadata.get("business_result").map(String::as_str),
-            Some("EXPECTED")
-        );
         assert!(result.assertions.iter().all(|item| item.passed));
         assert_eq!(
             message.body, original,

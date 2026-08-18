@@ -8,9 +8,10 @@ use chrono::Utc;
 use super::Application;
 use crate::{
     AndroidNetworkState, AppError, AppResult, OperationResultViewModel, ProxyWorkspace,
-    UiEventPayload, UiTone, WORKSPACE_DOCUMENT_FORMAT_VERSION, WorkspaceChangeKind,
-    WorkspaceChangedViewModel, WorkspaceDocument, WorkspaceId, WorkspaceSummaryViewModel,
-    WorkspaceValidationViewModel, parse_workspace_document_with_source, remap_workspace_identity,
+    UiEventPayload, UiTone, WORKSPACE_DOCUMENT_FORMAT_VERSION,
+    WORKSPACE_DOCUMENT_V4_FORMAT_VERSION, WorkspaceChangeKind, WorkspaceChangedViewModel,
+    WorkspaceDocument, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    parse_workspace_document_with_source, remap_workspace_identity,
     retain_reachable_certificate_references, serialize_workspace_document,
 };
 
@@ -248,13 +249,15 @@ impl Application {
             return Ok(cancelled("已取消导入 Workspace。"));
         };
         let parsed = parse_workspace_document_with_source(&document)?;
+        let migration_warning = parsed.migration_report.warning_message();
         let portable = parsed.document;
         let protocol_packages = portable.protocol_packages;
         let expected_packages = protocol_packages
             .iter()
             .map(|package| package.package.clone())
             .collect::<Vec<_>>();
-        let descriptions = if parsed.source_version == WORKSPACE_DOCUMENT_FORMAT_VERSION {
+        let has_package_payload = parsed.source_version >= WORKSPACE_DOCUMENT_V4_FORMAT_VERSION;
+        let descriptions = if has_package_payload {
             self.protocol_package_portability
                 .preflight_workspace_packages(&protocol_packages)
                 .await?
@@ -262,7 +265,7 @@ impl Application {
             self.describe_installed_portable_references(std::slice::from_ref(&portable.workspace))
                 .await?
         };
-        let expected_packages = if parsed.source_version == WORKSPACE_DOCUMENT_FORMAT_VERSION {
+        let expected_packages = if has_package_payload {
             expected_packages
         } else {
             super::protocol_package_portability::referenced_protocol_packages(std::slice::from_ref(
@@ -290,7 +293,7 @@ impl Application {
             });
         }
         let imported = workspace.clone();
-        let commit = if parsed.source_version == WORKSPACE_DOCUMENT_FORMAT_VERSION {
+        let commit = if has_package_payload {
             self.protocol_package_portability
                 .commit_workspace_bundle(protocol_packages, workspace)
                 .await
@@ -320,8 +323,13 @@ impl Application {
         Ok(OperationResultViewModel {
             success: true,
             cancelled: false,
-            message: "Workspace 与证书材料已从单个文件导入。".into(),
-            ui_tone: UiTone::Positive,
+            message: migration_warning
+                .unwrap_or_else(|| "Workspace 与证书材料已从单个文件导入。".into()),
+            ui_tone: if parsed.migration_report.removed_metadata_extractors > 0 {
+                UiTone::Warning
+            } else {
+                UiTone::Positive
+            },
             entity_id: Some(workspace.id.to_string()),
             revision: Some(workspace.revision.get()),
             requires_restart: false,

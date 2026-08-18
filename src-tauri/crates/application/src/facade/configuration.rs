@@ -139,6 +139,7 @@ impl Application {
             });
         };
         let parsed = parse_application_configuration_with_source(&bytes)?;
+        let migration_warning = parsed.migration_report.warning_message();
         let old_workspaces = self.workspaces_before_replacement().await?;
         let (source_version, document) = self
             .prepare_configuration_import(parsed.source_version, parsed.document)
@@ -161,7 +162,8 @@ impl Application {
                 },
             );
         }
-        let (message, ui_tone) = import_result_message(cleanup_warning.as_ref());
+        let (message, ui_tone) =
+            import_result_message(cleanup_warning.as_ref(), migration_warning.as_deref());
         Ok(OperationResultViewModel {
             success: true,
             cancelled: false,
@@ -178,7 +180,9 @@ impl Application {
         source_version: u16,
         document: ApplicationConfigurationDocument,
     ) -> AppResult<(u16, ApplicationConfigurationDocument)> {
-        let expected_packages = if source_version == APPLICATION_CONFIGURATION_FORMAT_VERSION {
+        let has_package_payload =
+            source_version >= crate::APPLICATION_CONFIGURATION_V4_FORMAT_VERSION;
+        let expected_packages = if has_package_payload {
             document
                 .protocol_packages
                 .iter()
@@ -187,7 +191,7 @@ impl Application {
         } else {
             super::protocol_package_portability::referenced_protocol_packages(&document.workspaces)
         };
-        let descriptions = if source_version == APPLICATION_CONFIGURATION_FORMAT_VERSION {
+        let descriptions = if has_package_payload {
             self.protocol_package_portability
                 .preflight_application_packages(&document.protocol_packages)
                 .await?
@@ -240,7 +244,7 @@ impl Application {
             .await?;
         let imported_workspaces = document.workspaces.clone();
         let protocol_packages = document.protocol_packages.clone();
-        let replacement = if source_version == APPLICATION_CONFIGURATION_FORMAT_VERSION {
+        let replacement = if source_version >= crate::APPLICATION_CONFIGURATION_V4_FORMAT_VERSION {
             self.protocol_package_portability
                 .replace_application_bundle(protocol_packages, document)
                 .await
@@ -265,8 +269,11 @@ impl Application {
     }
 }
 
-fn import_result_message(cleanup_warning: Option<&AppError>) -> (String, UiTone) {
-    cleanup_warning.map_or_else(
+fn import_result_message(
+    cleanup_warning: Option<&AppError>,
+    migration_warning: Option<&str>,
+) -> (String, UiTone) {
+    let (message, tone) = cleanup_warning.map_or_else(
         || {
             (
                 "完整应用配置已原子替换；全局设置将在下次启动代理时生效。".into(),
@@ -282,5 +289,9 @@ fn import_result_message(cleanup_warning: Option<&AppError>) -> (String, UiTone)
                 UiTone::Warning,
             )
         },
-    )
+    );
+    match migration_warning {
+        Some(warning) => (format!("{message} {warning}"), UiTone::Warning),
+        None => (message, tone),
+    }
 }

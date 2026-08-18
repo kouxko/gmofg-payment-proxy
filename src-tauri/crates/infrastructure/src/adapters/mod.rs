@@ -9,7 +9,7 @@ mod body_codecs;
 mod bundle;
 mod capture;
 mod certificates;
-mod common;
+pub(crate) mod common;
 mod faults;
 mod files;
 mod listener_certificate_metadata;

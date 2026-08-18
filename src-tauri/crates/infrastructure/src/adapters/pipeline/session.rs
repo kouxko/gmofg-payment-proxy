@@ -81,7 +81,6 @@ impl RuntimePipelineAdapter {
             request: Some(request),
             response: None,
             rule_trace: Vec::new(),
-            extracted_metadata: BTreeMap::new(),
             response_assertions: Vec::new(),
         };
         let record = SessionRecord {
@@ -120,12 +119,6 @@ impl RuntimePipelineAdapter {
         breakpoint_draft: Option<MessageContentViewModel>,
         body_codec: &dyn BodyCodec,
     ) -> ProxyResult<SessionRecord> {
-        let policy = self.evaluate_workspace_policies(
-            context,
-            DomainMessageStage::Request,
-            effective,
-            body_codec,
-        )?;
         self.update_live_session(context, move |record| {
             let summary = &mut record.detail.summary;
             summary.matched_rule_ids.clone_from(&rules.matched_ids);
@@ -144,7 +137,6 @@ impl RuntimePipelineAdapter {
             summary.revision = summary.revision.saturating_add(1);
             record.detail.request = Some(content_view(body_codec, effective));
             record.detail.rule_trace.clone_from(&rules.traces);
-            record.detail.extracted_metadata.extend(policy.metadata);
             record.breakpoint_draft = breakpoint_draft;
         })
     }
@@ -187,7 +179,6 @@ impl RuntimePipelineAdapter {
             summary.revision = summary.revision.saturating_add(1);
             record.detail.response = Some(content_view(body_codec, effective));
             record.detail.rule_trace.extend(rules.traces.clone());
-            record.detail.extracted_metadata.extend(policy.metadata);
             record.detail.response_assertions = policy.assertions;
             if record
                 .detail

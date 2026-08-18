@@ -463,7 +463,6 @@ export type CaptureDetailViewModel = {
 	tls_summary: string,
 	timings_ms: { [key in string]: number },
 	rule_trace: string[],
-	extracted_metadata: { [key in string]: string },
 	response_assertions: ResponseAssertionResultViewModel[],
 	revision: number,
 };
@@ -1034,18 +1033,6 @@ export type MessageContentViewModel = {
 
 export type MessageStage = "tls_handshake" | "request" | "response" | "terminal";
 
-/**  从通用 HTTP 报文提取列表/规则所需的少量元数据。 */
-export type MetadataExtractor = {
-	id: MetadataExtractorId,
-	name: string,
-	listener_ids: ListenerId[],
-	source: MetadataExtractorSource,
-};
-
-export type MetadataExtractorId = string;
-
-export type MetadataExtractorSource = { kind: "header"; name: string } | { kind: "json_path"; path: string } | { kind: "body_text" } | { kind: "fixed_value"; value: string };
-
 export type MitmSettings = {
 	enabled: boolean,
 	authority_allowlist: string[],
@@ -1295,7 +1282,6 @@ export type ProxyWorkspace = {
 	name: string,
 	revision: Revision,
 	listeners: ProxyListener[],
-	metadata_extractors: MetadataExtractor[],
 	response_assertions: ResponseAssertion[],
 	fault_presets: FaultPreset[],
 	certificate_references: CertificateReference[],
@@ -1448,8 +1434,6 @@ export type SessionDetailViewModel = {
 	request: MessageContentViewModel | null,
 	response: MessageContentViewModel | null,
 	rule_trace: string[],
-	/**  Workspace 元数据提取器生成的少量文本，不包含额外 Payload 副本。 */
-	extracted_metadata?: { [key in string]: string },
 	/**  对最终响应执行的通用断言结果；失败只影响会话结论，不篡改线上响应。 */
 	response_assertions?: ResponseAssertionResultViewModel[],
 };

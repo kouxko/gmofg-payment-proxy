@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use crate::InfrastructureError;
 
-const LATEST_SCHEMA_VERSION: i64 = 9;
+const LATEST_SCHEMA_VERSION: i64 = 10;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StoredSettings {

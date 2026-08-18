@@ -116,7 +116,6 @@ pub(in crate::requirements_tests) fn session(
             request: Some(content(body)),
             response: None,
             rule_trace: vec!["规则轨迹".into()],
-            extracted_metadata: BTreeMap::new(),
             response_assertions: Vec::new(),
         },
         breakpoint_draft: pending.then(|| content(b"draft")),

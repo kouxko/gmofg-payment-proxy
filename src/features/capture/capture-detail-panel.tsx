@@ -187,24 +187,6 @@ export function CaptureDetailPanel({
                     : "等待响应"}
                 </dd>
               </dl>
-              {Object.keys(detail.data?.extracted_metadata ?? {}).length >
-                0 && (
-                <div>
-                  <h2 className="mb-2 font-semibold">Workspace 提取结果</h2>
-                  <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
-                    {Object.entries(detail.data?.extracted_metadata ?? {}).map(
-                      ([name, value]) => (
-                        <div key={name} className="contents">
-                          <dt>{name}</dt>
-                          <dd className="break-all font-mono text-xs">
-                            {value}
-                          </dd>
-                        </div>
-                      ),
-                    )}
-                  </dl>
-                </div>
-              )}
               {(detail.data?.response_assertions.length ?? 0) > 0 && (
                 <div>
                   <h2 className="mb-2 font-semibold">响应断言</h2>

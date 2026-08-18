@@ -213,7 +213,6 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
             ),
             timings_ms: session.timings_ms,
             rule_trace: session.rule_trace,
-            extracted_metadata: session.extracted_metadata,
             response_assertions: session.response_assertions,
             revision: session.summary.revision,
         })

@@ -257,7 +257,6 @@ pub struct CaptureDetailViewModel {
     pub tls_summary: String,
     pub timings_ms: BTreeMap<String, u64>,
     pub rule_trace: Vec<String>,
-    pub extracted_metadata: BTreeMap<String, String>,
     pub response_assertions: Vec<ResponseAssertionResultViewModel>,
     pub revision: Revision,
 }

@@ -1,15 +1,14 @@
 //! 未持久化 Workspace 组件草稿的领域编辑意图。
 
 use intercept_proxy_domain::{
-    ConnectionFaultAction, FaultPreset, FaultPresetId, MetadataExtractor, MetadataExtractorId,
-    MetadataExtractorSource, ResponseAssertion, ResponseAssertionId, ResponseAssertionKind,
+    ConnectionFaultAction, FaultPreset, FaultPresetId, ResponseAssertion, ResponseAssertionId,
+    ResponseAssertionKind,
 };
 
 use super::{
     AppError, AppResult, Application, ProxyWorkspace,
     support::{
-        connection_fault, delete_component, find_mut, metadata_source, parse_listener_ids,
-        response_assertion,
+        connection_fault, delete_component, find_mut, parse_listener_ids, response_assertion,
     },
 };
 
@@ -25,12 +24,6 @@ impl Application {
         kind: &str,
     ) -> AppResult<ProxyWorkspace> {
         match kind {
-            "metadata_extractor" => workspace.metadata_extractors.push(MetadataExtractor {
-                id: MetadataExtractorId::new(),
-                name: "Metadata Extractor".into(),
-                listener_ids: Vec::new(),
-                source: MetadataExtractorSource::BodyText,
-            }),
             "response_assertion" => workspace.response_assertions.push(ResponseAssertion {
                 id: ResponseAssertionId::new(),
                 name: "Response Assertion".into(),
@@ -78,25 +71,12 @@ impl Application {
             return Ok(workspace);
         }
         match (component_kind, operation) {
-            ("metadata_extractor", "listener_ids") => {
-                let ids = parse_listener_ids(value)?;
-                find_mut(&mut workspace.metadata_extractors, component_id, |item| {
-                    item.id.to_string()
-                })?
-                .listener_ids = ids;
-            }
             ("response_assertion", "listener_ids") => {
                 let ids = parse_listener_ids(value)?;
                 find_mut(&mut workspace.response_assertions, component_id, |item| {
                     item.id.to_string()
                 })?
                 .listener_ids = ids;
-            }
-            ("metadata_extractor", "variant") => {
-                find_mut(&mut workspace.metadata_extractors, component_id, |item| {
-                    item.id.to_string()
-                })?
-                .source = metadata_source(value)?;
             }
             ("response_assertion", "variant") => {
                 find_mut(&mut workspace.response_assertions, component_id, |item| {

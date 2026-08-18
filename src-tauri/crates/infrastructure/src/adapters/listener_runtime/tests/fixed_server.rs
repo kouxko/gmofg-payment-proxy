@@ -135,7 +135,6 @@ async fn multiple_fixed_server_listeners_route_to_their_own_upstream_origins() {
         name: "multiple mappings".into(),
         revision: Revision::INITIAL,
         listeners: vec![transaction.clone(), webhook.clone()],
-        metadata_extractors: Vec::new(),
         response_assertions: Vec::new(),
         rules: Vec::new(),
         socket_rules: Vec::new(),

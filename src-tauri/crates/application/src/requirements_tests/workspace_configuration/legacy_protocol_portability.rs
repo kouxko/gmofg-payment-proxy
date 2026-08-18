@@ -170,6 +170,10 @@ fn v3_configuration_bytes(workspace: ProxyWorkspace) -> Vec<u8> {
     value["workspaces"][0]
         .as_object_mut()
         .unwrap()
+        .insert("metadata_extractors".into(), serde_json::json!([]));
+    value["workspaces"][0]
+        .as_object_mut()
+        .unwrap()
         .remove("socket_rules");
     value["workspaces"][0]
         .as_object_mut()
@@ -182,39 +186,40 @@ fn v2_configuration_bytes() -> Vec<u8> {
     let current = ProxyWorkspace::default();
     let listener = &current.listeners[0];
     let http = listener.http().unwrap();
-    serde_json::to_vec(&ApplicationConfigurationDocumentV2 {
-        format_version: APPLICATION_CONFIGURATION_V2_FORMAT_VERSION,
-        selected_workspace_id: current.id,
-        workspaces: vec![ProxyWorkspaceV2 {
-            id: current.id,
-            name: current.name,
-            revision: current.revision,
-            listeners: vec![ProxyListenerV2 {
-                id: listener.id,
-                name: listener.name.clone(),
-                enabled: listener.enabled,
-                bind_address: listener.bind_address.clone(),
-                port: listener.port,
-                authentication: http.authentication.clone(),
-                allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
-                mitm: http.mitm.clone(),
-                connect_timeout_ms: listener.connect_timeout_ms,
-                read_timeout_ms: listener.read_timeout_ms,
-                write_timeout_ms: listener.write_timeout_ms,
-                downstream_tls: Some(http.downstream_tls.clone()),
-                request_body_codec: http.request_body_codec,
-                response_body_codec: http.response_body_codec,
-                fixed_server: http.fixed_server.clone(),
-            }],
-            metadata_extractors: current.metadata_extractors,
-            response_assertions: current.response_assertions,
-            rules: current.rules,
-            fault_presets: current.fault_presets,
-            certificate_references: current.certificate_references,
-            android_network_profiles: current.android_network_profiles,
+    let listener = ProxyListenerV2 {
+        id: listener.id,
+        name: listener.name.clone(),
+        enabled: listener.enabled,
+        bind_address: listener.bind_address.clone(),
+        port: listener.port,
+        authentication: http.authentication.clone(),
+        allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
+        mitm: http.mitm.clone(),
+        connect_timeout_ms: listener.connect_timeout_ms,
+        read_timeout_ms: listener.read_timeout_ms,
+        write_timeout_ms: listener.write_timeout_ms,
+        downstream_tls: Some(http.downstream_tls.clone()),
+        request_body_codec: http.request_body_codec,
+        response_body_codec: http.response_body_codec,
+        fixed_server: http.fixed_server.clone(),
+    };
+    serde_json::to_vec(&serde_json::json!({
+        "format_version": APPLICATION_CONFIGURATION_V2_FORMAT_VERSION,
+        "selected_workspace_id": current.id,
+        "workspaces": [{
+            "id": current.id,
+            "name": current.name,
+            "revision": current.revision,
+            "listeners": [listener],
+            "metadata_extractors": [],
+            "response_assertions": current.response_assertions,
+            "rules": current.rules,
+            "fault_presets": current.fault_presets,
+            "certificate_references": current.certificate_references,
+            "android_network_profiles": current.android_network_profiles,
         }],
-        settings: PortableSettings::from(&SettingsDraft::default()),
-        certificate_materials: Vec::new(),
-    })
+        "settings": PortableSettings::from(&SettingsDraft::default()),
+        "certificate_materials": [],
+    }))
     .unwrap()
 }

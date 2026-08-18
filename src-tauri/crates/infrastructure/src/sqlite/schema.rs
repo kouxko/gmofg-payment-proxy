@@ -1,6 +1,9 @@
-use rusqlite::{OptionalExtension, Transaction};
+use rusqlite::{OptionalExtension, Transaction, params};
 
-use super::InfrastructureError;
+use super::{InfrastructureError, load_workspace_records};
+use crate::adapters::common::{decode_workspace_record, encode_workspace_record};
+
+const WORKSPACE_V5_SCHEMA_MIGRATION: i64 = 10;
 
 pub(super) fn create_schema(transaction: &Transaction<'_>) -> Result<(), InfrastructureError> {
     transaction
@@ -58,6 +61,58 @@ pub(super) fn create_schema(transaction: &Transaction<'_>) -> Result<(), Infrast
         )
         .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
     migrate_android_runtime_owner(transaction)
+}
+
+pub(super) fn migrate_workspaces_to_v5(
+    transaction: &Transaction<'_>,
+) -> Result<(), InfrastructureError> {
+    let already_applied = transaction
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version = ?1)",
+            [WORKSPACE_V5_SCHEMA_MIGRATION],
+            |row| row.get::<_, bool>(0),
+        )
+        .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+    if already_applied {
+        return Ok(());
+    }
+
+    let records = load_workspace_records(transaction)?;
+    let migrated = records
+        .into_iter()
+        .map(|record| {
+            let id = record.id;
+            let revision = record.revision;
+            let workspace = decode_workspace_record(record)
+                .map_err(|message| InfrastructureError::DatabaseMigrationInvalid { message })?;
+            let value = encode_workspace_record(&workspace)
+                .map_err(|message| InfrastructureError::DatabaseMigrationInvalid { message })?;
+            Ok((id, revision, value))
+        })
+        .collect::<Result<Vec<_>, InfrastructureError>>()?;
+
+    for (id, revision, value) in migrated {
+        let changed = transaction
+            .execute(
+                "UPDATE workspaces SET json = ?1 WHERE id = ?2 AND revision = ?3",
+                params![
+                    value.to_string(),
+                    id.to_string(),
+                    i64::try_from(revision).map_err(|_| {
+                        InfrastructureError::DatabaseMigrationInvalid {
+                            message: format!("Workspace {id} revision 超出 SQLite 范围"),
+                        }
+                    })?,
+                ],
+            )
+            .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
+        if changed != 1 {
+            return Err(InfrastructureError::DatabaseMigrationInvalid {
+                message: format!("Workspace {id} 在迁移期间发生变化"),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn migrate_android_runtime_owner(transaction: &Transaction<'_>) -> Result<(), InfrastructureError> {

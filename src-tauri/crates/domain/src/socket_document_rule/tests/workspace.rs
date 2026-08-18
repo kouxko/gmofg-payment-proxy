@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     DirectionProcessingOptions, ListenerDataPlane, MAX_JAVASCRIPT_SAFE_INTEGER, ProxyListener,
-    ProxyWorkspace, ProxyWorkspaceV2, ScriptedSocketProcessing, SocketDownstreamSecurity,
+    ProxyWorkspace, ScriptedSocketProcessing, SocketDownstreamSecurity,
     SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
     SocketRelaySettings, SocketTopology,
 };
@@ -222,25 +222,6 @@ fn local_responder_allows_static_response_but_rejects_direction_and_encode_misma
             .field_errors
             .contains_key("socket_rules.0.actions")
     );
-}
-
-#[test]
-fn v2_migration_initializes_empty_socket_rules() {
-    let workspace = ProxyWorkspaceV2 {
-        id: crate::WorkspaceId::new(),
-        name: "legacy".into(),
-        revision: Revision::INITIAL,
-        listeners: Vec::new(),
-        metadata_extractors: Vec::new(),
-        response_assertions: Vec::new(),
-        rules: Vec::new(),
-        fault_presets: Vec::new(),
-        certificate_references: Vec::new(),
-        android_network_profiles: Vec::new(),
-    };
-    let workspace = ProxyWorkspace::from(workspace);
-    assert!(workspace.socket_rules.is_empty());
-    assert_eq!(workspace.socket_rule_created_order_high_water, 0);
 }
 
 #[test]

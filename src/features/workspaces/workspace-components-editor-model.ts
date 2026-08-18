@@ -1,11 +1,9 @@
 import type {
   CertificateReferenceKind,
   ConnectionFaultAction,
-  MetadataExtractorSource,
 } from "@/generated/rust-types";
 
 export type ComponentKind =
-  | "metadata_extractor"
   | "response_assertion"
   | "fault_preset"
   | "certificate_reference";
@@ -28,35 +26,6 @@ export function updateAtIndex<T>(
   return items.map((item, itemIndex) =>
     itemIndex === index ? update(item) : item,
   );
-}
-
-export function extractorSourceValue(source: MetadataExtractorSource) {
-  switch (source.kind) {
-    case "header":
-      return source.name;
-    case "json_path":
-      return source.path;
-    case "fixed_value":
-      return source.value;
-    case "body_text":
-      return "";
-  }
-}
-
-export function updateExtractorSource(
-  source: MetadataExtractorSource,
-  value: string,
-) {
-  switch (source.kind) {
-    case "header":
-      return { ...source, name: value };
-    case "json_path":
-      return { ...source, path: value };
-    case "fixed_value":
-      return { ...source, value };
-    case "body_text":
-      return source;
-  }
 }
 
 export function faultActionValue(action: ConnectionFaultAction) {

@@ -70,16 +70,16 @@ fn application_data_reset_removes_local_runtime_owner() {
 }
 
 #[test]
-fn failed_v9_migration_rolls_back_owner_table_and_version() {
+fn failed_owner_migration_rolls_back_owner_table_and_latest_version() {
     let store = SqliteStore::in_memory().unwrap();
     {
         let connection = store.connection.lock();
         connection
             .execute_batch(
                 "DROP TABLE android_runtime_owner;
-                 DELETE FROM schema_migrations WHERE version = 9;
+                 DELETE FROM schema_migrations WHERE version = 10;
                  CREATE TRIGGER reject_owner_migration
-                 BEFORE INSERT ON schema_migrations WHEN NEW.version = 9
+                 BEFORE INSERT ON schema_migrations WHEN NEW.version = 10
                  BEGIN SELECT RAISE(ABORT, 'reject owner migration'); END;",
             )
             .unwrap();
@@ -99,7 +99,7 @@ fn failed_v9_migration_rolls_back_owner_table_and_version() {
         .connection
         .lock()
         .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 9",
+            "SELECT COUNT(*) FROM schema_migrations WHERE version = 10",
             [],
             |row| row.get(0),
         )
@@ -114,7 +114,7 @@ fn version_eight_owner_row_migrates_atomically_with_resume_state_default() {
     store
         .execute_test_batch(&format!(
             "DROP TABLE android_runtime_owner;
-             DELETE FROM schema_migrations WHERE version = 9;
+             DELETE FROM schema_migrations WHERE version = 10;
              CREATE TABLE android_runtime_owner (
                 singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
                 serial TEXT NOT NULL, epoch TEXT NOT NULL,
