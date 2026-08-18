@@ -25,7 +25,6 @@ import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { ApplicationDataResetDialog } from "./application-data-reset-dialog";
 import { SettingsEditorTabs } from "./settings-editor-tabs";
-import { SettingsSummary } from "./settings-summary";
 
 export function SettingsView() {
   const settings = useIpcQuery<SettingsViewModel>("settings-get", () =>
@@ -37,22 +36,30 @@ export function SettingsView() {
   );
   const [draftState, setDraftState] = useState<SettingsDraft>();
   const [validation, setValidation] = useState<FieldValidationViewModel>();
-  const [pendingAction, setPendingAction] = useState<"validate" | "save">();
+  const [pendingAction, setPendingAction] = useState<"save">();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
+  const [savedRequiresRestart, setSavedRequiresRestart] = useState(false);
   const draft = draftState ?? settings.data?.stored;
   const draftDirty = useMemo(
-    () =>
-      Boolean(
-        draft &&
-          settings.data &&
-          JSON.stringify(draft) !== JSON.stringify(settings.data.stored),
-      ),
+    () => Boolean(draft && settings.data && JSON.stringify(draft) !== JSON.stringify(settings.data.stored)),
     [draft, settings.data],
   );
   const writePending = pendingAction != null || resetPending;
   const fieldError = (field: string) =>
     validation?.field_errors[field]?.join("；");
+  const mappedFields = new Set([
+    "connect_timeout_seconds",
+    "write_timeout_seconds",
+    "read_timeout_seconds",
+    "max_sessions",
+    "max_memory_bytes",
+    "max_body_bytes",
+    "rewrite_host",
+  ]);
+  const globalErrors = Object.entries(validation?.field_errors ?? {})
+    .filter(([field]) => !mappedFields.has(field))
+    .flatMap(([, errors]) => errors);
 
   function setDraft(next: SettingsDraft | undefined) {
     // 用户继续编辑后，旧校验结果不再可信，必须清除并重新请求 Rust 校验。
@@ -60,30 +67,17 @@ export function SettingsView() {
     setValidation(undefined);
   }
 
-  async function validate(candidate = draft) {
-    if (!candidate || writePending) return;
-    setPendingAction("validate");
-    try {
-      setValidation(await callCommand(commands.settingsValidate(candidate)));
-    } catch (reason) {
-      const appError = appErrorViewModel(reason);
-      if (appError) {
-        setValidation({
-          valid: false,
-          field_errors: appError.field_errors,
-          warnings: [],
-        });
-      }
-      toast(errorMessage(reason), { variant: "danger" });
-    } finally {
-      setPendingAction(undefined);
-    }
-  }
-
   async function save() {
     if (!draft || writePending) return;
     setPendingAction("save");
     try {
+      const checked = await callCommand(commands.settingsValidate(draft));
+      setValidation(checked);
+      if (!checked.valid) {
+        toast(Object.values(checked.field_errors).flat().join("；") || "设置校验失败。", { variant: "danger" });
+        return;
+      }
+      setValidation(undefined);
       const result = await callCommand(commands.settingsSave(draft));
       toast(
         result.requires_restart
@@ -92,6 +86,7 @@ export function SettingsView() {
         { variant: result.requires_restart ? "warning" : "success" },
       );
       settings.setData(result);
+      setSavedRequiresRestart(result.requires_restart);
       setDraft(result.stored);
     } catch (reason) {
       const appError = appErrorViewModel(reason);
@@ -156,21 +151,22 @@ export function SettingsView() {
 
   return (
     <section className="flex h-full flex-col">
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_440px] gap-4 overflow-hidden p-5 max-[1280px]:block max-[1280px]:overflow-auto">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
         <SettingsEditorTabs
           draft={draft}
-          payloadPolicyText={settings.data.payload_policy_text}
           fieldError={fieldError}
           onDraftChange={setDraft}
+          isDisabled={writePending}
         />
-        <SettingsSummary
-          stored={settings.data.stored}
-          draftDirty={draftDirty}
-          validation={validation}
-          writePending={writePending}
-          validating={pendingAction === "validate"}
-          onValidate={() => void validate()}
-        />
+        {globalErrors.length > 0 && (
+          <Alert status="danger">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Title>设置无法保存</Alert.Title>
+              <Alert.Description>{globalErrors.join("；")}</Alert.Description>
+            </Alert.Content>
+          </Alert>
+        )}
       </div>
 
       <footer className="flex h-16 items-center border-t border-[var(--telemetry-line)] px-5">
@@ -215,6 +211,9 @@ export function SettingsView() {
           </AlertDialog.Backdrop>
         </AlertDialog>
         <ApplicationDataResetDialog isDisabled={writePending} />
+        <span className="ml-4 text-sm text-[var(--telemetry-muted)]">
+          {draftDirty ? "有未保存更改" : savedRequiresRestart || settings.data.requires_restart ? "重启后生效" : "已保存"}
+        </span>
         <div className="ml-auto flex gap-3">
           <Button
             variant="outline"
