@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Tabs, toast } from "@heroui/react";
+import { toast } from "@heroui/react";
 import type {
   RuleDraft,
   RuleSummaryViewModel,
@@ -24,31 +24,26 @@ import {
   useBootstrap,
 } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
+import {
+  ProtocolWorkspaceTabs,
+  type ProtocolType,
+} from "@/features/shared/protocol-workspace-tabs";
 import type { RuleDraftChange } from "./rule-editor";
 import { RuleEditorPanel } from "./rule-editor-panel";
 import { RulesListPanel } from "./rules-list-panel";
 import { SocketRulesView } from "./socket-rules-view";
 
 export function RulesView() {
-  const [mode, setMode] = useState<"http" | "socket">("http");
+  const [mode, setMode] = useState<ProtocolType>("http");
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <Tabs
-        className="min-h-0 flex-1"
-        onSelectionChange={(key) => setMode(key as "http" | "socket")}
-        selectedKey={mode}
-      >
-        <Tabs.ListContainer className="border-b border-[var(--telemetry-line)] px-5 pt-3">
-          <Tabs.List aria-label="规则类型">
-            <Tabs.Tab id="http">HTTP 规则<Tabs.Indicator /></Tabs.Tab>
-            <Tabs.Tab id="socket">Socket 规则<Tabs.Indicator /></Tabs.Tab>
-          </Tabs.List>
-        </Tabs.ListContainer>
-        <Tabs.Panel className="h-full min-h-0" id={mode}>
-          {mode === "http" ? <HttpRulesView /> : <SocketRulesView />}
-        </Tabs.Panel>
-      </Tabs>
-    </div>
+    <ProtocolWorkspaceTabs
+      ariaLabel="规则协议"
+      pageTitle="规则"
+      selectedKey={mode}
+      onSelectionChange={setMode}
+    >
+      {mode === "http" ? <HttpRulesView /> : <SocketRulesView />}
+    </ProtocolWorkspaceTabs>
   );
 }
 
@@ -262,7 +257,7 @@ function HttpRulesView() {
   }
 
   return (
-    <section className="grid h-full grid-cols-[minmax(600px,1fr)_560px] max-[1280px]:grid-cols-1">
+    <section className="grid h-full grid-cols-[minmax(600px,1fr)_560px] max-[1280px]:h-auto max-[1280px]:grid-cols-1">
       <RulesListPanel
         rules={rules.data}
         error={rules.error}

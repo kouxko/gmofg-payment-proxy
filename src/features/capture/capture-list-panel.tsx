@@ -51,7 +51,7 @@ export function CaptureListPanel(props: CaptureListPanelProps) {
     <div className="min-w-0 space-y-4 overflow-auto p-5">
       <header className="flex items-start">
         <div>
-          <h1 className="text-2xl font-semibold">实时抓包</h1>
+          <h2 className="text-lg font-semibold">HTTP 抓包</h2>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
             暂停列表滚动不会影响网络转发、规则或会话记录
           </p>

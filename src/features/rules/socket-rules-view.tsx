@@ -286,7 +286,7 @@ export function SocketRulesView() {
     : undefined;
   const editorError = capabilities.error ?? receivedCatalogValidation ?? bindingError ?? draftValidation;
   return (
-    <div className="grid h-full grid-cols-[minmax(520px,1fr)_620px] max-[1280px]:grid-cols-1">
+    <div className="grid h-full grid-cols-[minmax(520px,1fr)_620px] max-[1280px]:h-auto max-[1280px]:grid-cols-1">
       <SocketRulesList
         error={combinedListError}
         listeners={listeners}

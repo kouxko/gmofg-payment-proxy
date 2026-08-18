@@ -28,7 +28,7 @@ export function SocketCaptureList(props: SocketCaptureListProps) {
     <div id="socket-capture-list" className="min-w-0 space-y-4 overflow-auto p-5" tabIndex={-1}>
       <header className="flex items-start gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Socket 抓包</h1>
+          <h2 className="text-lg font-semibold">Socket 抓包</h2>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
             仅显示完成写出的 Frame 或 LocalResponder Request/Response 交换
           </p>
