@@ -3,12 +3,12 @@
 use async_trait::async_trait;
 
 use crate::{
-    AppError, AppResult, ApplicationConfigurationDocument, PortableApplicationProtocolPackage,
-    PortableProtocolPackage, ProtocolPackageCompilationReceipt,
-    ProtocolPackageDescriptionViewModel, ProtocolPackageImportPreviewViewModel,
-    ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
-    ProtocolPackageUsageCount, ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel,
-    ProxyWorkspace,
+    AppError, AppResult, ApplicationBackupProtocolPackageBaseline,
+    ApplicationConfigurationDocument, PortableApplicationProtocolPackage, PortableProtocolPackage,
+    ProtocolPackageCompilationReceipt, ProtocolPackageDescriptionViewModel,
+    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
+    ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageCount,
+    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel, ProxyWorkspace,
 };
 
 #[async_trait]
@@ -85,6 +85,10 @@ pub trait ProtocolPackageUsageQueryPort: Send + Sync + std::fmt::Debug {
 /// 事务开始前重新执行相同恢复/编译链，再把协议包和 Workspace/完整配置作为一个
 /// `SQLite` 事务提交。相同身份但内容不同必须整体失败，不能覆盖本机已安装版本。
 pub trait ProtocolPackagePortabilityPort: Send + Sync + std::fmt::Debug {
+    /// Stable persisted generations used to detect registry changes after import preview.
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>>;
     /// 导出 Workspace 精确引用的包，不携带本机启用状态。
     async fn export_workspace_packages(
         &self,
@@ -191,6 +195,7 @@ impl ProtocolPackageStorePort for UnavailableProtocolPackageServices {
     async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
         unavailable_protocol_packages()
     }
+
 }
 
 #[async_trait]
@@ -251,6 +256,12 @@ impl ProtocolPackageUsageQueryPort for UnavailableProtocolPackageServices {
 
 #[async_trait]
 impl ProtocolPackagePortabilityPort for UnavailableProtocolPackageServices {
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        unavailable_protocol_packages()
+    }
+
     async fn export_workspace_packages(
         &self,
         _: &[ProtocolPackageRef],

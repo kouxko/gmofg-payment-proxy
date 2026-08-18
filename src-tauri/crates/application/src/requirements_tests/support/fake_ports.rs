@@ -47,6 +47,8 @@ pub(super) fn fake_certificate_overview() -> CertificateOverviewViewModel {
 #[derive(Debug)]
 pub(in crate::requirements_tests) struct FakePorts {
     pub(in crate::requirements_tests) settings_validations: AtomicUsize,
+    pub(in crate::requirements_tests) settings_validation_override:
+        parking_lot::Mutex<Option<SettingsValidationViewModel>>,
     pub(in crate::requirements_tests) proxy_state: parking_lot::Mutex<ProxyState>,
     pub(in crate::requirements_tests) start_results:
         parking_lot::Mutex<VecDeque<AppResult<ProxyStatusViewModel>>>,
@@ -61,6 +63,7 @@ pub(in crate::requirements_tests) struct FakePorts {
     pub(in crate::requirements_tests) certificate_overview_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_discard_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_restore_calls: AtomicUsize,
+    pub(in crate::requirements_tests) certificate_preflight_calls: AtomicUsize,
     pub(in crate::requirements_tests) block_certificate_discard: AtomicBool,
     pub(in crate::requirements_tests) fail_certificate_discard: AtomicBool,
     pub(in crate::requirements_tests) certificate_discard_entered: tokio::sync::Notify,
@@ -81,6 +84,7 @@ impl Default for FakePorts {
     fn default() -> Self {
         Self {
             settings_validations: AtomicUsize::new(0),
+            settings_validation_override: parking_lot::Mutex::new(None),
             proxy_state: parking_lot::Mutex::new(ProxyState::Stopped),
             start_results: parking_lot::Mutex::new(VecDeque::new()),
             start_calls: AtomicUsize::new(0),
@@ -94,6 +98,7 @@ impl Default for FakePorts {
             certificate_overview_calls: AtomicUsize::new(0),
             certificate_discard_calls: AtomicUsize::new(0),
             certificate_restore_calls: AtomicUsize::new(0),
+            certificate_preflight_calls: AtomicUsize::new(0),
             block_certificate_discard: AtomicBool::new(false),
             fail_certificate_discard: AtomicBool::new(false),
             certificate_discard_entered: tokio::sync::Notify::new(),
@@ -351,6 +356,9 @@ impl SettingsRepositoryPort for FakePorts {
     }
     async fn validate(&self, _: &SettingsDraft) -> AppResult<SettingsValidationViewModel> {
         self.settings_validations.fetch_add(1, Ordering::SeqCst);
+        if let Some(validation) = self.settings_validation_override.lock().clone() {
+            return Ok(validation);
+        }
         Ok(FieldValidationViewModel {
             valid: true,
             field_errors: BTreeMap::new(),

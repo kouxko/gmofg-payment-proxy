@@ -21,6 +21,7 @@ use crate::{
 
 mod android;
 mod application_backup;
+mod application_backup_import;
 mod bootstrap;
 mod certificate_portability;
 mod certificates;

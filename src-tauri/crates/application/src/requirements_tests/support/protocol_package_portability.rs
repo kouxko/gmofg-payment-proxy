@@ -22,6 +22,13 @@ pub(in crate::requirements_tests) struct FakeProtocolPackagePortability {
     pub(in crate::requirements_tests) compiler_describe_calls: AtomicUsize,
     pub(in crate::requirements_tests) fail_commit: AtomicBool,
     pub(in crate::requirements_tests) fail_preflight: AtomicBool,
+    pub(in crate::requirements_tests) fail_preflight_at: parking_lot::Mutex<Option<usize>>,
+    pub(in crate::requirements_tests) block_preflight: AtomicBool,
+    pub(in crate::requirements_tests) preflight_entered: tokio::sync::Notify,
+    pub(in crate::requirements_tests) continue_preflight: tokio::sync::Notify,
+    pub(in crate::requirements_tests) block_backup_baseline: AtomicBool,
+    pub(in crate::requirements_tests) backup_baseline_entered: tokio::sync::Notify,
+    pub(in crate::requirements_tests) continue_backup_baseline: tokio::sync::Notify,
     pub(in crate::requirements_tests) block_workspace_export: AtomicBool,
     pub(in crate::requirements_tests) workspace_export_entered: tokio::sync::Notify,
     pub(in crate::requirements_tests) continue_workspace_export: tokio::sync::Notify,
@@ -52,6 +59,13 @@ impl FakeProtocolPackagePortability {
             compiler_describe_calls: AtomicUsize::new(0),
             fail_commit: AtomicBool::new(false),
             fail_preflight: AtomicBool::new(false),
+            fail_preflight_at: parking_lot::Mutex::new(None),
+            block_preflight: AtomicBool::new(false),
+            preflight_entered: tokio::sync::Notify::new(),
+            continue_preflight: tokio::sync::Notify::new(),
+            block_backup_baseline: AtomicBool::new(false),
+            backup_baseline_entered: tokio::sync::Notify::new(),
+            continue_backup_baseline: tokio::sync::Notify::new(),
             block_workspace_export: AtomicBool::new(false),
             workspace_export_entered: tokio::sync::Notify::new(),
             continue_workspace_export: tokio::sync::Notify::new(),
@@ -91,15 +105,46 @@ impl FakeProtocolPackagePortability {
             ));
         }
         let descriptions = self.descriptions.lock();
+        let fail_at = *self.fail_preflight_at.lock();
         packages
             .iter()
-            .map(|package| {
+            .enumerate()
+            .map(|(index, package)| {
+                if fail_at == Some(index) {
+                    return Err(AppError::new(
+                        "SCRIPT_SYNTAX_INVALID",
+                        "测试注入：指定协议包预检失败。",
+                    ));
+                }
                 descriptions.get(identity(package)).cloned().ok_or_else(|| {
                     AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试协议包没有对应编译描述。")
                 })
             })
             .collect()
     }
+}
+
+#[async_trait]
+impl ProtocolPackageStorePort for FakeProtocolPackagePortability {
+    async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
+        Ok(Vec::new())
+    }
+
+    async fn get(
+        &self,
+        _: &ProtocolPackageRef,
+    ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
+        Ok(None)
+    }
+
+    async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
+        Err(AppError::new("TEST_READ_ONLY", "测试替身只读。"))
+    }
+
+    async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        Err(AppError::new("TEST_READ_ONLY", "测试替身只读。"))
+    }
+
 }
 
 #[async_trait]
@@ -141,6 +186,25 @@ impl ProtocolPackageCompilerPort for FakeProtocolPackagePortability {
 
 #[async_trait]
 impl ProtocolPackagePortabilityPort for FakeProtocolPackagePortability {
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        if self.block_backup_baseline.load(Ordering::SeqCst) {
+            self.backup_baseline_entered.notify_one();
+            self.continue_backup_baseline.notified().await;
+        }
+        Ok(self
+            .application_packages
+            .lock()
+            .iter()
+            .map(|package| ApplicationBackupProtocolPackageBaseline {
+                package: package.package.clone(),
+                enabled: package.enabled,
+                generation: uuid::Uuid::nil(),
+            })
+            .collect())
+    }
+
     async fn export_workspace_packages(
         &self,
         packages: &[ProtocolPackageRef],
@@ -186,6 +250,10 @@ impl ProtocolPackagePortabilityPort for FakeProtocolPackagePortability {
         packages: &[PortableApplicationProtocolPackage],
     ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
         self.preflight_calls.fetch_add(1, Ordering::SeqCst);
+        if self.block_preflight.load(Ordering::SeqCst) {
+            self.preflight_entered.notify_one();
+            self.continue_preflight.notified().await;
+        }
         self.descriptions_for(packages, |package| &package.package)
     }
 

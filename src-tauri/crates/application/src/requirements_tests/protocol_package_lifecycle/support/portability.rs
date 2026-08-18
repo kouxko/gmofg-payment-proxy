@@ -2,6 +2,34 @@ use super::*;
 
 #[async_trait]
 impl ProtocolPackagePortabilityPort for FakeProtocolPackageServices {
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        let mut baseline = self
+            .records
+            .lock()
+            .values()
+            .map(|record| ApplicationBackupProtocolPackageBaseline {
+                package: record.package.clone(),
+                enabled: record.enabled,
+                generation: uuid::Uuid::nil(),
+            })
+            .collect::<Vec<_>>();
+        baseline.sort_by(|left, right| {
+            left.package
+                .id
+                .as_str()
+                .cmp(right.package.id.as_str())
+                .then_with(|| {
+                    left.package
+                        .version
+                        .as_str()
+                        .cmp(right.package.version.as_str())
+                })
+        });
+        Ok(baseline)
+    }
+
     async fn export_workspace_packages(
         &self,
         packages: &[ProtocolPackageRef],

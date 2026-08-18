@@ -86,6 +86,16 @@ impl ListenerCertificateImportPort for FakePorts {
         })
     }
 
+    async fn preflight_portable(&self, material: &PortableCertificateMaterial) -> AppResult<()> {
+        self.certificate_preflight_calls
+            .fetch_add(1, Ordering::SeqCst);
+        material.validate_shape()
+    }
+
+    async fn application_backup_baseline(&self) -> AppResult<[u8; 32]> {
+        Ok([0; 32])
+    }
+
     async fn discard(&self, reference: CertificateReference) -> AppResult<()> {
         self.certificate_discard_calls
             .fetch_add(1, Ordering::SeqCst);

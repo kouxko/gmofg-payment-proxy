@@ -72,6 +72,12 @@ pub trait ListenerCertificateImportPort: Send + Sync + std::fmt::Debug {
         reference: CertificateReference,
     ) -> AppResult<PortableCertificateMaterial>;
 
+    /// Fully parses and validates portable material without persisting secrets or references.
+    async fn preflight_portable(&self, material: &PortableCertificateMaterial) -> AppResult<()>;
+
+    /// Opaque digest of managed Listener certificate state for preview staleness checks.
+    async fn application_backup_baseline(&self) -> AppResult<[u8; 32]>;
+
     /// 校验可移植载荷并写入当前机器的受保护存储，返回新的本机托管引用。
     async fn restore_portable(
         &self,
