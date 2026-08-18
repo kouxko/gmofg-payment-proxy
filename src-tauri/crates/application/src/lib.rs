@@ -7,6 +7,7 @@
 //! 或文件系统实现。
 
 mod android;
+mod application_backup;
 mod breakpoint_validation;
 mod breakpoints;
 mod capacity;
@@ -26,6 +27,7 @@ mod workspace_migration;
 mod workspaces;
 
 pub use android::*;
+pub use application_backup::*;
 pub use breakpoint_validation::{BreakpointBodyCodecResolver, BreakpointValidator};
 pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket};
 pub use capacity::CapacityLedger;

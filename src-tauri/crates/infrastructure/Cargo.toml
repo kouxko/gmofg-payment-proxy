@@ -36,6 +36,7 @@ tracing.workspace = true
 uuid.workspace = true
 x509-parser.workspace = true
 zeroize.workspace = true
+zip.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys.workspace = true
