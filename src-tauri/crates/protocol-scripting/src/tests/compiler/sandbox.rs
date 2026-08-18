@@ -1,4 +1,4 @@
-use super::common::{compile, minimal_manifest, package, script_error, valid_receive_script};
+use super::common::{compile, minimal_manifest, package, script_error};
 use crate::{ProtocolRuntimeLimits, ProtocolScriptCompileErrorCode, compiler::build_engine};
 
 #[test]
@@ -29,14 +29,11 @@ fn disabled_float_time_and_closure_language_features_fail_during_compilation() {
         "let value = |x| x + 1;",
     ] {
         let upstream = format!(
-            "fn frame(reader, context) {{ {expression} }}\nfn decode(origin, context) {{ () }}"
+            "fn frame(reader, context) {{ {expression} }}\nfn decode(origin, context) {{ () }}\nfn encode(origin, document, context) {{ origin }}"
         );
         let files = package(
             minimal_manifest(),
-            &[
-                ("upstream.rhai", upstream.as_bytes()),
-                ("downstream.rhai", valid_receive_script().as_bytes()),
-            ],
+            &[("protocol.rhai", upstream.as_bytes())],
         );
         let result = compile(&files);
         assert!(
@@ -62,14 +59,11 @@ fn file_network_process_and_environment_capability_names_are_forbidden() {
         "env(\"HOME\");",
     ] {
         let upstream = format!(
-            "fn frame(reader, context) {{ {expression} }}\nfn decode(origin, context) {{ () }}"
+            "fn frame(reader, context) {{ {expression} }}\nfn decode(origin, context) {{ () }}\nfn encode(origin, document, context) {{ origin }}"
         );
         let files = package(
             minimal_manifest(),
-            &[
-                ("upstream.rhai", upstream.as_bytes()),
-                ("downstream.rhai", valid_receive_script().as_bytes()),
-            ],
+            &[("protocol.rhai", upstream.as_bytes())],
         );
         let result = compile(&files);
         assert!(
@@ -86,13 +80,11 @@ fn entry_bodies_are_compiled_but_never_executed_during_t08() {
     let upstream = concat!(
         "fn frame(reader, context) { while true { } }\n",
         "fn decode(origin, context) { throw \"not executed during import\"; }\n",
+        "fn encode(origin, document, context) { origin }\n",
     );
     let files = package(
         minimal_manifest(),
-        &[
-            ("upstream.rhai", upstream.as_bytes()),
-            ("downstream.rhai", valid_receive_script().as_bytes()),
-        ],
+        &[("protocol.rhai", upstream.as_bytes())],
     );
 
     assert!(compile(&files).is_ok());

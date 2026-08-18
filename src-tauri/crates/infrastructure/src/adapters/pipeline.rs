@@ -197,6 +197,7 @@ struct CapturePublication<'a> {
 mod breakpoints;
 mod completion;
 mod core;
+mod http_protocol;
 mod mapping;
 mod metrics;
 mod ports;

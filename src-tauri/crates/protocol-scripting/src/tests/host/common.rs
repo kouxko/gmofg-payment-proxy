@@ -4,7 +4,7 @@ use intercept_proxy_domain::{
 use rhai::Engine;
 
 use crate::{
-    ProtocolRuntimeLimits, compiler::build_engine, host::ProtocolHostApi,
+    ProtocolDirection, ProtocolRuntimeLimits, compiler::build_engine, host::ProtocolHostApi,
     test_support::CompiledProtocolPackageTestBuilder,
 };
 
@@ -27,7 +27,7 @@ pub(super) fn host() -> ProtocolHostApi {
     let package = CompiledProtocolPackageTestBuilder::new()
         .with_schema(schema())
         .build();
-    ProtocolHostApi::for_package(&package)
+    ProtocolHostApi::for_package(&package, ProtocolDirection::Upstream)
 }
 
 pub(super) fn engine() -> Engine {

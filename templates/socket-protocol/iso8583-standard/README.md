@@ -17,7 +17,7 @@ iso8583-standard/
 ├── manifest.toml               协议包身份、Schema 和入口声明
 ├── document.toml               Document 字段及规则变量声明
 ├── protocol.rhai               frame / decode / encode 入口
-├── display.rhai                display 可选入口
+├── display.rhai                display 必需入口
 ├── libraries/
 │   └── iso8583.rhai            ISO 8583 字段解析和编码
 └── samples/
@@ -27,22 +27,13 @@ iso8583-standard/
 
 `manifest.toml` 就是协议包的导出表。Rhai 本身不需要额外的 `export` 关键字；宿主只调用 Manifest 明确声明的函数。
 
-## Hook 命名
+## 方向与处理顺序
 
-`upstream/downstream` 表示完整的数据流向，`receive/send` 始终以 Proxy 为主体：
-
-```text
-hooks.upstream.receive    App -> Proxy
-hooks.upstream.send       Proxy -> Server
-hooks.downstream.receive  Server -> Proxy
-hooks.downstream.send     Proxy -> App
-```
-
-因此同一个方向的处理链是：
+`upstream/downstream` 表示完整的数据流向；每个方向由一份字段结构、一个展示入口以及一组 frame/decode/encode 入口组成：
 
 ```text
-Upstream:   upstream.receive.frame/decode -> rules -> upstream.send.encode
-Downstream: downstream.receive.frame/decode -> rules -> downstream.send.encode
+Upstream:   App -> Proxy rule -> Proxy -> Server rule
+Downstream: Server -> Proxy rule -> Proxy -> App rule
 ```
 
 ## 数据流程
@@ -51,19 +42,17 @@ Downstream: downstream.receive.frame/decode -> rules -> downstream.send.encode
 TCP bytes
   -> frame(reader, context)
   -> complete origin Blob
-  -> Decode 开：decode(origin, context) -> Document -> rules
-     Decode 关：空的 Schema Document，不执行 rules
-  -> Encode 开：encode(origin, document, context)；display（若声明）作为旁路展示
-     Encode 关：不调用 display，直接发送 origin
+  -> decode(origin, context) -> Document
+  -> 按边界顺序执行字段规则
+  -> encode(origin, document, context)
+  -> display(document, context) 生成只读协议视图
   -> TCP bytes
 ```
 
-- `frame` 和 `decode` 是 Manifest 必需入口；Scripted Listener 始终调用 frame，但可以按方向关闭 Decode。
-- `display` 没有独立开关，跟随同方向 Encode；Encode 关闭、Display 未声明或失败时应用显示完整 Frame 的 Hex。
-- `encode` 未声明或未启用时，应用发送 `origin`；脚本也可以主动 `return origin`。
-- Listener 明确绑定一个协议包的 `id + version`，协议包之间不做自动识别。
-- Listener 分别配置 Upstream/Downstream 的 `decode_enabled` 与 `encode_enabled`，四个开关互相独立。
-- Decode 关闭/Encode 开启时，encode 收到空的 Schema 绑定 Document；本模板 encode 依赖字段，因此实际使用时应同时开启 Decode。
+- Socket 包两个方向的 `frame`、`decode`、`encode`、Schema 和 `display` 都是必需声明；绑定协议包即执行完整链。
+- 没有规则修改时，本模板的 `encode` 会重建等价报文；协议作者也可以在确认字段未变化时主动返回 `origin`。
+- 入口明确绑定一个协议包的 `id + version`，协议包之间不做自动识别。
+- Display 失败只使应用回退完整报文十六进制，不影响网络写出。
 - 导入会编译此目录所有声明脚本和模块；任意 Rhai 语法、入口参数或返回类型错误都会拒绝导入。
 - 应用的版本详情 Dialog 可以查看此模板的 Schema 和入口能力，但不显示 Rhai 源码。
 

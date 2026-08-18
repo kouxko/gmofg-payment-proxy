@@ -4,12 +4,11 @@ use std::io::{Cursor, Write};
 use std::sync::Arc;
 
 use intercept_proxy_domain::{
-    DirectionProcessingOptions, DocumentAction, DocumentCondition, DocumentFieldName,
-    DocumentValue, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, ProxyListener, ProxyWorkspace, ScriptedSocketProcessing,
-    SocketDirection, SocketDocumentRuleDefinition, SocketDocumentRuleId, SocketEndpoint,
-    SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings, SocketRelayTopology,
-    SocketTopology,
+    DocumentAction, DocumentCondition, DocumentFieldName, DocumentValue, ListenerDataPlane,
+    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolPackageId,
+    ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyWorkspace,
+    ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
+    SocketRelaySettings, SocketRelayTopology, SocketTopology,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -27,29 +26,22 @@ id = "runtime-matrix"
 name = "Runtime Matrix"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
+display = "display"
 
-[document.display]
-script = "protocol.rhai"
-function = "display"
+[document.downstream]
+schema = "document.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
 encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.downstream.send]
-script = "protocol.rhai"
 encode = "encode"
 "#;
 
@@ -81,37 +73,24 @@ fn encode(origin, document, context) {
     result[1] = if document.has("amount") { document.get("amount") } else { 0 };
     result
 }
+"#;
 
+const DISPLAY: &str = r#"
 fn display(document, context) { "<p>runtime</p>" }
 "#;
 
 #[tokio::test]
-async fn all_sixteen_direction_state_pairs_use_exact_real_tcp_wire_semantics() {
-    for upstream_state in states() {
-        for downstream_state in states() {
-            run_case(upstream_state, downstream_state).await;
-        }
-    }
-}
-
-async fn run_case(upstream_state: State, downstream_state: State) {
+async fn both_directions_use_the_full_real_tcp_protocol_chain() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
     let listener_port = reserve_port().await;
-    let listener = listener(
-        listener_port,
-        upstream_address.port(),
-        upstream_state,
-        downstream_state,
-    );
-    let workspace = workspace(&listener, upstream_state, downstream_state);
-    let expected_upstream = expected([2, 11], 161, upstream_state);
-    let expected_downstream = expected([2, 22], 209, downstream_state);
+    let listener = listener(listener_port, upstream_address.port());
+    let workspace = workspace(&listener);
     let upstream_task = tokio::spawn(async move {
         let (mut stream, _) = upstream.accept().await.unwrap();
         let mut request = [0_u8; 2];
         stream.read_exact(&mut request).await.unwrap();
-        assert_eq!(request, expected_upstream);
+        assert_eq!(request, [161, 42]);
         stream.write_all(&[2, 22]).await.unwrap();
         stream.shutdown().await.unwrap();
     });
@@ -136,7 +115,7 @@ async fn run_case(upstream_state: State, downstream_state: State) {
     client.shutdown().await.unwrap();
     let mut response = Vec::new();
     client.read_to_end(&mut response).await.unwrap();
-    assert_eq!(response, expected_downstream);
+    assert_eq!(response, [209, 42]);
 
     upstream_task.await.unwrap();
     let page = tokio::time::timeout(std::time::Duration::from_secs(2), async {
@@ -156,80 +135,24 @@ async fn run_case(upstream_state: State, downstream_state: State) {
         else {
             panic!("expected relay frame")
         };
-        let (state, origin, written) = match frame.direction {
-            SocketDirection::Upstream => (upstream_state, vec![2, 11], expected_upstream.to_vec()),
-            SocketDirection::Downstream => {
-                (downstream_state, vec![2, 22], expected_downstream.to_vec())
-            }
+        let (origin, written) = match frame.direction {
+            ProtocolDirection::Upstream => (vec![2, 11], vec![161, 42]),
+            ProtocolDirection::Downstream => (vec![2, 22], vec![209, 42]),
         };
+        assert_eq!(frame.schema.id.as_str(), "runtime-message");
+        assert_eq!(frame.schema.version, 1);
         assert_eq!(frame.origin, origin);
         assert_eq!(frame.written, written);
-        assert_eq!(frame.document.is_some(), state.decode);
-        assert_eq!(
-            frame.write_kind,
-            if state.encode {
-                intercept_proxy_application::SocketWriteKind::Encoded
-            } else {
-                intercept_proxy_application::SocketWriteKind::Original
-            }
-        );
-        assert!(if state.decode || state.encode {
-            matches!(
-                frame.display,
-                intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
-            )
-        } else {
-            matches!(
-                frame.display,
-                intercept_proxy_application::SocketDisplayResult::HexFallback {
-                    reason:
-                        intercept_proxy_application::SocketDisplayFallbackReason::EncodeDisabled,
-                    ..
-                }
-            )
-        });
+        assert_eq!(frame.stages.len(), 2);
+        assert!(matches!(
+            frame.display,
+            intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
+        ));
     }
     runtime.stop(listener.id).await.unwrap();
 }
 
-#[derive(Clone, Copy, Debug)]
-struct State {
-    decode: bool,
-    encode: bool,
-}
-
-fn states() -> [State; 4] {
-    [
-        State {
-            decode: false,
-            encode: false,
-        },
-        State {
-            decode: true,
-            encode: false,
-        },
-        State {
-            decode: false,
-            encode: true,
-        },
-        State {
-            decode: true,
-            encode: true,
-        },
-    ]
-}
-
-fn expected(origin: [u8; 2], marker: u8, state: State) -> [u8; 2] {
-    if !state.encode {
-        origin
-    } else if state.decode {
-        [marker, 42]
-    } else {
-        [marker, 0]
-    }
-}
-
-fn listener(port: u16, upstream_port: u16, upstream: State, downstream: State) -> ProxyListener {
+fn listener(port: u16, upstream_port: u16) -> ProxyListener {
     ProxyListener {
         name: "runtime matrix".into(),
         bind_address: "127.0.0.1".into(),
@@ -245,62 +168,42 @@ fn listener(port: u16, upstream_port: u16, upstream: State, downstream: State) -
             maximum_connections: 4,
             processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package: package(),
-                upstream: options(upstream),
-                downstream: options(downstream),
             }),
         }),
         ..ProxyListener::default()
     }
 }
 
-fn workspace(listener: &ProxyListener, upstream: State, downstream: State) -> ProxyWorkspace {
+fn workspace(listener: &ProxyListener) -> ProxyWorkspace {
     let mut rules = Vec::new();
-    add_rule(&mut rules, listener, SocketDirection::Upstream, upstream, 1);
-    add_rule(
-        &mut rules,
-        listener,
-        SocketDirection::Downstream,
-        downstream,
-        2,
-    );
+    add_rule(&mut rules, listener, ProtocolDirection::Upstream, 1);
+    add_rule(&mut rules, listener, ProtocolDirection::Downstream, 2);
     let created_order_high_water = rules
         .iter()
-        .map(SocketDocumentRuleDefinition::created_order)
+        .map(ProtocolDocumentRuleDefinition::created_order)
         .max()
         .unwrap_or(0);
     ProxyWorkspace {
         listeners: vec![listener.clone()],
-        socket_rule_created_order_high_water: created_order_high_water,
-        socket_rules: rules,
+        protocol_rule_created_order_high_water: created_order_high_water,
+        protocol_rules: rules,
         ..ProxyWorkspace::default()
     }
 }
 
 fn add_rule(
-    rules: &mut Vec<SocketDocumentRuleDefinition>,
+    rules: &mut Vec<ProtocolDocumentRuleDefinition>,
     listener: &ProxyListener,
-    direction: SocketDirection,
-    state: State,
+    direction: ProtocolDirection,
     created_order: u64,
 ) {
-    if !state.decode {
-        return;
-    }
-    let actions = if state.encode {
-        vec![DocumentAction::SetField {
-            field: DocumentFieldName::new("amount").unwrap(),
-            value: DocumentValue::Int(42),
-        }]
-    } else {
-        vec![DocumentAction::RecordMatch]
-    };
     let expected_decoded_amount = match direction {
-        SocketDirection::Upstream => 11,
-        SocketDirection::Downstream => 22,
+        ProtocolDirection::Upstream => 11,
+        ProtocolDirection::Downstream => 22,
     };
     rules.push(
-        SocketDocumentRuleDefinition::new(
-            SocketDocumentRuleId::new(),
+        ProtocolDocumentRuleDefinition::new(
+            ProtocolDocumentRuleId::new(),
             true,
             10,
             created_order,
@@ -312,17 +215,13 @@ fn add_rule(
                 field: DocumentFieldName::new("amount").unwrap(),
                 value: DocumentValue::Int(expected_decoded_amount),
             }],
-            actions,
+            vec![DocumentAction::SetField {
+                field: DocumentFieldName::new("amount").unwrap(),
+                value: DocumentValue::Int(42),
+            }],
         )
         .unwrap(),
     );
-}
-
-fn options(state: State) -> DirectionProcessingOptions {
-    DirectionProcessingOptions {
-        decode_enabled: state.decode,
-        encode_enabled: state.encode,
-    }
 }
 
 async fn reserve_port() -> u16 {
@@ -347,6 +246,7 @@ fn package_zip() -> Vec<u8> {
         ("manifest.toml", MANIFEST.as_bytes()),
         ("document.toml", SCHEMA.as_bytes()),
         ("protocol.rhai", SCRIPT.as_bytes()),
+        ("display.rhai", DISPLAY.as_bytes()),
     ] {
         writer
             .start_file(path, SimpleFileOptions::default())

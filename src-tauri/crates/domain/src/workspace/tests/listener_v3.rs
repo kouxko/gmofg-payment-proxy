@@ -1,17 +1,12 @@
 use super::*;
 use crate::{ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion};
 
-fn scripted_processing(
-    upstream: DirectionProcessingOptions,
-    downstream: DirectionProcessingOptions,
-) -> SocketPayloadProcessing {
+fn scripted_processing() -> SocketPayloadProcessing {
     SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
         package: ProtocolPackageRef {
             id: ProtocolPackageId::new("iso8583-standard").unwrap(),
             version: ProtocolPackageVersion::new("1.2.3").unwrap(),
         },
-        upstream,
-        downstream,
     })
 }
 
@@ -175,37 +170,17 @@ fn current_listener_rejects_unknown_fields() {
 }
 
 #[test]
-fn socket_processing_all_sixteen_switch_combinations_round_trip_without_direction_swaps() {
-    // 四个布尔值共同组成 16 种合法配置。逐位生成而不是只抽样，确保 Serde 字段映射不会把
-    // Upstream/Downstream 或 Decode/Encode 接反。
-    for mask in 0_u8..16 {
-        let upstream_decode = mask & 0b0001 != 0;
-        let upstream_encode = mask & 0b0010 != 0;
-        let downstream_decode = mask & 0b0100 != 0;
-        let downstream_encode = mask & 0b1000 != 0;
-        let processing = scripted_processing(
-            DirectionProcessingOptions {
-                decode_enabled: upstream_decode,
-                encode_enabled: upstream_encode,
-            },
-            DirectionProcessingOptions {
-                decode_enabled: downstream_decode,
-                encode_enabled: downstream_encode,
-            },
-        );
-
-        let json = serde_json::to_value(&processing).unwrap();
-        let settings = &json["settings"];
-        assert_eq!(settings["upstream"]["decode_enabled"], upstream_decode);
-        assert_eq!(settings["upstream"]["encode_enabled"], upstream_encode);
-        assert_eq!(settings["downstream"]["decode_enabled"], downstream_decode);
-        assert_eq!(settings["downstream"]["encode_enabled"], downstream_encode);
-        assert_eq!(
-            serde_json::from_value::<SocketPayloadProcessing>(json).unwrap(),
-            processing,
-            "four-switch mask {mask:04b} must round-trip exactly"
-        );
-    }
+fn scripted_processing_round_trips_only_the_exact_package_binding() {
+    let processing = scripted_processing();
+    let json = serde_json::to_value(&processing).unwrap();
+    assert_eq!(json["settings"]["package"]["id"], "iso8583-standard");
+    assert_eq!(json["settings"]["package"]["version"], "1.2.3");
+    assert!(json["settings"].get("upstream").is_none());
+    assert!(json["settings"].get("downstream").is_none());
+    assert_eq!(
+        serde_json::from_value::<SocketPayloadProcessing>(json).unwrap(),
+        processing
+    );
 }
 
 #[test]
@@ -241,17 +216,7 @@ fn socket_processing_default_is_direct_and_current_wire_is_strict() {
 
 #[test]
 fn socket_processing_rejects_incomplete_invalid_or_ambiguous_wire_data() {
-    let scripted = serde_json::to_value(scripted_processing(
-        DirectionProcessingOptions {
-            decode_enabled: true,
-            encode_enabled: false,
-        },
-        DirectionProcessingOptions {
-            decode_enabled: false,
-            encode_enabled: true,
-        },
-    ))
-    .unwrap();
+    let scripted = serde_json::to_value(scripted_processing()).unwrap();
 
     let mut invalid_cases = Vec::new();
 
@@ -282,9 +247,12 @@ fn socket_processing_rejects_incomplete_invalid_or_ambiguous_wire_data() {
     unknown_scripted["settings"]["unexpected"] = serde_json::json!(true);
     invalid_cases.push(("unknown scripted field", unknown_scripted));
 
-    let mut unknown_direction = scripted;
-    unknown_direction["settings"]["upstream"]["unexpected"] = serde_json::json!(true);
-    invalid_cases.push(("unknown direction field", unknown_direction));
+    let mut obsolete_direction_switches = scripted;
+    obsolete_direction_switches["settings"]["upstream"] = serde_json::json!({
+        "decode_enabled": true,
+        "encode_enabled": true
+    });
+    invalid_cases.push(("obsolete direction switches", obsolete_direction_switches));
 
     for (case, value) in invalid_cases {
         assert!(
@@ -295,7 +263,7 @@ fn socket_processing_rejects_incomplete_invalid_or_ambiguous_wire_data() {
 }
 
 #[test]
-fn cloned_socket_workspace_edits_only_the_selected_direction() {
+fn cloned_socket_workspace_edits_only_the_selected_package_binding() {
     let mut workspace = ProxyWorkspace::default();
     workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
         topology: relay_topology(
@@ -306,16 +274,7 @@ fn cloned_socket_workspace_edits_only_the_selected_direction() {
             SocketRelaySecurity::Transparent,
         ),
         maximum_connections: DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
-        processing: scripted_processing(
-            DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: true,
-            },
-            DirectionProcessingOptions {
-                decode_enabled: false,
-                encode_enabled: true,
-            },
-        ),
+        processing: scripted_processing(),
     });
     let original = workspace.clone();
 
@@ -325,7 +284,7 @@ fn cloned_socket_workspace_edits_only_the_selected_direction() {
     let SocketPayloadProcessing::Scripted(scripted) = &mut settings.processing else {
         unreachable!()
     };
-    scripted.upstream.decode_enabled = false;
+    scripted.package.version = ProtocolPackageVersion::new("2.0.0").unwrap();
 
     let ListenerDataPlane::Socket(original_settings) = &original.listeners[0].data_plane else {
         unreachable!()
@@ -333,17 +292,12 @@ fn cloned_socket_workspace_edits_only_the_selected_direction() {
     let SocketPayloadProcessing::Scripted(original_scripted) = &original_settings.processing else {
         unreachable!()
     };
-    assert!(original_scripted.upstream.decode_enabled);
-    assert!(original_scripted.upstream.encode_enabled);
-    assert!(!original_scripted.downstream.decode_enabled);
-    assert!(original_scripted.downstream.encode_enabled);
+    assert_eq!(original_scripted.package.version.as_str(), "1.2.3");
 
     let SocketPayloadProcessing::Scripted(edited) = &settings.processing else {
         unreachable!()
     };
-    assert!(!edited.upstream.decode_enabled);
-    assert!(edited.upstream.encode_enabled);
-    assert_eq!(edited.downstream, original_scripted.downstream);
+    assert_eq!(edited.package.version.as_str(), "2.0.0");
     original.validate().unwrap();
     workspace.validate().unwrap();
 }

@@ -110,9 +110,9 @@ function SocketFieldErrors({ errors }: { errors?: Record<string, string[]> }): R
   const groups = [
     { label: "Socket 连接", tokens: ["topology", "downstream_security"] },
     // 规则路径也可能含 package/schema，必须先归入内容处理规则而不是包绑定。
-    { label: "内容处理规则", tokens: ["socket_rules", "rule"] },
+    { label: "内容处理规则", tokens: ["protocol_rules", "rule"] },
     { label: "精确协议包", tokens: ["package", "schema"] },
-    { label: "处理选项", tokens: ["capability", "decode_enabled", "encode_enabled", "processing"] },
+    { label: "协议处理", tokens: ["capability", "processing"] },
   ];
   const entries = Object.entries(errors ?? {});
   const matched = new Set<string>();

@@ -1,13 +1,13 @@
-import { Alert, Button, Chip, Spinner, Table, Tabs } from "@heroui/react";
+import { Alert, Button, Spinner, Table, Tabs } from "@heroui/react";
 import type {
   SessionDetailViewModel,
   SessionSummaryViewModel,
 } from "@/generated/rust-types";
 import type { QueryAwareRequest } from "@/lib/message-content";
 import {
-  HttpBodyViewer,
   HttpRequestTargetView,
 } from "@/features/shared/http-inspection";
+import { HttpProtocolBodyViewer } from "@/features/shared/http-protocol-body";
 import { sessionDetailTabLabels } from "./session-config";
 
 interface DetailQuery {
@@ -151,7 +151,7 @@ export function SessionDetailContent({
             headers={detail.data?.request?.headers ?? {}}
           />
           <h2 className="font-semibold">请求 Body</h2>
-          <HttpBodyViewer
+          <HttpProtocolBodyViewer
             label="请求 Body"
             message={detail.data?.request}
             emptyText="按需读取后显示请求报文"
@@ -164,7 +164,7 @@ export function SessionDetailContent({
             headers={detail.data?.response?.headers ?? {}}
           />
           <h2 className="font-semibold">响应 Body</h2>
-          <HttpBodyViewer
+          <HttpProtocolBodyViewer
             label="响应 Body"
             message={detail.data?.response}
             emptyText="按需读取后显示响应报文"

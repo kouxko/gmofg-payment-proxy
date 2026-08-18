@@ -8,8 +8,8 @@ use chrono::{DateTime, Utc};
 use intercept_proxy_domain::ProtocolPackageRef;
 use intercept_proxy_protocol_scripting::{
     CompiledProtocolPackage, ProtocolArchiveError, ProtocolArchiveLimits,
-    ProtocolPackageCompilationError, ProtocolPackageCompiler, ProtocolRuntimeLimits,
-    read_protocol_package_zip, restore_protocol_package_files,
+    ProtocolPackageCompilationError, ProtocolPackageCompiler, ProtocolPackageKind,
+    ProtocolRuntimeLimits, read_protocol_package_zip, restore_protocol_package_files,
 };
 use parking_lot::Mutex;
 use thiserror::Error;
@@ -42,6 +42,8 @@ pub struct ProtocolPackageSummary {
     pub name: String,
     /// 导入时已经确认受当前 Host 支持的 API 主版本。
     pub host_api: u32,
+    /// 从严格 Manifest 推断的数据平面类型。
+    pub kind: ProtocolPackageKind,
     /// 应用级启用位；新安装记录固定为 `false`。
     pub enabled: bool,
     /// 最近一次完整编译或缓存恢复结果。
@@ -226,6 +228,7 @@ impl ProtocolPackageRepositoryAdapter {
             package: compiled.package().clone(),
             name: manifest.package().name().to_owned(),
             host_api: manifest.api(),
+            kind: compiled.kind(),
             enabled: false,
             validation: StoredProtocolPackageValidation::Valid,
             installed_at: Utc::now(),
@@ -361,6 +364,7 @@ impl ProtocolPackageRepositoryAdapter {
         if compiled.package() != package
             || compiled.manifest().package().name() != stored.header.name
             || compiled.manifest().api() != stored.header.host_api
+            || compiled.kind() != stored.header.kind
         {
             return self.reject_stored(package, "STORED_IDENTITY_MISMATCH", cache);
         }

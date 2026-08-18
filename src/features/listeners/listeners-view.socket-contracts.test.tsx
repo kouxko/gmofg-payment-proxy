@@ -33,8 +33,6 @@ function scriptedSocketWorkspace(): ProxyWorkspace {
     mode: "scripted",
     settings: {
       package: { id: "iso-8583", version: "1.0.0" },
-      upstream: { decode_enabled: true, encode_enabled: true },
-      downstream: { decode_enabled: true, encode_enabled: true },
     },
   };
   const references = [
@@ -60,11 +58,13 @@ function setupScriptedSocket() {
   mocks.listenerProtocolPackageCatalog.mockReturnValue(ok({
     options: [{
       package: { id: "iso-8583", version: "1.0.0" }, name: "ISO 8583",
+      kind: "socket",
       capabilities: {
         upstream: { frame: true, decode: true, encode: true },
         downstream: { frame: true, decode: true, encode: true }, display: true,
       },
-      schema: { id: "iso-message", version: 1, title: "ISO", fields: [{ name: "mti", label: "MTI", type: "string" }] },
+      upstream_schema: { id: "iso-request", version: 1, title: "ISO Request", fields: [{ name: "mti", label: "MTI", type: "string" }] },
+      downstream_schema: { id: "iso-response", version: 1, title: "ISO Response", fields: [{ name: "response_code", label: "Response", type: "string" }] },
     }],
     installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
   }));
@@ -73,7 +73,7 @@ function setupScriptedSocket() {
 
 function expectSocketEditorLocked() {
   expect(screen.getByRole("textbox", { name: "代理监听名称" })).toBeDisabled();
-  expect(screen.getByLabelText("Socket 工作方式")).toBeDisabled();
+  expect(screen.getByLabelText("Socket 响应方式")).toBeDisabled();
   expect(screen.getByLabelText("Socket 协议处理方案")).toBeDisabled();
   expect(screen.getByLabelText("App 接入传输")).toBeDisabled();
   expect(screen.getByLabelText("App 侧服务端身份")).toBeDisabled();
@@ -103,9 +103,9 @@ describe("Listener Socket integration contracts", () => {
 
   it("shows rejected start field paths and messages in a persistent Alert", async () => {
     setupScriptedSocket();
-    const field = "listeners[0].data_plane.settings.processing.upstream.decode_enabled";
-    mocks.listenerStart.mockReturnValue(commandError("LocalResponder 规则能力不兼容。", {
-      [field]: ["当前包未声明 upstream Decode。"],
+    const field = "listeners[0].data_plane.settings.processing";
+    mocks.listenerStart.mockReturnValue(commandError("协议处理链不可用。", {
+      [field]: ["当前包无法执行完整处理链。"],
     }));
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "启动监听" }));
@@ -113,8 +113,8 @@ describe("Listener Socket integration contracts", () => {
       "操作未完成，请按页面提示修正 Socket 配置。", { variant: "danger" },
     ));
     expect(await screen.findAllByText((text) => text.includes(field)
-      && text.includes("当前包未声明 upstream Decode"))).toHaveLength(2);
-    expect(screen.getByText("处理选项需要修正")).toBeVisible();
+      && text.includes("当前包无法执行完整处理链"))).toHaveLength(2);
+    expect(screen.getByText("协议处理需要修正")).toBeVisible();
   });
 
   it("rejects a malformed catalog without rendering candidates or causing mutations", async () => {
@@ -126,7 +126,7 @@ describe("Listener Socket integration contracts", () => {
     } as never));
     render(<ListenersView />);
     expect(await screen.findByText("协议包目录读取失败")).toBeVisible();
-    expect(screen.getByText("Listener 协议包目录数据不完整，请刷新后重试。")).toBeVisible();
+    expect(screen.getByText("入口协议包目录数据不完整，请刷新后重试。")).toBeVisible();
     expect(screen.queryByRole("option", { name: /bad@1\.0\.0/ })).not.toBeInTheDocument();
     expect(mocks.listenerSave).not.toHaveBeenCalled();
   });

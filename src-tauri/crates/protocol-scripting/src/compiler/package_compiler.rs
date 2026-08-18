@@ -2,10 +2,12 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use rhai::{AST, Position};
 
+use intercept_proxy_domain::DocumentSchema;
+
 use crate::{
-    CompiledProtocolPackage, ProtocolPackageFile, ProtocolPackageFiles, ProtocolPackageParseError,
-    ProtocolPackageParseErrorCode, ProtocolRuntimeLimits, parse_document_schema,
-    parse_protocol_manifest,
+    CompiledProtocolPackage, PackageFilePath, ProtocolPackageFile, ProtocolPackageFiles,
+    ProtocolPackageParseError, ProtocolPackageParseErrorCode, ProtocolRuntimeLimits,
+    parse_document_schema, parse_protocol_manifest,
 };
 
 use super::{
@@ -46,24 +48,18 @@ impl ProtocolPackageCompiler {
         })?;
         let manifest = parse_protocol_manifest(manifest_source)?;
 
-        let schema_bytes = files.get(manifest.document().schema()).ok_or_else(|| {
-            ProtocolPackageParseError::new(
-                ProtocolPackageParseErrorCode::ReferencedFileMissing,
-                ProtocolPackageFile::Manifest,
-                "document.schema",
-            )
-        })?;
-        let schema_source = std::str::from_utf8(schema_bytes).map_err(|_| {
-            ProtocolPackageParseError::new(
-                ProtocolPackageParseErrorCode::TomlInvalid,
-                ProtocolPackageFile::DocumentSchema,
-                "$",
-            )
-        })?;
-        let schema = Arc::new(parse_document_schema(schema_source)?);
-
         let available = files.iter().map(|(path, _)| path.clone()).collect();
         manifest.validate_referenced_files(&available)?;
+        let upstream_schema = parse_schema(
+            files,
+            manifest.document().upstream().schema(),
+            "document.upstream.schema",
+        )?;
+        let downstream_schema = parse_schema(
+            files,
+            manifest.document().downstream().schema(),
+            "document.downstream.schema",
+        )?;
 
         let resolver = PackageModuleResolver::new(Arc::new(files.clone()));
         let mut engine = build_engine(self.limits);
@@ -71,7 +67,8 @@ impl ProtocolPackageCompiler {
         engine.set_module_resolver(resolver.clone());
 
         let mut script_paths = manifest.referenced_files();
-        script_paths.remove(manifest.document().schema());
+        script_paths.remove(manifest.document().upstream().schema());
+        script_paths.remove(manifest.document().downstream().schema());
         let mut scripts: BTreeMap<_, Arc<AST>> = BTreeMap::new();
         for path in script_paths {
             // `validate_referenced_files` 已在同一不可变集合上验证全部 Manifest 引用；这里是内部不变量。
@@ -89,11 +86,34 @@ impl ProtocolPackageCompiler {
             scripts.insert(path.clone(), Arc::new(ast));
         }
 
-        let (upstream, downstream, display) = validate_manifest_entries(&manifest, &scripts)?;
+        let (upstream, downstream) =
+            validate_manifest_entries(&manifest, &scripts, upstream_schema, downstream_schema)?;
         Ok(CompiledProtocolPackage::from_compilation(
-            manifest, schema, upstream, downstream, display,
+            manifest, upstream, downstream,
         ))
     }
+}
+
+fn parse_schema(
+    files: &ProtocolPackageFiles,
+    path: &PackageFilePath,
+    field: &'static str,
+) -> Result<Arc<DocumentSchema>, ProtocolPackageCompilationError> {
+    let bytes = files.get(path).ok_or_else(|| {
+        ProtocolPackageParseError::new(
+            ProtocolPackageParseErrorCode::ReferencedFileMissing,
+            ProtocolPackageFile::Manifest,
+            field,
+        )
+    })?;
+    let source = std::str::from_utf8(bytes).map_err(|_| {
+        ProtocolPackageParseError::new(
+            ProtocolPackageParseErrorCode::TomlInvalid,
+            ProtocolPackageFile::DocumentSchema,
+            "$",
+        )
+    })?;
+    Ok(Arc::new(parse_document_schema(source)?))
 }
 
 impl Default for ProtocolPackageCompiler {

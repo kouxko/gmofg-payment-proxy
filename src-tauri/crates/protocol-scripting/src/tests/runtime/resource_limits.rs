@@ -8,9 +8,7 @@ fn operation_blob_string_and_wall_time_limits_are_typed_and_do_not_leak_scope() 
         .with_script(operation_script)
         .build();
     let limits = ProtocolRuntimeLimits::new(100, 32, 1024, 1024, 100).unwrap();
-    let plan =
-        DirectionExecutionPlan::new(&package, ProtocolDirection::Upstream, options(true, false))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let mut executor =
         ProtocolDirectionExecutor::new(&package, plan, "connection", "listener", limits).unwrap();
     assert!(matches!(
@@ -31,9 +29,7 @@ fn operation_blob_string_and_wall_time_limits_are_typed_and_do_not_leak_scope() 
 
     let normal = package_with_all_entries();
     let limits = ProtocolRuntimeLimits::new(10_000, 32, 5, 1, 100).unwrap();
-    let plan =
-        DirectionExecutionPlan::new(&normal, ProtocolDirection::Upstream, options(true, false))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let mut blob_limited =
         ProtocolDirectionExecutor::new(&normal, plan, "connection", "listener", limits).unwrap();
     assert!(matches!(
@@ -55,9 +51,7 @@ fn call_depth_and_encode_blob_limits_are_classified_by_entry() {
         .with_script(recursive)
         .build();
     let limits = ProtocolRuntimeLimits::new(100_000, 4, 1024, 1024, 100).unwrap();
-    let plan =
-        DirectionExecutionPlan::new(&package, ProtocolDirection::Upstream, options(true, false))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let mut executor =
         ProtocolDirectionExecutor::new(&package, plan, "connection", "listener", limits).unwrap();
     assert!(matches!(
@@ -76,9 +70,7 @@ fn call_depth_and_encode_blob_limits_are_classified_by_entry() {
         .with_upstream_encode()
         .build();
     let limits = ProtocolRuntimeLimits::new(100_000, 32, 1024, 2, 100).unwrap();
-    let plan =
-        DirectionExecutionPlan::new(&package, ProtocolDirection::Upstream, options(true, true))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let mut executor =
         ProtocolDirectionExecutor::new(&package, plan, "connection", "listener", limits).unwrap();
     assert!(matches!(
@@ -105,9 +97,7 @@ fn display(document, context) { "123456" }
         .with_display()
         .build();
     let limits = ProtocolRuntimeLimits::new(100_000, 32, 5, 1024, 100).unwrap();
-    let plan =
-        DirectionExecutionPlan::new(&package, ProtocolDirection::Upstream, options(false, true))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let mut executor = ProtocolDirectionExecutor::new(&package, plan, "c", "l", limits).unwrap();
     let output = executor.execute_frame(vec![1]).unwrap();
     assert_eq!(output.written(), &[0]);
@@ -128,9 +118,7 @@ fn display(document, context) { "123456" }
         .with_display()
         .build();
     let limits = ProtocolRuntimeLimits::new(10_000_000, 32, 1024, 1024, 1).unwrap();
-    let plan =
-        DirectionExecutionPlan::new(&package, ProtocolDirection::Upstream, options(true, true))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let mut executor =
         ProtocolDirectionExecutor::new(&package, plan, "connection", "listener", limits).unwrap();
     let output = executor.execute_frame(vec![1]).unwrap();

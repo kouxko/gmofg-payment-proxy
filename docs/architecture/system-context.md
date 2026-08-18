@@ -13,6 +13,7 @@ flowchart LR
   Tauri --> Application[application crate]
   Application --> Domain[domain + product-api]
   Tauri --> Infrastructure[infrastructure adapters]
+  MCP[Loopback read-only MCP] --> Application
   Infrastructure --> Runtime[proxy runtime]
   Infrastructure --> Scripts[protocol-scripting]
   Infrastructure --> SQLite[(SQLite)]
@@ -33,6 +34,7 @@ flowchart LR
 | WebView <-> Rust sensitive flow | WebView 可把 credential 作为瞬时 intent 提交给 Rust IPC；持久化 secret/private key/password 不回显；capture payload 是有意返回展示的 DTO。详见[生命周期与信任边界](lifecycle-persistence-security.md) | `src/features/listeners/use-listener-certificates.ts`, `src-tauri/src/commands/listener.rs`, `src-tauri/src/commands/capture.rs`, `src-tauri/crates/infrastructure/src/adapters/protected_secrets.rs` | `src/features/listeners/socket-security-cards.test.tsx`, `src-tauri/src/commands/capture/tests.rs`, `src-tauri/crates/application/src/requirements_tests/diagnostics.rs` |
 | Listener host -> external App/Server | App 侧 accept；Relay 才建立 Server 侧连接 | `src-tauri/crates/proxy/src/listener/supervisor.rs`, `src-tauri/crates/proxy/src/socket_relay/handler.rs` | `src-tauri/crates/proxy/src/listener/supervisor/tests.rs`, `src-tauri/crates/proxy/src/socket_relay/tests.rs` |
 | Android Companion -> host | 选定应用流量经 VPN/转发进入桌面 Listener | `android-companion/app/src/main`, `src-tauri/crates/android-engine/src/lib.rs` | `android-companion/app/src/test`, `src-tauri/crates/android-engine/src/routing_tests.rs` |
+| loopback MCP -> application | 官方 `rmcp` Streamable HTTP 只调用只读 application facade；不提供写入、启停、导入导出或任意文件访问 | `src-tauri/src/mcp`, `src-tauri/src/lib.rs` | `src-tauri/src/mcp/tests.rs` |
 
 ## To-Be
 
@@ -43,5 +45,4 @@ flowchart LR
 ## Open Decision
 
 - Android owner/epoch 和端点漂移的完整容器关系尚未建模。Owner: R02（owner correctness）与 R10（endpoint drift）。
-- MCP 只在能力清单和 SDK/transport ADR 完成后进入上下文。Owner: R11a。
 - 完整 HTTP/Socket 规则、抓包与 Session 聚合图在相应功能切片回填。Owner: R04、R07e。

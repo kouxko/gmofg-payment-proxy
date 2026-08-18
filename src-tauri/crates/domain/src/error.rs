@@ -33,7 +33,7 @@ pub enum ErrorCode {
     BodyEncodeFailed,
     JsonInvalid,
     RuleInvalid,
-    /// Socket Document 规则执行被调用方显式取消。
+    /// 协议 Document 规则执行被调用方显式取消。
     RuleExecutionCancelled,
     RuleConflictWarning,
     /// 协议包 ID 或 `SemVer` 不符合稳定身份约束。

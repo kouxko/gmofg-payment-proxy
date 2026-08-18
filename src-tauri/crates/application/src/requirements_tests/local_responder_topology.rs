@@ -1,8 +1,8 @@
 use super::*;
 use intercept_proxy_domain::{
-    DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, ScriptedSocketProcessing, SocketDownstreamSecurity,
-    SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySettings, SocketTopology,
+    ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ScriptedSocketProcessing, SocketDownstreamSecurity, SocketLocalResponderTopology,
+    SocketPayloadProcessing, SocketRelaySettings, SocketTopology,
 };
 
 #[derive(Debug, Default)]
@@ -31,7 +31,7 @@ impl ListenerRuntimePort for CountingNetworkRuntime {
         unused()
     }
 
-    async fn replace_socket_rules(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
+    async fn replace_protocol_rules(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
         Ok(())
     }
 
@@ -64,14 +64,6 @@ fn local_responder_listener(mut listener: ProxyListener) -> ProxyListener {
             package: ProtocolPackageRef {
                 id: ProtocolPackageId::new("iso8583-standard").unwrap(),
                 version: ProtocolPackageVersion::new("1.0.0").unwrap(),
-            },
-            upstream: DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: false,
-            },
-            downstream: DirectionProcessingOptions {
-                decode_enabled: false,
-                encode_enabled: true,
             },
         }),
     });

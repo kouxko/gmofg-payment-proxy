@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Alert, Button, Chip, Modal, Spinner } from "@heroui/react";
-import { capabilityItems } from "./protocol-package-model";
+import { capabilityItems, protocolPackageKindText } from "./protocol-package-model";
 import type {
   ImportPreviewDisplay,
   ProtocolPackageImportState,
@@ -132,9 +132,14 @@ function ImportPreview({
           <dt className="text-[var(--telemetry-muted)]">包 ID</dt><dd className="break-all font-mono">{preview.package.id}</dd>
           <dt className="text-[var(--telemetry-muted)]">精确版本</dt><dd className="break-all font-mono">{preview.package.version}</dd>
           <dt className="text-[var(--telemetry-muted)]">Host API</dt><dd>{preview.host_api}</dd>
-          <dt className="text-[var(--telemetry-muted)]">Schema</dt>
+          <dt className="text-[var(--telemetry-muted)]">适用协议</dt><dd>{protocolPackageKindText(preview.kind)}</dd>
+          <dt className="text-[var(--telemetry-muted)]">上行 Schema</dt>
           <dd className="break-words">
-            {preview.schema.title} · <span className="font-mono">{preview.schema.id}</span> · v{preview.schema.version} · {preview.schema.fields.length} 个字段
+            {preview.upstream_schema.title} · <span className="font-mono">{preview.upstream_schema.id}</span> · v{preview.upstream_schema.version} · {preview.upstream_schema.fields.length} 个字段
+          </dd>
+          <dt className="text-[var(--telemetry-muted)]">下行 Schema</dt>
+          <dd className="break-words">
+            {preview.downstream_schema.title} · <span className="font-mono">{preview.downstream_schema.id}</span> · v{preview.downstream_schema.version} · {preview.downstream_schema.fields.length} 个字段
           </dd>
         </dl>
       </section>

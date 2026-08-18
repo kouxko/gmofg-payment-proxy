@@ -1,14 +1,14 @@
 # ADR-003：统一 application ZIP 的所有权与版本
 
-- Status: Accepted design; implementation deferred
+- Status: Accepted and implemented
 - Implementation owner: R07a-R07e
 - Date: 2026-08-17
 - Scope: application-wide backup/import archive, not protocol-package author ZIP
 
 ## Context
 
-仓库已有 Workspace/config 文档和协议包 author ZIP，但 application-wide 原子备份/恢复尚未实现。若每个
-adapter 或页面各自写 ZIP、版本和迁移，会产生无法一致预览、回滚或升级的多套 wire。
+仓库已有协议包 author ZIP；应用数据的完整备份/恢复需要另一套受控 archive，不能由各 adapter 或页面
+分别定义 ZIP、版本和迁移，否则会产生无法一致预览、回滚或升级的多套 wire。
 
 ## Decision
 
@@ -29,10 +29,13 @@ ZIP 安全限额、临时文件、flush/fsync/atomic rename、SQLite transaction
 
 ## Consequences
 
-- R01 只冻结所有权；不宣称 v1 已实现。
-- R07 必须用真实 archive reader/writer 验证限额、preview token、revision/running guard、原子 commit 和回滚。
+- application archive v1 已由 application 严格 wire、prepare/commit/discard 用例和 infrastructure 安全
+  reader/writer 实现；原生文件对话框只负责选择路径，不拥有业务格式。
+- 真实 archive reader/writer 已覆盖 ZIP 限额、一次性 preview token、revision/running guard、原子 commit、
+  失败补偿和确定性导出。
 - 格式升级必须显式版本化并 fail-closed 拒绝 unknown field；不得用 `PRAGMA user_version` 代替 application wire version。
 
 ## Open items
 
-- v1 wire、限额、preview、commit、平台和 legacy 迁移仍待实现。Owner: R07a、R07b、R07c、R07d、R07e。
+- future archive version 必须新增 ADR、严格 wire 和显式迁移策略；1.0 不读取旧 JSON 配置或旧 archive。
+- Windows/macOS 打包后的原生打开、保存与启动 smoke 仍由发布验证持续覆盖。

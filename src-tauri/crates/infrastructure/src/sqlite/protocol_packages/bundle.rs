@@ -7,6 +7,7 @@ use rusqlite::{Transaction, params};
 use super::{
     InfrastructureError, StoredProtocolPackageFiles, StoredProtocolPackageHeader,
     StoredProtocolPackageValidation, database_error, load_protocol_package,
+    package_id_has_different_kind, protocol_package_kind_text,
 };
 
 /// 组合导入事务中的已恢复、已编译协议包。
@@ -33,6 +34,11 @@ pub(crate) fn compare_or_insert_protocol_package(
     package: &StoredProtocolPackageWrite,
     enabled: Option<bool>,
 ) -> Result<(), StoredProtocolPackageBundleError> {
+    if package_id_has_different_kind(transaction, &package.header.package, package.header.kind)? {
+        return Err(StoredProtocolPackageBundleError::IdentityConflict(
+            package.header.package.clone(),
+        ));
+    }
     if let Some(existing) = load_protocol_package(transaction, &package.header.package)? {
         if !same_immutable_content(&existing, package) {
             return Err(StoredProtocolPackageBundleError::IdentityConflict(
@@ -74,6 +80,7 @@ pub(super) fn same_immutable_content(
     existing.header.package == package.header.package
         && existing.header.name == package.header.name
         && existing.header.host_api == package.header.host_api
+        && existing.header.kind == package.header.kind
         && existing.header.generation != uuid::Uuid::nil()
         && !matches!(
             existing.header.validation,
@@ -90,14 +97,15 @@ pub(super) fn insert_protocol_package(
     transaction
         .execute(
             "INSERT INTO protocol_packages(
-                package_id, version, name, host_api, enabled,
+                package_id, version, name, host_api, kind, enabled,
                 validation_state, validation_error_code, installed_at, generation
-             ) VALUES (?1, ?2, ?3, ?4, ?5, 'valid', NULL, ?6, ?7)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'valid', NULL, ?7, ?8)",
             params![
                 package.header.package.id.as_str(),
                 package.header.package.version.as_str(),
                 package.header.name,
                 i64::from(package.header.host_api),
+                protocol_package_kind_text(package.header.kind),
                 enabled,
                 package.header.installed_at.to_rfc3339(),
                 package.header.generation.to_string(),

@@ -8,7 +8,7 @@ use uuid::Uuid;
 use super::{
     SqliteStore, StoredProtocolPackageBundleError, StoredProtocolPackageHeader,
     StoredProtocolPackageWrite, database_error, insert_protocol_package, load_protocol_package,
-    same_immutable_content,
+    package_id_has_different_kind, same_immutable_content,
 };
 
 pub(crate) const BUILTIN_ISO8583_FEATURE_KEY: &str = "builtin_iso8583_ascii_standard_v1";
@@ -42,6 +42,12 @@ impl SqliteStore {
         if initialized {
             transaction.commit().map_err(database_error)?;
             return Ok(StoredBuiltinSeedOutcome::AlreadyInitialized);
+        }
+
+        if package_id_has_different_kind(&transaction, &header.package, header.kind)? {
+            return Err(StoredProtocolPackageBundleError::IdentityConflict(
+                header.package.clone(),
+            ));
         }
 
         let write = StoredProtocolPackageWrite {
@@ -93,6 +99,11 @@ impl SqliteStore {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(database_error)?;
+        if package_id_has_different_kind(&transaction, &header.package, header.kind)? {
+            return Err(StoredProtocolPackageBundleError::IdentityConflict(
+                header.package.clone(),
+            ));
+        }
         transaction
             .execute(
                 "DELETE FROM protocol_packages WHERE package_id = ?1 AND version = ?2",

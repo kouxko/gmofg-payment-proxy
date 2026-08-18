@@ -12,6 +12,7 @@ import type {
 } from "@/generated/rust-types";
 import { BodyCodecSettings } from "./body-codec-settings";
 import { FixedServerTlsSettings } from "./fixed-server-tls-settings";
+import { HttpProtocolProcessingCard } from "./http-protocol-processing-card";
 import {
   changeDataPlaneKind,
   changeHttpSettings,
@@ -86,7 +87,12 @@ export function ListenerEditor(props: Props): ReactNode {
           </ListBox></Select.Popover>
         </Select>
         {http && <fieldset disabled={locked} className="contents">
-          <HttpSettings {...props} settings={http} onSettingsChange={changeHttp} />
+          <HttpSettings
+            {...props}
+            settings={http}
+            protocolCatalog={protocolCatalog}
+            onSettingsChange={changeHttp}
+          />
         </fieldset>}
         {socket && (
           <SocketListenerSettings
@@ -163,6 +169,7 @@ function CommonFields({ listener, locked = false, onChange }: Pick<Props, "liste
 
 function HttpSettings(props: Props & {
   settings: HttpListenerSettings;
+  protocolCatalog: ProtocolCatalogState;
   onSettingsChange: (changes: Partial<HttpListenerSettings>) => void;
 }): ReactNode {
   const { settings, onSettingsChange } = props;
@@ -182,6 +189,12 @@ function HttpSettings(props: Props & {
       onPasswordChange={props.onBasicPasswordChange}
       onChange={onSettingsChange}
       onStore={props.onStoreBasicCredential}
+    />
+    <HttpProtocolProcessingCard
+      settings={settings}
+      catalog={props.protocolCatalog}
+      locked={props.locked ?? false}
+      onChange={onSettingsChange}
     />
     <BodyCodecSettings
       requestCodec={settings.request_body_codec}

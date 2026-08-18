@@ -98,7 +98,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
   "/capture": {
     title: "实时抓包",
     summary:
-      "分别查看经过 Proxy 的 HTTP 事件与已完成写出的 Socket Frame/LocalResponder 交换，适合在操作客户端应用的同时观察链路和规则结果。",
+      "分别查看经过代理的 HTTP 事件、Socket 转发报文与本机应答交换，适合在操作客户端应用的同时观察链路和规则结果。",
     recommendedFor:
       "定位某次请求经过了哪个通道、命中了哪些规则、在哪个阶段失败，以及请求和响应的最终内容。",
     sections: [
@@ -145,8 +145,8 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "“概览”查看请求 ID、终端、通道、TLS、时间、最终结果和规则执行轨迹。",
           "“请求”查看完整请求 Header 与 Shift-JIS 解码 Body；“响应”查看 HTTP 状态码、完整响应 Header 与解码 Body。",
-          "Socket Relay 详情分别展示 Origin、Document、命中规则和 Written；LocalResponder 在同一详情内分开显示 Request 与 Response，并明确 Raw Echo 或 Encoded。",
-          "Socket 的协议视图来自不可信脚本输出，只在无脚本能力的 sandbox iframe 中展示；Hex 页签按 4 KiB 分页且可到达全部字节，超长协议视图会拒绝渲染并回退 Hex。",
+          "Socket 转发详情按四个边界分别展示原始报文、解析字段、命中规则和写出报文；本机应答在同一详情内分开显示请求与响应，并明确原样写出或协议重建。",
+          "Socket 的协议视图来自不可信脚本输出，只在无脚本权限的隔离区域中展示；十六进制页签按 4 KiB 分页且可到达全部字节，超长协议视图会拒绝渲染并回退十六进制。",
           "规则轨迹按真实执行顺序显示匹配、跳过、修改、终止或暂停结果。",
           "使用复制按钮复制当前文本；关闭详情后页面会释放完整报文引用。",
           "如果详情读取失败，点击详情错误条中的“重试”；切换到另一行时旧请求的迟到结果不会覆盖新详情。",

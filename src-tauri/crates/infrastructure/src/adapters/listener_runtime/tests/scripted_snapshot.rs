@@ -1,14 +1,15 @@
 use std::io::{Cursor, Write};
 
 use intercept_proxy_domain::{
-    CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    DirectionProcessingOptions, DocumentAction, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, ScriptedSocketProcessing, SocketDirection,
-    SocketDocumentRuleDefinition, SocketDocumentRuleId, SocketEndpoint,
-    SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
+    CertificateReference, CertificateReferenceId, CertificateReferenceKind, DocumentAction,
+    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolPackageId,
+    ProtocolPackageRef, ProtocolPackageVersion, ProtocolRuleStage, ScriptedSocketProcessing,
+    SocketEndpoint, SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
     SocketRelaySettings, SocketRelayTopology, SocketTopology,
 };
-use intercept_proxy_protocol_scripting::{ProtocolDirection, ProtocolRuntimeLimits};
+use intercept_proxy_protocol_scripting::{
+    ProtocolDirection as ScriptProtocolDirection, ProtocolRuntimeLimits,
+};
 use intercept_proxy_runtime::{SocketDownstreamTlsConfig, SocketTlsIdentity};
 use zeroize::Zeroizing;
 use zip::{ZipWriter, write::SimpleFileOptions};
@@ -29,25 +30,47 @@ id = "snapshot-protocol"
 name = "Snapshot Protocol"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
 encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
+"#;
 
-[hooks.downstream.send]
-script = "protocol.rhai"
+const HTTP_SNAPSHOT_MANIFEST: &str = r#"
+api = 1
+
+[package]
+id = "snapshot-protocol"
+name = "Snapshot Protocol"
+version = "1.0.0"
+
+[document.upstream]
+schema = "document.toml"
+display = "display"
+
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
+decode = "decode"
+encode = "encode"
+
+[hooks.downstream]
+decode = "decode"
 encode = "encode"
 "#;
 
@@ -67,6 +90,8 @@ fn frame(reader, context) { framing::complete(1) }
 fn decode(origin, context) { document::create() }
 fn encode(origin, document, context) { origin }
 ";
+
+const SNAPSHOT_DISPLAY: &str = r#"fn display(document, context) { "<p>snapshot</p>" }"#;
 
 #[tokio::test]
 async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts() {
@@ -99,12 +124,12 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts
         }],
         ..ProxyWorkspace::default()
     };
-    workspace.socket_rules = vec![
+    workspace.protocol_rules = vec![
         rule(&listener, 20, 2),
         rule(&listener, 10, 3),
         rule(&listener, 10, 1),
     ];
-    workspace.socket_rule_created_order_high_water = 3;
+    workspace.protocol_rule_created_order_high_water = 3;
     workspace.validate().unwrap();
     let runtime = test_listener_runtime_with_packages(store, repository);
     let plan = ListenerRuntimePlanBuilder::new(&runtime)
@@ -118,10 +143,13 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts
     assert_eq!(snapshot.package().compiled().package(), &snapshot_package());
     assert_ne!(snapshot.package().generation(), Uuid::nil());
     assert_eq!(snapshot.runtime_limits(), limits);
-    assert_eq!(snapshot.upstream().direction(), ProtocolDirection::Upstream);
+    assert_eq!(
+        snapshot.upstream().direction(),
+        ScriptProtocolDirection::Upstream
+    );
     assert_eq!(
         snapshot.downstream().direction(),
-        ProtocolDirection::Downstream
+        ScriptProtocolDirection::Downstream
     );
     assert_eq!(
         snapshot
@@ -133,14 +161,14 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts
     );
     assert_eq!(
         snapshot
-            .rule_program(SocketDirection::Upstream)
+            .rule_program(ProtocolRuleStage::ProxyToUpstream)
             .rules()
             .len(),
         3
     );
     assert!(
         snapshot
-            .rule_program(SocketDirection::Downstream)
+            .rule_program(ProtocolRuleStage::ProxyToApp)
             .rules()
             .is_empty()
     );
@@ -224,40 +252,6 @@ async fn local_responder_plan_has_no_upstream_security_or_probe_and_starts_local
 }
 
 #[tokio::test]
-async fn runtime_plan_rejects_an_enabled_encode_switch_without_manifest_entry() {
-    let store = Arc::new(SqliteStore::in_memory().unwrap());
-    let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
-        Arc::clone(&store),
-    ));
-    let manifest = SNAPSHOT_MANIFEST.replace(
-        "\n[hooks.downstream.send]\nscript = \"protocol.rhai\"\nencode = \"encode\"\n",
-        "\n",
-    );
-    repository
-        .install_zip(&snapshot_zip_with_manifest(&manifest, SNAPSHOT_SCRIPT))
-        .unwrap();
-    repository.set_enabled(&snapshot_package(), true).unwrap();
-    let listener = scripted_listener(SocketTopology::Relay(SocketRelayTopology {
-        upstream: SocketEndpoint {
-            host: "127.0.0.1".into(),
-            port: 9_999,
-        },
-        security: SocketRelaySecurity::Transparent,
-    }));
-    let workspace = ProxyWorkspace {
-        listeners: vec![listener.clone()],
-        ..ProxyWorkspace::default()
-    };
-    let runtime = test_listener_runtime_with_packages(store, repository);
-    let error = ListenerRuntimePlanBuilder::new(&runtime)
-        .build(&workspace, &listener, Uuid::new_v4())
-        .await
-        .err()
-        .expect("missing configured Encode must fail at the runtime boundary");
-    assert_eq!(error.view_model.code, "ENTRY_POINT_UNAVAILABLE");
-}
-
-#[tokio::test]
 async fn runtime_plan_rejects_rule_schema_drift_even_when_called_below_application() {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
@@ -278,8 +272,8 @@ async fn runtime_plan_rejects_rule_schema_drift_even_when_called_below_applicati
     invalid_rule = serde_json::from_value(serde_json::Value::Object(object)).unwrap();
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        socket_rules: vec![invalid_rule],
-        socket_rule_created_order_high_water: 1,
+        protocol_rules: vec![invalid_rule],
+        protocol_rule_created_order_high_water: 1,
         ..ProxyWorkspace::default()
     };
     workspace.validate().unwrap();
@@ -291,8 +285,42 @@ async fn runtime_plan_rejects_rule_schema_drift_even_when_called_below_applicati
         .expect("fresh compiled Schema must reject persisted rule drift");
     assert_eq!(
         error.view_model.code,
-        "SOCKET_RULE_RUNTIME_BINDING_MISMATCH"
+        "PROTOCOL_RULE_RUNTIME_BINDING_MISMATCH"
     );
+}
+
+#[tokio::test]
+async fn socket_runtime_snapshot_rejects_an_http_protocol_package() {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
+        Arc::clone(&store),
+    ));
+    repository
+        .install_zip(&snapshot_zip_with_manifest(
+            HTTP_SNAPSHOT_MANIFEST,
+            SNAPSHOT_SCRIPT,
+        ))
+        .unwrap();
+    repository.set_enabled(&snapshot_package(), true).unwrap();
+    let listener = scripted_listener(SocketTopology::Relay(SocketRelayTopology {
+        upstream: SocketEndpoint {
+            host: "127.0.0.1".into(),
+            port: 9_999,
+        },
+        security: SocketRelaySecurity::Transparent,
+    }));
+    let workspace = ProxyWorkspace {
+        listeners: vec![listener.clone()],
+        ..ProxyWorkspace::default()
+    };
+    let runtime = test_listener_runtime_with_packages(store, repository);
+
+    let error = ListenerRuntimePlanBuilder::new(&runtime)
+        .build(&workspace, &listener, Uuid::new_v4())
+        .await
+        .err()
+        .expect("Socket runtime must reject an HTTP protocol package");
+    assert_eq!(error.view_model.code, "PROTOCOL_PACKAGE_KIND_MISMATCH");
 }
 
 #[test]
@@ -398,27 +426,8 @@ fn scripted_security_debug_never_contains_certificate_or_private_key_bytes() {
 
 fn scripted_listener(topology: SocketTopology) -> ProxyListener {
     let processing = match topology {
-        SocketTopology::Relay(_) => ScriptedSocketProcessing {
+        SocketTopology::Relay(_) | SocketTopology::LocalResponder(_) => ScriptedSocketProcessing {
             package: snapshot_package(),
-            upstream: DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: true,
-            },
-            downstream: DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: true,
-            },
-        },
-        SocketTopology::LocalResponder(_) => ScriptedSocketProcessing {
-            package: snapshot_package(),
-            upstream: DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: false,
-            },
-            downstream: DirectionProcessingOptions {
-                decode_enabled: false,
-                encode_enabled: true,
-            },
         },
     };
     ProxyListener {
@@ -438,16 +447,16 @@ fn rule(
     listener: &ProxyListener,
     priority: i32,
     created_order: u64,
-) -> SocketDocumentRuleDefinition {
-    SocketDocumentRuleDefinition::new(
-        SocketDocumentRuleId::new(),
+) -> ProtocolDocumentRuleDefinition {
+    ProtocolDocumentRuleDefinition::new(
+        ProtocolDocumentRuleId::new(),
         true,
         priority,
         created_order,
         listener.id,
         snapshot_package(),
         7,
-        SocketDirection::Upstream,
+        ProtocolDirection::Upstream,
         Vec::new(),
         vec![DocumentAction::RecordMatch],
     )
@@ -478,6 +487,7 @@ fn snapshot_zip_with_manifest(manifest: &str, script: &str) -> Vec<u8> {
         ("manifest.toml", manifest.as_bytes()),
         ("document.toml", SNAPSHOT_SCHEMA.as_bytes()),
         ("protocol.rhai", script.as_bytes()),
+        ("display.rhai", SNAPSHOT_DISPLAY.as_bytes()),
     ] {
         writer
             .start_file(path, SimpleFileOptions::default())

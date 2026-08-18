@@ -93,9 +93,9 @@ describe("SocketCaptureList", () => {
     renderList();
 
     expect(screen.getByText("Server → App")).toBeVisible();
-    expect(screen.getByText("Local Request ⇄ Response")).toBeVisible();
-    expect(screen.getByText("Relay Frame")).toBeVisible();
-    expect(screen.getByText("LocalExchange")).toBeVisible();
+    expect(screen.getByText("应用请求 ⇄ 本机应答")).toBeVisible();
+    expect(screen.getByText("转发报文")).toBeVisible();
+    expect(screen.getByText("本机应答")).toBeVisible();
   });
 
   it("labels an upstream Relay direction as App to Server", () => {

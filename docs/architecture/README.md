@@ -17,8 +17,9 @@
 ## 已接受决策
 
 - [ADR-001：HTTP 与 Socket 只共享中立内核](decisions/ADR-001-http-socket-boundary.md)
-- [ADR-002：当前协议包 ABI 不扩展到 HTTP](decisions/ADR-002-protocol-packages-http.md)
+- [ADR-002：HTTP 与 Socket 使用独立协议包，共享字段处理模型](decisions/ADR-002-protocol-packages-http.md)
 - [ADR-003：统一 application ZIP 的所有权与版本](decisions/ADR-003-application-zip-ownership.md)
+- [ADR-004：本机只读 MCP 信任边界](decisions/ADR-004-embedded-read-only-mcp.md)
 
 ## 既有专题文档
 

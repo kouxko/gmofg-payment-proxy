@@ -241,6 +241,79 @@ async fn successful_apply_publishes_staged_mapping_before_retiring_old_mapping()
 }
 
 #[tokio::test]
+async fn successful_initial_start_commits_without_previous_reverse_mapping() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(RecordingRunner::default());
+    let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+    *adapter.selected_serial.write().unwrap() = Some("DEVICE-A".into());
+    let listener_id = ListenerId::new();
+    let activation = test_activation("profile-new", "203.0.113.20", listener_id, 36_127);
+
+    let prepared = adapter
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Start)
+        .await
+        .unwrap();
+    let staged_port = prepared.reverse.as_ref().unwrap().ports[0];
+
+    adapter
+        .finish_prepared_network_update(prepared, Ok(()))
+        .await
+        .unwrap();
+
+    let active = adapter.active_reverse.lock().await.clone().unwrap();
+    assert_eq!(active.profile_id, "profile-new");
+    assert_eq!(active.ports, vec![staged_port]);
+    assert!(
+        runner
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|args| !args.contains(&"--remove".to_owned()))
+    );
+    assert_eq!(
+        adapter.required_runtime_owner().await.unwrap().state,
+        AndroidRuntimeOwnerState::Active
+    );
+}
+
+#[tokio::test]
+async fn failed_start_without_proxy_routes_restores_empty_runtime_state() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(RecordingRunner::default());
+    let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+    *adapter.selected_serial.write().unwrap() = Some("DEVICE-A".into());
+    let mut activation = test_activation(
+        "profile-without-routes",
+        "203.0.113.20",
+        ListenerId::new(),
+        36_127,
+    );
+    activation.profile.proxy_routes.clear();
+    activation.proxy_routes.clear();
+
+    let prepared = adapter
+        .prepare_usb_proxy_runtime(&activation, AndroidRuntimeOwnerSource::Start)
+        .await
+        .unwrap();
+    assert!(prepared.reverse.is_none());
+
+    let error = adapter
+        .finish_prepared_network_update::<()>(
+            prepared,
+            Err(AppError::new("ANDROID_CONTROL_FAILED", "injected")),
+        )
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.view_model.code, "ANDROID_CONTROL_FAILED");
+    assert!(adapter.active_reverse.lock().await.is_none());
+    assert!(adapter.active_runtime.lock().await.is_none());
+    assert!(adapter.runtime_owner_snapshot().await.is_none());
+    assert!(runner.calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn failed_reverse_cleanup_retains_only_failed_ports_for_retry() {
     let temp = tempfile::tempdir().unwrap();
     let runner = Arc::new(SequenceRunner {

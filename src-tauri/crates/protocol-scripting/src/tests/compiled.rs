@@ -3,6 +3,7 @@ use intercept_proxy_domain::{
     ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
 };
 
+use crate::ProtocolDirection;
 use crate::test_support::CompiledProtocolPackageTestBuilder;
 
 #[test]
@@ -31,11 +32,17 @@ fn compiled_package_test_builder_preserves_exact_identity_and_shared_schema() {
         .build();
 
     assert_eq!(compiled.package(), &package);
-    assert_eq!(compiled.schema(), &schema);
+    assert_eq!(compiled.manifest().package().package(), &package);
+    assert_eq!(compiled.schema(ProtocolDirection::Upstream), &schema);
+    assert!(compiled.supports_upstream_encode());
+    assert!(compiled.supports_downstream_encode());
 
     let cloned = compiled.clone();
     assert_eq!(cloned.package(), &package);
-    assert!(std::ptr::eq(compiled.schema(), cloned.schema()));
+    assert!(std::ptr::eq(
+        compiled.schema(ProtocolDirection::Upstream),
+        cloned.schema(ProtocolDirection::Upstream)
+    ));
 }
 
 #[test]
@@ -44,6 +51,12 @@ fn compiled_package_test_builder_has_valid_safe_defaults() {
 
     assert_eq!(compiled.package().id.as_str(), "test-protocol");
     assert_eq!(compiled.package().version.as_str(), "1.0.0");
-    assert_eq!(compiled.schema().id().as_str(), "test-message");
-    assert_eq!(compiled.schema().fields().len(), 1);
+    assert_eq!(
+        compiled.schema(ProtocolDirection::Upstream).id().as_str(),
+        "test-message"
+    );
+    assert_eq!(
+        compiled.schema(ProtocolDirection::Upstream).fields().len(),
+        1
+    );
 }

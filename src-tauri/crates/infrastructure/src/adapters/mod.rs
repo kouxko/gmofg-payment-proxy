@@ -34,8 +34,8 @@ pub use faults::FaultServiceAdapter;
 pub use files::{FileSelection, NativeFileDialog};
 pub use listener_certificates::ManagedListenerCertificateAdapter;
 pub use listener_runtime::{
-    BoundSocketDocument, ListenerRuntimeAdapter, SocketDocumentRuleConnection,
-    SocketDocumentRuleConnectionFactory,
+    BoundSocketDocument, HttpProtocolObservationSink, ListenerRuntimeAdapter,
+    ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
 };
 pub use pipeline::{
     RuntimeBodyCodecResolver, RuntimePipelineAdapter, RuntimePipelineProductHooks,

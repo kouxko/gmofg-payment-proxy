@@ -4,6 +4,7 @@ import type {
   ProtocolPackageImportViewModel,
   ProtocolPackageRef,
 } from "@/generated/rust-types";
+import { isProtocolPackageSchema } from "@/lib/protocol-package-schema";
 
 export type ImportPreviewDisplay = Omit<ProtocolPackageImportPreviewViewModel, "token">;
 export type CommittableImportPreview = ProtocolPackageImportPreviewViewModel & {
@@ -43,7 +44,9 @@ export function withoutImportToken(
 export function isImportPreview(
   value: unknown,
 ): value is ProtocolPackageImportPreviewViewModel {
-  if (!isRecord(value) || !isRecord(value.package)) return false;
+  if (!isRecord(value)
+    || !hasOnly(value, ["token", "disposition", "package", "name", "host_api", "kind", "capabilities", "upstream_schema", "downstream_schema"])
+    || !isRecord(value.package)) return false;
   const disposition = value.disposition;
   const tokenMatchesDisposition = disposition === "identity_conflict"
     ? value.token === null
@@ -58,8 +61,10 @@ export function isImportPreview(
     && typeof value.name === "string"
     && value.name.length > 0
     && isCounter(value.host_api)
-    && isCapabilities(value.capabilities)
-    && isSchema(value.schema);
+    && (value.kind === "http" || value.kind === "socket")
+    && isCapabilities(value.capabilities, value.kind)
+    && isProtocolPackageSchema(value.upstream_schema)
+    && isProtocolPackageSchema(value.downstream_schema);
 }
 
 export function isCommittableImportPreview(
@@ -75,13 +80,16 @@ export function importResultError(
   preview: ProtocolPackageImportPreviewViewModel,
 ): string | undefined {
   if (!isRecord(value)
+    || !hasOnly(value, ["outcome", "version", "kind", "capabilities", "upstream_schema", "downstream_schema"])
     || (value.outcome !== "installed" && value.outcome !== "reused")
     || !isRecord(value.version)
     || !isRecord(value.version.package)
     || value.version.package.id !== preview.package.id
     || value.version.package.version !== preview.package.version
-    || !isCapabilities(value.capabilities)
-    || !isSchema(value.schema)) {
+    || value.kind !== preview.kind
+    || !isCapabilities(value.capabilities, preview.kind)
+    || !isProtocolPackageSchema(value.upstream_schema)
+    || !isProtocolPackageSchema(value.downstream_schema)) {
     return "协议包导入结果与已确认预览不一致，请刷新列表后重试。";
   }
   return undefined;
@@ -142,33 +150,28 @@ function asAppError(value: unknown): AppErrorViewModel | undefined {
   return value as AppErrorViewModel;
 }
 
-function isCapabilities(value: unknown): boolean {
-  if (!isRecord(value) || !isRecord(value.upstream) || !isRecord(value.downstream)) return false;
-  return [
-    value.upstream.frame,
-    value.upstream.decode,
-    value.upstream.encode,
-    value.downstream.frame,
-    value.downstream.decode,
-    value.downstream.encode,
-    value.display,
-  ].every((item) => typeof item === "boolean");
+function isCapabilities(value: unknown, kind: "http" | "socket"): boolean {
+  if (!isRecord(value) || !hasOnly(value, ["upstream", "downstream", "display"])) return false;
+  return isDirectionCapabilities(value.upstream, kind)
+    && isDirectionCapabilities(value.downstream, kind)
+    && value.display === true;
 }
 
-function isSchema(value: unknown): boolean {
+function isDirectionCapabilities(value: unknown, kind: "http" | "socket"): boolean {
   return isRecord(value)
-    && typeof value.id === "string"
-    && typeof value.title === "string"
-    && isCounter(value.version)
-    && Array.isArray(value.fields)
-    && value.fields.every((field) => isRecord(field)
-      && typeof field.name === "string"
-      && typeof field.label === "string"
-      && ["string", "int", "bool", "blob"].includes(String(field.type)));
+    && hasOnly(value, ["frame", "decode", "encode"])
+    && value.frame === (kind === "socket")
+    && value.decode === true
+    && value.encode === true;
 }
 
 function isCounter(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function hasOnly(value: Record<string, unknown>, keys: string[]): boolean {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => actual.includes(key));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

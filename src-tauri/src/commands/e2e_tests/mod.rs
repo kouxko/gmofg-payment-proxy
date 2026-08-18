@@ -9,18 +9,18 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    DocumentAction, DocumentFieldName, DocumentValue, PageRequest, ProtocolPackageDetailViewModel,
+    DiagnosticLogPageViewModel, DocumentAction, DocumentFieldName, DocumentValue, PageRequest,
+    ProtocolDocumentRuleDefinition, ProtocolPackageDetailViewModel,
     ProtocolPackageImportPreviewViewModel, ProtocolPackageImportViewModel,
-    ProtocolPackageVersionViewModel, ProxyListener, ProxyWorkspace, SocketCaptureDetailViewModel,
-    SocketCaptureDocumentValue, SocketCaptureKind, SocketCapturePageViewModel,
-    SocketCapturePayload, SocketCaptureQuery, SocketCaptureSort, SocketDirection,
-    SocketDisplayResult, SocketDocumentRuleDefinition, SocketRuleSaveInput, SocketWriteKind,
-    SortDirection, WorkspaceSummaryViewModel,
+    ProtocolPackageVersionViewModel, ProtocolRuleSaveInput, ProtocolRuleStage, ProxyListener,
+    ProxyWorkspace, SocketCaptureDetailViewModel, SocketCaptureDocumentValue, SocketCaptureKind,
+    SocketCapturePageViewModel, SocketCapturePayload, SocketCaptureQuery, SocketCaptureSort,
+    SocketDisplayResult, SortDirection, WorkspaceSummaryViewModel,
 };
 use intercept_proxy_domain::{
-    DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, ScriptedSocketProcessing, SocketDownstreamSecurity,
-    SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySettings, SocketTopology,
+    ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ScriptedSocketProcessing, SocketDownstreamSecurity, SocketLocalResponderTopology,
+    SocketPayloadProcessing, SocketRelaySettings, SocketTopology,
 };
 use serde_json::json;
 
@@ -40,7 +40,8 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
     let preview: ProtocolPackageImportPreviewViewModel =
         fixture.invoke_ok(&webview, "protocol_package_import", json!({}));
     assert_eq!(preview.package, package);
-    assert_eq!(preview.schema.id, "t30-iso8583");
+    assert_eq!(preview.upstream_schema.id, "t30-iso8583");
+    assert_eq!(preview.downstream_schema.id, "t30-iso8583");
     let imported: ProtocolPackageImportViewModel = fixture.invoke_ok(
         &webview,
         "protocol_package_import_commit",
@@ -53,8 +54,9 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
         "protocol_package_detail",
         json!({ "packageRef": package }),
     );
-    assert_eq!(detail.schema.id, "t30-iso8583");
-    assert_eq!(detail.schema.fields.len(), 4);
+    assert_eq!(detail.upstream_schema.id, "t30-iso8583");
+    assert_eq!(detail.downstream_schema.id, "t30-iso8583");
+    assert_eq!(detail.upstream_schema.fields.len(), 1);
     let enabled: ProtocolPackageVersionViewModel = fixture.invoke_ok(
         &webview,
         "protocol_package_enable",
@@ -74,14 +76,6 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
         maximum_connections: 4,
         processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: package.clone(),
-            upstream: DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: false,
-            },
-            downstream: DirectionProcessingOptions {
-                decode_enabled: false,
-                encode_enabled: true,
-            },
         }),
     });
     let saved: ProxyWorkspace = fixture.invoke_ok(
@@ -96,11 +90,11 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
     );
     assert!(saved.listeners.contains(&listener));
 
-    let rule: SocketDocumentRuleDefinition = fixture.invoke_ok(
+    let rule: ProtocolDocumentRuleDefinition = fixture.invoke_ok(
         &webview,
-        "socket_rule_save",
+        "protocol_rule_save",
         json!({
-            "input": SocketRuleSaveInput {
+            "input": ProtocolRuleSaveInput {
                 rule_id: None,
                 expected_revision: None,
                 name: "本机应答".into(),
@@ -109,18 +103,12 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
                 listener_id: listener.id,
                 package: package.clone(),
                 schema_version: 1,
-                direction: SocketDirection::Downstream,
+                stage: ProtocolRuleStage::ProxyToApp,
                 conditions: Vec::new(),
-                actions: vec![
-                    DocumentAction::SetField {
-                        field: DocumentFieldName::new("mti").unwrap(),
-                        value: DocumentValue::String("0210".into()),
-                    },
-                    DocumentAction::SetField {
-                        field: DocumentFieldName::new("response_code").unwrap(),
-                        value: DocumentValue::String("00".into()),
-                    },
-                ],
+                actions: vec![DocumentAction::SetField {
+                    field: DocumentFieldName::new("message").unwrap(),
+                    value: DocumentValue::Blob(RESPONSE.to_vec()),
+                }],
             }
         }),
     );
@@ -139,37 +127,40 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
         }),
     );
 
-    assert_eq!(
-        tcp_exchange(listener.port, REQUEST, RESPONSE.len()),
-        RESPONSE
-    );
+    let response = tcp_exchange(listener.port, REQUEST, RESPONSE.len());
+    if response != RESPONSE {
+        let diagnostics: DiagnosticLogPageViewModel = fixture.invoke_ok(
+            &webview,
+            "diagnostic_log_query",
+            json!({ "query": { "keyword": null, "after_event_id": null, "limit": 300 } }),
+        );
+        panic!(
+            "unexpected response {response:?}; diagnostics={:?}",
+            diagnostics.rows
+        );
+    }
     let capture = wait_for_capture(&fixture, &webview, selected.id, listener.id);
     let SocketCapturePayload::LocalExchange(exchange) = capture.record.payload else {
         panic!("expected a formal LocalExchange capture")
     };
     assert_eq!(exchange.request_origin, REQUEST);
     assert_eq!(exchange.written_response, RESPONSE);
-    assert_eq!(exchange.response_write_kind, SocketWriteKind::Encoded);
     assert_eq!(
         exchange.response_display,
         SocketDisplayResult::UntrustedHtml {
             html: "<p>T30 ISO response</p>".into(),
         }
     );
-    assert_eq!(exchange.matched_downstream_rule_ids, [rule.rule_id()]);
-    let request_document = exchange.request_document.expect("request was decoded");
+    assert!(exchange.matched_request_rule_ids.is_empty());
+    assert_eq!(exchange.matched_response_rule_ids, [rule.rule_id()]);
+    let request_document = exchange.request_document;
     assert_eq!(
-        request_document.get("mti"),
-        Some(&SocketCaptureDocumentValue::String("0200".into()))
-    );
-    assert!(request_document.get("response_code").is_none());
-    assert_eq!(
-        exchange.response_document.get("mti"),
-        Some(&SocketCaptureDocumentValue::String("0210".into()))
+        request_document.get("message"),
+        Some(&SocketCaptureDocumentValue::Blob(REQUEST.to_vec()))
     );
     assert_eq!(
-        exchange.response_document.get("response_code"),
-        Some(&SocketCaptureDocumentValue::String("00".into()))
+        exchange.response_document.get("message"),
+        Some(&SocketCaptureDocumentValue::Blob(RESPONSE.to_vec()))
     );
 
     let _: serde_json::Value = fixture.invoke_ok(
@@ -219,8 +210,15 @@ fn tcp_exchange(port: u16, request: &[u8], response_len: usize) -> Vec<u8> {
         .unwrap();
     stream.write_all(request).unwrap();
     let mut response = vec![0; response_len];
-    stream.read_exact(&mut response).unwrap();
-    stream.shutdown(Shutdown::Both).unwrap();
+    let mut received = 0;
+    while received < response_len {
+        match stream.read(&mut response[received..]).unwrap() {
+            0 => break,
+            count => received += count,
+        }
+    }
+    response.truncate(received);
+    let _ = stream.shutdown(Shutdown::Both);
     response
 }
 

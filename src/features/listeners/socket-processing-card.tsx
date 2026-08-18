@@ -5,7 +5,7 @@ import type {
   ListenerProtocolPackageOptionViewModel,
   SocketRelaySettings,
 } from "@/generated/rust-types";
-import { bindPackage, exactPackageKey, matchingOption, setProcessingMode } from "./socket-listener-model";
+import { bindPackage, exactPackageKey, matchingOption, setProcessingMode, socketCatalogOptions } from "./socket-listener-model";
 import { SocketProtocolPackageDialog } from "./socket-protocol-package-dialog";
 
 export interface ProtocolCatalogState {
@@ -40,6 +40,7 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
     && !catalog.loading
     && !catalog.error
     && Boolean(catalog.data);
+  const socketOptions = socketCatalogOptions(catalog.data);
 
   function selectPackage(key: Key | null) {
     if (!local && key === TRANSPARENT_RELAY_KEY) {
@@ -47,14 +48,14 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
       setAnnouncement("已取消协议包；数据将保持原样透明转发。");
       return;
     }
-    const option = catalog.data?.options.find((item) => exactPackageKey(item.package) === key);
+    const option = socketOptions.find((item) => exactPackageKey(item.package) === key);
     if (!option) return;
     const current = processing.mode === "scripted"
       ? processing
       : setProcessingMode(settings, "scripted").processing;
     if (current.mode !== "scripted") return;
     const nextProcessing = bindPackage(current, option, local);
-    setAnnouncement(`已选择 ${option.name}；协议包声明的解析、编码和显示能力将自动应用。`);
+    setAnnouncement(`已选择 ${option.name}；完整的分帧、解析、规则、编码和显示处理链将自动应用。`);
     onChange({ ...settings, processing: nextProcessing });
   }
 
@@ -76,12 +77,12 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
           <Alert.Title>尚未选择处理方案</Alert.Title>
           <Alert.Description>请选择一个可用的处理方案后再配置处理步骤。</Alert.Description>
         </Alert.Content></Alert>}
-        {!catalog.loading && !catalog.error && catalog.data?.options.length === 0 && (
+        {!catalog.loading && !catalog.error && socketOptions.length === 0 && (
           <Alert status="warning"><Alert.Indicator /><Alert.Content>
-            <Alert.Title>没有可绑定的协议包版本</Alert.Title>
+            <Alert.Title>没有可绑定的 Socket 协议包版本</Alert.Title>
             <Alert.Description>
-              已安装 {catalog.data.installed_version_count} 个版本，其中 {catalog.data.unavailable_version_count} 个当前不可用。
-              请先在协议包页面导入、修复或启用兼容版本。
+              已安装 {catalog.data?.installed_version_count ?? 0} 个版本，其中 {catalog.data?.unavailable_version_count ?? 0} 个当前不可用。
+              HTTP 协议包不会出现在此处；请先在协议包页面导入、修复或启用兼容的 Socket 版本。
             </Alert.Description>
           </Alert.Content></Alert>
         )}
@@ -91,7 +92,7 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
         </Alert.Content></Alert>}
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <Select aria-label="Socket 协议处理方案" selectedKey={selectedKey}
-            isDisabled={locked || (local && (catalog.loading || Boolean(catalog.error) || catalog.data?.options.length === 0))}
+            isDisabled={locked || (local && (catalog.loading || Boolean(catalog.error) || socketOptions.length === 0))}
             onSelectionChange={selectPackage}>
             <Label>协议包</Label>
             <Select.Trigger className="h-10 min-h-10"><Select.Value className="truncate" /><Select.Indicator /></Select.Trigger>
@@ -102,7 +103,7 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
               {missingFromCatalog && <ListBox.Item id={selectedKey} isDisabled textValue="当前选择（不可用）">
                 当前选择（不可用）
               </ListBox.Item>}
-              {(!catalog.loading && !catalog.error ? catalog.data?.options ?? [] : []).map((option) => (
+              {(!catalog.loading && !catalog.error ? socketOptions : []).map((option) => (
                 <ListBox.Item key={exactPackageKey(option.package)} id={exactPackageKey(option.package)} textValue={optionLabel(option)}>
                   {optionLabel(option)}
                 </ListBox.Item>
@@ -136,11 +137,11 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
 
 function PackageSummary({ option }: { option: ListenerProtocolPackageOptionViewModel }) {
   return <div className="flex flex-wrap gap-2 text-sm"><Chip variant="soft">{option.package.id}@{option.package.version}</Chip>
-    <Chip variant="soft">Schema {option.schema.id} v{option.schema.version}</Chip>
-    <Chip variant="soft">{option.schema.fields.length} 个字段</Chip>
-    <Chip variant="soft">Frame / Decode：双向</Chip>
-    <Chip variant="soft">Encode：上行 {option.capabilities.upstream.encode ? "支持" : "不支持"}，下行 {option.capabilities.downstream.encode ? "支持" : "不支持"}</Chip>
-    <Chip variant="soft" color={option.capabilities.display ? "success" : "default"}>Display：{option.capabilities.display ? "支持" : "未声明"}</Chip></div>;
+    <Chip variant="soft">上行字段结构 {option.upstream_schema.id} v{option.upstream_schema.version}</Chip>
+    <Chip variant="soft">下行字段结构 {option.downstream_schema.id} v{option.downstream_schema.version}</Chip>
+    <Chip variant="soft">报文边界与字段解析：双向支持</Chip>
+    <Chip variant="soft">报文重建：上行 {option.capabilities.upstream.encode ? "支持" : "不支持"}，下行 {option.capabilities.downstream.encode ? "支持" : "不支持"}</Chip>
+    <Chip variant="soft" color={option.capabilities.display ? "success" : "default"}>协议视图：{option.capabilities.display ? "支持" : "未提供"}</Chip></div>;
 }
 
 function optionLabel(option: ListenerProtocolPackageOptionViewModel): string {

@@ -47,9 +47,8 @@ fn decode(origin, context) {
     iso8583::decode(message)
 }
 
-// 可选入口：把规则处理后的 Document 编码为一条完整 Frame。
+// 必需入口：把规则处理后的 Document 编码为一条完整 Frame。
 // 如果协议只需要观察、不需要重编码，可以直接写：return origin;
-// 如果 manifest 没声明 encode，或 Listener 关闭该能力，宿主也会直接发送 origin。
 // 返回值必须包含长度头在内的完整 Frame；失败时宿主关闭当前连接。
 fn encode(origin, document, context) {
     let message = iso8583::encode(document);

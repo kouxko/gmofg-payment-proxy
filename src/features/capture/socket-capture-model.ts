@@ -63,11 +63,6 @@ function isBytes(value: unknown): value is number[] {
     && value.every((item) => Number.isInteger(item) && item >= 0 && item <= 255);
 }
 
-function sameBytes(left: unknown, right: unknown): boolean {
-  return isBytes(left) && isBytes(right) && left.length === right.length
-    && left.every((byte, index) => byte === right[index]);
-}
-
 function samePackage(left: unknown, right: ProtocolPackageRef): boolean {
   return isRecord(left) && hasOnly(left, ["id", "version"])
     && left.id === right.id && left.version === right.version;
@@ -126,65 +121,55 @@ function sameRuleIds(value: unknown, expected: string[]): boolean {
     && value.every((id, index) => id === expected[index]);
 }
 
+function sameLocalRuleIds(request: unknown, response: unknown, expected: string[]): boolean {
+  return isRuleIds(request) && isRuleIds(response)
+    && sameRuleIds([...request, ...response], expected);
+}
+
 function isDisplay(value: unknown): boolean {
   if (!isRecord(value)) return false;
   if (value.type === "untrusted_html") {
     return hasOnly(value, ["type", "html"]) && typeof value.html === "string";
   }
   if (value.type !== "hex_fallback" || !hasOnly(value, ["type", "reason", "diagnostic"])
-    || !["encode_disabled", "not_declared", "entry_point_failed", "resource_limit_exceeded"].includes(String(value.reason))) return false;
+    || !["entry_point_failed", "resource_limit_exceeded"].includes(String(value.reason))) return false;
   return value.diagnostic === null || (isRecord(value.diagnostic)
     && hasOnly(value.diagnostic, ["code", "message"])
     && isText(value.diagnostic.code) && typeof value.diagnostic.message === "string");
 }
 
-function displayMatchesDocument(value: Record<string, unknown>, hasDocument: boolean): boolean {
-  if (!isRecord(value)) return false;
-  if (!hasDocument) {
-    return value.type === "hex_fallback"
-      && value.reason === "encode_disabled"
-      && value.diagnostic === null;
-  }
-  return !(value.type === "hex_fallback" && value.reason === "encode_disabled");
-}
-
 function isRelayCapture(value: unknown, row: SocketCaptureRowViewModel): boolean {
-  if (!isRecord(value) || !hasOnly(value, ["direction", "package", "schema", "decode_enabled", "encode_enabled", "origin", "document", "matched_rule_ids", "written", "write_kind", "display"])
+  if (!isRecord(value) || !hasOnly(value, ["direction", "package", "schema", "origin", "stages", "written", "display"])
     || value.direction !== row.direction || !samePackage(value.package, row.package)
-    || !sameSchemaRef(value.schema, row.schema) || typeof value.decode_enabled !== "boolean"
-    || typeof value.encode_enabled !== "boolean" || !isBytes(value.origin) || !isBytes(value.written)
-    || !sameRuleIds(value.matched_rule_ids, row.matched_rule_ids) || !isDisplay(value.display)
-    || !["original", "encoded"].includes(String(value.write_kind))
-    || value.encode_enabled !== (value.write_kind === "encoded")
-    || !displayMatchesDocument(value.display as Record<string, unknown>, value.decode_enabled === true || value.encode_enabled === true)) return false;
+    || !sameSchemaRef(value.schema, row.schema) || !isBytes(value.origin) || !isBytes(value.written)
+    || !Array.isArray(value.stages) || !isDisplay(value.display)) return false;
   if (value.origin.length !== row.origin_size_bytes || value.written.length !== row.written_size_bytes) return false;
-  if (value.write_kind === "original" && !sameBytes(value.origin, value.written)) return false;
-  if (value.decode_enabled === false && (value.matched_rule_ids as string[]).length !== 0) return false;
-  return value.document === null
-    ? value.decode_enabled === false
-    : value.decode_enabled === true && isDocument(value.document, row.schema);
+  const expectedStages = row.direction === "upstream"
+    ? ["app_to_proxy", "proxy_to_upstream"]
+    : ["upstream_to_proxy", "proxy_to_app"];
+  const stagesValid = value.stages.length === 2 && value.stages.every((stage, index) =>
+    isRecord(stage) && hasOnly(stage, ["stage", "matched_rule_ids", "document"])
+      && stage.stage === expectedStages[index] && isRuleIds(stage.matched_rule_ids)
+      && isDocument(stage.document, row.schema));
+  if (!stagesValid) return false;
+  const matched = value.stages.flatMap((stage) => (stage as { matched_rule_ids: string[] }).matched_rule_ids);
+  return sameRuleIds(matched, row.matched_rule_ids);
 }
 
 function isLocalCapture(value: unknown, row: SocketCaptureRowViewModel): boolean {
-  if (!isRecord(value) || !hasOnly(value, ["exchange_id", "package", "schema", "request_decode_enabled", "response_encode_enabled", "request_origin", "request_document", "request_display", "response_document", "matched_downstream_rule_ids", "written_response", "response_write_kind", "response_display"])
+  if (!isRecord(value) || !hasOnly(value, ["exchange_id", "package", "request_schema", "response_schema", "request_origin", "request_document", "request_display", "response_document", "matched_request_rule_ids", "matched_response_rule_ids", "written_response", "response_display"])
     || row.direction !== null || !isText(value.exchange_id)
-    || !samePackage(value.package, row.package) || !sameSchemaRef(value.schema, row.schema)
-    || typeof value.request_decode_enabled !== "boolean" || typeof value.response_encode_enabled !== "boolean"
+    || !samePackage(value.package, row.package) || !isSchemaRef(value.request_schema)
+    || !sameSchemaRef(value.response_schema, row.schema)
     || !isBytes(value.request_origin) || !isBytes(value.written_response)
-    || !sameRuleIds(value.matched_downstream_rule_ids, row.matched_rule_ids) || !isDisplay(value.response_display)
-    || !["original", "encoded"].includes(String(value.response_write_kind))
-    || value.response_encode_enabled !== (value.response_write_kind === "encoded")
-    || !displayMatchesDocument(value.response_display as Record<string, unknown>, true)
-    || !isDocument(value.response_document, row.schema)) return false;
+    || !sameLocalRuleIds(value.matched_request_rule_ids, value.matched_response_rule_ids, row.matched_rule_ids)
+    || !isDisplay(value.response_display)
+    || !isDisplay(value.request_display)
+    || !isDocument(value.request_document, value.request_schema as SocketCaptureSchemaRef)
+    || !isDocument(value.response_document, value.response_schema as SocketCaptureSchemaRef)) return false;
   if (value.request_origin.length !== row.origin_size_bytes
     || value.written_response.length !== row.written_size_bytes) return false;
-  if (value.response_write_kind === "original" && !sameBytes(value.request_origin, value.written_response)) return false;
-  return value.request_document === null
-    ? value.request_decode_enabled === false && value.request_display === null
-    : value.request_decode_enabled === true
-      && isDocument(value.request_document, row.schema)
-      && isDisplay(value.request_display)
-      && displayMatchesDocument(value.request_display as Record<string, unknown>, true);
+  return true;
 }
 
 function isPackage(value: unknown): value is ProtocolPackageRef {

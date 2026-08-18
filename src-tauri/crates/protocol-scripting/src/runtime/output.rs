@@ -58,7 +58,9 @@ impl ProtocolFrameOutput {
         self.decoded_document.as_ref()
     }
 
-    pub(super) const fn execution_document(&self) -> &Document {
+    /// 返回规则执行后的最终 Document，供传输无关的捕获和展示层读取。
+    #[must_use]
+    pub const fn execution_document(&self) -> &Document {
         &self.execution_document
     }
 
@@ -86,10 +88,6 @@ impl fmt::Debug for ProtocolFrameOutput {
 /// Display 没有产生 HTML 时，UI 改为 Hex 展示的稳定原因。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DisplayFallbackReason {
-    /// 该方向 Encode 关闭；契约规定 Display 同时关闭。
-    EncodeDisabled,
-    /// Manifest 未声明公共 Display 入口。
-    NotDeclared,
     /// Display 抛错或返回了非字符串值。
     EntryPointFailed,
     /// Display 触发了指定资源硬门禁。

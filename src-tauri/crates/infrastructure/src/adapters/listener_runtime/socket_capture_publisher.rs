@@ -121,12 +121,6 @@ pub(super) fn capture_display(result: ProtocolDisplayResult) -> SocketDisplayRes
         ProtocolDisplayResult::UntrustedHtml(html) => SocketDisplayResult::UntrustedHtml { html },
         ProtocolDisplayResult::HexFallback(reason) => {
             let (reason, diagnostic) = match reason {
-                DisplayFallbackReason::EncodeDisabled => {
-                    (SocketDisplayFallbackReason::EncodeDisabled, None)
-                }
-                DisplayFallbackReason::NotDeclared => {
-                    (SocketDisplayFallbackReason::NotDeclared, None)
-                }
                 DisplayFallbackReason::EntryPointFailed => (
                     SocketDisplayFallbackReason::EntryPointFailed,
                     Some(SocketDisplayDiagnostic {

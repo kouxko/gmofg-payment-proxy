@@ -145,6 +145,20 @@ pub struct FixedServerSettings {
     pub upstream_tls: UpstreamTlsSettings,
 }
 
+/// HTTP Body 的处理方式。
+///
+/// `Plain` 保持现有 HTTP 语义；`Protocol` 使用精确协议包版本把 UTF-8 Body 解码为
+/// Document，并在 Document 实际变化时重新编码。未命中规则时不会重写 Body。
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum HttpBodyProcessing {
+    #[default]
+    Plain,
+    Protocol {
+        package: ProtocolPackageRef,
+    },
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct HttpListenerSettings {
@@ -153,6 +167,7 @@ pub struct HttpListenerSettings {
     pub downstream_tls: DownstreamTlsSettings,
     pub request_body_codec: BodyCodecKind,
     pub response_body_codec: BodyCodecKind,
+    pub body_processing: HttpBodyProcessing,
     pub fixed_server: Option<FixedServerSettings>,
 }
 
@@ -164,6 +179,7 @@ impl Default for HttpListenerSettings {
             downstream_tls: DownstreamTlsSettings::default(),
             request_body_codec: BodyCodecKind::Auto,
             response_body_codec: BodyCodecKind::Auto,
+            body_processing: HttpBodyProcessing::Plain,
             fixed_server: None,
         }
     }
@@ -287,38 +303,19 @@ impl<'de> Deserialize<'de> for SocketRelaySecurity {
     }
 }
 
-/// 单个 Socket 数据方向是否启用协议包的 Decode 与 Encode 阶段。
-/// `decode_enabled` 与 `encode_enabled` 是两个彼此独立的开关，而不是同一个“脚本启用”状态：
-/// Decode 关闭时仍可让 Encode 只根据原始 Frame 产生新字节；Encode 关闭时，即使 Decode 和规则
-/// 修改了 Document，线路上仍发送原始 Frame。Display 没有单独配置字段，后续运行时会按产品契约
-/// 跟随同方向的 Encode 开关和 Manifest 能力决定是否调用。
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct DirectionProcessingOptions {
-    /// 是否把完整 Frame 交给该方向的 Decode 入口并生成 Document。
-    pub decode_enabled: bool,
-    /// 是否把该方向的 Document 与原始 Frame 交给 Encode 入口生成待发送字节。
-    pub encode_enabled: bool,
-}
-
 /// Scripted 模式所需的完整、静态 Listener 配置。
-/// Listener 精确绑定一个 `package id + version`，不会自动选择、升级或回退协议包。领域层只保证
-/// 引用和开关结构合法；包是否已安装、已启用、API 兼容，以及方向是否声明 Encode，必须由需要
-/// 查询协议包注册表的 Application 层校验。
+/// 入口精确绑定一个 `package id + version`，不会自动选择、升级或回退协议包。选择协议包即表示
+/// 两个方向固定执行 Frame、Decode、规则、Encode 与 Display，不再保存重复的阶段开关。
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct ScriptedSocketProcessing {
-    /// Listener 固定使用的协议包 ID 与精确 `SemVer`。
+    /// 入口固定使用的协议包 ID 与精确 `SemVer`。
     pub package: ProtocolPackageRef,
-    /// App -> Proxy -> Server 方向的 Decode/Encode 开关。
-    pub upstream: DirectionProcessingOptions,
-    /// Server -> Proxy -> App 方向的 Decode/Encode 开关。
-    pub downstream: DirectionProcessingOptions,
 }
 
 /// Socket payload 的处理方式。
 /// `Direct` 保持现有透明字节转发，不加载脚本、不切 Frame、不创建 Document；`Scripted` 按绑定
-/// 协议包切分完整 Frame，并分别应用两个方向的处理开关。
+/// 协议包切分完整 Frame，并执行两个方向声明的完整处理链。
 /// Wire 结构使用 `mode` + `settings`，例如 Direct 是 `{"mode":"direct"}`，Scripted 是
 /// `{"mode":"scripted","settings":{...}}`。额外字段会被拒绝，防止 Direct 配置中夹带不会生效的
 /// 脚本字段。

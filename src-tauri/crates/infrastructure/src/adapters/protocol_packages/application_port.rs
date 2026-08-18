@@ -7,11 +7,13 @@ use intercept_proxy_application::{
     AppError, AppErrorDiagnosticViewModel, AppResult, ProtocolPackageCapabilitiesViewModel,
     ProtocolPackageCompilationReceipt, ProtocolPackageCompilerPort,
     ProtocolPackageDescriptionViewModel, ProtocolPackageDirectionCapabilitiesViewModel,
-    ProtocolPackageSchemaFieldTypeViewModel, ProtocolPackageSchemaFieldViewModel,
-    ProtocolPackageSchemaViewModel, ProtocolPackageStorePort, ProtocolPackageValidationViewModel,
-    ProtocolPackageVersionViewModel, is_builtin_protocol_package,
+    ProtocolPackageKindViewModel, ProtocolPackageSchemaFieldTypeViewModel,
+    ProtocolPackageSchemaFieldViewModel, ProtocolPackageSchemaViewModel, ProtocolPackageStorePort,
+    ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
+    is_builtin_protocol_package,
 };
 use intercept_proxy_protocol_scripting::CompiledProtocolPackage;
+use intercept_proxy_protocol_scripting::{ProtocolDirection, ProtocolPackageKind};
 
 use super::{
     PreparedProtocolPackage, ProtocolPackageRef, ProtocolPackageRepositoryAdapter,
@@ -83,6 +85,10 @@ pub(in crate::adapters) fn application_summary(
         package: summary.package,
         name: summary.name,
         host_api: summary.host_api,
+        kind: match summary.kind {
+            ProtocolPackageKind::Http => ProtocolPackageKindViewModel::Http,
+            ProtocolPackageKind::Socket => ProtocolPackageKindViewModel::Socket,
+        },
         built_in,
         enabled: summary.enabled,
         validation: match summary.validation {
@@ -98,49 +104,60 @@ pub(in crate::adapters) fn application_summary(
 pub(in crate::adapters) fn application_description(
     compiled: &CompiledProtocolPackage,
 ) -> ProtocolPackageDescriptionViewModel {
-    let schema = compiled.schema();
+    let frame = compiled.kind() == ProtocolPackageKind::Socket;
     ProtocolPackageDescriptionViewModel {
         package: compiled.package().clone(),
+        kind: match compiled.kind() {
+            ProtocolPackageKind::Http => ProtocolPackageKindViewModel::Http,
+            ProtocolPackageKind::Socket => ProtocolPackageKindViewModel::Socket,
+        },
         capabilities: ProtocolPackageCapabilitiesViewModel {
             upstream: ProtocolPackageDirectionCapabilitiesViewModel {
-                frame: true,
+                frame,
                 decode: true,
                 encode: compiled.supports_upstream_encode(),
             },
             downstream: ProtocolPackageDirectionCapabilitiesViewModel {
-                frame: true,
+                frame,
                 decode: true,
                 encode: compiled.supports_downstream_encode(),
             },
             display: compiled.supports_display(),
         },
-        schema: ProtocolPackageSchemaViewModel {
-            id: schema.id().as_str().to_owned(),
-            version: schema.version(),
-            title: schema.title().to_owned(),
-            fields: schema
-                .fields()
-                .iter()
-                .map(|field| ProtocolPackageSchemaFieldViewModel {
-                    name: field.name().as_str().to_owned(),
-                    label: field.label().to_owned(),
-                    field_type: match field.field_type() {
-                        intercept_proxy_domain::DocumentFieldType::String => {
-                            ProtocolPackageSchemaFieldTypeViewModel::String
-                        }
-                        intercept_proxy_domain::DocumentFieldType::Int => {
-                            ProtocolPackageSchemaFieldTypeViewModel::Int
-                        }
-                        intercept_proxy_domain::DocumentFieldType::Bool => {
-                            ProtocolPackageSchemaFieldTypeViewModel::Bool
-                        }
-                        intercept_proxy_domain::DocumentFieldType::Blob => {
-                            ProtocolPackageSchemaFieldTypeViewModel::Blob
-                        }
-                    },
-                })
-                .collect(),
-        },
+        upstream_schema: application_schema(compiled.schema(ProtocolDirection::Upstream)),
+        downstream_schema: application_schema(compiled.schema(ProtocolDirection::Downstream)),
+    }
+}
+
+fn application_schema(
+    schema: &intercept_proxy_domain::DocumentSchema,
+) -> ProtocolPackageSchemaViewModel {
+    ProtocolPackageSchemaViewModel {
+        id: schema.id().as_str().to_owned(),
+        version: schema.version(),
+        title: schema.title().to_owned(),
+        fields: schema
+            .fields()
+            .iter()
+            .map(|field| ProtocolPackageSchemaFieldViewModel {
+                name: field.name().as_str().to_owned(),
+                label: field.label().to_owned(),
+                field_type: match field.field_type() {
+                    intercept_proxy_domain::DocumentFieldType::String => {
+                        ProtocolPackageSchemaFieldTypeViewModel::String
+                    }
+                    intercept_proxy_domain::DocumentFieldType::Int => {
+                        ProtocolPackageSchemaFieldTypeViewModel::Int
+                    }
+                    intercept_proxy_domain::DocumentFieldType::Bool => {
+                        ProtocolPackageSchemaFieldTypeViewModel::Bool
+                    }
+                    intercept_proxy_domain::DocumentFieldType::Blob => {
+                        ProtocolPackageSchemaFieldTypeViewModel::Blob
+                    }
+                },
+            })
+            .collect(),
     }
 }
 

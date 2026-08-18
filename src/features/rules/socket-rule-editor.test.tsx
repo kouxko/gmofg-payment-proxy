@@ -7,16 +7,16 @@ import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ProxyListener,
-  SocketDirection,
-  SocketRuleCapabilityCatalog,
+  ProtocolRuleStage,
+  ProtocolRuleCapabilityCatalog,
 } from "@/generated/rust-types";
-import { SocketRuleEditor } from "./socket-rule-editor";
+import { ProtocolRuleEditor } from "./socket-rule-editor";
 import {
-  newSocketRuleDraft,
-  type SocketRuleDraft,
+  newProtocolRuleDraft,
+  type ProtocolRuleDraft,
 } from "./socket-rule-model";
 
-const commandMocks = vi.hoisted(() => ({ socketRuleParseValue: vi.fn() }));
+const commandMocks = vi.hoisted(() => ({ protocolRuleParseValue: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
   callCommand: async <T,>(value: Promise<T> | T) => value,
@@ -24,7 +24,7 @@ vi.mock("@/lib/ipc/client", () => ({
 }));
 
 beforeEach(() => {
-  commandMocks.socketRuleParseValue.mockImplementation(async (type: string, raw: string) => {
+  commandMocks.protocolRuleParseValue.mockImplementation(async (type: string, raw: string) => {
     if (type === "string") return { type, value: raw };
     if (type === "int") return { type, value: Number(raw) };
     if (type === "bool") return { type, value: raw === "true" };
@@ -63,8 +63,6 @@ function listener(id: string, local = false): ProxyListener {
           mode: "scripted",
           settings: {
             package: packageRef,
-            upstream: { decode_enabled: true, encode_enabled: true },
-            downstream: { decode_enabled: true, encode_enabled: true },
           },
         },
       },
@@ -72,18 +70,18 @@ function listener(id: string, local = false): ProxyListener {
   };
 }
 
-const fields: SocketRuleCapabilityCatalog["fields"] = [
+const fields: ProtocolRuleCapabilityCatalog["fields"] = [
   { name: "message_type", label: "消息类型", type: "string", operators: ["equals"], actions: ["set_field"] },
   { name: "amount", label: "金额", type: "int", operators: ["equals"], actions: ["set_field"] },
   { name: "approved", label: "批准", type: "bool", operators: ["equals"], actions: ["set_field"] },
   { name: "bitmap", label: "位图", type: "blob", operators: ["equals"], actions: ["set_field"] },
 ];
 
-function catalog(direction: SocketDirection = "upstream"): SocketRuleCapabilityCatalog {
+function catalog(stage: ProtocolRuleStage = "app_to_proxy"): ProtocolRuleCapabilityCatalog {
   return {
     package: packageRef,
     schema_version: 7,
-    direction,
+    stage,
     fields,
     common_actions: ["record_match", "clear_document"],
   };
@@ -93,7 +91,6 @@ function Harness({
   activeListener = listener("relay"),
   activeCatalog = catalog(),
   creating = true,
-  decodeEnabled = true,
   initialDraft,
   loading = false,
   error,
@@ -105,29 +102,27 @@ function Harness({
   onReload = vi.fn(),
 }: {
   activeListener?: ProxyListener;
-  activeCatalog?: SocketRuleCapabilityCatalog;
+  activeCatalog?: ProtocolRuleCapabilityCatalog;
   creating?: boolean;
-  decodeEnabled?: boolean;
-  initialDraft?: SocketRuleDraft;
+  initialDraft?: ProtocolRuleDraft;
   loading?: boolean;
   error?: string;
   fieldErrors?: Record<string, string[]>;
   pending?: boolean;
   invalidInitially?: boolean;
-  onSave?: (draft: SocketRuleDraft) => void;
+  onSave?: (draft: ProtocolRuleDraft) => void;
   onDelete?: () => void;
   onReload?: () => void;
 }) {
   const [draft, setDraft] = useState(
-    initialDraft ?? newSocketRuleDraft(activeListener, activeCatalog.direction, activeCatalog),
+    initialDraft ?? newProtocolRuleDraft(activeListener, activeCatalog.stage, activeCatalog),
   );
   const [valueStates, setValueStates] = useState<Record<string, { pending: boolean; invalid: boolean }>>(
     invalidInitially ? { invalid: { pending: false, invalid: true } } : {},
   );
-  return <SocketRuleEditor
+  return <ProtocolRuleEditor
     catalog={activeCatalog}
     creating={creating}
-    decodeEnabled={decodeEnabled}
     draft={draft}
     error={error}
     fieldErrors={fieldErrors}
@@ -137,7 +132,7 @@ function Harness({
     loading={loading}
     onChange={setDraft}
     onDelete={onDelete}
-    onDirectionChange={(direction) => setDraft({ ...draft, direction })}
+    onStageChange={(stage) => setDraft({ ...draft, stage })}
     onValueStateChange={(key, state) => setValueStates((current) => {
       const next = { ...current };
       if (state) next[key] = state; else delete next[key];
@@ -155,7 +150,7 @@ function Harness({
 describe("Socket rule editor product boundary", () => {
   it("shows a capability loading state", () => {
     render(<Harness loading />);
-    expect(screen.getByLabelText("正在读取 Socket 规则能力")).toBeVisible();
+    expect(screen.getByLabelText("正在读取报文规则能力")).toBeVisible();
   });
 
   it("shows a capability error and retries", async () => {
@@ -176,50 +171,44 @@ describe("Socket rule editor product boundary", () => {
     }
   });
 
-  it("keeps an existing listener, package, schema, and direction binding read-only", () => {
+  it("keeps an existing entry, package, schema, and stage binding read-only", () => {
     const relay = listener("relay");
-    const draft = { ...newSocketRuleDraft(relay, "upstream", catalog()), rule_id: "rule-1", expected_revision: 4 };
+    const draft = { ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), rule_id: "rule-1", expected_revision: 4 };
     render(<Harness activeListener={relay} creating={false} initialDraft={draft} />);
     expect(screen.getByLabelText("固定规则绑定")).toHaveTextContent("交易中继");
     expect(screen.getByLabelText("固定规则绑定")).toHaveTextContent("iso8583@1.2.3");
-    expect(screen.queryByLabelText("Socket Listener")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Socket 方向")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("协议入口")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("报文处理阶段")).not.toBeInTheDocument();
   });
 
-  it("offers both directions while creating a Relay rule", async () => {
+  it("offers all four processing stages while creating a relay rule", async () => {
     const user = userEvent.setup();
     render(<Harness />);
-    await user.click(screen.getByLabelText("Socket 方向"));
-    expect(await screen.findByRole("option", { name: "upstream" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "downstream" })).toBeVisible();
+    await user.click(screen.getByLabelText("报文处理阶段"));
+    expect(await screen.findByRole("option", { name: "应用 → 代理" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "代理 → 上游服务" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "上游服务 → 代理" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "代理 → 应用" })).toBeVisible();
   });
 
-  it("fixes LocalResponder creation to downstream without a direction Select", () => {
+  it("offers the two app-facing stages for local response", async () => {
+    const user = userEvent.setup();
     const local = listener("local", true);
-    render(<Harness activeCatalog={catalog("downstream")} activeListener={local} />);
-    expect(screen.queryByLabelText("Socket 方向")).not.toBeInTheDocument();
-    expect(screen.getByText("downstream")).toBeVisible();
-  });
-
-  it("warns that LocalResponder field conditions cannot match when request Decode is off", () => {
-    render(<Harness activeCatalog={catalog("downstream")} activeListener={listener("local", true)} decodeEnabled={false} />);
-    expect(screen.getByText("请求 Decode 已关闭")).toBeVisible();
-    expect(screen.getByText(/字段条件不会命中/)).toBeVisible();
-  });
-
-  it("warns that a Relay direction has no Document when Decode is off", () => {
-    render(<Harness decodeEnabled={false} />);
-    expect(screen.getByText("此方向 Decode 已关闭")).toBeVisible();
+    render(<Harness activeCatalog={catalog("proxy_to_app")} activeListener={local} />);
+    await user.click(screen.getByLabelText("报文处理阶段"));
+    expect(await screen.findByRole("option", { name: "应用 → 代理" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "代理 → 应用" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "代理 → 上游服务" })).not.toBeInTheDocument();
   });
 
   it("maps binding, condition, action, and general field errors without duplicate general alerts", () => {
     render(<Harness fieldErrors={{
-      listener_id: ["Listener 已变化"],
+      listener_id: ["入口已变化"],
       "conditions[0]": ["条件非法"],
       actions: ["动作非法"],
       general: ["revision conflict"],
     }} />);
-    expect(screen.getByText("Listener 已变化")).toBeVisible();
+    expect(screen.getByText("入口已变化")).toBeVisible();
     expect(screen.getByText("条件非法")).toBeVisible();
     expect(screen.getByText("动作非法")).toBeVisible();
     expect(screen.getByText("revision conflict")).toBeVisible();
@@ -231,30 +220,30 @@ describe("Socket rule editor product boundary", () => {
     expect(screen.getByRole("button", { name: "正在保存…" })).toBeDisabled();
     unmount();
     render(<Harness invalidInitially />);
-    expect(screen.getByRole("button", { name: "保存 Socket 规则" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存报文规则" })).toBeDisabled();
   });
 
   it("blocks save while Rust is parsing an edited action value", () => {
-    commandMocks.socketRuleParseValue.mockReturnValue(new Promise(() => undefined));
+    commandMocks.protocolRuleParseValue.mockReturnValue(new Promise(() => undefined));
     const relay = listener("relay");
     const draft = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       actions: [{ type: "set_field" as const, field: "message_type", value: { type: "string" as const, value: "0200" } }],
     };
     const save = vi.fn();
     render(<Harness initialDraft={draft} onSave={save} />);
     fireEvent.change(screen.getByRole("textbox", { name: "设置值" }), { target: { value: "0210" } });
     expect(screen.getByLabelText("正在解析设置值")).toBeVisible();
-    expect(screen.getByRole("button", { name: "保存 Socket 规则" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存报文规则" })).toBeDisabled();
     expect(save).not.toHaveBeenCalled();
   });
 
   it("locks other draft paths until a deferred parser result is applied", async () => {
     let finish!: (value: unknown) => void;
-    commandMocks.socketRuleParseValue.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    commandMocks.protocolRuleParseValue.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const relay = listener("relay");
     const draft = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       actions: [
         { type: "set_field" as const, field: "message_type", value: { type: "string" as const, value: "0200" } },
         { type: "set_field" as const, field: "amount", value: { type: "int" as const, value: 100 } },
@@ -269,7 +258,7 @@ describe("Socket rule editor product boundary", () => {
     expect(screen.getByRole("textbox", { name: "优先级" })).toBeDisabled();
     finish({ type: "string", value: "0210" });
     await waitFor(() => expect(screen.queryByLabelText("正在解析设置值")).not.toBeInTheDocument());
-    const saveButton = screen.getByRole("button", { name: "保存 Socket 规则" });
+    const saveButton = screen.getByRole("button", { name: "保存报文规则" });
     await waitFor(() => expect(saveButton).toBeEnabled());
     await userEvent.setup().click(saveButton);
     expect(save.mock.calls[0][0].actions[1].value).toEqual({ type: "int", value: 100 });
@@ -278,7 +267,7 @@ describe("Socket rule editor product boundary", () => {
   it("renders stale condition and action fields fail-closed", () => {
     const relay = listener("relay");
     const draft = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       conditions: [{ operator: "equals" as const, field: "removed", value: { type: "string" as const, value: "x" } }],
       actions: [{ type: "set_field" as const, field: "removed", value: { type: "string" as const, value: "x" } }],
     };
@@ -290,33 +279,32 @@ describe("Socket rule editor product boundary", () => {
   it("disables additions at the 64-condition and 64-action limits", () => {
     const relay = listener("relay");
     const draft = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       conditions: Array.from({ length: 64 }, () => ({ operator: "equals" as const, field: "removed", value: { type: "string" as const, value: "x" } })),
       actions: Array.from({ length: 64 }, () => ({ type: "record_match" as const })),
     };
     render(<Harness initialDraft={draft} />);
     expect(screen.getByRole("button", { name: "添加条件" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "添加 RecordMatch" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "添加 ClearDocument" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "添加 SetField" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加：记录命中" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加：清空全部字段" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "添加：设置字段" })).toBeDisabled();
   });
 
-  it("shows only RecordMatch when Encode is off", () => {
+  it("shows only RecordMatch when the capability catalog exposes no mutation actions", () => {
     const recordOnly = {
       ...catalog(),
       fields: fields.map((field) => ({ ...field, actions: [] })),
       common_actions: ["record_match" as const],
     };
     render(<Harness activeCatalog={recordOnly} />);
-    expect(screen.getByText("此方向 Encode 已关闭")).toBeVisible();
-    expect(screen.getByRole("button", { name: "添加 RecordMatch" })).toBeEnabled();
-    expect(screen.queryByRole("button", { name: "添加 SetField" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "添加 ClearDocument" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加：记录命中" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "添加：设置字段" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "添加：清空全部字段" })).not.toBeInTheDocument();
   });
 
   it("explains that an empty Schema still supports an unconditional RecordMatch", () => {
     render(<Harness activeCatalog={{ ...catalog(), fields: [], common_actions: ["record_match"] }} />);
-    expect(screen.getByText("Schema 没有声明字段")).toBeVisible();
+    expect(screen.getByText("协议没有可配置字段")).toBeVisible();
     expect(screen.getByText("空条件恒匹配。")).toBeVisible();
   });
 
@@ -335,7 +323,7 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       conditions: [
         { operator: "equals" as const, field: "message_type", value: { type: "string" as const, value: "0200" } },
         { operator: "equals" as const, field: "amount", value: { type: "int" as const, value: 100 } },
@@ -351,9 +339,9 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const saved = vi.fn();
-    render(<Harness initialDraft={{ ...newSocketRuleDraft(relay, "upstream", catalog()), actions: [{ type: "clear_document" }] }} onSave={saved} />);
-    await user.click(screen.getByRole("button", { name: "添加 RecordMatch" }));
-    await user.click(screen.getByRole("button", { name: "保存 Socket 规则" }));
+    render(<Harness initialDraft={{ ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), actions: [{ type: "clear_document" }] }} onSave={saved} />);
+    await user.click(screen.getByRole("button", { name: "添加：记录命中" }));
+    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
     expect(saved.mock.calls[0][0].actions).toEqual([{ type: "clear_document" }, { type: "record_match" }]);
   });
 
@@ -361,13 +349,13 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       actions: [{ type: "clear_document" as const }],
     };
     const saved = vi.fn();
     render(<Harness initialDraft={initial} onSave={saved} />);
-    await user.click(screen.getByRole("button", { name: "添加 SetField" }));
-    await user.click(screen.getByRole("button", { name: "保存 Socket 规则" }));
+    await user.click(screen.getByRole("button", { name: "添加：设置字段" }));
+    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
     expect(saved).toHaveBeenCalledWith(expect.objectContaining({
       actions: [
         { type: "clear_document" },
@@ -380,13 +368,13 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       actions: [{ type: "record_match" as const }, { type: "clear_document" as const }],
     };
     const saved = vi.fn();
     render(<Harness initialDraft={initial} onSave={saved} />);
     await user.click(screen.getByRole("button", { name: "动作 2 上移" }));
-    await user.click(screen.getByRole("button", { name: "保存 Socket 规则" }));
+    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
     expect(saved.mock.calls[0][0].actions).toEqual([{ type: "clear_document" }, { type: "record_match" }]);
   });
 
@@ -394,13 +382,13 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       actions: [{ type: "record_match" as const }, { type: "clear_document" as const }],
     };
     const saved = vi.fn();
     render(<Harness initialDraft={initial} onSave={saved} />);
     await user.click(screen.getByRole("button", { name: "动作 1 下移" }));
-    await user.click(screen.getByRole("button", { name: "保存 Socket 规则" }));
+    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
     expect(saved.mock.calls[0][0].actions).toEqual([{ type: "clear_document" }, { type: "record_match" }]);
   });
 
@@ -408,14 +396,14 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       actions: [{ type: "set_field" as const, field: "message_type", value: { type: "string" as const, value: "0210" } }],
     };
     const saved = vi.fn();
     render(<Harness initialDraft={initial} onSave={saved} />);
     await user.click(screen.getByLabelText("设置字段"));
     await user.click(await screen.findByRole("option", { name: /amount/ }));
-    await user.click(screen.getByRole("button", { name: "保存 Socket 规则" }));
+    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
     expect(saved.mock.calls[0][0].actions).toEqual([{ type: "set_field", field: "amount", value: { type: "int", value: 0 } }]);
   });
 
@@ -427,11 +415,11 @@ describe("Socket rule editor product boundary", () => {
   it("requires explicit confirmation before deleting a saved rule", async () => {
     const user = userEvent.setup();
     const relay = listener("relay");
-    const draft = { ...newSocketRuleDraft(relay, "upstream", catalog()), rule_id: "rule-1", expected_revision: 2 };
+    const draft = { ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), rule_id: "rule-1", expected_revision: 2 };
     const remove = vi.fn();
     render(<Harness activeListener={relay} creating={false} initialDraft={draft} onDelete={remove} />);
     await user.click(screen.getByRole("button", { name: "删除规则" }));
-    expect(screen.getByRole("alertdialog", { name: "删除此 Socket 规则？" })).toBeVisible();
+    expect(screen.getByRole("alertdialog", { name: "删除此报文规则？" })).toBeVisible();
     expect(remove).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "确认删除" }));
     expect(remove).toHaveBeenCalledOnce();
@@ -440,27 +428,27 @@ describe("Socket rule editor product boundary", () => {
   it("does not open deletion confirmation while another mutation is pending", async () => {
     const user = userEvent.setup();
     const relay = listener("relay");
-    const draft = { ...newSocketRuleDraft(relay, "upstream", catalog()), rule_id: "rule-1", expected_revision: 2 };
+    const draft = { ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), rule_id: "rule-1", expected_revision: 2 };
     render(<Harness activeListener={relay} creating={false} initialDraft={draft} pending />);
     const remove = screen.getByRole("button", { name: "删除规则" });
     expect(remove).toBeDisabled();
     await user.click(remove);
-    expect(screen.queryByRole("alertdialog", { name: "删除此 Socket 规则？" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog", { name: "删除此报文规则？" })).not.toBeInTheDocument();
   });
 
   it("locks every draft and context control while a mutation is pending", () => {
     const relay = listener("relay");
     const draft = {
-      ...newSocketRuleDraft(relay, "upstream", catalog()),
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
       conditions: [{ operator: "equals" as const, field: "message_type", value: { type: "string" as const, value: "0200" } }],
       actions: [{ type: "record_match" as const }, { type: "set_field" as const, field: "message_type", value: { type: "string" as const, value: "0210" } }],
     };
     render(<Harness activeListener={relay} initialDraft={draft} pending />);
-    for (const name of ["Socket Listener", "Socket 方向", "启用 Socket 规则", "条件字段", "设置字段"]) {
+    for (const name of ["协议入口", "报文处理阶段", "启用报文规则", "条件字段", "设置字段"]) {
       expect(screen.getByLabelText(name)).toBeDisabled();
     }
     for (const name of ["优先级", "比较值", "设置值"]) expect(screen.getByRole("textbox", { name })).toBeDisabled();
-    for (const name of ["添加条件", "添加 RecordMatch", "添加 ClearDocument", "添加 SetField", "删除条件 1", "动作 1 下移", "动作 2 上移", "删除动作 2"]) {
+    for (const name of ["添加条件", "添加：记录命中", "添加：清空全部字段", "添加：设置字段", "删除条件 1", "动作 1 下移", "动作 2 上移", "删除动作 2"]) {
       expect(screen.getByRole("button", { name })).toBeDisabled();
     }
   });

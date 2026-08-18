@@ -6,10 +6,10 @@ use std::{
 };
 
 use intercept_proxy_domain::{
-    DirectionProcessingOptions, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
+    ListenerDataPlane, ProtocolDocumentRuleDefinition, ProtocolPackageId, ProtocolPackageRef,
     ProtocolPackageVersion, ProxyListener, ProxyWorkspace, ScriptedSocketProcessing,
-    SocketDocumentRuleDefinition, SocketDownstreamSecurity, SocketLocalResponderTopology,
-    SocketPayloadProcessing, SocketRelaySettings, SocketTopology,
+    SocketDownstreamSecurity, SocketLocalResponderTopology, SocketPayloadProcessing,
+    SocketRelaySettings, SocketTopology,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -63,24 +63,9 @@ version = 1
 title = "Local ISO8583"
 
 [[fields]]
-name = "mti"
-label = "MTI"
-type = "string"
-
-[[fields]]
-name = "trace"
-label = "Trace"
-type = "string"
-
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "string"
-
-[[fields]]
-name = "response_code"
-label = "Response Code"
-type = "string"
+name = "message"
+label = "Message"
+type = "blob"
 "#;
 
 pub(super) const ISO_SCRIPT: &str = r#"
@@ -91,17 +76,12 @@ fn frame(reader, context) {
 
 fn decode(origin, context) {
     let result = document::create();
-    result.set("mti", origin.extract(0, 4).as_string());
-    result.set("trace", origin.extract(4, 6).as_string());
-    result.set("amount", origin.extract(10, 8).as_string());
+    result.set("message", origin);
     result
 }
 
 fn encode(origin, document, context) {
-    document.get("mti").to_blob()
-        + document.get("trace").to_blob()
-        + document.get("amount").to_blob()
-        + document.get("response_code").to_blob()
+    document.get("message")
 }
 
 fn display(document, context) { "<p>iso8583 response</p>" }
@@ -114,12 +94,7 @@ pub(super) fn package_ref(id: &str) -> ProtocolPackageRef {
     }
 }
 
-pub(super) fn local_listener(
-    id: &str,
-    listener_port: u16,
-    decode: bool,
-    encode: bool,
-) -> ProxyListener {
+pub(super) fn local_listener(id: &str, listener_port: u16) -> ProxyListener {
     ProxyListener {
         name: format!("LocalResponder {id}"),
         bind_address: "127.0.0.1".into(),
@@ -131,14 +106,6 @@ pub(super) fn local_listener(
             maximum_connections: 8,
             processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package: package_ref(id),
-                upstream: DirectionProcessingOptions {
-                    decode_enabled: decode,
-                    encode_enabled: false,
-                },
-                downstream: DirectionProcessingOptions {
-                    decode_enabled: false,
-                    encode_enabled: encode,
-                },
             }),
         }),
         ..ProxyListener::default()
@@ -157,17 +124,17 @@ pub(super) fn listener_package_id(listener: &ProxyListener) -> &str {
 
 pub(super) fn workspace(
     listener: ProxyListener,
-    rules: Vec<SocketDocumentRuleDefinition>,
+    rules: Vec<ProtocolDocumentRuleDefinition>,
 ) -> ProxyWorkspace {
     let created_order_high_water = rules
         .iter()
-        .map(SocketDocumentRuleDefinition::created_order)
+        .map(ProtocolDocumentRuleDefinition::created_order)
         .max()
         .unwrap_or(0);
     ProxyWorkspace {
         listeners: vec![listener],
-        socket_rule_created_order_high_water: created_order_high_water,
-        socket_rules: rules,
+        protocol_rule_created_order_high_water: created_order_high_water,
+        protocol_rules: rules,
         ..ProxyWorkspace::default()
     }
 }
@@ -179,7 +146,7 @@ pub(super) async fn start_local_runtime(
     workspace: ProxyWorkspace,
     listener: &ProxyListener,
 ) -> ListenerRuntimeAdapter {
-    start_local_runtime_inner(id, schema, script, workspace, listener, None)
+    start_local_runtime_inner(id, schema, schema, script, workspace, listener, None)
         .await
         .0
 }
@@ -192,9 +159,17 @@ pub(super) async fn start_local_runtime_with_events(
     listener: &ProxyListener,
     events: Arc<intercept_proxy_application::EventHub>,
 ) -> ListenerRuntimeAdapter {
-    start_local_runtime_inner(id, schema, script, workspace, listener, Some(events))
-        .await
-        .0
+    start_local_runtime_inner(
+        id,
+        schema,
+        schema,
+        script,
+        workspace,
+        listener,
+        Some(events),
+    )
+    .await
+    .0
 }
 
 pub(super) async fn start_local_runtime_with_capture(
@@ -208,12 +183,46 @@ pub(super) async fn start_local_runtime_with_capture(
     ListenerRuntimeAdapter,
     Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
 ) {
-    start_local_runtime_inner(id, schema, script, workspace, listener, Some(events)).await
+    start_local_runtime_inner(
+        id,
+        schema,
+        schema,
+        script,
+        workspace,
+        listener,
+        Some(events),
+    )
+    .await
+}
+
+pub(super) async fn start_local_runtime_with_directional_schemas_and_capture(
+    id: &str,
+    upstream_schema: &str,
+    downstream_schema: &str,
+    script: &str,
+    workspace: ProxyWorkspace,
+    listener: &ProxyListener,
+    events: Arc<intercept_proxy_application::EventHub>,
+) -> (
+    ListenerRuntimeAdapter,
+    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
+) {
+    start_local_runtime_inner(
+        id,
+        upstream_schema,
+        downstream_schema,
+        script,
+        workspace,
+        listener,
+        Some(events),
+    )
+    .await
 }
 
 async fn start_local_runtime_inner(
     id: &str,
-    schema: &str,
+    upstream_schema: &str,
+    downstream_schema: &str,
     script: &str,
     workspace: ProxyWorkspace,
     listener: &ProxyListener,
@@ -227,7 +236,7 @@ async fn start_local_runtime_inner(
         Arc::clone(&store),
     ));
     repository
-        .install_zip(&package_zip(id, schema, script))
+        .install_zip(&package_zip(id, upstream_schema, downstream_schema, script))
         .unwrap();
     repository.set_enabled(&package_ref(id), true).unwrap();
     let capture = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
@@ -260,7 +269,7 @@ pub(super) async fn reserve_port() -> u16 {
         .port()
 }
 
-fn package_zip(id: &str, schema: &str, script: &str) -> Vec<u8> {
+fn package_zip(id: &str, upstream_schema: &str, downstream_schema: &str, script: &str) -> Vec<u8> {
     let manifest = format!(
         r#"
 api = 1
@@ -270,37 +279,32 @@ id = "{id}"
 name = "T25 LocalResponder Test"
 version = "1.0.0"
 
-[document]
-schema = "document.toml"
+[document.upstream]
+schema = "upstream.toml"
+display = "display"
 
-[document.display]
-script = "protocol.rhai"
-function = "display"
+[document.downstream]
+schema = "downstream.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
 encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.downstream.send]
-script = "protocol.rhai"
 encode = "encode"
 "#,
     );
     let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
     for (path, contents) in [
         ("manifest.toml", manifest.as_bytes()),
-        ("document.toml", schema.as_bytes()),
+        ("upstream.toml", upstream_schema.as_bytes()),
+        ("downstream.toml", downstream_schema.as_bytes()),
         ("protocol.rhai", script.as_bytes()),
+        ("display.rhai", script.as_bytes()),
     ] {
         writer
             .start_file(path, SimpleFileOptions::default())

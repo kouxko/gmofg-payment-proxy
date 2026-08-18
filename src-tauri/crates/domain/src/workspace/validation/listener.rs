@@ -350,7 +350,7 @@ fn validate_socket_local_responder(
         );
     }
 
-    let SocketPayloadProcessing::Scripted(scripted) = processing else {
+    let SocketPayloadProcessing::Scripted(_) = processing else {
         push_field_error(
             error,
             format!("{field}.processing"),
@@ -358,20 +358,6 @@ fn validate_socket_local_responder(
         );
         return;
     };
-    if scripted.upstream.encode_enabled {
-        push_field_error(
-            error,
-            format!("{field}.processing.settings.upstream.encode_enabled"),
-            "LocalResponder 不存在 App 到 Server 写入，upstream Encode 必须关闭",
-        );
-    }
-    if scripted.downstream.decode_enabled {
-        push_field_error(
-            error,
-            format!("{field}.processing.settings.downstream.decode_enabled"),
-            "LocalResponder 没有 Server 响应输入，downstream Decode 必须关闭",
-        );
-    }
 }
 
 fn validate_socket_downstream_tls(

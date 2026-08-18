@@ -11,11 +11,11 @@ mod diagnostics;
 mod events;
 mod fault;
 mod protocol_package;
+mod protocol_rule;
 mod rule;
 mod session;
 mod socket_capture;
 mod socket_capture_diagnostics;
-mod socket_rule;
 mod workspace;
 
 #[cfg(test)]
@@ -29,9 +29,9 @@ pub use diagnostics::*;
 pub use events::*;
 pub use fault::*;
 pub use protocol_package::*;
+pub use protocol_rule::*;
 pub use rule::*;
 pub use session::*;
 pub use socket_capture::*;
 pub use socket_capture_diagnostics::*;
-pub use socket_rule::*;
 pub use workspace::*;

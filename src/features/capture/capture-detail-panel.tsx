@@ -17,9 +17,9 @@ import type { QueryAwareRequest } from "@/lib/message-content";
 import { toneColor } from "@/lib/format";
 import { errorMessage } from "@/lib/ipc/client";
 import {
-  HttpBodyViewer,
   HttpRequestTargetView,
 } from "@/features/shared/http-inspection";
+import { HttpProtocolBodyViewer } from "@/features/shared/http-protocol-body";
 import { captureDetailTabLabels } from "./capture-view";
 
 interface DetailQuery {
@@ -262,7 +262,7 @@ export function CaptureDetailPanel({
               </div>
               <div>
                 <h2 className="mb-2 font-semibold">请求 Body</h2>
-                <HttpBodyViewer
+                <HttpProtocolBodyViewer
                   label="请求 Body"
                   message={detail.data?.request}
                   emptyText="无请求正文"
@@ -301,7 +301,7 @@ export function CaptureDetailPanel({
               </div>
               <div>
                 <h2 className="mb-2 font-semibold">响应 Body</h2>
-                <HttpBodyViewer
+                <HttpProtocolBodyViewer
                   label="响应 Body"
                   message={detail.data.response}
                   emptyText="无响应正文"

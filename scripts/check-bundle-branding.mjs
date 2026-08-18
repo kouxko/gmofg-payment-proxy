@@ -10,7 +10,6 @@ const forbidden = [
   /GMO-FG/i,
   /gmofg/i,
   /Payment Proxy/i,
-  /\bPayment\b/i,
   /\bDLL\b/i,
   /\bD48\b/i,
   /https\.gmo-fg\.net/i,

@@ -180,7 +180,7 @@ export function WorkspacesView() {
                   <p>将替换全部 Workspace、当前选择、全局设置和协议包注册表。</p>
                   <p>{backupPreview?.workspace_count} 个 Workspace · {backupPreview?.protocol_package_count} 个协议包版本（启用 {backupPreview?.enabled_protocol_package_count}）· {backupPreview?.portable_material_count} 份证书材料</p>
                 </Modal.Body>
-                <Modal.Footer><Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-discard", discardApplicationImport)}>取消</Button><Button variant="danger" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-commit", commitApplicationImport)}>确认替换</Button></Modal.Footer>
+                <Modal.Footer><Button slot="close" variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-discard", discardApplicationImport)}>取消</Button><Button variant="danger" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-commit", commitApplicationImport)}>确认替换</Button></Modal.Footer>
               </Modal.Dialog></Modal.Container></Modal.Backdrop>
             </Modal>
           </div>

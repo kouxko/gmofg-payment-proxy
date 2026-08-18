@@ -5,6 +5,7 @@
 
 mod app_state;
 mod commands;
+mod mcp;
 mod native_dialog;
 
 use std::{error::Error, path::PathBuf, sync::Arc};
@@ -14,7 +15,11 @@ use intercept_proxy_product_api::InterceptProxyProfile;
 use specta_typescript::Typescript;
 use tauri::{Manager, path::BaseDirectory};
 
-use crate::{app_state::AppState, native_dialog::TauriNativeFileDialog};
+use crate::{
+    app_state::AppState,
+    mcp::{ApplicationBackend, MCP_ENDPOINT, ReadOnlyMcpServer},
+    native_dialog::TauriNativeFileDialog,
+};
 
 const BUILTIN_ISO8583_ARCHIVE: &[u8] = include_bytes!(concat!(
     env!("OUT_DIR"),
@@ -97,7 +102,18 @@ fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> 
     }
     host_builder = host_builder.with_builtin_protocol_package(Arc::from(BUILTIN_ISO8583_ARCHIVE));
     let host = tauri::async_runtime::block_on(host_builder.build())?;
-    Ok(AppState::new(host))
+    let backend = Arc::new(ApplicationBackend::new(host.application()));
+    let mcp = match tauri::async_runtime::block_on(ReadOnlyMcpServer::start(backend)) {
+        Ok(mcp) => {
+            tracing::info!(endpoint = MCP_ENDPOINT, address = %mcp.local_addr(), "read-only MCP server started");
+            Some(mcp)
+        }
+        Err(error) => {
+            tracing::warn!(endpoint = MCP_ENDPOINT, %error, "read-only MCP unavailable; proxy startup continues");
+            None
+        }
+    };
+    Ok(AppState::production(host, mcp))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -135,9 +151,16 @@ pub fn run() {
             }
             if plan.start_shutdown {
                 let host = state.host();
+                let mcp = state.mcp();
                 let app_handle = app_handle.clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Err(error) = host.shutdown().await {
+                    let host_result = if let Some(mcp) = mcp {
+                        let (host_result, ()) = tokio::join!(host.shutdown(), mcp.shutdown());
+                        host_result
+                    } else {
+                        host.shutdown().await
+                    };
+                    if let Err(error) = host_result {
                         tracing::error!(
                             code = %error.view_model.code,
                             message = %error.view_model.message,

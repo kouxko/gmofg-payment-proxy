@@ -36,6 +36,7 @@ rcgen = { version = "=0.14.8", default-features = false, features = ["crypto", "
 ring = "0.17.14"
 # `internals` 仅用于精确遍历固定版本 AST 中的 import/禁止调用；不暴露到 crate 公共 API。
 rhai = { version = "=1.25.1", default-features = false, features = ["std", "sync", "internals", "only_i64", "no_float", "no_time", "no_closure", "no_custom_syntax"] }
+rmcp = { version = "=3.1.3", default-features = false, features = ["server", "transport-streamable-http-server"] }
 rustls = { version = "=0.23.42", default-features = false, features = ["ring", "tls12", "logging"] }
 rustls-native-certs = "=0.8.4"
 rustls-pemfile = "=2.2.0"
@@ -57,6 +58,7 @@ tokio = { version = "1.50", features = ["fs", "io-util", "macros", "net", "rt-mu
 tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring", "tls12", "logging"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
 toml = { version = "=1.1.3", default-features = false, features = ["parse", "serde"] }
+tower-service = "0.3.3"
 tracing = "0.1.44"
 uuid = { version = "1.22", features = ["serde", "v4"] }
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Memory"] }
@@ -100,6 +102,13 @@ tauri-build = { version = "2.6.3", features = [] }
 zip.workspace = true
 
 [dependencies]
+async-trait.workspace = true
+base64.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
 intercept-proxy-application = { path = "crates/application" }
 intercept-proxy-domain = { path = "crates/domain" }
 intercept-proxy-host = { path = "crates/host" }
@@ -107,7 +116,9 @@ intercept-proxy-infrastructure = { path = "crates/infrastructure" }
 intercept-proxy-product-api = { path = "crates/product-api" }
 intercept-proxy-runtime = { path = "crates/proxy" }
 log = "0.4"
+rmcp.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 specta.workspace = true
 specta-typescript.workspace = true
 tauri.workspace = true
@@ -115,10 +126,11 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2.7.2"
 tauri-specta.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
+tower-service.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
 tempfile.workspace = true
 tauri = { workspace = true, features = ["test"] }
 zip.workspace = true

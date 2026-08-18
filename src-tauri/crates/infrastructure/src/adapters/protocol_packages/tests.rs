@@ -4,9 +4,13 @@ use std::{
 };
 
 use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion};
+use intercept_proxy_protocol_scripting::ProtocolPackageKind;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::*;
+
+#[path = "tests/concurrent_imports.rs"]
+mod concurrent_imports;
 
 mod application_ports;
 mod cache;
@@ -19,22 +23,23 @@ id = "example-protocol"
 name = "Example Protocol"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
 encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 "#;
 
 const SCHEMA: &str = r#"
@@ -54,6 +59,8 @@ fn decode(origin, context) { document::create() }
 fn encode(origin, document, context) { origin }
 ";
 
+const DISPLAY: &str = r#"fn display(document, context) { "<p>ok</p>" }"#;
+
 #[test]
 fn install_list_enable_compile_and_delete_use_no_source_summary() {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
@@ -66,6 +73,7 @@ fn install_list_enable_compile_and_delete_use_no_source_summary() {
     };
     assert_eq!(installed.package, package("1.0.0"));
     assert_eq!(installed.name, "Example Protocol");
+    assert_eq!(installed.kind, ProtocolPackageKind::Socket);
     assert!(!installed.enabled);
     assert_eq!(installed.validation, ProtocolPackageValidationStatus::Valid);
     assert_eq!(repository.list().unwrap(), vec![installed.clone()]);
@@ -306,6 +314,67 @@ fn stored_manifest_identity_mismatch_is_invalidated_before_cache_insert() {
 }
 
 #[test]
+fn stored_manifest_kind_mismatch_is_invalidated_before_cache_insert() {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let installer = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::clone(&store));
+    installer
+        .install_zip(&package_zip(MANIFEST, SCRIPT))
+        .unwrap();
+    let package = package("1.0.0");
+    store.corrupt_protocol_package_kind_for_test(&package, "http");
+
+    let restarted = ProtocolPackageRepositoryAdapter::with_default_limits(store);
+    let error = restarted.compiled(&package).unwrap_err();
+    assert_eq!(error.detail_code(), Some("STORED_IDENTITY_MISMATCH"));
+    assert!(matches!(
+        restarted.summary(&package).unwrap().unwrap().validation,
+        ProtocolPackageValidationStatus::Invalid { ref code }
+            if code == "STORED_IDENTITY_MISMATCH"
+    ));
+}
+
+#[test]
+fn runtime_snapshot_rejects_a_tampered_persisted_kind() {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let installer = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::clone(&store));
+    installer
+        .install_zip(&package_zip(MANIFEST, SCRIPT))
+        .unwrap();
+    let package = package("1.0.0");
+    installer.set_enabled(&package, true).unwrap();
+    store.corrupt_protocol_package_kind_for_test(&package, "http");
+
+    let restarted = ProtocolPackageRepositoryAdapter::with_default_limits(store);
+    let error = restarted.freeze_for_listener_start(&package).unwrap_err();
+    assert_eq!(error.view_model.code, "STORED_IDENTITY_MISMATCH");
+}
+
+#[test]
+fn one_package_id_cannot_mix_http_and_socket_versions() {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let repository = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::clone(&store));
+    repository
+        .install_zip(&package_zip(MANIFEST, SCRIPT))
+        .unwrap();
+    let http_v2 = MANIFEST
+        .replace("version = \"1.0.0\"", "version = \"2.0.0\"")
+        .replace("frame = \"frame\"\n", "");
+
+    let error = repository
+        .install_zip(&package_zip(&http_v2, SCRIPT))
+        .unwrap_err();
+    assert_eq!(
+        error.code(),
+        ProtocolPackageStorageErrorCode::IdentityConflict
+    );
+    assert_eq!(store.protocol_package_row_counts_for_test(), (1, 4));
+    assert_eq!(
+        repository.list().unwrap()[0].kind,
+        ProtocolPackageKind::Socket
+    );
+}
+
+#[test]
 fn missing_and_persistence_errors_keep_stable_coarse_and_detail_codes() {
     let repository = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::new(
         SqliteStore::in_memory().unwrap(),
@@ -375,58 +444,7 @@ fn concurrent_identical_import_has_one_install_one_reuse_and_no_half_state() {
         1
     );
     let store = SqliteStore::open(&path).unwrap();
-    assert_eq!(store.protocol_package_row_counts_for_test(), (1, 3));
-}
-
-#[test]
-fn concurrent_different_content_never_overwrites_the_winning_identity() {
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("state.sqlite");
-    SqliteStore::open(&path).unwrap();
-    let archives = [
-        package_zip(MANIFEST, SCRIPT),
-        package_zip(MANIFEST, &SCRIPT.replace("origin }", "blob() }")),
-    ];
-    let barrier = Arc::new(Barrier::new(2));
-    let stores = [
-        Arc::new(SqliteStore::open(&path).unwrap()),
-        Arc::new(SqliteStore::open(&path).unwrap()),
-    ];
-    let threads = archives
-        .into_iter()
-        .zip(stores)
-        .map(|(zip, store)| {
-            let barrier = Arc::clone(&barrier);
-            std::thread::spawn(move || {
-                let repository = ProtocolPackageRepositoryAdapter::with_default_limits(store);
-                barrier.wait();
-                repository.install_zip(&zip)
-            })
-        })
-        .collect::<Vec<_>>();
-    let results = threads
-        .into_iter()
-        .map(|thread| thread.join().unwrap())
-        .collect::<Vec<_>>();
-    assert_eq!(results.iter().filter(|result| result.is_ok()).count(), 1);
-    assert_eq!(
-        results
-            .iter()
-            .filter(|result| matches!(
-                result,
-                Err(error) if error.code() == ProtocolPackageStorageErrorCode::IdentityConflict
-            ))
-            .count(),
-        1
-    );
-    let reopened = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::new(
-        SqliteStore::open(&path).unwrap(),
-    ));
-    assert_eq!(reopened.list().unwrap().len(), 1);
-    assert_eq!(
-        reopened.recover_cache().unwrap().loaded,
-        vec![package("1.0.0")]
-    );
+    assert_eq!(store.protocol_package_row_counts_for_test(), (1, 4));
 }
 
 #[test]
@@ -458,6 +476,7 @@ fn package_zip(manifest: &str, script: &str) -> Vec<u8> {
         ("manifest.toml", manifest.as_bytes()),
         ("document.toml", SCHEMA.as_bytes()),
         ("protocol.rhai", script.as_bytes()),
+        ("display.rhai", DISPLAY.as_bytes()),
     ] {
         writer
             .start_file(path, SimpleFileOptions::default())

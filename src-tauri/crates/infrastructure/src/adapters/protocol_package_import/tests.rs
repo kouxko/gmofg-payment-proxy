@@ -22,23 +22,23 @@ id = "example-protocol"
 name = "Example Protocol"
 version = "1.0.0"
 
-[document]
+[document.upstream]
 schema = "document.toml"
-display = { script = "protocol.rhai", function = "display" }
+display = "display"
 
-[hooks.upstream.receive]
-script = "protocol.rhai"
+[document.downstream]
+schema = "document.toml"
+display = "display"
+
+[hooks.upstream]
 frame = "frame"
 decode = "decode"
-
-[hooks.upstream.send]
-script = "protocol.rhai"
 encode = "encode"
 
-[hooks.downstream.receive]
-script = "protocol.rhai"
+[hooks.downstream]
 frame = "frame"
 decode = "decode"
+encode = "encode"
 "#;
 
 const SCHEMA: &str = r#"
@@ -62,10 +62,13 @@ label = "Approved"
 type = "bool"
 "#;
 
-const SCRIPT: &str = r#"
+const SCRIPT: &str = r"
 fn frame(reader, context) { framing::complete(1) }
 fn decode(origin, context) { document::create() }
 fn encode(origin, document, context) { origin }
+";
+
+const DISPLAY_SCRIPT: &str = r#"
 fn display(document, context) { "<p>ok</p>" }
 "#;
 
@@ -189,11 +192,11 @@ async fn valid_zip_returns_safe_capabilities_schema_and_idempotent_outcome() {
     );
     assert_eq!(installed.version.package, reused.version.package);
     assert!(installed.capabilities.upstream.encode);
-    assert!(!installed.capabilities.downstream.encode);
+    assert!(installed.capabilities.downstream.encode);
     assert!(installed.capabilities.display);
     assert_eq!(
         installed
-            .schema
+            .upstream_schema
             .fields
             .iter()
             .map(|field| field.name.as_str())
@@ -458,6 +461,7 @@ fn package_zip_parts(schema: &str, script: &str) -> Vec<u8> {
         ("manifest.toml", MANIFEST.as_bytes()),
         ("document.toml", schema.as_bytes()),
         ("protocol.rhai", script.as_bytes()),
+        ("display.rhai", DISPLAY_SCRIPT.as_bytes()),
     ] {
         archive
             .start_file(path, SimpleFileOptions::default())

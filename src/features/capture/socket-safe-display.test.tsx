@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { SocketSafeDisplay } from "./socket-safe-display";
 
 async function renderedSource(): Promise<string> {
-  const frame = await screen.findByTitle("Socket 协议安全展示");
+  const frame = await screen.findByTitle("协议包安全展示");
   await waitFor(() => expect(frame).toHaveAttribute("srcdoc"));
   return frame.getAttribute("srcdoc") ?? "";
 }
@@ -63,7 +63,7 @@ describe("SocketSafeDisplay", () => {
   it("uses a no-capability iframe with an inner deny-by-default CSP", async () => {
     render(<SocketSafeDisplay html="<p>safe</p>" />);
 
-    const frame = await screen.findByTitle("Socket 协议安全展示");
+    const frame = await screen.findByTitle("协议包安全展示");
     const source = await renderedSource();
     expect(frame).toHaveAttribute("sandbox", "");
     expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
@@ -83,7 +83,15 @@ describe("SocketSafeDisplay", () => {
     expect(
       await screen.findByText("协议视图超过 128 KiB，已禁止渲染"),
     ).toBeVisible();
-    expect(screen.queryByTitle("Socket 协议安全展示")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("协议包安全展示")).not.toBeInTheDocument();
+    expect(screen.getByText("完整字节仍可在 Hex 页签逐页查看。")).toBeVisible();
+  });
+
+  it("rejects deeply nested HTML without overflowing the sanitizer stack", async () => {
+    render(<SocketSafeDisplay html={`${"<div>".repeat(3_000)}safe${"</div>".repeat(3_000)}`} />);
+
+    expect(await screen.findByText("协议视图结构过于复杂，已禁止渲染")).toBeVisible();
+    expect(screen.queryByTitle("协议包安全展示")).not.toBeInTheDocument();
     expect(screen.getByText("完整字节仍可在 Hex 页签逐页查看。")).toBeVisible();
   });
 });

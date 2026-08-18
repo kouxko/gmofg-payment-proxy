@@ -11,7 +11,7 @@ use intercept_proxy_application::{
     SocketCapturePageViewModel, SocketCapturePayload, SocketCaptureQuery, SocketCaptureRecord,
     SocketCaptureRowViewModel, SocketCaptureSort, SortDirection,
 };
-use intercept_proxy_domain::SocketDirection;
+use intercept_proxy_domain::ProtocolDirection;
 
 use crate::{InfrastructureError, SqliteStore};
 
@@ -231,17 +231,25 @@ fn row_from_record(record: &SocketCaptureRecord) -> SocketCaptureRowViewModel {
             frame.schema.clone(),
             frame.origin.len(),
             frame.written.len(),
-            frame.matched_rule_ids.clone(),
+            frame
+                .stages
+                .iter()
+                .flat_map(|stage| stage.matched_rule_ids.iter().copied())
+                .collect(),
         ),
-        SocketCapturePayload::LocalExchange(exchange) => (
-            SocketCaptureKind::LocalExchange,
-            None,
-            exchange.package.clone(),
-            exchange.schema.clone(),
-            exchange.request_origin.len(),
-            exchange.written_response.len(),
-            exchange.matched_downstream_rule_ids.clone(),
-        ),
+        SocketCapturePayload::LocalExchange(exchange) => {
+            let mut matched_rule_ids = exchange.matched_request_rule_ids.clone();
+            matched_rule_ids.extend_from_slice(&exchange.matched_response_rule_ids);
+            (
+                SocketCaptureKind::LocalExchange,
+                None,
+                exchange.package.clone(),
+                exchange.response_schema.clone(),
+                exchange.request_origin.len(),
+                exchange.written_response.len(),
+                matched_rule_ids,
+            )
+        }
     };
     SocketCaptureRowViewModel {
         capture_id: record.capture_id,
@@ -266,7 +274,7 @@ fn payload_index(
     payload: &SocketCapturePayload,
 ) -> (
     StoredSocketCaptureKind,
-    Option<SocketDirection>,
+    Option<ProtocolDirection>,
     &intercept_proxy_domain::ProtocolPackageRef,
 ) {
     match payload {
@@ -290,10 +298,10 @@ const fn storage_kind(kind: SocketCaptureKind) -> StoredSocketCaptureKind {
     }
 }
 
-const fn direction_text(direction: SocketDirection) -> &'static str {
+const fn direction_text(direction: ProtocolDirection) -> &'static str {
     match direction {
-        SocketDirection::Upstream => "upstream",
-        SocketDirection::Downstream => "downstream",
+        ProtocolDirection::Upstream => "upstream",
+        ProtocolDirection::Downstream => "downstream",
     }
 }
 

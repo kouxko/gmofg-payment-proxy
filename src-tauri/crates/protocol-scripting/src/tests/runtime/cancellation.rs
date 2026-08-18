@@ -12,9 +12,7 @@ fn decode(origin, context) {
     let package = CompiledProtocolPackageTestBuilder::new()
         .with_script(script)
         .build();
-    let plan =
-        DirectionExecutionPlan::new(&package, ProtocolDirection::Upstream, options(true, false))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let cancellation = ProtocolExecutionCancellation::new();
     let limits = ProtocolRuntimeLimits::new(10_000_000, 32, 1024, 1024, 30_000).unwrap();
     let mut executor = ProtocolDirectionExecutor::new_with_cancellation(
@@ -73,9 +71,7 @@ fn encode(origin, document, context) {
         .with_script(script)
         .with_upstream_encode()
         .build();
-    let plan =
-        DirectionExecutionPlan::new(&package, ProtocolDirection::Upstream, options(true, true))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let cancellation = ProtocolExecutionCancellation::new();
     let limits = ProtocolRuntimeLimits::new(10_000_000, 32, 1024, 1024, 30_000).unwrap();
     let mut executor = ProtocolDirectionExecutor::new_with_cancellation(
@@ -112,9 +108,7 @@ fn encode(origin, document, context) {
 #[test]
 fn pre_cancelled_handle_fails_closed_and_display_uses_same_direction_handle() {
     let package = package_with_all_entries();
-    let plan =
-        DirectionExecutionPlan::new(&package, ProtocolDirection::Upstream, options(true, true))
-            .unwrap();
+    let plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
     let cancellation = ProtocolExecutionCancellation::new();
     let mut executor = ProtocolDirectionExecutor::new_with_cancellation(
         &package,
@@ -147,4 +141,13 @@ fn pre_cancelled_handle_fails_closed_and_display_uses_same_direction_handle() {
         executor.render_display(&output),
         ProtocolDisplayResult::UntrustedHtml("upstream-html".to_owned())
     );
+}
+
+#[test]
+fn resetting_an_active_generation_advances_without_marking_it_cancelled() {
+    let cancellation = ProtocolExecutionCancellation::new();
+
+    cancellation.reset();
+
+    assert!(!cancellation.is_cancelled());
 }

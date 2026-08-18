@@ -35,6 +35,8 @@ include!("tests/fixed_server.rs");
 include!("tests/socket_runtime.rs");
 include!("tests/validation.rs");
 
+#[path = "tests/http_protocol_pipeline.rs"]
+mod http_protocol_pipeline_tests;
 #[path = "tests/local_responder_runtime.rs"]
 mod local_responder_runtime_tests;
 #[path = "tests/scripted_relay_runtime.rs"]

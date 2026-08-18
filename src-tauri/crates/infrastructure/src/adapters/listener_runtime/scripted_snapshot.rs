@@ -4,20 +4,21 @@ use std::{collections::BTreeSet, sync::Arc, time::Duration};
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    CertificateReference, CertificateReferenceId, DownstreamClientAuthentication, ProxyListener,
-    ProxyWorkspace, SocketDirection, SocketDocumentRuleDefinition, SocketDocumentRuleProgram,
+    CertificateReference, CertificateReferenceId, DownstreamClientAuthentication,
+    ProtocolDirection as RuleDirection, ProtocolDocumentRuleDefinition,
+    ProtocolDocumentRuleProgram, ProtocolRuleStage, ProxyListener, ProxyWorkspace,
     SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketPayloadProcessing,
-    SocketRelaySecurity as DomainSecurity, SocketRuleStage, SocketTopology,
-    SocketUpstreamTlsSettings, sort_socket_document_rules,
+    SocketRelaySecurity as DomainSecurity, SocketTopology, SocketUpstreamTlsSettings,
+    sort_protocol_document_rules,
 };
 use intercept_proxy_protocol_scripting::{
-    DirectionExecutionPlan, ProtocolDirection, ProtocolRuntimeLimits,
+    DirectionExecutionPlan, ProtocolDirection, ProtocolPackageKind, ProtocolRuntimeLimits,
 };
 use intercept_proxy_runtime::{SocketDownstreamTlsConfig, SocketRelaySecurity};
 
 use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackageSnapshot;
 
-use super::{ListenerRuntimeAdapter, SocketDocumentRuleConnectionFactory};
+use super::{ListenerRuntimeAdapter, ProtocolDocumentRuleConnectionFactory};
 
 /// 一次 Listener start 冻结的脚本、拓扑、规则、证书引用与资源限制。
 #[derive(Clone)]
@@ -26,7 +27,7 @@ pub(super) struct ScriptedSocketRuntimeSnapshot {
     topology: SocketTopology,
     upstream: DirectionExecutionPlan,
     downstream: DirectionExecutionPlan,
-    document_rules: SocketDocumentRuleConnectionFactory,
+    document_rules: ProtocolDocumentRuleConnectionFactory,
     certificate_references: Arc<[CertificateReference]>,
     security: ScriptedSocketSecuritySnapshot,
     allowed_client_cidrs: Arc<[String]>,
@@ -61,27 +62,23 @@ impl ScriptedSocketRuntimeSnapshot {
         let package = adapter
             .protocol_packages
             .freeze_for_listener_start(&scripted.package)?;
-        let upstream = DirectionExecutionPlan::new(
-            package.compiled(),
-            ProtocolDirection::Upstream,
-            scripted.upstream,
-        )
-        .map_err(|error| runtime_plan_error(listener, &error))?;
-        let downstream = DirectionExecutionPlan::new(
-            package.compiled(),
-            ProtocolDirection::Downstream,
-            scripted.downstream,
-        )
-        .map_err(|error| runtime_plan_error(listener, &error))?;
+        if package.compiled().kind() != ProtocolPackageKind::Socket {
+            return Err(AppError::new(
+                "PROTOCOL_PACKAGE_KIND_MISMATCH",
+                "Socket 报文处理必须绑定 Socket 协议包。",
+            )
+            .entity(listener.id.to_string()));
+        }
+        let upstream = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
+        let downstream = DirectionExecutionPlan::new(ProtocolDirection::Downstream);
 
         let document_rules = compile_document_rules(
             workspace,
             listener,
             &scripted.package,
-            package.compiled().schema(),
+            package.compiled().schema(ProtocolDirection::Upstream),
+            package.compiled().schema(ProtocolDirection::Downstream),
             &socket.topology,
-            upstream,
-            downstream,
         )?;
         Ok(Some(Arc::new(Self {
             package,
@@ -116,15 +113,16 @@ impl ScriptedSocketRuntimeSnapshot {
     }
 
     #[cfg(test)]
-    pub(super) fn rules(&self) -> Vec<SocketDocumentRuleDefinition> {
-        let upstream = self.document_rules.program(SocketDirection::Upstream);
-        let downstream = self.document_rules.program(SocketDirection::Downstream);
-        let mut rules = upstream
-            .rules()
-            .iter()
-            .chain(downstream.rules())
-            .cloned()
-            .collect::<Vec<_>>();
+    pub(super) fn rules(&self) -> Vec<ProtocolDocumentRuleDefinition> {
+        let mut rules = [
+            ProtocolRuleStage::AppToProxy,
+            ProtocolRuleStage::ProxyToUpstream,
+            ProtocolRuleStage::UpstreamToProxy,
+            ProtocolRuleStage::ProxyToApp,
+        ]
+        .into_iter()
+        .flat_map(|stage| self.document_rules.program(stage).rules().to_vec())
+        .collect::<Vec<_>>();
         rules.sort_by(|left, right| {
             left.priority()
                 .cmp(&right.priority())
@@ -137,13 +135,13 @@ impl ScriptedSocketRuntimeSnapshot {
     #[cfg(test)]
     pub(super) fn rule_program(
         &self,
-        direction: SocketDirection,
-    ) -> Arc<SocketDocumentRuleProgram> {
-        self.document_rules.program(direction)
+        stage: ProtocolRuleStage,
+    ) -> Arc<ProtocolDocumentRuleProgram> {
+        self.document_rules.program(stage)
     }
 
     /// 返回启动时已编译并冻结的规则连接工厂。
-    pub(super) const fn rule_connections(&self) -> &SocketDocumentRuleConnectionFactory {
+    pub(super) const fn rule_connections(&self) -> &ProtocolDocumentRuleConnectionFactory {
         &self.document_rules
     }
 
@@ -162,12 +160,13 @@ impl ScriptedSocketRuntimeSnapshot {
             workspace,
             listener,
             &scripted.package,
-            self.package.compiled().schema(),
+            self.package.compiled().schema(ProtocolDirection::Upstream),
+            self.package
+                .compiled()
+                .schema(ProtocolDirection::Downstream),
             &socket.topology,
-            self.upstream,
-            self.downstream,
         )?;
-        self.document_rules.replace(replacement);
+        self.document_rules.replace(&replacement);
         Ok(())
     }
 
@@ -300,15 +299,15 @@ fn compile_rule_program(
     listener: &ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,
     schema: &intercept_proxy_domain::DocumentSchema,
-    stage: SocketRuleStage,
-    rules: &[SocketDocumentRuleDefinition],
-) -> AppResult<SocketDocumentRuleProgram> {
+    stage: ProtocolRuleStage,
+    rules: &[ProtocolDocumentRuleDefinition],
+) -> AppResult<ProtocolDocumentRuleProgram> {
     let selected = rules
         .iter()
         .filter(|rule| rule.stage() == stage)
         .cloned()
         .collect::<Vec<_>>();
-    SocketDocumentRuleProgram::new_for_stage(
+    ProtocolDocumentRuleProgram::new_for_stage(
         listener.id,
         package.clone(),
         schema.clone(),
@@ -322,74 +321,66 @@ fn compile_document_rules(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,
-    schema: &intercept_proxy_domain::DocumentSchema,
+    upstream_schema: &intercept_proxy_domain::DocumentSchema,
+    downstream_schema: &intercept_proxy_domain::DocumentSchema,
     topology: &SocketTopology,
-    upstream: DirectionExecutionPlan,
-    downstream: DirectionExecutionPlan,
-) -> AppResult<SocketDocumentRuleConnectionFactory> {
+) -> AppResult<ProtocolDocumentRuleConnectionFactory> {
     let mut rules = workspace
-        .socket_rules
+        .protocol_rules
         .iter()
         .filter(|rule| rule.listener_id() == listener.id)
         .cloned()
         .collect::<Vec<_>>();
     for rule in &rules {
+        let schema = match rule.direction() {
+            RuleDirection::Upstream => upstream_schema,
+            RuleDirection::Downstream => downstream_schema,
+        };
         if rule.package() != package || rule.schema_version() != schema.version() {
             return Err(AppError::new(
-                "SOCKET_RULE_RUNTIME_BINDING_MISMATCH",
-                "Socket 规则与当前协议包或 Schema 不一致。",
+                "PROTOCOL_RULE_RUNTIME_BINDING_MISMATCH",
+                "协议报文规则与当前协议包或 Schema 不一致。",
             )
             .entity(rule.rule_id().to_string()));
         }
         rule.validate_against_schema(schema)?;
-        validate_rule_direction(rule, topology, upstream, downstream)?;
+        validate_rule_direction(rule, topology)?;
     }
-    sort_socket_document_rules(&mut rules);
-    let compile =
-        |stage| compile_rule_program(listener, package, schema, stage, &rules).map(Arc::new);
-    SocketDocumentRuleConnectionFactory::new(
-        compile(SocketRuleStage::AppToProxy)?,
-        compile(SocketRuleStage::ProxyToUpstream)?,
-        compile(SocketRuleStage::UpstreamToProxy)?,
-        compile(SocketRuleStage::ProxyToApp)?,
+    sort_protocol_document_rules(&mut rules);
+    let compile = |stage: ProtocolRuleStage| {
+        let schema = match stage.direction() {
+            RuleDirection::Upstream => upstream_schema,
+            RuleDirection::Downstream => downstream_schema,
+        };
+        compile_rule_program(listener, package, schema, stage, &rules).map(Arc::new)
+    };
+    ProtocolDocumentRuleConnectionFactory::new(
+        compile(ProtocolRuleStage::AppToProxy)?,
+        compile(ProtocolRuleStage::ProxyToUpstream)?,
+        compile(ProtocolRuleStage::UpstreamToProxy)?,
+        compile(ProtocolRuleStage::ProxyToApp)?,
     )
     .map_err(AppError::from)
 }
 
 fn validate_rule_direction(
-    rule: &SocketDocumentRuleDefinition,
+    rule: &ProtocolDocumentRuleDefinition,
     topology: &SocketTopology,
-    upstream: DirectionExecutionPlan,
-    downstream: DirectionExecutionPlan,
 ) -> AppResult<()> {
-    let plan = match rule.direction() {
-        SocketDirection::Upstream => upstream,
-        SocketDirection::Downstream => downstream,
-    };
     match topology {
-        SocketTopology::Relay(_) if !plan.decode_enabled() => Err(AppError::new(
-            "SOCKET_RULE_DECODE_REQUIRED",
-            "Relay 规则要求对应方向在运行快照中开启 Decode。",
-        )
-        .entity(rule.rule_id().to_string())),
         SocketTopology::LocalResponder(_)
             if !matches!(
                 rule.stage(),
-                SocketRuleStage::AppToProxy | SocketRuleStage::ProxyToApp
+                ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToApp
             ) =>
         {
             Err(AppError::new(
-                "SOCKET_RULE_DIRECTION_INVALID",
+                "PROTOCOL_RULE_DIRECTION_INVALID",
                 "本机应答运行快照只接受“应用 → 代理”和“代理 → 应用”规则。",
             )
             .entity(rule.rule_id().to_string()))
         }
-        _ if rule.modifies_document() && !plan.encode_enabled() => Err(AppError::new(
-            "SOCKET_RULE_ENCODE_REQUIRED",
-            "修改 Document 的规则要求运行快照开启 Encode。",
-        )
-        .entity(rule.rule_id().to_string())),
-        _ => Ok(()),
+        SocketTopology::Relay(_) | SocketTopology::LocalResponder(_) => Ok(()),
     }
 }
 
@@ -450,12 +441,4 @@ fn select_upstream_tls(
 ) {
     selected.extend(settings.server_trust);
     selected.extend(settings.client_identity);
-}
-
-fn runtime_plan_error(
-    listener: &ProxyListener,
-    error: &intercept_proxy_protocol_scripting::ProtocolRuntimeError,
-) -> AppError {
-    AppError::new(error.code(), "协议包入口能力不能满足 Listener 运行计划。")
-        .entity(listener.id.to_string())
 }

@@ -6,9 +6,7 @@ use std::{
     },
 };
 
-use intercept_proxy_domain::{
-    DirectionProcessingOptions, Document, DocumentSchema, ProtocolPackageRef,
-};
+use intercept_proxy_domain::{Document, DocumentSchema, ProtocolPackageRef};
 
 use crate::{
     CompiledProtocolPackage, LocalResponseOwnershipViolation, ProtocolDirection,
@@ -18,10 +16,10 @@ use crate::{
 
 use super::{DirectionExecutionPlan, ProtocolDisplayResult, ProtocolFrameOutput};
 
-/// `LocalResponder` 已完成 request Decode 的只读桥接对象。
+/// `LocalResponder` 已完成 request Decode 与上行宿主变换的只读桥接对象。
 ///
-/// Decode 关闭时 [`Self::document`] 为 `None`。字段全部私有且只提供不可变借用，所以下游规则
-/// 无法修改 Request Document；协调器会在 response 阶段显式 clone 或创建空 Document。
+/// 字段全部私有且只提供不可变借用，所以下游规则无法修改 Request Document；协调器会在
+/// response 阶段按下行 Schema 创建独立的空 Document。
 pub struct LocalRequestOutput {
     owner: Arc<()>,
     package: ProtocolPackageRef,
@@ -38,10 +36,10 @@ impl LocalRequestOutput {
         self.output.origin()
     }
 
-    /// Decode 开启时返回只读 Request Document；关闭时返回 `None`。
+    /// 返回完成上行宿主变换后的只读 Request Document。
     #[must_use]
-    pub const fn document(&self) -> Option<&Document> {
-        self.output.decoded_document()
+    pub const fn document(&self) -> &Document {
+        self.output.execution_document()
     }
 }
 
@@ -52,7 +50,7 @@ impl fmt::Debug for LocalRequestOutput {
             .field("package", &self.package)
             .field("connection_id", &self.connection_id)
             .field("origin_bytes", &self.origin().len())
-            .field("decoded", &self.document().is_some())
+            .field("document_schema", self.document().schema().id())
             .finish_non_exhaustive()
     }
 }
@@ -131,12 +129,12 @@ impl fmt::Debug for LocalResponseDisplayHandle {
 
 /// 单连接、单协议包的 `LocalResponder` request/response 协调器。
 ///
-/// 上游执行器固定禁止 Encode；下游执行器固定禁止 Decode。这样不存在的 Server 输入流不会被
-/// 伪造成 downstream Frame/Decode，且同一个 exchange 只有 Request Document clone 这一条受控桥。
+/// 上游负责解析请求，下游负责编码响应；同一个 exchange 只通过显式 Document 桥接。
 pub struct LocalResponderCoordinator {
     owner: Arc<()>,
     package: ProtocolPackageRef,
-    schema: Arc<DocumentSchema>,
+    upstream_schema: Arc<DocumentSchema>,
+    downstream_schema: Arc<DocumentSchema>,
     connection_id: String,
     listener_id: String,
     upstream: ProtocolDirectionExecutor,
@@ -149,16 +147,12 @@ impl LocalResponderCoordinator {
     /// 使用独立取消句柄构造单连接协调器。
     pub fn new(
         package: &CompiledProtocolPackage,
-        upstream_decode_enabled: bool,
-        downstream_encode_enabled: bool,
         connection_id: impl Into<String>,
         listener_id: impl Into<String>,
         limits: ProtocolRuntimeLimits,
     ) -> ProtocolRuntimeResult<Self> {
         Self::new_with_cancellation(
             package,
-            upstream_decode_enabled,
-            downstream_encode_enabled,
             connection_id,
             listener_id,
             limits,
@@ -169,8 +163,6 @@ impl LocalResponderCoordinator {
     /// 使用与 upstream Frame Inspector 共享的取消句柄构造单连接协调器。
     pub fn new_with_cancellation(
         package: &CompiledProtocolPackage,
-        upstream_decode_enabled: bool,
-        downstream_encode_enabled: bool,
         connection_id: impl Into<String>,
         listener_id: impl Into<String>,
         limits: ProtocolRuntimeLimits,
@@ -178,22 +170,8 @@ impl LocalResponderCoordinator {
     ) -> ProtocolRuntimeResult<Self> {
         let connection_id = connection_id.into();
         let listener_id = listener_id.into();
-        let upstream_plan = DirectionExecutionPlan::new(
-            package,
-            ProtocolDirection::Upstream,
-            DirectionProcessingOptions {
-                decode_enabled: upstream_decode_enabled,
-                encode_enabled: false,
-            },
-        )?;
-        let downstream_plan = DirectionExecutionPlan::new(
-            package,
-            ProtocolDirection::Downstream,
-            DirectionProcessingOptions {
-                decode_enabled: false,
-                encode_enabled: downstream_encode_enabled,
-            },
-        )?;
+        let upstream_plan = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
+        let downstream_plan = DirectionExecutionPlan::new(ProtocolDirection::Downstream);
         let upstream = ProtocolDirectionExecutor::new_with_cancellation(
             package,
             upstream_plan,
@@ -213,7 +191,8 @@ impl LocalResponderCoordinator {
         Ok(Self {
             owner: Arc::new(()),
             package: package.package().clone(),
-            schema: package.schema_arc(),
+            upstream_schema: package.schema_arc(ProtocolDirection::Upstream),
+            downstream_schema: package.schema_arc(ProtocolDirection::Downstream),
             connection_id,
             listener_id,
             upstream,
@@ -229,13 +208,28 @@ impl LocalResponderCoordinator {
         self.cancellation.clone()
     }
 
-    /// 对一个已由 upstream Frame Inspector 切出的完整 request 执行可选 Decode。
+    /// 对一个已由 upstream Frame Inspector 切出的完整 request 执行 Decode。
     pub fn decode_request(&mut self, origin: Vec<u8>) -> ProtocolRuntimeResult<LocalRequestOutput> {
-        let output = self.upstream.execute_frame(origin)?;
+        self.decode_request_with_document_transform(origin, Ok)
+    }
+
+    /// 对完整 request 执行 Decode，并在上行 Document 上原子执行一次宿主变换。
+    ///
+    /// 该边界专门承载 App -> Proxy 规则。成功后 [`LocalRequestOutput::document`] 保存变换后的
+    /// 上行 Document；下行响应仍由 [`Self::build_response`] 从下行 Schema 的空 Document 创建，
+    /// 不会隐式复制任何请求字段。
+    pub fn decode_request_with_document_transform(
+        &mut self,
+        origin: Vec<u8>,
+        transform: impl FnOnce(Document) -> ProtocolRuntimeResult<Document>,
+    ) -> ProtocolRuntimeResult<LocalRequestOutput> {
+        let output = self
+            .upstream
+            .decode_frame_with_document_transform(origin, transform)?;
         Ok(LocalRequestOutput {
             owner: Arc::clone(&self.owner),
             package: self.package.clone(),
-            schema: Arc::clone(&self.schema),
+            schema: Arc::clone(&self.upstream_schema),
             connection_id: self.connection_id.clone(),
             output,
             response_started: AtomicBool::new(false),
@@ -244,8 +238,8 @@ impl LocalResponderCoordinator {
 
     /// 从当前 request 构造 Response Document，执行一次 owned 规则变换并决定 Encode/Echo 输出。
     ///
-    /// Decode 开启时初值是 Request Document 的独立 clone；关闭时是同 Schema 空 Document。
-    /// `transform` 无论 Decode 是否开启都恰好调用一次，使空 Document 仍可执行无条件静态规则。
+    /// Response 总是从下行 Schema 的空 Document 开始，避免把上行字段误当作下行字段。
+    /// `transform` 恰好调用一次，规则动作可按顺序构造完整响应。
     pub fn build_response(
         &mut self,
         request: &LocalRequestOutput,
@@ -260,13 +254,10 @@ impl LocalResponderCoordinator {
         {
             return Err(self.ownership_error(LocalResponseOwnershipViolation::Output));
         }
-        let initial = request
-            .document()
-            .cloned()
-            .unwrap_or_else(|| Document::new(Arc::clone(&self.schema)));
+        let initial = Document::new(Arc::clone(&self.downstream_schema));
         let document = transform(initial)?;
         self.ensure_not_cancelled()?;
-        self.validate_schema(document.schema())?;
+        self.validate_downstream_schema(document.schema())?;
         let output = self
             .downstream
             .execute_predecoded_document(request.origin().to_vec(), document)?;
@@ -287,7 +278,7 @@ impl LocalResponderCoordinator {
         Ok(LocalResponseOutput {
             owner: Arc::clone(&self.owner),
             package: self.package.clone(),
-            schema: Arc::clone(&self.schema),
+            schema: Arc::clone(&self.downstream_schema),
             connection_id: self.connection_id.clone(),
             output: Arc::new(output),
             committed: AtomicBool::new(false),
@@ -316,7 +307,7 @@ impl LocalResponderCoordinator {
         })
     }
 
-    /// 对成功 Decode 的 request 执行公共 Display；失败只返回 Hex 回退。
+    /// 对成功 Decode 且完成请求规则处理的 request 执行公共 Display；失败只返回 Hex 回退。
     pub fn render_request_display(
         &mut self,
         request: &LocalRequestOutput,
@@ -337,52 +328,36 @@ impl LocalResponderCoordinator {
     }
 
     fn validate_request(&self, request: &LocalRequestOutput) -> ProtocolRuntimeResult<()> {
-        self.validate_identity(
-            &request.owner,
-            &request.package,
-            &request.schema,
-            &request.connection_id,
-        )?;
-        if let Some(document) = request.document() {
-            self.validate_schema(document.schema())?;
-        }
+        self.validate_identity(&request.owner, &request.package, &request.connection_id)?;
+        self.validate_upstream_schema(&request.schema)?;
+        self.validate_upstream_schema(request.document().schema())?;
         Ok(())
     }
 
     fn validate_response(&self, response: &LocalResponseOutput) -> ProtocolRuntimeResult<()> {
-        self.validate_identity(
-            &response.owner,
-            &response.package,
-            &response.schema,
-            &response.connection_id,
-        )?;
-        self.validate_schema(response.response_document().schema())
+        self.validate_identity(&response.owner, &response.package, &response.connection_id)?;
+        self.validate_downstream_schema(&response.schema)?;
+        self.validate_downstream_schema(response.response_document().schema())
     }
 
     fn validate_display_handle(
         &self,
         handle: &LocalResponseDisplayHandle,
     ) -> ProtocolRuntimeResult<()> {
-        self.validate_identity(
-            &handle.owner,
-            &handle.package,
-            &handle.schema,
-            &handle.connection_id,
-        )?;
-        self.validate_schema(handle.output.execution_document().schema())
+        self.validate_identity(&handle.owner, &handle.package, &handle.connection_id)?;
+        self.validate_downstream_schema(&handle.schema)?;
+        self.validate_downstream_schema(handle.output.execution_document().schema())
     }
 
     fn validate_identity(
         &self,
         owner: &Arc<()>,
         package: &ProtocolPackageRef,
-        schema: &DocumentSchema,
         connection_id: &str,
     ) -> ProtocolRuntimeResult<()> {
         if package != &self.package {
             return Err(self.ownership_error(LocalResponseOwnershipViolation::Package));
         }
-        self.validate_schema(schema)?;
         if connection_id != self.connection_id {
             return Err(self.ownership_error(LocalResponseOwnershipViolation::Connection));
         }
@@ -392,8 +367,16 @@ impl LocalResponderCoordinator {
         Ok(())
     }
 
-    fn validate_schema(&self, schema: &DocumentSchema) -> ProtocolRuntimeResult<()> {
-        if schema == self.schema.as_ref() {
+    fn validate_upstream_schema(&self, schema: &DocumentSchema) -> ProtocolRuntimeResult<()> {
+        if schema == self.upstream_schema.as_ref() {
+            Ok(())
+        } else {
+            Err(self.ownership_error(LocalResponseOwnershipViolation::Schema))
+        }
+    }
+
+    fn validate_downstream_schema(&self, schema: &DocumentSchema) -> ProtocolRuntimeResult<()> {
+        if schema == self.downstream_schema.as_ref() {
             Ok(())
         } else {
             Err(self.ownership_error(LocalResponseOwnershipViolation::Schema))
@@ -423,8 +406,8 @@ impl fmt::Debug for LocalResponderCoordinator {
         formatter
             .debug_struct("LocalResponderCoordinator")
             .field("package", &self.package)
-            .field("schema_id", &self.schema.id())
-            .field("schema_version", &self.schema.version())
+            .field("upstream_schema_id", &self.upstream_schema.id())
+            .field("downstream_schema_id", &self.downstream_schema.id())
             .field("connection_id", &self.connection_id)
             .field("listener_id", &self.listener_id)
             .field("limits", &self.limits)

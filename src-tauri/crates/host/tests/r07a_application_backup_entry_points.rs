@@ -1,45 +1,45 @@
 use std::path::{Path, PathBuf};
 
 #[test]
-fn application_backup_zip_has_no_tauri_command_in_r07a() {
-    let host = read_tree(&repository_root().join("src-tauri/src"), "rs");
+fn application_backup_zip_commands_are_registered() {
+    let command_module =
+        std::fs::read_to_string(repository_root().join("src-tauri/src/commands/mod.rs"))
+            .expect("read Tauri command module");
 
-    for forbidden in [
-        "application_archive_import",
-        "application_archive_export",
-        "application_backup_import",
+    for command in [
         "application_backup_export",
-        "read_application_archive_zip",
+        "application_backup_import_prepare",
+        "application_backup_import_commit",
+        "application_backup_import_discard",
     ] {
         assert!(
-            !host.contains(forbidden),
-            "R07a must not expose the application backup ZIP through Tauri: {forbidden}"
+            command_module.contains(command),
+            "application backup ZIP command is not registered: {command}"
         );
     }
 }
 
 #[test]
-fn application_backup_zip_has_no_frontend_entry_in_r07a() {
+fn application_backup_zip_has_one_frontend_import_and_export_flow() {
     let frontend = read_tree(&repository_root().join("src"), "tsx");
 
-    for forbidden in [
+    for required in [
         "导入应用数据",
         "导出应用数据",
-        "applicationArchiveImport",
-        "applicationArchiveExport",
-        "applicationBackupImport",
+        "applicationBackupImportPrepare",
+        "applicationBackupImportCommit",
+        "applicationBackupImportDiscard",
         "applicationBackupExport",
-        "intercept-proxy-backup-",
     ] {
         assert!(
-            !frontend.contains(forbidden),
-            "R07a must keep the application backup ZIP UI closed: {forbidden}"
+            frontend.contains(required),
+            "application backup ZIP UI flow is missing: {required}"
         );
     }
 }
 
 #[test]
-fn legacy_json_configuration_paths_remain_registered_in_r07a() {
+fn legacy_json_configuration_paths_are_not_registered() {
     let command_module =
         std::fs::read_to_string(repository_root().join("src-tauri/src/commands/mod.rs"))
             .expect("read Tauri command module");
@@ -54,8 +54,8 @@ fn legacy_json_configuration_paths_remain_registered_in_r07a() {
         "workspace_export",
     ] {
         assert!(
-            command_module.contains(legacy_command),
-            "R07a must not remove legacy JSON command {legacy_command}"
+            !command_module.contains(legacy_command),
+            "legacy JSON command must stay removed: {legacy_command}"
         );
     }
     for legacy_binding in [
@@ -65,8 +65,8 @@ fn legacy_json_configuration_paths_remain_registered_in_r07a() {
         "workspaceExport",
     ] {
         assert!(
-            generated_bindings.contains(legacy_binding),
-            "R07a must not remove legacy JSON binding {legacy_binding}"
+            !generated_bindings.contains(legacy_binding),
+            "legacy JSON binding must stay removed: {legacy_binding}"
         );
     }
 }

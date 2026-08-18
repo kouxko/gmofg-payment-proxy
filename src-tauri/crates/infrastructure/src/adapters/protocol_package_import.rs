@@ -185,8 +185,10 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
             package,
             name,
             host_api,
+            kind: description.kind,
             capabilities: description.capabilities,
-            schema: description.schema,
+            upstream_schema: description.upstream_schema,
+            downstream_schema: description.downstream_schema,
         }))
     }
 
@@ -213,8 +215,10 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
         Ok(ProtocolPackageImportViewModel {
             outcome: outcome_kind,
             version: application_summary(summary),
+            kind: description.kind,
             capabilities: description.capabilities,
-            schema: description.schema,
+            upstream_schema: description.upstream_schema,
+            downstream_schema: description.downstream_schema,
         })
     }
 

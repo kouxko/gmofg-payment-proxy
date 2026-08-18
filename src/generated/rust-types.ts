@@ -95,8 +95,10 @@ export const commands = {
 	package: ProtocolPackageRef,
 	name: string,
 	host_api: number,
+	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel,
+	downstream_schema: ProtocolPackageSchemaViewModel,
 } | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import")),
 	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
 	protocolPackageImportDiscard: (token: ProtocolPackageImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_discard", { token })),
@@ -164,18 +166,18 @@ export const commands = {
 	ruleToggle: (ruleId: string, expectedRevision: number, enabled: boolean) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_toggle", { ruleId, expectedRevision, enabled })),
 	ruleImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_import")),
 	ruleExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_export")),
-	socketRuleList: () => typedError<SocketDocumentRuleDefinition[], AppErrorViewModel>(__TAURI_INVOKE("socket_rule_list")),
-	socketRuleCapabilities: (listenerId: ListenerId, stage: SocketRuleStage) => typedError<SocketRuleCapabilityCatalog, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_capabilities", { listenerId, stage })),
+	protocolRuleList: () => typedError<ProtocolDocumentRuleDefinition[], AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_list")),
+	protocolRuleCapabilities: (listenerId: ListenerId, stage: ProtocolRuleStage) => typedError<ProtocolRuleCapabilityCatalog, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_capabilities", { listenerId, stage })),
 	/**
 	 *  把规则编辑器文本解析为 Rust/Schema 认可的类型化值。
 	 *
 	 *  该纯命令不依赖当前 Workspace；前端切换字段时只需提交公开字段类型，不能自行解释
 	 *  UTF-8 字节、JavaScript 安全整数或 Blob Hex。
 	 */
-	socketRuleParseValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_parse_value", { fieldType, raw })),
-	socketRuleSave: (input: SocketRuleSaveInput) => typedError<SocketDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_save", { input })),
-	socketRuleToggle: (ruleId: SocketDocumentRuleId, expectedRevision: number, enabled: boolean) => typedError<SocketDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_toggle", { ruleId, expectedRevision, enabled })),
-	socketRuleDelete: (ruleId: SocketDocumentRuleId, expectedRevision: number, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_rule_delete", { ruleId, expectedRevision, confirmed })),
+	protocolRuleParseValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_parse_value", { fieldType, raw })),
+	protocolRuleSave: (input: ProtocolRuleSaveInput) => typedError<ProtocolDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_save", { input })),
+	protocolRuleToggle: (ruleId: ProtocolDocumentRuleId, expectedRevision: number, enabled: boolean) => typedError<ProtocolDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_toggle", { ruleId, expectedRevision, enabled })),
+	protocolRuleDelete: (ruleId: ProtocolDocumentRuleId, expectedRevision: number, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_delete", { ruleId, expectedRevision, confirmed })),
 	faultTemplateList: () => typedError<FaultTemplateViewModel[], AppErrorViewModel>(__TAURI_INVOKE("fault_template_list")),
 	faultConfigure: (draft: FaultConfigurationDraft) => typedError<ActiveFaultViewModel, AppErrorViewModel>(__TAURI_INVOKE("fault_configure", { draft })),
 	faultActiveList: () => typedError<ActiveFaultViewModel[], AppErrorViewModel>(__TAURI_INVOKE("fault_active_list")),
@@ -712,25 +714,19 @@ export type DiagnosticLogRowViewModel = {
 /**  跨桌面、ADB、Companion 与代理链路共用的诊断阶段。 */
 export type DiagnosticLogStage = "system" | "adb_forward_control" | "adb_reverse_business" | "desktop_dns" | "companion" | "vpn" | "tun" | "app_selection" | "route_activation" | "listener" | "downstream_tls" | "upstream_tls" | "http" | "socket" | "stop_fallback" | "cleanup";
 
-/**
- *  单个 Socket 数据方向是否启用协议包的 Decode 与 Encode 阶段。
- *  `decode_enabled` 与 `encode_enabled` 是两个彼此独立的开关，而不是同一个“脚本启用”状态：
- *  Decode 关闭时仍可让 Encode 只根据原始 Frame 产生新字节；Encode 关闭时，即使 Decode 和规则
- *  修改了 Document，线路上仍发送原始 Frame。Display 没有单独配置字段，后续运行时会按产品契约
- *  跟随同方向的 Encode 开关和 Manifest 能力决定是否调用。
- */
-export type DirectionProcessingOptions = {
-	/**  是否把完整 Frame 交给该方向的 Decode 入口并生成 Document。 */
-	decode_enabled: boolean,
-	/**  是否把该方向的 Document 与原始 Frame 交给 Encode 入口生成待发送字节。 */
-	encode_enabled: boolean,
-};
-
 /**  Rust 判断某操作不可用时给出的稳定原因。 */
 export type DisabledReason = {
 	code: string,
 	message: string,
 };
+
+/**
+ *  一个完整 Frame 解码后的稀疏、有序字段集合。
+ *
+ *  Document 共享不可变 [`DocumentSchema`]，并为每个 Schema 字段维护一个同索引的可空值槽。
+ *  这种表示不需要第三方有序 Map，也天然区分“字段未声明”和“已声明但当前未赋值”。
+ */
+export type Document = DocumentWire;
 
 /**  v1 Document 动作。动作按声明顺序执行，不包含隐式终止或 first-match 语义。 */
 export type DocumentAction =
@@ -759,14 +755,14 @@ field: DocumentFieldName;
 value: DocumentValue };
 
 /**
- *  一个可由协议脚本赋值、UI 展示并被 Socket 规则引用的字段声明。
+ *  一个可由协议脚本赋值、UI 展示并被 协议报文规则引用的字段声明。
  *
  *  此类型只声明允许的名称和类型，不表达字段是否必须出现；协议条件完整性属于脚本。
  */
 export type DocumentField = DocumentFieldWire;
 
 /**
- *  Schema 字段名，同时也是脚本和 Socket 规则使用的稳定变量名。
+ *  Schema 字段名，同时也是脚本和 协议报文规则使用的稳定变量名。
  *  名称必须匹配 `[a-z][a-z0-9_]*`，并拒绝全部 Rhai active/reserved 关键字，
  *  防止同一个字段在 Schema 中合法、注册到脚本时却无法使用。
  */
@@ -830,6 +826,11 @@ export type DocumentValue =
 { type: "bool"; value: boolean } |
 /**  对应 [`DocumentFieldType::Blob`]。 */
 { type: "blob"; value: number[] };
+
+export type DocumentWire = {
+	schema: DocumentSchema,
+	values: (DocumentValue | null)[],
+};
 
 export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "optional"; trust: CertificateReferenceId } | { mode: "required"; trust: CertificateReferenceId };
 
@@ -899,13 +900,66 @@ export type FixedServerSettings = {
 
 export type ForwardProxyAuthentication = { mode: "none" } | { mode: "basic"; credential: SecretReference };
 
+/**
+ *  HTTP Body 的处理方式。
+ *
+ *  `Plain` 保持现有 HTTP 语义；`Protocol` 使用精确协议包版本把 UTF-8 Body 解码为
+ *  Document，并在 Document 实际变化时重新编码。未命中规则时不会重写 Body。
+ */
+export type HttpBodyProcessing = { mode: "plain" } | { mode: "protocol"; package: ProtocolPackageRef };
+
 export type HttpListenerSettings = {
 	authentication: ForwardProxyAuthentication,
 	mitm: MitmSettings,
 	downstream_tls: DownstreamTlsSettings,
 	request_body_codec: BodyCodecKind,
 	response_body_codec: BodyCodecKind,
+	body_processing: HttpBodyProcessing,
 	fixed_server: FixedServerSettings | null,
+};
+
+/**  HTTP 文本 Body 经协议包 Decode、两段规则和 Display 后冻结的证据。 */
+export type HttpProtocolBodyViewModel = {
+	package: ProtocolPackageRef,
+	/**  协议处理前收到的精确 HTTP Body 字节。 */
+	origin_body: number[],
+	/**  由 Rust 在 UTF-8 门禁后生成，前端不得再次自行解码字节。 */
+	origin_text: string,
+	/**  协议处理成功后实际写入线路的精确 HTTP Body 字节。 */
+	written_body: number[],
+	/**  由 Rust 在 Encode 输出 UTF-8 门禁后生成。 */
+	written_text: string,
+	document: Document,
+	stages: HttpProtocolRuleStageViewModel[],
+	display: HttpProtocolDisplayViewModel,
+};
+
+/**  Display 无法生成 HTML 时供 UI 稳定展示的原因。 */
+export type HttpProtocolDisplayFallbackReason = "entry_point_failed" | "resource_limit_exceeded";
+
+/**  协议包对当前 HTTP Body 的展示结果。HTML 始终是不可信内容，前端只能放入受限沙箱。 */
+export type HttpProtocolDisplayViewModel = { kind: "untrusted_html"; html: string } | { kind: "hex_fallback"; reason: HttpProtocolDisplayFallbackReason };
+
+/**  HTTP 协议处理失败的稳定分类；不依赖错误文案解析。 */
+export type HttpProtocolFailureKind = "input_not_utf8" | "decode_failed" | "rule_failed" | "encode_failed" | "output_not_utf8" | "worker_failed";
+
+/**  HTTP 协议处理在返回错误前冻结的脱敏证据。 */
+export type HttpProtocolFailureViewModel = {
+	package: ProtocolPackageRef,
+	direction: ProtocolDirection,
+	stage: ProtocolRuleStage | null,
+	kind: HttpProtocolFailureKind,
+	code: string,
+	detail: string,
+	origin_body: number[],
+};
+
+/**  当前 HTTP 方向内一段独立规则程序的真实命中结果。 */
+export type HttpProtocolRuleStageViewModel = {
+	stage: ProtocolRuleStage,
+	matched_rule_ids: ProtocolDocumentRuleId[],
+	document: Document,
+	display: HttpProtocolDisplayViewModel,
 };
 
 /**
@@ -996,8 +1050,10 @@ export type ListenerProtocolPackageCatalogViewModel = {
 export type ListenerProtocolPackageOptionViewModel = {
 	package: ProtocolPackageRef,
 	name: string,
+	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel,
+	downstream_schema: ProtocolPackageSchemaViewModel,
 };
 
 export type ListenerRuntimeState = "stopped" | "starting" | "running" | "stopping" | "faulted";
@@ -1084,6 +1140,10 @@ export type MessageContentViewModel = {
 	codec_id: string | null,
 	decode_error: string | null,
 	query_string: string | null,
+	/**  仅当当前入口绑定 HTTP 协议包且 Body 非空时存在。 */
+	protocol: HttpProtocolBodyViewModel | null,
+	/**  协议处理失败时在返回错误前保存；与成功证据互斥。 */
+	protocol_failure: HttpProtocolFailureViewModel | null,
 };
 
 export type MessageStage = "tls_handshake" | "request" | "response" | "terminal";
@@ -1131,6 +1191,36 @@ export type PathMtuProfile = {
 /**  超过路径 MTU 时的处理语义。 */
 export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
 
+/**  Socket Frame 相对于代理的稳定数据方向。 */
+export type ProtocolDirection =
+/**  App 到 Server，或 `LocalResponder` 的请求方向。 */
+"upstream" |
+/**  Server 到 App，或 `LocalResponder` 的响应方向。 */
+"downstream";
+
+/**
+ *  可持久化的 协议 Document 规则实体。
+ *
+ *  `rule_id` 与 `created_order` 在更新时保持稳定，`revision` 对每次成功更新或启停递增。
+ *  反序列化会重新执行全部结构限制，因此导入不能绕过空动作、重复字段或资源上限。
+ */
+export type ProtocolDocumentRuleDefinition = {
+	rule_id: ProtocolDocumentRuleId,
+	revision: Revision,
+	name: string,
+	enabled: boolean,
+	priority: number,
+	created_order: number,
+	listener_id: ListenerId,
+	package: ProtocolPackageRef,
+	schema_version: number,
+	stage: ProtocolRuleStage,
+	conditions: DocumentCondition[],
+	actions: DocumentAction[],
+};
+
+export type ProtocolDocumentRuleId = string;
+
 /**  协议包两个方向与公共 Display 的完整能力投影。 */
 export type ProtocolPackageCapabilitiesViewModel = {
 	upstream: ProtocolPackageDirectionCapabilitiesViewModel,
@@ -1141,15 +1231,17 @@ export type ProtocolPackageCapabilitiesViewModel = {
 /**  精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。 */
 export type ProtocolPackageDetailViewModel = {
 	version: ProtocolPackageVersionViewModel,
+	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel,
+	downstream_schema: ProtocolPackageSchemaViewModel,
 	usages: ProtocolPackageUsageViewModel[],
 };
 
 /**
  *  一个方向在 Manifest 中声明并通过编译校验的能力。
- *  Frame 与 Decode 在 Host API v1 中是必需入口，仍显式返回给 UI，避免前端根据 API
- *  版本自行推断。Encode 是可选入口；为 `false` 时对应开关必须保持关闭。
+ *  编译后方向能力的只读投影。HTTP 不声明 Frame，Socket 必须声明；Decode 与 Encode
+ *  均由当前严格 Manifest 提供，不再交给入口配置开关选择。
  */
 export type ProtocolPackageDirectionCapabilitiesViewModel = {
 	frame: boolean,
@@ -1168,6 +1260,8 @@ export type ProtocolPackageGroupViewModel = {
 	id: ProtocolPackageId,
 	/**  最新已安装版本声明的名称，作为分组行的稳定展示名称。 */
 	name: string,
+	/**  同一 ID 的所有版本必须属于同一数据平面。 */
+	kind: ProtocolPackageKindViewModel,
 	versions: ProtocolPackageVersionViewModel[],
 	/**  全部精确版本被已保存 Listener 引用的总次数。 */
 	reference_count: number,
@@ -1210,8 +1304,10 @@ export type ProtocolPackageImportPreviewViewModel = {
 	package: ProtocolPackageRef,
 	name: string,
 	host_api: number,
+	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel,
+	downstream_schema: ProtocolPackageSchemaViewModel,
 };
 
 /**  一次已验证但未安装的 pending import 随机令牌。 */
@@ -1225,9 +1321,14 @@ export type ProtocolPackageImportToken = string;
 export type ProtocolPackageImportViewModel = {
 	outcome: ProtocolPackageImportOutcomeViewModel,
 	version: ProtocolPackageVersionViewModel,
+	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel,
+	downstream_schema: ProtocolPackageSchemaViewModel,
 };
+
+/**  Manifest 结构推导出的协议包数据平面。 */
+export type ProtocolPackageKindViewModel = "http" | "socket";
 
 /**
  *  Listener/Workspace 引用协议包时使用的精确身份。
@@ -1287,12 +1388,62 @@ export type ProtocolPackageVersionViewModel = {
 	package: ProtocolPackageRef,
 	name: string,
 	host_api: number,
+	/**  安装时由严格 Manifest 推断并持久化的数据平面类型。 */
+	kind: ProtocolPackageKindViewModel,
 	/**  由应用精确身份保护的官方 ISO 8583:1987 ASCII Profile。 */
 	built_in: boolean,
 	enabled: boolean,
 	validation: ProtocolPackageValidationViewModel,
 	installed_at: string,
 };
+
+export type ProtocolRuleCapabilityCatalog = {
+	package: ProtocolPackageRef,
+	schema_version: number,
+	stage: ProtocolRuleStage,
+	fields: ProtocolRuleFieldCapability[],
+	common_actions: ProtocolRuleCommonActionCapability[],
+};
+
+export type ProtocolRuleCommonActionCapability = "record_match" | "clear_document";
+
+export type ProtocolRuleFieldActionCapability = "set_field" | "clear_field";
+
+export type ProtocolRuleFieldCapability = {
+	name: string,
+	label: string,
+	type: ProtocolPackageSchemaFieldTypeViewModel,
+	operators: ProtocolRuleFieldOperatorCapability[],
+	actions: ProtocolRuleFieldActionCapability[],
+};
+
+export type ProtocolRuleFieldOperatorCapability = "equals";
+
+export type ProtocolRuleSaveInput = {
+	/**  `None` 表示创建；更新时必须同时提供规则 ID 与期望 revision。 */
+	rule_id: ProtocolDocumentRuleId | null,
+	expected_revision: number | null,
+	name: string,
+	enabled: boolean,
+	priority: number,
+	listener_id: ListenerId,
+	package: ProtocolPackageRef,
+	schema_version: number,
+	stage: ProtocolRuleStage,
+	conditions: DocumentCondition[],
+	actions: DocumentAction[],
+};
+
+/**  Socket 报文经过代理时可独立配置的处理阶段。 */
+export type ProtocolRuleStage =
+/**  应用发出的报文刚进入代理。 */
+"app_to_proxy" |
+/**  代理即将把报文发送给上游服务。 */
+"proxy_to_upstream" |
+/**  上游服务返回的报文刚进入代理。 */
+"upstream_to_proxy" |
+/**  代理即将把报文返回给应用。 */
+"proxy_to_app";
 
 export type ProxyListener = {
 	id: ListenerId,
@@ -1410,17 +1561,12 @@ export type RuleViewModel = {
 
 /**
  *  Scripted 模式所需的完整、静态 Listener 配置。
- *  Listener 精确绑定一个 `package id + version`，不会自动选择、升级或回退协议包。领域层只保证
- *  引用和开关结构合法；包是否已安装、已启用、API 兼容，以及方向是否声明 Encode，必须由需要
- *  查询协议包注册表的 Application 层校验。
+ *  入口精确绑定一个 `package id + version`，不会自动选择、升级或回退协议包。选择协议包即表示
+ *  两个方向固定执行 Frame、Decode、规则、Encode 与 Display，不再保存重复的阶段开关。
  */
 export type ScriptedSocketProcessing = {
-	/**  Listener 固定使用的协议包 ID 与精确 `SemVer`。 */
+	/**  入口固定使用的协议包 ID 与精确 `SemVer`。 */
 	package: ProtocolPackageRef,
-	/**  App -> Proxy -> Server 方向的 Decode/Encode 开关。 */
-	upstream: DirectionProcessingOptions,
-	/**  Server -> Proxy -> App 方向的 Decode/Encode 开关。 */
-	downstream: DirectionProcessingOptions,
 };
 
 export type SecretReference = {
@@ -1572,7 +1718,7 @@ export type SocketCaptureQuery = {
 	session_id: string | null,
 	connection_id: SocketConnectionId | null,
 	package: ProtocolPackageRef | null,
-	direction: SocketDirection | null,
+	direction: ProtocolDirection | null,
 	kind: SocketCaptureKind | null,
 	occurred_from: string | null,
 	occurred_to: string | null,
@@ -1605,13 +1751,13 @@ export type SocketCaptureRowViewModel = {
 	occurred_at: string,
 	completed_at: string,
 	kind: SocketCaptureKind,
-	direction: SocketDirection | null,
+	direction: ProtocolDirection | null,
 	package: ProtocolPackageRef,
 	schema: SocketCaptureSchemaRef,
 	origin_size_bytes: number,
 	written_size_bytes: number,
 	logical_size_bytes: number,
-	matched_rule_ids: SocketDocumentRuleId[],
+	matched_rule_ids: ProtocolDocumentRuleId[],
 };
 
 /**  捕获时实际使用的精确 Schema 身份。 */
@@ -1656,13 +1802,6 @@ export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_s
 
 export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "frame_inspect" | "decode" | "rule" | "encode" | "frame_process" | "relay_write" | "shutdown";
 
-/**  Socket Frame 相对于代理的稳定数据方向。 */
-export type SocketDirection =
-/**  App 到 Server，或 `LocalResponder` 的请求方向。 */
-"upstream" |
-/**  Server 到 App，或 `LocalResponder` 的响应方向。 */
-"downstream";
-
 /**  Display 失败时允许持久化的脱敏诊断。 */
 export type SocketDisplayDiagnostic = {
 	code: string,
@@ -1670,33 +1809,10 @@ export type SocketDisplayDiagnostic = {
 };
 
 /**  Hex fallback 的稳定原因；不保存脚本异常文本或原始 payload。 */
-export type SocketDisplayFallbackReason = "encode_disabled" | "not_declared" | "entry_point_failed" | "resource_limit_exceeded";
+export type SocketDisplayFallbackReason = "entry_point_failed" | "resource_limit_exceeded";
 
 /**  协议展示结果。HTML 即使经过脚本生成也仍按不可信内容处理。 */
 export type SocketDisplayResult = { type: "untrusted_html"; html: string } | { type: "hex_fallback"; reason: SocketDisplayFallbackReason; diagnostic: SocketDisplayDiagnostic | null };
-
-/**
- *  可持久化的 Socket Document 规则实体。
- *
- *  `rule_id` 与 `created_order` 在更新时保持稳定，`revision` 对每次成功更新或启停递增。
- *  反序列化会重新执行全部结构限制，因此导入不能绕过空动作、重复字段或资源上限。
- */
-export type SocketDocumentRuleDefinition = {
-	rule_id: SocketDocumentRuleId,
-	revision: Revision,
-	name: string,
-	enabled: boolean,
-	priority: number,
-	created_order: number,
-	listener_id: ListenerId,
-	package: ProtocolPackageRef,
-	schema_version: number,
-	stage: SocketRuleStage,
-	conditions: DocumentCondition[],
-	actions: DocumentAction[],
-};
-
-export type SocketDocumentRuleId = string;
 
 /**  `LocalResponder` 只面向连接到 Listener 的 App，因此安全配置只能描述 App 侧传输。 */
 export type SocketDownstreamSecurity = { mode: "tcp" } | { mode: "tls"; downstream_tls: SocketDownstreamTlsSettings };
@@ -1718,19 +1834,20 @@ export type SocketExchangeId = string;
 export type SocketLocalExchangeCapture = {
 	exchange_id: SocketExchangeId,
 	package: ProtocolPackageRef,
-	schema: SocketCaptureSchemaRef,
-	request_decode_enabled: boolean,
-	response_encode_enabled: boolean,
+	request_schema: SocketCaptureSchemaRef,
+	response_schema: SocketCaptureSchemaRef,
 	request_origin: number[],
-	/**  Decode 关闭时必须保持 `None`，不得合成空 Document 冒充解析结果。 */
-	request_document: SocketCaptureDocument | null,
-	/**  Decode 关闭时为 `None`；成功 Decode 后保存同一协议包的 Display 或明确 Hex 回退。 */
-	request_display: SocketDisplayResult | null,
-	/**  规则只修改该响应 Document，不得覆盖 request Document。 */
+	/**  Decode 与 App -> Proxy 请求规则完成后的上行 Document。 */
+	request_document: SocketCaptureDocument,
+	/**  同一协议包的请求 Display 或明确 Hex 回退。 */
+	request_display: SocketDisplayResult,
+	/**  Proxy -> App 响应规则只修改该下行 Document，不得覆盖 request Document。 */
 	response_document: SocketCaptureDocument,
-	matched_downstream_rule_ids: SocketDocumentRuleId[],
+	/**  App -> Proxy 请求阶段按执行顺序命中的规则。 */
+	matched_request_rule_ids: ProtocolDocumentRuleId[],
+	/**  Proxy -> App 响应阶段按执行顺序命中的规则。 */
+	matched_response_rule_ids: ProtocolDocumentRuleId[],
 	written_response: number[],
-	response_write_kind: SocketWriteKind,
 	response_display: SocketDisplayResult,
 };
 
@@ -1742,7 +1859,7 @@ export type SocketLocalResponderTopology = {
 /**
  *  Socket payload 的处理方式。
  *  `Direct` 保持现有透明字节转发，不加载脚本、不切 Frame、不创建 Document；`Scripted` 按绑定
- *  协议包切分完整 Frame，并分别应用两个方向的处理开关。
+ *  协议包切分完整 Frame，并执行两个方向声明的完整处理链。
  *  Wire 结构使用 `mode` + `settings`，例如 Direct 是 `{"mode":"direct"}`，Scripted 是
  *  `{"mode":"scripted","settings":{...}}`。额外字段会被拒绝，防止 Direct 配置中夹带不会生效的
  *  脚本字段。
@@ -1751,19 +1868,15 @@ export type SocketPayloadProcessing = { mode: "direct" } | { mode: "scripted"; s
 
 /**  Relay 中一个方向已成功写出的完整 Frame。 */
 export type SocketRelayFrameCapture = {
-	direction: SocketDirection,
+	direction: ProtocolDirection,
 	package: ProtocolPackageRef,
 	schema: SocketCaptureSchemaRef,
-	decode_enabled: boolean,
-	encode_enabled: boolean,
-	/**  网络读取到的完整原始 Frame；Decode 关闭或失败时仍必须保留。 */
+	/**  网络读取到的完整原始 Frame。 */
 	origin: number[],
-	/**  规则执行所使用的 Document。Decode 关闭时必须为 `None`。 */
-	document: SocketCaptureDocument | null,
-	matched_rule_ids: SocketDocumentRuleId[],
+	/**  当前方向固定两段规则的独立后置快照，按线路顺序保存。 */
+	stages: SocketRelayRuleStageCapture[],
 	/**  实际成功写入另一端的完整字节；不得记录部分写入缓冲区。 */
 	written: number[],
-	write_kind: SocketWriteKind,
 	display: SocketDisplayResult,
 };
 
@@ -1773,6 +1886,13 @@ export type SocketRelayRouteEvidenceViewModel = {
 	downstream_tls_peer: string | null,
 	upstream_tls: SocketTlsEvidenceViewModel | null,
 	connection_test: SocketConnectionTestEvidenceViewModel | null,
+};
+
+/**  Relay 中一段规则执行完成后的不可变 Document 快照。 */
+export type SocketRelayRuleStageCapture = {
+	stage: ProtocolRuleStage,
+	matched_rule_ids: ProtocolDocumentRuleId[],
+	document: SocketCaptureDocument,
 };
 
 export type SocketRelaySecurity = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsSettings; upstream_tls: SocketUpstreamTlsSettings };
@@ -1791,54 +1911,6 @@ export type SocketRelayTopology = {
 	upstream: SocketEndpoint,
 	security: SocketRelaySecurity,
 };
-
-export type SocketRuleCapabilityCatalog = {
-	package: ProtocolPackageRef,
-	schema_version: number,
-	stage: SocketRuleStage,
-	fields: SocketRuleFieldCapability[],
-	common_actions: SocketRuleCommonActionCapability[],
-};
-
-export type SocketRuleCommonActionCapability = "record_match" | "clear_document";
-
-export type SocketRuleFieldActionCapability = "set_field" | "clear_field";
-
-export type SocketRuleFieldCapability = {
-	name: string,
-	label: string,
-	type: ProtocolPackageSchemaFieldTypeViewModel,
-	operators: SocketRuleFieldOperatorCapability[],
-	actions: SocketRuleFieldActionCapability[],
-};
-
-export type SocketRuleFieldOperatorCapability = "equals";
-
-export type SocketRuleSaveInput = {
-	/**  `None` 表示创建；更新时必须同时提供规则 ID 与期望 revision。 */
-	rule_id: SocketDocumentRuleId | null,
-	expected_revision: number | null,
-	name: string,
-	enabled: boolean,
-	priority: number,
-	listener_id: ListenerId,
-	package: ProtocolPackageRef,
-	schema_version: number,
-	stage: SocketRuleStage,
-	conditions: DocumentCondition[],
-	actions: DocumentAction[],
-};
-
-/**  Socket 报文经过代理时可独立配置的处理阶段。 */
-export type SocketRuleStage =
-/**  应用发出的报文刚进入代理。 */
-"app_to_proxy" |
-/**  代理即将把报文发送给上游服务。 */
-"proxy_to_upstream" |
-/**  上游服务返回的报文刚进入代理。 */
-"upstream_to_proxy" |
-/**  代理即将把报文返回给应用。 */
-"proxy_to_app";
 
 /**  上游 TLS 握手的结构化证据；不保存证书原文。 */
 export type SocketTlsEvidenceViewModel = {
@@ -1860,9 +1932,6 @@ export type SocketUpstreamTlsSettings = {
 	server_trust: CertificateReferenceId | null,
 	client_identity: CertificateReferenceId | null,
 };
-
-/**  `written` 字节来自原文还是 Encode；UI 不通过比较字节猜测处理路径。 */
-export type SocketWriteKind = "original" | "encoded";
 
 export type SortDirection = "asc" | "desc";
 

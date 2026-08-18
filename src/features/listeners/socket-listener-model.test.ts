@@ -16,6 +16,7 @@ import {
   setServerTls,
   setServerTransport,
   setSocketTopology,
+  socketCatalogOptions,
 } from "./socket-listener-model";
 
 function option(
@@ -29,8 +30,10 @@ function option(
   return {
     package: { id: "iso-8583", version },
     name: `ISO 8583 ${version}`,
+    kind: "socket",
     capabilities,
-    schema: { id: "iso-message", version: 1, title: "ISO Message", fields: [] },
+    upstream_schema: { id: "iso-request", version: 1, title: "ISO Request", fields: [] },
+    downstream_schema: { id: "iso-response", version: 1, title: "ISO Response", fields: [] },
   };
 }
 
@@ -48,8 +51,6 @@ function relaySettings(): SocketRelaySettings {
       mode: "scripted",
       settings: {
         package: { id: "iso-8583", version: "1.0.0" },
-        upstream: { decode_enabled: false, encode_enabled: false },
-        downstream: { decode_enabled: false, encode_enabled: false },
       },
     },
   };
@@ -68,7 +69,8 @@ function localSettings(): SocketRelaySettings {
 describe("Socket Listener model", () => {
   it("accepts a complete internally consistent Listener package catalog", () => {
     const candidate = option();
-    candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+    candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+    candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
 
     expect(isListenerProtocolPackageCatalog({
       options: [candidate],
@@ -78,23 +80,36 @@ describe("Socket Listener model", () => {
     })).toBe(true);
   });
 
-  it("accepts optional Encode and Display capabilities declared false", () => {
+  it("accepts complete HTTP and Socket package descriptions", () => {
     const candidate = option("1.0.0", {
-      upstream: { frame: true, decode: true, encode: false },
-      downstream: { frame: true, decode: true, encode: false },
-      display: false,
+      upstream: { frame: false, decode: true, encode: true },
+      downstream: { frame: false, decode: true, encode: true },
+      display: true,
     });
-    candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+    candidate.kind = "http";
+    candidate.upstream_schema.fields = [{ name: "request", label: "Request", type: "string" }];
+    candidate.downstream_schema.fields = [{ name: "response", label: "Response", type: "string" }];
 
     expect(isListenerProtocolPackageCatalog({
       options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
     })).toBe(true);
+
+    candidate.capabilities.downstream.encode = false;
+    expect(isListenerProtocolPackageCatalog({
+      options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
+    })).toBe(false);
+    candidate.capabilities.downstream.encode = true;
+    candidate.capabilities.upstream.frame = true;
+    expect(isListenerProtocolPackageCatalog({
+      options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
+    })).toBe(false);
   });
 
   it("accepts only a recommended exact package that exists in the available options", () => {
     const candidate = option();
     candidate.package = { id: "iso8583-ascii-standard", version: "1.0.0" };
-    candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+    candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+    candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
 
     expect(isListenerProtocolPackageCatalog({
       options: [candidate],
@@ -102,6 +117,13 @@ describe("Socket Listener model", () => {
       unavailable_version_count: 0,
       recommended_package: candidate.package,
     })).toBe(true);
+    const wrongKind = { ...candidate, kind: "http" as const };
+    expect(isListenerProtocolPackageCatalog({
+      options: [wrongKind],
+      installed_version_count: 1,
+      unavailable_version_count: 0,
+      recommended_package: wrongKind.package,
+    })).toBe(false);
     expect(isListenerProtocolPackageCatalog({
       options: [candidate],
       installed_version_count: 1,
@@ -110,7 +132,8 @@ describe("Socket Listener model", () => {
     })).toBe(false);
     const userCandidate = option();
     userCandidate.package = { id: "user-package", version: "1.0.0" };
-    userCandidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+    userCandidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+    userCandidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
     expect(isListenerProtocolPackageCatalog({
       options: [candidate, userCandidate],
       installed_version_count: 2,
@@ -127,36 +150,42 @@ describe("Socket Listener model", () => {
     ["inconsistent counts", { options: [], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null }],
     ["duplicate exact identity", (() => {
       const candidate = option();
-      candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       return { options: [candidate, candidate], installed_version_count: 2, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid package identity", (() => {
       const candidate = option();
       candidate.package.id = "";
-      candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid Schema", (() => {
       const candidate = option();
-      candidate.schema.version = 0;
-      candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.upstream_schema.version = 0;
+      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid capabilities", (() => {
       const candidate = option();
-      candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       candidate.capabilities.upstream.decode = "yes" as never;
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["missing required Frame capability", (() => {
       const candidate = option();
-      candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       candidate.capabilities.downstream.frame = false;
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["missing required Decode capability", (() => {
       const candidate = option();
-      candidate.schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
+      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       candidate.capabilities.upstream.decode = false;
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
@@ -164,52 +193,11 @@ describe("Socket Listener model", () => {
     expect(isListenerProtocolPackageCatalog(value)).toBe(false);
   });
 
-  it("binds a full-capability package without changing any of the sixteen Relay combinations", () => {
-    for (let mask = 0; mask < 16; mask += 1) {
-      const settings = relaySettings();
-      const flags = [0, 1, 2, 3].map((bit) => Boolean(mask & (1 << bit)));
-      settings.processing = {
-        mode: "scripted",
-        settings: {
-          package: { id: "iso-8583", version: "1.0.0" },
-          upstream: { decode_enabled: flags[0], encode_enabled: flags[1] },
-          downstream: { decode_enabled: flags[2], encode_enabled: flags[3] },
-        },
-      };
-
-      expect(bindPackage(settings.processing, option(), false)).toEqual({
-        mode: "scripted",
-        settings: {
-          package: { id: "iso-8583", version: "1.0.0" },
-          upstream: { decode_enabled: flags[0], encode_enabled: flags[1] },
-          downstream: { decode_enabled: flags[2], encode_enabled: flags[3] },
-        },
-      });
-    }
-  });
-
-  it("binds all four LocalResponder combinations while forcing impossible directions off", () => {
-    for (let mask = 0; mask < 4; mask += 1) {
-      const settings = localSettings();
-      settings.processing = {
-        mode: "scripted",
-        settings: {
-          package: { id: "iso-8583", version: "1.0.0" },
-          // 故意注入两个非法 true，证明生产边界会关闭它们，而不是测试字面量自比较。
-          upstream: { decode_enabled: Boolean(mask & 1), encode_enabled: true },
-          downstream: { decode_enabled: true, encode_enabled: Boolean(mask & 2) },
-        },
-      };
-
-      expect(bindPackage(settings.processing, option(), true)).toEqual({
-        mode: "scripted",
-        settings: {
-          package: { id: "iso-8583", version: "1.0.0" },
-          upstream: { decode_enabled: Boolean(mask & 1), encode_enabled: false },
-          downstream: { decode_enabled: false, encode_enabled: Boolean(mask & 2) },
-        },
-      });
-    }
+  it("binds an exact package as the whole processing configuration", () => {
+    expect(bindPackage({ mode: "direct" }, option("2.0.0"), false)).toEqual({
+      mode: "scripted",
+      settings: { package: { id: "iso-8583", version: "2.0.0" } },
+    });
   });
 
   it("removes Relay-only endpoint and Server security when switching to LocalResponder", () => {
@@ -241,8 +229,6 @@ describe("Socket Listener model", () => {
         mode: "scripted",
         settings: {
           package: { id: "iso-8583", version: "1.0.0" },
-          upstream: { decode_enabled: false, encode_enabled: false },
-          downstream: { decode_enabled: false, encode_enabled: false },
         },
       },
     });
@@ -291,42 +277,6 @@ describe("Socket Listener model", () => {
       mode: "scripted",
       settings: {
         package: { id: "", version: "" },
-        upstream: { decode_enabled: false, encode_enabled: false },
-        downstream: { decode_enabled: false, encode_enabled: false },
-      },
-    });
-  });
-
-  it("turns off capabilities unsupported by a newly bound exact package version", () => {
-    const settings = relaySettings();
-    if (settings.processing.mode !== "scripted") throw new Error("expected scripted settings");
-    settings.processing.settings.upstream = { decode_enabled: true, encode_enabled: true };
-    settings.processing.settings.downstream = { decode_enabled: true, encode_enabled: true };
-
-    expect(bindPackage(settings.processing, option("2.0.0", {
-      upstream: { frame: true, decode: false, encode: true },
-      downstream: { frame: true, decode: true, encode: false },
-      display: false,
-    }), false)).toEqual({
-      mode: "scripted",
-      settings: {
-        package: { id: "iso-8583", version: "2.0.0" },
-        upstream: { decode_enabled: false, encode_enabled: true },
-        downstream: { decode_enabled: true, encode_enabled: false },
-      },
-    });
-  });
-
-  it("keeps LocalResponder forced directions off even when a package supports them", () => {
-    const settings = localSettings();
-    if (settings.processing.mode !== "scripted") throw new Error("expected scripted settings");
-    settings.processing.settings.upstream.encode_enabled = true;
-    settings.processing.settings.downstream.decode_enabled = true;
-
-    expect(bindPackage(settings.processing, option("2.0.0"), true)).toMatchObject({
-      settings: {
-        upstream: { encode_enabled: false },
-        downstream: { decode_enabled: false },
       },
     });
   });
@@ -342,6 +292,21 @@ describe("Socket Listener model", () => {
     expect(matchingOption(catalog, { id: "iso-8583", version: "1.0.0" })?.package.version).toBe("1.0.0");
     expect(matchingOption(catalog, { id: "iso-8583", version: "3.0.0" })).toBeUndefined();
     expect(exactPackageKey({ id: "a@b", version: "c" })).not.toBe(exactPackageKey({ id: "a", version: "b@c" }));
+  });
+
+  it("keeps HTTP packages out of Socket package selection", () => {
+    const socket = option("1.0.0");
+    const http = option("2.0.0");
+    http.kind = "http";
+    const catalog: ListenerProtocolPackageCatalogViewModel = {
+      options: [http, socket],
+      installed_version_count: 2,
+      unavailable_version_count: 0,
+      recommended_package: null,
+    };
+
+    expect(socketCatalogOptions(catalog)).toEqual([socket]);
+    expect(matchingOption(catalog, http.package)).toBeUndefined();
   });
 
   it("preserves App TLS while changing Server transport independently", () => {
@@ -442,7 +407,8 @@ describe("Socket Listener model", () => {
     ["missing Schema field label", [{ name: "mti", type: "string" }]],
   ])("rejects a catalog with %s", (_case, fields) => {
     const candidate = option();
-    candidate.schema.fields = fields as never;
+    candidate.upstream_schema.fields = fields as never;
+    candidate.downstream_schema.fields = [{ name: "response", label: "Response", type: "string" }];
 
     expect(isListenerProtocolPackageCatalog({
       options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,

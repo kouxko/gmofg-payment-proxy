@@ -75,13 +75,12 @@ function relayDetail(
           direction: "upstream",
           package: row.package,
           schema: row.schema,
-          decode_enabled: true,
-          encode_enabled: true,
           origin: [0x30, 0x32, 0x30],
-          document: documentFixture,
-          matched_rule_ids: row.matched_rule_ids,
+          stages: [
+            { stage: "app_to_proxy", matched_rule_ids: row.matched_rule_ids, document: documentFixture },
+            { stage: "proxy_to_upstream", matched_rule_ids: [], document: documentFixture },
+          ],
           written: [0x31, 0x32],
-          write_kind: "encoded",
           display: {
             type: "untrusted_html",
             html: "<p>ISO 8583</p>",
@@ -123,16 +122,15 @@ function localDetail(
         capture: {
           exchange_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           package: row.package,
-          schema: row.schema,
-          request_decode_enabled: false,
-          response_encode_enabled: true,
+          request_schema: row.schema,
+          response_schema: row.schema,
           request_origin: [0x30, 0x32],
-          request_document: null,
-          request_display: null,
+          request_document: documentFixture,
+          request_display: { type: "untrusted_html", html: "<p>Request</p>" },
           response_document: documentFixture,
-          matched_downstream_rule_ids: row.matched_rule_ids,
+          matched_request_rule_ids: [],
+          matched_response_rule_ids: row.matched_rule_ids,
           written_response: [0x30, 0x32, 0x31],
-          response_write_kind: "encoded",
           response_display: {
             type: "untrusted_html",
             html: "<p>Approved</p>",
@@ -188,16 +186,16 @@ describe("Socket capture detail validation", () => {
     if (validated?.record.payload.kind !== "relay_frame") {
       throw new Error("expected relay fixture");
     }
-    expect(validated.record.payload.capture.document?.values).toEqual(
+    expect(validated.record.payload.capture.stages[1].document.values).toEqual(
       documentFixture.values,
     );
-    expect(validated.record.payload.capture.document?.values[1]).toEqual({
+    expect(validated.record.payload.capture.stages[1].document.values[1]).toEqual({
       type: "int",
       value: "9223372036854775807",
     });
   });
 
-  it("accepts a Local exchange whose undecoded request has no fake Document", () => {
+  it("accepts a Local exchange with isolated request and response Documents", () => {
     const row = localRow();
 
     const validated = validateSocketCaptureDetail(
@@ -210,7 +208,7 @@ describe("Socket capture detail validation", () => {
     if (validated?.record.payload.kind !== "local_exchange") {
       throw new Error("expected local fixture");
     }
-    expect(validated.record.payload.capture.request_document).toBeNull();
+    expect(validated.record.payload.capture.request_document).toEqual(documentFixture);
     expect(validated.record.payload.capture.response_document).toEqual(
       documentFixture,
     );
@@ -248,10 +246,8 @@ describe("Socket capture detail validation", () => {
   it("rejects an invalid i64 text instead of coercing it through JavaScript number", () => {
     const row = relayRow();
     const detail = structuredClone(relayDetail(row));
-    if (detail.record.payload.kind !== "relay_frame" || !detail.record.payload.capture.document) {
-      throw new Error("expected decoded relay fixture");
-    }
-    detail.record.payload.capture.document.values[1] = {
+    if (detail.record.payload.kind !== "relay_frame") throw new Error("expected relay fixture");
+    detail.record.payload.capture.stages[1].document.values[1] = {
       type: "int",
       value: "01",
     };
@@ -262,10 +258,8 @@ describe("Socket capture detail validation", () => {
   it("accepts the exact signed i64 minimum as decimal text", () => {
     const row = relayRow();
     const detail = structuredClone(relayDetail(row));
-    if (detail.record.payload.kind !== "relay_frame" || !detail.record.payload.capture.document) {
-      throw new Error("expected decoded relay fixture");
-    }
-    detail.record.payload.capture.document.values[1] = {
+    if (detail.record.payload.kind !== "relay_frame") throw new Error("expected relay fixture");
+    detail.record.payload.capture.stages[1].document.values[1] = {
       type: "int",
       value: "-9223372036854775808",
     };
@@ -276,10 +270,8 @@ describe("Socket capture detail validation", () => {
   it("rejects decimal text outside the signed i64 range", () => {
     const row = relayRow();
     const detail = structuredClone(relayDetail(row));
-    if (detail.record.payload.kind !== "relay_frame" || !detail.record.payload.capture.document) {
-      throw new Error("expected decoded relay fixture");
-    }
-    detail.record.payload.capture.document.values[1] = {
+    if (detail.record.payload.kind !== "relay_frame") throw new Error("expected relay fixture");
+    detail.record.payload.capture.stages[1].document.values[1] = {
       type: "int",
       value: "9223372036854775808",
     };
@@ -301,18 +293,7 @@ describe("Socket capture detail validation", () => {
     expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeUndefined();
   });
 
-  it("rejects Relay encode evidence whose write kind contradicts the enabled flag", () => {
-    const row = relayRow();
-    const detail = structuredClone(relayDetail(row));
-    if (detail.record.payload.kind !== "relay_frame") {
-      throw new Error("expected relay fixture");
-    }
-    detail.record.payload.capture.encode_enabled = false;
-
-    expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeUndefined();
-  });
-
-  it("rejects encode-enabled evidence that claims the encode-disabled Display reason", () => {
+  it("accepts an explicit Display fallback from the full processing chain", () => {
     const row = relayRow();
     const detail = structuredClone(relayDetail(row));
     if (detail.record.payload.kind !== "relay_frame") {
@@ -320,28 +301,20 @@ describe("Socket capture detail validation", () => {
     }
     detail.record.payload.capture.display = {
       type: "hex_fallback",
-      reason: "encode_disabled",
-      diagnostic: null,
+      reason: "entry_point_failed",
+      diagnostic: { code: "DISPLAY_FAILED", message: "协议展示失败" },
     };
 
-    expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeUndefined();
+    expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeDefined();
   });
 
-  it("rejects encode-disabled evidence with a fabricated Display diagnostic", () => {
+  it("rejects relay evidence when one required stage snapshot is missing", () => {
     const row = relayRow();
     const detail = structuredClone(relayDetail(row));
     if (detail.record.payload.kind !== "relay_frame") {
       throw new Error("expected relay fixture");
     }
-    detail.record.payload.capture.encode_enabled = false;
-    detail.record.payload.capture.write_kind = "original";
-    detail.record.payload.capture.written = [...detail.record.payload.capture.origin];
-    row.written_size_bytes = row.origin_size_bytes;
-    detail.record.payload.capture.display = {
-      type: "hex_fallback",
-      reason: "encode_disabled",
-      diagnostic: { code: "IMPOSSIBLE", message: "must be absent" },
-    };
+    detail.record.payload.capture.stages.pop();
 
     expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeUndefined();
   });
@@ -349,22 +322,10 @@ describe("Socket capture detail validation", () => {
   it("rejects a Document Schema with duplicate field names", () => {
     const row = relayRow();
     const detail = structuredClone(relayDetail(row));
-    if (detail.record.payload.kind !== "relay_frame" || !detail.record.payload.capture.document) {
-      throw new Error("expected decoded relay fixture");
-    }
-    detail.record.payload.capture.document.schema.fields[1].name = "mti";
+    if (detail.record.payload.kind !== "relay_frame") throw new Error("expected relay fixture");
+    detail.record.payload.capture.stages[1].document.schema.fields[1].name = "mti";
 
     expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeUndefined();
   });
 
-  it("rejects Local response evidence whose write kind contradicts the enabled flag", () => {
-    const row = localRow();
-    const detail = structuredClone(localDetail(row));
-    if (detail.record.payload.kind !== "local_exchange") {
-      throw new Error("expected local fixture");
-    }
-    detail.record.payload.capture.response_encode_enabled = false;
-
-    expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeUndefined();
-  });
 });

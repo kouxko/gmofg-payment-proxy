@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion};
 use intercept_proxy_protocol_scripting::{
     MAX_ARCHIVE_ENTRIES_LIMIT, MAX_FILE_BYTES_LIMIT, MAX_PACKAGE_FILE_PATH_BYTES,
-    MAX_TOTAL_BYTES_LIMIT, ProtocolPackageFiles,
+    MAX_TOTAL_BYTES_LIMIT, ProtocolPackageFiles, ProtocolPackageKind,
 };
 use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
 use uuid::Uuid;
@@ -28,6 +28,7 @@ pub(crate) struct StoredProtocolPackageHeader {
     pub package: ProtocolPackageRef,
     pub name: String,
     pub host_api: u32,
+    pub kind: ProtocolPackageKind,
     pub enabled: bool,
     pub validation: StoredProtocolPackageValidation,
     pub installed_at: DateTime<Utc>,
@@ -62,7 +63,7 @@ impl SqliteStore {
         let connection = self.connection.lock();
         let mut statement = connection
             .prepare(
-                "SELECT package_id, version, name, host_api, enabled,
+                "SELECT package_id, version, name, host_api, kind, enabled,
                         validation_state, validation_error_code, installed_at, generation
                  FROM protocol_packages ORDER BY package_id, version",
             )
@@ -104,6 +105,10 @@ impl SqliteStore {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(database_error)?;
+        if package_id_has_different_kind(&transaction, &header.package, header.kind)? {
+            transaction.commit().map_err(database_error)?;
+            return Ok(StoredProtocolPackageInstallOutcome::IdentityConflict);
+        }
         if let Some(existing) = load_protocol_package(&transaction, &header.package)? {
             let expected_files = files
                 .iter()
@@ -112,6 +117,7 @@ impl SqliteStore {
             let same_immutable_content = existing.header.package == header.package
                 && existing.header.name == header.name
                 && existing.header.host_api == header.host_api
+                && existing.header.kind == header.kind
                 && existing.header.generation != Uuid::nil()
                 && !matches!(
                     existing.header.validation,
@@ -130,14 +136,15 @@ impl SqliteStore {
         transaction
             .execute(
                 "INSERT INTO protocol_packages(
-                    package_id, version, name, host_api, enabled,
+                    package_id, version, name, host_api, kind, enabled,
                     validation_state, validation_error_code, installed_at, generation
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, 'valid', NULL, ?6, ?7)",
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 'valid', NULL, ?7, ?8)",
                 params![
                     header.package.id.as_str(),
                     header.package.version.as_str(),
                     header.name,
                     i64::from(header.host_api),
+                    protocol_package_kind_text(header.kind),
                     header.enabled,
                     header.installed_at.to_rfc3339(),
                     header.generation.to_string(),
@@ -218,6 +225,7 @@ type HeaderRow = (
     String,
     String,
     i64,
+    String,
     i64,
     String,
     Option<String>,
@@ -236,11 +244,13 @@ fn read_header_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<HeaderRow> {
         row.get(6)?,
         row.get(7)?,
         row.get(8)?,
+        row.get(9)?,
     ))
 }
 
 fn parse_header(row: HeaderRow) -> Result<StoredProtocolPackageHeader, InfrastructureError> {
-    let (id, version, name, host_api, enabled, state, error_code, installed_at, generation) = row;
+    let (id, version, name, host_api, kind, enabled, state, error_code, installed_at, generation) =
+        row;
     let package = ProtocolPackageRef {
         id: ProtocolPackageId::new(id).map_err(|_| corrupt_protocol_package("package_id 无效"))?,
         version: ProtocolPackageVersion::new(version)
@@ -257,6 +267,14 @@ fn parse_header(row: HeaderRow) -> Result<StoredProtocolPackageHeader, Infrastru
         metadata_corrupt = true;
         0
     });
+    let kind = match kind.as_str() {
+        "http" => ProtocolPackageKind::Http,
+        "socket" => ProtocolPackageKind::Socket,
+        _ => {
+            metadata_corrupt = true;
+            ProtocolPackageKind::Http
+        }
+    };
     let enabled = match enabled {
         0 => false,
         1 => true,
@@ -295,6 +313,7 @@ fn parse_header(row: HeaderRow) -> Result<StoredProtocolPackageHeader, Infrastru
         package,
         name,
         host_api,
+        kind,
         enabled,
         validation,
         installed_at,
@@ -343,7 +362,7 @@ fn load_protocol_package_header(
 ) -> Result<Option<StoredProtocolPackageHeader>, InfrastructureError> {
     connection
         .query_row(
-            "SELECT package_id, version, name, host_api, enabled,
+            "SELECT package_id, version, name, host_api, kind, enabled,
                     validation_state, validation_error_code, installed_at, generation
              FROM protocol_packages WHERE package_id = ?1 AND version = ?2",
             params![package.id.as_str(), package.version.as_str()],
@@ -353,6 +372,30 @@ fn load_protocol_package_header(
         .map_err(database_error)?
         .map(parse_header)
         .transpose()
+}
+
+const fn protocol_package_kind_text(kind: ProtocolPackageKind) -> &'static str {
+    match kind {
+        ProtocolPackageKind::Http => "http",
+        ProtocolPackageKind::Socket => "socket",
+    }
+}
+
+fn package_id_has_different_kind(
+    transaction: &Transaction<'_>,
+    package: &ProtocolPackageRef,
+    kind: ProtocolPackageKind,
+) -> Result<bool, InfrastructureError> {
+    transaction
+        .query_row(
+            "SELECT EXISTS(
+                 SELECT 1 FROM protocol_packages
+                 WHERE package_id = ?1 AND kind <> ?2
+             )",
+            params![package.id.as_str(), protocol_package_kind_text(kind)],
+            |row| row.get(0),
+        )
+        .map_err(database_error)
 }
 
 #[path = "protocol_packages/bundle.rs"]

@@ -19,15 +19,15 @@ mod windows_process;
 
 pub use adapters::{
     AndroidAdbAdapter, BoundSocketDocument, CaptureRepositoryAdapter, CertificateServiceAdapter,
-    FaultServiceAdapter, HeaderBodyCodecResolver, InfrastructureServiceBundle,
-    ListenerRuntimeAdapter, NativeFileDialog, ProtectedSecretAdapter, ProtocolPackageImportAdapter,
-    ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure, ProtocolPackageRecoveryReport,
-    ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError, ProtocolPackageStorageErrorCode,
-    ProtocolPackageSummary, ProtocolPackageUsageQueryAdapter, ProtocolPackageValidationStatus,
-    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
-    RuntimeRuleRepository, SettingsRepositoryAdapter, SocketCaptureRepositoryAdapter,
-    SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory, WorkspaceBodyCodecResolver,
-    WorkspaceRepositoryAdapter,
+    FaultServiceAdapter, HeaderBodyCodecResolver, HttpProtocolObservationSink,
+    InfrastructureServiceBundle, ListenerRuntimeAdapter, NativeFileDialog, ProtectedSecretAdapter,
+    ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
+    ProtocolPackageImportAdapter, ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure,
+    ProtocolPackageRecoveryReport, ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError,
+    ProtocolPackageStorageErrorCode, ProtocolPackageSummary, ProtocolPackageUsageQueryAdapter,
+    ProtocolPackageValidationStatus, RuleRepositoryAdapter, RuntimePipelineAdapter,
+    RuntimePipelineProductHooks, RuntimeRuleRepository, SettingsRepositoryAdapter,
+    SocketCaptureRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter,
 };
 pub use application_backup::{
     ApplicationBackupArchive, ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode,
@@ -53,7 +53,7 @@ pub use files::{
 #[cfg(target_os = "macos")]
 pub use keychain::MacKeychainProtector;
 pub use sqlite::{
-    AndroidRuntimeOwnerRecord, CertificateMaterialRecord, CertificateMaterialSnapshot,
-    ProtectedSecretRecord, SqliteStore, StoredSettings, WorkspaceCollectionSnapshot,
-    WorkspaceRecord,
+    AndroidRuntimeOwnerRecord, CURRENT_APPLICATION_SCHEMA_VERSION, CertificateMaterialRecord,
+    CertificateMaterialSnapshot, ProtectedSecretRecord, SqliteStore, StoredSettings,
+    WorkspaceCollectionSnapshot, WorkspaceRecord,
 };

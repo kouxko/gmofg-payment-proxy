@@ -69,16 +69,17 @@ export function SettingsView() {
 
   async function save() {
     if (!draft || writePending) return;
+    const candidate = draft;
     setPendingAction("save");
     try {
-      const checked = await callCommand(commands.settingsValidate(draft));
+      const checked = await callCommand(commands.settingsValidate(candidate));
       setValidation(checked);
       if (!checked.valid) {
         toast(Object.values(checked.field_errors).flat().join("；") || "设置校验失败。", { variant: "danger" });
         return;
       }
       setValidation(undefined);
-      const result = await callCommand(commands.settingsSave(draft));
+      const result = await callCommand(commands.settingsSave(candidate));
       toast("设置已保存。", { variant: "success" });
       settings.setData(result);
       setDraft(result.stored);

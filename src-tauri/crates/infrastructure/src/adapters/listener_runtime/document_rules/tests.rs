@@ -3,8 +3,9 @@ use std::{sync::Arc, thread};
 use intercept_proxy_domain::{
     Document, DocumentAction, DocumentCondition, DocumentField, DocumentFieldName,
     DocumentFieldType, DocumentSchema, DocumentSchemaId, DocumentValue, ListenerId,
-    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, SocketDirection,
-    SocketDocumentRuleDefinition, SocketDocumentRuleId, SocketDocumentRuleProgram,
+    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolDocumentRuleProgram, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ProtocolRuleStage,
 };
 use intercept_proxy_runtime::SocketConnectionIdentity;
 use uuid::Uuid;
@@ -46,16 +47,16 @@ fn rule(
     created_order: u64,
     conditions: Vec<DocumentCondition>,
     actions: Vec<DocumentAction>,
-) -> SocketDocumentRuleDefinition {
-    SocketDocumentRuleDefinition::new(
-        SocketDocumentRuleId::new(),
+) -> ProtocolDocumentRuleDefinition {
+    ProtocolDocumentRuleDefinition::new(
+        ProtocolDocumentRuleId::new(),
         true,
         10,
         created_order,
         listener_id,
         package(),
         1,
-        SocketDirection::Downstream,
+        ProtocolDirection::Downstream,
         conditions,
         actions,
     )
@@ -70,13 +71,13 @@ fn connection(id: Uuid) -> SocketConnectionIdentity {
     }
 }
 
-fn program(listener_id: ListenerId) -> Arc<SocketDocumentRuleProgram> {
+fn program(listener_id: ListenerId) -> Arc<ProtocolDocumentRuleProgram> {
     Arc::new(
-        SocketDocumentRuleProgram::new(
+        ProtocolDocumentRuleProgram::new(
             listener_id,
             package(),
             schema(),
-            SocketDirection::Downstream,
+            ProtocolDirection::Downstream,
             vec![
                 rule(
                     listener_id,
@@ -102,25 +103,39 @@ fn program(listener_id: ListenerId) -> Arc<SocketDocumentRuleProgram> {
     )
 }
 
-fn factory(listener_id: ListenerId) -> SocketDocumentRuleConnectionFactory {
-    let upstream = Arc::new(
-        SocketDocumentRuleProgram::new(
+fn empty_program(
+    listener_id: ListenerId,
+    stage: ProtocolRuleStage,
+) -> Arc<ProtocolDocumentRuleProgram> {
+    Arc::new(
+        ProtocolDocumentRuleProgram::new_for_stage(
             listener_id,
             package(),
             schema(),
-            SocketDirection::Upstream,
+            stage,
             Vec::new(),
         )
         .unwrap(),
-    );
-    SocketDocumentRuleConnectionFactory::new(upstream, program(listener_id)).unwrap()
+    )
+}
+
+fn factory(listener_id: ListenerId) -> ProtocolDocumentRuleConnectionFactory {
+    ProtocolDocumentRuleConnectionFactory::new(
+        empty_program(listener_id, ProtocolRuleStage::AppToProxy),
+        empty_program(listener_id, ProtocolRuleStage::ProxyToUpstream),
+        empty_program(listener_id, ProtocolRuleStage::UpstreamToProxy),
+        program(listener_id),
+    )
+    .unwrap()
 }
 
 #[test]
 fn local_empty_document_allows_static_assignment_but_field_condition_is_non_match() {
     let listener_id = ListenerId::new();
-    let runtime = factory(listener_id)
-        .connection(connection(Uuid::from_u128(10)), SocketDirection::Downstream);
+    let runtime = factory(listener_id).connection(
+        connection(Uuid::from_u128(10)),
+        ProtocolRuleStage::ProxyToApp,
+    );
 
     let result = runtime.execute(runtime.empty_document()).unwrap();
 
@@ -136,8 +151,14 @@ fn local_empty_document_allows_static_assignment_but_field_condition_is_non_matc
 fn runtime_rejects_cross_connection_and_every_frozen_binding_mismatch() {
     let listener_id = ListenerId::new();
     let factory = factory(listener_id);
-    let first = factory.connection(connection(Uuid::from_u128(11)), SocketDirection::Downstream);
-    let second = factory.connection(connection(Uuid::from_u128(12)), SocketDirection::Downstream);
+    let first = factory.connection(
+        connection(Uuid::from_u128(11)),
+        ProtocolRuleStage::ProxyToApp,
+    );
+    let second = factory.connection(
+        connection(Uuid::from_u128(12)),
+        ProtocolRuleStage::ProxyToApp,
+    );
 
     assert_eq!(
         second.execute(first.empty_document()).unwrap_err().code,
@@ -153,9 +174,9 @@ fn runtime_rejects_cross_connection_and_every_frozen_binding_mismatch() {
         version: ProtocolPackageVersion::new("1.0.0").unwrap(),
     };
     assert!(first.execute(wrong_package).is_err());
-    let mut wrong_direction = first.empty_document();
-    wrong_direction.direction = SocketDirection::Upstream;
-    assert!(first.execute(wrong_direction).is_err());
+    let mut wrong_stage = first.empty_document();
+    wrong_stage.stage = ProtocolRuleStage::AppToProxy;
+    assert!(first.execute(wrong_stage).is_err());
 
     let other_schema = DocumentSchema::new(
         DocumentSchemaId::new("other-test").unwrap(),
@@ -179,7 +200,10 @@ fn runtime_rejects_cross_connection_and_every_frozen_binding_mismatch() {
 fn successive_frames_and_concurrent_connections_share_no_document_state() {
     let listener_id = ListenerId::new();
     let shared = factory(listener_id);
-    let first = shared.connection(connection(Uuid::from_u128(20)), SocketDirection::Downstream);
+    let first = shared.connection(
+        connection(Uuid::from_u128(20)),
+        ProtocolRuleStage::ProxyToApp,
+    );
     let mut decoded = Document::new(schema());
     decoded
         .set("request", DocumentValue::String("sale".into()))
@@ -195,8 +219,10 @@ fn successive_frames_and_concurrent_connections_share_no_document_state() {
         .map(|id| {
             let factory = shared.clone();
             thread::spawn(move || {
-                let runtime = factory
-                    .connection(connection(Uuid::from_u128(id)), SocketDirection::Downstream);
+                let runtime = factory.connection(
+                    connection(Uuid::from_u128(id)),
+                    ProtocolRuleStage::ProxyToApp,
+                );
                 runtime.execute(runtime.empty_document()).unwrap()
             })
         })
@@ -211,8 +237,10 @@ fn successive_frames_and_concurrent_connections_share_no_document_state() {
 #[test]
 fn runtime_debug_exposes_binding_shape_but_never_document_values() {
     let listener_id = ListenerId::new();
-    let runtime = factory(listener_id)
-        .connection(connection(Uuid::from_u128(40)), SocketDirection::Downstream);
+    let runtime = factory(listener_id).connection(
+        connection(Uuid::from_u128(40)),
+        ProtocolRuleStage::ProxyToApp,
+    );
     let mut document = Document::new(schema());
     document
         .set("request", DocumentValue::String("secret-sale".into()))
@@ -231,21 +259,21 @@ fn runtime_debug_exposes_binding_shape_but_never_document_values() {
 #[test]
 fn factory_accepts_only_matching_directional_programs_and_creates_connections() {
     let listener_id = ListenerId::new();
-    let upstream = Arc::new(
-        SocketDocumentRuleProgram::new(
-            listener_id,
-            package(),
-            schema(),
-            SocketDirection::Upstream,
-            Vec::new(),
-        )
-        .unwrap(),
+    let app_to_proxy = empty_program(listener_id, ProtocolRuleStage::AppToProxy);
+    let proxy_to_upstream = empty_program(listener_id, ProtocolRuleStage::ProxyToUpstream);
+    let upstream_to_proxy = empty_program(listener_id, ProtocolRuleStage::UpstreamToProxy);
+    let proxy_to_app = program(listener_id);
+    let factory = ProtocolDocumentRuleConnectionFactory::new(
+        Arc::clone(&app_to_proxy),
+        Arc::clone(&proxy_to_upstream),
+        Arc::clone(&upstream_to_proxy),
+        Arc::clone(&proxy_to_app),
+    )
+    .unwrap();
+    let runtime = factory.connection(
+        connection(Uuid::from_u128(50)),
+        ProtocolRuleStage::ProxyToApp,
     );
-    let downstream = program(listener_id);
-    let factory =
-        SocketDocumentRuleConnectionFactory::new(Arc::clone(&upstream), Arc::clone(&downstream))
-            .unwrap();
-    let runtime = factory.connection(connection(Uuid::from_u128(50)), SocketDirection::Downstream);
 
     assert_eq!(
         runtime
@@ -256,22 +284,21 @@ fn factory_accepts_only_matching_directional_programs_and_creates_connections() 
         1
     );
     assert!(
-        SocketDocumentRuleConnectionFactory::new(downstream, upstream).is_err(),
-        "swapped directions must be rejected"
+        ProtocolDocumentRuleConnectionFactory::new(
+            proxy_to_upstream,
+            app_to_proxy,
+            upstream_to_proxy,
+            proxy_to_app,
+        )
+        .is_err(),
+        "swapped stages must be rejected"
     );
     assert!(
-        SocketDocumentRuleConnectionFactory::new(
-            Arc::new(
-                SocketDocumentRuleProgram::new(
-                    listener_id,
-                    package(),
-                    schema(),
-                    SocketDirection::Upstream,
-                    Vec::new(),
-                )
-                .unwrap(),
-            ),
-            program(ListenerId::new()),
+        ProtocolDocumentRuleConnectionFactory::new(
+            empty_program(listener_id, ProtocolRuleStage::AppToProxy),
+            empty_program(listener_id, ProtocolRuleStage::ProxyToUpstream),
+            empty_program(listener_id, ProtocolRuleStage::UpstreamToProxy),
+            empty_program(ListenerId::new(), ProtocolRuleStage::ProxyToApp),
         )
         .is_err(),
         "programs from different listeners must be rejected"
@@ -279,10 +306,70 @@ fn factory_accepts_only_matching_directional_programs_and_creates_connections() 
 }
 
 #[test]
+fn factory_debug_reports_all_four_stage_counts() {
+    let listener_id = ListenerId::new();
+    let debug = format!("{:?}", factory(listener_id));
+
+    assert!(debug.contains("app_to_proxy: 0"));
+    assert!(debug.contains("proxy_to_upstream: 0"));
+    assert!(debug.contains("upstream_to_proxy: 0"));
+    assert!(debug.contains("proxy_to_app: 2"));
+}
+
+#[test]
+fn factory_rejects_different_schemas_within_one_direction() {
+    let listener_id = ListenerId::new();
+    let different_schema = DocumentSchema::new(
+        DocumentSchemaId::new("different-rules-test").unwrap(),
+        1,
+        "Different rules test",
+        vec![
+            DocumentField::new(
+                DocumentFieldName::new("request").unwrap(),
+                DocumentFieldType::String,
+                "Request",
+            )
+            .unwrap(),
+            DocumentField::new(
+                DocumentFieldName::new("response").unwrap(),
+                DocumentFieldType::String,
+                "Response",
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    let mismatched = Arc::new(
+        ProtocolDocumentRuleProgram::new_for_stage(
+            listener_id,
+            package(),
+            different_schema,
+            ProtocolRuleStage::ProxyToUpstream,
+            Vec::new(),
+        )
+        .unwrap(),
+    );
+
+    let error = ProtocolDocumentRuleConnectionFactory::new(
+        empty_program(listener_id, ProtocolRuleStage::AppToProxy),
+        mismatched,
+        empty_program(listener_id, ProtocolRuleStage::UpstreamToProxy),
+        empty_program(listener_id, ProtocolRuleStage::ProxyToApp),
+    )
+    .unwrap_err();
+
+    assert_eq!(error.code, ErrorCode::RuleInvalid);
+    assert!(error.field_errors.contains_key("factory.schema"));
+}
+
+#[test]
 fn existing_connection_reads_replaced_rules_on_the_next_document() {
     let listener_id = ListenerId::new();
     let factory = factory(listener_id);
-    let runtime = factory.connection(connection(Uuid::from_u128(60)), SocketDirection::Downstream);
+    let runtime = factory.connection(
+        connection(Uuid::from_u128(60)),
+        ProtocolRuleStage::ProxyToApp,
+    );
     assert_eq!(
         runtime
             .execute(runtime.empty_document())
@@ -293,22 +380,12 @@ fn existing_connection_reads_replaced_rules_on_the_next_document() {
         &DocumentValue::String("approved".into())
     );
 
-    let upstream = Arc::new(
-        SocketDocumentRuleProgram::new(
+    let proxy_to_app = Arc::new(
+        ProtocolDocumentRuleProgram::new(
             listener_id,
             package(),
             schema(),
-            SocketDirection::Upstream,
-            Vec::new(),
-        )
-        .unwrap(),
-    );
-    let downstream = Arc::new(
-        SocketDocumentRuleProgram::new(
-            listener_id,
-            package(),
-            schema(),
-            SocketDirection::Downstream,
+            ProtocolDirection::Downstream,
             vec![rule(
                 listener_id,
                 1,
@@ -321,7 +398,15 @@ fn existing_connection_reads_replaced_rules_on_the_next_document() {
         )
         .unwrap(),
     );
-    factory.replace(SocketDocumentRuleConnectionFactory::new(upstream, downstream).unwrap());
+    factory.replace(
+        &ProtocolDocumentRuleConnectionFactory::new(
+            empty_program(listener_id, ProtocolRuleStage::AppToProxy),
+            empty_program(listener_id, ProtocolRuleStage::ProxyToUpstream),
+            empty_program(listener_id, ProtocolRuleStage::UpstreamToProxy),
+            proxy_to_app,
+        )
+        .unwrap(),
+    );
 
     assert_eq!(
         runtime

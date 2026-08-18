@@ -14,6 +14,7 @@ export function version(
     package: { id: "iso-8583", version: value },
     name: "ISO 8583 长名称协议包",
     host_api: 1,
+    kind: "socket",
     built_in: false,
     enabled: value === "2.0.0",
     validation: { state: "valid" },
@@ -28,6 +29,7 @@ export function group(
   return {
     id: "iso-8583",
     name: "ISO 8583",
+    kind: "socket",
     // Application 按 Rust SemVer 从旧到新返回；UI 只负责反转展示顺序。
     versions: [version("1.2.0"), version("1.10.0"), version("2.0.0")],
     reference_count: 3,
@@ -42,18 +44,27 @@ export function detail(
 ): ProtocolPackageDetailViewModel {
   return {
     version: selected,
+    kind: "socket",
     capabilities: {
       upstream: { frame: true, decode: true, encode: true },
-      downstream: { frame: true, decode: true, encode: false },
+      downstream: { frame: true, decode: true, encode: true },
       display: true,
     },
-    schema: {
+    upstream_schema: {
       id: "iso-message",
       version: 1,
       title: "ISO 8583 消息",
       fields: [
         { name: "message_type", label: "消息类型", type: "string" },
         { name: "amount", label: "交易金额", type: "int" },
+      ],
+    },
+    downstream_schema: {
+      id: "iso-response",
+      version: 1,
+      title: "ISO 8583 响应",
+      fields: [
+        { name: "response_code", label: "响应码", type: "string" },
       ],
     },
     usages: [
@@ -79,12 +90,13 @@ export function importPreview(
     package: { id: "iso-8583", version: "3.0.0" },
     name: "ISO 8583 导入包",
     host_api: 1,
+    kind: "socket",
     capabilities: {
       upstream: { frame: true, decode: true, encode: true },
-      downstream: { frame: true, decode: true, encode: false },
+      downstream: { frame: true, decode: true, encode: true },
       display: true,
     },
-    schema: {
+    upstream_schema: {
       id: "iso-message",
       version: 2,
       title: "ISO 导入 Schema",
@@ -92,6 +104,12 @@ export function importPreview(
         { name: "mti", label: "消息类型", type: "string" },
         { name: "amount", label: "金额", type: "int" },
       ],
+    },
+    downstream_schema: {
+      id: "iso-response",
+      version: 2,
+      title: "ISO 导入响应 Schema",
+      fields: [{ name: "response_code", label: "响应码", type: "string" }],
     },
     ...overrides,
   };
@@ -108,8 +126,10 @@ export function importResult(
       name: preview.name,
       enabled: false,
     }),
+    kind: preview.kind,
     capabilities: preview.capabilities,
-    schema: preview.schema,
+    upstream_schema: preview.upstream_schema,
+    downstream_schema: preview.downstream_schema,
   };
 }
 

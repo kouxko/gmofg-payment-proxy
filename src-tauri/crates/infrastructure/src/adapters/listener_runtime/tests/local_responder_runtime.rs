@@ -6,8 +6,8 @@
 use std::sync::Arc;
 
 use intercept_proxy_domain::{
-    DocumentAction, DocumentCondition, DocumentFieldName, DocumentValue, SocketDirection,
-    SocketDocumentRuleDefinition, SocketDocumentRuleId,
+    DocumentAction, DocumentCondition, DocumentFieldName, DocumentValue, ProtocolDirection,
+    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolRuleStage,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -18,130 +18,75 @@ use tokio::{
 use super::*;
 use support::*;
 
-#[derive(Clone, Copy, Debug)]
-struct LocalState {
-    decode: bool,
-    encode: bool,
+#[tokio::test]
+async fn local_response_always_uses_the_full_protocol_chain() {
+    let id = "local-full-chain";
+    let listener_port = reserve_port().await;
+    let listener = local_listener(id, listener_port);
+    let workspace = workspace(
+        listener.clone(),
+        vec![set_amount_rule(&listener, false, 42)],
+    );
+    let (runtime, captures) = start_local_runtime_with_capture(
+        id,
+        BASIC_SCHEMA,
+        BASIC_SCRIPT,
+        workspace,
+        &listener,
+        Arc::new(intercept_proxy_application::EventHub::default()),
+    )
+    .await;
+
+    let response = request_once(listener_port, &[2, 11]).await;
+    assert_eq!(response, [209, 42]);
+    let row = captures::wait_for_rows(&captures, 1).await.rows.remove(0);
+    let detail = captures.get_detail(row.capture_id).unwrap().record;
+    let intercept_proxy_application::SocketCapturePayload::LocalExchange(exchange) = detail.payload
+    else {
+        panic!("expected LocalExchange")
+    };
+    assert!(exchange.request_document.schema.version() > 0);
+    assert_eq!(exchange.request_origin, [2, 11]);
+    assert_eq!(exchange.written_response, [209, 42]);
+    assert!(matches!(
+        exchange.response_display,
+        intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
+    ));
+
+    runtime.stop(listener.id).await.unwrap();
 }
 
 #[tokio::test]
-async fn four_valid_decode_encode_states_use_the_real_local_response_chain() {
-    for state in [
-        LocalState {
-            decode: false,
-            encode: false,
-        },
-        LocalState {
-            decode: true,
-            encode: false,
-        },
-        LocalState {
-            decode: false,
-            encode: true,
-        },
-        LocalState {
-            decode: true,
-            encode: true,
-        },
-    ] {
-        let id = format!("local-matrix-{}-{}", state.decode, state.encode);
-        let listener_port = reserve_port().await;
-        let listener = local_listener(&id, listener_port, state.decode, state.encode);
-        let rules = if state.encode {
-            vec![set_amount_rule(&listener, state.decode, 42)]
-        } else {
-            Vec::new()
-        };
-        let workspace = workspace(listener.clone(), rules);
-        let (runtime, captures) = start_local_runtime_with_capture(
-            &id,
-            BASIC_SCHEMA,
-            BASIC_SCRIPT,
-            workspace,
-            &listener,
-            Arc::new(intercept_proxy_application::EventHub::default()),
-        )
-        .await;
+async fn no_rule_encodes_the_empty_isolated_response_document() {
+    let id = "local-no-rule";
+    let listener_port = reserve_port().await;
+    let listener = local_listener(id, listener_port);
+    let workspace = workspace(listener.clone(), Vec::new());
+    let runtime = start_local_runtime(id, BASIC_SCHEMA, BASIC_SCRIPT, workspace, &listener).await;
 
-        let response = request_once(listener_port, &[2, 11]).await;
-        let expected = if state.encode {
-            vec![209, 42]
-        } else {
-            vec![2, 11]
-        };
-        assert_eq!(response, expected, "failed state: {state:?}");
-        let row = captures::wait_for_rows(&captures, 1).await.rows.remove(0);
-        let detail = captures.get_detail(row.capture_id).unwrap().record;
-        let intercept_proxy_application::SocketCapturePayload::LocalExchange(exchange) =
-            detail.payload
-        else {
-            panic!("expected LocalExchange")
-        };
-        assert_eq!(exchange.request_document.is_some(), state.decode);
-        assert_eq!(exchange.request_display.is_some(), state.decode);
-        assert_eq!(exchange.request_origin, [2, 11]);
-        assert_eq!(exchange.written_response, expected);
-        assert_eq!(exchange.response_encode_enabled, state.encode);
-        assert_eq!(
-            exchange.response_write_kind,
-            if state.encode {
-                intercept_proxy_application::SocketWriteKind::Encoded
-            } else {
-                intercept_proxy_application::SocketWriteKind::Original
-            }
-        );
-        assert!(matches!(
-            exchange.response_display,
-            intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
-        ));
-
-        runtime.stop(listener.id).await.unwrap();
-    }
+    assert_eq!(request_once(listener_port, &[2, 17]).await, [209, 0]);
+    runtime.stop(listener.id).await.unwrap();
 }
 
 #[tokio::test]
-async fn no_rule_encode_off_echoes_and_encode_on_uses_the_unmodified_document() {
-    for (encode, expected) in [(false, vec![2, 17]), (true, vec![209, 17])] {
-        let id = format!("local-no-rule-{encode}");
-        let listener_port = reserve_port().await;
-        let listener = local_listener(&id, listener_port, true, encode);
-        let workspace = workspace(listener.clone(), Vec::new());
-        let runtime =
-            start_local_runtime(&id, BASIC_SCHEMA, BASIC_SCRIPT, workspace, &listener).await;
-
-        assert_eq!(request_once(listener_port, &[2, 17]).await, expected);
-        runtime.stop(listener.id).await.unwrap();
-    }
-}
-
-#[tokio::test]
-async fn iso8583_style_rule_clones_request_fields_and_sets_response_fields() {
+async fn iso8583_style_rule_builds_the_isolated_response_document() {
     let id = "local-iso8583";
     let listener_port = reserve_port().await;
-    let listener = local_listener(id, listener_port, true, true);
-    let rule = SocketDocumentRuleDefinition::new(
-        SocketDocumentRuleId::new(),
+    let listener = local_listener(id, listener_port);
+    let rule = ProtocolDocumentRuleDefinition::new(
+        ProtocolDocumentRuleId::new(),
         true,
         10,
         1,
         listener.id,
         package_ref(id),
         1,
-        SocketDirection::Downstream,
-        vec![DocumentCondition::Equals {
-            field: DocumentFieldName::new("mti").unwrap(),
-            value: DocumentValue::String("0200".into()),
+        ProtocolDirection::Downstream,
+        Vec::new(),
+        vec![DocumentAction::SetField {
+            field: DocumentFieldName::new("message").unwrap(),
+            value: DocumentValue::Blob(b"02101234560000100000".to_vec()),
         }],
-        vec![
-            DocumentAction::SetField {
-                field: DocumentFieldName::new("mti").unwrap(),
-                value: DocumentValue::String("0210".into()),
-            },
-            DocumentAction::SetField {
-                field: DocumentFieldName::new("response_code").unwrap(),
-                value: DocumentValue::String("00".into()),
-            },
-        ],
     )
     .unwrap();
     let workspace = workspace(listener.clone(), vec![rule]);
@@ -158,21 +103,18 @@ async fn iso8583_style_rule_clones_request_fields_and_sets_response_fields() {
 async fn matching_rule_applies_set_clear_and_set_actions_in_declared_order() {
     let id = "local-action-order";
     let listener_port = reserve_port().await;
-    let listener = local_listener(id, listener_port, true, true);
+    let listener = local_listener(id, listener_port);
     let amount = DocumentFieldName::new("amount").unwrap();
-    let rule = SocketDocumentRuleDefinition::new(
-        SocketDocumentRuleId::new(),
+    let rule = ProtocolDocumentRuleDefinition::new(
+        ProtocolDocumentRuleId::new(),
         true,
         10,
         1,
         listener.id,
         package_ref(id),
         1,
-        SocketDirection::Downstream,
-        vec![DocumentCondition::Equals {
-            field: amount.clone(),
-            value: DocumentValue::Int(11),
-        }],
+        ProtocolDirection::Downstream,
+        Vec::new(),
         vec![
             DocumentAction::SetField {
                 field: amount.clone(),
@@ -197,7 +139,7 @@ async fn matching_rule_applies_set_clear_and_set_actions_in_declared_order() {
 async fn pipelined_requests_are_replied_once_each_in_fifo_order() {
     let id = "local-fifo";
     let listener_port = reserve_port().await;
-    let listener = local_listener(id, listener_port, true, true);
+    let listener = local_listener(id, listener_port);
     let workspace = workspace(listener.clone(), Vec::new());
     let runtime = start_local_runtime(id, BASIC_SCHEMA, BASIC_SCRIPT, workspace, &listener).await;
 
@@ -208,16 +150,16 @@ async fn pipelined_requests_are_replied_once_each_in_fifo_order() {
     client.shutdown().await.unwrap();
     let mut response = Vec::new();
     client.read_to_end(&mut response).await.unwrap();
-    assert_eq!(response, [209, 7, 209, 8, 209, 9]);
+    assert_eq!(response, [209, 0, 209, 0, 209, 0]);
 
     runtime.stop(listener.id).await.unwrap();
 }
 
 #[tokio::test]
-async fn concurrent_connections_keep_request_and_response_documents_isolated() {
+async fn concurrent_connections_do_not_leak_request_fields_into_response_documents() {
     let id = "local-connection-isolation";
     let listener_port = reserve_port().await;
-    let listener = local_listener(id, listener_port, true, true);
+    let listener = local_listener(id, listener_port);
     let workspace = workspace(listener.clone(), Vec::new());
     let runtime = start_local_runtime(id, BASIC_SCHEMA, BASIC_SCRIPT, workspace, &listener).await;
     let barrier = Arc::new(Barrier::new(3));
@@ -240,33 +182,34 @@ async fn concurrent_connections_keep_request_and_response_documents_isolated() {
 
     for client in clients {
         let (amount, response) = client.await.unwrap();
-        assert_eq!(response, [209, amount]);
+        assert_eq!(
+            response,
+            [209, 0],
+            "request amount {amount} must stay upstream"
+        );
     }
     runtime.stop(listener.id).await.unwrap();
 }
 
 #[tokio::test]
-async fn local_exchange_skips_nonexistent_upstream_and_downstream_input_stages() {
+async fn local_exchange_uses_receive_then_downstream_send_without_upstream_io() {
     let id = "local-direction-guards";
     let port = reserve_port().await;
-    let listener = local_listener(id, port, true, true);
+    let listener = local_listener(id, port);
     let script = r#"
 fn frame(reader, context) {
-    if context.direction() != "upstream" { throw "downstream frame must not run"; }
     if reader.available() < 2 { framing::need_more(2) }
     else { framing::complete(2) }
 }
 fn decode(origin, context) {
-    if context.direction() != "upstream" { throw "downstream decode must not run"; }
     let result = document::create();
-    result.set("amount", origin[1]);
+    result.set("amount", origin[1].to_int());
     result
 }
 fn encode(origin, document, context) {
-    if context.direction() != "downstream" { throw "upstream encode must not run"; }
     let result = blob(2, 0);
     result[0] = 209;
-    result[1] = document.get("amount");
+    result[1] = if document.has("amount") { document.get("amount") } else { 0 };
     result
 }
 fn display(document, context) { "ok" }
@@ -280,7 +223,7 @@ fn display(document, context) { "ok" }
     )
     .await;
 
-    assert_eq!(request_once(port, &[2, 61]).await, [209, 61]);
+    assert_eq!(request_once(port, &[2, 61]).await, [209, 0]);
     let status = runtime.statuses().await.unwrap().pop().unwrap();
     assert_eq!(status.client_to_server_bytes, 0);
     assert_eq!(status.server_to_client_bytes, 2);
@@ -291,7 +234,7 @@ fn set_amount_rule(
     listener: &ProxyListener,
     require_request_match: bool,
     amount: i64,
-) -> SocketDocumentRuleDefinition {
+) -> ProtocolDocumentRuleDefinition {
     let conditions = if require_request_match {
         vec![DocumentCondition::Equals {
             field: DocumentFieldName::new("amount").unwrap(),
@@ -301,15 +244,15 @@ fn set_amount_rule(
         // Domain 用空条件列表表达无条件恒匹配；不存在协议专属的 Always 哨兵类型。
         Vec::new()
     };
-    SocketDocumentRuleDefinition::new(
-        SocketDocumentRuleId::new(),
+    ProtocolDocumentRuleDefinition::new(
+        ProtocolDocumentRuleId::new(),
         true,
         10,
         1,
         listener.id,
         package_ref(listener_package_id(listener)),
         1,
-        SocketDirection::Downstream,
+        ProtocolDirection::Downstream,
         conditions,
         vec![DocumentAction::SetField {
             field: DocumentFieldName::new("amount").unwrap(),

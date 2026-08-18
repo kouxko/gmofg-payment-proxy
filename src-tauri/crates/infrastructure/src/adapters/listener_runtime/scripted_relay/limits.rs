@@ -10,16 +10,10 @@ use super::invalid_limits;
 pub(crate) fn frame_pump_limits(
     runtime: ProtocolRuntimeLimits,
     framing: ProtocolFramingLimits,
-    upstream: DirectionExecutionPlan,
-    downstream: DirectionExecutionPlan,
+    _upstream: DirectionExecutionPlan,
+    _downstream: DirectionExecutionPlan,
 ) -> Result<SocketFramePumpLimits, SocketProcessingFailure> {
-    let entry_calls = [upstream, downstream]
-        .into_iter()
-        .map(|plan| u64::from(plan.decode_enabled()) + u64::from(plan.encode_enabled()))
-        .max()
-        .unwrap_or(0)
-        .max(1);
-    frame_pump_limits_for_entry_calls(runtime, framing, entry_calls)
+    frame_pump_limits_for_entry_calls(runtime, framing, 2)
 }
 
 pub(crate) fn frame_pump_limits_for_entry_calls(

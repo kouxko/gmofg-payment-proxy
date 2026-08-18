@@ -6,8 +6,8 @@
 
 use chrono::{DateTime, Utc};
 use intercept_proxy_domain::{
-    DocumentSchemaId, ListenerId, ProtocolPackageRef, SocketDirection, SocketDocumentRuleId,
-    WorkspaceId,
+    DocumentSchemaId, ListenerId, ProtocolDirection, ProtocolDocumentRuleId, ProtocolPackageRef,
+    ProtocolRuleStage, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -97,8 +97,6 @@ impl SocketCaptureSchemaRef {
 #[serde(rename_all = "snake_case")]
 /// Hex fallback 的稳定原因；不保存脚本异常文本或原始 payload。
 pub enum SocketDisplayFallbackReason {
-    EncodeDisabled,
-    NotDeclared,
     EntryPointFailed,
     ResourceLimitExceeded,
 }
@@ -191,31 +189,39 @@ impl SocketDisplayResult {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-/// `written` 字节来自原文还是 Encode；UI 不通过比较字节猜测处理路径。
-pub enum SocketWriteKind {
-    Original,
-    Encoded,
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+/// Relay 中一段规则执行完成后的不可变 Document 快照。
+pub struct SocketRelayRuleStageCapture {
+    pub stage: ProtocolRuleStage,
+    pub matched_rule_ids: Vec<ProtocolDocumentRuleId>,
+    pub document: SocketCaptureDocument,
+}
+
+impl fmt::Debug for SocketRelayRuleStageCapture {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("SocketRelayRuleStageCapture")
+            .field("stage", &self.stage)
+            .field("matched_rule_count", &self.matched_rule_ids.len())
+            .field("document_schema", self.document.schema.id())
+            .finish()
+    }
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 /// Relay 中一个方向已成功写出的完整 Frame。
 pub struct SocketRelayFrameCapture {
-    pub direction: SocketDirection,
+    pub direction: ProtocolDirection,
     pub package: ProtocolPackageRef,
     pub schema: SocketCaptureSchemaRef,
-    pub decode_enabled: bool,
-    pub encode_enabled: bool,
-    /// 网络读取到的完整原始 Frame；Decode 关闭或失败时仍必须保留。
+    /// 网络读取到的完整原始 Frame。
     pub origin: Vec<u8>,
-    /// 规则执行所使用的 Document。Decode 关闭时必须为 `None`。
-    pub document: Option<SocketCaptureDocument>,
-    pub matched_rule_ids: Vec<SocketDocumentRuleId>,
+    /// 当前方向固定两段规则的独立后置快照，按线路顺序保存。
+    pub stages: Vec<SocketRelayRuleStageCapture>,
     /// 实际成功写入另一端的完整字节；不得记录部分写入缓冲区。
     pub written: Vec<u8>,
-    pub write_kind: SocketWriteKind,
     pub display: SocketDisplayResult,
 }
 
@@ -226,13 +232,9 @@ impl fmt::Debug for SocketRelayFrameCapture {
             .field("direction", &self.direction)
             .field("package", &self.package)
             .field("schema", &self.schema)
-            .field("decode_enabled", &self.decode_enabled)
-            .field("encode_enabled", &self.encode_enabled)
             .field("origin_bytes", &self.origin.len())
-            .field("document_present", &self.document.is_some())
-            .field("matched_rule_count", &self.matched_rule_ids.len())
+            .field("stage_count", &self.stages.len())
             .field("written_bytes", &self.written.len())
-            .field("write_kind", &self.write_kind)
             .field("display", &self.display)
             .finish()
     }
@@ -247,8 +249,13 @@ impl SocketRelayFrameCapture {
             + self.schema.logical_bytes()
             + self.origin.len() as u64
             + self.written.len() as u64
-            + document_logical_bytes(self.document.as_ref())
-            + (self.matched_rule_ids.len() as u64 * 16)
+            + self
+                .stages
+                .iter()
+                .map(|stage| {
+                    32 + stage.document.logical_bytes() + (stage.matched_rule_ids.len() as u64 * 16)
+                })
+                .sum::<u64>()
             + self.display.logical_bytes()
     }
 }
@@ -259,19 +266,20 @@ impl SocketRelayFrameCapture {
 pub struct SocketLocalExchangeCapture {
     pub exchange_id: SocketExchangeId,
     pub package: ProtocolPackageRef,
-    pub schema: SocketCaptureSchemaRef,
-    pub request_decode_enabled: bool,
-    pub response_encode_enabled: bool,
+    pub request_schema: SocketCaptureSchemaRef,
+    pub response_schema: SocketCaptureSchemaRef,
     pub request_origin: Vec<u8>,
-    /// Decode 关闭时必须保持 `None`，不得合成空 Document 冒充解析结果。
-    pub request_document: Option<SocketCaptureDocument>,
-    /// Decode 关闭时为 `None`；成功 Decode 后保存同一协议包的 Display 或明确 Hex 回退。
-    pub request_display: Option<SocketDisplayResult>,
-    /// 规则只修改该响应 Document，不得覆盖 request Document。
+    /// Decode 与 App -> Proxy 请求规则完成后的上行 Document。
+    pub request_document: SocketCaptureDocument,
+    /// 同一协议包的请求 Display 或明确 Hex 回退。
+    pub request_display: SocketDisplayResult,
+    /// Proxy -> App 响应规则只修改该下行 Document，不得覆盖 request Document。
     pub response_document: SocketCaptureDocument,
-    pub matched_downstream_rule_ids: Vec<SocketDocumentRuleId>,
+    /// App -> Proxy 请求阶段按执行顺序命中的规则。
+    pub matched_request_rule_ids: Vec<ProtocolDocumentRuleId>,
+    /// Proxy -> App 响应阶段按执行顺序命中的规则。
+    pub matched_response_rule_ids: Vec<ProtocolDocumentRuleId>,
     pub written_response: Vec<u8>,
-    pub response_write_kind: SocketWriteKind,
     pub response_display: SocketDisplayResult,
 }
 
@@ -281,22 +289,24 @@ impl fmt::Debug for SocketLocalExchangeCapture {
             .debug_struct("SocketLocalExchangeCapture")
             .field("exchange_id", &self.exchange_id)
             .field("package", &self.package)
-            .field("schema", &self.schema)
-            .field("request_decode_enabled", &self.request_decode_enabled)
-            .field("response_encode_enabled", &self.response_encode_enabled)
+            .field("request_schema", &self.request_schema)
+            .field("response_schema", &self.response_schema)
             .field("request_origin_bytes", &self.request_origin.len())
-            .field("request_document_present", &self.request_document.is_some())
+            .field("request_document_schema", self.request_document.schema.id())
             .field("request_display", &self.request_display)
             .field(
                 "response_document_schema",
                 self.response_document.schema.id(),
             )
             .field(
-                "matched_downstream_rule_count",
-                &self.matched_downstream_rule_ids.len(),
+                "matched_request_rule_count",
+                &self.matched_request_rule_ids.len(),
+            )
+            .field(
+                "matched_response_rule_count",
+                &self.matched_response_rule_ids.len(),
             )
             .field("written_response_bytes", &self.written_response.len())
-            .field("response_write_kind", &self.response_write_kind)
             .field("response_display", &self.response_display)
             .finish()
     }
@@ -308,16 +318,15 @@ impl SocketLocalExchangeCapture {
     fn logical_bytes(&self) -> u64 {
         Self::FIXED_OVERHEAD_BYTES
             + package_logical_bytes(&self.package)
-            + self.schema.logical_bytes()
+            + self.request_schema.logical_bytes()
+            + self.response_schema.logical_bytes()
             + self.request_origin.len() as u64
             + self.written_response.len() as u64
-            + document_logical_bytes(self.request_document.as_ref())
-            + self
-                .request_display
-                .as_ref()
-                .map_or(0, SocketDisplayResult::logical_bytes)
-            + document_logical_bytes(Some(&self.response_document))
-            + (self.matched_downstream_rule_ids.len() as u64 * 16)
+            + self.request_document.logical_bytes()
+            + self.request_display.logical_bytes()
+            + self.response_document.logical_bytes()
+            + (self.matched_request_rule_ids.len() as u64 * 16)
+            + (self.matched_response_rule_ids.len() as u64 * 16)
             + self.response_display.logical_bytes()
     }
 }
@@ -326,8 +335,8 @@ impl SocketLocalExchangeCapture {
 #[serde(tag = "kind", content = "capture", rename_all = "snake_case")]
 /// Socket capture 的封闭联合类型；本地 exchange 不伪装为 Server frame。
 pub enum SocketCapturePayload {
-    RelayFrame(SocketRelayFrameCapture),
-    LocalExchange(SocketLocalExchangeCapture),
+    RelayFrame(Box<SocketRelayFrameCapture>),
+    LocalExchange(Box<SocketLocalExchangeCapture>),
 }
 
 impl fmt::Debug for SocketCapturePayload {
@@ -421,7 +430,7 @@ pub struct SocketCaptureQuery {
     pub session_id: Option<SessionId>,
     pub connection_id: Option<SocketConnectionId>,
     pub package: Option<ProtocolPackageRef>,
-    pub direction: Option<SocketDirection>,
+    pub direction: Option<ProtocolDirection>,
     pub kind: Option<SocketCaptureKind>,
     pub occurred_from: Option<DateTime<Utc>>,
     pub occurred_to: Option<DateTime<Utc>>,
@@ -442,13 +451,13 @@ pub struct SocketCaptureRowViewModel {
     pub occurred_at: DateTime<Utc>,
     pub completed_at: DateTime<Utc>,
     pub kind: SocketCaptureKind,
-    pub direction: Option<SocketDirection>,
+    pub direction: Option<ProtocolDirection>,
     pub package: ProtocolPackageRef,
     pub schema: SocketCaptureSchemaRef,
     pub origin_size_bytes: u64,
     pub written_size_bytes: u64,
     pub logical_size_bytes: u64,
-    pub matched_rule_ids: Vec<SocketDocumentRuleId>,
+    pub matched_rule_ids: Vec<ProtocolDocumentRuleId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -480,12 +489,4 @@ impl fmt::Debug for SocketCaptureDetailViewModel {
 
 fn package_logical_bytes(package: &ProtocolPackageRef) -> u64 {
     (package.id.as_str().len() + package.version.as_str().len()) as u64
-}
-
-fn document_logical_bytes(document: Option<&SocketCaptureDocument>) -> u64 {
-    document.map_or(0, |value| {
-        // Document 的严格 wire 包含完整 Schema 和稀疏值槽。使用 wire 字节长度可稳定计入
-        // 字段名、标签、String/Blob 内容，且不会受 allocator capacity 或平台 ABI 影响。
-        serde_json::to_vec(value).map_or(u64::MAX, |bytes| bytes.len() as u64)
-    })
 }

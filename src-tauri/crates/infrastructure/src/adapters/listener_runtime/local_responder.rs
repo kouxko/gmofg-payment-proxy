@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{SocketCaptureSchemaRef, SocketExchangeId};
-use intercept_proxy_domain::SocketRuleStage;
+use intercept_proxy_domain::ProtocolRuleStage;
 use intercept_proxy_protocol_scripting::{
     LocalResponderCoordinator, ProtocolDirection, ProtocolExecutionCancellation,
     ProtocolFrameInspector, ProtocolFramingLimits, ProtocolRuntimeError, ProtocolRuntimeLimits,
@@ -21,7 +21,7 @@ use intercept_proxy_runtime::{
 use tokio::sync::{mpsc, oneshot};
 
 use super::{
-    SocketDocumentRuleConnection, SocketDocumentRuleConnectionFactory,
+    ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
     scripted_relay::limiter::{BlockingCommandSlots, acquire_for_reply},
     scripted_snapshot::ScriptedSocketRuntimeSnapshot,
     socket_capture_publisher::{SocketCaptureContext, SocketCapturePublishTicket},
@@ -33,7 +33,7 @@ mod failure;
 mod limits;
 mod preview;
 use failure::{
-    frame_boundary, framing_failure, invalid_limits, processing_failure, request_runtime_failure,
+    frame_boundary, framing_failure, processing_failure, request_runtime_failure,
     response_runtime_failure, worker_failure,
 };
 pub(super) use limits::local_frame_pump_limits;
@@ -41,15 +41,14 @@ pub(super) use limits::local_frame_pump_limits;
 /// 同一次 Listener 启动快照派生的 `LocalResponder` processor factory。
 pub(super) struct LocalResponderProcessorFactoryAdapter {
     package: RuntimeProtocolPackageSnapshot,
-    request_decode_enabled: bool,
-    response_encode_enabled: bool,
-    rules: SocketDocumentRuleConnectionFactory,
+    rules: ProtocolDocumentRuleConnectionFactory,
     listener_id: String,
     runtime_limits: ProtocolRuntimeLimits,
     framing_limits: ProtocolFramingLimits,
     blocking_slots: BlockingCommandSlots,
     capture: SocketCaptureContext,
-    schema: SocketCaptureSchemaRef,
+    request_schema: SocketCaptureSchemaRef,
+    response_schema: SocketCaptureSchemaRef,
 }
 
 impl LocalResponderProcessorFactoryAdapter {
@@ -59,20 +58,29 @@ impl LocalResponderProcessorFactoryAdapter {
         framing_limits: ProtocolFramingLimits,
         capture: SocketCaptureContext,
     ) -> Self {
-        let schema = snapshot.package().compiled().schema();
+        let request_schema = snapshot
+            .package()
+            .compiled()
+            .schema(ProtocolDirection::Upstream);
+        let response_schema = snapshot
+            .package()
+            .compiled()
+            .schema(ProtocolDirection::Downstream);
         Self {
             package: snapshot.package().clone(),
-            request_decode_enabled: snapshot.upstream().decode_enabled(),
-            response_encode_enabled: snapshot.downstream().encode_enabled(),
             rules: snapshot.rule_connections().clone(),
             listener_id,
             runtime_limits: snapshot.runtime_limits(),
             framing_limits,
             blocking_slots: BlockingCommandSlots::new_local(snapshot.maximum_connections()),
             capture,
-            schema: SocketCaptureSchemaRef {
-                id: schema.id().clone(),
-                version: schema.version(),
+            request_schema: SocketCaptureSchemaRef {
+                id: request_schema.id().clone(),
+                version: request_schema.version(),
+            },
+            response_schema: SocketCaptureSchemaRef {
+                id: response_schema.id().clone(),
+                version: response_schema.version(),
             },
         }
     }
@@ -95,8 +103,6 @@ impl LocalResponderProcessorFactoryAdapter {
         );
         let coordinator = LocalResponderCoordinator::new_with_cancellation(
             self.package.compiled(),
-            self.request_decode_enabled,
-            self.response_encode_enabled,
             connection_context,
             self.listener_id.clone(),
             self.runtime_limits,
@@ -105,10 +111,10 @@ impl LocalResponderProcessorFactoryAdapter {
         .map_err(|error| request_runtime_failure(&error))?;
         let request_rules = self
             .rules
-            .connection(connection.clone(), SocketRuleStage::AppToProxy);
+            .connection(connection.clone(), ProtocolRuleStage::AppToProxy);
         let response_rules = self
             .rules
-            .connection(connection.clone(), SocketRuleStage::ProxyToApp);
+            .connection(connection.clone(), ProtocolRuleStage::ProxyToApp);
         Ok(LocalResponderFrameProcessor::spawn(
             LocalWorkerState {
                 inspector,
@@ -121,9 +127,8 @@ impl LocalResponderProcessorFactoryAdapter {
                 cancellation: cancellation.clone(),
                 connection,
                 capture: self.capture.clone(),
-                schema: self.schema.clone(),
-                request_decode_enabled: self.request_decode_enabled,
-                response_encode_enabled: self.response_encode_enabled,
+                request_schema: self.request_schema.clone(),
+                response_schema: self.response_schema.clone(),
             },
             self.blocking_slots.clone(),
             cancellation,
@@ -288,17 +293,16 @@ enum LocalCommand {
 struct LocalWorkerState {
     inspector: ProtocolFrameInspector,
     coordinator: LocalResponderCoordinator,
-    request_rules: SocketDocumentRuleConnection,
-    response_rules: SocketDocumentRuleConnection,
+    request_rules: ProtocolDocumentRuleConnection,
+    response_rules: ProtocolDocumentRuleConnection,
     package: intercept_proxy_domain::ProtocolPackageRef,
     pending_response: Option<capture::PendingLocalCapture>,
     diagnostics: Option<LocalResponderDiagnostics>,
     cancellation: ProtocolExecutionCancellation,
     connection: SocketConnectionIdentity,
     capture: SocketCaptureContext,
-    schema: SocketCaptureSchemaRef,
-    request_decode_enabled: bool,
-    response_encode_enabled: bool,
+    request_schema: SocketCaptureSchemaRef,
+    response_schema: SocketCaptureSchemaRef,
 }
 
 async fn run_local_worker(
@@ -329,15 +333,16 @@ async fn run_local_worker(
                 capture::commit(
                     &mut state.coordinator,
                     pending,
-                    ticket,
-                    &state.capture,
-                    &state.connection,
-                    completed_at,
-                    state.package.clone(),
-                    state.schema.clone(),
-                    state.request_decode_enabled,
-                    state.response_encode_enabled,
-                    false,
+                    capture::LocalCaptureCommit {
+                        ticket,
+                        capture: &state.capture,
+                        connection: &state.connection,
+                        completed_at,
+                        package: state.package.clone(),
+                        request_schema: state.request_schema.clone(),
+                        response_schema: state.response_schema.clone(),
+                        render_display: false,
+                    },
                 );
             }
             continue;
@@ -385,15 +390,16 @@ fn run_local_command(mut state: LocalWorkerState, command: LocalCommand) -> Loca
                 capture::commit(
                     &mut state.coordinator,
                     pending,
-                    ticket,
-                    &state.capture,
-                    &state.connection,
-                    completed_at,
-                    state.package.clone(),
-                    state.schema.clone(),
-                    state.request_decode_enabled,
-                    state.response_encode_enabled,
-                    true,
+                    capture::LocalCaptureCommit {
+                        ticket,
+                        capture: &state.capture,
+                        connection: &state.connection,
+                        completed_at,
+                        package: state.package.clone(),
+                        request_schema: state.request_schema.clone(),
+                        response_schema: state.response_schema.clone(),
+                        render_display: true,
+                    },
                 );
             }
         }
@@ -412,39 +418,60 @@ fn process_exchange(
         ));
     }
     let exchange_id = SocketExchangeId::new();
-    let request = state
-        .coordinator
-        .decode_request(origin.to_vec())
-        .map_err(|error| request_runtime_failure(&error))?;
-    preview::publish_request_parsed(state.diagnostics.as_ref(), exchange_id, &request);
     let package = state.package.clone();
     let cancellation = state.cancellation.clone();
-    let mut matched_rule_ids = Vec::new();
-    let response = state
+    let mut matched_request_rule_ids = Vec::new();
+    let request = state
         .coordinator
-        .build_response(&request, |document| {
+        .decode_request_with_document_transform(origin.to_vec(), |document| {
             state
                 .request_rules
                 .execute_with_cancellation(state.request_rules.bind_document(document), || {
                     cancellation.is_cancelled()
                 })
-                .and_then(|execution| {
-                    let (document, mut request_ids) = execution.into_parts();
-                    state
-                        .response_rules
-                        .execute_with_cancellation(
-                            state.response_rules.bind_document(document),
-                            || cancellation.is_cancelled(),
-                        )
-                        .map(|execution| {
-                            let (document, response_ids) = execution.into_parts();
-                            request_ids.extend(response_ids);
-                            matched_rule_ids = request_ids;
-                            document
-                        })
+                .map(|execution| {
+                    let (document, matched_ids) = execution.into_parts();
+                    matched_request_rule_ids = matched_ids;
+                    document
                 })
-                .map_err(|_| ProtocolRuntimeError::DocumentTransformFailed {
-                    package: package.clone(),
+                .map_err(|_| {
+                    if cancellation.is_cancelled() {
+                        ProtocolRuntimeError::LocalResponseCancelled {
+                            package: package.clone(),
+                        }
+                    } else {
+                        ProtocolRuntimeError::DocumentTransformFailed {
+                            package: package.clone(),
+                        }
+                    }
+                })
+        })
+        .map_err(|error| request_runtime_failure(&error))?;
+    preview::publish_request_parsed(state.diagnostics.as_ref(), exchange_id, &request);
+    let mut matched_response_rule_ids = Vec::new();
+    let response = state
+        .coordinator
+        .build_response(&request, |document| {
+            state
+                .response_rules
+                .execute_with_cancellation(state.response_rules.bind_document(document), || {
+                    cancellation.is_cancelled()
+                })
+                .map(|execution| {
+                    let (document, matched_ids) = execution.into_parts();
+                    matched_response_rule_ids = matched_ids;
+                    document
+                })
+                .map_err(|_| {
+                    if cancellation.is_cancelled() {
+                        ProtocolRuntimeError::LocalResponseCancelled {
+                            package: package.clone(),
+                        }
+                    } else {
+                        ProtocolRuntimeError::DocumentTransformFailed {
+                            package: package.clone(),
+                        }
+                    }
                 })
         })
         .map_err(|error| response_runtime_failure(&error))?;
@@ -453,7 +480,8 @@ fn process_exchange(
         response,
         exchange_id,
         request,
-        matched_rule_ids,
+        matched_request_rule_ids,
+        matched_response_rule_ids,
         occurred_at,
     ));
     Ok(written)

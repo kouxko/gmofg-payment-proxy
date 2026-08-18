@@ -85,6 +85,9 @@ pub use android_runtime_owner::AndroidRuntimeOwnerRecord;
 mod portable_configuration;
 pub(crate) mod protocol_packages;
 mod schema;
+
+/// 当前 1.0 数据库格式版本。低于该版本的预发布数据由 Host 清空后重建。
+pub const CURRENT_APPLICATION_SCHEMA_VERSION: i64 = schema::CURRENT_SCHEMA_VERSION;
 pub(crate) mod socket_capture_coordination;
 pub(crate) mod socket_captures;
 mod workspaces;

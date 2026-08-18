@@ -73,6 +73,8 @@ const iconCloseTriggerFiles = new Set([
   "src/features/capture/capture-detail-panel.tsx",
   "src/features/capture/socket-capture-detail.tsx",
   "src/features/sessions/session-actions.tsx",
+  "src/features/listeners/socket-protocol-package-dialog.tsx",
+  "src/features/protocol-packages/protocol-package-dialog.tsx",
 ]);
 
 const failures = [];

@@ -19,7 +19,7 @@ interface SocketCaptureListProps {
   clearButtonId: string;
 }
 
-const kindLabel = { relay_frame: "Relay Frame", local_exchange: "LocalExchange" } as const;
+const kindLabel = { relay_frame: "转发报文", local_exchange: "本机应答" } as const;
 const directionLabel = { upstream: "App → Server", downstream: "Server → App" } as const;
 
 export function SocketCaptureList(props: SocketCaptureListProps) {
@@ -30,7 +30,7 @@ export function SocketCaptureList(props: SocketCaptureListProps) {
         <div>
           <h2 className="text-lg font-semibold">Socket 抓包</h2>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
-            仅显示完成写出的 Frame 或 LocalResponder Request/Response 交换
+            仅显示已完成写出的转发报文或本机应答请求与响应
           </p>
         </div>
         <Button id={props.clearButtonId} className="ml-auto" variant="danger-soft" isDisabled={props.loading} onPress={props.onClear}>
@@ -66,8 +66,8 @@ export function SocketCaptureList(props: SocketCaptureListProps) {
               <Table.Column>类型</Table.Column>
               <Table.Column>方向</Table.Column>
               <Table.Column>协议包</Table.Column>
-              <Table.Column>Schema</Table.Column>
-              <Table.Column>Origin / Written / Logical</Table.Column>
+              <Table.Column>字段结构</Table.Column>
+              <Table.Column>原始 / 写出 / 解析</Table.Column>
               <Table.Column>规则</Table.Column>
               <Table.Column>连接</Table.Column>
             </Table.Header>
@@ -84,7 +84,7 @@ export function SocketCaptureList(props: SocketCaptureListProps) {
                     </Button>
                   </Table.Cell>
                   <Table.Cell><Chip size="sm" color="accent" variant="soft">{kindLabel[row.kind]}</Chip></Table.Cell>
-                  <Table.Cell>{row.direction ? directionLabel[row.direction] : "Local Request ⇄ Response"}</Table.Cell>
+                  <Table.Cell>{row.direction ? directionLabel[row.direction] : "应用请求 ⇄ 本机应答"}</Table.Cell>
                   <Table.Cell><code className="text-xs">{packageLabel(row.package)}</code></Table.Cell>
                   <Table.Cell><code className="text-xs">{schemaLabel(row.schema)}</code></Table.Cell>
                   <Table.Cell className="whitespace-nowrap text-xs">

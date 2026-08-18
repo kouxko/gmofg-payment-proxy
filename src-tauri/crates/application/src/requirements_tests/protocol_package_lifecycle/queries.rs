@@ -38,7 +38,8 @@ async fn listener_catalog_only_returns_enabled_valid_current_descriptions_in_sta
         [first.clone(), second.clone()]
     );
     assert_eq!(catalog.options[0].name, format!("alpha {}", first.version));
-    assert_eq!(catalog.options[0].schema.id, "payments");
+    assert_eq!(catalog.options[0].upstream_schema.id, "payments");
+    assert_eq!(catalog.options[0].downstream_schema.id, "responses");
     assert!(catalog.options[0].capabilities.upstream.encode);
     assert_eq!(services.describe_calls.load(Ordering::SeqCst), 0);
     assert_eq!(services.compile_calls.load(Ordering::SeqCst), 0);
@@ -156,10 +157,14 @@ async fn list_groups_versions_by_id_and_detail_uses_the_exact_version() {
         .unwrap();
     assert_eq!(detail.version.package, iso_v1);
     assert_eq!(detail.capabilities, expected_description.capabilities);
-    assert_eq!(detail.schema, expected_description.schema);
+    assert_eq!(detail.upstream_schema, expected_description.upstream_schema);
+    assert_eq!(
+        detail.downstream_schema,
+        expected_description.downstream_schema
+    );
     assert_eq!(
         detail
-            .schema
+            .upstream_schema
             .fields
             .iter()
             .map(|field| field.name.as_str())
@@ -279,14 +284,18 @@ async fn native_import_cancellation_success_and_errors_are_forwarded_without_par
         package: version.package.clone(),
         name: version.name.clone(),
         host_api: version.host_api,
+        kind: description.kind,
         capabilities: description.capabilities,
-        schema: description.schema.clone(),
+        upstream_schema: description.upstream_schema.clone(),
+        downstream_schema: description.downstream_schema.clone(),
     };
     let imported = ProtocolPackageImportViewModel {
         outcome: ProtocolPackageImportOutcomeViewModel::Installed,
         version,
+        kind: description.kind,
         capabilities: description.capabilities,
-        schema: description.schema,
+        upstream_schema: description.upstream_schema,
+        downstream_schema: description.downstream_schema,
     };
     services.push_import_response(Ok(None));
     services.push_import_response(Ok(Some(preview.clone())));
@@ -327,13 +336,20 @@ async fn detail_serializes_only_the_approved_no_source_wire_shape() {
             .keys()
             .cloned()
             .collect::<BTreeSet<_>>(),
-        ["capabilities", "schema", "usages", "version"]
-            .into_iter()
-            .map(str::to_owned)
-            .collect()
+        [
+            "capabilities",
+            "downstream_schema",
+            "kind",
+            "upstream_schema",
+            "usages",
+            "version",
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
     );
     assert_eq!(
-        value["schema"]["fields"]
+        value["upstream_schema"]["fields"]
             .as_array()
             .unwrap()
             .iter()
@@ -341,6 +357,7 @@ async fn detail_serializes_only_the_approved_no_source_wire_shape() {
             .collect::<Vec<_>>(),
         ["trace_id", "amount", "approved"]
     );
+    assert_eq!(value["downstream_schema"]["id"], "responses");
     assert_no_forbidden_protocol_package_keys(&value);
 }
 

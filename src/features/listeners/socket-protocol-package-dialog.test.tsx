@@ -21,21 +21,29 @@ function detail() {
       package: { id: "iso-8583", version: "2.0.0" },
       name: "ISO 8583 v2",
       host_api: 1,
+      kind: "socket" as const,
       built_in: false,
       enabled: true,
       validation: { state: "valid" as const },
       installed_at: "2026-08-15T00:00:00Z",
     },
+    kind: "socket" as const,
     capabilities: {
       upstream: { frame: true, decode: true, encode: true },
       downstream: { frame: true, decode: true, encode: true },
       display: true,
     },
-    schema: {
-      id: "iso-message",
+    upstream_schema: {
+      id: "iso-request",
       version: 7,
-      title: "ISO Message",
+      title: "ISO Request",
       fields: [{ name: "mti", label: "MTI", type: "string" as const }],
+    },
+    downstream_schema: {
+      id: "iso-response",
+      version: 8,
+      title: "ISO Response",
+      fields: [{ name: "response_code", label: "Response", type: "string" as const }],
     },
     usages: [],
   };
@@ -55,7 +63,7 @@ describe("SocketProtocolPackageDialog", () => {
     trigger.focus();
     await user.keyboard("{Enter}");
 
-    expect(await screen.findByRole("dialog", { name: "Listener 协议包详情" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "入口协议包详情" })).toBeVisible();
     expect(screen.getByText("mti")).toBeVisible();
     expect(mocks.protocolPackageDetail).toHaveBeenCalledWith({ id: "iso-8583", version: "2.0.0" });
   });
@@ -65,11 +73,11 @@ describe("SocketProtocolPackageDialog", () => {
     render(<SocketProtocolPackageDialog packageRef={{ id: "iso-8583", version: "2.0.0" }} />);
     const trigger = screen.getByRole("button", { name: "查看所选版本与 Schema" });
     await user.click(trigger);
-    expect(await screen.findByRole("dialog", { name: "Listener 协议包详情" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "入口协议包详情" })).toBeVisible();
 
     await user.keyboard("{Escape}");
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Listener 协议包详情" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "入口协议包详情" })).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
   });
 
@@ -97,12 +105,22 @@ describe("SocketProtocolPackageDialog", () => {
     expect(await screen.findByText("协议包详情身份与当前选择不一致。")).toBeVisible();
   });
 
+  it("fails closed when a Socket binding resolves to an HTTP package", async () => {
+    mocks.protocolPackageDetail.mockResolvedValue({ ...detail(), kind: "http" });
+    const user = userEvent.setup();
+    render(<SocketProtocolPackageDialog packageRef={{ id: "iso-8583", version: "2.0.0" }} />);
+
+    await user.click(screen.getByRole("button", { name: "查看所选版本与 Schema" }));
+
+    expect(await screen.findByText("协议包详情数据不完整。")).toBeVisible();
+  });
+
   it("opens through the real Modal trigger callback without scheduling focus restoration", async () => {
     render(<SocketProtocolPackageDialog packageRef={{ id: "iso-8583", version: "2.0.0" }} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "打开 Listener 协议包详情", hidden: true }));
+    fireEvent.click(screen.getByRole("button", { name: "打开入口协议包详情", hidden: true }));
 
-    expect(await screen.findByRole("dialog", { name: "Listener 协议包详情" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "入口协议包详情" })).toBeVisible();
   });
 
   it("disables the detail trigger while the editor is locked", () => {

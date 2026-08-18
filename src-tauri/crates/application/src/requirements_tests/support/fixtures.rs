@@ -74,6 +74,8 @@ pub(in crate::requirements_tests) fn content(body: &[u8]) -> MessageContentViewM
         codec_id: Some("utf-8".into()),
         decode_error: None,
         query_string: None,
+        protocol: None,
+        protocol_failure: None,
     }
 }
 
@@ -210,6 +212,7 @@ pub(in crate::requirements_tests) fn protocol_package_description(
 ) -> ProtocolPackageDescriptionViewModel {
     ProtocolPackageDescriptionViewModel {
         package,
+        kind: ProtocolPackageKindViewModel::Socket,
         capabilities: ProtocolPackageCapabilitiesViewModel {
             upstream: ProtocolPackageDirectionCapabilitiesViewModel {
                 frame: true,
@@ -223,10 +226,28 @@ pub(in crate::requirements_tests) fn protocol_package_description(
             },
             display: true,
         },
-        schema: ProtocolPackageSchemaViewModel {
+        upstream_schema: ProtocolPackageSchemaViewModel {
             id: "portable-message".into(),
             version: 7,
             title: "Portable Message".into(),
+            fields: [
+                ("text", ProtocolPackageSchemaFieldTypeViewModel::String),
+                ("amount", ProtocolPackageSchemaFieldTypeViewModel::Int),
+                ("approved", ProtocolPackageSchemaFieldTypeViewModel::Bool),
+                ("raw", ProtocolPackageSchemaFieldTypeViewModel::Blob),
+            ]
+            .into_iter()
+            .map(|(name, field_type)| ProtocolPackageSchemaFieldViewModel {
+                name: name.into(),
+                label: name.into(),
+                field_type,
+            })
+            .collect(),
+        },
+        downstream_schema: ProtocolPackageSchemaViewModel {
+            id: "portable-response".into(),
+            version: 8,
+            title: "Portable Response".into(),
             fields: [
                 ("text", ProtocolPackageSchemaFieldTypeViewModel::String),
                 ("amount", ProtocolPackageSchemaFieldTypeViewModel::Int),
@@ -268,30 +289,22 @@ pub(in crate::requirements_tests) fn scripted_workspace(
         maximum_connections: 8,
         processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: package.clone(),
-            upstream: DirectionProcessingOptions {
-                decode_enabled: true,
-                encode_enabled: !local_responder,
-            },
-            downstream: DirectionProcessingOptions {
-                decode_enabled: !local_responder,
-                encode_enabled: true,
-            },
         }),
     });
     let direction = if local_responder {
-        SocketDirection::Downstream
+        ProtocolDirection::Downstream
     } else {
-        SocketDirection::Upstream
+        ProtocolDirection::Upstream
     };
-    workspace.socket_rules.push(
-        SocketDocumentRuleDefinition::new(
-            SocketDocumentRuleId::new(),
+    workspace.protocol_rules.push(
+        ProtocolDocumentRuleDefinition::new(
+            ProtocolDocumentRuleId::new(),
             true,
             -10,
             41,
             listener.id,
             package,
-            7,
+            if local_responder { 8 } else { 7 },
             direction,
             vec![
                 document_equals("text", DocumentValue::String("sale".into())),
@@ -309,7 +322,7 @@ pub(in crate::requirements_tests) fn scripted_workspace(
         )
         .unwrap(),
     );
-    workspace.socket_rule_created_order_high_water = 41;
+    workspace.protocol_rule_created_order_high_water = 41;
     workspace.validate().unwrap();
     workspace
 }

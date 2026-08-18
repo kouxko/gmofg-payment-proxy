@@ -19,7 +19,7 @@ impl SettingsRepositoryPort for SettingsRepositoryAdapter {
         let mut validation = Self::validate_domain(draft);
         self.validate_catalog(draft, &mut validation);
         if validation.valid {
-            self.validate_ports(draft, &mut validation);
+            Self::validate_ports(draft, &mut validation);
         }
         Ok(validation)
     }

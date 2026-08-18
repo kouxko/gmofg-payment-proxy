@@ -16,7 +16,7 @@ fn empty_encode_blob_is_valid_and_html_is_explicitly_untrusted() {
         .with_upstream_encode()
         .with_display()
         .build();
-    let mut executor = executor(&package, ProtocolDirection::Upstream, true, true);
+    let mut executor = executor(&package, ProtocolDirection::Upstream);
     let output = executor.execute_frame(vec![1]).unwrap();
 
     assert!(output.written().is_empty());
@@ -45,7 +45,7 @@ fn direction_has_stable_wire_values() {
 #[test]
 fn executor_debug_is_safe_and_does_not_include_script_source() {
     let package = package_with_all_entries();
-    let executor = executor(&package, ProtocolDirection::Upstream, true, true);
+    let executor = executor(&package, ProtocolDirection::Upstream);
     let debug = format!("{executor:?}");
 
     assert!(debug.contains("test-protocol"));

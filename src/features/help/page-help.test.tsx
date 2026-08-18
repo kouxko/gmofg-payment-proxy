@@ -61,7 +61,7 @@ describe("page-specific usage guides", () => {
     expect(protocolPackageGuide).toContain("页面不会接收本机路径或 ZIP 字节");
     expect(protocolPackageGuide).toContain("此阶段不会安装任何内容");
     expect(protocolPackageGuide).toContain("新安装版本默认停用");
-    expect(protocolPackageGuide).toContain("导入不会自动修改或重绑任何 Listener");
+    expect(protocolPackageGuide).toContain("导入不会自动修改或重绑任何入口");
   });
 
   it("opens the current page guide in a Drawer without document navigation", async () => {

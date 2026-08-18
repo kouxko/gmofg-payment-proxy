@@ -203,7 +203,7 @@ impl ApplicationHostBuilder {
         let services = InfrastructureServiceBundle::new(
             store,
             secret_protector,
-            self.platform.file_dialog,
+            &file_dialog,
             Arc::clone(&self.product),
             Arc::clone(&capacity),
             self.builtin_protocol_package,

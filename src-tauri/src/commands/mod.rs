@@ -11,9 +11,9 @@ mod certificates;
 mod diagnostics;
 mod listener;
 mod protocol_packages;
+mod protocol_rules;
 mod rules;
 mod settings;
-mod socket_rules;
 mod workspace;
 
 #[cfg(test)]
@@ -28,9 +28,9 @@ pub use certificates::*;
 pub use diagnostics::*;
 pub use listener::*;
 pub use protocol_packages::*;
+pub use protocol_rules::*;
 pub use rules::*;
 pub use settings::*;
-pub use socket_rules::*;
 pub use workspace::*;
 
 use intercept_proxy_application::{AppError, AppErrorViewModel};
@@ -155,12 +155,12 @@ pub fn builder() -> Builder<Wry> {
             rule_toggle,
             rule_import,
             rule_export,
-            socket_rule_list,
-            socket_rule_capabilities,
-            socket_rule_parse_value,
-            socket_rule_save,
-            socket_rule_toggle,
-            socket_rule_delete,
+            protocol_rule_list,
+            protocol_rule_capabilities,
+            protocol_rule_parse_value,
+            protocol_rule_save,
+            protocol_rule_toggle,
+            protocol_rule_delete,
             fault_template_list,
             fault_configure,
             fault_active_list,

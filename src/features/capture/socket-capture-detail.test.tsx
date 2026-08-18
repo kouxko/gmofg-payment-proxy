@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-/** Relay Frame 与 LocalExchange 详情的准确展示和 HTTP 隔离测试。 */
+/** 转发报文与本机应答详情的准确展示和 HTTP 隔离测试。 */
 
 import "@testing-library/jest-dom/vitest";
 import { render, screen, within } from "@testing-library/react";
@@ -63,13 +63,12 @@ function relayDetail(
           direction: "downstream",
           package: row.package,
           schema: row.schema,
-          decode_enabled: true,
-          encode_enabled: true,
           origin: [0x30, 0x32],
-          document: documentFixture,
-          matched_rule_ids: row.matched_rule_ids,
+          stages: [
+            { stage: "upstream_to_proxy", matched_rule_ids: row.matched_rule_ids, document: documentFixture },
+            { stage: "proxy_to_app", matched_rule_ids: [], document: documentFixture },
+          ],
           written: [0x30, 0x33],
-          write_kind: "encoded",
           display: { type: "untrusted_html", html: "<p>Response 0210</p>" },
         },
       },
@@ -108,16 +107,15 @@ function localDetail(
         capture: {
           exchange_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           package: row.package,
-          schema: row.schema,
-          request_decode_enabled: false,
-          response_encode_enabled: true,
+          request_schema: row.schema,
+          response_schema: row.schema,
           request_origin: [0x30],
-          request_document: null,
-          request_display: null,
+          request_document: documentFixture,
+          request_display: { type: "untrusted_html", html: "<p>Local request</p>" },
           response_document: documentFixture,
-          matched_downstream_rule_ids: row.matched_rule_ids,
+          matched_request_rule_ids: [],
+          matched_response_rule_ids: row.matched_rule_ids,
           written_response: [0x31],
-          response_write_kind: "encoded",
           response_display: { type: "untrusted_html", html: "<p>Local approved</p>" },
         },
       },
@@ -145,7 +143,7 @@ function renderDetail(
 }
 
 describe("SocketCaptureDetail Relay", () => {
-  it("shows exact Relay direction, identities, bytes, Document and matched rules", () => {
+  it("shows exact relay direction, identities, bytes, parsed fields and matched rules", () => {
     const row = relayRow();
     renderDetail(row, relayDetail(row));
 
@@ -153,36 +151,33 @@ describe("SocketCaptureDetail Relay", () => {
     expect(within(dialog).getByText("Server → App")).toBeVisible();
     expect(within(dialog).getByText("iso8583@2.0.0")).toBeVisible();
     expect(within(dialog).getByText("payment-message v3")).toBeVisible();
-    expect(within(dialog).getByText("9007199254740993")).toBeVisible();
+    expect(within(dialog).getAllByText("9007199254740993")).toHaveLength(2);
     expect(
       within(dialog).getByText("66666666-6666-4666-8666-666666666666"),
     ).toBeVisible();
-    expect(within(dialog).getByRole("region", { name: "Relay Origin" })).toBeVisible();
-    expect(within(dialog).getByText("Encoded")).toBeVisible();
+    expect(within(dialog).getByRole("region", { name: "转发原始报文" })).toBeVisible();
+    expect(within(dialog).getByText("Decode → 两段规则 → Encode")).toBeVisible();
   });
 
-  it("labels an encode-disabled Relay write as Raw Echo and defaults its fallback to Hex", () => {
+  it("defaults a failed protocol display to Hex", () => {
     const row = relayRow();
     const detail = relayDetail(row);
     if (detail.record.payload.kind !== "relay_frame") throw new Error("relay fixture");
-    detail.record.payload.capture.encode_enabled = false;
-    detail.record.payload.capture.write_kind = "original";
     detail.record.payload.capture.display = {
       type: "hex_fallback",
-      reason: "encode_disabled",
-      diagnostic: null,
+      reason: "entry_point_failed",
+      diagnostic: { code: "DISPLAY_FAILED", message: "协议视图生成失败" },
     };
     renderDetail(row, detail);
 
-    expect(screen.getByText("Raw Echo")).toBeVisible();
-    expect(screen.getByText("Encode 未启用，因此未调用 Display")).toBeVisible();
+    expect(screen.getByText("协议视图生成失败，默认显示 Hex")).toBeVisible();
     expect(screen.getByRole("tab", { name: "Hex" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
   });
 
-  it("shows a stable Display failure diagnostic without exposing script text", () => {
+  it("shows a stable protocol-view failure diagnostic without exposing script text", () => {
     const row = relayRow();
     const detail = relayDetail(row);
     if (detail.record.payload.kind !== "relay_frame") throw new Error("relay fixture");
@@ -193,58 +188,53 @@ describe("SocketCaptureDetail Relay", () => {
     };
     renderDetail(row, detail);
 
-    expect(screen.getByText("Display 执行失败，默认显示 Hex")).toBeVisible();
+    expect(screen.getByText("协议视图生成失败，默认显示 Hex")).toBeVisible();
     expect(screen.getByText("DISPLAY_FAILED")).toBeVisible();
     expect(screen.getByText(/协议展示失败/)).toBeVisible();
   });
 
-  it("shows absent Relay Document and empty rule state explicitly", () => {
+  it("shows both rule-stage snapshots and empty rule state explicitly", () => {
     const row = relayRow();
     const detail = relayDetail(row);
     if (detail.record.payload.kind !== "relay_frame") throw new Error("relay fixture");
-    detail.record.payload.capture.decode_enabled = false;
-    detail.record.payload.capture.document = null;
-    detail.record.payload.capture.matched_rule_ids = [];
+    detail.record.payload.capture.stages.forEach((stage) => { stage.matched_rule_ids = []; });
     renderDetail(row, detail);
 
-    expect(screen.getByText("Decode 未启用，没有 Document。")).toBeVisible();
-    expect(screen.getByText("无规则命中")).toBeVisible();
+    expect(screen.getByText("上游服务 → 代理")).toBeVisible();
+    expect(screen.getByText("代理 → 应用")).toBeVisible();
+    expect(screen.getAllByText("无规则命中")).toHaveLength(2);
   });
 });
 
-describe("SocketCaptureDetail LocalExchange", () => {
+describe("SocketCaptureDetail local response", () => {
   it("associates Request and Response under the same stable exchange ID", () => {
     const row = localRow();
     renderDetail(row, localDetail(row));
 
     const dialog = screen.getByRole("dialog", { name: "Socket 抓包详情" });
-    expect(within(dialog).getByRole("heading", { name: "LocalResponder Request" })).toBeVisible();
-    expect(within(dialog).getByRole("heading", { name: "LocalResponder Response" })).toBeVisible();
+    expect(within(dialog).getByRole("heading", { name: "本机应答请求" })).toBeVisible();
+    expect(within(dialog).getByRole("heading", { name: "本机应答响应" })).toBeVisible();
     expect(
       within(dialog).getByText("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
     ).toBeVisible();
   });
 
-  it("keeps an undecoded Request on built-in Hex and custom Display on Response only", async () => {
+  it("keeps request and response protocol views isolated", async () => {
     const row = localRow();
     renderDetail(row, localDetail(row));
 
-    const request = screen.getByRole("heading", { name: "LocalResponder Request" }).closest("section");
-    const response = screen.getByRole("heading", { name: "LocalResponder Response" }).closest("section");
+    const request = screen.getByRole("heading", { name: "本机应答请求" }).closest("section");
+    const response = screen.getByRole("heading", { name: "本机应答响应" }).closest("section");
     expect(request).not.toBeNull();
     expect(response).not.toBeNull();
-    expect(within(request!).getByText("未启用（没有 Document）")).toBeVisible();
-    expect(within(request!).getByRole("region", { name: "Local Request Hex" })).toBeVisible();
-    expect(within(request!).queryByTitle("Socket 协议安全展示")).toBeNull();
-    expect(await within(response!).findByTitle("Socket 协议安全展示")).toBeVisible();
-    expect(within(response!).getByText("Encoded")).toBeVisible();
+    expect(await within(request!).findByTitle("协议包安全展示")).toBeVisible();
+    expect(await within(response!).findByTitle("协议包安全展示")).toBeVisible();
   });
 
-  it("uses the protocol Display for a decoded Request", async () => {
+  it("uses the protocol view for a parsed request", async () => {
     const row = localRow();
     const detail = localDetail(row);
     if (detail.record.payload.kind !== "local_exchange") throw new Error("expected local exchange");
-    detail.record.payload.capture.request_decode_enabled = true;
     detail.record.payload.capture.request_document = documentFixture;
     detail.record.payload.capture.request_display = {
       type: "untrusted_html",
@@ -252,8 +242,8 @@ describe("SocketCaptureDetail LocalExchange", () => {
     };
     renderDetail(row, detail);
 
-    const request = screen.getByRole("heading", { name: "LocalResponder Request" }).closest("section");
-    expect(await within(request!).findByTitle("Socket 协议安全展示")).toBeVisible();
+    const request = screen.getByRole("heading", { name: "本机应答请求" }).closest("section");
+    expect(await within(request!).findByTitle("协议包安全展示")).toBeVisible();
     expect(within(request!).queryByRole("table")).toBeNull();
   });
 
@@ -261,8 +251,8 @@ describe("SocketCaptureDetail LocalExchange", () => {
     const row = localRow();
     renderDetail(row, localDetail(row));
 
-    const request = screen.getByRole("heading", { name: "LocalResponder Request" }).closest("section");
-    const response = screen.getByRole("heading", { name: "LocalResponder Response" }).closest("section");
+    const request = screen.getByRole("heading", { name: "本机应答请求" }).closest("section");
+    const response = screen.getByRole("heading", { name: "本机应答响应" }).closest("section");
     const ruleId = "99999999-9999-4999-8999-999999999999";
     expect(within(request!).queryByText(ruleId)).toBeNull();
     expect(within(response!).getByText(ruleId)).toBeVisible();
@@ -274,7 +264,7 @@ describe("SocketCaptureDetail states and isolation", () => {
     renderDetail(relayRow(), undefined, { loading: true });
 
     expect(screen.getByLabelText("正在读取 Socket 抓包详情")).toBeVisible();
-    expect(screen.queryByText("Origin 原始 Frame")).not.toBeInTheDocument();
+    expect(screen.queryByText("原始报文")).not.toBeInTheDocument();
   });
 
   it("shows a retry action for malformed detail", async () => {

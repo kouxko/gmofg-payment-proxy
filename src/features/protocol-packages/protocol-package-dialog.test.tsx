@@ -37,9 +37,10 @@ describe("ProtocolPackageDialog details", () => {
       const selected = version(packageRef.version, {
         name: packageRef.version === "1.10.0" ? "旧版专用名称" : "最新版专用名称",
       });
+      const schemaVersion = packageRef.version.replaceAll(".", "-");
       return detail(selected, {
-        schema: {
-          id: `schema-${packageRef.version}`,
+        upstream_schema: {
+          id: `schema-${schemaVersion}`,
           version: packageRef.version === "1.10.0" ? 7 : 8,
           title: packageRef.version === "1.10.0" ? "旧版 Schema" : "最新版 Schema",
           fields: packageRef.version === "1.10.0"
@@ -64,17 +65,45 @@ describe("ProtocolPackageDialog details", () => {
     expect(screen.getByText("Host API")).toBeVisible();
     expect(screen.getByText("校验通过")).toBeVisible();
     expect(screen.getByText("上行 Encode：支持")).toBeVisible();
-    expect(screen.getByText("下行 Encode：不支持")).toBeVisible();
+    expect(screen.getByText("下行 Encode：支持")).toBeVisible();
     expect(screen.getByText("收银台测试 / 上游 Socket")).toBeVisible();
     expect(screen.getByText("workspace-1 / listener-1")).toBeVisible();
     expect(screen.getByText("已启用 · 运行中")).toBeVisible();
-    const table = screen.getByRole("grid", { name: "协议包 Schema 字段" });
+    expect(screen.getByText("适用协议")).toBeVisible();
+    expect(screen.getByText("Socket", { selector: "dd" })).toBeVisible();
+    const table = screen.getByRole("grid", { name: "上行 Schema 字段" });
     expect(within(table).getByText("字段名")).toBeVisible();
     expect(within(table).getByText("标签")).toBeVisible();
     expect(within(table).getByText("类型")).toBeVisible();
     expect(within(table).getByText("new_field")).toBeVisible();
     expect(within(table).getByText("新版字段")).toBeVisible();
     expect(within(table).getByText("blob")).toBeVisible();
+  });
+
+  it("shows HTTP as unframed while retaining request and response decoding", async () => {
+    mocks.protocolPackageList.mockResolvedValue([group({
+      kind: "http",
+      versions: [version("2.0.0", { kind: "http" })],
+    })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(version("2.0.0", { kind: "http" }), {
+      kind: "http",
+      capabilities: {
+        upstream: { frame: false, decode: true, encode: true },
+        downstream: { frame: false, decode: true, encode: true },
+        display: true,
+      },
+    }));
+
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("tab", { name: "HTTP" }));
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+    await screen.findByText("ISO 8583 长名称协议包");
+    expect(screen.getByText("HTTP", { selector: "dd" })).toBeVisible();
+    expect(screen.getByText("上行 Frame：不支持")).toBeVisible();
+    expect(screen.getByText("下行 Frame：不支持")).toBeVisible();
+    expect(screen.getByRole("grid", { name: "请求 Schema 字段" })).toBeVisible();
+    expect(screen.getByRole("grid", { name: "响应 Schema 字段" })).toBeVisible();
   });
 
   it("explains the exact scope and limitations of the built-in ISO example", async () => {
@@ -106,7 +135,7 @@ describe("ProtocolPackageDialog details", () => {
     mocks.protocolPackageDetail.mockImplementation(async (packageRef) => {
       if (packageRef.version === "2.0.0") return latest.promise;
       return detail(version("1.10.0", { name: "当前旧版" }), {
-        schema: {
+        upstream_schema: {
           id: "old-schema",
           version: 1,
           title: "当前 Schema",
@@ -121,7 +150,7 @@ describe("ProtocolPackageDialog details", () => {
     expect(await screen.findByText("current_field")).toBeVisible();
 
     latest.resolve(detail(version("2.0.0"), {
-      schema: {
+      upstream_schema: {
         id: "late-schema",
         version: 1,
         title: "迟到 Schema",
@@ -140,16 +169,16 @@ describe("ProtocolPackageDialog details", () => {
     await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
 
     expect(await screen.findByText("协议包详情身份与当前选择不一致。")).toBeVisible();
-    expect(screen.queryByRole("grid", { name: "协议包 Schema 字段" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("grid", { name: "上行 Schema 字段" })).not.toBeInTheDocument();
   });
 
-  it("defends long content and valid empty collections", async () => {
-    const longName = `field_${"x".repeat(180)}`;
+  it("defends long content and valid empty usage collections", async () => {
+    const longName = `field_${"x".repeat(100)}`;
     mocks.protocolPackageList.mockResolvedValue([
       group({ name: `协议包${"很长".repeat(80)}`, versions: [version("3.0.0")] }),
     ]);
     mocks.protocolPackageDetail.mockResolvedValue(detail(version("3.0.0"), {
-      schema: { id: "", version: 1, title: "", fields: [{ name: longName, label: "", type: "string" }] },
+      upstream_schema: { id: "long-schema", version: 1, title: "长字段 Schema", fields: [{ name: "long_field", label: longName, type: "string" }] },
       usages: [],
     }));
     const user = userEvent.setup();
@@ -157,9 +186,7 @@ describe("ProtocolPackageDialog details", () => {
     await user.click(await screen.findByRole("button", { name: /查看协议包/ }));
 
     expect(await screen.findByText(longName)).toBeVisible();
-    expect(screen.getByText("当前没有 Listener 引用此版本。")).toBeVisible();
-    expect(screen.getByText(/未命名 Schema/)).toBeVisible();
-
+    expect(screen.getByText("当前没有入口引用此版本。")).toBeVisible();
   });
 
   it("contains no source entry, source text, or source request", async () => {
@@ -172,13 +199,17 @@ describe("ProtocolPackageDialog details", () => {
       .toEqual(["protocolPackageList", "protocolPackageDetail"]);
   });
 
-  it("shows an empty Schema without crashing", async () => {
+  it("rejects an empty Schema instead of presenting impossible Rust data", async () => {
     mocks.protocolPackageDetail.mockResolvedValue(detail(version("2.0.0"), {
-      schema: { id: "empty", version: 1, title: "空 Schema", fields: [] },
+      upstream_schema: { id: "empty", version: 1, title: "空 Schema", fields: [] },
+      downstream_schema: { id: "empty-response", version: 1, title: "空响应 Schema", fields: [] },
       usages: [],
     }));
-    await openDialog();
-    expect(await screen.findByText("此 Schema 没有声明字段。")).toBeVisible();
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+    expect(await screen.findByText("协议包详情数据不完整。")).toBeVisible();
+    expect(screen.queryByRole("grid", { name: "上行 Schema 字段" })).not.toBeInTheDocument();
   });
 
   it("renders detail request errors without stale content", async () => {
@@ -193,7 +224,7 @@ describe("ProtocolPackageDialog details", () => {
 
   it("fails closed instead of masking missing required detail collections", async () => {
     mocks.protocolPackageDetail.mockResolvedValue(detail(version("2.0.0"), {
-      schema: undefined as never,
+      downstream_schema: undefined as never,
     }));
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);

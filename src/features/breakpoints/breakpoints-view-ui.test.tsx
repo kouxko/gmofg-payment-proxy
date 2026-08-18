@@ -67,6 +67,8 @@ vi.mock("@/features/shell/workspace-navigation", () => ({
 }));
 
 const message = (bodyText: string): MessageContentViewModel => ({
+  protocol: null,
+  protocol_failure: null,
   http_status: null,
   start_line_bytes: [],
   raw_headers: [],

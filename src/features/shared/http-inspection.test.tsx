@@ -10,6 +10,8 @@ import {
 } from "./http-inspection";
 
 const jsonMessage: MessageContentViewModel = {
+  protocol: null,
+  protocol_failure: null,
   http_status: null,
   start_line_bytes: [],
   raw_headers: [],

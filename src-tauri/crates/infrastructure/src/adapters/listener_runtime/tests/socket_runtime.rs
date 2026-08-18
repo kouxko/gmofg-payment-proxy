@@ -1,7 +1,7 @@
 use intercept_proxy_application::{ListenerDataPlaneKind, SocketTransportMode};
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    DirectionProcessingOptions, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
     ScriptedSocketProcessing, SocketDownstreamSecurity, SocketDownstreamTlsSettings,
     SocketEndpoint, SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
     SocketRelaySettings, SocketTopology, SocketUpstreamTlsSettings,
@@ -43,14 +43,6 @@ fn local_responder_listener(bind: SocketAddr) -> ProxyListener {
                 package: ProtocolPackageRef {
                     id: ProtocolPackageId::new("iso8583-standard").unwrap(),
                     version: ProtocolPackageVersion::new("1.2.3").unwrap(),
-                },
-                upstream: DirectionProcessingOptions {
-                    decode_enabled: true,
-                    encode_enabled: false,
-                },
-                downstream: DirectionProcessingOptions {
-                    decode_enabled: false,
-                    encode_enabled: true,
                 },
             }),
         }),

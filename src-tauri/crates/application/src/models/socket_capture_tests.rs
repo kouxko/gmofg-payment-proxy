@@ -1,8 +1,8 @@
 use chrono::{TimeZone, Utc};
 use intercept_proxy_domain::{
     Document, DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema,
-    DocumentSchemaId, DocumentValue, ListenerId, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, SocketDirection, SocketDocumentRuleId, WorkspaceId,
+    DocumentSchemaId, DocumentValue, ListenerId, ProtocolDirection, ProtocolDocumentRuleId,
+    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProtocolRuleStage, WorkspaceId,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -54,43 +54,33 @@ fn schema_ref() -> SocketCaptureSchemaRef {
     }
 }
 
-fn display(enabled: bool) -> SocketDisplayResult {
-    if enabled {
-        SocketDisplayResult::UntrustedHtml {
-            html: "<dl><dt>MTI</dt><dd>0200</dd></dl>".into(),
-        }
-    } else {
-        SocketDisplayResult::HexFallback {
-            reason: SocketDisplayFallbackReason::EncodeDisabled,
-            diagnostic: None,
-        }
+fn display() -> SocketDisplayResult {
+    SocketDisplayResult::UntrustedHtml {
+        html: "<dl><dt>MTI</dt><dd>0200</dd></dl>".into(),
     }
 }
 
-fn relay(decode_enabled: bool, encode_enabled: bool) -> SocketRelayFrameCapture {
+fn relay() -> SocketRelayFrameCapture {
+    let first_rule = ProtocolDocumentRuleId::new();
     SocketRelayFrameCapture {
-        direction: SocketDirection::Upstream,
+        direction: ProtocolDirection::Upstream,
         package: package(),
         schema: schema_ref(),
-        decode_enabled,
-        encode_enabled,
         origin: vec![0x02, 0x30, 0x32, 0x30, 0x30, 0x03],
-        document: decode_enabled.then(|| SocketCaptureDocument::from_document(&document())),
-        matched_rule_ids: decode_enabled
-            .then(SocketDocumentRuleId::new)
-            .into_iter()
-            .collect(),
-        written: if encode_enabled {
-            vec![0x02, 0x30, 0x32, 0x31, 0x30, 0x03]
-        } else {
-            vec![0x02, 0x30, 0x32, 0x30, 0x30, 0x03]
-        },
-        write_kind: if encode_enabled {
-            SocketWriteKind::Encoded
-        } else {
-            SocketWriteKind::Original
-        },
-        display: display(decode_enabled || encode_enabled),
+        stages: vec![
+            SocketRelayRuleStageCapture {
+                stage: ProtocolRuleStage::AppToProxy,
+                matched_rule_ids: vec![first_rule],
+                document: SocketCaptureDocument::from_document(&document()),
+            },
+            SocketRelayRuleStageCapture {
+                stage: ProtocolRuleStage::ProxyToUpstream,
+                matched_rule_ids: Vec::new(),
+                document: SocketCaptureDocument::from_document(&document()),
+            },
+        ],
+        written: vec![0x02, 0x30, 0x32, 0x31, 0x30, 0x03],
+        display: display(),
     }
 }
 
@@ -111,32 +101,17 @@ fn record(payload: SocketCapturePayload) -> SocketCaptureRecord {
 }
 
 #[test]
-fn relay_four_processing_states_keep_exact_origin_and_written_evidence() {
-    for decode_enabled in [false, true] {
-        for encode_enabled in [false, true] {
-            let capture = relay(decode_enabled, encode_enabled);
-            assert_eq!(capture.document.is_some(), decode_enabled);
-            assert_eq!(capture.origin, [0x02, 0x30, 0x32, 0x30, 0x30, 0x03]);
-            assert_eq!(
-                capture.write_kind,
-                if encode_enabled {
-                    SocketWriteKind::Encoded
-                } else {
-                    SocketWriteKind::Original
-                }
-            );
-            if !encode_enabled {
-                assert_eq!(capture.written, capture.origin);
-                assert!(matches!(
-                    capture.display,
-                    SocketDisplayResult::HexFallback {
-                        reason: SocketDisplayFallbackReason::EncodeDisabled,
-                        ..
-                    }
-                ));
-            }
-        }
-    }
+fn relay_capture_keeps_full_processing_chain_evidence() {
+    let capture = relay();
+    assert_eq!(capture.stages.len(), 2);
+    assert_eq!(capture.stages[0].stage, ProtocolRuleStage::AppToProxy);
+    assert_eq!(capture.stages[1].stage, ProtocolRuleStage::ProxyToUpstream);
+    assert_eq!(capture.origin, [0x02, 0x30, 0x32, 0x30, 0x30, 0x03]);
+    assert_ne!(capture.written, capture.origin);
+    assert!(matches!(
+        capture.display,
+        SocketDisplayResult::UntrustedHtml { .. }
+    ));
 }
 
 #[test]
@@ -153,30 +128,30 @@ fn local_exchange_keeps_request_and_response_documents_separate() {
     let exchange = SocketLocalExchangeCapture {
         exchange_id: SocketExchangeId::new(),
         package: package(),
-        schema: schema_ref(),
-        request_decode_enabled: true,
-        response_encode_enabled: true,
+        request_schema: schema_ref(),
+        response_schema: schema_ref(),
         request_origin: b"0200".to_vec(),
-        request_document: Some(SocketCaptureDocument::from_document(&request)),
-        request_display: Some(display(true)),
+        request_document: SocketCaptureDocument::from_document(&request),
+        request_display: display(),
         response_document: SocketCaptureDocument::from_document(&response),
-        matched_downstream_rule_ids: vec![SocketDocumentRuleId::new()],
+        matched_request_rule_ids: vec![ProtocolDocumentRuleId::new()],
+        matched_response_rule_ids: vec![ProtocolDocumentRuleId::new()],
         written_response: b"021000".to_vec(),
-        response_write_kind: SocketWriteKind::Encoded,
-        response_display: display(true),
+        response_display: display(),
     };
 
-    assert_eq!(exchange.request_document, Some(request_snapshot));
+    assert_eq!(exchange.request_document, request_snapshot);
     assert_eq!(
         exchange.response_document.get("mti").unwrap(),
         &SocketCaptureDocumentValue::String("0210".into())
     );
-    assert_eq!(exchange.matched_downstream_rule_ids.len(), 1);
+    assert_eq!(exchange.matched_request_rule_ids.len(), 1);
+    assert_eq!(exchange.matched_response_rule_ids.len(), 1);
 }
 
 #[test]
 fn socket_capture_wire_is_strict_and_contains_no_http_projection() {
-    let capture = record(SocketCapturePayload::RelayFrame(relay(true, true)));
+    let capture = record(SocketCapturePayload::RelayFrame(Box::new(relay())));
     let value = serde_json::to_value(&capture).unwrap();
     let object = value.as_object().unwrap();
     for forbidden in ["headers", "http_status", "method", "json_path", "status"] {
@@ -195,7 +170,7 @@ fn socket_capture_wire_is_strict_and_contains_no_http_projection() {
 
 #[test]
 fn logical_bytes_count_owned_network_and_display_bytes_exactly() {
-    let base = record(SocketCapturePayload::RelayFrame(relay(true, true)));
+    let base = record(SocketCapturePayload::RelayFrame(Box::new(relay())));
     let mut larger = base.clone();
     let SocketCapturePayload::RelayFrame(frame) = &mut larger.payload else {
         unreachable!();
@@ -231,13 +206,13 @@ fn connection_route_wire_cannot_attach_upstream_to_local_responder() {
 #[test]
 fn full_capture_debug_reports_shape_without_payload_document_or_html() {
     let detail = SocketCaptureDetailViewModel {
-        record: record(SocketCapturePayload::RelayFrame(relay(true, true))),
+        record: record(SocketCapturePayload::RelayFrame(Box::new(relay()))),
     };
     let debug = format!("{detail:?}");
 
     assert!(debug.contains("origin_bytes: 6"));
     assert!(debug.contains("written_bytes: 6"));
-    assert!(debug.contains("document_present: true"));
+    assert!(debug.contains("stage_count: 2"));
     for secret in ["0200", "<dl>", "field_39", "[2, 48, 50"] {
         assert!(!debug.contains(secret), "Debug leaked {secret}: {debug}");
     }
@@ -257,24 +232,18 @@ fn display_wire_rejects_unknown_http_fields() {
 
 #[test]
 fn consistency_rejects_contradictory_relay_facts() {
-    let mut capture = record(SocketCapturePayload::RelayFrame(relay(true, true)));
+    let mut capture = record(SocketCapturePayload::RelayFrame(Box::new(relay())));
     assert!(capture.is_consistent());
 
     if let SocketCapturePayload::RelayFrame(frame) = &mut capture.payload {
-        frame.decode_enabled = false;
-    }
-    assert!(!capture.is_consistent());
-
-    if let SocketCapturePayload::RelayFrame(frame) = &mut capture.payload {
-        frame.document = None;
-        frame.write_kind = SocketWriteKind::Original;
+        frame.stages.pop();
     }
     assert!(!capture.is_consistent());
 }
 
 #[test]
 fn consistency_rejects_schema_mismatch_and_duplicate_rule_evidence() {
-    let mut capture = record(SocketCapturePayload::RelayFrame(relay(true, true)));
+    let mut capture = record(SocketCapturePayload::RelayFrame(Box::new(relay())));
     if let SocketCapturePayload::RelayFrame(frame) = &mut capture.payload {
         frame.schema.version += 1;
     }
@@ -282,8 +251,8 @@ fn consistency_rejects_schema_mismatch_and_duplicate_rule_evidence() {
 
     if let SocketCapturePayload::RelayFrame(frame) = &mut capture.payload {
         frame.schema.version -= 1;
-        let duplicate = frame.matched_rule_ids[0];
-        frame.matched_rule_ids.push(duplicate);
+        let duplicate = frame.stages[0].matched_rule_ids[0];
+        frame.stages[0].matched_rule_ids.push(duplicate);
     }
     assert!(!capture.is_consistent());
 }
@@ -294,19 +263,18 @@ fn consistency_rejects_incomplete_local_exchange_and_invalid_timeline() {
     let exchange = SocketLocalExchangeCapture {
         exchange_id: SocketExchangeId::new(),
         package: package(),
-        schema: schema_ref(),
-        request_decode_enabled: true,
-        response_encode_enabled: false,
+        request_schema: schema_ref(),
+        response_schema: schema_ref(),
         request_origin: b"0200".to_vec(),
-        request_document: Some(SocketCaptureDocument::from_document(&request)),
-        request_display: Some(display(true)),
+        request_document: SocketCaptureDocument::from_document(&request),
+        request_display: display(),
         response_document: SocketCaptureDocument::from_document(&request),
-        matched_downstream_rule_ids: Vec::new(),
+        matched_request_rule_ids: Vec::new(),
+        matched_response_rule_ids: Vec::new(),
         written_response: b"0200".to_vec(),
-        response_write_kind: SocketWriteKind::Original,
-        response_display: display(true),
+        response_display: display(),
     };
-    let mut capture = record(SocketCapturePayload::LocalExchange(exchange));
+    let mut capture = record(SocketCapturePayload::LocalExchange(Box::new(exchange)));
     assert!(capture.is_consistent());
 
     capture.completed_at = capture.occurred_at - chrono::Duration::milliseconds(1);
@@ -356,37 +324,43 @@ fn capture_integer_wire_preserves_full_i64_and_rejects_noncanonical_text() {
 }
 
 #[test]
-fn consistency_rejects_rules_without_decode_and_incompatible_display() {
-    let mut relay = record(SocketCapturePayload::RelayFrame(relay(false, false)));
+fn consistency_rejects_missing_stage_and_incompatible_local_document() {
+    let mut relay = record(SocketCapturePayload::RelayFrame(Box::new(relay())));
     let SocketCapturePayload::RelayFrame(frame) = &mut relay.payload else {
         unreachable!();
     };
-    frame.matched_rule_ids.push(SocketDocumentRuleId::new());
+    frame.stages.clear();
     assert!(!relay.is_consistent());
 
-    let mut local = record(SocketCapturePayload::LocalExchange(
+    let mut local = record(SocketCapturePayload::LocalExchange(Box::new(
         SocketLocalExchangeCapture {
             exchange_id: SocketExchangeId::new(),
             package: package(),
-            schema: schema_ref(),
-            request_decode_enabled: false,
-            response_encode_enabled: false,
+            request_schema: schema_ref(),
+            response_schema: schema_ref(),
             request_origin: b"0200".to_vec(),
-            request_document: None,
-            request_display: None,
+            request_document: SocketCaptureDocument::from_document(&document()),
+            request_display: display(),
             response_document: SocketCaptureDocument::from_document(&document()),
-            matched_downstream_rule_ids: Vec::new(),
+            matched_request_rule_ids: Vec::new(),
+            matched_response_rule_ids: Vec::new(),
             written_response: b"0200".to_vec(),
-            response_write_kind: SocketWriteKind::Original,
-            response_display: display(false),
+            response_display: SocketDisplayResult::HexFallback {
+                reason: SocketDisplayFallbackReason::EntryPointFailed,
+                diagnostic: Some(SocketDisplayDiagnostic {
+                    code: "DISPLAY_ENTRY_FAILED".into(),
+                    message: "协议视图生成失败".into(),
+                }),
+            },
         },
-    ));
+    )));
+    if let SocketCapturePayload::LocalExchange(exchange) = &mut local.payload {
+        exchange.request_schema.version += 1;
+    }
     assert!(!local.is_consistent());
 
-    let SocketCapturePayload::LocalExchange(exchange) = &mut local.payload else {
-        unreachable!();
-    };
-    exchange.response_display = display(true);
-    exchange.written_response = b"different".to_vec();
-    assert!(!local.is_consistent());
+    if let SocketCapturePayload::LocalExchange(exchange) = &mut local.payload {
+        exchange.request_schema.version -= 1;
+    }
+    assert!(local.is_consistent());
 }

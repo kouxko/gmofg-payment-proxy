@@ -56,7 +56,7 @@ impl RhaiFrameDecider {
         runtime_limits: ProtocolRuntimeLimits,
         cancellation: ProtocolExecutionCancellation,
     ) -> Self {
-        let host = ProtocolHostApi::for_package(package);
+        let host = ProtocolHostApi::for_package(package, direction);
         let mut engine = build_engine(runtime_limits);
         host.register(&mut engine);
         let deadline = FrameCallDeadline::install(&mut engine, cancellation);
@@ -64,6 +64,7 @@ impl RhaiFrameDecider {
             ProtocolDirection::Upstream => package.upstream().frame(),
             ProtocolDirection::Downstream => package.downstream().frame(),
         }
+        .expect("Socket protocol packages compile both frame entries")
         .clone();
         Self {
             engine,

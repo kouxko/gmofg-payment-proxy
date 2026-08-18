@@ -2,8 +2,11 @@ use std::{collections::BTreeMap, fmt, sync::Arc};
 
 use rhai::{AST, FnAccess};
 
+use intercept_proxy_domain::DocumentSchema;
+
 use crate::{
-    DirectionHooks, PackageFilePath, ProtocolEntryPoint, ProtocolFunctionName, ProtocolManifest,
+    DirectionHooks, DocumentDeclaration, PackageFilePath, ProtocolEntryPoint, ProtocolFunctionName,
+    ProtocolManifest,
 };
 
 use super::{ProtocolScriptCompileError, ProtocolScriptCompileErrorCode};
@@ -54,86 +57,108 @@ impl CompiledEntry {
     }
 }
 
-/// 单方向已经编译的 Frame、Decode 与可选 Encode 入口。
+/// 单方向已经编译的 Schema、Frame、Decode、Encode 与 Display 入口。
 #[derive(Clone, Debug)]
 pub(crate) struct CompiledDirection {
-    frame: CompiledEntry,
+    schema: Arc<DocumentSchema>,
+    frame: Option<CompiledEntry>,
     decode: CompiledEntry,
-    encode: Option<CompiledEntry>,
+    encode: CompiledEntry,
+    display: CompiledEntry,
 }
 
 impl CompiledDirection {
-    pub(crate) const fn frame(&self) -> &CompiledEntry {
-        &self.frame
+    pub(crate) fn schema(&self) -> &DocumentSchema {
+        &self.schema
+    }
+
+    pub(crate) fn schema_arc(&self) -> Arc<DocumentSchema> {
+        Arc::clone(&self.schema)
+    }
+
+    pub(crate) const fn frame(&self) -> Option<&CompiledEntry> {
+        self.frame.as_ref()
     }
 
     pub(crate) const fn decode(&self) -> &CompiledEntry {
         &self.decode
     }
 
-    pub(crate) const fn encode(&self) -> Option<&CompiledEntry> {
-        self.encode.as_ref()
+    pub(crate) const fn encode(&self) -> &CompiledEntry {
+        &self.encode
+    }
+
+    pub(crate) const fn display(&self) -> &CompiledEntry {
+        &self.display
     }
 }
 
 pub(crate) fn validate_manifest_entries(
     manifest: &ProtocolManifest,
     scripts: &BTreeMap<PackageFilePath, Arc<AST>>,
-) -> Result<(CompiledDirection, CompiledDirection, Option<CompiledEntry>), ProtocolScriptCompileError>
-{
-    let upstream = validate_direction(manifest.hooks().upstream(), scripts)?;
-    let downstream = validate_direction(manifest.hooks().downstream(), scripts)?;
-    let display = manifest
-        .document()
-        .display()
-        .map(|declaration| {
-            validate_entry(
-                ProtocolEntryPoint::Display,
-                declaration.script(),
-                declaration.function(),
-                DISPLAY_ARITY,
-                scripts,
-            )
-        })
-        .transpose()?;
-    Ok((upstream, downstream, display))
+    upstream_schema: Arc<DocumentSchema>,
+    downstream_schema: Arc<DocumentSchema>,
+) -> Result<(CompiledDirection, CompiledDirection), ProtocolScriptCompileError> {
+    let upstream = validate_direction(
+        manifest.hooks().upstream(),
+        manifest.document().upstream(),
+        upstream_schema,
+        scripts,
+    )?;
+    let downstream = validate_direction(
+        manifest.hooks().downstream(),
+        manifest.document().downstream(),
+        downstream_schema,
+        scripts,
+    )?;
+    Ok((upstream, downstream))
 }
 
 fn validate_direction(
     hooks: &DirectionHooks,
+    document: &DocumentDeclaration,
+    schema: Arc<DocumentSchema>,
     scripts: &BTreeMap<PackageFilePath, Arc<AST>>,
 ) -> Result<CompiledDirection, ProtocolScriptCompileError> {
-    let receive = hooks.receive();
-    let frame = validate_entry(
-        ProtocolEntryPoint::Frame,
-        receive.script(),
-        receive.frame(),
-        FRAME_ARITY,
-        scripts,
-    )?;
-    let decode = validate_entry(
-        ProtocolEntryPoint::Decode,
-        receive.script(),
-        receive.decode(),
-        DECODE_ARITY,
-        scripts,
-    )?;
-    let encode = hooks
-        .send()
-        .map(|send| {
+    let frame = hooks
+        .frame()
+        .map(|function| {
             validate_entry(
-                ProtocolEntryPoint::Encode,
-                send.script(),
-                send.encode(),
-                ENCODE_ARITY,
+                ProtocolEntryPoint::Frame,
+                hooks.script(),
+                function,
+                FRAME_ARITY,
                 scripts,
             )
         })
         .transpose()?;
+    let decode = validate_entry(
+        ProtocolEntryPoint::Decode,
+        hooks.script(),
+        hooks.decode(),
+        DECODE_ARITY,
+        scripts,
+    )?;
+    let encode = validate_entry(
+        ProtocolEntryPoint::Encode,
+        hooks.script(),
+        hooks.encode(),
+        ENCODE_ARITY,
+        scripts,
+    )?;
+    let display = validate_entry(
+        ProtocolEntryPoint::Display,
+        document.display().script(),
+        document.display().function(),
+        DISPLAY_ARITY,
+        scripts,
+    )?;
     Ok(CompiledDirection {
+        schema,
         frame,
         decode,
         encode,
+        display,
     })
 }
 

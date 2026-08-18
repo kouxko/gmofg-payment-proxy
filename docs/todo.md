@@ -44,10 +44,93 @@
 | 14 | R08 | `TODO-WORKSPACE-UX-003` + `TODO-SETTINGS-UX-004`（合并交付） | R07e | Workspace/Settings 信息架构收敛且窄窗口无页面溢出 |
 | 15 | R10 | `TODO-ANDROID-001B` | R02 | 运行端点可见，LAN IP 漂移可幂等恢复且 Reverse 无回归 |
 | 16 | R11a | `TODO-MCP-001`（capability inventory + SDK/transport ADR） | R01, R07e, R09, R10 | 只读能力清单、denylist 与 SDK/transport ADR 确定 |
-| 17 | R11b | `TODO-MCP-001`（read-only query ports） | R11a | 完整 snapshot/pagination/privileged read 且无 mutation capability |
-| 18 | R11c | `TODO-MCP-001`（transport/auth/lifecycle） | R11b | 本机认证、取消和有界关停通过，默认仍关闭 |
+| 17 | R11b | `TODO-MCP-001`（read-only query ports） | R11a | 一致性 snapshot、分页查询和全部 Workspace 读取且无 mutation capability |
+| 18 | R11c | `TODO-MCP-001`（loopback transport/lifecycle） | R11b | 默认启用、无认证的本机信任边界、资源限制和有界关停通过 |
 | 19 | R11d | `TODO-MCP-001`（协议包资源与操作建议） | R11c | 权威资源/模板/生成类型可读，仍无 mutation |
-| 20 | R11e | `TODO-MCP-001`（客户端/打包验证并开放 opt-in） | R11d | 两客户端与 Windows/macOS 打包验证通过后才开放 opt-in |
+| 20 | R11e | `TODO-MCP-001`（客户端/打包验证） | R11d | 真实客户端与 Windows/macOS 打包验证通过 |
+| 21 | R12 | `TODO-PROTOCOL-PLATFORM-003` | R01, R06 | HTTP/Socket 独立协议包使用同一双方向 Document 执行模型，四阶段规则与抓包 Display 全链一致 |
+
+## TODO-PROTOCOL-PLATFORM-003：统一 HTTP Body 与 Socket 的 Document 处理模型
+
+需求状态：`实施中`（核心服务已实现，真实客户端与跨平台打包验证待完成）
+
+优先级：`P0`
+
+依赖：`TODO-ARCH-001`、`TODO-PROTOCOL-PACKAGE-002`
+
+### 已确认且不得漂移的设计
+
+- HTTP 与 Socket 是两类独立协议包；它们存放在同一应用级注册表中，以不可变 `kind` 隔离，并分别绑定、
+  分页展示，不允许一个包同时服务两种数据平面。两类包只复用 Manifest 结构、Schema/Document 规则模型、Rhai Host API、
+  Display 沙箱和测试工具。
+- Manifest 不声明 `content_types`，不使用 `decode_request`、`encode_response` 等 HTTP 专用函数名。
+  包类型由 hook 严格推导：两个方向都声明 `frame` 是 Socket；两个方向都不声明 `frame` 是 HTTP；
+  只在单侧声明 `frame` 必须拒绝。
+- HTTP 与 Socket 都使用以下双方向结构；Socket 仅在两个 `hooks` 表额外声明同名 `frame`：
+
+```toml
+api = 1
+
+[package]
+id = "example"
+name = "Example"
+version = "1.0.0"
+
+[document.upstream]
+schema = "schemas/upstream.toml"
+display = "display"
+
+[document.downstream]
+schema = "schemas/downstream.toml"
+display = "display"
+
+[hooks.upstream]
+decode = "decode"
+encode = "encode"
+
+[hooks.downstream]
+decode = "decode"
+encode = "encode"
+```
+
+- `upstream` Document/Schema 用于 App 发往 Server 的数据；`downstream` Document/Schema 用于
+  Server 返回 App 的数据。四个规则阶段必须分别保存和执行：App→Proxy、Proxy→Server、
+  Server→Proxy、Proxy→App。前两阶段共享 upstream Schema，后两阶段共享 downstream Schema，
+  但规则集合、条件、动作顺序和命中记录互不合并。
+- 每条规则的条件按 AND 判断；多条规则按优先级数值从小到大、同优先级按创建顺序逐条匹配；
+  每条命中规则的动作从上到下顺序执行，后续规则看到前序动作已经修改后的 Document。
+- 选择协议包即固定执行 Decode、规则、Encode 和 Display，不再保存或显示方向开关。Display 只生成
+  抓包/会话 UI 的不可信 HTML，不修改线路；Encode 只在线路 Document 实际改变时替换报文。
+
+### HTTP 文本 Body 语义
+
+- HTTP 协议包只处理非空 UTF-8 文本 Body；空 Body 直接通过，不调用 Decode/Encode/Display，
+  也不产生错误。
+- 非空 Body 的固定顺序是 Decode→当前方向第一阶段规则→当前方向第二阶段规则→按需 Encode。
+  无规则命中或命中后 Document 未改变时，必须保留完全相同的原始 Body 字节，
+  并保证 Content-Length 的语义数值与 Body 字节数一致；HTTP 线路库可以规范化 Header 的空白和序列化格式。
+  Document 改变后才调用 Encode，并按编码后的 UTF-8 字节长度重算 Content-Length。
+- HTTP Header、Cookie、状态码、方法、URL 等仍由 HTTP 专属能力处理，不塞进 Document 规则模型。
+  协议包只负责 Body 文本与 Schema 字段之间的转换和展示。
+
+### 抓包、错误和 UI
+
+- HTTP 与 Socket 的四个方向都保存原始/写出报文、方向 Schema、Document、命中规则及 Display 结果；
+  抓包详情默认展示协议包 Display，仍提供原始文本/Hex 证据入口。
+- Decode、规则、Encode 或 Display 失败必须显示稳定阶段、错误码和安全的详细原因；列表可显示摘要，
+  详情不得只写“内部错误”。错误中不得回显密码、私钥或未授权秘密材料。
+- HTTP/Socket 页面保持条件挂载和 DTO 隔离；用户界面不出现 `Listener`、`Frame`、`Document`、
+  `Decode`、`Encode`、`Schema` 等实现术语，精确技术身份仅放在默认折叠的高级信息/诊断中。
+
+### 实施与验收
+
+- 先完成 strict Manifest、编译器、运行时、持久化和生成绑定，再同步前端；不保留旧格式兼容分支。
+  1.0 正式发布前发现旧 Schema 版本时清空旧数据并要求重新配置，不执行历史迁移。
+- 定向测试覆盖 HTTP 空 Body、UTF-8 拒绝、未命中精确保留、命中未改变精确保留、改变后重编码、
+  Content-Length、四阶段顺序、上下游不同 Schema、Socket Relay/本地应答、Display 与阶段错误详情。
+- 新增/重写核心模块以 100% 语句/分支/函数/行覆盖为目标；无法达到的不可达防御分支必须删除或
+  明确证明，而不是放宽门禁。最后统一执行架构审查、HTTP/Socket 隔离审查、对抗测试、视觉矩阵、
+  全量门禁，再提交推送并要求 Windows CI 对该精确提交成功。
 
 ## TODO-ARCH-001：建立 HTTP、Socket 与协议包的整体软件设计基线
 
@@ -184,20 +267,19 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
 
 ### 只读权限范围
 
-- MCP 默认关闭且只允许本机可信客户端连接；启用后，已认证客户端可以遍历全部 Workspace 和全部
-  应用级数据，不受当前 UI 所选 Workspace 限制。
+- MCP 随应用默认启动，只绑定 `127.0.0.1`，不提供认证。产品明确把当前操作系统用户下的本机进程
+  视为可信边界；任何能访问该回环端口的本机进程都可以遍历全部 Workspace 和应用级只读数据，
+  不受当前 UI 所选 Workspace 限制，也不提供隐私保护承诺。
 - 提供完整读取能力，包括设置、Workspace、Listener、HTTP/Socket 规则、故障预设、Android 方案、
   运行状态、runtime epoch、任务/连接/队列/容量、全部日志和诊断、HTTP/Socket 抓包原始字节、
   Header、Cookie、Authorization、Body、Document 字段值、Display HTML、规则轨迹和内部错误文本。
-- 提供完整协议包能力，包括包 ZIP/目录、Manifest、Schema、全部 Rhai 源码和库、编译/缓存状态、
-  精确引用、启用状态、导入 token、验证诊断和模板文件。
+- 协议包读取以现有 `Application` 只读 façade 为边界：提供包清单、Manifest/Schema 投影、能力、精确
+  引用和使用情况；官方模板额外提供 Manifest、Schema、全部 Rhai 源码/库和 ZIP Resources。
 - 提供与当前应用版本严格匹配的 Socket 协议包编写参考，包括 Manifest、Document Schema、Host API、
   Rhai 沙箱、资源限制、Frame/Decode/Encode/Display 生命周期、Relay 双向语义、LocalResponder 的
   Request/Response Document 隔离、规则执行顺序、错误码和完整 ISO 8583 示例。
-- 提供完整证书与秘密能力，包括证书链、P12/PFX/PEM 原文、私钥、密码、HTTP Basic 凭据、受保护
-  存储引用、应用管理的路径和可导出材料；工具和返回模型不做秘密字段过滤。
-- 提供应用内部持久化检查能力：一致性 SQLite 快照、表/索引/外键/格式版本、缓存 header 和应用
-  管理目录文件。诊断读取可以绕过普通 ViewModel 的裁剪，但不能持有数据库/runtime 内部锁跨请求。
+- 证书能力仅复用 `Application` 提供的公开证书元数据和 Workspace 引用，不读取私钥、密码或原始
+  P12/PFX/PEM。MCP 不直接读取 SQLite、缓存目录或任意文件；需要扩展时必须先增加领域化只读 façade。
 - MCP 不提供任何应用 mutation：不得创建、复制、选择、保存、启用、停用、删除、导入、导出、
   清空或重置对象，不得启动/停止/测试 Listener，不得应用 Android 网络方案，不得修改数据库、缓存、
   文件、证书、协议包源码或运行时状态。
@@ -209,8 +291,9 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
 
 ### 工具与资源模型
 
-- 读取工具覆盖 app health、完整配置、Listener/runtime、抓包/session、规则轨迹、协议包源码、证书/
-  凭据、日志、数据库快照、Android 路由和架构文档；列表统一支持有界分页、过滤和精确详情查询。
+- 读取工具覆盖 app snapshot、设置、Workspace、入口/runtime、抓包/session、断点、HTTP/Socket
+  规则、协议包投影/使用情况、公开证书元数据、诊断和 Android 路由；列表使用现有 façade 提供的
+  有界分页、过滤和精确详情查询。
 - MCP 工具表只注册查询、解释和建议类工具；禁止注册 mutation、万能 `execute_action`、Tauri command
   透传、任意 SQL、任意网络请求、任意文件读写和任意 Shell。即使客户端显式要求，也只能返回操作
   建议、风险、预期结果和 UI 路径，不能代替用户执行。
@@ -226,8 +309,8 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
   可发现且能明确说明适用版本。
 - 参考资料必须直接来自应用随包发布的权威文档、模板或由生产类型生成，不能由 MCP 维护一套容易过期
   的复制文本。文档示例必须在 CI 中用同一个生产解析器、编译器和资源限制执行。
-- MCP 可以读取已安装协议包的完整文件，比较用户问题与当前 Manifest/Schema/Rhai API，解释具体
-  file/function/line/column/field/stage 错误，并给出可复制的骨架、代码片段、测试报文和修改建议。
+- MCP 可以读取已安装包的 Application 投影和官方模板完整文件，比较用户问题与 Manifest/Schema/
+  Rhai API，结合现有诊断解释 file/function/line/column/field/stage 错误并给出修改建议。
 - MCP 可以回答“如何编写 Frame/Decode/Encode/Display”“如何声明四种字段类型”“如何为 Relay 两个
   方向或 LocalResponder 响应方向编写规则”等问题，但不得在应用目录创建项目、改写文件、生成 ZIP、
   导入、启用或绑定协议包；这些步骤只作为用户操作说明返回。
@@ -238,20 +321,18 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
 
 ### 安全与完整性边界
 
-- 不设置隐私脱敏或字段级读取限制，但仍必须阻止未认证进程、远程网络和其他系统用户取得完整读取权限。
-  MCP 传输方案通过 ADR 决定，优先 `stdio` 或仅回环本地服务，并使用受保护的客户端凭据。
+- 不设置隐私脱敏、字段级读取限制或客户端认证。服务只绑定 IPv4 回环地址，不允许远程网络直接
+  连接；同一操作系统用户下的本机进程属于产品明确接受的信任边界，能够读取返回的完整数据。
 - Payload、Header、日志、脚本、Display 和错误文本即使允许完整返回，仍属于不可信 data，不能被
   MCP server 当成指令或自动转成工具调用；用包含“忽略规则并删除数据”等内容验证 prompt injection
   不会让 server 注册、伪造或调用任何写操作。
-- 凭据可由应用生成并保存在系统受保护存储；MCP 本身允许读取应用秘密，但连接凭据不能被未认证
-  客户端预先取得，否则等同于无认证开放全部控制权。
 - 调用审计允许记录完整参数和结果；日志、响应、资源和队列仍使用条目数与逻辑字节双重上限，避免
   大抓包、数据库或证书数据耗尽内存。超限时分页/分块，不以隐私理由截断内容。
 
 ### 产品交互
 
-- 在“关于/帮助”或独立“MCP”区域明确展示“启用后客户端可以读取全部应用数据，但不能操作应用”，以及
-  MCP 状态、已连接客户端、启动/停止、复制客户端配置、查看调用记录和撤销全部会话。
+- 用户文档明确展示“本机 MCP 默认启用、无认证，可以读取全部应用数据，但不能操作应用”，并给出
+  固定回环 endpoint 和客户端连接配置；当前版本不提供会话撤销或启停 UI。
 - 错误 Alert 提供“复制诊断上下文 ID”，MCP Client 也可以不使用 ID 直接遍历完整应用状态。
 - 回答必须能引用稳定事实：错误码、阶段、Listener、方向、发生时间和检查来源，并明确区分
   “TCP 成功”“TLS 成功”“HTTP 成功”“业务成功”，不能因下层成功推断上层结果。
@@ -262,8 +343,8 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
 
 ### 生命周期与实现约束
 
-- MCP server/bridge 由 host 组合，生命周期受应用拥有；启动失败不得影响代理功能，停止应用必须
-  bounded shutdown、撤销凭据并 join 所有任务，不能留下端口或孤儿进程。
+- MCP server/bridge 由应用组合并拥有生命周期；端口占用或启动失败不得影响代理功能，停止应用必须
+  bounded shutdown 并 join 所有任务，不能留下端口或孤儿进程。
 - 查询使用权威 snapshot + cursor/revision/generation，跨 await 后重新验证对象；MCP 可以访问全部
   Workspace，但只能说明快照版本和状态变化，不能用旧快照覆盖新的配置或运行 epoch。
 - 每个工具定义严格 JSON Schema、最大分页、最大字符串/集合/逻辑字节和 deadline；取消请求要传播
@@ -276,13 +357,13 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
 
 ### 验收测试
 
-- 应用未运行、MCP 未启用、凭据错误/过期、非回环连接、未知工具、超限参数和高并发均确定性拒绝，
-  不影响现有 Listener、规则、抓包或 UI。
+- 非回环连接、未知工具、超限参数和高并发均确定性拒绝；MCP 端口占用时应用继续启动，且不影响
+  现有入口、规则、抓包或 UI。
 - Listener 启动、DNS、TCP、TLS/mTLS、HTTP 写/读、Socket Frame/Decode/Rule/Encode/Write、协议包
   校验和 Android 路由各至少有一个真实错误能通过 MCP 返回稳定阶段和完整底层证据。
-- 完整读取测试精确返回 HTTP Header/Cookie/Authorization/Body、Socket origin/written、Document、
-  Display、日志、规则、协议包源码、证书/私钥/密码、应用路径和一致性数据库快照，不得被 DTO 静默
-  脱敏、替换为空值或截成只有摘要。
+- façade 已提供的数据应完整返回，包括 HTTP Header/Cookie/Authorization/Body、Socket
+  origin/written、Document、Display、日志、规则与公开证书元数据；MCP 不绕过 façade 读取私钥、
+  密码、应用路径或数据库文件。
 - 只读负面矩阵枚举所有 Workspace、Listener、规则、协议包、证书、设置、Android、抓包和 reset
   mutation，证明 MCP 工具表无对应操作，伪造工具名、Tauri command、SQL、网络请求、文件写入和
   Shell 均被拒绝，应用数据库、文件、runtime epoch、连接和 UI 状态保持逐字节/逐字段不变。
@@ -294,13 +375,14 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
 - 恶意 Header/Body/Socket Payload/Display/规则名称包含 prompt injection、巨大 Unicode、控制字符、
   HTML/脚本和秘密样例时，工具完整返回数据但不会自行触发任何应用操作。
 - 两个 Workspace、两个客户端、旧 runtime epoch、应用侧并发 mutation、clear/reset 和重启场景证明
-  MCP 查询会标记陈旧快照并重新读取，绝不会执行写入；撤销客户端后零迟到响应。
+  MCP 查询会标记不稳定快照并重新读取，绝不会执行写入；服务停止后零迟到响应。
 - 队列满、客户端停止读取、查询超时、server stop 和应用退出均在界限内释放任务、连接、许可和
   内存；不得阻塞代理数据面。
-- 使用至少两个真实 MCP Client 完成连接、完整读取、问题解释、Socket 协议包编写参考、操作建议、
-  撤销和错误恢复；Windows/macOS 打包产物都验证启动、只读权限、路径和卸载后无残留服务。
-- 安全审查确认只有经过本机认证的客户端能取得完整读取权限；源码扫描和负面 fixture 拒绝远程绑定、
-  未登记万能命令、任何应用 mutation、绕过领域校验和任意操作系统文件/Shell 后门。
+- 使用至少两个真实 MCP Client 完成连接、完整读取、问题解释、Socket 协议包编写参考、操作建议和
+  错误恢复；Windows/macOS 打包产物都验证启动、只读权限、路径和卸载后无残留服务。
+- 安全审查确认服务只绑定回环地址且无认证，并把这一产品接受的本机信任边界记录在 ADR；源码扫描
+  和负面 fixture 拒绝远程绑定、未登记万能命令、任何应用 mutation、绕过领域校验和任意操作系统
+  文件/Shell 后门。
 
 ## TODO-SOCKET-UX-001：把 Socket 配置改为三种用户工作方式
 
@@ -375,8 +457,9 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
   应用数据重置后以及升级到该功能的既有数据库，都能幂等地恢复为“已安装、校验有效、已启用”。
 - 用户第一次选择“按协议转发”或“本地应答”时，如果没有既有精确绑定，默认选中该官方版本；
   已保存 Listener 继续绑定原精确版本，升级时不得静默换包。
-- 协议包列表与详情显示“内置示例”标识；不再增加单独的模板导出按钮。统一的“导出应用数据”
-  ZIP 必须把该模板作为完整协议包目录导出，用户解压备份后即可取得、学习和修改模板。
+- 协议包列表与详情显示“内置示例”标识；协议包页面提供“导出 ISO 8583 模板 ZIP”，直接导出
+  应用编译期携带并通过校验的精确模板。统一的“导出应用数据”ZIP 也必须把该模板作为完整协议包
+  目录导出，用户可从任一入口取得、学习和修改模板。
 - 应用数据 ZIP 中的模板目录至少包含 `manifest.toml`、`document.toml`、`protocol.rhai`、
   `display.rhai`、`libraries/iso8583.rhai`、README 和完整请求/响应示例。
 - 页面与导出 README 必须明确提示：“这是起始示例，接入真实系统前必须按对端长度头、位图、
@@ -399,6 +482,8 @@ MCP 负责把完整工具和结构化上下文提供给 Codex、Claude Desktop �
 - 导出/导入预览、错误和日志中不包含数据库路径、应用安装路径、临时 token、第三方包源码或
   其他本机信息；用户确认生成的最终 ZIP 按上述契约包含协议包原始文件。
 - macOS/Windows 打包产物都包含同一模板，构建门禁验证资产存在且实际可编译，不只检查文件名。
+- 协议包页的模板 ZIP 导出支持原生保存对话框取消、覆盖确认与原子替换；导出的 ZIP 可被当前
+  “导入协议包 ZIP”流程重新校验和导入。
 
 ## TODO-CAPTURE-UX-002：重做抓包页 HTTP/Socket 切换条
 

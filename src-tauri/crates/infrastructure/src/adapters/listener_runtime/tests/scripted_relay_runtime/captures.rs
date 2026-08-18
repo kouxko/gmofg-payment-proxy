@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use intercept_proxy_application::{
     PageRequest, SocketCaptureDocumentValue, SocketCaptureInteger, SocketCapturePayload,
-    SocketCaptureQuery, SocketCaptureSort, SocketDisplayResult, SocketWriteKind, SortDirection,
+    SocketCaptureQuery, SocketCaptureSort, SocketDisplayResult, SortDirection,
 };
+use intercept_proxy_domain::ProtocolRuleStage;
 
 use super::*;
 
@@ -42,27 +43,30 @@ async fn wait_for_two(
     panic!("relay capture drain did not persist both directions");
 }
 
+#[path = "captures/four_stages.rs"]
+mod four_stages;
+
 #[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "single real-TCP capture contract keeps both directions visible together"
+)]
 async fn relay_records_each_direction_only_after_commit_with_exact_documents_and_rules() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_port = upstream.local_addr().unwrap().port();
     let listener_port = reserve_port().await;
-    let state = State {
-        decode: true,
-        encode: true,
-    };
-    let listener = listener(listener_port, upstream_port, state, state);
-    let workspace = workspace(&listener, state, state);
+    let listener = listener(listener_port, upstream_port);
+    let workspace = workspace(&listener);
     let upstream_rule = workspace
-        .socket_rules
+        .protocol_rules
         .iter()
-        .find(|rule| rule.direction() == SocketDirection::Upstream)
+        .find(|rule| rule.direction() == ProtocolDirection::Upstream)
         .unwrap()
         .rule_id();
     let downstream_rule = workspace
-        .socket_rules
+        .protocol_rules
         .iter()
-        .find(|rule| rule.direction() == SocketDirection::Downstream)
+        .find(|rule| rule.direction() == ProtocolDirection::Downstream)
         .unwrap()
         .rule_id();
     let upstream_task = tokio::spawn(async move {
@@ -109,7 +113,7 @@ async fn relay_records_each_direction_only_after_commit_with_exact_documents_and
         .iter()
         .find_map(|record| match &record.payload {
             SocketCapturePayload::RelayFrame(frame)
-                if frame.direction == SocketDirection::Upstream =>
+                if frame.direction == ProtocolDirection::Upstream =>
             {
                 Some(frame)
             }
@@ -119,11 +123,18 @@ async fn relay_records_each_direction_only_after_commit_with_exact_documents_and
     assert_eq!(upstream.origin, [2, 11]);
     assert_eq!(upstream.written, [161, 42]);
     assert_eq!(
-        upstream.document.as_ref().unwrap().get("amount").unwrap(),
+        upstream.stages[1].document.get("amount").unwrap(),
         &SocketCaptureDocumentValue::Int(SocketCaptureInteger::from_i64(42))
     );
-    assert_eq!(upstream.matched_rule_ids, [upstream_rule]);
-    assert_eq!(upstream.write_kind, SocketWriteKind::Encoded);
+    assert_eq!(upstream.stages.len(), 2);
+    assert_eq!(
+        upstream
+            .stages
+            .iter()
+            .flat_map(|stage| stage.matched_rule_ids.iter().copied())
+            .collect::<Vec<_>>(),
+        [upstream_rule]
+    );
     assert_eq!(
         upstream.display,
         SocketDisplayResult::UntrustedHtml {
@@ -134,7 +145,7 @@ async fn relay_records_each_direction_only_after_commit_with_exact_documents_and
         .iter()
         .find_map(|record| match &record.payload {
             SocketCapturePayload::RelayFrame(frame)
-                if frame.direction == SocketDirection::Downstream =>
+                if frame.direction == ProtocolDirection::Downstream =>
             {
                 Some(frame)
             }
@@ -143,7 +154,118 @@ async fn relay_records_each_direction_only_after_commit_with_exact_documents_and
         .unwrap();
     assert_eq!(downstream.origin, [2, 22]);
     assert_eq!(downstream.written, [209, 42]);
-    assert_eq!(downstream.matched_rule_ids, [downstream_rule]);
+    assert_eq!(downstream.stages.len(), 2);
+    assert_eq!(
+        downstream
+            .stages
+            .iter()
+            .flat_map(|stage| stage.matched_rule_ids.iter().copied())
+            .collect::<Vec<_>>(),
+        [downstream_rule]
+    );
+    runtime.stop(listener.id).await.unwrap();
+}
+
+#[tokio::test]
+async fn relay_no_match_still_runs_decode_encode_and_display() {
+    let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_port = upstream.local_addr().unwrap().port();
+    let listener_port = reserve_port().await;
+    let listener = listener(listener_port, upstream_port);
+    let upstream_task = tokio::spawn(async move {
+        let (mut stream, _) = upstream.accept().await.unwrap();
+        let mut request = [0_u8; 2];
+        stream.read_exact(&mut request).await.unwrap();
+        assert_eq!(request, [161, 11]);
+        stream.write_all(&[2, 22]).await.unwrap();
+        stream.shutdown().await.unwrap();
+    });
+
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
+        Arc::clone(&store),
+    ));
+    packages.install_zip(&package_zip()).unwrap();
+    packages.set_enabled(&package(), true).unwrap();
+    let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
+        Arc::clone(&store),
+    ));
+    let runtime = test_listener_runtime_with_packages(store, packages);
+    runtime.set_socket_capture_repository(Arc::clone(&captures));
+    runtime
+        .start(
+            ProxyWorkspace {
+                listeners: vec![listener.clone()],
+                ..ProxyWorkspace::default()
+            },
+            listener.clone(),
+        )
+        .await
+        .unwrap();
+
+    let mut client = TcpStream::connect(("127.0.0.1", listener_port))
+        .await
+        .unwrap();
+    client.write_all(&[2, 11]).await.unwrap();
+    client.shutdown().await.unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.unwrap();
+    assert_eq!(response, [209, 22]);
+
+    upstream_task.await.unwrap();
+
+    let page = wait_for_two(&captures).await;
+    let mut records = Vec::new();
+    for row in page.rows {
+        records.push(captures.get_detail(row.capture_id).unwrap().record);
+    }
+    let upstream = records
+        .iter()
+        .find_map(|record| match &record.payload {
+            SocketCapturePayload::RelayFrame(frame)
+                if frame.direction == ProtocolDirection::Upstream =>
+            {
+                Some(frame)
+            }
+            _ => None,
+        })
+        .unwrap();
+    let downstream = records
+        .iter()
+        .find_map(|record| match &record.payload {
+            SocketCapturePayload::RelayFrame(frame)
+                if frame.direction == ProtocolDirection::Downstream =>
+            {
+                Some(frame)
+            }
+            _ => None,
+        })
+        .unwrap();
+
+    assert_eq!(upstream.origin, [2, 11]);
+    assert_eq!(upstream.written, [161, 11]);
+    assert!(
+        upstream
+            .stages
+            .iter()
+            .all(|stage| stage.matched_rule_ids.is_empty())
+    );
+    assert_eq!(upstream.schema.id.as_str(), "runtime-message");
+    assert_eq!(upstream.schema.version, 1);
+    assert_eq!(upstream.stages.len(), 2);
+
+    assert_eq!(downstream.origin, [2, 22]);
+    assert_eq!(downstream.written, [209, 22]);
+    assert!(
+        downstream
+            .stages
+            .iter()
+            .all(|stage| stage.matched_rule_ids.is_empty())
+    );
+    assert_eq!(downstream.schema.id.as_str(), "runtime-message");
+    assert_eq!(downstream.schema.version, 1);
+    assert_eq!(downstream.stages.len(), 2);
+
     runtime.stop(listener.id).await.unwrap();
 }
 
@@ -152,12 +274,8 @@ async fn clear_after_output_commit_cannot_revive_a_blocked_relay_capture() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_port = upstream.local_addr().unwrap().port();
     let listener_port = reserve_port().await;
-    let state = State {
-        decode: true,
-        encode: true,
-    };
-    let listener = listener(listener_port, upstream_port, state, state);
-    let workspace = workspace(&listener, state, state);
+    let listener = listener(listener_port, upstream_port);
+    let workspace = workspace(&listener);
     let workspace_id = workspace.id;
     let upstream_task = tokio::spawn(async move {
         let (mut stream, _) = upstream.accept().await.unwrap();
@@ -207,7 +325,7 @@ async fn clear_after_output_commit_cannot_revive_a_blocked_relay_capture() {
         let SocketCapturePayload::RelayFrame(frame) = record.payload else {
             panic!("expected RelayFrame")
         };
-        assert_ne!(frame.direction, SocketDirection::Upstream);
+        assert_ne!(frame.direction, ProtocolDirection::Upstream);
     }
     runtime.stop(listener.id).await.unwrap();
 }

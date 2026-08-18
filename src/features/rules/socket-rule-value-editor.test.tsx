@@ -4,17 +4,17 @@ import "@testing-library/jest-dom/vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DocumentValue, SocketRuleFieldCapability } from "@/generated/rust-types";
-import { SocketRuleValueEditor } from "./socket-rule-value-editor";
+import type { DocumentValue, ProtocolRuleFieldCapability } from "@/generated/rust-types";
+import { ProtocolRuleValueEditor } from "./socket-rule-value-editor";
 
-const commandMocks = vi.hoisted(() => ({ socketRuleParseValue: vi.fn() }));
+const commandMocks = vi.hoisted(() => ({ protocolRuleParseValue: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
   callCommand: async <T,>(value: Promise<T> | T) => value,
   errorMessage: (reason: unknown) => reason instanceof Error ? reason.message : "Rust 解析失败",
 }));
 
-const fields: SocketRuleFieldCapability[] = [
+const fields: ProtocolRuleFieldCapability[] = [
   { name: "message_type", label: "消息类型", type: "string", operators: ["equals"], actions: ["set_field"] },
   { name: "amount", label: "金额", type: "int", operators: ["equals"], actions: ["set_field"] },
   { name: "approved", label: "批准", type: "bool", operators: ["equals"], actions: ["set_field"] },
@@ -22,7 +22,7 @@ const fields: SocketRuleFieldCapability[] = [
 ];
 
 beforeEach(() => {
-  commandMocks.socketRuleParseValue.mockImplementation(async (type: string, raw: string) => {
+  commandMocks.protocolRuleParseValue.mockImplementation(async (type: string, raw: string) => {
     if (type === "string") return { type, value: raw };
     if (type === "int") return { type, value: Number(raw) };
     if (type === "bool") return { type, value: raw === "true" };
@@ -39,29 +39,29 @@ describe("Socket typed value editor Rust parsing", () => {
   ] as const)("calls Rust and emits a typed $name payload", async (field, initial, text, expected) => {
     const user = userEvent.setup();
     const change = vi.fn();
-    render(<SocketRuleValueEditor field={field} label="值" value={initial as DocumentValue} onChange={change} onAsyncStateChange={vi.fn()} />);
+    render(<ProtocolRuleValueEditor field={field} label="值" value={initial as DocumentValue} onChange={change} onAsyncStateChange={vi.fn()} />);
     const input = screen.getByRole("textbox", { name: "值" });
     await user.clear(input);
     await user.type(input, text);
     await waitFor(() => expect(change).toHaveBeenLastCalledWith(expected));
-    expect(commandMocks.socketRuleParseValue).toHaveBeenLastCalledWith(field.type, text);
+    expect(commandMocks.protocolRuleParseValue).toHaveBeenLastCalledWith(field.type, text);
   });
 
   it("calls Rust for an explicit boolean payload", async () => {
     const user = userEvent.setup();
     const change = vi.fn();
-    render(<SocketRuleValueEditor field={fields[2]} label="值" value={{ type: "bool", value: false }} onChange={change} onAsyncStateChange={vi.fn()} />);
+    render(<ProtocolRuleValueEditor field={fields[2]} label="值" value={{ type: "bool", value: false }} onChange={change} onAsyncStateChange={vi.fn()} />);
     await user.click(screen.getByLabelText("值"));
     await user.click(await screen.findByRole("option", { name: "true" }));
     await waitFor(() => expect(change).toHaveBeenCalledWith({ type: "bool", value: true }));
-    expect(commandMocks.socketRuleParseValue).toHaveBeenCalledWith("bool", "true");
+    expect(commandMocks.protocolRuleParseValue).toHaveBeenCalledWith("bool", "true");
   });
 
   it("shows a Rust field error and marks the value invalid", async () => {
-    commandMocks.socketRuleParseValue.mockRejectedValueOnce(new Error("整数超出 Rust 安全范围"));
+    commandMocks.protocolRuleParseValue.mockRejectedValueOnce(new Error("整数超出 Rust 安全范围"));
     const change = vi.fn();
     const asyncState = vi.fn();
-    render(<SocketRuleValueEditor field={fields[1]} label="值" value={{ type: "int", value: 1 }} onChange={change} onAsyncStateChange={asyncState} />);
+    render(<ProtocolRuleValueEditor field={fields[1]} label="值" value={{ type: "int", value: 1 }} onChange={change} onAsyncStateChange={asyncState} />);
     fireEvent.change(screen.getByRole("textbox", { name: "值" }), { target: { value: "9007199254740992" } });
     expect(await screen.findByText("整数超出 Rust 安全范围")).toBeVisible();
     expect(asyncState).toHaveBeenLastCalledWith({ pending: false, invalid: true });
@@ -72,10 +72,10 @@ describe("Socket typed value editor Rust parsing", () => {
     [{ type: "string", value: "100" }, "Rust 返回了错误的字段类型"],
     [{ unexpected: true }, "Rust 返回了无效的字段值"],
   ])("rejects a malformed Rust parse payload", async (payload, expectedError) => {
-    commandMocks.socketRuleParseValue.mockResolvedValueOnce(payload);
+    commandMocks.protocolRuleParseValue.mockResolvedValueOnce(payload);
     const change = vi.fn();
     const asyncState = vi.fn();
-    render(<SocketRuleValueEditor field={fields[1]} label="值" value={{ type: "int", value: 1 }} onChange={change} onAsyncStateChange={asyncState} />);
+    render(<ProtocolRuleValueEditor field={fields[1]} label="值" value={{ type: "int", value: 1 }} onChange={change} onAsyncStateChange={asyncState} />);
     fireEvent.change(screen.getByRole("textbox", { name: "值" }), { target: { value: "100" } });
     expect(await screen.findByText(expectedError)).toBeVisible();
     expect(asyncState).toHaveBeenLastCalledWith({ pending: false, invalid: true });
@@ -85,11 +85,11 @@ describe("Socket typed value editor Rust parsing", () => {
   it("discards an older Rust parse response", async () => {
     let finishFirst!: (value: DocumentValue) => void;
     let finishSecond!: (value: DocumentValue) => void;
-    commandMocks.socketRuleParseValue
+    commandMocks.protocolRuleParseValue
       .mockReturnValueOnce(new Promise((resolve) => { finishFirst = resolve; }))
       .mockReturnValueOnce(new Promise((resolve) => { finishSecond = resolve; }));
     const change = vi.fn();
-    render(<SocketRuleValueEditor field={fields[0]} label="值" value={{ type: "string", value: "" }} onChange={change} onAsyncStateChange={vi.fn()} />);
+    render(<ProtocolRuleValueEditor field={fields[0]} label="值" value={{ type: "string", value: "" }} onChange={change} onAsyncStateChange={vi.fn()} />);
     const input = screen.getByRole("textbox", { name: "值" });
     fireEvent.change(input, { target: { value: "first" } });
     fireEvent.change(input, { target: { value: "second" } });
@@ -100,9 +100,9 @@ describe("Socket typed value editor Rust parsing", () => {
   });
 
   it("reports pending then clears state when unmounted", () => {
-    commandMocks.socketRuleParseValue.mockReturnValue(new Promise(() => undefined));
+    commandMocks.protocolRuleParseValue.mockReturnValue(new Promise(() => undefined));
     const asyncState = vi.fn();
-    const { unmount } = render(<SocketRuleValueEditor field={fields[0]} label="值" value={{ type: "string", value: "" }} onChange={vi.fn()} onAsyncStateChange={asyncState} />);
+    const { unmount } = render(<ProtocolRuleValueEditor field={fields[0]} label="值" value={{ type: "string", value: "" }} onChange={vi.fn()} onAsyncStateChange={asyncState} />);
     fireEvent.change(screen.getByRole("textbox", { name: "值" }), { target: { value: "pending" } });
     expect(screen.getByLabelText("正在解析值")).toBeVisible();
     expect(asyncState).toHaveBeenLastCalledWith({ pending: true, invalid: false });
@@ -111,17 +111,17 @@ describe("Socket typed value editor Rust parsing", () => {
   });
 
   it("cancels a pending parse for a reloaded value or field", async () => {
-    commandMocks.socketRuleParseValue.mockReturnValue(new Promise(() => undefined));
+    commandMocks.protocolRuleParseValue.mockReturnValue(new Promise(() => undefined));
     const asyncState = vi.fn();
     const props = { label: "值", onChange: vi.fn(), onAsyncStateChange: asyncState };
-    const { rerender } = render(<SocketRuleValueEditor {...props} field={fields[1]} value={{ type: "int", value: 1 }} />);
+    const { rerender } = render(<ProtocolRuleValueEditor {...props} field={fields[1]} value={{ type: "int", value: 1 }} />);
     const input = screen.getByRole("textbox", { name: "值" });
     fireEvent.change(input, { target: { value: "-" } });
     expect(input).toHaveValue("-");
-    rerender(<SocketRuleValueEditor {...props} field={fields[1]} value={{ type: "int", value: 2 }} />);
+    rerender(<ProtocolRuleValueEditor {...props} field={fields[1]} value={{ type: "int", value: 2 }} />);
     await waitFor(() => expect(input).toHaveValue("2"));
     expect(asyncState).toHaveBeenLastCalledWith(undefined);
-    rerender(<SocketRuleValueEditor {...props} field={{ ...fields[1], name: "trace" }} value={{ type: "int", value: 7 }} />);
+    rerender(<ProtocolRuleValueEditor {...props} field={{ ...fields[1], name: "trace" }} value={{ type: "int", value: 7 }} />);
     await waitFor(() => expect(input).toHaveValue("7"));
   });
 });

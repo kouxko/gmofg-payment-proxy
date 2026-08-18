@@ -133,7 +133,7 @@ impl SettingsRepositoryAdapter {
         }
     }
 
-    fn validate_ports(&self, draft: &SettingsDraft, validation: &mut SettingsValidationViewModel) {
+    fn validate_ports(draft: &SettingsDraft, validation: &mut SettingsValidationViewModel) {
         let Ok(bind_address) = draft.bind_address.parse::<IpAddr>() else {
             return;
         };

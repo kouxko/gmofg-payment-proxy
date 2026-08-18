@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    AndroidNetworkProfile, CertificateReferenceId, DomainError, ErrorCode, ListenerId, Revision,
-    Rule, SocketDocumentRuleDefinition, WorkspaceId,
+    AndroidNetworkProfile, CertificateReferenceId, DomainError, ErrorCode, ListenerId,
+    ProtocolDocumentRuleDefinition, Revision, Rule, WorkspaceId,
 };
 
 mod listener_model;
@@ -58,12 +58,12 @@ pub struct ProxyWorkspace {
     /// 字段仍属于领域聚合并参与导入导出，只不重复进入 Workspace 的 TypeScript DTO。
     #[specta(skip)]
     pub rules: Vec<Rule>,
-    /// Schema 驱动的 Socket 规则；与 HTTP `rules` 使用完全独立的类型和维护入口。
+    /// Schema 驱动的 协议报文规则；与 HTTP `rules` 使用完全独立的类型和维护入口。
     #[specta(skip)]
-    pub socket_rules: Vec<SocketDocumentRuleDefinition>,
-    /// Socket 规则 `created_order` 的单调高水位；删除规则不会降低此值。
+    pub protocol_rules: Vec<ProtocolDocumentRuleDefinition>,
+    /// 协议报文规则 `created_order` 的单调高水位；删除规则不会降低此值。
     #[specta(skip)]
-    pub socket_rule_created_order_high_water: u64,
+    pub protocol_rule_created_order_high_water: u64,
     pub certificate_references: Vec<CertificateReference>,
     /// 与该 Workspace 一起迁移的 Android 设备网络方案。
     /// 设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，
@@ -79,8 +79,8 @@ impl Default for ProxyWorkspace {
             revision: Revision::INITIAL,
             listeners: vec![ProxyListener::default()],
             rules: Vec::new(),
-            socket_rules: Vec::new(),
-            socket_rule_created_order_high_water: 0,
+            protocol_rules: Vec::new(),
+            protocol_rule_created_order_high_water: 0,
             certificate_references: Vec::new(),
             android_network_profiles: Vec::new(),
         }

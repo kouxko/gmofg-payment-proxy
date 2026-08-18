@@ -25,24 +25,38 @@ function ProtocolTabsHarness() {
 }
 
 describe("ProtocolWorkspaceTabs", () => {
-  it("renders a fixed page title with content-width protocol tabs", () => {
+  it("renders an optional page title with full-width protocol tabs", () => {
     render(<ProtocolTabsHarness />);
 
     expect(screen.getByRole("heading", { level: 1, name: "测试工作区" })).toBeVisible();
     const tablist = screen.getByRole("tablist", { name: "测试协议" });
-    expect(tablist).toHaveClass("w-fit");
+    expect(tablist).not.toHaveClass("w-fit");
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "HTTP",
       "Socket",
     ]);
   });
 
-  it("keeps the compact header wrapping without horizontal overflow classes", () => {
+  it("keeps the header bounded without horizontal overflow classes", () => {
     render(<ProtocolTabsHarness />);
 
     const header = screen.getByRole("heading", { name: "测试工作区" }).closest("header");
-    expect(header).toHaveClass("flex-wrap", "shrink-0");
+    expect(header).toHaveClass("shrink-0");
     expect(header?.className).not.toMatch(/(?:^|\s)(?:w-screen|min-w-max)(?:\s|$)/);
+  });
+
+  it("does not render a duplicate title when the workspace owns its heading", () => {
+    render(
+      <ProtocolWorkspaceTabs
+        ariaLabel="测试协议"
+        selectedKey="http"
+        onSelectionChange={() => undefined}
+      >
+        <section>content</section>
+      </ProtocolWorkspaceTabs>,
+    );
+
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
   });
 
   it("connects the selected tab to the active tabpanel", () => {

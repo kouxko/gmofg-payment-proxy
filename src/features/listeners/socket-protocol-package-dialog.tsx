@@ -23,7 +23,7 @@ export function SocketProtocolPackageDialog({ packageRef, disabled }: {
     { enabled: open },
   );
   const responseError = detail.data
-    ? protocolPackageDetailError(detail.data, packageRef)
+    ? protocolPackageDetailError(detail.data, packageRef, "socket")
     : undefined;
   return (
     <>

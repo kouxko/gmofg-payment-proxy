@@ -73,6 +73,8 @@ pub(super) fn content_view(
         codec_id,
         decode_error,
         query_string: query_string(&message.start_line),
+        protocol: None,
+        protocol_failure: None,
     }
 }
 

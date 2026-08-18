@@ -1,4 +1,7 @@
 use super::*;
+
+#[path = "tests/tail_write.rs"]
+mod tail_write;
 use std::net::{IpAddr, Ipv4Addr};
 
 #[test]
@@ -147,6 +150,69 @@ async fn write_test_request(client: &mut tokio::io::DuplexStream) {
         .write_all(b"POST / HTTP/1.1\r\nHost: proxy.test\r\nContent-Length: 0\r\n\r\n")
         .await
         .expect("write test request");
+}
+
+#[tokio::test]
+async fn response_from_disposition_without_body_declares_zero_length() {
+    let canonical_head = StdMutex::new(None);
+    let raw_tail = StdMutex::new(None);
+    let fault = StdMutex::new(None);
+
+    let response = response_from_disposition(
+        ResponseDisposition::Send {
+            message: Message::response(StatusCode::OK, &HeaderMap::new(), Bytes::new()),
+            schedule: TrafficSchedule::default(),
+        },
+        &canonical_head,
+        &raw_tail,
+        &fault,
+        &CancellationToken::new(),
+    )
+    .expect("empty body response must build");
+
+    assert_eq!(response.headers().get("content-length").unwrap(), "0");
+    let mut body = response.into_body();
+    assert!(body.frame().await.is_none());
+    assert!(
+        fault
+            .lock()
+            .expect("intentional fault mutex poisoned")
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn response_from_disposition_updates_content_length_after_body_text_change() {
+    let canonical_head = StdMutex::new(None);
+    let raw_tail = StdMutex::new(None);
+    let fault = StdMutex::new(None);
+
+    let response = response_from_disposition(
+        ResponseDisposition::Send {
+            message: Message::response(
+                StatusCode::OK,
+                &HeaderMap::new(),
+                Bytes::from_static(b"changed-body"),
+            ),
+            schedule: TrafficSchedule::default(),
+        },
+        &canonical_head,
+        &raw_tail,
+        &fault,
+        &CancellationToken::new(),
+    )
+    .expect("rewritten response should build");
+
+    assert_eq!(
+        response.headers().get("content-length").unwrap(),
+        http::HeaderValue::from_static("12")
+    );
+    assert!(
+        fault
+            .lock()
+            .expect("intentional fault mutex poisoned")
+            .is_none()
+    );
 }
 
 #[tokio::test]
@@ -414,73 +480,4 @@ async fn downstream_response_write_stops_when_supervisor_cancels() {
     let error = result.expect_err("supervisor cancellation must stop the downstream write");
 
     assert_eq!(error.code, ErrorCode::ProxyStopped.as_str());
-}
-
-#[tokio::test]
-async fn incorrect_content_length_tail_write_is_bounded() {
-    let (mut client, server) = tokio::io::duplex(256);
-    write_test_request(&mut client).await;
-    let service = downstream_test_service(
-        Bytes::from(vec![b'x'; 4 * 1024]),
-        Some(1),
-        Duration::from_millis(10),
-    );
-
-    let error = tokio::time::timeout(
-        Duration::from_secs(1),
-        service.run_connection_inner(
-            Box::new(server),
-            &downstream_test_context(),
-            CancellationToken::new(),
-        ),
-    )
-    .await
-    .expect("incorrect content-length tail write must be bounded")
-    .expect_err("intentional incorrect content-length remains a terminal fault");
-
-    assert_eq!(error.code, ErrorCode::IncorrectContentLength.as_str());
-}
-
-#[tokio::test]
-async fn incorrect_content_length_tail_write_stops_when_supervisor_cancels() {
-    let mut io: BoxIo = Box::new(PendingWriteIo(PendingWriteStage::Tail));
-    let cancellation = CancellationToken::new();
-    let stop = cancellation.clone();
-    let intentional_fault = StdMutex::new(Some(IntentionalWireFault::IncorrectContentLength));
-
-    let ((), result) = tokio::join!(
-        async move {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-            stop.cancel();
-        },
-        finish_downstream_write(
-            &mut io,
-            Some(Bytes::from_static(b"tail")),
-            Duration::from_secs(30),
-            &cancellation,
-            &intentional_fault,
-        )
-    );
-    let error = result.expect_err("supervisor cancellation must stop the raw tail write");
-
-    assert_eq!(error.code, ErrorCode::ProxyStopped.as_str());
-}
-
-#[tokio::test]
-async fn downstream_flush_and_shutdown_each_respect_write_timeout() {
-    for stage in [PendingWriteStage::Flush, PendingWriteStage::Shutdown] {
-        let mut io: BoxIo = Box::new(PendingWriteIo(stage));
-        let error = finish_downstream_write(
-            &mut io,
-            None,
-            Duration::from_millis(5),
-            &CancellationToken::new(),
-            &StdMutex::new(None),
-        )
-        .await
-        .expect_err("a stalled downstream write stage must time out");
-
-        assert_eq!(error.code, ErrorCode::Io.as_str());
-        assert!(error.message.contains("timed out after 5 ms"));
-    }
 }

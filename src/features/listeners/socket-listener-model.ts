@@ -11,6 +11,7 @@ import type {
   SocketUpstreamTlsSettings,
 } from "@/generated/rust-types";
 import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
+import { isProtocolPackageSchema } from "@/lib/protocol-package-schema";
 import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
 
 export type SocketWorkingMode = "raw_relay" | "protocol_relay" | "local_response";
@@ -52,8 +53,6 @@ export function defaultDownstreamTls(): SocketDownstreamTlsSettings {
 function emptyScripted(packageRef?: ProtocolPackageRef): ScriptedSocketProcessing {
   return {
     package: packageRef ?? { id: "", version: "" },
-    upstream: { decode_enabled: false, encode_enabled: false },
-    downstream: { decode_enabled: false, encode_enabled: false },
   };
 }
 
@@ -147,11 +146,7 @@ export function setSocketTopology(
     return {
       ...settings,
       topology: { mode: "local_responder", settings: { downstream_security: security } },
-      processing: { mode: "scripted", settings: {
-        ...current,
-        upstream: { ...current.upstream, encode_enabled: false },
-        downstream: { ...current.downstream, decode_enabled: false },
-      } },
+      processing: { mode: "scripted", settings: current },
     };
   }
   const security = appSecurity(settings);
@@ -188,21 +183,9 @@ export function bindPackage(
   option: ListenerProtocolPackageOptionViewModel,
   local: boolean,
 ): SocketPayloadProcessing {
-  const current = processing.mode === "scripted" ? processing.settings : emptyScripted();
-  return { mode: "scripted", settings: {
-    ...current,
-    package: option.package,
-    upstream: {
-      ...current.upstream,
-      decode_enabled: option.capabilities.upstream.decode,
-      encode_enabled: !local && option.capabilities.upstream.encode,
-    },
-    downstream: {
-      ...current.downstream,
-      decode_enabled: !local && option.capabilities.downstream.decode,
-      encode_enabled: option.capabilities.downstream.encode,
-    },
-  } };
+  void processing;
+  void local;
+  return { mode: "scripted", settings: { package: option.package } };
 }
 
 export function matchingOption(
@@ -210,7 +193,19 @@ export function matchingOption(
   packageRef: ProtocolPackageRef,
 ): ListenerProtocolPackageOptionViewModel | undefined {
   const key = exactPackageKey(packageRef);
-  return catalog?.options.find((item) => exactPackageKey(item.package) === key);
+  return socketCatalogOptions(catalog).find((item) => exactPackageKey(item.package) === key);
+}
+
+export function socketCatalogOptions(
+  catalog: ListenerProtocolPackageCatalogViewModel | undefined,
+): ListenerProtocolPackageOptionViewModel[] {
+  return catalog?.options.filter((item) => item.kind === "socket") ?? [];
+}
+
+export function httpCatalogOptions(
+  catalog: ListenerProtocolPackageCatalogViewModel | undefined,
+): ListenerProtocolPackageOptionViewModel[] {
+  return catalog?.options.filter((item) => item.kind === "http") ?? [];
 }
 
 /**
@@ -236,42 +231,25 @@ export function isListenerProtocolPackageCatalog(
     if (identities.has(identity)) return false;
     identities.add(identity);
   }
-  if (value.recommended_package !== null
-    && (exactPackageKey(value.recommended_package) !== exactPackageKey(BUILT_IN_ISO_8583_PACKAGE)
-      || !identities.has(exactPackageKey(value.recommended_package)))) return false;
+  const recommended = value.recommended_package as ProtocolPackageRef | null;
+  if (recommended !== null
+    && (exactPackageKey(recommended) !== exactPackageKey(BUILT_IN_ISO_8583_PACKAGE)
+      || !value.options.some((option) => option.kind === "socket"
+        && exactPackageKey(option.package) === exactPackageKey(recommended)))) return false;
   return true;
 }
 
 function isCatalogOption(value: unknown): value is ListenerProtocolPackageOptionViewModel {
   if (!isRecord(value)
-    || !hasOnly(value, ["package", "name", "capabilities", "schema"])
+    || !hasOnly(value, ["package", "name", "kind", "capabilities", "upstream_schema", "downstream_schema"])
     || !isPackageRef(value.package)
     || typeof value.name !== "string"
     || value.name.length === 0
-    || !isCapabilities(value.capabilities)
-    || !isRecord(value.schema)
-    || !hasOnly(value.schema, ["id", "version", "title", "fields"])
-    || typeof value.schema.id !== "string"
-    || value.schema.id.length === 0
-    || typeof value.schema.version !== "number"
-    || !Number.isSafeInteger(value.schema.version)
-    || value.schema.version < 1
-    || typeof value.schema.title !== "string"
-    || !Array.isArray(value.schema.fields)
-    || value.schema.fields.length === 0) {
+    || (value.kind !== "http" && value.kind !== "socket")
+    || !isCapabilities(value.capabilities, value.kind)
+    || !isProtocolPackageSchema(value.upstream_schema)
+    || !isProtocolPackageSchema(value.downstream_schema)) {
     return false;
-  }
-  const names = new Set<string>();
-  for (const field of value.schema.fields) {
-    if (!isRecord(field)
-      || !hasOnly(field, ["name", "type", "label"])
-      || typeof field.name !== "string"
-      || field.name.length === 0
-      || names.has(field.name)
-      || typeof field.type !== "string"
-      || !["string", "int", "bool", "blob"].includes(field.type)
-      || typeof field.label !== "string") return false;
-    names.add(field.name);
   }
   return true;
 }
@@ -285,20 +263,20 @@ function isPackageRef(value: unknown): value is ProtocolPackageRef {
     && value.version.length > 0;
 }
 
-function isCapabilities(value: unknown): boolean {
+function isCapabilities(value: unknown, kind: "http" | "socket"): boolean {
   if (!isRecord(value) || !hasOnly(value, ["upstream", "downstream", "display"])) return false;
-  return isDirectionCapabilities(value.upstream)
-    && isDirectionCapabilities(value.downstream)
-    && typeof value.display === "boolean";
+  return isDirectionCapabilities(value.upstream, kind)
+    && isDirectionCapabilities(value.downstream, kind)
+    && value.display === true;
 }
 
-function isDirectionCapabilities(value: unknown): boolean {
+function isDirectionCapabilities(value: unknown, kind: "http" | "socket"): boolean {
   return isRecord(value)
     && hasOnly(value, ["frame", "decode", "encode"])
-    // 当前 Host API 的 Frame/Decode 是必需入口；false 表示伪造或旧响应，整批拒绝。
-    && value.frame === true
+    // 当前 Manifest 只允许 Socket 双向声明 Frame、HTTP 双向不声明 Frame。
+    && value.frame === (kind === "socket")
     && value.decode === true
-    && typeof value.encode === "boolean";
+    && value.encode === true;
 }
 
 function isCount(value: unknown): value is number {

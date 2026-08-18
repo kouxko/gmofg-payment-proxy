@@ -113,6 +113,7 @@ impl ProtocolPackageRepositoryAdapter {
         if compiled.package() != package
             || compiled.manifest().package().name() != stored.header.name
             || compiled.manifest().api() != stored.header.host_api
+            || compiled.kind() != stored.header.kind
         {
             return Err(package_error(
                 package,

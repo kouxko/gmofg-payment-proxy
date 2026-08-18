@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   builtInRestoreResultError,
+  isProtocolPackageGroupList,
   packageStatus,
+  protocolPackageDetailError,
   sortPackageVersions,
   validationText,
 } from "./protocol-package-model";
-import { version } from "./protocol-packages-test-support";
+import { detail, group, version } from "./protocol-packages-test-support";
 
 describe("protocol package presentation model", () => {
   it("reverses the authoritative Rust SemVer order without reparsing numbers", () => {
@@ -53,12 +55,14 @@ describe("protocol package presentation model", () => {
         built_in: true,
         enabled: true,
       }),
+      kind: "socket",
       capabilities: {
         upstream: { frame: true, decode: true, encode: true },
         downstream: { frame: true, decode: true, encode: true },
         display: true,
       },
-      schema: { id: "iso8583", version: 1, title: "ISO", fields: [] },
+      upstream_schema: { id: "iso8583-request", version: 1, title: "ISO Request", fields: [{ name: "mti", label: "MTI", type: "string" }] },
+      downstream_schema: { id: "iso8583-response", version: 1, title: "ISO Response", fields: [{ name: "code", label: "Code", type: "string" }] },
     })).toBeUndefined();
     expect(builtInRestoreResultError({
       outcome: "installed",
@@ -71,5 +75,68 @@ describe("protocol package presentation model", () => {
         built_in: false,
       }),
     })).toBe("内置示例恢复结果不完整，请刷新列表后重试。");
+  });
+
+  it("rejects cross-kind versions and unknown list fields", () => {
+    expect(isProtocolPackageGroupList([group({
+      kind: "http",
+      versions: [version("1.0.0", { kind: "socket" })],
+    })])).toBe(false);
+    expect(isProtocolPackageGroupList([{
+      ...group(),
+      legacy_schema: "document.toml",
+    }])).toBe(false);
+    expect(isProtocolPackageGroupList([group({
+      kind: "http",
+      versions: [version("1.0.0", { kind: "http" })],
+    })])).toBe(true);
+  });
+
+  it("validates Frame capability against the detail package kind", () => {
+    const expected = { id: "iso-8583", version: "2.0.0" };
+    const http = detail(version("2.0.0", { kind: "http" }), {
+      kind: "http",
+      capabilities: {
+        upstream: { frame: false, decode: true, encode: true },
+        downstream: { frame: false, decode: true, encode: true },
+        display: true,
+      },
+    });
+    expect(protocolPackageDetailError(http, expected)).toBeUndefined();
+    expect(protocolPackageDetailError({
+      ...http,
+      version: { ...http.version, kind: "socket" },
+    }, expected)).toBe("协议包详情数据不完整。");
+    expect(protocolPackageDetailError({
+      ...http,
+      capabilities: {
+        ...http.capabilities,
+        upstream: { ...http.capabilities.upstream, frame: true },
+      },
+    }, expected)).toBe("协议包详情数据不完整。");
+
+    const socket = detail();
+    expect(protocolPackageDetailError({
+      ...socket,
+      capabilities: {
+        ...socket.capabilities,
+        downstream: { ...socket.capabilities.downstream, frame: false },
+      },
+    }, expected)).toBe("协议包详情数据不完整。");
+  });
+
+  it("rejects empty, duplicate, and extended Schema fields", () => {
+    const expected = { id: "iso-8583", version: "2.0.0" };
+    const base = detail();
+    for (const fields of [
+      [],
+      [{ name: "mti", label: "MTI", type: "string" }, { name: "mti", label: "Again", type: "int" }],
+      [{ name: "mti", label: "MTI", type: "string", legacy: true }],
+    ]) {
+      expect(protocolPackageDetailError({
+        ...base,
+        upstream_schema: { ...base.upstream_schema, fields: fields as never },
+      }, expected)).toBe("协议包详情数据不完整。");
+    }
   });
 });

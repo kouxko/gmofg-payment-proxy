@@ -60,9 +60,8 @@ fn runtime_failure_covers_cancel_entry_and_fallback_groups() {
             SocketProcessingFailureKind::RuleFailed,
         ),
         (
-            ProtocolRuntimeError::EntryPointUnavailable {
+            ProtocolRuntimeError::EntryPointFailed {
                 package: package(),
-                direction: intercept_proxy_protocol_scripting::ProtocolDirection::Upstream,
                 entry: ProtocolEntryPoint::Decode,
             },
             SocketProcessingFailureKind::DecodeFailed,

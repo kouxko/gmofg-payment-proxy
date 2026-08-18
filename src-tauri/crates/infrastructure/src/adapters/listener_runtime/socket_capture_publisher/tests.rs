@@ -2,13 +2,14 @@ use super::*;
 use crate::{SqliteStore, adapters::SocketCaptureRepositoryAdapter};
 use chrono::{Duration, TimeZone, Utc};
 use intercept_proxy_application::{
-    EventHub, SocketCaptureId, SocketCapturePayload, SocketCaptureRecord, SocketCaptureSchemaRef,
-    SocketConnectionId, SocketDisplayFallbackReason, SocketDisplayResult, SocketRelayFrameCapture,
-    SocketWriteKind,
+    EventHub, SocketCaptureDocument, SocketCaptureId, SocketCapturePayload, SocketCaptureRecord,
+    SocketCaptureSchemaRef, SocketConnectionId, SocketDisplayResult, SocketRelayFrameCapture,
+    SocketRelayRuleStageCapture,
 };
 use intercept_proxy_domain::{
-    DocumentSchemaId, ListenerId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    SocketDirection, WorkspaceId,
+    Document, DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema,
+    DocumentSchemaId, ListenerId, ProtocolDirection, ProtocolPackageId, ProtocolPackageRef,
+    ProtocolPackageVersion, ProtocolRuleStage, WorkspaceId,
 };
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -25,8 +26,8 @@ fn record(id: u128, workspace_id: WorkspaceId) -> SocketCaptureRecord {
         peer_address: "127.0.0.1:43100".to_owned(),
         occurred_at,
         completed_at: occurred_at + Duration::milliseconds(7),
-        payload: SocketCapturePayload::RelayFrame(SocketRelayFrameCapture {
-            direction: SocketDirection::Upstream,
+        payload: SocketCapturePayload::RelayFrame(Box::new(SocketRelayFrameCapture {
+            direction: ProtocolDirection::Upstream,
             package: ProtocolPackageRef {
                 id: ProtocolPackageId::new("iso8583").unwrap(),
                 version: ProtocolPackageVersion::new("1.0.0").unwrap(),
@@ -35,19 +36,43 @@ fn record(id: u128, workspace_id: WorkspaceId) -> SocketCaptureRecord {
                 id: DocumentSchemaId::new("payment").unwrap(),
                 version: 1,
             },
-            decode_enabled: false,
-            encode_enabled: false,
             origin: vec![0x02, 0x03],
-            document: None,
-            matched_rule_ids: Vec::new(),
+            stages: vec![
+                SocketRelayRuleStageCapture {
+                    stage: ProtocolRuleStage::AppToProxy,
+                    matched_rule_ids: Vec::new(),
+                    document: capture_document(),
+                },
+                SocketRelayRuleStageCapture {
+                    stage: ProtocolRuleStage::ProxyToUpstream,
+                    matched_rule_ids: Vec::new(),
+                    document: capture_document(),
+                },
+            ],
             written: vec![0x02, 0x03],
-            write_kind: SocketWriteKind::Original,
-            display: SocketDisplayResult::HexFallback {
-                reason: SocketDisplayFallbackReason::EncodeDisabled,
-                diagnostic: None,
+            display: SocketDisplayResult::UntrustedHtml {
+                html: "<p>capture</p>".into(),
             },
-        }),
+        })),
     }
+}
+
+fn capture_document() -> SocketCaptureDocument {
+    let schema = DocumentSchema::new(
+        DocumentSchemaId::new("payment").unwrap(),
+        1,
+        "Payment",
+        vec![
+            DocumentField::new(
+                DocumentFieldName::new("amount").unwrap(),
+                DocumentFieldType::Int,
+                "Amount",
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    SocketCaptureDocument::from_document(&Document::new(schema))
 }
 
 #[test]
@@ -303,16 +328,6 @@ mod completion_events;
 #[test]
 fn display_capture_maps_every_fallback_without_dynamic_script_text() {
     for (input, expected_reason, expected_code) in [
-        (
-            ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EncodeDisabled),
-            SocketDisplayFallbackReason::EncodeDisabled,
-            None,
-        ),
-        (
-            ProtocolDisplayResult::HexFallback(DisplayFallbackReason::NotDeclared),
-            SocketDisplayFallbackReason::NotDeclared,
-            None,
-        ),
         (
             ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed),
             SocketDisplayFallbackReason::EntryPointFailed,

@@ -8,6 +8,8 @@ use std::sync::Arc;
 use intercept_proxy_application::Application;
 use intercept_proxy_host::ApplicationHost;
 
+use crate::mcp::ReadOnlyMcpServer;
+
 /// Tauri exposes only the application facade to commands.
 ///
 /// Database connections, listeners, certificate private keys and domain
@@ -16,14 +18,27 @@ use intercept_proxy_host::ApplicationHost;
 pub struct AppState {
     pub application: Arc<Application>,
     host: Arc<ApplicationHost>,
+    mcp: Option<ReadOnlyMcpServer>,
 }
 
 impl AppState {
+    /// Builds command state without outer adapters. Used by command-level tests.
+    #[cfg(test)]
     pub fn new(host: ApplicationHost) -> Self {
+        Self::with_optional_mcp(host, None)
+    }
+
+    /// Builds production state. MCP is best-effort so a local port conflict cannot block proxy use.
+    pub fn production(host: ApplicationHost, mcp: Option<ReadOnlyMcpServer>) -> Self {
+        Self::with_optional_mcp(host, mcp)
+    }
+
+    fn with_optional_mcp(host: ApplicationHost, mcp: Option<ReadOnlyMcpServer>) -> Self {
         let host = Arc::new(host);
         Self {
             application: host.application(),
             host,
+            mcp,
         }
     }
 
@@ -37,11 +52,18 @@ impl AppState {
     }
 
     pub fn shutdown(&self) {
+        if let Some(mcp) = &self.mcp {
+            mcp.cancel();
+        }
         self.host.cancel_background_tasks();
     }
 
     pub fn host(&self) -> Arc<ApplicationHost> {
         Arc::clone(&self.host)
+    }
+
+    pub fn mcp(&self) -> Option<ReadOnlyMcpServer> {
+        self.mcp.clone()
     }
 }
 

@@ -25,18 +25,23 @@ id = "example-protocol"
 name = "Example Protocol"
 version = "1.2.3-beta.1+build.7"
 
-[document]
-schema = "schemas/document.toml"
+[document.upstream]
+schema = "schemas/upstream.toml"
+display = "render_upstream"
 
-[hooks.upstream.receive]
-script = "scripts/upstream.rhai"
+[document.downstream]
+schema = "schemas/downstream.toml"
+display = "render_downstream"
+
+[hooks.upstream]
 frame = "upstream_frame"
 decode = "upstream_decode"
+encode = "upstream_encode"
 
-[hooks.downstream.receive]
-script = "scripts/downstream.rhai"
+[hooks.downstream]
 frame = "downstream_frame"
 decode = "downstream_decode"
+encode = "downstream_encode"
 "#
     .to_owned()
 }

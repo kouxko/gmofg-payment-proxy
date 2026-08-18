@@ -20,8 +20,8 @@ impl<'de> Deserialize<'de> for SocketCapturePayload {
             deny_unknown_fields
         )]
         enum Wire {
-            RelayFrame(SocketRelayFrameCapture),
-            LocalExchange(SocketLocalExchangeCapture),
+            RelayFrame(Box<SocketRelayFrameCapture>),
+            LocalExchange(Box<SocketLocalExchangeCapture>),
         }
 
         Ok(match Wire::deserialize(deserializer)? {

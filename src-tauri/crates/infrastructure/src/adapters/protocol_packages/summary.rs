@@ -16,6 +16,7 @@ pub(super) fn summary_from_header(header: StoredProtocolPackageHeader) -> Protoc
         package: header.package,
         name: header.name,
         host_api: header.host_api,
+        kind: header.kind,
         enabled: header.enabled,
         validation,
         installed_at: header.installed_at,

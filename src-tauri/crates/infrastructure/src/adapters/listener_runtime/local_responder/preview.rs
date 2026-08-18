@@ -19,7 +19,7 @@ pub(super) fn request_preview(
     SocketLocalRequestPreview::new(
         exchange_id,
         request.origin(),
-        request.document().map(document_preview),
+        Some(document_preview(request.document())),
     )
 }
 

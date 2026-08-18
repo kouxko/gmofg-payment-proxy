@@ -12,17 +12,20 @@ use intercept_proxy_domain::{
 use intercept_proxy_runtime::{
     ChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode, ForwardMitmConfig,
     ForwardProxyAuthenticator, ForwardProxyConfig, ForwardProxyService, MessageLimits,
-    NativeRootMitmConnector, NoAuthentication, ReverseProxyConfig, ReverseProxyService,
-    SocketDownstreamTlsConfig, SocketEndpoint, SocketRelayConfig,
+    NativeRootMitmConnector, NoAuthentication, PipelinePorts, ReverseProxyConfig,
+    ReverseProxyService, SocketDownstreamTlsConfig, SocketEndpoint, SocketRelayConfig,
     SocketRelaySecurity as RuntimeSocketSecurity, SocketRelayService, SocketTlsIdentity,
     SocketUpstreamTlsConfig,
 };
 
 use super::{
-    ListenerRuntimeAdapter, helpers::ensure_snapshot_matches, parse_bind_address,
+    ListenerRuntimeAdapter, helpers::ensure_snapshot_matches,
+    http_protocol_pipeline::HttpProtocolRuntimeSnapshot, parse_bind_address,
     scripted_snapshot::ScriptedSocketRuntimeSnapshot, socket_diagnostics::SocketDiagnosticObserver,
     socket_plan,
 };
+
+mod tls;
 
 mod scripted;
 
@@ -30,10 +33,12 @@ pub(super) enum PreparedListenerRuntime {
     HttpForward {
         bind_addr: SocketAddr,
         service: ForwardProxyService,
+        protocol: Option<Arc<HttpProtocolRuntimeSnapshot>>,
     },
     HttpFixed {
         bind_addr: SocketAddr,
         service: Box<ReverseProxyService>,
+        protocol: Option<Arc<HttpProtocolRuntimeSnapshot>>,
     },
     Socket {
         bind_addr: SocketAddr,
@@ -63,10 +68,28 @@ impl PreparedListenerRuntime {
             _ => None,
         }
     }
+
+    pub(super) fn http_protocol_snapshot(&self) -> Option<Arc<HttpProtocolRuntimeSnapshot>> {
+        match self {
+            Self::HttpForward { protocol, .. } | Self::HttpFixed { protocol, .. } => {
+                protocol.clone()
+            }
+            Self::Socket { .. } | Self::ScriptedSocket { .. } => None,
+        }
+    }
 }
 
 pub(super) struct ListenerRuntimePlanBuilder<'ctx> {
     adapter: &'ctx ListenerRuntimeAdapter,
+}
+
+struct HttpBuildContext<'a> {
+    workspace: &'a ProxyWorkspace,
+    listener: &'a ProxyListener,
+    http: &'a HttpListenerSettings,
+    bind_addr: SocketAddr,
+    protocol: Option<Arc<HttpProtocolRuntimeSnapshot>>,
+    pipeline: Option<Arc<dyn PipelinePorts>>,
 }
 
 impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
@@ -130,37 +153,35 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
         runtime_epoch: uuid::Uuid,
         full_runtime: bool,
     ) -> AppResult<PreparedListenerRuntime> {
-        if let Some(fixed) = &http.fixed_server {
-            let mut service = ReverseProxyService::build(ReverseProxyConfig {
-                bind_addr,
-                allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
-                upstream_origin: fixed.upstream_url.clone(),
-                downstream_tls: if full_runtime {
-                    self.adapter.downstream_tls(workspace, listener, http)?
-                } else {
-                    None
-                },
-                upstream_tls: self.adapter.upstream_tls(workspace, fixed)?,
-                connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                write_timeout: Duration::from_millis(listener.write_timeout_ms),
-            })
-            .await
-            .map_err(|error| runtime_error(listener, error.code, error.message))?;
-            if full_runtime {
-                service = service
-                    .with_pipeline(
-                        channel(listener)?,
-                        self.pipeline(listener)?,
-                        MessageLimits::default(),
-                        DEFAULT_MAX_CONNECTIONS,
+        let protocol = if full_runtime {
+            HttpProtocolRuntimeSnapshot::prepare(self.adapter, workspace, listener)?
+        } else {
+            None
+        };
+        let pipeline = if full_runtime {
+            let services = self.pipeline(listener)?;
+            Some(protocol.as_ref().map_or_else(
+                || services.ports.clone(),
+                |snapshot| {
+                    snapshot.wrap(
+                        services.ports.clone(),
+                        services.http_protocol_observations.clone(),
                     )
-                    .map_err(|error| runtime_error(listener, error.code, error.message))?;
-            }
-            return Ok(PreparedListenerRuntime::HttpFixed {
-                bind_addr,
-                service: Box::new(service),
-            });
+                },
+            ))
+        } else {
+            None
+        };
+        let context = HttpBuildContext {
+            workspace,
+            listener,
+            http,
+            bind_addr,
+            protocol,
+            pipeline,
+        };
+        if let Some(fixed) = &http.fixed_server {
+            return self.build_fixed_http(&context, fixed, full_runtime).await;
         }
 
         if !full_runtime {
@@ -171,56 +192,114 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             .entity(listener.id.to_string()));
         }
 
-        let (authentication, authenticator) = self.authentication(http)?;
+        self.build_forward_http(&context, runtime_epoch)
+    }
+
+    async fn build_fixed_http(
+        &self,
+        context: &HttpBuildContext<'_>,
+        fixed: &intercept_proxy_domain::FixedServerSettings,
+        full_runtime: bool,
+    ) -> AppResult<PreparedListenerRuntime> {
+        let mut service = ReverseProxyService::build(ReverseProxyConfig {
+            bind_addr: context.bind_addr,
+            allowed_client_cidrs: context.listener.allowed_client_cidrs.clone(),
+            upstream_origin: fixed.upstream_url.clone(),
+            downstream_tls: if full_runtime {
+                self.adapter
+                    .downstream_tls(context.workspace, context.listener, context.http)?
+            } else {
+                None
+            },
+            upstream_tls: self.adapter.upstream_tls(context.workspace, fixed)?,
+            connect_timeout: Duration::from_millis(context.listener.connect_timeout_ms),
+            read_timeout: Duration::from_millis(context.listener.read_timeout_ms),
+            write_timeout: Duration::from_millis(context.listener.write_timeout_ms),
+        })
+        .await
+        .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
+        if let Some(pipeline) = &context.pipeline {
+            service = service
+                .with_pipeline(
+                    channel(context.listener)?,
+                    Arc::clone(pipeline),
+                    MessageLimits::default(),
+                    DEFAULT_MAX_CONNECTIONS,
+                )
+                .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
+        }
+        Ok(PreparedListenerRuntime::HttpFixed {
+            bind_addr: context.bind_addr,
+            service: Box::new(service),
+            protocol: context.protocol.clone(),
+        })
+    }
+
+    fn build_forward_http(
+        &self,
+        context: &HttpBuildContext<'_>,
+        runtime_epoch: uuid::Uuid,
+    ) -> AppResult<PreparedListenerRuntime> {
+        let (authentication, authenticator) = self.authentication(context.http)?;
         let mut service = ForwardProxyService::new(
             ForwardProxyConfig {
-                bind_addr,
+                bind_addr: context.bind_addr,
                 authentication,
-                allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
-                connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                write_timeout: Duration::from_millis(listener.write_timeout_ms),
+                allowed_client_cidrs: context.listener.allowed_client_cidrs.clone(),
+                connect_timeout: Duration::from_millis(context.listener.connect_timeout_ms),
+                read_timeout: Duration::from_millis(context.listener.read_timeout_ms),
+                write_timeout: Duration::from_millis(context.listener.write_timeout_ms),
                 tunnel_idle_timeout: Duration::from_millis(
-                    listener.read_timeout_ms.min(listener.write_timeout_ms),
+                    context
+                        .listener
+                        .read_timeout_ms
+                        .min(context.listener.write_timeout_ms),
                 ),
             },
             authenticator,
         )
-        .map_err(|error| runtime_error(listener, error.code, error.message))?;
-        if let Some(tls) = self.adapter.downstream_tls(workspace, listener, http)? {
+        .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
+        if let Some(tls) =
+            self.adapter
+                .downstream_tls(context.workspace, context.listener, context.http)?
+        {
             service = service
                 .with_downstream_tls(&tls)
-                .map_err(|error| runtime_error(listener, error.code, error.message))?;
+                .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
         }
-        if http.mitm.enabled {
+        if context.http.mitm.enabled {
             let authority = self
                 .adapter
                 .mitm_certificate_authority
                 .clone()
-                .ok_or_else(|| certificate_not_ready(listener, "MITM Root CA 签发能力"))?;
+                .ok_or_else(|| certificate_not_ready(context.listener, "MITM Root CA 签发能力"))?;
             let upstream = NativeRootMitmConnector::new()
                 .map_err(|error| AppError::new(error.code, error.message))?;
             service = service
                 .with_mitm(
                     ForwardMitmConfig {
-                        authority_allowlist: http.mitm.authority_allowlist.clone(),
+                        authority_allowlist: context.http.mitm.authority_allowlist.clone(),
                         maximum_cached_leaf_certificates: usize::from(
-                            http.mitm.maximum_cached_leaf_certificates,
+                            context.http.mitm.maximum_cached_leaf_certificates,
                         ),
                     },
                     authority,
                     Arc::new(upstream),
                 )
-                .map_err(|error| runtime_error(listener, error.code, error.message))?;
+                .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
         }
         Ok(PreparedListenerRuntime::HttpForward {
-            bind_addr,
+            bind_addr: context.bind_addr,
             service: service.with_pipeline(
-                channel(listener)?,
+                channel(context.listener)?,
                 runtime_epoch,
-                self.pipeline(listener)?,
+                context
+                    .pipeline
+                    .clone()
+                    .expect("full runtime pipeline prepared"),
                 MessageLimits::default(),
             ),
+            protocol: context.protocol.clone(),
         })
     }
 
@@ -317,17 +396,18 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
         }
     }
 
-    fn pipeline(
-        &self,
-        listener: &ProxyListener,
-    ) -> AppResult<Arc<dyn intercept_proxy_runtime::PipelinePorts>> {
-        self.adapter.pipeline_ports.read().clone().ok_or_else(|| {
-            AppError::new(
-                "LISTENER_RUNTIME_NOT_READY",
-                "通用规则、抓包与断点管线尚未完成装配。",
-            )
-            .entity(listener.id.to_string())
-        })
+    fn pipeline(&self, listener: &ProxyListener) -> AppResult<super::RuntimePipelineServices> {
+        self.adapter
+            .pipeline_services
+            .read()
+            .clone()
+            .ok_or_else(|| {
+                AppError::new(
+                    "LISTENER_RUNTIME_NOT_READY",
+                    "通用规则、抓包与断点管线尚未完成装配。",
+                )
+                .entity(listener.id.to_string())
+            })
     }
 
     fn socket_security(
@@ -368,59 +448,6 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
                     upstream_tls: self.socket_upstream_tls(workspace, upstream_tls)?,
                 }
             }
-        })
-    }
-
-    fn socket_downstream_tls(
-        &self,
-        workspace: &ProxyWorkspace,
-        settings: &SocketDownstreamTlsSettings,
-    ) -> AppResult<SocketDownstreamTlsConfig> {
-        let identity = self
-            .adapter
-            .load_identity_by_id(workspace, settings.server_identity)?;
-        let (client_trust_der, client_authentication_required) =
-            match settings.client_authentication {
-                DownstreamClientAuthentication::Disabled => (Vec::new(), false),
-                DownstreamClientAuthentication::Optional { trust } => {
-                    (self.adapter.load_trust_by_id(workspace, trust)?, false)
-                }
-                DownstreamClientAuthentication::Required { trust } => {
-                    (self.adapter.load_trust_by_id(workspace, trust)?, true)
-                }
-            };
-        Ok(SocketDownstreamTlsConfig {
-            server_identity: SocketTlsIdentity {
-                certificate_chain_der: identity.certificate_chain_der,
-                private_key_pkcs8_der: identity.private_key_pkcs8_der,
-            },
-            client_trust_der,
-            client_authentication_required,
-        })
-    }
-
-    fn socket_upstream_tls(
-        &self,
-        workspace: &ProxyWorkspace,
-        settings: &SocketUpstreamTlsSettings,
-    ) -> AppResult<SocketUpstreamTlsConfig> {
-        let server_trust_der = settings
-            .server_trust
-            .map(|id| self.adapter.load_trust_by_id(workspace, id))
-            .transpose()?
-            .unwrap_or_default();
-        let client_identity = settings
-            .client_identity
-            .map(|id| self.adapter.load_identity_by_id(workspace, id))
-            .transpose()?
-            .map(|identity| SocketTlsIdentity {
-                certificate_chain_der: identity.certificate_chain_der,
-                private_key_pkcs8_der: identity.private_key_pkcs8_der,
-            });
-        Ok(SocketUpstreamTlsConfig {
-            server_trust_der,
-            client_identity,
-            verify_hostname: settings.verify_hostname,
         })
     }
 }

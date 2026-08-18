@@ -326,6 +326,8 @@ mod tests {
             codec_id: Some("auto:utf-8".into()),
             decode_error: None,
             query_string: None,
+            protocol: None,
+            protocol_failure: None,
         };
 
         let codec = resolver.resolve(&message);
@@ -356,6 +358,8 @@ mod tests {
             codec_id: Some("shift-jis".into()),
             decode_error: None,
             query_string: None,
+            protocol: None,
+            protocol_failure: None,
         };
 
         let codec = resolver.resolve(&message);

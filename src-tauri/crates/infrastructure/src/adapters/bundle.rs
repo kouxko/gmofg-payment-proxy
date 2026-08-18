@@ -45,7 +45,7 @@ impl InfrastructureServiceBundle {
     pub fn new(
         store: Arc<SqliteStore>,
         protector: Arc<dyn SecretProtector>,
-        dialog: Arc<dyn NativeFileDialog>,
+        dialog: &Arc<dyn NativeFileDialog>,
         product: Arc<dyn ProductProfile>,
         capacity: Arc<CapacityLedger>,
         builtin_protocol_package: Option<Arc<[u8]>>,
@@ -62,7 +62,7 @@ impl InfrastructureServiceBundle {
         ));
         let rules = Arc::new(RuleRepositoryAdapter::new(
             Arc::clone(&store),
-            Arc::clone(&dialog),
+            Arc::clone(dialog),
             sessions.clone(),
             product.channels(),
         ));
@@ -78,7 +78,7 @@ impl InfrastructureServiceBundle {
         let certificates = Arc::new(CertificateServiceAdapter::new(
             Arc::clone(&store),
             Arc::clone(&protector),
-            Arc::clone(&dialog),
+            Arc::clone(dialog),
             product,
         ));
         let protected_secrets = Arc::new(ProtectedSecretAdapter::new(
@@ -95,12 +95,12 @@ impl InfrastructureServiceBundle {
         let protocol_packages = Arc::new(protocol_packages);
         let protocol_package_import = Arc::new(ProtocolPackageImportAdapter::new(
             protocol_packages.clone(),
-            Arc::clone(&dialog),
+            Arc::clone(dialog),
         ));
         let listener_certificates = Arc::new(ManagedListenerCertificateAdapter::new(
             Arc::clone(&store),
             protector,
-            Arc::clone(&dialog),
+            Arc::clone(dialog),
         ));
         let workspace_body_codecs = Arc::new(WorkspaceBodyCodecResolver::new(Arc::clone(&store)));
         let listener_runtime = Arc::new(
@@ -119,6 +119,7 @@ impl InfrastructureServiceBundle {
             listener_runtime.clone(),
         ));
         Self {
+            settings,
             workspaces,
             workspace_body_codecs,
             listener_runtime,
@@ -127,13 +128,12 @@ impl InfrastructureServiceBundle {
             protocol_packages,
             protocol_package_import,
             protocol_package_usage,
-            settings,
+            rules,
             faults,
             certificates,
             capture,
             sessions,
             capacity,
-            rules,
         }
     }
 }

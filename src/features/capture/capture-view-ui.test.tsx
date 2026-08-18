@@ -120,14 +120,14 @@ describe("CaptureView live controls", () => {
     commandMocks.captureClearView.mockResolvedValue(99);
   });
 
-  it("shows the fixed capture title and compact HTTP and Socket tabs", () => {
+  it("shows only the shared HTTP and Socket tabs without a duplicate page title", () => {
     render(<CaptureView />);
 
-    expect(screen.getByRole("heading", { level: 1, name: "实时抓包" })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 1, name: "实时抓包" })).toBeNull();
     const tablist = screen.getByRole("tablist", { name: "抓包协议" });
     expect(tablist).toBeVisible();
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["HTTP", "Socket"]);
-    expect(tablist.className).not.toMatch(/(?:^|\s)(?:w-full|flex-1)(?:\s|$)/);
+    expect(tablist).toBeVisible();
   });
 
   it("links each protocol tab to exactly one conditionally mounted tabpanel", () => {

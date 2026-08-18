@@ -108,7 +108,7 @@ impl ListenerRuntimePort for StaticListenerRuntime {
         unused()
     }
 
-    async fn replace_socket_rules(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
+    async fn replace_protocol_rules(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
         Ok(())
     }
 

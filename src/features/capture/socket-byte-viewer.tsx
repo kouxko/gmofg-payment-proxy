@@ -101,8 +101,8 @@ export function ProtocolHexViewer(props: ProtocolHexViewerProps) {
   const htmlDisplay = props.display?.type === "untrusted_html" ? props.display : undefined;
   const hasHtml = Boolean(htmlDisplay);
   const htmlTooLarge = htmlDisplay ? displayHtmlIsTooLarge(htmlDisplay.html) : false;
-  // 自定义 Display 只有成功且未超限才默认协议视图；Local Request 可显式让内置
-  // Document 默认显示。Display fallback 即使仍有 Document，也必须默认 Hex。
+  // 自定义协议视图只有成功且未超限才默认展示；本机请求可显式让内置字段视图
+  // 默认显示。协议视图降级时即使仍有字段报文，也必须默认 Hex。
   const defaultProtocol = (hasHtml && !htmlTooLarge) || (props.preferDocument && Boolean(props.document));
   const [tab, setTab] = useState<"protocol" | "hex">(defaultProtocol ? "protocol" : "hex");
   return (
@@ -118,7 +118,7 @@ export function ProtocolHexViewer(props: ProtocolHexViewerProps) {
           : htmlDisplay ? <SocketSafeDisplay html={htmlDisplay.html} />
             : props.document ? <SocketDocumentView document={props.document} />
               : <p className="py-8 text-center text-sm text-[var(--telemetry-muted)]">
-                {props.decodeDisabled ? "Decode 未启用，没有 Document；请切换 Hex 查看完整字节。" : "协议视图不可用；请切换 Hex 查看完整字节。"}
+                {props.decodeDisabled ? "未解析出报文字段；请切换 Hex 查看完整字节。" : "协议视图不可用；请切换 Hex 查看完整字节。"}
               </p>}
       </Tabs.Panel>
     </Tabs>

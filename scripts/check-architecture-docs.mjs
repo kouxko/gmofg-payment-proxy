@@ -14,6 +14,11 @@ const decisions = [
   "decisions/ADR-001-http-socket-boundary.md",
   "decisions/ADR-002-protocol-packages-http.md",
   "decisions/ADR-003-application-zip-ownership.md",
+  "decisions/ADR-004-embedded-read-only-mcp.md",
+];
+const authoringDocuments = [
+  "templates/socket-protocol/API.md",
+  "templates/socket-protocol/AUTHORING.md",
 ];
 
 function section(source, heading) {
@@ -181,6 +186,16 @@ for (const name of [...baselineDocuments, ...decisions, "README.md"]) {
 const designSource = await readFile(path.join(repositoryRoot, "DESIGN.md"), "utf8");
 if (!/Status: Active baseline/u.test(designSource) || /Status: Draft/u.test(designSource)) {
   failures.push("DESIGN.md: architecture baseline must be active, not Draft");
+}
+
+for (const relative of authoringDocuments) {
+  const source = await readFile(path.join(repositoryRoot, relative), "utf8");
+  for (const required of ["[document.upstream]", "[document.downstream]", "[hooks.upstream]", "[hooks.downstream]"]) {
+    if (!source.includes(required)) failures.push(`${relative}: missing current directional contract ${required}`);
+  }
+  if (/^\s*script\s*=/mu.test(source)) failures.push(`${relative}: legacy manifest script field is forbidden`);
+  if (/protocol\.rhai[^\n]*(?:Manifest[^\n]*决定|可选)/iu.test(source)) failures.push(`${relative}: protocol.rhai must use the fixed required filename`);
+  if (/display\.rhai[^\n]*可选/iu.test(source)) failures.push(`${relative}: display.rhai must be required`);
 }
 if (!designSource.includes("## Open decisions and deferred delivery")) {
   failures.push("DESIGN.md: missing explicit open/deferred delivery section");

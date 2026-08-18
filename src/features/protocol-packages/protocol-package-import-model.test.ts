@@ -16,7 +16,22 @@ describe("protocol package import boundary model", () => {
     expect(isImportPreview(importPreview({ disposition: "identity_conflict" }))).toBe(false);
     expect(isImportPreview(importPreview({ package: { id: "", version: "3.0.0" } }))).toBe(false);
     expect(isImportPreview(importPreview({ capabilities: undefined as never }))).toBe(false);
-    expect(isImportPreview(importPreview({ schema: { ...importPreview().schema, fields: [{} as never] } }))).toBe(false);
+    expect(isImportPreview(importPreview({ capabilities: {
+      ...importPreview().capabilities,
+      display: false,
+    } }))).toBe(false);
+    expect(isImportPreview(importPreview({ capabilities: {
+      ...importPreview().capabilities,
+      downstream: { ...importPreview().capabilities.downstream, encode: false },
+    } }))).toBe(false);
+    expect(isImportPreview(importPreview({ upstream_schema: { ...importPreview().upstream_schema, fields: [{} as never] } }))).toBe(false);
+    expect(isImportPreview(importPreview({ upstream_schema: { ...importPreview().upstream_schema, fields: [] } }))).toBe(false);
+    expect(isImportPreview(importPreview({ upstream_schema: {
+      ...importPreview().upstream_schema,
+      fields: [{ name: "mti", label: "MTI", type: "string" }, { name: "mti", label: "Again", type: "int" }],
+    } }))).toBe(false);
+    expect(isImportPreview({ ...importPreview(), schema: importPreview().upstream_schema })).toBe(false);
+    expect(isImportPreview({ ...importPreview(), content_types: ["application/json"] })).toBe(false);
   });
 
   it("rejects a malformed or identity-mismatched commit result", () => {
@@ -28,6 +43,7 @@ describe("protocol package import boundary model", () => {
       ...importResult(),
       version: { ...importResult().version, package: { id: "tlv", version: "3.0.0" } },
     }, preview)).toMatch(/不一致/);
+    expect(importResultError({ ...importResult(), kind: "http" }, preview)).toMatch(/不一致/);
   });
 
   it("preserves stable backend errors and deduplicates position details", () => {

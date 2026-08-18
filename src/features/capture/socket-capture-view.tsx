@@ -119,6 +119,7 @@ export function SocketCaptureView() {
       setClearOpen(false);
       setClearWorkspaceId("");
       setClearPending(false);
+      requestAnimationFrame(() => document.getElementById("socket-capture-list")?.focus());
     }, 0);
     return () => window.clearTimeout(task);
   }, [clearWorkspaceId, workspaceId]);
