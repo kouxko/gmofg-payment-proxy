@@ -78,6 +78,7 @@ async fn four_valid_decode_encode_states_use_the_real_local_response_chain() {
             panic!("expected LocalExchange")
         };
         assert_eq!(exchange.request_document.is_some(), state.decode);
+        assert_eq!(exchange.request_display.is_some(), state.decode);
         assert_eq!(exchange.request_origin, [2, 11]);
         assert_eq!(exchange.written_response, expected);
         assert_eq!(exchange.response_encode_enabled, state.encode);
@@ -89,21 +90,10 @@ async fn four_valid_decode_encode_states_use_the_real_local_response_chain() {
                 intercept_proxy_application::SocketWriteKind::Original
             }
         );
-        assert!(if state.encode {
-            matches!(
-                exchange.response_display,
-                intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
-            )
-        } else {
-            matches!(
-                exchange.response_display,
-                intercept_proxy_application::SocketDisplayResult::HexFallback {
-                    reason:
-                        intercept_proxy_application::SocketDisplayFallbackReason::EncodeDisabled,
-                    ..
-                }
-            )
-        });
+        assert!(matches!(
+            exchange.response_display,
+            intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
+        ));
 
         runtime.stop(listener.id).await.unwrap();
     }

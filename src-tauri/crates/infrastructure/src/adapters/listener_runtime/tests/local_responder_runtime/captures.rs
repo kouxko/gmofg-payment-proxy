@@ -4,8 +4,7 @@ use std::{sync::Arc, time::Duration};
 
 use intercept_proxy_application::{
     EventHub, PageRequest, SocketCaptureDocumentValue, SocketCaptureInteger, SocketCapturePayload,
-    SocketCaptureQuery, SocketCaptureSort, SocketDisplayFallbackReason, SocketDisplayResult,
-    SocketWriteKind, SortDirection,
+    SocketCaptureQuery, SocketCaptureSort, SocketDisplayResult, SocketWriteKind, SortDirection,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -98,6 +97,10 @@ async fn partial_request_has_no_capture_then_commit_persists_one_exact_exchange(
     };
     let exchange_id = exchange.exchange_id;
     assert_eq!(exchange.request_origin, [2, 11]);
+    assert!(matches!(
+        exchange.request_display,
+        Some(SocketDisplayResult::UntrustedHtml { .. })
+    ));
     assert_eq!(
         exchange.request_document.unwrap().get("amount").unwrap(),
         &SocketCaptureDocumentValue::Int(SocketCaptureInteger::from_i64(11))
@@ -165,15 +168,13 @@ async fn decode_off_capture_has_no_request_document_and_echo_fallback_is_explici
         panic!("expected LocalExchange")
     };
     assert!(exchange.request_document.is_none());
+    assert!(exchange.request_display.is_none());
     assert_eq!(exchange.response_write_kind, SocketWriteKind::Original);
     assert_eq!(exchange.written_response, [2, 9]);
-    assert_eq!(
+    assert!(matches!(
         exchange.response_display,
-        SocketDisplayResult::HexFallback {
-            reason: SocketDisplayFallbackReason::EncodeDisabled,
-            diagnostic: None,
-        }
-    );
+        SocketDisplayResult::UntrustedHtml { .. }
+    ));
     runtime.stop(listener.id).await.unwrap();
 }
 

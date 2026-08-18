@@ -90,7 +90,7 @@ fn relay(decode_enabled: bool, encode_enabled: bool) -> SocketRelayFrameCapture 
         } else {
             SocketWriteKind::Original
         },
-        display: display(encode_enabled),
+        display: display(decode_enabled || encode_enabled),
     }
 }
 
@@ -158,6 +158,7 @@ fn local_exchange_keeps_request_and_response_documents_separate() {
         response_encode_enabled: true,
         request_origin: b"0200".to_vec(),
         request_document: Some(SocketCaptureDocument::from_document(&request)),
+        request_display: Some(display(true)),
         response_document: SocketCaptureDocument::from_document(&response),
         matched_downstream_rule_ids: vec![SocketDocumentRuleId::new()],
         written_response: b"021000".to_vec(),
@@ -298,11 +299,12 @@ fn consistency_rejects_incomplete_local_exchange_and_invalid_timeline() {
         response_encode_enabled: false,
         request_origin: b"0200".to_vec(),
         request_document: Some(SocketCaptureDocument::from_document(&request)),
+        request_display: Some(display(true)),
         response_document: SocketCaptureDocument::from_document(&request),
         matched_downstream_rule_ids: Vec::new(),
         written_response: b"0200".to_vec(),
         response_write_kind: SocketWriteKind::Original,
-        response_display: display(false),
+        response_display: display(true),
     };
     let mut capture = record(SocketCapturePayload::LocalExchange(exchange));
     assert!(capture.is_consistent());
@@ -371,13 +373,12 @@ fn consistency_rejects_rules_without_decode_and_incompatible_display() {
             response_encode_enabled: false,
             request_origin: b"0200".to_vec(),
             request_document: None,
+            request_display: None,
             response_document: SocketCaptureDocument::from_document(&document()),
             matched_downstream_rule_ids: Vec::new(),
             written_response: b"0200".to_vec(),
             response_write_kind: SocketWriteKind::Original,
-            response_display: SocketDisplayResult::UntrustedHtml {
-                html: "<p>forged</p>".into(),
-            },
+            response_display: display(false),
         },
     ));
     assert!(!local.is_consistent());
@@ -385,7 +386,7 @@ fn consistency_rejects_rules_without_decode_and_incompatible_display() {
     let SocketCapturePayload::LocalExchange(exchange) = &mut local.payload else {
         unreachable!();
     };
-    exchange.response_display = display(false);
+    exchange.response_display = display(true);
     exchange.written_response = b"different".to_vec();
     assert!(!local.is_consistent());
 }

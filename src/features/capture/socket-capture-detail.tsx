@@ -107,7 +107,7 @@ function LocalDetail({ detail }: { detail: SocketCaptureDetailViewModel }) {
         <section className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
           <div><h2 className="font-semibold">LocalResponder Request</h2><p className="text-xs text-[var(--telemetry-muted)]">App → LocalResponder</p></div>
           <p className="text-sm">Decode：<span>{exchange.request_decode_enabled ? "已启用" : "未启用（没有 Document）"}</span></p>
-          <ProtocolHexViewer bytes={exchange.request_origin} document={exchange.request_document} label="Local Request" decodeDisabled={!exchange.request_decode_enabled} preferDocument />
+          <ProtocolHexViewer bytes={exchange.request_origin} document={exchange.request_document} display={exchange.request_display ?? undefined} label="Local Request" decodeDisabled={!exchange.request_decode_enabled} />
         </section>
         <section className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
           <div><h2 className="font-semibold">LocalResponder Response</h2><p className="text-xs text-[var(--telemetry-muted)]">LocalResponder → App</p></div>

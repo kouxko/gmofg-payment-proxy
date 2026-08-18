@@ -316,13 +316,24 @@ impl LocalResponderCoordinator {
         })
     }
 
+    /// 对成功 Decode 的 request 执行公共 Display；失败只返回 Hex 回退。
+    pub fn render_request_display(
+        &mut self,
+        request: &LocalRequestOutput,
+    ) -> ProtocolRuntimeResult<ProtocolDisplayResult> {
+        self.validate_request(request)?;
+        Ok(self.upstream.render_decoded_display(&request.output))
+    }
+
     /// 对已提交 response 执行可选 downstream Display；脚本失败只返回 Hex 回退。
     pub fn render_response_display(
         &mut self,
         handle: &LocalResponseDisplayHandle,
     ) -> ProtocolRuntimeResult<ProtocolDisplayResult> {
         self.validate_display_handle(handle)?;
-        Ok(self.downstream.render_display(&handle.output))
+        Ok(self
+            .downstream
+            .render_output_document_display(&handle.output))
     }
 
     fn validate_request(&self, request: &LocalRequestOutput) -> ProtocolRuntimeResult<()> {

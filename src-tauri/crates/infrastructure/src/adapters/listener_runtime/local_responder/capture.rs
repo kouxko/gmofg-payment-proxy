@@ -5,9 +5,10 @@ use intercept_proxy_application::{
     SocketCaptureDocument, SocketCapturePayload, SocketCaptureSchemaRef, SocketExchangeId,
     SocketLocalExchangeCapture, SocketWriteKind,
 };
-use intercept_proxy_domain::{Document, ProtocolPackageRef, SocketDocumentRuleId};
+use intercept_proxy_domain::{ProtocolPackageRef, SocketDocumentRuleId};
 use intercept_proxy_protocol_scripting::{
-    DisplayFallbackReason, LocalResponderCoordinator, LocalResponseOutput, ProtocolDisplayResult,
+    DisplayFallbackReason, LocalRequestOutput, LocalResponderCoordinator, LocalResponseOutput,
+    ProtocolDisplayResult,
 };
 use intercept_proxy_runtime::SocketConnectionIdentity;
 
@@ -18,7 +19,7 @@ use super::super::socket_capture_publisher::{
 pub(super) struct PendingLocalCapture {
     pub(super) response: LocalResponseOutput,
     pub(super) exchange_id: SocketExchangeId,
-    pub(super) request_document: Option<Document>,
+    pub(super) request: LocalRequestOutput,
     pub(super) matched_rule_ids: Vec<SocketDocumentRuleId>,
     occurred_at: DateTime<Utc>,
 }
@@ -27,14 +28,14 @@ impl PendingLocalCapture {
     pub(super) fn new(
         response: LocalResponseOutput,
         exchange_id: SocketExchangeId,
-        request_document: Option<Document>,
+        request: LocalRequestOutput,
         matched_rule_ids: Vec<SocketDocumentRuleId>,
         occurred_at: DateTime<Utc>,
     ) -> Self {
         Self {
             response,
             exchange_id,
-            request_document,
+            request,
             matched_rule_ids,
             occurred_at,
         }
@@ -57,6 +58,16 @@ pub(super) fn commit(
 ) {
     #[cfg(test)]
     capture.wait_before_display();
+    let request_display = pending.request.document().map(|_| {
+        capture_display(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                coordinator.render_request_display(&pending.request)
+            }))
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_else(entry_fallback),
+        )
+    });
     let handle = coordinator.response_committed(&pending.response).ok();
     let display = if render_display {
         capture_display(handle.as_ref().map_or_else(entry_fallback, |handle| {
@@ -81,11 +92,12 @@ pub(super) fn commit(
             schema,
             request_decode_enabled,
             response_encode_enabled,
-            request_origin: pending.response.request_origin().to_vec(),
+            request_origin: pending.request.origin().to_vec(),
             request_document: pending
-                .request_document
-                .as_ref()
+                .request
+                .document()
                 .map(SocketCaptureDocument::from_document),
+            request_display,
             response_document: SocketCaptureDocument::from_document(
                 pending.response.response_document(),
             ),
