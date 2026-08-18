@@ -66,6 +66,9 @@ describe("Socket rules list states", () => {
   it("shows an empty state when listeners exist but no rules do", () => {
     renderList();
     expect(screen.getByText("暂无 Socket 规则")).toBeVisible();
+    expect(
+      screen.getByText("选择新建规则后绑定一个按协议处理的 Socket Listener"),
+    ).toBeVisible();
   });
 
   it("starts creation exactly once", async () => {

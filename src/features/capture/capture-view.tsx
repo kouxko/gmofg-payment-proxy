@@ -2,7 +2,7 @@
 
 /** 实时抓包页面容器：仅管理 Rust 查询、游标、选择和详情生命周期。 */
 import { useEffect, useMemo, useState } from "react";
-import { Tabs, toast } from "@heroui/react";
+import { toast } from "@heroui/react";
 import type {
   CaptureDetailViewModel,
   CapturePageViewModel,
@@ -16,6 +16,10 @@ import {
   useBootstrap,
 } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
+import {
+  ProtocolWorkspaceTabs,
+  type ProtocolType,
+} from "@/features/shared/protocol-workspace-tabs";
 import { CaptureDetailPanel } from "./capture-detail-panel";
 import { CaptureListPanel } from "./capture-list-panel";
 import { SocketCaptureView } from "./socket-capture-view";
@@ -52,35 +56,20 @@ export function CaptureView({
 }: {
   initialPage?: CapturePageViewModel;
 }) {
-  const [mode, setMode] = useState<"http" | "socket">("http");
+  const [mode, setMode] = useState<ProtocolType>("http");
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <Tabs
-        className="min-h-0 flex-1"
-        selectedKey={mode}
-        onSelectionChange={(key) => setMode(key as "http" | "socket")}
-      >
-        <Tabs.ListContainer className="border-b border-[var(--telemetry-line)] px-5 pt-3">
-          <Tabs.List aria-label="抓包类型">
-            <Tabs.Tab id="http">
-              HTTP 抓包
-              <Tabs.Indicator />
-            </Tabs.Tab>
-            <Tabs.Tab id="socket">
-              Socket 抓包
-              <Tabs.Indicator />
-            </Tabs.Tab>
-          </Tabs.List>
-        </Tabs.ListContainer>
-        <Tabs.Panel id={mode} className="h-full min-h-0">
-          {mode === "http" ? (
-            <HttpCaptureView initialPage={initialPage} />
-          ) : (
-            <SocketCaptureView />
-          )}
-        </Tabs.Panel>
-      </Tabs>
-    </div>
+    <ProtocolWorkspaceTabs
+      ariaLabel="抓包协议"
+      pageTitle="实时抓包"
+      selectedKey={mode}
+      onSelectionChange={setMode}
+    >
+      {mode === "http" ? (
+        <HttpCaptureView initialPage={initialPage} />
+      ) : (
+        <SocketCaptureView />
+      )}
+    </ProtocolWorkspaceTabs>
   );
 }
 

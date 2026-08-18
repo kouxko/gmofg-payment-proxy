@@ -37,7 +37,7 @@ export function RulesListPanel({
   return (
     <div className="min-w-0 space-y-5 overflow-auto p-5">
       <div className="flex items-center">
-        <h1 className="text-2xl font-semibold">拦截规则</h1>
+        <h2 className="text-lg font-semibold">HTTP 拦截规则</h2>
         <div className="ml-auto flex gap-3">
           <Button
             variant="primary"
@@ -108,7 +108,7 @@ export function RulesListPanel({
                     ? "正在读取规则…"
                     : error
                       ? "规则列表暂不可用"
-                      : "暂无拦截规则"}
+                      : "暂无 HTTP 拦截规则，请选择新建规则开始配置"}
                 </div>
               )}
             >

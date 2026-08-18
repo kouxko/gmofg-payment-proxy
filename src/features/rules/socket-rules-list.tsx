@@ -34,7 +34,7 @@ export function SocketRulesList({
     <section className="min-w-0 space-y-4 overflow-auto p-5">
       <div className="flex items-center gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Socket 规则</h1>
+          <h2 className="text-lg font-semibold">Socket 报文规则</h2>
           <p className="text-sm text-[var(--telemetry-muted)]">规则按优先级与创建顺序执行。</p>
         </div>
         <Button className="ml-auto" isDisabled={pending || listeners.length === 0} onPress={onNew} variant="primary">
@@ -62,7 +62,12 @@ export function SocketRulesList({
         </Alert>
       )}
       {!loading && !error && listeners.length > 0 && (rules?.length ?? 0) === 0 && (
-        <p className="rounded-lg border border-dashed p-8 text-center text-[var(--telemetry-muted)]">暂无 Socket 规则</p>
+        <div className="rounded-lg border border-dashed p-8 text-center text-[var(--telemetry-muted)]">
+          <p>暂无 Socket 规则</p>
+          <p className="mt-1 text-sm">
+            选择新建规则后绑定一个按协议处理的 Socket Listener
+          </p>
+        </div>
       )}
       <div aria-label="Socket 规则列表" className="space-y-2" role="list">
         {(rules ?? []).map((rule) => (

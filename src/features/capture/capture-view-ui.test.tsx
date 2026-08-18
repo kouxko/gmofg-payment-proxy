@@ -3,6 +3,7 @@
 /** 验证抓包暂停/恢复/清空/选择失效等 UI 意图会调用正确 Rust Command。 */
 
 import "@testing-library/jest-dom/vitest";
+import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -61,11 +62,19 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
 }));
 
 vi.mock("./socket-capture-view", () => ({
-  SocketCaptureView: () => (
-    <section aria-label="Socket 抓包工作区">
-      <button type="button">Socket 专用操作</button>
-    </section>
-  ),
+  SocketCaptureView: () => {
+    const [filter, setFilter] = useState("");
+    return (
+      <section aria-label="Socket 抓包工作区">
+        <h2>Socket 抓包记录</h2>
+        <label>
+          Socket 测试筛选
+          <input value={filter} onChange={(event) => setFilter(event.target.value)} />
+        </label>
+        <button type="button">刷新 Socket 抓包</button>
+      </section>
+    );
+  },
 }));
 
 const page = (): CapturePageViewModel => ({
@@ -112,27 +121,88 @@ describe("CaptureView live controls", () => {
     commandMocks.captureClearView.mockResolvedValue(99);
   });
 
-  it("uses keyboard tabs and conditionally mounts only the selected protocol workspace", async () => {
+  it("shows the fixed capture title and compact HTTP and Socket tabs", () => {
+    render(<CaptureView />);
+
+    expect(screen.getByRole("heading", { level: 1, name: "实时抓包" })).toBeVisible();
+    const tablist = screen.getByRole("tablist", { name: "抓包协议" });
+    expect(tablist).toBeVisible();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["HTTP", "Socket"]);
+    expect(tablist.className).not.toMatch(/(?:^|\s)(?:w-full|flex-1)(?:\s|$)/);
+  });
+
+  it("links each protocol tab to exactly one conditionally mounted tabpanel", () => {
+    render(<CaptureView />);
+
+    const httpTab = screen.getByRole("tab", { name: "HTTP" });
+    const panel = screen.getByRole("tabpanel");
+    expect(httpTab).toHaveAttribute("aria-controls", panel.id);
+    expect(panel).toHaveAttribute("aria-labelledby", httpTab.id);
+    expect(screen.getByRole("grid", { name: "实时抓包事件" })).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Socket 抓包工作区" })).toBeNull();
+  });
+
+  it.each([
+    ["{ArrowRight}", "Socket"],
+    ["{End}", "Socket"],
+  ])("switches from HTTP with %s", async (key, expected) => {
     const user = userEvent.setup();
     render(<CaptureView />);
 
-    const httpTab = screen.getByRole("tab", { name: "HTTP 抓包" });
-    expect(httpTab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("grid", { name: "实时抓包事件" })).toBeVisible();
-    expect(screen.queryByRole("region", { name: "Socket 抓包工作区" })).toBeNull();
-
+    const httpTab = screen.getByRole("tab", { name: "HTTP" });
     httpTab.focus();
-    await user.keyboard("{ArrowRight}");
+    await user.keyboard(key);
 
-    expect(screen.getByRole("tab", { name: "Socket 抓包" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: expected })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("region", { name: "Socket 抓包工作区" })).toBeVisible();
     expect(screen.queryByRole("grid", { name: "实时抓包事件" })).toBeNull();
     expect(screen.queryByRole("button", { name: "清空当前显示" })).toBeNull();
+  });
 
-    await user.keyboard("{ArrowLeft}");
+  it.each([
+    ["{ArrowLeft}"],
+    ["{Home}"],
+  ])("switches from Socket with %s", async (key) => {
+    const user = userEvent.setup();
+    render(<CaptureView />);
 
+    await user.click(screen.getByRole("tab", { name: "Socket" }));
+    await user.keyboard(key);
+
+    expect(screen.getByRole("tab", { name: "HTTP" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("grid", { name: "实时抓包事件" })).toBeVisible();
     expect(screen.queryByRole("region", { name: "Socket 抓包工作区" })).toBeNull();
+  });
+
+  it.each(["{Enter}", " "])("activates the focused Socket tab with %s", async (key) => {
+    const user = userEvent.setup();
+    render(<CaptureView />);
+
+    const socketTab = screen.getByRole("tab", { name: "Socket" });
+    socketTab.focus();
+    await user.keyboard(key);
+
+    expect(socketTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("region", { name: "Socket 抓包工作区" })).toBeVisible();
+  });
+
+  it("unmounts protocol-only controls and resets local state when returning", async () => {
+    const user = userEvent.setup();
+    render(<CaptureView />);
+
+    await user.type(screen.getByRole("searchbox", { name: "关键字或请求 ID" }), "http-only");
+    await user.click(screen.getByRole("tab", { name: "Socket" }));
+    expect(screen.queryByRole("searchbox", { name: "关键字或请求 ID" })).toBeNull();
+    expect(screen.queryByText(/HTTP 状态码|Cookie|JSONPath/)).toBeNull();
+    const socketFilter = screen.getByRole("textbox", { name: "Socket 测试筛选" });
+    await user.type(socketFilter, "socket-only");
+
+    await user.click(screen.getByRole("tab", { name: "HTTP" }));
+    expect(screen.queryByRole("textbox", { name: "Socket 测试筛选" })).toBeNull();
+    expect(screen.getByRole("searchbox", { name: "关键字或请求 ID" })).toHaveValue("");
+
+    await user.click(screen.getByRole("tab", { name: "Socket" }));
+    expect(screen.getByRole("textbox", { name: "Socket 测试筛选" })).toHaveValue("");
   });
 
   it("pauses and resumes the display, then clears the current Rust cursor", async () => {
