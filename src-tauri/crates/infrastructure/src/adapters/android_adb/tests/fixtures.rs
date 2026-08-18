@@ -11,6 +11,7 @@ impl AndroidAdbAdapter {
             network_operation: Mutex::new(()),
             active_reverse: Mutex::new(None),
             active_runtime: Mutex::new(None),
+            runtime_endpoints: Mutex::new(Vec::new()),
             runtime_owner: Mutex::new(None),
             runtime_resume_state: Mutex::new(None),
             runtime_store,
@@ -31,6 +32,7 @@ impl AndroidAdbAdapter {
             network_operation: Mutex::new(()),
             active_reverse: Mutex::new(None),
             active_runtime: Mutex::new(None),
+            runtime_endpoints: Mutex::new(Vec::new()),
             runtime_owner: Mutex::new(None),
             runtime_resume_state: Mutex::new(None),
             runtime_store,
@@ -122,6 +124,7 @@ pub(super) fn test_activation(
         },
         proxy_routes: vec![AndroidProxyRouteActivation {
             listener_id: listener_id.to_string(),
+            listener_name: "Test listener".into(),
             original_destination: destination.into(),
             original_ports: vec![443],
             desktop_listener_bind_address: "0.0.0.0".into(),
@@ -152,6 +155,7 @@ pub(super) async fn seed_active_runtime(
         route_count: 1,
         uses_adb_reverse: true,
         listener_ports: BTreeMap::new(),
+        endpoints: Vec::new(),
     };
     *adapter.active_reverse.lock().await = Some(reverse.clone());
     *adapter.active_runtime.lock().await = Some(runtime.clone());
@@ -201,5 +205,6 @@ pub(super) fn activation_runtime() -> ActiveRuntimeFacts {
         route_count: 2,
         uses_adb_reverse: true,
         listener_ports: BTreeMap::new(),
+        endpoints: Vec::new(),
     }
 }

@@ -35,6 +35,7 @@ async fn seed_owner(adapter: &AndroidAdbAdapter, serial: &str, ports: Vec<u16>) 
         route_count: 1,
         listener_ports: BTreeMap::new(),
         uses_adb_reverse: true,
+        endpoints: Vec::new(),
     });
     adapter.save_owner(owner(serial, epoch)).await.unwrap();
     epoch

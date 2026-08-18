@@ -4,8 +4,9 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    AndroidNetworkActivation, AndroidRuntimeOwnerSource, AndroidRuntimeOwnerState,
-    AndroidRuntimeOwnerTransitionReason, AppError, AppResult,
+    AndroidNetworkActivation, AndroidRuntimeEndpointHealth, AndroidRuntimeEndpointViewModel,
+    AndroidRuntimeOwnerSource, AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason,
+    AppError, AppResult,
 };
 use serde_json::json;
 
@@ -24,6 +25,48 @@ struct ReverseCreationFailure {
 }
 
 impl AndroidAdbAdapter {
+    pub(in crate::adapters::android_adb) async fn build_lan_runtime_for_owner(
+        &self,
+        activation: &AndroidNetworkActivation,
+        owner: &intercept_proxy_application::AndroidRuntimeOwnerViewModel,
+        lan_host: std::net::Ipv4Addr,
+    ) -> AppResult<(serde_json::Value, ActiveRuntimeFacts)> {
+        let resolved_routes = resolve_routes(activation).await?;
+        let listener_ports = BTreeMap::new();
+        let (routes, endpoints) = build_routes_and_endpoints(
+            resolved_routes,
+            Some(lan_host),
+            &listener_ports,
+            &owner.serial,
+            owner.epoch,
+            intercept_proxy_application::AndroidRuntimeOwnerMode::Lan,
+        );
+        let route_fingerprint = sha256_json(&routes)?;
+        let profile_fingerprint = sha256_json(&activation.profile)?;
+        let route_count = activation.proxy_routes.len();
+        let payload = json!({
+            "routes": routes,
+            "route_source": activation.proxy_routes,
+            "profile_fingerprint": profile_fingerprint,
+            "route_fingerprint": route_fingerprint,
+            "route_count": route_count,
+        });
+        Ok((
+            payload,
+            ActiveRuntimeFacts {
+                epoch: owner.epoch,
+                serial: owner.serial.clone(),
+                profile_id: activation.profile.id.clone(),
+                profile_fingerprint,
+                route_fingerprint,
+                route_count,
+                listener_ports,
+                uses_adb_reverse: false,
+                endpoints,
+            },
+        ))
+    }
+
     pub(in crate::adapters::android_adb) async fn prepare_usb_proxy_runtime(
         &self,
         activation: &AndroidNetworkActivation,
@@ -36,6 +79,7 @@ impl AndroidAdbAdapter {
         let previous_resume_state = *self.runtime_resume_state.lock().await;
         let previous_reverse = self.active_reverse.lock().await.clone();
         let previous_runtime = self.active_runtime.lock().await.clone();
+        let previous_endpoints = self.runtime_endpoints.lock().await.clone();
         let reserved_ports = previous_reverse
             .as_ref()
             .map_or_else(Vec::new, |ownership| ownership.ports.clone());
@@ -50,10 +94,18 @@ impl AndroidAdbAdapter {
         } else {
             BTreeMap::new()
         };
-        let routes = build_routes(resolved_routes, lan_host, &listener_ports);
+        let route_count = activation.proxy_routes.len();
+        let mode = runtime_mode(route_count, uses_adb_reverse);
+        let (routes, endpoints) = build_routes_and_endpoints(
+            resolved_routes,
+            lan_host,
+            &listener_ports,
+            &serial,
+            epoch,
+            mode,
+        );
         let route_fingerprint = sha256_json(&routes)?;
         let profile_fingerprint = sha256_json(&activation.profile)?;
-        let route_count = activation.proxy_routes.len();
         let payload = json!({
             "routes": routes,
             "route_source": activation.proxy_routes,
@@ -77,9 +129,10 @@ impl AndroidAdbAdapter {
             route_count,
             listener_ports,
             uses_adb_reverse,
+            endpoints,
         };
         let owner = runtime.owner(
-            runtime_mode(route_count, uses_adb_reverse),
+            mode,
             source,
             AndroidRuntimeOwnerState::CleanupRequired,
             AndroidRuntimeOwnerTransitionReason::ReversePreparation,
@@ -93,6 +146,7 @@ impl AndroidAdbAdapter {
             previous_resume_state,
             previous_reverse,
             previous_runtime,
+            previous_endpoints,
         };
         let cleanup_ports = prepared.all_cleanup_ports();
         self.stage_prepared_cleanup(&prepared, cleanup_ports)
@@ -219,31 +273,54 @@ async fn resolve_routes(
     Ok(routes)
 }
 
-fn build_routes(
+fn build_routes_and_endpoints(
     routes: Vec<(
         &intercept_proxy_application::AndroidProxyRouteActivation,
         Vec<IpAddr>,
     )>,
     lan_host: Option<std::net::Ipv4Addr>,
     listener_ports: &BTreeMap<String, u16>,
-) -> Vec<serde_json::Value> {
-    routes
-        .into_iter()
-        .map(|(route, resolved_original_ips)| {
+    serial: &str,
+    epoch: uuid::Uuid,
+    mode: intercept_proxy_application::AndroidRuntimeOwnerMode,
+) -> (Vec<serde_json::Value>, Vec<AndroidRuntimeEndpointViewModel>) {
+    let resolved_at = chrono::Utc::now();
+    routes.into_iter().fold(
+        (Vec::new(), Vec::new()),
+        |(mut payload_routes, mut endpoints), (route, resolved_original_ips)| {
             let (proxy_host, proxy_port) = lan_host.map_or_else(
                 || ("127.0.0.1".to_owned(), listener_ports[&route.listener_id]),
                 |host| (host.to_string(), route.desktop_listener_port),
             );
-            json!({
+            payload_routes.push(json!({
                 "listener_id": route.listener_id,
                 "original_destination": route.original_destination,
                 "original_ports": route.original_ports,
                 "resolved_original_ips": resolved_original_ips,
                 "proxy_host": proxy_host,
                 "proxy_port": proxy_port,
-            })
-        })
-        .collect()
+            }));
+            endpoints.push(AndroidRuntimeEndpointViewModel {
+                serial: serial.to_owned(),
+                epoch,
+                mode,
+                original_destination: route.original_destination.clone(),
+                original_ports: route.original_ports.clone(),
+                resolved_original_ips: resolved_original_ips
+                    .into_iter()
+                    .map(|address| address.to_string())
+                    .collect(),
+                listener_id: route.listener_id.clone(),
+                listener_name: route.listener_name.clone(),
+                desktop_listener_port: route.desktop_listener_port,
+                proxy_host,
+                proxy_port,
+                resolved_at,
+                health: AndroidRuntimeEndpointHealth::Healthy,
+            });
+            (payload_routes, endpoints)
+        },
+    )
 }
 
 async fn resolve_original_ips(destination: &str) -> AppResult<Vec<IpAddr>> {

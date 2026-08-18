@@ -45,6 +45,7 @@ export function runtimeOwnerStateText(owner: RuntimeOwnerDisplay): string {
   if (owner.state === "active") return "运行记录有效";
   if (owner.state === "uncertain") return "运行状态待确认，仍保留运行所有权";
   if (owner.state === "stop_failed") return "上次停止失败，仍需停止或紧急恢复";
+  if (owner.state === "faulted") return "LAN 实际运行端点故障，仍保留运行所有权";
   return assertNever(owner.state);
 }
 
@@ -59,6 +60,8 @@ export function runtimeOwnerTransitionText(
   if (reason === "device_reconnected") return "同序列号设备已重连";
   if (reason === "stop_failed") return "停止失败";
   if (reason === "recovered_from_storage") return "从本机恢复运行记录";
+  if (reason === "lan_endpoint_reapplied") return "LAN 实际运行端点已重新应用";
+  if (reason === "lan_endpoint_faulted") return "LAN 实际运行端点恢复失败";
   return assertNever(reason);
 }
 

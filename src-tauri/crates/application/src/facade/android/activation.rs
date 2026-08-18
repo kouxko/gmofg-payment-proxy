@@ -2,12 +2,75 @@
 
 use super::{AndroidNetworkProfile, AppError, AppResult, Application, validate_profile_id};
 use crate::{
-    AndroidNetworkActivation, AndroidNetworkState, AndroidNetworkStatusViewModel,
+    AndroidConfiguredEndpointViewModel, AndroidNetworkActivation,
+    AndroidNetworkEndpointSnapshotViewModel, AndroidNetworkState, AndroidNetworkStatusViewModel,
     AndroidProxyRouteActivation,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 impl Application {
+    pub async fn device_network_endpoints(
+        &self,
+        profile_id: Option<String>,
+    ) -> AppResult<AndroidNetworkEndpointSnapshotViewModel> {
+        let runtime_owner = self.android.runtime_owner().await?;
+        let configured_profile_id = profile_id
+            .as_deref()
+            .or_else(|| {
+                runtime_owner
+                    .as_ref()
+                    .map(|owner| owner.profile_id.as_str())
+            })
+            .map(str::to_owned);
+        let configured_activation = match configured_profile_id.as_deref() {
+            Some(profile_id) => {
+                let (workspace, profile) = self.running_profile_with_workspace(profile_id).await?;
+                Some(Self::android_activation(&workspace, profile)?)
+            }
+            None => None,
+        };
+        let configured = configured_activation
+            .as_ref()
+            .map(|activation| {
+                activation
+                    .proxy_routes
+                    .iter()
+                    .map(|route| AndroidConfiguredEndpointViewModel {
+                        profile_id: activation.profile.id.clone(),
+                        original_destination: route.original_destination.clone(),
+                        original_ports: route.original_ports.clone(),
+                        listener_id: route.listener_id.clone(),
+                        listener_name: route.listener_name.clone(),
+                        listener_bind_address: route.desktop_listener_bind_address.clone(),
+                        listener_port: route.desktop_listener_port,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        // Runtime facts always resolve through the persisted owner profile. A selected or queried
+        // profile is only configuration context and must never retarget an active device runtime.
+        let runtime_activation = match runtime_owner.as_ref() {
+            Some(owner) => {
+                let (workspace, profile) = self
+                    .running_profile_with_workspace(&owner.profile_id)
+                    .await?;
+                Some(Self::android_activation(&workspace, profile)?)
+            }
+            None => None,
+        };
+        let runtime = self
+            .android
+            .network_runtime_endpoints(runtime_activation)
+            .await?;
+        Ok(AndroidNetworkEndpointSnapshotViewModel {
+            configured_profile_id,
+            configured,
+            runtime_owner,
+            runtime,
+        })
+    }
+
     pub async fn device_network_start(
         &self,
         profile_id: String,
@@ -171,6 +234,10 @@ impl Application {
             ));
         };
         let activation = Self::android_activation(&workspace, profile)?;
+        let _runtime_endpoints = self
+            .android
+            .network_runtime_endpoints(Some(activation.clone()))
+            .await?;
         match self
             .android
             .network_runtime_ready(&activation, &status)
@@ -258,6 +325,7 @@ impl Application {
             }
             proxy_routes.push(AndroidProxyRouteActivation {
                 listener_id: listener.id.to_string(),
+                listener_name: listener.name.clone(),
                 original_destination: route.destination.clone(),
                 original_ports: route.ports.clone(),
                 desktop_listener_bind_address: listener.bind_address.clone(),

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{
-    AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource, AndroidRuntimeOwnerState,
-    AndroidRuntimeOwnerTransitionReason, AndroidRuntimeOwnerViewModel,
+    AndroidRuntimeEndpointViewModel, AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource,
+    AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason, AndroidRuntimeOwnerViewModel,
 };
 use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,7 @@ pub struct AndroidRuntimeOwnerRecord {
     pub owner: AndroidRuntimeOwnerViewModel,
     pub reverse_ports: Vec<u16>,
     pub resume_state: Option<AndroidRuntimeOwnerState>,
+    pub runtime_endpoints: Vec<AndroidRuntimeEndpointViewModel>,
 }
 
 impl SqliteStore {
@@ -24,7 +25,8 @@ impl SqliteStore {
         connection
             .query_row(
                 "SELECT serial, epoch, mode, profile_id, state, source,
-                        transition_reason, reverse_ports_json, resume_state, updated_at
+                        transition_reason, reverse_ports_json, resume_state, runtime_endpoints_json,
+                        updated_at
                  FROM android_runtime_owner WHERE singleton_id = 1",
                 [],
                 |row| {
@@ -39,6 +41,7 @@ impl SqliteStore {
                         row.get::<_, String>(7)?,
                         row.get::<_, Option<String>>(8)?,
                         row.get::<_, String>(9)?,
+                        row.get::<_, String>(10)?,
                     ))
                 },
             )
@@ -57,14 +60,16 @@ impl SqliteStore {
             .execute(
                 "INSERT INTO android_runtime_owner(
                     singleton_id, serial, epoch, mode, profile_id, state, source,
-                    transition_reason, reverse_ports_json, resume_state, updated_at
-                 ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                    transition_reason, reverse_ports_json, resume_state, runtime_endpoints_json,
+                    updated_at
+                 ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(singleton_id) DO UPDATE SET
                     serial = excluded.serial, epoch = excluded.epoch, mode = excluded.mode,
                     profile_id = excluded.profile_id, state = excluded.state,
                     source = excluded.source, transition_reason = excluded.transition_reason,
                     reverse_ports_json = excluded.reverse_ports_json,
                     resume_state = excluded.resume_state,
+                    runtime_endpoints_json = excluded.runtime_endpoints_json,
                     updated_at = excluded.updated_at",
                 params![
                     record.owner.serial,
@@ -77,6 +82,8 @@ impl SqliteStore {
                     serde_json::to_string(&record.reverse_ports)
                         .map_err(|error| corrupt(error.to_string()))?,
                     record.resume_state.map(state_text),
+                    serde_json::to_string(&record.runtime_endpoints)
+                        .map_err(|error| corrupt(error.to_string()))?,
                     record.owner.updated_at.to_rfc3339(),
                 ],
             )
@@ -109,7 +116,8 @@ impl SqliteStore {
                 "UPDATE android_runtime_owner SET
                     serial = ?1, mode = ?2, profile_id = ?3, state = ?4, source = ?5,
                     transition_reason = ?6, reverse_ports_json = ?7, resume_state = ?8,
-                    updated_at = ?9 WHERE singleton_id = 1 AND epoch = ?10",
+                    runtime_endpoints_json = ?9, updated_at = ?10
+                    WHERE singleton_id = 1 AND epoch = ?11",
                 params![
                     record.owner.serial,
                     mode_text(record.owner.mode),
@@ -120,6 +128,8 @@ impl SqliteStore {
                     serde_json::to_string(&record.reverse_ports)
                         .map_err(|error| corrupt(error.to_string()))?,
                     record.resume_state.map(state_text),
+                    serde_json::to_string(&record.runtime_endpoints)
+                        .map_err(|error| corrupt(error.to_string()))?,
                     record.owner.updated_at.to_rfc3339(),
                     expected_epoch.to_string(),
                 ],
@@ -140,11 +150,23 @@ type OwnerRow = (
     String,
     Option<String>,
     String,
+    String,
 );
 
 fn parse_record(row: OwnerRow) -> Result<AndroidRuntimeOwnerRecord, InfrastructureError> {
-    let (serial, epoch, mode, profile_id, state, source, reason, ports, resume_state, updated_at) =
-        row;
+    let (
+        serial,
+        epoch,
+        mode,
+        profile_id,
+        state,
+        source,
+        reason,
+        ports,
+        resume_state,
+        endpoints,
+        updated_at,
+    ) = row;
     Ok(AndroidRuntimeOwnerRecord {
         owner: AndroidRuntimeOwnerViewModel {
             serial,
@@ -162,6 +184,8 @@ fn parse_record(row: OwnerRow) -> Result<AndroidRuntimeOwnerRecord, Infrastructu
         reverse_ports: serde_json::from_str(&ports)
             .map_err(|error| corrupt(format!("reverse_ports_json 无效：{error}")))?,
         resume_state: resume_state.as_deref().map(parse_state).transpose()?,
+        runtime_endpoints: serde_json::from_str(&endpoints)
+            .map_err(|error| corrupt(format!("runtime_endpoints_json 无效：{error}")))?,
     })
 }
 
@@ -179,6 +203,7 @@ const fn state_text(value: AndroidRuntimeOwnerState) -> &'static str {
         AndroidRuntimeOwnerState::WaitingReconnect => "waiting_reconnect",
         AndroidRuntimeOwnerState::CleanupRequired => "cleanup_required",
         AndroidRuntimeOwnerState::StopFailed => "stop_failed",
+        AndroidRuntimeOwnerState::Faulted => "faulted",
     }
 }
 const fn source_text(value: AndroidRuntimeOwnerSource) -> &'static str {
@@ -198,6 +223,8 @@ const fn reason_text(value: AndroidRuntimeOwnerTransitionReason) -> &'static str
         AndroidRuntimeOwnerTransitionReason::DeviceReconnected => "device_reconnected",
         AndroidRuntimeOwnerTransitionReason::StopFailed => "stop_failed",
         AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage => "recovered_from_storage",
+        AndroidRuntimeOwnerTransitionReason::LanEndpointReapplied => "lan_endpoint_reapplied",
+        AndroidRuntimeOwnerTransitionReason::LanEndpointFaulted => "lan_endpoint_faulted",
     }
 }
 fn parse_mode(value: &str) -> Result<AndroidRuntimeOwnerMode, InfrastructureError> {
@@ -215,6 +242,7 @@ fn parse_state(value: &str) -> Result<AndroidRuntimeOwnerState, InfrastructureEr
         "waiting_reconnect" => Ok(AndroidRuntimeOwnerState::WaitingReconnect),
         "cleanup_required" => Ok(AndroidRuntimeOwnerState::CleanupRequired),
         "stop_failed" => Ok(AndroidRuntimeOwnerState::StopFailed),
+        "faulted" => Ok(AndroidRuntimeOwnerState::Faulted),
         _ => Err(corrupt(format!("state 无效：{value}"))),
     }
 }
@@ -238,6 +266,8 @@ fn parse_reason(value: &str) -> Result<AndroidRuntimeOwnerTransitionReason, Infr
         "device_reconnected" => Ok(AndroidRuntimeOwnerTransitionReason::DeviceReconnected),
         "stop_failed" => Ok(AndroidRuntimeOwnerTransitionReason::StopFailed),
         "recovered_from_storage" => Ok(AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage),
+        "lan_endpoint_reapplied" => Ok(AndroidRuntimeOwnerTransitionReason::LanEndpointReapplied),
+        "lan_endpoint_faulted" => Ok(AndroidRuntimeOwnerTransitionReason::LanEndpointFaulted),
         _ => Err(corrupt(format!("transition_reason 无效：{value}"))),
     }
 }

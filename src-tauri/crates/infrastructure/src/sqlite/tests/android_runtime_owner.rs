@@ -19,6 +19,7 @@ fn record(epoch: Uuid) -> AndroidRuntimeOwnerRecord {
         },
         reverse_ports: vec![31_627, 31_628],
         resume_state: None,
+        runtime_endpoints: Vec::new(),
     }
 }
 
@@ -141,6 +142,7 @@ fn version_eight_owner_row_migrates_atomically_with_resume_state_default() {
     assert_eq!(loaded.owner.epoch, epoch);
     assert_eq!(loaded.reverse_ports, vec![31_627]);
     assert_eq!(loaded.resume_state, None);
+    assert!(loaded.runtime_endpoints.is_empty());
 }
 
 #[test]
@@ -178,6 +180,7 @@ fn owner_enum_round_trips_and_epoch_replace_is_compare_and_swap() {
         AndroidRuntimeOwnerState::WaitingReconnect,
         AndroidRuntimeOwnerState::CleanupRequired,
         AndroidRuntimeOwnerState::StopFailed,
+        AndroidRuntimeOwnerState::Faulted,
     ];
     for state in states {
         value.owner.state = state;
@@ -197,6 +200,8 @@ fn owner_enum_round_trips_and_epoch_replace_is_compare_and_swap() {
         AndroidRuntimeOwnerTransitionReason::DeviceReconnected,
         AndroidRuntimeOwnerTransitionReason::StopFailed,
         AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage,
+        AndroidRuntimeOwnerTransitionReason::LanEndpointReapplied,
+        AndroidRuntimeOwnerTransitionReason::LanEndpointFaulted,
     ];
     for reason in reasons {
         value.owner.transition_reason = reason;

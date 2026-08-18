@@ -127,10 +127,9 @@ fn migrate_android_runtime_owner(transaction: &Transaction<'_>) -> Result<(), In
         )
         .optional()
         .map_err(|source| InfrastructureError::DatabaseMigration { source })?;
-    if definition
-        .as_deref()
-        .is_some_and(|sql| !sql.contains("waiting_reconnect"))
-    {
+    if definition.as_deref().is_some_and(|sql| {
+        !sql.contains("runtime_endpoints_json") || !sql.contains("lan_endpoint_faulted")
+    }) {
         transaction
             .execute_batch(
                 "ALTER TABLE android_runtime_owner RENAME TO android_runtime_owner_v8;
@@ -140,15 +139,18 @@ fn migrate_android_runtime_owner(transaction: &Transaction<'_>) -> Result<(), In
                     mode TEXT NOT NULL CHECK(mode IN ('device_only', 'lan', 'adb_reverse')),
                     profile_id TEXT NOT NULL,
                     state TEXT NOT NULL CHECK(state IN (
-                        'active', 'uncertain', 'waiting_reconnect', 'cleanup_required', 'stop_failed'
+                        'active', 'uncertain', 'waiting_reconnect', 'cleanup_required', 'stop_failed',
+                        'faulted'
                     )),
                     source TEXT NOT NULL CHECK(source IN ('start', 'apply', 'recovery')),
                     transition_reason TEXT NOT NULL CHECK(transition_reason IN (
                         'activation_confirmed', 'activation_uncertain', 'reverse_preparation',
                         'reverse_cleanup_required', 'device_disconnected', 'device_reconnected',
-                        'stop_failed', 'recovered_from_storage'
+                        'stop_failed', 'recovered_from_storage', 'lan_endpoint_reapplied',
+                        'lan_endpoint_faulted'
                     )),
                     reverse_ports_json TEXT NOT NULL, resume_state TEXT NULL,
+                    runtime_endpoints_json TEXT NOT NULL DEFAULT '[]',
                     updated_at TEXT NOT NULL
                  );
                  INSERT INTO android_runtime_owner(
@@ -169,15 +171,18 @@ fn migrate_android_runtime_owner(transaction: &Transaction<'_>) -> Result<(), In
                     mode TEXT NOT NULL CHECK(mode IN ('device_only', 'lan', 'adb_reverse')),
                     profile_id TEXT NOT NULL,
                     state TEXT NOT NULL CHECK(state IN (
-                        'active', 'uncertain', 'waiting_reconnect', 'cleanup_required', 'stop_failed'
+                        'active', 'uncertain', 'waiting_reconnect', 'cleanup_required', 'stop_failed',
+                        'faulted'
                     )),
                     source TEXT NOT NULL CHECK(source IN ('start', 'apply', 'recovery')),
                     transition_reason TEXT NOT NULL CHECK(transition_reason IN (
                         'activation_confirmed', 'activation_uncertain', 'reverse_preparation',
                         'reverse_cleanup_required', 'device_disconnected', 'device_reconnected',
-                        'stop_failed', 'recovered_from_storage'
+                        'stop_failed', 'recovered_from_storage', 'lan_endpoint_reapplied',
+                        'lan_endpoint_faulted'
                     )),
                     reverse_ports_json TEXT NOT NULL, resume_state TEXT NULL,
+                    runtime_endpoints_json TEXT NOT NULL DEFAULT '[]',
                     updated_at TEXT NOT NULL
                  );",
             )

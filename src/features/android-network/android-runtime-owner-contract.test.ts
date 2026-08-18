@@ -38,7 +38,7 @@ describe("generated Android runtime owner contract", () => {
       "device_only" | "lan" | "adb_reverse"
     >();
     expectTypeOf<AndroidRuntimeOwnerState>().toEqualTypeOf<
-      "active" | "uncertain" | "waiting_reconnect" | "cleanup_required" | "stop_failed"
+      "active" | "uncertain" | "waiting_reconnect" | "cleanup_required" | "stop_failed" | "faulted"
     >();
     expectTypeOf<AndroidRuntimeOwnerSource>().toEqualTypeOf<
       "start" | "apply" | "recovery"
@@ -52,6 +52,8 @@ describe("generated Android runtime owner contract", () => {
       | "device_reconnected"
       | "stop_failed"
       | "recovered_from_storage"
+      | "lan_endpoint_reapplied"
+      | "lan_endpoint_faulted"
     >();
   });
 });

@@ -36,6 +36,7 @@ export const commands = {
 	deviceNetworkStop: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_stop")),
 	deviceNetworkEmergencyRestore: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_emergency_restore")),
 	deviceNetworkStatus: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_status")),
+	deviceNetworkEndpoints: (profileId: string | null) => typedError<AndroidNetworkEndpointSnapshotViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_endpoints", { profileId })),
 	deviceNetworkRuntimeOwner: () => typedError<{
 	serial: string,
 	epoch: string,
@@ -250,6 +251,16 @@ export type AndroidCompanionInstallViewModel = {
 	version_code: string | null,
 };
 
+export type AndroidConfiguredEndpointViewModel = {
+	profile_id: string,
+	original_destination: string,
+	original_ports: number[],
+	listener_id: string,
+	listener_name: string,
+	listener_bind_address: string,
+	listener_port: number,
+};
+
 export type AndroidControlTransport = "local_abstract_socket" | "rescue_activity" | "adb_force_stop" | "unavailable";
 
 /**  弱网只作用于指定远端地址/端口时使用的过滤条件。 */
@@ -268,6 +279,13 @@ export type AndroidDeviceViewModel = {
 	device: string | null,
 	transport_id: string | null,
 	selected: boolean,
+};
+
+export type AndroidNetworkEndpointSnapshotViewModel = {
+	configured_profile_id: string | null,
+	configured: AndroidConfiguredEndpointViewModel[],
+	runtime_owner: AndroidRuntimeOwnerViewModel | null,
+	runtime: AndroidRuntimeEndpointViewModel[],
 };
 
 /**  可随 Workspace 导入导出的 Android 设备网络方案。 */
@@ -341,6 +359,24 @@ export type AndroidProxyRoute = {
 	listener_id: ListenerId,
 };
 
+export type AndroidRuntimeEndpointHealth = "healthy" | "waiting_reconnect" | "faulted";
+
+export type AndroidRuntimeEndpointViewModel = {
+	serial: string,
+	epoch: string,
+	mode: AndroidRuntimeOwnerMode,
+	original_destination: string,
+	original_ports: number[],
+	resolved_original_ips: string[],
+	listener_id: string,
+	listener_name: string,
+	desktop_listener_port: number,
+	proxy_host: string,
+	proxy_port: number,
+	resolved_at: string,
+	health: AndroidRuntimeEndpointHealth,
+};
+
 /**
  *  Android 网络运行态的实际设备所有者。
  *  它与 UI 当前选择的设备完全独立；停止、状态查询和恢复只能以这里记录的 serial 为目标。
@@ -349,9 +385,9 @@ export type AndroidRuntimeOwnerMode = "device_only" | "lan" | "adb_reverse";
 
 export type AndroidRuntimeOwnerSource = "start" | "apply" | "recovery";
 
-export type AndroidRuntimeOwnerState = "active" | "uncertain" | "waiting_reconnect" | "cleanup_required" | "stop_failed";
+export type AndroidRuntimeOwnerState = "active" | "uncertain" | "waiting_reconnect" | "cleanup_required" | "stop_failed" | "faulted";
 
-export type AndroidRuntimeOwnerTransitionReason = "activation_confirmed" | "activation_uncertain" | "reverse_preparation" | "reverse_cleanup_required" | "device_disconnected" | "device_reconnected" | "stop_failed" | "recovered_from_storage";
+export type AndroidRuntimeOwnerTransitionReason = "activation_confirmed" | "activation_uncertain" | "reverse_preparation" | "reverse_cleanup_required" | "device_disconnected" | "device_reconnected" | "stop_failed" | "recovered_from_storage" | "lan_endpoint_reapplied" | "lan_endpoint_faulted";
 
 export type AndroidRuntimeOwnerViewModel = {
 	serial: string,

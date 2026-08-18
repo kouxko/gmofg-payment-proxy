@@ -124,8 +124,19 @@ impl AndroidAdbAdapter {
         serial: &str,
         activation: &AndroidNetworkActivation,
     ) -> Option<Ipv4Addr> {
+        self.preferred_lan_proxy_host_strict(serial, activation)
+            .await
+            .ok()
+            .flatten()
+    }
+
+    pub(super) async fn preferred_lan_proxy_host_strict(
+        &self,
+        serial: &str,
+        activation: &AndroidNetworkActivation,
+    ) -> AppResult<Option<Ipv4Addr>> {
         if activation.proxy_routes.is_empty() {
-            return None;
+            return Ok(None);
         }
         let output = self
             .run_for_serial(
@@ -133,15 +144,14 @@ impl AndroidAdbAdapter {
                 &["shell", "ip", "-o", "-4", "addr", "show", "scope", "global"],
                 COMMAND_TIMEOUT,
             )
-            .await
-            .ok()?;
-        parse_device_lan_addresses(&output.stdout)
+            .await?;
+        Ok(parse_device_lan_addresses(&output.stdout)
             .into_iter()
             .find_map(|(device_address, prefix)| {
                 let host = self.lan_address.local_ipv4_for(device_address)?;
                 lan_endpoint_is_eligible(host, device_address, prefix, &activation.proxy_routes)
                     .then_some(host)
-            })
+            }))
     }
 
     pub(super) async fn finish_prepared_network_update<T>(

@@ -21,6 +21,7 @@ pub enum AndroidRuntimeOwnerState {
     WaitingReconnect,
     CleanupRequired,
     StopFailed,
+    Faulted,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -42,6 +43,8 @@ pub enum AndroidRuntimeOwnerTransitionReason {
     DeviceReconnected,
     StopFailed,
     RecoveredFromStorage,
+    LanEndpointReapplied,
+    LanEndpointFaulted,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
