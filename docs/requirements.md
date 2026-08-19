@@ -163,7 +163,7 @@ ProxyWorkspace
   删除正在运行的目标 Listener。聚合 `workspace_save` 不得作为入口页面的保存路径。
 - “系统设置”只包含全局超时、Body 上限、会话容量、内存容量、数据和应用策略；不得重复
   展示或保存入口字段，也不得提供“保存并重启全部代理”。
-- “运行监控”和顶部状态栏只展示 Rust 将当前 Workspace 与实际 Listener 运行状态合并后的
+- 顶部状态栏和“入口配置”只展示 Rust 将当前 Workspace 与实际 Listener 运行状态合并后的
   `ListenerOverviewViewModel`，不得读取旧静态产品通道目录或在 TypeScript 中补齐停止状态。
 - 工作区没有入口时显示“未配置入口”；入口停止、启动中、运行中、停止中和故障均由 Rust
   返回稳定状态文案与 UI tone。
@@ -461,11 +461,11 @@ CI/开发机必须提供一个只存在于 `test-support` 和 `androidTest` 的�
 | 需求 | UI | Rust Use Case / 模块 | IPC | 测试 |
 | --- | --- | --- | --- | --- |
 | Workspace | Workspace/Listener 页面 | application + domain | `workspace_*`, `listener_*` | workspace roundtrip |
-| 入口配置唯一来源 | 入口配置/运行监控/顶部状态栏 | application listener overview | `listener_overview`, listener events | overview + UI boundary |
+| 入口配置唯一来源 | 入口配置/顶部状态栏 | application listener overview | `listener_overview`, listener events | overview + UI boundary |
 | 请求目标/CONNECT | Listener 状态与抓包 | proxy | listener/status events | 100× HTTP/CONNECT |
 | MITM | 证书与 allowlist | proxy + infrastructure | `certificate_*` | tunnel/MITM split |
 | 固定 Server TLS/mTLS | 同一入口配置（Server 材料按入口导入） | proxy + infrastructure | `listener_*` | TLS matrix |
-| 规则与断点 | 规则/断点/详情 | application + proxy | rule/breakpoint | rule semantics |
+| 规则与暂停处理 | 规则/全局暂停处理窗口/抓包详情 | application + proxy | rule/breakpoint | rule semantics |
 | Android 定向 VPN | Android 弱网页 | application + android-engine | `android_*`, `device_network_*` | scope gate |
 | 弱网 | Profile/实时统计 | android-engine | profile/status events | deterministic vectors |
 | 真实上游兼容 | 无默认业务 UI | generic fixed-server route | existing generic IPC | real-device report |

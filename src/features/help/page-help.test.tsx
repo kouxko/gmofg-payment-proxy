@@ -16,9 +16,7 @@ const workspacePaths: WorkspacePath[] = [
   "/protocol-packages",
   "/android-network",
   "/diagnostics",
-  "/console",
   "/capture",
-  "/breakpoints",
   "/rules",
   "/certificates",
   "/settings",
@@ -40,14 +38,14 @@ describe("page-specific usage guides", () => {
     }
   });
 
-  it("distinguishes Android transparent routing from an ordinary client proxy", () => {
-    const consoleGuide = pageHelpGuides["/console"].sections
+  it("keeps entry guidance free of removed standalone pages", () => {
+    const listenerGuide = pageHelpGuides["/listeners"].sections
       .flatMap((section) => section.steps)
       .join("\n");
 
-    expect(consoleGuide).toContain("Android 应用网络接管不修改业务 App 的 URL 或 Proxy IP");
-    expect(consoleGuide).toContain("非 VPN 客户端则按自身能力配置标准代理或直接连接入口");
-    expect(consoleGuide).not.toContain("将客户端应用的目标地址配置为代理电脑");
+    expect(listenerGuide).toContain("HTTP 或 Socket");
+    expect(listenerGuide).not.toContain("运行监控");
+    expect(listenerGuide).not.toContain("断点实验台");
   });
 
   it("documents the native and non-mutating protocol-package import boundary", () => {
@@ -65,17 +63,15 @@ describe("page-specific usage guides", () => {
   it("opens the current page guide in a Drawer without document navigation", async () => {
     const user = userEvent.setup();
     const documentUrl = window.location.href;
-    render(<PageHelp pathname="/console" />);
+    render(<PageHelp pathname="/workspaces" />);
 
     await user.click(
-      screen.getByRole("button", { name: "打开运行监控使用说明" }),
+      screen.getByRole("button", { name: "打开Workspace 管理使用说明" }),
     );
 
     expect(
-      screen.getByRole("dialog", { name: "运行监控使用说明" }),
+      screen.getByRole("dialog", { name: "Workspace 管理使用说明" }),
     ).toBeVisible();
-    expect(screen.getByText("首次运行前的准备")).toBeVisible();
-    expect(screen.getByText("真实设备链路的成功判定")).toBeVisible();
     expect(window.location.href).toBe(documentUrl);
   });
 

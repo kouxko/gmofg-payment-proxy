@@ -23,9 +23,7 @@ export type WorkspacePath =
   | "/protocol-packages"
   | "/android-network"
   | "/diagnostics"
-  | "/console"
   | "/capture"
-  | "/breakpoints"
   | "/rules"
   | "/certificates"
   | "/settings";
@@ -39,16 +37,14 @@ type WorkspaceNavigation = WorkspaceLocation & {
   navigate: (href: string) => void;
 };
 
-const defaultPath: WorkspacePath = "/console";
+const defaultPath: WorkspacePath = "/workspaces";
 const workspacePaths = new Set<WorkspacePath>([
   "/workspaces",
   "/listeners",
   "/protocol-packages",
   "/android-network",
   "/diagnostics",
-  "/console",
   "/capture",
-  "/breakpoints",
   "/rules",
   "/certificates",
   "/settings",

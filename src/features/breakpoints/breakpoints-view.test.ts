@@ -7,7 +7,6 @@ import type {
   MessageContentViewModel,
 } from "@/generated/rust-types";
 import {
-  breakpointDraftBody,
   breakpointEditableBody,
   buildBreakpointDecision,
 } from "./breakpoints-view";
@@ -106,13 +105,7 @@ describe("breakpointEditableBody", () => {
     expect(breakpointEditableBody(undefined, message)).toBe(
       '{"ErrorCode":"D48"}',
     );
-    expect(breakpointDraftBody(undefined, message)).toBe(
-      '{"ErrorCode":"D48"}',
-    );
     expect(breakpointEditableBody('{"ErrorCode":"D32"}', message)).toBe(
-      '{"ErrorCode":"D32"}',
-    );
-    expect(breakpointDraftBody('{"ErrorCode":"D32"}', message)).toBe(
       '{"ErrorCode":"D32"}',
     );
   });

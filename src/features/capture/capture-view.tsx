@@ -189,7 +189,6 @@ function HttpCaptureView({ initialPage }: { initialPage?: CapturePageViewModel }
           setSelectedEventId(undefined);
           detail.invalidate();
         }}
-        onNavigate={navigate}
         onCreateRule={() => selectedId && navigate(ruleEditorHref(selectedId))}
       />
     </section>
