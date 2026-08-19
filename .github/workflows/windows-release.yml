@@ -4,6 +4,14 @@ run-name: Desktop release · ${{ github.ref_name }} · ${{ github.event_name }}
 on:
   workflow_dispatch:
     inputs:
+      run_mode:
+        description: 完整验证后构建，或跳过完整验证快速生成测试产物；正式标签不能跳过验证
+        type: choice
+        required: true
+        default: verify-and-build
+        options:
+          - verify-and-build
+          - build-only
       platform:
         description: 手动构建平台；日常测试默认只生成 Windows，正式标签仍构建全部平台
         type: choice
@@ -64,6 +72,7 @@ jobs:
   verify:
     name: Verify before packaging (${{ matrix.os }})
     needs: android-companion
+    if: github.event_name == 'push' || inputs.run_mode != 'build-only'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
@@ -170,6 +179,10 @@ jobs:
 
   build:
     needs: [android-companion, verify]
+    if: >-
+      always() &&
+      needs.android-companion.result == 'success' &&
+      (needs.verify.result == 'success' || needs.verify.result == 'skipped')
     runs-on: windows-latest
     timeout-minutes: 60
     permissions:
@@ -376,7 +389,11 @@ jobs:
   build-macos:
     name: build-macos-universal
     needs: [android-companion, verify]
-    if: github.event_name == 'push' || inputs.platform == 'all'
+    if: >-
+      always() &&
+      needs.android-companion.result == 'success' &&
+      (needs.verify.result == 'success' || needs.verify.result == 'skipped') &&
+      (github.event_name == 'push' || inputs.platform == 'all')
     runs-on: macos-14
     timeout-minutes: 60
     permissions:

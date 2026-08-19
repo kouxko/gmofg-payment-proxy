@@ -192,9 +192,6 @@ pub struct AndroidNetworkStatusViewModel {
 
 impl AndroidNetworkStatusViewModel {
     /// 设备端协议只上报稳定状态码；最终中文展示文案由 Rust 统一生成。
-    ///
-    /// `state_text` 保留在公开 DTO 中，让 TypeScript 只负责渲染。Companion 必须按
-    /// 当前协议返回完整字段，缺失字段直接拒绝。
     #[must_use]
     pub fn with_rust_state_text(mut self) -> Self {
         let (state_text, ui_tone) = match self.state {
@@ -210,6 +207,49 @@ impl AndroidNetworkStatusViewModel {
         state_text.clone_into(&mut self.state_text);
         self.ui_tone = ui_tone;
         self
+    }
+}
+
+/// Android Companion 在控制协议中返回的机器状态。
+///
+/// 该结构不包含桌面展示文案或视觉语义；这些字段由 Rust 在协议校验完成后统一生成。
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AndroidCompanionStatus {
+    pub serial: String,
+    pub state: AndroidNetworkState,
+    pub verified: bool,
+    pub transport: AndroidControlTransport,
+    pub active_profile_id: Option<String>,
+    pub active_profile_fingerprint: Option<String>,
+    pub active_route_fingerprint: Option<String>,
+    pub active_route_count: usize,
+    pub companion_process_running: Option<bool>,
+    pub message: String,
+    pub unsupported_fields: Vec<String>,
+    pub stats: Option<Value>,
+}
+
+impl AndroidCompanionStatus {
+    #[must_use]
+    pub fn into_view_model(self) -> AndroidNetworkStatusViewModel {
+        AndroidNetworkStatusViewModel {
+            serial: self.serial,
+            state: self.state,
+            state_text: String::new(),
+            ui_tone: UiTone::Neutral,
+            verified: self.verified,
+            transport: self.transport,
+            active_profile_id: self.active_profile_id,
+            active_profile_fingerprint: self.active_profile_fingerprint,
+            active_route_fingerprint: self.active_route_fingerprint,
+            active_route_count: self.active_route_count,
+            companion_process_running: self.companion_process_running,
+            message: self.message,
+            unsupported_fields: self.unsupported_fields,
+            stats: self.stats,
+        }
+        .with_rust_state_text()
     }
 }
 
@@ -264,7 +304,7 @@ pub struct AndroidControlResponse {
     pub version: u16,
     pub request_id: Uuid,
     pub ok: bool,
-    pub status: Option<AndroidNetworkStatusViewModel>,
+    pub status: Option<AndroidCompanionStatus>,
     pub error_code: Option<String>,
     pub error_message: Option<String>,
 }
@@ -395,19 +435,53 @@ mod tests {
     }
 
     #[test]
-    fn companion_wire_status_without_display_text_is_rejected() {
-        let error = serde_json::from_value::<AndroidNetworkStatusViewModel>(json!({
+    fn companion_wire_status_is_projected_to_desktop_display_fields() {
+        let response = serde_json::from_value::<AndroidControlResponse>(json!({
+            "version": ANDROID_CONTROL_PROTOCOL_VERSION,
+            "request_id": Uuid::nil(),
+            "ok": true,
+            "status": {
+                "serial": "",
+                "state": "running",
+                "verified": true,
+                "transport": "local_abstract_socket",
+                "active_profile_id": "profile-1",
+                "active_profile_fingerprint": "profile-fingerprint",
+                "active_route_fingerprint": "route-fingerprint",
+                "active_route_count": 2,
+                "companion_process_running": true,
+                "message": "native running",
+                "unsupported_fields": ["serial"],
+                "stats": null
+            },
+            "error_code": null,
+            "error_message": null
+        }))
+        .expect("Companion machine status should not contain desktop display fields");
+
+        let status = response.status.unwrap().into_view_model();
+        assert_eq!(status.state_text, "运行中");
+        assert_eq!(status.ui_tone, UiTone::Positive);
+    }
+
+    #[test]
+    fn companion_wire_status_rejects_desktop_display_fields() {
+        let error = serde_json::from_value::<AndroidCompanionStatus>(json!({
             "serial": "",
             "state": "running",
+            "state_text": "由设备伪造的文案",
             "verified": true,
             "transport": "local_abstract_socket",
-            "active_profile_id": "profile-1",
+            "active_profile_id": null,
+            "active_profile_fingerprint": null,
+            "active_route_fingerprint": null,
+            "active_route_count": 0,
             "companion_process_running": true,
             "message": "native running",
             "unsupported_fields": ["serial"],
-            "stats": null
+            "stats": {}
         }))
-        .expect_err("current companion wire must include the complete status DTO");
+        .expect_err("Companion wire must not contain desktop-only display fields");
 
         assert!(error.to_string().contains("state_text"));
     }

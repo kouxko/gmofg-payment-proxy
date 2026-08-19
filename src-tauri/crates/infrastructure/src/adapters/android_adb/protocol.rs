@@ -173,7 +173,7 @@ impl AndroidAdbAdapter {
         }
         response
             .status
-            .map(AndroidNetworkStatusViewModel::with_rust_state_text)
+            .map(|status| status.into_view_model())
             .ok_or_else(|| {
                 AppError::new(
                     "ANDROID_PROTOCOL_RESPONSE_INVALID",
