@@ -52,7 +52,7 @@ function CommonMetadata({ row, detail }: { row: SocketCaptureRowViewModel; detai
       <dt>协议包</dt><dd><code className="text-xs">{packageLabel(row.package)}</code></dd>
       <dt>字段结构</dt><dd><code className="text-xs">{schemaLabel(row.schema)}</code></dd>
       <dt>连接</dt><dd className="break-all font-mono text-xs">{row.connection_id}</dd>
-      <dt>会话</dt><dd className="break-all font-mono text-xs">{row.session_id}</dd>
+      <dt>关联交换</dt><dd className="break-all font-mono text-xs">{row.session_id}</dd>
       <dt>入口</dt><dd className="break-all font-mono text-xs">{row.listener_id}</dd>
       <dt>数据量</dt><dd>原始 {formatBytes(row.origin_size_bytes)} · 写出 {formatBytes(row.written_size_bytes)} · 解析 {formatBytes(row.logical_size_bytes)}</dd>
     </dl>

@@ -10,6 +10,7 @@ import {
 } from "@heroui/react";
 import type { SettingsDraft } from "@/generated/rust-types";
 import { ThemeSettings } from "./settings-content";
+import { McpSettings } from "./mcp-settings";
 
 export function bytesToMib(bytes: number) {
   return Math.round(bytes / 1024 / 1024);
@@ -20,8 +21,8 @@ type SettingsEditorTabsProps = {
   fieldError: (field: string) => string | undefined;
   onDraftChange: (draft: SettingsDraft) => void;
   isDisabled: boolean;
-  selectedSection: "capacity" | "app";
-  onSectionChange: (section: "capacity" | "app") => void;
+  selectedSection: "capacity" | "app" | "mcp";
+  onSectionChange: (section: "capacity" | "app" | "mcp") => void;
 };
 
 export function SettingsEditorTabs({
@@ -37,7 +38,12 @@ export function SettingsEditorTabs({
       <h1 className="sr-only">系统设置</h1>
       <Card className="border border-[var(--telemetry-line)] shadow-sm">
         <Card.Content className="p-0">
-          <Tabs selectedKey={selectedSection} onSelectionChange={(key) => onSectionChange(key as "capacity" | "app")}>
+          <Tabs
+            selectedKey={selectedSection}
+            onSelectionChange={(key) =>
+              onSectionChange(key as "capacity" | "app" | "mcp")
+            }
+          >
             <Tabs.ListContainer>
               <Tabs.List aria-label="系统设置分类" className="px-3 pt-2">
                 <Tabs.Tab id="capacity" isDisabled={isDisabled}>
@@ -46,6 +52,10 @@ export function SettingsEditorTabs({
                 </Tabs.Tab>
                 <Tabs.Tab id="app" isDisabled={isDisabled}>
                   应用
+                  <Tabs.Indicator />
+                </Tabs.Tab>
+                <Tabs.Tab id="mcp">
+                  AI 助手（MCP）
                   <Tabs.Indicator />
                 </Tabs.Tab>
               </Tabs.List>
@@ -63,6 +73,9 @@ export function SettingsEditorTabs({
                 系统设置只管理全局行为；入口配置、证书和规则分别在对应页面管理。
               </Alert>
               <ThemeSettings />
+            </Tabs.Panel>
+            <Tabs.Panel id="mcp" className="p-4">
+              <McpSettings />
             </Tabs.Panel>
           </Tabs>
         </Card.Content>
@@ -123,7 +136,7 @@ function CapacitySettings({
             onDraftChange({ ...draft, max_sessions })
           }
         >
-          <Label>最大会话数</Label>
+          <Label>最多保留的 HTTP 交换</Label>
           <NumberField.Group className="w-full">
             <NumberField.DecrementButton />
             <NumberField.Input />
@@ -168,7 +181,7 @@ function CapacitySettings({
         </Switch>
       </div>
       <Alert status="accent">
-        待处理断点及其会话永不自动淘汰；容量按可重复计算的逻辑字节数判定。
+        待处理断点对应的 HTTP 交换永不自动淘汰；容量按可重复计算的逻辑字节数判定。
       </Alert>
     </Form>
   );

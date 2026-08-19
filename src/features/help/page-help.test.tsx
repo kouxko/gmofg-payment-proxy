@@ -18,10 +18,8 @@ const workspacePaths: WorkspacePath[] = [
   "/diagnostics",
   "/console",
   "/capture",
-  "/sessions",
   "/breakpoints",
   "/rules",
-  "/faults",
   "/certificates",
   "/settings",
 ];

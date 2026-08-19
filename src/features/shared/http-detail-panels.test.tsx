@@ -8,11 +8,9 @@ import type {
   CaptureDetailViewModel,
   CaptureRowViewModel,
   MessageContentViewModel,
-  SessionDetailViewModel,
   SessionSummaryViewModel,
 } from "@/generated/rust-types";
 import { CaptureDetailPanel } from "@/features/capture/capture-detail-panel";
-import { SessionDetailContent } from "@/features/sessions/session-detail-content";
 
 const message: MessageContentViewModel = {
   protocol: null,
@@ -54,7 +52,7 @@ const summary: SessionSummaryViewModel = {
   revision: 1,
 };
 
-describe("抓包与会话正文接入共享查看器", () => {
+describe("抓包正文接入共享查看器", () => {
   it("抓包请求页展示任意 method、原始 query 与 XML", async () => {
     const user = userEvent.setup();
     const selected: CaptureRowViewModel = {
@@ -107,32 +105,4 @@ describe("抓包与会话正文接入共享查看器", () => {
     expect(screen.getByText("XML")).toBeVisible();
   });
 
-  it("会话请求页展示同一套 method、query 与正文元数据", async () => {
-    const user = userEvent.setup();
-    const detail = {
-      data: {
-        summary,
-        runtime_epoch: "epoch-1",
-        connection_id: "connection-1",
-        certificate_fingerprint: "AA:BB",
-        upstream_host: "server.test",
-        app_to_proxy_tls: "明文",
-        proxy_to_server_tls: "明文",
-        final_action: "转发",
-        timings_ms: {},
-        request: message,
-        response: null,
-        rule_trace: [],
-      } satisfies SessionDetailViewModel,
-      isLoading: false,
-      refresh: vi.fn(),
-    };
-
-    render(<SessionDetailContent selected={summary} detail={detail} />);
-    await user.click(screen.getByRole("tab", { name: "请求" }));
-
-    expect(screen.getByText("QUERY")).toBeVisible();
-    expect(screen.getByText("code=D48&name=A%2BB")).toBeVisible();
-    expect(screen.getByText("XML")).toBeVisible();
-  });
 });

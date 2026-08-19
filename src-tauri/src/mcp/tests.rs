@@ -95,6 +95,14 @@ fn resources_include_authoring_manifest_and_official_zip() {
             .any(|resource| resource.uri == resources::SOCKET_AUTHORING_URI)
     );
     assert!(resources.iter().any(|resource| {
+        resource.uri == resources::CERTIFICATE_CONCEPTS_URI
+            && resource.mime_type.as_deref() == Some("text/markdown")
+    }));
+    assert!(resources.iter().any(|resource| {
+        resource.uri == resources::APP_INTEGRATION_GUIDE_URI
+            && resource.mime_type.as_deref() == Some("text/markdown")
+    }));
+    assert!(resources.iter().any(|resource| {
         resource.uri == resources::ISO8583_ARCHIVE_URI
             && resource.mime_type.as_deref() == Some("application/zip")
     }));

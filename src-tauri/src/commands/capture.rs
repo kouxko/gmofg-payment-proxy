@@ -1,12 +1,11 @@
-//! 抓包、会话与断点命令适配层：查询和决策语义由 application 门面定义，本层保持 IPC 形状。
+//! 抓包与断点命令适配层：查询和决策语义由 application 门面定义，本层保持 IPC 形状。
 
 use std::sync::Arc;
 
 use intercept_proxy_application::{
     AppError, BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft, BreakpointId,
     BreakpointSummaryViewModel, BreakpointValidationViewModel, CaptureDetailViewModel,
-    CapturePageViewModel, CaptureQuery, OperationResultViewModel, RuntimeEpoch,
-    SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
+    CapturePageViewModel, CaptureQuery, OperationResultViewModel, RuntimeEpoch, SessionId,
     SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel, SocketCaptureQuery,
     WorkspaceId,
 };
@@ -95,45 +94,6 @@ pub async fn socket_capture_clear(
     state
         .application
         .socket_capture_clear(workspace_id, confirmed)
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn session_query(
-    state: State<'_, AppState>,
-    query: SessionQuery,
-) -> CommandResult<SessionListViewModel> {
-    state
-        .application
-        .session_query(query)
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn session_get(
-    state: State<'_, AppState>,
-    session_id: SessionId,
-) -> CommandResult<SessionDetailViewModel> {
-    state
-        .application
-        .session_get(session_id)
-        .await
-        .map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn session_clear(
-    state: State<'_, AppState>,
-    confirmed: bool,
-) -> CommandResult<OperationResultViewModel> {
-    state
-        .application
-        .session_clear(confirmed)
         .await
         .map_err(command_error)
 }

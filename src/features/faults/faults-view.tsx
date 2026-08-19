@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * 故障模拟页面容器。
+ * HTTP 规则页的故障预设容器。
  *
  * 本文件只负责 Rust IPC、表单草稿和异步状态；模板列表与配置表单分别由
  * 独立展示组件负责，避免把查询、业务动作和大量 JSX 混在一个文件中。
@@ -10,7 +10,6 @@
 import { useMemo, useRef, useState } from "react";
 import { toast } from "@heroui/react";
 import type {
-  ActiveFaultViewModel,
   ChannelId,
   FaultConfigurationDraft,
   FaultParameterValue,
@@ -20,32 +19,24 @@ import { commands } from "@/generated/rust-types";
 import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
-import {
-  useAppEventRefresh,
-  useBootstrap,
-} from "@/features/shell/bootstrap-context";
-import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
+import { useBootstrap } from "@/features/shell/bootstrap-context";
 import { FaultConfigurationPanel } from "./fault-configuration-panel";
 import { FaultsListPanel } from "./faults-list-panel";
 
-export function FaultsView() {
+export function FaultPresetsView({
+  onRuleCreated,
+}: {
+  onRuleCreated?: (ruleId: string) => void;
+}) {
   const { bootstrap } = useBootstrap();
   const channels = bootstrap?.channel_catalog ?? [];
-  const { navigate } = useWorkspaceNavigation();
   const templates = useIpcQuery<FaultTemplateViewModel[]>(
     "fault-template-list",
     () => callCommand(commands.faultTemplateList()),
   );
-  const active = useIpcQuery<ActiveFaultViewModel[]>("fault-active-list", () =>
-    callCommand(commands.faultActiveList()),
-  );
-  useAppEventRefresh(["rule_hit", "snapshot_required"], active.refresh);
-
   const [selectedId, setSelectedId] = useState<string>();
-  const [configurePending, setConfigurePending] = useState<"enable" | "save">();
+  const [configurePending, setConfigurePending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
-  const [stopDialogRuleId, setStopDialogRuleId] = useState<string>();
-  const [stoppingRuleId, setStoppingRuleId] = useState<string>();
   const configurationPanelRef = useRef<HTMLElement>(null);
   const [terminal, setTerminal] = useState("");
   const [target, setTarget] = useState("");
@@ -73,7 +64,7 @@ export function FaultsView() {
   const effectivePriority = priority ?? selected?.default_priority;
   const effectiveOneShot = oneShot ?? selected?.default_one_shot;
   const effectiveChannel = channel ?? selected?.default_channel;
-  const writePending = configurePending != null || stoppingRuleId != null;
+  const writePending = configurePending;
   const fieldError = (field: string) => fieldErrors[field]?.join("；");
 
   const draft = useMemo<FaultConfigurationDraft | undefined>(() => {
@@ -144,37 +135,19 @@ export function FaultsView() {
     }
   }
 
-  async function configure(openRules: boolean) {
+  async function configure() {
     if (!draft || writePending) return;
-    setConfigurePending(openRules ? "save" : "enable");
+    setConfigurePending(true);
     setFieldErrors({});
     try {
       const result = await callCommand(commands.faultConfigure(draft));
       toast(result.status_text, { variant: toneColor(result.ui_tone) });
-      await active.refresh();
-      if (openRules) navigate("/rules");
+      onRuleCreated?.(result.rule_id);
     } catch (reason) {
       setFieldErrors(appErrorViewModel(reason)?.field_errors ?? {});
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
-      setConfigurePending(undefined);
-    }
-  }
-
-  async function stopFault(item: ActiveFaultViewModel) {
-    if (writePending) return;
-    setStoppingRuleId(item.rule_id);
-    try {
-      const result = await callCommand(
-        commands.faultStop(item.rule_id, item.revision, true),
-      );
-      toast(result.status_text, { variant: toneColor(result.ui_tone) });
-      await active.refresh();
-      setStopDialogRuleId(undefined);
-    } catch (reason) {
-      toast(errorMessage(reason), { variant: "danger" });
-    } finally {
-      setStoppingRuleId(undefined);
+      setConfigurePending(false);
     }
   }
 
@@ -182,18 +155,9 @@ export function FaultsView() {
     <section className="grid h-full grid-cols-[minmax(0,1fr)_430px] max-[1280px]:grid-cols-1">
       <FaultsListPanel
         templates={templates}
-        active={active}
         effectiveSelectedId={effectiveSelectedId}
         hasChannels={channels.length > 0}
-        writePending={writePending}
-        stopDialogRuleId={stopDialogRuleId}
-        stoppingRuleId={stoppingRuleId}
         onSelectTemplate={selectTemplate}
-        onStopDialogChange={(ruleId, open) => {
-          if (!open && stoppingRuleId === ruleId) return;
-          setStopDialogRuleId(open ? ruleId : undefined);
-        }}
-        onStopFault={(item) => void stopFault(item)}
       />
       <FaultConfigurationPanel
         panelRef={configurationPanelRef}
@@ -229,7 +193,7 @@ export function FaultsView() {
           setPriority(value);
         }}
         onOneShotChange={setOneShot}
-        onConfigure={(openRules) => void configure(openRules)}
+        onConfigure={() => void configure()}
       />
     </section>
   );

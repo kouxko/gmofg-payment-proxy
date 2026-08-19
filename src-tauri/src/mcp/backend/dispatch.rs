@@ -5,9 +5,8 @@ use serde_json::Value;
 use super::{
     AndroidEndpointArguments, AndroidPackageArguments, AndroidProfileArguments, ApplicationBackend,
     BreakpointDetailArguments, BreakpointQueryArguments, HttpCaptureDetailArguments,
-    HttpRuleArguments, ProtocolPackageArguments, SessionDetailArguments,
-    SocketCaptureDetailArguments, ToolResult, WorkspaceArguments, json_value, parse, query,
-    unknown_tool,
+    HttpRuleArguments, ProtocolPackageArguments, SocketCaptureDetailArguments, ToolResult,
+    WorkspaceArguments, json_value, parse, query, unknown_tool,
 };
 
 impl ApplicationBackend {
@@ -51,14 +50,6 @@ impl ApplicationBackend {
                         .capture_get_detail(args.session_id, args.runtime_epoch)
                         .await?,
                 )
-            }
-            "session_query" => {
-                let args: query::SessionArguments = parse(arguments)?;
-                json_value(self.application.session_query(args.into_query()).await?)
-            }
-            "session_get" => {
-                let args: SessionDetailArguments = parse(arguments)?;
-                json_value(self.application.session_get(args.session_id).await?)
             }
             "socket_capture_query" => {
                 let args: query::SocketCaptureArguments = parse(arguments)?;

@@ -10,11 +10,11 @@ import type {
   ProtocolRuleStage,
   ProtocolRuleCapabilityCatalog,
 } from "@/generated/rust-types";
-import { ProtocolRuleEditor } from "./socket-rule-editor";
+import { ProtocolRuleEditor } from "./protocol-rule-editor";
 import {
   newProtocolRuleDraft,
   type ProtocolRuleDraft,
-} from "./socket-rule-model";
+} from "./protocol-rule-model";
 
 const commandMocks = vi.hoisted(() => ({ protocolRuleParseValue: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));

@@ -15,5 +15,9 @@ mod server;
 pub use backend::ApplicationBackend;
 pub use server::{MCP_ENDPOINT, ReadOnlyMcpServer};
 
+pub fn catalog_size() -> (usize, usize) {
+    (catalog::tools().len(), resources::list().len())
+}
+
 #[cfg(test)]
 mod tests;

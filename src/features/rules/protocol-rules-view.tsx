@@ -7,7 +7,6 @@ import type {
   ProtocolDocumentRuleDefinition,
   ProtocolRuleCapabilityCatalog,
   ProtocolRuleStage,
-  WorkspaceSummaryViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
@@ -23,7 +22,6 @@ import {
   newProtocolRuleDraft,
   protocolRulePackage,
   saveResponseMatches,
-  protocolRuleListeners,
   type ProtocolRuleKind,
   type ProtocolRuleDraft,
   validateCapabilityCatalog,
@@ -31,37 +29,52 @@ import {
   toggleResponseMatches,
 } from "./protocol-rule-model";
 import { ProtocolRulesList } from "./protocol-rules-list";
+import { RulesWorkspaceShell } from "./rules-workspace-shell";
+import {
+  type ProtocolRuleSource,
+  useProtocolRuleSource,
+} from "./use-protocol-rule-source";
 
-export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
-  const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>("protocol-rule-workspaces", () => callCommand(commands.workspaceList()));
-  const workspaceId = workspaces.data?.find((workspace) => workspace.selected)?.id;
-  const workspace = useIpcQuery<ProxyWorkspace>(
-    `protocol-rule-workspace:${workspaceId ?? "none"}`,
-    () => callCommand(commands.workspaceGet(workspaceId!)),
-    undefined,
-    { enabled: Boolean(workspaceId) },
-  );
-  const rules = useIpcQuery<ProtocolDocumentRuleDefinition[]>(`protocol-rule-list:${workspaceId ?? "none"}`, () => callCommand(commands.protocolRuleList()), undefined, { enabled: Boolean(workspaceId) });
-  const listeners = useMemo(() => protocolRuleListeners(
-    Array.isArray(workspace.data?.listeners) ? workspace.data.listeners : [],
-    kind,
-  ), [kind, workspace.data]);
-  const ruleListValid = rules.data === undefined || isProtocolRuleList(rules.data);
-  const listenerIds = useMemo(
-    () => new Set(listeners.map((listener) => listener.id)),
-    [listeners],
-  );
-  const safeRules = useMemo(
-    () => rules.data !== undefined && ruleListValid
-      ? rules.data.filter((rule) => listenerIds.has(rule.listener_id))
-      : [],
-    [listenerIds, ruleListValid, rules.data],
-  );
-  const rulePayloadError = !ruleListValid
-    ? "报文规则列表包含无效数据，已拒绝显示。"
-    : undefined;
-  const sourceLoading = workspaces.isLoading || workspace.isLoading || rules.isLoading;
-  const combinedListError = workspaces.error ?? workspace.error ?? rules.error ?? rulePayloadError;
+type ProtocolRulesViewProps = {
+  kind: ProtocolRuleKind;
+  selectedRuleId?: string;
+  createOnMount?: boolean;
+  onCreateHandled?: () => void;
+  onChanged?: (ruleId?: string) => void;
+  onPendingChange?: (pending: boolean) => void;
+};
+
+export function ProtocolRulesView({
+  kind,
+  ...props
+}: ProtocolRulesViewProps) {
+  const source = useProtocolRuleSource(kind);
+  return <ProtocolRulesController kind={kind} source={source} {...props} />;
+}
+
+export function ProtocolRuleEditorView({
+  source,
+  ...props
+}: Omit<ProtocolRulesViewProps, "kind"> & { source: ProtocolRuleSource }) {
+  return <ProtocolRulesController kind="http" source={source} editorOnly {...props} />;
+}
+
+function ProtocolRulesController({
+  kind,
+  source,
+  editorOnly = false,
+  selectedRuleId,
+  createOnMount = false,
+  onCreateHandled,
+  onChanged,
+  onPendingChange,
+}: ProtocolRulesViewProps & {
+  source: ProtocolRuleSource;
+  editorOnly?: boolean;
+}) {
+  const { workspaceId, listeners, rules: safeRules } = source;
+  const sourceLoading = source.isLoading;
+  const combinedListError = source.error;
   const sourceBlocked = sourceLoading || Boolean(combinedListError);
   const [selectedId, setSelectedId] = useState<string>();
   const [creating, setCreating] = useState(false);
@@ -74,6 +87,7 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
   const [valueStates, setValueStates] = useState<Record<string, { pending: boolean; invalid: boolean }>>({});
   const editorHeadingRef = useRef<HTMLDivElement>(null);
   const mutationLock = useRef(false);
+  const createHandled = useRef(false);
   const editorGeneration = useRef(0);
   const editorContextCurrent = Boolean(workspaceId && editorWorkspaceId === workspaceId);
   const activeListenerId = editorContextCurrent ? listenerId : undefined;
@@ -84,21 +98,8 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
     undefined,
     { enabled: Boolean(activeListenerId) },
   );
-  const refreshWorkspaces = workspaces.refresh;
-  const refreshWorkspace = workspace.refresh;
-  const refreshRules = rules.refresh;
   const refreshCapabilities = capabilities.refresh;
-  const refreshSocketContext = useCallback(async () => {
-    // 外部窗口可能同时修改 Workspace、Listener 或规则。保留本地草稿供用户处理
-    // revision 冲突，但刷新其全部事实来源，使不兼容绑定立即进入 fail-closed 状态。
-    await Promise.all([
-      refreshWorkspaces(),
-      refreshWorkspace(),
-      refreshRules(),
-      refreshCapabilities(),
-    ]);
-  }, [refreshCapabilities, refreshRules, refreshWorkspace, refreshWorkspaces]);
-  useAppEventRefresh(["workspace_changed", "snapshot_required"], refreshSocketContext);
+  useAppEventRefresh(["workspace_changed", "snapshot_required"], refreshCapabilities);
 
   const receivedCatalogValidation = capabilities.data !== undefined
     ? validateCapabilityCatalog(capabilities.data)
@@ -118,6 +119,13 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
       : undefined
   );
   const valueParsing = Object.values(valueStates).some((state) => state.pending);
+  useEffect(() => {
+    onPendingChange?.(pending || valueParsing || sourceBlocked);
+  }, [onPendingChange, pending, sourceBlocked, valueParsing]);
+  useEffect(
+    () => () => onPendingChange?.(false),
+    [onPendingChange],
+  );
   const mutationContext = useMemo(() => ({
     workspaceId,
     editorWorkspaceId,
@@ -150,6 +158,11 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
     return () => window.clearTimeout(task);
   }, [creating, draft, usableCatalog]);
 
+  function resetDerivedState() {
+    setFieldErrors({});
+    setValueStates({});
+  }
+
   function chooseRule(rule: ProtocolDocumentRuleDefinition) {
     if (sourceBlocked || valueParsing) return;
     editorGeneration.current += 1;
@@ -162,7 +175,7 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
     resetDerivedState();
   }
 
-  function newRule() {
+  const newRule = useCallback(() => {
     if (sourceBlocked || valueParsing) return;
     const listener = listeners[0];
     if (!listener) return;
@@ -176,7 +189,35 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
     setDraft(undefined);
     resetDerivedState();
     requestAnimationFrame(() => editorHeadingRef.current?.focus());
-  }
+  }, [listeners, sourceBlocked, valueParsing, workspaceId]);
+
+  useEffect(() => {
+    if (!createOnMount) {
+      createHandled.current = false;
+      return;
+    }
+    if (createHandled.current || sourceBlocked || listeners.length === 0) return;
+    createHandled.current = true;
+    newRule();
+    onCreateHandled?.();
+  }, [createOnMount, listeners.length, newRule, onCreateHandled, sourceBlocked]);
+
+  useEffect(() => {
+    if (!selectedRuleId || sourceBlocked || selectedId === selectedRuleId) return;
+    const selected = safeRules.find((rule) => rule.rule_id === selectedRuleId);
+    if (!selected) return;
+    editorGeneration.current += 1;
+    const task = window.setTimeout(() => {
+      setCreating(false);
+      setEditorWorkspaceId(workspaceId);
+      setSelectedId(selected.rule_id);
+      setListenerId(selected.listener_id);
+      setStage(selected.stage);
+      setDraft(draftFromRule(selected));
+      resetDerivedState();
+    }, 0);
+    return () => window.clearTimeout(task);
+  }, [safeRules, selectedId, selectedRuleId, sourceBlocked, workspaceId]);
 
   function changeListener(nextId: string) {
     if (sourceBlocked || valueParsing) return;
@@ -223,7 +264,8 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
       setListenerId(saved.listener_id);
       setStage(saved.stage);
       setDraft(draftFromRule(saved));
-      await rules.refresh();
+      await source.refresh();
+      onChanged?.(saved.rule_id);
       toast("报文规则已保存。", { variant: "success" });
     } catch (reason) {
       const appError = appErrorViewModel(reason);
@@ -247,7 +289,7 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
       if (!mutationRequestCurrent(request, editorGeneration.current, mutationContextRef.current)) return;
       if (!toggleResponseMatches(saved, rule, enabled)) throw new Error("报文规则启停响应无效。");
       if (selectedId === saved.rule_id) setDraft(draftFromRule(saved));
-      await rules.refresh();
+      await source.refresh();
     } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
@@ -268,7 +310,8 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
       setSelectedId(undefined);
       setListenerId(undefined);
       setDraft(undefined);
-      await rules.refresh();
+      await source.refresh();
+      onChanged?.();
       editorHeadingRef.current?.focus();
     } catch (reason) {
       setFieldErrors(appErrorViewModel(reason)?.field_errors ?? { general: [errorMessage(reason)] });
@@ -288,7 +331,7 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
       const selected = latest.find((rule) => rule.rule_id === selectedId);
       if (!selected) throw new Error("missing rule");
       chooseRule(selected);
-      await rules.refresh();
+      await source.refresh();
     } catch (reason) {
       setFieldErrors({ general: [errorMessage(reason)] });
     } finally {
@@ -297,26 +340,53 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
     }
   }
 
-  function resetDerivedState() {
-    setFieldErrors({});
-    setValueStates({});
-  }
-
   const effectiveDraft = !sourceBlocked && editorContextCurrent ? preparedDraft : undefined;
   const editingListener = listeners.find((listener) => listener.id === effectiveDraft?.listener_id) ?? selectedListener;
   const draftValidation = effectiveDraft && usableCatalog
     ? validateProtocolRuleDraft(effectiveDraft, usableCatalog)
     : undefined;
   const editorError = capabilities.error ?? receivedCatalogValidation ?? bindingError;
+  const editor = (
+    <div aria-label="报文规则编辑区" ref={editorHeadingRef} role="region" tabIndex={-1}>
+      <ProtocolRuleEditor
+        blocked={sourceBlocked}
+        catalog={editorError ? undefined : usableCatalog}
+        creating={creating}
+        draft={effectiveDraft}
+        error={editorError}
+        fieldErrors={fieldErrors}
+        listener={editingListener}
+        listeners={listeners}
+        loading={Boolean(listenerId) && capabilities.isLoading}
+        onChange={(next) => { editorGeneration.current += 1; setDraft(next); setFieldErrors({}); }}
+        onDelete={() => void remove()}
+        onStageChange={changeStage}
+        onListenerChange={changeListener}
+        onReload={() => void capabilities.refresh()}
+        onReloadRule={() => void reloadSelectedRule()}
+        onResetInvalidValues={() => setValueStates({})}
+        onSave={() => void save()}
+        pending={pending}
+        validationError={draftValidation}
+        valueStates={valueStates}
+        onValueStateChange={(key, state) => setValueStates((current) => {
+          const next = { ...current };
+          if (state) next[key] = state; else delete next[key];
+          return next;
+        })}
+      />
+    </div>
+  );
+  if (editorOnly) return editor;
   return (
-    <div className="grid h-full grid-cols-[minmax(520px,1fr)_620px] max-[1280px]:h-auto max-[1280px]:grid-cols-1">
+    <RulesWorkspaceShell>
       <ProtocolRulesList
         kind={kind}
         error={combinedListError}
         listeners={listeners}
         loading={sourceLoading}
         onNew={newRule}
-        onRetry={() => { void workspaces.refresh(); void workspace.refresh(); void rules.refresh(); }}
+        onRetry={() => void source.refresh()}
         onSelect={chooseRule}
         onToggle={(rule, enabled) => void toggle(rule, enabled)}
         pending={pending || valueParsing || sourceBlocked}
@@ -324,36 +394,8 @@ export function ProtocolRulesView({ kind }: { kind: ProtocolRuleKind }) {
         rules={sourceBlocked ? [] : safeRules}
         selectedId={editorContextCurrent ? selectedId : undefined}
       />
-      <div aria-label="报文规则编辑区" ref={editorHeadingRef} role="region" tabIndex={-1}>
-        <ProtocolRuleEditor
-          blocked={sourceBlocked}
-          catalog={editorError ? undefined : usableCatalog}
-          creating={creating}
-          draft={effectiveDraft}
-          error={editorError}
-          fieldErrors={fieldErrors}
-          listener={editingListener}
-          listeners={listeners}
-          loading={Boolean(listenerId) && capabilities.isLoading}
-          onChange={(next) => { editorGeneration.current += 1; setDraft(next); setFieldErrors({}); }}
-          onDelete={() => void remove()}
-          onStageChange={changeStage}
-          onListenerChange={changeListener}
-          onReload={() => void capabilities.refresh()}
-          onReloadRule={() => void reloadSelectedRule()}
-          onResetInvalidValues={() => setValueStates({})}
-          onSave={() => void save()}
-          pending={pending}
-          validationError={draftValidation}
-          valueStates={valueStates}
-          onValueStateChange={(key, state) => setValueStates((current) => {
-            const next = { ...current };
-            if (state) next[key] = state; else delete next[key];
-            return next;
-          })}
-        />
-      </div>
-    </div>
+      {editor}
+    </RulesWorkspaceShell>
   );
 }
 

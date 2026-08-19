@@ -90,7 +90,7 @@ impl ServerHandler for ReadOnlyMcpHandler {
             env!("CARGO_PKG_VERSION"),
         ))
         .with_instructions(
-            "Loopback-only, unauthenticated, read-only diagnostics. Any local process can read exposed data. No tool mutates configuration, runtime, files, captures, rules or protocol packages.",
+            "Loopback-only, unauthenticated, read-only diagnostics. Any local process can read exposed data. Use tools and resources to separate observed evidence from hypotheses, explain certificate and protocol concepts for beginners, and propose App-side changes with alternatives, risks, rollback and verification. No tool mutates the App, configuration, runtime, files, captures, rules or protocol packages.",
         )
     }
 

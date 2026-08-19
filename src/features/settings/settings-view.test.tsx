@@ -8,6 +8,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  McpInfoViewModel,
   SettingsDraft,
   SettingsViewModel,
 } from "@/generated/rust-types";
@@ -19,6 +20,7 @@ const commandMocks = vi.hoisted(() => ({
   settingsSave: vi.fn(),
   settingsValidate: vi.fn(),
   settingsGet: vi.fn(),
+  mcpInfo: vi.fn(),
   settingsSetData: vi.fn(),
 }));
 
@@ -72,15 +74,26 @@ const settings: SettingsViewModel = {
   payload_policy_text: "Payload 仅保存在内存中。",
 };
 
+const mcpInfo: McpInfoViewModel = {
+  available: true,
+  endpoint: "http://127.0.0.1:17653/mcp",
+  protocol_version: "2026-07-28",
+  transport: "Streamable HTTP",
+  access_scope: "仅本机回环地址",
+  authentication: "无认证",
+  tool_count: 33,
+  resource_count: 11,
+};
+
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
-  useIpcQuery: () => {
-    const [data, setData] = useState(settings);
+  useIpcQuery: (key: string) => {
+    const [data, setData] = useState(key === "mcp-info" ? mcpInfo : settings);
     return {
       data,
       error: undefined,
       isLoading: false,
       refresh: vi.fn(),
-      setData: (next: SettingsViewModel) => {
+      setData: (next: SettingsViewModel | McpInfoViewModel) => {
         commandMocks.settingsSetData(next);
         setData(next);
       },
@@ -208,15 +221,29 @@ describe("production SettingsView overlay", () => {
     expect(screen.getByText(/代理入口的监听地址、端口、上游和 TLS/)).toBeVisible();
   });
 
-  it("keeps only the capacity and application tabs without the summary sidebar", () => {
+  it("keeps the compact settings tabs without the summary sidebar", () => {
     render(<SettingsView />);
 
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "超时与容量",
       "应用",
+      "AI 助手（MCP）",
     ]);
     expect(screen.queryByText("数据与导出")).not.toBeInTheDocument();
     expect(screen.queryByText("配置摘要与校验")).not.toBeInTheDocument();
+  });
+
+  it("shows the MCP address, client configuration and App-side guidance", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("tab", { name: "AI 助手（MCP）" }));
+
+    expect(screen.getByText("http://127.0.0.1:17653/mcp")).toBeVisible();
+    expect(screen.getByText("33 个只读工具 · 11 个参考资源")).toBeVisible();
+    expect(screen.getByText(/App 端的修改建议/)).toBeVisible();
+    expect(screen.getByText(/Root CA、服务端证书、客户端证书/)).toBeVisible();
+    expect(screen.getByText(/"type": "http"/)).toBeVisible();
   });
 
   it("does not write when Rust validation rejects the current draft", async () => {

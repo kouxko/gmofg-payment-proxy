@@ -1,13 +1,20 @@
 import { Alert, Button, Chip, Switch, Table } from "@heroui/react";
 import { FileArrowRightOut, FileArrowUp, Plus } from "@gravity-ui/icons";
-import type { RuleSummaryViewModel } from "@/generated/rust-types";
+import type {
+  ProtocolDocumentRuleDefinition,
+  RuleSummaryViewModel,
+} from "@/generated/rust-types";
 import { formatTimestamp } from "@/lib/format";
+import { protocolRuleStageLabel } from "./protocol-rule-model";
 
 type RulesListPanelProps = {
   rules?: RuleSummaryViewModel[];
+  bodyRules?: ProtocolDocumentRuleDefinition[];
+  bodyListenerNames?: Map<string, string>;
   error?: string;
   isLoading: boolean;
   selectedId?: string;
+  selectedKind?: "standard" | "body";
   writePending: boolean;
   editorBlocked: boolean;
   pendingAction?: string;
@@ -16,14 +23,22 @@ type RulesListPanelProps = {
   onExport: () => void;
   onRefresh: () => void;
   onSelect: (ruleId: string) => void;
+  onSelectBody?: (ruleId: string) => void;
   onToggle: (rule: RuleSummaryViewModel, enabled: boolean) => void;
+  onToggleBody?: (
+    rule: ProtocolDocumentRuleDefinition,
+    enabled: boolean,
+  ) => void;
 };
 
 export function RulesListPanel({
   rules,
+  bodyRules = [],
+  bodyListenerNames = new Map(),
   error,
   isLoading,
   selectedId,
+  selectedKind = "standard",
   writePending,
   editorBlocked,
   pendingAction,
@@ -32,7 +47,9 @@ export function RulesListPanel({
   onExport,
   onRefresh,
   onSelect,
+  onSelectBody,
   onToggle,
+  onToggleBody,
 }: RulesListPanelProps) {
   return (
     <div className="min-w-0 space-y-5 overflow-auto p-5">
@@ -83,18 +100,22 @@ export function RulesListPanel({
             aria-label="拦截规则"
             className="min-w-[1080px]"
             selectionMode="single"
-            selectedKeys={selectedId ? [selectedId] : []}
+            selectedKeys={selectedId ? [`${selectedKind}:${selectedId}`] : []}
             onSelectionChange={(keys) => {
               if (keys === "all") return;
               const first = Array.from(keys)[0];
-              if (first != null) onSelect(String(first));
+              if (first == null) return;
+              const [kind, ...idParts] = String(first).split(":");
+              const ruleId = idParts.join(":");
+              if (kind === "body") onSelectBody?.(ruleId);
+              else onSelect(ruleId);
             }}
           >
             <Table.Header>
               <Table.Column>启用</Table.Column>
               <Table.Column>优先级</Table.Column>
               <Table.Column isRowHeader>规则名称</Table.Column>
-              <Table.Column>通道</Table.Column>
+              <Table.Column>作用范围</Table.Column>
               <Table.Column>阶段</Table.Column>
               <Table.Column>匹配条件（摘要）</Table.Column>
               <Table.Column>执行动作（摘要）</Table.Column>
@@ -113,7 +134,10 @@ export function RulesListPanel({
               )}
             >
               {(rules ?? []).map((rule) => (
-                <Table.Row key={rule.rule_id} id={rule.rule_id}>
+                <Table.Row
+                  key={`standard:${rule.rule_id}`}
+                  id={`standard:${rule.rule_id}`}
+                >
                   <Table.Cell>
                     <Switch
                       aria-label={`${rule.enabled ? "停用" : "启用"}规则 ${rule.name}`}
@@ -145,6 +169,40 @@ export function RulesListPanel({
                   <Table.Cell>{formatTimestamp(rule.last_hit_at)}</Table.Cell>
                 </Table.Row>
               ))}
+              {bodyRules.map((rule) => (
+                <Table.Row
+                  key={`body:${rule.rule_id}`}
+                  id={`body:${rule.rule_id}`}
+                >
+                  <Table.Cell>
+                    <Switch
+                      aria-label={`${rule.enabled ? "停用" : "启用"} Body 报文规则 ${rule.name}`}
+                      isSelected={rule.enabled}
+                      isDisabled={writePending || editorBlocked}
+                      onChange={(enabled) => onToggleBody?.(rule, enabled)}
+                    >
+                      <Switch.Content>
+                        <Switch.Control>
+                          <Switch.Thumb />
+                        </Switch.Control>
+                      </Switch.Content>
+                    </Switch>
+                  </Table.Cell>
+                  <Table.Cell>{rule.priority}</Table.Cell>
+                  <Table.Cell className="font-medium">{rule.name}</Table.Cell>
+                  <Table.Cell>
+                    <div className="flex items-center gap-2">
+                      <Chip size="sm" color="accent" variant="soft">Body 报文</Chip>
+                      <span>{bodyListenerNames.get(rule.listener_id) ?? "—"}</span>
+                    </div>
+                  </Table.Cell>
+                  <Table.Cell>{protocolRuleStageLabel(rule.stage)}</Table.Cell>
+                  <Table.Cell>{rule.conditions.length} 个条件</Table.Cell>
+                  <Table.Cell>{rule.actions.length} 个动作</Table.Cell>
+                  <Table.Cell>—</Table.Cell>
+                  <Table.Cell>—</Table.Cell>
+                </Table.Row>
+              ))}
             </Table.Body>
           </Table.Content>
         </Table.ScrollContainer>
@@ -154,7 +212,8 @@ export function RulesListPanel({
         <Alert.Content>
           <Alert.Title>执行顺序</Alert.Title>
           <Alert.Description>
-            按优先级升序、同优先级按创建顺序执行；命中终止动作后停止后续规则。
+            先执行 HTTP 基础规则，再执行 Body 报文规则；每类内部按优先级升序、
+            同优先级按创建顺序执行，命中终止动作后停止该类后续规则。
           </Alert.Description>
         </Alert.Content>
       </Alert>

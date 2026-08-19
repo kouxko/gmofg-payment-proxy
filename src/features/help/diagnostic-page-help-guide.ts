@@ -16,7 +16,7 @@ export const diagnosticPageHelpGuides: Record<
     sections: [
       ["区分两条 ADB 通道", "adb forward 只承载桌面控制命令，adb reverse 才承载设备到桌面入口的业务连接。"],
       ["检查设备网络接管", "查看已产生的 Companion、VPN、TUN、目标应用和透明路由事件；缺失阶段需要结合设备状态继续确认。"],
-      ["检查代理链路", "查看已产生的桌面 DNS、代理入口、客户端 TLS、上游 TLS 和 HTTP 会话事件。"],
+      ["检查代理链路", "查看已产生的桌面 DNS、代理入口、客户端 TLS、上游 TLS 和 HTTP 交换事件。"],
       ["检查停止与清理", "查看已有的停止、回退和映射清理事件；不要把缺少成功日志视为已完成。"],
       ["筛选与保密边界", "可按设备、入口、方案或摘要筛选；系统会限制长度并脱敏密码、PEM 和长 Base64 内容。"],
     ].map(([title, detail], index) => ({

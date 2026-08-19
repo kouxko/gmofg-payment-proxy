@@ -157,18 +157,6 @@ fn traffic_tools() -> Vec<Tool> {
             ),
         ),
         tool(
-            "session_query",
-            "HTTP sessions",
-            "Read retained HTTP session summaries.",
-            session_schema(),
-        ),
-        tool(
-            "session_get",
-            "HTTP session detail",
-            "Read one complete HTTP session.",
-            required_string("session_id", "Session UUID."),
-        ),
-        tool(
             "socket_capture_query",
             "Socket captures",
             "Read a bounded page of Socket captures.",
@@ -366,21 +354,6 @@ fn http_capture_schema() -> Value {
         ),
     ]));
     object_schema(Value::Object(properties), &[])
-}
-
-fn session_schema() -> Value {
-    object_schema(
-        json!({
-            "keyword": {"type": "string"}, "terminal_ip": {"type": "string"},
-            "channel": {"type": "string"}, "result": {"type": "string"},
-            "rule_id": {"type": "string", "format": "uuid"},
-            "started_from": {"type": "string", "format": "date-time"},
-            "started_to": {"type": "string", "format": "date-time"},
-            "sort": {"type": "string", "enum": ["started_at", "terminal_ip", "duration", "request_size", "response_size"]},
-            "direction": {"type": "string", "enum": ["asc", "desc"]}
-        }),
-        &[],
-    )
 }
 
 fn socket_capture_schema() -> Value {

@@ -1,7 +1,7 @@
 use chrono::{TimeZone as _, Utc};
 use intercept_proxy_application::{
     CaptureSort, ChannelId, ListenerId, MessageStage, ProtocolDirection, ProtocolPackageId,
-    ProtocolPackageRef, ProtocolPackageVersion, SessionSort, SocketCaptureKind, SocketCaptureSort,
+    ProtocolPackageRef, ProtocolPackageVersion, SocketCaptureKind, SocketCaptureSort,
     SocketConnectionId, SortDirection, WorkspaceId,
 };
 
@@ -54,29 +54,6 @@ fn http_capture_arguments_preserve_filters_and_explicit_paging() {
 }
 
 #[test]
-fn session_arguments_preserve_time_range_and_sorting() {
-    let started_from = Utc.with_ymd_and_hms(2026, 8, 19, 1, 2, 3).unwrap();
-    let started_to = Utc.with_ymd_and_hms(2026, 8, 19, 2, 3, 4).unwrap();
-    let query = SessionArguments {
-        keyword: Some("sale".into()),
-        terminal_ip: Some("10.0.0.2".into()),
-        channel: Some(ChannelId::new("pos").unwrap()),
-        result: Some("failed".into()),
-        rule_id: Some("00000000-0000-0000-0000-000000000012".parse().unwrap()),
-        started_from: Some(started_from),
-        started_to: Some(started_to),
-        sort: Some(SessionSort::ResponseSize),
-        direction: Some(SortDirection::Asc),
-    }
-    .into_query();
-
-    assert_eq!(query.started_from, Some(started_from));
-    assert_eq!(query.started_to, Some(started_to));
-    assert_eq!(query.sort, SessionSort::ResponseSize);
-    assert_eq!(query.direction, SortDirection::Asc);
-}
-
-#[test]
 fn socket_capture_arguments_preserve_directional_identity_and_paging() {
     let package = ProtocolPackageRef {
         id: ProtocolPackageId::new("iso8583-standard").unwrap(),
@@ -115,14 +92,11 @@ fn socket_capture_arguments_preserve_directional_identity_and_paging() {
 #[test]
 fn empty_query_arguments_apply_stable_defaults() {
     let http = HttpCaptureArguments::default().into_query();
-    let session = SessionArguments::default().into_query();
     let socket = SocketCaptureArguments::default().into_query();
 
     assert_eq!(http.sort, CaptureSort::OccurredAt);
     assert_eq!(http.direction, SortDirection::Desc);
     assert_eq!((http.page.page, http.page.page_size), (1, 100));
-    assert_eq!(session.sort, SessionSort::StartedAt);
-    assert_eq!(session.direction, SortDirection::Desc);
     assert_eq!(socket.sort, SocketCaptureSort::OccurredAt);
     assert_eq!(socket.direction_sort, SortDirection::Desc);
     assert_eq!((socket.page.page, socket.page.page_size), (1, 100));

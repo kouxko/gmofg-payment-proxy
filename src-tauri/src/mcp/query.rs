@@ -3,9 +3,8 @@
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{
     CaptureQuery, CaptureSort, ChannelId, DiagnosticLogQuery, ListenerId, MessageStage,
-    PageRequest, ProtocolDirection, ProtocolPackageRef, RuleId, SessionId, SessionQuery,
-    SessionSort, SocketCaptureKind, SocketCaptureQuery, SocketCaptureSort, SocketConnectionId,
-    SortDirection, WorkspaceId,
+    PageRequest, ProtocolDirection, ProtocolPackageRef, RuleId, SessionId, SocketCaptureKind,
+    SocketCaptureQuery, SocketCaptureSort, SocketConnectionId, SortDirection, WorkspaceId,
 };
 use serde::Deserialize;
 
@@ -59,36 +58,6 @@ impl HttpCaptureArguments {
                 page: self.page.unwrap_or(1),
                 page_size: self.page_size.unwrap_or(100),
             },
-        }
-    }
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-pub struct SessionArguments {
-    pub keyword: Option<String>,
-    pub terminal_ip: Option<String>,
-    pub channel: Option<ChannelId>,
-    pub result: Option<String>,
-    pub rule_id: Option<RuleId>,
-    pub started_from: Option<DateTime<Utc>>,
-    pub started_to: Option<DateTime<Utc>>,
-    pub sort: Option<SessionSort>,
-    pub direction: Option<SortDirection>,
-}
-
-impl SessionArguments {
-    pub fn into_query(self) -> SessionQuery {
-        SessionQuery {
-            keyword: self.keyword,
-            terminal_ip: self.terminal_ip,
-            channel: self.channel,
-            result: self.result,
-            rule_id: self.rule_id,
-            started_from: self.started_from,
-            started_to: self.started_to,
-            sort: self.sort.unwrap_or(SessionSort::StartedAt),
-            direction: self.direction.unwrap_or(SortDirection::Desc),
         }
     }
 }

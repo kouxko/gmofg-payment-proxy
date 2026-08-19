@@ -7,34 +7,19 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FaultTemplateViewModel } from "@/generated/rust-types";
-import { FaultsView } from "./faults-view";
+import { FaultPresetsView } from "./faults-view";
 
 const commandMocks = vi.hoisted(() => ({
   faultTemplateList: vi.fn(),
-  faultActiveList: vi.fn(),
   faultConfigure: vi.fn(),
-  faultStop: vi.fn(),
 }));
 
 const refreshMocks = vi.hoisted(() => ({
   templates: vi.fn(),
-  active: vi.fn(),
-}));
-
-const workspaceNavigationMocks = vi.hoisted(() => ({
-  navigate: vi.fn(),
 }));
 
 vi.mock("@/generated/rust-types", () => ({
   commands: commandMocks,
-}));
-
-vi.mock("@/features/shell/workspace-navigation", () => ({
-  useWorkspaceNavigation: () => ({
-    pathname: "/faults",
-    searchParams: new URLSearchParams(),
-    navigate: workspaceNavigationMocks.navigate,
-  }),
 }));
 
 vi.mock("@/lib/ipc/client", () => ({
@@ -43,14 +28,15 @@ vi.mock("@/lib/ipc/client", () => ({
 }));
 
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
-  useIpcQuery: (key: string) =>
-    key === "fault-template-list"
-      ? { data: templates, refresh: refreshMocks.templates }
-      : { data: [], refresh: refreshMocks.active },
+  useIpcQuery: () => ({
+    data: templates,
+    error: undefined,
+    isLoading: false,
+    refresh: refreshMocks.templates,
+  }),
 }));
 
 vi.mock("@/features/shell/bootstrap-context", () => ({
-  useAppEventRefresh: vi.fn(),
   useBootstrap: () => ({
     bootstrap: {
       channel_catalog: [
@@ -103,7 +89,7 @@ const templates: FaultTemplateViewModel[] = [
   },
 ];
 
-describe("FaultsView", () => {
+describe("HTTP fault presets", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     commandMocks.faultConfigure.mockResolvedValue({
@@ -120,7 +106,7 @@ describe("FaultsView", () => {
   });
 
   it("selects the first template by default and uses the row as the configuration action", () => {
-    render(<FaultsView />);
+    render(<FaultPresetsView />);
 
     expect(
       screen.getByRole("row", { name: /Mock JSON/ }),
@@ -137,7 +123,7 @@ describe("FaultsView", () => {
 
   it("renders schema-driven fields and submits tagged typed defaults", async () => {
     const user = userEvent.setup();
-    render(<FaultsView />);
+    render(<FaultPresetsView />);
 
     expect(
       screen.getByRole("textbox", { name: "HTTP 状态码" }),
@@ -152,7 +138,7 @@ describe("FaultsView", () => {
     ).toBeVisible();
     await user.click(screen.getByRole("option", { name: "主接口" }));
 
-    await user.click(screen.getByRole("button", { name: "启用模拟" }));
+    await user.click(screen.getByRole("button", { name: "创建故障规则" }));
 
     expect(commandMocks.faultConfigure).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -168,13 +154,13 @@ describe("FaultsView", () => {
 
   it("submits the explicitly selected secondary channel", async () => {
     const user = userEvent.setup();
-    render(<FaultsView />);
+    render(<FaultPresetsView />);
 
     await user.click(screen.getByLabelText("代理通道"));
     await user.click(
       await screen.findByRole("option", { name: "辅助接口" }),
     );
-    await user.click(screen.getByRole("button", { name: "启用模拟" }));
+    await user.click(screen.getByRole("button", { name: "创建故障规则" }));
 
     expect(commandMocks.faultConfigure).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -184,12 +170,16 @@ describe("FaultsView", () => {
     );
   });
 
-  it("opens the saved rule through client navigation", async () => {
+  it("returns the created ordinary rule identity to the rules workspace", async () => {
     const user = userEvent.setup();
-    render(<FaultsView />);
+    const onRuleCreated = vi.fn();
+    render(<FaultPresetsView onRuleCreated={onRuleCreated} />);
 
-    await user.click(screen.getByRole("button", { name: "保存为规则" }));
+    await user.click(screen.getByRole("button", { name: "创建故障规则" }));
 
-    expect(workspaceNavigationMocks.navigate).toHaveBeenCalledWith("/rules");
+    expect(onRuleCreated).toHaveBeenCalledWith("rule-1");
+    expect(
+      screen.queryByRole("heading", { name: "当前生效的故障预设" }),
+    ).not.toBeInTheDocument();
   });
 });

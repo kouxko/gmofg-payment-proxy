@@ -121,6 +121,16 @@ describe("Socket rules view state and command contracts", () => {
     expect(screen.queryByRole("option", { name: /local.*本机应答/ })).not.toBeInTheDocument();
   });
 
+  it("uses the shared rule workspace columns for protocol rules", () => {
+    render(<SocketRulesView />);
+
+    expect(screen.getByRole("heading", { name: "Socket 报文规则" }).closest("section")?.parentElement)
+      .toHaveClass(
+        "grid-cols-[minmax(600px,1fr)_560px]",
+        "max-[1280px]:grid-cols-1",
+      );
+  });
+
   it("isolates mixed HTTP and Socket rules by their owning entry", () => {
     queryState.rules = [
       { ...rule(), rule_id: "socket-rule", name: "Socket 金额规则" },

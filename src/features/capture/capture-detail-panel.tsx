@@ -108,7 +108,7 @@ export function CaptureDetailPanel({
               <p className="max-w-full truncate text-left text-xs text-[var(--telemetry-muted)]">
                 {selected
                   ? `${selected.method} ${selected.target} · ${selected.terminal_ip}`
-                  : "请求、响应与原始字节仅保留在当前会话"}
+                  : "请求、响应与原始字节仅保留在当前 HTTP 交换"}
               </p>
               <Modal.CloseTrigger
                 aria-label="关闭详情并释放报文"
@@ -232,7 +232,7 @@ export function CaptureDetailPanel({
                 转到断点
               </Button>
               <Button variant="outline" fullWidth onPress={onCreateRule}>
-                基于此会话新建规则
+                基于此请求新建规则
               </Button>
             </>
           )}
@@ -278,7 +278,7 @@ export function CaptureDetailPanel({
             </p>
           ) : !detail.data?.response ? (
             <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">
-              当前会话没有响应报文
+              当前请求没有响应报文
             </p>
           ) : (
             <>

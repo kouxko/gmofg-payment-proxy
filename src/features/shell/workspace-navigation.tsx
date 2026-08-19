@@ -25,10 +25,8 @@ export type WorkspacePath =
   | "/diagnostics"
   | "/console"
   | "/capture"
-  | "/sessions"
   | "/breakpoints"
   | "/rules"
-  | "/faults"
   | "/certificates"
   | "/settings";
 
@@ -50,10 +48,8 @@ const workspacePaths = new Set<WorkspacePath>([
   "/diagnostics",
   "/console",
   "/capture",
-  "/sessions",
   "/breakpoints",
   "/rules",
-  "/faults",
   "/certificates",
   "/settings",
 ]);
