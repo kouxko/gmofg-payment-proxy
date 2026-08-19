@@ -233,9 +233,9 @@ function ActionRow(props: SectionProps & { action: DocumentAction; index: number
     props.onChange({ ...props.draft, actions });
   };
   const remove = () => { props.onResetInvalidValues(); props.onChange({ ...props.draft, actions: props.draft.actions.filter((_, index) => index !== props.index) }); };
-  return <div className="grid gap-3 rounded-lg border border-[var(--telemetry-line)] p-3 sm:grid-cols-[1fr_auto]">
-    <div><p className="mb-2 text-xs font-medium text-[var(--telemetry-muted)]">第 {props.index + 1} 步</p>{props.action.type === "set_field" ? <SetFieldAction {...props} action={props.action} /> : props.action.type === "clear_field" ? <ClearFieldAction {...props} action={props.action} /> : <div><p className="text-sm font-medium">{props.action.type === "record_match" ? "记录命中" : "清空全部字段"}</p><p className="mt-1 text-xs text-[var(--telemetry-muted)]">{props.action.type === "record_match" ? "保留报文内容，只在抓包记录中标记本规则已命中。" : "移除当前报文中的全部字段值，后续步骤可重新构造应答。"}</p></div>}</div>
-    <div className="flex gap-1">
+  return <div className="grid gap-3 rounded-lg border border-[var(--telemetry-line)] p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+    <div className="min-w-0"><p className="mb-2 text-xs font-medium text-[var(--telemetry-muted)]">第 {props.index + 1} 步</p>{props.action.type === "set_field" ? <SetFieldAction {...props} action={props.action} /> : props.action.type === "clear_field" ? <ClearFieldAction {...props} action={props.action} /> : <div><p className="text-sm font-medium">{props.action.type === "record_match" ? "记录命中" : "清空全部字段"}</p><p className="mt-1 text-xs text-[var(--telemetry-muted)]">{props.action.type === "record_match" ? "保留报文内容，只在抓包记录中标记本规则已命中。" : "移除当前报文中的全部字段值，后续步骤可重新构造应答。"}</p></div>}</div>
+    <div className="flex shrink-0 gap-1">
       <Button aria-label={`动作 ${props.index + 1} 上移`} isDisabled={disabled || props.index === 0} size="sm" variant="ghost" onPress={() => move(-1)}>上移</Button>
       <Button aria-label={`动作 ${props.index + 1} 下移`} isDisabled={disabled || props.index === props.draft.actions.length - 1} size="sm" variant="ghost" onPress={() => move(1)}>下移</Button>
       <Button aria-label={`删除动作 ${props.index + 1}`} isDisabled={disabled || props.draft.actions.length === 1} size="sm" variant="danger-soft" onPress={remove}>删除</Button>
@@ -248,7 +248,7 @@ function SetFieldAction(props: SectionProps & { action: Extract<DocumentAction, 
   const field = fields.find((item) => item.name === props.action.field);
   if (!field) return <InlineErrors errors={[`动作 ${props.index + 1} 引用了不可修改字段。`]} />;
   const key = `action-${props.index}`;
-  return <div className="grid gap-3 sm:grid-cols-2">
+  return <div className="grid min-w-0 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
     <FieldSelect disabled={draftControlsDisabled(props)} label="设置字段" field={field} fields={fields} onChange={(next) => { props.onResetInvalidValues(); replaceAction(props, props.index, setActionFor(next)); }} />
     <ProtocolRuleValueEditor disabled={valueEditorDisabled(props, key)} field={field} label="设置值" value={props.action.value} onChange={(value) => replaceAction(props, props.index, { ...props.action, value })} onAsyncStateChange={(state) => props.onValueStateChange(key, state)} />
   </div>;
@@ -262,11 +262,11 @@ function ClearFieldAction(props: SectionProps & { action: Extract<DocumentAction
 }
 
 function FieldSelect({ disabled, field, fields, label, onChange }: { disabled: boolean; field: ProtocolRuleFieldCapability; fields: ProtocolRuleFieldCapability[]; label: string; onChange: (field: ProtocolRuleFieldCapability) => void }) {
-  return <div className="grid gap-1"><Label>{label}</Label><Select aria-label={label} isDisabled={disabled} selectedKey={field.name} onSelectionChange={(key) => { const next = fields.find((item) => item.name === key); if (next) onChange(next); }}>
-    <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>
-      {fields.map((item) => <ListBox.Item id={item.name} key={item.name} textValue={`${item.label} ${item.name} ${item.type}`}><span>{item.label}</span> <code>{item.name}</code> <span>{item.type}</span></ListBox.Item>)}
+  return <div className="grid min-w-0 gap-1"><Label>{label}</Label><Select aria-label={label} isDisabled={disabled} selectedKey={field.name} onSelectionChange={(key) => { const next = fields.find((item) => item.name === key); if (next) onChange(next); }}>
+    <Select.Trigger className="h-10 min-h-10 w-full min-w-0 overflow-hidden"><Select.Value className="min-w-0 flex-1 truncate">{({ selectedText }) => selectedText}</Select.Value><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
+      {fields.map((item) => <ListBox.Item id={item.name} key={item.name} textValue={item.label}><span>{item.label}</span> <code>{item.name}</code> <span>{item.type}</span></ListBox.Item>)}
     </ListBox></Select.Popover>
-  </Select><p className="text-xs text-[var(--telemetry-muted)]"><span>{field.label}</span> · <code>{field.name}</code> · <span>{field.type}</span></p></div>;
+  </Select></div>;
 }
 
 function fieldErrorsFor(fieldErrors: Record<string, string[]>, prefixes: string[]) {
