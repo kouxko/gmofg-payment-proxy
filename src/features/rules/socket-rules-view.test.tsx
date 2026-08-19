@@ -206,18 +206,26 @@ describe("Socket rules view state and command contracts", () => {
     render(<SocketRulesView />);
     await user.click(screen.getByRole("button", { name: "新建报文规则" }));
 
-    await user.click(screen.getByRole("button", { name: "添加条件" }));
+    const addCondition = screen.getByRole("button", { name: "添加条件" });
+    await user.click(addCondition);
     await user.type(screen.getByRole("textbox", { name: "比较值" }), "0200");
-    await user.click(screen.getByRole("button", { name: "添加条件" }));
+    await waitFor(() => expect(addCondition).toBeEnabled());
+    await user.click(addCondition);
     const conditionValues = screen.getAllByRole("textbox", { name: "比较值" });
     await user.clear(conditionValues[1]);
     await user.type(conditionValues[1], "100");
 
-    await user.click(screen.getByRole("button", { name: "添加：清空全部字段" }));
+    const addClearDocument = screen.getByRole("button", { name: "添加：清空全部字段" });
+    await waitFor(() => expect(addClearDocument).toBeEnabled());
+    await user.click(addClearDocument);
     await user.click(screen.getByRole("button", { name: "添加：设置字段" }));
     await user.type(screen.getByRole("textbox", { name: "设置值" }), "0210");
-    await user.click(screen.getByRole("button", { name: "删除动作 1" }));
-    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
+    const deleteFirstAction = screen.getByRole("button", { name: "删除动作 1" });
+    await waitFor(() => expect(deleteFirstAction).toBeEnabled());
+    await user.click(deleteFirstAction);
+    const saveButton = screen.getByRole("button", { name: "保存报文规则" });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
 
     expect(commandMocks.protocolRuleSave).toHaveBeenCalledWith({
       rule_id: null,
@@ -247,7 +255,9 @@ describe("Socket rules view state and command contracts", () => {
     await user.click(screen.getByRole("button", { name: "新建报文规则" }));
     await user.click(screen.getByRole("button", { name: "添加条件" }));
     await user.type(screen.getByRole("textbox", { name: "比较值" }), "0200");
-    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
+    const saveButton = screen.getByRole("button", { name: "保存报文规则" });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
     expect(await screen.findByText("SetField 被后端拒绝")).toBeVisible();
     expect(screen.getByDisplayValue("0200")).toBeVisible();
   });
@@ -262,7 +272,9 @@ describe("Socket rules view state and command contracts", () => {
     const input = screen.getByRole("textbox", { name: "比较值" });
     await user.clear(input);
     await user.type(input, "0210");
-    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
+    const saveButton = screen.getByRole("button", { name: "保存报文规则" });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
     expect(await screen.findByText("规则已被其他窗口更新")).toBeVisible();
     expect(screen.getByDisplayValue("0210")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "重新加载当前规则" }));
@@ -434,7 +446,9 @@ describe("Socket rules view state and command contracts", () => {
     await user.click(screen.getByRole("button", { name: "新建报文规则" }));
     await user.click(screen.getByRole("button", { name: "添加条件" }));
     await user.type(screen.getByRole("textbox", { name: "比较值" }), "0200");
-    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
+    const saveButton = screen.getByRole("button", { name: "保存报文规则" });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
     const staleResponse = savedFromInput(commandMocks.protocolRuleSave.mock.calls[0][0]) as ProtocolDocumentRuleDefinition;
     const changedListener = socketListener("relay");
     if (changedListener.data_plane.kind === "socket" && changedListener.data_plane.settings.processing?.mode === "scripted") {
@@ -452,16 +466,17 @@ describe("Socket rules view state and command contracts", () => {
     expect(queryState.refresh).toHaveBeenCalledTimes(refreshCount);
   });
 
-  it("blocks toggle, reload, and delete while a field parser is pending", async () => {
+  it("blocks only save while a field parser is pending", async () => {
     commandMocks.protocolRuleParseValue.mockReturnValue(new Promise(() => {}));
     queryState.rules = [rule(3)];
     const user = userEvent.setup();
     render(<SocketRulesView />);
     await user.click(screen.getByRole("button", { name: /relay/ }));
     await user.type(screen.getByRole("textbox", { name: "比较值" }), "1");
-    expect(screen.getByRole("switch", { name: "停用报文规则 rule-1" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "重新加载当前规则" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "删除规则" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存报文规则" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "停用报文规则 rule-1" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "重新加载当前规则" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "删除规则" })).toBeEnabled();
   });
 
   it.each(["workspaces", "workspace", "rules"] as const)("hides cached rules and editor actions while %s is loading or failed", async (source) => {

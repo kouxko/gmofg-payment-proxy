@@ -22,7 +22,7 @@ const fields: ProtocolRuleFieldCapability[] = [
 ];
 
 beforeEach(() => {
-  commandMocks.protocolRuleParseValue.mockImplementation(async (type: string, raw: string) => {
+  commandMocks.protocolRuleParseValue.mockReset().mockImplementation(async (type: string, raw: string) => {
     if (type === "string") return { type, value: raw };
     if (type === "int") return { type, value: Number(raw) };
     if (type === "bool") return { type, value: raw === "true" };
@@ -92,11 +92,32 @@ describe("Socket typed value editor Rust parsing", () => {
     render(<ProtocolRuleValueEditor field={fields[0]} label="值" value={{ type: "string", value: "" }} onChange={change} onAsyncStateChange={vi.fn()} />);
     const input = screen.getByRole("textbox", { name: "值" });
     fireEvent.change(input, { target: { value: "first" } });
+    await waitFor(() => expect(commandMocks.protocolRuleParseValue).toHaveBeenCalledTimes(1));
     fireEvent.change(input, { target: { value: "second" } });
+    await waitFor(() => expect(commandMocks.protocolRuleParseValue).toHaveBeenCalledTimes(2));
     await act(async () => { finishSecond({ type: "string", value: "second" }); await Promise.resolve(); });
     expect(change).toHaveBeenLastCalledWith({ type: "string", value: "second" });
     await act(async () => { finishFirst({ type: "string", value: "first" }); await Promise.resolve(); });
     expect(change).toHaveBeenCalledTimes(1);
+  });
+
+  it("coalesces rapid typing without replacing or blurring the input", async () => {
+    const change = vi.fn();
+    render(<ProtocolRuleValueEditor compact field={fields[0]} label="设置值" value={{ type: "string", value: "" }} onChange={change} onAsyncStateChange={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: "设置值" });
+    input.focus();
+    fireEvent.change(input, { target: { value: "0" } });
+    fireEvent.change(input, { target: { value: "02" } });
+    fireEvent.change(input, { target: { value: "0200" } });
+    expect(commandMocks.protocolRuleParseValue).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "设置值" })).toBe(input);
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute("placeholder", "设置值");
+    await waitFor(() => expect(commandMocks.protocolRuleParseValue).toHaveBeenCalledOnce());
+    expect(commandMocks.protocolRuleParseValue).toHaveBeenCalledWith("string", "0200");
+    await waitFor(() => expect(change).toHaveBeenCalledWith({ type: "string", value: "0200" }));
+    expect(screen.getByRole("textbox", { name: "设置值" })).toBe(input);
+    expect(input).toHaveFocus();
   });
 
   it("reports pending then clears state when unmounted", () => {
