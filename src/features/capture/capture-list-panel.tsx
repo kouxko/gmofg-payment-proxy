@@ -53,7 +53,7 @@ export function CaptureListPanel(props: CaptureListPanelProps) {
         <div>
           <h2 className="text-lg font-semibold">HTTP 抓包</h2>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
-            暂停列表滚动不会影响网络转发、规则或会话记录
+            暂停列表滚动不会影响网络转发、规则或抓包记录
           </p>
         </div>
         <div className="ml-auto flex gap-2">

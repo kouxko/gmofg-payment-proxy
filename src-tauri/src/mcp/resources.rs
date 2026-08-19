@@ -6,6 +6,8 @@ pub const AUTHORING_GUIDE_URI: &str = "intercept-proxy://docs/protocol-package-a
 pub const HOST_API_URI: &str = "intercept-proxy://docs/protocol-package-host-api/1.0";
 pub const SOCKET_AUTHORING_URI: &str =
     "intercept-proxy://docs/socket-protocol-package-authoring/1.0";
+pub const CERTIFICATE_CONCEPTS_URI: &str = "intercept-proxy://docs/certificate-concepts/1.0";
+pub const APP_INTEGRATION_GUIDE_URI: &str = "intercept-proxy://docs/app-integration-guide/1.0";
 pub const ISO8583_MANIFEST_URI: &str =
     "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/manifest.toml";
 pub const ISO8583_SCHEMA_URI: &str =
@@ -22,6 +24,8 @@ pub const ISO8583_ARCHIVE_URI: &str =
 const PROTOCOL_BOUNDARIES: &str = include_str!("../../../docs/architecture/protocol-boundaries.md");
 const HOST_API: &str = include_str!("../../../templates/socket-protocol/API.md");
 const SOCKET_AUTHORING: &str = include_str!("../../../templates/socket-protocol/AUTHORING.md");
+const CERTIFICATE_CONCEPTS: &str = include_str!("../../../docs/mcp/certificate-concepts.md");
+const APP_INTEGRATION_GUIDE: &str = include_str!("../../../docs/mcp/app-integration-guide.md");
 const ISO8583_MANIFEST: &str =
     include_str!("../../../templates/socket-protocol/iso8583-standard/manifest.toml");
 const ISO8583_SCHEMA: &str =
@@ -51,6 +55,18 @@ pub fn list() -> Vec<Resource> {
             .with_title("Socket protocol package authoring guide")
             .with_description(
                 "Practical framing, field parsing, reconstruction, display and test guidance.",
+            )
+            .with_mime_type("text/markdown"),
+        Resource::new(CERTIFICATE_CONCEPTS_URI, "certificate-concepts")
+            .with_title("Certificate concepts for proxy troubleshooting")
+            .with_description(
+                "A beginner-friendly guide to Root CA, server/client certificates, trust, private keys and common TLS failures.",
+            )
+            .with_mime_type("text/markdown"),
+        Resource::new(APP_INTEGRATION_GUIDE_URI, "app-integration-guide")
+            .with_title("App integration and troubleshooting guide")
+            .with_description(
+                "Evidence-based App-side changes for proxy routing, Android trust, HTTP and Socket clients, with alternatives and verification steps.",
             )
             .with_mime_type("text/markdown"),
         Resource::new(ISO8583_MANIFEST_URI, "official-iso8583-manifest")
@@ -83,6 +99,8 @@ pub fn text(uri: &str) -> Option<(&'static str, &'static str)> {
         AUTHORING_GUIDE_URI => Some(("text/markdown", PROTOCOL_BOUNDARIES)),
         HOST_API_URI => Some(("text/markdown", HOST_API)),
         SOCKET_AUTHORING_URI => Some(("text/markdown", SOCKET_AUTHORING)),
+        CERTIFICATE_CONCEPTS_URI => Some(("text/markdown", CERTIFICATE_CONCEPTS)),
+        APP_INTEGRATION_GUIDE_URI => Some(("text/markdown", APP_INTEGRATION_GUIDE)),
         ISO8583_MANIFEST_URI => Some(("application/toml", ISO8583_MANIFEST)),
         ISO8583_SCHEMA_URI => Some(("application/toml", ISO8583_SCHEMA)),
         ISO8583_PROTOCOL_SOURCE_URI => Some(("text/x-rhai", ISO8583_PROTOCOL_SOURCE)),

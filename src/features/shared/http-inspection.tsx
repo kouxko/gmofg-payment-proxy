@@ -91,7 +91,7 @@ export function HttpBodyViewer({
       )}
       {(textPreview.truncated || bytesTruncated) && (
         <p className="text-xs text-warning">
-          正文较大，仅渲染安全预览；完整原始数据仍保存在当前会话中。
+          正文较大，仅渲染安全预览；完整原始数据仍保存在当前 HTTP 交换中。
         </p>
       )}
       {editable ? (

@@ -21,7 +21,7 @@ import {
   validateCapabilityCatalog,
   validateProtocolRuleDraft,
   valueText,
-} from "./socket-rule-model";
+} from "./protocol-rule-model";
 
 const commandMocks = vi.hoisted(() => ({ protocolRuleParseValue: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));

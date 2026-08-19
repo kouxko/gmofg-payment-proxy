@@ -32,10 +32,10 @@ export function ListenerListPanel({
       </Alert.Description>
     </Alert.Content></Alert>
     <Alert status="warning"><Alert.Indicator /><Alert.Content>
-      <Alert.Title>故障模拟与规则作用于监听流量</Alert.Title>
-      <Alert.Description>启动监听后，到故障模拟或拦截规则页面配置行为。</Alert.Description>
+      <Alert.Title>HTTP 故障预设与规则作用于监听流量</Alert.Title>
+      <Alert.Description>启动监听后，到规则页配置拦截行为；故障预设仅适用于 HTTP。</Alert.Description>
       <div className="mt-3 flex gap-2">
-        <Button size="sm" variant="primary" onPress={() => onNavigate("/faults")}>去添加故障模拟</Button>
+        <Button size="sm" variant="primary" onPress={() => onNavigate("/rules?create=fault")}>从故障预设创建规则</Button>
         <Button size="sm" variant="outline" onPress={() => onNavigate("/rules")}>去配置拦截规则</Button>
       </div>
     </Alert.Content></Alert>

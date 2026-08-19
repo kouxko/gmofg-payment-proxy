@@ -54,9 +54,9 @@ describe("统一代理监听编辑器", () => {
     expect(await screen.findByText(/system\/secret-ref-1/)).toBeVisible();
   });
 
-  it("说明监听流量如何进入故障模拟", async () => {
+  it("说明 HTTP 监听流量如何进入故障预设", async () => {
     const user = userEvent.setup(); render(<ListenersView />);
-    await user.click(await screen.findByRole("button", { name: "去添加故障模拟" }));
-    expect(navigationMocks.navigate).toHaveBeenCalledWith("/faults");
+    await user.click(await screen.findByRole("button", { name: "从故障预设创建规则" }));
+    expect(navigationMocks.navigate).toHaveBeenCalledWith("/rules?create=fault");
 });
 });

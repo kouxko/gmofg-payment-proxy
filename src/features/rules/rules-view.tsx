@@ -8,9 +8,10 @@
  * Rust 提供的草稿/解析/保存命令并显示字段错误。
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, toast } from "@heroui/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "@heroui/react";
 import type {
+  ProtocolDocumentRuleDefinition,
   RuleDraft,
   RuleSummaryViewModel,
   RuleViewModel,
@@ -31,7 +32,11 @@ import {
 import type { RuleDraftChange } from "./rule-editor";
 import { RuleEditorPanel } from "./rule-editor-panel";
 import { RulesListPanel } from "./rules-list-panel";
-import { ProtocolRulesView } from "./protocol-rules-view";
+import { ProtocolRuleEditorView, ProtocolRulesView } from "./protocol-rules-view";
+import { RulesWorkspaceShell } from "./rules-workspace-shell";
+import { RuleCreationDialogs } from "./rule-creation-dialogs";
+import { useProtocolRuleSource } from "./use-protocol-rule-source";
+import { toggleResponseMatches } from "./protocol-rule-model";
 
 export function RulesView() {
   const [mode, setMode] = useState<ProtocolType>("http");
@@ -41,52 +46,49 @@ export function RulesView() {
       selectedKey={mode}
       onSelectionChange={setMode}
     >
-      {mode === "http" ? <HttpRulesView /> : <ProtocolRulesView kind="socket" />}
+      <div className="h-full min-h-0 p-3">
+        {mode === "http" ? <HttpRulesView /> : <ProtocolRulesView kind="socket" />}
+      </div>
     </ProtocolWorkspaceTabs>
   );
 }
 
 function HttpRulesView() {
-  const [ruleKind, setRuleKind] = useState<"standard" | "body">("standard");
+  const { navigate, searchParams } = useWorkspaceNavigation();
+  const bodyEditor = searchParams.get("category") === "body";
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-3">
-      <div
-        aria-label="HTTP 规则类型"
-        className="flex w-fit rounded-lg border border-[var(--telemetry-line)] bg-[var(--telemetry-soft)] p-1"
-        role="group"
-      >
-        {([
-          ["standard", "常规规则"],
-          ["body", "Body 报文规则"],
-        ] as const).map(([key, label]) => (
-          <Button
-            aria-pressed={ruleKind === key}
-            className="min-w-28"
-            key={key}
-            onClick={() => setRuleKind(key)}
-            size="sm"
-            variant={ruleKind === key ? "primary" : "ghost"}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-      <div className="min-h-0 flex-1">
-        {ruleKind === "standard"
-          ? <HttpStandardRulesView />
-          : <ProtocolRulesView kind="http" />}
-      </div>
-    </div>
+    <HttpStandardRulesView
+      bodyEditor={bodyEditor}
+      bodyRuleId={searchParams.get("ruleId") ?? undefined}
+      createBodyOnMount={bodyEditor && searchParams.get("create") === "rule"}
+      onBodyCreateHandled={() => navigate("/rules?category=body")}
+    />
   );
 }
 
-function HttpStandardRulesView() {
+function HttpStandardRulesView({
+  bodyEditor,
+  bodyRuleId,
+  createBodyOnMount,
+  onBodyCreateHandled,
+}: {
+  bodyEditor: boolean;
+  bodyRuleId?: string;
+  createBodyOnMount: boolean;
+  onBodyCreateHandled: () => void;
+}) {
   const { bootstrap } = useBootstrap();
   const channelCatalog = bootstrap?.channel_catalog ?? [];
   const { navigate, searchParams } = useWorkspaceNavigation();
   const sourceSessionId = searchParams.get("sessionId");
+  const requestedCreate = searchParams.get("create");
   const rules = useIpcQuery<RuleSummaryViewModel[]>("rule-list", () =>
     callCommand(commands.ruleList()),
+  );
+  const bodySource = useProtocolRuleSource("http");
+  const bodyListenerNames = useMemo(
+    () => new Map(bodySource.listeners.map((listener) => [listener.id, listener.name])),
+    [bodySource.listeners],
   );
   useAppEventRefresh(["rule_hit", "snapshot_required"], rules.refresh);
   const [selectedId, setSelectedId] = useState<string | "new">();
@@ -97,10 +99,24 @@ function HttpStandardRulesView() {
   >();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
+  const [creationChoiceOpen, setCreationChoiceOpen] = useState(false);
+  const [faultPresetOpen, setFaultPresetOpen] = useState(
+    requestedCreate === "fault",
+  );
+  const [bodyEditorPending, setBodyEditorPending] = useState(false);
   const [editorAsyncStates, setEditorAsyncStates] = useState<
     Record<string, { pending: boolean; invalid: boolean }>
   >({});
   const editorPanelRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (requestedCreate !== "fault") return;
+    const task = window.setTimeout(() => {
+      setFaultPresetOpen(true);
+      navigate("/rules");
+    }, 0);
+    return () => window.clearTimeout(task);
+  }, [navigate, requestedCreate]);
 
   function revealEditor() {
     // 窄窗口中列表和编辑器上下排列，选择后滚到编辑区，避免用户误以为没响应。
@@ -120,7 +136,7 @@ function HttpStandardRulesView() {
     undefined,
     { enabled: Boolean(effectiveSelectedId) },
   );
-  const writePending = pendingAction != null || deletePending;
+  const writePending = pendingAction != null || deletePending || bodyEditorPending;
   const editorBlocked = Object.values(editorAsyncStates).some(
     (state) => state.pending || state.invalid,
   );
@@ -160,7 +176,7 @@ function HttpStandardRulesView() {
   }, [effectiveSelectedId, ruleDetail.data]);
 
   useEffect(() => {
-    // 从抓包/会话进入时只携带 sessionId，Rust 负责生成合法的预填草稿。
+    // 从抓包进入时只携带内部 sessionId，Rust 负责生成合法的预填草稿。
     if (!sourceSessionId) return;
     let active = true;
     void callCommand(commands.ruleCreateFromSession(sourceSessionId))
@@ -249,6 +265,27 @@ function HttpStandardRulesView() {
     }
   }
 
+  async function toggleBody(
+    rule: ProtocolDocumentRuleDefinition,
+    enabled: boolean,
+  ) {
+    if (writePending) return;
+    setPendingAction(`toggle:${rule.rule_id}`);
+    try {
+      const saved = await callCommand(
+        commands.protocolRuleToggle(rule.rule_id, rule.revision, enabled),
+      );
+      if (!toggleResponseMatches(saved, rule, enabled)) {
+        throw new Error("Body 报文规则启停响应无效。");
+      }
+      await bodySource.refresh();
+    } catch (reason) {
+      toast(errorMessage(reason), { variant: "danger" });
+    } finally {
+      setPendingAction(undefined);
+    }
+  }
+
   async function copySelected() {
     if (!effectiveSelectedId || writePending || editorBlocked) return;
     setPendingAction("copy");
@@ -290,50 +327,102 @@ function HttpStandardRulesView() {
   }
 
   return (
-    <section className="grid h-full grid-cols-[minmax(600px,1fr)_560px] max-[1280px]:h-auto max-[1280px]:grid-cols-1">
+    <RulesWorkspaceShell>
       <RulesListPanel
         rules={rules.data}
-        error={rules.error}
-        isLoading={rules.isLoading}
-        selectedId={effectiveSelectedId}
+        bodyRules={bodySource.rules}
+        bodyListenerNames={bodyListenerNames}
+        error={rules.error ?? bodySource.error}
+        isLoading={rules.isLoading || bodySource.isLoading}
+        selectedId={bodyEditor ? bodyRuleId : effectiveSelectedId}
+        selectedKind={bodyEditor ? "body" : "standard"}
         writePending={writePending}
         editorBlocked={editorBlocked}
         pendingAction={pendingAction}
-        onNew={() => void newRule()}
+        onNew={() => setCreationChoiceOpen(true)}
         onImport={() => void transferRules("import")}
         onExport={() => void transferRules("export")}
-        onRefresh={() => void rules.refresh()}
+        onRefresh={() => void Promise.all([rules.refresh(), bodySource.refresh()])}
         onSelect={(ruleId) => {
+          navigate("/rules");
           setDraft(undefined);
           setSelectedId(ruleId);
           revealEditor();
         }}
+        onSelectBody={(ruleId) => {
+          navigate(`/rules?category=body&ruleId=${encodeURIComponent(ruleId)}`);
+          revealEditor();
+        }}
         onToggle={(rule, enabled) => void toggle(rule, enabled)}
+        onToggleBody={(rule, enabled) => void toggleBody(rule, enabled)}
       />
-      <RuleEditorPanel
-        panelRef={editorPanelRef}
-        draft={draft}
-        isLoading={ruleDetail.isLoading}
-        loadError={ruleDetail.error}
-        fieldErrors={fieldErrors}
-        channelCatalog={channelCatalog}
-        writePending={writePending}
-        editorBlocked={editorBlocked}
-        pendingAction={pendingAction}
-        selectedId={effectiveSelectedId}
-        deleteDialogOpen={deleteDialogOpen}
-        deletePending={deletePending}
-        onDraftChange={updateDraft}
-        onAsyncStateChange={updateEditorAsyncState}
-        onRetry={() => void ruleDetail.refresh()}
-        onSave={() => void save()}
-        onCopy={() => void copySelected()}
-        onDelete={() => void remove()}
-        onDeleteDialogChange={(open) => {
-          if (!open && deletePending) return;
-          setDeleteDialogOpen(open);
+      {bodyEditor ? (
+        <ProtocolRuleEditorView
+          source={bodySource}
+          selectedRuleId={bodyRuleId}
+          createOnMount={createBodyOnMount}
+          onCreateHandled={onBodyCreateHandled}
+          onPendingChange={setBodyEditorPending}
+          onChanged={(ruleId) => {
+            void bodySource.refresh();
+            navigate(
+              ruleId
+                ? `/rules?category=body&ruleId=${encodeURIComponent(ruleId)}`
+                : "/rules",
+            );
+          }}
+        />
+      ) : (
+        <RuleEditorPanel
+          panelRef={editorPanelRef}
+          draft={draft}
+          isLoading={ruleDetail.isLoading}
+          loadError={ruleDetail.error}
+          fieldErrors={fieldErrors}
+          channelCatalog={channelCatalog}
+          writePending={writePending}
+          editorBlocked={editorBlocked}
+          pendingAction={pendingAction}
+          selectedId={effectiveSelectedId}
+          deleteDialogOpen={deleteDialogOpen}
+          deletePending={deletePending}
+          onDraftChange={updateDraft}
+          onAsyncStateChange={updateEditorAsyncState}
+          onRetry={() => void ruleDetail.refresh()}
+          onSave={() => void save()}
+          onCopy={() => void copySelected()}
+          onDelete={() => void remove()}
+          onDeleteDialogChange={(open) => {
+            if (!open && deletePending) return;
+            setDeleteDialogOpen(open);
+          }}
+        />
+      )}
+      <RuleCreationDialogs
+        choiceOpen={creationChoiceOpen}
+        faultPresetOpen={faultPresetOpen}
+        onChoiceOpenChange={setCreationChoiceOpen}
+        onFaultPresetOpenChange={setFaultPresetOpen}
+        onBlankRule={() => {
+          setCreationChoiceOpen(false);
+          void newRule();
+        }}
+        onBodyRule={() => {
+          setCreationChoiceOpen(false);
+          navigate("/rules?category=body&create=rule");
+        }}
+        onFaultPreset={() => {
+          setCreationChoiceOpen(false);
+          setFaultPresetOpen(true);
+        }}
+        onRuleCreated={(ruleId) => {
+          setFaultPresetOpen(false);
+          setDraft(undefined);
+          setSelectedId(ruleId);
+          void rules.refresh();
+          revealEditor();
         }}
       />
-    </section>
+    </RulesWorkspaceShell>
   );
 }

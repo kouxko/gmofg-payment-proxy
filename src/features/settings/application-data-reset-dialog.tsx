@@ -52,7 +52,7 @@ export function ApplicationDataResetDialog({
             <AlertDialog.Body className="space-y-3">
               <p>
                 将停止所有入口和设备网络接管，并删除全部工作区、监听、规则、设备方案、
-                会话、抓包、导入的 Listener TLS / PKCS12 / CA 材料及全局设置。
+                抓包、导入的入口 TLS / PKCS12 / CA 材料及全局设置。
               </p>
               <p>
                 清除后应用会自动重启并建立干净的默认工作区。本机外观主题会保留；

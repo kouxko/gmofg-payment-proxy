@@ -7,6 +7,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { RulesView } from "./rules-view";
 
+const navigationMocks = vi.hoisted(() => ({ navigate: vi.fn() }));
+
 vi.mock("@/generated/rust-types", () => ({ commands: {} }));
 vi.mock("@/lib/ipc/client", () => ({
   appErrorViewModel: () => undefined,
@@ -23,7 +25,7 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
   useBootstrap: () => ({ bootstrap: { channel_catalog: [] } }),
 }));
 vi.mock("@/features/shell/workspace-navigation", () => ({
-  useWorkspaceNavigation: () => ({ pathname: "/rules", searchParams: new URLSearchParams(), navigate: vi.fn() }),
+  useWorkspaceNavigation: () => ({ pathname: "/rules", searchParams: new URLSearchParams(), navigate: navigationMocks.navigate }),
 }));
 vi.mock("./protocol-rules-view", () => ({
   ProtocolRulesView: ({ kind }: { kind: "http" | "socket" }) => {
@@ -46,6 +48,13 @@ vi.mock("./protocol-rules-view", () => ({
     );
   },
 }));
+vi.mock("@/features/faults/faults-view", () => ({
+  FaultPresetsView: () => (
+    <section aria-label="HTTP 故障预设已挂载">
+      <h2>HTTP 故障预设</h2>
+    </section>
+  ),
+}));
 
 describe("HTTP and Socket controlled rule tabs", () => {
   it("shows protocol tabs without a duplicate page title and keeps HTTP actions isolated", () => {
@@ -62,17 +71,42 @@ describe("HTTP and Socket controlled rule tabs", () => {
     expect(screen.queryByLabelText("socket protocol rules mounted")).not.toBeInTheDocument();
   });
 
-  it("switches locally from HTTP regular rules to HTTP Body message rules", async () => {
+  it("uses the new-rule dialog as the only HTTP rule-type chooser", async () => {
     const user = userEvent.setup();
     render(<RulesView />);
 
-    expect(screen.getByRole("button", { name: "常规规则" })).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Body 报文规则" }));
+    expect(screen.queryByRole("tab", { name: "常规规则" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Body 报文规则" })).not.toBeInTheDocument();
 
-    expect(screen.getByLabelText("http protocol rules mounted")).toBeVisible();
-    expect(screen.getByRole("heading", { level: 2, name: "HTTP Body 报文规则" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "导入规则" })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("socket protocol rules mounted")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "新建规则" }));
+    expect(screen.getByRole("button", { name: /空白规则/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Body 报文规则/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /从故障预设创建/ })).toBeVisible();
+  });
+
+  it("offers blank, Body and fault-preset creation from the regular new-rule action", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(screen.getByRole("button", { name: "新建规则" }));
+    expect(screen.getByRole("button", { name: /空白规则/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Body 报文规则/ })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /从故障预设创建/ }));
+    expect(screen.getByLabelText("HTTP 故障预设已挂载")).toBeVisible();
+
+    expect(screen.queryByRole("tab", { name: "故障预设" })).not.toBeInTheDocument();
+  });
+
+  it("routes Body creation to the Body workspace in create mode", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(screen.getByRole("button", { name: "新建规则" }));
+    await user.click(screen.getByRole("button", { name: /Body 报文规则/ }));
+
+    expect(navigationMocks.navigate).toHaveBeenCalledWith(
+      "/rules?category=body&create=rule",
+    );
   });
 
   it("links the selected tab and panel with the tablist ARIA contract", () => {
@@ -147,7 +181,10 @@ describe("HTTP and Socket controlled rule tabs", () => {
     render(<RulesView />);
 
     expect(screen.getByRole("heading", { level: 2, name: "HTTP 拦截规则" }).closest("section"))
-      .toHaveClass("max-[1280px]:grid-cols-1");
+      .toHaveClass(
+        "grid-cols-[minmax(600px,1fr)_560px]",
+        "max-[1280px]:grid-cols-1",
+      );
     await user.click(screen.getByRole("tab", { name: "Socket" }));
     expect(screen.getByLabelText("socket protocol rules mounted")).toHaveClass("max-[1280px]:grid-cols-1");
   });

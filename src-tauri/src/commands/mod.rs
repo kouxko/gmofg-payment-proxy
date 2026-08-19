@@ -10,6 +10,7 @@ mod capture;
 mod certificates;
 mod diagnostics;
 mod listener;
+mod mcp;
 mod protocol_packages;
 mod protocol_rules;
 mod rules;
@@ -27,6 +28,7 @@ pub use capture::*;
 pub use certificates::*;
 pub use diagnostics::*;
 pub use listener::*;
+pub use mcp::*;
 pub use protocol_packages::*;
 pub use protocol_rules::*;
 pub use rules::*;
@@ -56,6 +58,7 @@ pub fn builder() -> Builder<Wry> {
             app_bootstrap,
             app_subscribe_events,
             app_unsubscribe_events,
+            mcp_info,
             diagnostic_log_query,
             android_adb_get,
             android_adb_select,
@@ -130,9 +133,6 @@ pub fn builder() -> Builder<Wry> {
             socket_capture_query,
             socket_capture_get_detail,
             socket_capture_clear,
-            session_query,
-            session_get,
-            session_clear,
             breakpoint_query,
             breakpoint_get,
             breakpoint_format_json,

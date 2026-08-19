@@ -4,7 +4,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     fmt,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::{Duration, Instant},
 };
 
 use async_trait::async_trait;
@@ -33,14 +33,22 @@ pub trait ApplicationBackupImportTokenGenerator: Send + Sync + fmt::Debug {
     fn generate(&self) -> ApplicationBackupImportToken;
 }
 
-#[derive(Debug, Default)]
-pub struct SystemApplicationBackupImportClock;
+#[derive(Debug)]
+pub struct SystemApplicationBackupImportClock {
+    started_at: Instant,
+}
+
+impl Default for SystemApplicationBackupImportClock {
+    fn default() -> Self {
+        Self {
+            started_at: Instant::now(),
+        }
+    }
+}
 
 impl ApplicationBackupImportClock for SystemApplicationBackupImportClock {
     fn now(&self) -> Duration {
-        SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap_or_default()
+        self.started_at.elapsed()
     }
 }
 
@@ -91,7 +99,7 @@ impl ApplicationBackupImportPreparer {
             DEFAULT_APPLICATION_BACKUP_PENDING_TTL,
             DEFAULT_APPLICATION_BACKUP_PENDING_CAPACITY,
             DEFAULT_APPLICATION_BACKUP_PENDING_BYTES,
-            Arc::new(SystemApplicationBackupImportClock),
+            Arc::new(SystemApplicationBackupImportClock::default()),
             Arc::new(RandomApplicationBackupImportTokenGenerator),
         )
         .expect("default application backup pending limits are valid")

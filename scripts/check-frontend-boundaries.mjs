@@ -72,9 +72,9 @@ const themeStorageFiles = new Set([
 const iconCloseTriggerFiles = new Set([
   "src/features/capture/capture-detail-panel.tsx",
   "src/features/capture/socket-capture-detail.tsx",
-  "src/features/sessions/session-actions.tsx",
   "src/features/listeners/socket-protocol-package-dialog.tsx",
   "src/features/protocol-packages/protocol-package-dialog.tsx",
+  "src/features/rules/rule-creation-dialogs.tsx",
 ]);
 
 const failures = [];
@@ -145,7 +145,6 @@ for (const file of sourceFiles(sourceRoot)) {
 for (const [path, label] of [
   ["src/features/capture/capture-detail-panel.tsx", "关闭详情并释放报文"],
   ["src/features/capture/socket-capture-detail.tsx", "关闭 Socket 抓包详情"],
-  ["src/features/sessions/session-actions.tsx", "关闭会话详情并释放报文"],
 ]) {
   const source = readFileSync(join(root, path), "utf8");
   const contract = new RegExp(
@@ -266,7 +265,9 @@ if (/\.name\.includes\(/.test(faultSource)) {
   );
 }
 if (
-  /useState\(\s*(?:1|100|false)\s*\)/.test(faultSource) ||
+  /const\s*\[\s*(?:nthHit|priority|oneShot|channel)\s*,[^\]]+\]\s*=\s*useState\(\s*(?:1|100|false|["']transaction["'])\s*\)/.test(
+    faultSource,
+  ) ||
   /channel:\s*["']transaction["']/.test(faultSource)
 ) {
   failures.push(
@@ -284,7 +285,6 @@ if (
 
 const productChannelUiContracts = [
   ["capture", "features/capture/capture-view.tsx", ["channel_catalog", "channel_text"]],
-  ["sessions", "features/sessions/sessions-view.tsx", ["channel_catalog", "channel_text"]],
   ["breakpoints", "features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
   ["rules", "features/rules/rules-view.tsx", ["channel_catalog", "channel_text"]],
   ["faults", "features/faults/faults-view.tsx", ["channel_catalog"]],
@@ -309,11 +309,6 @@ const httpInspectionUiContracts = [
   [
     "capture",
     "features/capture/capture-view.tsx",
-    ["http_status", ".headers", "HTTP 状态码"],
-  ],
-  [
-    "sessions",
-    "features/sessions/sessions-view.tsx",
     ["http_status", ".headers", "HTTP 状态码"],
   ],
 ];

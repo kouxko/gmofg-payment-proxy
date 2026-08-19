@@ -14,6 +14,7 @@ export const commands = {
 	 */
 	appSubscribeEvents: (afterEventId: number, onEvent: Channel<UiEventEnvelope>) => typedError<SubscriptionAckViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_subscribe_events", { afterEventId, onEvent })),
 	appUnsubscribeEvents: (subscriptionId: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_unsubscribe_events", { subscriptionId })),
+	mcpInfo: () => __TAURI_INVOKE<McpInfoViewModel>("mcp_info"),
 	diagnosticLogQuery: (query: DiagnosticLogQuery) => typedError<DiagnosticLogPageViewModel, AppErrorViewModel>(__TAURI_INVOKE("diagnostic_log_query", { query })),
 	androidAdbGet: () => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_get")),
 	androidAdbSelect: (serial: string) => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_select", { serial })),
@@ -141,9 +142,6 @@ export const commands = {
 	socketCaptureQuery: (query: SocketCaptureQuery) => typedError<SocketCapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_query", { query })),
 	socketCaptureGetDetail: (captureId: SocketCaptureId) => typedError<SocketCaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_get_detail", { captureId })),
 	socketCaptureClear: (workspaceId: WorkspaceId, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_clear", { workspaceId, confirmed })),
-	sessionQuery: (query: SessionQuery) => typedError<SessionListViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_query", { query })),
-	sessionGet: (sessionId: string) => typedError<SessionDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_get", { sessionId })),
-	sessionClear: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_clear", { confirmed })),
 	breakpointQuery: (runtimeEpoch: string | null) => typedError<BreakpointSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("breakpoint_query", { runtimeEpoch })),
 	breakpointGet: (breakpointId: string, runtimeEpoch: string) => typedError<BreakpointDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_get", { breakpointId, runtimeEpoch })),
 	breakpointFormatJson: (draft: BreakpointDraft) => typedError<BreakpointDraft, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_format_json", { draft })),
@@ -1119,6 +1117,17 @@ export type ListenerUpstreamTlsTestViewModel = {
 	ui_tone: UiTone,
 };
 
+export type McpInfoViewModel = {
+	available: boolean,
+	endpoint: string,
+	protocol_version: string,
+	transport: string,
+	access_scope: string,
+	authentication: string,
+	tool_count: number,
+	resource_count: number,
+};
+
 export type MessageContentKind = "json" | "xml" | "text" | "binary" | "unknown";
 
 /**  可供界面查看/编辑，同时可无损重建网络报文的内容模型。 */
@@ -1573,43 +1582,6 @@ export type SecretReference = {
 	provider: string,
 	key: string,
 };
-
-/**  会话详情；完整请求/响应只在用户打开详情时返回。 */
-export type SessionDetailViewModel = {
-	summary: SessionSummaryViewModel,
-	runtime_epoch: string,
-	connection_id: string,
-	certificate_fingerprint: string,
-	upstream_host: string,
-	app_to_proxy_tls: string,
-	proxy_to_server_tls: string,
-	final_action: string,
-	timings_ms: { [key in string]: number },
-	request: MessageContentViewModel | null,
-	response: MessageContentViewModel | null,
-	rule_trace: string[],
-};
-
-export type SessionListViewModel = {
-	items: SessionSummaryViewModel[],
-	total: number,
-	empty_message: string,
-};
-
-/**  会话页提交给 Rust 的筛选、时间范围和排序条件。 */
-export type SessionQuery = {
-	keyword: string | null,
-	terminal_ip: string | null,
-	channel: ChannelId | null,
-	result: string | null,
-	rule_id: string | null,
-	started_from: string | null,
-	started_to: string | null,
-	sort: SessionSort,
-	direction: SortDirection,
-};
-
-export type SessionSort = "started_at" | "terminal_ip" | "duration" | "request_size" | "response_size";
 
 export type SessionSummaryViewModel = {
 	session_id: string,

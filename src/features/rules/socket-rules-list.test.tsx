@@ -5,7 +5,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ProxyListener, ProtocolDocumentRuleDefinition } from "@/generated/rust-types";
-import { ProtocolRulesList } from "./socket-rules-list";
+import { ProtocolRulesList } from "./protocol-rules-list";
 
 const listener = {
   id: "relay",

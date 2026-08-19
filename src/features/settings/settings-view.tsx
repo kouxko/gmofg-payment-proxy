@@ -39,7 +39,7 @@ export function SettingsView() {
   const [pendingAction, setPendingAction] = useState<"save">();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
-  const [selectedSection, setSelectedSection] = useState<"capacity" | "app">("capacity");
+  const [selectedSection, setSelectedSection] = useState<"capacity" | "app" | "mcp">("capacity");
   const draft = draftState ?? settings.data?.stored;
   const draftDirty = useMemo(
     () => Boolean(draft && settings.data && JSON.stringify(draft) !== JSON.stringify(settings.data.stored)),

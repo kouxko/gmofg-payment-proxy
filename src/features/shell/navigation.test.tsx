@@ -82,10 +82,8 @@ describe("UI-001 fixed navigation order", () => {
       "/diagnostics",
       "/console",
       "/capture",
-      "/sessions",
       "/breakpoints",
       "/rules",
-      "/faults",
       "/certificates",
       "/settings",
     ]);

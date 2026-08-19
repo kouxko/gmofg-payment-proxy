@@ -1,6 +1,7 @@
 //! Read-only MCP backend implemented exclusively through the application facade.
 
 mod dispatch;
+mod guidance;
 
 use std::{fmt::Debug, sync::Arc};
 
@@ -15,6 +16,7 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
 use super::{query, resources};
+use guidance::diagnostic_guidance;
 
 #[derive(Debug, Clone)]
 pub struct ToolFailure {
@@ -60,10 +62,22 @@ impl ToolFailure {
 impl From<AppError> for ToolFailure {
     fn from(error: AppError) -> Self {
         let view_model = AppErrorViewModel::from(error);
+        let code = view_model.code.clone();
+        let message = view_model.message.clone();
+        let details = json!({
+            "code": view_model.code,
+            "message": view_model.message,
+            "field_errors": view_model.field_errors,
+            "retryable": view_model.retryable,
+            "suggested_action": view_model.suggested_action,
+            "entity_id": view_model.entity_id,
+            "runtime_epoch": view_model.runtime_epoch,
+            "diagnostic": view_model.diagnostic,
+        });
         Self {
-            code: view_model.code.clone(),
-            message: view_model.message.clone(),
-            details: serde_json::to_value(view_model).ok(),
+            code,
+            message,
+            details: Some(details),
         }
     }
 }
@@ -97,7 +111,7 @@ impl ApplicationBackend {
                     "consistency": {
                         "strategy": "bounded_generation_validation",
                         "attempt": attempt,
-                        "generation": snapshot_fingerprint(&first),
+                        "generation": snapshot_fingerprint(&first)?,
                         "observed_at": Utc::now(),
                         "status": "validated_no_observed_change"
                     }
@@ -149,66 +163,17 @@ impl ApplicationBackend {
                     row.detail.as_deref().unwrap_or_default()
                 );
                 let normalized = evidence.to_lowercase();
-                let (category, ui_path, action, verification) =
-                    if contains_any(&normalized, &["tls", "certificate", "证书", "trust anchor"])
-                    {
-                        (
-                            "tls",
-                            "入口配置 > App 接入安全 / Server 上游",
-                            "核对报错方向的证书链、主机名和信任来源；如应用使用自定义信任策略，也一并核对。",
-                            "在应用中重新执行对应连接测试，并确认 TCP 与 TLS 结果分别成功。",
-                        )
-                    } else if contains_any(
-                        &normalized,
-                        &["address in use", "bind", "端口", "listen"],
-                    ) {
-                        (
-                            "bind",
-                            "入口配置 > 监听地址与端口",
-                            "检查同一地址和端口是否已被其他入口或进程占用，然后修改冲突配置。",
-                            "重新启动该入口并确认状态为运行中。",
-                        )
-                    } else if contains_any(&normalized, &["dns", "resolve", "解析主机"])
-                    {
-                        (
-                            "dns",
-                            "入口配置 > Server 上游",
-                            "核对 Server 主机名、当前电脑 DNS 和网络可达性。",
-                            "重新执行 Server 连接测试并确认 DNS 与 TCP 分阶段成功。",
-                        )
-                    } else if contains_any(&normalized, &["timeout", "超时"] ) {
-                        (
-                            "timeout",
-                            "设置 > 超时与容量",
-                            "先确认超时发生在连接、写入还是读取阶段，再核对对应上游可达性和超时值。",
-                            "复现请求并比较新的诊断阶段与耗时。",
-                        )
-                    } else if contains_any(
-                        &normalized,
-                        &["frame", "decode", "encode", "schema", "协议包"],
-                    ) {
-                        (
-                            "protocol_package",
-                            "协议包 > 版本详情；规则 > Socket",
-                            "核对入口绑定的精确包版本、方向 Schema、字段类型和报错入口。修改包时提升 SemVer 后重新导入。",
-                            "用同一测试报文复现，并确认 Frame、解析、规则、编码和写出阶段依次成功。",
-                        )
-                    } else {
-                        (
-                            "general",
-                            "日志 > 诊断详情",
-                            "按诊断中的对象、方向和阶段检查配置；不要把下层成功当作业务成功。",
-                            "再次复现并比较错误码、阶段、时间和对象是否变化。",
-                        )
-                    };
+                let guidance = diagnostic_guidance(&normalized);
                 json!({
                     "diagnostic_event_id": row.event_id,
-                    "category": category,
+                    "category": guidance.category,
                     "evidence": row,
-                    "suggested_ui_path": ui_path,
-                    "suggested_action": action,
+                    "suggested_ui_path": guidance.ui_path,
+                    "suggested_action": guidance.action,
+                    "suggested_app_action": guidance.app_action,
+                    "alternative_approaches": guidance.alternatives,
                     "risk": "尚未执行；修改配置前记录原值以便回退。",
-                    "expected_verification": verification,
+                    "expected_verification": guidance.verification,
                 })
             })
             .collect::<Vec<_>>();
@@ -234,8 +199,6 @@ impl ReadOnlyMcpBackend for ApplicationBackend {
             | "diagnose_recent_failures" => self.call_general_tool(name, arguments).await,
             "http_capture_query"
             | "http_capture_get"
-            | "session_query"
-            | "session_get"
             | "socket_capture_query"
             | "socket_capture_get"
             | "breakpoint_query"
@@ -292,12 +255,6 @@ struct WorkspaceArguments {
 struct HttpCaptureDetailArguments {
     session_id: SessionId,
     runtime_epoch: RuntimeEpoch,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SessionDetailArguments {
-    session_id: SessionId,
 }
 
 #[derive(Debug, Deserialize)]
@@ -363,18 +320,15 @@ fn json_value(value: impl serde::Serialize) -> ToolResult {
     serde_json::to_value(value).map_err(|error| ToolFailure::internal(error.to_string()))
 }
 
-fn contains_any(value: &str, needles: &[&str]) -> bool {
-    needles.iter().any(|needle| value.contains(needle))
-}
-
 fn unknown_tool(name: &str) -> ToolResult {
     Err(ToolFailure::not_found(format!("Unknown tool: {name}")))
 }
 
-fn snapshot_fingerprint(value: &Value) -> String {
-    let bytes = serde_json::to_vec(value).unwrap_or_default();
+fn snapshot_fingerprint(value: &Value) -> Result<String, ToolFailure> {
+    let bytes =
+        serde_json::to_vec(value).map_err(|error| ToolFailure::internal(error.to_string()))?;
     let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
         (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
     });
-    format!("{hash:016x}")
+    Ok(format!("{hash:016x}"))
 }

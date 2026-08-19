@@ -33,7 +33,7 @@ interface FaultConfigurationPanelProps {
   priority?: number;
   oneShot?: boolean;
   draft?: FaultConfigurationDraft;
-  configurePending?: "enable" | "save";
+  configurePending: boolean;
   writePending: boolean;
   fieldError: (field: string) => string | undefined;
   onSetParameter: (key: string, value: FaultParameterValue) => void;
@@ -43,7 +43,7 @@ interface FaultConfigurationPanelProps {
   onNthHitChange: (value: number) => void;
   onPriorityChange: (value: number) => void;
   onOneShotChange: (value: boolean) => void;
-  onConfigure: (openRules: boolean) => void;
+  onConfigure: () => void;
 }
 
 function ParameterField({
@@ -285,22 +285,13 @@ export function FaultConfigurationPanel({
               <FieldError>{fieldError("priority")}</FieldError>
             )}
           </NumberField>
-          <div className="flex gap-3">
-            <Button
-              variant="primary"
-              isDisabled={writePending || !draft}
-              onPress={() => onConfigure(false)}
-            >
-              {configurePending === "enable" ? "正在启用…" : "启用模拟"}
-            </Button>
-            <Button
-              variant="outline"
-              isDisabled={writePending || !draft}
-              onPress={() => onConfigure(true)}
-            >
-              {configurePending === "save" ? "正在保存…" : "保存为规则"}
-            </Button>
-          </div>
+          <Button
+            variant="primary"
+            isDisabled={writePending || !draft}
+            onPress={onConfigure}
+          >
+            {configurePending ? "正在创建…" : "创建故障规则"}
+          </Button>
         </div>
       )}
     </aside>
