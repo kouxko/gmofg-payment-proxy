@@ -407,6 +407,27 @@ describe("Socket rule editor product boundary", () => {
     expect(saved.mock.calls[0][0].actions).toEqual([{ type: "set_field", field: "amount", value: { type: "int", value: 0 } }]);
   });
 
+  it("keeps the selected field control compact without repeating field metadata", () => {
+    const relay = listener("relay");
+    const longLabelCatalog = {
+      ...catalog(),
+      fields: fields.map((field) => field.name === "amount"
+        ? { ...field, label: "DE4 Transaction Amount" }
+        : field),
+    };
+    const initial = {
+      ...newProtocolRuleDraft(relay, "app_to_proxy", longLabelCatalog),
+      actions: [{ type: "set_field" as const, field: "amount", value: { type: "int" as const, value: 100 } }],
+    };
+    render(<Harness activeCatalog={longLabelCatalog} initialDraft={initial} />);
+    const fieldSelect = screen.getByLabelText("设置字段");
+    expect(fieldSelect).toHaveTextContent("DE4 Transaction Amount");
+    expect(fieldSelect).not.toHaveTextContent("amount int");
+    expect(fieldSelect).toHaveClass("min-w-0", "overflow-hidden");
+    expect(screen.queryByText(/十进制整数，范围/)).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "设置值" })).toHaveAttribute("aria-description", expect.stringContaining("安全整数"));
+  });
+
   it("does not allow the final action to be deleted", () => {
     render(<Harness />);
     expect(screen.getByRole("button", { name: "删除动作 1" })).toBeDisabled();
