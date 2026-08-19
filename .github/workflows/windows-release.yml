@@ -3,6 +3,15 @@ run-name: Desktop release · ${{ github.ref_name }} · ${{ github.event_name }}
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: 手动构建平台；日常测试默认只生成 Windows，正式标签仍构建全部平台
+        type: choice
+        required: true
+        default: windows
+        options:
+          - windows
+          - all
   push:
     tags:
       # 正式版本标签自动执行签名发布；开发分支需要安装包时使用 workflow_dispatch。
@@ -26,6 +35,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 9.6.1
+          # setup-gradle 默认只允许默认分支写缓存。手动发布来自可信分支，
+          # 允许写入当前分支缓存，后续重复验证可复用 Gradle/Android 构建产物。
+          cache-read-only: ${{ github.event_name != 'workflow_dispatch' }}
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - name: Install Android SDK/NDK
         shell: bash
@@ -57,9 +69,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - windows-latest
-          - macos-14
+        os: ${{ fromJSON((github.event_name == 'push' || inputs.platform == 'all') && '["windows-latest","macos-14"]' || '["windows-latest"]') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -72,6 +82,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Restore Next.js build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json') }}-
+
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           components: rustfmt, clippy
@@ -79,7 +97,8 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target
-          shared-key: release-verify-${{ matrix.os }}
+          shared-key: desktop-${{ runner.os }}
+          add-job-id-key: false
           cache-on-failure: true
 
       - run: pnpm install --frozen-lockfile
@@ -101,9 +120,16 @@ jobs:
       - name: Verify generated IPC bindings twice
         shell: pwsh
         run: |
-          pnpm bindings
+          # 先编译一次生成器，再执行同一个二进制两次验证确定性，避免两次 cargo run。
+          cargo build --release --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings
+          $generator = if ($IsWindows) {
+            "src-tauri/target/release/export-bindings.exe"
+          } else {
+            "src-tauri/target/release/export-bindings"
+          }
+          & $generator
           git diff --exit-code -- src/generated/rust-types.ts
-          pnpm bindings
+          & $generator
           git diff --exit-code -- src/generated/rust-types.ts
 
       - name: Verify frontend and architecture boundaries
@@ -160,16 +186,29 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Restore Next.js build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json') }}-
+
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
-      - name: Restore Rust and Tauri tool caches
+      - name: Restore Rust cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target
-          shared-key: windows-release
-          cache-directories: |
-            ~/AppData/Local/tauri
+          shared-key: desktop-${{ runner.os }}
+          add-job-id-key: false
           cache-on-failure: true
+
+      - name: Restore Tauri tool cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/AppData/Local/tauri
+          key: ${{ runner.os }}-tauri-tools-v1
 
       - run: pnpm install --frozen-lockfile
 
@@ -337,6 +376,7 @@ jobs:
   build-macos:
     name: build-macos-universal
     needs: [android-companion, verify]
+    if: github.event_name == 'push' || inputs.platform == 'all'
     runs-on: macos-14
     timeout-minutes: 60
     permissions:
@@ -353,6 +393,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Restore Next.js build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json') }}-
+
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
       - name: Install both macOS Rust targets
@@ -363,7 +411,8 @@ jobs:
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target
-          shared-key: macos-universal-release
+          shared-key: desktop-${{ runner.os }}
+          add-job-id-key: false
           cache-on-failure: true
 
       - run: pnpm install --frozen-lockfile
