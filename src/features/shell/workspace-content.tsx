@@ -8,10 +8,8 @@
  * 全局状态。页面自己的临时草稿仍由各自组件管理。
  */
 
-import { BreakpointsView } from "@/features/breakpoints/breakpoints-view";
 import { CaptureRoute } from "@/features/capture/capture-route";
 import { CertificatesView } from "@/features/certificates/certificates-view";
-import { ConsoleRoute } from "@/features/console/console-route";
 import { RulesView } from "@/features/rules/rules-view";
 import { SettingsView } from "@/features/settings/settings-view";
 import { AndroidNetworkView } from "@/features/android-network/android-network-view";
@@ -37,16 +35,13 @@ export function WorkspaceContent() {
       return <DiagnosticLogsView />;
     case "/capture":
       return <CaptureRoute />;
-    case "/breakpoints":
-      return <BreakpointsView />;
     case "/rules":
       return <RulesView />;
     case "/certificates":
       return <CertificatesView />;
     case "/settings":
       return <SettingsView />;
-    case "/console":
     default:
-      return <ConsoleRoute />;
+      return <WorkspacesView />;
   }
 }

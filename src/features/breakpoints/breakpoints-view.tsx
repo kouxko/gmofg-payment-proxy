@@ -2,7 +2,7 @@
 
 /** 人工断点容器：Rust 持有暂停任务；此处只管理草稿、校验和决策 IPC。 */
 import { useMemo, useState } from "react";
-import { toast } from "@heroui/react";
+import { Button, Modal, toast } from "@heroui/react";
 import type {
   BreakpointActionOptionViewModel,
   BreakpointDecision,
@@ -15,8 +15,10 @@ import { commands } from "@/generated/rust-types";
 import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
-import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
-import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
+import {
+  useAppEventRefresh,
+  useBootstrap,
+} from "@/features/shell/bootstrap-context";
 import { BreakpointActionPanel } from "./breakpoint-action-panel";
 import { BreakpointEditorPanel } from "./breakpoint-editor-panel";
 import { BreakpointQueuePanel } from "./breakpoint-queue-panel";
@@ -51,16 +53,8 @@ export function breakpointEditableBody(
   return edited ?? message?.body_text ?? "";
 }
 
-export function breakpointDraftBody(
-  edited: string | undefined,
-  message: BreakpointDetailViewModel["effective"] | undefined,
-) {
-  return edited ?? message?.body_text ?? "";
-}
-
-export function BreakpointsView() {
-  const { searchParams } = useWorkspaceNavigation();
-  const requestedId = searchParams.get("breakpointId") ?? undefined;
+export function BreakpointModal() {
+  const { bootstrap } = useBootstrap();
   const queue = useIpcQuery<BreakpointSummaryViewModel[]>(
     "breakpoint-query",
     () => callCommand(commands.breakpointQuery(null)),
@@ -69,16 +63,8 @@ export function BreakpointsView() {
     ["breakpoint_queued", "breakpoint_resolved", "snapshot_required"],
     queue.refresh,
   );
-  const [selection, setSelection] = useState(() => ({
-    routeBreakpointId: requestedId,
-    selectedId: requestedId,
-  }));
-  const selectedId =
-    selection.routeBreakpointId === requestedId
-      ? selection.selectedId
-      : requestedId;
-  const setSelectedId = (value?: string) =>
-    setSelection({ routeBreakpointId: requestedId, selectedId: value });
+  const pendingBreakpoints = queue.data ?? bootstrap?.pending_breakpoints;
+  const [selectedId, setSelectedId] = useState<string>();
   const [bodyEdits, setBodyEdits] = useState<Record<string, string>>({});
   const [validationState, setValidationState] = useState<{
     breakpointId: string;
@@ -95,8 +81,11 @@ export function BreakpointsView() {
   const [editorPending, setEditorPending] = useState<
     "format" | "restore" | "validate"
   >();
-  const effectiveSelectedId = selectedId ?? queue.data?.[0]?.breakpoint_id;
-  const selectedSummary = queue.data?.find(
+  const effectiveSelectedId =
+    pendingBreakpoints?.some((item) => item.breakpoint_id === selectedId)
+      ? selectedId
+      : pendingBreakpoints?.[0]?.breakpoint_id;
+  const selectedSummary = pendingBreakpoints?.find(
     (item) => item.breakpoint_id === effectiveSelectedId,
   );
   const detail = useIpcQuery<BreakpointDetailViewModel>(
@@ -119,10 +108,6 @@ export function BreakpointsView() {
     ? bodyEdits[effectiveSelectedId]
     : undefined;
   const bodyText = breakpointEditableBody(editedBody, detail.data?.effective);
-  const draftBodyText = breakpointDraftBody(
-    editedBody,
-    detail.data?.effective,
-  );
   const validation =
     validationState?.breakpointId === effectiveSelectedId
       ? validationState?.result
@@ -135,10 +120,10 @@ export function BreakpointsView() {
         ? {
             breakpoint_id: detail.data.summary.breakpoint_id,
             expected_revision: detail.data.summary.revision,
-            message: { ...detail.data.effective, body_text: draftBodyText },
+            message: { ...detail.data.effective, body_text: bodyText },
           }
         : undefined,
-    [draftBodyText, detail.data],
+    [bodyText, detail.data],
   );
 
   function recordErrors(reason: unknown) {
@@ -258,43 +243,65 @@ export function BreakpointsView() {
     onResolve: (kind: BreakpointDecision["kind"]) => void resolve(kind),
   };
   return (
-    <section className="grid h-full grid-cols-[290px_minmax(0,1fr)_260px] max-[1280px]:grid-cols-[250px_minmax(0,1fr)] max-[820px]:grid-cols-1">
-      <BreakpointQueuePanel
-        data={queue.data}
-        error={queue.error}
-        isLoading={queue.isLoading}
-        selectedId={effectiveSelectedId}
-        onRefresh={() => void queue.refresh()}
-        onSelect={setSelectedId}
-      />
-      <BreakpointEditorPanel
-        hasSelection={Boolean(selectedSummary)}
-        detail={detail}
-        bodyText={bodyText}
-        editorPending={editorPending}
-        resolvePending={resolvePending}
-        validation={validation}
-        validationError={validationError}
-        drawerOpen={drawerOpen}
-        actionProps={actionProps}
-        onBodyChange={(value) => {
-          if (!effectiveSelectedId) return;
-          setBodyEdits((current) => ({
-            ...current,
-            [effectiveSelectedId]: value,
-          }));
-          setValidationState(undefined);
-        }}
-        onFormat={() => void runEditor("format")}
-        onRestore={() => void runEditor("restore")}
-        onValidate={() => void runEditor("validate")}
-        onDrawerChange={(open) => {
-          if (!open && resolvePending) return;
-          setDrawerOpen(open);
-        }}
-        onResolve={(kind) => void resolve(kind)}
-      />
-      <BreakpointActionPanel {...actionProps} />
-    </section>
+    <Modal
+      isOpen={Boolean(pendingBreakpoints?.length)}
+      onOpenChange={() => undefined}
+    >
+      <Button className="hidden" aria-hidden="true">
+        打开暂停请求处理窗口
+      </Button>
+      <Modal.Backdrop isDismissable={false}>
+        <Modal.Container size="cover" scroll="inside">
+          <Modal.Dialog>
+            <Modal.Header>
+              <Modal.Heading>处理暂停请求</Modal.Heading>
+              <p className="text-sm text-[var(--telemetry-muted)]">
+                网络请求已暂停。请选择处理方式；完成前不能关闭此窗口。
+              </p>
+            </Modal.Header>
+            <Modal.Body className="min-h-0 p-0">
+              <section className="grid min-h-[70vh] grid-cols-[290px_minmax(0,1fr)_260px] max-[1280px]:grid-cols-[250px_minmax(0,1fr)] max-[820px]:grid-cols-1">
+                <BreakpointQueuePanel
+                  data={pendingBreakpoints}
+                  error={queue.error}
+                  isLoading={queue.isLoading}
+                  selectedId={effectiveSelectedId}
+                  onRefresh={() => void queue.refresh()}
+                  onSelect={setSelectedId}
+                />
+                <BreakpointEditorPanel
+                  hasSelection={Boolean(selectedSummary)}
+                  detail={detail}
+                  bodyText={bodyText}
+                  editorPending={editorPending}
+                  resolvePending={resolvePending}
+                  validation={validation}
+                  validationError={validationError}
+                  drawerOpen={drawerOpen}
+                  actionProps={actionProps}
+                  onBodyChange={(value) => {
+                    if (!effectiveSelectedId) return;
+                    setBodyEdits((current) => ({
+                      ...current,
+                      [effectiveSelectedId]: value,
+                    }));
+                    setValidationState(undefined);
+                  }}
+                  onFormat={() => void runEditor("format")}
+                  onRestore={() => void runEditor("restore")}
+                  onValidate={() => void runEditor("validate")}
+                  onDrawerChange={(open) => {
+                    if (!open && resolvePending) return;
+                    setDrawerOpen(open);
+                  }}
+                  onResolve={(kind) => void resolve(kind)}
+                />
+                <BreakpointActionPanel {...actionProps} />
+              </section>
+            </Modal.Body>
+          </Modal.Dialog>
+        </Modal.Container>
+      </Modal.Backdrop>
+    </Modal>
   );
 }

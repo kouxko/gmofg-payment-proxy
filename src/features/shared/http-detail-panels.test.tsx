@@ -93,7 +93,6 @@ describe("抓包正文接入共享查看器", () => {
         requestHeaderCount={1}
         responseHeaderCount={0}
         onClose={vi.fn()}
-        onNavigate={vi.fn()}
         onCreateRule={vi.fn()}
       />,
     );

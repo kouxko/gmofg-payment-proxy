@@ -21,7 +21,6 @@ import {
 } from "@heroui/react";
 import {
   Archive,
-  Bug,
   Bars,
   CircleInfo,
   File,
@@ -31,7 +30,6 @@ import {
   ListCheck,
   Lock,
   Shield,
-  SlidersVertical,
   Smartphone,
   Server,
 } from "@gravity-ui/icons";
@@ -51,6 +49,7 @@ import type {
 } from "@/generated/rust-types";
 import { callCommand } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
+import { BreakpointModal } from "@/features/breakpoints/breakpoints-view";
 
 export const navigation = [
   {
@@ -83,14 +82,7 @@ export const navigation = [
     title: "诊断日志",
     icon: FileText,
   },
-  {
-    href: "/console",
-    label: "运行监控",
-    title: "代理运行监控",
-    icon: SlidersVertical,
-  },
   { href: "/capture", label: "抓包", title: "实时抓包", icon: File },
-  { href: "/breakpoints", label: "断点", title: "断点实验台", icon: Bug },
   { href: "/rules", label: "规则", title: "拦截规则", icon: ListCheck },
   {
     href: "/certificates",
@@ -346,6 +338,7 @@ function ShellContent({ children }: Readonly<{ children: React.ReactNode }>) {
         )}
         {children}
       </main>
+      <BreakpointModal />
     </div>
   );
 }

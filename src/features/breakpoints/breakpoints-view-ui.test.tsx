@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-/** 验证断点页面的真实用户路径：切换选择、编辑、Rust 校验、解决与队列刷新。 */
+/** 验证全局断点弹窗的真实用户路径：强制处理、切换、编辑、校验与解决。 */
 
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -11,7 +11,7 @@ import type {
   BreakpointSummaryViewModel,
   MessageContentViewModel,
 } from "@/generated/rust-types";
-import { BreakpointsView } from "./breakpoints-view";
+import { BreakpointModal } from "./breakpoints-view";
 
 const commandMocks = vi.hoisted(() => ({
   breakpointQuery: vi.fn(),
@@ -24,10 +24,6 @@ const queryMocks = vi.hoisted(() => ({
   refresh: vi.fn(),
   invalidate: vi.fn(),
 }));
-const navigationMocks = vi.hoisted(() => ({
-  searchParams: new URLSearchParams(),
-}));
-
 vi.mock("@/generated/rust-types", () => ({
   commands: commandMocks,
 }));
@@ -58,11 +54,8 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
 
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
-}));
-
-vi.mock("@/features/shell/workspace-navigation", () => ({
-  useWorkspaceNavigation: () => ({
-    searchParams: navigationMocks.searchParams,
+  useBootstrap: () => ({
+    bootstrap: { pending_breakpoints: summaries },
   }),
 }));
 
@@ -106,7 +99,8 @@ const summary = (
   ui_tone: "warning",
   revision: 3,
 });
-const summaries = [summary("A", "断点 A"), summary("B", "断点 B")];
+const initialSummaries = [summary("A", "断点 A"), summary("B", "断点 B")];
+let summaries = [...initialSummaries];
 const detail = (
   breakpointSummary: BreakpointSummaryViewModel,
 ): BreakpointDetailViewModel => ({
@@ -129,16 +123,16 @@ const detail = (
   ],
 });
 const details: Record<string, BreakpointDetailViewModel> = {
-  A: detail(summaries[0]),
-  B: detail(summaries[1]),
+  A: detail(initialSummaries[0]),
+  B: detail(initialSummaries[1]),
 };
 
-describe("BreakpointsView queue controls", () => {
+describe("BreakpointModal queue controls", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    details.A = detail(summaries[0]);
-    details.B = detail(summaries[1]);
-    navigationMocks.searchParams = new URLSearchParams();
+    summaries = [...initialSummaries];
+    details.A = detail(initialSummaries[0]);
+    details.B = detail(initialSummaries[1]);
     queryMocks.refresh.mockResolvedValue(undefined);
     commandMocks.breakpointValidate.mockResolvedValue({
       valid: true,
@@ -154,7 +148,7 @@ describe("BreakpointsView queue controls", () => {
 
   it("explains and executes the icon-only refresh button", async () => {
     const user = userEvent.setup();
-    render(<BreakpointsView />);
+    render(<BreakpointModal />);
 
     const refresh = screen.getByRole("button", {
       name: "刷新断点队列",
@@ -167,30 +161,32 @@ describe("BreakpointsView queue controls", () => {
   });
 
   it("keeps long queue metadata inside the breakpoint card", () => {
-    const { container } = render(<BreakpointsView />);
+    render(<BreakpointModal />);
 
-    expect(container.querySelector("[data-breakpoint-card]")).toHaveClass(
+    expect(document.body.querySelector("[data-breakpoint-card]")).toHaveClass(
       "min-w-0",
       "max-w-full",
       "overflow-hidden",
     );
     expect(
-      container.querySelector("[data-breakpoint-card-content]"),
+      document.body.querySelector("[data-breakpoint-card-content]"),
     ).toHaveClass("overflow-hidden");
-    expect(container.querySelector("[data-breakpoint-channel]")).toHaveClass(
+    expect(document.body.querySelector("[data-breakpoint-channel]")).toHaveClass(
       "min-w-0",
       "truncate",
     );
   });
 
-  it("follows breakpointId changes while staying on the same route", async () => {
-    navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
-    const { rerender } = render(<BreakpointsView />);
+  it("opens globally, cannot be dismissed, and selects another queued breakpoint", async () => {
+    const user = userEvent.setup();
+    render(<BreakpointModal />);
 
+    expect(screen.getByRole("dialog", { name: "处理暂停请求" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "断点 A" })).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "处理暂停请求" })).toBeVisible();
 
-    navigationMocks.searchParams = new URLSearchParams("breakpointId=B");
-    rerender(<BreakpointsView />);
+    await user.click(screen.getByRole("button", { name: /POST \/api\/B/ }));
 
     expect(
       await screen.findByRole("heading", { name: "断点 B" }),
@@ -200,10 +196,18 @@ describe("BreakpointsView queue controls", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("stays absent when there is no pending breakpoint", () => {
+    summaries = [];
+    render(<BreakpointModal />);
+
+    expect(
+      screen.queryByRole("dialog", { name: "处理暂停请求" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("validates the edited body and resolves with the validated draft", async () => {
-    navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
     const user = userEvent.setup();
-    render(<BreakpointsView />);
+    render(<BreakpointModal />);
 
     fireEvent.change(screen.getByRole("textbox", { name: "有效 JSON" }), {
       target: { value: '{"edited":true}' },
@@ -244,9 +248,8 @@ describe("BreakpointsView queue controls", () => {
   });
 
   it("uses the Rust content kind for the breakpoint body label", () => {
-    navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
     details.A = {
-      ...detail(summaries[0]),
+      ...detail(initialSummaries[0]),
       original: {
         ...message("<request><code>D48</code></request>"),
         headers: { "content-type": ["application/xml"] },
@@ -263,7 +266,7 @@ describe("BreakpointsView queue controls", () => {
       },
     };
 
-    render(<BreakpointsView />);
+    render(<BreakpointModal />);
 
     expect(screen.getAllByRole("tab", { name: "XML" })).toHaveLength(2);
     expect(screen.getByRole("textbox", { name: "有效 XML" })).toHaveValue(
@@ -276,7 +279,6 @@ describe("BreakpointsView queue controls", () => {
   });
 
   it("uses the shared code surface for editable plain text", () => {
-    navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
     const textMessage: MessageContentViewModel = {
       ...message("ErrorCode=D48&ResponseID=A"),
       headers: { "content-type": ["text/plain; charset=shift_jis"] },
@@ -287,15 +289,17 @@ describe("BreakpointsView queue controls", () => {
       codec_id: "shift-jis",
     };
     details.A = {
-      ...detail(summaries[0]),
+      ...detail(initialSummaries[0]),
       original: textMessage,
       effective: textMessage,
     };
 
-    const { container } = render(<BreakpointsView />);
+    render(<BreakpointModal />);
 
     expect(
-      container.querySelector('[aria-label="有效 文本"][data-code-surface="text"]'),
+      document.body.querySelector(
+        '[aria-label="有效 文本"][data-code-surface="text"]',
+      ),
     ).toHaveClass("min-h-[320px]", "font-mono");
     expect(screen.getByRole("textbox", { name: "有效 文本" })).toHaveClass(
       "text-sm",
@@ -304,7 +308,6 @@ describe("BreakpointsView queue controls", () => {
   });
 
   it("formats original and effective vendor JSON consistently", () => {
-    navigationMocks.searchParams = new URLSearchParams("breakpointId=A");
     const vendorMessage: MessageContentViewModel = {
       ...message('{"ErrorCode":"D48","ResponseID":"A"}'),
       headers: { "content-type": ["text/csv; charset=shift_jis"] },
@@ -315,15 +318,15 @@ describe("BreakpointsView queue controls", () => {
       codec_id: "shift-jis",
     };
     details.A = {
-      ...detail(summaries[0]),
+      ...detail(initialSummaries[0]),
       original: vendorMessage,
       effective: vendorMessage,
     };
 
-    const { container } = render(<BreakpointsView />);
+    render(<BreakpointModal />);
 
     const originalLines = Array.from(
-      container.querySelectorAll(
+      document.body.querySelectorAll(
         '[aria-label="原始 文本"][data-code-surface="json"] code',
       ),
       (line) => line.textContent,
@@ -337,11 +340,11 @@ describe("BreakpointsView queue controls", () => {
     expect(screen.getByRole("textbox", { name: "有效 文本" })).toHaveValue(
       '{"ErrorCode":"D48","ResponseID":"A"}',
     );
-    const effectiveSurface = container.querySelector(
+    const effectiveSurface = document.body.querySelector(
       '[aria-label="有效 文本"][data-code-surface="json"]',
     );
     const effectiveEditor = screen.getByRole("textbox", { name: "有效 文本" });
-    const originalCodeRow = container.querySelector(
+    const originalCodeRow = document.body.querySelector(
       '[aria-label="原始 文本"] [data-code-row]',
     );
     expect(effectiveSurface).toHaveClass(

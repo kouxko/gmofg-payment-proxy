@@ -22,7 +22,7 @@ const workspaceNavigationMocks = vi.hoisted(() => ({
 
 vi.mock("./workspace-navigation", () => ({
   useWorkspaceNavigation: () => ({
-    pathname: "/console",
+    pathname: "/workspaces",
     searchParams: new URLSearchParams(),
     navigate: workspaceNavigationMocks.navigate,
   }),
@@ -72,6 +72,10 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
         },
 }));
 
+vi.mock("@/features/breakpoints/breakpoints-view", () => ({
+  BreakpointModal: () => null,
+}));
+
 describe("UI-001 fixed navigation order", () => {
   it("matches the frozen requirement document", () => {
     expect(navigation.map((item) => item.href)).toEqual([
@@ -80,9 +84,7 @@ describe("UI-001 fixed navigation order", () => {
       "/protocol-packages",
       "/android-network",
       "/diagnostics",
-      "/console",
       "/capture",
-      "/breakpoints",
       "/rules",
       "/certificates",
       "/settings",
@@ -179,11 +181,11 @@ describe("desktop client navigation", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "打开运行监控使用说明" }),
+      screen.getByRole("button", { name: "打开Workspace 管理使用说明" }),
     );
 
     expect(
-      screen.getByRole("dialog", { name: "运行监控使用说明" }),
+      screen.getByRole("dialog", { name: "Workspace 管理使用说明" }),
     ).toBeVisible();
     expect(workspaceNavigationMocks.navigate).not.toHaveBeenCalled();
     expect(window.location.href).toBe(documentUrl);

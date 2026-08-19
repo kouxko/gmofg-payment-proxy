@@ -36,7 +36,6 @@ interface CaptureDetailPanelProps {
   requestHeaderCount: number;
   responseHeaderCount: number;
   onClose: () => void;
-  onNavigate: (path: string) => void;
   onCreateRule: () => void;
 }
 
@@ -85,7 +84,6 @@ export function CaptureDetailPanel({
   requestHeaderCount,
   responseHeaderCount,
   onClose,
-  onNavigate,
   onCreateRule,
 }: CaptureDetailPanelProps) {
   return (
@@ -217,19 +215,6 @@ export function CaptureDetailPanel({
               >
                 <Copy className="size-4" />
                 复制请求 ID
-              </Button>
-              <Button
-                variant="outline"
-                fullWidth
-                isDisabled={!selected.can_go_to_breakpoint}
-                onPress={() =>
-                  selected.breakpoint_id &&
-                  onNavigate(
-                    `/breakpoints?breakpointId=${encodeURIComponent(selected.breakpoint_id)}`,
-                  )
-                }
-              >
-                转到断点
               </Button>
               <Button variant="outline" fullWidth onPress={onCreateRule}>
                 基于此请求新建规则
