@@ -238,7 +238,7 @@ describe("Socket rule editor product boundary", () => {
     expect(save).not.toHaveBeenCalled();
   });
 
-  it("locks other draft paths until a deferred parser result is applied", async () => {
+  it("keeps other draft controls responsive while a value is being parsed", async () => {
     let finish!: (value: unknown) => void;
     commandMocks.protocolRuleParseValue.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const relay = listener("relay");
@@ -254,8 +254,10 @@ describe("Socket rule editor product boundary", () => {
     const values = screen.getAllByRole("textbox", { name: "设置值" });
     fireEvent.change(values[0], { target: { value: "0210" } });
     expect(values[0]).toBeEnabled();
-    expect(values[1]).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "优先级" })).toBeDisabled();
+    expect(values[1]).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "优先级" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "保存报文规则" })).toBeDisabled();
+    await waitFor(() => expect(commandMocks.protocolRuleParseValue).toHaveBeenCalledWith("string", "0210"));
     finish({ type: "string", value: "0210" });
     await waitFor(() => expect(screen.queryByLabelText("正在解析设置值")).not.toBeInTheDocument());
     const saveButton = screen.getByRole("button", { name: "保存报文规则" });
@@ -421,11 +423,28 @@ describe("Socket rule editor product boundary", () => {
     };
     render(<Harness activeCatalog={longLabelCatalog} initialDraft={initial} />);
     const fieldSelect = screen.getByLabelText("设置字段");
+    const valueInput = screen.getByRole("textbox", { name: "设置值" });
     expect(fieldSelect).toHaveTextContent("DE4 Transaction Amount");
     expect(fieldSelect).not.toHaveTextContent("amount int");
     expect(fieldSelect).toHaveClass("min-w-0", "overflow-hidden");
+    expect(screen.getByRole("group", { name: "动作 1 字段和值" })).toHaveClass("sm:grid-cols-2");
+    expect(screen.getByText("设置字段")).toHaveClass("sr-only");
+    expect(screen.getByText("设置值")).toHaveClass("sr-only");
+    expect(valueInput).toHaveAttribute("placeholder", "设置值");
     expect(screen.queryByText(/十进制整数，范围/)).not.toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "设置值" })).toHaveAttribute("aria-description", expect.stringContaining("安全整数"));
+    expect(valueInput).toHaveAttribute("aria-description", expect.stringContaining("安全整数"));
+  });
+
+  it("uses matching two-column geometry for binding and rule state controls", () => {
+    render(<Harness />);
+    const listener = screen.getByLabelText("协议入口");
+    const stage = screen.getByLabelText("报文处理阶段");
+    expect(listener).toHaveClass("h-12", "w-full");
+    expect(stage).toHaveClass("h-12", "w-full");
+    expect(screen.getByRole("group", { name: "入口和处理阶段" })).toHaveClass("sm:grid-cols-2");
+    expect(screen.getByRole("group", { name: "规则状态和优先级" })).toHaveClass("sm:grid-cols-2");
+    expect(screen.getByText("入口")).toHaveClass("h-6", "items-center", "leading-none");
+    expect(screen.getByText("处理阶段")).toHaveClass("h-6", "items-center", "leading-none");
   });
 
   it("does not allow the final action to be deleted", () => {

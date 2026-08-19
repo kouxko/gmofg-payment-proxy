@@ -118,10 +118,9 @@ function ProtocolRulesController({
       ? newProtocolRuleDraft(selectedListener, stage, usableCatalog)
       : undefined
   );
-  const valueParsing = Object.values(valueStates).some((state) => state.pending);
   useEffect(() => {
-    onPendingChange?.(pending || valueParsing || sourceBlocked);
-  }, [onPendingChange, pending, sourceBlocked, valueParsing]);
+    onPendingChange?.(pending || sourceBlocked);
+  }, [onPendingChange, pending, sourceBlocked]);
   useEffect(
     () => () => onPendingChange?.(false),
     [onPendingChange],
@@ -164,7 +163,7 @@ function ProtocolRulesController({
   }
 
   function chooseRule(rule: ProtocolDocumentRuleDefinition) {
-    if (sourceBlocked || valueParsing) return;
+    if (sourceBlocked) return;
     editorGeneration.current += 1;
     setCreating(false);
     setEditorWorkspaceId(workspaceId);
@@ -176,7 +175,7 @@ function ProtocolRulesController({
   }
 
   const newRule = useCallback(() => {
-    if (sourceBlocked || valueParsing) return;
+    if (sourceBlocked) return;
     const listener = listeners[0];
     if (!listener) return;
     const nextStage = listenerStages(listener)[0];
@@ -189,7 +188,7 @@ function ProtocolRulesController({
     setDraft(undefined);
     resetDerivedState();
     requestAnimationFrame(() => editorHeadingRef.current?.focus());
-  }, [listeners, sourceBlocked, valueParsing, workspaceId]);
+  }, [listeners, sourceBlocked, workspaceId]);
 
   useEffect(() => {
     if (!createOnMount) {
@@ -220,7 +219,7 @@ function ProtocolRulesController({
   }, [safeRules, selectedId, selectedRuleId, sourceBlocked, workspaceId]);
 
   function changeListener(nextId: string) {
-    if (sourceBlocked || valueParsing) return;
+    if (sourceBlocked) return;
     const listener = listeners.find((item) => item.id === nextId);
     if (!listener) return;
     editorGeneration.current += 1;
@@ -231,7 +230,7 @@ function ProtocolRulesController({
   }
 
   function changeStage(nextStage: ProtocolRuleStage) {
-    if (sourceBlocked || valueParsing) return;
+    if (sourceBlocked) return;
     editorGeneration.current += 1;
     setStage(nextStage);
     setDraft(undefined);
@@ -280,7 +279,7 @@ function ProtocolRulesController({
   }
 
   async function toggle(rule: ProtocolDocumentRuleDefinition, enabled: boolean) {
-    if (sourceBlocked || mutationLock.current || valueParsing) return;
+    if (sourceBlocked || mutationLock.current) return;
     mutationLock.current = true;
     const request = mutationRequest(editorGeneration.current, mutationContextRef.current);
     setPending(true);
@@ -299,7 +298,7 @@ function ProtocolRulesController({
   }
 
   async function remove() {
-    if (sourceBlocked || !draft?.rule_id || draft.expected_revision == null || mutationLock.current || valueParsing) return;
+    if (sourceBlocked || !draft?.rule_id || draft.expected_revision == null || mutationLock.current) return;
     mutationLock.current = true;
     const request = mutationRequest(editorGeneration.current, mutationContextRef.current);
     setPending(true);
@@ -322,7 +321,7 @@ function ProtocolRulesController({
   }
 
   async function reloadSelectedRule() {
-    if (sourceBlocked || !selectedId || mutationLock.current || valueParsing) return;
+    if (sourceBlocked || !selectedId || mutationLock.current) return;
     mutationLock.current = true;
     setPending(true);
     try {
@@ -358,7 +357,15 @@ function ProtocolRulesController({
         listener={editingListener}
         listeners={listeners}
         loading={Boolean(listenerId) && capabilities.isLoading}
-        onChange={(next) => { editorGeneration.current += 1; setDraft(next); setFieldErrors({}); }}
+        onChange={(next) => {
+          editorGeneration.current += 1;
+          setDraft((current) => {
+            const base = current ?? preparedDraft;
+            if (!base) return current;
+            return typeof next === "function" ? next(base) : next;
+          });
+          setFieldErrors({});
+        }}
         onDelete={() => void remove()}
         onStageChange={changeStage}
         onListenerChange={changeListener}
@@ -389,8 +396,8 @@ function ProtocolRulesController({
         onRetry={() => void source.refresh()}
         onSelect={chooseRule}
         onToggle={(rule, enabled) => void toggle(rule, enabled)}
-        pending={pending || valueParsing || sourceBlocked}
-        sideEffectsDisabled={pending || valueParsing || sourceBlocked}
+        pending={pending || sourceBlocked}
+        sideEffectsDisabled={pending || sourceBlocked}
         rules={sourceBlocked ? [] : safeRules}
         selectedId={editorContextCurrent ? selectedId : undefined}
       />

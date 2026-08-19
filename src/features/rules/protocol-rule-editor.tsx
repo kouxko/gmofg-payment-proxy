@@ -31,6 +31,8 @@ import {
 } from "./protocol-rule-model";
 import { ProtocolRuleValueEditor, type ProtocolValueAsyncState } from "./protocol-rule-value-editor";
 
+type ProtocolRuleDraftChange = ProtocolRuleDraft | ((current: ProtocolRuleDraft) => ProtocolRuleDraft);
+
 export function ProtocolRuleEditor(props: {
   draft?: ProtocolRuleDraft;
   catalog?: ProtocolRuleCapabilityCatalog;
@@ -48,7 +50,7 @@ export function ProtocolRuleEditor(props: {
   onResetInvalidValues: () => void;
   onListenerChange: (listenerId: string) => void;
   onStageChange: (stage: ProtocolRuleStage) => void;
-  onChange: (draft: ProtocolRuleDraft) => void;
+  onChange: (change: ProtocolRuleDraftChange) => void;
   onSave: () => void;
   onReload: () => void;
   onReloadRule: () => void;
@@ -65,9 +67,8 @@ export function ProtocolRuleEditor(props: {
     return <EditorShell><p className="text-[var(--telemetry-muted)]">选择一条规则或新建规则进行编辑。</p></EditorShell>;
   }
   const { draft, catalog, listener } = props;
-  const valueParsing = Object.values(props.valueStates).some((state) => state.pending);
-  const draftDisabled = props.pending || props.blocked || valueParsing;
-  const sideEffectsDisabled = props.pending || props.blocked || valueParsing;
+  const draftDisabled = Boolean(props.pending || props.blocked);
+  const sideEffectsDisabled = Boolean(props.pending || props.blocked);
   const errors = unmappedFieldErrors(props.fieldErrors);
   return (
     <EditorShell>
@@ -106,13 +107,18 @@ export function ProtocolRuleEditor(props: {
           <Chip variant="soft">{protocolRuleStageLabel(draft.stage)}</Chip>
         </div>
       )}
-      <div className="flex flex-wrap gap-5">
-        <Switch aria-label="启用报文规则" isDisabled={draftDisabled} isSelected={draft.enabled} onChange={(enabled) => props.onChange({ ...draft, enabled })}>
-          <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control><span>启用规则</span></Switch.Content>
-        </Switch>
-        <NumberField isDisabled={draftDisabled} value={draft.priority} onChange={(priority) => props.onChange({ ...draft, priority })}>
-          <Label>优先级</Label>
-          <NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
+      <div aria-label="规则状态和优先级" className="grid items-end gap-4 sm:grid-cols-2" role="group">
+        <div className="grid gap-1">
+          <Label className="flex h-6 items-center leading-none">规则状态</Label>
+          <div className="flex h-12 items-center">
+            <Switch aria-label="启用报文规则" isDisabled={draftDisabled} isSelected={draft.enabled} onChange={(enabled) => props.onChange({ ...draft, enabled })}>
+              <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control><span>启用规则</span></Switch.Content>
+            </Switch>
+          </div>
+        </div>
+        <NumberField className="min-w-0" isDisabled={draftDisabled} value={draft.priority} onChange={(priority) => props.onChange({ ...draft, priority })}>
+          <Label className="flex h-6 items-center leading-none">优先级</Label>
+          <NumberField.Group className="h-12 w-full"><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
         </NumberField>
       </div>
       <InlineErrors errors={fieldErrorsFor(props.fieldErrors, ["priority", "listener_id", "package", "schema_version", "stage"])} />
@@ -153,17 +159,17 @@ function CreationBinding(props: {
   pending?: boolean;
 }) {
   const stages = listenerStages(props.listener);
-  return <div className="grid gap-4 sm:grid-cols-2">
-    <div className="grid gap-1"><Label>入口</Label><Select aria-label="协议入口" isDisabled={props.pending} selectedKey={props.listener.id} onSelectionChange={(key) => props.onListenerChange(String(key))}>
-      <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>
+  return <div aria-label="入口和处理阶段" className="grid items-start gap-4 sm:grid-cols-2" role="group">
+    <div className="grid min-w-0 gap-1"><Label className="flex h-6 items-center leading-none">入口</Label><Select aria-label="协议入口" isDisabled={props.pending} selectedKey={props.listener.id} onSelectionChange={(key) => props.onListenerChange(String(key))}>
+      <Select.Trigger className="h-12 min-h-12 w-full min-w-0"><Select.Value className="min-w-0 flex-1 truncate">{({ selectedText }) => selectedText}</Select.Value><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
         {props.listeners.map((listener) => {
           const details = protocolRuleEntryDescription(listener);
           return <ListBox.Item id={listener.id} key={listener.id} textValue={listener.name}><span>{listener.name}</span><span className="ml-2 text-xs text-[var(--telemetry-muted)]">{details}</span></ListBox.Item>;
         })}
       </ListBox></Select.Popover>
     </Select></div>
-    <div className="grid gap-1"><Label>处理阶段</Label><Select aria-label="报文处理阶段" isDisabled={props.pending} selectedKey={props.stage} onSelectionChange={(key) => props.onStageChange(key as ProtocolRuleStage)}>
-      <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>
+    <div className="grid min-w-0 gap-1"><Label className="flex h-6 items-center leading-none">处理阶段</Label><Select aria-label="报文处理阶段" isDisabled={props.pending} selectedKey={props.stage} onSelectionChange={(key) => props.onStageChange(key as ProtocolRuleStage)}>
+      <Select.Trigger className="h-12 min-h-12 w-full min-w-0"><Select.Value className="min-w-0 flex-1 truncate" /><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
         {stages.map((stage) => <ListBox.Item id={stage} key={stage} textValue={protocolRuleStageLabel(stage)}>{protocolRuleStageLabel(stage)}</ListBox.Item>)}
       </ListBox></Select.Popover>
     </Select></div>
@@ -197,7 +203,7 @@ function ConditionRow(props: SectionProps & { condition: DocumentCondition; inde
   return <div className="grid gap-3 rounded-lg border border-[var(--telemetry-line)] p-3 sm:grid-cols-[1fr_110px_1fr_auto]">
     <FieldSelect disabled={disabled} label="条件字段" field={field} fields={props.catalog.fields.filter((item) => !usedElsewhere.has(item.name))} onChange={(next) => { props.onResetInvalidValues(); replaceCondition(props, props.index, conditionFor(next)); }} />
     <div><Label>操作符</Label><p className="mt-2 font-mono text-sm">equals</p></div>
-    <ProtocolRuleValueEditor disabled={valueEditorDisabled(props, key)} field={field} label="比较值" value={props.condition.value} onChange={(value) => replaceCondition(props, props.index, { ...props.condition, value })} onAsyncStateChange={(state) => props.onValueStateChange(key, state)} />
+    <ProtocolRuleValueEditor disabled={valueEditorDisabled(props)} field={field} label="比较值" value={props.condition.value} onChange={(value) => replaceCondition(props, props.index, { ...props.condition, value })} onAsyncStateChange={(state) => props.onValueStateChange(key, state)} />
     <Button aria-label={`删除条件 ${props.index + 1}`} isDisabled={disabled} size="sm" variant="danger-soft" onPress={() => { props.onResetInvalidValues(); props.onChange({ ...props.draft, conditions: props.draft.conditions.filter((_, index) => index !== props.index) }); }}>删除</Button>
   </div>;
 }
@@ -233,13 +239,16 @@ function ActionRow(props: SectionProps & { action: DocumentAction; index: number
     props.onChange({ ...props.draft, actions });
   };
   const remove = () => { props.onResetInvalidValues(); props.onChange({ ...props.draft, actions: props.draft.actions.filter((_, index) => index !== props.index) }); };
-  return <div className="grid gap-3 rounded-lg border border-[var(--telemetry-line)] p-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-    <div className="min-w-0"><p className="mb-2 text-xs font-medium text-[var(--telemetry-muted)]">第 {props.index + 1} 步</p>{props.action.type === "set_field" ? <SetFieldAction {...props} action={props.action} /> : props.action.type === "clear_field" ? <ClearFieldAction {...props} action={props.action} /> : <div><p className="text-sm font-medium">{props.action.type === "record_match" ? "记录命中" : "清空全部字段"}</p><p className="mt-1 text-xs text-[var(--telemetry-muted)]">{props.action.type === "record_match" ? "保留报文内容，只在抓包记录中标记本规则已命中。" : "移除当前报文中的全部字段值，后续步骤可重新构造应答。"}</p></div>}</div>
-    <div className="flex shrink-0 gap-1">
+  return <div className="rounded-lg border border-[var(--telemetry-line)] p-3">
+    <div className="mb-3 flex items-center gap-2">
+      <p className="text-xs font-medium text-[var(--telemetry-muted)]">第 {props.index + 1} 步</p>
+      <div className="ml-auto flex shrink-0 gap-1">
       <Button aria-label={`动作 ${props.index + 1} 上移`} isDisabled={disabled || props.index === 0} size="sm" variant="ghost" onPress={() => move(-1)}>上移</Button>
       <Button aria-label={`动作 ${props.index + 1} 下移`} isDisabled={disabled || props.index === props.draft.actions.length - 1} size="sm" variant="ghost" onPress={() => move(1)}>下移</Button>
       <Button aria-label={`删除动作 ${props.index + 1}`} isDisabled={disabled || props.draft.actions.length === 1} size="sm" variant="danger-soft" onPress={remove}>删除</Button>
+      </div>
     </div>
+    <div className="min-w-0">{props.action.type === "set_field" ? <SetFieldAction {...props} action={props.action} /> : props.action.type === "clear_field" ? <ClearFieldAction {...props} action={props.action} /> : <div><p className="text-sm font-medium">{props.action.type === "record_match" ? "记录命中" : "清空全部字段"}</p><p className="mt-1 text-xs text-[var(--telemetry-muted)]">{props.action.type === "record_match" ? "保留报文内容，只在抓包记录中标记本规则已命中。" : "移除当前报文中的全部字段值，后续步骤可重新构造应答。"}</p></div>}</div>
   </div>;
 }
 
@@ -248,9 +257,9 @@ function SetFieldAction(props: SectionProps & { action: Extract<DocumentAction, 
   const field = fields.find((item) => item.name === props.action.field);
   if (!field) return <InlineErrors errors={[`动作 ${props.index + 1} 引用了不可修改字段。`]} />;
   const key = `action-${props.index}`;
-  return <div className="grid min-w-0 items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-    <FieldSelect disabled={draftControlsDisabled(props)} label="设置字段" field={field} fields={fields} onChange={(next) => { props.onResetInvalidValues(); replaceAction(props, props.index, setActionFor(next)); }} />
-    <ProtocolRuleValueEditor disabled={valueEditorDisabled(props, key)} field={field} label="设置值" value={props.action.value} onChange={(value) => replaceAction(props, props.index, { ...props.action, value })} onAsyncStateChange={(state) => props.onValueStateChange(key, state)} />
+  return <div aria-label={`动作 ${props.index + 1} 字段和值`} className="grid min-w-0 items-start gap-3 sm:grid-cols-2" role="group">
+    <FieldSelect compact disabled={draftControlsDisabled(props)} label="设置字段" field={field} fields={fields} onChange={(next) => { props.onResetInvalidValues(); replaceAction(props, props.index, setActionFor(next)); }} />
+    <ProtocolRuleValueEditor compact disabled={valueEditorDisabled(props)} field={field} label="设置值" value={props.action.value} onChange={(value) => replaceAction(props, props.index, { ...props.action, value })} onAsyncStateChange={(state) => props.onValueStateChange(key, state)} />
   </div>;
 }
 
@@ -261,9 +270,9 @@ function ClearFieldAction(props: SectionProps & { action: Extract<DocumentAction
   return <FieldSelect disabled={draftControlsDisabled(props)} label="清除字段" field={field} fields={fields} onChange={(next) => { props.onResetInvalidValues(); replaceAction(props, props.index, clearActionFor(next)); }} />;
 }
 
-function FieldSelect({ disabled, field, fields, label, onChange }: { disabled: boolean; field: ProtocolRuleFieldCapability; fields: ProtocolRuleFieldCapability[]; label: string; onChange: (field: ProtocolRuleFieldCapability) => void }) {
-  return <div className="grid min-w-0 gap-1"><Label>{label}</Label><Select aria-label={label} isDisabled={disabled} selectedKey={field.name} onSelectionChange={(key) => { const next = fields.find((item) => item.name === key); if (next) onChange(next); }}>
-    <Select.Trigger className="h-10 min-h-10 w-full min-w-0 overflow-hidden"><Select.Value className="min-w-0 flex-1 truncate">{({ selectedText }) => selectedText}</Select.Value><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
+function FieldSelect({ compact = false, disabled, field, fields, label, onChange }: { compact?: boolean; disabled: boolean; field: ProtocolRuleFieldCapability; fields: ProtocolRuleFieldCapability[]; label: string; onChange: (field: ProtocolRuleFieldCapability) => void }) {
+  return <div className="grid min-w-0 gap-1"><Label className={compact ? "sr-only" : undefined}>{label}</Label><Select aria-label={label} isDisabled={disabled} selectedKey={field.name} onSelectionChange={(key) => { const next = fields.find((item) => item.name === key); if (next) onChange(next); }}>
+    <Select.Trigger className="h-10 min-h-10 w-full min-w-0 overflow-hidden"><Select.Value className="min-w-0 flex-1 truncate">{({ selectedText }) => selectedText || "选择字段"}</Select.Value><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
       {fields.map((item) => <ListBox.Item id={item.name} key={item.name} textValue={item.label}><span>{item.label}</span> <code>{item.name}</code> <span>{item.type}</span></ListBox.Item>)}
     </ListBox></Select.Popover>
   </Select></div>;
@@ -287,19 +296,24 @@ function InlineErrors({ errors }: { errors: string[] }) {
 }
 
 function replaceCondition(props: SectionProps, index: number, condition: DocumentCondition) {
-  props.onChange({ ...props.draft, conditions: props.draft.conditions.map((item, itemIndex) => itemIndex === index ? condition : item) });
+  props.onChange((current) => ({
+    ...current,
+    conditions: current.conditions.map((item, itemIndex) => itemIndex === index ? condition : item),
+  }));
 }
 function replaceAction(props: SectionProps, index: number, action: DocumentAction) {
-  props.onChange({ ...props.draft, actions: props.draft.actions.map((item, itemIndex) => itemIndex === index ? action : item) });
+  props.onChange((current) => ({
+    ...current,
+    actions: current.actions.map((item, itemIndex) => itemIndex === index ? action : item),
+  }));
 }
 
 function draftControlsDisabled(props: SectionProps) {
-  return props.pending || props.blocked || Object.values(props.valueStates).some((state) => state.pending);
+  return Boolean(props.pending || props.blocked || Object.keys(props.valueStates).length > 0);
 }
 
-function valueEditorDisabled(props: SectionProps, key: string) {
-  const parsing = Object.values(props.valueStates).some((state) => state.pending);
-  return Boolean(props.pending || props.blocked || (parsing && !props.valueStates[key]?.pending));
+function valueEditorDisabled(props: SectionProps) {
+  return Boolean(props.pending || props.blocked);
 }
 
 function DeleteRuleButton({ listener, draft, pending, onDelete }: { listener: ProxyListener; draft: ProtocolRuleDraft; pending: boolean; onDelete: () => void }) {
