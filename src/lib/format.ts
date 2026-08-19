@@ -38,10 +38,14 @@ export function formatDuration(milliseconds?: number | null): string {
   return `${(milliseconds / 1000).toFixed(3)} s`;
 }
 
-/** 将 ISO 时间戳裁剪为表格需要的毫秒精度，不改变其业务含义。 */
+/** 将带时区的 ISO 时间戳转换为本机时间，并保留毫秒精度。 */
 export function formatTimestamp(value?: string | null): string {
   if (!value) return "—";
-  return value.replace("T", " ").replace("Z", "").slice(0, 23);
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) return "—";
+
+  const pad = (part: number, length = 2) => String(part).padStart(length, "0");
+  return `${pad(timestamp.getFullYear(), 4)}-${pad(timestamp.getMonth() + 1)}-${pad(timestamp.getDate())} ${pad(timestamp.getHours())}:${pad(timestamp.getMinutes())}:${pad(timestamp.getSeconds())}.${pad(timestamp.getMilliseconds(), 3)}`;
 }
 
 /** 计算进度条百分比并限制在 0~100，maximum 无效时安全返回 0。 */
