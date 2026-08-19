@@ -32,6 +32,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 9.6.1
+          # 只让默认分支写共享缓存；PR 和手动分支只读，避免污染主线缓存。
+          cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
 
@@ -143,6 +145,14 @@ jobs:
           node-version: 22
           cache: pnpm
 
+      - name: Restore Next.js build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json') }}-
+
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
           components: rustfmt, clippy
@@ -150,7 +160,8 @@ jobs:
       - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target
-          shared-key: ci-${{ matrix.os }}
+          shared-key: desktop-${{ runner.os }}
+          add-job-id-key: false
           cache-on-failure: true
 
       - name: Install frontend dependencies
@@ -173,9 +184,15 @@ jobs:
         run: |
           # Rust 是 IPC 类型的唯一来源。连续生成两次都必须零差异，既防手改镜像类型，
           # 也防生成器顺序或时间戳导致同一源码产生不同结果。
-          pnpm bindings
+          cargo build --release --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings
+          $generator = if ($IsWindows) {
+            "src-tauri/target/release/export-bindings.exe"
+          } else {
+            "src-tauri/target/release/export-bindings"
+          }
+          & $generator
           git diff --exit-code -- src/generated/rust-types.ts
-          pnpm bindings
+          & $generator
           git diff --exit-code -- src/generated/rust-types.ts
 
       - name: Verify frontend
