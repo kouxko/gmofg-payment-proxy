@@ -83,6 +83,23 @@ export function ProtocolPackagesView() {
     }
   }
 
+  function versionEnabled(enabled: ProtocolPackageVersionViewModel) {
+    if (!isProtocolPackageGroupList(packages.data)) return;
+    const refreshed = packages.data.map((group) => group.id === enabled.package.id
+      ? {
+          ...group,
+          versions: group.versions.map((version) =>
+            version.package.version === enabled.package.version ? enabled : version),
+        }
+      : group);
+    const exactGroup = refreshed.find((group) => group.id === enabled.package.id);
+    if (!exactGroup) return;
+    packages.setData(refreshed);
+    setSelectedGroup(exactGroup);
+    setSelectedVersion(enabled);
+    setImportNotice(`${enabled.name} ${enabled.package.version} 已启用，可在入口配置中选择。`);
+  }
+
   async function chooseZip() {
     if (prepareLock.current || commitLock.current || restoreLock.current || exportLock.current) return;
     triggerRef.current = importTriggerRef.current;
@@ -399,6 +416,7 @@ export function ProtocolPackagesView() {
         isOpen={dialogOpen}
         announcement={importNotice}
         onVersionChange={setSelectedVersion}
+        onVersionEnabled={versionEnabled}
         onOpenChange={changeOpen}
       />
       <ProtocolPackageImportDialog

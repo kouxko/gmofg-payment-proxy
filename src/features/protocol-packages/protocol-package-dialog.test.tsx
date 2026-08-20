@@ -15,12 +15,14 @@ import {
 const mocks = vi.hoisted(() => ({
   protocolPackageList: vi.fn(),
   protocolPackageDetail: vi.fn(),
+  protocolPackageEnable: vi.fn(),
 }));
 
 vi.mock("@/generated/rust-types", () => ({
   commands: {
     protocolPackageList: mocks.protocolPackageList,
     protocolPackageDetail: mocks.protocolPackageDetail,
+    protocolPackageEnable: mocks.protocolPackageEnable,
   },
 }));
 
@@ -33,6 +35,10 @@ describe("ProtocolPackageDialog details", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.protocolPackageList.mockResolvedValue([group()]);
+    mocks.protocolPackageEnable.mockImplementation(async (packageRef) => version(packageRef.version, {
+      package: packageRef,
+      enabled: true,
+    }));
     mocks.protocolPackageDetail.mockImplementation(async (packageRef) => {
       const selected = version(packageRef.version, {
         name: packageRef.version === "1.10.0" ? "旧版专用名称" : "最新版专用名称",
@@ -242,6 +248,44 @@ describe("ProtocolPackageDialog details", () => {
 
     expect(await screen.findByText("协议包详情数据不完整。")).toBeVisible();
     expect(screen.queryByText("选择一个版本查看详情。")).not.toBeInTheDocument();
+  });
+
+  it("enables an imported version and updates its availability without a reload", async () => {
+    const disabled = version("1.0.0", { enabled: false, name: "用户导入协议包" });
+    mocks.protocolPackageList.mockResolvedValue([group({
+      versions: [disabled],
+      reference_count: 0,
+      active_reference_count: 0,
+    })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(disabled, { usages: [] }));
+    mocks.protocolPackageEnable.mockResolvedValue({ ...disabled, enabled: true });
+
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+    await user.click(await screen.findByRole("button", { name: "启用协议包" }));
+
+    await waitFor(() => expect(mocks.protocolPackageEnable).toHaveBeenCalledWith(disabled.package));
+    expect(await screen.findByText("已启用", { selector: "dd" })).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("已启用，可在入口配置中选择");
+    expect(screen.queryByRole("button", { name: "启用协议包" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a version disabled and restores the enable action after failure", async () => {
+    const disabled = version("1.0.0", { enabled: false, name: "用户导入协议包" });
+    mocks.protocolPackageList.mockResolvedValue([group({ versions: [disabled] })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(disabled));
+    mocks.protocolPackageEnable.mockRejectedValue(new Error("协议脚本编译失败"));
+
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+    await user.click(await screen.findByRole("button", { name: "启用协议包" }));
+
+    expect(await screen.findByText("协议包启用失败")).toBeVisible();
+    expect(screen.getByText("协议脚本编译失败")).toBeVisible();
+    expect(screen.getByText("已停用", { selector: "dd" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "启用协议包" })).toBeEnabled();
   });
 
   it("keeps narrow dialogs scrollable with keyboard-accessible version actions", async () => {

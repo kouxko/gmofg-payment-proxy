@@ -168,7 +168,7 @@ export function protocolPackageDetailError(
   return undefined;
 }
 
-function isProtocolPackageVersion(
+export function isProtocolPackageVersion(
   value: unknown,
 ): value is ProtocolPackageVersionViewModel {
   if (!isRecord(value)
