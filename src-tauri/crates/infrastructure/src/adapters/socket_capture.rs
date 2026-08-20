@@ -223,7 +223,8 @@ fn decode_stored(stored: &StoredSocketCapture) -> AppResult<SocketCaptureRecord>
 }
 
 fn row_from_record(record: &SocketCaptureRecord) -> SocketCaptureRowViewModel {
-    let (kind, direction, package, schema, origin, written, rules) = match &record.payload {
+    let (kind, direction, package, schema, origin, written, rules, failure) = match &record.payload
+    {
         SocketCapturePayload::RelayFrame(frame) => (
             SocketCaptureKind::RelayFrame,
             Some(frame.direction),
@@ -236,6 +237,7 @@ fn row_from_record(record: &SocketCaptureRecord) -> SocketCaptureRowViewModel {
                 .iter()
                 .flat_map(|stage| stage.matched_rule_ids.iter().copied())
                 .collect(),
+            None,
         ),
         SocketCapturePayload::LocalExchange(exchange) => {
             let mut matched_rule_ids = exchange.matched_request_rule_ids.clone();
@@ -248,6 +250,25 @@ fn row_from_record(record: &SocketCaptureRecord) -> SocketCaptureRowViewModel {
                 exchange.request_origin.len(),
                 exchange.written_response.len(),
                 matched_rule_ids,
+                None,
+            )
+        }
+        SocketCapturePayload::LocalExchangeFailure(exchange) => {
+            let mut matched_rule_ids = exchange.matched_request_rule_ids.clone();
+            matched_rule_ids.extend_from_slice(&exchange.matched_response_rule_ids);
+            (
+                SocketCaptureKind::LocalExchange,
+                None,
+                exchange.package.clone(),
+                exchange.response_schema.clone(),
+                exchange.request_origin.len(),
+                exchange.written_response_prefix.len(),
+                matched_rule_ids,
+                Some(intercept_proxy_application::SocketCaptureFailureViewModel {
+                    stage: exchange.failure_stage,
+                    code: exchange.failure_code.clone(),
+                    message: exchange.failure_message.clone(),
+                }),
             )
         }
     };
@@ -267,6 +288,7 @@ fn row_from_record(record: &SocketCaptureRecord) -> SocketCaptureRowViewModel {
         written_size_bytes: u64::try_from(written).unwrap_or(u64::MAX),
         logical_size_bytes: record.logical_bytes(),
         matched_rule_ids: rules,
+        failure,
     }
 }
 
@@ -284,6 +306,11 @@ fn payload_index(
             &frame.package,
         ),
         SocketCapturePayload::LocalExchange(exchange) => (
+            StoredSocketCaptureKind::LocalExchange,
+            None,
+            &exchange.package,
+        ),
+        SocketCapturePayload::LocalExchangeFailure(exchange) => (
             StoredSocketCaptureKind::LocalExchange,
             None,
             &exchange.package,

@@ -17,6 +17,7 @@ use uuid::Uuid;
 use super::{PageRequest, RuntimeEpoch, SessionId, SortDirection};
 
 mod document;
+mod payload_impl;
 mod payload_wire;
 mod validation;
 pub use document::*;
@@ -198,17 +199,6 @@ pub struct SocketRelayRuleStageCapture {
     pub document: SocketCaptureDocument,
 }
 
-impl fmt::Debug for SocketRelayRuleStageCapture {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SocketRelayRuleStageCapture")
-            .field("stage", &self.stage)
-            .field("matched_rule_count", &self.matched_rule_ids.len())
-            .field("document_schema", self.document.schema.id())
-            .finish()
-    }
-}
-
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 /// Relay 中一个方向已成功写出的完整 Frame。
@@ -223,41 +213,6 @@ pub struct SocketRelayFrameCapture {
     /// 实际成功写入另一端的完整字节；不得记录部分写入缓冲区。
     pub written: Vec<u8>,
     pub display: SocketDisplayResult,
-}
-
-impl fmt::Debug for SocketRelayFrameCapture {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SocketRelayFrameCapture")
-            .field("direction", &self.direction)
-            .field("package", &self.package)
-            .field("schema", &self.schema)
-            .field("origin_bytes", &self.origin.len())
-            .field("stage_count", &self.stages.len())
-            .field("written_bytes", &self.written.len())
-            .field("display", &self.display)
-            .finish()
-    }
-}
-
-impl SocketRelayFrameCapture {
-    const FIXED_OVERHEAD_BYTES: u64 = 192;
-
-    fn logical_bytes(&self) -> u64 {
-        Self::FIXED_OVERHEAD_BYTES
-            + package_logical_bytes(&self.package)
-            + self.schema.logical_bytes()
-            + self.origin.len() as u64
-            + self.written.len() as u64
-            + self
-                .stages
-                .iter()
-                .map(|stage| {
-                    32 + stage.document.logical_bytes() + (stage.matched_rule_ids.len() as u64 * 16)
-                })
-                .sum::<u64>()
-            + self.display.logical_bytes()
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -283,52 +238,37 @@ pub struct SocketLocalExchangeCapture {
     pub response_display: SocketDisplayResult,
 }
 
-impl fmt::Debug for SocketLocalExchangeCapture {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SocketLocalExchangeCapture")
-            .field("exchange_id", &self.exchange_id)
-            .field("package", &self.package)
-            .field("request_schema", &self.request_schema)
-            .field("response_schema", &self.response_schema)
-            .field("request_origin_bytes", &self.request_origin.len())
-            .field("request_document_schema", self.request_document.schema.id())
-            .field("request_display", &self.request_display)
-            .field(
-                "response_document_schema",
-                self.response_document.schema.id(),
-            )
-            .field(
-                "matched_request_rule_count",
-                &self.matched_request_rule_ids.len(),
-            )
-            .field(
-                "matched_response_rule_count",
-                &self.matched_response_rule_ids.len(),
-            )
-            .field("written_response_bytes", &self.written_response.len())
-            .field("response_display", &self.response_display)
-            .finish()
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+/// `LocalResponder` 在请求已经解析后失败的稳定阶段。
+pub enum SocketLocalExchangeFailureStage {
+    ResponseRule,
+    ResponseEncode,
+    ResponseWrite,
 }
 
-impl SocketLocalExchangeCapture {
-    const FIXED_OVERHEAD_BYTES: u64 = 224;
-
-    fn logical_bytes(&self) -> u64 {
-        Self::FIXED_OVERHEAD_BYTES
-            + package_logical_bytes(&self.package)
-            + self.request_schema.logical_bytes()
-            + self.response_schema.logical_bytes()
-            + self.request_origin.len() as u64
-            + self.written_response.len() as u64
-            + self.request_document.logical_bytes()
-            + self.request_display.logical_bytes()
-            + self.response_document.logical_bytes()
-            + (self.matched_request_rule_ids.len() as u64 * 16)
-            + (self.matched_response_rule_ids.len() as u64 * 16)
-            + self.response_display.logical_bytes()
-    }
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+/// 请求已解析但 response 未完整写出的失败证据；不伪装成成功 exchange。
+pub struct SocketLocalExchangeFailureCapture {
+    pub exchange_id: SocketExchangeId,
+    pub package: ProtocolPackageRef,
+    pub request_schema: SocketCaptureSchemaRef,
+    pub response_schema: SocketCaptureSchemaRef,
+    pub request_origin: Vec<u8>,
+    pub request_document: SocketCaptureDocument,
+    pub request_display: SocketDisplayResult,
+    pub matched_request_rule_ids: Vec<ProtocolDocumentRuleId>,
+    pub matched_response_rule_ids: Vec<ProtocolDocumentRuleId>,
+    /// response 规则已经完成时保留；规则或 Encode 构造失败时为空。
+    pub response_document: Option<SocketCaptureDocument>,
+    pub failure_stage: SocketLocalExchangeFailureStage,
+    /// 仅允许稳定枚举 code，不保存 I/O、脚本或 payload 动态文本。
+    pub failure_code: String,
+    /// 仅允许 `failure_stage.stable_message()`，便于 UI 直接展示且保持脱敏。
+    pub failure_message: String,
+    /// 实际已写入应用的 response 前缀；未开始写时为空。
+    pub written_response_prefix: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Type)]
@@ -337,27 +277,7 @@ impl SocketLocalExchangeCapture {
 pub enum SocketCapturePayload {
     RelayFrame(Box<SocketRelayFrameCapture>),
     LocalExchange(Box<SocketLocalExchangeCapture>),
-}
-
-impl fmt::Debug for SocketCapturePayload {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::RelayFrame(value) => formatter.debug_tuple("RelayFrame").field(value).finish(),
-            Self::LocalExchange(value) => {
-                formatter.debug_tuple("LocalExchange").field(value).finish()
-            }
-        }
-    }
-}
-
-impl SocketCapturePayload {
-    #[must_use]
-    pub fn logical_bytes(&self) -> u64 {
-        match self {
-            Self::RelayFrame(value) => value.logical_bytes(),
-            Self::LocalExchange(value) => value.logical_bytes(),
-        }
-    }
+    LocalExchangeFailure(Box<SocketLocalExchangeFailureCapture>),
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -458,6 +378,15 @@ pub struct SocketCaptureRowViewModel {
     pub written_size_bytes: u64,
     pub logical_size_bytes: u64,
     pub matched_rule_ids: Vec<ProtocolDocumentRuleId>,
+    pub failure: Option<SocketCaptureFailureViewModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct SocketCaptureFailureViewModel {
+    pub stage: SocketLocalExchangeFailureStage,
+    pub code: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -485,8 +414,4 @@ impl fmt::Debug for SocketCaptureDetailViewModel {
             .field("record", &self.record)
             .finish()
     }
-}
-
-fn package_logical_bytes(package: &ProtocolPackageRef) -> u64 {
-    (package.id.as_str().len() + package.version.as_str().len()) as u64
 }

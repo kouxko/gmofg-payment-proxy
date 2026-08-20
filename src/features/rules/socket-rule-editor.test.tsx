@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -15,14 +14,12 @@ import {
   newProtocolRuleDraft,
   type ProtocolRuleDraft,
 } from "./protocol-rule-model";
-
 const commandMocks = vi.hoisted(() => ({ protocolRuleParseValue: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
   callCommand: async <T,>(value: Promise<T> | T) => value,
   errorMessage: (reason: unknown) => reason instanceof Error ? reason.message : "Rust 解析失败",
 }));
-
 beforeEach(() => {
   commandMocks.protocolRuleParseValue.mockImplementation(async (type: string, raw: string) => {
     if (type === "string") return { type, value: raw };
@@ -32,9 +29,7 @@ beforeEach(() => {
     return { type, value: compact.match(/.{2}/g)?.map((byte) => Number.parseInt(byte, 16)) ?? [] };
   });
 });
-
 const packageRef = { id: "iso8583", version: "1.2.3" };
-
 function listener(id: string, local = false): ProxyListener {
   return {
     id,
@@ -69,14 +64,12 @@ function listener(id: string, local = false): ProxyListener {
     },
   };
 }
-
 const fields: ProtocolRuleCapabilityCatalog["fields"] = [
   { name: "message_type", label: "消息类型", type: "string", operators: ["equals"], actions: ["set_field"] },
   { name: "amount", label: "金额", type: "int", operators: ["equals"], actions: ["set_field"] },
   { name: "approved", label: "批准", type: "bool", operators: ["equals"], actions: ["set_field"] },
   { name: "bitmap", label: "位图", type: "blob", operators: ["equals"], actions: ["set_field"] },
 ];
-
 function catalog(stage: ProtocolRuleStage = "app_to_proxy"): ProtocolRuleCapabilityCatalog {
   return {
     package: packageRef,
@@ -86,7 +79,6 @@ function catalog(stage: ProtocolRuleStage = "app_to_proxy"): ProtocolRuleCapabil
     common_actions: ["record_match", "clear_document"],
   };
 }
-
 function Harness({
   activeListener = listener("relay"),
   activeCatalog = catalog(),
@@ -146,13 +138,11 @@ function Harness({
     pending={pending}
   />;
 }
-
 describe("Socket rule editor product boundary", () => {
   it("shows a capability loading state", () => {
     render(<Harness loading />);
     expect(screen.getByLabelText("正在读取报文规则能力")).toBeVisible();
   });
-
   it("shows a capability error and retries", async () => {
     const user = userEvent.setup();
     const reload = vi.fn();
@@ -161,7 +151,6 @@ describe("Socket rule editor product boundary", () => {
     await user.click(screen.getByRole("button", { name: "重试" }));
     expect(reload).toHaveBeenCalledOnce();
   });
-
   it("does not render any HTTP-only control in its DOM or accessibility tree", () => {
     const { container } = render(<Harness />);
     const forbidden = /Method|Path|Query|Header|Cookie|Status Code|JSONPath|HTTP Body|nth[- ]hit|TLS handshake/i;
@@ -170,7 +159,6 @@ describe("Socket rule editor product boundary", () => {
       expect(`${element.getAttribute("aria-label") ?? ""} ${element.getAttribute("aria-description") ?? ""}`).not.toMatch(forbidden);
     }
   });
-
   it("keeps an existing entry, package, schema, and stage binding read-only", () => {
     const relay = listener("relay");
     const draft = { ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), rule_id: "rule-1", expected_revision: 4 };
@@ -180,7 +168,6 @@ describe("Socket rule editor product boundary", () => {
     expect(screen.queryByLabelText("协议入口")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("报文处理阶段")).not.toBeInTheDocument();
   });
-
   it("offers all four processing stages while creating a relay rule", async () => {
     const user = userEvent.setup();
     render(<Harness />);
@@ -190,7 +177,6 @@ describe("Socket rule editor product boundary", () => {
     expect(screen.getByRole("option", { name: "上游服务 → 代理" })).toBeVisible();
     expect(screen.getByRole("option", { name: "代理 → 应用" })).toBeVisible();
   });
-
   it("offers the two app-facing stages for local response", async () => {
     const user = userEvent.setup();
     const local = listener("local", true);
@@ -319,6 +305,24 @@ describe("Socket rule editor product boundary", () => {
     await user.click(screen.getAllByLabelText("条件字段")[1]);
     expect(screen.queryByRole("option", { name: /message_type/ })).not.toBeInTheDocument();
     expect(await screen.findByRole("option", { name: /amount/ })).toBeVisible();
+  });
+
+  it("keeps condition fields and values in a responsive two-column row without duplicate labels", () => {
+    const relay = listener("relay");
+    const initial = {
+      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      conditions: [
+        { operator: "equals" as const, field: "message_type", value: { type: "string" as const, value: "0200" } },
+      ],
+    };
+    render(<Harness initialDraft={initial} />);
+
+    expect(screen.getByText("第 1 个条件 · 等于")).toBeVisible();
+    expect(screen.queryByText("equals")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "条件 1 字段和值" })).toHaveClass("sm:grid-cols-2");
+    expect(screen.getByText("条件字段")).toHaveClass("sr-only");
+    expect(screen.getByText("比较值")).toHaveClass("sr-only");
+    expect(screen.getByRole("textbox", { name: "比较值" })).toHaveAttribute("placeholder", "比较值");
   });
 
   it("deletes one condition without disturbing the remaining condition", async () => {

@@ -28,6 +28,7 @@ const relayRow = {
   written_size_bytes: 2,
   logical_size_bytes: 300,
   matched_rule_ids: [],
+  failure: null,
 } satisfies SocketCaptureRowViewModel;
 
 const localRow = {
@@ -36,6 +37,17 @@ const localRow = {
   kind: "local_exchange",
   direction: null,
   matched_rule_ids: ["77777777-7777-4777-8777-777777777777"],
+} satisfies SocketCaptureRowViewModel;
+
+const failedLocalRow = {
+  ...localRow,
+  capture_id: "88888888-8888-4888-8888-888888888888",
+  written_size_bytes: 0,
+  failure: {
+    stage: "response_encode",
+    code: "ENCODE_FAILED",
+    message: "响应报文生成失败，请检查代理→应用规则是否补齐协议要求的字段。",
+  },
 } satisfies SocketCaptureRowViewModel;
 
 function page(
@@ -102,6 +114,12 @@ describe("SocketCaptureList", () => {
     renderList({ page: page([{ ...relayRow, direction: "upstream" }]) });
 
     expect(screen.getByText("App → Server")).toBeVisible();
+  });
+
+  it("shows a failed local response without presenting it as success", () => {
+    renderList({ page: page([failedLocalRow]) });
+
+    expect(screen.getByText("响应生成失败")).toBeVisible();
   });
 
   it("selects the exact row represented by a table key", async () => {

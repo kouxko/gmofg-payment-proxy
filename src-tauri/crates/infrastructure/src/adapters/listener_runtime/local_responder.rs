@@ -8,15 +8,16 @@
 use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
-use intercept_proxy_application::{SocketCaptureSchemaRef, SocketExchangeId};
+use intercept_proxy_application::SocketCaptureSchemaRef;
 use intercept_proxy_domain::ProtocolRuleStage;
 use intercept_proxy_protocol_scripting::{
     LocalResponderCoordinator, ProtocolDirection, ProtocolExecutionCancellation,
-    ProtocolFrameInspector, ProtocolFramingLimits, ProtocolRuntimeError, ProtocolRuntimeLimits,
+    ProtocolFrameInspector, ProtocolFramingLimits, ProtocolRuntimeLimits,
 };
 use intercept_proxy_runtime::{
     FrameBoundary, LocalResponderDiagnostics, LocalResponderProcessorFactory,
     SocketConnectionIdentity, SocketFrameProcessor, SocketProcessingFailure,
+    SocketProcessingFailureKind,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -32,11 +33,13 @@ mod capture;
 mod failure;
 mod limits;
 mod preview;
+mod worker;
 use failure::{
     frame_boundary, framing_failure, processing_failure, request_runtime_failure,
     response_runtime_failure, worker_failure,
 };
 pub(super) use limits::local_frame_pump_limits;
+use worker::run_local_worker;
 
 /// 同一次 Listener 启动快照派生的 `LocalResponder` processor factory。
 pub(super) struct LocalResponderProcessorFactoryAdapter {
@@ -253,6 +256,16 @@ impl SocketFrameProcessor for LocalResponderFrameProcessor {
             ticket,
         });
     }
+
+    fn output_failed(&mut self, failure: &SocketProcessingFailure, written_bytes: usize) {
+        let ticket = self.capture.ticket();
+        let _ = self.commands.try_send(LocalCommand::FailOutput {
+            completed_at: Utc::now(),
+            ticket,
+            failure_kind: failure.kind,
+            written_bytes,
+        });
+    }
 }
 
 struct FailedLocalProcessor {
@@ -288,6 +301,12 @@ enum LocalCommand {
         completed_at: DateTime<Utc>,
         ticket: Option<SocketCapturePublishTicket>,
     },
+    FailOutput {
+        completed_at: DateTime<Utc>,
+        ticket: Option<SocketCapturePublishTicket>,
+        failure_kind: SocketProcessingFailureKind,
+        written_bytes: usize,
+    },
 }
 
 struct LocalWorkerState {
@@ -303,186 +322,4 @@ struct LocalWorkerState {
     capture: SocketCaptureContext,
     request_schema: SocketCaptureSchemaRef,
     response_schema: SocketCaptureSchemaRef,
-}
-
-async fn run_local_worker(
-    mut commands: mpsc::Receiver<LocalCommand>,
-    mut state: LocalWorkerState,
-    blocking_slots: BlockingCommandSlots,
-) {
-    while let Some(mut command) = commands.recv().await {
-        if let LocalCommand::SetDiagnostics(diagnostics) = command {
-            state.diagnostics = Some(diagnostics);
-            continue;
-        }
-        let permits = match &mut command {
-            LocalCommand::Inspect { reply, .. } => acquire_for_reply(&blocking_slots, reply).await,
-            LocalCommand::Process { reply, .. } => acquire_for_reply(&blocking_slots, reply).await,
-            // Display 已在线路提交之后。资源繁忙时丢弃展示并清理 pending response，不能
-            // 留下等待 blocking permit 的孤儿任务，也不能阻塞下一个 request。
-            LocalCommand::CommitDisplay { .. } => blocking_slots.try_acquire(),
-            LocalCommand::SetDiagnostics(_) => unreachable!("handled before permit acquisition"),
-        };
-        let Some(permits) = permits else {
-            if let LocalCommand::CommitDisplay {
-                completed_at,
-                ticket,
-            } = command
-                && let Some(pending) = state.pending_response.take()
-            {
-                capture::commit(
-                    &mut state.coordinator,
-                    pending,
-                    capture::LocalCaptureCommit {
-                        ticket,
-                        capture: &state.capture,
-                        connection: &state.connection,
-                        completed_at,
-                        package: state.package.clone(),
-                        request_schema: state.request_schema.clone(),
-                        response_schema: state.response_schema.clone(),
-                        render_display: false,
-                    },
-                );
-            }
-            continue;
-        };
-        let result = tokio::task::spawn_blocking(move || {
-            let _permits = permits;
-            run_local_command(state, command)
-        })
-        .await;
-        match result {
-            Ok(next) => state = next,
-            // panic 只关闭当前 exchange worker；等待的 oneshot 自动关闭并由 processor
-            // 映射为稳定 ProcessorPanicked，panic payload 不进入诊断。
-            Err(_) => return,
-        }
-    }
-}
-
-fn run_local_command(mut state: LocalWorkerState, command: LocalCommand) -> LocalWorkerState {
-    match command {
-        LocalCommand::SetDiagnostics(_) => unreachable!("handled by async worker"),
-        LocalCommand::Inspect { buffered, reply } => {
-            let result = state
-                .inspector
-                .inspect(&buffered)
-                .map(frame_boundary)
-                .map_err(|error| framing_failure(&error));
-            let _ = reply.send(result);
-        }
-        LocalCommand::Process {
-            origin,
-            occurred_at,
-            reply,
-        } => {
-            let result = process_exchange(&mut state, &origin, occurred_at);
-            let _ = reply.send(result);
-        }
-        LocalCommand::CommitDisplay {
-            completed_at,
-            ticket,
-        } => {
-            if let Some(pending) = state.pending_response.take() {
-                // response_committed 验证 handle 归属；任一错误或 panic 都只降级展示，不能
-                // 反写已提交 response 或毒化下一次 request。
-                capture::commit(
-                    &mut state.coordinator,
-                    pending,
-                    capture::LocalCaptureCommit {
-                        ticket,
-                        capture: &state.capture,
-                        connection: &state.connection,
-                        completed_at,
-                        package: state.package.clone(),
-                        request_schema: state.request_schema.clone(),
-                        response_schema: state.response_schema.clone(),
-                        render_display: true,
-                    },
-                );
-            }
-        }
-    }
-    state
-}
-
-fn process_exchange(
-    state: &mut LocalWorkerState,
-    origin: &Bytes,
-    occurred_at: DateTime<Utc>,
-) -> Result<Bytes, SocketProcessingFailure> {
-    if state.pending_response.is_some() {
-        return Err(processing_failure(
-            "previous local response was not committed before next request",
-        ));
-    }
-    let exchange_id = SocketExchangeId::new();
-    let package = state.package.clone();
-    let cancellation = state.cancellation.clone();
-    let mut matched_request_rule_ids = Vec::new();
-    let request = state
-        .coordinator
-        .decode_request_with_document_transform(origin.to_vec(), |document| {
-            state
-                .request_rules
-                .execute_with_cancellation(state.request_rules.bind_document(document), || {
-                    cancellation.is_cancelled()
-                })
-                .map(|execution| {
-                    let (document, matched_ids) = execution.into_parts();
-                    matched_request_rule_ids = matched_ids;
-                    document
-                })
-                .map_err(|_| {
-                    if cancellation.is_cancelled() {
-                        ProtocolRuntimeError::LocalResponseCancelled {
-                            package: package.clone(),
-                        }
-                    } else {
-                        ProtocolRuntimeError::DocumentTransformFailed {
-                            package: package.clone(),
-                        }
-                    }
-                })
-        })
-        .map_err(|error| request_runtime_failure(&error))?;
-    preview::publish_request_parsed(state.diagnostics.as_ref(), exchange_id, &request);
-    let mut matched_response_rule_ids = Vec::new();
-    let response = state
-        .coordinator
-        .build_response(&request, |document| {
-            state
-                .response_rules
-                .execute_with_cancellation(state.response_rules.bind_document(document), || {
-                    cancellation.is_cancelled()
-                })
-                .map(|execution| {
-                    let (document, matched_ids) = execution.into_parts();
-                    matched_response_rule_ids = matched_ids;
-                    document
-                })
-                .map_err(|_| {
-                    if cancellation.is_cancelled() {
-                        ProtocolRuntimeError::LocalResponseCancelled {
-                            package: package.clone(),
-                        }
-                    } else {
-                        ProtocolRuntimeError::DocumentTransformFailed {
-                            package: package.clone(),
-                        }
-                    }
-                })
-        })
-        .map_err(|error| response_runtime_failure(&error))?;
-    let written = Bytes::from_owner(response.written_owner());
-    state.pending_response = Some(capture::PendingLocalCapture::new(
-        response,
-        exchange_id,
-        request,
-        matched_request_rule_ids,
-        matched_response_rule_ids,
-        occurred_at,
-    ));
-    Ok(written)
 }

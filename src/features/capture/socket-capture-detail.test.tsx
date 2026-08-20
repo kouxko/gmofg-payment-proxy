@@ -40,6 +40,7 @@ function relayRow(): SocketCaptureRowViewModel {
     written_size_bytes: 2,
     logical_size_bytes: 768,
     matched_rule_ids: ["66666666-6666-4666-8666-666666666666"],
+    failure: null,
   };
 }
 
@@ -121,6 +122,45 @@ function localDetail(
       },
     },
   } satisfies SocketCaptureDetailViewModel;
+}
+
+function failedLocalRow(): SocketCaptureRowViewModel {
+  return {
+    ...localRow(),
+    written_size_bytes: 0,
+    failure: {
+      stage: "response_encode",
+      code: "ENCODE_FAILED",
+      message: "响应报文生成失败，请检查代理→应用规则是否补齐协议要求的字段。",
+    },
+  };
+}
+
+function failedLocalDetail(row: SocketCaptureRowViewModel = failedLocalRow()): SocketCaptureDetailViewModel {
+  return {
+    record: {
+      ...localDetail(row).record,
+      payload: {
+        kind: "local_exchange_failure",
+        capture: {
+          exchange_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          package: row.package,
+          request_schema: row.schema,
+          response_schema: row.schema,
+          request_origin: [0x30],
+          request_document: documentFixture,
+          request_display: { type: "untrusted_html", html: "<p>Local request</p>" },
+          matched_request_rule_ids: [],
+          matched_response_rule_ids: row.matched_rule_ids,
+          response_document: null,
+          failure_stage: "response_encode",
+          failure_code: "ENCODE_FAILED",
+          failure_message: "响应报文生成失败，请检查代理→应用规则是否补齐协议要求的字段。",
+          written_response_prefix: [],
+        },
+      },
+    },
+  };
 }
 
 function renderDetail(
@@ -256,6 +296,16 @@ describe("SocketCaptureDetail local response", () => {
     const ruleId = "99999999-9999-4999-8999-999999999999";
     expect(within(request!).queryByText(ruleId)).toBeNull();
     expect(within(response!).getByText(ruleId)).toBeVisible();
+  });
+
+  it("shows parsed request evidence when response generation fails", () => {
+    const row = failedLocalRow();
+    renderDetail(row, failedLocalDetail(row));
+
+    expect(screen.getByText("响应生成失败")).toBeVisible();
+    expect(screen.getByText("ENCODE_FAILED")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "已解析的应用请求" })).toBeVisible();
+    expect(screen.getByText("未写出响应字节")).toBeVisible();
   });
 });
 

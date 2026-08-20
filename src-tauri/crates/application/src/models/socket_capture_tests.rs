@@ -150,6 +150,69 @@ fn local_exchange_keeps_request_and_response_documents_separate() {
 }
 
 #[test]
+fn failed_local_exchange_keeps_request_evidence_without_claiming_a_response() {
+    let failure = SocketLocalExchangeFailureCapture {
+        exchange_id: SocketExchangeId::new(),
+        package: package(),
+        request_schema: schema_ref(),
+        response_schema: schema_ref(),
+        request_origin: b"0200".to_vec(),
+        request_document: SocketCaptureDocument::from_document(&document()),
+        request_display: display(),
+        matched_request_rule_ids: vec![ProtocolDocumentRuleId::new()],
+        matched_response_rule_ids: Vec::new(),
+        response_document: None,
+        failure_stage: SocketLocalExchangeFailureStage::ResponseEncode,
+        failure_code: "ENCODE_FAILED".to_owned(),
+        failure_message: "响应报文生成失败，请检查代理→应用规则是否补齐协议要求的字段。".to_owned(),
+        written_response_prefix: Vec::new(),
+    };
+    let capture = record(SocketCapturePayload::LocalExchangeFailure(Box::new(
+        failure,
+    )));
+
+    assert!(capture.is_consistent());
+    let json = serde_json::to_value(&capture.payload).unwrap();
+    assert_eq!(json["kind"], "local_exchange_failure");
+    assert_eq!(json["capture"]["failure_code"], "ENCODE_FAILED");
+    assert!(format!("{:?}", capture.payload).contains("failure_message_bytes"));
+    assert!(!format!("{:?}", capture.payload).contains("响应报文生成失败"));
+}
+
+#[test]
+fn failed_local_exchange_rejects_dynamic_or_contradictory_failure_evidence() {
+    let failure = SocketLocalExchangeFailureCapture {
+        exchange_id: SocketExchangeId::new(),
+        package: package(),
+        request_schema: schema_ref(),
+        response_schema: schema_ref(),
+        request_origin: b"0200".to_vec(),
+        request_document: SocketCaptureDocument::from_document(&document()),
+        request_display: display(),
+        matched_request_rule_ids: Vec::new(),
+        matched_response_rule_ids: Vec::new(),
+        response_document: None,
+        failure_stage: SocketLocalExchangeFailureStage::ResponseWrite,
+        failure_code: "WRITE_FAILED".to_owned(),
+        failure_message: "响应写回应用失败，已保留请求解析结果和已写出的响应前缀。".to_owned(),
+        written_response_prefix: vec![1],
+    };
+    let mut capture = record(SocketCapturePayload::LocalExchangeFailure(Box::new(
+        failure,
+    )));
+    assert!(!capture.is_consistent());
+
+    if let SocketCapturePayload::LocalExchangeFailure(failure) = &mut capture.payload {
+        failure.response_document = Some(SocketCaptureDocument::from_document(&document()));
+    }
+    assert!(capture.is_consistent());
+    if let SocketCapturePayload::LocalExchangeFailure(failure) = &mut capture.payload {
+        failure.failure_code = "socket reset by peer: secret".to_owned();
+    }
+    assert!(!capture.is_consistent());
+}
+
+#[test]
 fn socket_capture_wire_is_strict_and_contains_no_http_projection() {
     let capture = record(SocketCapturePayload::RelayFrame(Box::new(relay())));
     let value = serde_json::to_value(&capture).unwrap();

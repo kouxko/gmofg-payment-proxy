@@ -77,6 +77,12 @@ struct CommitCountingProcessor {
     committed: Arc<AtomicUsize>,
 }
 
+struct OutputNotificationProcessor {
+    output: Bytes,
+    committed: Arc<AtomicUsize>,
+    failed: Arc<std::sync::Mutex<Option<(SocketProcessingFailureKind, usize)>>>,
+}
+
 #[async_trait]
 impl SocketFrameProcessor for CancellingProcessor {
     async fn inspect(
@@ -107,6 +113,28 @@ impl SocketFrameProcessor for CommitCountingProcessor {
 
     fn output_committed(&mut self) {
         self.committed.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+#[async_trait]
+impl SocketFrameProcessor for OutputNotificationProcessor {
+    async fn inspect(
+        &mut self,
+        _buffered: Bytes,
+    ) -> Result<FrameBoundary, SocketProcessingFailure> {
+        Ok(FrameBoundary::Complete { bytes: 1 })
+    }
+
+    async fn process(&mut self, _origin: Bytes) -> Result<Bytes, SocketProcessingFailure> {
+        Ok(self.output.clone())
+    }
+
+    fn output_committed(&mut self) {
+        self.committed.fetch_add(1, Ordering::SeqCst);
+    }
+
+    fn output_failed(&mut self, failure: &SocketProcessingFailure, written_bytes: usize) {
+        *self.failed.lock().unwrap() = Some((failure.kind, written_bytes));
     }
 }
 
@@ -352,6 +380,38 @@ async fn partial_reset_preserves_successful_byte_count() {
     assert_eq!(progress.io_snapshot().read.client_to_server, 1);
     assert_eq!(failure.bytes().server_to_client, 3);
     assert_eq!(committed.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn partial_write_notifies_failure_with_exact_written_prefix_length() {
+    let committed = Arc::new(AtomicUsize::new(0));
+    let failed = Arc::new(std::sync::Mutex::new(None));
+    let factory = Factory::new(Box::new(OutputNotificationProcessor {
+        output: Bytes::from_static(b"response"),
+        committed: Arc::clone(&committed),
+        failed: Arc::clone(&failed),
+    }));
+    let failure = respond_framed_locally(
+        Box::new(PartialThenError {
+            first_write: true,
+            read_once: false,
+        }),
+        identity(),
+        &factory,
+        limits(),
+        timeouts(),
+        CancellationToken::new(),
+        Arc::new(RelayProgress::default()),
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(failure.kind, SocketProcessingFailureKind::WriteFailed);
+    assert_eq!(committed.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        *failed.lock().unwrap(),
+        Some((SocketProcessingFailureKind::WriteFailed, 3))
+    );
 }
 
 #[tokio::test]

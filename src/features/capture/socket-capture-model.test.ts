@@ -52,6 +52,7 @@ function relayRow(): SocketCaptureRowViewModel {
     written_size_bytes: 2,
     logical_size_bytes: 512,
     matched_rule_ids: ["77777777-7777-4777-8777-777777777777"],
+    failure: null,
   };
 }
 
@@ -141,6 +142,53 @@ function localDetail(
   } satisfies SocketCaptureDetailViewModel;
 }
 
+function failedLocalRow(): SocketCaptureRowViewModel {
+  return {
+    ...localRow(),
+    written_size_bytes: 0,
+    failure: {
+      stage: "response_encode",
+      code: "ENCODE_FAILED",
+      message: "响应报文生成失败，请检查代理→应用规则是否补齐协议要求的字段。",
+    },
+  };
+}
+
+function failedLocalDetail(row: SocketCaptureRowViewModel = failedLocalRow()): SocketCaptureDetailViewModel {
+  return {
+    record: {
+      capture_id: row.capture_id,
+      runtime_epoch: row.runtime_epoch,
+      workspace_id: workspaceId,
+      listener_id: row.listener_id,
+      session_id: row.session_id,
+      connection_id: row.connection_id,
+      peer_address: "127.0.0.1:42000",
+      occurred_at: row.occurred_at,
+      completed_at: row.completed_at,
+      payload: {
+        kind: "local_exchange_failure",
+        capture: {
+          exchange_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+          package: row.package,
+          request_schema: row.schema,
+          response_schema: row.schema,
+          request_origin: [0x30, 0x32],
+          request_document: documentFixture,
+          request_display: { type: "untrusted_html", html: "<p>Request</p>" },
+          matched_request_rule_ids: [],
+          matched_response_rule_ids: row.matched_rule_ids,
+          response_document: null,
+          failure_stage: "response_encode",
+          failure_code: "ENCODE_FAILED",
+          failure_message: "响应报文生成失败，请检查代理→应用规则是否补齐协议要求的字段。",
+          written_response_prefix: [],
+        },
+      },
+    },
+  };
+}
+
 describe("Socket capture query model", () => {
   it("contains only Socket query dimensions and starts from the first page", () => {
     const query = defaultSocketCaptureQuery(workspaceId);
@@ -212,6 +260,13 @@ describe("Socket capture detail validation", () => {
     expect(validated.record.payload.capture.response_document).toEqual(
       documentFixture,
     );
+  });
+
+  it("accepts a failed local response while preserving the parsed request", () => {
+    const row = failedLocalRow();
+    const validated = validateSocketCaptureDetail(failedLocalDetail(row), row, workspaceId);
+
+    expect(validated?.record.payload.kind).toBe("local_exchange_failure");
   });
 
   it("rejects a payload branch that disagrees with the selected row kind", () => {

@@ -72,6 +72,7 @@ const pageFixture = {
       written_size_bytes: 1,
       logical_size_bytes: 256,
       matched_rule_ids: [],
+      failure: null,
     },
   ],
   total: 1,
@@ -121,7 +122,6 @@ const detailFixture = {
     },
   },
 } satisfies SocketCaptureDetailViewModel;
-
 function installQueryMock() {
   queryHookMock.mockImplementation((key: string, loader: () => unknown) => {
     if (key === "socket-capture-workspaces") {

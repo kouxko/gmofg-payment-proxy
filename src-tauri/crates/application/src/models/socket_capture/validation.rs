@@ -7,7 +7,8 @@ use std::collections::HashSet;
 
 use super::{
     SocketCaptureDocument, SocketCapturePayload, SocketCaptureRecord, SocketCaptureSchemaRef,
-    SocketDisplayFallbackReason, SocketDisplayResult, SocketRelayRuleStageCapture,
+    SocketDisplayFallbackReason, SocketDisplayResult, SocketLocalExchangeFailureCapture,
+    SocketLocalExchangeFailureStage, SocketRelayRuleStageCapture,
 };
 use intercept_proxy_domain::{ProtocolDirection, ProtocolDocumentRuleId, ProtocolRuleStage};
 
@@ -42,7 +43,46 @@ impl SocketCaptureRecord {
                         && unique_rule_ids(&exchange.matched_request_rule_ids)
                         && unique_rule_ids(&exchange.matched_response_rule_ids)
                 }
+                SocketCapturePayload::LocalExchangeFailure(failure) => {
+                    failed_exchange_is_consistent(failure)
+                }
             }
+    }
+}
+
+fn failed_exchange_is_consistent(failure: &SocketLocalExchangeFailureCapture) -> bool {
+    failure.request_schema.version > 0
+        && failure.response_schema.version > 0
+        && !failure.request_origin.is_empty()
+        && schema_matches(&failure.request_document, &failure.request_schema)
+        && display_matches_document(&failure.request_display)
+        && failure
+            .response_document
+            .as_ref()
+            .is_none_or(|document| schema_matches(document, &failure.response_schema))
+        && unique_rule_ids(&failure.matched_request_rule_ids)
+        && unique_rule_ids(&failure.matched_response_rule_ids)
+        && failure.failure_message == failure.failure_stage.stable_message()
+        && failure_code_matches_stage(failure.failure_stage, &failure.failure_code)
+        && (failure.failure_stage == SocketLocalExchangeFailureStage::ResponseWrite
+            || failure.written_response_prefix.is_empty())
+        && (failure.written_response_prefix.is_empty() || failure.response_document.is_some())
+}
+
+fn failure_code_matches_stage(stage: SocketLocalExchangeFailureStage, code: &str) -> bool {
+    match stage {
+        SocketLocalExchangeFailureStage::ResponseRule => code == "RULE_FAILED",
+        SocketLocalExchangeFailureStage::ResponseEncode => matches!(
+            code,
+            "ENCODE_FAILED"
+                | "EMPTY_OUTPUT"
+                | "OUTPUT_LIMIT_EXCEEDED"
+                | "PROCESSING_FAILED"
+                | "PROCESSING_TIMEOUT"
+        ),
+        SocketLocalExchangeFailureStage::ResponseWrite => {
+            matches!(code, "WRITE_FAILED" | "WRITE_TIMEOUT" | "CANCELLED")
+        }
     }
 }
 
