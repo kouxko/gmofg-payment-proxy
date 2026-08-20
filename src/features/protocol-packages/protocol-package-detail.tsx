@@ -1,4 +1,4 @@
-import { Alert, Chip, Spinner, Table } from "@heroui/react";
+import { Alert, Button, Chip, Spinner, Table } from "@heroui/react";
 import type {
   ListenerRuntimeState,
   ProtocolPackageDetailViewModel,
@@ -11,7 +11,17 @@ interface DetailState {
   isLoading: boolean;
 }
 
-export function ProtocolPackageDetail({ detail }: { detail: DetailState }) {
+export function ProtocolPackageDetail({
+  detail,
+  enablePending = false,
+  enableError,
+  onEnable,
+}: {
+  detail: DetailState;
+  enablePending?: boolean;
+  enableError?: string;
+  onEnable?: () => void;
+}) {
   if (detail.isLoading) {
     return <div className="grid min-h-56 place-items-center"><Spinner aria-label="正在读取协议包详情" /></div>;
   }
@@ -46,6 +56,25 @@ export function ProtocolPackageDetail({ detail }: { detail: DetailState }) {
           <dt className="text-[var(--telemetry-muted)]">状态</dt><dd>{version.enabled ? "已启用" : "已停用"}</dd>
           <dt className="text-[var(--telemetry-muted)]">安装时间</dt><dd className="break-all">{version.installed_at || "—"}</dd>
         </dl>
+        {!version.enabled && version.validation.state === "valid" && onEnable ? (
+          <div className="mt-4 space-y-3">
+            {enableError ? (
+              <Alert status="danger">
+                <Alert.Indicator />
+                <Alert.Content>
+                  <Alert.Title>协议包启用失败</Alert.Title>
+                  <Alert.Description>{enableError}</Alert.Description>
+                </Alert.Content>
+              </Alert>
+            ) : null}
+            <Button variant="primary" isDisabled={enablePending} onPress={onEnable}>
+              {enablePending ? "正在启用…" : "启用协议包"}
+            </Button>
+            <p className="text-sm text-[var(--telemetry-muted)]">
+              启用后可在匹配的入口配置中选择此版本。
+            </p>
+          </div>
+        ) : null}
       </section>
 
       {version.built_in && (

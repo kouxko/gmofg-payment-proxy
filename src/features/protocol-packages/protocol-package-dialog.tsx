@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { Button, Modal } from "@heroui/react";
 import { Xmark } from "@gravity-ui/icons";
 import type {
@@ -6,10 +7,10 @@ import type {
   ProtocolPackageVersionViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
-import { callCommand } from "@/lib/ipc/client";
+import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { ProtocolPackageDetail } from "./protocol-package-detail";
-import { protocolPackageDetailError } from "./protocol-package-model";
+import { isProtocolPackageVersion, protocolPackageDetailError } from "./protocol-package-model";
 import { ProtocolPackageVersionList } from "./protocol-package-version-list";
 
 export function ProtocolPackageDialog({
@@ -18,6 +19,7 @@ export function ProtocolPackageDialog({
   isOpen,
   announcement,
   onVersionChange,
+  onVersionEnabled,
   onOpenChange,
 }: {
   group?: ProtocolPackageGroupViewModel;
@@ -25,8 +27,12 @@ export function ProtocolPackageDialog({
   isOpen: boolean;
   announcement?: string;
   onVersionChange: (version: ProtocolPackageVersionViewModel) => void;
+  onVersionEnabled: (version: ProtocolPackageVersionViewModel) => void;
   onOpenChange: (open: boolean) => void;
 }) {
+  const enableLock = useRef(false);
+  const [enablePending, setEnablePending] = useState(false);
+  const [enableError, setEnableError] = useState<string>();
   const packageRef = selectedVersion?.package;
   const detail = useIpcQuery<ProtocolPackageDetailViewModel>(
     `protocol-package-detail:${packageRef?.id ?? ""}@${packageRef?.version ?? ""}`,
@@ -40,6 +46,35 @@ export function ProtocolPackageDialog({
   const visibleDetail = responseError
     ? { data: undefined, error: responseError, isLoading: false }
     : detail;
+
+  useEffect(() => {
+    setEnableError(undefined);
+  }, [isOpen, packageRef?.id, packageRef?.version]);
+
+  async function enableVersion() {
+    if (!selectedVersion || selectedVersion.enabled || enableLock.current) return;
+    enableLock.current = true;
+    setEnablePending(true);
+    setEnableError(undefined);
+    try {
+      const enabled = await callCommand(commands.protocolPackageEnable(selectedVersion.package));
+      if (!isProtocolPackageVersion(enabled)
+        || enabled.package.id !== selectedVersion.package.id
+        || enabled.package.version !== selectedVersion.package.version
+        || enabled.enabled !== true
+        || enabled.validation.state !== "valid") {
+        setEnableError("协议包启用结果不完整，请刷新列表后重试。");
+        return;
+      }
+      if (detail.data) detail.setData({ ...detail.data, version: enabled });
+      onVersionEnabled(enabled);
+    } catch (reason) {
+      setEnableError(errorMessage(reason));
+    } finally {
+      enableLock.current = false;
+      setEnablePending(false);
+    }
+  }
 
   return (
     <Modal isOpen={isOpen} onOpenChange={onOpenChange}>
@@ -62,9 +97,17 @@ export function ProtocolPackageDialog({
                 <ProtocolPackageVersionList
                   versions={group ? group.versions : []}
                   selectedVersion={selectedVersion?.package.version}
-                  onSelect={onVersionChange}
+                  onSelect={(version) => {
+                    setEnableError(undefined);
+                    onVersionChange(version);
+                  }}
                 />
-                <ProtocolPackageDetail detail={visibleDetail} />
+                <ProtocolPackageDetail
+                  detail={visibleDetail}
+                  enablePending={enablePending}
+                  enableError={enableError}
+                  onEnable={() => void enableVersion()}
+                />
               </div>
             </Modal.Body>
           </Modal.Dialog>
