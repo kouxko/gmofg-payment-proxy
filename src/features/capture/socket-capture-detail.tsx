@@ -4,6 +4,7 @@ import type {
   SocketCaptureDetailViewModel,
   SocketCaptureRowViewModel,
   SocketDisplayFallbackReason,
+  SocketLocalExchangeFailureStage,
 } from "@/generated/rust-types";
 import { formatBytes, formatTimestamp } from "@/lib/format";
 import { packageLabel, schemaLabel } from "./socket-capture-model";
@@ -26,6 +27,12 @@ interface SocketCaptureDetailProps {
 const fallbackText: Record<SocketDisplayFallbackReason, string> = {
   entry_point_failed: "协议视图生成失败，默认显示 Hex",
   resource_limit_exceeded: "协议视图超出脚本资源限制，默认显示 Hex",
+};
+
+const failureTitle: Record<SocketLocalExchangeFailureStage, string> = {
+  response_rule: "响应规则失败",
+  response_encode: "响应生成失败",
+  response_write: "响应写回失败",
 };
 
 function DisplayFallback({ display }: { display: Extract<import("@/generated/rust-types").SocketDisplayResult, { type: "hex_fallback" }> }) {
@@ -117,6 +124,52 @@ function LocalDetail({ detail }: { detail: SocketCaptureDetailViewModel }) {
   );
 }
 
+function LocalFailureDetail({ detail }: { detail: SocketCaptureDetailViewModel }) {
+  if (detail.record.payload.kind !== "local_exchange_failure") return null;
+  const failure = detail.record.payload.capture;
+  return (
+    <div className="space-y-6">
+      <Alert status="danger">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Title>{failureTitle[failure.failure_stage]}</Alert.Title>
+          <Alert.Description>
+            {failure.failure_message} <code className="ml-1 text-xs">{failure.failure_code}</code>
+          </Alert.Description>
+        </Alert.Content>
+      </Alert>
+      <section className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
+        <div>
+          <h2 className="font-semibold">已解析的应用请求</h2>
+          <p className="text-xs text-[var(--telemetry-muted)]">应用 → 本机应答</p>
+        </div>
+        <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+          <dt>命中规则</dt><dd><Rules ids={failure.matched_request_rule_ids} /></dd>
+        </dl>
+        <ProtocolHexViewer
+          bytes={failure.request_origin}
+          document={failure.request_document}
+          display={failure.request_display}
+          label="失败前解析的应用请求"
+        />
+      </section>
+      <section className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
+        <div>
+          <h2 className="font-semibold">未完成的本机应答</h2>
+          <p className="text-xs text-[var(--telemetry-muted)]">本机应答 → 应用</p>
+        </div>
+        <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+          <dt>命中规则</dt><dd><Rules ids={failure.matched_response_rule_ids} /></dd>
+        </dl>
+        {failure.response_document && <SocketDocumentView document={failure.response_document} />}
+        {failure.written_response_prefix.length > 0
+          ? <PaginatedHex bytes={failure.written_response_prefix} label="已写出的响应前缀" />
+          : <p className="text-sm text-[var(--telemetry-muted)]">未写出响应字节</p>}
+      </section>
+    </div>
+  );
+}
+
 export function SocketCaptureDetail(props: SocketCaptureDetailProps) {
   return (
     <Modal isOpen={Boolean(props.selected)} onOpenChange={(open) => { if (!open) props.onClose(); }}>
@@ -136,7 +189,11 @@ export function SocketCaptureDetail(props: SocketCaptureDetailProps) {
               )}
               {props.loading && <div className="grid min-h-48 place-items-center"><Spinner aria-label="正在读取 Socket 抓包详情" /></div>}
               {!props.loading && !props.error && !props.malformed && props.detail && (
-                props.detail.record.payload.kind === "relay_frame" ? <RelayDetail detail={props.detail} /> : <LocalDetail detail={props.detail} />
+                props.detail.record.payload.kind === "relay_frame"
+                  ? <RelayDetail detail={props.detail} />
+                  : props.detail.record.payload.kind === "local_exchange"
+                    ? <LocalDetail detail={props.detail} />
+                    : <LocalFailureDetail detail={props.detail} />
               )}
             </Modal.Body>
           </Modal.Dialog>

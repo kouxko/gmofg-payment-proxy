@@ -138,6 +138,20 @@ function isDisplay(value: unknown): boolean {
     && isText(value.diagnostic.code) && typeof value.diagnostic.message === "string");
 }
 
+const localFailureMessages = {
+  response_rule: "代理→应用规则执行失败。",
+  response_encode: "响应报文生成失败，请检查代理→应用规则是否补齐协议要求的字段。",
+  response_write: "响应写回应用失败，已保留请求解析结果和已写出的响应前缀。",
+} as const;
+
+function isLocalFailure(value: unknown): boolean {
+  if (!isRecord(value) || !hasOnly(value, ["stage", "code", "message"])
+    || !isText(value.code) || !isText(value.message)
+    || !Object.hasOwn(localFailureMessages, String(value.stage))) return false;
+  const stage = value.stage as keyof typeof localFailureMessages;
+  return value.message === localFailureMessages[stage];
+}
+
 function isRelayCapture(value: unknown, row: SocketCaptureRowViewModel): boolean {
   if (!isRecord(value) || !hasOnly(value, ["direction", "package", "schema", "origin", "stages", "written", "display"])
     || value.direction !== row.direction || !samePackage(value.package, row.package)
@@ -172,6 +186,27 @@ function isLocalCapture(value: unknown, row: SocketCaptureRowViewModel): boolean
   return true;
 }
 
+function isLocalFailureCapture(value: unknown, row: SocketCaptureRowViewModel): boolean {
+  if (!isRecord(value) || !row.failure || !hasOnly(value, [
+    "exchange_id", "package", "request_schema", "response_schema", "request_origin",
+    "request_document", "request_display", "matched_request_rule_ids",
+    "matched_response_rule_ids", "response_document", "failure_stage", "failure_code",
+    "failure_message", "written_response_prefix",
+  ]) || row.direction !== null || !isText(value.exchange_id)
+    || !samePackage(value.package, row.package) || !isSchemaRef(value.request_schema)
+    || !sameSchemaRef(value.response_schema, row.schema)
+    || !isBytes(value.request_origin) || !isBytes(value.written_response_prefix)
+    || !sameLocalRuleIds(value.matched_request_rule_ids, value.matched_response_rule_ids, row.matched_rule_ids)
+    || !isDisplay(value.request_display)
+    || !isDocument(value.request_document, value.request_schema as SocketCaptureSchemaRef)
+    || !(value.response_document === null
+      || isDocument(value.response_document, value.response_schema as SocketCaptureSchemaRef))
+    || value.failure_stage !== row.failure.stage || value.failure_code !== row.failure.code
+    || value.failure_message !== row.failure.message) return false;
+  return value.request_origin.length === row.origin_size_bytes
+    && value.written_response_prefix.length === row.written_size_bytes;
+}
+
 function isPackage(value: unknown): value is ProtocolPackageRef {
   return isRecord(value) && hasOnly(value, ["id", "version"])
     && isText(value.id) && isText(value.version);
@@ -183,7 +218,7 @@ function isSchemaRef(value: unknown): value is SocketCaptureSchemaRef {
 }
 
 function isCaptureRow(value: unknown, workspaceId: string): value is SocketCaptureRowViewModel {
-  if (!isRecord(value) || !hasOnly(value, ["capture_id", "runtime_epoch", "session_id", "connection_id", "listener_id", "occurred_at", "completed_at", "kind", "direction", "package", "schema", "origin_size_bytes", "written_size_bytes", "logical_size_bytes", "matched_rule_ids"])) return false;
+  if (!isRecord(value) || !hasOnly(value, ["capture_id", "runtime_epoch", "session_id", "connection_id", "listener_id", "occurred_at", "completed_at", "kind", "direction", "package", "schema", "origin_size_bytes", "written_size_bytes", "logical_size_bytes", "matched_rule_ids", "failure"])) return false;
   const sizes = [value.origin_size_bytes, value.written_size_bytes, value.logical_size_bytes];
   return isText(value.capture_id) && isText(value.runtime_epoch) && isText(value.session_id)
     && value.session_id === value.connection_id
@@ -194,7 +229,11 @@ function isCaptureRow(value: unknown, workspaceId: string): value is SocketCaptu
       ? value.direction === "upstream" || value.direction === "downstream"
       : value.direction === null)
     && isPackage(value.package) && isSchemaRef(value.schema) && sizes.every(isNonnegativeSafeInteger)
-    && Number(value.origin_size_bytes) > 0 && Number(value.written_size_bytes) > 0
+    && Number(value.origin_size_bytes) > 0
+    && (value.failure === null
+      ? Number(value.written_size_bytes) > 0
+      : value.kind === "local_exchange" && isLocalFailure(value.failure))
+    && (value.kind === "relay_frame" ? value.failure === null : true)
     && isRuleIds(value.matched_rule_ids) && workspaceId.length > 0;
 }
 
@@ -263,9 +302,13 @@ export function validateSocketCaptureDetail(
     || !isText(record.peer_address) || record.occurred_at !== row.occurred_at
     || record.completed_at !== row.completed_at || !isRecord(record.payload)
     || !hasOnly(record.payload, ["kind", "capture"])
-    || record.payload.kind !== row.kind || !isRecord(record.payload.capture)) return undefined;
+    || !isRecord(record.payload.capture)) return undefined;
   const valid = row.kind === "relay_frame"
-    ? isRelayCapture(record.payload.capture, row)
-    : isLocalCapture(record.payload.capture, row);
+    ? row.failure === null && record.payload.kind === "relay_frame"
+      && isRelayCapture(record.payload.capture, row)
+    : row.failure === null
+      ? record.payload.kind === "local_exchange" && isLocalCapture(record.payload.capture, row)
+      : record.payload.kind === "local_exchange_failure"
+        && isLocalFailureCapture(record.payload.capture, row);
   return valid ? value as SocketCaptureDetailViewModel : undefined;
 }

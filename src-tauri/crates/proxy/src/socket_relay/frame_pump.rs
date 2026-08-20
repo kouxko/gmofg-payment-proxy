@@ -153,12 +153,23 @@ where
                     &cancellation,
                 )
                 .await?;
-                validate_output(&output, limits, direction)?;
+                if let Err(failure) = validate_output(&output, limits, direction) {
+                    notify_output_failed(processor.as_mut(), &failure, 0);
+                    return Err(failure);
+                }
                 // 这里是 Processing -> Writing 的唯一线性化点。通过检查后，后续 write
                 // 故意不再监听 cancellation；否则 cancel-safe 不完整的 AsyncWrite 可能
                 // 已提交前缀后被 drop，并在上层重试时重复写同一 response。
-                begin_writing(&cancellation, direction)?;
-                write_output(&mut writer, &output, direction, timeouts.write, &progress).await?;
+                if let Err(failure) = begin_writing(&cancellation, direction) {
+                    notify_output_failed(processor.as_mut(), &failure, 0);
+                    return Err(failure);
+                }
+                if let Err((failure, written_bytes)) =
+                    write_output(&mut writer, &output, direction, timeouts.write, &progress).await
+                {
+                    notify_output_failed(processor.as_mut(), &failure, written_bytes);
+                    return Err(failure);
+                }
                 // Display/捕获只能在线路完整 write + flush 后收到提交通知。旁路实现即使 panic
                 // 也不能把已经成功提交的网络输出反写成连接失败。
                 let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -216,6 +227,16 @@ where
             }
         }
     }
+}
+
+fn notify_output_failed(
+    processor: &mut dyn SocketFrameProcessor,
+    failure: &SocketProcessingFailure,
+    written_bytes: usize,
+) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        processor.output_failed(failure, written_bytes);
+    }));
 }
 
 fn begin_writing(
@@ -352,43 +373,56 @@ async fn write_output<W: AsyncWrite + Unpin>(
     direction: SocketPayloadDirection,
     timeout: Duration,
     progress: &RelayProgress,
-) -> Result<(), SocketProcessingFailure> {
+) -> Result<(), (SocketProcessingFailure, usize)> {
+    let mut offset = 0;
     let operation = async {
-        let mut offset = 0;
         while offset < output.len() {
-            let written = writer.write(&output[offset..]).await.map_err(|error| {
-                SocketProcessingFailure::new(
-                    SocketProcessingFailureKind::WriteFailed,
-                    format!("socket write failed: {error}"),
-                )
-                .in_direction(direction)
-            })?;
+            let written = writer
+                .write(&output[offset..])
+                .await
+                .map_err(|error| {
+                    SocketProcessingFailure::new(
+                        SocketProcessingFailureKind::WriteFailed,
+                        format!("socket write failed: {error}"),
+                    )
+                    .in_direction(direction)
+                })
+                .map_err(|failure| (failure, offset))?;
             if written == 0 {
-                return fail(
-                    SocketProcessingFailureKind::WriteFailed,
-                    direction,
-                    "socket write returned zero",
-                );
+                return Err((
+                    SocketProcessingFailure::new(
+                        SocketProcessingFailureKind::WriteFailed,
+                        "socket write returned zero",
+                    )
+                    .in_direction(direction),
+                    offset,
+                ));
             }
             offset += written;
             progress.add(relay_direction(direction), written);
         }
         writer.flush().await.map_err(|error| {
-            SocketProcessingFailure::new(
-                SocketProcessingFailureKind::WriteFailed,
-                format!("socket flush failed: {error}"),
+            (
+                SocketProcessingFailure::new(
+                    SocketProcessingFailureKind::WriteFailed,
+                    format!("socket flush failed: {error}"),
+                )
+                .in_direction(direction),
+                offset,
             )
-            .in_direction(direction)
         })
     };
     tokio::time::timeout(timeout, operation)
         .await
         .map_err(|_| {
-            SocketProcessingFailure::new(
-                SocketProcessingFailureKind::WriteTimeout,
-                "socket write timed out",
+            (
+                SocketProcessingFailure::new(
+                    SocketProcessingFailureKind::WriteTimeout,
+                    "socket write timed out",
+                )
+                .in_direction(direction),
+                offset,
             )
-            .in_direction(direction)
         })?
 }
 

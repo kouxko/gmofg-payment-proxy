@@ -351,6 +351,59 @@ async fn decode_failure_writes_and_publishes_no_completed_exchange() {
 }
 
 #[tokio::test]
+async fn encode_failure_persists_parsed_request_without_publishing_success_exchange() {
+    let id = "local-capture-encode-failure";
+    let port = reserve_port().await;
+    let listener = local_listener(id, port);
+    let script = BASIC_SCRIPT.replace(
+        "let result = blob(2, 0);",
+        "throw \"private encode detail\"; let result = blob(2, 0);",
+    );
+    let events = Arc::new(EventHub::default());
+    let (runtime, captures) = start_local_runtime_with_capture(
+        id,
+        BASIC_SCHEMA,
+        &script,
+        workspace(listener.clone(), Vec::new()),
+        &listener,
+        Arc::clone(&events),
+    )
+    .await;
+
+    assert!(request_once(port, &[2, 9]).await.is_empty());
+    let row = wait_for_rows(&captures, 1).await.rows.remove(0);
+    let detail = captures.get_detail(row.capture_id).unwrap().record;
+    let SocketCapturePayload::LocalExchangeFailure(failure) = detail.payload else {
+        panic!("expected LocalExchangeFailure")
+    };
+    assert_eq!(failure.request_origin, [2, 9]);
+    assert_eq!(
+        failure.request_document.get("amount"),
+        Some(&SocketCaptureDocumentValue::Int(
+            SocketCaptureInteger::from_i64(9)
+        ))
+    );
+    assert!(matches!(
+        failure.request_display,
+        SocketDisplayResult::UntrustedHtml { .. }
+    ));
+    assert_eq!(
+        failure.failure_stage,
+        intercept_proxy_application::SocketLocalExchangeFailureStage::ResponseEncode
+    );
+    assert_eq!(failure.failure_code, "ENCODE_FAILED");
+    assert!(!failure.failure_message.contains("private encode detail"));
+    assert!(failure.response_document.is_some());
+    assert!(failure.written_response_prefix.is_empty());
+    assert!(!events.replay_after(0).events.iter().any(|event| matches!(
+        &event.payload,
+        intercept_proxy_application::UiEventPayload::SocketCaptureCompleted(row)
+            if row.failure.is_none()
+    )));
+    runtime.stop(listener.id).await.unwrap();
+}
+
+#[tokio::test]
 async fn clear_after_output_commit_cannot_revive_a_blocked_local_capture() {
     let id = "local-capture-clear-race";
     let port = reserve_port().await;

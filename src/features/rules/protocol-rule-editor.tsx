@@ -200,11 +200,15 @@ function ConditionRow(props: SectionProps & { condition: DocumentCondition; inde
   const usedElsewhere = new Set(props.draft.conditions.filter((_, index) => index !== props.index).map((item) => item.field));
   const key = `condition-${props.index}`;
   const disabled = draftControlsDisabled(props);
-  return <div className="grid gap-3 rounded-lg border border-[var(--telemetry-line)] p-3 sm:grid-cols-[1fr_110px_1fr_auto]">
-    <FieldSelect disabled={disabled} label="条件字段" field={field} fields={props.catalog.fields.filter((item) => !usedElsewhere.has(item.name))} onChange={(next) => { props.onResetInvalidValues(); replaceCondition(props, props.index, conditionFor(next)); }} />
-    <div><Label>操作符</Label><p className="mt-2 font-mono text-sm">equals</p></div>
-    <ProtocolRuleValueEditor disabled={valueEditorDisabled(props)} field={field} label="比较值" value={props.condition.value} onChange={(value) => replaceCondition(props, props.index, { ...props.condition, value })} onAsyncStateChange={(state) => props.onValueStateChange(key, state)} />
-    <Button aria-label={`删除条件 ${props.index + 1}`} isDisabled={disabled} size="sm" variant="danger-soft" onPress={() => { props.onResetInvalidValues(); props.onChange({ ...props.draft, conditions: props.draft.conditions.filter((_, index) => index !== props.index) }); }}>删除</Button>
+  return <div className="space-y-3 rounded-lg border border-[var(--telemetry-line)] p-3">
+    <div className="flex items-center gap-3">
+      <p className="text-sm font-medium">第 {props.index + 1} 个条件 · 等于</p>
+      <Button className="ml-auto shrink-0" aria-label={`删除条件 ${props.index + 1}`} isDisabled={disabled} size="sm" variant="danger-soft" onPress={() => { props.onResetInvalidValues(); props.onChange({ ...props.draft, conditions: props.draft.conditions.filter((_, index) => index !== props.index) }); }}>删除</Button>
+    </div>
+    <div aria-label={`条件 ${props.index + 1} 字段和值`} className="grid min-w-0 items-start gap-3 sm:grid-cols-2" role="group">
+      <FieldSelect compact disabled={disabled} label="条件字段" field={field} fields={props.catalog.fields.filter((item) => !usedElsewhere.has(item.name))} onChange={(next) => { props.onResetInvalidValues(); replaceCondition(props, props.index, conditionFor(next)); }} />
+      <ProtocolRuleValueEditor compact disabled={valueEditorDisabled(props)} field={field} label="比较值" value={props.condition.value} onChange={(value) => replaceCondition(props, props.index, { ...props.condition, value })} onAsyncStateChange={(state) => props.onValueStateChange(key, state)} />
+    </div>
   </div>;
 }
 

@@ -1663,6 +1663,12 @@ export type SocketCaptureFailureDiagnostic = {
 
 export type SocketCaptureFailureStage = "frame" | "decode" | "rule" | "encode" | "write";
 
+export type SocketCaptureFailureViewModel = {
+	stage: SocketLocalExchangeFailureStage,
+	code: string,
+	message: string,
+};
+
 /** 一条已完成 Socket capture 的稳定标识。 */
 export type SocketCaptureId = string;
 
@@ -1681,7 +1687,7 @@ export type SocketCapturePageViewModel = {
 };
 
 /**  Socket capture 的封闭联合类型；本地 exchange 不伪装为 Server frame。 */
-export type SocketCapturePayload = { kind: "relay_frame"; capture: SocketRelayFrameCapture } | { kind: "local_exchange"; capture: SocketLocalExchangeCapture };
+export type SocketCapturePayload = { kind: "relay_frame"; capture: SocketRelayFrameCapture } | { kind: "local_exchange"; capture: SocketLocalExchangeCapture } | { kind: "local_exchange_failure"; capture: SocketLocalExchangeFailureCapture };
 
 /**  Socket 页面专用查询；刻意不接受 HTTP stage、status、Header 或 `JSONPath` 条件。 */
 export type SocketCaptureQuery = {
@@ -1730,6 +1736,7 @@ export type SocketCaptureRowViewModel = {
 	written_size_bytes: number,
 	logical_size_bytes: number,
 	matched_rule_ids: ProtocolDocumentRuleId[],
+	failure: SocketCaptureFailureViewModel | null,
 };
 
 /**  捕获时实际使用的精确 Schema 身份。 */
@@ -1822,6 +1829,31 @@ export type SocketLocalExchangeCapture = {
 	written_response: number[],
 	response_display: SocketDisplayResult,
 };
+
+/**  请求已解析但 response 未完整写出的失败证据；不伪装成成功 exchange。 */
+export type SocketLocalExchangeFailureCapture = {
+	exchange_id: SocketExchangeId,
+	package: ProtocolPackageRef,
+	request_schema: SocketCaptureSchemaRef,
+	response_schema: SocketCaptureSchemaRef,
+	request_origin: number[],
+	request_document: SocketCaptureDocument,
+	request_display: SocketDisplayResult,
+	matched_request_rule_ids: ProtocolDocumentRuleId[],
+	matched_response_rule_ids: ProtocolDocumentRuleId[],
+	/**  response 规则已经完成时保留；规则或 Encode 构造失败时为空。 */
+	response_document: SocketCaptureDocument | null,
+	failure_stage: SocketLocalExchangeFailureStage,
+	/**  仅允许稳定枚举 code，不保存 I/O、脚本或 payload 动态文本。 */
+	failure_code: string,
+	/**  仅允许 `failure_stage.stable_message()`，便于 UI 直接展示且保持脱敏。 */
+	failure_message: string,
+	/**  实际已写入应用的 response 前缀；未开始写时为空。 */
+	written_response_prefix: number[],
+};
+
+/**  `LocalResponder` 在请求已经解析后失败的稳定阶段。 */
+export type SocketLocalExchangeFailureStage = "response_rule" | "response_encode" | "response_write";
 
 /**  不连接 Server、而是由协议包在本机生成响应的 Socket 拓扑。 */
 export type SocketLocalResponderTopology = {

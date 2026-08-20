@@ -5,7 +5,10 @@
 
 use serde::Deserialize;
 
-use super::{SocketCapturePayload, SocketLocalExchangeCapture, SocketRelayFrameCapture};
+use super::{
+    SocketCapturePayload, SocketLocalExchangeCapture, SocketLocalExchangeFailureCapture,
+    SocketRelayFrameCapture,
+};
 
 impl<'de> Deserialize<'de> for SocketCapturePayload {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -22,11 +25,13 @@ impl<'de> Deserialize<'de> for SocketCapturePayload {
         enum Wire {
             RelayFrame(Box<SocketRelayFrameCapture>),
             LocalExchange(Box<SocketLocalExchangeCapture>),
+            LocalExchangeFailure(Box<SocketLocalExchangeFailureCapture>),
         }
 
         Ok(match Wire::deserialize(deserializer)? {
             Wire::RelayFrame(value) => Self::RelayFrame(value),
             Wire::LocalExchange(value) => Self::LocalExchange(value),
+            Wire::LocalExchangeFailure(value) => Self::LocalExchangeFailure(value),
         })
     }
 }

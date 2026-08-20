@@ -237,6 +237,12 @@ pub trait SocketFrameProcessor: Send {
     /// 默认实现为空，现有 Direct/fake processor 无需感知。通知发生在 Writing 之后，因而只能
     /// 用于 Display、捕获等旁路工作；实现不得再修改线路输出，也不得把失败升级为连接失败。
     fn output_committed(&mut self) {}
+
+    /// 通知 processor：上一次 `process` 的输出未能完整写入。
+    ///
+    /// `written_bytes` 是 Pump 已确认成功写出的 response 前缀长度。默认实现为空；该通知
+    /// 只允许形成失败诊断或失败 capture，不得重试写入，也不得发布成功完成事件。
+    fn output_failed(&mut self, _failure: &SocketProcessingFailure, _written_bytes: usize) {}
 }
 
 /// 为 Scripted Relay 的两个方向分别创建连接级 processor。

@@ -27,6 +27,7 @@ function relayRow(): SocketCaptureRowViewModel {
     written_size_bytes: 2,
     logical_size_bytes: 512,
     matched_rule_ids: ["77777777-7777-4777-8777-777777777777"],
+    failure: null,
   };
 }
 
