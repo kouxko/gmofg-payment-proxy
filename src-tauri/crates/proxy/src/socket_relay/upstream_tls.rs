@@ -199,17 +199,15 @@ fn certificate_server_names(certificate: &X509) -> Vec<String> {
         .subject_alt_names()
         .into_iter()
         .flatten()
-        .filter_map(|name| name.dnsname())
+        .filter_map(|name| name.dnsname().map(str::to_owned))
         .filter(|name| !name.starts_with("*.") && valid_dns_name(name))
-        .map(str::to_owned)
         .collect::<Vec<_>>();
     if names.is_empty() {
         names.extend(
             certificate
                 .subject_name()
                 .entries_by_nid(Nid::COMMONNAME)
-                .filter_map(|entry| entry.data().as_utf8().ok())
-                .map(|name| name.to_string())
+                .filter_map(|entry| entry.data().to_string().ok())
                 .filter(|name| !name.starts_with("*.") && valid_dns_name(name)),
         );
     }
