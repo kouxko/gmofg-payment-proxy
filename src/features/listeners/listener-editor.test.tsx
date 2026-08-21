@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -166,7 +166,7 @@ describe("ListenerEditor", () => {
     expect(screen.getByRole("button", { name: "保护并引用" })).toBeDisabled();
   });
 
-  it("Basic Auth 开关独占整行使用户名与密码从同一网格行开始", () => {
+  it("Basic 用户名与密码固定在同一响应式网格行", () => {
     const props = editorProps({
       listener: {
         ...dynamicListener(),
@@ -186,8 +186,15 @@ describe("ListenerEditor", () => {
 
     expect(screen.getByRole("group", { name: "HTTP Basic 认证开关" }))
       .toHaveClass("col-span-2", "max-[700px]:col-span-1");
-    expect(screen.getByLabelText("代理认证用户名")).toHaveClass("h-10", "py-0");
-    expect(screen.getByLabelText("代理认证密码")).toHaveClass("h-10", "py-0");
+    const credentialGroup = screen.getByRole("group", { name: "HTTP Basic 认证凭据" });
+    expect(credentialGroup).toHaveClass(
+      "col-span-2",
+      "grid-cols-2",
+      "max-[700px]:col-span-1",
+      "max-[700px]:grid-cols-1",
+    );
+    expect(within(credentialGroup).getByLabelText("代理认证用户名")).toHaveClass("h-10", "py-0");
+    expect(within(credentialGroup).getByLabelText("代理认证密码")).toHaveClass("h-10", "py-0");
   });
 
   it("将 MITM allowlist 输入规范化为 authority 列表", () => {
