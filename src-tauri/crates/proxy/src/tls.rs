@@ -10,3 +10,4 @@ mod support;
 
 pub use client::{ClientTlsAdapter, ClientTlsConnection, ClientTlsHandshakeEvidence};
 pub use server::ServerTlsAdapter;
+pub(crate) use support::peer_identity;

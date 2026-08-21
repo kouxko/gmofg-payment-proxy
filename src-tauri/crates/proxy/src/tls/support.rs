@@ -28,17 +28,17 @@ pub(super) fn certified_key(
     Ok(certified_key)
 }
 
-pub(super) fn peer_identity(certificate_der: &[u8]) -> Result<TlsPeerIdentity> {
+pub(crate) fn peer_identity(certificate_der: &[u8]) -> Result<TlsPeerIdentity> {
     let (remaining, certificate) = parse_x509_certificate(certificate_der).map_err(|error| {
         ProxyError::new(
             ErrorCode::TlsHandshakeFailed,
-            format!("client certificate is invalid: {error:?}"),
+            format!("TLS peer certificate is invalid: {error:?}"),
         )
     })?;
     if !remaining.is_empty() {
         return Err(ProxyError::new(
             ErrorCode::TlsHandshakeFailed,
-            "client certificate contains trailing DER data",
+            "TLS peer certificate contains trailing DER data",
         ));
     }
     Ok(TlsPeerIdentity {
