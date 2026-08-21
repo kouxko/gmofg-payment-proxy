@@ -2,7 +2,10 @@
 //!
 //! 这些函数返回稳定字段错误和规范化值，任何展示适配器都不应复制这部分业务逻辑。
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    net::IpAddr,
+};
 
 use crate::{
     AppError, AppResult, FieldValidationViewModel, SettingsDraft, SettingsValidationViewModel,
@@ -31,6 +34,11 @@ pub(super) fn parse_sans_raw(raw: &str) -> Vec<String> {
 
 pub(super) fn normalize_settings(mut draft: SettingsDraft) -> SettingsDraft {
     draft.bind_address = draft.bind_address.trim().to_owned();
+    draft.external_package_service.bind_address = draft
+        .external_package_service
+        .bind_address
+        .trim()
+        .to_owned();
     for channel in &mut draft.channels {
         channel.display_name = channel.display_name.trim().to_owned();
         channel.upstream_url = channel.upstream_url.trim().to_owned();
@@ -79,6 +87,7 @@ pub(super) fn validate_settings_locally(draft: &SettingsDraft) -> SettingsValida
     if draft.bind_address.is_empty() {
         push_error(&mut field_errors, "bind_address", "绑定地址不能为空。");
     }
+    validate_external_package_service(draft, &mut field_errors);
     for (field, timeout) in [
         ("connect_timeout_seconds", draft.connect_timeout_seconds),
         ("write_timeout_seconds", draft.write_timeout_seconds),
@@ -109,6 +118,41 @@ pub(super) fn validate_settings_locally(draft: &SettingsDraft) -> SettingsValida
         valid: field_errors.is_empty(),
         field_errors,
         warnings: Vec::new(),
+    }
+}
+
+fn validate_external_package_service(
+    draft: &SettingsDraft,
+    field_errors: &mut BTreeMap<String, Vec<String>>,
+) {
+    let external = &draft.external_package_service;
+    if external.bind_address.parse::<IpAddr>().is_err() {
+        push_error(
+            field_errors,
+            "external_package_service.bind_address",
+            "外部软件包服务监听地址必须是有效 IP 地址。",
+        );
+    }
+    if external.port == 0 {
+        push_error(
+            field_errors,
+            "external_package_service.port",
+            "外部软件包服务端口必须位于 1 到 65535 之间。",
+        );
+    }
+    if !(1..=300).contains(&external.rpc_timeout_seconds) {
+        push_error(
+            field_errors,
+            "external_package_service.rpc_timeout_seconds",
+            "外部软件包 RPC 超时必须位于 1 到 300 秒之间。",
+        );
+    }
+    if external.max_in_flight == 0 {
+        push_error(
+            field_errors,
+            "external_package_service.max_in_flight",
+            "单软件包最大并发数必须至少为 1。",
+        );
     }
 }
 

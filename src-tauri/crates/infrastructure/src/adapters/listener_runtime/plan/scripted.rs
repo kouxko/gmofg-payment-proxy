@@ -4,7 +4,8 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    ProxyListener, ProxyWorkspace, SocketDownstreamSecurity, SocketRelaySettings, SocketTopology,
+    ProxyListener, ProxyWorkspace, SocketDownstreamSecurity, SocketPayloadProcessing,
+    SocketRelaySettings, SocketTopology,
 };
 use intercept_proxy_runtime::{
     SocketDownstreamSecurity as RuntimeDownstreamSecurity, SocketEndpoint, SocketFramePumpLimits,
@@ -13,6 +14,8 @@ use intercept_proxy_runtime::{
 
 use super::{ListenerRuntimePlanBuilder, PreparedListenerRuntime, runtime_error};
 use crate::adapters::listener_runtime::{
+    external_local_responder::ExternalLocalResponderProcessorFactoryAdapter,
+    external_relay::{ExternalRelayProcessorFactoryAdapter, ExternalSocketRuntimeSnapshot},
     local_responder::{LocalResponderProcessorFactoryAdapter, local_frame_pump_limits},
     scripted_relay::{ScriptedRelayProcessorFactoryAdapter, frame_pump_limits},
     scripted_snapshot::{ScriptedSocketRuntimeSnapshot, ScriptedSocketSecuritySnapshot},
@@ -28,6 +31,23 @@ impl ListenerRuntimePlanBuilder<'_> {
         socket: &SocketRelaySettings,
         bind_addr: SocketAddr,
     ) -> AppResult<PreparedListenerRuntime> {
+        let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
+            return Err(AppError::new(
+                "SCRIPTED_SOCKET_PLAN_INVALID",
+                "Scripted Socket 缺少协议包绑定。",
+            )
+            .entity(listener.id.to_string()));
+        };
+        let provider = self.adapter.external_package_provider.read().clone();
+        if let Some(binding) = provider
+            .as_ref()
+            .map(|provider| provider.resolve(&scripted.package))
+            .transpose()?
+            .flatten()
+        {
+            return self
+                .build_external_scripted_socket(workspace, listener, socket, bind_addr, binding);
+        }
         let security = self.scripted_socket_security(workspace, &socket.topology)?;
         let snapshot =
             ScriptedSocketRuntimeSnapshot::prepare(self.adapter, workspace, listener, security)?
@@ -94,6 +114,115 @@ impl ListenerRuntimePlanBuilder<'_> {
             bind_addr,
             snapshot,
             service: Some(Arc::new(service)),
+        })
+    }
+
+    fn build_external_scripted_socket(
+        &self,
+        workspace: &ProxyWorkspace,
+        listener: &ProxyListener,
+        socket: &SocketRelaySettings,
+        bind_addr: SocketAddr,
+        binding: crate::adapters::listener_runtime::ExternalSocketPackageBinding,
+    ) -> AppResult<PreparedListenerRuntime> {
+        let max_frame_bytes = binding.max_frame_bytes();
+        let rpc_timeout = binding.rpc_timeout();
+        let registration = binding.registration();
+        let package = registration.package().identity();
+        let rules = super::super::scripted_snapshot::compile_document_rules(
+            workspace,
+            listener,
+            package,
+            registration.document().upstream().schema(),
+            registration.document().downstream().schema(),
+            &socket.topology,
+        )?;
+        let snapshot = Arc::new(ExternalSocketRuntimeSnapshot::new(
+            binding,
+            rules,
+            socket.topology.clone(),
+        ));
+        let pump_limits = SocketFramePumpLimits::new(
+            max_frame_bytes,
+            max_frame_bytes,
+            (16 * 1024).min(max_frame_bytes),
+            rpc_timeout,
+        )
+        .map_err(|error| {
+            runtime_error(
+                listener,
+                error.stable_code(),
+                "外部协议包 Frame 资源限制无效".to_owned(),
+            )
+        })?;
+        let observer = Arc::new(SocketDiagnosticObserver::new(
+            self.adapter.socket_diagnostic_events.read().clone(),
+        ));
+        let service = match &socket.topology {
+            SocketTopology::Relay(relay) => {
+                let factory = Arc::new(ExternalRelayProcessorFactoryAdapter::new(
+                    &snapshot,
+                    self.capture_context(workspace, listener),
+                ));
+                SocketRelayService::build_scripted_with_observer(
+                    SocketRelayConfig {
+                        bind_addr,
+                        allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
+                        upstream: SocketEndpoint {
+                            host: relay.upstream.host.clone(),
+                            port: relay.upstream.port,
+                        },
+                        security: self.socket_security(workspace, &relay.security)?,
+                        maximum_connections: socket.maximum_connections,
+                        connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
+                        read_timeout: Duration::from_millis(listener.read_timeout_ms),
+                        write_timeout: Duration::from_millis(listener.write_timeout_ms),
+                    },
+                    factory,
+                    pump_limits,
+                    observer,
+                )
+            }
+            SocketTopology::LocalResponder(_) => {
+                let ScriptedSocketSecuritySnapshot::LocalResponder { downstream_tls } =
+                    self.scripted_socket_security(workspace, &socket.topology)?
+                else {
+                    return Err(AppError::new(
+                        "SCRIPTED_SOCKET_PLAN_INVALID",
+                        "外部 LocalResponder 传输安全模式不一致。",
+                    )
+                    .entity(listener.id.to_string()));
+                };
+                let factory = Arc::new(ExternalLocalResponderProcessorFactoryAdapter::new(
+                    Arc::clone(&snapshot),
+                    self.capture_context(workspace, listener),
+                ));
+                SocketRelayService::build_local_responder_with_observer(
+                    SocketLocalResponderConfig {
+                        bind_addr,
+                        allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
+                        security: downstream_tls.as_ref().map_or(
+                            RuntimeDownstreamSecurity::Tcp,
+                            |tls| RuntimeDownstreamSecurity::Tls {
+                                downstream_tls: tls.clone(),
+                            },
+                        ),
+                        maximum_connections: socket.maximum_connections,
+                        handshake_timeout: Duration::from_millis(listener.connect_timeout_ms),
+                        read_timeout: Duration::from_millis(listener.read_timeout_ms),
+                        write_timeout: Duration::from_millis(listener.write_timeout_ms),
+                    },
+                    factory,
+                    pump_limits,
+                    observer,
+                )
+            }
+        }
+        .map_err(|error| runtime_error(listener, error.code, error.message))?;
+        Ok(PreparedListenerRuntime::ExternalScriptedSocket {
+            bind_addr,
+            snapshot,
+            service: Arc::new(service),
         })
     }
 

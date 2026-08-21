@@ -35,6 +35,7 @@ fn display_results_round_trip_and_redact_payloads_from_debug() {
         diagnostic: Some(SocketDisplayDiagnostic {
             code: "DISPLAY_ENTRY_FAILED".into(),
             message: "secret diagnostic".into(),
+            external_package_call: None,
         }),
     };
 
@@ -128,7 +129,18 @@ fn both_capture_payload_variants_round_trip_and_account_logical_bytes() {
             serde_json::from_value::<SocketCapturePayload>(serde_json::to_value(&payload).unwrap())
                 .unwrap();
         assert_eq!(restored, payload);
-        assert!(!format!("{payload:?}").contains("0200"));
+        let debug = format!("{payload:?}");
+        for secret in [
+            "origin:",
+            "written:",
+            "request_origin:",
+            "request_document:",
+            "response_document:",
+            "written_response:",
+            "html:",
+        ] {
+            assert!(!debug.contains(secret), "Debug leaked {secret}: {debug}");
+        }
     }
 }
 

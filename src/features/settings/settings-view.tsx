@@ -24,7 +24,7 @@ import {
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { ApplicationDataResetDialog } from "./application-data-reset-dialog";
-import { SettingsEditorTabs } from "./settings-editor-tabs";
+import { SettingsEditorTabs, type SettingsSection } from "./settings-editor-tabs";
 
 export function SettingsView() {
   const settings = useIpcQuery<SettingsViewModel>("settings-get", () =>
@@ -39,7 +39,7 @@ export function SettingsView() {
   const [pendingAction, setPendingAction] = useState<"save">();
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [resetPending, setResetPending] = useState(false);
-  const [selectedSection, setSelectedSection] = useState<"capacity" | "app" | "mcp">("capacity");
+  const [selectedSection, setSelectedSection] = useState<SettingsSection>("capacity");
   const draft = draftState ?? settings.data?.stored;
   const draftDirty = useMemo(
     () => Boolean(draft && settings.data && JSON.stringify(draft) !== JSON.stringify(settings.data.stored)),
@@ -56,6 +56,10 @@ export function SettingsView() {
     "max_memory_bytes",
     "max_body_bytes",
     "rewrite_host",
+    "external_package_service.bind_address",
+    "external_package_service.port",
+    "external_package_service.rpc_timeout_seconds",
+    "external_package_service.max_in_flight",
   ]);
   const globalErrors = Object.entries(validation?.field_errors ?? {})
     .filter(([field]) => !mappedFields.has(field))
@@ -208,7 +212,7 @@ export function SettingsView() {
           </AlertDialog.Backdrop>
         </AlertDialog>
         <ApplicationDataResetDialog isDisabled={writePending} />
-        {selectedSection === "capacity" && <>
+        {(selectedSection === "capacity" || selectedSection === "external-packages") && <>
           <span className="ml-4 text-sm text-[var(--telemetry-muted)]">
             {draftDirty ? "有未保存更改" : "已保存"}
           </span>

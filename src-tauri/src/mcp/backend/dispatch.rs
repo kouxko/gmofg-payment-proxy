@@ -4,15 +4,42 @@ use serde_json::Value;
 
 use super::{
     AndroidEndpointArguments, AndroidPackageArguments, AndroidProfileArguments, ApplicationBackend,
-    BreakpointDetailArguments, BreakpointQueryArguments, HttpCaptureDetailArguments,
-    HttpRuleArguments, ProtocolPackageArguments, SocketCaptureDetailArguments, ToolResult,
-    WorkspaceArguments, json_value, parse, query, unknown_tool,
+    ApplicationLogDetailArguments, BreakpointDetailArguments, BreakpointQueryArguments,
+    HttpCaptureDetailArguments, HttpRuleArguments, ProtocolPackageArguments,
+    SocketCaptureDetailArguments, ToolFailure, ToolResult, WorkspaceArguments, json_value, parse,
+    query, unknown_tool,
 };
+use crate::{reproduction_report, runtime_logs::ApplicationLogQuery};
 
 impl ApplicationBackend {
     pub(super) async fn call_general_tool(&self, name: &str, arguments: Value) -> ToolResult {
         match name {
             "application_snapshot" => self.application_snapshot().await,
+            "application_log_query" => {
+                let query: ApplicationLogQuery = parse(arguments)?;
+                json_value(self.runtime_logs.query(&query))
+            }
+            "application_log_get" => {
+                let args: ApplicationLogDetailArguments = parse(arguments)?;
+                let entry = self.runtime_logs.get(args.log_id).ok_or_else(|| {
+                    ToolFailure::not_found(format!(
+                        "Application log {} is outside the retained range.",
+                        args.log_id
+                    ))
+                })?;
+                json_value(entry)
+            }
+            "reproduction_report" => {
+                let query: intercept_proxy_application::DiagnosticReportQuery = parse(arguments)?;
+                let report =
+                    reproduction_report::generate(&self.application, &self.runtime_logs, query)
+                        .await?;
+                Ok(serde_json::json!({
+                    "bundle": report.application.bundle,
+                    "application_logs": report.application_logs,
+                    "markdown": report.markdown,
+                }))
+            }
             "settings_get" => json_value(self.application.settings_get().await?),
             "workspace_list" => json_value(self.application.workspace_list().await?),
             "workspace_get" => {
@@ -125,6 +152,9 @@ impl ApplicationBackend {
 
     pub(super) async fn call_runtime_tool(&self, name: &str, arguments: Value) -> ToolResult {
         match name {
+            "external_package_service_status" => {
+                json_value(self.application.external_package_service_status().await?)
+            }
             "android_adb_get" => json_value(self.application.android_adb_get().await?),
             "android_device_list" => json_value(self.application.android_device_list().await?),
             "android_package_list" => json_value(self.application.android_package_list().await?),

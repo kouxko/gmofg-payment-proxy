@@ -142,27 +142,30 @@ export function WorkspacesView() {
   return (
     <section className="grid h-full grid-cols-[minmax(420px,1fr)_380px] max-[1000px]:grid-cols-1">
       <div className="min-w-0 space-y-4 overflow-x-hidden overflow-y-auto p-5">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <div className="min-w-64">
+        <div className="min-w-0 space-y-3">
+          <div className="min-w-0">
             <h1 className="sr-only">Workspace</h1>
             <p className="mt-1 text-sm text-[var(--telemetry-muted)]">在此创建、复制、选择及导入导出 Workspace。</p>
           </div>
-          <div data-testid="workspace-toolbar" className="flex min-w-0 flex-nowrap items-center justify-end gap-2 overflow-x-auto overflow-y-hidden max-[720px]:w-full max-[720px]:justify-start">
+          <div
+            data-testid="workspace-toolbar"
+            className="grid min-w-0 grid-cols-[minmax(240px,1fr)_auto_auto_auto] items-center gap-2 max-[860px]:grid-cols-2"
+          >
             <Input
               aria-label="新 Workspace 名称"
               disabled={Boolean(pendingAction)}
-              className="w-72 max-[720px]:min-w-56 max-[720px]:flex-1"
+              className="min-w-0 w-full max-[860px]:col-span-2"
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
               placeholder="新 Workspace 名称"
             />
-            <Button variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("create", createWorkspace)}>
+            <Button className="whitespace-nowrap" variant="primary" isDisabled={Boolean(pendingAction)} onPress={() => void run("create", createWorkspace)}>
               <Plus className="size-4" />新建
             </Button>
-            <Button variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-export", exportApplicationData)}>
+            <Button className="whitespace-nowrap" variant="outline" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-export", exportApplicationData)}>
               导出应用数据
             </Button>
-            <Button variant="danger-soft" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-prepare", prepareApplicationImport)}>
+            <Button className="whitespace-nowrap max-[860px]:col-span-2" variant="danger-soft" isDisabled={Boolean(pendingAction)} onPress={() => void run("backup-prepare", prepareApplicationImport)}>
               <ArrowUpFromLine className="size-4" />导入应用数据
             </Button>
             <Modal

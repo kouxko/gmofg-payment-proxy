@@ -7,13 +7,23 @@ import type {
 } from "@/generated/rust-types";
 import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
 import { isProtocolPackageSchema } from "@/lib/protocol-package-schema";
+import {
+  isBuiltInPackage,
+  isProtocolPackageSource,
+} from "./protocol-package-source";
+
+export {
+  isBuiltInPackage,
+  isExternalPackage,
+  packageSourceText,
+} from "./protocol-package-source";
 
 export function builtInRestoreResultError(value: unknown): string | undefined {
   if (!isRecord(value)
     || !hasOnly(value, ["outcome", "version", "kind", "capabilities", "upstream_schema", "downstream_schema"])
     || (value.outcome !== "installed" && value.outcome !== "reused")
     || !isProtocolPackageVersion(value.version)
-    || value.version.built_in !== true
+    || !isBuiltInPackage(value.version)
     || value.version.enabled !== true
     || value.version.validation.state !== "valid"
     || value.version.package.id !== BUILT_IN_ISO_8583_PACKAGE.id
@@ -145,7 +155,7 @@ export function protocolPackageDetailError(
   expectedKind?: "http" | "socket",
 ): string | undefined {
   if (!isRecord(value)
-    || !hasOnly(value, ["version", "kind", "capabilities", "upstream_schema", "downstream_schema", "usages"])
+    || !hasOnly(value, ["version", "kind", "capabilities", "upstream_schema", "downstream_schema", "usages", "external"])
     || !isProtocolPackageVersion(value.version)) {
     return "协议包详情数据不完整。";
   }
@@ -162,17 +172,57 @@ export function protocolPackageDetailError(
     || !isProtocolPackageSchema(value.upstream_schema)
     || !isProtocolPackageSchema(value.downstream_schema)
     || !Array.isArray(value.usages)
-    || !value.usages.every(isUsage)) {
+    || !value.usages.every(isUsage)
+    || (value.version.package_source.type === "internal"
+      ? value.external !== null
+      : !isExternalDetail(value.external))) {
     return "协议包详情数据不完整。";
   }
   return undefined;
+}
+
+function isExternalDetail(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnly(value, [
+      "remote_address", "connection_id", "first_connected_at", "last_connected_at",
+      "registration_fingerprint_sha256", "rpc_timeout_seconds", "upstream_methods",
+      "downstream_methods", "recent_error",
+    ])
+    && (value.remote_address === null || typeof value.remote_address === "string")
+    && (value.connection_id === null || typeof value.connection_id === "string")
+    && typeof value.first_connected_at === "string"
+    && typeof value.last_connected_at === "string"
+    && typeof value.registration_fingerprint_sha256 === "string"
+    && /^[0-9a-f]{64}$/.test(value.registration_fingerprint_sha256)
+    && typeof value.rpc_timeout_seconds === "number"
+    && Number.isSafeInteger(value.rpc_timeout_seconds)
+    && value.rpc_timeout_seconds > 0
+    && isExternalMethods(value.upstream_methods)
+    && isExternalMethods(value.downstream_methods)
+    && (value.recent_error === null || isExternalRecentError(value.recent_error));
+}
+
+function isExternalMethods(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnly(value, ["frame", "decode", "encode", "display"])
+    && [value.frame, value.decode, value.encode, value.display]
+      .every((method) => typeof method === "string" && method.length > 0);
+}
+
+function isExternalRecentError(value: unknown): boolean {
+  return isRecord(value)
+    && hasOnly(value, ["code", "message", "occurred_at"])
+    && typeof value.code === "string"
+    && value.code.length > 0
+    && typeof value.message === "string"
+    && typeof value.occurred_at === "string";
 }
 
 export function isProtocolPackageVersion(
   value: unknown,
 ): value is ProtocolPackageVersionViewModel {
   if (!isRecord(value)
-    || !hasOnly(value, ["package", "name", "host_api", "kind", "built_in", "enabled", "validation", "installed_at"])
+    || !hasOnly(value, ["package", "name", "host_api", "kind", "package_source", "enabled", "validation", "installed_at"])
     || !isRecord(value.package)
     || !hasOnly(value.package, ["id", "version"])) return false;
   const validation = value.validation;
@@ -184,7 +234,7 @@ export function isProtocolPackageVersion(
     && value.name.length > 0
     && isCounter(value.host_api)
     && (value.kind === "http" || value.kind === "socket")
-    && typeof value.built_in === "boolean"
+    && isProtocolPackageSource(value.package_source)
     && typeof value.enabled === "boolean"
     && typeof value.installed_at === "string"
     && isRecord(validation)

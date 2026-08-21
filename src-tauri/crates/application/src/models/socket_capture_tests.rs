@@ -276,7 +276,9 @@ fn full_capture_debug_reports_shape_without_payload_document_or_html() {
     assert!(debug.contains("origin_bytes: 6"));
     assert!(debug.contains("written_bytes: 6"));
     assert!(debug.contains("stage_count: 2"));
-    for secret in ["0200", "<dl>", "field_39", "[2, 48, 50"] {
+    for secret in [
+        "origin:", "written:", "stages:", "values:", "html:", "<dl>", "field_39",
+    ] {
         assert!(!debug.contains(secret), "Debug leaked {secret}: {debug}");
     }
 }
@@ -413,6 +415,7 @@ fn consistency_rejects_missing_stage_and_incompatible_local_document() {
                 diagnostic: Some(SocketDisplayDiagnostic {
                     code: "DISPLAY_ENTRY_FAILED".into(),
                     message: "协议视图生成失败".into(),
+                    external_package_call: None,
                 }),
             },
         },

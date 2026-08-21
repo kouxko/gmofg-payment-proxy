@@ -9,17 +9,20 @@ use intercept_proxy_domain::{
 };
 
 use super::{
-    Application, protocol_packages::ensure_description_identity, validation::require_confirmation,
+    Application,
+    protocol_packages::{ensure_description_identity, ensure_external_description},
+    validation::require_confirmation,
 };
 use crate::{
     AppError, AppResult, HttpBodyProcessing, ListenerDataPlane, ListenerId,
     OperationResultViewModel, ProtocolDirection, ProtocolDocumentRuleDefinition,
     ProtocolDocumentRuleDraft, ProtocolDocumentRuleId, ProtocolPackageDescriptionViewModel,
     ProtocolPackageKindViewModel, ProtocolPackageRef, ProtocolPackageSchemaFieldTypeViewModel,
-    ProtocolRuleCapabilityCatalog, ProtocolRuleCommonActionCapability,
-    ProtocolRuleFieldActionCapability, ProtocolRuleFieldCapability,
-    ProtocolRuleFieldOperatorCapability, ProtocolRuleSaveInput, ProtocolRuleStage, ProxyListener,
-    ProxyWorkspace, SocketPayloadProcessing, SocketTopology, UiTone, WorkspaceChangeKind,
+    ProtocolPackageSourceViewModel, ProtocolRuleCapabilityCatalog,
+    ProtocolRuleCommonActionCapability, ProtocolRuleFieldActionCapability,
+    ProtocolRuleFieldCapability, ProtocolRuleFieldOperatorCapability, ProtocolRuleSaveInput,
+    ProtocolRuleStage, ProxyListener, ProxyWorkspace, SocketPayloadProcessing, SocketTopology,
+    UiTone, WorkspaceChangeKind,
 };
 
 impl Application {
@@ -100,7 +103,7 @@ impl Application {
                     input.conditions,
                     input.actions,
                 )?;
-                validate_rule(&rule, &context)?;
+                rule.validate_against_schema(&context.schema)?;
                 workspace.protocol_rule_created_order_high_water = created_order;
                 workspace.protocol_rules.push(rule);
                 rule_id
@@ -124,7 +127,7 @@ impl Application {
                     actions: input.actions,
                 };
                 current.update(Revision::new(expected_revision), values)?;
-                validate_rule(current, &context)?;
+                current.validate_against_schema(&context.schema)?;
                 rule_id
             }
             _ => unreachable!("rule ID/revision pair was validated before external queries"),
@@ -297,9 +300,19 @@ impl Application {
                 &scripted.package
             }
         };
-        self.require_protocol_package(package).await?;
-        let description = self.protocol_package_compiler.describe(package).await?;
-        ensure_description_identity(package, &description)?;
+        let version = self.require_protocol_package(package).await?;
+        let description = match version.source {
+            ProtocolPackageSourceViewModel::Internal { .. } => {
+                let description = self.protocol_package_compiler.describe(package).await?;
+                ensure_description_identity(package, &description)?;
+                description
+            }
+            ProtocolPackageSourceViewModel::External { .. } => {
+                let description = self.external_packages.describe(package).await?;
+                ensure_external_description(package, &description)?;
+                description
+            }
+        };
         match (&listener.data_plane, description.kind) {
             (ListenerDataPlane::Http(_), ProtocolPackageKindViewModel::Http)
             | (ListenerDataPlane::Socket(_), ProtocolPackageKindViewModel::Socket) => {}
@@ -452,14 +465,6 @@ fn ensure_immutable_binding(
         "更新规则不能改变入口、协议包、Schema 或处理阶段绑定。",
     )
     .entity(current.rule_id().to_string()))
-}
-
-fn validate_rule(
-    rule: &ProtocolDocumentRuleDefinition,
-    context: &ProtocolRuleContext,
-) -> AppResult<()> {
-    rule.validate_against_schema(&context.schema)?;
-    Ok(())
 }
 
 fn next_created_order(

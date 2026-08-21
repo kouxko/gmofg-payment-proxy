@@ -26,6 +26,18 @@ const policies = [
     required: true,
     filePolicies: [
       {
+        suffix: "crates/domain/src/external_package/document.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "crates/domain/src/external_package/registration.rs",
+        thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+      {
+        suffix: "crates/domain/src/external_package/runtime.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
         suffix: "crates/domain/src/protocol_document_rule.rs",
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
@@ -69,6 +81,74 @@ const policies = [
     package: "intercept-proxy-infrastructure",
     required: true,
     filePolicies: [
+      {
+        suffix: "adapters/external_package_registry/application_port.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/external_package_registry/mod.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/external_package_registry/views.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/external_package_registry/diagnostics.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/external_packages/actor.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/external_packages/actor/config.rs",
+        thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+      {
+        suffix: "adapters/external_packages/actor/recent_ids.rs",
+        thresholds: { functions: 100, lines: 100, regions: 95 },
+      },
+      {
+        // `register<S>` is instantiated for both the real transport and the deterministic
+        // failure transport. Every behavior branch is covered, while LLVM counts the same
+        // generic `?` regions separately per concrete `S`; keep functions at 100% and the
+        // compiler-stable line/region floor above the feature-wide 90% requirement.
+        suffix: "adapters/external_packages/actor/registration.rs",
+        thresholds: { functions: 100, lines: 95, regions: 90 },
+      },
+      {
+        suffix: "adapters/external_packages/actor/response.rs",
+        thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+      {
+        suffix: "adapters/external_packages/error.rs",
+        thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+      {
+        suffix: "adapters/external_packages/handshake.rs",
+        thresholds: { functions: 100, lines: 100, regions: 100 },
+      },
+      {
+        suffix: "adapters/listener_runtime/external_local_responder.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/listener_runtime/external_relay.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/listener_runtime/external_relay/contract.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "adapters/listener_runtime/external_relay/diagnostics.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
+      {
+        suffix: "sqlite/external_packages.rs",
+        thresholds: { functions: 90, lines: 90, regions: 90 },
+      },
       { suffix: "adapters/android_adb/owner.rs", thresholds: { lines: 90 } },
       { suffix: "adapters/android_adb/reverse.rs", thresholds: { lines: 90 } },
       { suffix: "adapters/android_adb/reverse/preparation.rs", thresholds: { lines: 90 } },
@@ -196,6 +276,9 @@ function collectPackageCoverage(policy) {
 }
 
 verifyToolVersion();
+// Coverage object files retain source mappings across local edits. Start from one
+// workspace-clean profile set so per-package reports cannot merge stale crate hashes.
+runCargo(["llvm-cov", "clean", "--manifest-path", manifestPath, "--workspace"]);
 const summaries = [];
 for (const policy of policies) {
   if (!isActive(policy)) {

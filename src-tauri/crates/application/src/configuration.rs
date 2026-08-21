@@ -12,12 +12,12 @@ use crate::document_security::{canonical_field_name, is_secret_field};
 use specta::Type;
 
 use crate::{
-    AppError, AppResult, ChannelSettingsDraft, PortableApplicationProtocolPackage,
-    PortableCertificateMaterial, ProxyWorkspace, SettingsDraft, WorkspaceId,
-    validate_certificate_materials, validate_configuration_package_references,
+    AppError, AppResult, ChannelSettingsDraft, ExternalPackageServiceSettingsDraft,
+    PortableApplicationProtocolPackage, PortableCertificateMaterial, ProxyWorkspace, SettingsDraft,
+    WorkspaceId, validate_certificate_materials, validate_configuration_package_references,
 };
 
-pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 5;
+pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 6;
 pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 128 * 1024 * 1024;
 /// 监听证书只能引用应用受保护存储中的材料，不能携带文件路径或环境变量密码。
 pub const MANAGED_LISTENER_CERTIFICATE_PREFIX: &str = "managed:listener-tls:";
@@ -68,6 +68,7 @@ pub struct PortableSettings {
     pub max_sessions: usize,
     pub max_memory_bytes: u64,
     pub leaf_sans: Vec<String>,
+    pub external_package_service: ExternalPackageServiceSettingsDraft,
 }
 
 impl From<&SettingsDraft> for PortableSettings {
@@ -83,6 +84,7 @@ impl From<&SettingsDraft> for PortableSettings {
             max_sessions: value.max_sessions,
             max_memory_bytes: value.max_memory_bytes,
             leaf_sans: value.leaf_sans.clone(),
+            external_package_service: value.external_package_service.clone(),
         }
     }
 }
@@ -102,6 +104,7 @@ impl PortableSettings {
             max_sessions: self.max_sessions,
             max_memory_bytes: self.max_memory_bytes,
             leaf_sans: self.leaf_sans.clone(),
+            external_package_service: self.external_package_service.clone(),
         }
     }
 }

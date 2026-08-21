@@ -4,11 +4,12 @@
 //! 有界读取、完整编译、引用约束和启停约束都在 Rust Application/Infrastructure 中执行。
 
 use intercept_proxy_application::{
-    AppError, ListenerProtocolPackageCatalogViewModel, OperationResultViewModel,
-    ProtocolPackageDetailViewModel, ProtocolPackageExportOutcomeViewModel,
-    ProtocolPackageGroupViewModel, ProtocolPackageImportPreviewViewModel,
-    ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
-    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel,
+    AppError, ExternalPackageServiceStatusViewModel, ListenerProtocolPackageCatalogViewModel,
+    OperationResultViewModel, ProtocolPackageDetailViewModel,
+    ProtocolPackageExportOutcomeViewModel, ProtocolPackageGroupViewModel,
+    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportToken,
+    ProtocolPackageImportViewModel, ProtocolPackageRef, ProtocolPackageUsageViewModel,
+    ProtocolPackageVersionViewModel,
 };
 use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageVersion};
 use intercept_proxy_infrastructure::{AtomicFileExporter, InfrastructureError};
@@ -21,6 +22,18 @@ use crate::app_state::AppState;
 
 const PROTOCOL_PACKAGE_EXPORT_DIALOG_PURPOSE: &str = "protocol_package_export_zip";
 const BUILTIN_PROTOCOL_PACKAGE_FILE_NAME: &str = "iso8583-ascii-standard-1.0.0.zip";
+
+#[tauri::command]
+#[specta::specta]
+pub async fn external_package_service_status(
+    state: State<'_, AppState>,
+) -> CommandResult<ExternalPackageServiceStatusViewModel> {
+    state
+        .application
+        .external_package_service_status()
+        .await
+        .map_err(command_error)
+}
 
 /// `WebView` 提交的未验证协议包身份。
 /// IPC 先反序列化普通字符串，再在命令内部调用领域构造器，因此恶意或过期前端提交的

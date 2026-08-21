@@ -7,6 +7,8 @@ mod app_state;
 mod commands;
 mod mcp;
 mod native_dialog;
+mod reproduction_report;
+mod runtime_logs;
 
 use std::{error::Error, path::PathBuf, sync::Arc};
 
@@ -19,6 +21,7 @@ use crate::{
     app_state::AppState,
     mcp::{ApplicationBackend, MCP_ENDPOINT, ReadOnlyMcpServer},
     native_dialog::TauriNativeFileDialog,
+    runtime_logs::{ApplicationLogLevel, RuntimeLogStore, install_tracing_bridge},
 };
 
 const BUILTIN_ISO8583_ARCHIVE: &[u8] = include_bytes!(concat!(
@@ -79,7 +82,10 @@ fn normalize_generated_typescript(generated: &str) -> String {
     normalized
 }
 
-fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> {
+fn initialize_application(
+    app: &tauri::App,
+    runtime_logs: Arc<RuntimeLogStore>,
+) -> Result<AppState, Box<dyn Error>> {
     let app_data_dir = app.path().app_data_dir()?;
     // 资源在不同平台的安装目录不同。必须由 Tauri 的路径解析器给出真实绝对路径，
     // 不能从当前 exe 所在目录猜测，否则 Windows 安装版和便携版容易出现差异。
@@ -102,7 +108,10 @@ fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> 
     }
     host_builder = host_builder.with_builtin_protocol_package(Arc::from(BUILTIN_ISO8583_ARCHIVE));
     let host = tauri::async_runtime::block_on(host_builder.build())?;
-    let backend = Arc::new(ApplicationBackend::new(host.application()));
+    let backend = Arc::new(ApplicationBackend::new(
+        host.application(),
+        Arc::clone(&runtime_logs),
+    ));
     let mcp = match tauri::async_runtime::block_on(ReadOnlyMcpServer::start(backend)) {
         Ok(mcp) => {
             tracing::info!(endpoint = MCP_ENDPOINT, address = %mcp.local_addr(), "read-only MCP server started");
@@ -113,7 +122,7 @@ fn initialize_application(app: &tauri::App) -> Result<AppState, Box<dyn Error>> 
             None
         }
     };
-    Ok(AppState::production(host, mcp))
+    Ok(AppState::production(host, mcp, runtime_logs))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -126,14 +135,45 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(command_builder.invoke_handler())
         .setup(|app| {
-            if cfg!(debug_assertions) {
-                app.handle().plugin(
-                    tauri_plugin_log::Builder::default()
-                        .level(log::LevelFilter::Info)
-                        .build(),
-                )?;
-            }
-            app.manage(initialize_application(app)?);
+            const LOG_CAPACITY: usize = 20_000;
+            const LOG_FILE_BYTES: u64 = 32 * 1024 * 1024;
+            let app_data_dir = app.path().app_data_dir()?;
+            let runtime_logs = Arc::new(RuntimeLogStore::open(
+                app_data_dir
+                    .join("runtime-logs")
+                    .join("application-runtime.jsonl"),
+                LOG_CAPACITY,
+                LOG_FILE_BYTES,
+            )?);
+            install_tracing_bridge(Arc::clone(&runtime_logs))?;
+            let dispatch_logs = Arc::clone(&runtime_logs);
+            let dispatch = tauri_plugin_log::fern::Dispatch::new().chain(
+                tauri_plugin_log::fern::Output::call(move |record| {
+                    let level = match record.level() {
+                        log::Level::Trace => ApplicationLogLevel::Trace,
+                        log::Level::Debug => ApplicationLogLevel::Debug,
+                        log::Level::Info => ApplicationLogLevel::Info,
+                        log::Level::Warn => ApplicationLogLevel::Warning,
+                        log::Level::Error => ApplicationLogLevel::Error,
+                    };
+                    dispatch_logs.record(level, record.target(), &record.args().to_string());
+                }),
+            );
+            app.handle().plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(log::LevelFilter::Debug)
+                    .filter(|metadata| {
+                        metadata.level() <= log::Level::Info
+                            || metadata.target().starts_with("intercept_proxy")
+                    })
+                    .max_file_size(8 * 1024 * 1024)
+                    .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepSome(8))
+                    .target(tauri_plugin_log::Target::new(
+                        tauri_plugin_log::TargetKind::Dispatch(dispatch),
+                    ))
+                    .build(),
+            )?;
+            app.manage(initialize_application(app, runtime_logs)?);
             Ok(())
         })
         .build(tauri::generate_context!())

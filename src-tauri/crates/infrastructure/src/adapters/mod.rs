@@ -9,6 +9,9 @@ mod bundle;
 mod capture;
 mod certificates;
 pub(crate) mod common;
+mod external_package_registry;
+mod external_package_server;
+pub mod external_packages;
 mod faults;
 mod files;
 mod listener_certificate_metadata;
@@ -30,6 +33,17 @@ pub use body_codecs::{HeaderBodyCodecResolver, WorkspaceBodyCodecResolver};
 pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;
+pub use external_package_registry::{
+    AcceptedExternalPackageConnection, ExternalPackageConnectionId, ExternalPackageRegistryAdapter,
+    external_package_registration_fingerprint,
+};
+pub use external_package_server::{
+    ExternalPackageListenerRuntime, ExternalPackageServer, ExternalPackageServerConfig,
+};
+pub use external_packages::{
+    ExternalPackageClient, ExternalPackageConnectionConfig, ExternalPackageConnectionError,
+    ExternalPackageFatalProtocolError, ExternalPackageRemoteError, accept_packages_websocket,
+};
 pub use faults::FaultServiceAdapter;
 pub use files::{FileSelection, NativeFileDialog};
 pub use listener_certificates::ManagedListenerCertificateAdapter;

@@ -108,6 +108,7 @@ pub enum SocketDisplayFallbackReason {
 pub struct SocketDisplayDiagnostic {
     pub code: String,
     pub message: String,
+    pub external_package_call: Option<super::ExternalPackageCallDiagnosticViewModel>,
 }
 
 #[derive(Clone, PartialEq, Eq, Serialize, Type)]

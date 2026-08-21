@@ -74,6 +74,27 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getByText("AA:BB:CC:DD")).toBeVisible();
   });
 
+  it("上游 CA 导入操作在小弹窗内保持可收缩且不挤出取消按钮", async () => {
+    const fixedWorkspace = {
+      ...workspace,
+      listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")],
+    };
+    mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
+
+    expect(screen.getByRole("group", { name: "上游 CA 导入操作" }))
+      .toHaveClass("flex-wrap");
+    expect(screen.getByRole("button", { name: "取消" })).toHaveClass("shrink-0");
+    const choose = screen.getByRole("button", {
+      name: "选择 CA 证书（.cer / .crt / .pem / .der）",
+    });
+    expect(choose).toHaveClass("min-w-0", "flex-1");
+    expect(choose).toHaveTextContent("选择 CA 证书");
+  });
+
   it("Socket Relay 导入上游 CA 后保留 topology 并只更新 Relay 安全配置", async () => {
     const socket = socketListener("socket-1", "Socket TLS", 9443, "tcp_to_tls");
     const socketWorkspace = { ...workspace, listeners: [socket] };

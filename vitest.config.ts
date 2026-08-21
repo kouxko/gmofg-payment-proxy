@@ -35,6 +35,18 @@ export default defineConfig({
           functions: 90,
           lines: 90,
         },
+        "src/features/protocol-packages/protocol-package-source.ts": {
+          statements: 100,
+          branches: 100,
+          functions: 100,
+          lines: 100,
+        },
+        "src/features/settings/external-package-service-settings.tsx": {
+          statements: 90,
+          branches: 90,
+          functions: 90,
+          lines: 90,
+        },
         "src/features/listeners/socket-*": {
           statements: 90,
           branches: 90,

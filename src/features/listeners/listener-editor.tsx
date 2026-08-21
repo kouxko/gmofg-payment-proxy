@@ -249,17 +249,23 @@ function HttpAuthentication({
     "border-[var(--telemetry-line)] p-4",
     "max-[700px]:col-span-1 max-[700px]:grid-cols-1",
   ].join(" ")}>
-    <Switch
-      isSelected={settings.authentication.mode === "basic"}
-      onChange={(enabled) => onChange({
-        authentication: enabled
-          ? { mode: "basic", credential: { provider: "system", key: "" } }
-          : { mode: "none" },
-      })}
+    <div
+      role="group"
+      aria-label="HTTP Basic 认证开关"
+      className="col-span-2 max-[700px]:col-span-1"
     >
-      <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>
-        <span>启用 HTTP Basic 认证</span></Switch.Content>
-    </Switch>
+      <Switch
+        isSelected={settings.authentication.mode === "basic"}
+        onChange={(enabled) => onChange({
+          authentication: enabled
+            ? { mode: "basic", credential: { provider: "system", key: "" } }
+            : { mode: "none" },
+        })}
+      >
+        <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>
+          <span>启用 HTTP Basic 认证</span></Switch.Content>
+      </Switch>
+    </div>
     {!settings.fixed_server && <MitmSwitch settings={settings} onChange={onChange} />}
     {settings.authentication.mode === "basic" && <>
       <TextInput label="用户名" ariaLabel="代理认证用户名" value={username} onChange={onUsernameChange} />
@@ -323,7 +329,7 @@ function MitmFields({ settings, onChange }: {
 function TextInput({ label, ariaLabel, value, onChange, password = false }: {
   label: string; ariaLabel: string; value: string; onChange: (value: string) => void; password?: boolean;
 }): ReactNode {
-  return <div className="grid gap-1"><Label>{label}</Label><Input aria-label={ariaLabel}
+  return <div className="grid gap-1"><Label>{label}</Label><Input aria-label={ariaLabel} className="h-10 py-0"
     type={password ? "password" : "text"} value={value} autoComplete={password ? "new-password" : "off"}
     onChange={(event) => onChange(event.target.value)} /></div>;
 }

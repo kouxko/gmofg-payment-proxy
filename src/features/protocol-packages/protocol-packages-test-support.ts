@@ -15,7 +15,7 @@ export function version(
     name: "ISO 8583 长名称协议包",
     host_api: 1,
     kind: "socket",
-    built_in: false,
+    package_source: { type: "internal", built_in: false },
     enabled: value === "2.0.0",
     validation: { state: "valid" },
     installed_at: "2026-08-14T08:00:00Z",
@@ -42,6 +42,7 @@ export function detail(
   selected = version("2.0.0"),
   overrides: Partial<ProtocolPackageDetailViewModel> = {},
 ): ProtocolPackageDetailViewModel {
+  const external = selected.package_source.type === "external" ? externalDetail() : null;
   return {
     version: selected,
     kind: "socket",
@@ -77,7 +78,31 @@ export function detail(
         runtime_state: "running",
       },
     ],
+    external,
     ...overrides,
+  };
+}
+
+function externalDetail(): NonNullable<ProtocolPackageDetailViewModel["external"]> {
+  return {
+    remote_address: "127.0.0.1:49152",
+    connection_id: "018f6fc0-65d8-7d90-b25b-392f6d9b9481",
+    first_connected_at: "2026-08-20T08:00:00Z",
+    last_connected_at: "2026-08-20T09:00:00Z",
+    registration_fingerprint_sha256: "ab".repeat(32),
+    rpc_timeout_seconds: 5,
+    upstream_methods: externalMethods("upstream"),
+    downstream_methods: externalMethods("downstream"),
+    recent_error: null,
+  };
+}
+
+function externalMethods(direction: "upstream" | "downstream") {
+  return {
+    frame: `hooks.${direction}.frame`,
+    decode: `hooks.${direction}.decode`,
+    encode: `hooks.${direction}.encode`,
+    display: `document.${direction}.display`,
   };
 }
 

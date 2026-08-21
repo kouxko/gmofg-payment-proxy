@@ -2,7 +2,7 @@ use rusqlite::Transaction;
 
 use super::InfrastructureError;
 
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 15;
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 17;
 
 pub(super) fn create_current_schema(
     transaction: &Transaction<'_>,
@@ -79,11 +79,45 @@ pub(super) fn create_current_schema(
             ",
         )
         .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+    create_external_package_schema(transaction)?;
     transaction
         .execute(
             "INSERT INTO application_schema(singleton_id, version) VALUES (1, ?1)",
             [CURRENT_SCHEMA_VERSION],
         )
         .map(|_| ())
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })
+}
+
+fn create_external_package_schema(
+    transaction: &Transaction<'_>,
+) -> Result<(), InfrastructureError> {
+    transaction
+        .execute_batch(
+            "CREATE TABLE external_protocol_packages (
+                package_id TEXT NOT NULL,
+                version TEXT NOT NULL,
+                registration_json TEXT NOT NULL,
+                registration_fingerprint BLOB NOT NULL
+                    CHECK(length(registration_fingerprint) = 32),
+                enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+                first_connected_at TEXT NOT NULL,
+                last_connected_at TEXT NOT NULL,
+                last_remote_address TEXT NULL,
+                recent_error_code TEXT NULL,
+                recent_error_message TEXT NULL,
+                recent_error_occurred_at TEXT NULL,
+                CHECK(
+                    (recent_error_code IS NULL
+                        AND recent_error_message IS NULL
+                        AND recent_error_occurred_at IS NULL)
+                    OR
+                    (recent_error_code IS NOT NULL
+                        AND recent_error_message IS NOT NULL
+                        AND recent_error_occurred_at IS NOT NULL)
+                ),
+                PRIMARY KEY(package_id, version)
+            );",
+        )
         .map_err(|source| InfrastructureError::DatabaseSchema { source })
 }

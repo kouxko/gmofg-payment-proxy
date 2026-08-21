@@ -127,4 +127,6 @@ pub struct ProtocolPackageApplicationServices {
     pub builtin: std::sync::Arc<dyn BuiltinProtocolPackagePort>,
     pub usage_query: std::sync::Arc<dyn ProtocolPackageUsageQueryPort>,
     pub portability: std::sync::Arc<dyn ProtocolPackagePortabilityPort>,
+    /// 外部软件包注册表与活动连接端口。
+    pub external: std::sync::Arc<dyn crate::ExternalPackageApplicationPort>,
 }

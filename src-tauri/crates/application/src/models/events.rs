@@ -47,6 +47,12 @@ pub enum UiEventPayload {
     AndroidVpnStatusChanged(crate::AndroidNetworkStatusViewModel),
     CertificateStatusChanged(CertificateOverviewViewModel),
     SettingsChanged(Box<SettingsViewModel>),
+    /// 外部软件包服务绑定状态或在线连接数发生变化。
+    ExternalPackageServiceStatusChanged(super::ExternalPackageServiceStatusViewModel),
+    /// 外部精确版本注册、断线、启停或删除后，目录消费者应重新读取权威快照。
+    ProtocolPackageCatalogChanged {
+        package: super::ProtocolPackageRef,
+    },
     ResourceWarning {
         message: String,
     },

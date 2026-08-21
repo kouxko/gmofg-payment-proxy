@@ -39,6 +39,11 @@ pub struct SocketConnectionIdentity {
 pub enum FrameBoundary {
     /// 还需读取；`total` 是完成当前 Frame 所需的总字节数，必须大于当前长度。
     NeedMore { total: usize },
+    /// 还需读取，但处理器无法提前知道完整 Frame 的总长度。
+    ///
+    /// 该语义适用于由外部协议实现逐步检查分隔符或密文边界的场景。Frame Pump 仍拥有
+    /// 读取节奏与最大缓冲区限制；处理器不得用伪造的 `current + 1` 长度表达未知边界。
+    NeedMoreUnknown,
     /// 缓冲区开头已有完整 Frame；`bytes` 是需要精确消费的字节数。
     Complete { bytes: usize },
     /// 当前输入不可能构成合法 Frame。原因只供内部诊断，不进入公开 observer。
@@ -215,9 +220,10 @@ impl SocketFramePumpLimits {
 
 /// 面向一个连接方向的、有状态 Frame processor。
 ///
-/// 实现必须保持连接隔离，不得在方法内执行网络 I/O。Pump 保证同一实例严格串行调用：
-/// 先用 `inspect` 判定完整 Frame，再把精确 origin 交给 `process`，并在完整写出返回值后
-/// 才处理下一 Frame。
+/// 实现必须保持连接隔离。`inspect` 与 `process` 可以执行外部协议 RPC 等有界异步 I/O，
+/// 但不得绕过 Frame Pump 自行读写当前业务连接；Pump 会用 [`SocketFramePumpLimits`] 的
+/// processing timeout 约束每次调用。Pump 保证同一实例严格串行调用：先用 `inspect` 判定
+/// 完整 Frame，再把精确 origin 交给 `process`，并在完整写出返回值后才处理下一 Frame。
 #[async_trait]
 pub trait SocketFrameProcessor: Send {
     /// 检查当前从 Frame 起点开始的完整有界缓冲区，不消费输入。

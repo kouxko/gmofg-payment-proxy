@@ -10,6 +10,7 @@ base64.workspace = true
 bytes.workspace = true
 chrono.workspace = true
 encoding_rs.workspace = true
+futures-util.workspace = true
 http.workspace = true
 intercept-proxy-application = { path = "../application" }
 intercept-proxy-domain = { path = "../domain" }
@@ -31,6 +32,7 @@ tempfile.workspace = true
 thiserror.workspace = true
 time.workspace = true
 tokio = { workspace = true, features = ["process"] }
+tokio-tungstenite.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 uuid.workspace = true
@@ -45,6 +47,7 @@ windows-sys.workspace = true
 security-framework.workspace = true
 
 [dev-dependencies]
+tokio-tungstenite = { workspace = true, features = ["connect"] }
 zip.workspace = true
 
 [lints]

@@ -37,6 +37,10 @@ vi.mock("@/lib/ipc/client", () => ({
   errorMessage: (reason: unknown) => reason instanceof Error ? reason.message : String(reason),
 }));
 
+vi.mock("@/features/shell/bootstrap-context", () => ({
+  useAppEventRefresh: vi.fn(),
+}));
+
 function importedGroup() {
   return group({
     versions: [

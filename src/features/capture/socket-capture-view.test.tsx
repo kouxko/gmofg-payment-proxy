@@ -116,7 +116,7 @@ const detailFixture = {
         display: {
           type: "hex_fallback",
           reason: "entry_point_failed",
-          diagnostic: { code: "DISPLAY_FAILED", message: "协议展示失败" },
+          diagnostic: { code: "DISPLAY_FAILED", message: "协议展示失败", external_package_call: null },
         },
       },
     },

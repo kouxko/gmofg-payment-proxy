@@ -11,11 +11,12 @@ use intercept_proxy_product_api::ProductProfile;
 use crate::{SecretProtector, SqliteStore};
 
 use super::{
-    CaptureRepositoryAdapter, CertificateServiceAdapter, FaultServiceAdapter,
-    ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
-    ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageRepositoryAdapter,
-    ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, SettingsRepositoryAdapter,
-    SocketCaptureRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter,
+    CaptureRepositoryAdapter, CertificateServiceAdapter, ExternalPackageRegistryAdapter,
+    FaultServiceAdapter, ListenerRuntimeAdapter, ManagedListenerCertificateAdapter,
+    NativeFileDialog, ProtectedSecretAdapter, ProtocolPackageImportAdapter,
+    ProtocolPackageRepositoryAdapter, ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter,
+    SettingsRepositoryAdapter, SocketCaptureRepositoryAdapter, WorkspaceBodyCodecResolver,
+    WorkspaceRepositoryAdapter,
 };
 
 #[derive(Debug)]
@@ -32,6 +33,8 @@ pub struct InfrastructureServiceBundle {
     pub protocol_package_import: Arc<ProtocolPackageImportAdapter>,
     /// 汇总全部 Workspace 的精确引用，并与 Listener 运行态合并。
     pub protocol_package_usage: Arc<ProtocolPackageUsageQueryAdapter>,
+    /// 外部软件包持久化元数据、在线连接与服务状态的唯一注册表。
+    pub external_packages: Arc<ExternalPackageRegistryAdapter>,
     pub rules: Arc<RuleRepositoryAdapter>,
     pub faults: Arc<FaultServiceAdapter>,
     pub certificates: Arc<CertificateServiceAdapter>,
@@ -103,6 +106,7 @@ impl InfrastructureServiceBundle {
             Arc::clone(dialog),
         ));
         let workspace_body_codecs = Arc::new(WorkspaceBodyCodecResolver::new(Arc::clone(&store)));
+        let external_packages = Arc::new(ExternalPackageRegistryAdapter::new(Arc::clone(&store)));
         let listener_runtime = Arc::new(
             ListenerRuntimeAdapter::new(
                 store,
@@ -113,6 +117,7 @@ impl InfrastructureServiceBundle {
             .with_installation_server_identity(certificates.clone())
             .with_managed_listener_certificates(listener_certificates.clone()),
         );
+        listener_runtime.set_external_package_provider(external_packages.clone());
         listener_runtime.set_socket_capture_repository(socket_capture);
         let protocol_package_usage = Arc::new(ProtocolPackageUsageQueryAdapter::new(
             workspaces.clone(),
@@ -128,6 +133,7 @@ impl InfrastructureServiceBundle {
             protocol_packages,
             protocol_package_import,
             protocol_package_usage,
+            external_packages,
             rules,
             faults,
             certificates,

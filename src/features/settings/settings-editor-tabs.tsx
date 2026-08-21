@@ -11,6 +11,9 @@ import {
 import type { SettingsDraft } from "@/generated/rust-types";
 import { ThemeSettings } from "./settings-content";
 import { McpSettings } from "./mcp-settings";
+import { ExternalPackageServiceSettings } from "./external-package-service-settings";
+
+export type SettingsSection = "capacity" | "app" | "external-packages" | "mcp";
 
 export function bytesToMib(bytes: number) {
   return Math.round(bytes / 1024 / 1024);
@@ -21,8 +24,8 @@ type SettingsEditorTabsProps = {
   fieldError: (field: string) => string | undefined;
   onDraftChange: (draft: SettingsDraft) => void;
   isDisabled: boolean;
-  selectedSection: "capacity" | "app" | "mcp";
-  onSectionChange: (section: "capacity" | "app" | "mcp") => void;
+  selectedSection: SettingsSection;
+  onSectionChange: (section: SettingsSection) => void;
 };
 
 export function SettingsEditorTabs({
@@ -41,7 +44,7 @@ export function SettingsEditorTabs({
           <Tabs
             selectedKey={selectedSection}
             onSelectionChange={(key) =>
-              onSectionChange(key as "capacity" | "app" | "mcp")
+              onSectionChange(key as SettingsSection)
             }
           >
             <Tabs.ListContainer>
@@ -52,6 +55,10 @@ export function SettingsEditorTabs({
                 </Tabs.Tab>
                 <Tabs.Tab id="app" isDisabled={isDisabled}>
                   应用
+                  <Tabs.Indicator />
+                </Tabs.Tab>
+                <Tabs.Tab id="external-packages" isDisabled={isDisabled}>
+                  外部软件包
                   <Tabs.Indicator />
                 </Tabs.Tab>
                 <Tabs.Tab id="mcp">
@@ -73,6 +80,10 @@ export function SettingsEditorTabs({
                 系统设置只管理全局行为；入口配置、证书和规则分别在对应页面管理。
               </Alert>
               <ThemeSettings />
+            </Tabs.Panel>
+            <Tabs.Panel id="external-packages" className="p-4">
+              <ExternalPackageServiceSettings draft={draft} fieldError={fieldError}
+                onDraftChange={onDraftChange} isDisabled={isDisabled} />
             </Tabs.Panel>
             <Tabs.Panel id="mcp" className="p-4">
               <McpSettings />

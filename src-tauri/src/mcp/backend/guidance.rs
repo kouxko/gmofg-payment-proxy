@@ -10,6 +10,29 @@ pub(super) struct DiagnosticGuidance {
 }
 
 pub(super) fn diagnostic_guidance(evidence: &str) -> DiagnosticGuidance {
+    if contains_any(
+        evidence,
+        &[
+            "external package",
+            "external_package",
+            "外部软件包",
+            "外部协议包",
+            "package.register",
+            "json-rpc",
+        ],
+    ) {
+        return DiagnosticGuidance {
+            category: "external_package",
+            ui_path: "设置 > 外部软件包服务；协议包 > 外部版本详情",
+            action: "先读取外部软件包服务状态和精确版本详情，再按日志中的 handshake、registration、RPC 阶段、连接 ID 与方法名定位；不要用重连掩盖严格合同错误。",
+            app_action: "第三方进程必须连接实际 ws:// 地址的精确 /packages 路径，正确响应 package.register，并实现详情中声明的 hooks/document JSON-RPC 方法。",
+            alternatives: &[
+                "先停用协议处理并用原样 Socket 转发确认 TCP/TLS 字节链路。",
+                "用独立最小外部软件包进程复现，以区分第三方实现、入口配置和上游服务问题。",
+            ],
+            verification: "确认 external_package_service_status 为 listening、精确版本 online+enabled，并用 diagnostics_query 与 socket_capture_query 验证同一连接和方向的处理结果。",
+        };
+    }
     if contains_any(evidence, &["tls", "certificate", "证书", "trust anchor"]) {
         return DiagnosticGuidance {
             category: "tls",
@@ -84,6 +107,8 @@ mod tests {
     #[test]
     fn classifies_supported_failure_families_and_returns_complete_guidance() {
         for (evidence, category) in [
+            ("external package registration failed", "external_package"),
+            ("外部软件包连接已断开", "external_package"),
             ("TLS certificate rejected", "tls"),
             ("address in use while bind", "bind"),
             ("DNS resolve failed", "dns"),

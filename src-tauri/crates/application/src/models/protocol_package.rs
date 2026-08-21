@@ -38,6 +38,59 @@ pub enum ProtocolPackageValidationViewModel {
     Invalid { code: String },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+/// 精确协议包版本的执行来源。
+///
+/// 内置 Rhai 与外部进程的可用性约束不同，因此使用 closed tagged union 表达，禁止调用方
+/// 通过多个可空字段猜测来源。`built_in` 只标识官方起始包；用户导入的 Rhai 包仍属于
+/// `Internal`。外部包的 `online` 是连接状态快照，与用户启用状态相互独立。
+pub enum ProtocolPackageSourceViewModel {
+    /// 由当前进程中的 Rhai Host 执行。
+    Internal { built_in: bool },
+    /// 由已注册的第三方进程通过 JSON-RPC 执行。
+    External { online: bool },
+}
+
+/// 外部软件包 WebSocket 服务的启动状态。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum ExternalPackageServiceStateViewModel {
+    /// 服务已绑定预期地址并接受 `/packages` 连接。
+    Listening,
+    /// 启动绑定失败；内置协议包仍可继续使用。
+    Failed { error: String },
+}
+
+/// 设置页展示的外部软件包服务运行快照。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ExternalPackageServiceStatusViewModel {
+    /// 本次进程启动时实际采用的 WebSocket 地址，不随尚未重启的设置草稿变化。
+    pub websocket_url: String,
+    pub fixed_path: String,
+    pub online_connection_count: usize,
+    pub state: ExternalPackageServiceStateViewModel,
+    /// 第一版不提供认证；显式字段避免 UI 仅靠说明文字表达安全边界。
+    pub authentication_enabled: bool,
+}
+
+impl ProtocolPackageSourceViewModel {
+    /// 返回该精确版本是否由外部进程执行。
+    #[must_use]
+    pub const fn is_external(self) -> bool {
+        matches!(self, Self::External { .. })
+    }
+
+    /// 返回外部连接是否在线；内置来源不依赖外部连接，固定返回 `None`。
+    #[must_use]
+    pub const fn external_online(self) -> Option<bool> {
+        match self {
+            Self::Internal { .. } => None,
+            Self::External { online } => Some(online),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 一个不可变协议包版本的轻量摘要。
 pub struct ProtocolPackageVersionViewModel {
@@ -46,8 +99,9 @@ pub struct ProtocolPackageVersionViewModel {
     pub host_api: u32,
     /// 安装时由严格 Manifest 推断并持久化的数据平面类型。
     pub kind: ProtocolPackageKindViewModel,
-    /// 由应用精确身份保护的官方 ISO 8583:1987 ASCII Profile。
-    pub built_in: bool,
+    /// 该精确版本的可判别执行来源。
+    #[serde(rename = "package_source")]
+    pub source: ProtocolPackageSourceViewModel,
     pub enabled: bool,
     pub validation: ProtocolPackageValidationViewModel,
     pub installed_at: DateTime<Utc>,
@@ -105,6 +159,39 @@ pub struct ProtocolPackageDetailViewModel {
     pub upstream_schema: ProtocolPackageSchemaViewModel,
     pub downstream_schema: ProtocolPackageSchemaViewModel,
     pub usages: Vec<ProtocolPackageUsageViewModel>,
+    /// 仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。
+    pub external: Option<ExternalPackageDetailViewModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 一个方向实际调用的完整 JSON-RPC 方法名。
+pub struct ExternalPackageDirectionMethodsViewModel {
+    pub frame: String,
+    pub decode: String,
+    pub encode: String,
+    pub display: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 最近一次连接级错误的安全摘要；不包含第三方 payload 或未脱敏 `data`。
+pub struct ExternalPackageRecentErrorViewModel {
+    pub code: String,
+    pub message: String,
+    pub occurred_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 外部协议包详情的严格连接投影。
+pub struct ExternalPackageDetailViewModel {
+    pub remote_address: Option<String>,
+    pub connection_id: Option<Uuid>,
+    pub first_connected_at: DateTime<Utc>,
+    pub last_connected_at: DateTime<Utc>,
+    pub registration_fingerprint_sha256: String,
+    pub rpc_timeout_seconds: u64,
+    pub upstream_methods: ExternalPackageDirectionMethodsViewModel,
+    pub downstream_methods: ExternalPackageDirectionMethodsViewModel,
+    pub recent_error: Option<ExternalPackageRecentErrorViewModel>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -180,6 +267,9 @@ pub struct ProtocolPackageDescriptionViewModel {
 pub struct ListenerProtocolPackageOptionViewModel {
     pub package: ProtocolPackageRef,
     pub name: String,
+    /// 选择器明确区分内置 Rhai 与外部进程，不从其他字段反推来源。
+    #[serde(rename = "package_source")]
+    pub source: ProtocolPackageSourceViewModel,
     pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
     pub upstream_schema: ProtocolPackageSchemaViewModel,

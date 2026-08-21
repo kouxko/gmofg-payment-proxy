@@ -134,8 +134,37 @@ function isDisplay(value: unknown): boolean {
   if (value.type !== "hex_fallback" || !hasOnly(value, ["type", "reason", "diagnostic"])
     || !["entry_point_failed", "resource_limit_exceeded"].includes(String(value.reason))) return false;
   return value.diagnostic === null || (isRecord(value.diagnostic)
-    && hasOnly(value.diagnostic, ["code", "message"])
-    && isText(value.diagnostic.code) && typeof value.diagnostic.message === "string");
+    && Object.keys(value.diagnostic).length === 3
+    && hasOnly(value.diagnostic, ["code", "message", "external_package_call"])
+    && isText(value.diagnostic.code)
+    && typeof value.diagnostic.message === "string"
+    && (value.diagnostic.external_package_call === null
+      || isExternalPackageCallDiagnostic(value.diagnostic.external_package_call)));
+}
+
+/**
+ * 外部 RPC 诊断只允许查询关联信息与远端 data 的形状摘要；禁止接受业务 payload、
+ * 任意扩展字段或超过 JavaScript 安全整数范围的远端错误码。
+ */
+function isExternalPackageCallDiagnostic(value: unknown): boolean {
+  if (!isRecord(value)
+    || Object.keys(value).length !== 8
+    || !hasOnly(value, [
+      "package", "direction", "stage", "method", "request_id", "remote_code",
+      "remote_message", "remote_data_summary",
+    ])) return false;
+  return isPackage(value.package)
+    && (value.direction === "upstream" || value.direction === "downstream")
+    && ["frame", "decode", "encode", "display"].includes(String(value.stage))
+    && isText(value.method)
+    && (value.request_id === null || isText(value.request_id))
+    && (value.remote_code === null || Number.isSafeInteger(value.remote_code))
+    && (value.remote_message === null || typeof value.remote_message === "string")
+    && (value.remote_data_summary === null
+      || (typeof value.remote_data_summary === "string"
+        && /^(?:none|null|bool|number|string\(bytes=\d+\)|array\(items=\d+\)|object\(fields=\d+\))$/.test(
+          value.remote_data_summary,
+        )));
 }
 
 const localFailureMessages = {

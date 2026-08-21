@@ -20,7 +20,10 @@ fn full_configuration_round_trips() {
     let expected = document();
     let bytes = serialize_application_configuration(&expected).expect("serialize");
     let wire: Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(wire["format_version"], 5);
+    assert_eq!(
+        wire["format_version"],
+        APPLICATION_CONFIGURATION_FORMAT_VERSION
+    );
     assert_eq!(wire["workspaces"][0]["protocol_rules"], json!([]));
     assert_eq!(
         wire["workspaces"][0]["protocol_rule_created_order_high_water"],

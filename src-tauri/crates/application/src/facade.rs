@@ -10,12 +10,13 @@ use chrono::Utc;
 use crate::{
     AndroidControlPort, AppError, AppResult, BreakpointCoordinator, BreakpointValidationPort,
     BuiltinProtocolPackagePort, CertificateOverviewViewModel, CertificateServicePort,
-    CertificateValidationViewModel, ChannelPresentationViewModel, EventHub, FaultServicePort,
-    ListenerCertificateImportPort, ListenerRuntimePort, OperationResultViewModel,
-    ProtectedSecretPort, ProtocolPackageApplicationServices, ProtocolPackageCompilerPort,
-    ProtocolPackageImportPort, ProtocolPackagePortabilityPort, ProtocolPackageStorePort,
-    ProtocolPackageUsageQueryPort, RuleRepositoryPort, SessionQueryPort, SettingsRepositoryPort,
-    SettingsViewModel, UiEventPayload, WorkspaceRepositoryPort,
+    CertificateValidationViewModel, ChannelPresentationViewModel, EventHub,
+    ExternalPackageApplicationPort, FaultServicePort, ListenerCertificateImportPort,
+    ListenerRuntimePort, OperationResultViewModel, ProtectedSecretPort,
+    ProtocolPackageApplicationServices, ProtocolPackageCompilerPort, ProtocolPackageImportPort,
+    ProtocolPackagePortabilityPort, ProtocolPackageStorePort, ProtocolPackageUsageQueryPort,
+    RuleRepositoryPort, SessionQueryPort, SettingsRepositoryPort, SettingsViewModel,
+    UiEventPayload, WorkspaceRepositoryPort,
 };
 
 mod android;
@@ -25,6 +26,7 @@ mod bootstrap;
 mod certificate_portability;
 mod certificates;
 mod configuration;
+mod diagnostic_report;
 mod diagnostics;
 mod lifecycle;
 mod listener_certificates;
@@ -74,6 +76,7 @@ pub struct Application {
     protocol_package_builtin: Arc<dyn BuiltinProtocolPackagePort>,
     protocol_package_usage: Arc<dyn ProtocolPackageUsageQueryPort>,
     protocol_package_portability: Arc<dyn ProtocolPackagePortabilityPort>,
+    external_packages: Arc<dyn ExternalPackageApplicationPort>,
     protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
     mutation_gate: tokio::sync::Mutex<()>,
@@ -128,6 +131,7 @@ impl Application {
             protocol_package_builtin: dependencies.protocol_packages.builtin,
             protocol_package_usage: dependencies.protocol_packages.usage_query,
             protocol_package_portability: dependencies.protocol_packages.portability,
+            external_packages: dependencies.protocol_packages.external,
             protected_secrets,
             events: dependencies.events,
             mutation_gate: tokio::sync::Mutex::new(()),

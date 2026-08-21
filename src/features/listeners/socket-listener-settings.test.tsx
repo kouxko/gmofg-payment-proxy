@@ -196,6 +196,7 @@ describe("SocketListenerSettings", () => {
     const option = {
       package: recommended,
       name: "ISO 8583 ASCII 示例",
+      package_source: { type: "internal" as const, built_in: true },
       kind: "socket" as const,
       capabilities: {
         upstream: { frame: true, decode: true, encode: true },

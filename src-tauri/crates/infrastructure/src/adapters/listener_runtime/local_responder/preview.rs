@@ -87,6 +87,22 @@ fn document_preview(document: &Document) -> SocketDocumentPreview {
     SocketDocumentPreview::new(schema_id, schema_version, fields)
 }
 
+pub(crate) fn publish_external_request_parsed(
+    diagnostics: Option<&LocalResponderDiagnostics>,
+    exchange_id: Uuid,
+    origin: &[u8],
+    document: &Document,
+) {
+    let Some(diagnostics) = diagnostics else {
+        return;
+    };
+    let preview =
+        SocketLocalRequestPreview::new(exchange_id, origin, Some(document_preview(document)));
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        diagnostics.request_parsed(preview);
+    }));
+}
+
 fn preview_value(value: &DocumentValue, maximum_bytes: usize) -> (Option<String>, bool, bool) {
     match value {
         DocumentValue::String(value) => {

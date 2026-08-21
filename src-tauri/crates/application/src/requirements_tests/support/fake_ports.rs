@@ -64,6 +64,8 @@ pub(in crate::requirements_tests) struct FakePorts {
         parking_lot::Mutex<CertificateOverviewViewModel>,
     pub(in crate::requirements_tests) socket_capture_queries:
         parking_lot::Mutex<Vec<SocketCaptureQuery>>,
+    pub(in crate::requirements_tests) socket_capture_detail:
+        parking_lot::Mutex<Option<SocketCaptureDetailViewModel>>,
     pub(in crate::requirements_tests) socket_capture_clear_calls: AtomicUsize,
     pub(in crate::requirements_tests) socket_capture_clear_workspaces:
         parking_lot::Mutex<Vec<WorkspaceId>>,
@@ -90,6 +92,7 @@ impl Default for FakePorts {
             settings: parking_lot::Mutex::new(fake_settings_view()),
             certificate_overview: parking_lot::Mutex::new(fake_certificate_overview()),
             socket_capture_queries: parking_lot::Mutex::new(Vec::new()),
+            socket_capture_detail: parking_lot::Mutex::new(None),
             socket_capture_clear_calls: AtomicUsize::new(0),
             socket_capture_clear_workspaces: parking_lot::Mutex::new(Vec::new()),
         }
@@ -98,6 +101,56 @@ impl Default for FakePorts {
 
 pub(in crate::requirements_tests) fn unused<T>() -> AppResult<T> {
     Err(AppError::new("UNUSED_FAKE_PORT", "测试未使用此端口。"))
+}
+
+#[derive(Debug, Default)]
+pub(in crate::requirements_tests) struct UnusedExternalPackagePort;
+
+#[async_trait]
+impl ExternalPackageApplicationPort for UnusedExternalPackagePort {
+    async fn service_status(&self) -> AppResult<ExternalPackageServiceStatusViewModel> {
+        Ok(ExternalPackageServiceStatusViewModel {
+            websocket_url: "ws://0.0.0.0:8765/packages".into(),
+            fixed_path: "/packages".into(),
+            online_connection_count: 0,
+            state: ExternalPackageServiceStateViewModel::Listening,
+            authentication_enabled: false,
+        })
+    }
+
+    async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
+        Ok(Vec::new())
+    }
+
+    async fn get(
+        &self,
+        _: &ProtocolPackageRef,
+    ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
+        Ok(None)
+    }
+
+    async fn describe(
+        &self,
+        _: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
+        unused()
+    }
+
+    async fn detail(&self, _: &ProtocolPackageRef) -> AppResult<ExternalPackageDetailViewModel> {
+        unused()
+    }
+
+    async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
+        unused()
+    }
+
+    async fn disconnect(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        unused()
+    }
+
+    async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        unused()
+    }
 }
 
 #[derive(Debug, Default)]
@@ -209,9 +262,13 @@ impl CaptureRepositoryPort for FakePorts {
     }
     async fn get_socket_detail(
         &self,
-        _: SocketCaptureId,
+        capture_id: SocketCaptureId,
     ) -> AppResult<SocketCaptureDetailViewModel> {
-        unused()
+        self.socket_capture_detail
+            .lock()
+            .clone()
+            .filter(|detail| detail.record.capture_id == capture_id)
+            .ok_or_else(|| AppError::new("UNUSED_FAKE_PORT", "测试未配置该 Socket capture。"))
     }
     async fn clear_view(&self, _: u64) -> AppResult<u64> {
         unused()

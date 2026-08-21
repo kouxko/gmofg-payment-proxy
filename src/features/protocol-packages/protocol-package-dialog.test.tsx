@@ -16,6 +16,8 @@ const mocks = vi.hoisted(() => ({
   protocolPackageList: vi.fn(),
   protocolPackageDetail: vi.fn(),
   protocolPackageEnable: vi.fn(),
+  protocolPackageDisable: vi.fn(),
+  protocolPackageDelete: vi.fn(),
 }));
 
 vi.mock("@/generated/rust-types", () => ({
@@ -23,12 +25,18 @@ vi.mock("@/generated/rust-types", () => ({
     protocolPackageList: mocks.protocolPackageList,
     protocolPackageDetail: mocks.protocolPackageDetail,
     protocolPackageEnable: mocks.protocolPackageEnable,
+    protocolPackageDisable: mocks.protocolPackageDisable,
+    protocolPackageDelete: mocks.protocolPackageDelete,
   },
 }));
 
 vi.mock("@/lib/ipc/client", () => ({
   callCommand: async <T,>(value: Promise<T> | T) => value,
   errorMessage: (reason: unknown) => reason instanceof Error ? reason.message : String(reason),
+}));
+
+vi.mock("@/features/shell/bootstrap-context", () => ({
+  useAppEventRefresh: vi.fn(),
 }));
 
 describe("ProtocolPackageDialog details", () => {
@@ -39,6 +47,20 @@ describe("ProtocolPackageDialog details", () => {
       package: packageRef,
       enabled: true,
     }));
+    mocks.protocolPackageDisable.mockImplementation(async (packageRef) => version(packageRef.version, {
+      package: packageRef,
+      package_source: { type: "external", online: true },
+      enabled: false,
+    }));
+    mocks.protocolPackageDelete.mockResolvedValue({
+      success: true,
+      cancelled: false,
+      message: "协议包版本已删除。",
+      ui_tone: "positive",
+      entity_id: "iso-8583@2.0.0",
+      revision: null,
+      requires_restart: false,
+    });
     mocks.protocolPackageDetail.mockImplementation(async (packageRef) => {
       const selected = version(packageRef.version, {
         name: packageRef.version === "1.10.0" ? "旧版专用名称" : "最新版专用名称",
@@ -86,6 +108,48 @@ describe("ProtocolPackageDialog details", () => {
     expect(within(table).getByText("blob")).toBeVisible();
   });
 
+  it("shows the external connection contract without exposing payloads", async () => {
+    mocks.protocolPackageList.mockResolvedValue([group({
+      versions: [version("2.0.0", { package_source: { type: "external", online: true } })],
+    })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(
+      version("2.0.0", { package_source: { type: "external", online: true } }),
+      {
+        external: {
+          remote_address: "127.0.0.1:49152",
+          connection_id: "018f6fc0-65d8-7d90-b25b-392f6d9b9481",
+          first_connected_at: "2026-08-20T08:00:00Z",
+          last_connected_at: "2026-08-20T09:00:00Z",
+          registration_fingerprint_sha256: "ab".repeat(32),
+          rpc_timeout_seconds: 5,
+          upstream_methods: {
+            frame: "hooks.upstream.split",
+            decode: "hooks.upstream.decode",
+            encode: "hooks.upstream.encode",
+            display: "document.upstream.render",
+          },
+          downstream_methods: {
+            frame: "hooks.downstream.split",
+            decode: "hooks.downstream.decode",
+            encode: "hooks.downstream.encode",
+            display: "document.downstream.render",
+          },
+          recent_error: {
+            code: "EXTERNAL_PACKAGE_DISCONNECTED",
+            message: "外部软件包连接已断开。",
+            occurred_at: "2026-08-20T09:01:00Z",
+          },
+        },
+      },
+    ));
+
+    await openDialog();
+    expect(screen.getByText("127.0.0.1:49152")).toBeVisible();
+    expect(screen.getByText(/hooks\.upstream\.split/)).toBeVisible();
+    expect(screen.getByText(/最近错误：EXTERNAL_PACKAGE_DISCONNECTED/)).toBeVisible();
+    expect(screen.queryByText(/payload/i)).not.toBeInTheDocument();
+  });
+
   it("shows HTTP as unframed while retaining request and response decoding", async () => {
     mocks.protocolPackageList.mockResolvedValue([group({
       kind: "http",
@@ -114,9 +178,9 @@ describe("ProtocolPackageDialog details", () => {
 
   it("explains the exact scope and limitations of the built-in ISO example", async () => {
     mocks.protocolPackageList.mockResolvedValue([group({
-      versions: [version("1.0.0", { built_in: true })],
+      versions: [version("1.0.0", { package_source: { type: "internal", built_in: true } })],
     })]);
-    mocks.protocolPackageDetail.mockResolvedValue(detail(version("1.0.0", { built_in: true })));
+    mocks.protocolPackageDetail.mockResolvedValue(detail(version("1.0.0", { package_source: { type: "internal", built_in: true } })));
     await openDialog();
 
     const dialog = screen.getByRole("dialog", { name: "ISO 8583" });
@@ -286,6 +350,137 @@ describe("ProtocolPackageDialog details", () => {
     expect(screen.getByText("协议脚本编译失败")).toBeVisible();
     expect(screen.getByText("已停用", { selector: "dd" })).toBeVisible();
     expect(screen.getByRole("button", { name: "启用协议包" })).toBeEnabled();
+  });
+
+  it("disables an external package once and updates the exact version after success", async () => {
+    const external = version("2.0.0", {
+      package_source: { type: "external", online: true },
+      enabled: true,
+    });
+    const pending = deferred<ReturnType<typeof version>>();
+    mocks.protocolPackageList.mockResolvedValue([group({ versions: [external] })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(external, { usages: [] }));
+    mocks.protocolPackageDisable.mockReturnValue(pending.promise);
+
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+    const disableButton = await screen.findByRole("button", { name: "停用外部软件包" });
+    await Promise.all([user.click(disableButton), user.click(disableButton)]);
+
+    expect(mocks.protocolPackageDisable).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "正在停用…" })).toBeDisabled();
+    pending.resolve({ ...external, enabled: false });
+    expect(await screen.findByText("已停用", { selector: "dd" })).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent("已停用");
+    expect(screen.queryByRole("button", { name: "停用外部软件包" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the external package enabled and exposes a retry after disable fails", async () => {
+    const external = version("2.0.0", {
+      package_source: { type: "external", online: true },
+      enabled: true,
+    });
+    mocks.protocolPackageList.mockResolvedValue([group({ versions: [external] })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(external, { usages: [] }));
+    mocks.protocolPackageDisable.mockRejectedValue(new Error("入口停止失败"));
+
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+    await user.click(await screen.findByRole("button", { name: "停用外部软件包" }));
+
+    expect(await screen.findByText("外部软件包停用失败")).toBeVisible();
+    expect(screen.getByText("入口停止失败")).toBeVisible();
+    expect(screen.getByText("已启用", { selector: "dd" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "停用外部软件包" })).toBeEnabled();
+  });
+
+  it("blocks deletion from the authoritative usage list and explains every reference", async () => {
+    const external = version("2.0.0", {
+      package_source: { type: "external", online: false },
+      enabled: false,
+    });
+    mocks.protocolPackageList.mockResolvedValue([group({ versions: [external] })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(external));
+
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+
+    expect(await screen.findByText("仍有 1 个入口引用此精确版本，不能删除。")).toBeVisible();
+    expect(screen.getByText("请先修改或删除：收银台测试 / 上游 Socket")).toBeVisible();
+    expect(screen.getByRole("button", { name: "删除外部软件包" })).toBeDisabled();
+    expect(mocks.protocolPackageDelete).not.toHaveBeenCalled();
+  });
+
+  it("confirms deletion, keeps the confirmation locked while pending, then refreshes and restores focus", async () => {
+    const external = version("2.0.0", {
+      package_source: { type: "external", online: true },
+      enabled: false,
+    });
+    const pending = deferred<{
+      success: boolean;
+      cancelled: boolean;
+      message: string;
+      ui_tone: "positive";
+      entity_id: string;
+      revision: null;
+      requires_restart: boolean;
+    }>();
+    mocks.protocolPackageList.mockResolvedValueOnce([group({ versions: [external] })]).mockResolvedValueOnce([]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(external, { usages: [] }));
+    mocks.protocolPackageDelete.mockReturnValue(pending.promise);
+
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+    await user.click(await screen.findByRole("button", { name: "删除外部软件包" }));
+    expect(screen.getByRole("alertdialog", { name: "删除 ISO 8583 长名称协议包 2.0.0？" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
+
+    expect(screen.getByRole("button", { name: "正在删除…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+    pending.resolve({
+      success: true,
+      cancelled: false,
+      message: "协议包版本已删除。",
+      ui_tone: "positive",
+      entity_id: "iso-8583@2.0.0",
+      revision: null,
+      requires_restart: false,
+    });
+
+    await waitFor(() => expect(mocks.protocolPackageList).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("尚未安装 Socket 协议包")).toBeVisible();
+    await waitFor(() => expect(screen.getByRole("heading", { name: "协议包" })).toHaveFocus());
+  });
+
+  it("keeps the delete confirmation open and reports a backend rejection", async () => {
+    const external = version("2.0.0", {
+      package_source: { type: "external", online: false },
+      enabled: false,
+    });
+    mocks.protocolPackageList.mockResolvedValue([group({ versions: [external] })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(external, { usages: [] }));
+    mocks.protocolPackageDelete.mockRejectedValue(new Error("注册状态已变化，请刷新"));
+
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+    await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
+    await user.click(await screen.findByRole("button", { name: "删除外部软件包" }));
+    await user.click(screen.getByRole("button", { name: "确认删除" }));
+
+    expect(await screen.findByText("外部软件包删除失败")).toBeVisible();
+    expect(screen.getByText("注册状态已变化，请刷新")).toBeVisible();
+    expect(screen.getByRole("button", { name: "确认删除" })).toBeEnabled();
+    expect(screen.getByRole("alertdialog")).toBeVisible();
+  });
+
+  it("does not expose external lifecycle controls for internal packages", async () => {
+    await openDialog();
+    expect(screen.queryByRole("button", { name: "停用外部软件包" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "删除外部软件包" })).not.toBeInTheDocument();
   });
 
   it("keeps narrow dialogs scrollable with keyboard-accessible version actions", async () => {

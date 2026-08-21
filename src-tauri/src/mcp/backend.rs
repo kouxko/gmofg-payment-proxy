@@ -16,6 +16,7 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 
 use super::{query, resources};
+use crate::runtime_logs::RuntimeLogStore;
 use guidance::diagnostic_guidance;
 
 #[derive(Debug, Clone)]
@@ -93,11 +94,15 @@ pub trait ReadOnlyMcpBackend: Debug + Send + Sync {
 #[derive(Debug)]
 pub struct ApplicationBackend {
     application: Arc<Application>,
+    runtime_logs: Arc<RuntimeLogStore>,
 }
 
 impl ApplicationBackend {
-    pub fn new(application: Arc<Application>) -> Self {
-        Self { application }
+    pub(crate) fn new(application: Arc<Application>, runtime_logs: Arc<RuntimeLogStore>) -> Self {
+        Self {
+            application,
+            runtime_logs,
+        }
     }
 
     async fn application_snapshot(&self) -> ToolResult {
@@ -134,6 +139,7 @@ impl ApplicationBackend {
         }
         let entry_statuses = self.application.listener_statuses().await?;
         let protocol_packages = self.application.protocol_package_list().await?;
+        let external_package_service = self.application.external_package_service_status().await?;
         let diagnostics = self
             .application
             .diagnostic_log_query(&DiagnosticLogQuery::default());
@@ -143,6 +149,7 @@ impl ApplicationBackend {
             "workspace_details": workspace_details,
             "entry_statuses": entry_statuses,
             "protocol_packages": protocol_packages,
+            "external_package_service": external_package_service,
             "diagnostics": diagnostics,
         }))
     }
@@ -190,6 +197,9 @@ impl ReadOnlyMcpBackend for ApplicationBackend {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult {
         match name {
             "application_snapshot"
+            | "application_log_query"
+            | "application_log_get"
+            | "reproduction_report"
             | "settings_get"
             | "workspace_list"
             | "workspace_get"
@@ -212,6 +222,7 @@ impl ReadOnlyMcpBackend for ApplicationBackend {
             | "protocol_package_detail"
             | "protocol_package_usage" => self.call_configuration_tool(name, arguments).await,
             "android_adb_get"
+            | "external_package_service_status"
             | "android_device_list"
             | "android_package_list"
             | "android_package_get"
@@ -248,6 +259,12 @@ impl ReadOnlyMcpBackend for ApplicationBackend {
 #[serde(deny_unknown_fields)]
 struct WorkspaceArguments {
     workspace_id: WorkspaceId,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ApplicationLogDetailArguments {
+    log_id: u64,
 }
 
 #[derive(Debug, Deserialize)]

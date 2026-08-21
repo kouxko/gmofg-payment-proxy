@@ -96,6 +96,38 @@ async fn settings_use_case_accepts_safe_defaults_and_normalizes_before_port_vali
 }
 
 #[tokio::test]
+async fn external_package_service_settings_are_normalized_and_validated_before_persistence() {
+    let ports = Arc::new(FakePorts::default());
+    let application = application_with_fake_ports(ports.clone());
+    let mut draft = valid_settings_draft();
+    draft.external_package_service.bind_address = " 127.0.0.1 ".into();
+    draft.external_package_service.rpc_timeout_seconds = 0;
+    draft.external_package_service.max_in_flight = 0;
+
+    let validation = application
+        .settings_validate(draft)
+        .await
+        .expect("external package settings validation result");
+
+    assert!(!validation.valid);
+    assert!(
+        validation
+            .field_errors
+            .contains_key("external_package_service.rpc_timeout_seconds")
+    );
+    assert!(
+        validation
+            .field_errors
+            .contains_key("external_package_service.max_in_flight")
+    );
+    assert_eq!(
+        ports.settings_validations.load(Ordering::SeqCst),
+        0,
+        "invalid local settings must not reach persistence"
+    );
+}
+
+#[tokio::test]
 async fn settings_san_raw_input_is_normalized_atomically_in_rust() {
     let ports = Arc::new(FakePorts::default());
     let application = application_with_fake_ports(ports.clone());

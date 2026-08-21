@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -105,12 +106,52 @@ pub struct SocketDiagnosticContextViewModel {
     pub listener_run_epoch: String,
     pub route: Option<SocketConnectionRouteViewModel>,
     pub capture_failure: Option<SocketCaptureFailureDiagnostic>,
+    pub external_package_call: Option<ExternalPackageCallDiagnosticViewModel>,
     pub stage: SocketDiagnosticStage,
     pub direction: Option<SocketDiagnosticDirection>,
     pub client_to_server_read_bytes: u64,
     pub client_to_server_bytes: u64,
     pub server_to_client_read_bytes: u64,
     pub server_to_client_bytes: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ExternalPackageCallStage {
+    Frame,
+    Decode,
+    Encode,
+    Display,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 外部 JSON-RPC 调用的可查询脱敏诊断；绝不携带业务报文或远端 `data` 值。
+pub struct ExternalPackageCallDiagnosticViewModel {
+    pub package: ProtocolPackageRef,
+    pub direction: ProtocolDirection,
+    pub stage: ExternalPackageCallStage,
+    pub method: String,
+    pub request_id: Option<String>,
+    pub remote_code: Option<i64>,
+    pub remote_message: Option<String>,
+    /// 只允许 `null/bool/number/string(bytes=N)/array(items=N)/object(fields=N)` 形状摘要。
+    pub remote_data_summary: Option<String>,
+}
+
+impl ExternalPackageCallDiagnosticViewModel {
+    #[must_use]
+    pub fn sanitized(mut self) -> Self {
+        self.method = sanitize_text(&self.method, DIAGNOSTIC_CONTEXT_MAX_CHARS);
+        self.request_id =
+            sanitize_optional(self.request_id.as_deref(), DIAGNOSTIC_CONTEXT_MAX_CHARS);
+        self.remote_message =
+            sanitize_optional(self.remote_message.as_deref(), DIAGNOSTIC_SUMMARY_MAX_CHARS);
+        self.remote_data_summary = sanitize_optional(
+            self.remote_data_summary.as_deref(),
+            DIAGNOSTIC_CONTEXT_MAX_CHARS,
+        );
+        self
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -162,7 +203,12 @@ impl DiagnosticLogEntryViewModel {
                 DIAGNOSTIC_CONTEXT_MAX_CHARS,
             ),
             profile_id: sanitize_optional(self.profile_id.as_deref(), DIAGNOSTIC_CONTEXT_MAX_CHARS),
-            socket_context: self.socket_context,
+            socket_context: self.socket_context.map(|mut context| {
+                context.external_package_call = context
+                    .external_package_call
+                    .map(ExternalPackageCallDiagnosticViewModel::sanitized);
+                context
+            }),
         }
     }
 }

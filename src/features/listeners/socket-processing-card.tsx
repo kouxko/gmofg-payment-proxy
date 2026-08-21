@@ -88,7 +88,10 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
         )}
         {unavailableBound && <Alert status="warning"><Alert.Indicator /><Alert.Content>
           <Alert.Title>当前处理方案已不可用</Alert.Title>
-          <Alert.Description>原选择仍会保留，不会自动替换；请选择新的可用方案。</Alert.Description>
+          <Alert.Description>
+            精确身份 {scripted?.package.id}@{scripted?.package.version} 仍会保留，不会自动替换。
+            该版本可能已停用、校验失败，或其外部进程已离线；恢复可用后刷新目录，或选择新的方案。
+          </Alert.Description>
         </Alert.Content></Alert>}
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <Select aria-label="Socket 协议处理方案" selectedKey={selectedKey}
@@ -101,7 +104,7 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
                 不使用协议包（透明转发）
               </ListBox.Item>}
               {missingFromCatalog && <ListBox.Item id={selectedKey} isDisabled textValue="当前选择（不可用）">
-                当前选择（不可用）
+                {scripted?.package.id}@{scripted?.package.version} · 当前选择（不可用）
               </ListBox.Item>}
               {(!catalog.loading && !catalog.error ? socketOptions : []).map((option) => (
                 <ListBox.Item key={exactPackageKey(option.package)} id={exactPackageKey(option.package)} textValue={optionLabel(option)}>
@@ -137,6 +140,7 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
 
 function PackageSummary({ option }: { option: ListenerProtocolPackageOptionViewModel }) {
   return <div className="flex flex-wrap gap-2 text-sm"><Chip variant="soft">{option.package.id}@{option.package.version}</Chip>
+    <Chip variant="soft" color={option.package_source.type === "external" ? "warning" : "accent"}>{sourceLabel(option)}</Chip>
     <Chip variant="soft">上行字段结构 {option.upstream_schema.id} v{option.upstream_schema.version}</Chip>
     <Chip variant="soft">下行字段结构 {option.downstream_schema.id} v{option.downstream_schema.version}</Chip>
     <Chip variant="soft">报文边界与字段解析：双向支持</Chip>
@@ -145,5 +149,12 @@ function PackageSummary({ option }: { option: ListenerProtocolPackageOptionViewM
 }
 
 function optionLabel(option: ListenerProtocolPackageOptionViewModel): string {
-  return `${option.name} · ${option.package.version}`;
+  return `${option.name} · ${option.package.version} · ${sourceLabel(option)}`;
+}
+
+function sourceLabel(option: ListenerProtocolPackageOptionViewModel): string {
+  if (option.package_source.type === "external") {
+    return option.package_source.online ? "外部 · 在线" : "外部 · 离线";
+  }
+  return option.package_source.built_in ? "内置示例" : "内部安装";
 }

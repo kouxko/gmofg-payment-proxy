@@ -317,7 +317,7 @@ fn compile_rule_program(
     .map_err(AppError::from)
 }
 
-fn compile_document_rules(
+pub(super) fn compile_document_rules(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,

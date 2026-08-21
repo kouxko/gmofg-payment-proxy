@@ -6,8 +6,8 @@ use rusqlite::{Transaction, params};
 
 use super::{
     InfrastructureError, StoredProtocolPackageFiles, StoredProtocolPackageHeader,
-    StoredProtocolPackageValidation, database_error, load_protocol_package,
-    package_id_has_different_kind, protocol_package_kind_text,
+    StoredProtocolPackageValidation, database_error, identity::exact_external_package_exists,
+    load_protocol_package, package_id_has_different_kind, protocol_package_kind_text,
 };
 
 /// 组合导入事务中的已恢复、已编译协议包。
@@ -34,6 +34,11 @@ pub(crate) fn compare_or_insert_protocol_package(
     package: &StoredProtocolPackageWrite,
     enabled: Option<bool>,
 ) -> Result<(), StoredProtocolPackageBundleError> {
+    if exact_external_package_exists(transaction, &package.header.package)? {
+        return Err(StoredProtocolPackageBundleError::IdentityConflict(
+            package.header.package.clone(),
+        ));
+    }
     if package_id_has_different_kind(transaction, &package.header.package, package.header.kind)? {
         return Err(StoredProtocolPackageBundleError::IdentityConflict(
             package.header.package.clone(),

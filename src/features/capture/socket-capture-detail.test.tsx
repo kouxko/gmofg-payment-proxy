@@ -206,7 +206,11 @@ describe("SocketCaptureDetail Relay", () => {
     detail.record.payload.capture.display = {
       type: "hex_fallback",
       reason: "entry_point_failed",
-      diagnostic: { code: "DISPLAY_FAILED", message: "协议视图生成失败" },
+      diagnostic: {
+        code: "DISPLAY_FAILED",
+        message: "协议视图生成失败",
+        external_package_call: null,
+      },
     };
     renderDetail(row, detail);
 
@@ -224,7 +228,11 @@ describe("SocketCaptureDetail Relay", () => {
     detail.record.payload.capture.display = {
       type: "hex_fallback",
       reason: "entry_point_failed",
-      diagnostic: { code: "DISPLAY_FAILED", message: "协议展示失败" },
+      diagnostic: {
+        code: "DISPLAY_FAILED",
+        message: "协议展示失败",
+        external_package_call: null,
+      },
     };
     renderDetail(row, detail);
 

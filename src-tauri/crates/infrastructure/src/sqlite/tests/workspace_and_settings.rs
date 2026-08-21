@@ -12,6 +12,7 @@ fn schema_keeps_http_payload_storage_absent_and_socket_capture_explicit() {
             "application_schema",
             "certificate_material",
             "certificate_state",
+            "external_protocol_packages",
             "protected_secrets",
             "protocol_package_files",
             "protocol_packages",
@@ -155,6 +156,56 @@ fn full_configuration_replace_rolls_back_all_tables_on_failure() {
 fn application_data_reset_atomically_removes_persisted_user_data() {
     let store = SqliteStore::in_memory().expect("store");
     let old_id = Uuid::new_v4();
+    seed_reset_data(&store, old_id);
+
+    let clean_id = Uuid::new_v4();
+    let clean = WorkspaceRecord {
+        id: clean_id,
+        revision: 1,
+        value: json!({"id": clean_id, "name": "Default Workspace", "revision": 1}),
+        updated_at: Utc::now(),
+    };
+    store
+        .reset_application_data(
+            clean_id,
+            std::slice::from_ref(&clean),
+            &json!({"default": true}),
+        )
+        .expect("atomic reset");
+
+    let snapshot = store.load_workspaces().expect("workspace snapshot");
+    assert_eq!(snapshot.selected_id, Some(clean_id));
+    assert_eq!(snapshot.records, vec![clean]);
+    assert_eq!(
+        store
+            .load_settings()
+            .expect("settings")
+            .expect("stored")
+            .value,
+        json!({"default": true})
+    );
+    assert!(
+        store
+            .load_protected_secret("test", "listener-p12")
+            .expect("secret lookup")
+            .is_none()
+    );
+    let connection = store.connection.lock();
+    for table in [
+        "certificate_material",
+        "external_protocol_packages",
+        "socket_captures",
+    ] {
+        let count: i64 = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get(0)
+            })
+            .expect("row count");
+        assert_eq!(count, 0, "{table} must be empty");
+    }
+}
+
+fn seed_reset_data(store: &SqliteStore, old_id: Uuid) {
     store
         .insert_workspace(&WorkspaceRecord {
             id: old_id,
@@ -201,48 +252,19 @@ fn application_data_reset_atomically_removes_persisted_user_data() {
                 ],
             )
             .expect("seed socket capture");
-    }
-
-    let clean_id = Uuid::new_v4();
-    let clean = WorkspaceRecord {
-        id: clean_id,
-        revision: 1,
-        value: json!({"id": clean_id, "name": "Default Workspace", "revision": 1}),
-        updated_at: Utc::now(),
-    };
-    store
-        .reset_application_data(
-            clean_id,
-            std::slice::from_ref(&clean),
-            &json!({"default": true}),
-        )
-        .expect("atomic reset");
-
-    let snapshot = store.load_workspaces().expect("workspace snapshot");
-    assert_eq!(snapshot.selected_id, Some(clean_id));
-    assert_eq!(snapshot.records, vec![clean]);
-    assert_eq!(
-        store
-            .load_settings()
-            .expect("settings")
-            .expect("stored")
-            .value,
-        json!({"default": true})
-    );
-    assert!(
-        store
-            .load_protected_secret("test", "listener-p12")
-            .expect("secret lookup")
-            .is_none()
-    );
-    let connection = store.connection.lock();
-    for table in ["certificate_material", "socket_captures"] {
-        let count: i64 = connection
-            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
-                row.get(0)
-            })
-            .expect("row count");
-        assert_eq!(count, 0, "{table} must be empty");
+        connection
+            .execute(
+                "INSERT INTO external_protocol_packages(
+                    package_id, version, registration_json, registration_fingerprint,
+                    enabled, first_connected_at, last_connected_at, last_remote_address,
+                    recent_error_code, recent_error_message, recent_error_occurred_at
+                 ) VALUES (
+                    'external-reset-test', '1.0.0', '{}', ?1, 0, ?2, ?2, '127.0.0.1:49152',
+                    'EXTERNAL_PACKAGE_DISCONNECTED', '外部软件包连接已断开。', ?2
+                 )",
+                params![vec![0_u8; 32], Utc::now().to_rfc3339()],
+            )
+            .expect("seed external protocol package");
     }
 }
 

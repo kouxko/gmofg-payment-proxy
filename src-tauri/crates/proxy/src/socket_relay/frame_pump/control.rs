@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio_util::sync::CancellationToken;
 
-use crate::transport::relay::RelayBytes;
+use crate::transport::relay::{RelayBytes, RelayDirection};
 
 use super::super::processing::{
     LocalResponderProcessorFactory, ScriptedRelayProcessorFactory, SocketConnectionIdentity,
@@ -73,6 +73,24 @@ pub(super) fn choose_relay_result(
         }
         (Err(first), _) => Err(first),
         (_, Err(second)) => Err(second),
+    }
+}
+
+pub(super) fn relay_direction(direction: SocketPayloadDirection) -> RelayDirection {
+    match direction {
+        SocketPayloadDirection::AppToUpstream => RelayDirection::ClientToServer,
+        SocketPayloadDirection::UpstreamToApp | SocketPayloadDirection::LocalExchange => {
+            RelayDirection::ServerToClient
+        }
+    }
+}
+
+pub(super) fn read_relay_direction(direction: SocketPayloadDirection) -> RelayDirection {
+    match direction {
+        SocketPayloadDirection::AppToUpstream | SocketPayloadDirection::LocalExchange => {
+            RelayDirection::ClientToServer
+        }
+        SocketPayloadDirection::UpstreamToApp => RelayDirection::ServerToClient,
     }
 }
 

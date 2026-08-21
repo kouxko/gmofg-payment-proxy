@@ -8,7 +8,18 @@
  * 承载设备到桌面代理入口的业务连接。
  */
 
-import { Alert, Button, Card, Chip, Input, Spinner, Table } from "@heroui/react";
+import {
+  Alert,
+  Button,
+  Card,
+  Chip,
+  Input,
+  ListBox,
+  Select,
+  Spinner,
+  Table,
+  toast,
+} from "@heroui/react";
 import { useMemo, useState } from "react";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { commands } from "@/generated/rust-types";
@@ -16,9 +27,11 @@ import type {
   DiagnosticLogPageViewModel,
   DiagnosticLogQuery,
   DiagnosticLogRowViewModel,
+  ProxyWorkspace,
+  WorkspaceSummaryViewModel,
 } from "@/generated/rust-types";
 import { formatTimestamp, toneColor } from "@/lib/format";
-import { callCommand } from "@/lib/ipc/client";
+import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 
 const refreshEvents = [
@@ -44,6 +57,8 @@ function contextText(row: DiagnosticLogRowViewModel): string {
 export function DiagnosticLogsView() {
   const [draftKeyword, setDraftKeyword] = useState("");
   const [keyword, setKeyword] = useState("");
+  const [reportListenerId, setReportListenerId] = useState<string>();
+  const [reportPending, setReportPending] = useState(false);
   const query = useMemo<DiagnosticLogQuery>(
     () => ({ keyword: keyword || null, after_event_id: null, limit: 300 }),
     [keyword],
@@ -53,7 +68,50 @@ export function DiagnosticLogsView() {
     `diagnostic-log-query:${queryKey}`,
     () => callCommand(commands.diagnosticLogQuery(query)),
   );
+  const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>(
+    "diagnostic-report-workspaces",
+    () => callCommand(commands.workspaceList()),
+  );
+  const workspaceId = workspaces.data?.find((item) => item.selected)?.id;
+  const workspace = useIpcQuery<ProxyWorkspace>(
+    `diagnostic-report-workspace:${workspaceId ?? "none"}`,
+    () => callCommand(commands.workspaceGet(workspaceId!)),
+    undefined,
+    { enabled: Boolean(workspaceId) },
+  );
+  const effectiveReportListenerId = workspace.data?.listeners.some(
+    (listener) => listener.id === reportListenerId,
+  )
+    ? reportListenerId
+    : workspace.data?.listeners[0]?.id;
   useAppEventRefresh(refreshEvents, page.refresh);
+  useAppEventRefresh(
+    ["workspace_changed", "listener_status_changed", "snapshot_required"],
+    async () => {
+      await Promise.all([workspaces.refresh(), workspace.refresh()]);
+    },
+  );
+
+  const exportReport = async () => {
+    if (!workspaceId || !effectiveReportListenerId) return;
+    setReportPending(true);
+    try {
+      const result = await callCommand(commands.diagnosticReproductionReportExport({
+        workspace_id: workspaceId,
+        listener_id: effectiveReportListenerId,
+        capture_id: null,
+      }));
+      if (result) {
+        toast(`故障复现报告已导出（${result.bytes_written} 字节）。`, {
+          variant: "success",
+        });
+      }
+    } catch (reason) {
+      toast(errorMessage(reason), { variant: "danger" });
+    } finally {
+      setReportPending(false);
+    }
+  };
 
   return (
     <section className="space-y-5 p-5">
@@ -77,9 +135,58 @@ export function DiagnosticLogsView() {
 
       <Card className="border border-[var(--telemetry-line)] shadow-sm">
         <Card.Header>
+          <Card.Title>故障复现报告</Card.Title>
+          <Card.Description>
+            聚合当前 Workspace、精确入口、运行状态、转发方式、规则、协议包、Android 网络、最近抓包、结构化诊断与持久化应用日志，导出为可复制的 Markdown。
+          </Card.Description>
+        </Card.Header>
+        <Card.Content className="grid items-end gap-3 px-4 pb-4 md:grid-cols-[minmax(0,1fr)_auto]">
+          <Select
+            aria-label="选择复现报告入口"
+            isDisabled={reportPending || workspace.isLoading || !workspace.data?.listeners.length}
+            selectedKey={effectiveReportListenerId}
+            onSelectionChange={(key) => setReportListenerId(String(key))}
+          >
+            <Select.Trigger className="h-11 min-h-11 min-w-0">
+              <Select.Value className="min-w-0 flex-1 truncate">
+                {({ selectedText }) => selectedText || "选择入口"}
+              </Select.Value>
+              <Select.Indicator className="shrink-0" />
+            </Select.Trigger>
+            <Select.Popover>
+              <ListBox>
+                {(workspace.data?.listeners ?? []).map((listener) => (
+                  <ListBox.Item id={listener.id} key={listener.id} textValue={listener.name}>
+                    <span>{listener.name}</span>
+                    <span className="ml-2 text-xs text-[var(--telemetry-muted)]">
+                      {listener.bind_address}:{listener.port}
+                    </span>
+                  </ListBox.Item>
+                ))}
+              </ListBox>
+            </Select.Popover>
+          </Select>
+          <Button
+            variant="primary"
+            isPending={reportPending}
+            isDisabled={!workspaceId || !effectiveReportListenerId || Boolean(workspace.error)}
+            onPress={() => void exportReport()}
+          >
+            导出复现 Markdown
+          </Button>
+          {(workspaces.error || workspace.error) && (
+            <p className="text-sm text-[var(--telemetry-danger)] md:col-span-2">
+              无法读取报告范围：{workspaces.error ?? workspace.error}
+            </p>
+          )}
+        </Card.Content>
+      </Card>
+
+      <Card className="border border-[var(--telemetry-line)] shadow-sm">
+        <Card.Header>
           <Card.Title>运行诊断记录</Card.Title>
           <Card.Description>
-            仅保存在内存中；统一限制长度并脱敏密码、PEM 和长 Base64 内容。某阶段没有记录不代表该阶段成功。
+            本表显示有界的结构化诊断事件；完整进程运行日志另行持久化并可由 MCP 分页查询。某阶段没有记录不代表该阶段成功。
           </Card.Description>
         </Card.Header>
         <Card.Content className="space-y-4 p-0">

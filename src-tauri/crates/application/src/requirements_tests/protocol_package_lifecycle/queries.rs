@@ -322,7 +322,7 @@ async fn native_import_cancellation_success_and_errors_are_forwarded_without_par
 }
 
 #[tokio::test]
-async fn detail_serializes_only_the_approved_no_source_wire_shape() {
+async fn internal_detail_serializes_the_closed_wire_shape_with_no_external_metadata() {
     let (application, services, _, _) = fixture();
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target.clone(), false));
@@ -339,6 +339,7 @@ async fn detail_serializes_only_the_approved_no_source_wire_shape() {
         [
             "capabilities",
             "downstream_schema",
+            "external",
             "kind",
             "upstream_schema",
             "usages",
@@ -348,6 +349,7 @@ async fn detail_serializes_only_the_approved_no_source_wire_shape() {
         .map(str::to_owned)
         .collect()
     );
+    assert!(value["external"].is_null());
     assert_eq!(
         value["upstream_schema"]["fields"]
             .as_array()

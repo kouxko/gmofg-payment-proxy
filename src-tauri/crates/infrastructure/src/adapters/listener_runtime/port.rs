@@ -18,10 +18,43 @@ use super::{
     ListenerRuntimeAdapter, ListenerRuntimePlanBuilder, PreparedListenerRuntime, RunningListener,
     bind_tcp_listener, running_status, upstream_tls_test_error,
 };
+use crate::adapters::external_package_server::ExternalPackageListenerRuntime;
 
 mod status;
 
 use status::{http_probe_view, socket_probe_view, status_from_snapshot};
+
+impl ListenerRuntimeAdapter {
+    async fn finish_stopping(
+        &self,
+        listener_id: ListenerId,
+        handle: RunningListener,
+        workspace_stopped: bool,
+    ) -> AppResult<ListenerStatusViewModel> {
+        handle.cancellation.cancel();
+        let stop_error = match handle.task.await {
+            Err(error) if !error.is_cancelled() => Some(
+                AppError::new(
+                    "LISTENER_STOP_FAILED",
+                    format!("Listener 任务停止失败：{error}"),
+                )
+                .entity(listener_id.to_string()),
+            ),
+            _ => None,
+        };
+        let stopped_epoch = workspace_stopped
+            .then(|| self.runtime_epochs.write().remove(&handle.workspace.id))
+            .flatten();
+        let pipeline_services = self.pipeline_services.read().clone();
+        if let (Some(epoch), Some(services)) = (stopped_epoch, pipeline_services) {
+            services.ports.runtime_stopping(epoch).await;
+        }
+        if let Some(error) = stop_error {
+            return Err(error);
+        }
+        Ok(Self::stopped(listener_id, handle.listen_address))
+    }
+}
 
 struct StatusSnapshot {
     listener_id: ListenerId,
@@ -76,6 +109,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             .build(&workspace, &listener, runtime_epoch)
             .await?;
         let scripted_snapshot = plan.scripted_snapshot();
+        let external_socket_snapshot = plan.external_socket_snapshot();
         let http_protocol_snapshot = plan.http_protocol_snapshot();
         if let Some(snapshot) = plan.scripted_snapshot()
             && matches!(snapshot.topology(), DomainSocketTopology::LocalResponder(_))
@@ -100,6 +134,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         let task_fault = Arc::clone(&fault);
         let socket_service = match &plan {
             PreparedListenerRuntime::Socket { service, .. }
+            | PreparedListenerRuntime::ExternalScriptedSocket { service, .. }
             | PreparedListenerRuntime::ScriptedSocket {
                 service: Some(service),
                 ..
@@ -133,6 +168,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         running.insert(
             listener_id,
             RunningListener {
+                run_token: uuid::Uuid::new_v4(),
                 cancellation,
                 task,
                 listen_address: listen_address.clone(),
@@ -140,6 +176,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 workspace,
                 socket_service,
                 scripted_snapshot,
+                external_socket_snapshot,
                 http_protocol_snapshot,
             },
         );
@@ -151,17 +188,18 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         workspace: ProxyWorkspace,
         listener_id: ListenerId,
     ) -> AppResult<()> {
-        let (socket_snapshot, http_snapshot) =
-            self.running
-                .lock()
-                .await
-                .get(&listener_id)
-                .map_or((None, None), |running| {
-                    (
-                        running.scripted_snapshot.clone(),
-                        running.http_protocol_snapshot.clone(),
-                    )
-                });
+        let (socket_snapshot, external_socket_snapshot, http_snapshot) = self
+            .running
+            .lock()
+            .await
+            .get(&listener_id)
+            .map_or((None, None, None), |running| {
+                (
+                    running.scripted_snapshot.clone(),
+                    running.external_socket_snapshot.clone(),
+                    running.http_protocol_snapshot.clone(),
+                )
+            });
         let listener = workspace
             .listeners
             .iter()
@@ -171,6 +209,9 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                     .entity(listener_id.to_string())
             })?;
         if let Some(snapshot) = socket_snapshot {
+            snapshot.replace_document_rules(&workspace, listener)?;
+        }
+        if let Some(snapshot) = external_socket_snapshot {
             snapshot.replace_document_rules(&workspace, listener)?;
         }
         if let Some(snapshot) = http_snapshot {
@@ -201,28 +242,8 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 .all(|candidate| candidate.workspace.id != handle.workspace.id);
             (handle, workspace_stopped)
         };
-        handle.cancellation.cancel();
-        let stop_error = match handle.task.await {
-            Err(error) if !error.is_cancelled() => Some(
-                AppError::new(
-                    "LISTENER_STOP_FAILED",
-                    format!("Listener 任务停止失败：{error}"),
-                )
-                .entity(listener_id.to_string()),
-            ),
-            _ => None,
-        };
-        let stopped_epoch = workspace_stopped
-            .then(|| self.runtime_epochs.write().remove(&handle.workspace.id))
-            .flatten();
-        let pipeline_services = self.pipeline_services.read().clone();
-        if let (Some(epoch), Some(services)) = (stopped_epoch, pipeline_services) {
-            services.ports.runtime_stopping(epoch).await;
-        }
-        if let Some(error) = stop_error {
-            return Err(error);
-        }
-        Ok(Self::stopped(listener_id, handle.listen_address))
+        self.finish_stopping(listener_id, handle, workspace_stopped)
+            .await
     }
 
     async fn test_upstream_tls(
@@ -277,7 +298,8 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                     .map_err(|error| upstream_tls_test_error(listener.id, &error))?;
                 socket_probe_view(&listener, result)
             }
-            PreparedListenerRuntime::ScriptedSocket { .. } => Err(AppError::new(
+            PreparedListenerRuntime::ExternalScriptedSocket { .. }
+            | PreparedListenerRuntime::ScriptedSocket { .. } => Err(AppError::new(
                 "LISTENER_CONNECTION_TEST_UNSUPPORTED",
                 "Scripted Socket 运行计划不能直接作为上游探测服务。",
             )
@@ -288,6 +310,46 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             )
             .entity(listener.id.to_string())),
         }
+    }
+}
+
+#[async_trait]
+impl ExternalPackageListenerRuntime for ListenerRuntimeAdapter {
+    async fn current_run_token(&self, listener_id: ListenerId) -> Option<uuid::Uuid> {
+        self.running
+            .lock()
+            .await
+            .get(&listener_id)
+            .map(|running| running.run_token)
+    }
+
+    async fn stop_if_run_token(
+        &self,
+        listener_id: ListenerId,
+        expected_run_token: uuid::Uuid,
+    ) -> AppResult<Option<ListenerStatusViewModel>> {
+        let removed = {
+            let mut running = self.running.lock().await;
+            match running.get(&listener_id) {
+                Some(current) if current.run_token == expected_run_token => {
+                    let handle = running
+                        .remove(&listener_id)
+                        .expect("listener existence was checked while holding the running lock");
+                    let workspace_stopped = running
+                        .values()
+                        .all(|candidate| candidate.workspace.id != handle.workspace.id);
+                    Some((handle, workspace_stopped))
+                }
+                Some(_) | None => None,
+            }
+        };
+        let Some((handle, workspace_stopped)) = removed else {
+            return Ok(None);
+        };
+        Ok(Some(
+            self.finish_stopping(listener_id, handle, workspace_stopped)
+                .await?,
+        ))
     }
 }
 
@@ -308,6 +370,7 @@ async fn serve_prepared_listener(
                 .await
         }
         PreparedListenerRuntime::Socket { service, .. }
+        | PreparedListenerRuntime::ExternalScriptedSocket { service, .. }
         | PreparedListenerRuntime::ScriptedSocket {
             service: Some(service),
             ..

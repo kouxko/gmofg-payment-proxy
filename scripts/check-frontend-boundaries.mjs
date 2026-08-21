@@ -381,13 +381,25 @@ if (/allow-(?:scripts|same-origin|forms|popups|top-navigation|downloads)/.test(s
     "src/features/capture/socket-*: Display sandbox 禁止获得脚本、同源、表单、弹窗、顶层导航或下载能力",
   );
 }
-const socketCaptureUiSource = socketCaptureFiles
-  .filter((name) => name !== "socket-safe-display.tsx")
+const socketCaptureUiFiles = socketCaptureFiles
+  .filter((name) => name !== "socket-safe-display.tsx");
+const socketCaptureUiSource = socketCaptureUiFiles
   .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
   .join("\n");
-if (/\.headers\b|\.http_status\b|\.method\b|\.target\b|JSONPath|HTTP 状态码|Cookie/.test(socketCaptureUiSource)) {
+const socketCaptureDisplaySource = socketCaptureUiFiles
+  .filter((name) => name !== "socket-capture-model.ts")
+  .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
+  .join("\n");
+const socketCaptureModelSource = readFileSync(
+  join(sourceRoot, "features", "capture", "socket-capture-model.ts"),
+  "utf8",
+);
+if (/\.headers\b|\.http_status\b|\.target\b|JSONPath|HTTP 状态码|Cookie/.test(socketCaptureUiSource)
+  || /\.method\b/.test(socketCaptureDisplaySource)
+  || !socketCaptureModelSource.includes("isExternalPackageCallDiagnostic")
+  || !socketCaptureModelSource.includes("isText(value.method)")) {
   failures.push(
-    "src/features/capture/socket-*: Socket 抓包 UI 禁止消费 Header、Cookie、Status、Method、Target 或 JSONPath",
+    "src/features/capture/socket-*: 禁止消费 HTTP Header/Cookie/Status/Method/Target/JSONPath；外部 RPC method 仅允许在 strict 诊断模型中验证",
   );
 }
 

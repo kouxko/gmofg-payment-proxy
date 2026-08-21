@@ -9,8 +9,8 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    DiagnosticLogPageViewModel, DocumentAction, DocumentFieldName, DocumentValue, PageRequest,
-    ProtocolDocumentRuleDefinition, ProtocolPackageDetailViewModel,
+    DiagnosticLogPageViewModel, DiagnosticReportQuery, DocumentAction, DocumentFieldName,
+    DocumentValue, PageRequest, ProtocolDocumentRuleDefinition, ProtocolPackageDetailViewModel,
     ProtocolPackageImportPreviewViewModel, ProtocolPackageImportViewModel,
     ProtocolPackageVersionViewModel, ProtocolRuleSaveInput, ProtocolRuleStage, ProxyListener,
     ProxyWorkspace, SocketCaptureDetailViewModel, SocketCaptureDocumentValue, SocketCaptureKind,
@@ -25,9 +25,78 @@ use intercept_proxy_domain::{
 use serde_json::json;
 
 use self::support::{CrossLayerFixture, unused_local_port};
+use super::DiagnosticReportExportOutcome;
 
 const REQUEST: &[u8; 18] = b"020012345600001000";
 const RESPONSE: &[u8; 20] = b"02101234560000100000";
+
+#[test]
+fn diagnostic_report_export_uses_native_dialog_and_writes_copyable_markdown() {
+    let fixture = CrossLayerFixture::new();
+    let webview = fixture.webview();
+    let selected = selected_workspace(&fixture, &webview);
+    let workspace: ProxyWorkspace = fixture.invoke_ok(
+        &webview,
+        "workspace_get",
+        json!({ "workspaceId": selected.id }),
+    );
+    let listener = workspace.listeners.first().expect("default listener");
+
+    let outcome: Option<DiagnosticReportExportOutcome> = fixture.invoke_ok(
+        &webview,
+        "diagnostic_reproduction_report_export",
+        json!({
+            "query": DiagnosticReportQuery {
+                workspace_id: workspace.id,
+                listener_id: listener.id,
+                capture_id: None,
+            }
+        }),
+    );
+
+    assert!(outcome.expect("saved report").bytes_written > 0);
+    let markdown = fixture.saved_report();
+    assert!(markdown.contains("# Intercept Proxy 故障复现报告"));
+    assert!(markdown.contains(&workspace.id.to_string()));
+    assert!(markdown.contains(&listener.id.to_string()));
+    assert!(markdown.contains("## 持久化应用运行日志"));
+    fixture.assert_report_dialog_boundary();
+}
+
+#[test]
+fn mcp_reproduction_report_and_runtime_logs_are_read_only_and_queryable() {
+    let fixture = CrossLayerFixture::new();
+    let webview = fixture.webview();
+    let selected = selected_workspace(&fixture, &webview);
+    let before: ProxyWorkspace = fixture.invoke_ok(
+        &webview,
+        "workspace_get",
+        json!({ "workspaceId": selected.id }),
+    );
+    let listener = before.listeners.first().expect("default listener");
+
+    let logs = fixture.call_mcp_tool("application_log_query", json!({ "limit": 10 }));
+    let report = fixture.call_mcp_tool(
+        "reproduction_report",
+        json!({
+            "workspace_id": before.id,
+            "listener_id": listener.id,
+        }),
+    );
+    let after: ProxyWorkspace = fixture.invoke_ok(
+        &webview,
+        "workspace_get",
+        json!({ "workspaceId": selected.id }),
+    );
+
+    assert!(logs["rows"].is_array());
+    assert!(
+        report["markdown"]
+            .as_str()
+            .is_some_and(|markdown| markdown.contains("持久化应用运行日志"))
+    );
+    assert_eq!(before, after, "read-only MCP must not mutate the workspace");
+}
 
 #[test]
 // 一条测试刻意保留单一 host/SQLite/runtime 所有权，拆成多个测试会把跨层证据降级为孤立断言。

@@ -161,7 +161,7 @@ function CreationBinding(props: {
   const stages = listenerStages(props.listener);
   return <div aria-label="入口和处理阶段" className="grid items-start gap-4 sm:grid-cols-2" role="group">
     <div className="grid min-w-0 gap-1"><Label className="flex h-6 items-center leading-none">入口</Label><Select aria-label="协议入口" isDisabled={props.pending} selectedKey={props.listener.id} onSelectionChange={(key) => props.onListenerChange(String(key))}>
-      <Select.Trigger className="h-12 min-h-12 w-full min-w-0"><Select.Value className="min-w-0 flex-1 truncate">{({ selectedText }) => selectedText}</Select.Value><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
+      <Select.Trigger className="h-12 min-h-12 w-full min-w-0 items-center py-0"><Select.Value className="min-w-0 flex-1 truncate">{({ selectedText }) => selectedText}</Select.Value><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
         {props.listeners.map((listener) => {
           const details = protocolRuleEntryDescription(listener);
           return <ListBox.Item id={listener.id} key={listener.id} textValue={listener.name}><span>{listener.name}</span><span className="ml-2 text-xs text-[var(--telemetry-muted)]">{details}</span></ListBox.Item>;
@@ -169,7 +169,7 @@ function CreationBinding(props: {
       </ListBox></Select.Popover>
     </Select></div>
     <div className="grid min-w-0 gap-1"><Label className="flex h-6 items-center leading-none">处理阶段</Label><Select aria-label="报文处理阶段" isDisabled={props.pending} selectedKey={props.stage} onSelectionChange={(key) => props.onStageChange(key as ProtocolRuleStage)}>
-      <Select.Trigger className="h-12 min-h-12 w-full min-w-0"><Select.Value className="min-w-0 flex-1 truncate" /><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
+      <Select.Trigger className="h-12 min-h-12 w-full min-w-0 items-center py-0"><Select.Value className="min-w-0 flex-1 truncate" /><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
         {stages.map((stage) => <ListBox.Item id={stage} key={stage} textValue={protocolRuleStageLabel(stage)}>{protocolRuleStageLabel(stage)}</ListBox.Item>)}
       </ListBox></Select.Popover>
     </Select></div>

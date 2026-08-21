@@ -136,6 +136,7 @@ export function ImportIdentityModal({
               <TextField>
                 <Label>{passwordLabel}</Label>
                 <Input
+                  className="h-10 py-0"
                   type="password"
                   value={password}
                   onChange={(event) => onPasswordChange(event.target.value)}
@@ -209,14 +210,25 @@ export function ImportTrustModal({
                 SHA-256，并在“测试 Server 连接”中实际验证。
               </p>
             </Modal.Body>
-            <Modal.Footer>
-              <Button slot="close" variant="outline" isDisabled={busy}>取消</Button>
+            <Modal.Footer
+              role="group"
+              aria-label="上游 CA 导入操作"
+              className="shrink-0 flex-wrap border-t border-[var(--telemetry-line)] pt-4"
+            >
               <Button
+                className="shrink-0"
+                slot="close"
+                variant="outline"
+                isDisabled={busy}
+              >取消</Button>
+              <Button
+                aria-label="选择 CA 证书（.cer / .crt / .pem / .der）"
+                className="min-w-0 flex-1"
                 variant="primary"
                 isDisabled={busy || !label.trim()}
                 onPress={() => void onImport()}
               >
-                选择 CA 证书（.cer / .crt / .pem / .der）
+                选择 CA 证书
               </Button>
             </Modal.Footer>
           </Modal.Dialog>
