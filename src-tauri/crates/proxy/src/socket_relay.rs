@@ -13,6 +13,7 @@ mod handler_support;
 mod observer;
 mod processing;
 mod service;
+mod upstream_tls;
 
 pub use config::{
     SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint,

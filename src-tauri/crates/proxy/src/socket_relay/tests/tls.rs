@@ -1,21 +1,29 @@
 use std::{
     net::{IpAddr, Ipv4Addr},
+    pin::Pin,
     sync::Arc,
 };
 
+use openssl::{
+    pkey::PKey,
+    rsa::Rsa,
+    ssl::{Ssl, SslAcceptor, SslMethod, SslVersion},
+    x509::X509,
+};
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
-    Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, SanType,
+    Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, PKCS_RSA_SHA256, SanType,
 };
 use rustls::{
     ClientConfig, RootCertStore, ServerConfig,
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
-    version::TLS12,
+    version::{TLS12, TLS13},
 };
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, TcpStream},
 };
+use tokio_openssl::SslStream;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
 use tokio_util::sync::CancellationToken;
 
@@ -164,6 +172,71 @@ async fn upstream_mtls_probe_fails_closed_without_client_identity() {
     .unwrap();
     let error = service.test_upstream_connection().await.unwrap_err();
     assert_eq!(error.code, "SOCKET_UPSTREAM_TLS_FAILED");
+    upstream_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn upstream_tls_automatically_negotiates_static_rsa_aes_gcm() {
+    let target = rsa_identity("legacy rsa target");
+    let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_address = upstream.local_addr().unwrap();
+    let target_for_server = target.clone();
+    let upstream_task = tokio::spawn(async move {
+        let (stream, _) = upstream.accept().await.unwrap();
+        let mut stream = static_rsa_accept(stream, &target_for_server).await;
+        stream.shutdown().await.unwrap();
+    });
+    let service = SocketRelayService::build(base_config(
+        reserve_address(),
+        upstream_address,
+        SocketRelaySecurity::TcpToTls {
+            upstream_tls: SocketUpstreamTlsConfig {
+                server_trust_der: vec![target.ca.clone()],
+                client_identity: None,
+                verify_hostname: true,
+            },
+        },
+    ))
+    .unwrap();
+
+    let result = service.test_upstream_connection().await.unwrap();
+    let tls = result.tls.expect("TLS evidence must be reported");
+    assert_eq!(tls.tls_version, "TLS 1.2");
+    assert!(matches!(
+        tls.cipher_suite.as_str(),
+        "AES256-GCM-SHA384" | "AES128-GCM-SHA256"
+    ));
+    upstream_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn upstream_tls_automatically_negotiates_modern_tls13() {
+    let target = identity("modern tls13 target", false);
+    let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_address = upstream.local_addr().unwrap();
+    let target_for_server = target.clone();
+    let upstream_task = tokio::spawn(async move {
+        let (stream, _) = upstream.accept().await.unwrap();
+        let mut stream = tls13_accept(stream, &target_for_server).await;
+        stream.shutdown().await.unwrap();
+    });
+    let service = SocketRelayService::build(base_config(
+        reserve_address(),
+        upstream_address,
+        SocketRelaySecurity::TcpToTls {
+            upstream_tls: SocketUpstreamTlsConfig {
+                server_trust_der: vec![target.ca.clone()],
+                client_identity: None,
+                verify_hostname: true,
+            },
+        },
+    ))
+    .unwrap();
+
+    let result = service.test_upstream_connection().await.unwrap();
+    let tls = result.tls.expect("TLS evidence must be reported");
+    assert_eq!(tls.tls_version, "TLS 1.3");
+    assert!(tls.cipher_suite.starts_with("TLS_AES_"));
     upstream_task.await.unwrap();
 }
 
@@ -322,6 +395,29 @@ async fn tls_accept(
         .unwrap()
 }
 
+async fn tls13_accept(
+    stream: TcpStream,
+    identity: &Identity,
+) -> tokio_rustls::server::TlsStream<TcpStream> {
+    let config =
+        ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_protocol_versions(&[&TLS13])
+            .unwrap()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![
+                    CertificateDer::from(identity.cert.clone()),
+                    CertificateDer::from(identity.ca.clone()),
+                ],
+                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(identity.key.clone())),
+            )
+            .unwrap();
+    TlsAcceptor::from(Arc::new(config))
+        .accept(stream)
+        .await
+        .unwrap()
+}
+
 async fn tls_connect(stream: TcpStream, ca: &[u8]) -> tokio_rustls::client::TlsStream<TcpStream> {
     tls_connect_result(stream, ca, None).await.unwrap()
 }
@@ -385,6 +481,34 @@ async fn mtls_accept(
     TlsAcceptor::from(Arc::new(config)).accept(stream).await
 }
 
+async fn static_rsa_accept(stream: TcpStream, identity: &Identity) -> SslStream<TcpStream> {
+    let mut builder = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls()).unwrap();
+    builder
+        .set_min_proto_version(Some(SslVersion::TLS1_2))
+        .unwrap();
+    builder
+        .set_max_proto_version(Some(SslVersion::TLS1_2))
+        .unwrap();
+    builder
+        .set_cipher_list("AES256-GCM-SHA384:AES128-GCM-SHA256")
+        .unwrap();
+    builder
+        .set_certificate(&X509::from_der(&identity.cert).unwrap())
+        .unwrap();
+    builder
+        .add_extra_chain_cert(X509::from_der(&identity.ca).unwrap())
+        .unwrap();
+    builder
+        .set_private_key(&PKey::private_key_from_pkcs8(&identity.key).unwrap())
+        .unwrap();
+    builder.check_private_key().unwrap();
+    let acceptor = builder.build();
+    let ssl = Ssl::new(acceptor.context()).unwrap();
+    let mut stream = SslStream::new(ssl, stream).unwrap();
+    Pin::new(&mut stream).accept().await.unwrap();
+    stream
+}
+
 fn ca(common_name: &str) -> (Vec<u8>, Vec<u8>) {
     let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
     let mut params = CertificateParams::default();
@@ -414,6 +538,41 @@ fn identity(common_name: &str, client: bool) -> Identity {
         cert: cert.der().to_vec(),
         key: key.serialize_der(),
         ca: ca_der,
+    }
+}
+
+fn rsa_identity(common_name: &str) -> Identity {
+    let ca_private_key = PKey::from_rsa(Rsa::generate(2_048).unwrap()).unwrap();
+    let ca_key_der = ca_private_key.private_key_to_pkcs8().unwrap();
+    let ca_key = KeyPair::from_pkcs8_der_and_sign_algo(
+        &PrivatePkcs8KeyDer::from(ca_key_der.as_slice()),
+        &PKCS_RSA_SHA256,
+    )
+    .unwrap();
+    let mut ca_params = CertificateParams::default();
+    let mut ca_dn = DistinguishedName::new();
+    ca_dn.push(DnType::CommonName, format!("{common_name} CA"));
+    ca_params.distinguished_name = ca_dn;
+    ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
+    ca_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
+    let ca = ca_params.self_signed(&ca_key).unwrap();
+
+    let issuer = Issuer::from_ca_cert_der(ca.der(), ca_key).unwrap();
+    let leaf_private_key = PKey::from_rsa(Rsa::generate(2_048).unwrap()).unwrap();
+    let leaf_key_der = leaf_private_key.private_key_to_pkcs8().unwrap();
+    let leaf_key = KeyPair::from_pkcs8_der_and_sign_algo(
+        &PrivatePkcs8KeyDer::from(leaf_key_der.as_slice()),
+        &PKCS_RSA_SHA256,
+    )
+    .unwrap();
+    let mut leaf_params = CertificateParams::default();
+    leaf_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    leaf_params.subject_alt_names = vec![SanType::IpAddress(IpAddr::V4(Ipv4Addr::LOCALHOST))];
+    let leaf = leaf_params.signed_by(&leaf_key, &issuer).unwrap();
+    Identity {
+        cert: leaf.der().to_vec(),
+        key: leaf_key.serialize_der(),
+        ca: ca.der().to_vec(),
     }
 }
 

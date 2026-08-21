@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use tokio::{
@@ -7,15 +7,12 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::reverse::{
-    DownstreamTlsAcceptor, ReverseClientIdentity, ReverseDownstreamTls, ReverseUpstreamTls,
-    build_client_connector,
-};
-use crate::tls::ClientTlsAdapter;
+use crate::reverse::{DownstreamTlsAcceptor, ReverseClientIdentity, ReverseDownstreamTls};
 use crate::transport::relay::timeout_cancel_first;
 use crate::transport::{AcceptedConnection, BoxIo, ConnectionContext};
 use crate::{ChannelId, ErrorCode, ProxyError, Result};
 
+use super::upstream_tls::{SocketUpstreamTlsConnector, build_socket_upstream_tls_connector};
 use super::{
     SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint, SocketRelayDirection,
     SocketRelayFailure, SocketRelaySecurity, SocketRelayStage, SocketTlsEvidence,
@@ -49,7 +46,7 @@ impl SocketPreparationFailure {
 #[derive(Clone, Debug)]
 pub(super) struct PreparedSocketSecurity {
     downstream: Option<DownstreamTlsAcceptor>,
-    upstream: Option<ClientTlsAdapter>,
+    upstream: Option<Arc<dyn SocketUpstreamTlsConnector>>,
     mode: SocketTransportMode,
 }
 
@@ -248,22 +245,14 @@ impl PreparedSocketSecurity {
         let connected = timeout_cancel_first(
             timeout,
             cancellation,
-            connector.connect_with_evidence(&endpoint.host, io),
+            connector.connect(&endpoint.host, io),
             ErrorCode::SocketUpstreamTlsTimeout,
             "socket relay cancelled during upstream TLS",
             "socket upstream TLS handshake",
         )
         .await?
         .map_err(|error| ProxyError::new(ErrorCode::SocketUpstreamTlsFailed, error.message))?;
-        let evidence = SocketTlsEvidence {
-            tls_version: connected.evidence.tls_version,
-            cipher_suite: connected.evidence.cipher_suite,
-            peer_subject: connected.evidence.peer.subject_summary,
-            peer_sha256_fingerprint: connected.evidence.peer.sha256_fingerprint,
-            hostname_verification_enabled: connected.evidence.hostname_verification_enabled,
-            client_identity_configured: connected.evidence.client_identity_configured,
-        };
-        Ok((connected.io, Some(evidence)))
+        Ok((connected.io, Some(connected.evidence)))
     }
 }
 
@@ -346,12 +335,10 @@ fn downstream_acceptor(config: &SocketDownstreamTlsConfig) -> Result<DownstreamT
     })
 }
 
-fn upstream_adapter(config: &SocketUpstreamTlsConfig) -> Result<ClientTlsAdapter> {
-    build_client_connector(&ReverseUpstreamTls {
-        server_trust_der: config.server_trust_der.clone(),
-        client_identity: config.client_identity.as_ref().map(reverse_identity),
-        verify_hostname: config.verify_hostname,
-    })
+fn upstream_adapter(
+    config: &SocketUpstreamTlsConfig,
+) -> Result<Arc<dyn SocketUpstreamTlsConnector>> {
+    build_socket_upstream_tls_connector(config)
 }
 
 fn reverse_identity(identity: &SocketTlsIdentity) -> ReverseClientIdentity {

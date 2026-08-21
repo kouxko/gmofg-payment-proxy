@@ -187,6 +187,9 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
+    env:
+      # Socket 上游 TLS 使用 vendored OpenSSL；测试产物必须静态链接，目标机器无需安装 DLL。
+      OPENSSL_STATIC: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -309,6 +312,38 @@ jobs:
           args: >-
             --bundles msi,nsis
             ${{ startsWith(github.ref, 'refs/tags/v') && '--config src-tauri/tauri.signing.conf.json' || '' }}
+
+      - name: Reject runtime OpenSSL DLL dependencies
+        shell: pwsh
+        run: |
+          $app = Get-Item "src-tauri/target/release/intercept-proxy.exe" -ErrorAction Stop
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+            "Microsoft Visual Studio/Installer/vswhere.exe"
+          $installation = & $vswhere `
+            -latest `
+            -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          if ([string]::IsNullOrWhiteSpace($installation)) {
+            throw "Visual Studio C++ tools were not found for DLL dependency inspection."
+          }
+          $dumpbin = Get-ChildItem `
+            (Join-Path $installation "VC/Tools/MSVC/*/bin/Hostx64/x64/dumpbin.exe") `
+            -File |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if ($null -eq $dumpbin) {
+            throw "dumpbin.exe was not found for DLL dependency inspection."
+          }
+          $dependencies = & $dumpbin.FullName /DEPENDENTS $app.FullName 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            throw "dumpbin failed while inspecting $($app.FullName)."
+          }
+          $forbidden = $dependencies | Select-String `
+            -Pattern '(?i)\b(libssl|libcrypto|ssleay32|libeay32)[^\s]*\.dll\b'
+          if ($forbidden) {
+            throw "Windows executable depends on an OpenSSL runtime DLL: $forbidden"
+          }
 
       - name: Verify Authenticode signatures before release
         if: startsWith(github.ref, 'refs/tags/v')
