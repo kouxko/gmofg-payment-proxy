@@ -63,6 +63,7 @@ pub struct SocketUpstreamTlsConfig {
     pub server_trust_der: Vec<Vec<u8>>,
     pub client_identity: Option<SocketTlsIdentity>,
     pub verify_hostname: bool,
+    pub tls_server_name: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -138,6 +139,7 @@ pub struct SocketUpstreamConnectionTestResult {
     pub resolved_address: SocketAddr,
     pub transport: SocketUpstreamTransport,
     pub tls: Option<super::SocketTlsEvidence>,
+    pub tls_server_name_candidates: Vec<String>,
     pub elapsed_millis: u64,
 }
 

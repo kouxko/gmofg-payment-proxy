@@ -117,6 +117,7 @@ describe("统一代理监听编辑器", () => {
           mode: "tcp_to_tls",
           upstream_tls: {
             verify_hostname: true,
+            tls_server_name: null,
             server_trust: "ca-ref-1",
             client_identity: null,
           },

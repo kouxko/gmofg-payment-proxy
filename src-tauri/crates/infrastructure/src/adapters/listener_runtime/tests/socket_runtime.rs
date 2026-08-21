@@ -219,6 +219,7 @@ async fn socket_plan_resolves_only_references_selected_by_its_tls_mode() {
         SocketRelaySecurity::TcpToTls {
             upstream_tls: SocketUpstreamTlsSettings {
                 verify_hostname: true,
+                tls_server_name: None,
                 server_trust: Some(reference_id),
                 client_identity: None,
             },

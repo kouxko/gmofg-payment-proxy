@@ -111,6 +111,7 @@ fn socket_tls_roles_are_exhaustive_and_round_trip() {
                 },
                 upstream_tls: SocketUpstreamTlsSettings {
                     verify_hostname: true,
+                    tls_server_name: None,
                     server_trust: Some(server_trust),
                     client_identity: Some(client_identity),
                 },

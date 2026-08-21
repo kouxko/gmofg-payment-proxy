@@ -55,6 +55,7 @@ impl ListenerRuntimePlanBuilder<'_> {
             server_trust_der,
             client_identity,
             verify_hostname: settings.verify_hostname,
+            tls_server_name: settings.tls_server_name.clone(),
         })
     }
 }

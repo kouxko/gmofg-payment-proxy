@@ -28,6 +28,7 @@ function relay(security: "transparent" | "tls_to_tls" = "tls_to_tls"): SocketRel
           },
           upstream_tls: {
             verify_hostname: true,
+            tls_server_name: null,
             server_trust: "server-ca",
             client_identity: "client-id",
           },
@@ -97,7 +98,7 @@ function testResult(tls = true): ListenerUpstreamConnectionTestViewModel {
       tls_version: "TLSv1.3", cipher_suite: "TLS_AES_256_GCM_SHA384", peer_subject: "CN=server.test",
       peer_sha256_fingerprint: "AA:BB", hostname_verification_enabled: true, client_identity_configured: true,
     } : null,
-    socket_transport_mode: tls ? "tls_to_tls" : "transparent", elapsed_millis: 12, message: "连接成功", ui_tone: "positive",
+    socket_transport_mode: tls ? "tls_to_tls" : "transparent", tls_server_name_candidates: [], elapsed_millis: 12, message: "连接成功", ui_tone: "positive",
   };
 }
 
@@ -383,6 +384,28 @@ describe("Socket security cards", () => {
     await user.click(await screen.findByRole("option", { name: "不提供客户端身份" }));
 
     expect(props.onChange).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps an IP endpoint while editing the TLS Server Name", () => {
+    const current = relay();
+    if (current.topology.mode !== "relay") throw new Error("expected Relay");
+    current.topology.settings.upstream.host = "113.197.126.77";
+    const props = renderServer(current);
+
+    fireEvent.change(screen.getByLabelText("Socket TLS Server Name"), {
+      target: { value: "testssl.tnsi.com.au" },
+    });
+
+    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
+      topology: expect.objectContaining({
+        settings: expect.objectContaining({
+          upstream: { host: "113.197.126.77", port: 9443 },
+          security: expect.objectContaining({
+            upstream_tls: expect.objectContaining({ tls_server_name: "testssl.tnsi.com.au" }),
+          }),
+        }),
+      }),
+    }));
   });
 
   it("imports a Server client identity with its password", async () => {

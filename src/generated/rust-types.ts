@@ -1177,6 +1177,7 @@ export type ListenerUpstreamConnectionTestViewModel = {
 	transport: string,
 	tls: ListenerUpstreamTlsEvidenceViewModel | null,
 	socket_transport_mode: SocketTransportMode | null,
+	tls_server_name_candidates?: string[],
 	elapsed_millis: number,
 	message: string,
 	ui_tone: UiTone,
@@ -2047,6 +2048,7 @@ export type SocketTransportMode = "transparent" | "tcp_to_tls" | "tls_to_tcp" | 
 
 export type SocketUpstreamTlsSettings = {
 	verify_hostname: boolean,
+	tls_server_name: string | null,
 	server_trust: CertificateReferenceId | null,
 	client_identity: CertificateReferenceId | null,
 };
@@ -2156,4 +2158,3 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
-
