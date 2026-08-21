@@ -85,8 +85,9 @@ impl OpenSslSocketUpstreamTlsConnector {
                         "socket upstream client certificate chain is empty",
                     )
                 })?;
+            let leaf_certificate = X509::from_der(leaf).map_err(config_error)?;
             builder
-                .set_certificate(&X509::from_der(leaf).map_err(config_error)?)
+                .set_certificate(&leaf_certificate)
                 .map_err(config_error)?;
             for certificate in chain {
                 builder
