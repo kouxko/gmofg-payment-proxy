@@ -20,6 +20,7 @@ import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
 import { ListenerEditor } from "./listener-editor";
+import { socketUpstreamTls } from "./listener-data-plane";
 import { ListenerListPanel } from "./listener-list-panel";
 import { ListenerRuntimeCard, type ListenerPending } from "./listener-runtime-card";
 import {
@@ -33,7 +34,6 @@ import { useListenerPersistence } from "./use-listener-persistence";
 import {
   isListenerProtocolPackageCatalog,
   setServerTls,
-  socketUpstreamTls,
   socketWorkingMode,
 } from "./socket-listener-model";
 
