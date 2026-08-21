@@ -129,6 +129,7 @@ function defaultSocketDownstreamTls(): SocketDownstreamTlsSettings {
 function defaultSocketUpstreamTls(): SocketUpstreamTlsSettings {
   return {
     verify_hostname: true,
+    tls_server_name: null,
     server_trust: null,
     client_identity: null,
   };

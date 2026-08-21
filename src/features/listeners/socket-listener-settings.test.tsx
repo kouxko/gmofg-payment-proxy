@@ -27,6 +27,7 @@ function relayTlsSettings(): SocketRelaySettings {
           },
           upstream_tls: {
             verify_hostname: true,
+            tls_server_name: null,
             server_trust: "server-ca",
             client_identity: "client-identity",
           },

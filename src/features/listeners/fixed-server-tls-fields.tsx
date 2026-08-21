@@ -63,8 +63,12 @@ export function ConnectionTestResult({
   result: ListenerUpstreamConnectionTestViewModel;
   showTlsDetails?: boolean;
 }) {
+  const awaitingServerNameConfirmation = Boolean(result.tls_server_name_candidates?.length);
   return (
-    <Alert status="success" className="col-span-2 max-[700px]:col-span-1">
+    <Alert
+      status={result.ui_tone === "warning" ? "warning" : "success"}
+      className="col-span-2 max-[700px]:col-span-1"
+    >
       <Alert.Indicator />
       <Alert.Content>
         <Alert.Title>{result.message}</Alert.Title>
@@ -83,7 +87,9 @@ export function ConnectionTestResult({
                   主机名校验：
                   {result.tls.hostname_verification_enabled
                     ? "已启用并通过"
-                    : "按入口配置关闭"}
+                    : awaitingServerNameConfirmation
+                      ? "等待确认 TLS Server Name 并再次测试"
+                      : "按入口配置关闭"}
                   {" · "}客户端身份：
                   {result.tls.client_identity_configured
                     ? "已配置"

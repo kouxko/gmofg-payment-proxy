@@ -18,6 +18,7 @@ import { useAppEventRefresh, useBootstrap } from "@/features/shell/bootstrap-con
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
+import { toneColor } from "@/lib/format";
 import { ListenerEditor } from "./listener-editor";
 import { ListenerListPanel } from "./listener-list-panel";
 import { ListenerRuntimeCard, type ListenerPending } from "./listener-runtime-card";
@@ -29,7 +30,12 @@ import {
 } from "./listener-workspace-draft";
 import { useListenerCertificates } from "./use-listener-certificates";
 import { useListenerPersistence } from "./use-listener-persistence";
-import { isListenerProtocolPackageCatalog, socketWorkingMode } from "./socket-listener-model";
+import {
+  isListenerProtocolPackageCatalog,
+  setServerTls,
+  socketUpstreamTls,
+  socketWorkingMode,
+} from "./socket-listener-model";
 
 export function ListenersView() {
   const { navigate } = useWorkspaceNavigation();
@@ -282,8 +288,32 @@ export function ListenersView() {
           ),
         ),
       );
+      const tlsServerName = test.tls_server_name_candidates?.[0];
+      if (tlsServerName && selected.data_plane.kind === "socket") {
+        const settings = selected.data_plane.settings;
+        if (settings.topology.mode === "relay") {
+          const upstreamTls = socketUpstreamTls(settings.topology.settings.security);
+          if (upstreamTls) {
+            const updated = {
+              ...selected,
+              data_plane: {
+                kind: "socket" as const,
+                settings: setServerTls(settings, {
+                  ...upstreamTls,
+                  tls_server_name: tlsServerName,
+                }),
+              },
+            };
+            certificateActions.applyDraftWorkspace({
+              ...effectiveWorkspace,
+              listeners: effectiveWorkspace.listeners.map((listener) =>
+                listener.id === selected.id ? updated : listener),
+            }, effectiveWorkspace);
+          }
+        }
+      }
       setTlsTest(test);
-      toast(test.message, { variant: "success" });
+      toast(test.message, { variant: toneColor(test.ui_tone) });
     }, (reason) => setTlsTestError(errorMessage(reason)));
   }
 

@@ -145,6 +145,9 @@ pub struct ListenerUpstreamConnectionTestViewModel {
     pub transport: String,
     pub tls: Option<ListenerUpstreamTlsEvidenceViewModel>,
     pub socket_transport_mode: Option<SocketTransportMode>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[specta(optional)]
+    pub tls_server_name_candidates: Vec<String>,
     pub elapsed_millis: u64,
     pub message: String,
     pub ui_tone: UiTone,

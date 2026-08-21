@@ -1,10 +1,11 @@
-use std::{collections::HashSet, fmt, pin::Pin, sync::Arc};
+use std::{collections::HashSet, fmt, net::IpAddr, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use openssl::{
+    nid::Nid,
     pkey::PKey,
     ssl::{SslConnector, SslMethod, SslVerifyMode},
-    x509::{X509, store::X509StoreBuilder},
+    x509::{X509, X509VerifyResult, store::X509StoreBuilder},
 };
 use tokio_openssl::SslStream;
 
@@ -17,6 +18,7 @@ use super::{SocketTlsEvidence, SocketUpstreamTlsConfig};
 pub(super) struct SocketUpstreamTlsConnection {
     pub(super) io: BoxIo,
     pub(super) evidence: SocketTlsEvidence,
+    pub(super) server_name_candidates: Vec<String>,
 }
 
 impl fmt::Debug for SocketUpstreamTlsConnection {
@@ -36,6 +38,12 @@ impl fmt::Debug for SocketUpstreamTlsConnection {
 #[async_trait]
 pub(super) trait SocketUpstreamTlsConnector: fmt::Debug + Send + Sync {
     async fn connect(&self, domain: &str, io: BoxIo) -> Result<SocketUpstreamTlsConnection>;
+    fn requires_server_name_discovery(&self, endpoint_host: &str) -> bool;
+    async fn discover_server_names(
+        &self,
+        endpoint_host: &str,
+        io: BoxIo,
+    ) -> Result<SocketUpstreamTlsConnection>;
 }
 
 pub(super) fn build_socket_upstream_tls_connector(
@@ -49,6 +57,7 @@ struct OpenSslSocketUpstreamTlsConnector {
     connector: SslConnector,
     hostname_verification_enabled: bool,
     client_identity_configured: bool,
+    tls_server_name: Option<String>,
 }
 
 impl fmt::Debug for OpenSslSocketUpstreamTlsConnector {
@@ -105,21 +114,35 @@ impl OpenSslSocketUpstreamTlsConnector {
             connector: builder.build(),
             hostname_verification_enabled: config.verify_hostname,
             client_identity_configured: config.client_identity.is_some(),
+            tls_server_name: validate_tls_server_name(config.tls_server_name.as_deref())?,
         })
     }
-}
 
-#[async_trait]
-impl SocketUpstreamTlsConnector for OpenSslSocketUpstreamTlsConnector {
-    async fn connect(&self, domain: &str, io: BoxIo) -> Result<SocketUpstreamTlsConnection> {
+    async fn connect_with_verification(
+        &self,
+        server_name: &str,
+        verify_hostname: bool,
+        io: BoxIo,
+    ) -> Result<SocketUpstreamTlsConnection> {
         let mut configuration = self.connector.configure().map_err(config_error)?;
-        configuration.set_verify_hostname(self.hostname_verification_enabled);
-        let ssl = configuration.into_ssl(domain).map_err(config_error)?;
+        configuration.set_verify_hostname(verify_hostname);
+        let ssl = configuration.into_ssl(server_name).map_err(config_error)?;
         let mut stream = SslStream::new(ssl, io).map_err(config_error)?;
-        Pin::new(&mut stream)
-            .connect()
-            .await
-            .map_err(handshake_error)?;
+        if Pin::new(&mut stream).connect().await.is_err() {
+            let verification = stream.ssl().verify_result();
+            if verification != X509VerifyResult::OK {
+                return Err(ProxyError::new(
+                    ErrorCode::CertificateInvalid,
+                    format!(
+                        "socket upstream certificate verification failed: {verification}; check Server CA and TLS Server Name",
+                    ),
+                ));
+            }
+            return Err(ProxyError::new(
+                ErrorCode::TlsHandshakeFailed,
+                "socket upstream TLS handshake failed",
+            ));
+        }
         let ssl = stream.ssl();
         let certificate = ssl.peer_certificate().ok_or_else(|| {
             ProxyError::new(
@@ -127,6 +150,7 @@ impl SocketUpstreamTlsConnector for OpenSslSocketUpstreamTlsConnector {
                 "socket upstream TLS handshake returned no peer certificate",
             )
         })?;
+        let server_name_candidates = certificate_server_names(&certificate);
         let peer = peer_identity(&certificate.to_der().map_err(handshake_error)?)?;
         let evidence = SocketTlsEvidence {
             tls_version: normalize_tls_version(ssl.version_str()),
@@ -135,14 +159,93 @@ impl SocketUpstreamTlsConnector for OpenSslSocketUpstreamTlsConnector {
                 .map_or_else(|| "未知".to_owned(), |cipher| cipher.name().to_owned()),
             peer_subject: peer.subject_summary,
             peer_sha256_fingerprint: peer.sha256_fingerprint,
-            hostname_verification_enabled: self.hostname_verification_enabled,
+            hostname_verification_enabled: verify_hostname,
             client_identity_configured: self.client_identity_configured,
         };
         Ok(SocketUpstreamTlsConnection {
             io: Box::new(stream),
             evidence,
+            server_name_candidates,
         })
     }
+}
+
+#[async_trait]
+impl SocketUpstreamTlsConnector for OpenSslSocketUpstreamTlsConnector {
+    async fn connect(&self, domain: &str, io: BoxIo) -> Result<SocketUpstreamTlsConnection> {
+        let tls_server_name = self.tls_server_name.as_deref().unwrap_or(domain);
+        self.connect_with_verification(tls_server_name, self.hostname_verification_enabled, io)
+            .await
+    }
+
+    fn requires_server_name_discovery(&self, endpoint_host: &str) -> bool {
+        self.hostname_verification_enabled
+            && self.tls_server_name.is_none()
+            && endpoint_host.parse::<IpAddr>().is_ok()
+    }
+
+    async fn discover_server_names(
+        &self,
+        endpoint_host: &str,
+        io: BoxIo,
+    ) -> Result<SocketUpstreamTlsConnection> {
+        self.connect_with_verification(endpoint_host, false, io)
+            .await
+    }
+}
+
+fn certificate_server_names(certificate: &X509) -> Vec<String> {
+    let mut names = certificate
+        .subject_alt_names()
+        .into_iter()
+        .flatten()
+        .filter_map(|name| name.dnsname())
+        .filter(|name| !name.starts_with("*.") && valid_dns_name(name))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if names.is_empty() {
+        names.extend(
+            certificate
+                .subject_name()
+                .entries_by_nid(Nid::COMMONNAME)
+                .filter_map(|entry| entry.data().as_utf8().ok())
+                .map(|name| name.to_string())
+                .filter(|name| !name.starts_with("*.") && valid_dns_name(name)),
+        );
+    }
+    let mut seen = HashSet::new();
+    names.retain(|name| seen.insert(name.to_ascii_lowercase()));
+    names
+}
+
+fn valid_dns_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 253
+        && value.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
+}
+
+fn validate_tls_server_name(value: Option<&str>) -> Result<Option<String>> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_empty()
+        || value != value.trim()
+        || (value.parse::<IpAddr>().is_err() && !valid_dns_name(value))
+    {
+        return Err(ProxyError::new(
+            ErrorCode::ConfigInvalid,
+            "socket upstream TLS Server Name must be an exact DNS name or IP without a port, URL, or path",
+        ));
+    }
+    Ok(Some(value.to_owned()))
 }
 
 fn trust_store(explicit_roots: &[Vec<u8>]) -> Result<openssl::x509::store::X509Store> {

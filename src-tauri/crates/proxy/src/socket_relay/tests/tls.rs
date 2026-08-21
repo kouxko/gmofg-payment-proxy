@@ -126,6 +126,7 @@ async fn upstream_mtls_uses_the_configured_client_identity() {
                     server_trust_der: vec![target.ca.clone()],
                     client_identity: Some(socket_identity(&client)),
                     verify_hostname: true,
+                    tls_server_name: None,
                 },
             },
         ))
@@ -166,6 +167,7 @@ async fn upstream_mtls_probe_fails_closed_without_client_identity() {
                 server_trust_der: vec![target.ca.clone()],
                 client_identity: None,
                 verify_hostname: true,
+                tls_server_name: None,
             },
         },
     ))
@@ -194,6 +196,7 @@ async fn upstream_tls_automatically_negotiates_static_rsa_aes_gcm() {
                 server_trust_der: vec![target.ca.clone()],
                 client_identity: None,
                 verify_hostname: true,
+                tls_server_name: None,
             },
         },
     ))
@@ -228,6 +231,7 @@ async fn upstream_tls_automatically_negotiates_modern_tls13() {
                 server_trust_der: vec![target.ca.clone()],
                 client_identity: None,
                 verify_hostname: true,
+                tls_server_name: None,
             },
         },
     ))
@@ -237,6 +241,70 @@ async fn upstream_tls_automatically_negotiates_modern_tls13() {
     let tls = result.tls.expect("TLS evidence must be reported");
     assert_eq!(tls.tls_version, "TLS 1.3");
     assert!(tls.cipher_suite.starts_with("TLS_AES_"));
+    upstream_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn upstream_tls_connects_to_an_ip_using_an_explicit_server_name() {
+    let target = dns_identity("payments.example.test");
+    let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_address = upstream.local_addr().unwrap();
+    let target_for_server = target.clone();
+    let upstream_task = tokio::spawn(async move {
+        let (stream, _) = upstream.accept().await.unwrap();
+        let mut stream = tls13_accept(stream, &target_for_server).await;
+        stream.shutdown().await.unwrap();
+    });
+    let service = SocketRelayService::build(base_config(
+        reserve_address(),
+        upstream_address,
+        SocketRelaySecurity::TcpToTls {
+            upstream_tls: SocketUpstreamTlsConfig {
+                server_trust_der: vec![target.ca.clone()],
+                client_identity: None,
+                verify_hostname: true,
+                tls_server_name: Some("payments.example.test".into()),
+            },
+        },
+    ))
+    .unwrap();
+
+    let result = service.test_upstream_connection().await.unwrap();
+    assert!(result.tls.unwrap().hostname_verification_enabled);
+    upstream_task.await.unwrap();
+}
+
+#[tokio::test]
+async fn upstream_tls_probe_discovers_dns_names_without_reporting_strict_verification() {
+    let target = dns_identity("payments.example.test");
+    let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_address = upstream.local_addr().unwrap();
+    let target_for_server = target.clone();
+    let upstream_task = tokio::spawn(async move {
+        let (stream, _) = upstream.accept().await.unwrap();
+        let mut stream = tls13_accept(stream, &target_for_server).await;
+        stream.shutdown().await.unwrap();
+    });
+    let service = SocketRelayService::build(base_config(
+        reserve_address(),
+        upstream_address,
+        SocketRelaySecurity::TcpToTls {
+            upstream_tls: SocketUpstreamTlsConfig {
+                server_trust_der: vec![target.ca.clone()],
+                client_identity: None,
+                verify_hostname: true,
+                tls_server_name: None,
+            },
+        },
+    ))
+    .unwrap();
+
+    let result = service.test_upstream_connection().await.unwrap();
+    assert_eq!(
+        result.tls_server_name_candidates,
+        vec!["payments.example.test"]
+    );
+    assert!(!result.tls.unwrap().hostname_verification_enabled);
     upstream_task.await.unwrap();
 }
 
@@ -294,6 +362,7 @@ async fn bridge_roundtrip(mode: BridgeMode) {
         server_trust_der: vec![target_identity.ca.clone()],
         client_identity: None,
         verify_hostname: true,
+        tls_server_name: None,
     };
     let security = match mode {
         BridgeMode::TcpToTls => SocketRelaySecurity::TcpToTls {
@@ -533,6 +602,22 @@ fn identity(common_name: &str, client: bool) -> Identity {
         ExtendedKeyUsagePurpose::ServerAuth
     }];
     params.subject_alt_names = vec![SanType::IpAddress(IpAddr::V4(Ipv4Addr::LOCALHOST))];
+    let cert = params.signed_by(&key, &issuer).unwrap();
+    Identity {
+        cert: cert.der().to_vec(),
+        key: key.serialize_der(),
+        ca: ca_der,
+    }
+}
+
+fn dns_identity(server_name: &str) -> Identity {
+    let (ca_der, ca_key_der) = ca(&format!("{server_name} CA"));
+    let ca_key = KeyPair::try_from(ca_key_der.as_slice()).unwrap();
+    let issuer = Issuer::from_ca_cert_der(&ca_der.clone().into(), ca_key).unwrap();
+    let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
+    let mut params = CertificateParams::default();
+    params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
+    params.subject_alt_names = vec![SanType::DnsName(server_name.try_into().unwrap())];
     let cert = params.signed_by(&key, &issuer).unwrap();
     Identity {
         cert: cert.der().to_vec(),

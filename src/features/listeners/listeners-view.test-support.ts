@@ -102,7 +102,7 @@ export function socketListener(
   port = 9000,
   mode: "transparent" | "tcp_to_tls" | "tls_to_tcp" | "tls_to_tls" = "transparent",
 ) {
-  const upstreamTls = { verify_hostname: true, server_trust: null, client_identity: null };
+  const upstreamTls = { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null };
   const downstreamTls = {
     server_identity: "",
     client_authentication: { mode: "disabled" as const },

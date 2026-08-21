@@ -38,6 +38,7 @@ function relay(processing: SocketRelaySettings["processing"]): SocketRelaySettin
           downstream_tls: appTls,
           upstream_tls: {
             verify_hostname: false,
+            tls_server_name: "payments.example.test",
             server_trust: "server-ca",
             client_identity: "client-identity",
           },

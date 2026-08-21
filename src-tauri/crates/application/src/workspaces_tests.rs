@@ -140,6 +140,7 @@ fn identity_remap_preserves_socket_target_and_remaps_all_tls_references() {
             },
             upstream_tls: SocketUpstreamTlsSettings {
                 verify_hostname: true,
+                tls_server_name: None,
                 server_trust: Some(server_trust),
                 client_identity: Some(client_identity),
             },

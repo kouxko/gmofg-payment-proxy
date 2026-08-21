@@ -114,7 +114,7 @@ export function setServerTransport(settings: SocketRelaySettings, mode: "tcp" | 
   if (settings.topology.mode !== "relay") return settings;
   const relay = settings.topology.settings;
   const upstreamTls = mode === "tls"
-    ? socketUpstreamTls(relay.security) ?? { verify_hostname: true, server_trust: null, client_identity: null }
+    ? socketUpstreamTls(relay.security) ?? { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null }
     : undefined;
   const downstream = socketDownstreamTls(relay.security);
   return { ...settings, topology: { mode: "relay", settings: {

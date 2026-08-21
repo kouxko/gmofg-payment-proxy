@@ -203,6 +203,8 @@ pub struct SocketDownstreamTlsSettings {
 #[serde(deny_unknown_fields)]
 pub struct SocketUpstreamTlsSettings {
     pub verify_hostname: bool,
+    #[serde(default)]
+    pub tls_server_name: Option<String>,
     pub server_trust: Option<CertificateReferenceId>,
     pub client_identity: Option<CertificateReferenceId>,
 }
@@ -211,6 +213,7 @@ impl Default for SocketUpstreamTlsSettings {
     fn default() -> Self {
         Self {
             verify_hostname: true,
+            tls_server_name: None,
             server_trust: None,
             client_identity: None,
         }

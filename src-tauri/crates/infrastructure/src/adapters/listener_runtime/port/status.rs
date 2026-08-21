@@ -62,6 +62,7 @@ pub(super) fn http_probe_view(
         transport: transport.into(),
         tls,
         socket_transport_mode: None,
+        tls_server_name_candidates: Vec::new(),
         elapsed_millis: result.elapsed_millis,
         message: format!("上游 Server {transport} 连接成功。"),
         ui_tone: UiTone::Positive,
@@ -90,6 +91,8 @@ pub(super) fn socket_probe_view(
         intercept_proxy_runtime::SocketUpstreamTransport::Tcp => "tcp",
         intercept_proxy_runtime::SocketUpstreamTransport::Tls => "tls",
     };
+    let tls_server_name_candidates = result.tls_server_name_candidates;
+    let discovered_server_name = !tls_server_name_candidates.is_empty();
     Ok(ListenerUpstreamConnectionTestViewModel {
         listener_id: listener.id,
         data_plane: ListenerDataPlaneKind::Socket,
@@ -99,9 +102,19 @@ pub(super) fn socket_probe_view(
         transport: transport.into(),
         tls: result.tls.map(socket_tls_evidence_view),
         socket_transport_mode: Some(socket_mode(&relay.security)),
+        tls_server_name_candidates,
         elapsed_millis: result.elapsed_millis,
-        message: format!("上游 Socket {transport} 连接成功。"),
-        ui_tone: UiTone::Positive,
+        message: if discovered_server_name {
+            "Server 证书链验证成功，已自动填写 TLS Server Name；请再次测试以完成严格主机名校验。"
+                .into()
+        } else {
+            format!("上游 Socket {transport} 连接成功。")
+        },
+        ui_tone: if discovered_server_name {
+            UiTone::Warning
+        } else {
+            UiTone::Positive
+        },
     })
 }
 

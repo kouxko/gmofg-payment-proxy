@@ -382,6 +382,73 @@ describe("统一代理监听编辑器", () => {
     expect(mocks.listenerTestUpstreamConnection).toHaveBeenCalledOnce();
   });
 
+  it("Socket 使用 IP 连接时从证书自动填写 TLS Server Name 并要求再次严格测试", async () => {
+    const socket = socketListener("socket-1", "Socket", 9000, "tcp_to_tls");
+    socket.data_plane.settings.topology.settings.upstream.host = "113.197.126.77";
+    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [socket] }));
+    mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("socket-1")])));
+    mocks.listenerTestUpstreamConnection
+      .mockReturnValueOnce(ok({
+        listener_id: "socket-1",
+        data_plane: "socket",
+        upstream_origin: "113.197.126.77:9443",
+        resolved_address: "113.197.126.77:9443",
+        scheme: "socket",
+        transport: "tls",
+        tls: {
+          tls_version: "TLS 1.2",
+          cipher_suite: "AES256-GCM-SHA384",
+          peer_subject: "CN=testssl.tnsi.com.au",
+          peer_sha256_fingerprint: "AA:BB",
+          hostname_verification_enabled: false,
+          client_identity_configured: false,
+        },
+        socket_transport_mode: "tcp_to_tls",
+        tls_server_name_candidates: ["testssl.tnsi.com.au"],
+        elapsed_millis: 12,
+        message: "Server 证书链验证成功，已自动填写 TLS Server Name；请再次测试以完成严格主机名校验。",
+        ui_tone: "warning",
+      }))
+      .mockReturnValueOnce(ok({
+        listener_id: "socket-1",
+        data_plane: "socket",
+        upstream_origin: "113.197.126.77:9443",
+        resolved_address: "113.197.126.77:9443",
+        scheme: "socket",
+        transport: "tls",
+        tls: {
+          tls_version: "TLS 1.2",
+          cipher_suite: "AES256-GCM-SHA384",
+          peer_subject: "CN=testssl.tnsi.com.au",
+          peer_sha256_fingerprint: "AA:BB",
+          hostname_verification_enabled: true,
+          client_identity_configured: false,
+        },
+        socket_transport_mode: "tcp_to_tls",
+        elapsed_millis: 10,
+        message: "上游 Socket tls 连接成功。",
+        ui_tone: "positive",
+      }));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("button", { name: "测试 Server 连接" }));
+
+    expect(await screen.findByRole("textbox", { name: "Socket TLS Server Name" }))
+      .toHaveValue("testssl.tnsi.com.au");
+    expect(screen.getByRole("textbox", { name: "Socket Server 主机" }))
+      .toHaveValue("113.197.126.77");
+    expect(screen.getByText(/请再次测试以完成严格主机名校验/)).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "测试 Server 连接" }));
+    await waitFor(() => expect(mocks.listenerTestUpstreamConnection).toHaveBeenCalledTimes(2));
+    const retested = mocks.listenerTestUpstreamConnection.mock.calls[1][2];
+    expect(retested.data_plane.settings.topology.settings.upstream.host).toBe("113.197.126.77");
+    expect(retested.data_plane.settings.topology.settings.security.upstream_tls.tls_server_name)
+      .toBe("testssl.tnsi.com.au");
+    expect(await screen.findByText("上游 Socket tls 连接成功。")).toBeVisible();
+  });
+
   it("LocalResponder 可启动和复制且不读取或探测不存在的 Server 上游", async () => {
     const local = localResponderListener();
     mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [local] }));

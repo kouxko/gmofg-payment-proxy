@@ -140,6 +140,7 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
                     client_identity_configured: target.client_identity_configured,
                 }),
             socket_transport_mode: target.socket_transport_mode,
+            tls_server_name_candidates: Vec::new(),
             elapsed_millis: 1,
             message: "上游 Server 连接成功。".into(),
             ui_tone: UiTone::Positive,
@@ -305,6 +306,7 @@ mod tests {
                 SocketRelaySecurity::TcpToTls {
                     upstream_tls: SocketUpstreamTlsSettings {
                         verify_hostname: false,
+                        tls_server_name: None,
                         server_trust: None,
                         client_identity: None,
                     },

@@ -392,6 +392,17 @@ fn validate_socket_upstream_tls(
     prefix: &str,
     error: &mut DomainError,
 ) {
+    if value
+        .tls_server_name
+        .as_deref()
+        .is_some_and(|server_name| !is_valid_socket_host(server_name))
+    {
+        push_field_error(
+            error,
+            format!("{prefix}.upstream_tls.tls_server_name"),
+            "TLS Server Name 必须是精确 DNS 主机名或 IP，不能包含端口、URL 或路径",
+        );
+    }
     validate_upstream_tls_references(
         value.server_trust,
         value.client_identity,

@@ -210,7 +210,7 @@ describe("Socket Listener model", () => {
         security: {
           mode: "tls_to_tls",
           downstream_tls: { server_identity: "app-cert", client_authentication: { mode: "disabled" } },
-          upstream_tls: { verify_hostname: false, server_trust: "server-ca", client_identity: "client-cert" },
+          upstream_tls: { verify_hostname: false, tls_server_name: "payments.example.test", server_trust: "server-ca", client_identity: "client-cert" },
         },
       },
     };
@@ -349,7 +349,7 @@ describe("Socket Listener model", () => {
 
   it("updates Relay Server TLS while preserving App TLS", () => {
     const current = setAppTransport(relaySettings(), "tls");
-    const tls = { verify_hostname: false, server_trust: "ca", client_identity: "identity" };
+    const tls = { verify_hostname: false, tls_server_name: "payments.example.test", server_trust: "ca", client_identity: "identity" };
 
     expect(setServerTls(current, tls).topology).toMatchObject({
       settings: {
@@ -365,7 +365,7 @@ describe("Socket Listener model", () => {
   it("ignores Server TLS changes for LocalResponder", () => {
     const current = localSettings();
 
-    expect(setServerTls(current, { verify_hostname: true, server_trust: null, client_identity: null })).toBe(current);
+    expect(setServerTls(current, { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null })).toBe(current);
   });
 
   it("ignores invalid or unavailable Server transport selections", () => {
@@ -378,7 +378,7 @@ describe("Socket Listener model", () => {
 
   it("preserves existing Server TLS settings when TLS is selected again", () => {
     const current = setServerTls(setServerTransport(relaySettings(), "tls"), {
-      verify_hostname: false, server_trust: "ca", client_identity: "identity",
+      verify_hostname: false, tls_server_name: "payments.example.test", server_trust: "ca", client_identity: "identity",
     });
 
     expect(setServerTransport(current, "tls")).toEqual(current);

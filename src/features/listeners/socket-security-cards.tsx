@@ -146,6 +146,13 @@ function UpstreamTlsFields({ tls, references, details, disabled, onChange, onImp
   const identities = references.filter((item) => item.kind === "upstream_client_identity");
   return <div className="space-y-4 rounded-xl border border-[var(--telemetry-line)] p-4">
     <p className="text-xs text-[var(--telemetry-muted)]">这里的身份用于代理连接上游 Server：mTLS 身份必须具备 clientAuth，不是 App 接入时使用的 serverAuth 服务端身份。</p>
+    <div className="grid gap-1">
+      <Label>TLS Server Name（SNI / 证书主机名）</Label>
+      <Input aria-label="Socket TLS Server Name" value={tls.tls_server_name ?? ""} disabled={disabled}
+        placeholder="留空时使用 Server 主机"
+        onChange={(event) => onChange({ ...tls, tls_server_name: event.target.value || null })} />
+      <p className="text-xs text-[var(--telemetry-muted)]">Server 主机填写 IP、证书签给域名时，在这里填写证书域名；TCP 仍连接上面的 IP。</p>
+    </div>
     <div className="flex items-center justify-between gap-4"><span>校验 Server 主机名</span><Switch aria-label="校验 Socket Server 主机名" isSelected={tls.verify_hostname} isDisabled={disabled} onChange={(verify_hostname) => onChange({ ...tls, verify_hostname })}><Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control></Switch.Content></Switch></div>
     <CertificateRow label="Server CA" value={tls.server_trust} emptyLabel="使用系统信任根" references={trusts} button="导入 Server CA" disabled={disabled} onChange={(server_trust) => onChange({ ...tls, server_trust })} onImport={onImportTrust} />
     <CertificateDetailPanel reference={trusts.find((item) => item.id === tls.server_trust)} detail={detail(details, tls.server_trust ?? undefined)} emptyText="当前使用系统信任根。" />

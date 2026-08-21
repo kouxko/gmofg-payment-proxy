@@ -175,8 +175,8 @@ impl PreparedSocketSecurity {
         let addresses = resolve(endpoint, connect_timeout, cancellation).await?;
         let (resolved_address, tcp) =
             connect_tcp(&addresses, connect_timeout, cancellation).await?;
-        let (mut io, tls) = self
-            .connect_upstream(tcp, endpoint, connect_timeout, cancellation)
+        let (mut io, tls, tls_server_name_candidates) = self
+            .test_connect_upstream(tcp, endpoint, connect_timeout, cancellation)
             .await?;
         let _ = io.shutdown().await;
         Ok(SocketUpstreamConnectionTestResult {
@@ -187,6 +187,7 @@ impl PreparedSocketSecurity {
                 SocketUpstreamTransport::Tcp
             },
             tls,
+            tls_server_name_candidates,
             elapsed_millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         })
     }
@@ -253,6 +254,42 @@ impl PreparedSocketSecurity {
         .await?
         .map_err(|error| ProxyError::new(ErrorCode::SocketUpstreamTlsFailed, error.message))?;
         Ok((connected.io, Some(connected.evidence)))
+    }
+
+    async fn test_connect_upstream(
+        &self,
+        io: BoxIo,
+        endpoint: &SocketEndpoint,
+        timeout: Duration,
+        cancellation: &CancellationToken,
+    ) -> Result<(BoxIo, Option<SocketTlsEvidence>, Vec<String>)> {
+        let Some(connector) = &self.upstream else {
+            return Ok((io, None, Vec::new()));
+        };
+        let discovering = connector.requires_server_name_discovery(&endpoint.host);
+        let connect = async {
+            if discovering {
+                connector.discover_server_names(&endpoint.host, io).await
+            } else {
+                connector.connect(&endpoint.host, io).await
+            }
+        };
+        let connected = timeout_cancel_first(
+            timeout,
+            cancellation,
+            connect,
+            ErrorCode::SocketUpstreamTlsTimeout,
+            "socket relay cancelled during upstream TLS test",
+            "socket upstream TLS test handshake",
+        )
+        .await?
+        .map_err(|error| ProxyError::new(ErrorCode::SocketUpstreamTlsFailed, error.message))?;
+        let candidates = if discovering {
+            connected.server_name_candidates
+        } else {
+            Vec::new()
+        };
+        Ok((connected.io, Some(connected.evidence), candidates))
     }
 }
 
