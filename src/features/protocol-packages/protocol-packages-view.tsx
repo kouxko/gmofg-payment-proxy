@@ -6,6 +6,7 @@ import type { ProtocolPackageGroupViewModel, ProtocolPackageVersionViewModel } f
 import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
+import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { ProtocolPackageDialog } from "./protocol-package-dialog";
 import { ProtocolPackageImportDialog } from "./protocol-package-import-dialog";
 import {
@@ -25,6 +26,7 @@ import {
 } from "@/features/shared/protocol-workspace-tabs";
 import {
   builtInRestoreResultError,
+  isBuiltInPackage,
   isProtocolPackageGroupList,
   sortPackageVersions,
 } from "./protocol-package-model";
@@ -33,6 +35,10 @@ export function ProtocolPackagesView() {
   const packages = useIpcQuery<ProtocolPackageGroupViewModel[]>(
     "protocol-packages",
     () => callCommand(commands.protocolPackageList()),
+  );
+  useAppEventRefresh(
+    ["protocol_package_catalog_changed", "snapshot_required"],
+    packages.refresh,
   );
   const [selectedGroup, setSelectedGroup] = useState<ProtocolPackageGroupViewModel>();
   const [selectedVersion, setSelectedVersion] = useState<ProtocolPackageVersionViewModel>();
@@ -83,21 +89,43 @@ export function ProtocolPackagesView() {
     }
   }
 
-  function versionEnabled(enabled: ProtocolPackageVersionViewModel) {
+  function versionUpdated(updated: ProtocolPackageVersionViewModel) {
     if (!isProtocolPackageGroupList(packages.data)) return;
-    const refreshed = packages.data.map((group) => group.id === enabled.package.id
+    const refreshed = packages.data.map((group) => group.id === updated.package.id
       ? {
           ...group,
           versions: group.versions.map((version) =>
-            version.package.version === enabled.package.version ? enabled : version),
+            version.package.version === updated.package.version ? updated : version),
         }
       : group);
-    const exactGroup = refreshed.find((group) => group.id === enabled.package.id);
+    const exactGroup = refreshed.find((group) => group.id === updated.package.id);
     if (!exactGroup) return;
     packages.setData(refreshed);
     setSelectedGroup(exactGroup);
-    setSelectedVersion(enabled);
-    setImportNotice(`${enabled.name} ${enabled.package.version} 已启用，可在入口配置中选择。`);
+    setSelectedVersion(updated);
+    setImportNotice(updated.enabled
+      ? `${updated.name} ${updated.package.version} 已启用，可在入口配置中选择。`
+      : `${updated.name} ${updated.package.version} 已停用；活动引用入口已停止。`);
+  }
+
+  function versionDeleted(deleted: ProtocolPackageVersionViewModel) {
+    if (isProtocolPackageGroupList(packages.data)) {
+      const refreshed = packages.data.flatMap((group) => {
+        if (group.id !== deleted.package.id) return [group];
+        const versions = group.versions.filter((version) => version.package.version !== deleted.package.version);
+        return versions.length > 0 ? [{ ...group, versions }] : [];
+      });
+      packages.setData(refreshed);
+    }
+    setSelectedGroup(undefined);
+    setSelectedVersion(undefined);
+    setImportNotice(`${deleted.name} ${deleted.package.version} 已删除。`);
+    setDialogOpen(false);
+    requestAnimationFrame(() => {
+      const focusTarget = triggerRef.current?.isConnected ? triggerRef.current : headingRef.current;
+      focusTarget?.focus();
+    });
+    void packages.refresh();
   }
 
   async function chooseZip() {
@@ -160,7 +188,7 @@ export function ProtocolPackagesView() {
       const exactGroup = refreshed.find((item) => item.id === packageRef.id);
       const exactVersion = exactGroup?.versions.find((item) =>
         item.package.version === packageRef.version
-        && item.built_in
+        && isBuiltInPackage(item)
         && item.enabled
         && item.validation.state === "valid");
       if (!exactGroup || !exactVersion) {
@@ -416,7 +444,8 @@ export function ProtocolPackagesView() {
         isOpen={dialogOpen}
         announcement={importNotice}
         onVersionChange={setSelectedVersion}
-        onVersionEnabled={versionEnabled}
+        onVersionUpdated={versionUpdated}
+        onVersionDeleted={versionDeleted}
         onOpenChange={changeOpen}
       />
       <ProtocolPackageImportDialog

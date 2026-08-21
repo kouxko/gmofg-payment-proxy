@@ -235,10 +235,14 @@ describe("Workspace CRUD surface", () => {
     await waitFor(() => expect(importButton).toBeEnabled());
   });
 
-  it("keeps the four controls on one local horizontal-scroll toolbar", async () => {
+  it("keeps the workspace name input in its own shrinkable grid cell", async () => {
     await renderLoadedView();
     const toolbar = screen.getByTestId("workspace-toolbar");
-    expect(toolbar).toHaveClass("flex-nowrap", "overflow-x-auto", "overflow-y-hidden");
+    const input = screen.getByRole("textbox", { name: "新 Workspace 名称" });
+
+    expect(toolbar).toHaveClass("grid", "min-w-0");
+    expect(toolbar).not.toHaveClass("overflow-x-auto");
+    expect(input).toHaveClass("w-full", "min-w-0");
     expect(toolbar.parentElement).toHaveClass("min-w-0");
     expect(toolbar.parentElement?.parentElement).toHaveClass("overflow-x-hidden");
   });

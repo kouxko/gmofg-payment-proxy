@@ -105,6 +105,10 @@ impl SqliteStore {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(database_error)?;
+        if exact_external_package_exists(&transaction, &header.package)? {
+            transaction.commit().map_err(database_error)?;
+            return Ok(StoredProtocolPackageInstallOutcome::IdentityConflict);
+        }
         if package_id_has_different_kind(&transaction, &header.package, header.kind)? {
             transaction.commit().map_err(database_error)?;
             return Ok(StoredProtocolPackageInstallOutcome::IdentityConflict);
@@ -408,6 +412,9 @@ use bundle::{insert_protocol_package, same_immutable_content};
 #[path = "protocol_packages/builtin.rs"]
 mod builtin;
 pub(crate) use builtin::{BUILTIN_ISO8583_FEATURE_KEY, StoredBuiltinSeedOutcome};
+#[path = "protocol_packages/identity.rs"]
+mod identity;
+use identity::exact_external_package_exists;
 
 fn preflight_protocol_package_files(
     transaction: &Transaction<'_>,

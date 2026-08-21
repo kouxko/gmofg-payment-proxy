@@ -32,7 +32,7 @@ use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackage
 mod capture;
 mod failure;
 mod limits;
-mod preview;
+pub(super) mod preview;
 mod worker;
 use failure::{
     frame_boundary, framing_failure, processing_failure, request_runtime_failure,

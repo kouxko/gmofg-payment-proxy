@@ -60,7 +60,10 @@ export function HttpProtocolProcessingCard({ settings, catalog, locked, onChange
   }
 
   function optionText(option: ListenerProtocolPackageOptionViewModel): string {
-    return `${option.name} · ${option.package.version}`;
+    const source = option.package_source.type === "external"
+      ? option.package_source.online ? "外部 · 在线" : "外部 · 离线"
+      : option.package_source.built_in ? "内置示例" : "内部安装";
+    return `${option.name} · ${option.package.version} · ${source}`;
   }
 
   return (
@@ -98,7 +101,10 @@ export function HttpProtocolProcessingCard({ settings, catalog, locked, onChange
             <Alert.Indicator />
             <Alert.Content>
               <Alert.Title>当前 Body 协议处理已不可用</Alert.Title>
-              <Alert.Description>原选择仍会保留，不会自动替换；请选择新的可用方案。</Alert.Description>
+              <Alert.Description>
+                精确身份 {body.mode === "protocol" ? `${body.package.id}@${body.package.version}` : ""} 仍会保留，不会自动替换。
+                该版本可能已停用、校验失败，或其外部进程已离线。
+              </Alert.Description>
             </Alert.Content>
           </Alert>
         )}
@@ -116,7 +122,7 @@ export function HttpProtocolProcessingCard({ settings, catalog, locked, onChange
               </ListBox.Item>
               {unavailableBound && (
                 <ListBox.Item id={selectedKey} isDisabled textValue="当前选择（不可用）">
-                  当前选择（不可用）
+                  {body.mode === "protocol" ? `${body.package.id}@${body.package.version}` : ""} · 当前选择（不可用）
                 </ListBox.Item>
               )}
               {optionsCount > 0 && (!catalog.loading && !catalog.error ? httpOptions : []).map((option) => (

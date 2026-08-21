@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
-use intercept_proxy_application::AppResult;
+use intercept_proxy_application::{
+    AppResult, ExternalPackageServiceStateViewModel, SettingsRepositoryPort,
+};
 use intercept_proxy_infrastructure::{
     CURRENT_APPLICATION_SCHEMA_VERSION, InfrastructureError, NativeFileDialog, SecretProtector,
-    adapters::FileSelection,
+    SettingsRepositoryAdapter, SqliteStore, adapters::FileSelection,
 };
 use intercept_proxy_product_api::InterceptProxyProfile;
 use rusqlite::Connection;
@@ -75,6 +77,13 @@ async fn builds_and_invokes_application_without_tauri() {
     let application = host.application();
     let settings = application.settings_get().await.expect("query settings");
     assert_eq!(settings.stored.max_sessions, 500);
+    assert_eq!(settings.stored.external_package_service.port, 8_765);
+    let external_status = application
+        .external_package_service_status()
+        .await
+        .expect("query external package service status");
+    assert_eq!(external_status.fixed_path, "/packages");
+    assert!(!external_status.authentication_enabled);
 
     let draft = application
         .rule_new_draft()
@@ -112,6 +121,42 @@ async fn keychain_refusal_does_not_prevent_host_or_bootstrap_startup() {
     assert_eq!(error.view_model.code, "KEYCHAIN_PROTECT_FAILED");
 
     host.shutdown().await.expect("shutdown UI-neutral host");
+}
+
+#[tokio::test]
+async fn external_package_bind_failure_is_visible_without_blocking_host_startup() {
+    let temp = tempfile::tempdir().expect("temporary host directory");
+    let occupied = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve local port");
+    let port = occupied.local_addr().expect("reserved address").port();
+    let database = temp.path().join("intercept-proxy.sqlite3");
+    let product = InterceptProxyProfile;
+    let store = Arc::new(SqliteStore::open(&database).expect("open settings database"));
+    let settings = SettingsRepositoryAdapter::new(store, &product);
+    let mut draft = settings.defaults().await.expect("default settings");
+    draft.external_package_service.bind_address = "127.0.0.1".into();
+    draft.external_package_service.port = port;
+    settings.save(draft).await.expect("persist occupied port");
+
+    let host = ApplicationHostBuilder::new(
+        temp.path(),
+        HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
+        Arc::new(product),
+    )
+    .build()
+    .await
+    .expect("external service bind failure must be non-fatal");
+    let status = host
+        .application()
+        .external_package_service_status()
+        .await
+        .expect("query failed service status");
+
+    assert!(matches!(
+        status.state,
+        ExternalPackageServiceStateViewModel::Failed { .. }
+    ));
+    assert!(status.websocket_url.ends_with(&format!(":{port}/packages")));
+    host.shutdown().await.expect("shutdown host");
 }
 
 #[tokio::test]

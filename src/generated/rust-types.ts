@@ -16,6 +16,11 @@ export const commands = {
 	appUnsubscribeEvents: (subscriptionId: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_unsubscribe_events", { subscriptionId })),
 	mcpInfo: () => __TAURI_INVOKE<McpInfoViewModel>("mcp_info"),
 	diagnosticLogQuery: (query: DiagnosticLogQuery) => typedError<DiagnosticLogPageViewModel, AppErrorViewModel>(__TAURI_INVOKE("diagnostic_log_query", { query })),
+	/**  生成与 MCP `reproduction_report` 同源的报告，并通过系统保存对话框原子写入 Markdown。 */
+	diagnosticReproductionReportExport: (query: DiagnosticReportQuery) => typedError<{
+	bytes_written: number,
+	replaced_existing: boolean,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("diagnostic_reproduction_report_export", { query })),
 	androidAdbGet: () => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_get")),
 	androidAdbSelect: (serial: string) => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_select", { serial })),
 	androidDeviceList: () => typedError<AndroidDeviceViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_device_list")),
@@ -87,6 +92,7 @@ export const commands = {
 	listenerTestUpstreamConnection: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamConnectionTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_connection", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	listenerTestUpstreamTls: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	protocolPackageList: () => typedError<ProtocolPackageGroupViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_list")),
+	externalPackageServiceStatus: () => typedError<ExternalPackageServiceStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("external_package_service_status")),
 	listenerProtocolPackageCatalog: () => typedError<ListenerProtocolPackageCatalogViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_protocol_package_catalog")),
 	protocolPackageDetail: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_detail", { packageRef })),
 	protocolPackageImport: () => typedError<{
@@ -712,6 +718,19 @@ export type DiagnosticLogRowViewModel = {
 /**  跨桌面、ADB、Companion 与代理链路共用的诊断阶段。 */
 export type DiagnosticLogStage = "system" | "adb_forward_control" | "adb_reverse_business" | "desktop_dns" | "companion" | "vpn" | "tun" | "app_selection" | "route_activation" | "listener" | "downstream_tls" | "upstream_tls" | "http" | "socket" | "stop_fallback" | "cleanup";
 
+export type DiagnosticReportExportOutcome = {
+	bytes_written: number,
+	replaced_existing: boolean,
+};
+
+/**  生成故障复现报告所需的精确范围。 */
+export type DiagnosticReportQuery = {
+	workspace_id: WorkspaceId,
+	listener_id: ListenerId,
+	/**  指定时额外收集该条 Socket capture 详情；不自动选择其他记录。 */
+	capture_id: SocketCaptureId | null,
+};
+
 /**  Rust 判断某操作不可用时给出的稳定原因。 */
 export type DisabledReason = {
 	code: string,
@@ -837,6 +856,80 @@ export type DownstreamTlsSettings = {
 	server_identity: CertificateReferenceId | null,
 	dynamic_sni_allowlist: string[],
 	client_authentication: DownstreamClientAuthentication,
+};
+
+/**  外部 JSON-RPC 调用的可查询脱敏诊断；绝不携带业务报文或远端 `data` 值。 */
+export type ExternalPackageCallDiagnosticViewModel = {
+	package: ProtocolPackageRef,
+	direction: ProtocolDirection,
+	stage: ExternalPackageCallStage,
+	method: string,
+	request_id: string | null,
+	remote_code: number | null,
+	remote_message: string | null,
+	/**  只允许 `null/bool/number/string(bytes=N)/array(items=N)/object(fields=N)` 形状摘要。 */
+	remote_data_summary: string | null,
+};
+
+export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display";
+
+/**  外部协议包详情的严格连接投影。 */
+export type ExternalPackageDetailViewModel = {
+	remote_address: string | null,
+	connection_id: string | null,
+	first_connected_at: string,
+	last_connected_at: string,
+	registration_fingerprint_sha256: string,
+	rpc_timeout_seconds: number,
+	upstream_methods: ExternalPackageDirectionMethodsViewModel,
+	downstream_methods: ExternalPackageDirectionMethodsViewModel,
+	recent_error: ExternalPackageRecentErrorViewModel | null,
+};
+
+/**  一个方向实际调用的完整 JSON-RPC 方法名。 */
+export type ExternalPackageDirectionMethodsViewModel = {
+	frame: string,
+	decode: string,
+	encode: string,
+	display: string,
+};
+
+/**  最近一次连接级错误的安全摘要；不包含第三方 payload 或未脱敏 `data`。 */
+export type ExternalPackageRecentErrorViewModel = {
+	code: string,
+	message: string,
+	occurred_at: string,
+};
+
+/**
+ *  外部软件包 WebSocket 服务的启动配置。
+ *
+ *  监听地址和端口只在进程启动时读取；保存后由设置页明确提示重启。RPC 超时和并发上限
+ *  同样固定进一次连接快照，避免一个已建立连接在处理中途改变资源语义。
+ */
+export type ExternalPackageServiceSettingsDraft = {
+	bind_address: string,
+	port: number,
+	rpc_timeout_seconds: number,
+	max_in_flight: number,
+};
+
+/**  外部软件包 WebSocket 服务的启动状态。 */
+export type ExternalPackageServiceStateViewModel =
+/**  服务已绑定预期地址并接受 `/packages` 连接。 */
+{ state: "listening" } |
+/**  启动绑定失败；内置协议包仍可继续使用。 */
+{ state: "failed"; error: string };
+
+/**  设置页展示的外部软件包服务运行快照。 */
+export type ExternalPackageServiceStatusViewModel = {
+	/**  本次进程启动时实际采用的 WebSocket 地址，不随尚未重启的设置草稿变化。 */
+	websocket_url: string,
+	fixed_path: string,
+	online_connection_count: number,
+	state: ExternalPackageServiceStateViewModel,
+	/**  第一版不提供认证；显式字段避免 UI 仅靠说明文字表达安全边界。 */
+	authentication_enabled: boolean,
 };
 
 export type FaultConfigurationDraft = {
@@ -1048,6 +1141,8 @@ export type ListenerProtocolPackageCatalogViewModel = {
 export type ListenerProtocolPackageOptionViewModel = {
 	package: ProtocolPackageRef,
 	name: string,
+	/**  选择器明确区分内置 Rhai 与外部进程，不从其他字段反推来源。 */
+	package_source: ProtocolPackageSourceViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
 	upstream_schema: ProtocolPackageSchemaViewModel,
@@ -1245,6 +1340,8 @@ export type ProtocolPackageDetailViewModel = {
 	upstream_schema: ProtocolPackageSchemaViewModel,
 	downstream_schema: ProtocolPackageSchemaViewModel,
 	usages: ProtocolPackageUsageViewModel[],
+	/**  仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。 */
+	external: ExternalPackageDetailViewModel | null,
 };
 
 /**
@@ -1369,6 +1466,19 @@ export type ProtocolPackageSchemaViewModel = {
 };
 
 /**
+ *  精确协议包版本的执行来源。
+ *
+ *  内置 Rhai 与外部进程的可用性约束不同，因此使用 closed tagged union 表达，禁止调用方
+ *  通过多个可空字段猜测来源。`built_in` 只标识官方起始包；用户导入的 Rhai 包仍属于
+ *  `Internal`。外部包的 `online` 是连接状态快照，与用户启用状态相互独立。
+ */
+export type ProtocolPackageSourceViewModel =
+/**  由当前进程中的 Rhai Host 执行。 */
+{ type: "internal"; built_in: boolean } |
+/**  由已注册的第三方进程通过 JSON-RPC 执行。 */
+{ type: "external"; online: boolean };
+
+/**
  *  一个已保存 Listener 对精确协议包版本的引用。
  *  `runtime_state` 由 Rust 合并运行时状态；没有活动运行记录时固定为 `Stopped`。删除只看
  *  引用是否存在，停用则仅允许所有引用都已确认停止。
@@ -1399,8 +1509,8 @@ export type ProtocolPackageVersionViewModel = {
 	host_api: number,
 	/**  安装时由严格 Manifest 推断并持久化的数据平面类型。 */
 	kind: ProtocolPackageKindViewModel,
-	/**  由应用精确身份保护的官方 ISO 8583:1987 ASCII Profile。 */
-	built_in: boolean,
+	/**  该精确版本的可判别执行来源。 */
+	package_source: ProtocolPackageSourceViewModel,
 	enabled: boolean,
 	validation: ProtocolPackageValidationViewModel,
 	installed_at: string,
@@ -1617,6 +1727,8 @@ export type SettingsDraft = {
 	max_sessions: number,
 	max_memory_bytes: number,
 	leaf_sans: string[],
+	/**  固定路径 `/packages` 的外部软件包服务配置。 */
+	external_package_service: ExternalPackageServiceSettingsDraft,
 };
 
 /**  设置页展示模型。 */
@@ -1769,6 +1881,7 @@ export type SocketDiagnosticContextViewModel = {
 	listener_run_epoch: string,
 	route: SocketConnectionRouteViewModel | null,
 	capture_failure: SocketCaptureFailureDiagnostic | null,
+	external_package_call: ExternalPackageCallDiagnosticViewModel | null,
 	stage: SocketDiagnosticStage,
 	direction: SocketDiagnosticDirection | null,
 	client_to_server_read_bytes: number,
@@ -1785,6 +1898,7 @@ export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "co
 export type SocketDisplayDiagnostic = {
 	code: string,
 	message: string,
+	external_package_call: ExternalPackageCallDiagnosticViewModel | null,
 };
 
 /**  Hex fallback 的稳定原因；不保存脚本异常文本或原始 payload。 */
@@ -1965,7 +2079,13 @@ export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChanged
  *  一个 Socket Frame 或 `LocalExchange` 已完整写出并进入正式 capture 仓储。
  *  `RequestParsed` 仍只走有界诊断事件，不能构造此完成事件。
  */
-{ type: "socket_capture_completed"; data: SocketCaptureRowViewModel } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
+{ type: "socket_capture_completed"; data: SocketCaptureRowViewModel } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } |
+/**  外部软件包服务绑定状态或在线连接数发生变化。 */
+{ type: "external_package_service_status_changed"; data: ExternalPackageServiceStatusViewModel } |
+/**  外部精确版本注册、断线、启停或删除后，目录消费者应重新读取权威快照。 */
+{ type: "protocol_package_catalog_changed"; data: {
+	package: ProtocolPackageRef,
+} } | { type: "resource_warning"; data: {
 	message: string,
 } } | { type: "operation_failed"; data: AppErrorViewModel } | { type: "snapshot_required"; data: {
 	reason: string,

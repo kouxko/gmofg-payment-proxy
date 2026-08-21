@@ -4,7 +4,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { SocketSafeDisplay } from "./socket-safe-display";
 
 async function renderedSource(): Promise<string> {
@@ -14,6 +14,8 @@ async function renderedSource(): Promise<string> {
 }
 
 describe("SocketSafeDisplay", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("keeps only the protocol-display allowlist and harmless table attributes", async () => {
     render(
       <SocketSafeDisplay
@@ -93,5 +95,18 @@ describe("SocketSafeDisplay", () => {
     expect(await screen.findByText("协议视图结构过于复杂，已禁止渲染")).toBeVisible();
     expect(screen.queryByTitle("协议包安全展示")).not.toBeInTheDocument();
     expect(screen.getByText("完整字节仍可在 Hex 页签逐页查看。")).toBeVisible();
+  });
+
+  it("fails closed when the browser parser itself rejects the untrusted document", async () => {
+    vi.stubGlobal("DOMParser", class {
+      constructor() {
+        throw new Error("parser unavailable");
+      }
+    });
+
+    render(<SocketSafeDisplay html="<p>untrusted</p>" />);
+
+    expect(await screen.findByText("协议视图结构过于复杂，已禁止渲染")).toBeVisible();
+    expect(screen.queryByTitle("协议包安全展示")).not.toBeInTheDocument();
   });
 });

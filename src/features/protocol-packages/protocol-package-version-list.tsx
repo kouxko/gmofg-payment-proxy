@@ -5,10 +5,12 @@ import { sortPackageVersions, validationText } from "./protocol-package-model";
 export function ProtocolPackageVersionList({
   versions,
   selectedVersion,
+  isDisabled = false,
   onSelect,
 }: {
   versions: ProtocolPackageVersionViewModel[];
   selectedVersion?: string;
+  isDisabled?: boolean;
   onSelect: (version: ProtocolPackageVersionViewModel) => void;
 }) {
   const sorted = sortPackageVersions(versions);
@@ -27,6 +29,7 @@ export function ProtocolPackageVersionList({
                 variant={selected ? "primary" : "outline"}
                 className="h-auto min-w-40 justify-between py-2 lg:w-full"
                 aria-pressed={selected}
+                isDisabled={isDisabled}
                 onPress={() => onSelect(version)}
               >
                 <span className="font-mono">{version.package.version}</span>

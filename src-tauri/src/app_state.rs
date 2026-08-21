@@ -9,6 +9,7 @@ use intercept_proxy_application::Application;
 use intercept_proxy_host::ApplicationHost;
 
 use crate::mcp::ReadOnlyMcpServer;
+use crate::runtime_logs::RuntimeLogStore;
 
 /// Tauri exposes only the application facade to commands.
 ///
@@ -19,26 +20,36 @@ pub struct AppState {
     pub application: Arc<Application>,
     host: Arc<ApplicationHost>,
     mcp: Option<ReadOnlyMcpServer>,
+    runtime_logs: Arc<RuntimeLogStore>,
 }
 
 impl AppState {
     /// Builds command state without outer adapters. Used by command-level tests.
     #[cfg(test)]
     pub fn new(host: ApplicationHost) -> Self {
-        Self::with_optional_mcp(host, None)
+        Self::with_optional_mcp(host, None, Arc::new(RuntimeLogStore::memory(128)))
     }
 
     /// Builds production state. MCP is best-effort so a local port conflict cannot block proxy use.
-    pub fn production(host: ApplicationHost, mcp: Option<ReadOnlyMcpServer>) -> Self {
-        Self::with_optional_mcp(host, mcp)
+    pub fn production(
+        host: ApplicationHost,
+        mcp: Option<ReadOnlyMcpServer>,
+        runtime_logs: Arc<RuntimeLogStore>,
+    ) -> Self {
+        Self::with_optional_mcp(host, mcp, runtime_logs)
     }
 
-    fn with_optional_mcp(host: ApplicationHost, mcp: Option<ReadOnlyMcpServer>) -> Self {
+    fn with_optional_mcp(
+        host: ApplicationHost,
+        mcp: Option<ReadOnlyMcpServer>,
+        runtime_logs: Arc<RuntimeLogStore>,
+    ) -> Self {
         let host = Arc::new(host);
         Self {
             application: host.application(),
             host,
             mcp,
+            runtime_logs,
         }
     }
 
@@ -64,6 +75,10 @@ impl AppState {
 
     pub fn mcp(&self) -> Option<ReadOnlyMcpServer> {
         self.mcp.clone()
+    }
+
+    pub(crate) fn runtime_logs(&self) -> Arc<RuntimeLogStore> {
+        Arc::clone(&self.runtime_logs)
     }
 }
 

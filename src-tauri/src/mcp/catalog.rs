@@ -21,6 +21,27 @@ fn general_tools() -> Vec<Tool> {
             empty_schema(),
         ),
         tool(
+            "application_log_query",
+            "Application runtime logs",
+            "Read persisted Rust/Tauri runtime logs with stable cursor paging, explicit retention metadata, module, level and keyword filters.",
+            application_log_schema(),
+        ),
+        tool(
+            "application_log_get",
+            "Application runtime log detail",
+            "Read one retained runtime log by its stable log ID.",
+            object_schema(
+                json!({"log_id": {"type": "integer", "minimum": 1}}),
+                &["log_id"],
+            ),
+        ),
+        tool(
+            "reproduction_report",
+            "Reproduction report",
+            "Build one bounded diagnostic bundle and copyable Markdown report for an exact Workspace and Listener, optionally anchored to one Socket capture.",
+            reproduction_report_schema(),
+        ),
+        tool(
             "settings_get",
             "Settings",
             "Read the saved global settings.",
@@ -67,6 +88,12 @@ fn general_tools() -> Vec<Tool> {
 
 fn runtime_tools() -> Vec<Tool> {
     vec![
+        tool(
+            "external_package_service_status",
+            "External package service",
+            "Read the authoritative external-package WebSocket URL, fixed path, bind state, authentication boundary and online connection count.",
+            empty_schema(),
+        ),
         tool(
             "android_adb_get",
             "Android ADB",
@@ -309,6 +336,35 @@ fn diagnostics_schema() -> Value {
             "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 300}
         }),
         &[],
+    )
+}
+
+fn application_log_schema() -> Value {
+    object_schema(
+        json!({
+            "level": {
+                "type": "string",
+                "enum": ["trace", "debug", "info", "warning", "error"]
+            },
+            "target": {"type": "string"},
+            "keyword": {"type": "string"},
+            "occurred_from": {"type": "string", "format": "date-time"},
+            "occurred_to": {"type": "string", "format": "date-time"},
+            "before_log_id": {"type": "integer", "minimum": 1},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 200}
+        }),
+        &[],
+    )
+}
+
+fn reproduction_report_schema() -> Value {
+    object_schema(
+        json!({
+            "workspace_id": {"type": "string", "format": "uuid"},
+            "listener_id": {"type": "string", "format": "uuid"},
+            "capture_id": {"type": "string", "format": "uuid"}
+        }),
+        &["workspace_id", "listener_id"],
     )
 }
 

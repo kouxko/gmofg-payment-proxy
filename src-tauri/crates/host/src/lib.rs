@@ -19,22 +19,22 @@ use intercept_proxy_application::{
     OperationResultViewModel, ProtocolPackageApplicationServices, SettingsRepositoryPort,
     WorkspaceRepositoryPort,
 };
-#[cfg(not(target_os = "macos"))]
-use intercept_proxy_infrastructure::DpapiProtector;
-#[cfg(target_os = "macos")]
-use intercept_proxy_infrastructure::MacKeychainProtector;
 use intercept_proxy_infrastructure::{
-    AndroidAdbAdapter, ApplicationBackupImportPreparer, HeaderBodyCodecResolver,
-    InfrastructureError, InfrastructureServiceBundle, NativeFileDialog, RuntimePipelineAdapter,
-    RuntimePipelineProductHooks, SecretProtector, SqliteStore,
+    AndroidAdbAdapter, ApplicationBackupImportPreparer, ExternalPackageServer,
+    HeaderBodyCodecResolver, InfrastructureError, InfrastructureServiceBundle, NativeFileDialog,
+    RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector, SqliteStore,
 };
-use intercept_proxy_product_api::{
-    ProductError, ProductProfile, ProductStorageNamespace, validate_product_profile,
-};
+use intercept_proxy_product_api::{ProductError, ProductProfile, validate_product_profile};
 use parking_lot::Mutex;
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+
+use external_server::start_external_package_server;
+use platform::{create_data_directory, platform_secret_protector};
+
+mod external_server;
+mod platform;
 
 #[derive(Debug, Error)]
 pub enum HostBuildError {
@@ -229,6 +229,7 @@ impl ApplicationHostBuilder {
         services
             .listener_runtime
             .set_socket_diagnostic_events(events.clone());
+        services.external_packages.set_event_hub(events.clone());
         let android = Arc::new(AndroidAdbAdapter::new(
             self.android_companion_apk,
             android_store,
@@ -240,7 +241,9 @@ impl ApplicationHostBuilder {
             builtin: services.protocol_packages.clone(),
             usage_query: services.protocol_package_usage.clone(),
             portability: services.protocol_packages.clone(),
+            external: services.external_packages.clone(),
         };
+        let external_package_server = Arc::new(start_external_package_server(&services).await?);
         let application = Arc::new(Application::new(
             self.product.name().to_owned(),
             ApplicationDependencies {
@@ -274,6 +277,7 @@ impl ApplicationHostBuilder {
             application_backup_importer: Arc::new(ApplicationBackupImportPreparer::new()),
             background_cancellation,
             event_task: Mutex::new(Some(event_task)),
+            external_package_server,
             shutdown_started: AtomicBool::new(false),
             shutdown_completed: AtomicBool::new(false),
         })
@@ -401,6 +405,7 @@ pub struct ApplicationHost {
     application_backup_importer: Arc<ApplicationBackupImportPreparer>,
     background_cancellation: CancellationToken,
     event_task: Mutex<Option<JoinHandle<()>>>,
+    external_package_server: Arc<ExternalPackageServer>,
     shutdown_started: AtomicBool,
     shutdown_completed: AtomicBool,
 }
@@ -444,10 +449,12 @@ impl ApplicationHost {
 
     pub fn cancel_background_tasks(&self) {
         self.background_cancellation.cancel();
+        self.external_package_server.cancel();
     }
 
     async fn stop_background_tasks(&self) {
         self.cancel_background_tasks();
+        self.external_package_server.shutdown().await;
         let task = self.event_task.lock().take();
         if let Some(task) = task
             && let Err(error) = task.await
@@ -464,30 +471,6 @@ impl Drop for ApplicationHost {
         if let Some(task) = self.event_task.get_mut().take() {
             task.abort();
         }
-    }
-}
-
-fn create_data_directory(path: &Path) -> Result<(), HostBuildError> {
-    std::fs::create_dir_all(path).map_err(|source| HostBuildError::CreateDataDirectory {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-fn platform_secret_protector(storage: ProductStorageNamespace) -> Arc<dyn SecretProtector> {
-    #[cfg(windows)]
-    {
-        let _ = storage;
-        Arc::new(DpapiProtector)
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Arc::new(MacKeychainProtector::for_namespace(storage))
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        let _ = storage;
-        Arc::new(DpapiProtector)
     }
 }
 

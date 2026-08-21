@@ -130,10 +130,9 @@ describe("统一代理监听编辑器", () => {
     const user = userEvent.setup();
     render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "导入独立服务端身份" }));
-    await user.type(
-      screen.getByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）"),
-      "server-secret",
-    );
+    const passwordInput = screen.getByLabelText("P12 / PFX 密码（PEM 不使用；允许为空）");
+    expect(passwordInput).toHaveClass("h-10", "py-0");
+    await user.type(passwordInput, "server-secret");
     await user.click(screen.getByRole("button", { name: "选择服务端身份（.p12 / .pfx / .pem）" }));
     expect(mocks.listenerImportDownstreamServerIdentity).toHaveBeenCalledWith(
       "本监听独立服务端身份",

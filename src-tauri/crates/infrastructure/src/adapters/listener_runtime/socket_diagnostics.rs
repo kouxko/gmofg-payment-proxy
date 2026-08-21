@@ -394,6 +394,7 @@ fn socket_context(
         listener_run_epoch: run.listener_run_epoch.to_string(),
         route,
         capture_failure,
+        external_package_call: None,
         stage: application_stage(stage),
         direction: direction.map(application_direction),
         client_to_server_read_bytes: bytes.client_to_server_read,

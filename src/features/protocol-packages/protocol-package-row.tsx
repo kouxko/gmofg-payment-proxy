@@ -1,7 +1,12 @@
 import { useRef } from "react";
 import { Button, Chip } from "@heroui/react";
 import type { ProtocolPackageGroupViewModel } from "@/generated/rust-types";
-import { packageStatus, sortPackageVersions } from "./protocol-package-model";
+import {
+  isBuiltInPackage,
+  isExternalPackage,
+  packageStatus,
+  sortPackageVersions,
+} from "./protocol-package-model";
 
 export function ProtocolPackageRow({
   group,
@@ -25,8 +30,11 @@ export function ProtocolPackageRow({
     >
       <span className="min-w-0">
         <span className="block truncate font-medium">{group.name}</span>
-        {versions.some((version) => version.built_in) && (
+        {versions.some(isBuiltInPackage) && (
           <Chip size="sm" color="accent" variant="soft">内置示例</Chip>
+        )}
+        {versions.some(isExternalPackage) && (
+          <Chip size="sm" color="warning" variant="soft">外部软件包</Chip>
         )}
         <span className="block truncate font-mono text-xs text-[var(--telemetry-muted)]">
           {group.id}
@@ -37,6 +45,12 @@ export function ProtocolPackageRow({
       <span>{group.reference_count} 个引用</span>
       <span className="flex flex-wrap gap-1">
         <Chip size="sm" color={status.color} variant="soft">{status.label}</Chip>
+        {versions.some((version) => version.package_source.type === "external" && version.package_source.online) && (
+          <Chip size="sm" color="success" variant="soft">外部在线</Chip>
+        )}
+        {versions.some((version) => version.package_source.type === "external" && !version.package_source.online) && (
+          <Chip size="sm" color="danger" variant="soft">外部离线</Chip>
+        )}
         {status.invalidCount > 0 && status.validCount > 0 && (
           <Chip size="sm" color="danger" variant="soft">
             {status.invalidCount} 个校验异常

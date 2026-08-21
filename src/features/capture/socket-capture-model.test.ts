@@ -357,10 +357,100 @@ describe("Socket capture detail validation", () => {
     detail.record.payload.capture.display = {
       type: "hex_fallback",
       reason: "entry_point_failed",
-      diagnostic: { code: "DISPLAY_FAILED", message: "协议展示失败" },
+      diagnostic: {
+        code: "DISPLAY_FAILED",
+        message: "协议展示失败",
+        external_package_call: null,
+      },
     };
 
     expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeDefined();
+  });
+
+  it("accepts every sanitized external RPC diagnostic shape", () => {
+    const summaries = [
+      null,
+      "none",
+      "null",
+      "bool",
+      "number",
+      "string(bytes=12)",
+      "array(items=3)",
+      "object(fields=4)",
+    ];
+    const stages = ["frame", "decode", "encode", "display"] as const;
+    for (const [index, summary] of summaries.entries()) {
+      const row = relayRow();
+      const detail = structuredClone(relayDetail(row));
+      if (detail.record.payload.kind !== "relay_frame") {
+        throw new Error("expected relay fixture");
+      }
+      detail.record.payload.capture.display = {
+        type: "hex_fallback",
+        reason: "entry_point_failed",
+        diagnostic: {
+          code: "EXTERNAL_PACKAGE_RPC_FAILED",
+          message: "远端调用失败",
+          external_package_call: {
+            package: row.package,
+            direction: index % 2 === 0 ? "upstream" : "downstream",
+            stage: stages[index % stages.length],
+            method: "document.upstream.render",
+            request_id: index === 0 ? null : `rpc-${index}`,
+            remote_code: index === 0 ? null : -32_000,
+            remote_message: index === 0 ? null : "remote failure",
+            remote_data_summary: summary,
+          },
+        },
+      };
+
+      expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeDefined();
+    }
+  });
+
+  it("rejects external RPC diagnostics that leak payloads or break correlation", () => {
+    const row = relayRow();
+    const valid = {
+      package: row.package,
+      direction: "upstream",
+      stage: "display",
+      method: "document.upstream.render",
+      request_id: "rpc-7",
+      remote_code: -32_000,
+      remote_message: "remote failure",
+      remote_data_summary: "object(fields=1)",
+    };
+    const malformed = [
+      "invalid",
+      { ...valid, payload: "secret" },
+      { ...valid, package: { id: "", version: "1.2.3" } },
+      { ...valid, direction: "client_to_server" },
+      { ...valid, stage: "rule" },
+      { ...valid, method: "" },
+      { ...valid, request_id: "" },
+      { ...valid, request_id: 7 },
+      { ...valid, remote_code: Number.MAX_SAFE_INTEGER + 1 },
+      { ...valid, remote_message: 7 },
+      { ...valid, remote_data_summary: "object(secret=value)" },
+      { ...valid, remote_data_summary: 7 },
+    ];
+    for (const diagnostic of malformed) {
+      const detail = structuredClone(relayDetail(row));
+      if (detail.record.payload.kind !== "relay_frame") {
+        throw new Error("expected relay fixture");
+      }
+      detail.record.payload.capture.display = {
+        type: "hex_fallback",
+        reason: "entry_point_failed",
+        diagnostic: {
+          code: "EXTERNAL_PACKAGE_RPC_FAILED",
+          message: "远端调用失败",
+          external_package_call: diagnostic,
+        },
+      } as never;
+
+      expect(validateSocketCaptureDetail(detail, row, workspaceId)).toBeUndefined();
+    }
   });
 
   it("rejects relay evidence when one required stage snapshot is missing", () => {

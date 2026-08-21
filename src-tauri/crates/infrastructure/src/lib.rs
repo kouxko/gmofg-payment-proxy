@@ -18,16 +18,22 @@ pub mod sqlite;
 mod windows_process;
 
 pub use adapters::{
-    AndroidAdbAdapter, BoundSocketDocument, CaptureRepositoryAdapter, CertificateServiceAdapter,
-    FaultServiceAdapter, HeaderBodyCodecResolver, HttpProtocolObservationSink,
-    InfrastructureServiceBundle, ListenerRuntimeAdapter, NativeFileDialog, ProtectedSecretAdapter,
-    ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
-    ProtocolPackageImportAdapter, ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure,
-    ProtocolPackageRecoveryReport, ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError,
-    ProtocolPackageStorageErrorCode, ProtocolPackageSummary, ProtocolPackageUsageQueryAdapter,
-    ProtocolPackageValidationStatus, RuleRepositoryAdapter, RuntimePipelineAdapter,
-    RuntimePipelineProductHooks, RuntimeRuleRepository, SettingsRepositoryAdapter,
-    SocketCaptureRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter,
+    AcceptedExternalPackageConnection, AndroidAdbAdapter, BoundSocketDocument,
+    CaptureRepositoryAdapter, CertificateServiceAdapter, ExternalPackageClient,
+    ExternalPackageConnectionConfig, ExternalPackageConnectionError, ExternalPackageConnectionId,
+    ExternalPackageFatalProtocolError, ExternalPackageListenerRuntime,
+    ExternalPackageRegistryAdapter, ExternalPackageRemoteError, ExternalPackageServer,
+    ExternalPackageServerConfig, FaultServiceAdapter, HeaderBodyCodecResolver,
+    HttpProtocolObservationSink, InfrastructureServiceBundle, ListenerRuntimeAdapter,
+    NativeFileDialog, ProtectedSecretAdapter, ProtocolDocumentRuleConnection,
+    ProtocolDocumentRuleConnectionFactory, ProtocolPackageImportAdapter,
+    ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure, ProtocolPackageRecoveryReport,
+    ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError, ProtocolPackageStorageErrorCode,
+    ProtocolPackageSummary, ProtocolPackageUsageQueryAdapter, ProtocolPackageValidationStatus,
+    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
+    RuntimeRuleRepository, SettingsRepositoryAdapter, SocketCaptureRepositoryAdapter,
+    WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter, accept_packages_websocket,
+    external_package_registration_fingerprint,
 };
 pub use application_backup::{
     ApplicationBackupArchive, ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode,

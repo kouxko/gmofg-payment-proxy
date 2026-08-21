@@ -21,6 +21,7 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::super::*;
 use crate::app_state::AppState;
+use crate::mcp::{ApplicationBackend, ReadOnlyMcpBackend};
 
 const MANIFEST: &str = r#"
 api = 1
@@ -157,6 +158,7 @@ impl CrossLayerFixture {
                 socket_capture_query,
                 socket_capture_get_detail,
                 diagnostic_log_query,
+                diagnostic_reproduction_report_export,
             ])
             .build(tauri::test::mock_context(tauri::test::noop_assets()))
             .unwrap();
@@ -194,6 +196,24 @@ impl CrossLayerFixture {
             self.dialog.calls.lock().unwrap().as_slice(),
             &[("protocol_package_zip".into(), "open")]
         );
+    }
+
+    pub(super) fn saved_report(&self) -> String {
+        std::fs::read_to_string(&self.dialog.save_path).expect("saved reproduction report")
+    }
+
+    pub(super) fn assert_report_dialog_boundary(&self) {
+        assert_eq!(
+            self.dialog.calls.lock().unwrap().as_slice(),
+            &[("diagnostic_reproduction_markdown".into(), "save")]
+        );
+    }
+
+    pub(super) fn call_mcp_tool(&self, name: &str, arguments: Value) -> Value {
+        let state = self.app.state::<AppState>();
+        let backend = ApplicationBackend::new(Arc::clone(&state.application), state.runtime_logs());
+        tauri::async_runtime::block_on(backend.call_tool(name, arguments))
+            .unwrap_or_else(|error| panic!("MCP {name} failed: {} {}", error.code, error.message))
     }
 }
 

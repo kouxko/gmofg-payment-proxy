@@ -52,6 +52,9 @@ pub(crate) trait InstallationServerIdentityProvider: std::fmt::Debug + Send + Sy
 
 #[derive(Debug)]
 struct RunningListener {
+    /// Unique identity of this exact start operation. Unlike the Workspace epoch, this token
+    /// changes on every stop/start cycle, even while another Listener keeps the Workspace alive.
+    run_token: Uuid,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
     listen_address: String,
@@ -61,6 +64,7 @@ struct RunningListener {
     workspace: ProxyWorkspace,
     socket_service: Option<Arc<SocketRelayService>>,
     scripted_snapshot: Option<Arc<scripted_snapshot::ScriptedSocketRuntimeSnapshot>>,
+    external_socket_snapshot: Option<Arc<external_relay::ExternalSocketRuntimeSnapshot>>,
     http_protocol_snapshot: Option<Arc<http_protocol_pipeline::HttpProtocolRuntimeSnapshot>>,
 }
 
@@ -81,6 +85,8 @@ pub struct ListenerRuntimeAdapter {
     protected_secrets: Arc<ProtectedSecretAdapter>,
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
     protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
+    external_package_provider:
+        RwLock<Option<Arc<dyn external_relay::ExternalSocketPackageProvider>>>,
     socket_capture_publisher: RwLock<Option<socket_capture_publisher::SocketCapturePublisher>>,
     pipeline_services: RwLock<Option<RuntimePipelineServices>>,
     socket_diagnostic_events: Arc<RwLock<Arc<EventHub>>>,
@@ -102,10 +108,22 @@ impl ListenerRuntimeAdapter {
             protected_secrets,
             managed_listener_certificates: None,
             protocol_packages,
+            external_package_provider: RwLock::new(None),
             socket_capture_publisher: RwLock::new(None),
             pipeline_services: RwLock::new(None),
             socket_diagnostic_events: Arc::new(RwLock::new(Arc::new(EventHub::default()))),
         }
+    }
+
+    /// 注入外部协议包在线注册表。
+    ///
+    /// Provider 只在 Listener start 时解析一次精确版本；已运行连接持有冻结的注册合同和 actor
+    /// 句柄，不会因目录刷新而在一帧中途切换实现。
+    pub(crate) fn set_external_package_provider(
+        &self,
+        provider: Arc<dyn external_relay::ExternalSocketPackageProvider>,
+    ) {
+        *self.external_package_provider.write() = Some(provider);
     }
 
     #[must_use]
@@ -219,6 +237,8 @@ impl Drop for ListenerRuntimeAdapter {
 }
 
 mod document_rules;
+mod external_local_responder;
+mod external_relay;
 mod helpers;
 mod http_protocol_pipeline;
 mod local_responder;
@@ -235,6 +255,10 @@ pub use http_protocol_pipeline::HttpProtocolObservationSink;
 
 pub use document_rules::{
     BoundSocketDocument, ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
+};
+pub(crate) use external_relay::{
+    ExternalSocketPackageProvider,
+    RuntimeExternalSocketPackageBinding as ExternalSocketPackageBinding,
 };
 use helpers::{bind_tcp_listener, parse_bind_address, running_status, upstream_tls_test_error};
 use plan::{ListenerRuntimePlanBuilder, PreparedListenerRuntime};

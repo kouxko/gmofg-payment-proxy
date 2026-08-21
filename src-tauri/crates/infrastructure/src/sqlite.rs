@@ -82,6 +82,7 @@ mod android_runtime_owner;
 mod certificates;
 mod core;
 pub use android_runtime_owner::AndroidRuntimeOwnerRecord;
+pub(crate) mod external_packages;
 mod portable_configuration;
 pub(crate) mod protocol_packages;
 mod schema;

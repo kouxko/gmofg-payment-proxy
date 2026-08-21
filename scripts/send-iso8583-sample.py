@@ -5,11 +5,12 @@ from __future__ import annotations
 
 import json
 import socket
+from argparse import ArgumentParser
 from pathlib import Path
 
 
-HOST = "127.0.0.1"
-PORT = 8080
+DEFAULT_HOST = "127.0.0.1"
+DEFAULT_PORT = 8080
 TIMEOUT_SECONDS = 3
 SAMPLE_PATH = (
     Path(__file__).resolve().parent.parent
@@ -29,11 +30,20 @@ def receive_exact(connection: socket.socket, size: int) -> bytes:
     return b"".join(chunks)
 
 
+def parse_target() -> tuple[str, int]:
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument("--host", default=DEFAULT_HOST)
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    arguments = parser.parse_args()
+    return arguments.host, arguments.port
+
+
 def main() -> None:
+    host, port = parse_target()
     sample = json.loads(SAMPLE_PATH.read_text(encoding="utf-8"))
     request = bytes.fromhex(sample["complete_frame_hex"])
 
-    with socket.create_connection((HOST, PORT), timeout=TIMEOUT_SECONDS) as connection:
+    with socket.create_connection((host, port), timeout=TIMEOUT_SECONDS) as connection:
         connection.settimeout(TIMEOUT_SECONDS)
         connection.sendall(request)
         print(f"sent_bytes={len(request)}")

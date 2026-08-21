@@ -4,6 +4,7 @@ use super::*;
 
 mod android_runtime_owner;
 mod corruption_and_certificates;
+mod external_packages;
 mod protocol_packages;
 mod socket_capture_adversarial;
 mod socket_captures;

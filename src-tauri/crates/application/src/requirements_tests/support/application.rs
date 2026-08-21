@@ -135,5 +135,6 @@ pub(in crate::requirements_tests) fn protocol_package_services(
         builtin: portability.clone(),
         usage_query: portability.clone(),
         portability,
+        external: Arc::new(UnusedExternalPackagePort),
     }
 }

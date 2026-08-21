@@ -12,6 +12,7 @@ import type {
 } from "@/generated/rust-types";
 import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
 import { isProtocolPackageSchema } from "@/lib/protocol-package-schema";
+import { isProtocolPackageSource } from "@/features/protocol-packages/protocol-package-source";
 import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
 
 export type SocketWorkingMode = "raw_relay" | "protocol_relay" | "local_response";
@@ -241,10 +242,11 @@ export function isListenerProtocolPackageCatalog(
 
 function isCatalogOption(value: unknown): value is ListenerProtocolPackageOptionViewModel {
   if (!isRecord(value)
-    || !hasOnly(value, ["package", "name", "kind", "capabilities", "upstream_schema", "downstream_schema"])
+    || !hasOnly(value, ["package", "name", "package_source", "kind", "capabilities", "upstream_schema", "downstream_schema"])
     || !isPackageRef(value.package)
     || typeof value.name !== "string"
     || value.name.length === 0
+    || !isProtocolPackageSource(value.package_source)
     || (value.kind !== "http" && value.kind !== "socket")
     || !isCapabilities(value.capabilities, value.kind)
     || !isProtocolPackageSchema(value.upstream_schema)

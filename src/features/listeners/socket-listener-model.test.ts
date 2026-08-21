@@ -30,6 +30,7 @@ function option(
   return {
     package: { id: "iso-8583", version },
     name: `ISO 8583 ${version}`,
+    package_source: { type: "internal", built_in: false },
     kind: "socket",
     capabilities,
     upstream_schema: { id: "iso-request", version: 1, title: "ISO Request", fields: [] },

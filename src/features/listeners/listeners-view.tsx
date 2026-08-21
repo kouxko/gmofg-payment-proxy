@@ -88,7 +88,7 @@ export function ListenersView() {
     listenerOverview.refresh,
   );
   useAppEventRefresh(
-    ["workspace_changed", "snapshot_required"],
+    ["workspace_changed", "protocol_package_catalog_changed", "snapshot_required"],
     protocolCatalog.refresh,
   );
 

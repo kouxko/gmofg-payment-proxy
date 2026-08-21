@@ -6,6 +6,7 @@ import {
   protocolPackageDetailError,
   sortPackageVersions,
   validationText,
+  packageSourceText,
 } from "./protocol-package-model";
 import { detail, group, version } from "./protocol-packages-test-support";
 
@@ -47,12 +48,31 @@ describe("protocol package presentation model", () => {
     expect(validationText({ state: "invalid", code: "" })).toBe("校验失败：未知错误");
   });
 
+  it("uses the closed source union for internal and external status text", () => {
+    expect(packageSourceText(version("1.0.0"))).toBe("用户安装");
+    expect(packageSourceText(version("1.0.0", {
+      package_source: { type: "external", online: true },
+    }))).toBe("外部 · 在线");
+    expect(packageSourceText(version("1.0.0", {
+      package_source: { type: "external", online: false },
+    }))).toBe("外部 · 离线");
+    const malformed: unknown = [{
+      ...group(),
+      versions: [{
+        ...version("1.0.0"),
+        package_source: { type: "external", online: false },
+        legacy_online: false,
+      }],
+    }];
+    expect(isProtocolPackageGroupList(malformed)).toBe(false);
+  });
+
   it("accepts only the protected built-in exact identity as a restore result", () => {
     expect(builtInRestoreResultError({
       outcome: "installed",
       version: version("1.0.0", {
         package: { id: "iso8583-ascii-standard", version: "1.0.0" },
-        built_in: true,
+        package_source: { type: "internal", built_in: true },
         enabled: true,
       }),
       kind: "socket",
@@ -66,13 +86,13 @@ describe("protocol package presentation model", () => {
     })).toBeUndefined();
     expect(builtInRestoreResultError({
       outcome: "installed",
-      version: version("1.0.0", { built_in: true }),
+      version: version("1.0.0", { package_source: { type: "internal", built_in: true } }),
     })).toBe("内置示例恢复结果不完整，请刷新列表后重试。");
     expect(builtInRestoreResultError({
       outcome: "installed",
       version: version("1.0.0", {
         package: { id: "iso8583-ascii-standard", version: "1.0.0" },
-        built_in: false,
+        package_source: { type: "internal", built_in: false },
       }),
     })).toBe("内置示例恢复结果不完整，请刷新列表后重试。");
   });

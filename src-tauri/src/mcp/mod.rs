@@ -13,6 +13,8 @@ mod resources;
 mod server;
 
 pub use backend::ApplicationBackend;
+#[cfg(test)]
+pub(crate) use backend::ReadOnlyMcpBackend;
 pub use server::{MCP_ENDPOINT, ReadOnlyMcpServer};
 
 pub fn catalog_size() -> (usize, usize) {

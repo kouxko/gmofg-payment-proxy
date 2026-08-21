@@ -9,10 +9,12 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   McpInfoViewModel,
+  ExternalPackageServiceStatusViewModel,
   SettingsDraft,
   SettingsViewModel,
 } from "@/generated/rust-types";
 import { SettingsView } from "./settings-view";
+import { isExternalPackageServiceStatus } from "./external-package-service-settings";
 
 const commandMocks = vi.hoisted(() => ({
   applicationDataReset: vi.fn(),
@@ -21,8 +23,10 @@ const commandMocks = vi.hoisted(() => ({
   settingsValidate: vi.fn(),
   settingsGet: vi.fn(),
   mcpInfo: vi.fn(),
+  externalPackageServiceStatus: vi.fn(),
   settingsSetData: vi.fn(),
 }));
+const appEventRefreshMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/generated/rust-types", () => ({
   commands: commandMocks,
@@ -61,6 +65,12 @@ const draft: SettingsDraft = {
   max_sessions: 500,
   max_memory_bytes: 256 * 1024 * 1024,
   leaf_sans: ["127.0.0.1"],
+  external_package_service: {
+    bind_address: "0.0.0.0",
+    port: 8765,
+    rpc_timeout_seconds: 5,
+    max_in_flight: 256,
+  },
 };
 
 const settings: SettingsViewModel = {
@@ -85,15 +95,25 @@ const mcpInfo: McpInfoViewModel = {
   resource_count: 11,
 };
 
+const externalStatus: ExternalPackageServiceStatusViewModel = {
+  websocket_url: "ws://0.0.0.0:8765/packages",
+  fixed_path: "/packages",
+  online_connection_count: 2,
+  state: { state: "listening" },
+  authentication_enabled: false,
+};
+
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
   useIpcQuery: (key: string) => {
-    const [data, setData] = useState(key === "mcp-info" ? mcpInfo : settings);
+    const [data, setData] = useState(key === "mcp-info"
+      ? mcpInfo
+      : key === "external-package-service-status" ? externalStatus : settings);
     return {
       data,
       error: undefined,
       isLoading: false,
       refresh: vi.fn(),
-      setData: (next: SettingsViewModel | McpInfoViewModel) => {
+      setData: (next: SettingsViewModel | McpInfoViewModel | ExternalPackageServiceStatusViewModel) => {
         commandMocks.settingsSetData(next);
         setData(next);
       },
@@ -102,7 +122,7 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
 }));
 
 vi.mock("@/features/shell/bootstrap-context", () => ({
-  useAppEventRefresh: vi.fn(),
+  useAppEventRefresh: appEventRefreshMock,
 }));
 
 describe("production SettingsView overlay", () => {
@@ -119,10 +139,29 @@ describe("production SettingsView overlay", () => {
     });
   });
 
+  it("refreshes the external package service card from authoritative service events", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    await user.click(screen.getByRole("tab", { name: "外部软件包" }));
+
+    expect(appEventRefreshMock).toHaveBeenCalledWith(
+      ["external_package_service_status_changed", "snapshot_required"],
+      expect.any(Function),
+    );
+  });
+
   it("does not expose manual validation controls or validation-result landmarks", () => {
     render(<SettingsView />);
     expect(screen.queryByText("校验结果")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "校验设置" })).not.toBeInTheDocument();
+  });
+
+  it("fails closed for malformed external service runtime snapshots", () => {
+    expect(isExternalPackageServiceStatus(externalStatus)).toBe(true);
+    expect(isExternalPackageServiceStatus({ ...externalStatus, fixed_path: "/legacy" })).toBe(false);
+    expect(isExternalPackageServiceStatus({ ...externalStatus, authentication_enabled: undefined })).toBe(false);
+    expect(isExternalPackageServiceStatus({ ...externalStatus, online_connection_count: -1 })).toBe(false);
+    expect(isExternalPackageServiceStatus({ ...externalStatus, legacy_endpoint: true })).toBe(false);
   });
 
   it("saves through Rust and replaces the displayed stored snapshot", async () => {
@@ -227,6 +266,7 @@ describe("production SettingsView overlay", () => {
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "超时与容量",
       "应用",
+      "外部软件包",
       "AI 助手（MCP）",
     ]);
     expect(screen.queryByText("数据与导出")).not.toBeInTheDocument();
@@ -244,6 +284,25 @@ describe("production SettingsView overlay", () => {
     expect(screen.getByText(/App 端的修改建议/)).toBeVisible();
     expect(screen.getByText(/Root CA、服务端证书、客户端证书/)).toBeVisible();
     expect(screen.getByText(/"type": "http"/)).toBeVisible();
+  });
+
+  it("shows the authoritative external package service status and restart boundary", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("tab", { name: "外部软件包" }));
+
+    expect(screen.getByText("正在监听")).toBeVisible();
+    expect(screen.getByText("ws://0.0.0.0:8765/packages")).toBeVisible();
+    expect(screen.getByText("/packages")).toBeVisible();
+    expect(screen.getByText("2 个")).toBeVisible();
+    expect(screen.getByText("当前版本不提供连接认证")).toBeVisible();
+    expect(screen.getByText(/重启应用后生效/)).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "监听地址" })).toHaveValue("0.0.0.0");
+    expect(screen.getByRole("textbox", { name: "端口" })).toHaveValue("8,765");
+    expect(screen.getByRole("textbox", { name: "RPC 超时（秒）" })).toHaveValue("5");
+    expect(screen.getByRole("textbox", { name: "最大并发 RPC" })).toHaveValue("256");
+    expect(screen.getByRole("button", { name: "保存设置" })).toBeVisible();
   });
 
   it("does not write when Rust validation rejects the current draft", async () => {

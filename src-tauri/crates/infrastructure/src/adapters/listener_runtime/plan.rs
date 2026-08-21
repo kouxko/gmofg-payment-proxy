@@ -44,6 +44,12 @@ pub(super) enum PreparedListenerRuntime {
         bind_addr: SocketAddr,
         service: Arc<SocketRelayService>,
     },
+    /// 外部协议包 Relay；注册合同和 actor 句柄由 processor factory 冻结持有。
+    ExternalScriptedSocket {
+        bind_addr: SocketAddr,
+        snapshot: Arc<super::external_relay::ExternalSocketRuntimeSnapshot>,
+        service: Arc<SocketRelayService>,
+    },
     /// Scripted Relay 与 `LocalResponder` 共用冻结快照，但各自装配拓扑专用服务。
     /// `None` 只保留为反序列化之外的内部防御状态，启动门禁会在 bind 前拒绝它。
     ScriptedSocket {
@@ -58,6 +64,7 @@ impl PreparedListenerRuntime {
             Self::HttpForward { bind_addr, .. }
             | Self::HttpFixed { bind_addr, .. }
             | Self::Socket { bind_addr, .. }
+            | Self::ExternalScriptedSocket { bind_addr, .. }
             | Self::ScriptedSocket { bind_addr, .. } => *bind_addr,
         }
     }
@@ -69,12 +76,23 @@ impl PreparedListenerRuntime {
         }
     }
 
+    pub(super) fn external_socket_snapshot(
+        &self,
+    ) -> Option<Arc<super::external_relay::ExternalSocketRuntimeSnapshot>> {
+        match self {
+            Self::ExternalScriptedSocket { snapshot, .. } => Some(Arc::clone(snapshot)),
+            _ => None,
+        }
+    }
+
     pub(super) fn http_protocol_snapshot(&self) -> Option<Arc<HttpProtocolRuntimeSnapshot>> {
         match self {
             Self::HttpForward { protocol, .. } | Self::HttpFixed { protocol, .. } => {
                 protocol.clone()
             }
-            Self::Socket { .. } | Self::ScriptedSocket { .. } => None,
+            Self::Socket { .. }
+            | Self::ExternalScriptedSocket { .. }
+            | Self::ScriptedSocket { .. } => None,
         }
     }
 }

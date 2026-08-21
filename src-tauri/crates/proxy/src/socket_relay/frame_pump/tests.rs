@@ -82,6 +82,22 @@ impl SocketFrameProcessor for LengthProcessor {
     }
 }
 
+struct DelimitedProcessor;
+
+#[async_trait]
+impl SocketFrameProcessor for DelimitedProcessor {
+    async fn inspect(&mut self, buffered: Bytes) -> Result<FrameBoundary, SocketProcessingFailure> {
+        buffered.iter().position(|byte| *byte == b'\n').map_or_else(
+            || Ok(FrameBoundary::NeedMoreUnknown),
+            |index| Ok(FrameBoundary::Complete { bytes: index + 1 }),
+        )
+    }
+
+    async fn process(&mut self, origin: Bytes) -> Result<Bytes, SocketProcessingFailure> {
+        Ok(origin)
+    }
+}
+
 async fn run_local(
     input: &[u8],
     processor: Box<dyn SocketFrameProcessor>,
@@ -136,6 +152,37 @@ async fn local_handles_chunked_and_sticky_frames_in_fifo_order() {
     assert_eq!(output, input);
     assert_eq!(result.unwrap().server_to_client, input.len() as u64);
     assert_eq!(bytes.read.client_to_server, input.len() as u64);
+}
+
+#[tokio::test]
+async fn unknown_length_need_more_reads_until_the_processor_finds_a_boundary() {
+    let input = b"first frame\nsecond frame\n";
+    let (output, result, bytes) = run_local(input, Box::new(DelimitedProcessor), limits()).await;
+
+    assert_eq!(output, input);
+    assert_eq!(result.unwrap().server_to_client, input.len() as u64);
+    assert_eq!(bytes.read.client_to_server, input.len() as u64);
+}
+
+#[tokio::test]
+async fn unknown_length_need_more_fails_closed_at_eof_and_buffer_limit() {
+    let (output, truncated, bytes) =
+        run_local(b"partial", Box::new(DelimitedProcessor), limits()).await;
+    assert!(output.is_empty());
+    assert_eq!(
+        truncated.unwrap_err().kind,
+        SocketProcessingFailureKind::TruncatedFrame
+    );
+    assert_eq!(bytes.read.client_to_server, 7);
+
+    let full = vec![b'x'; limits().max_buffer_bytes()];
+    let (output, exceeded, bytes) = run_local(&full, Box::new(DelimitedProcessor), limits()).await;
+    assert!(output.is_empty());
+    assert_eq!(
+        exceeded.unwrap_err().kind,
+        SocketProcessingFailureKind::BufferLimitExceeded
+    );
+    assert_eq!(bytes.read.client_to_server, full.len() as u64);
 }
 
 #[tokio::test]

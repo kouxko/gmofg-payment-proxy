@@ -15,7 +15,7 @@ use std::{
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use intercept_proxy_domain::{
-    DownstreamClientAuthentication, FixedServerSettings, UpstreamTlsSettings,
+    DocumentSchemaId, DownstreamClientAuthentication, FixedServerSettings, UpstreamTlsSettings,
 };
 use intercept_proxy_product_api::{BodyCodec, ProductError};
 use uuid::Uuid;
@@ -29,8 +29,10 @@ use support::*;
 mod android_runtime;
 mod breakpoints;
 mod capacity;
+mod diagnostic_report;
 mod diagnostics;
 mod events;
+mod external_package_lifecycle;
 mod listener_certificates;
 mod local_responder_topology;
 mod protocol_package_lifecycle;

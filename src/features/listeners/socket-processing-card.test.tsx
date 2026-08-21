@@ -22,6 +22,7 @@ function packageOption(
   return {
     package: { id: "iso-8583", version },
     name: `ISO 8583 ${version}`,
+    package_source: { type: "internal", built_in: false },
     kind: "socket",
     capabilities: {
       upstream: { frame: true, decode: true, encode: true },
@@ -139,7 +140,7 @@ describe("SocketProcessingCard", () => {
     render(<SocketProcessingCard settings={direct} catalog={catalog()} locked={false} onChange={onChange} />);
 
     await user.click(screen.getByLabelText("Socket 协议处理方案"));
-    await user.click(await screen.findByRole("option", { name: "ISO 8583 1.0.0 · 1.0.0" }));
+    await user.click(await screen.findByRole("option", { name: "ISO 8583 1.0.0 · 1.0.0 · 内部安装" }));
 
     expect(onChange).toHaveBeenCalledWith({
       ...direct,
@@ -229,8 +230,8 @@ describe("SocketProcessingCard", () => {
     );
 
     await user.click(screen.getByLabelText("Socket 协议处理方案"));
-    expect(await screen.findByRole("option", { name: "ISO 8583 1.0.0 · 1.0.0" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "ISO 8583 2.0.0 · 2.0.0" })).toBeVisible();
+    expect(await screen.findByRole("option", { name: "ISO 8583 1.0.0 · 1.0.0 · 内部安装" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "ISO 8583 2.0.0 · 2.0.0 · 内部安装" })).toBeVisible();
     expect(screen.getAllByRole("option")).toHaveLength(3);
   });
 
@@ -240,7 +241,7 @@ describe("SocketProcessingCard", () => {
     render(<SocketProcessingCard settings={settings()} catalog={catalog([packageOption(), http])} locked={false} onChange={vi.fn()} />);
 
     await user.click(screen.getByLabelText("Socket 协议处理方案"));
-    expect(await screen.findByRole("option", { name: "ISO 8583 1.0.0 · 1.0.0" })).toBeVisible();
+    expect(await screen.findByRole("option", { name: "ISO 8583 1.0.0 · 1.0.0 · 内部安装" })).toBeVisible();
     expect(screen.queryByRole("option", { name: /HTTP JSON/ })).not.toBeInTheDocument();
   });
 
@@ -257,7 +258,7 @@ describe("SocketProcessingCard", () => {
 
     expect(screen.getByText("当前处理方案已不可用")).toBeVisible();
     await user.click(screen.getByLabelText("Socket 协议处理方案"));
-    expect(await screen.findByRole("option", { name: "当前选择（不可用）" })).toHaveAttribute("aria-disabled", "true");
+    expect(await screen.findByRole("option", { name: "iso-8583@1.0.0 · 当前选择（不可用）" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("locks package changes while the entry is running", () => {

@@ -8,7 +8,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
 use crate::transport::BoxIo;
-use crate::transport::relay::{RelayBytes, RelayDirection, RelayProgress};
+use crate::transport::relay::{RelayBytes, RelayProgress};
 
 #[cfg(test)]
 use super::processing::LocalResponderProcessorFactory;
@@ -17,7 +17,10 @@ use super::processing::{
     SocketFramePumpLimits, SocketPayloadDirection, SocketProcessingFailure,
     SocketProcessingFailureKind,
 };
-use control::{choose_relay_result, create_relay_processor, pump_and_cancel};
+use control::{
+    choose_relay_result, create_relay_processor, pump_and_cancel, read_relay_direction,
+    relay_direction,
+};
 
 mod control;
 mod local;
@@ -204,6 +207,33 @@ where
                         SocketProcessingFailureKind::TruncatedFrame,
                         direction,
                         "stream ended with an incomplete frame",
+                    );
+                }
+                read_more(
+                    &mut reader,
+                    &mut buffered,
+                    direction,
+                    limits,
+                    timeouts.read,
+                    &cancellation,
+                    &progress,
+                )
+                .await
+                .map(|read| eof = read == 0)?;
+            }
+            FrameBoundary::NeedMoreUnknown => {
+                if buffered.len() >= limits.max_buffer_bytes() {
+                    return fail(
+                        SocketProcessingFailureKind::BufferLimitExceeded,
+                        direction,
+                        "frame exceeds the configured buffer limit before a boundary was found",
+                    );
+                }
+                if eof {
+                    return fail(
+                        SocketProcessingFailureKind::TruncatedFrame,
+                        direction,
+                        "stream ended before the processor found a frame boundary",
                     );
                 }
                 read_more(
@@ -447,24 +477,6 @@ async fn shutdown_writer<W: AsyncWrite + Unpin>(
             )
             .in_direction(direction)
         })
-}
-
-fn relay_direction(direction: SocketPayloadDirection) -> RelayDirection {
-    match direction {
-        SocketPayloadDirection::AppToUpstream => RelayDirection::ClientToServer,
-        SocketPayloadDirection::UpstreamToApp | SocketPayloadDirection::LocalExchange => {
-            RelayDirection::ServerToClient
-        }
-    }
-}
-
-fn read_relay_direction(direction: SocketPayloadDirection) -> RelayDirection {
-    match direction {
-        SocketPayloadDirection::AppToUpstream | SocketPayloadDirection::LocalExchange => {
-            RelayDirection::ClientToServer
-        }
-        SocketPayloadDirection::UpstreamToApp => RelayDirection::ServerToClient,
-    }
 }
 
 fn fail<T>(

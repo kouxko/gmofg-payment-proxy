@@ -22,7 +22,7 @@ function detail() {
       name: "ISO 8583 v2",
       host_api: 1,
       kind: "socket" as const,
-      built_in: false,
+      package_source: { type: "internal", built_in: false },
       enabled: true,
       validation: { state: "valid" as const },
       installed_at: "2026-08-15T00:00:00Z",
@@ -46,6 +46,7 @@ function detail() {
       fields: [{ name: "response_code", label: "Response", type: "string" as const }],
     },
     usages: [],
+    external: null,
   };
 }
 

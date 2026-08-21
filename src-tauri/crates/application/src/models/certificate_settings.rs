@@ -61,6 +61,29 @@ pub struct ChannelSettingsDraft {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 外部软件包 WebSocket 服务的启动配置。
+///
+/// 监听地址和端口只在进程启动时读取；保存后由设置页明确提示重启。RPC 超时和并发上限
+/// 同样固定进一次连接快照，避免一个已建立连接在处理中途改变资源语义。
+pub struct ExternalPackageServiceSettingsDraft {
+    pub bind_address: String,
+    pub port: u16,
+    pub rpc_timeout_seconds: u64,
+    pub max_in_flight: usize,
+}
+
+impl Default for ExternalPackageServiceSettingsDraft {
+    fn default() -> Self {
+        Self {
+            bind_address: "0.0.0.0".into(),
+            port: 8_765,
+            rpc_timeout_seconds: 5,
+            max_in_flight: 256,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 设置页提交的前端友好草稿，端口会再转换并执行领域校验。
 pub struct SettingsDraft {
     pub expected_revision: Option<Revision>,
@@ -74,6 +97,8 @@ pub struct SettingsDraft {
     pub max_sessions: usize,
     pub max_memory_bytes: u64,
     pub leaf_sans: Vec<String>,
+    /// 固定路径 `/packages` 的外部软件包服务配置。
+    pub external_package_service: ExternalPackageServiceSettingsDraft,
 }
 
 impl Default for SettingsDraft {
@@ -90,6 +115,7 @@ impl Default for SettingsDraft {
             max_sessions: 500,
             max_memory_bytes: 256 * 1024 * 1024,
             leaf_sans: Vec::new(),
+            external_package_service: ExternalPackageServiceSettingsDraft::default(),
         }
     }
 }

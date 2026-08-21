@@ -166,6 +166,30 @@ describe("ListenerEditor", () => {
     expect(screen.getByRole("button", { name: "保护并引用" })).toBeDisabled();
   });
 
+  it("Basic Auth 开关独占整行使用户名与密码从同一网格行开始", () => {
+    const props = editorProps({
+      listener: {
+        ...dynamicListener(),
+        data_plane: {
+          kind: "http",
+          settings: {
+            ...dynamicListener().data_plane.settings,
+            authentication: {
+              mode: "basic",
+              credential: { provider: "system", key: "" },
+            },
+          },
+        },
+      },
+    });
+    render(<ListenerEditor {...props} />);
+
+    expect(screen.getByRole("group", { name: "HTTP Basic 认证开关" }))
+      .toHaveClass("col-span-2", "max-[700px]:col-span-1");
+    expect(screen.getByLabelText("代理认证用户名")).toHaveClass("h-10", "py-0");
+    expect(screen.getByLabelText("代理认证密码")).toHaveClass("h-10", "py-0");
+  });
+
   it("将 MITM allowlist 输入规范化为 authority 列表", () => {
     const listener: ProxyListener = dynamicListener();
     if (listener.data_plane.kind !== "http") throw new Error("expected HTTP");

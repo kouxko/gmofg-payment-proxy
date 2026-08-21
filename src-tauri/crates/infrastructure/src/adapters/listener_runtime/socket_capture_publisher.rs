@@ -29,6 +29,8 @@ use parking_lot::{Mutex, RwLock};
 use crate::adapters::SocketCaptureRepositoryAdapter;
 use crate::sqlite::socket_capture_coordination::SocketCaptureGeneration;
 
+mod external_diagnostics;
+
 const SOCKET_CAPTURE_QUEUE_CAPACITY: usize = 256;
 const SOCKET_CAPTURE_QUEUE_MAX_LOGICAL_BYTES: u64 = 64 * 1024 * 1024;
 const SOCKET_CAPTURE_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -126,6 +128,7 @@ pub(super) fn capture_display(result: ProtocolDisplayResult) -> SocketDisplayRes
                     Some(SocketDisplayDiagnostic {
                         code: "DISPLAY_ENTRY_FAILED".to_owned(),
                         message: "Display 执行失败，已回退 Hex。".to_owned(),
+                        external_package_call: None,
                     }),
                 ),
                 DisplayFallbackReason::ResourceLimitExceeded(limit) => (
@@ -133,6 +136,7 @@ pub(super) fn capture_display(result: ProtocolDisplayResult) -> SocketDisplayRes
                     Some(SocketDisplayDiagnostic {
                         code: "DISPLAY_RESOURCE_LIMIT_EXCEEDED".to_owned(),
                         message: format!("Display 超出资源限制（{limit}），已回退 Hex。"),
+                        external_package_call: None,
                     }),
                 ),
             };
@@ -147,6 +151,7 @@ pub(super) fn capture_resource_busy() -> SocketDisplayResult {
         diagnostic: Some(SocketDisplayDiagnostic {
             code: "DISPLAY_RESOURCE_BUSY".to_owned(),
             message: "Display 后台资源繁忙，已回退 Hex。".to_owned(),
+            external_package_call: None,
         }),
     }
 }

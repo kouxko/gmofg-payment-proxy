@@ -8,9 +8,9 @@ use intercept_proxy_application::{
     ProtocolPackageCompilationReceipt, ProtocolPackageCompilerPort,
     ProtocolPackageDescriptionViewModel, ProtocolPackageDirectionCapabilitiesViewModel,
     ProtocolPackageKindViewModel, ProtocolPackageSchemaFieldTypeViewModel,
-    ProtocolPackageSchemaFieldViewModel, ProtocolPackageSchemaViewModel, ProtocolPackageStorePort,
-    ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
-    is_builtin_protocol_package,
+    ProtocolPackageSchemaFieldViewModel, ProtocolPackageSchemaViewModel,
+    ProtocolPackageSourceViewModel, ProtocolPackageStorePort, ProtocolPackageValidationViewModel,
+    ProtocolPackageVersionViewModel, is_builtin_protocol_package,
 };
 use intercept_proxy_protocol_scripting::CompiledProtocolPackage;
 use intercept_proxy_protocol_scripting::{ProtocolDirection, ProtocolPackageKind};
@@ -89,7 +89,7 @@ pub(in crate::adapters) fn application_summary(
             ProtocolPackageKind::Http => ProtocolPackageKindViewModel::Http,
             ProtocolPackageKind::Socket => ProtocolPackageKindViewModel::Socket,
         },
-        built_in,
+        source: ProtocolPackageSourceViewModel::Internal { built_in },
         enabled: summary.enabled,
         validation: match summary.validation {
             ProtocolPackageValidationStatus::Valid => ProtocolPackageValidationViewModel::Valid,

@@ -307,7 +307,13 @@ fn snapshot() -> ApplicationBackupExportSnapshot {
                     "max_body_bytes": 1024,
                     "max_sessions": 10,
                     "max_memory_bytes": 4096,
-                    "leaf_sans": []
+                    "leaf_sans": [],
+                    "external_package_service": {
+                        "bind_address": "0.0.0.0",
+                        "port": 8765,
+                        "rpc_timeout_seconds": 5,
+                        "max_in_flight": 256
+                    }
                 }
             },
             "protocol_packages": [{

@@ -50,7 +50,11 @@ fn tool_catalog_is_read_only_and_covers_runtime_and_portable_protocol_data() {
 
     for required in [
         "application_snapshot",
+        "application_log_query",
+        "application_log_get",
+        "reproduction_report",
         "diagnostics_query",
+        "external_package_service_status",
         "android_network_endpoints",
         "certificate_overview",
         "workspace_protocol_rule_list",
@@ -103,9 +107,60 @@ fn resources_include_authoring_manifest_and_official_zip() {
             && resource.mime_type.as_deref() == Some("text/markdown")
     }));
     assert!(resources.iter().any(|resource| {
+        resource.uri == resources::EXTERNAL_PACKAGE_INTEGRATION_GUIDE_URI
+            && resource.mime_type.as_deref() == Some("text/markdown")
+    }));
+    assert!(resources.iter().any(|resource| {
+        resource.uri == resources::DIAGNOSTIC_ARCHITECTURE_URI
+            && resource.mime_type.as_deref() == Some("text/markdown")
+    }));
+    assert!(resources.iter().any(|resource| {
         resource.uri == resources::ISO8583_ARCHIVE_URI
             && resource.mime_type.as_deref() == Some("application/zip")
     }));
+}
+
+#[test]
+fn diagnostic_architecture_resource_maps_evidence_to_code_and_reproduction_tools() {
+    let (_, guide) = resources::text(resources::DIAGNOSTIC_ARCHITECTURE_URI)
+        .expect("diagnostic architecture guide");
+
+    for required in [
+        "application_log_query",
+        "application_log_get",
+        "diagnostics_query",
+        "socket_capture_get",
+        "reproduction_report",
+        "ListenerRuntime",
+        "external_package",
+        "src-tauri/crates/application",
+        "src-tauri/crates/infrastructure",
+        "src-tauri/crates/proxy",
+    ] {
+        assert!(guide.contains(required), "guide is missing {required}");
+    }
+}
+
+#[test]
+fn external_package_guide_explains_connection_runtime_diagnostics_and_read_only_boundaries() {
+    let (_, guide) = resources::text(resources::EXTERNAL_PACKAGE_INTEGRATION_GUIDE_URI)
+        .expect("external package guide");
+
+    for required in [
+        "external_package_service_status",
+        "ws://",
+        "/packages",
+        "package.register",
+        "hooks.upstream",
+        "document.downstream",
+        "diagnostics_query",
+        "socket_capture_query",
+        "protocol_package_detail",
+        "1 MiB",
+        "只读",
+    ] {
+        assert!(guide.contains(required), "guide is missing {required}");
+    }
 }
 
 #[test]

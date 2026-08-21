@@ -443,8 +443,8 @@ describe("Socket rule editor product boundary", () => {
     render(<Harness />);
     const listener = screen.getByLabelText("协议入口");
     const stage = screen.getByLabelText("报文处理阶段");
-    expect(listener).toHaveClass("h-12", "w-full");
-    expect(stage).toHaveClass("h-12", "w-full");
+    expect(listener).toHaveClass("h-12", "w-full", "items-center", "py-0");
+    expect(stage).toHaveClass("h-12", "w-full", "items-center", "py-0");
     expect(screen.getByRole("group", { name: "入口和处理阶段" })).toHaveClass("sm:grid-cols-2");
     expect(screen.getByRole("group", { name: "规则状态和优先级" })).toHaveClass("sm:grid-cols-2");
     expect(screen.getByText("入口")).toHaveClass("h-6", "items-center", "leading-none");

@@ -1,0 +1,182 @@
+//! 外部 Socket 数据面的启动端口与不可变绑定。
+
+use std::{fmt, sync::Arc, time::Duration};
+
+use async_trait::async_trait;
+use intercept_proxy_application::AppResult;
+use intercept_proxy_domain::{
+    ExternalDecodeRequest, ExternalDecodeResponse, ExternalDisplayRequest, ExternalDisplayResponse,
+    ExternalEncodeRequest, ExternalEncodeResponse, ExternalFrameRequest, ExternalFrameResult,
+    ExternalPackageRegistration, ProtocolPackageRef, ProxyListener, ProxyWorkspace, SocketTopology,
+};
+
+use super::super::{ProtocolDocumentRuleConnectionFactory, scripted_snapshot};
+use crate::adapters::external_packages::{ExternalPackageClient, ExternalPackageConnectionError};
+
+/// 外部连接的协议入口窄接口。
+#[async_trait]
+pub(crate) trait ExternalPackageRpc: fmt::Debug + Send + Sync {
+    async fn frame(
+        &self,
+        method: &str,
+        request: &ExternalFrameRequest,
+    ) -> Result<ExternalFrameResult, ExternalPackageConnectionError>;
+    async fn decode(
+        &self,
+        method: &str,
+        request: &ExternalDecodeRequest,
+    ) -> Result<ExternalDecodeResponse, ExternalPackageConnectionError>;
+    async fn encode(
+        &self,
+        method: &str,
+        request: &ExternalEncodeRequest,
+    ) -> Result<ExternalEncodeResponse, ExternalPackageConnectionError>;
+    async fn display(
+        &self,
+        method: &str,
+        request: &ExternalDisplayRequest,
+    ) -> Result<ExternalDisplayResponse, ExternalPackageConnectionError>;
+}
+
+#[async_trait]
+impl ExternalPackageRpc for ExternalPackageClient {
+    async fn frame(
+        &self,
+        method: &str,
+        request: &ExternalFrameRequest,
+    ) -> Result<ExternalFrameResult, ExternalPackageConnectionError> {
+        self.call(method, request).await
+    }
+    async fn decode(
+        &self,
+        method: &str,
+        request: &ExternalDecodeRequest,
+    ) -> Result<ExternalDecodeResponse, ExternalPackageConnectionError> {
+        self.call(method, request).await
+    }
+    async fn encode(
+        &self,
+        method: &str,
+        request: &ExternalEncodeRequest,
+    ) -> Result<ExternalEncodeResponse, ExternalPackageConnectionError> {
+        self.call(method, request).await
+    }
+    async fn display(
+        &self,
+        method: &str,
+        request: &ExternalDisplayRequest,
+    ) -> Result<ExternalDisplayResponse, ExternalPackageConnectionError> {
+        self.call_display(method, request).await
+    }
+}
+
+/// 注册快照与对应在线 actor 的不可分割绑定。
+#[derive(Clone)]
+pub(crate) struct ExternalSocketPackageBinding {
+    pub(crate) registration: ExternalPackageRegistration,
+    pub(crate) rpc: Arc<dyn ExternalPackageRpc>,
+    max_frame_bytes: usize,
+    rpc_timeout: Duration,
+}
+
+impl ExternalSocketPackageBinding {
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn new(
+        registration: ExternalPackageRegistration,
+        rpc: Arc<dyn ExternalPackageRpc>,
+    ) -> Self {
+        Self::with_limits(registration, rpc, 8 * 1024 * 1024, Duration::from_secs(5))
+    }
+
+    pub(crate) fn with_limits(
+        registration: ExternalPackageRegistration,
+        rpc: Arc<dyn ExternalPackageRpc>,
+        max_frame_bytes: usize,
+        rpc_timeout: Duration,
+    ) -> Self {
+        Self {
+            registration,
+            rpc,
+            max_frame_bytes,
+            rpc_timeout,
+        }
+    }
+    pub(crate) const fn registration(&self) -> &ExternalPackageRegistration {
+        &self.registration
+    }
+    pub(crate) const fn max_frame_bytes(&self) -> usize {
+        self.max_frame_bytes
+    }
+    pub(crate) const fn rpc_timeout(&self) -> Duration {
+        self.rpc_timeout
+    }
+}
+
+impl fmt::Debug for ExternalSocketPackageBinding {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ExternalSocketPackageBinding")
+            .field("package", self.registration.package().identity())
+            .finish_non_exhaustive()
+    }
+}
+
+/// Listener 启动阶段解析外部协议包的最小端口。
+pub(crate) trait ExternalSocketPackageProvider: fmt::Debug + Send + Sync {
+    fn resolve(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<Option<ExternalSocketPackageBinding>>;
+}
+
+/// 一次 Listener start 冻结的外部注册合同与可热替换规则集合。
+#[derive(Clone)]
+pub(crate) struct ExternalSocketRuntimeSnapshot {
+    pub(crate) binding: ExternalSocketPackageBinding,
+    pub(crate) rules: ProtocolDocumentRuleConnectionFactory,
+    topology: SocketTopology,
+}
+
+impl ExternalSocketRuntimeSnapshot {
+    pub(crate) fn new(
+        binding: ExternalSocketPackageBinding,
+        rules: ProtocolDocumentRuleConnectionFactory,
+        topology: SocketTopology,
+    ) -> Self {
+        Self {
+            binding,
+            rules,
+            topology,
+        }
+    }
+
+    /// 复用现有编译边界，原子替换运行中外部 Listener 的四阶段规则。
+    pub(crate) fn replace_document_rules(
+        &self,
+        workspace: &ProxyWorkspace,
+        listener: &ProxyListener,
+    ) -> AppResult<()> {
+        let registration = self.binding.registration();
+        let replacement = scripted_snapshot::compile_document_rules(
+            workspace,
+            listener,
+            registration.package().identity(),
+            registration.document().upstream().schema(),
+            registration.document().downstream().schema(),
+            &self.topology,
+        )?;
+        self.rules.replace(&replacement);
+        Ok(())
+    }
+}
+
+impl fmt::Debug for ExternalSocketRuntimeSnapshot {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ExternalSocketRuntimeSnapshot")
+            .field("binding", &self.binding)
+            .field("topology", &self.topology)
+            .finish_non_exhaustive()
+    }
+}

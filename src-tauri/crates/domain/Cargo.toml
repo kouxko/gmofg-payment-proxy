@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+base64.workspace = true
 chrono.workspace = true
 regex = "1.12.2"
 serde.workspace = true

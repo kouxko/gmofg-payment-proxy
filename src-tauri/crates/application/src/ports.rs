@@ -8,6 +8,9 @@ use async_trait::async_trait;
 mod android;
 pub use android::AndroidControlPort;
 
+mod external_packages;
+pub use external_packages::ExternalPackageApplicationPort;
+
 mod protocol_packages;
 pub use protocol_packages::{
     BuiltinProtocolPackagePort, ProtocolPackageApplicationServices, ProtocolPackageCompilerPort,

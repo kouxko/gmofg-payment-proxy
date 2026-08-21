@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   protocolPackageRestoreBuiltin: vi.fn(),
   protocolPackageExportBuiltin: vi.fn(),
   toast: vi.fn(),
+  useAppEventRefresh: vi.fn(),
 }));
 
 vi.mock("@heroui/react", async (importOriginal) => ({
@@ -34,6 +35,10 @@ vi.mock("@/lib/ipc/client", () => ({
   errorMessage: (reason: unknown) => reason instanceof Error ? reason.message : String(reason),
 }));
 
+vi.mock("@/features/shell/bootstrap-context", () => ({
+  useAppEventRefresh: mocks.useAppEventRefresh,
+}));
+
 describe("ProtocolPackagesView list", () => {
   beforeEach(() => {
     vi.resetAllMocks();
@@ -46,7 +51,7 @@ describe("ProtocolPackagesView list", () => {
       version: version("1.0.0", {
         package: { id: "iso8583-ascii-standard", version: "1.0.0" },
         name: "ISO 8583 ASCII 示例",
-        built_in: true,
+        package_source: { type: "internal", built_in: true },
         enabled: true,
       }),
       capabilities: detail().capabilities,
@@ -59,6 +64,17 @@ describe("ProtocolPackagesView list", () => {
       bytes_written: 4096,
       replaced_existing: false,
     });
+  });
+
+  it("refreshes the catalog for authoritative package and snapshot events", () => {
+    render(<ProtocolPackagesView />);
+
+    // 列表与详情查询各自订阅同一权威目录事件；关闭中的详情也必须在下次打开前失效。
+    expect(mocks.useAppEventRefresh).toHaveBeenCalledTimes(2);
+    expect(mocks.useAppEventRefresh).toHaveBeenCalledWith(
+      ["protocol_package_catalog_changed", "snapshot_required"],
+      expect.any(Function),
+    );
   });
 
   it("loads through protocolPackageList and renders loading then empty state", async () => {
@@ -78,7 +94,7 @@ describe("ProtocolPackagesView list", () => {
     const builtInVersion = version("1.0.0", {
       package: { id: "iso8583-ascii-standard", version: "1.0.0" },
       name: "ISO 8583 ASCII 示例",
-      built_in: true,
+      package_source: { type: "internal", built_in: true },
       enabled: true,
     });
     const builtInGroup = group({
@@ -128,7 +144,7 @@ describe("ProtocolPackagesView list", () => {
   it("fails closed for a mismatched restore response", async () => {
     mocks.protocolPackageRestoreBuiltin.mockResolvedValue({
       outcome: "installed",
-      version: version("9.0.0", { built_in: true }),
+      version: version("9.0.0", { package_source: { type: "internal", built_in: true } }),
     });
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
@@ -149,7 +165,7 @@ describe("ProtocolPackagesView list", () => {
       version: version("1.0.0", {
         package: { id: "iso8583-ascii-standard", version: "1.0.0" },
         name: "ISO 8583 ASCII 示例",
-        built_in: true,
+        package_source: { type: "internal", built_in: true },
         enabled: true,
       }),
       capabilities: detail().capabilities,
@@ -173,7 +189,7 @@ describe("ProtocolPackagesView list", () => {
     const restoredVersion = version("1.0.0", {
       package: { id: "iso8583-ascii-standard", version: "1.0.0" },
       name: "ISO 8583 ASCII 示例",
-      built_in: true,
+      package_source: { type: "internal", built_in: true },
       enabled: true,
     });
     const restoredGroup = group({
@@ -292,7 +308,7 @@ describe("ProtocolPackagesView list", () => {
 
   it("marks a built-in example in the package list", async () => {
     mocks.protocolPackageList.mockResolvedValue([group({
-      versions: [version("1.0.0", { built_in: true })],
+      versions: [version("1.0.0", { package_source: { type: "internal", built_in: true } })],
     })]);
     render(<ProtocolPackagesView />);
 
@@ -397,5 +413,30 @@ describe("ProtocolPackagesView list", () => {
 
     expect(await screen.findByText("协议包列表返回了不完整的数据。")).toBeVisible();
     expect(screen.queryByRole("button", { name: /查看协议包/ })).not.toBeInTheDocument();
+  });
+
+  it("shows external source and online state in both list and detail", async () => {
+    const external = version("4.0.0", {
+      package: { id: "vendor-iso", version: "4.0.0" },
+      name: "Vendor ISO",
+      package_source: { type: "external", online: true },
+      enabled: true,
+    });
+    mocks.protocolPackageList.mockResolvedValue([group({
+      id: "vendor-iso",
+      name: "Vendor ISO",
+      versions: [external],
+      reference_count: 0,
+      active_reference_count: 0,
+    })]);
+    mocks.protocolPackageDetail.mockResolvedValue(detail(external));
+    const user = userEvent.setup();
+    render(<ProtocolPackagesView />);
+
+    const row = await screen.findByRole("button", { name: "查看协议包 Vendor ISO" });
+    expect(row).toHaveTextContent("外部软件包");
+    expect(row).toHaveTextContent("外部在线");
+    await user.click(row);
+    expect(await screen.findByText("外部 · 在线")).toBeVisible();
   });
 });

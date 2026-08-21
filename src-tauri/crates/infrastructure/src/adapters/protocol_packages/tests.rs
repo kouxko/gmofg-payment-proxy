@@ -14,6 +14,7 @@ mod concurrent_imports;
 
 mod application_ports;
 mod cache;
+mod external_identity_conflicts;
 
 const MANIFEST: &str = r#"
 api = 1

@@ -8,6 +8,9 @@ pub const SOCKET_AUTHORING_URI: &str =
     "intercept-proxy://docs/socket-protocol-package-authoring/1.0";
 pub const CERTIFICATE_CONCEPTS_URI: &str = "intercept-proxy://docs/certificate-concepts/1.0";
 pub const APP_INTEGRATION_GUIDE_URI: &str = "intercept-proxy://docs/app-integration-guide/1.0";
+pub const EXTERNAL_PACKAGE_INTEGRATION_GUIDE_URI: &str =
+    "intercept-proxy://docs/external-package-integration-guide/1.0";
+pub const DIAGNOSTIC_ARCHITECTURE_URI: &str = "intercept-proxy://docs/diagnostic-architecture/1.0";
 pub const ISO8583_MANIFEST_URI: &str =
     "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/manifest.toml";
 pub const ISO8583_SCHEMA_URI: &str =
@@ -26,6 +29,9 @@ const HOST_API: &str = include_str!("../../../templates/socket-protocol/API.md")
 const SOCKET_AUTHORING: &str = include_str!("../../../templates/socket-protocol/AUTHORING.md");
 const CERTIFICATE_CONCEPTS: &str = include_str!("../../../docs/mcp/certificate-concepts.md");
 const APP_INTEGRATION_GUIDE: &str = include_str!("../../../docs/mcp/app-integration-guide.md");
+const EXTERNAL_PACKAGE_INTEGRATION_GUIDE: &str =
+    include_str!("../../../docs/mcp/external-package-integration-guide.md");
+const DIAGNOSTIC_ARCHITECTURE: &str = include_str!("../../../docs/mcp/diagnostic-architecture.md");
 const ISO8583_MANIFEST: &str =
     include_str!("../../../templates/socket-protocol/iso8583-standard/manifest.toml");
 const ISO8583_SCHEMA: &str =
@@ -69,6 +75,21 @@ pub fn list() -> Vec<Resource> {
                 "Evidence-based App-side changes for proxy routing, Android trust, HTTP and Socket clients, with alternatives and verification steps.",
             )
             .with_mime_type("text/markdown"),
+        Resource::new(
+            EXTERNAL_PACKAGE_INTEGRATION_GUIDE_URI,
+            "external-package-integration-guide",
+        )
+        .with_title("External package integration and diagnostics guide")
+        .with_description(
+            "The WebSocket registration, JSON-RPC method, lifecycle, size, security and MCP troubleshooting contract for external protocol packages.",
+        )
+        .with_mime_type("text/markdown"),
+        Resource::new(DIAGNOSTIC_ARCHITECTURE_URI, "diagnostic-architecture")
+            .with_title("Diagnostic evidence and code architecture map")
+            .with_description(
+                "How runtime logs, structured diagnostics, captures, configuration and code ownership combine into a reproducible failure report.",
+            )
+            .with_mime_type("text/markdown"),
         Resource::new(ISO8583_MANIFEST_URI, "official-iso8583-manifest")
             .with_title("ISO 8583:1987 ASCII Profile manifest")
             .with_description("The exact manifest compiled into the official 1.0.0 template.")
@@ -101,6 +122,10 @@ pub fn text(uri: &str) -> Option<(&'static str, &'static str)> {
         SOCKET_AUTHORING_URI => Some(("text/markdown", SOCKET_AUTHORING)),
         CERTIFICATE_CONCEPTS_URI => Some(("text/markdown", CERTIFICATE_CONCEPTS)),
         APP_INTEGRATION_GUIDE_URI => Some(("text/markdown", APP_INTEGRATION_GUIDE)),
+        EXTERNAL_PACKAGE_INTEGRATION_GUIDE_URI => {
+            Some(("text/markdown", EXTERNAL_PACKAGE_INTEGRATION_GUIDE))
+        }
+        DIAGNOSTIC_ARCHITECTURE_URI => Some(("text/markdown", DIAGNOSTIC_ARCHITECTURE)),
         ISO8583_MANIFEST_URI => Some(("application/toml", ISO8583_MANIFEST)),
         ISO8583_SCHEMA_URI => Some(("application/toml", ISO8583_SCHEMA)),
         ISO8583_PROTOCOL_SOURCE_URI => Some(("text/x-rhai", ISO8583_PROTOCOL_SOURCE)),
