@@ -268,8 +268,17 @@ function HttpAuthentication({
     </div>
     {!settings.fixed_server && <MitmSwitch settings={settings} onChange={onChange} />}
     {settings.authentication.mode === "basic" && <>
-      <TextInput label="用户名" ariaLabel="代理认证用户名" value={username} onChange={onUsernameChange} />
-      <TextInput label="密码" ariaLabel="代理认证密码" value={password} onChange={onPasswordChange} password />
+      <div
+        role="group"
+        aria-label="HTTP Basic 认证凭据"
+        className={[
+          "col-span-2 grid grid-cols-2 gap-4",
+          "max-[700px]:col-span-1 max-[700px]:grid-cols-1",
+        ].join(" ")}
+      >
+        <TextInput label="用户名" ariaLabel="代理认证用户名" value={username} onChange={onUsernameChange} />
+        <TextInput label="密码" ariaLabel="代理认证密码" value={password} onChange={onPasswordChange} password />
+      </div>
       <div className="col-span-2 flex items-center justify-between gap-3 max-[700px]:col-span-1">
         <p className="min-w-0 truncate text-xs text-[var(--telemetry-muted)]">
           {credentialKey
