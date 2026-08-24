@@ -75,21 +75,6 @@ pub(super) async fn start_scripted_runtime(
     listener_port: u16,
     upstream_port: u16,
 ) -> (ListenerRuntimeAdapter, ProxyListener) {
-    let (runtime, listener, _) =
-        start_scripted_runtime_with_capture(id, script, listener_port, upstream_port).await;
-    (runtime, listener)
-}
-
-pub(super) async fn start_scripted_runtime_with_capture(
-    id: &str,
-    script: &str,
-    listener_port: u16,
-    upstream_port: u16,
-) -> (
-    ListenerRuntimeAdapter,
-    ProxyListener,
-    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
-) {
     let package = package_ref(id);
     let listener = ProxyListener {
         name: format!("T24 {id}"),
@@ -104,13 +89,14 @@ pub(super) async fn start_scripted_runtime_with_capture(
                 security: SocketRelaySecurity::Transparent,
             }),
             maximum_connections: 8,
+            runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
             processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package: package.clone(),
             }),
         }),
         ..ProxyListener::default()
     };
-    start_scripted_runtime_from_listener(id, script, listener, None, true).await
+    start_scripted_runtime_from_listener(id, script, listener, None).await
 }
 
 pub(super) async fn start_scripted_runtime_from_listener(
@@ -118,12 +104,7 @@ pub(super) async fn start_scripted_runtime_from_listener(
     script: &str,
     listener: ProxyListener,
     events: Option<Arc<intercept_proxy_application::EventHub>>,
-    publish_captures: bool,
-) -> (
-    ListenerRuntimeAdapter,
-    ProxyListener,
-    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
-) {
+) -> (ListenerRuntimeAdapter, ProxyListener) {
     let package = package_ref(id);
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
@@ -135,18 +116,12 @@ pub(super) async fn start_scripted_runtime_from_listener(
     ));
     repository.install_zip(&package_zip(id, script)).unwrap();
     repository.set_enabled(&package, true).unwrap();
-    let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
-        Arc::clone(&store),
-    ));
     let runtime = test_listener_runtime_with_packages(store, repository);
-    if publish_captures {
-        runtime.set_socket_capture_repository(Arc::clone(&captures));
-    }
     if let Some(events) = events {
         runtime.set_socket_diagnostic_events(events);
     }
     runtime.start(workspace, listener.clone()).await.unwrap();
-    (runtime, listener, captures)
+    (runtime, listener)
 }
 
 pub(super) async fn read_to_end_bounded(stream: &mut TcpStream) -> Vec<u8> {

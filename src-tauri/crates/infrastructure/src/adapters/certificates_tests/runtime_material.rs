@@ -26,7 +26,7 @@ async fn generic_profile_exports_the_fixed_test_root_without_private_material() 
 
 // CERT-005~017, SECURITY-006~009, TEST-TLS
 #[tokio::test]
-async fn protected_material_builds_a_complete_epoch_snapshot() {
+async fn protected_material_supports_listener_tls_configuration() {
     let directory = tempfile::tempdir().expect("tempdir");
     let certificate_service = CertificateService;
     let (pkcs12, client_private_key) = shared_client_pkcs12();
@@ -95,12 +95,6 @@ async fn protected_material_builds_a_complete_epoch_snapshot() {
     );
     assert!(adapter.validate().await.expect("validate").valid);
 
-    let snapshot = adapter
-        .load_epoch_snapshot(&["127.0.0.1".into()])
-        .await
-        .expect("snapshot");
-    assert_eq!(snapshot.upstream_client_certificate_chain_der.len(), 2);
-    assert!(!snapshot.upstream_client_private_key_pkcs8_der.is_empty());
     let debug = format!("{adapter:?}");
     assert!(!debug.contains("password"));
     assert!(!debug.contains("PRIVATE"));

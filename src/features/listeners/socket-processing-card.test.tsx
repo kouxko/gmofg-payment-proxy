@@ -8,6 +8,7 @@ import type {
   SocketRelaySettings,
 } from "@/generated/rust-types";
 import { SocketProcessingCard, type ProtocolCatalogState } from "./socket-processing-card";
+import { defaultSocketRuntimeLimits } from "./listener-data-plane";
 
 vi.mock("./socket-protocol-package-dialog", () => ({
   SocketProtocolPackageDialog: ({ packageRef }: { packageRef: { id: string; version: string } }) => (
@@ -77,6 +78,7 @@ function settings(mode: "relay" | "local_responder" = "relay"): SocketRelaySetti
         settings: { downstream_security: { mode: "tcp" } },
       },
     maximum_connections: 32,
+    runtime_limits: defaultSocketRuntimeLimits(),
     processing: {
       mode: "scripted",
       settings: {

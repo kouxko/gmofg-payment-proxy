@@ -1,6 +1,39 @@
 use super::*;
 
 #[tokio::test]
+async fn transparent_relay_dials_upstream_only_after_the_first_app_bytes() {
+    let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream_address = upstream.local_addr().unwrap();
+    let bind_addr = reserve_address();
+    let service = Arc::new(
+        SocketRelayService::build(transparent_config(bind_addr, upstream_address)).unwrap(),
+    );
+    let cancellation = CancellationToken::new();
+    let server_cancel = cancellation.clone();
+    let server = tokio::spawn(async move { service.serve(server_cancel).await });
+
+    let mut client = connect_retry(bind_addr).await;
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), upstream.accept())
+            .await
+            .is_err(),
+        "accepting an App socket without payload must not dial the upstream server"
+    );
+
+    client.write_all(b"first-payload").await.unwrap();
+    let (mut upstream_stream, _) = tokio::time::timeout(Duration::from_secs(3), upstream.accept())
+        .await
+        .expect("first App payload must trigger the lazy upstream dial")
+        .unwrap();
+    let mut received = vec![0; b"first-payload".len()];
+    upstream_stream.read_exact(&mut received).await.unwrap();
+    assert_eq!(received, b"first-payload");
+
+    cancellation.cancel();
+    server.await.unwrap().unwrap();
+}
+
+#[tokio::test]
 async fn transparent_relay_preserves_arbitrary_write_boundaries_and_coalesced_frames() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();

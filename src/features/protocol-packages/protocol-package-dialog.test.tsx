@@ -166,7 +166,6 @@ describe("ProtocolPackageDialog details", () => {
 
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(await screen.findByRole("tab", { name: "HTTP" }));
     await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
     await screen.findByText("ISO 8583 长名称协议包");
     expect(screen.getByText("HTTP", { selector: "dd" })).toBeVisible();
@@ -452,7 +451,7 @@ describe("ProtocolPackageDialog details", () => {
     });
 
     await waitFor(() => expect(mocks.protocolPackageList).toHaveBeenCalledTimes(2));
-    expect(await screen.findByText("尚未安装 Socket 协议包")).toBeVisible();
+    expect(await screen.findByText("尚未安装协议包")).toBeVisible();
     await waitFor(() => expect(screen.getByRole("heading", { name: "协议包" })).toHaveFocus());
   });
 

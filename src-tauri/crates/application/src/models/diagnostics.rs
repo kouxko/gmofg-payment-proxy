@@ -3,7 +3,7 @@ use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::{SocketCaptureFailureDiagnostic, SocketConnectionRouteViewModel, UiTone};
+use super::{SocketConnectionRouteViewModel, SocketFailureDiagnostic, UiTone};
 use sanitization::{sanitize_optional, sanitize_text};
 
 mod sanitization;
@@ -105,7 +105,7 @@ pub struct SocketDiagnosticContextViewModel {
     pub workspace_runtime_epoch: String,
     pub listener_run_epoch: String,
     pub route: Option<SocketConnectionRouteViewModel>,
-    pub capture_failure: Option<SocketCaptureFailureDiagnostic>,
+    pub socket_failure: Option<SocketFailureDiagnostic>,
     pub external_package_call: Option<ExternalPackageCallDiagnosticViewModel>,
     pub stage: SocketDiagnosticStage,
     pub direction: Option<SocketDiagnosticDirection>,

@@ -1,11 +1,11 @@
 //! 规则与故障注入命令适配层：草稿解析、版本检查和运行时操作全部委托给 application 门面。
 
 use intercept_proxy_application::{
-    ActiveFaultViewModel, FaultConfigurationDraft, FaultTemplateViewModel,
+    ActiveFaultViewModel, FaultConfigurationDraft, FaultTemplateViewModel, MessageStage,
     OperationResultViewModel, RuleAction, RuleActionKind, RuleByteInputViewModel, RuleCondition,
     RuleConditionKind, RuleDraft, RuleHeaderInputViewModel, RuleId, RuleMatchField,
-    RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind, RuleSummaryViewModel,
-    RuleViewModel, SessionId,
+    RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind, RuleStageCapabilityViewModel,
+    RuleSummaryViewModel, RuleViewModel, SessionId,
 };
 use tauri::State;
 
@@ -40,29 +40,49 @@ pub async fn rule_new_draft(state: State<'_, AppState>) -> CommandResult<RuleDra
 
 #[tauri::command]
 #[specta::specta]
-pub async fn rule_condition_draft(
+pub async fn rule_capabilities(
     state: State<'_, AppState>,
+) -> CommandResult<Vec<RuleStageCapabilityViewModel>> {
+    Ok(state.application.rule_capabilities())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rule_condition_draft(
+    app_state: State<'_, AppState>,
     kind: RuleConditionKind,
+    stage: MessageStage,
 ) -> CommandResult<RuleCondition> {
-    Ok(state.application.rule_condition_draft(kind))
+    app_state
+        .application
+        .rule_condition_draft(kind, stage)
+        .map_err(command_error)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn rule_action_draft(
-    state: State<'_, AppState>,
+    app_state: State<'_, AppState>,
     kind: RuleActionKind,
+    stage: MessageStage,
 ) -> CommandResult<RuleAction> {
-    Ok(state.application.rule_action_draft(kind))
+    app_state
+        .application
+        .rule_action_draft(kind, stage)
+        .map_err(command_error)
 }
 
 #[tauri::command]
 #[specta::specta]
 pub async fn rule_match_field_draft(
-    state: State<'_, AppState>,
+    app_state: State<'_, AppState>,
     kind: RuleMatchFieldKind,
+    stage: MessageStage,
 ) -> CommandResult<RuleMatchField> {
-    Ok(state.application.rule_match_field_draft(kind))
+    app_state
+        .application
+        .rule_match_field_draft(kind, stage)
+        .map_err(command_error)
 }
 
 #[tauri::command]

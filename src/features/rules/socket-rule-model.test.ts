@@ -22,6 +22,7 @@ import {
   validateProtocolRuleDraft,
   valueText,
 } from "./protocol-rule-model";
+import { defaultSocketRuntimeLimits } from "@/features/listeners/listener-data-plane";
 
 const commandMocks = vi.hoisted(() => ({ protocolRuleParseValue: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
@@ -76,6 +77,7 @@ function listener(
               },
             },
         maximum_connections: 8,
+        runtime_limits: defaultSocketRuntimeLimits(),
         processing: options.scripted === false
           ? { mode: "direct" }
           : {

@@ -85,9 +85,14 @@ describe("DiagnosticLogsView reproduction report", () => {
       expect(commandMocks.diagnosticReproductionReportExport).toHaveBeenCalledWith({
         workspace_id: workspaceSummary.id,
         listener_id: listener.id,
-        capture_id: null,
       });
     });
     expect(screen.getByText("故障复现报告")).toBeInTheDocument();
+  });
+
+  it("does not render a redundant clear-filter action", () => {
+    render(<DiagnosticLogsView />);
+
+    expect(screen.queryByRole("button", { name: "清除" })).not.toBeInTheDocument();
   });
 });

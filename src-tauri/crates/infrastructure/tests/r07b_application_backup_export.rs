@@ -307,6 +307,7 @@ fn snapshot() -> ApplicationBackupExportSnapshot {
                     "max_body_bytes": 1024,
                     "max_sessions": 10,
                     "max_memory_bytes": 4096,
+                    "ui_event_capacity": 4096,
                     "leaf_sans": [],
                     "external_package_service": {
                         "bind_address": "0.0.0.0",

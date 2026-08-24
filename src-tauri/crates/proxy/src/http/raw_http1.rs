@@ -78,6 +78,17 @@ impl RawHttp1HeadCapture {
         })
     }
 
+    /// 取出当前完整 head 并为同一 HTTP/1 connection 的下一条消息复位。
+    pub(super) fn take_required_head(&mut self, direction: &str) -> Result<Bytes> {
+        let head = self.required_head(direction)?;
+        self.pending.clear();
+        self.complete = None;
+        self.informational.clear();
+        self.limit_exceeded = false;
+        self.captured_bytes = 0;
+        Ok(head)
+    }
+
     pub(super) fn informational_heads(&self, direction: &str) -> Result<Vec<Bytes>> {
         if self.limit_exceeded {
             return Err(ProxyError::new(

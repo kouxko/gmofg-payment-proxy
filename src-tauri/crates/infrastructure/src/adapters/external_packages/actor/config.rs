@@ -101,7 +101,7 @@ impl ExternalPackageConnectionConfig {
         self.max_in_flight
     }
     #[must_use]
-    /// 返回 Frame Pump 使用的解码前/编码后逻辑报文字节上限。
+    /// 返回 Socket Pipeline 使用的解码前/编码后逻辑报文字节上限。
     pub const fn max_logical_frame_bytes(&self) -> usize {
         self.max_logical_frame_bytes
     }

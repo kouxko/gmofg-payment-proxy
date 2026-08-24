@@ -76,21 +76,22 @@ impl ForwardProxyService {
         let handler_context = Some(context.clone());
         let handler_cancellation = cancellation.clone();
         let handler_task_scope = task_scope;
+        let exchange = Arc::new(tokio::sync::Mutex::new(None));
+        let handler_exchange = Arc::clone(&exchange);
         let handler = service_fn(move |request| {
             let service = service.clone();
             let context = handler_context.clone();
             let cancellation = handler_cancellation.clone();
             let task_scope = handler_task_scope.clone();
+            let exchange = Arc::clone(&handler_exchange);
             async move {
                 service
-                    .handle(request, peer, context, cancellation, task_scope)
+                    .handle(request, peer, context, cancellation, task_scope, exchange)
                     .await
             }
         });
-        let connection = server_http1::Builder::new()
-            .keep_alive(true)
-            .serve_connection(TokioIo::new(accepted.io), handler)
-            .with_upgrades();
+        let connection =
+            server_http1::Builder::new().serve_connection(TokioIo::new(accepted.io), handler);
         let result = tokio::select! {
             () = cancellation.cancelled() => Err(ProxyError::new(
                 ErrorCode::ProxyStopped,
@@ -103,6 +104,13 @@ impl ForwardProxyService {
                 )
             }),
         };
+        let exchange_result = if let Some(exchange) = exchange.lock().await.take() {
+            exchange.exchange.shutdown();
+            Ok(())
+        } else {
+            Ok(())
+        };
+        let result = result.and(exchange_result);
         if let Some(pipeline) = &self.pipeline {
             pipeline.ports.connection_closed(&context, &result).await;
         }

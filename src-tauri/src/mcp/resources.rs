@@ -24,7 +24,8 @@ pub const ISO8583_LIBRARY_SOURCE_URI: &str =
 pub const ISO8583_ARCHIVE_URI: &str =
     "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/archive.zip";
 
-const PROTOCOL_BOUNDARIES: &str = include_str!("../../../docs/architecture/protocol-boundaries.md");
+const RULES_AND_PROTOCOL_PACKAGES: &str =
+    include_str!("../../../docs/architecture/rules-and-protocol-packages.md");
 const HOST_API: &str = include_str!("../../../templates/socket-protocol/API.md");
 const SOCKET_AUTHORING: &str = include_str!("../../../templates/socket-protocol/AUTHORING.md");
 const CERTIFICATE_CONCEPTS: &str = include_str!("../../../docs/mcp/certificate-concepts.md");
@@ -46,7 +47,7 @@ const ISO8583_LIBRARY_SOURCE: &str =
 pub fn list() -> Vec<Resource> {
     vec![
         Resource::new(AUTHORING_GUIDE_URI, "protocol-package-authoring-guide")
-            .with_title("Intercept Proxy 1.0 protocol package boundaries")
+            .with_title("Intercept Proxy rules and protocol package boundaries")
             .with_description(
                 "The application-owned HTTP/Socket package contract, direction model and execution order.",
             )
@@ -117,7 +118,7 @@ pub fn list() -> Vec<Resource> {
 
 pub fn text(uri: &str) -> Option<(&'static str, &'static str)> {
     match uri {
-        AUTHORING_GUIDE_URI => Some(("text/markdown", PROTOCOL_BOUNDARIES)),
+        AUTHORING_GUIDE_URI => Some(("text/markdown", RULES_AND_PROTOCOL_PACKAGES)),
         HOST_API_URI => Some(("text/markdown", HOST_API)),
         SOCKET_AUTHORING_URI => Some(("text/markdown", SOCKET_AUTHORING)),
         CERTIFICATE_CONCEPTS_URI => Some(("text/markdown", CERTIFICATE_CONCEPTS)),

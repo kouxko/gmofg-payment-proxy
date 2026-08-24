@@ -215,6 +215,40 @@ fn external_document_wire_round_trips_all_types_and_preserves_unset_fields() {
 }
 
 #[test]
+fn external_document_wire_json_contract_is_frozen() {
+    let schema = registration().document().upstream().schema().clone();
+    let empty = ExternalDocumentWire::default();
+    assert_eq!(serde_json::to_string(&empty).unwrap(), "{}");
+
+    let golden = concat!(
+        r#"{"amount":{"type":"int","value":"-9223372036854775808"},"#,
+        r#""icc_data":{"type":"blob","value_base64":""},"#,
+        r#""message_type":{"type":"string","value":""}}"#,
+    );
+    let wire: ExternalDocumentWire = serde_json::from_str(golden).unwrap();
+    assert_eq!(serde_json::to_string(&wire).unwrap(), golden);
+
+    let document = wire.into_document(&schema).unwrap();
+    assert!(!document.has("approved").unwrap());
+    assert_eq!(
+        document.get("amount").unwrap(),
+        &DocumentValue::Int(i64::MIN)
+    );
+    assert_eq!(
+        document.get("icc_data").unwrap(),
+        &DocumentValue::Blob(Vec::new())
+    );
+    assert_eq!(
+        document.get("message_type").unwrap(),
+        &DocumentValue::String(String::new())
+    );
+    assert_eq!(
+        serde_json::to_string(&ExternalDocumentWire::from_document(&document)).unwrap(),
+        golden
+    );
+}
+
+#[test]
 fn external_document_wire_rejects_unknown_fields_type_mismatch_and_noncanonical_values() {
     let registration = registration();
     let schema = registration.document().upstream().schema();

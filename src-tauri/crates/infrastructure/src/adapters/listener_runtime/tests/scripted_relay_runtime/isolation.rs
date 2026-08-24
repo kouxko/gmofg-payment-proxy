@@ -35,7 +35,11 @@ async fn consecutive_frames_on_one_connection_use_fresh_document_and_call_scope(
     let upstream_task = tokio::spawn(async move {
         let (mut stream, _) = upstream.accept().await.unwrap();
         let mut received = [0_u8; 4];
-        stream.read_exact(&mut received).await.unwrap();
+        stream.read_exact(&mut received[..2]).await.unwrap();
+        stream.write_all(&[2, 17]).await.unwrap();
+        stream.read_exact(&mut received[2..]).await.unwrap();
+        stream.write_all(&[2, 10]).await.unwrap();
+        stream.shutdown().await.unwrap();
         received
     });
     let (runtime, listener) = start_scripted_runtime(
@@ -49,7 +53,13 @@ async fn consecutive_frames_on_one_connection_use_fresh_document_and_call_scope(
     let mut client = TcpStream::connect(("127.0.0.1", listener_port))
         .await
         .unwrap();
-    client.write_all(&[2, 7, 2, 0]).await.unwrap();
+    client.write_all(&[2, 7]).await.unwrap();
+    let mut response = [0_u8; 2];
+    client.read_exact(&mut response).await.unwrap();
+    assert_eq!(response, [209, 17]);
+    client.write_all(&[2, 0]).await.unwrap();
+    client.read_exact(&mut response).await.unwrap();
+    assert_eq!(response, [209, 10]);
     client.shutdown().await.unwrap();
 
     // 第二个 Decode 故意不设置 amount：若复用上一 Frame 的 Document，会错误保留 7；

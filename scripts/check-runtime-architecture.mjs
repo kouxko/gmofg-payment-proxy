@@ -14,6 +14,7 @@ import { productionRustSource, productionRustWithStrings } from "./rust-lexical-
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const runtimeCrate = "src-tauri/crates/proxy";
+const exchangeCrate = "src-tauri/crates/exchange";
 const requireZeroDebt =
   process.argv.includes("--require-zero-debt") ||
   process.env.RUNTIME_ARCH_REQUIRE_ZERO_DEBT === "1";
@@ -95,8 +96,8 @@ function sourceRole(file) {
   return "other";
 }
 
-async function runtimeSources(root) {
-  const crateRoot = path.join(root, runtimeCrate);
+async function crateSources(root, cratePath) {
+  const crateRoot = path.join(root, cratePath);
   const sourceRoot = path.join(crateRoot, "src");
   let sources;
   try {
@@ -118,6 +119,14 @@ async function runtimeSources(root) {
         };
       }),
   );
+}
+
+async function runtimeSources(root) {
+  return crateSources(root, runtimeCrate);
+}
+
+async function exchangeSources(root) {
+  return crateSources(root, exchangeCrate);
 }
 
 async function checkSourceBoundaries(root) {
@@ -241,17 +250,39 @@ async function checkSpawnLedger(root, ledgerEntries, debtEntries, zeroDebt) {
   return { violations, sites, activeDebt: debtEntries.filter((_, index) => matchedDebt.has(index)) };
 }
 
+async function checkExchangeTaskBoundary(root) {
+  return (await exchangeSources(root)).flatMap(({ file, source }) =>
+    taskSites(file, source).map((site) =>
+      problem(
+        "EXCHANGE_TASK",
+        `${exchangeCrate}/${site.file}`,
+        `${site.symbol} creates ${site.api}; the externally-polled Exchange core must not create background tasks`,
+        site.line,
+      ),
+    ),
+  );
+}
+
 function problem(code, file, message, line) {
   return { code, file, line, message };
 }
 
 async function scan(root, { ledgerEntries = [], debtEntries = [], zeroDebt = false } = {}) {
-  const [crateViolations, boundaryViolations, spawn] = await Promise.all([
+  const [crateViolations, boundaryViolations, exchangeTaskViolations, spawn] = await Promise.all([
     checkCrateDependencies(root),
     checkSourceBoundaries(root),
+    checkExchangeTaskBoundary(root),
     checkSpawnLedger(root, ledgerEntries, debtEntries, zeroDebt),
   ]);
-  return { ...spawn, violations: [...crateViolations, ...boundaryViolations, ...spawn.violations] };
+  return {
+    ...spawn,
+    violations: [
+      ...crateViolations,
+      ...boundaryViolations,
+      ...exchangeTaskViolations,
+      ...spawn.violations,
+    ],
+  };
 }
 
 async function materializeFixture(root, fixture) {
@@ -273,6 +304,7 @@ const fixtureCases = [
     files: {
       "src-tauri/crates/domain/Cargo.toml": `[package]\nname = "intercept-proxy-domain"\nversion = "0.0.0"\n[dependencies]\nserde = "1"\n`,
       "src-tauri/crates/application/Cargo.toml": `[package]\nname = "intercept-proxy-application"\nversion = "0.0.0"\n[dependencies]\nintercept-proxy-domain = { path = "../domain" }\n`,
+      "src-tauri/crates/exchange/Cargo.toml": `[package]\nname = "intercept-proxy-exchange"\nversion = "0.0.0"\n[dependencies]\nintercept-proxy-domain = { path = "../domain" }\n`,
       "src-tauri/crates/proxy/src/listener/supervisor.rs": `pub async fn run() { tokio::spawn(async move { owned().await }); }\n`,
       "src-tauri/crates/proxy/src/listener/tests.rs": `fn cancellation_joins_children() {}\n`,
       "src-tauri/crates/proxy/src/http/handler.rs": `use crate::transport::BoxIo;\n`,
@@ -385,6 +417,14 @@ const fixtureCases = [
     name: "unregistered production spawn fails",
     expected: ["SPAWN_UNREGISTERED"],
     files: { "src-tauri/crates/proxy/src/other.rs": `pub async fn detach() { tokio::spawn(async {}); }\n` },
+  },
+  {
+    name: "externally-polled Exchange core cannot create background tasks",
+    expected: ["EXCHANGE_TASK"],
+    files: {
+      "src-tauri/crates/exchange/src/local_server.rs":
+        `pub async fn connect() { tokio::spawn(async { echo().await }); }\n`,
+    },
   },
   {
     name: "handler spawn cannot be legalized as a lifecycle facility",

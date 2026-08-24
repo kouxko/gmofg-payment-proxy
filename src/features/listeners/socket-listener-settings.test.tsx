@@ -4,6 +4,7 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { CertificateReference, SocketRelaySettings } from "@/generated/rust-types";
 import { SocketListenerSettings } from "./socket-listener-settings";
+import { defaultSocketRuntimeLimits } from "./listener-data-plane";
 import type { ProtocolCatalogState } from "./socket-processing-card";
 
 const certificates: CertificateReference[] = [
@@ -35,6 +36,7 @@ function relayTlsSettings(): SocketRelaySettings {
       },
     },
     maximum_connections: 100,
+    runtime_limits: defaultSocketRuntimeLimits(),
     processing: { mode: "direct" },
   };
 }

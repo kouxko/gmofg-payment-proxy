@@ -8,7 +8,7 @@ import type {
   MessageContentViewModel,
   ProtocolRuleStage,
 } from "@/generated/rust-types";
-import { ProtocolSafeDisplay } from "@/features/capture/socket-safe-display";
+import { ProtocolSafeDisplay } from "./protocol-safe-display";
 import { HttpBodyViewer } from "./http-inspection";
 
 const DISPLAY_FALLBACK_TEXT: Record<HttpProtocolDisplayFallbackReason, string> = {

@@ -41,10 +41,18 @@ describe("RULE-001 Rust-owned rule editor drafts", () => {
     commandMocks.ruleConditionDraft.mockResolvedValue(condition);
     commandMocks.ruleActionDraft.mockResolvedValue(action);
 
-    await expect(requestConditionDraft("nth_hit")).resolves.toBe(condition);
-    await expect(requestActionDraft("delay")).resolves.toBe(action);
-    expect(commandMocks.ruleConditionDraft).toHaveBeenCalledWith("nth_hit");
-    expect(commandMocks.ruleActionDraft).toHaveBeenCalledWith("delay");
+    await expect(requestConditionDraft("nth_hit", "request")).resolves.toBe(
+      condition,
+    );
+    await expect(requestActionDraft("delay", "request")).resolves.toBe(action);
+    expect(commandMocks.ruleConditionDraft).toHaveBeenCalledWith(
+      "nth_hit",
+      "request",
+    );
+    expect(commandMocks.ruleActionDraft).toHaveBeenCalledWith(
+      "delay",
+      "request",
+    );
   });
 
   it("requests field and operator defaults from Rust", async () => {
@@ -57,10 +65,14 @@ describe("RULE-001 Rust-owned rule editor drafts", () => {
       pattern: "",
     });
 
-    await expect(requestMatchFieldDraft("json_path")).resolves.toEqual({
+    await expect(requestMatchFieldDraft("json_path", "response")).resolves.toEqual({
       type: "json_path",
       path: "$",
     });
+    expect(commandMocks.ruleMatchFieldDraft).toHaveBeenCalledWith(
+      "json_path",
+      "response",
+    );
     await expect(requestMatchOperatorDraft("regex")).resolves.toEqual({
       type: "regex",
       pattern: "",

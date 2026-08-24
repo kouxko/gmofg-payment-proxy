@@ -30,6 +30,7 @@ async fn external_socket_package_exposes_rule_capabilities_and_accepts_rules() {
     listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
         topology: SocketTopology::LocalResponder(SocketLocalResponderTopology::default()),
         maximum_connections: 8,
+        runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
         processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: package.clone(),
         }),

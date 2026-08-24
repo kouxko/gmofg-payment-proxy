@@ -287,6 +287,7 @@ pub(in crate::requirements_tests) fn scripted_workspace(
     listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings {
         topology,
         maximum_connections: 8,
+        runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
         processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: package.clone(),
         }),

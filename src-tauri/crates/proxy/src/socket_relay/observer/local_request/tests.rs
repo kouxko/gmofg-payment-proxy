@@ -76,8 +76,9 @@ fn debug_never_prints_origin_or_document_values() {
 
 #[test]
 fn observer_evicts_oldest_event_by_count_and_logical_bytes() {
-    let observer = BoundedSocketConnectionObserver::with_limits(2, 1_024);
+    let observer = BoundedSocketConnectionObserver::with_limits(2, 1_024).unwrap();
     let run = SocketRelayRunContext {
+        workspace_id: "test-workspace".into(),
         listener_id: "listener".into(),
         workspace_runtime_epoch: Uuid::new_v4(),
         listener_run_epoch: Uuid::new_v4(),

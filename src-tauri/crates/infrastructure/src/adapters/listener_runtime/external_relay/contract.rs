@@ -180,3 +180,309 @@ impl fmt::Debug for ExternalSocketRuntimeSnapshot {
             .finish_non_exhaustive()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use intercept_proxy_domain::{
+        DocumentAction, DocumentFieldName, DocumentValue, ExternalDocumentWire, ListenerId,
+        ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
+        ProtocolRuleStage, SocketLocalResponderTopology,
+    };
+    use serde_json::json;
+    use uuid::Uuid;
+
+    #[derive(Debug)]
+    struct DisconnectedRpc;
+
+    #[async_trait]
+    impl ExternalPackageRpc for DisconnectedRpc {
+        async fn frame(
+            &self,
+            _method: &str,
+            _request: &ExternalFrameRequest,
+        ) -> Result<ExternalFrameResult, ExternalPackageConnectionError> {
+            Err(ExternalPackageConnectionError::Disconnected)
+        }
+
+        async fn decode(
+            &self,
+            _method: &str,
+            _request: &ExternalDecodeRequest,
+        ) -> Result<ExternalDecodeResponse, ExternalPackageConnectionError> {
+            Err(ExternalPackageConnectionError::Disconnected)
+        }
+
+        async fn encode(
+            &self,
+            _method: &str,
+            _request: &ExternalEncodeRequest,
+        ) -> Result<ExternalEncodeResponse, ExternalPackageConnectionError> {
+            Err(ExternalPackageConnectionError::Disconnected)
+        }
+
+        async fn display(
+            &self,
+            _method: &str,
+            _request: &ExternalDisplayRequest,
+        ) -> Result<ExternalDisplayResponse, ExternalPackageConnectionError> {
+            Err(ExternalPackageConnectionError::Disconnected)
+        }
+    }
+
+    #[tokio::test]
+    async fn rpc_contract_frame_preserves_connection_failure() {
+        let rpc = DisconnectedRpc;
+        assert!(matches!(
+            rpc.frame("frame", &ExternalFrameRequest::from_bytes(b"frame"))
+                .await,
+            Err(ExternalPackageConnectionError::Disconnected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn rpc_contract_decode_preserves_connection_failure() {
+        let rpc = DisconnectedRpc;
+        assert!(matches!(
+            rpc.decode("decode", &ExternalDecodeRequest::from_bytes(b"frame"))
+                .await,
+            Err(ExternalPackageConnectionError::Disconnected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn rpc_contract_encode_preserves_connection_failure() {
+        let rpc = DisconnectedRpc;
+        assert!(matches!(
+            rpc.encode(
+                "encode",
+                &ExternalEncodeRequest {
+                    document: ExternalDocumentWire::default(),
+                },
+            )
+            .await,
+            Err(ExternalPackageConnectionError::Disconnected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn rpc_contract_display_preserves_connection_failure() {
+        let rpc = DisconnectedRpc;
+        assert!(matches!(
+            rpc.display(
+                "display",
+                &ExternalDisplayRequest {
+                    document: ExternalDocumentWire::default(),
+                },
+            )
+            .await,
+            Err(ExternalPackageConnectionError::Disconnected)
+        ));
+    }
+
+    #[test]
+    fn binding_preserves_registration_limits_and_safe_debug_identity() {
+        let registration = registration();
+        let package = registration.package().identity().clone();
+        let binding = ExternalSocketPackageBinding::with_limits(
+            registration,
+            Arc::new(DisconnectedRpc),
+            4096,
+            Duration::from_millis(250),
+        );
+
+        assert_eq!(binding.registration().package().identity(), &package);
+        assert_eq!(binding.max_frame_bytes(), 4096);
+        assert_eq!(binding.rpc_timeout(), Duration::from_millis(250));
+        assert_eq!(
+            format!("{binding:?}"),
+            "ExternalSocketPackageBinding { package: ProtocolPackageRef { id: ProtocolPackageId(\"contract-test\"), version: ProtocolPackageVersion(\"1.0.0\") }, .. }"
+        );
+    }
+
+    #[test]
+    fn snapshot_debug_includes_binding_and_topology_without_rule_state() {
+        let registration = registration();
+        let listener = listener();
+        let snapshot = ExternalSocketRuntimeSnapshot::new(
+            ExternalSocketPackageBinding::new(registration.clone(), Arc::new(DisconnectedRpc)),
+            empty_rules(&registration, listener.id),
+            SocketTopology::default(),
+        );
+
+        let debug = format!("{snapshot:?}");
+
+        assert!(debug.contains("ExternalSocketRuntimeSnapshot"));
+        assert!(debug.contains("contract-test"));
+        assert!(debug.contains("topology: Relay"));
+        assert!(!debug.contains("rules"));
+    }
+
+    #[test]
+    fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
+        let registration = registration();
+        let listener = listener();
+        let package = registration.package().identity().clone();
+        let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
+            ProtocolDocumentRuleId::new(),
+            "relay rule".to_owned(),
+            true,
+            10,
+            1,
+            listener.id,
+            package,
+            registration.document().upstream().schema().version(),
+            ProtocolRuleStage::ProxyToUpstream,
+            Vec::new(),
+            vec![DocumentAction::SetField {
+                field: DocumentFieldName::new("request").unwrap(),
+                value: DocumentValue::String("updated".to_owned()),
+            }],
+        )
+        .unwrap();
+        let workspace = ProxyWorkspace {
+            protocol_rules: vec![rule],
+            ..ProxyWorkspace::default()
+        };
+        let snapshot = ExternalSocketRuntimeSnapshot::new(
+            ExternalSocketPackageBinding::new(registration.clone(), Arc::new(DisconnectedRpc)),
+            empty_rules(&registration, listener.id),
+            SocketTopology::default(),
+        );
+
+        snapshot
+            .replace_document_rules(&workspace, &listener)
+            .unwrap();
+
+        assert_eq!(
+            snapshot
+                .rules
+                .program(ProtocolRuleStage::ProxyToUpstream)
+                .rules()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn replace_document_rules_rejects_relay_only_stage_for_local_responder() {
+        let registration = registration();
+        let listener = listener();
+        let package = registration.package().identity().clone();
+        let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
+            ProtocolDocumentRuleId::new(),
+            "invalid local stage".to_owned(),
+            true,
+            10,
+            1,
+            listener.id,
+            package,
+            registration.document().upstream().schema().version(),
+            ProtocolRuleStage::ProxyToUpstream,
+            Vec::new(),
+            vec![DocumentAction::SetField {
+                field: DocumentFieldName::new("request").unwrap(),
+                value: DocumentValue::String("updated".to_owned()),
+            }],
+        )
+        .unwrap();
+        let workspace = ProxyWorkspace {
+            protocol_rules: vec![rule],
+            ..ProxyWorkspace::default()
+        };
+        let snapshot = ExternalSocketRuntimeSnapshot::new(
+            ExternalSocketPackageBinding::new(registration.clone(), Arc::new(DisconnectedRpc)),
+            empty_rules(&registration, listener.id),
+            SocketTopology::LocalResponder(SocketLocalResponderTopology::default()),
+        );
+
+        let error = snapshot
+            .replace_document_rules(&workspace, &listener)
+            .unwrap_err();
+
+        assert_eq!(error.view_model.code, "PROTOCOL_RULE_DIRECTION_INVALID");
+        assert!(
+            snapshot
+                .rules
+                .program(ProtocolRuleStage::ProxyToUpstream)
+                .rules()
+                .is_empty()
+        );
+    }
+
+    fn listener() -> ProxyListener {
+        ProxyListener {
+            id: ListenerId::from_uuid(Uuid::from_u128(42)),
+            ..ProxyListener::default()
+        }
+    }
+
+    fn empty_rules(
+        registration: &ExternalPackageRegistration,
+        listener_id: ListenerId,
+    ) -> ProtocolDocumentRuleConnectionFactory {
+        let package = registration.package().identity().clone();
+        let upstream = registration.document().upstream().schema().clone();
+        let downstream = registration.document().downstream().schema().clone();
+        let program = |stage, schema| {
+            Arc::new(
+                ProtocolDocumentRuleProgram::new_for_stage(
+                    listener_id,
+                    package.clone(),
+                    schema,
+                    stage,
+                    Vec::new(),
+                )
+                .unwrap(),
+            )
+        };
+        ProtocolDocumentRuleConnectionFactory::new(
+            program(ProtocolRuleStage::AppToProxy, upstream.clone()),
+            program(ProtocolRuleStage::ProxyToUpstream, upstream),
+            program(ProtocolRuleStage::UpstreamToProxy, downstream.clone()),
+            program(ProtocolRuleStage::ProxyToApp, downstream),
+        )
+        .unwrap()
+    }
+
+    fn registration() -> ExternalPackageRegistration {
+        serde_json::from_value(json!({
+            "api": 1,
+            "package": {
+                "id": "contract-test",
+                "name": "Contract test",
+                "version": "1.0.0",
+                "description": "test"
+            },
+            "document": {
+                "upstream": {
+                    "schema": {
+                        "id": "contract-upstream",
+                        "title": "Upstream",
+                        "version": 1,
+                        "fields": [
+                            {"name": "request", "label": "Request", "type": "string"}
+                        ]
+                    },
+                    "display": "render"
+                },
+                "downstream": {
+                    "schema": {
+                        "id": "contract-downstream",
+                        "title": "Downstream",
+                        "version": 1,
+                        "fields": [
+                            {"name": "response", "label": "Response", "type": "string"}
+                        ]
+                    },
+                    "display": "render"
+                }
+            },
+            "hooks": {
+                "upstream": {"frame": "frame", "decode": "decode", "encode": "encode"},
+                "downstream": {"frame": "frame", "decode": "decode", "encode": "encode"}
+            }
+        }))
+        .unwrap()
+    }
+}

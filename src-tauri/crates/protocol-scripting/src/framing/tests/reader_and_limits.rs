@@ -27,13 +27,6 @@ fn reader_rejects_every_invalid_offset_and_length_boundary() {
         assert_eq!(result.unwrap_err(), ProtocolFramingError::ReaderOutOfBounds);
     }
 
-    // 生产构造器始终保证 segments 总长度等于 available；此畸形对象只验证未来若破坏该不变量，
-    // Reader 仍然返回受控越界错误而不是 panic。
-    let malformed = ProtocolReader::from_segments(Vec::new(), 1);
-    assert_eq!(
-        malformed.peek_u8(0).unwrap_err(),
-        ProtocolFramingError::ReaderOutOfBounds
-    );
 }
 
 #[test]
@@ -52,7 +45,9 @@ fn reader_find_handles_cross_chunk_missing_empty_and_start_boundaries() {
         ProtocolFramingError::InvalidFindStart
     );
     assert_eq!(
-        ProtocolReader::empty().find(b"A", 0).unwrap_err(),
+        ProtocolReader::new(Arc::from([]))
+            .find(b"A", 0)
+            .unwrap_err(),
         ProtocolFramingError::InvalidFindStart
     );
     assert_eq!(reader.find(b"ABCDEFG", 0).unwrap(), None);

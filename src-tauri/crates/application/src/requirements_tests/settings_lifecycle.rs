@@ -285,24 +285,106 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
 }
 
 #[test]
-fn rule_editor_primitives_and_byte_parser_are_owned_by_rust() {
+fn rule_editor_capabilities_are_stage_exact_and_rust_owned() {
     let application = application_with_fake_ports(Arc::new(FakePorts::default()));
+    let capabilities = application.rule_capabilities();
+    let request = capabilities
+        .iter()
+        .find(|capability| capability.stage == MessageStage::Request)
+        .expect("request capability");
+    let response = capabilities
+        .iter()
+        .find(|capability| capability.stage == MessageStage::Response)
+        .expect("response capability");
+    let tls = capabilities
+        .iter()
+        .find(|capability| capability.stage == MessageStage::TlsHandshake)
+        .expect("TLS capability");
+    assert!(
+        request
+            .actions
+            .iter()
+            .any(|action| action.kind == RuleActionKind::MockResponse)
+    );
+    assert!(
+        !request
+            .actions
+            .iter()
+            .any(|action| action.kind == RuleActionKind::CustomHttpStatus)
+    );
+    assert!(
+        response
+            .actions
+            .iter()
+            .any(|action| action.kind == RuleActionKind::CustomHttpStatus)
+    );
+    assert!(
+        !response
+            .actions
+            .iter()
+            .any(|action| action.kind == RuleActionKind::MockResponse)
+    );
     assert_eq!(
-        application.rule_condition_draft(RuleConditionKind::NthHit),
+        tls.match_field_kinds,
+        vec![RuleMatchFieldKind::CertificateFingerprint]
+    );
+    assert_eq!(tls.actions.len(), 1);
+    assert_eq!(tls.actions[0].kind, RuleActionKind::RejectTlsHandshake);
+    for stage in &capabilities {
+        for action in &stage.actions {
+            let draft = application
+                .rule_action_draft(action.kind, stage.stage)
+                .expect("every advertised action must produce a valid draft");
+            match (draft, action.traffic_direction) {
+                (
+                    RuleAction::Throttle { direction, .. }
+                    | RuleAction::Intermittent { direction, .. },
+                    Some(expected),
+                ) => assert_eq!(direction, expected),
+                (RuleAction::Throttle { .. } | RuleAction::Intermittent { .. }, None) => {
+                    panic!("directional action must advertise its fixed direction")
+                }
+                (_, _) => {}
+            }
+        }
+    }
+    assert_eq!(
+        application
+            .rule_condition_draft(RuleConditionKind::NthHit, MessageStage::Request)
+            .expect("request condition draft"),
         RuleCondition::NthHit { count: 1 }
     );
     assert!(matches!(
-        application.rule_action_draft(RuleActionKind::MockResponse),
+        application
+            .rule_action_draft(RuleActionKind::MockResponse, MessageStage::Request)
+            .expect("request action draft"),
         RuleAction::Terminal {
             action: RuleTerminalAction::MockResponse { .. }
         }
     ));
     assert_eq!(
-        application.rule_match_field_draft(RuleMatchFieldKind::JsonPath),
+        application
+            .rule_match_field_draft(RuleMatchFieldKind::JsonPath, MessageStage::Response)
+            .expect("response field draft"),
         RuleMatchField::JsonPath {
             path: "$.field".into()
         }
     );
+    assert!(
+        application
+            .rule_action_draft(RuleActionKind::CustomHttpStatus, MessageStage::Request,)
+            .is_err()
+    );
+    assert!(
+        application
+            .rule_match_field_draft(RuleMatchFieldKind::JsonPath, MessageStage::TlsHandshake,)
+            .is_err()
+    );
+}
+
+#[test]
+fn rule_editor_primitives_and_byte_parser_are_owned_by_rust() {
+    let application = application_with_fake_ports(Arc::new(FakePorts::default()));
     assert_eq!(
         application.rule_match_operator_draft(RuleMatchOperatorKind::Regex),
         RuleMatchOperator::Regex {

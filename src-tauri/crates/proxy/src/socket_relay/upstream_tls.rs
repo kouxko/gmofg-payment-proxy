@@ -27,6 +27,7 @@ impl fmt::Debug for SocketUpstreamTlsConnection {
             .debug_struct("SocketUpstreamTlsConnection")
             .field("io", &"<TLS stream>")
             .field("evidence", &self.evidence)
+            .field("server_name_candidates", &self.server_name_candidates)
             .finish()
     }
 }
@@ -262,7 +263,7 @@ fn trust_store(explicit_roots: &[Vec<u8>]) -> Result<openssl::x509::store::X509S
         native
             .certs
             .iter()
-            .map(|certificate| certificate.as_ref())
+            .map(std::convert::AsRef::as_ref)
             .collect::<Vec<_>>()
     } else {
         explicit_roots.iter().map(Vec::as_slice).collect::<Vec<_>>()

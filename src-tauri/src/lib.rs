@@ -13,6 +13,7 @@ mod runtime_logs;
 use std::{error::Error, path::PathBuf, sync::Arc};
 
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
+use intercept_proxy_infrastructure::ExchangeObservationStore;
 use intercept_proxy_product_api::InterceptProxyProfile;
 use specta_typescript::Typescript;
 use tauri::{Manager, path::BaseDirectory};
@@ -21,7 +22,7 @@ use crate::{
     app_state::AppState,
     mcp::{ApplicationBackend, MCP_ENDPOINT, ReadOnlyMcpServer},
     native_dialog::TauriNativeFileDialog,
-    runtime_logs::{ApplicationLogLevel, RuntimeLogStore, install_tracing_bridge},
+    runtime_logs::{ApplicationLogLevel, RuntimeLogStore, TracingBridge, install_tracing_bridge},
 };
 
 const BUILTIN_ISO8583_ARCHIVE: &[u8] = include_bytes!(concat!(
@@ -71,21 +72,19 @@ pub fn export_bindings() -> Result<PathBuf, String> {
 }
 
 fn normalize_generated_typescript(generated: &str) -> String {
-    let mut normalized = generated
-        .lines()
-        .map(str::trim_end)
-        .collect::<Vec<_>>()
-        .join("\n");
-    if generated.ends_with('\n') {
-        normalized.push('\n');
+    let mut lines = generated.lines().map(str::trim_end).collect::<Vec<_>>();
+    while lines.last().is_some_and(|line| line.is_empty()) {
+        lines.pop();
     }
+    let mut normalized = lines.join("\n");
+    normalized.push('\n');
     normalized
 }
 
 fn initialize_application(
     app: &tauri::App,
     runtime_logs: Arc<RuntimeLogStore>,
-) -> Result<AppState, Box<dyn Error>> {
+) -> Result<(AppState, TracingBridge), Box<dyn Error>> {
     let app_data_dir = app.path().app_data_dir()?;
     // 资源在不同平台的安装目录不同。必须由 Tauri 的路径解析器给出真实绝对路径，
     // 不能从当前 exe 所在目录猜测，否则 Windows 安装版和便携版容易出现差异。
@@ -108,9 +107,28 @@ fn initialize_application(
     }
     host_builder = host_builder.with_builtin_protocol_package(Arc::from(BUILTIN_ISO8583_ARCHIVE));
     let host = tauri::async_runtime::block_on(host_builder.build())?;
+    let observation_queue_capacity =
+        tauri::async_runtime::block_on(host.application().settings_get())?
+            .stored
+            .ui_event_capacity;
+    // Runtime logs and Exchange observation share at most one quarter of the configured process
+    // memory budget while waiting in their non-blocking queues. Retained UI evidence is accounted
+    // separately by CapacityLedger after the consumer accepts it.
+    let observation_queue_bytes = usize::try_from(host.capacity().max_bytes().saturating_div(4))
+        .unwrap_or(usize::MAX)
+        .max(1);
+    let exchange_observations = Arc::new(ExchangeObservationStore::new(host.capacity()));
+    let tracing_bridge = install_tracing_bridge(
+        Arc::clone(&runtime_logs),
+        Arc::clone(&exchange_observations),
+        host.events(),
+        observation_queue_capacity,
+        observation_queue_bytes,
+    )?;
     let backend = Arc::new(ApplicationBackend::new(
         host.application(),
         Arc::clone(&runtime_logs),
+        Arc::clone(&exchange_observations),
     ));
     let mcp = match tauri::async_runtime::block_on(ReadOnlyMcpServer::start(backend)) {
         Ok(mcp) => {
@@ -122,7 +140,10 @@ fn initialize_application(
             None
         }
     };
-    Ok(AppState::production(host, mcp, runtime_logs))
+    Ok((
+        AppState::production(host, mcp, runtime_logs, exchange_observations),
+        tracing_bridge,
+    ))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -145,7 +166,6 @@ pub fn run() {
                 LOG_CAPACITY,
                 LOG_FILE_BYTES,
             )?);
-            install_tracing_bridge(Arc::clone(&runtime_logs))?;
             let dispatch_logs = Arc::clone(&runtime_logs);
             let dispatch = tauri_plugin_log::fern::Dispatch::new().chain(
                 tauri_plugin_log::fern::Output::call(move |record| {
@@ -173,7 +193,9 @@ pub fn run() {
                     ))
                     .build(),
             )?;
-            app.manage(initialize_application(app, runtime_logs)?);
+            let (state, tracing_bridge) = initialize_application(app, runtime_logs)?;
+            app.manage(tracing_bridge);
+            app.manage(state);
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -207,6 +229,11 @@ pub fn run() {
                             "graceful application shutdown failed"
                         );
                     }
+                    if let Err(error) = app_handle.state::<TracingBridge>().shutdown() {
+                        // tracing consumer 已关闭或 join 失败时不能再递归写 tracing；stderr
+                        // 是进程退出阶段唯一不会重新进入该桥接器的诊断出口。
+                        eprintln!("tracing bridge shutdown failed: {error}");
+                    }
                     app_handle.exit(plan.exit_code);
                 });
             }
@@ -219,9 +246,9 @@ mod tests {
     use super::{ExitRequestPlan, normalize_generated_typescript, plan_exit_request};
 
     #[test]
-    fn generated_typescript_normalization_removes_only_line_end_whitespace() {
+    fn generated_typescript_normalization_removes_line_end_whitespace_and_blank_eof() {
         assert_eq!(
-            normalize_generated_typescript("export type A = \n\tstring;  \n"),
+            normalize_generated_typescript("export type A = \n\tstring;  \n\n"),
             "export type A =\n\tstring;\n"
         );
     }

@@ -83,6 +83,64 @@ async fn two_ports_use_http11_close_and_preserve_body_bytes() {
 }
 
 #[tokio::test]
+async fn one_http11_connection_processes_two_framed_requests_in_one_exchange() {
+    let ports = Arc::new(RecordingPorts::default());
+    let supervisor = ProxySupervisor::new(
+        Arc::new(TokioListenerBinder),
+        service_with_connector(ports.clone(), Arc::new(SequencedRawConnector::default())),
+    );
+    let started = supervisor.start(config()).await.unwrap();
+    let mut stream = TcpStream::connect(started.listeners[&channel_id("alpha")])
+        .await
+        .unwrap();
+
+    for (sequence, body) in [b"first".as_slice(), b"second".as_slice()]
+        .into_iter()
+        .enumerate()
+    {
+        let request = format!(
+            "POST /settle HTTP/1.1\r\nHost: app\r\nContent-Length: {}\r\n\r\n",
+            body.len()
+        );
+        stream.write_all(request.as_bytes()).await.unwrap();
+        stream.write_all(body).await.unwrap();
+        let head = read_http_head(&mut stream).await;
+        assert!(
+            head.starts_with(format!("HTTP/1.1 200 Sequence {sequence}\r\n").as_bytes()),
+            "head: {head:?}"
+        );
+        assert!(
+            head.windows(format!("X-Sequence: exact-{sequence}\r\n").len())
+                .any(|window| window == format!("X-Sequence: exact-{sequence}\r\n").as_bytes()),
+            "every response must use its own encoded canonical head: {head:?}"
+        );
+        assert!(
+            !head
+                .windows(b"connection: close".len())
+                .any(|window| window.eq_ignore_ascii_case(b"connection: close")),
+            "long-lived Exchange must not force HTTP keep-alive off"
+        );
+        let mut response_body = vec![0; body.len()];
+        stream.read_exact(&mut response_body).await.unwrap();
+        assert_eq!(response_body, body);
+    }
+
+    drop(stream);
+    tokio::time::timeout(Duration::from_secs(1), async {
+        loop {
+            if ports.bodies.lock().unwrap().len() == 2 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("both messages must pass through one connection Exchange");
+    assert_eq!(ports.connection_ids.lock().unwrap().len(), 1);
+    supervisor.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn mock_response_writes_arbitrary_body_bytes_without_codec_round_trip() {
     let body = Bytes::from_static(&[0x00, 0x80, 0xff, b'{']);
     let ports = Arc::new(ClosedResultPorts {

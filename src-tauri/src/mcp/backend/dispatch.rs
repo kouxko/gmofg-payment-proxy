@@ -5,11 +5,11 @@ use serde_json::Value;
 use super::{
     AndroidEndpointArguments, AndroidPackageArguments, AndroidProfileArguments, ApplicationBackend,
     ApplicationLogDetailArguments, BreakpointDetailArguments, BreakpointQueryArguments,
-    HttpCaptureDetailArguments, HttpRuleArguments, ProtocolPackageArguments,
-    SocketCaptureDetailArguments, ToolFailure, ToolResult, WorkspaceArguments, json_value, parse,
-    query, unknown_tool,
+    HttpCaptureDetailArguments, HttpRuleArguments, ProtocolPackageArguments, ToolFailure,
+    ToolResult, WorkspaceArguments, json_value, parse, query, unknown_tool,
 };
 use crate::{reproduction_report, runtime_logs::ApplicationLogQuery};
+use intercept_proxy_application::ExchangeObservationQuery;
 
 impl ApplicationBackend {
     pub(super) async fn call_general_tool(&self, name: &str, arguments: Value) -> ToolResult {
@@ -28,6 +28,22 @@ impl ApplicationBackend {
                     ))
                 })?;
                 json_value(entry)
+            }
+            "exchange_observation_query" => {
+                let query: ExchangeObservationQuery = parse(arguments)?;
+                json_value(self.exchange_observations.query(&query))
+            }
+            "exchange_observation_get" => {
+                let exchange_id = arguments
+                    .get("exchange_id")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| ToolFailure::invalid_arguments("exchange_id is required"))?;
+                let record = self.exchange_observations.get(exchange_id).ok_or_else(|| {
+                    ToolFailure::not_found(format!(
+                        "Exchange {exchange_id} is outside the retained range."
+                    ))
+                })?;
+                json_value(record)
             }
             "reproduction_report" => {
                 let query: intercept_proxy_application::DiagnosticReportQuery = parse(arguments)?;
@@ -75,22 +91,6 @@ impl ApplicationBackend {
                 json_value(
                     self.application
                         .capture_get_detail(args.session_id, args.runtime_epoch)
-                        .await?,
-                )
-            }
-            "socket_capture_query" => {
-                let args: query::SocketCaptureArguments = parse(arguments)?;
-                json_value(
-                    self.application
-                        .socket_capture_query(args.into_query())
-                        .await?,
-                )
-            }
-            "socket_capture_get" => {
-                let args: SocketCaptureDetailArguments = parse(arguments)?;
-                json_value(
-                    self.application
-                        .socket_capture_get_detail(args.capture_id)
                         .await?,
                 )
             }

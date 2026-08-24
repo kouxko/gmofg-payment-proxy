@@ -6,7 +6,6 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
 use intercept_proxy_runtime::SocketConnectionIdentity;
 
-use super::super::socket_capture_publisher::SocketCaptureContext;
 use crate::adapters::external_packages::ExternalPackageConnectionError;
 
 pub(in crate::adapters::listener_runtime) fn trace_external_rpc_failure(
@@ -16,7 +15,6 @@ pub(in crate::adapters::listener_runtime) fn trace_external_rpc_failure(
     stage: ExternalPackageCallStage,
     method: &str,
     error: &ExternalPackageConnectionError,
-    capture: &SocketCaptureContext,
 ) -> ExternalPackageCallDiagnosticViewModel {
     let (request_id, remote_code, remote_message, remote_data) = match error {
         ExternalPackageConnectionError::Timeout { request_id, .. } => {
@@ -63,7 +61,6 @@ pub(in crate::adapters::listener_runtime) fn trace_external_rpc_failure(
         error = ?error,
         "external package RPC stage failed"
     );
-    capture.record_external_rpc_failure(connection, diagnostic.clone());
     diagnostic
 }
 

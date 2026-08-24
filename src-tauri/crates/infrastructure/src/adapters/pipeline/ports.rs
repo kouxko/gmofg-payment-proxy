@@ -103,7 +103,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
         }
     }
 
-    async fn request(
+    async fn apply_request_policy(
         &self,
         context: &ConnectionContext,
         message: &mut Message,
@@ -188,7 +188,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
         Ok(actions)
     }
 
-    async fn response(
+    async fn apply_response_policy(
         &self,
         context: &ConnectionContext,
         message: &mut Message,

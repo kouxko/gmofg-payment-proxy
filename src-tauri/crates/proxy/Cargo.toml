@@ -12,7 +12,7 @@ http.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
-openssl.workspace = true
+intercept-proxy-exchange = { path = "../exchange" }
 ring.workspace = true
 rustls.workspace = true
 rustls-native-certs.workspace = true
@@ -26,6 +26,14 @@ tracing.workspace = true
 uuid.workspace = true
 x509-parser.workspace = true
 zeroize.workspace = true
+
+# macOS 发布包链接系统 OpenSSL，避免 vendored OpenSSL 把本机绝对 Cargo OUT_DIR
+# 编译进最终二进制。其他目标继续使用固定版本的 vendored OpenSSL，保持 CI/交叉编译自包含。
+[target.'cfg(target_os = "macos")'.dependencies]
+openssl = "=0.10.81"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+openssl.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true

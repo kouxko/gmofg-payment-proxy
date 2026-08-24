@@ -101,11 +101,7 @@ async fn both_directions_use_the_full_real_tcp_protocol_chain() {
     ));
     repository.install_zip(&package_zip()).unwrap();
     repository.set_enabled(&package(), true).unwrap();
-    let captures = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
-        Arc::clone(&store),
-    ));
     let runtime = test_listener_runtime_with_packages(store, repository);
-    runtime.set_socket_capture_repository(Arc::clone(&captures));
     runtime.start(workspace, listener.clone()).await.unwrap();
 
     let mut client = TcpStream::connect(("127.0.0.1", listener_port))
@@ -118,37 +114,6 @@ async fn both_directions_use_the_full_real_tcp_protocol_chain() {
     assert_eq!(response, [209, 42]);
 
     upstream_task.await.unwrap();
-    let page = tokio::time::timeout(std::time::Duration::from_secs(2), async {
-        loop {
-            let page = captures.query(&captures::query()).unwrap();
-            if page.rows.len() == 2 {
-                break page;
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
-        }
-    })
-    .await
-    .expect("two committed relay captures should persist within the bounded wait");
-    for row in page.rows {
-        let detail = captures.get_detail(row.capture_id).unwrap().record;
-        let intercept_proxy_application::SocketCapturePayload::RelayFrame(frame) = detail.payload
-        else {
-            panic!("expected relay frame")
-        };
-        let (origin, written) = match frame.direction {
-            ProtocolDirection::Upstream => (vec![2, 11], vec![161, 42]),
-            ProtocolDirection::Downstream => (vec![2, 22], vec![209, 42]),
-        };
-        assert_eq!(frame.schema.id.as_str(), "runtime-message");
-        assert_eq!(frame.schema.version, 1);
-        assert_eq!(frame.origin, origin);
-        assert_eq!(frame.written, written);
-        assert_eq!(frame.stages.len(), 2);
-        assert!(matches!(
-            frame.display,
-            intercept_proxy_application::SocketDisplayResult::UntrustedHtml { .. }
-        ));
-    }
     runtime.stop(listener.id).await.unwrap();
 }
 
@@ -166,6 +131,7 @@ fn listener(port: u16, upstream_port: u16) -> ProxyListener {
                 security: SocketRelaySecurity::Transparent,
             }),
             maximum_connections: 4,
+            runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
             processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package: package(),
             }),
@@ -256,10 +222,6 @@ fn package_zip() -> Vec<u8> {
     writer.finish().unwrap().into_inner()
 }
 
-#[path = "scripted_relay_runtime/captures.rs"]
-mod captures;
-#[path = "scripted_relay_runtime/failures.rs"]
-mod failures;
 #[path = "scripted_relay_runtime/flow_control.rs"]
 mod flow_control;
 #[path = "scripted_relay_runtime/isolation.rs"]

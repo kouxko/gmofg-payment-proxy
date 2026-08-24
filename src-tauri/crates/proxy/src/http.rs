@@ -33,8 +33,8 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::fault::{self, FaultAction, ResponseDisposition};
-use crate::message::{Message, MessageLimits, RawHeader};
+use crate::fault::{FaultAction, ResponseDisposition};
+use crate::message::{Message, MessageLimits};
 use crate::supervisor::ChannelId;
 use crate::tls::ClientTlsAdapter;
 use crate::traffic::{
@@ -43,8 +43,13 @@ use crate::traffic::{
 };
 use crate::{ErrorCode, ProxyError, Result};
 
+mod capabilities;
 mod contracts;
 mod exchange;
+mod exchange_runtime;
+pub(crate) use exchange_runtime::{
+    HttpExchangeConnection, HttpExchangeRequest, HttpExchangeRuntime,
+};
 mod helpers;
 mod raw_http1;
 mod raw_http1_response;
@@ -62,6 +67,10 @@ pub use crate::transport::{
     HandshakePolicy, ListenerBinder, SystemClock, TlsPeerIdentity, TokioListenerBinder,
     UpstreamSecurityEvidence, UpstreamTransportSecurity,
 };
+pub use capabilities::{
+    HttpConnectionIdentity, HttpDirectionCapabilities, HttpObservationMetadata,
+    HttpProtocolCapabilityFactory, PlainHttpCapabilityFactory, RulesChain,
+};
 pub use contracts::{
     ForwardRequest, NoopPipelinePorts, PipelinePorts, UpstreamConnector, UpstreamExchange,
 };
@@ -77,7 +86,7 @@ use helpers::{
     timeout_stage, validate_headers, wait_for_injected_timeout,
 };
 use raw_http1::{RawHttp1HeadCapture, ReadRecordingIo, RequestHeadPreservingIo};
-use raw_http1_response::ResponseHeadPreservingIo;
+use raw_http1_response::{CanonicalResponseHead, ResponseHeadPreservingIo};
 pub(crate) use schedule::traffic_schedule;
 use service::RequestWireState;
 use stream_io::SplitIo;

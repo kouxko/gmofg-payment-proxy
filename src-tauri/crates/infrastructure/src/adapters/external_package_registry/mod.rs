@@ -3,16 +3,15 @@
 //! `SQLite` 是注册元数据和用户启用位的事实源；本适配器只在内存中保存活动 WebSocket client。
 //! 两者通过同一注册表临界区发布，确保重复连接不能覆盖先注册者，数据库失败也不会产生“幽灵在线”状态。
 
-use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use chrono::Utc;
 use intercept_proxy_application::{
-    AppError, AppResult, EventHub, ExternalPackageRecentErrorViewModel,
-    ExternalPackageServiceStateViewModel, ExternalPackageServiceStatusViewModel, UiEventPayload,
+    AppResult, EventHub, ExternalPackageServiceStateViewModel,
+    ExternalPackageServiceStatusViewModel, UiEventPayload,
 };
 use intercept_proxy_domain::{ExternalPackageRegistration, ProtocolPackageRef};
 use parking_lot::{Mutex, RwLock};
-use uuid::Uuid;
 
 use crate::SqliteStore;
 
@@ -21,50 +20,19 @@ use super::{
     external_packages::{ExternalPackageClient, ExternalPackageConnectionError},
     listener_runtime::{ExternalSocketPackageBinding, ExternalSocketPackageProvider},
 };
-use crate::sqlite::external_packages::{
-    StoredExternalPackageRegistrationOutcome, canonical_external_registration_fingerprint,
-};
+use crate::sqlite::external_packages::StoredExternalPackageRegistrationOutcome;
 
 mod application_port;
+mod connection;
 mod diagnostics;
+mod identity;
 mod views;
 
+pub use connection::{AcceptedExternalPackageConnection, ExternalPackageConnectionId};
+use connection::{ConnectionDetailSnapshot, ExternalPackageServiceSnapshot, OnlineConnection};
+pub use identity::external_package_registration_fingerprint;
+use identity::{not_found, package_error};
 use views::recent_error_view;
-
-/// 一次在线注册的稳定标识，用于忽略被新连接取代后的迟到断线通知。
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct ExternalPackageConnectionId(Uuid);
-
-impl ExternalPackageConnectionId {
-    /// 返回可用于日志关联的 UUID。
-    #[must_use]
-    pub const fn as_uuid(self) -> Uuid {
-        self.0
-    }
-}
-
-/// 注册成功后交给 Host 监视连接生命周期的结果。
-#[derive(Clone, Debug)]
-pub struct AcceptedExternalPackageConnection {
-    /// 软件包声明的精确身份。
-    pub package: ProtocolPackageRef,
-    /// 此次连接的唯一标识。
-    pub connection_id: ExternalPackageConnectionId,
-    /// 首次注册时为 `false`；重连保留之前的用户启用位。
-    pub enabled: bool,
-}
-
-#[derive(Debug)]
-enum OnlineConnection {
-    Active {
-        id: ExternalPackageConnectionId,
-        client: ExternalPackageClient,
-    },
-    Closing {
-        id: ExternalPackageConnectionId,
-        client: Option<ExternalPackageClient>,
-    },
-}
 
 /// 外部协议包的 `SQLite` + 活动连接组合注册表。
 #[derive(Debug)]
@@ -74,20 +42,6 @@ pub struct ExternalPackageRegistryAdapter {
     service: Mutex<ExternalPackageServiceSnapshot>,
     events: RwLock<Option<Arc<EventHub>>>,
     connection_details: Mutex<HashMap<ProtocolPackageRef, ConnectionDetailSnapshot>>,
-}
-
-#[derive(Clone, Debug)]
-pub(super) struct ConnectionDetailSnapshot {
-    pub(super) connection_id: ExternalPackageConnectionId,
-    pub(super) remote_address: Option<SocketAddr>,
-    pub(super) rpc_timeout: Duration,
-    pub(super) recent_error: Option<ExternalPackageRecentErrorViewModel>,
-}
-
-#[derive(Clone, Debug)]
-struct ExternalPackageServiceSnapshot {
-    websocket_url: String,
-    state: ExternalPackageServiceStateViewModel,
 }
 
 impl ExternalPackageRegistryAdapter {
@@ -183,7 +137,7 @@ impl ExternalPackageRegistryAdapter {
             StoredExternalPackageRegistrationOutcome::Inserted => false,
             StoredExternalPackageRegistrationOutcome::Reconnected { enabled } => enabled,
         };
-        let connection_id = ExternalPackageConnectionId(Uuid::new_v4());
+        let connection_id = ExternalPackageConnectionId::new();
         let rpc_timeout = client.rpc_timeout();
         // 始终按 online -> connection_details 的顺序持锁。详情先安装、在线代次后发布；
         // 因此观察到 Active 新代次的调用必然也能观察到同一代次的详情快照。
@@ -470,28 +424,6 @@ impl ExternalSocketPackageProvider for ExternalPackageRegistryAdapter {
             rpc_timeout,
         )))
     }
-}
-
-/// 对规范化注册合同计算稳定 SHA-256 指纹。
-pub fn external_package_registration_fingerprint(
-    registration: &ExternalPackageRegistration,
-) -> AppResult<[u8; 32]> {
-    canonical_external_registration_fingerprint(registration).map_err(|error| {
-        tracing::error!(error = ?error, "external package registration serialization failed");
-        AppError::new("INTERNAL_ERROR", "外部协议包注册内容无法规范化。")
-    })
-}
-
-fn not_found(package: &ProtocolPackageRef) -> AppError {
-    package_error(
-        "PROTOCOL_PACKAGE_NOT_FOUND",
-        "外部协议包精确版本不存在。",
-        package,
-    )
-}
-
-fn package_error(code: &str, message: &str, package: &ProtocolPackageRef) -> AppError {
-    AppError::new(code, message).entity(format!("{}@{}", package.id, package.version))
 }
 
 #[cfg(test)]

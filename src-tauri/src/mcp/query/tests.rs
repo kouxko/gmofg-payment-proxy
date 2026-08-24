@@ -1,9 +1,4 @@
-use chrono::{TimeZone as _, Utc};
-use intercept_proxy_application::{
-    CaptureSort, ChannelId, ListenerId, MessageStage, ProtocolDirection, ProtocolPackageId,
-    ProtocolPackageRef, ProtocolPackageVersion, SocketCaptureKind, SocketCaptureSort,
-    SocketConnectionId, SortDirection, WorkspaceId,
-};
+use intercept_proxy_application::{CaptureSort, ChannelId, MessageStage, SortDirection};
 
 use super::*;
 
@@ -54,50 +49,10 @@ fn http_capture_arguments_preserve_filters_and_explicit_paging() {
 }
 
 #[test]
-fn socket_capture_arguments_preserve_directional_identity_and_paging() {
-    let package = ProtocolPackageRef {
-        id: ProtocolPackageId::new("iso8583-standard").unwrap(),
-        version: ProtocolPackageVersion::new("1.0.0").unwrap(),
-    };
-    let occurred_from = Utc.with_ymd_and_hms(2026, 8, 19, 3, 4, 5).unwrap();
-    let occurred_to = Utc.with_ymd_and_hms(2026, 8, 19, 4, 5, 6).unwrap();
-    let query = SocketCaptureArguments {
-        workspace_id: Some(WorkspaceId::new()),
-        listener_id: Some(ListenerId::new()),
-        session_id: Some("00000000-0000-0000-0000-000000000013".parse().unwrap()),
-        connection_id: Some(SocketConnectionId::new()),
-        package: Some(package.clone()),
-        direction: Some(ProtocolDirection::Downstream),
-        kind: Some(SocketCaptureKind::LocalExchange),
-        occurred_from: Some(occurred_from),
-        occurred_to: Some(occurred_to),
-        sort: Some(SocketCaptureSort::Size),
-        direction_sort: Some(SortDirection::Asc),
-        page: Some(4),
-        page_size: Some(50),
-    }
-    .into_query();
-
-    assert_eq!(query.package, Some(package));
-    assert_eq!(query.direction, Some(ProtocolDirection::Downstream));
-    assert_eq!(query.kind, Some(SocketCaptureKind::LocalExchange));
-    assert_eq!(query.occurred_from, Some(occurred_from));
-    assert_eq!(query.occurred_to, Some(occurred_to));
-    assert_eq!(query.sort, SocketCaptureSort::Size);
-    assert_eq!(query.direction_sort, SortDirection::Asc);
-    assert_eq!(query.page.page, 4);
-    assert_eq!(query.page.page_size, 50);
-}
-
-#[test]
 fn empty_query_arguments_apply_stable_defaults() {
     let http = HttpCaptureArguments::default().into_query();
-    let socket = SocketCaptureArguments::default().into_query();
 
     assert_eq!(http.sort, CaptureSort::OccurredAt);
     assert_eq!(http.direction, SortDirection::Desc);
     assert_eq!((http.page.page, http.page.page_size), (1, 100));
-    assert_eq!(socket.sort, SocketCaptureSort::OccurredAt);
-    assert_eq!(socket.direction_sort, SortDirection::Desc);
-    assert_eq!((socket.page.page, socket.page.page_size), (1, 100));
 }

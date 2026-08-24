@@ -2,16 +2,17 @@
 //!
 //! This module never parses HTTP and never knows Rhai, Document or rule types. Direct Relay keeps
 //! forwarding TCP bytes unchanged; Scripted Relay and `LocalResponder` only coordinate the generic
-//! bounded [`SocketFrameProcessor`] boundary. TLS termination/origination remains explicit in the
+//! bounded [`SocketDirectionCapabilities`] boundary. TLS termination/origination remains explicit in the
 //! selected topology.
 
 mod config;
 mod connector;
-pub(crate) mod frame_pump;
 mod handler;
 mod handler_support;
 mod observer;
 mod processing;
+mod protocol_exchange;
+mod raw_exchange;
 mod service;
 mod upstream_tls;
 
@@ -21,17 +22,16 @@ pub use config::{
     SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig, SocketUpstreamTransport,
 };
 pub use observer::{
-    BoundedSocketConnectionObserver, LocalResponderDiagnostics, NoopSocketConnectionObserver,
-    SocketConnectionEvent, SocketConnectionObserver, SocketConnectionTarget,
-    SocketDocumentFieldPreview, SocketDocumentPreview, SocketLocalRequestPreview,
-    SocketOpenedEvidence, SocketRejectionReason, SocketRelayBytes, SocketRelayDirection,
-    SocketRelayFailure, SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelayStage,
-    SocketTlsEvidence, SocketTransportMode,
+    BoundedSocketConnectionObserver, NoopSocketConnectionObserver, SocketConnectionEvent,
+    SocketConnectionObserver, SocketConnectionTarget, SocketDocumentFieldPreview,
+    SocketDocumentPreview, SocketLocalRequestPreview, SocketOpenedEvidence, SocketRejectionReason,
+    SocketRelayBytes, SocketRelayDirection, SocketRelayFailure, SocketRelayMetricsSnapshot,
+    SocketRelayRunContext, SocketRelayStage, SocketTlsEvidence, SocketTransportMode,
 };
 pub use processing::{
-    FrameBoundary, LocalResponderProcessorFactory, ScriptedRelayProcessorFactory,
-    SocketConnectionIdentity, SocketFrameProcessor, SocketFramePumpLimits, SocketPayloadDirection,
-    SocketProcessingFailure, SocketProcessingFailureKind,
+    FrameBoundary, SocketConnectionIdentity, SocketDirectionCapabilities,
+    SocketObservationMetadata, SocketPayloadDirection, SocketPipelineLimits,
+    SocketProcessingFailure, SocketProcessingFailureKind, SocketProtocolCapabilityFactory,
 };
 pub use service::SocketRelayService;
 

@@ -14,6 +14,7 @@ import {
   newProtocolRuleDraft,
   type ProtocolRuleDraft,
 } from "./protocol-rule-model";
+import { packageRef, socketRuleListener as listener } from "./socket-rule-editor.test-support";
 const commandMocks = vi.hoisted(() => ({ protocolRuleParseValue: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
@@ -29,41 +30,6 @@ beforeEach(() => {
     return { type, value: compact.match(/.{2}/g)?.map((byte) => Number.parseInt(byte, 16)) ?? [] };
   });
 });
-const packageRef = { id: "iso8583", version: "1.2.3" };
-function listener(id: string, local = false): ProxyListener {
-  return {
-    id,
-    name: local ? "本地应答" : "交易中继",
-    enabled: true,
-    bind_address: "127.0.0.1",
-    port: local ? 9002 : 9001,
-    allowed_client_cidrs: [],
-    connect_timeout_ms: 1_000,
-    read_timeout_ms: 1_000,
-    write_timeout_ms: 1_000,
-    data_plane: {
-      kind: "socket",
-      settings: {
-        topology: local
-          ? { mode: "local_responder", settings: { downstream_security: { mode: "tcp" } } }
-          : {
-              mode: "relay",
-              settings: {
-                upstream: { host: "example.test", port: 9000 },
-                security: { mode: "transparent" },
-              },
-            },
-        maximum_connections: 8,
-        processing: {
-          mode: "scripted",
-          settings: {
-            package: packageRef,
-          },
-        },
-      },
-    },
-  };
-}
 const fields: ProtocolRuleCapabilityCatalog["fields"] = [
   { name: "message_type", label: "消息类型", type: "string", operators: ["equals"], actions: ["set_field"] },
   { name: "amount", label: "金额", type: "int", operators: ["equals"], actions: ["set_field"] },

@@ -6,7 +6,8 @@ use crate::{
     AppError, AppResult, CertificateReference, ListenerDataPlane, ListenerId,
     ListenerMonitorRowViewModel, ListenerOverviewViewModel, ListenerRuntimePort,
     ListenerRuntimeState, ListenerStatusViewModel, MANAGED_LISTENER_CERTIFICATE_PREFIX,
-    ProxyListener, ProxyWorkspace, SocketRelaySecurity, SocketTopology, UiTone,
+    ProxyListener, ProxyWorkspace, SocketPayloadProcessing, SocketRelaySecurity, SocketTopology,
+    UiTone,
 };
 
 /// 证书导入会先产生受基础设施管理的不可变引用，再由当前监听保存动作把引用并入
@@ -164,19 +165,23 @@ fn listener_presentation(listener: &ProxyListener) -> (String, String) {
         ),
         ListenerDataPlane::Socket(settings) => {
             let SocketTopology::Relay(relay) = &settings.topology else {
-                return (
-                    "Socket · LocalResponder".to_owned(),
-                    "本地响应数据面尚未可用".to_owned(),
-                );
+                return ("Socket · 本地应答".to_owned(), "本地回环服务".to_owned());
             };
-            let mode = match relay.security {
-                SocketRelaySecurity::Transparent => "Transparent",
-                SocketRelaySecurity::TcpToTls { .. } => "TCP → TLS",
-                SocketRelaySecurity::TlsToTcp { .. } => "TLS → TCP",
-                SocketRelaySecurity::TlsToTls { .. } => "TLS → TLS",
+            let processing = match &settings.processing {
+                SocketPayloadProcessing::Direct => "透明转发",
+                SocketPayloadProcessing::Scripted(_) => "按协议转发",
+            };
+            let transport = match &relay.security {
+                SocketRelaySecurity::Transparent => None,
+                SocketRelaySecurity::TcpToTls { .. } => Some("TCP → TLS"),
+                SocketRelaySecurity::TlsToTcp { .. } => Some("TLS → TCP"),
+                SocketRelaySecurity::TlsToTls { .. } => Some("TLS → TLS"),
             };
             (
-                format!("Socket · {mode}"),
+                transport.map_or_else(
+                    || format!("Socket · {processing}"),
+                    |transport| format!("Socket · {processing} · {transport}"),
+                ),
                 format!("{}:{}", relay.upstream.host, relay.upstream.port),
             )
         }
@@ -217,4 +222,79 @@ pub(super) fn set_listener_enabled(
 pub(super) fn listener_not_found(listener_id: ListenerId) -> AppError {
     AppError::new("LISTENER_NOT_FOUND", "Listener 不存在或已被删除。")
         .entity(listener_id.to_string())
+}
+
+#[cfg(test)]
+mod presentation_tests {
+    use crate::{
+        ListenerDataPlane, ScriptedSocketProcessing, SocketEndpoint, SocketLocalResponderTopology,
+        SocketRelaySettings, SocketUpstreamTlsSettings, builtin_iso8583_package_ref,
+    };
+
+    use super::*;
+
+    #[test]
+    fn scripted_relay_reports_processing_instead_of_transport_as_transparent() {
+        let listener = ProxyListener {
+            data_plane: ListenerDataPlane::Socket(SocketRelaySettings::relay(
+                SocketEndpoint {
+                    host: "127.0.0.1".into(),
+                    port: 19_081,
+                },
+                SocketRelaySecurity::Transparent,
+                20,
+                SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
+                    package: builtin_iso8583_package_ref(),
+                }),
+            )),
+            ..ProxyListener::default()
+        };
+
+        assert_eq!(
+            listener_presentation(&listener),
+            ("Socket · 按协议转发".into(), "127.0.0.1:19081".into())
+        );
+    }
+
+    #[test]
+    fn relay_security_is_appended_without_hiding_processing_mode() {
+        let listener = ProxyListener {
+            data_plane: ListenerDataPlane::Socket(SocketRelaySettings::relay(
+                SocketEndpoint {
+                    host: "upstream.test".into(),
+                    port: 443,
+                },
+                SocketRelaySecurity::TcpToTls {
+                    upstream_tls: SocketUpstreamTlsSettings::default(),
+                },
+                20,
+                SocketPayloadProcessing::Direct,
+            )),
+            ..ProxyListener::default()
+        };
+
+        assert_eq!(
+            listener_presentation(&listener),
+            (
+                "Socket · 透明转发 · TCP → TLS".into(),
+                "upstream.test:443".into()
+            )
+        );
+    }
+
+    #[test]
+    fn local_responder_is_presented_as_the_supported_local_service() {
+        let listener = ProxyListener {
+            data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
+                topology: SocketTopology::LocalResponder(SocketLocalResponderTopology::default()),
+                ..SocketRelaySettings::default()
+            }),
+            ..ProxyListener::default()
+        };
+
+        assert_eq!(
+            listener_presentation(&listener),
+            ("Socket · 本地应答".into(), "本地回环服务".into())
+        );
+    }
 }

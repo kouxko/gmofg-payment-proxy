@@ -175,6 +175,7 @@ impl ReverseProxyService {
         mut self,
         channel: ChannelId,
         ports: Arc<dyn PipelinePorts>,
+        capabilities: Arc<dyn crate::http::HttpProtocolCapabilityFactory>,
         limits: MessageLimits,
         maximum_connections: usize,
     ) -> Result<Self> {
@@ -200,6 +201,8 @@ impl ReverseProxyService {
             acceptor,
             upstream: Arc::new(upstream),
             ports,
+            capabilities,
+            endpoint: self.endpoint.address.to_string(),
             clock: Arc::new(SystemClock),
             admission: ConnectionAdmission::new(maximum_connections)?,
             allowed_client_cidrs: self.config.allowed_client_cidrs.clone(),

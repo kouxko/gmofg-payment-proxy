@@ -3,13 +3,13 @@ use serde::{Deserialize, Serialize};
 use super::{ProtocolFramingError, ProtocolFramingLimit, ProtocolFramingResult};
 
 /// 默认单 Frame 上限：1 MiB。
-pub const DEFAULT_MAX_FRAME_BYTES: u64 = 1024 * 1024;
+pub(crate) const DEFAULT_MAX_FRAME_BYTES: u64 = 1024 * 1024;
 /// 宿主允许配置的最大单 Frame 上限：16 MiB。
-pub const MAX_FRAME_BYTES_LIMIT: u64 = 16 * 1024 * 1024;
+pub(crate) const MAX_FRAME_BYTES_LIMIT: u64 = 16 * 1024 * 1024;
 /// 默认单连接、单方向 FIFO 上限：2 MiB。
-pub const DEFAULT_MAX_FRAME_FIFO_BYTES: u64 = 2 * 1024 * 1024;
+pub(crate) const DEFAULT_MAX_FRAME_FIFO_BYTES: u64 = 2 * 1024 * 1024;
 /// 宿主允许配置的最大单方向 FIFO 上限：32 MiB。
-pub const MAX_FRAME_FIFO_BYTES_LIMIT: u64 = 32 * 1024 * 1024;
+pub(crate) const MAX_FRAME_FIFO_BYTES_LIMIT: u64 = 32 * 1024 * 1024;
 
 /// 单连接、单方向切帧器的硬资源限制。
 ///
@@ -73,10 +73,6 @@ impl ProtocolFramingLimits {
 
     pub(super) fn max_frame_usize(self) -> usize {
         usize::try_from(self.frame_bytes).unwrap_or(usize::MAX)
-    }
-
-    pub(super) fn max_fifo_usize(self) -> usize {
-        usize::try_from(self.fifo_bytes).unwrap_or(usize::MAX)
     }
 }
 

@@ -20,6 +20,7 @@ import { Copy, TrashBin } from "@gravity-ui/icons";
 import type {
   ChannelPresentationViewModel,
   RuleDraft,
+  RuleStageCapabilityViewModel,
 } from "@/generated/rust-types";
 import {
   ActionsEditor,
@@ -35,6 +36,8 @@ type RuleEditorPanelProps = {
   loadError?: string;
   fieldErrors: Record<string, string[]>;
   channelCatalog: ChannelPresentationViewModel[];
+  capabilities?: RuleStageCapabilityViewModel[];
+  capabilityError?: string;
   writePending: boolean;
   editorBlocked: boolean;
   pendingAction?: string;
@@ -57,6 +60,8 @@ export function RuleEditorPanel({
   loadError,
   fieldErrors,
   channelCatalog,
+  capabilities,
+  capabilityError,
   writePending,
   editorBlocked,
   pendingAction,
@@ -72,6 +77,9 @@ export function RuleEditorPanel({
   onDeleteDialogChange,
 }: RuleEditorPanelProps) {
   const fieldError = (field: string) => fieldErrors[field]?.join("；");
+  const stageCapability = capabilities?.find(
+    (capability) => capability.stage === draft?.stage,
+  );
   return (
     <aside
       ref={panelRef}
@@ -186,23 +194,33 @@ export function RuleEditorPanel({
               </div>
             </Tabs.Panel>
             <Tabs.Panel id="conditions" className="pt-4">
-              <ConditionsEditor
-                draft={draft}
-                fieldErrors={fieldErrors}
-                onChange={onDraftChange}
-                onAsyncStateChange={onAsyncStateChange}
-              />
+              {stageCapability ? (
+                <ConditionsEditor
+                  draft={draft}
+                  fieldErrors={fieldErrors}
+                  onChange={onDraftChange}
+                  onAsyncStateChange={onAsyncStateChange}
+                  capability={stageCapability}
+                />
+              ) : (
+                <CapabilityUnavailable error={capabilityError} />
+              )}
               <p className="mt-2 text-xs text-[var(--telemetry-muted)]">
                 空条件表示匹配该通道和阶段的全部消息；保存时统一校验。
               </p>
             </Tabs.Panel>
             <Tabs.Panel id="actions" className="pt-4">
-              <ActionsEditor
-                draft={draft}
-                fieldErrors={fieldErrors}
-                onChange={onDraftChange}
-                onAsyncStateChange={onAsyncStateChange}
-              />
+              {stageCapability ? (
+                <ActionsEditor
+                  draft={draft}
+                  fieldErrors={fieldErrors}
+                  onChange={onDraftChange}
+                  onAsyncStateChange={onAsyncStateChange}
+                  capability={stageCapability}
+                />
+              ) : (
+                <CapabilityUnavailable error={capabilityError} />
+              )}
               <p className="mt-2 text-xs text-[var(--telemetry-muted)]">
                 动作顺序即执行顺序，终止动作会中断后续评估。
               </p>
@@ -237,6 +255,20 @@ export function RuleEditorPanel({
         </Form>
       )}
     </aside>
+  );
+}
+
+function CapabilityUnavailable({ error }: { error?: string }) {
+  return (
+    <Alert status="danger">
+      <Alert.Indicator />
+      <Alert.Content>
+        <Alert.Title>规则能力读取失败</Alert.Title>
+        <Alert.Description>
+          {error ?? "当前阶段没有可用的规则能力，请重新选择阶段。"}
+        </Alert.Description>
+      </Alert.Content>
+    </Alert>
   );
 }
 
@@ -303,10 +335,12 @@ function RuleSelects({
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
-              <ListBox.Item id="none">请选择</ListBox.Item>
-              <ListBox.Item id="tls_handshake">TLS 握手</ListBox.Item>
-              <ListBox.Item id="request">请求</ListBox.Item>
-              <ListBox.Item id="response">响应</ListBox.Item>
+              <ListBox.Item id="none" textValue="请选择">请选择</ListBox.Item>
+              <ListBox.Item id="tls_handshake" textValue="TLS 握手">
+                TLS 握手
+              </ListBox.Item>
+              <ListBox.Item id="request" textValue="请求">请求</ListBox.Item>
+              <ListBox.Item id="response" textValue="响应">响应</ListBox.Item>
             </ListBox>
           </Select.Popover>
         </Select>

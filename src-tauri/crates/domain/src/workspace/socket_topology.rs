@@ -8,6 +8,29 @@ use super::{
     SocketPayloadProcessing, SocketRelaySecurity,
 };
 
+pub const DEFAULT_SOCKET_READ_CHUNK_BYTES: u32 = 16 * 1024;
+pub const DEFAULT_SOCKET_DIAGNOSTIC_EVENT_CAPACITY: u32 = 256;
+pub const DEFAULT_SOCKET_DIAGNOSTIC_MEMORY_BYTES: u64 = 1024 * 1024;
+
+/// Socket 运行时所有内存队列和单次 OS read 的显式资源合同。
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct SocketRuntimeLimits {
+    pub read_chunk_bytes: u32,
+    pub diagnostic_event_capacity: u32,
+    pub diagnostic_memory_bytes: u64,
+}
+
+impl Default for SocketRuntimeLimits {
+    fn default() -> Self {
+        Self {
+            read_chunk_bytes: DEFAULT_SOCKET_READ_CHUNK_BYTES,
+            diagnostic_event_capacity: DEFAULT_SOCKET_DIAGNOSTIC_EVENT_CAPACITY,
+            diagnostic_memory_bytes: DEFAULT_SOCKET_DIAGNOSTIC_MEMORY_BYTES,
+        }
+    }
+}
+
 /// 具有真实 Server 上游的 Socket 转发拓扑。
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
@@ -52,6 +75,8 @@ pub struct SocketRelaySettings {
     pub topology: SocketTopology,
     /// Listener 同时接受的最大 Socket 连接数。
     pub maximum_connections: u16,
+    /// 经过 Workspace 校验后原样注入 Proxy/diagnostic runtime；运行时不得静默修正。
+    pub runtime_limits: SocketRuntimeLimits,
     /// Frame/payload 处理方式。
     pub processing: SocketPayloadProcessing,
 }
@@ -61,6 +86,7 @@ impl Default for SocketRelaySettings {
         Self {
             topology: SocketTopology::default(),
             maximum_connections: DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
+            runtime_limits: SocketRuntimeLimits::default(),
             processing: SocketPayloadProcessing::Direct,
         }
     }
@@ -69,7 +95,7 @@ impl Default for SocketRelaySettings {
 impl SocketRelaySettings {
     /// 构造保持现有透明/脚本 Relay 语义的显式拓扑配置。
     #[must_use]
-    pub const fn relay(
+    pub fn relay(
         upstream: SocketEndpoint,
         security: SocketRelaySecurity,
         maximum_connections: u16,
@@ -78,6 +104,7 @@ impl SocketRelaySettings {
         Self {
             topology: SocketTopology::Relay(SocketRelayTopology { upstream, security }),
             maximum_connections,
+            runtime_limits: SocketRuntimeLimits::default(),
             processing,
         }
     }

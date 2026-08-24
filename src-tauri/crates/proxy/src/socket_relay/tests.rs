@@ -42,6 +42,7 @@ fn transparent_config(bind_addr: SocketAddr, upstream: SocketAddr) -> SocketRela
         },
         security: SocketRelaySecurity::Transparent,
         maximum_connections: 8,
+        read_chunk_bytes: 16 * 1024,
         connect_timeout: Duration::from_secs(1),
         read_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),
@@ -172,11 +173,12 @@ fn endpoint_and_capacity_validation_reject_url_shaped_hosts_and_invalid_limits()
 mod direct;
 mod local_responder;
 mod scripted_relay;
+mod scripted_tls;
 mod support;
 mod tls;
 
 #[tokio::test]
-async fn cancellation_emits_one_terminal_event_and_resets_active_metrics() {
+async fn cancellation_before_first_ingress_never_opens_upstream_and_resets_metrics() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
     let upstream_task = tokio::spawn(async move {
@@ -196,6 +198,7 @@ async fn cancellation_emits_one_terminal_event_and_resets_active_metrics() {
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
     let run = SocketRelayRunContext {
+        workspace_id: "test-workspace".into(),
         listener_id: "socket-test-listener".into(),
         workspace_runtime_epoch: uuid::Uuid::new_v4(),
         listener_run_epoch: uuid::Uuid::new_v4(),
@@ -203,18 +206,10 @@ async fn cancellation_emits_one_terminal_event_and_resets_active_metrics() {
     let expected_run = run.clone();
     let server = tokio::spawn(async move { running.serve_with_context(run, server_cancel).await });
     let _client = connect_retry(bind_addr).await;
-    for _ in 0..100 {
-        if observer
-            .0
-            .lock()
-            .unwrap()
-            .iter()
-            .any(|event| matches!(event, SocketConnectionEvent::Opened { .. }))
-        {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    wait_for_event(&observer, |event| {
+        matches!(event, SocketConnectionEvent::Admitted { .. })
+    })
+    .await;
     cancellation.cancel();
     server.await.unwrap().unwrap();
     upstream_task.abort();
@@ -233,7 +228,7 @@ async fn cancellation_emits_one_terminal_event_and_resets_active_metrics() {
                 .iter()
                 .filter(|event| matches!(event, SocketConnectionEvent::Opened { .. }))
                 .count(),
-            1
+            0
         );
         let closed = events
             .iter()
@@ -275,7 +270,8 @@ async fn cidr_and_capacity_rejections_are_typed_and_counted() {
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
     let server = tokio::spawn(async move { running.serve(server_cancel).await });
-    let _first = connect_retry(bind_addr).await;
+    let mut first = connect_retry(bind_addr).await;
+    first.write_all(b"open").await.unwrap();
     wait_for_event(&observer, |event| {
         matches!(event, SocketConnectionEvent::Opened { .. })
     })
@@ -324,7 +320,8 @@ async fn pre_open_dns_and_connect_failures_have_typed_stages() {
         let running = Arc::clone(&service);
         let server_cancel = cancellation.clone();
         let server = tokio::spawn(async move { running.serve(server_cancel).await });
-        let _client = connect_retry(bind_addr).await;
+        let mut client = connect_retry(bind_addr).await;
+        client.write_all(b"trigger-connect").await.unwrap();
         wait_for_event(&observer, |event| match event {
             SocketConnectionEvent::Closed {
                 opened: false,

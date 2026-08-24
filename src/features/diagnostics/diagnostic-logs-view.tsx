@@ -99,7 +99,6 @@ export function DiagnosticLogsView() {
       const result = await callCommand(commands.diagnosticReproductionReportExport({
         workspace_id: workspaceId,
         listener_id: effectiveReportListenerId,
-        capture_id: null,
       }));
       if (result) {
         toast(`故障复现报告已导出（${result.bytes_written} 字节）。`, {
@@ -202,16 +201,6 @@ export function DiagnosticLogsView() {
             />
             <Button variant="primary" onPress={() => setKeyword(draftKeyword.trim())}>
               筛选
-            </Button>
-            <Button
-              variant="outline"
-              isDisabled={!draftKeyword && !keyword}
-              onPress={() => {
-                setDraftKeyword("");
-                setKeyword("");
-              }}
-            >
-              清除
             </Button>
             <Button variant="outline" onPress={() => void page.refresh()}>
               刷新

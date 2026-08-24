@@ -24,7 +24,6 @@ async fn forward_downstream_tls_round_trip(require_client_identity: bool) {
             connect_timeout: Duration::from_secs(2),
             read_timeout: Duration::from_secs(2),
             write_timeout: Duration::from_secs(2),
-            tunnel_idle_timeout: Duration::from_secs(2),
         },
         Arc::new(NoAuthentication),
     )

@@ -9,6 +9,7 @@ import {
   socketWorkingMode,
   type SocketWorkingMode,
 } from "./socket-listener-model";
+import { defaultSocketRuntimeLimits } from "./listener-data-plane";
 
 const appTls: SocketDownstreamTlsSettings = {
   server_identity: "app-identity",
@@ -46,6 +47,7 @@ function relay(processing: SocketRelaySettings["processing"]): SocketRelaySettin
       },
     },
     maximum_connections: 64,
+    runtime_limits: defaultSocketRuntimeLimits(),
     processing,
   };
 }
@@ -57,6 +59,7 @@ function local(processing: SocketRelaySettings["processing"]): SocketRelaySettin
       settings: { downstream_security: { mode: "tls", downstream_tls: appTls } },
     },
     maximum_connections: 64,
+    runtime_limits: defaultSocketRuntimeLimits(),
     processing,
   };
 }

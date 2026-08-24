@@ -50,11 +50,10 @@ pub(super) struct PreparedSocketSecurity {
     mode: SocketTransportMode,
 }
 
-pub(super) struct ConnectedSocket {
-    pub(super) downstream: BoxIo,
+/// 延迟建立的 Server 侧 Socket，以及建立连接时形成的真实证据。
+pub(super) struct ConnectedUpstreamSocket {
     pub(super) upstream: BoxIo,
     pub(super) resolved_address: SocketAddr,
-    pub(super) downstream_tls_peer: Option<String>,
     pub(super) upstream_tls: Option<SocketTlsEvidence>,
 }
 
@@ -120,24 +119,16 @@ impl PreparedSocketSecurity {
         self.mode.clone()
     }
 
-    pub(super) async fn connect(
+    /// 只建立 Server 侧连接。
+    ///
+    /// 协议 Exchange 会先完成 App 侧接纳和首条消息处理，直到实际写出时才调用本方法。
+    /// 这样 DNS、TCP 与上游 TLS 都不会早于首份 App ingress 发生。
+    pub(super) async fn connect_upstream_endpoint(
         &self,
-        downstream: BoxIo,
-        peer: SocketAddr,
         endpoint: &SocketEndpoint,
         connect_timeout: Duration,
         cancellation: &CancellationToken,
-    ) -> std::result::Result<ConnectedSocket, SocketPreparationFailure> {
-        let downstream = self
-            .accept_downstream(downstream, peer, connect_timeout, cancellation)
-            .await
-            .map_err(|error| {
-                SocketPreparationFailure::new(
-                    error,
-                    SocketRelayStage::DownstreamTls,
-                    Some(SocketRelayDirection::Downstream),
-                )
-            })?;
+    ) -> std::result::Result<ConnectedUpstreamSocket, SocketPreparationFailure> {
         let addresses = resolve(endpoint, connect_timeout, cancellation)
             .await
             .map_err(|error| SocketPreparationFailure::new(error, SocketRelayStage::Dns, None))?;
@@ -156,11 +147,9 @@ impl PreparedSocketSecurity {
                     Some(SocketRelayDirection::Upstream),
                 )
             })?;
-        Ok(ConnectedSocket {
-            downstream: downstream.downstream,
+        Ok(ConnectedUpstreamSocket {
             upstream,
             resolved_address,
-            downstream_tls_peer: downstream.downstream_tls_peer,
             upstream_tls,
         })
     }

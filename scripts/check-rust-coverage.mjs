@@ -46,7 +46,7 @@ const policies = [
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
       {
-        suffix: "crates/domain/src/protocol_package/document.rs",
+        suffix: "crates/domain/src/document/model.rs",
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
       {
@@ -54,7 +54,7 @@ const policies = [
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
       {
-        suffix: "crates/domain/src/protocol_package/schema.rs",
+        suffix: "crates/domain/src/document/schema.rs",
         thresholds: { functions: 100, lines: 100, regions: 100 },
       },
     ],
@@ -130,10 +130,6 @@ const policies = [
         thresholds: { functions: 100, lines: 100, regions: 100 },
       },
       {
-        suffix: "adapters/listener_runtime/external_local_responder.rs",
-        thresholds: { functions: 90, lines: 90, regions: 90 },
-      },
-      {
         suffix: "adapters/listener_runtime/external_relay.rs",
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
@@ -159,23 +155,11 @@ const policies = [
         thresholds: { lines: 90 },
       },
       {
-        suffix: "adapters/listener_runtime/http_protocol_pipeline/failure.rs",
-        thresholds: { functions: 90, lines: 90, regions: 90 },
-      },
-      {
         suffix: "adapters/listener_runtime/http_protocol_pipeline/programs.rs",
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
       {
-        suffix: "adapters/listener_runtime/local_responder/failure.rs",
-        thresholds: { functions: 90, lines: 90, regions: 90 },
-      },
-      {
         suffix: "adapters/listener_runtime/scripted_relay/failure.rs",
-        thresholds: { functions: 90, lines: 90, regions: 90 },
-      },
-      {
-        suffix: "adapters/listener_runtime/socket_capture_publisher.rs",
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
     ],

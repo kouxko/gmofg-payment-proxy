@@ -64,6 +64,7 @@ const draft: SettingsDraft = {
   max_body_bytes: 4 * 1024 * 1024,
   max_sessions: 500,
   max_memory_bytes: 256 * 1024 * 1024,
+  ui_event_capacity: 4096,
   leaf_sans: ["127.0.0.1"],
   external_package_service: {
     bind_address: "0.0.0.0",

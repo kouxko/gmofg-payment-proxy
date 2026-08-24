@@ -5,17 +5,15 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     DownstreamClientAuthentication, HttpListenerSettings, ListenerDataPlane, ProxyListener,
-    ProxyWorkspace, SocketDownstreamTlsSettings, SocketPayloadProcessing,
-    SocketRelaySecurity as DomainSocketSecurity, SocketRelaySettings, SocketTopology,
-    SocketUpstreamTlsSettings,
+    ProxyWorkspace, SocketDownstreamTlsSettings, SocketRelaySecurity as DomainSocketSecurity,
+    SocketRelaySettings, SocketTopology, SocketUpstreamTlsSettings,
 };
 use intercept_proxy_runtime::{
-    ChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode, ForwardMitmConfig,
-    ForwardProxyAuthenticator, ForwardProxyConfig, ForwardProxyService, MessageLimits,
-    NativeRootMitmConnector, NoAuthentication, PipelinePorts, ReverseProxyConfig,
-    ReverseProxyService, SocketDownstreamTlsConfig, SocketEndpoint, SocketRelayConfig,
-    SocketRelaySecurity as RuntimeSocketSecurity, SocketRelayService, SocketTlsIdentity,
-    SocketUpstreamTlsConfig,
+    ChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode, ForwardProxyAuthenticator,
+    ForwardProxyConfig, ForwardProxyService, HttpProtocolCapabilityFactory, MessageLimits,
+    NoAuthentication, PipelinePorts, PlainHttpCapabilityFactory, ReverseProxyConfig,
+    ReverseProxyService, SocketDownstreamTlsConfig, SocketRelaySecurity as RuntimeSocketSecurity,
+    SocketRelayService, SocketTlsIdentity, SocketUpstreamTlsConfig,
 };
 
 use super::{
@@ -28,6 +26,7 @@ use super::{
 mod tls;
 
 mod scripted;
+mod socket;
 
 pub(super) enum PreparedListenerRuntime {
     HttpForward {
@@ -108,11 +107,42 @@ struct HttpBuildContext<'a> {
     bind_addr: SocketAddr,
     protocol: Option<Arc<HttpProtocolRuntimeSnapshot>>,
     pipeline: Option<Arc<dyn PipelinePorts>>,
+    capabilities: Option<Arc<dyn HttpProtocolCapabilityFactory>>,
 }
 
 impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
     pub(super) const fn new(adapter: &'ctx ListenerRuntimeAdapter) -> Self {
         Self { adapter }
+    }
+
+    fn socket_observer(
+        &self,
+        listener: &ProxyListener,
+        socket: &SocketRelaySettings,
+    ) -> AppResult<Arc<SocketDiagnosticObserver>> {
+        let capacity =
+            usize::try_from(socket.runtime_limits.diagnostic_event_capacity).map_err(|_| {
+                runtime_error(
+                    listener,
+                    "CONFIG_INVALID",
+                    "Socket 诊断事件容量超出平台范围".into(),
+                )
+            })?;
+        let max_logical_bytes = usize::try_from(socket.runtime_limits.diagnostic_memory_bytes)
+            .map_err(|_| {
+                runtime_error(
+                    listener,
+                    "CONFIG_INVALID",
+                    "Socket 诊断内存容量超出平台范围".into(),
+                )
+            })?;
+        SocketDiagnosticObserver::new(
+            self.adapter.socket_diagnostic_events.read().clone(),
+            capacity,
+            max_logical_bytes,
+        )
+        .map(Arc::new)
+        .map_err(|error| runtime_error(listener, error.code, error.message))
     }
 
     pub(super) async fn build(
@@ -177,15 +207,19 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             None
         };
         let pipeline = if full_runtime {
-            let services = self.pipeline(listener)?;
+            Some(self.pipeline(listener)?.ports.clone())
+        } else {
+            None
+        };
+        let capabilities = if full_runtime {
             Some(protocol.as_ref().map_or_else(
-                || services.ports.clone(),
-                |snapshot| {
-                    snapshot.wrap(
-                        services.ports.clone(),
-                        services.http_protocol_observations.clone(),
-                    )
+                || {
+                    Arc::new(PlainHttpCapabilityFactory::new(
+                        workspace.id.to_string(),
+                        listener.id.to_string(),
+                    )) as Arc<dyn HttpProtocolCapabilityFactory>
                 },
+                |snapshot| Arc::clone(snapshot) as Arc<dyn HttpProtocolCapabilityFactory>,
             ))
         } else {
             None
@@ -197,6 +231,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             bind_addr,
             protocol,
             pipeline,
+            capabilities,
         };
         if let Some(fixed) = &http.fixed_server {
             return self.build_fixed_http(&context, fixed, full_runtime).await;
@@ -241,6 +276,10 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
                 .with_pipeline(
                     channel(context.listener)?,
                     Arc::clone(pipeline),
+                    context
+                        .capabilities
+                        .clone()
+                        .expect("full runtime HTTP capabilities prepared"),
                     MessageLimits::default(),
                     DEFAULT_MAX_CONNECTIONS,
                 )
@@ -267,12 +306,6 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
                 connect_timeout: Duration::from_millis(context.listener.connect_timeout_ms),
                 read_timeout: Duration::from_millis(context.listener.read_timeout_ms),
                 write_timeout: Duration::from_millis(context.listener.write_timeout_ms),
-                tunnel_idle_timeout: Duration::from_millis(
-                    context
-                        .listener
-                        .read_timeout_ms
-                        .min(context.listener.write_timeout_ms),
-                ),
             },
             authenticator,
         )
@@ -286,25 +319,11 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
                 .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
         }
         if context.http.mitm.enabled {
-            let authority = self
-                .adapter
-                .mitm_certificate_authority
-                .clone()
-                .ok_or_else(|| certificate_not_ready(context.listener, "MITM Root CA 签发能力"))?;
-            let upstream = NativeRootMitmConnector::new()
-                .map_err(|error| AppError::new(error.code, error.message))?;
-            service = service
-                .with_mitm(
-                    ForwardMitmConfig {
-                        authority_allowlist: context.http.mitm.authority_allowlist.clone(),
-                        maximum_cached_leaf_certificates: usize::from(
-                            context.http.mitm.maximum_cached_leaf_certificates,
-                        ),
-                    },
-                    authority,
-                    Arc::new(upstream),
-                )
-                .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
+            return Err(AppError::new(
+                "HTTP_TUNNEL_UNSUPPORTED",
+                "当前 Exchange 架构不支持 HTTP CONNECT、Upgrade 或 MITM 隧道。",
+            )
+            .entity(context.listener.id.to_string()));
         }
         Ok(PreparedListenerRuntime::HttpForward {
             bind_addr: context.bind_addr,
@@ -315,57 +334,13 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
                     .pipeline
                     .clone()
                     .expect("full runtime pipeline prepared"),
+                context
+                    .capabilities
+                    .clone()
+                    .expect("full runtime HTTP capabilities prepared"),
                 MessageLimits::default(),
             ),
             protocol: context.protocol.clone(),
-        })
-    }
-
-    fn build_socket(
-        &self,
-        workspace: &ProxyWorkspace,
-        listener: &ProxyListener,
-        socket: &SocketRelaySettings,
-        bind_addr: SocketAddr,
-        full_runtime: bool,
-    ) -> AppResult<PreparedListenerRuntime> {
-        if !full_runtime {
-            return self.build_socket_probe(workspace, listener, socket, bind_addr);
-        }
-        if matches!(&socket.processing, SocketPayloadProcessing::Scripted(_)) {
-            return self.build_scripted_socket(workspace, listener, socket, bind_addr);
-        }
-        let SocketTopology::Relay(relay) = &socket.topology else {
-            return Err(AppError::new(
-                "LOCAL_RESPONDER_SCRIPTED_REQUIRED",
-                "LocalResponder 必须使用 Scripted 数据处理模式。",
-            )
-            .entity(listener.id.to_string()));
-        };
-        let security = self.socket_security(workspace, &relay.security)?;
-        let observer = Arc::new(SocketDiagnosticObserver::new(
-            self.adapter.socket_diagnostic_events.read().clone(),
-        ));
-        let service = SocketRelayService::build_with_observer(
-            SocketRelayConfig {
-                bind_addr,
-                allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
-                upstream: SocketEndpoint {
-                    host: relay.upstream.host.clone(),
-                    port: relay.upstream.port,
-                },
-                security,
-                maximum_connections: socket.maximum_connections,
-                connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                write_timeout: Duration::from_millis(listener.write_timeout_ms),
-            },
-            observer,
-        )
-        .map_err(|error| runtime_error(listener, error.code, error.message))?;
-        Ok(PreparedListenerRuntime::Socket {
-            bind_addr,
-            service: Arc::new(service),
         })
     }
 
@@ -481,9 +456,4 @@ pub(super) fn runtime_error(
     message: String,
 ) -> AppError {
     AppError::new(code, message).entity(listener.id.to_string())
-}
-
-fn certificate_not_ready(listener: &ProxyListener, capability: &str) -> AppError {
-    AppError::new("CERTIFICATE_NOT_READY", format!("{capability}尚未就绪。"))
-        .entity(listener.id.to_string())
 }

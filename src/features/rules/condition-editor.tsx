@@ -1,6 +1,5 @@
 import {
   Button,
-  FieldError,
   Input,
   Label,
   ListBox,
@@ -12,6 +11,8 @@ import type {
   RuleDraft,
   RuleMatchFieldKind,
   RuleMatchOperatorKind,
+  RuleStageCapabilityViewModel,
+  MessageStage,
 } from "@/generated/rust-types";
 import { NumericInput } from "./rule-editor-controls";
 import {
@@ -32,11 +33,15 @@ function ConditionFields({
   onChange,
   asyncStateKey,
   onAsyncStateChange,
+  matchFieldKinds,
+  stage,
 }: {
   condition: RuleCondition;
   onChange: (update: ConditionUpdate) => void;
   asyncStateKey: string;
   onAsyncStateChange: AsyncStateChange;
+  matchFieldKinds: RuleMatchFieldKind[];
+  stage: MessageStage;
 }) {
   const runAsync = useAsyncRequestSlots(asyncStateKey, onAsyncStateChange);
   if (condition.type === "nth_hit") {
@@ -64,7 +69,8 @@ function ConditionFields({
           onSelectionChange={(type) => {
             void runAsync(
               "field",
-              () => requestMatchFieldDraft(type as RuleMatchFieldKind),
+              () =>
+                requestMatchFieldDraft(type as RuleMatchFieldKind, stage),
               (next) =>
                 onChange((current) =>
                   current.type === "field"
@@ -80,9 +86,13 @@ function ConditionFields({
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
-              {Object.entries(fieldLabels).map(([value, label]) => (
-                <ListBox.Item key={value} id={value} textValue={label}>
-                  {label}
+              {matchFieldKinds.map((value) => (
+                <ListBox.Item
+                  key={value}
+                  id={value}
+                  textValue={fieldLabels[value]}
+                >
+                  {fieldLabels[value]}
                 </ListBox.Item>
               ))}
             </ListBox>
@@ -165,6 +175,8 @@ function ConditionRow({
   onChange,
   onDelete,
   onAsyncStateChange,
+  matchFieldKinds,
+  stage,
 }: {
   condition: RuleCondition;
   index: number;
@@ -173,6 +185,8 @@ function ConditionRow({
   onChange: (update: ConditionUpdate) => void;
   onDelete: () => void;
   onAsyncStateChange: AsyncStateChange;
+  matchFieldKinds: RuleMatchFieldKind[];
+  stage: MessageStage;
 }) {
   const runAsync = useAsyncRequestSlots(asyncStateKey, onAsyncStateChange);
   const rowError = errorText(fieldErrors, `conditions.${index}`);
@@ -197,7 +211,7 @@ function ConditionRow({
           onSelectionChange={(kind) => {
             void runAsync(
               "kind",
-              () => requestConditionDraft(kind as ConditionKind),
+              () => requestConditionDraft(kind as ConditionKind, stage),
               (next) => onChange(() => next),
             );
           }}
@@ -223,8 +237,26 @@ function ConditionRow({
         onChange={onChange}
         asyncStateKey={asyncStateKey}
         onAsyncStateChange={onAsyncStateChange}
+        matchFieldKinds={matchFieldKinds}
+        stage={stage}
       />
-      {rowError && <FieldError className="mt-2">{rowError}</FieldError>}
+      {condition.type === "field" &&
+        !matchFieldKinds.includes(condition.field.type) && (
+          <p
+            className="mt-2 text-sm text-[var(--telemetry-danger)]"
+            role="alert"
+          >
+            当前匹配字段不支持所选阶段，请改为下拉框中的可用字段。
+          </p>
+        )}
+      {rowError && (
+        <p
+          className="mt-2 text-sm text-[var(--telemetry-danger)]"
+          role="alert"
+        >
+          {rowError}
+        </p>
+      )}
     </div>
   );
 }
@@ -234,11 +266,13 @@ export function ConditionsEditor({
   fieldErrors,
   onChange,
   onAsyncStateChange,
+  capability,
 }: {
   draft: RuleDraft;
   fieldErrors: Record<string, string[]>;
   onChange: (change: RuleDraftChange) => void;
   onAsyncStateChange: AsyncStateChange;
+  capability?: RuleStageCapabilityViewModel;
 }) {
   const editorKey = draft.rule_id ?? "new";
   const runAsync = useAsyncRequestSlots(
@@ -255,7 +289,9 @@ export function ConditionsEditor({
   return (
     <div className="grid gap-3">
       {fieldErrors.conditions && (
-        <FieldError>{fieldErrors.conditions.join("；")}</FieldError>
+        <p className="text-sm text-[var(--telemetry-danger)]" role="alert">
+          {fieldErrors.conditions.join("；")}
+        </p>
       )}
       {draft.conditions.map((condition, index) => (
         <ConditionRow
@@ -274,14 +310,18 @@ export function ConditionsEditor({
             }))
           }
           onAsyncStateChange={onAsyncStateChange}
+          matchFieldKinds={capability?.match_field_kinds ?? []}
+          stage={draft.stage!}
         />
       ))}
       <Button
         variant="outline"
+        isDisabled={draft.stage == null || capability == null}
         onPress={() => {
+          if (draft.stage == null) return;
           void runAsync(
             "add",
-            () => requestConditionDraft("field"),
+            () => requestConditionDraft("field", draft.stage!),
             (condition) =>
               onChange((current) => ({
                 ...current,

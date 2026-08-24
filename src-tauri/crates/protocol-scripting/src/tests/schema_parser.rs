@@ -5,6 +5,7 @@ use intercept_proxy_domain::{
 };
 
 use super::fixtures::{TEMPLATE_SCHEMA, one_field_schema, schema_with_fields};
+use super::rhai_identifier::RHAI_RESERVED_WORDS;
 use crate::{
     MAX_DOCUMENT_SCHEMA_TOML_BYTES, ProtocolPackageFile, ProtocolPackageParseErrorCode,
     parse_document_schema,
@@ -203,6 +204,21 @@ type = "int"
             ProtocolPackageParseErrorCode::DocumentSchemaInvalid
         );
         assert_eq!(error.field(), field);
+    }
+}
+
+#[test]
+fn schema_rejects_every_host_api_v1_rhai_reserved_word_at_the_field_path() {
+    let base = one_field_schema();
+    for reserved in RHAI_RESERVED_WORDS {
+        let input = base.replace("name = \"amount\"", &format!("name = \"{reserved}\""));
+        let error = parse_document_schema(&input).unwrap_err();
+        assert_eq!(
+            error.code(),
+            ProtocolPackageParseErrorCode::DocumentSchemaInvalid,
+            "{reserved}"
+        );
+        assert_eq!(error.field(), "fields[0].name", "{reserved}");
     }
 }
 

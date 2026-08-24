@@ -132,8 +132,8 @@ fn assert_raw_pkcs12_secrets_are_not_persisted(store: &SqliteStore) {
     assert!(persisted.get("pkcs12_der").is_none());
 }
 
-#[tokio::test]
-async fn tls_snapshot_preserves_keychain_unprotect_error_code() {
+#[test]
+fn installation_identity_preserves_keychain_unprotect_error_code() {
     let store = Arc::new(SqliteStore::in_memory().expect("store"));
     store
         .compare_and_swap_certificate_materials(
@@ -156,11 +156,10 @@ async fn tls_snapshot_preserves_keychain_unprotect_error_code() {
     );
 
     let error = adapter
-        .load_epoch_snapshot(&["127.0.0.1".into()])
-        .await
-        .expect_err("snapshot must fail");
+        .load_installation_server_identity()
+        .expect_err("identity load must fail");
 
-    assert_eq!(error.code, "KEYCHAIN_UNPROTECT_FAILED");
+    assert_eq!(error.view_model.code, "KEYCHAIN_UNPROTECT_FAILED");
 }
 
 #[tokio::test]

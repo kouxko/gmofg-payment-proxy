@@ -2,12 +2,11 @@
 
 use super::Application;
 use crate::{
-    AppError, AppResult, DIAGNOSTIC_REPORT_MAX_CAPTURES, DIAGNOSTIC_REPORT_MAX_DIAGNOSTICS,
-    DiagnosticReportBundle, DiagnosticReportCollectionError, DiagnosticReportEnvironment,
-    DiagnosticReportQuery, DiagnosticReportSection, DiagnosticReportViewModel, HttpBodyProcessing,
-    ListenerDataPlane, ListenerRuntimeState, ListenerStatusViewModel, PageRequest,
-    ProtocolPackageRef, SocketCapturePageViewModel, SocketCaptureQuery, SocketCaptureSort,
-    SocketPayloadProcessing, SortDirection, UiTone,
+    AppError, AppResult, DIAGNOSTIC_REPORT_MAX_DIAGNOSTICS, DiagnosticReportBundle,
+    DiagnosticReportCollectionError, DiagnosticReportEnvironment, DiagnosticReportQuery,
+    DiagnosticReportSection, DiagnosticReportViewModel, HttpBodyProcessing, ListenerDataPlane,
+    ListenerRuntimeState, ListenerStatusViewModel, ProtocolPackageRef, SocketPayloadProcessing,
+    UiTone,
 };
 
 mod markdown;
@@ -69,22 +68,6 @@ impl Application {
             .collect();
 
         let diagnostics = self.report_diagnostics(listener.id);
-        let socket_captures = self
-            .report_socket_captures(
-                workspace.id,
-                listener.id,
-                package.clone(),
-                &mut collection_errors,
-            )
-            .await;
-        let capture_detail = self
-            .report_capture_detail(
-                query.capture_id,
-                workspace.id,
-                listener.id,
-                &mut collection_errors,
-            )
-            .await;
         let android = self
             .report_android_observations(&mut collection_errors)
             .await;
@@ -100,8 +83,6 @@ impl Application {
             protocol_package_detail,
             external_package_service,
             diagnostics,
-            socket_captures,
-            capture_detail,
             android_network_status: android.network_status,
             android_runtime_owner: android.runtime_owner,
             android_runtime_endpoints: android.runtime_endpoints,
@@ -144,69 +125,6 @@ impl Application {
             .collect()
     }
 
-    async fn report_socket_captures(
-        &self,
-        workspace_id: crate::WorkspaceId,
-        listener_id: crate::ListenerId,
-        package: Option<ProtocolPackageRef>,
-        errors: &mut Vec<DiagnosticReportCollectionError>,
-    ) -> SocketCapturePageViewModel {
-        let query = SocketCaptureQuery {
-            workspace_id: Some(workspace_id),
-            listener_id: Some(listener_id),
-            session_id: None,
-            connection_id: None,
-            package,
-            direction: None,
-            kind: None,
-            occurred_from: None,
-            occurred_to: None,
-            sort: SocketCaptureSort::OccurredAt,
-            direction_sort: SortDirection::Desc,
-            page: PageRequest {
-                page: 1,
-                page_size: DIAGNOSTIC_REPORT_MAX_CAPTURES,
-            },
-        };
-        match self.capture.query_socket(query).await {
-            Ok(page) => page,
-            Err(error) => {
-                collect_error(errors, DiagnosticReportSection::SocketCaptures, error);
-                empty_capture_page()
-            }
-        }
-    }
-
-    async fn report_capture_detail(
-        &self,
-        capture_id: Option<crate::SocketCaptureId>,
-        workspace_id: crate::WorkspaceId,
-        listener_id: crate::ListenerId,
-        errors: &mut Vec<DiagnosticReportCollectionError>,
-    ) -> Option<crate::SocketCaptureDetailViewModel> {
-        let detail = match capture_id {
-            Some(capture_id) => observe(
-                self.capture.get_socket_detail(capture_id).await,
-                DiagnosticReportSection::CaptureDetail,
-                errors,
-            ),
-            None => None,
-        }?;
-        if detail.record.workspace_id == workspace_id && detail.record.listener_id == listener_id {
-            Some(detail)
-        } else {
-            collect_error(
-                errors,
-                DiagnosticReportSection::CaptureDetail,
-                AppError::new(
-                    "CAPTURE_SCOPE_MISMATCH",
-                    "指定 Socket capture 不属于请求的 Workspace 与 Listener。",
-                ),
-            );
-            None
-        }
-    }
-
     async fn report_android_observations(
         &self,
         errors: &mut Vec<DiagnosticReportCollectionError>,
@@ -244,8 +162,9 @@ fn report_environment(product_name: &str) -> DiagnosticReportEnvironment {
         operating_system: std::env::consts::OS.into(),
         architecture: std::env::consts::ARCH.into(),
         architecture_refs: vec![
-            "docs/architecture/system-context.md".into(),
-            "docs/architecture/data-planes.md".into(),
+            "docs/architecture/modules.md".into(),
+            "docs/architecture/data-flow.md".into(),
+            "docs/architecture/runtime-observability.md".into(),
             "docs/architecture/decisions/ADR-004-embedded-read-only-mcp.md".into(),
             "src-tauri/crates/application/src/facade/diagnostic_report.rs".into(),
             "src-tauri/crates/proxy/src/socket_relay".into(),
@@ -325,17 +244,6 @@ fn observe_vec<T>(
     observe(result, section, errors).unwrap_or_default()
 }
 
-fn empty_capture_page() -> SocketCapturePageViewModel {
-    SocketCapturePageViewModel {
-        rows: Vec::new(),
-        total: 0,
-        page: 1,
-        page_size: DIAGNOSTIC_REPORT_MAX_CAPTURES,
-        total_pages: 0,
-        empty_message: "Socket 抓包查询失败；请查看报告采集错误。".into(),
-    }
-}
-
 fn reproduction_steps(
     workspace: &crate::ProxyWorkspace,
     listener: &crate::ProxyListener,
@@ -360,8 +268,8 @@ fn reproduction_steps(
     }
     steps.extend([
         format!("启动入口 `{}:{}`。", listener.bind_address, listener.port),
-        "按 Socket 抓包中的方向、顺序和测试输入重放请求。".into(),
-        "以报告中的诊断时间线和 capture ID 对比运行结果。".into(),
+        "按 Exchange 观测中的方向、顺序和测试输入重放请求。".into(),
+        "以报告中的诊断时间线和 Exchange ID 对比运行结果。".into(),
     ]);
     steps
 }

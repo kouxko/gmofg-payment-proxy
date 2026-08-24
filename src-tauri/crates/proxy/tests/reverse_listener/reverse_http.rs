@@ -1,3 +1,12 @@
+fn plain_capabilities(
+    listener_id: &str,
+) -> Arc<dyn intercept_proxy_runtime::HttpProtocolCapabilityFactory> {
+    Arc::new(intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
+        "reverse-test-workspace",
+        listener_id,
+    ))
+}
+
 #[tokio::test]
 async fn reverse_http_request_reports_ordinary_tls_evidence_to_pipeline() {
     let upstream_server = identity("ordinary-request-server", false);
@@ -63,6 +72,7 @@ async fn reverse_http_request_reports_ordinary_tls_evidence_to_pipeline() {
     .with_pipeline(
         intercept_proxy_runtime::ChannelId::new("ordinary-tls").unwrap(),
         ports.clone(),
+        plain_capabilities("ordinary-tls"),
         MessageLimits::default(),
         4,
     )
@@ -90,6 +100,10 @@ async fn reverse_http_request_reports_ordinary_tls_evidence_to_pipeline() {
     cancellation.cancel();
     reverse_task.await.unwrap().unwrap();
     let evidence = ports.evidence.lock().unwrap();
+    assert_ordinary_tls_evidence(&evidence);
+}
+
+fn assert_ordinary_tls_evidence(evidence: &[UpstreamSecurityEvidence]) {
     assert_eq!(evidence.len(), 1);
     assert_eq!(evidence[0].transport, UpstreamTransportSecurity::Tls);
     assert_eq!(evidence[0].tls_version.as_deref(), Some("TLS 1.2"));
@@ -150,6 +164,7 @@ async fn reverse_http_request_rewrites_ipv6_authority_host() {
     .with_pipeline(
         intercept_proxy_runtime::ChannelId::new("ipv6-host-rewrite").unwrap(),
         Arc::new(NoopPipelinePorts),
+        plain_capabilities("ipv6-host-rewrite"),
         MessageLimits::default(),
         4,
     )
@@ -250,6 +265,7 @@ async fn fixed_http_preserves_methods_query_and_body() {
     .with_pipeline(
         intercept_proxy_runtime::ChannelId::new("fixed-methods").unwrap(),
         Arc::new(NoopPipelinePorts),
+        plain_capabilities("fixed-methods"),
         MessageLimits::default(),
         4,
     )

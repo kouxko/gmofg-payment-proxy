@@ -2,7 +2,9 @@ use rusqlite::Transaction;
 
 use super::InfrastructureError;
 
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 17;
+// Socket capture 改为纯运行时内存证据，数据库不再创建相关表。
+// 项目仍处于开发期，提升版本使旧开发数据库直接重建为当前结构。
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 19;
 
 pub(super) fn create_current_schema(
     transaction: &Transaction<'_>,

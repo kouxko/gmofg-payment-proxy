@@ -4,6 +4,20 @@ import { productionRustSource } from "./rust-lexical-scan.mjs";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const proxySourceRoot = path.join(repositoryRoot, "src-tauri/crates/proxy/src");
+const domainDocumentSourceRoot = path.join(repositoryRoot, "src-tauri/crates/domain/src/document");
+const domainProtocolPackageSourceRoot = path.join(repositoryRoot, "src-tauri/crates/domain/src/protocol_package");
+const domainSourceRoot = path.join(repositoryRoot, "src-tauri/crates/domain/src");
+const exchangeSourceRoot = path.join(repositoryRoot, "src-tauri/crates/exchange/src");
+const cratesSourceRoot = path.join(repositoryRoot, "src-tauri/crates");
+const tauriAppSourceRoot = path.join(repositoryRoot, "src-tauri/src");
+const exchangeCapabilityFile = path.join(exchangeSourceRoot, "capability.rs");
+const sharedCapabilityHelperFiles = [path.join(proxySourceRoot, "transport/relay.rs")];
+const listenerRuntimeSourceRoot = path.join(repositoryRoot, "src-tauri/crates/infrastructure/src/adapters/listener_runtime");
+const applicationObservationFile = path.join(repositoryRoot, "src-tauri/crates/application/src/models/exchange_observation.rs");
+const infrastructureObservationFile = path.join(repositoryRoot, "src-tauri/crates/infrastructure/src/adapters/exchange_observation.rs");
+const runtimeObservationFile = path.join(repositoryRoot, "src-tauri/src/runtime_logs/exchange_ui_layer.rs");
+const sqliteSourceRoot = path.join(repositoryRoot, "src-tauri/crates/infrastructure/src/sqlite");
+const captureSourceRoot = path.join(repositoryRoot, "src/features/capture");
 
 function matchingDelimiter(source, open, left, right) {
   let depth = 0;
@@ -54,7 +68,7 @@ function normalizedRustImports(source) {
 
 function normalizedRustPaths(source) {
   const imports = normalizedRustImports(source);
-  const qualified = [...source.matchAll(/\b(?:crate|super|self|tauri|hyper|hyper_util|http|http_body_util|intercept_proxy_application|intercept_proxy_domain)(?:::[A-Za-z_][A-Za-z0-9_]*)+/gu)]
+  const qualified = [...source.matchAll(/\b(?:crate|super|self|tauri|rhai|rusqlite|sqlx|hyper|hyper_util|http|http_body_util|intercept_proxy_[A-Za-z0-9_]+)(?:::[A-Za-z_][A-Za-z0-9_]*)+/gu)]
     .map((match) => match[0]);
   return [...new Set([...imports, ...qualified])];
 }
@@ -72,7 +86,8 @@ function includesSequence(segments, sequence) {
 }
 
 function rustViolationCodes(role, source) {
-  const imports = normalizedRustPaths(productionRustSource(source));
+  const inspected = productionRustSource(source);
+  const imports = normalizedRustPaths(inspected);
   const failures = [];
   if (role === "http" && hasPath(imports, (parts) => includesSegment(parts, "socket_relay"))) {
     failures.push("HTTP_SOCKET_IMPORT");
@@ -96,7 +111,96 @@ function rustViolationCodes(role, source) {
     if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_application")) failures.push("NEUTRAL_APPLICATION_UPWARD");
     if (hasPath(imports, (parts) => parts[0] === "tauri")) failures.push("NEUTRAL_UI_UPWARD");
   }
+  if (role === "domain_document") {
+    if (hasPath(imports, (parts) => includesSequence(parts, ["crate", "protocol_package"]))) failures.push("DOCUMENT_PROTOCOL_PACKAGE_DEPENDENCY");
+    if (hasPath(imports, (parts) => includesSequence(parts, ["crate", "external_package"]))) failures.push("DOCUMENT_EXTERNAL_PACKAGE_DEPENDENCY");
+    if (hasPath(imports, (parts) => includesSequence(parts, ["crate", "protocol_document_rule"])
+      || includesSequence(parts, ["crate", "rule"]))) failures.push("DOCUMENT_RULE_DEPENDENCY");
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_application")) failures.push("DOCUMENT_APPLICATION_UPWARD");
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_infrastructure")) failures.push("DOCUMENT_INFRASTRUCTURE_UPWARD");
+    if (hasPath(imports, (parts) => parts[0] === "tauri")) failures.push("DOCUMENT_TAURI_UPWARD");
+    if (hasPath(imports, (parts) => parts[0] === "rhai")) failures.push("DOCUMENT_RHAI_DEPENDENCY");
+  }
+  if (role === "domain_protocol_package"
+    && /\b(?:Document|DocumentField|DocumentFieldName|DocumentFieldType|DocumentSchema|DocumentSchemaId|DocumentValue)\b/u.test(inspected)) {
+    failures.push("PROTOCOL_PACKAGE_DOCUMENT_TYPE");
+  }
+  if (role === "exchange") {
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_application")) failures.push("EXCHANGE_APPLICATION_UPWARD");
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_infrastructure")) failures.push("EXCHANGE_INFRASTRUCTURE_UPWARD");
+    if (hasPath(imports, (parts) => parts[0] === "tauri")) failures.push("EXCHANGE_TAURI_UPWARD");
+    if (hasPath(imports, (parts) => ["rusqlite", "sqlx"].includes(parts[0]) || includesSegment(parts, "sqlite"))) failures.push("EXCHANGE_SQLITE_DEPENDENCY");
+    if (/\bStore\b/u.test(inspected)) failures.push("EXCHANGE_STORE_DEPENDENCY");
+    if (/\bEventHub\b/u.test(inspected)) failures.push("EXCHANGE_EVENT_HUB_DEPENDENCY");
+  }
+  if (role === "domain_document_rules") {
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_application")) failures.push("DOCUMENT_RULE_APPLICATION_DEPENDENCY");
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_exchange")) failures.push("DOCUMENT_RULE_EXCHANGE_DEPENDENCY");
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_infrastructure")) failures.push("DOCUMENT_RULE_INFRASTRUCTURE_DEPENDENCY");
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_runtime")) failures.push("DOCUMENT_RULE_RUNTIME_DEPENDENCY");
+    if (hasPath(imports, (parts) => parts[0] === "tauri")) failures.push("DOCUMENT_RULE_TAURI_DEPENDENCY");
+    if (/\b(?:HttpConnectionIdentity|HttpContext|HttpDirectionCapabilities|SocketConnectionIdentity|SocketContext|SocketDirectionCapabilities|TcpStream|TlsStream)\b/u.test(inspected)) failures.push("DOCUMENT_RULE_TRANSPORT_TYPE");
+  }
+  if (role === "infra_http_document_rules"
+    && /\b(?:SocketConnectionIdentity|SocketContext|SocketDirectionCapabilities|SocketProcessing[A-Za-z0-9_]*|SocketRelay[A-Za-z0-9_]*)\b/u.test(inspected)) {
+    failures.push("HTTP_DOCUMENT_RULE_SOCKET_DEPENDENCY");
+  }
+  if (role === "infra_socket_document_rules"
+    && /\b(?:HttpConnectionIdentity|HttpContext|HttpDirectionCapabilities)\b/u.test(inspected)) {
+    failures.push("SOCKET_DOCUMENT_RULE_HTTP_DEPENDENCY");
+  }
+  if (role === "capability_non_owner"
+    && /\b(?:pub(?:\([^)]*\))?\s+)?(?:unsafe\s+)?trait\s+(?:Frame|Decode|Display|Rules|Encode)\b/u.test(inspected)) {
+    failures.push("CAPABILITY_STAGE_TRAIT_OUTSIDE_EXCHANGE");
+  }
+  if (role === "shared_capability_helper") {
+    if (hasPath(imports, (parts) => ["hyper", "hyper_util", "http", "http_body_util"].includes(parts[0])
+      || includesSequence(parts, ["crate", "http"]))) failures.push("SHARED_CAPABILITY_HTTP_DEPENDENCY");
+    if (hasPath(imports, (parts) => includesSequence(parts, ["crate", "socket_relay"]))
+      || /\bSocket(?:Connection|Context|Relay)[A-Za-z0-9_]*\b/u.test(inspected)) failures.push("SHARED_CAPABILITY_SOCKET_DEPENDENCY");
+    if (hasPath(imports, (parts) => includesSequence(parts, ["tokio", "net"])
+      || includesSequence(parts, ["std", "net"]))
+      || /\bTcp(?:Listener|Socket|Stream)\b/u.test(inspected)) failures.push("SHARED_CAPABILITY_CONCRETE_TRANSPORT");
+    if (hasPath(imports, (parts) => ["openssl", "rustls", "tokio_openssl", "tokio_rustls"].includes(parts[0])
+      || includesSegment(parts, "tls"))
+      || /\bTls[A-Za-z0-9_]*\b/u.test(inspected)) failures.push("SHARED_CAPABILITY_TLS_DEPENDENCY");
+  }
+  if (role === "observation_application") {
+    if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_infrastructure")) failures.push("OBSERVATION_APPLICATION_INFRASTRUCTURE");
+    if (hasPath(imports, (parts) => parts[0] === "tauri")) failures.push("OBSERVATION_APPLICATION_TAURI");
+    if (hasPath(imports, (parts) => parts[0] === "tracing")) failures.push("OBSERVATION_APPLICATION_TRACING");
+    if (hasPath(imports, (parts) => ["rusqlite", "sqlx"].includes(parts[0]) || includesSegment(parts, "sqlite"))) failures.push("OBSERVATION_APPLICATION_PERSISTENCE");
+    if (/\bEventHub\b/u.test(inspected)) failures.push("OBSERVATION_APPLICATION_EVENT_HUB");
+  }
+  if (role === "observation_store") {
+    if (hasPath(imports, (parts) => parts[0] === "tauri")) failures.push("OBSERVATION_STORE_TAURI");
+    if (hasPath(imports, (parts) => parts[0] === "tracing")) failures.push("OBSERVATION_STORE_TRACING");
+    if (hasPath(imports, (parts) => ["rusqlite", "sqlx"].includes(parts[0]) || includesSegment(parts, "sqlite"))) failures.push("OBSERVATION_STORE_PERSISTENCE");
+    if (/\bEventHub\b/u.test(inspected)) failures.push("OBSERVATION_STORE_EVENT_HUB");
+  }
+  if (role === "observation_runtime"
+    && hasPath(imports, (parts) => ["rusqlite", "sqlx"].includes(parts[0]) || includesSegment(parts, "sqlite"))) {
+    failures.push("OBSERVATION_RUNTIME_PERSISTENCE");
+  }
+  if (role === "observation_sqlite"
+    && /\b(?:ExchangeObservation(?:Event|Page|Query|Record|Store)?|ExchangeContext)\b/u.test(inspected)) {
+    failures.push("OBSERVATION_SQLITE_PAYLOAD");
+  }
   return [...new Set(failures)].sort();
+}
+
+function productionSuppressionCodes(source) {
+  const inspected = productionRustSource(source).replace(
+    /#!?\s*\[\s*cfg_attr\s*\(\s*not\s*\(\s*target_os\s*=\s*[^)]*\)\s*,\s*allow\s*\(\s*dead_code\s*\)\s*\)\s*\]/gu,
+    "",
+  );
+  for (const match of inspected.matchAll(/\ballow\s*\(([^)]*)\)/gu)) {
+    const lints = match[1].split(",").map((lint) => lint.trim());
+    if (lints.some((lint) => lint === "dead_code" || lint === "unused" || /^unused_[a-z_]+$/u.test(lint))) {
+      return ["PRODUCTION_UNUSED_SUPPRESSION"];
+    }
+  }
+  return [];
 }
 
 function frontendViolationCodes(source) {
@@ -117,6 +221,13 @@ function frontendViolationCodes(source) {
   return failures.sort();
 }
 
+function frontendObservationViolationCodes(source) {
+  const inspected = source.replace(/\/\*[\s\S]*?\*\//gu, " ").replace(/\/\/.*$/gmu, " ");
+  return /(?:from\s+|import\s*\()\s*["']@tauri-apps\/api\/event["']/u.test(inspected)
+    ? ["OBSERVATION_FRONTEND_DIRECT_TAURI_EVENT"]
+    : [];
+}
+
 function roleForProxyFile(relative) {
   if (/^(?:http|forward|reverse|message)(?:\.rs|\/)/u.test(relative)) return "http";
   if (/^socket_relay(?:\.rs|\/)/u.test(relative)) return "socket";
@@ -133,7 +244,32 @@ const fixtureCases = [
   ["Socket document rule is allowed", "socket", "use intercept_proxy_domain::socket_document_rule::{SocketDocumentRuleDefinition as Rule, SocketRuleStage};", []],
   ["neutral grouped upward imports", "neutral", "use {intercept_proxy_application::{facade::TrafficFacade as F}, tauri::{Manager as M}};", ["NEUTRAL_APPLICATION_UPWARD", "NEUTRAL_UI_UPWARD"]],
   ["neutral fully qualified UI path", "neutral", "fn attach() { tauri::Manager::manage(app, state); }", ["NEUTRAL_UI_UPWARD"]],
+  ["Document grouped domain dependencies", "domain_document", "use crate::{protocol_package::PackageId, external_package::ExternalDocumentWire, protocol_document_rule::ProtocolDocumentRule};", ["DOCUMENT_EXTERNAL_PACKAGE_DEPENDENCY", "DOCUMENT_PROTOCOL_PACKAGE_DEPENDENCY", "DOCUMENT_RULE_DEPENDENCY"]],
+  ["Document upward and Rhai dependencies", "domain_document", "use {intercept_proxy_application::TrafficFacade, intercept_proxy_infrastructure::Store, tauri::Manager}; fn engine() { rhai::Engine::new(); }", ["DOCUMENT_APPLICATION_UPWARD", "DOCUMENT_INFRASTRUCTURE_UPWARD", "DOCUMENT_RHAI_DEPENDENCY", "DOCUMENT_TAURI_UPWARD"]],
+  ["Document protocol-neutral dependencies are allowed", "domain_document", "use crate::{error::DomainError, id::WorkspaceId};", []],
+  ["protocol package cannot define Document types", "domain_protocol_package", "pub struct Document;", ["PROTOCOL_PACKAGE_DOCUMENT_TYPE"]],
+  ["protocol package cannot re-export Document types", "domain_protocol_package", "pub use crate::document::{DocumentSchema as Schema};", ["PROTOCOL_PACKAGE_DOCUMENT_TYPE"]],
+  ["Exchange upward and persistence dependencies", "exchange", "use {intercept_proxy_application::TrafficFacade, intercept_proxy_infrastructure::ObservationStore, tauri::Manager, rusqlite::Connection}; struct Runtime { store: Store, events: EventHub }", ["EXCHANGE_APPLICATION_UPWARD", "EXCHANGE_EVENT_HUB_DEPENDENCY", "EXCHANGE_INFRASTRUCTURE_UPWARD", "EXCHANGE_SQLITE_DEPENDENCY", "EXCHANGE_STORE_DEPENDENCY", "EXCHANGE_TAURI_UPWARD"]],
+  ["Exchange domain dependency is allowed", "exchange", "use intercept_proxy_domain::{Document, DomainError};", []],
+  ["Domain Document rules reject runtime transport identities", "domain_document_rules", "use {intercept_proxy_runtime::{HttpConnectionIdentity, SocketConnectionIdentity}, intercept_proxy_exchange::HttpContext};", ["DOCUMENT_RULE_EXCHANGE_DEPENDENCY", "DOCUMENT_RULE_RUNTIME_DEPENDENCY", "DOCUMENT_RULE_TRANSPORT_TYPE"]],
+  ["Domain Document rules allow pure domain contracts", "domain_document_rules", "use crate::{Document, ListenerId, ProtocolPackageRef};", []],
+  ["HTTP Document rules reject Socket runtime types", "infra_http_document_rules", "use intercept_proxy_runtime::{HttpConnectionIdentity, SocketConnectionIdentity};", ["HTTP_DOCUMENT_RULE_SOCKET_DEPENDENCY"]],
+  ["HTTP Document rules allow HTTP runtime types", "infra_http_document_rules", "use intercept_proxy_runtime::{HttpConnectionIdentity, HttpDirectionCapabilities};", []],
+  ["Socket Document rules reject HTTP runtime types", "infra_socket_document_rules", "use intercept_proxy_runtime::{HttpConnectionIdentity, SocketConnectionIdentity};", ["SOCKET_DOCUMENT_RULE_HTTP_DEPENDENCY"]],
+  ["Socket Document rules allow Socket runtime types", "infra_socket_document_rules", "use intercept_proxy_runtime::SocketConnectionIdentity;", []],
+  ["Capability stage traits cannot be redefined outside Exchange", "capability_non_owner", "pub trait Decode<P, D> {} pub trait Rules {}", ["CAPABILITY_STAGE_TRAIT_OUTSIDE_EXCHANGE"]],
+  ["Capability stage trait implementations are allowed outside Exchange", "capability_non_owner", "impl Decode<Http, Upstream> for HttpDecode {} impl Rules for HttpRules {}", []],
+  ["Shared capability helper rejects protocol and concrete transport imports", "shared_capability_helper", "use {hyper::Request, tokio::net::TcpStream, crate::socket_relay::SocketRelayService, rustls::ClientConfig};", ["SHARED_CAPABILITY_CONCRETE_TRANSPORT", "SHARED_CAPABILITY_HTTP_DEPENDENCY", "SHARED_CAPABILITY_SOCKET_DEPENDENCY", "SHARED_CAPABILITY_TLS_DEPENDENCY"]],
+  ["Shared capability helper allows protocol-neutral async IO", "shared_capability_helper", "use {tokio::io::{AsyncRead, AsyncWrite}, tokio_util::sync::CancellationToken};", []],
+  ["Application observation DTO rejects runtime and persistence ownership", "observation_application", "use {intercept_proxy_infrastructure::ExchangeObservationStore, tauri::Manager, tracing::Event, rusqlite::Connection}; struct ObservationDto { events: EventHub }", ["OBSERVATION_APPLICATION_EVENT_HUB", "OBSERVATION_APPLICATION_INFRASTRUCTURE", "OBSERVATION_APPLICATION_PERSISTENCE", "OBSERVATION_APPLICATION_TAURI", "OBSERVATION_APPLICATION_TRACING"]],
+  ["Infrastructure observation store rejects runtime and persistence ownership", "observation_store", "use {tauri::Manager, tracing::Event, rusqlite::Connection}; struct ObservationStore { events: EventHub }", ["OBSERVATION_STORE_EVENT_HUB", "OBSERVATION_STORE_PERSISTENCE", "OBSERVATION_STORE_TAURI", "OBSERVATION_STORE_TRACING"]],
+  ["Tauri observation layer rejects direct persistence", "observation_runtime", "use rusqlite::Connection;", ["OBSERVATION_RUNTIME_PERSISTENCE"]],
+  ["SQLite cannot own Exchange payload observations", "observation_sqlite", "struct Row { record: ExchangeObservationRecord, context: ExchangeContext }", ["OBSERVATION_SQLITE_PAYLOAD"]],
+  ["Capture observation UI uses the shared app event subscription", "frontend_observation", "import { listen } from '@tauri-apps/api/event';", ["OBSERVATION_FRONTEND_DIRECT_TAURI_EVENT"]],
   ["test-only forbidden Rust import is ignored", "socket", "use tokio::net::TcpStream; #[cfg(test)] mod tests { use hyper::{Request as Hidden}; }", []],
+  ["test-only Document boundary violation is ignored", "domain_document", "#[cfg(test)] mod tests { use crate::external_package::ExternalDocumentWire; }", []],
+  ["test-only protocol package Document type is ignored", "domain_protocol_package", "#[cfg(test)] struct Document;", []],
+  ["test-only Exchange persistence is ignored", "exchange", "#[cfg(test)] struct Store;", []],
   ["cfg test array return semicolon is ignored", "socket", "#[cfg(test)] fn hidden() -> [u8; 1] { let _ = hyper::Request::new(()); [0] }", []],
   ["cfg test const array return is ignored", "socket", "#[cfg(test)] fn hidden() -> [u8; { 1 }] { let _ = hyper::Request::new(()); [0] }", []],
   ["cfg test less-than const stops before production", "socket", "#[cfg(test)] const LESS: bool = 1 < 2;\nuse hyper::Request;", ["SOCKET_HTTP_DTO_IMPORT"]],
@@ -151,7 +287,15 @@ const fixtureCases = [
   ["frontend renamed package validator", "frontend", "const acceptable = (value) => /^[a-z][a-z0-9-]+$/.test(value);", ["FRONTEND_PACKAGE_ID_VALIDATION_COPY"]],
   ["frontend renamed SemVer validator", "frontend", "const acceptable = (value) => value.split('.').map(Number).every(Number.isInteger);", ["FRONTEND_SEMVER_VALIDATION_COPY"]],
   ["frontend data-plane constant copy", "frontend", "const acceptable = (value) => new Set(['http', 'socket']).has(value);", ["FRONTEND_DATA_PLANE_VALIDATION_COPY"]],
-  ["frontend response-shape guard is allowed", "frontend", "function validateSocketCapturePage(value) { return typeof value === 'object'; }", []],
+];
+
+const productionSuppressionFixtures = [
+  ["production dead-code suppression", "#[allow(dead_code)] fn obsolete() {}", ["PRODUCTION_UNUSED_SUPPRESSION"]],
+  ["production unused import suppression", "#![allow(unused_imports)]\nuse crate::obsolete;", ["PRODUCTION_UNUSED_SUPPRESSION"]],
+  ["conditional production suppression", "#[cfg_attr(feature = \"old\", allow(dead_code))] fn obsolete() {}", ["PRODUCTION_UNUSED_SUPPRESSION"]],
+  ["target-specific implementation suppression is allowed", "#![cfg_attr(not(target_os = \"android\"), allow(dead_code))]", []],
+  ["namespaced clippy lint is not a Rust unused suppression", "#[allow(clippy::unused_async)] async fn required_by_trait() {}", []],
+  ["test-only suppression is allowed", "#[cfg(test)] #[allow(dead_code)] fn fixture_helper() {}", []],
 ];
 
 const roleFixtures = [
@@ -162,8 +306,16 @@ const roleFixtures = [
 function runFixtures() {
   const failures = [];
   for (const [name, role, source, expected] of fixtureCases) {
-    const actual = role === "frontend" ? frontendViolationCodes(source) : rustViolationCodes(role, source);
+    const actual = role === "frontend"
+      ? frontendViolationCodes(source)
+      : role === "frontend_observation"
+        ? frontendObservationViolationCodes(source)
+        : rustViolationCodes(role, source);
     if (JSON.stringify(actual) !== JSON.stringify([...expected].sort())) failures.push(`${name}: expected [${expected}], got [${actual}]`);
+  }
+  for (const [name, source, expected] of productionSuppressionFixtures) {
+    const actual = productionSuppressionCodes(source);
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) failures.push(`${name}: expected [${expected}], got [${actual}]`);
   }
   for (const [file, expected] of roleFixtures) {
     const actual = roleForProxyFile(file);
@@ -203,11 +355,109 @@ function isProduction(file) {
 
 async function scanProduction() {
   const failures = [];
+  for (const [absolute, role] of [
+    [applicationObservationFile, "observation_application"],
+    [infrastructureObservationFile, "observation_store"],
+    [runtimeObservationFile, "observation_runtime"],
+  ]) {
+    const source = await readFile(absolute, "utf8");
+    for (const code of rustViolationCodes(role, source)) {
+      failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+    }
+  }
+  const runtimeObservation = productionRustSource(await readFile(runtimeObservationFile, "utf8"));
+  for (const [pattern, code] of [
+    [/\bimpl\s*<[^>]+>\s+Layer\s*</u, "OBSERVATION_RUNTIME_LAYER_MISSING"],
+    [/\bEventHub\b/u, "OBSERVATION_RUNTIME_EVENT_HUB_MISSING"],
+    [/\bpublish_changed\s*\(/u, "OBSERVATION_RUNTIME_PUBLICATION_MISSING"],
+  ]) {
+    if (!pattern.test(runtimeObservation)) failures.push(`${path.relative(repositoryRoot, runtimeObservationFile)}: [${code}]`);
+  }
+  for (const absolute of await filesBelow(sqliteSourceRoot, [".rs"])) {
+    const relative = path.relative(sqliteSourceRoot, absolute).split(path.sep).join("/");
+    if (!isProduction(relative)) continue;
+    for (const code of rustViolationCodes("observation_sqlite", await readFile(absolute, "utf8"))) {
+      failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+    }
+  }
+  for (const absolute of await filesBelow(captureSourceRoot, [".ts", ".tsx"])) {
+    const relative = path.relative(captureSourceRoot, absolute).split(path.sep).join("/");
+    if (!isProduction(relative) || !relative.startsWith("exchange-observation-")) continue;
+    for (const code of frontendObservationViolationCodes(await readFile(absolute, "utf8"))) {
+      failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+    }
+  }
+  for (const absolute of sharedCapabilityHelperFiles) {
+    for (const code of rustViolationCodes("shared_capability_helper", await readFile(absolute, "utf8"))) {
+      failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+    }
+  }
+  for (const sourceRoot of [cratesSourceRoot, tauriAppSourceRoot]) {
+    for (const absolute of await filesBelow(sourceRoot, [".rs"])) {
+      const relative = path.relative(sourceRoot, absolute).split(path.sep).join("/");
+      if (!isProduction(relative)) continue;
+      const source = await readFile(absolute, "utf8");
+      for (const code of productionSuppressionCodes(source)) {
+        failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+      }
+    }
+  }
+  for (const absolute of await filesBelow(cratesSourceRoot, [".rs"])) {
+    const relative = path.relative(cratesSourceRoot, absolute).split(path.sep).join("/");
+    if (!isProduction(relative)) continue;
+    const source = await readFile(absolute, "utf8");
+    if (absolute === exchangeCapabilityFile) {
+      const inspected = productionRustSource(source);
+      for (const traitName of ["Frame", "Decode", "Display", "Rules", "Encode"]) {
+        if (!new RegExp(`\\bpub\\s+trait\\s+${traitName}\\b`, "u").test(inspected)) {
+          failures.push(`${path.relative(repositoryRoot, absolute)}: [EXCHANGE_CAPABILITY_TRAIT_MISSING:${traitName}]`);
+        }
+      }
+      continue;
+    }
+    for (const code of rustViolationCodes("capability_non_owner", source)) {
+      failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+    }
+  }
   for (const absolute of await filesBelow(proxySourceRoot, [".rs"])) {
     const relative = path.relative(proxySourceRoot, absolute).split(path.sep).join("/");
     const role = roleForProxyFile(relative);
     if (!role || !isProduction(relative)) continue;
     for (const code of rustViolationCodes(role, await readFile(absolute, "utf8"))) failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+  }
+  for (const [root, role] of [
+    [domainDocumentSourceRoot, "domain_document"],
+    [domainProtocolPackageSourceRoot, "domain_protocol_package"],
+    [exchangeSourceRoot, "exchange"],
+  ]) {
+    for (const absolute of await filesBelow(root, [".rs"])) {
+      const relative = path.relative(root, absolute).split(path.sep).join("/");
+      if (!isProduction(relative)) continue;
+      for (const code of rustViolationCodes(role, await readFile(absolute, "utf8"))) {
+        failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+      }
+    }
+  }
+  for (const absolute of await filesBelow(domainSourceRoot, [".rs"])) {
+    const relative = path.relative(domainSourceRoot, absolute).split(path.sep).join("/");
+    if (!isProduction(relative)
+      || (relative !== "protocol_document_rule.rs" && !relative.startsWith("protocol_document_rule/"))) continue;
+    for (const code of rustViolationCodes("domain_document_rules", await readFile(absolute, "utf8"))) {
+      failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+    }
+  }
+  for (const absolute of await filesBelow(listenerRuntimeSourceRoot, [".rs"])) {
+    const relative = path.relative(listenerRuntimeSourceRoot, absolute).split(path.sep).join("/");
+    if (!isProduction(relative)) continue;
+    const role = relative === "http_protocol_pipeline.rs" || relative.startsWith("http_protocol_pipeline/")
+      ? "infra_http_document_rules"
+      : relative === "document_rules.rs" || relative.startsWith("document_rules/")
+        ? "infra_socket_document_rules"
+        : undefined;
+    if (!role) continue;
+    for (const code of rustViolationCodes(role, await readFile(absolute, "utf8"))) {
+      failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
+    }
   }
   for (const absolute of await filesBelow(path.join(repositoryRoot, "src"), [".ts", ".tsx"])) {
     const relative = path.relative(repositoryRoot, absolute).split(path.sep).join("/");

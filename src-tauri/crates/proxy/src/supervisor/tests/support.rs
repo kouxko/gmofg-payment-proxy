@@ -48,6 +48,11 @@ fn test_service(ports: Arc<dyn PipelinePorts>) -> ConnectionService {
         acceptor: Arc::new(PlaintextAcceptor),
         upstream: Arc::new(UnusedUpstream),
         ports,
+        capabilities: Arc::new(crate::http::PlainHttpCapabilityFactory::new(
+            "supervisor-test-workspace",
+            "supervisor-test-listener",
+        )),
+        endpoint: "unused.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(8).unwrap(),
         allowed_client_cidrs: Vec::new(),

@@ -52,7 +52,7 @@ impl PipelinePorts for RecordingPorts {
             .push(context.connection_id);
     }
 
-    async fn request(
+    async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
         message: &mut Message,
@@ -155,6 +155,29 @@ Content-Length: 2\r\n\r\n",
     }
 }
 
+#[derive(Debug, Default)]
+struct SequencedRawConnector(AtomicUsize);
+
+#[async_trait]
+impl UpstreamConnector for SequencedRawConnector {
+    async fn send(
+        &self,
+        _context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
+        request: ForwardRequest,
+        _actions: &[FaultAction],
+        _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
+        _cancellation: &CancellationToken,
+    ) -> Result<UpstreamExchange> {
+        let sequence = self.0.fetch_add(1, Ordering::SeqCst);
+        let head = format!(
+            "HTTP/1.1 200 Sequence {sequence}\r\nX-Sequence: exact-{sequence}\r\nContent-Length: {}\r\n\r\n",
+            request.message.body.len()
+        );
+        Message::from_raw_http1_head(head.as_bytes(), request.message.body).map(Into::into)
+    }
+}
+
 #[derive(Debug)]
 struct ResponseFaultPorts(Vec<FaultAction>);
 
@@ -162,7 +185,7 @@ impl HandshakePolicy for ResponseFaultPorts {}
 
 #[async_trait]
 impl PipelinePorts for ResponseFaultPorts {
-    async fn response(
+    async fn apply_response_policy(
         &self,
         _context: &ConnectionContext,
         _message: &mut Message,
@@ -188,7 +211,7 @@ impl HandshakePolicy for ClosedResultPorts {}
 
 #[async_trait]
 impl PipelinePorts for ClosedResultPorts {
-    async fn request(
+    async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
         _message: &mut Message,
@@ -262,6 +285,11 @@ fn service_with_connector(
         acceptor: Arc::new(TestPlaintextAcceptor),
         upstream,
         ports,
+        capabilities: Arc::new(intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
+            "raw-http-test-workspace",
+            "raw-http-test-listener",
+        )),
+        endpoint: "echo.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(500).unwrap(),
         allowed_client_cidrs: Vec::new(),
@@ -300,7 +328,7 @@ fn config() -> ProxyConfig {
 async fn exchange(address: SocketAddr, body: &[u8]) -> Vec<u8> {
     let mut stream = TcpStream::connect(address).await.unwrap();
     let head = format!(
-        "POST /settle HTTP/1.1\r\nHost: app\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
+        "POST /settle HTTP/1.1\r\nHost: app\r\nConnection: close\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\r\n",
         body.len()
     );
     stream.write_all(head.as_bytes()).await.unwrap();

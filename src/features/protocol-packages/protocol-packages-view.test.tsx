@@ -85,7 +85,7 @@ describe("ProtocolPackagesView list", () => {
     expect(screen.getByLabelText("正在读取协议包列表")).toBeVisible();
     expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
     pending.resolve([]);
-    expect(await screen.findByText("尚未安装 Socket 协议包")).toBeVisible();
+    expect(await screen.findByText("尚未安装协议包")).toBeVisible();
     expect(screen.getByText("内置 ISO 8583:1987 ASCII Profile")).toBeVisible();
     expect(screen.getByText(/覆盖主位图、次位图和 DE2–DE128 字段结构/)).toBeVisible();
   });
@@ -109,7 +109,7 @@ describe("ProtocolPackagesView list", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
 
-    await screen.findByText("尚未安装 Socket 协议包");
+    await screen.findByText("尚未安装协议包");
     await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
 
     expect(mocks.protocolPackageRestoreBuiltin).toHaveBeenCalledTimes(1);
@@ -129,7 +129,7 @@ describe("ProtocolPackagesView list", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
 
-    await screen.findByText("尚未安装 Socket 协议包");
+    await screen.findByText("尚未安装协议包");
     await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
 
     expect(await screen.findByText("内置示例恢复失败")).toBeVisible();
@@ -149,7 +149,7 @@ describe("ProtocolPackagesView list", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
 
-    await screen.findByText("尚未安装 Socket 协议包");
+    await screen.findByText("尚未安装协议包");
     await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" })[0]);
 
     expect(await screen.findByText("内置示例恢复结果不完整，请刷新列表后重试。")).toBeVisible();
@@ -177,7 +177,7 @@ describe("ProtocolPackagesView list", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
 
-    await screen.findByText("尚未安装 Socket 协议包");
+    await screen.findByText("尚未安装协议包");
     await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
 
     expect(await screen.findByText(message)).toBeVisible();
@@ -211,7 +211,7 @@ describe("ProtocolPackagesView list", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
 
-    await screen.findByText("尚未安装 Socket 协议包");
+    await screen.findByText("尚未安装协议包");
     await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
 
     expect(await screen.findByRole("status")).toHaveTextContent("官方 ISO 8583 示例已恢复并启用。");
@@ -275,7 +275,7 @@ describe("ProtocolPackagesView list", () => {
     expect(row).toHaveTextContent("1 个运行中");
   });
 
-  it("keeps HTTP and Socket packages in separate tabs", async () => {
+  it("shows HTTP and Socket packages in one list without protocol tabs", async () => {
     const httpVersion = version("1.0.0", {
       package: { id: "json-body", version: "1.0.0" },
       name: "JSON Body",
@@ -291,19 +291,16 @@ describe("ProtocolPackagesView list", () => {
       active_reference_count: 0,
     });
     mocks.protocolPackageList.mockResolvedValue([group(), httpGroup]);
-    const user = userEvent.setup();
     render(<ProtocolPackagesView />);
 
     expect(await screen.findByRole("button", { name: "查看协议包 ISO 8583" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "查看协议包 JSON Body" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看协议包 JSON Body" })).toBeVisible();
+    expect(screen.queryByRole("tab", { name: "HTTP" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Socket" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "恢复 ISO 8583 示例包" })).toBeVisible();
-
-    await user.click(screen.getByRole("tab", { name: "HTTP" }));
-
-    expect(await screen.findByRole("button", { name: "查看协议包 JSON Body" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "查看协议包 ISO 8583" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "恢复 ISO 8583 示例包" })).not.toBeInTheDocument();
-    expect(screen.queryByText("内置 ISO 8583:1987 ASCII Profile")).not.toBeInTheDocument();
+    expect(screen.getByText("内置 ISO 8583:1987 ASCII Profile")).toBeVisible();
+    expect(screen.getByRole("button", { name: "查看协议包 ISO 8583" })).toHaveTextContent("Socket");
+    expect(screen.getByRole("button", { name: "查看协议包 JSON Body" })).toHaveTextContent("HTTP");
   });
 
   it("marks a built-in example in the package list", async () => {

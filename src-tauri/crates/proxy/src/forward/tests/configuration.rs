@@ -40,28 +40,3 @@ fn mitm_allowlist_has_exact_and_domain_boundary_semantics() {
     assert!(!authority_is_allowed("badallowed.test", &patterns));
     assert!(!authority_is_allowed("api.example.test.evil", &patterns));
 }
-
-#[tokio::test]
-async fn mitm_leaf_cache_reuses_and_lru_evicts_with_configured_bound() {
-    let certificate_authority = Arc::new(CountingCertificateAuthority::default());
-    let runtime = ForwardMitmRuntime {
-        config: ForwardMitmConfig {
-            authority_allowlist: vec!["*.example.test".into()],
-            maximum_cached_leaf_certificates: 1,
-        },
-        certificate_authority: certificate_authority.clone(),
-        upstream_connector: Arc::new(NeverMitmUpstreamConnector),
-        leaf_cache: Mutex::new(MitmLeafCache::new(1)),
-    };
-    runtime.server_config_for("one.example.test").await.unwrap();
-    runtime.server_config_for("one.example.test").await.unwrap();
-    assert_eq!(certificate_authority.count(), 1, "cache must reuse leaf");
-    runtime.server_config_for("two.example.test").await.unwrap();
-    runtime.server_config_for("one.example.test").await.unwrap();
-    assert_eq!(
-        certificate_authority.count(),
-        3,
-        "capacity one must evict the least-recently-used leaf"
-    );
-    assert_eq!(runtime.leaf_cache.lock().await.entries.len(), 1);
-}

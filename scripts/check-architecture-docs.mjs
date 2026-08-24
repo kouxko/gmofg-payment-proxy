@@ -2,30 +2,66 @@ import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
-const architectureRoot = path.join(repositoryRoot, "docs/architecture");
-const baselineDocuments = [
-  "system-context.md",
-  "protocol-boundaries.md",
-  "data-planes.md",
-  "lifecycle-persistence-security.md",
-  "traceability.md",
-];
-const decisions = [
-  "decisions/ADR-001-http-socket-boundary.md",
-  "decisions/ADR-002-protocol-packages-http.md",
-  "decisions/ADR-003-application-zip-ownership.md",
-  "decisions/ADR-004-embedded-read-only-mcp.md",
-];
-const authoringDocuments = [
-  "templates/socket-protocol/API.md",
-  "templates/socket-protocol/AUTHORING.md",
+const docsRoot = path.join(repositoryRoot, "docs");
+const architectureRoot = path.join(docsRoot, "architecture");
+
+const currentDocuments = [
+  "README.md",
+  "modules.md",
+  "exchange-pipeline.md",
+  "data-flow.md",
+  "rules-and-protocol-packages.md",
+  "runtime-observability.md",
+  "security-and-persistence.md",
+  "android-vpn-transparent-routing.md",
+  "development-guide.md",
 ];
 
-function section(source, heading) {
-  const start = source.indexOf(`## ${heading}`);
-  if (start < 0) return "";
-  const next = source.indexOf("\n## ", start + 4);
-  return source.slice(start, next < 0 ? source.length : next);
+const mermaidDocuments = new Set([
+  "README.md",
+  "modules.md",
+  "exchange-pipeline.md",
+  "data-flow.md",
+]);
+
+const decisions = new Map([
+  ["decisions/ADR-001-http-socket-boundary.md", "Accepted"],
+  ["decisions/ADR-002-protocol-packages-http.md", "Accepted"],
+  ["decisions/ADR-003-application-zip-ownership.md", "Accepted"],
+  ["decisions/ADR-004-embedded-read-only-mcp.md", "Accepted"],
+  ["decisions/ADR-005-runtime-evidence-and-reproduction-report.md", "Accepted"],
+  ["decisions/ADR-006-unified-exchange-observation.md", "Superseded"],
+  ["decisions/ADR-007-exchange-pipeline-runtime-boundary.md", "Accepted"],
+]);
+
+const rootDocuments = [
+  "README.md",
+  "docs/README.md",
+  "docs/requirements.md",
+  "docs/user-operation-guide.md",
+  "docs/testing/release-validation-matrix.md",
+];
+
+const forbiddenCurrentDocuments = [
+  "data-planes.md",
+  "exchange-flow-clean-slate.md",
+  "exchange-observation-model.md",
+  "lifecycle-persistence-security.md",
+  "protocol-boundaries.md",
+  "request-lifecycle.md",
+  "rules-and-state.md",
+  "system-context.md",
+  "traceability.md",
+  "workspace-and-security.md",
+];
+
+async function exists(absolute) {
+  try {
+    await access(absolute);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function balancedDelimiters(source) {
@@ -46,7 +82,9 @@ function validFlowEndpoint(value) {
 function validateFlowchart(name, lines) {
   const failures = [];
   const stack = [];
-  if (!/^flowchart\s+(?:LR|RL|TB|BT|TD)$/u.test(lines[0])) return [`${name}: invalid flowchart declaration`];
+  if (!/^flowchart\s+(?:LR|RL|TB|BT|TD)$/u.test(lines[0])) {
+    return [`${name}: invalid flowchart declaration`];
+  }
   for (const [offset, raw] of lines.slice(1).entries()) {
     const line = raw.trim();
     const lineNumber = offset + 2;
@@ -71,7 +109,6 @@ function validateFlowchart(name, lines) {
 function validateSequence(name, lines) {
   const failures = [];
   const stack = [];
-  if (lines[0] !== "sequenceDiagram") return [`${name}: invalid sequenceDiagram declaration`];
   for (const [offset, raw] of lines.slice(1).entries()) {
     const line = raw.trim();
     const lineNumber = offset + 2;
@@ -97,8 +134,9 @@ function validateSequence(name, lines) {
 }
 
 function validateMermaid(name, source) {
-  const blocks = [...source.matchAll(/```mermaid\s*\n([\s\S]*?)```/gu)].map((match) => match[1].trim().split(/\r?\n/u));
-  if (blocks.length === 0) return [`${name}: missing non-empty Mermaid source`];
+  const blocks = [...source.matchAll(/```mermaid\s*\n([\s\S]*?)```/gu)]
+    .map((match) => match[1].trim().split(/\r?\n/u));
+  if (blocks.length === 0) return [`${name}: missing Mermaid source`];
   return blocks.flatMap((lines, index) => {
     const blockName = `${name} Mermaid ${index + 1}`;
     if (lines[0]?.startsWith("flowchart")) return validateFlowchart(blockName, lines);
@@ -107,130 +145,95 @@ function validateMermaid(name, source) {
   });
 }
 
-function validateBaselineSource(name, source) {
-  const failures = [];
-  for (const heading of ["As-Is", "To-Be", "Open Decision"]) {
-    if (!source.includes(`## ${heading}`)) failures.push(`${name}: missing ${heading} section`);
-  }
-  failures.push(...validateMermaid(name, source));
-
-  const asIs = section(source, "As-Is");
-  const evidenceRows = asIs.split("\n").filter((line) => /^\|.*\|$/u.test(line) && !/^\|\s*-+/u.test(line) && !/节点|路径|场景|\| path \|/u.test(line));
-  if (evidenceRows.length === 0) failures.push(`${name}: As-Is has no evidence rows`);
-  for (const row of evidenceRows) {
-    if (!/`(?:src(?:-tauri)?|android-companion)\//u.test(row)) failures.push(`${name}: As-Is row lacks a source anchor: ${row}`);
-    if (!/(?:tests?(?:\/|\.)|\.test\.)/u.test(row)) failures.push(`${name}: As-Is row lacks a test anchor: ${row}`);
-  }
-
-  const open = section(source, "Open Decision");
-  for (const line of open.split("\n").filter((candidate) => /^- /u.test(candidate))) {
-    if (!/Owner: R\d{2}[a-z]?(?:\b|[-,])/u.test(line)) failures.push(`${name}: deferred item lacks Owner Rxx: ${line}`);
-  }
-  return failures;
-}
-
-async function exists(absolute) {
-  try {
-    await access(absolute);
-    return true;
-  } catch {
-    return false;
-  }
+function relativeMarkdownLinks(source) {
+  return [...source.matchAll(/\[[^\]]+\]\((?!https?:|#)([^)#]+)(?:#[^)]+)?\)/gu)]
+    .map((match) => match[1]);
 }
 
 function referencedRepositoryPaths(source) {
-  return [...source.matchAll(/`((?:src(?:-tauri)?|android-companion|scripts)\/[A-Za-z0-9_./-]+)`/gu)].map((match) => match[1]);
+  return [...source.matchAll(/`((?:src(?:-tauri)?|android-companion|scripts|templates)\/[A-Za-z0-9_./-]+)`/gu)]
+    .map((match) => match[1]);
 }
 
-function relativeMarkdownLinks(source) {
-  return [...source.matchAll(/\[[^\]]+\]\((?!https?:|#)([^)#]+)(?:#[^)]+)?\)/gu)].map((match) => match[1]);
-}
-
-function runFixtures() {
-  const valid = `# Fixture\n\n## As-Is\n\n\`\`\`mermaid\nflowchart LR\n A --> B\n\`\`\`\n\n| path | source | test |\n| --- | --- | --- |\n| A -> B | \`src/a.rs\` | \`src/a/tests.rs\` |\n\n## To-Be\n\n- target\n\n## Open Decision\n\n- deferred. Owner: R07a.\n`;
-  const fixtures = [
-    ["valid baseline", valid, []],
-    ["missing Mermaid", valid.replace(/```mermaid[\s\S]+?```/u, ""), ["missing non-empty Mermaid source"]],
-    ["missing source path", valid.replace("`src/a.rs`", "none").replace("`src/a/tests.rs`", "tests.rs"), ["lacks a source anchor"]],
-    ["missing deferred owner", valid.replace("Owner: R07a.", "later."), ["lacks Owner Rxx"]],
-    ["invalid flow declaration", valid.replace("flowchart LR", "flowchart SIDEWAYS"), ["invalid flowchart declaration"]],
-    ["unbalanced flow node", valid.replace("A --> B", "A[broken --> B"), ["unsupported flowchart syntax"]],
-    ["unknown Mermaid garbage", valid.replace("A --> B", "this is not an edge"), ["unsupported flowchart syntax"]],
-    ["balanced subgraph", valid.replace("A --> B", "subgraph Plane\n A --> B\n end"), []],
-    ["unclosed subgraph", valid.replace("A --> B", "subgraph Plane\n A --> B"), ["unclosed subgraph"]],
-    ["invalid sequence message", valid.replace("flowchart LR\n A --> B", "sequenceDiagram\n participant A\n participant B\n A talks B"), ["unsupported sequence syntax"]],
-    ["unclosed sequence alt", valid.replace("flowchart LR\n A --> B", "sequenceDiagram\n participant A\n participant B\n alt branch\n A->>B: request"), ["unclosed sequence block"]],
-  ];
-  const failures = [];
-  for (const [name, source, expectedFragments] of fixtures) {
-    const actual = validateBaselineSource(name, source);
-    for (const fragment of expectedFragments) {
-      if (!actual.some((failure) => failure.includes(fragment))) failures.push(`${name}: fixture did not fail with ${fragment}`);
-    }
-    if (expectedFragments.length === 0 && actual.length > 0) failures.push(`${name}: fixture unexpectedly failed: ${actual}`);
-  }
-  return failures;
-}
-
-const failures = runFixtures();
+const failures = [];
 const documents = new Map();
-for (const name of [...baselineDocuments, ...decisions, "README.md"]) {
-  const absolute = path.join(architectureRoot, name);
+
+for (const relative of rootDocuments) {
+  const absolute = path.join(repositoryRoot, relative);
   if (!(await exists(absolute))) {
-    failures.push(`${name}: required architecture file is missing`);
+    failures.push(`${relative}: required project document is missing`);
     continue;
   }
-  documents.set(name, await readFile(absolute, "utf8"));
-}
-
-const designSource = await readFile(path.join(repositoryRoot, "DESIGN.md"), "utf8");
-if (!/Status: Active baseline/u.test(designSource) || /Status: Draft/u.test(designSource)) {
-  failures.push("DESIGN.md: architecture baseline must be active, not Draft");
-}
-
-for (const relative of authoringDocuments) {
-  const source = await readFile(path.join(repositoryRoot, relative), "utf8");
-  for (const required of ["[document.upstream]", "[document.downstream]", "[hooks.upstream]", "[hooks.downstream]"]) {
-    if (!source.includes(required)) failures.push(`${relative}: missing current directional contract ${required}`);
-  }
-  if (/^\s*script\s*=/mu.test(source)) failures.push(`${relative}: legacy manifest script field is forbidden`);
-  if (/protocol\.rhai[^\n]*(?:Manifest[^\n]*决定|可选)/iu.test(source)) failures.push(`${relative}: protocol.rhai must use the fixed required filename`);
-  if (/display\.rhai[^\n]*可选/iu.test(source)) failures.push(`${relative}: display.rhai must be required`);
-}
-if (!designSource.includes("## Open decisions and deferred delivery")) {
-  failures.push("DESIGN.md: missing explicit open/deferred delivery section");
-}
-
-for (const name of baselineDocuments) {
-  const source = documents.get(name);
-  if (!source) continue;
-  failures.push(...validateBaselineSource(name, source));
-  for (const referenced of referencedRepositoryPaths(source)) {
-    if (!(await exists(path.join(repositoryRoot, referenced)))) failures.push(`${name}: missing repository anchor ${referenced}`);
+  const source = await readFile(absolute, "utf8");
+  for (const linked of relativeMarkdownLinks(source)) {
+    const target = path.resolve(path.dirname(absolute), linked);
+    if (!(await exists(target))) failures.push(`${relative}: broken relative link ${linked}`);
   }
 }
 
-for (const name of decisions) {
-  const source = documents.get(name);
-  if (!source) continue;
-  if (!/Status: Accepted/u.test(source)) failures.push(`${name}: decision is not explicitly accepted`);
-  if (!/Rejected/u.test(source)) failures.push(`${name}: rejected alternatives are not explicit`);
-  if (!/(?:Open items|implementation deferred|future)/iu.test(source)) failures.push(`${name}: open/deferred state is not explicit`);
+for (const name of currentDocuments) {
+  const absolute = path.join(architectureRoot, name);
+  if (!(await exists(absolute))) {
+    failures.push(`${name}: required architecture document is missing`);
+    continue;
+  }
+  const source = await readFile(absolute, "utf8");
+  documents.set(name, source);
+  const lineCount = source.split(/\r?\n/u).length;
+  if (lineCount > 500) failures.push(`${name}: ${lineCount} lines exceeds the 500 line limit`);
+  if (!source.startsWith("# ")) failures.push(`${name}: missing top-level title`);
+  if (mermaidDocuments.has(name)) failures.push(...validateMermaid(name, source));
+}
+
+for (const name of forbiddenCurrentDocuments) {
+  if (await exists(path.join(architectureRoot, name))) {
+    failures.push(`${name}: obsolete architecture document must not remain in the current tree`);
+  }
+}
+
+for (const [name, expectedStatus] of decisions) {
+  const absolute = path.join(architectureRoot, name);
+  if (!(await exists(absolute))) {
+    failures.push(`${name}: required ADR is missing`);
+    continue;
+  }
+  const source = await readFile(absolute, "utf8");
+  documents.set(name, source);
+  if (!source.includes(`Status: ${expectedStatus}`)) {
+    failures.push(`${name}: expected Status: ${expectedStatus}`);
+  }
+  if (expectedStatus === "Accepted" && !/Rejected/u.test(source)) {
+    failures.push(`${name}: rejected alternatives are not explicit`);
+  }
 }
 
 for (const [name, source] of documents) {
   for (const linked of relativeMarkdownLinks(source)) {
-    if (!(await exists(path.resolve(architectureRoot, path.dirname(name), linked)))) failures.push(`${name}: broken relative link ${linked}`);
+    const target = path.resolve(architectureRoot, path.dirname(name), linked);
+    if (!(await exists(target))) failures.push(`${name}: broken relative link ${linked}`);
+  }
+  for (const referenced of referencedRepositoryPaths(source)) {
+    if (!(await exists(path.join(repositoryRoot, referenced)))) {
+      failures.push(`${name}: missing repository anchor ${referenced}`);
+    }
   }
 }
 
-if (!failures.some((failure) => failure.includes("fixture"))) {
-  console.log("Architecture documentation fixtures passed (11 cases, including Mermaid syntax failures).");
+const templateApi = await readFile(path.join(repositoryRoot, "templates/socket-protocol/API.md"), "utf8");
+const templateAuthoring = await readFile(path.join(repositoryRoot, "templates/socket-protocol/AUTHORING.md"), "utf8");
+for (const [name, source] of [["API.md", templateApi], ["AUTHORING.md", templateAuthoring]]) {
+  for (const required of ["[document.upstream]", "[document.downstream]", "[hooks.upstream]", "[hooks.downstream]"]) {
+    if (!source.includes(required)) failures.push(`templates/socket-protocol/${name}: missing ${required}`);
+  }
+  if (/^\s*script\s*=/mu.test(source)) failures.push(`templates/socket-protocol/${name}: legacy script field is forbidden`);
 }
+
 if (failures.length > 0) {
   console.error("Architecture documentation gate failed:");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log(`Architecture documentation gate passed (${baselineDocuments.length} baselines, ${decisions.length} ADRs).`);
+  console.log(
+    `Architecture documentation gate passed (${currentDocuments.length} current documents, ${decisions.size} ADRs).`,
+  );
 }

@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, time::SystemTime};
 
 use intercept_proxy_application::{
-    SocketCaptureFailureStage, SocketDiagnosticDirection, SocketDiagnosticStage, UiEventPayload,
+    SocketDiagnosticDirection, SocketDiagnosticStage, SocketFailureStage, UiEventPayload,
 };
 use intercept_proxy_runtime::{
     SocketConnectionTarget, SocketOpenedEvidence, SocketRelayBytes, SocketRelayRunContext,
@@ -13,6 +13,7 @@ use super::*;
 
 fn run() -> SocketRelayRunContext {
     SocketRelayRunContext {
+        workspace_id: "test-workspace".into(),
         listener_id: "listener-socket-1".into(),
         workspace_runtime_epoch: Uuid::new_v4(),
         listener_run_epoch: Uuid::new_v4(),
@@ -66,7 +67,7 @@ fn record_partial_relay_failure(
 #[test]
 fn typed_sequence_keeps_order_epochs_direction_and_partial_bytes() {
     let events = Arc::new(EventHub::new(16));
-    let observer = SocketDiagnosticObserver::with_capacity(Arc::clone(&events), 16);
+    let observer = SocketDiagnosticObserver::new(Arc::clone(&events), 16, 64 * 1024).unwrap();
     let run = run();
     let connection_id = Uuid::new_v4();
     let at = SystemTime::now();
@@ -100,6 +101,18 @@ fn typed_sequence_keeps_order_epochs_direction_and_partial_bytes() {
             "Socket 连接已失败"
         ]
     );
+    let UiEventPayload::DiagnosticLogAdded(admitted) = &replay.events[0].payload else {
+        unreachable!()
+    };
+    let admitted_detail = admitted.detail.as_deref().unwrap();
+    assert!(
+        admitted_detail.contains("传输：TCP → TLS"),
+        "{admitted_detail}"
+    );
+    assert!(
+        !admitted_detail.contains("模式：Transparent"),
+        "{admitted_detail}"
+    );
     let UiEventPayload::DiagnosticLogAdded(closed) = &replay.events[2].payload else {
         unreachable!()
     };
@@ -130,11 +143,11 @@ fn typed_sequence_keeps_order_epochs_direction_and_partial_bytes() {
     assert_eq!(context.server_to_client_read_bytes, 17);
     assert_eq!(context.server_to_client_bytes, 11);
     assert_eq!(
-        context.capture_failure.as_ref().unwrap().stage,
-        SocketCaptureFailureStage::Write
+        context.socket_failure.as_ref().unwrap().stage,
+        SocketFailureStage::Write
     );
     assert_eq!(
-        context.capture_failure.as_ref().unwrap().code,
+        context.socket_failure.as_ref().unwrap().code,
         "SOCKET_WRITE_FAILED"
     );
     let detail = closed.detail.as_deref().unwrap();
@@ -148,7 +161,7 @@ fn typed_sequence_keeps_order_epochs_direction_and_partial_bytes() {
 #[test]
 fn local_responder_diagnostics_never_invent_upstream_evidence() {
     let events = Arc::new(EventHub::new(16));
-    let observer = SocketDiagnosticObserver::with_capacity(Arc::clone(&events), 16);
+    let observer = SocketDiagnosticObserver::new(Arc::clone(&events), 16, 64 * 1024).unwrap();
     let run = run();
     let connection_id = Uuid::new_v4();
     let at = SystemTime::now();
@@ -247,7 +260,7 @@ fn local_responder_tls_ready_uses_downstream_tls_stage_only() {
 #[test]
 fn bounded_retention_drop_count_is_observable_and_resets_per_run() {
     let events = Arc::new(EventHub::new(16));
-    let observer = SocketDiagnosticObserver::with_capacity(events, 2);
+    let observer = SocketDiagnosticObserver::new(events, 2, 64 * 1024).unwrap();
     let run = run();
     for port in 1..=3 {
         observer.record(SocketConnectionEvent::Rejected {
@@ -302,35 +315,35 @@ fn frame_processing_and_local_exchange_keep_typed_diagnostic_values() {
 }
 
 #[test]
-fn capture_failures_keep_distinct_sanitized_stages() {
+fn socket_failures_keep_distinct_sanitized_stages() {
     for (runtime_stage, expected, code) in [
         (
             SocketRelayStage::FrameInspect,
-            SocketCaptureFailureStage::Frame,
+            SocketFailureStage::Frame,
             "FRAME_REJECTED",
         ),
         (
             SocketRelayStage::Decode,
-            SocketCaptureFailureStage::Decode,
+            SocketFailureStage::Decode,
             "DECODE_FAILED",
         ),
         (
             SocketRelayStage::Rule,
-            SocketCaptureFailureStage::Rule,
+            SocketFailureStage::Rule,
             "RULE_FAILED",
         ),
         (
             SocketRelayStage::Encode,
-            SocketCaptureFailureStage::Encode,
+            SocketFailureStage::Encode,
             "ENCODE_FAILED",
         ),
         (
             SocketRelayStage::RelayWrite,
-            SocketCaptureFailureStage::Write,
+            SocketFailureStage::Write,
             "SOCKET_WRITE_FAILED",
         ),
     ] {
-        let failure = capture_failure(&SocketRelayFailure {
+        let failure = socket_failure(&SocketRelayFailure {
             stage: runtime_stage,
             direction: Some(SocketRelayDirection::LocalExchange),
             code,
@@ -373,10 +386,8 @@ fn opened_relay_route_preserves_resolved_and_tls_evidence() {
 #[test]
 fn concurrent_connections_and_restarted_runs_keep_distinct_typed_identity() {
     let events = Arc::new(EventHub::new(16));
-    let observer = Arc::new(SocketDiagnosticObserver::with_capacity(
-        Arc::clone(&events),
-        16,
-    ));
+    let observer =
+        Arc::new(SocketDiagnosticObserver::new(Arc::clone(&events), 16, 64 * 1024).unwrap());
     let first_run = run();
     let mut second_run = run();
     second_run.listener_id = first_run.listener_id.clone();

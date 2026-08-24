@@ -13,45 +13,42 @@ fn frame(reader, context) {
 fn decode(origin, context) { () }
 "#;
     let package = compile_package(upstream_script, valid_fixed_script());
-    let decider = RhaiFrameDecider::for_package(
+    let mut inspector = frame_inspector(
         &package,
         ProtocolDirection::Upstream,
         "connection-1",
-        "listener-1",
         ProtocolRuntimeLimits::default(),
+        ProtocolFramingLimits::new(64, 64).unwrap(),
     );
-    let mut framer =
-        SingleDirectionFramer::new(decider, ProtocolFramingLimits::new(64, 64).unwrap());
-
-    assert!(framer.push(vec![0]).unwrap().is_empty());
-    assert!(framer.push(vec![2, b'A']).unwrap().is_empty());
     assert_eq!(
-        framer.push(vec![b'B']).unwrap(),
+        inspect_chunks(
+            &mut inspector,
+            [vec![0], vec![2, b'A'], vec![b'B']],
+        )
+        .unwrap(),
         vec![vec![0, 2, b'A', b'B']]
     );
 }
 #[test]
-fn rhai_frame_wrong_return_type_is_fail_closed_and_clears_fifo() {
+fn rhai_frame_wrong_return_type_is_fail_closed() {
     let package = compile_package(
         "fn frame(reader, context) { () }\nfn decode(origin, context) { () }\n",
         valid_fixed_script(),
     );
-    let decider = RhaiFrameDecider::for_package(
+    let mut inspector = frame_inspector(
         &package,
         ProtocolDirection::Upstream,
         "connection-2",
-        "listener-1",
         ProtocolRuntimeLimits::default(),
+        ProtocolFramingLimits::new(8, 8).unwrap(),
     );
-    let mut framer = SingleDirectionFramer::new(decider, ProtocolFramingLimits::new(8, 8).unwrap());
 
     assert_eq!(
-        framer.push(vec![1]).unwrap_err(),
+        inspector.inspect(&[1]).unwrap_err(),
         ProtocolFramingError::FrameEntryFailed {
             package: package.package().clone(),
         }
     );
-    assert_eq!(framer.buffered_bytes(), 0);
 }
 
 #[test]
@@ -77,19 +74,19 @@ fn delimiter_frame(reader) {
         valid_fixed_script(),
         &[("libraries/framing.rhai", library.as_bytes())],
     );
-    let decider = RhaiFrameDecider::for_package(
+    let mut inspector = frame_inspector(
         &package,
         ProtocolDirection::Upstream,
         "connection-import",
-        "listener-1",
         ProtocolRuntimeLimits::default(),
+        ProtocolFramingLimits::new(64, 64).unwrap(),
     );
-    let mut framer =
-        SingleDirectionFramer::new(decider, ProtocolFramingLimits::new(64, 64).unwrap());
-
-    assert!(framer.push(b"ONE\r".to_vec()).unwrap().is_empty());
     assert_eq!(
-        framer.push(b"\nTWO\r\n".to_vec()).unwrap(),
+        inspect_chunks(
+            &mut inspector,
+            [b"ONE\r".to_vec(), b"\nTWO\r\n".to_vec()],
+        )
+        .unwrap(),
         vec![b"ONE\r\n".to_vec(), b"TWO\r\n".to_vec()]
     );
 }
@@ -110,21 +107,18 @@ fn rhai_host_rejects_negative_lengths_empty_reasons_and_reader_misuse() {
             "fn frame(reader, context) {{ {body} }}\nfn decode(origin, context) {{ () }}\n"
         );
         let package = compile_package(&script, valid_fixed_script());
-        let decider = RhaiFrameDecider::for_package(
+        let mut inspector = frame_inspector(
             &package,
             ProtocolDirection::Upstream,
             format!("connection-invalid-{index}"),
-            "listener-1",
             ProtocolRuntimeLimits::default(),
+            ProtocolFramingLimits::new(8, 8).unwrap(),
         );
-        let mut framer =
-            SingleDirectionFramer::new(decider, ProtocolFramingLimits::new(8, 8).unwrap());
         assert_eq!(
-            framer.push(vec![1]).unwrap_err().code(),
+            inspector.inspect(&[1]).unwrap_err().code(),
             ProtocolFramingErrorCode::FrameEntryFailed,
             "invalid Rhai body unexpectedly succeeded: {body}"
         );
-        assert_eq!(framer.buffered_bytes(), 0);
     }
 }
 
@@ -146,19 +140,17 @@ fn frame(reader, context) {
 fn decode(origin, context) { () }
 "#;
     let package = compile_package(valid_fixed_script(), downstream);
-    let decider = RhaiFrameDecider::for_package(
+    let mut inspector = frame_inspector(
         &package,
         ProtocolDirection::Downstream,
         "connection-reader",
-        "listener-1",
         ProtocolRuntimeLimits::default(),
+        ProtocolFramingLimits::new(16, 16).unwrap(),
     );
-    let mut framer =
-        SingleDirectionFramer::new(decider, ProtocolFramingLimits::new(16, 16).unwrap());
 
     assert_eq!(
-        framer.push(vec![1, 2, 3, 4, 5, 6, 7, 8]).unwrap(),
-        vec![vec![1, 2, 3, 4, 5, 6, 7, 8]]
+        inspector.inspect(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap(),
+        ProtocolFrameInspection::Complete { bytes: 8 }
     );
 }
 
@@ -168,17 +160,16 @@ fn rhai_reject_constructor_accepts_a_bounded_reason() {
         "fn frame(reader, context) { framing::reject(\"not mine\") }\nfn decode(origin, context) { () }\n",
         valid_fixed_script(),
     );
-    let decider = RhaiFrameDecider::for_package(
+    let mut inspector = frame_inspector(
         &package,
         ProtocolDirection::Upstream,
         "connection-reject",
-        "listener-1",
         ProtocolRuntimeLimits::default(),
+        ProtocolFramingLimits::new(8, 8).unwrap(),
     );
-    let mut framer = SingleDirectionFramer::new(decider, ProtocolFramingLimits::new(8, 8).unwrap());
     assert_eq!(
-        framer.push(vec![1]).unwrap_err(),
-        ProtocolFramingError::Rejected {
+        inspector.inspect(&[1]).unwrap(),
+        ProtocolFrameInspection::Reject {
             reason: "not mine".to_owned(),
         }
     );
@@ -187,22 +178,20 @@ fn rhai_reject_constructor_accepts_a_bounded_reason() {
 #[test]
 fn official_iso8583_template_frame_executes_with_globals_and_embedded_imports() {
     let package = compile_official_iso8583_package();
-    let decider = RhaiFrameDecider::for_package(
+    let mut inspector = frame_inspector(
         &package,
         ProtocolDirection::Upstream,
         "connection-iso8583",
-        "listener-iso8583",
         ProtocolRuntimeLimits::default(),
-    );
-    let mut framer = SingleDirectionFramer::new(
-        decider,
         ProtocolFramingLimits::new(65_535, 131_070).unwrap(),
     );
 
-    assert!(framer.push(vec![0]).unwrap().is_empty());
-    assert!(framer.push(vec![4, b'0', b'2']).unwrap().is_empty());
     assert_eq!(
-        framer.push(vec![b'0', b'0']).unwrap(),
+        inspect_chunks(
+            &mut inspector,
+            [vec![0], vec![4, b'0', b'2'], vec![b'0', b'0']],
+        )
+        .unwrap(),
         vec![vec![0, 4, b'0', b'2', b'0', b'0']]
     );
 }
@@ -214,18 +203,16 @@ fn rhai_operation_limit_stops_a_non_terminating_frame_entry() {
         valid_fixed_script(),
     );
     let runtime_limits = ProtocolRuntimeLimits::new(100, 32, 1024, 1024, 250).unwrap();
-    let decider = RhaiFrameDecider::for_package(
+    let mut inspector = frame_inspector(
         &package,
         ProtocolDirection::Upstream,
         "connection-loop",
-        "listener-1",
         runtime_limits,
+        ProtocolFramingLimits::new(8, 8).unwrap(),
     );
-    let mut framer = SingleDirectionFramer::new(decider, ProtocolFramingLimits::new(8, 8).unwrap());
 
     assert_eq!(
-        framer.push(vec![1]).unwrap_err().code(),
+        inspector.inspect(&[1]).unwrap_err().code(),
         ProtocolFramingErrorCode::FrameEntryFailed
     );
-    assert_eq!(framer.buffered_bytes(), 0);
 }

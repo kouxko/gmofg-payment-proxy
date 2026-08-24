@@ -21,10 +21,6 @@ import {
 } from "./protocol-package-import-model";
 import { ProtocolPackageRow } from "./protocol-package-row";
 import {
-  ProtocolWorkspaceTabs,
-  type ProtocolType,
-} from "@/features/shared/protocol-workspace-tabs";
-import {
   builtInRestoreResultError,
   isBuiltInPackage,
   isProtocolPackageGroupList,
@@ -48,7 +44,6 @@ export function ProtocolPackagesView() {
   const [restoreError, setRestoreError] = useState<string>();
   const [restorePending, setRestorePending] = useState(false);
   const [exportPending, setExportPending] = useState(false);
-  const [selectedKind, setSelectedKind] = useState<ProtocolType>("socket");
   // state 更新发生在下一次渲染；ref 在事件入口同步上锁，阻止同一帧的重复点击。
   const prepareLock = useRef(false);
   const commitLock = useRef(false);
@@ -65,7 +60,7 @@ export function ProtocolPackagesView() {
       ? "协议包列表返回了不完整的数据。"
       : undefined);
   const groups: ProtocolPackageGroupViewModel[] = listIsValid && packages.data
-    ? packages.data.filter((group) => group.kind === selectedKind)
+    ? packages.data
     : [];
 
   function openGroup(group: ProtocolPackageGroupViewModel, trigger: HTMLButtonElement) {
@@ -196,7 +191,6 @@ export function ProtocolPackagesView() {
         return;
       }
       packages.setData(refreshed);
-      setSelectedKind("socket");
       setSelectedGroup(exactGroup);
       setSelectedVersion(exactVersion);
       setImportNotice(result.outcome === "reused"
@@ -269,7 +263,6 @@ export function ProtocolPackagesView() {
       const exactVersion = exactGroup?.versions.find((item) => item.package.version === packageRef.version);
       if (!exactGroup || !exactVersion) throw new Error("EXACT_VERSION_MISSING");
       packages.setData(refreshed);
-      setSelectedKind(exactGroup.kind);
       setSelectedGroup(exactGroup);
       setSelectedVersion(exactVersion);
       setImportNotice(outcomeText(outcome));
@@ -335,40 +328,29 @@ export function ProtocolPackagesView() {
   }
 
   return (
-    <ProtocolWorkspaceTabs
-      ariaLabel="协议包类型"
-      selectedKey={selectedKind}
-      onSelectionChange={setSelectedKind}
-    >
     <section className="min-w-0 space-y-4 overflow-auto p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 ref={headingRef} tabIndex={-1} className="sr-only">协议包</h1>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
-            {selectedKind === "http"
-              ? "查看用于解析 HTTP 文本 Body 的协议包、精确版本与双向 Schema。"
-              : "查看用于解析 Socket 报文的协议包、精确版本与双向 Schema。"}
+            统一查看 HTTP 与 Socket 协议包、精确版本、能力与双向 Schema。
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
-          {selectedKind === "socket" ? (
-            <>
-              <Button
-                variant="outline"
-                isDisabled={restorePending || exportPending || importState.kind !== "closed"}
-                onPress={() => void restoreBuiltInExample()}
-              >
-                {restorePending ? "正在恢复…" : "恢复 ISO 8583 示例包"}
-              </Button>
-              <Button
-                variant="outline"
-                isDisabled={exportPending || restorePending || importState.kind !== "closed"}
-                onPress={() => void exportBuiltInTemplate()}
-              >
-                {exportPending ? "正在导出…" : "导出 ISO 8583 模板 ZIP"}
-              </Button>
-            </>
-          ) : null}
+          <Button
+            variant="outline"
+            isDisabled={restorePending || exportPending || importState.kind !== "closed"}
+            onPress={() => void restoreBuiltInExample()}
+          >
+            {restorePending ? "正在恢复…" : "恢复 ISO 8583 示例包"}
+          </Button>
+          <Button
+            variant="outline"
+            isDisabled={exportPending || restorePending || importState.kind !== "closed"}
+            onPress={() => void exportBuiltInTemplate()}
+          >
+            {exportPending ? "正在导出…" : "导出 ISO 8583 模板 ZIP"}
+          </Button>
           <Button
             ref={importTriggerRef}
             variant="primary"
@@ -390,7 +372,7 @@ export function ProtocolPackagesView() {
           <Button size="sm" variant="outline" onPress={() => void restoreBuiltInExample()}>重试</Button>
         </Alert>
       )}
-      {selectedKind === "socket" ? <Alert status="accent">
+      <Alert status="accent">
         <Alert.Indicator />
         <Alert.Content>
           <Alert.Title>内置 ISO 8583:1987 ASCII Profile</Alert.Title>
@@ -398,7 +380,7 @@ export function ProtocolPackagesView() {
             模板覆盖主位图、次位图和 DE2–DE128 字段结构；2 字节大端长度头属于当前 Socket 传输约定。接入真实系统前，仍需按对端的字段编码和私有域规格调整。
           </Alert.Description>
         </Alert.Content>
-      </Alert> : null}
+      </Alert>
       {listError && (
         <Alert status="danger">
           <Alert.Indicator />
@@ -413,9 +395,9 @@ export function ProtocolPackagesView() {
         <div className="grid min-h-56 place-items-center"><Spinner aria-label="正在读取协议包列表" /></div>
       ) : !listError && groups.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--telemetry-line)] p-10 text-center">
-          <p className="font-medium">尚未安装 {selectedKind === "http" ? "HTTP" : "Socket"} 协议包</p>
-          <p className="mt-1 text-sm text-[var(--telemetry-muted)]">导入对应类型的 ZIP 后可在此查看版本、能力与 Schema。</p>
-          {selectedKind === "socket" ? <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <p className="font-medium">尚未安装协议包</p>
+          <p className="mt-1 text-sm text-[var(--telemetry-muted)]">导入 ZIP 后可在此查看 HTTP 与 Socket 包的版本、能力与 Schema。</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
             <Button variant="primary"
               isDisabled={restorePending || exportPending || importState.kind !== "closed"}
               onPress={() => void restoreBuiltInExample()}>
@@ -426,7 +408,7 @@ export function ProtocolPackagesView() {
               onPress={() => void exportBuiltInTemplate()}>
               {exportPending ? "正在导出…" : "导出 ISO 8583 模板 ZIP"}
             </Button>
-          </div> : null}
+          </div>
         </div>
       ) : !listError ? (
         <div className="overflow-hidden rounded-xl border border-[var(--telemetry-line)]">
@@ -460,6 +442,5 @@ export function ProtocolPackagesView() {
         }}
       />
     </section>
-    </ProtocolWorkspaceTabs>
   );
 }

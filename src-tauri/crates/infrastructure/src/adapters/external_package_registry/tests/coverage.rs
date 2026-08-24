@@ -1,4 +1,5 @@
 use intercept_proxy_application::UiEventPayload;
+use uuid::Uuid;
 
 use super::*;
 use crate::adapters::external_packages::{

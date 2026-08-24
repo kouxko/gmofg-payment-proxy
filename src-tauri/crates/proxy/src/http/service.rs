@@ -1,7 +1,8 @@
 use super::{
-    Arc, BoundListener, BoxIo, Bytes, CancellationToken, ChannelId, Clock, ConnectionAcceptor,
-    ConnectionContext, Debug, Duration, ErrorCode, InformationalResponseSink, IntentionalWireFault,
-    MessageLimits, PipelinePorts, ProxyError, RawHttp1HeadCapture, Result, StdMutex, TcpListener,
+    Arc, BoundListener, BoxIo, Bytes, CancellationToken, CanonicalResponseHead, ChannelId, Clock,
+    ConnectionAcceptor, ConnectionContext, Debug, Duration, ErrorCode,
+    HttpProtocolCapabilityFactory, InformationalResponseSink, IntentionalWireFault, MessageLimits,
+    PipelinePorts, ProxyError, RawHttp1HeadCapture, Result, StdMutex, TcpListener,
     TokioBoundListener, UpstreamConnector, Uuid, timeout_stage,
 };
 use async_trait::async_trait;
@@ -20,6 +21,10 @@ pub struct ConnectionService {
     pub acceptor: Arc<dyn ConnectionAcceptor>,
     pub upstream: Arc<dyn UpstreamConnector>,
     pub ports: Arc<dyn PipelinePorts>,
+    /// 一条 accepted connection 独占创建的 HTTP 协议能力。
+    pub capabilities: Arc<dyn HttpProtocolCapabilityFactory>,
+    /// Listener 创建时固定的 Server Endpoint；Exchange 生命周期内不可切换。
+    pub endpoint: String,
     pub clock: Arc<dyn Clock>,
     pub admission: ConnectionAdmission,
     pub allowed_client_cidrs: Vec<String>,
@@ -32,7 +37,7 @@ pub struct ConnectionService {
 
 pub(super) struct RequestWireState<'a> {
     pub(super) raw_request_head: &'a StdMutex<RawHttp1HeadCapture>,
-    pub(super) canonical_response_head: &'a StdMutex<Option<Bytes>>,
+    pub(super) canonical_response_head: &'a CanonicalResponseHead,
     pub(super) informational_response_sink: &'a InformationalResponseSink,
     pub(super) raw_tail: &'a StdMutex<Option<Bytes>>,
     pub(super) intentional_wire_fault: &'a StdMutex<Option<IntentionalWireFault>>,
@@ -118,6 +123,7 @@ impl ConnectionService {
         io: BoxIo,
         mut context: ConnectionContext,
         cancellation: CancellationToken,
+        task_scope: &ConnectionTaskScope,
     ) -> Result<()> {
         let accepted = timeout_stage(
             self.read_timeout,
@@ -131,7 +137,7 @@ impl ConnectionService {
             Ok(accepted) => {
                 context.tls_peer = accepted.tls_peer;
                 self.ports.connection_opened(&context).await;
-                self.run_connection_inner(accepted.io, &context, cancellation)
+                self.run_connection_inner_in_scope(accepted.io, &context, cancellation, task_scope)
                     .await
             }
             Err(error) => Err(error),
@@ -149,9 +155,11 @@ impl ConnectionHandler for ConnectionService {
         &self,
         io: BoxIo,
         context: ConnectionContext,
-        _child_tasks: ConnectionTaskScope,
+        child_tasks: ConnectionTaskScope,
         cancellation: CancellationToken,
     ) -> PrimaryConnectionOutcome {
-        self.run_connection(io, context, cancellation).await.into()
+        self.run_connection(io, context, cancellation, &child_tasks)
+            .await
+            .into()
     }
 }

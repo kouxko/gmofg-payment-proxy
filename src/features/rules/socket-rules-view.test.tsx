@@ -5,7 +5,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProtocolDocumentRuleDefinition } from "@/generated/rust-types";
-import { ProtocolRulesView, SocketRulesView } from "./socket-rules-view";
+import { ProtocolRulesView } from "./protocol-rules-view";
 import {
   capability,
   deleted,
@@ -36,6 +36,8 @@ const queryState = vi.hoisted(() => ({
   refresh: vi.fn(),
   eventRefresh: undefined as undefined | (() => Promise<void>),
 }));
+
+const SocketRulesView = () => <ProtocolRulesView kind="socket" />;
 
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/features/shell/bootstrap-context", () => ({

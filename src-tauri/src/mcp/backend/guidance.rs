@@ -30,7 +30,7 @@ pub(super) fn diagnostic_guidance(evidence: &str) -> DiagnosticGuidance {
                 "先停用协议处理并用原样 Socket 转发确认 TCP/TLS 字节链路。",
                 "用独立最小外部软件包进程复现，以区分第三方实现、入口配置和上游服务问题。",
             ],
-            verification: "确认 external_package_service_status 为 listening、精确版本 online+enabled，并用 diagnostics_query 与 socket_capture_query 验证同一连接和方向的处理结果。",
+            verification: "确认 external_package_service_status 为 listening、精确版本 online+enabled，并用 diagnostics_query 与 exchange_observation_query 验证同一连接的有序收发事件。",
         };
     }
     if contains_any(evidence, &["tls", "certificate", "证书", "trust anchor"]) {

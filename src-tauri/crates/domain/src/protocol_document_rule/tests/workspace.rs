@@ -3,7 +3,7 @@ use crate::{
     ListenerDataPlane, MAX_JAVASCRIPT_SAFE_INTEGER, ProtocolRuleStage, ProxyListener,
     ProxyWorkspace, ScriptedSocketProcessing, SocketDownstreamSecurity,
     SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
-    SocketRelaySettings, SocketTopology,
+    SocketRelaySettings, SocketRuntimeLimits, SocketTopology,
 };
 
 fn scripted_listener(topology: SocketTopology) -> ProxyListener {
@@ -11,6 +11,7 @@ fn scripted_listener(topology: SocketTopology) -> ProxyListener {
         data_plane: ListenerDataPlane::Socket(SocketRelaySettings {
             topology,
             maximum_connections: 32,
+            runtime_limits: SocketRuntimeLimits::default(),
             processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package: package("1.2.3"),
             }),

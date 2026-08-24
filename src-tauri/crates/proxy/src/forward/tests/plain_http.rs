@@ -57,50 +57,67 @@ async fn absolute_form_round_trip_once() {
 }
 
 #[tokio::test]
-async fn keepalive_releases_completed_origin_tasks_without_retaining_handles() {
-    const REQUESTS: u64 = 64;
-
+async fn one_app_connection_reuses_one_exchange_for_same_endpoint_requests() {
     let origin = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let origin_address = origin.local_addr().unwrap();
     let origin_task = tokio::spawn(async move {
-        for _ in 0..REQUESTS {
-            let (mut stream, _) = origin.accept().await.unwrap();
-            let mut request = Vec::new();
-            let mut buffer = [0_u8; 512];
-            while !request.windows(4).any(|window| window == b"\r\n\r\n") {
-                let read = stream.read(&mut buffer).await.unwrap();
-                assert_ne!(read, 0);
-                request.extend_from_slice(&buffer[..read]);
-            }
-            stream
-                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+        let request_count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        for _ in 0..2 {
+            let (stream, _) = origin.accept().await.unwrap();
+            let handler_count = Arc::clone(&request_count);
+            server_http1::Builder::new()
+                .serve_connection(
+                    TokioIo::new(stream),
+                    service_fn(move |_request: Request<Incoming>| {
+                        let sequence =
+                            handler_count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        async move {
+                            Ok::<_, Infallible>(Response::new(Full::new(Bytes::from(format!(
+                                "response-{sequence}"
+                            )))))
+                        }
+                    }),
+                )
                 .await
                 .unwrap();
         }
+        assert_eq!(request_count.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), origin.accept())
+                .await
+                .is_err(),
+            "the same App connection must reuse its first Server Endpoint connection"
+        );
     });
 
-    let service = ForwardProxyService::new(loopback_config(), Arc::new(NoAuthentication)).unwrap();
-    let scope = crate::listener::ConnectionTaskScope::new();
-    let observed_scope = scope.clone();
-    let (client, proxy) = tokio::io::duplex(32 * 1024);
+    let capabilities = Arc::new(CountingHttpCapabilities::new("same-endpoint"));
+    let ports = Arc::new(CapturingPipelinePorts::default());
+    let service = ForwardProxyService::new(loopback_config(), Arc::new(NoAuthentication))
+        .unwrap()
+        .with_pipeline(
+            ChannelId::new("same-endpoint").unwrap(),
+            Uuid::new_v4(),
+            ports.clone(),
+            capabilities.clone(),
+            MessageLimits::default(),
+        );
+    let (client, proxy) = tokio::io::duplex(16 * 1024);
     let proxy_task = tokio::spawn(async move {
         service
-            .serve_connection_in_scope(
+            .serve_connection(
                 Box::new(proxy),
                 "127.0.0.1:45009".parse().unwrap(),
                 CancellationToken::new(),
-                scope,
             )
             .await
     });
     let (mut sender, connection) = client_http1::handshake(TokioIo::new(client)).await.unwrap();
     let connection_task = tokio::spawn(connection);
-
-    for completed in 1..=REQUESTS {
+    for (path, expected) in [("one", "response-0"), ("two", "response-1")] {
         let response = sender
             .send_request(
                 Request::builder()
-                    .uri(format!("http://{origin_address}/keepalive/{completed}"))
+                    .uri(format!("http://{origin_address}/{path}"))
                     .body(Full::new(Bytes::new()))
                     .unwrap(),
             )
@@ -109,22 +126,36 @@ async fn keepalive_releases_completed_origin_tasks_without_retaining_handles() {
         assert_eq!(response.status(), StatusCode::OK);
         assert_eq!(
             response.into_body().collect().await.unwrap().to_bytes(),
-            "ok"
+            expected
         );
-        while observed_scope.snapshot().aggregate.completed_count < completed {
-            tokio::task::yield_now().await;
-        }
-        assert_eq!(observed_scope.snapshot().live_count, 0);
     }
-
     drop(sender);
     connection_task.await.unwrap().unwrap();
     proxy_task.await.unwrap().unwrap();
     origin_task.await.unwrap();
-    assert_eq!(observed_scope.snapshot().live_count, 0);
     assert_eq!(
-        observed_scope.snapshot().aggregate.completed_count,
-        REQUESTS
+        capabilities
+            .upstream
+            .load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "one App connection creates upstream capabilities once"
+    );
+    assert_eq!(
+        capabilities
+            .downstream
+            .load(std::sync::atomic::Ordering::SeqCst),
+        1,
+        "one App connection creates downstream capabilities once"
+    );
+    assert_eq!(
+        ports.requests.lock().unwrap().len(),
+        2,
+        "wire policy runs exactly once for each framed request"
+    );
+    assert_eq!(
+        ports.responses.lock().unwrap().len(),
+        2,
+        "wire policy runs exactly once for each paired response"
     );
 }
 
@@ -256,6 +287,7 @@ async fn absolute_form_enters_capture_and_rule_pipeline() {
             ChannelId::new("forward-test").unwrap(),
             Uuid::new_v4(),
             ports.clone(),
+            plain_capabilities("forward-test"),
             MessageLimits::default(),
         );
     let (client, proxy) = tokio::io::duplex(32 * 1024);
@@ -333,6 +365,7 @@ async fn plain_drop_without_upstream_read_closes_after_complete_request_write() 
             ChannelId::new("plain-drop-write").unwrap(),
             Uuid::new_v4(),
             ports,
+            plain_capabilities("plain-drop-write"),
             MessageLimits::default(),
         );
     let (client, proxy) = tokio::io::duplex(32 * 1024);
@@ -406,6 +439,7 @@ async fn plain_drop_with_upstream_read_waits_for_segmented_response_body() {
             ChannelId::new("plain-drop-read").unwrap(),
             Uuid::new_v4(),
             ports,
+            plain_capabilities("plain-drop-read"),
             MessageLimits::default(),
         );
     let (client, proxy) = tokio::io::duplex(32 * 1024);

@@ -1,28 +1,22 @@
-//! 正向代理的安全配置、认证边界与 MITM 依赖。
+//! HTTP 监听安全配置与动态服务端证书接口。
+//!
+//! 动态证书接口同时供 Reverse Listener 使用；当前 Forward Exchange 不支持 CONNECT
+//! 或 MITM 隧道，不能把这里的类型误解为 Forward 的旁路能力。
 
-use std::collections::{HashMap, VecDeque};
 use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use http::HeaderValue;
-use rustls::pki_types::ServerName;
-use rustls::{ClientConfig, RootCertStore, ServerConfig};
-use tokio::net::TcpStream;
-use tokio::sync::Mutex;
-use tokio_rustls::TlsConnector;
-use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use super::target::{Network, valid_authority_pattern};
-use super::tunnel::timeout_or_cancel;
-use super::{config_error, tls_config_error};
-use crate::http::PipelinePorts;
+use super::config_error;
+use super::target::Network;
+use crate::Result;
+use crate::http::{HttpProtocolCapabilityFactory, PipelinePorts};
 use crate::message::MessageLimits;
 use crate::supervisor::ChannelId;
-use crate::transport::BoxIo;
-use crate::{ErrorCode, ProxyError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ForwardAuthenticationMode {
@@ -38,8 +32,6 @@ pub struct ForwardProxyConfig {
     pub connect_timeout: Duration,
     pub read_timeout: Duration,
     pub write_timeout: Duration,
-    /// 每次成功读取或写入都会重新开始计时，因此它是真正的空闲超时，不是隧道总寿命。
-    pub tunnel_idle_timeout: Duration,
 }
 
 impl ForwardProxyConfig {
@@ -53,7 +45,6 @@ impl ForwardProxyConfig {
         if self.connect_timeout.is_zero()
             || self.read_timeout.is_zero()
             || self.write_timeout.is_zero()
-            || self.tunnel_idle_timeout.is_zero()
         {
             return Err(config_error(
                 "forward proxy timeouts must be greater than zero",
@@ -99,170 +90,12 @@ impl Debug for MitmServerIdentity {
     }
 }
 
-#[async_trait::async_trait]
-pub trait MitmUpstreamConnector: Debug + Send + Sync {
-    async fn connect(
-        &self,
-        authority_host: &str,
-        upstream: TcpStream,
-        cancellation: &CancellationToken,
-    ) -> Result<BoxIo>;
-}
-
-#[derive(Debug, Clone)]
-pub struct NativeRootMitmConnector {
-    config: Arc<ClientConfig>,
-}
-
-impl NativeRootMitmConnector {
-    pub fn new() -> Result<Self> {
-        let mut roots = RootCertStore::empty();
-        let loaded = rustls_native_certs::load_native_certs();
-        let (added, ignored) = roots.add_parsable_certificates(loaded.certs);
-        if added == 0 {
-            return Err(ProxyError::new(
-                ErrorCode::CertificateNotReady,
-                format!(
-                    "platform trust store contains no usable certificates ({} load errors, {ignored} invalid certificates)",
-                    loaded.errors.len()
-                ),
-            ));
-        }
-        let config =
-            ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-                .with_safe_default_protocol_versions()
-                .map_err(tls_config_error)?
-                .with_root_certificates(roots)
-                .with_no_client_auth();
-        Ok(Self {
-            config: Arc::new(config),
-        })
-    }
-}
-
-#[async_trait::async_trait]
-impl MitmUpstreamConnector for NativeRootMitmConnector {
-    async fn connect(
-        &self,
-        authority_host: &str,
-        upstream: TcpStream,
-        cancellation: &CancellationToken,
-    ) -> Result<BoxIo> {
-        let server_name = ServerName::try_from(authority_host.to_owned())
-            .map_err(|error| config_error(format!("invalid MITM upstream server name: {error}")))?;
-        let stream = timeout_or_cancel(
-            Duration::from_secs(30),
-            cancellation,
-            TlsConnector::from(self.config.clone()).connect(server_name, upstream),
-            ErrorCode::UpstreamConnectTimeout,
-        )
-        .await?
-        .map_err(|error| {
-            ProxyError::new(
-                ErrorCode::TlsHandshakeFailed,
-                format!("MITM upstream TLS handshake failed: {error}"),
-            )
-        })?;
-        Ok(Box::new(stream))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ForwardMitmConfig {
-    pub authority_allowlist: Vec<String>,
-    pub maximum_cached_leaf_certificates: usize,
-}
-
-impl ForwardMitmConfig {
-    pub(super) fn validate(&self) -> Result<()> {
-        if self.authority_allowlist.is_empty() {
-            return Err(config_error("MITM authority allowlist must not be empty"));
-        }
-        if !(1..=256).contains(&self.maximum_cached_leaf_certificates) {
-            return Err(config_error(
-                "MITM leaf certificate cache capacity must be in 1..=256",
-            ));
-        }
-        if self
-            .authority_allowlist
-            .iter()
-            .any(|pattern| !valid_authority_pattern(pattern))
-        {
-            return Err(config_error(
-                "MITM allowlist entries must be exact hosts/IPs or *.example.test patterns",
-            ));
-        }
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct MitmLeafCache {
-    pub(super) entries: HashMap<String, Arc<ServerConfig>>,
-    recency: VecDeque<String>,
-    capacity: usize,
-}
-
-impl MitmLeafCache {
-    pub(super) fn new(capacity: usize) -> Self {
-        Self {
-            entries: HashMap::with_capacity(capacity),
-            recency: VecDeque::with_capacity(capacity),
-            capacity,
-        }
-    }
-
-    pub(super) fn get(&mut self, host: &str) -> Option<Arc<ServerConfig>> {
-        let value = self.entries.get(host).cloned()?;
-        self.touch(host);
-        Some(value)
-    }
-
-    pub(super) fn insert(&mut self, host: &str, value: &Arc<ServerConfig>) {
-        self.entries.insert(host.to_owned(), value.clone());
-        self.touch(host);
-        while self.entries.len() > self.capacity {
-            if let Some(evicted) = self.recency.pop_front() {
-                self.entries.remove(&evicted);
-            }
-        }
-    }
-
-    fn touch(&mut self, host: &str) {
-        self.recency.retain(|entry| entry != host);
-        self.recency.push_back(host.to_owned());
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct ForwardMitmRuntime {
-    pub(super) config: ForwardMitmConfig,
-    pub(super) certificate_authority: Arc<dyn MitmCertificateAuthority>,
-    pub(super) upstream_connector: Arc<dyn MitmUpstreamConnector>,
-    pub(super) leaf_cache: Mutex<MitmLeafCache>,
-}
-
-impl ForwardMitmRuntime {
-    pub(super) fn new(
-        config: ForwardMitmConfig,
-        certificate_authority: Arc<dyn MitmCertificateAuthority>,
-        upstream_connector: Arc<dyn MitmUpstreamConnector>,
-    ) -> Self {
-        let capacity = config.maximum_cached_leaf_certificates;
-        Self {
-            config,
-            certificate_authority,
-            upstream_connector,
-            leaf_cache: Mutex::new(MitmLeafCache::new(capacity)),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub(super) struct ForwardPipelineRuntime {
     pub(super) channel: ChannelId,
     pub(super) runtime_epoch: Uuid,
     pub(super) ports: Arc<dyn PipelinePorts>,
+    pub(super) capabilities: Arc<dyn HttpProtocolCapabilityFactory>,
     pub(super) limits: MessageLimits,
 }
 

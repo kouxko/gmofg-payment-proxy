@@ -36,6 +36,7 @@ pub use protocol_package_portability::validate_portable_protocol_bindings;
 mod protocol_packages;
 mod protocol_rule_values;
 mod protocol_rules;
+mod rule_capabilities;
 mod rules;
 mod secrets;
 mod settings;

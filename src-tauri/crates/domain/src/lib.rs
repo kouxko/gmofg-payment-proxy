@@ -7,6 +7,7 @@
 pub mod android_network;
 pub mod breakpoint;
 pub mod certificate;
+pub mod document;
 pub mod error;
 pub mod external_package;
 pub mod id;
@@ -27,6 +28,7 @@ mod android_network_tests;
 pub use android_network::*;
 pub use breakpoint::*;
 pub use certificate::*;
+pub use document::*;
 pub use error::*;
 pub use external_package::*;
 pub use id::*;

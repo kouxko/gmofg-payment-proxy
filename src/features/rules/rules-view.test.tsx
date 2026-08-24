@@ -8,6 +8,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   RuleDraft,
+  RuleStageCapabilityViewModel,
   RuleSummaryViewModel,
 } from "@/generated/rust-types";
 import { RulesView } from "./rules-view";
@@ -15,6 +16,7 @@ import { RulesView } from "./rules-view";
 const commandMocks = vi.hoisted(() => ({
   ruleParseHeaderInput: vi.fn(),
   ruleParseByteInput: vi.fn(),
+  ruleConditionDraft: vi.fn(),
   ruleActionDraft: vi.fn(),
   ruleSave: vi.fn(),
   ruleToggle: vi.fn(),
@@ -96,6 +98,47 @@ const draft: RuleDraft = {
   one_shot: false,
 };
 const ruleView = { summary, draft };
+const capabilities: RuleStageCapabilityViewModel[] = [
+  {
+    stage: "request",
+    match_field_kinds: [
+      "terminal_ip",
+      "certificate_fingerprint",
+      "path_or_request_type",
+      "json_path",
+    ],
+    actions: [
+      { kind: "set_json_field", terminal: false, traffic_direction: null },
+      { kind: "throttle", terminal: false, traffic_direction: "upstream" },
+      { kind: "delay", terminal: false, traffic_direction: null },
+      { kind: "pause", terminal: false, traffic_direction: null },
+      { kind: "mock_response", terminal: true, traffic_direction: null },
+    ],
+  },
+  {
+    stage: "response",
+    match_field_kinds: [
+      "terminal_ip",
+      "certificate_fingerprint",
+      "path_or_request_type",
+      "json_path",
+    ],
+    actions: [
+      { kind: "set_json_field", terminal: false, traffic_direction: null },
+      { kind: "throttle", terminal: false, traffic_direction: "downstream" },
+      { kind: "delay", terminal: false, traffic_direction: null },
+      { kind: "custom_http_status", terminal: false, traffic_direction: null },
+      { kind: "invalid_json", terminal: true, traffic_direction: null },
+    ],
+  },
+  {
+    stage: "tls_handshake",
+    match_field_kinds: ["certificate_fingerprint"],
+    actions: [
+      { kind: "reject_tls_handshake", terminal: true, traffic_direction: null },
+    ],
+  },
+];
 
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
   useIpcQuery: (key: string) =>
@@ -106,6 +149,12 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
           isLoading: false,
           refresh: queryMocks.listRefresh,
         }
+      : key === "rule-capabilities"
+        ? {
+            data: capabilities,
+            error: undefined,
+            isLoading: false,
+          }
       : {
           data: ruleView,
           error: undefined,
@@ -123,6 +172,24 @@ describe("production RulesView async save guard", () => {
       bytes: [123, 125],
       normalized: "123, 125",
     });
+    commandMocks.ruleConditionDraft.mockResolvedValue({
+      type: "field",
+      field: { type: "certificate_fingerprint" },
+      operator: { type: "equals", value: "" },
+    });
+    commandMocks.ruleActionDraft.mockImplementation(
+      async (kind: string, stage: string) => {
+        if (kind === "throttle") {
+          return {
+            type: "throttle",
+            bytes_per_second: 1024,
+            chunk_bytes: 256,
+            direction: stage === "response" ? "downstream" : "upstream",
+          };
+        }
+        return { type: kind };
+      },
+    );
   });
 
   it("toggles one-shot by clicking the HeroUI switch control", async () => {
@@ -150,6 +217,87 @@ describe("production RulesView async save guard", () => {
     await user.click(screen.getByRole("button", { name: "保存规则" }));
     expect(commandMocks.ruleSave).toHaveBeenCalledWith(
       expect.objectContaining({ one_shot: true }),
+    );
+  });
+
+  it("does not offer response-only actions while editing a request-stage rule", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByRole("tab", { name: "执行动作" }));
+    await user.click(await screen.findByLabelText("动作类型"));
+
+    expect(
+      screen.queryByRole("option", { name: "自定义 HTTP 状态码" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: "非法 JSON 响应" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Mock 响应" }),
+    ).toBeVisible();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("button", { name: "添加动作" })).toBeDisabled();
+  });
+
+  it("switches to the Rust response capability without exposing request terminals", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByLabelText("规则阶段"));
+    await user.click(await screen.findByRole("option", { name: "响应" }));
+    await user.click(await screen.findByRole("tab", { name: "执行动作" }));
+    await user.click(await screen.findByLabelText("动作类型"));
+
+    expect(
+      screen.getByRole("option", { name: "自定义 HTTP 状态码" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: "Mock 响应" }),
+    ).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(
+      screen.getByText(
+        "当前动作不支持所选阶段或所在位置，请改为下拉框中的可用动作。",
+      ),
+    ).toBeVisible();
+  });
+
+  it("offers only certificate matching in the TLS stage", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByLabelText("规则阶段"));
+    await user.click(await screen.findByRole("option", { name: "TLS 握手" }));
+    await user.click(await screen.findByRole("tab", { name: "匹配条件" }));
+    await user.click(await screen.findByRole("button", { name: "添加条件" }));
+    await user.click(await screen.findByLabelText("匹配字段"));
+
+    expect(
+      screen.getByRole("option", { name: "证书指纹" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("option", { name: "JSON Path" })).not.toBeInTheDocument();
+    expect(commandMocks.ruleConditionDraft).toHaveBeenCalledWith(
+      "field",
+      "tls_handshake",
+    );
+  });
+
+  it("uses the stage-fixed traffic direction instead of offering an invalid choice", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByRole("tab", { name: "执行动作" }));
+    await user.click(await screen.findByLabelText("动作类型"));
+    await user.click(await screen.findByRole("option", { name: "带宽限速" }));
+
+    expect(
+      await screen.findByText("流量方向由阶段固定：上行 Proxy → Server"),
+    ).toBeVisible();
+    expect(screen.queryByLabelText("流量方向")).not.toBeInTheDocument();
+    expect(commandMocks.ruleActionDraft).toHaveBeenCalledWith(
+      "throttle",
+      "request",
     );
   });
 

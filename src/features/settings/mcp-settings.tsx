@@ -134,7 +134,7 @@ export function McpSettings() {
             <h2 className="font-semibold">AI 现在可以帮你做什么</h2>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-[var(--telemetry-muted)]">
               <li>读取 Workspace、入口、Android 网络接管和当前运行状态。</li>
-              <li>分析 HTTP/Socket 抓包、断点、规则命中与最近诊断。</li>
+              <li>分析统一的 HTTP/Socket Exchange 运行记录、断点、规则命中与最近诊断。</li>
               <li>检查协议包、字段结构、四阶段规则和 ISO 8583 示例资料。</li>
               <li>根据证据建议 App 端如何修改代理接入、证书信任、HTTP 或 Socket 客户端。</li>
               <li>给出最小方案、可选方案、风险、回退和验证步骤，不把猜测写成结论。</li>

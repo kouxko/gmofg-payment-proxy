@@ -16,6 +16,7 @@ async fn lifecycle_rejections_distinguish_cidr_and_capacity() {
     let events = Arc::new(SocketEventCoordinator::new(observer.clone()));
     let metrics = Arc::new(SocketRelayMetrics::default());
     let run = SocketRelayRunContext {
+        workspace_id: "test-workspace".into(),
         listener_id: "listener-1".into(),
         workspace_runtime_epoch: uuid::Uuid::new_v4(),
         listener_run_epoch: uuid::Uuid::new_v4(),
@@ -129,6 +130,7 @@ async fn panic_fallback_emits_the_tracked_partial_byte_counters() {
     let id = uuid::Uuid::new_v4();
     let epoch = uuid::Uuid::new_v4();
     let run = SocketRelayRunContext {
+        workspace_id: "test-workspace".into(),
         listener_id: "listener-1".into(),
         workspace_runtime_epoch: uuid::Uuid::new_v4(),
         listener_run_epoch: epoch,

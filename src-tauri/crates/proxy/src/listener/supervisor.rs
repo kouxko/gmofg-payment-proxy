@@ -101,6 +101,19 @@ impl<H: ConnectionHandler + ?Sized + 'static> ListenerSupervisor<H> {
         self.run_bound(listener, cancellation).await
     }
 
+    fn prepare_run(&self) -> Result<(ListenerAdmission, ListenerRunContext)> {
+        let admission = ListenerAdmission::new(
+            self.config.allowed_client_cidrs.clone(),
+            self.config.capacity.clone(),
+        )?;
+        let context = ListenerRunContext::new(
+            self.config.runtime_epoch,
+            self.config.listener_id.clone(),
+            Arc::clone(&self.clock),
+        );
+        Ok((admission, context))
+    }
+
     pub(crate) async fn run_bound(
         &self,
         listener: Arc<dyn BoundListener>,
@@ -109,15 +122,7 @@ impl<H: ConnectionHandler + ?Sized + 'static> ListenerSupervisor<H> {
         let local_addr = listener
             .local_addr()
             .map_err(|error| ProxyError::io("read listener address", &error))?;
-        let admission = ListenerAdmission::new(
-            self.config.allowed_client_cidrs.clone(),
-            self.config.capacity.clone(),
-        )?;
-        let run_context = ListenerRunContext::new(
-            self.config.runtime_epoch,
-            self.config.listener_id.clone(),
-            Arc::clone(&self.clock),
-        );
+        let (admission, run_context) = self.prepare_run()?;
         let mut connections = JoinSet::new();
         let rejection_projections = Arc::new(Semaphore::new(16));
         let mut listener_fault = None;
@@ -204,15 +209,32 @@ impl<H: ConnectionHandler + ?Sized + 'static> ListenerSupervisor<H> {
             }
         }
 
-        drop(listener);
-        cancellation.cancel();
-        if let Some(code) = drain_connections(&mut connections).await {
-            listener_fault = Some(code);
-        }
-        Ok(match listener_fault {
-            Some(code) => ListenerRunOutcome::Faulted { local_addr, code },
-            None => ListenerRunOutcome::Stopped { local_addr },
-        })
+        Ok(finish_listener_run(
+            listener,
+            cancellation,
+            &mut connections,
+            local_addr,
+            listener_fault,
+        )
+        .await)
+    }
+}
+
+async fn finish_listener_run(
+    listener: Arc<dyn BoundListener>,
+    cancellation: CancellationToken,
+    connections: &mut JoinSet<TerminalConnectionOutcome>,
+    local_addr: SocketAddr,
+    mut listener_fault: Option<&'static str>,
+) -> ListenerRunOutcome {
+    drop(listener);
+    cancellation.cancel();
+    if let Some(code) = drain_connections(connections).await {
+        listener_fault = Some(code);
+    }
+    match listener_fault {
+        Some(code) => ListenerRunOutcome::Faulted { local_addr, code },
+        None => ListenerRunOutcome::Stopped { local_addr },
     }
 }
 

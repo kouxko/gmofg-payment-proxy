@@ -5,7 +5,7 @@ import type {
   SocketDownstreamTlsSettings,
   SocketRelaySecurity,
   SocketRelaySettings,
-  SocketRelayTopology,
+  SocketRuntimeLimits,
   SocketUpstreamTlsSettings,
 } from "@/generated/rust-types";
 
@@ -46,19 +46,19 @@ export function defaultSocketDataPlane(): ListenerDataPlane {
         },
       },
       maximum_connections: 500,
+      runtime_limits: defaultSocketRuntimeLimits(),
       processing: { mode: "direct" },
     },
   };
 }
 
-/**
- * Socket 的网络字段属于 Relay topology，LocalResponder 从类型上就没有上游。
- * 所有调用方必须先通过这个窄化函数，再读取 upstream/security，避免用空地址模拟无上游。
- */
-export function socketRelayTopology(
-  settings: SocketRelaySettings,
-): SocketRelayTopology | undefined {
-  return settings.topology.mode === "relay" ? settings.topology.settings : undefined;
+/** 与 Rust `SocketRuntimeLimits::default()` 完全一致的显式运行时资源配置。 */
+export function defaultSocketRuntimeLimits(): SocketRuntimeLimits {
+  return {
+    read_chunk_bytes: 16 * 1024,
+    diagnostic_event_capacity: 256,
+    diagnostic_memory_bytes: 1024 * 1024,
+  };
 }
 
 export function changeDataPlaneKind(
@@ -85,24 +85,6 @@ export function changeSocketSettings(
   return { data_plane: { kind: "socket", settings: { ...settings, ...changes } } };
 }
 
-export function changeSocketSecurity(
-  mode: SocketRelaySecurity["mode"],
-  current?: SocketRelaySecurity,
-): SocketRelaySecurity {
-  const downstream = current
-    ? socketDownstreamTls(current) ?? defaultSocketDownstreamTls()
-    : defaultSocketDownstreamTls();
-  const upstream = current
-    ? socketUpstreamTls(current) ?? defaultSocketUpstreamTls()
-    : defaultSocketUpstreamTls();
-  if (mode === "tcp_to_tls") return { mode, upstream_tls: upstream };
-  if (mode === "tls_to_tcp") return { mode, downstream_tls: downstream };
-  if (mode === "tls_to_tls") {
-    return { mode, downstream_tls: downstream, upstream_tls: upstream };
-  }
-  return { mode: "transparent" };
-}
-
 export function socketDownstreamTls(
   security: SocketRelaySecurity,
 ): SocketDownstreamTlsSettings | undefined {
@@ -117,20 +99,4 @@ export function socketUpstreamTls(
   return security.mode === "tcp_to_tls" || security.mode === "tls_to_tls"
     ? security.upstream_tls
     : undefined;
-}
-
-function defaultSocketDownstreamTls(): SocketDownstreamTlsSettings {
-  return {
-    server_identity: "",
-    client_authentication: { mode: "disabled" },
-  };
-}
-
-function defaultSocketUpstreamTls(): SocketUpstreamTlsSettings {
-  return {
-    verify_hostname: true,
-    tls_server_name: null,
-    server_trust: null,
-    client_identity: null,
-  };
 }

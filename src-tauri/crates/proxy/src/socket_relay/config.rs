@@ -113,6 +113,7 @@ pub struct SocketRelayConfig {
     pub upstream: SocketEndpoint,
     pub security: SocketRelaySecurity,
     pub maximum_connections: u16,
+    pub read_chunk_bytes: usize,
     pub connect_timeout: Duration,
     pub read_timeout: Duration,
     pub write_timeout: Duration,
@@ -128,6 +129,7 @@ pub struct SocketLocalResponderConfig {
     pub allowed_client_cidrs: Vec<String>,
     pub security: SocketDownstreamSecurity,
     pub maximum_connections: u16,
+    pub read_chunk_bytes: usize,
     /// 下游 TLS 握手上限；纯 TCP 模式不会使用它。
     pub handshake_timeout: Duration,
     pub read_timeout: Duration,
@@ -153,6 +155,7 @@ impl SocketRelayConfig {
     pub fn validate(&self) -> Result<()> {
         self.upstream.validate()?;
         validate_connection_limit(self.maximum_connections)?;
+        validate_read_chunk_bytes(self.read_chunk_bytes)?;
         validate_timeouts([
             ("connect", self.connect_timeout),
             ("read", self.read_timeout),
@@ -164,6 +167,7 @@ impl SocketRelayConfig {
 impl SocketLocalResponderConfig {
     pub fn validate(&self) -> Result<()> {
         validate_connection_limit(self.maximum_connections)?;
+        validate_read_chunk_bytes(self.read_chunk_bytes)?;
         validate_timeouts([
             ("handshake", self.handshake_timeout),
             ("read", self.read_timeout),
@@ -177,6 +181,16 @@ fn validate_connection_limit(maximum_connections: u16) -> Result<()> {
         return Err(ProxyError::new(
             ErrorCode::ConfigInvalid,
             "socket maximum connections must be between 1 and 5000",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_read_chunk_bytes(read_chunk_bytes: usize) -> Result<()> {
+    if read_chunk_bytes == 0 {
+        return Err(ProxyError::new(
+            ErrorCode::ConfigInvalid,
+            "socket read chunk bytes must be greater than zero",
         ));
     }
     Ok(())

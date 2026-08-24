@@ -9,7 +9,6 @@ use intercept_proxy_application::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
-    sync::Barrier,
 };
 
 use super::support::{
@@ -20,18 +19,15 @@ use super::{SCRIPT, listener};
 const TEST_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[tokio::test]
-async fn simultaneous_opposite_direction_frames_cross_the_real_scripted_relay() {
+async fn server_response_follows_the_app_request_through_the_real_scripted_exchange() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_port = upstream.local_addr().unwrap().port();
     let listener_port = super::reserve_port().await;
-    let barrier = Arc::new(Barrier::new(2));
-    let upstream_barrier = Arc::clone(&barrier);
     let mut upstream_task = tokio::spawn(async move {
         let (mut stream, _) = upstream.accept().await.unwrap();
-        upstream_barrier.wait().await;
-        stream.write_all(&[2, 22]).await.unwrap();
         let mut request = [0_u8; 2];
         stream.read_exact(&mut request).await.unwrap();
+        stream.write_all(&[2, 22]).await.unwrap();
         request
     });
     let (runtime, configured) =
@@ -40,7 +36,6 @@ async fn simultaneous_opposite_direction_frames_cross_the_real_scripted_relay() 
         let mut client = TcpStream::connect(("127.0.0.1", listener_port))
             .await
             .unwrap();
-        barrier.wait().await;
         client.write_all(&[2, 11]).await.unwrap();
         let mut response = [0_u8; 2];
         client.read_exact(&mut response).await.unwrap();
@@ -66,11 +61,17 @@ async fn client_half_close_keeps_the_opposite_direction_open_until_upstream_eof(
     let listener_port = super::reserve_port().await;
     let mut upstream_task = tokio::spawn(async move {
         let (mut stream, _) = upstream.accept().await.unwrap();
-        let mut request = Vec::new();
-        stream.read_to_end(&mut request).await.unwrap();
+        let mut request = [0_u8; 2];
+        stream.read_exact(&mut request).await.unwrap();
         assert_eq!(request, [161, 11]);
         stream.write_all(&[2, 22]).await.unwrap();
         stream.shutdown().await.unwrap();
+        let mut trailing = Vec::new();
+        stream.read_to_end(&mut trailing).await.unwrap();
+        assert!(
+            trailing.is_empty(),
+            "App EOF must not create another request"
+        );
     });
     let (runtime, configured) =
         start_scripted_runtime("client-half-close", SCRIPT, listener_port, upstream_port).await;
@@ -114,12 +115,11 @@ async fn assert_directional_timeout(expected: SocketDiagnosticDirection) {
     let mut subscription = events.subscribe_default(0).unwrap();
     let mut configured = listener(listener_port, upstream_port);
     configured.read_timeout_ms = 100;
-    let (runtime, configured, _) = start_scripted_runtime_from_listener(
+    let (runtime, configured) = start_scripted_runtime_from_listener(
         "runtime-matrix",
         SCRIPT,
         configured,
         Some(Arc::clone(&events)),
-        false,
     )
     .await;
     let client = tokio::time::timeout(
@@ -129,54 +129,30 @@ async fn assert_directional_timeout(expected: SocketDiagnosticDirection) {
     .await
     .expect("relay listener must accept within the bound")
     .unwrap();
-    let (server, _) = tokio::time::timeout(TEST_TIMEOUT, upstream.accept())
-        .await
-        .expect("relay must connect upstream within the bound")
-        .unwrap();
-
-    let (mut client_read, mut client_write) = client.into_split();
-    let (mut server_read, mut server_write) = server.into_split();
-    let refresher = tokio::spawn(async move {
-        loop {
-            let result = match expected {
-                SocketDiagnosticDirection::ClientToServer => {
-                    async {
-                        server_write.write_all(&[2, 22]).await?;
-                        let mut response = [0_u8; 2];
-                        client_read.read_exact(&mut response).await?;
-                        std::io::Result::Ok(())
-                    }
-                    .await
-                }
-                SocketDiagnosticDirection::ServerToClient => {
-                    async {
-                        client_write.write_all(&[2, 11]).await?;
-                        let mut request = [0_u8; 2];
-                        server_read.read_exact(&mut request).await?;
-                        std::io::Result::Ok(())
-                    }
-                    .await
-                }
-                _ => unreachable!(),
-            };
-            if result.is_err() {
-                return;
-            }
-        }
-    });
-
-    // 先持续驱动非被测方向，再等待 opened 事件；否则慢 runner 可能在测试保活
-    // 启动前让两个方向同时达到 100ms 超时，使首个终止方向不确定。
-    if !wait_for_opened(&mut subscription).await {
-        refresher.abort();
-        let _ = refresher.await;
-        runtime.stop(configured.id).await.unwrap();
-        panic!("relay did not publish its opened evidence within the bound");
-    }
+    let mut client = client;
+    let _silent_server = if expected == SocketDiagnosticDirection::ServerToClient {
+        client.write_all(&[2, 11]).await.unwrap();
+        let (mut server, _) = tokio::time::timeout(TEST_TIMEOUT, upstream.accept())
+            .await
+            .expect("request must lazily connect upstream within the bound")
+            .unwrap();
+        let mut request = [0_u8; 2];
+        server.read_exact(&mut request).await.unwrap();
+        assert_eq!(request, [161, 11]);
+        assert!(wait_for_opened(&mut subscription).await);
+        Some(server)
+    } else {
+        assert!(
+            tokio::time::timeout(Duration::from_millis(150), upstream.accept())
+                .await
+                .is_err(),
+            "silent App must not cause an eager upstream connection"
+        );
+        None
+    };
 
     let observed = wait_for_directional_timeout(&mut subscription, expected).await;
-    refresher.abort();
-    let _ = refresher.await;
+    drop(client);
     runtime.stop(configured.id).await.unwrap();
     assert!(
         observed,

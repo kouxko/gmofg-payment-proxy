@@ -1,6 +1,6 @@
 import { Input, Label, ListBox, Select, TextArea } from "@heroui/react";
 import type { RuleAction } from "@/generated/rust-types";
-import { NumericInput, TrafficDirectionSelect } from "./rule-editor-controls";
+import { NumericInput } from "./rule-editor-controls";
 import type { ActionUpdate } from "./rule-editor-model";
 import { TerminalActionFields } from "./terminal-action-fields";
 
@@ -9,6 +9,7 @@ export function ActionFields({
   onChange,
   onAsyncStateChange,
   asyncStateKey,
+  trafficDirection,
 }: {
   action: RuleAction;
   onChange: (update: ActionUpdate) => void;
@@ -17,6 +18,7 @@ export function ActionFields({
     state?: { pending: boolean; invalid: boolean },
   ) => void;
   asyncStateKey: string;
+  trafficDirection?: "upstream" | "downstream";
 }) {
   switch (action.type) {
     case "set_json_field":
@@ -182,16 +184,7 @@ export function ActionFields({
               }
             />
           </div>
-          <TrafficDirectionSelect
-            value={action.direction}
-            onChange={(direction) =>
-              onChange((current) =>
-                current.type === "throttle"
-                  ? { ...current, direction }
-                  : current,
-              )
-            }
-          />
+          <TrafficDirection direction={trafficDirection} />
         </div>
       );
     case "intermittent":
@@ -221,16 +214,7 @@ export function ActionFields({
               }
             />
           </div>
-          <TrafficDirectionSelect
-            value={action.direction}
-            onChange={(direction) =>
-              onChange((current) =>
-                current.type === "intermittent"
-                  ? { ...current, direction }
-                  : current,
-              )
-            }
-          />
+          <TrafficDirection direction={trafficDirection} />
         </div>
       );
     case "custom_http_status":
@@ -270,4 +254,21 @@ export function ActionFields({
         </p>
       );
   }
+}
+
+function TrafficDirection({
+  direction,
+}: {
+  direction?: "upstream" | "downstream";
+}) {
+  return (
+    <p className="text-sm text-[var(--telemetry-muted)]">
+      流量方向由阶段固定：
+      {direction === "upstream"
+        ? "上行 Proxy → Server"
+        : direction === "downstream"
+          ? "下行 Proxy → App"
+          : "当前动作不可用"}
+    </p>
+  );
 }

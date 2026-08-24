@@ -11,7 +11,7 @@ use tokio::time::timeout;
 use external_package_runtime_support::*;
 
 #[tokio::test]
-async fn external_relay_handles_fragmented_upstream_and_coalesced_downstream_frames() {
+async fn external_relay_handles_fragmentation_across_sequential_interactions() {
     let mut harness = ExternalRuntimeHarness::start().await;
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
@@ -22,23 +22,25 @@ async fn external_relay_handles_fragmented_upstream_and_coalesced_downstream_fra
     harness.start_listener(workspace, listener.clone()).await;
     let upstream_task = tokio::spawn(async move {
         let (mut stream, _) = upstream.accept().await.unwrap();
-        let mut received = [0_u8; 7];
-        stream.read_exact(&mut received).await.unwrap();
-        assert_eq!(received, [3, b'a', b'b', 4, b'c', b'd', b'e']);
-        stream
-            .write_all(&[3, b'x', b'y', 4, b'z', b'1', b'2'])
-            .await
-            .unwrap();
+        let mut first = [0_u8; 3];
+        stream.read_exact(&mut first).await.unwrap();
+        assert_eq!(first, [3, b'a', b'b']);
+        stream.write_all(&[3, b'x', b'y']).await.unwrap();
+        let mut second = [0_u8; 4];
+        stream.read_exact(&mut second).await.unwrap();
+        assert_eq!(second, [4, b'c', b'd', b'e']);
+        stream.write_all(&[4, b'z', b'1', b'2']).await.unwrap();
         stream.shutdown().await.unwrap();
     });
 
     let mut client = TcpStream::connect(listener_address).await.unwrap();
     client.write_all(&[3]).await.unwrap();
     harness.peer().wait_for_need_more().await;
-    client
-        .write_all(&[b'a', b'b', 4, b'c', b'd', b'e'])
-        .await
-        .unwrap();
+    client.write_all(b"ab").await.unwrap();
+    let mut first_response = [0_u8; 3];
+    client.read_exact(&mut first_response).await.unwrap();
+    assert_eq!(first_response, [3, b'x', b'y']);
+    client.write_all(&[4, b'c', b'd', b'e']).await.unwrap();
     client.shutdown().await.unwrap();
     let mut response = Vec::new();
     timeout(TEST_TIMEOUT, client.read_to_end(&mut response))
@@ -46,7 +48,7 @@ async fn external_relay_handles_fragmented_upstream_and_coalesced_downstream_fra
         .expect("relay response deadline")
         .unwrap();
 
-    assert_eq!(response, [3, b'x', b'y', 4, b'z', b'1', b'2']);
+    assert_eq!(response, [4, b'z', b'1', b'2']);
     upstream_task.await.unwrap();
     assert_eq!(harness.peer().registration_count(), 1);
     harness.stop_listener(listener.id).await;
@@ -54,7 +56,7 @@ async fn external_relay_handles_fragmented_upstream_and_coalesced_downstream_fra
 }
 
 #[tokio::test]
-async fn external_local_responder_replies_once_for_each_coalesced_request_frame() {
+async fn external_local_server_echoes_one_payload_through_both_direction_hooks() {
     let mut harness = ExternalRuntimeHarness::start().await;
     let listener_address = reserve_address().await;
     let listener = external_local_listener(listener_address, &harness.package);
@@ -62,10 +64,7 @@ async fn external_local_responder_replies_once_for_each_coalesced_request_frame(
     harness.start_listener(workspace, listener.clone()).await;
 
     let mut client = TcpStream::connect(listener_address).await.unwrap();
-    client
-        .write_all(&[3, b'a', b'b', 4, b'c', b'd', b'e'])
-        .await
-        .unwrap();
+    client.write_all(&[3, b'a', b'b']).await.unwrap();
     client.shutdown().await.unwrap();
     let mut response = Vec::new();
     timeout(TEST_TIMEOUT, client.read_to_end(&mut response))
@@ -73,7 +72,7 @@ async fn external_local_responder_replies_once_for_each_coalesced_request_frame(
         .expect("LocalResponder response deadline")
         .unwrap();
 
-    assert_eq!(response, [3, b'O', b'K', 3, b'O', b'K']);
+    assert_eq!(response, [3, b'a', b'b']);
     harness.stop_listener(listener.id).await;
     harness.shutdown().await;
 }

@@ -135,6 +135,8 @@ impl ConnectionTaskScope {
         self.fatal.notified().await;
     }
 
+    /// 测试辅助：关闭注册并等待全部子任务，用于一次性断言最终聚合结果。
+    #[cfg(test)]
     pub(crate) async fn close_and_drain(&self) -> ChildTaskAggregate {
         self.close();
         self.drain().await;

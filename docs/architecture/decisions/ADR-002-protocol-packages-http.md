@@ -2,8 +2,12 @@
 
 - Status: Accepted
 - Supersedes: 2026-08-17 Socket-only decision
+- Refined by: [ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md)
 - Date: 2026-08-19
 - Scope: R12 protocol platform
+
+> 阶段顺序已由 ADR-007 与权威 Exchange/Pipeline 模板修订：Reader 先完成 Decode -> Display 并
+> 固定 Envelope，Writer 再对 Document clone 执行 Rules -> Encode。下方 Decision 保留原始决策语境。
 
 ## Context
 
@@ -31,7 +35,8 @@ Socket 拥有字节分帧、half-close、转发或本机应答语义。共享执
 
 ## Consequences
 
-- HTTP 与 Socket 的配置、包筛选、抓包视图和失败诊断保持隔离。
+- HTTP 与 Socket 的入口绑定、编辑字段、运行时和失败诊断语义保持隔离；规则页与协议包列表可以统一展示，
+  但每条数据必须保留明确的 `kind`，不得因此允许跨类型绑定。
 - 字段规则可以使用同一领域模型，但必须绑定入口、精确包版本、方向 Schema 和四阶段之一。
 - HTTP Body 未变化时逐字节保留 Body，并保持 `Content-Length` 的语义数值一致；
   HTTP 库可规范化 Header 的空白和序列化形式。Body 变化时只重建一次并更新 `Content-Length`。

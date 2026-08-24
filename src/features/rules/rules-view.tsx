@@ -13,6 +13,7 @@ import { toast } from "@heroui/react";
 import type {
   ProtocolDocumentRuleDefinition,
   RuleDraft,
+  RuleStageCapabilityViewModel,
   RuleSummaryViewModel,
   RuleViewModel,
 } from "@/generated/rust-types";
@@ -25,57 +26,54 @@ import {
   useBootstrap,
 } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
-import {
-  ProtocolWorkspaceTabs,
-  type ProtocolType,
-} from "@/features/shared/protocol-workspace-tabs";
 import type { RuleDraftChange } from "./rule-editor";
 import { RuleEditorPanel } from "./rule-editor-panel";
 import { RulesListPanel } from "./rules-list-panel";
-import { ProtocolRuleEditorView, ProtocolRulesView } from "./protocol-rules-view";
+import { ProtocolRuleEditorView } from "./protocol-rules-view";
 import { RulesWorkspaceShell } from "./rules-workspace-shell";
 import { RuleCreationDialogs } from "./rule-creation-dialogs";
 import { useProtocolRuleSource } from "./use-protocol-rule-source";
 import { toggleResponseMatches } from "./protocol-rule-model";
 
 export function RulesView() {
-  const [mode, setMode] = useState<ProtocolType>("http");
   return (
-    <ProtocolWorkspaceTabs
-      ariaLabel="规则协议"
-      selectedKey={mode}
-      onSelectionChange={setMode}
+    <div
+      aria-label="统一规则工作区"
+      className="h-full min-h-0 overflow-auto p-3"
     >
-      <div className="h-full min-h-0 p-3">
-        {mode === "http" ? <HttpRulesView /> : <ProtocolRulesView kind="socket" />}
+      <div className="h-full min-h-[42rem] max-[1280px]:h-auto">
+        <HttpRulesView />
       </div>
-    </ProtocolWorkspaceTabs>
+    </div>
   );
 }
 
 function HttpRulesView() {
   const { navigate, searchParams } = useWorkspaceNavigation();
-  const bodyEditor = searchParams.get("category") === "body";
+  const category = searchParams.get("category");
+  const protocolEditor = category === "body" || category === "socket"
+    ? category
+    : undefined;
   return (
     <HttpStandardRulesView
-      bodyEditor={bodyEditor}
-      bodyRuleId={searchParams.get("ruleId") ?? undefined}
-      createBodyOnMount={bodyEditor && searchParams.get("create") === "rule"}
-      onBodyCreateHandled={() => navigate("/rules?category=body")}
+      protocolEditor={protocolEditor}
+      protocolRuleId={searchParams.get("ruleId") ?? undefined}
+      createProtocolOnMount={Boolean(protocolEditor) && searchParams.get("create") === "rule"}
+      onProtocolCreateHandled={() => navigate(`/rules?category=${protocolEditor}`)}
     />
   );
 }
 
 function HttpStandardRulesView({
-  bodyEditor,
-  bodyRuleId,
-  createBodyOnMount,
-  onBodyCreateHandled,
+  protocolEditor,
+  protocolRuleId,
+  createProtocolOnMount,
+  onProtocolCreateHandled,
 }: {
-  bodyEditor: boolean;
-  bodyRuleId?: string;
-  createBodyOnMount: boolean;
-  onBodyCreateHandled: () => void;
+  protocolEditor?: "body" | "socket";
+  protocolRuleId?: string;
+  createProtocolOnMount: boolean;
+  onProtocolCreateHandled: () => void;
 }) {
   const { bootstrap } = useBootstrap();
   const channelCatalog = bootstrap?.channel_catalog ?? [];
@@ -85,17 +83,26 @@ function HttpStandardRulesView({
   const rules = useIpcQuery<RuleSummaryViewModel[]>("rule-list", () =>
     callCommand(commands.ruleList()),
   );
+  const capabilities = useIpcQuery<RuleStageCapabilityViewModel[]>(
+    "rule-capabilities",
+    () => callCommand(commands.ruleCapabilities()),
+  );
   const bodySource = useProtocolRuleSource("http");
+  const socketSource = useProtocolRuleSource("socket");
   const bodyListenerNames = useMemo(
     () => new Map(bodySource.listeners.map((listener) => [listener.id, listener.name])),
     [bodySource.listeners],
+  );
+  const socketListenerNames = useMemo(
+    () => new Map(socketSource.listeners.map((listener) => [listener.id, listener.name])),
+    [socketSource.listeners],
   );
   useAppEventRefresh(["rule_hit", "snapshot_required"], rules.refresh);
   const [selectedId, setSelectedId] = useState<string | "new">();
   const [draft, setDraft] = useState<RuleDraft>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [pendingAction, setPendingAction] = useState<
-    "new" | "import" | "export" | "save" | "copy" | `toggle:${string}`
+    "new" | "save" | "copy" | `toggle:${string}`
   >();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletePending, setDeletePending] = useState(false);
@@ -103,7 +110,7 @@ function HttpStandardRulesView({
   const [faultPresetOpen, setFaultPresetOpen] = useState(
     requestedCreate === "fault",
   );
-  const [bodyEditorPending, setBodyEditorPending] = useState(false);
+  const [protocolEditorPending, setProtocolEditorPending] = useState(false);
   const [editorAsyncStates, setEditorAsyncStates] = useState<
     Record<string, { pending: boolean; invalid: boolean }>
   >({});
@@ -136,10 +143,10 @@ function HttpStandardRulesView({
     undefined,
     { enabled: Boolean(effectiveSelectedId) },
   );
-  const writePending = pendingAction != null || deletePending || bodyEditorPending;
+  const writePending = pendingAction != null || deletePending || protocolEditorPending;
   const editorBlocked = Object.values(editorAsyncStates).some(
     (state) => state.pending || state.invalid,
-  );
+  ) || capabilities.error != null || capabilities.data == null;
   const updateEditorAsyncState = useCallback(
     (key: string, state?: { pending: boolean; invalid: boolean }) => {
       setEditorAsyncStates((current) => {
@@ -196,29 +203,14 @@ function HttpStandardRulesView({
   }, [navigate, sourceSessionId]);
 
   async function newRule() {
-    if (writePending || editorBlocked) return;
+    // 新建会替换当前草稿，因此当前草稿无效不应把用户锁在编辑器里。
+    if (writePending) return;
     setPendingAction("new");
     try {
       setDraft(await callCommand(commands.ruleNewDraft()));
       setEditorAsyncStates({});
       setSelectedId("new");
       revealEditor();
-    } catch (reason) {
-      toast(errorMessage(reason), { variant: "danger" });
-    } finally {
-      setPendingAction(undefined);
-    }
-  }
-
-  async function transferRules(mode: "import" | "export") {
-    if (writePending) return;
-    setPendingAction(mode);
-    try {
-      const result = await callCommand(
-        mode === "import" ? commands.ruleImport() : commands.ruleExport(),
-      );
-      toast(result.message, { variant: toneColor(result.ui_tone) });
-      await rules.refresh();
     } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
@@ -265,7 +257,8 @@ function HttpStandardRulesView({
     }
   }
 
-  async function toggleBody(
+  async function toggleProtocol(
+    kind: "body" | "socket",
     rule: ProtocolDocumentRuleDefinition,
     enabled: boolean,
   ) {
@@ -276,9 +269,9 @@ function HttpStandardRulesView({
         commands.protocolRuleToggle(rule.rule_id, rule.revision, enabled),
       );
       if (!toggleResponseMatches(saved, rule, enabled)) {
-        throw new Error("Body 报文规则启停响应无效。");
+        throw new Error("报文规则启停响应无效。");
       }
-      await bodySource.refresh();
+      await (kind === "body" ? bodySource : socketSource).refresh();
     } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
@@ -326,48 +319,59 @@ function HttpStandardRulesView({
     }
   }
 
+  const activeProtocolSource = protocolEditor === "body"
+    ? bodySource
+    : protocolEditor === "socket"
+      ? socketSource
+      : undefined;
+
   return (
     <RulesWorkspaceShell>
       <RulesListPanel
         rules={rules.data}
         bodyRules={bodySource.rules}
         bodyListenerNames={bodyListenerNames}
-        error={rules.error ?? bodySource.error}
-        isLoading={rules.isLoading || bodySource.isLoading}
-        selectedId={bodyEditor ? bodyRuleId : effectiveSelectedId}
-        selectedKind={bodyEditor ? "body" : "standard"}
+        socketRules={socketSource.rules}
+        socketListenerNames={socketListenerNames}
+        error={rules.error ?? bodySource.error ?? socketSource.error}
+        isLoading={rules.isLoading || bodySource.isLoading || socketSource.isLoading}
+        selectedId={protocolEditor ? protocolRuleId : effectiveSelectedId}
+        selectedKind={protocolEditor ?? "standard"}
         writePending={writePending}
         editorBlocked={editorBlocked}
         pendingAction={pendingAction}
         onNew={() => setCreationChoiceOpen(true)}
-        onImport={() => void transferRules("import")}
-        onExport={() => void transferRules("export")}
-        onRefresh={() => void Promise.all([rules.refresh(), bodySource.refresh()])}
+        onRefresh={() => void Promise.all([
+          rules.refresh(),
+          bodySource.refresh(),
+          socketSource.refresh(),
+        ])}
         onSelect={(ruleId) => {
           navigate("/rules");
           setDraft(undefined);
           setSelectedId(ruleId);
           revealEditor();
         }}
-        onSelectBody={(ruleId) => {
-          navigate(`/rules?category=body&ruleId=${encodeURIComponent(ruleId)}`);
+        onSelectProtocol={(kind, ruleId) => {
+          navigate(`/rules?category=${kind}&ruleId=${encodeURIComponent(ruleId)}`);
           revealEditor();
         }}
         onToggle={(rule, enabled) => void toggle(rule, enabled)}
-        onToggleBody={(rule, enabled) => void toggleBody(rule, enabled)}
+        onToggleProtocol={(kind, rule, enabled) => void toggleProtocol(kind, rule, enabled)}
       />
-      {bodyEditor ? (
+      {protocolEditor && activeProtocolSource ? (
         <ProtocolRuleEditorView
-          source={bodySource}
-          selectedRuleId={bodyRuleId}
-          createOnMount={createBodyOnMount}
-          onCreateHandled={onBodyCreateHandled}
-          onPendingChange={setBodyEditorPending}
+          kind={protocolEditor === "body" ? "http" : "socket"}
+          source={activeProtocolSource}
+          selectedRuleId={protocolRuleId}
+          createOnMount={createProtocolOnMount}
+          onCreateHandled={onProtocolCreateHandled}
+          onPendingChange={setProtocolEditorPending}
           onChanged={(ruleId) => {
-            void bodySource.refresh();
+            void activeProtocolSource.refresh();
             navigate(
               ruleId
-                ? `/rules?category=body&ruleId=${encodeURIComponent(ruleId)}`
+                ? `/rules?category=${protocolEditor}&ruleId=${encodeURIComponent(ruleId)}`
                 : "/rules",
             );
           }}
@@ -380,6 +384,8 @@ function HttpStandardRulesView({
           loadError={ruleDetail.error}
           fieldErrors={fieldErrors}
           channelCatalog={channelCatalog}
+          capabilities={capabilities.data}
+          capabilityError={capabilities.error}
           writePending={writePending}
           editorBlocked={editorBlocked}
           pendingAction={pendingAction}
@@ -405,11 +411,18 @@ function HttpStandardRulesView({
         onFaultPresetOpenChange={setFaultPresetOpen}
         onBlankRule={() => {
           setCreationChoiceOpen(false);
+          navigate("/rules");
           void newRule();
         }}
         onBodyRule={() => {
           setCreationChoiceOpen(false);
+          setEditorAsyncStates({});
           navigate("/rules?category=body&create=rule");
+        }}
+        onSocketRule={() => {
+          setCreationChoiceOpen(false);
+          setEditorAsyncStates({});
+          navigate("/rules?category=socket&create=rule");
         }}
         onFaultPreset={() => {
           setCreationChoiceOpen(false);

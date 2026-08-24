@@ -6,11 +6,10 @@ use crate::transport::relay::{RelayFailure, RelayOperation};
 use crate::{ErrorCode, ProxyError};
 
 use super::{
-    LocalResponderProcessorFactory, ScriptedRelayProcessorFactory, SocketConnectionIdentity,
-    SocketConnectionTarget, SocketFramePumpLimits, SocketLocalResponderConfig,
-    SocketPayloadDirection, SocketProcessingFailure, SocketProcessingFailureKind,
-    SocketRelayConfig, SocketRelayDirection, SocketRelayFailure, SocketRelayRunContext,
-    SocketRelayStage,
+    SocketConnectionIdentity, SocketConnectionTarget, SocketLocalResponderConfig,
+    SocketPayloadDirection, SocketPipelineLimits, SocketProcessingFailure,
+    SocketProcessingFailureKind, SocketProtocolCapabilityFactory, SocketRelayConfig,
+    SocketRelayDirection, SocketRelayFailure, SocketRelayRunContext, SocketRelayStage,
 };
 
 #[derive(Clone, Debug)]
@@ -33,13 +32,14 @@ impl SocketHandlerConfig {
 
 pub(super) enum SocketHandlerProcessing {
     Direct,
+    DirectLocal,
     ScriptedRelay {
-        factory: Arc<dyn ScriptedRelayProcessorFactory>,
-        limits: SocketFramePumpLimits,
+        factory: Arc<dyn SocketProtocolCapabilityFactory>,
+        limits: SocketPipelineLimits,
     },
     LocalResponder {
-        factory: Arc<dyn LocalResponderProcessorFactory>,
-        limits: SocketFramePumpLimits,
+        factory: Arc<dyn SocketProtocolCapabilityFactory>,
+        limits: SocketPipelineLimits,
     },
 }
 
@@ -47,6 +47,7 @@ impl std::fmt::Debug for SocketHandlerProcessing {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(match self {
             Self::Direct => "Direct",
+            Self::DirectLocal => "DirectLocal",
             Self::ScriptedRelay { .. } => "ScriptedRelay",
             Self::LocalResponder { .. } => "LocalResponder",
         })

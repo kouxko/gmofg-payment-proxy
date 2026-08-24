@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use intercept_proxy_application::Application;
 use intercept_proxy_host::ApplicationHost;
+use intercept_proxy_infrastructure::ExchangeObservationStore;
 
 use crate::mcp::ReadOnlyMcpServer;
 use crate::runtime_logs::RuntimeLogStore;
@@ -21,13 +22,20 @@ pub struct AppState {
     host: Arc<ApplicationHost>,
     mcp: Option<ReadOnlyMcpServer>,
     runtime_logs: Arc<RuntimeLogStore>,
+    exchange_observations: Arc<ExchangeObservationStore>,
 }
 
 impl AppState {
     /// Builds command state without outer adapters. Used by command-level tests.
     #[cfg(test)]
     pub fn new(host: ApplicationHost) -> Self {
-        Self::with_optional_mcp(host, None, Arc::new(RuntimeLogStore::memory(128)))
+        let observations = Arc::new(ExchangeObservationStore::new(host.capacity()));
+        Self::with_optional_mcp(
+            host,
+            None,
+            Arc::new(RuntimeLogStore::memory(128)),
+            observations,
+        )
     }
 
     /// Builds production state. MCP is best-effort so a local port conflict cannot block proxy use.
@@ -35,14 +43,16 @@ impl AppState {
         host: ApplicationHost,
         mcp: Option<ReadOnlyMcpServer>,
         runtime_logs: Arc<RuntimeLogStore>,
+        exchange_observations: Arc<ExchangeObservationStore>,
     ) -> Self {
-        Self::with_optional_mcp(host, mcp, runtime_logs)
+        Self::with_optional_mcp(host, mcp, runtime_logs, exchange_observations)
     }
 
     fn with_optional_mcp(
         host: ApplicationHost,
         mcp: Option<ReadOnlyMcpServer>,
         runtime_logs: Arc<RuntimeLogStore>,
+        exchange_observations: Arc<ExchangeObservationStore>,
     ) -> Self {
         let host = Arc::new(host);
         Self {
@@ -50,6 +60,7 @@ impl AppState {
             host,
             mcp,
             runtime_logs,
+            exchange_observations,
         }
     }
 
@@ -79,6 +90,10 @@ impl AppState {
 
     pub(crate) fn runtime_logs(&self) -> Arc<RuntimeLogStore> {
         Arc::clone(&self.runtime_logs)
+    }
+
+    pub(crate) fn exchange_observations(&self) -> Arc<ExchangeObservationStore> {
+        Arc::clone(&self.exchange_observations)
     }
 }
 

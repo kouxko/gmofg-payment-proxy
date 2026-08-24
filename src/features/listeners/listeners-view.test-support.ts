@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import type { HttpListenerSettings, ProxyListener } from "@/generated/rust-types";
+import { defaultSocketRuntimeLimits } from "./listener-data-plane";
 
 export const navigationMocks = { navigate: vi.fn() };
 
@@ -127,6 +128,7 @@ export function socketListener(
           },
         },
         maximum_connections: 500,
+        runtime_limits: defaultSocketRuntimeLimits(),
         processing: { mode: "direct" as const },
       },
     },
@@ -148,6 +150,7 @@ export function localResponderListener(
           settings: { downstream_security: { mode: "tcp" as const } },
         },
         maximum_connections: 100,
+        runtime_limits: defaultSocketRuntimeLimits(),
         processing: {
           mode: "scripted" as const,
           settings: {

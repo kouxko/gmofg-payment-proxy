@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - 日期：2026-08-21
+- Refined by: [ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md)
 
 ## Context
 
@@ -18,10 +19,10 @@ Rust/Tauri 进程日志。只让 MCP 分别查询这些接口，会遗漏应用�
 
 默认采集应用模块的 Debug 及以上记录、第三方模块的 Info 及以上记录。逐次 poll、WebSocket frame 等
 第三方 Trace 不进入持久存储，避免固定容量被高频实现细节占满；需要关联的业务阶段、方法、请求 ID、
-错误码和连接身份由结构化 diagnostics 与 capture 保存，而不是依赖第三方 Trace 推断。
+错误码和连接身份由结构化 diagnostics 与有界内存 Exchange observation 保存，而不是依赖第三方 Trace 推断。
 
 Application 层提供 `diagnostic_report_generate`，聚合精确 Workspace/Listener 的配置、运行态、
-规则、协议包、外部服务、Android 网络、结构化诊断和 Socket capture。桌面组合根追加最近持久日志，
+规则、协议包、外部服务、Android 网络和结构化诊断。桌面组合根追加最近持久日志，
 形成同源 `reproduction_report`：
 
 - MCP 返回结构化 bundle、日志页和 Markdown，不写本机文件；
@@ -33,6 +34,13 @@ Application 层提供 `diagnostic_report_generate`，聚合精确 Workspace/List
 这是 ADR-004 的窄扩展，不是任意文件读取例外。MCP 仍以只读 Application facade 为主，只额外接收
 进程创建并持有的 `RuntimeLogStore` 只读句柄。该句柄只认识自己的 JSONL 文件，不接受 MCP 提供的
 路径，也不暴露写入方法。
+
+本决策中的“持久化运行证据”只指专用、容量受限的进程 JSONL 日志。Exchange observation、连接时间线和
+运行报文继续存放在有界内存中，不写入 SQLite；配置数据库、内存观察记录和诊断日志具有独立生命周期。
+观察队列、投影或 UI 事件发布失败必须 fail-open，不得改变网络交易结果。
+当前 `reproduction_report` 不读取 `ExchangeObservationStore`；需要 Exchange 时间线时通过独立只读查询取得。
+MCP 对该 store 的只读句柄是 ADR-004 的窄例外：它只查询有界内存记录，不接受路径、不访问 SQLite、
+不提供清空或其他写操作。
 
 本机 MCP 的无认证、无隐私保证继续以 ADR-004 为准。日志可以包含故障复现需要的连接、端点、模块、
 错误和关联 ID；容量与结构边界用于可靠性和可诊断性，不宣称提供访问控制。
@@ -50,3 +58,8 @@ Application 层提供 `diagnostic_report_generate`，聚合精确 Workspace/List
 磁盘写入，且只保留容量范围内的历史；报告必须把 `has_more`、保留 ID 范围、
 `evicted_count`、损坏行、持久化错误、容量、文件上限、消息截断统计和
 `collection_errors` 视为证据缺口，不能将未查询到误写成未发生。
+
+## Open items
+
+- future 若要把 Exchange observation 合入 reproduction report，必须先定义一致性、容量、淘汰和失败投影，
+  并通过新的 ADR 或本 ADR 修订确认；当前保持独立查询。

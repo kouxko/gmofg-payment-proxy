@@ -43,11 +43,13 @@ fn valid_draft() -> SettingsDraft {
 
 #[test]
 fn current_settings_persistence_round_trips_strictly() {
-    let value = serialize_settings(&valid_draft()).expect("serialize current settings");
+    let mut expected = valid_draft();
+    expected.ui_event_capacity = 37;
+    let value = serialize_settings(&expected).expect("serialize current settings");
 
     let decoded = deserialize_settings(value).expect("deserialize current settings");
 
-    assert_eq!(decoded, valid_draft());
+    assert_eq!(decoded, expected);
 }
 
 #[test]
@@ -124,6 +126,18 @@ async fn validation_reports_an_occupied_listener_port() {
     let validation = adapter.validate(&draft).await.expect("validation");
     assert!(!validation.valid);
     assert!(validation.field_errors.contains_key("channels.alpha.port"));
+}
+
+#[tokio::test]
+async fn validation_rejects_zero_observation_queue_capacity() {
+    let adapter = adapter_with_address(None);
+    let mut draft = valid_draft();
+    draft.ui_event_capacity = 0;
+
+    let validation = adapter.validate(&draft).await.expect("validation");
+
+    assert!(!validation.valid);
+    assert!(validation.field_errors.contains_key("capacity"));
 }
 
 #[tokio::test]

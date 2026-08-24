@@ -20,7 +20,51 @@ use super::{
 };
 
 #[tokio::test]
-async fn local_responder_replies_to_pipelined_requests_in_fifo_order() {
+async fn local_raw_server_echoes_each_app_read_without_an_upstream() {
+    let bind_addr = reserve_address();
+    let observer = Arc::new(TestObserver::default());
+    let mut config = local_config(bind_addr);
+    config.read_chunk_bytes = 3;
+    let service = Arc::new(
+        SocketRelayService::build_local_raw_responder_with_observer(config, observer.clone())
+            .unwrap(),
+    );
+    let cancellation = CancellationToken::new();
+    let running = Arc::clone(&service);
+    let server_cancel = cancellation.clone();
+    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+
+    let mut client = connect_retry(bind_addr).await;
+    let request = b"raw-local-echo";
+    client.write_all(request).await.unwrap();
+    client.shutdown().await.unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.unwrap();
+    assert_eq!(response, request);
+
+    observer
+        .wait_until(|event| matches!(event, SocketConnectionEvent::Closed { .. }))
+        .await;
+    cancellation.cancel();
+    server.await.unwrap().unwrap();
+
+    let events = observer.events();
+    assert!(events.iter().any(|event| matches!(
+        event,
+        SocketConnectionEvent::Opened {
+            evidence: SocketOpenedEvidence::LocalResponder {
+                downstream_tls_peer: None
+            },
+            ..
+        }
+    )));
+    let metrics = service.metrics().await;
+    assert_eq!(metrics.client_to_server_read_bytes, request.len() as u64);
+    assert_eq!(metrics.server_to_client_bytes, request.len() as u64);
+}
+
+#[tokio::test]
+async fn local_server_rejects_pipelined_requests_under_strict_exchange_ordering() {
     let bind_addr = reserve_address();
     let factory = Arc::new(LocalFactory::new(ProcessorOutcome::Transform));
     let service = Arc::new(
@@ -44,8 +88,8 @@ async fn local_responder_replies_to_pipelined_requests_in_fifo_order() {
     client.shutdown().await.unwrap();
     let mut responses = Vec::new();
     client.read_to_end(&mut responses).await.unwrap();
-    assert_eq!(responses, b"RaRbbRc");
-    assert_eq!(factory.created(), 1);
+    assert!(responses.is_empty());
+    assert_eq!(factory.created(), 2);
 
     cancellation.cancel();
     server.await.unwrap().unwrap();
@@ -119,7 +163,7 @@ async fn local_responder_records_responses_as_server_to_client_bytes() {
     client.shutdown().await.unwrap();
     let mut response = Vec::new();
     client.read_to_end(&mut response).await.unwrap();
-    assert_eq!(response, b"Rok");
+    assert_eq!(response, &[2, b'o', b'k']);
 
     cancellation.cancel();
     server.await.unwrap().unwrap();
@@ -155,7 +199,7 @@ async fn local_responder_rejects_upstream_probe_but_still_serves_locally() {
     client.shutdown().await.unwrap();
     let mut response = Vec::new();
     client.read_to_end(&mut response).await.unwrap();
-    assert_eq!(response, b"Rx");
+    assert_eq!(response, &[1, b'x']);
 
     cancellation.cancel();
     server.await.unwrap().unwrap();
@@ -217,7 +261,7 @@ async fn local_stop_while_reading_maps_to_cancelled_and_emits_one_terminal() {
     assert_eq!(failures[0].stage, SocketRelayStage::Shutdown);
     assert_eq!(
         failures[0].direction,
-        Some(SocketRelayDirection::LocalExchange)
+        Some(SocketRelayDirection::ClientToServer)
     );
     assert_eq!(failures[0].code, "SOCKET_RELAY_CANCELLED");
 }
@@ -263,7 +307,10 @@ async fn assert_local_failure(outcome: ProcessorOutcome, expected_code: &'static
     assert_eq!(closed[0].1.server_to_client, 0);
     let failure = closed[0].0.expect("processor failure must be observable");
     assert_eq!(failure.stage, SocketRelayStage::FrameProcess);
-    assert_eq!(failure.direction, Some(SocketRelayDirection::LocalExchange));
+    assert_eq!(
+        failure.direction,
+        Some(SocketRelayDirection::ClientToServer)
+    );
     assert_eq!(failure.code, expected_code);
 }
 

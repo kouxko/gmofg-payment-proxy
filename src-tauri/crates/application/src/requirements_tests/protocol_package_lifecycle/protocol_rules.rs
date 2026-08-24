@@ -93,6 +93,7 @@ async fn configure_relay(
             security: SocketRelaySecurity::Transparent,
         }),
         maximum_connections: 8,
+        runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
         processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: package.clone(),
         }),

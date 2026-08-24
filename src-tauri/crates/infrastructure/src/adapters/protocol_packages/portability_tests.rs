@@ -101,6 +101,38 @@ async fn application_bundle_restores_enabled_removes_extra_and_clears_cache() {
 }
 
 #[tokio::test]
+async fn application_bundle_replaces_local_package_with_same_identity() {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let repository = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::clone(&store));
+    repository
+        .install_zip(&package_zip(&SCRIPT.replace("create()", "create()\n")))
+        .unwrap();
+
+    let source = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::new(
+        SqliteStore::in_memory().unwrap(),
+    ));
+    source.install_zip(&package_zip(SCRIPT)).unwrap();
+    let imported = source
+        .export_application_packages()
+        .await
+        .unwrap()
+        .into_iter()
+        .next()
+        .unwrap();
+    let document = application_document(workspace_with_package(), vec![imported.clone()]);
+
+    repository
+        .replace_application_bundle(vec![imported.clone()], document)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        repository.export_application_packages().await.unwrap(),
+        [imported]
+    );
+}
+
+#[tokio::test]
 async fn invalid_last_application_package_causes_zero_writes() {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let repository = ProtocolPackageRepositoryAdapter::with_default_limits(Arc::clone(&store));

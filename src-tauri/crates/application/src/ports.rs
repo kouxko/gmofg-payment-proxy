@@ -29,8 +29,7 @@ use crate::{
     ProxyListener, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
     RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
     SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
-    SettingsViewModel, SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel,
-    SocketCaptureQuery, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
 
 #[async_trait]
@@ -188,22 +187,6 @@ pub trait CaptureRepositoryPort: Send + Sync + std::fmt::Debug {
         runtime_epoch: RuntimeEpoch,
     ) -> AppResult<CaptureDetailViewModel>;
     async fn clear_view(&self, current_cursor: u64) -> AppResult<u64>;
-
-    /// 查询独立的 Socket capture 时间线。
-    async fn query_socket(
-        &self,
-        query: SocketCaptureQuery,
-    ) -> AppResult<SocketCapturePageViewModel>;
-
-    /// 按 capture id 加载完整 Socket 详情；与 HTTP 的 session/epoch 详情键分离。
-    async fn get_socket_detail(
-        &self,
-        capture_id: SocketCaptureId,
-    ) -> AppResult<SocketCaptureDetailViewModel>;
-
-    /// 清除已完成 Socket capture。实时 `RequestParsed` preview 由 observer 自己淘汰，
-    /// 不属于该持久化视图，也不计入返回数量。
-    async fn clear_socket_completed(&self, workspace_id: WorkspaceId) -> AppResult<usize>;
 }
 
 #[async_trait]
@@ -287,7 +270,6 @@ pub trait SettingsRepositoryPort: Send + Sync + std::fmt::Debug {
     async fn save(&self, draft: SettingsDraft) -> AppResult<SettingsViewModel>;
 }
 
-#[async_trait]
 #[async_trait]
 /// 会话查询端口，负责 Rust 侧筛选和排序。
 pub trait SessionQueryPort: Send + Sync + std::fmt::Debug {

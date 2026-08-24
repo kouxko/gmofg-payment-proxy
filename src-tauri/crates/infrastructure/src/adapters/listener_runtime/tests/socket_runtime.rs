@@ -39,6 +39,7 @@ fn local_responder_listener(bind: SocketAddr) -> ProxyListener {
                 downstream_security: SocketDownstreamSecurity::Tcp,
             }),
             maximum_connections: 8,
+            runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
             processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package: ProtocolPackageRef {
                     id: ProtocolPackageId::new("iso8583-standard").unwrap(),

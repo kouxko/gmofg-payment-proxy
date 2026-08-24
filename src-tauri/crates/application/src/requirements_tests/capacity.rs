@@ -56,6 +56,21 @@ fn event_capacity_replacement_is_atomic_on_success_and_failure() {
     assert_eq!(ledger.logical_bytes(), 90);
 }
 
+#[test]
+fn observation_capacity_replacement_never_exposes_a_release_reserve_gap() {
+    let ledger = CapacityLedger::new(100);
+    assert!(ledger.try_reserve_capture_bytes(60));
+    assert!(ledger.try_reserve_event_bytes(40));
+
+    assert!(!ledger.try_replace_capture_bytes(60, 61));
+    assert_eq!(ledger.capture_bytes(), 60);
+    assert_eq!(ledger.logical_bytes(), 100);
+
+    assert!(ledger.try_replace_capture_bytes(60, 50));
+    assert_eq!(ledger.capture_bytes(), 50);
+    assert_eq!(ledger.logical_bytes(), 90);
+}
+
 // DATA-007~011, TEST-CAPACITY: dual limits evict oldest completed and protect pending sessions.
 #[test]
 fn capacity_evicts_completed_in_order_and_rejects_when_all_are_pending() {

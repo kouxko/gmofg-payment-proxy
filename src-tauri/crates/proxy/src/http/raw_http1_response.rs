@@ -3,14 +3,44 @@ use super::{
     StdMutex, informational_status, io,
 };
 
+#[derive(Debug, Default)]
+pub(super) struct CanonicalResponseHead {
+    state: StdMutex<PublishedHead>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct PublishedHead {
+    generation: u64,
+    bytes: Option<Bytes>,
+}
+
+impl CanonicalResponseHead {
+    pub(super) fn publish(&self, bytes: Bytes) {
+        let mut state = self
+            .state
+            .lock()
+            .expect("canonical response head mutex poisoned");
+        state.generation = state.generation.wrapping_add(1);
+        state.bytes = Some(bytes);
+    }
+
+    fn snapshot(&self) -> PublishedHead {
+        self.state
+            .lock()
+            .expect("canonical response head mutex poisoned")
+            .clone()
+    }
+}
+
 pub(super) struct ResponseHeadPreservingIo {
     inner: BoxIo,
     generated_head: Vec<u8>,
-    canonical_head: Arc<StdMutex<Option<Bytes>>>,
+    canonical_head: Arc<CanonicalResponseHead>,
     pending_head: Option<Bytes>,
     canonical_offset: usize,
     generated_head_complete: bool,
     reset_after_flush: bool,
+    canonical_generation: u64,
 }
 
 impl Debug for ResponseHeadPreservingIo {
@@ -24,7 +54,7 @@ impl Debug for ResponseHeadPreservingIo {
 }
 
 impl ResponseHeadPreservingIo {
-    pub(super) fn new(inner: BoxIo, canonical_head: Arc<StdMutex<Option<Bytes>>>) -> Self {
+    pub(super) fn new(inner: BoxIo, canonical_head: Arc<CanonicalResponseHead>) -> Self {
         Self {
             inner,
             generated_head: Vec::new(),
@@ -33,17 +63,15 @@ impl ResponseHeadPreservingIo {
             canonical_offset: 0,
             generated_head_complete: false,
             reset_after_flush: false,
+            canonical_generation: 0,
         }
     }
 
     fn poll_flush_canonical(&mut self, context: &mut Context<'_>) -> Poll<io::Result<()>> {
         if self.pending_head.is_none() {
-            let published = self
-                .canonical_head
-                .lock()
-                .expect("canonical HTTP response head mutex poisoned")
-                .clone();
-            self.pending_head.clone_from(&published);
+            let published = self.canonical_head.snapshot();
+            self.canonical_generation = published.generation;
+            self.pending_head = published.bytes;
         }
         let Some(canonical) = self.pending_head.clone() else {
             return Poll::Ready(Err(io::Error::other(
@@ -93,6 +121,15 @@ impl AsyncWrite for ResponseHeadPreservingIo {
         context: &mut Context<'_>,
         buffer: &[u8],
     ) -> Poll<io::Result<usize>> {
+        if self.generated_head_complete && !self.reset_after_flush {
+            let published = self.canonical_head.snapshot();
+            if published.generation > self.canonical_generation {
+                self.generated_head.clear();
+                self.pending_head = None;
+                self.canonical_offset = 0;
+                self.generated_head_complete = false;
+            }
+        }
         if self.generated_head_complete {
             match self.poll_flush_canonical(context) {
                 Poll::Ready(Ok(())) => {}
@@ -113,6 +150,10 @@ impl AsyncWrite for ResponseHeadPreservingIo {
                 if informational_status(&self.generated_head).is_some() {
                     self.pending_head = Some(Bytes::copy_from_slice(&self.generated_head));
                     self.reset_after_flush = true;
+                } else {
+                    let published = self.canonical_head.snapshot();
+                    self.canonical_generation = published.generation;
+                    self.pending_head = published.bytes;
                 }
                 break;
             }

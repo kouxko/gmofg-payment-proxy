@@ -1,10 +1,8 @@
 //! `LocalResponder` request 的有界实时预览与观察句柄。
 
-use std::{fmt, sync::Arc, time::SystemTime};
+use std::fmt;
 
 use uuid::Uuid;
-
-use super::{SocketConnectionEvent, SocketConnectionObserver, SocketRelayRunContext};
 
 /// 单个 request 保留的原始字节预览上限。
 pub const LOCAL_REQUEST_ORIGIN_PREVIEW_MAX_BYTES: usize = 4 * 1024;
@@ -174,48 +172,6 @@ impl SocketLocalRequestPreview {
                     .as_ref()
                     .map_or(0, SocketDocumentPreview::logical_bytes),
             )
-    }
-}
-
-/// Proxy 在连接接纳后注入 processor 的有界旁路句柄。
-#[derive(Clone)]
-pub struct LocalResponderDiagnostics {
-    run: SocketRelayRunContext,
-    connection_id: Uuid,
-    observer: Arc<dyn SocketConnectionObserver>,
-}
-
-impl LocalResponderDiagnostics {
-    pub(crate) fn new(
-        run: SocketRelayRunContext,
-        connection_id: Uuid,
-        observer: Arc<dyn SocketConnectionObserver>,
-    ) -> Self {
-        Self {
-            run,
-            connection_id,
-            observer,
-        }
-    }
-
-    /// 发布 request 已解析事件。该调用同步、有界且不得执行网络或磁盘 I/O。
-    pub fn request_parsed(&self, preview: SocketLocalRequestPreview) {
-        self.observer.record(SocketConnectionEvent::RequestParsed {
-            run: self.run.clone(),
-            connection_id: self.connection_id,
-            preview,
-            at: SystemTime::now(),
-        });
-    }
-}
-
-impl fmt::Debug for LocalResponderDiagnostics {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("LocalResponderDiagnostics")
-            .field("listener_id", &self.run.listener_id)
-            .field("connection_id", &self.connection_id)
-            .finish_non_exhaustive()
     }
 }
 

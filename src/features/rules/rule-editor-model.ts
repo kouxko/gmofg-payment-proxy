@@ -10,6 +10,7 @@ import type {
   RuleMatchFieldKind,
   RuleMatchOperator,
   RuleMatchOperatorKind,
+  MessageStage,
   RuleTerminalAction,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
@@ -68,16 +69,25 @@ export function errorText(fieldErrors: Record<string, string[]>, prefix: string)
   return messages.length > 0 ? [...new Set(messages)].join("；") : undefined;
 }
 
-export function requestConditionDraft(kind: ConditionKind): Promise<RuleCondition> {
-  return callCommand(commands.ruleConditionDraft(kind));
+export function requestConditionDraft(
+  kind: ConditionKind,
+  stage: MessageStage,
+): Promise<RuleCondition> {
+  return callCommand(commands.ruleConditionDraft(kind, stage));
 }
 
-export function requestActionDraft(kind: ActionKind): Promise<RuleAction> {
-  return callCommand(commands.ruleActionDraft(kind));
+export function requestActionDraft(
+  kind: ActionKind,
+  stage: MessageStage,
+): Promise<RuleAction> {
+  return callCommand(commands.ruleActionDraft(kind, stage));
 }
 
-export function requestMatchFieldDraft(kind: RuleMatchFieldKind): Promise<RuleMatchField> {
-  return callCommand(commands.ruleMatchFieldDraft(kind));
+export function requestMatchFieldDraft(
+  kind: RuleMatchFieldKind,
+  stage: MessageStage,
+): Promise<RuleMatchField> {
+  return callCommand(commands.ruleMatchFieldDraft(kind, stage));
 }
 
 export function requestMatchOperatorDraft(kind: RuleMatchOperatorKind): Promise<RuleMatchOperator> {
@@ -126,5 +136,3 @@ export const actionLabels: Record<ActionKind, string> = {
   disconnect_during_upstream_write: "上行 Body 中途断连",
   disconnect_during_downstream_write: "下行 Body 中途断连",
 };
-
-export const actionKinds = Object.keys(actionLabels) as ActionKind[];

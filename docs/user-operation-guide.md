@@ -1,246 +1,305 @@
-# Intercept Proxy 详细使用说明
+# Intercept Proxy 用户操作说明
 
-本说明按照桌面应用页面组织。所有保存、校验、代理、证书、ADB 和弱网行为由 Rust 完成；
-界面只显示结果并提交操作。
+本文按实际桌面 App 的工作顺序说明 Workspace、入口、协议包、规则、抓包、诊断、证书和 Android
+网络接管。页面名称以当前中文界面为准。
 
-## 1. 第一次启动
+## 1. 基本概念
 
-1. 打开应用后等待顶部状态栏完成 Rust 核心初始化。
-2. 第一次启动会创建全新的 `intercept-proxy.sqlite3`，不会读取旧代理数据。
-3. Windows 与 macOS 使用同一张固定测试 Root CA；应用按本机地址签发独立叶子证书，测试客户端只需信任一次公开 Root CA。
-4. 默认 Workspace 不会监听网络，只包含关闭的 `127.0.0.1:8080` 代理监听草稿；默认按请求目标转发。
-5. 先配置代理入口，再启动代理。不要直接把 `0.0.0.0` 当作客户端连接地址；客户端应连接电脑实际 LAN IP。
+### 1.1 Workspace
 
-## 2. Workspace 页面
+Workspace 是一套可切换的测试配置，保存 Listener、HTTP 基础规则、协议 Document 规则、Android
+Profile 和证书引用。运行时报文、抓包 Exchange 和普通运行日志不属于 Workspace 配置。
 
-Workspace 是一套完整测试配置，可包含代理入口、编码策略、提取器、断言、规则、
-故障预设、证书安全引用和 Android 设备网络方案。
+切换 Workspace 前应停止当前入口。Listener 启动后使用不可变快照；编辑配置不会偷偷改变正在处理
+的连接，需要明确保存并重新启动入口。
 
-- **新建**：创建空 Workspace，不复制任何证书和密码。
-- **复制**：复制结构化配置；秘密只复制引用，目标环境仍需重新选择秘密。
-- **选择**：切换当前 Workspace。运行中的监听器存在未保存更改时，Rust 会拒绝危险切换。
-- **导入 Workspace**：选择 `.intercept-workspace`。Rust 校验版本、ID、入口引用、端口冲突和敏感字段。
-- **导出 Workspace**：确认敏感内容后导出当前 Workspace 的全部可移植配置。为实现受控测试环境的一文件迁移，文件可能包含 Listener 外部证书、服务端私钥、PKCS12/PFX 原文和明文 P12 密码；绝不包含本机 MITM Root CA 私钥或抓包 Payload。
-- **导入/导出整个应用配置**：使用 `.intercept-config`，一次备份或恢复全部 Workspaces、
-  当前 Workspace 选择和全局设置。导入先完整校验再原子替换；失败不会留下部分配置。
-- **删除**：必须先停止该 Workspace 的全部 Listener，并显式确认。
+### 1.2 Listener
 
-## 3. 代理入口页面
+一个 Listener 只有一个本地端点和一种明确数据面：
 
-代理入口可以理解为 Proxy 在本机打开的一扇门：客户端连接这扇门。每条监听默认从请求中读取
-目标地址；打开“转发到固定 Server”后，该监听只把请求转发到配置好的 Server。
+- HTTP：正向 absolute-form 请求，或固定 Server 转发。
+- Socket：RemoteServer 或 LocalServer；按协议转发或透明转发。
 
-代理入口不负责定义“延迟、断开、Mock、改状态码”等模拟行为。正确顺序是：
+一个 App connection 创建一个 Exchange。协议模式按 App 请求、Server 回复的严格顺序推进；
+App 断开或 Server 读写失败时，该 Exchange 结束。
 
-1. 在“入口配置”新增并启动入口，让客户端流量先经过代理。
-2. HTTP 需要快速故障时进入“拦截规则”的“故障预设”，选择模板并点击启用。Socket 不显示这个分类。
-3. 需要精确匹配路径、Header、Body 或组合动作时，在同一页切换到对应的规则分类。
-4. 故障预设最终会创建普通 HTTP 规则，并作用于经过代理入口的请求；入口状态统一在顶部状态栏和“入口配置”查看。
+### 1.3 规则
 
-### 3.1 按请求目标转发
+App 有两套目的不同的规则：
 
-1. 点击“新建代理监听”，保持“转发到固定 Server”关闭。
-2. 本机使用时保留 `127.0.0.1`；局域网设备连接时选择明确 LAN 地址或 `0.0.0.0`。
-3. 客户端 CIDR 留空表示允许任意地址；填写后仅允许命中列表的客户端。非回环动态正向代理仍必须启用代理认证。
-4. 启用 HTTP Basic 认证后，在用户名和密码输入框填写本次凭据，点击“保护并引用”。界面只会
-   显示 `system/<随机引用>`；密码框随即清空，Workspace 和导出文件中不会出现明文。
-5. 更换凭据时重新输入并生成新引用，不要手工复制其他安装实例的引用。
-6. 设置端口。默认建议 `8080`，端口是否可用由 Rust 校验。
-7. CONNECT 模式默认“隧道”。此模式不会解密 HTTPS。
-8. 需要 HTTPS 抓包时，先到证书页导出 Root CA并安装到测试客户端，再把明确域名加入 MITM allowlist。
-9. 不要用 `*` 绕过 allowlist；每个目标应显式配置。
+- HTTP 基础规则：匹配 Method、Path、Header、JSONPath、证书指纹等，并执行修改、故障或 Mock。
+- 协议 Document 规则：匹配协议包 Decode 后的 Schema 字段，并顺序修改 Document。
 
-客户端配置示例：
+两类规则可以在统一规则列表看到，但运行阶段和保存校验互相独立。
 
-```text
-HTTP Proxy  = <电脑地址>:8080
-HTTPS Proxy = <电脑地址>:8080
-```
+## 2. 建立测试 Workspace
 
-### 3.2 在代理监听中转发到固定 Server
+1. 打开“工作区”。
+2. 新建 Workspace，填写清晰名称和用途。
+3. 选中 Workspace 后进入“入口配置”。
+4. 配置 HTTP 或 Socket Listener。
+5. 保存后检查列表中的本地地址、端口、模式、Server 和安全摘要。
+6. 在执行真实交易前先确认测试端口没有被其他进程占用。
 
-1. 点击“新建代理监听”。应用只有这一种入口概念，不需要选择“正向”或“反向”。
-2. 默认情况下，入口按照客户端请求中的目标地址转发。需要将该入口固定转发到一个 Server 时，
-   打开“转发到固定 Server”。
-3. 配置本地监听地址/端口和本条映射的固定 Server origin，例如
-   `127.0.0.1:16627 -> https://transaction.example.test:16627`。
-4. 如果同一客户端还访问其他主机或端口，继续新增或复制监听，例如
-   `127.0.0.1:16127 -> https://dll.example.test:16127`。两条映射可以使用完全不同的域名和端口。
-5. 如客户端连接本地代理时要求 TLS，启用“为此监听启用 TLS”。服务端身份留空时直接使用证书管理页
-   签发的本机叶子证书；只有该入口需要另一套身份时，才点击“导入独立服务端身份”选择同时包含证书链
-   和私钥的 PEM。客户端只要求普通 HTTPS 时，把下游客户端认证保持为“关闭”；只有客户端确实会出示
-   证书时，才选择“可选”或“必须”并导入签发客户端证书的 CA。
-6. Server 只要求普通 HTTPS 时，客户端身份保持为空；只有 Server 要求 mTLS 时，才在
-   当前入口点击“导入 P12”，选择该 Server 对应的 PKCS12 客户端身份。
-7. 每条入口独立导入或选择证书引用。例如交易入口与 DLL 入口可以使用不同的下游证书、
-   上游客户端身份和上游 CA。运行时 Workspace 只保存托管引用；导出可移植文件时，Rust 可在明确确认后嵌入这些 Listener 材料的副本。
-8. 使用系统信任或在当前入口点击“导入 CA”，并保持主机名校验开启。
-9. 在每个代理入口中直接选择请求正文编码和响应正文编码：原始字节、UTF-8 或 Shift-JIS。
-10. 点击“测试 Server TLS 握手”。应用会由 Rust 校验当前入口草稿并临时连接该 Server；测试
-   不保存 Workspace、不启停其他入口，只验证 TCP/TLS、证书链、主机名策略和可选客户端身份，
-   不发送业务请求。因此其他入口运行时也可以测试当前入口。
-11. 检查返回的解析地址、TLS 版本、密码套件、Server 主题和 SHA-256 指纹。测试失败时按
-    中文错误检查网络、CA、主机名、证书有效期、客户端身份和 Server 是否要求 mTLS。
-12. 握手通过后逐条启动 Listener；不同入口的运行状态和错误互相独立。
+开发测试脚本可以重复安装同名 E2E Workspace；安装过程应更新同一套 Listener、规则和软件包，
+不能制造重复记录。
 
-## 4. 实时抓包
+## 3. HTTP Listener
 
-- 输入关键字、客户端 IP、Listener、阶段、结果或规则 ID 后提交筛选。
-- 筛选、排序和分页全部由 Rust 执行。
-- 列表只保存轻量摘要，完整报文在选择行时按 ID 加载。
-- 详情包含：
-  - 概览：连接、TLS、时间、规则轨迹、Workspace 元数据提取值和响应断言结果。
-  - 请求：起始行、完整 Headers、显示文本和 Body 信息。
-  - 响应：HTTP 状态、完整 Headers、显示文本和 Body 信息。
-- 关闭详情后前端释放 Payload 引用。
-- “清空当前显示”只移动视图游标，不影响正在转发的连接和会话仓储。
+### 3.1 正向 HTTP
 
-## 5. 暂停请求处理
+正向模式接收普通 absolute-form HTTP 请求，并按请求中的 HTTP 目标转发。当前仅支持普通 HTTP：
 
-1. 规则命中“暂停”后，报文进入断点队列。
-2. 应用会自动打开全局处理窗口；存在待处理报文时不能关闭该窗口或继续其他操作。
-3. 在窗口左侧切换待处理报文，查看原始报文和当前有效报文。
-4. 可选择原样放行、修改后放行、Mock、延迟、断开、状态码、错误长度、截断或丢弃。
-5. 修改后的 Body 必须先由 Rust 重新编码并校验。
-6. 客户端断开或代理停止后，断点进入终态，不能再次处理。
-7. 暂停请求不会自动放行；长时间等待是否超时由客户端和入口配置决定。
+- CONNECT 返回 `501`；
+- HTTP Upgrade/WebSocket 返回 `501`；
+- 不创建 tunnel、MITM 或透明转发兜底。
 
-## 6. 规则
+因此不能用“安装 Root CA + CONNECT”测试 HTTPS 抓包。若需要验证 HTTPS Server，应使用固定
+Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 
-### 6.1 创建
+### 3.2 固定 Server
 
-1. 点“新建规则”。
-2. 填写名称、说明、优先级和作用阶段。
-3. 添加一个或多个匹配条件。字段与操作符由 Rust 草稿接口提供。
-4. 添加执行动作。动作按页面顺序执行。
-5. 保存前 Rust 校验正则、JSONPath、Header、编码和动作兼容性。
+1. 选择固定 Server 模式。
+2. 填写唯一的 Server origin，例如 `http://127.0.0.1:19080` 或测试 HTTPS origin。
+3. 一个 Listener 只绑定一个 endpoint；Host、端口或证书策略变化时建立另一个 Listener。
+4. HTTP origin 只执行 TCP 探测；HTTPS origin 额外执行 TLS/hostname/CA 探测。
+5. 保存后启动 Listener，再从 App 向本地 Listener 发送请求。
 
-### 6.2 启用和仅命中一次
+固定 Server 模式不会因为请求携带其他 authority 而改连另一个目标。
 
-- “启用规则”控制该规则是否参与评估。
-- “仅命中一次”开启后，首次命中完成即由 Rust 自动关闭。
-- 第 N 次命中使用规则设置的计数范围。
-- 修改匹配条件，或关闭后重新启用，会重置命中计数。
+### 3.3 下游 TLS/mTLS
 
-### 6.3 动作组合
+这是 App 连接 Proxy 的安全边界。Proxy 作为 TLS Server：
 
-- 延迟、修改和暂停可以组合。
-- Mock、拒绝、断开、丢弃和截断会终止后续规则。
-- 列表中的执行轨迹是 Rust 真实评估结果，不是前端推断。
+1. 选择 Server Identity。
+2. 普通 TLS 不启用客户端认证。
+3. mTLS 选择 Client Trust，并设置 Optional 或 Required。
+4. Required 时，App 必须出示受信任客户端证书。
 
-## 7. 故障模拟
+### 3.4 上游 TLS/mTLS
 
-故障页使用与规则页相同的 Rust 执行引擎，只负责快速建立安全模板。复杂条件请进入规则页继续编辑。
+这是 Proxy 连接 Server 的独立安全边界。Proxy 作为 TLS Client：
 
-- 自定义状态码。
-- 上游前断开。
-- 上下行延迟、抖动和限速。
-- 中途断连、截断和错误 Content-Length。
-- Mock、非法 JSON 和丢弃响应。
+1. 选择 Server Trust 或系统信任策略。
+2. 保持正确 hostname/SNI。
+3. 只有 Server 明确要求 mTLS 时才选择 Client Identity。
+4. 使用“测试连接/TLS”检查 DNS、TCP、CA、hostname 和客户端身份。
 
-应用层故障只影响经过桌面代理的连接，不等同 Android TCP/IP 弱网。
+下游认证成功不代表上游认证成功；两边必须分别验证。
 
-## 8. 证书
+## 4. Socket Listener
 
-### 8.1 Root CA
+### 4.1 RemoteServer
 
-- Root CA 为跨 Windows/macOS 固定的测试证书，指纹应始终一致；叶子证书按本机 SAN 分别签发。
-- “导出 Root CA”只导出公开 PEM，不导出私钥。
-- 正向 MITM 客户端必须信任该 Root CA。
-- 重置 CA 后所有信任旧 CA 的客户端都需要重新安装，操作前必须停止代理。
+RemoteServer 将 App 连接与固定远端 TCP/TLS endpoint 包装进同一个 Exchange：
 
-### 8.2 Reverse TLS/mTLS
+1. 填写本地监听地址和端口。
+2. 填写唯一 Server host/port。
+3. 选择“按协议转发”或“透明转发”。
+4. 选择 TCP、TCP→TLS、TLS→TCP 或 TLS→TLS 安全拓扑。
+5. 保存、启动，再发送测试报文。
 
-- 下游服务端身份用于客户端连接 Listener。
-- 下游客户端 CA/指纹用于验证客户端身份。
-- 上游 P12 用于代理向上游证明客户端身份。
-- 上游 CA 用于验证上游服务端。
-- 每个 Listener 可以使用不同托管引用。运行时 UI/DTO 不接收私钥字节；明确确认后，Rust 可在可移植导出中写入 Listener 证书材料和明文 P12 密码。
-- 四类入口材料都应从入口配置页导入。导入后 Workspace 只保存 `managed:` 安全引用，不保存原文件
-  路径、P12 密码或私钥。若旧外部文件引用已失效，可点击“改用证书页签发的叶子证书”或重新导入。
-- Android 客户端不一定使用 mTLS；下游客户端认证可关闭、可选或强制。上游客户端身份也
-  可以为空，表示 Proxy 使用普通 TLS 连接 Server。
-- 证书页只检查本机 Root CA 与服务端叶子证书；入口页的“测试上游 TLS / mTLS 握手”才会使用
-  该入口配置真实连接 Server。握手成功仍不等于 HTTP 或业务请求成功。
+按协议转发要求选择协议包。Reader 每次从 Socket 读取数据后调用 Frame；NeedMore 时继续读，一个
+完整 Frame 后立即 Decode 并发往 Server，不等待第二个 Frame。
 
-## 9. 应用网络接管
+### 4.2 LocalServer
 
-### 9.1 准备
+LocalServer 是本地回环服务，不连接上游。它仍使用同一个 Exchange、Reader/Writer/Pipeline 模型：
 
-1. 电脑安装安卓调试工具，并确保 `adb version` 可执行。
-2. 通过 USB 或可信网络连接设备。
-3. 在“目标设备”区域选择设备；序列号用于区分同名设备。
-4. 点击“安装设备端组件”或“更新设备端组件”。桌面使用系统已有的安卓调试桥（ADB），不下载或携带调试工具。
-5. 点击“授权网络接管”，在设备系统对话框中确认一次。
+- Direct/透明模式按字节 echo；
+- Scripted/协议模式读取完整报文并通过协议 Pipeline 返回；
+- 不生成虚假的上游连接成功证据。
 
-### 9.2 选择目标应用
+LocalServer 不配置上游 host、上游 CA 或上游客户端身份。
 
-1. 选择设备并完成设备端控制准备；随后新建或打开设备网络方案。
-2. 在“按包名筛选”输入完整或部分包名，点击“筛选”或按回车。筛选由 Rust 执行；点击“清除”恢复完整列表。
-3. 从结果中选择最多 64 个目标包。
-4. 设备端组件自身不可选择。
-5. 如果包共享 UID，页面会显示整个 UID 组。必须选择整组并确认，否则不能启动。
-6. 启动前 Rust 校验目标包仍已安装，并核对 UID 与 shared UID 完整性；不读取或比较 APK 签名。
+### 4.3 透明转发
 
-### 9.3 配置弱网
+透明 Socket 保持原始字节：
 
-- “弱网覆盖范围”可以添加多条单个 IP 或 CIDR，并可分别指定端口；同一个应用访问多个
-  Server 时逐条添加即可。
-- 不添加弱网覆盖地址代表该应用的全部远端地址都应用弱网，不是“未配置”。
-- 只想影响一部分 Server 时添加弱网覆盖地址；未命中的地址会原样放行。
-- 弱网覆盖范围只决定是否加延迟、丢包、限速等，不决定是否经过桌面代理。
-- 上行和下行可以分别配置。
-- 建议先使用固定 seed，便于复现。
-- 先从小延迟、小丢包开始，再增加突发、乱序和黑洞。
-- 100% 丢包、全黑洞和无限运行需要二次确认。
-- DNS 黑洞只影响端口 53/853；已有连接可能继续工作。
-- 第 N 个 TCP flag 丢弃用于观察真实重传，需要结合 sequence 摘要判断。
-- PMTU 故障应同时观察 IPv4 fragmentation-needed 或 IPv6 PTB 指标。
+- App 读到多少就向 Server 写多少；
+- Server 读到多少就向 App 写多少；
+- 不执行 Frame、Decode、Document Rules、Encode 或 Display；
+- 保持半关闭，不把一侧 EOF 误当成必须立即丢弃另一侧待发送数据。
 
-### 9.4 不修改业务 App URL 地经过桌面代理
+协议包错误不能自动降级为透明转发。
 
-1. 先在当前 Workspace 的“代理入口”页创建并启动一条 Listener。如果要转发给固定
-   Server，在该 Listener 中启用固定 Server 并完成 TLS/mTLS 握手测试。
-2. 在设备网络方案的“透明代理路由”中添加业务 App 原本使用的 Server 域名、
-   IP 或 CIDR，明确添加一个或多个原始端口，然后选择对应的桌面 Listener。透明代理
-   路由不支持端口留空或“全部端口”匹配。
-3. 一个方案可添加多条映射，例如原始交易 Server 和 DLL Server 分别指向两条不同入口。
-4. 保持业务 App 中的 URL/主机/端口不变。启动方案时，Rust 会解析原始域名并通过 USB
-   ADB reverse 或 LAN 的临时运行端点把命中的 TCP 连接改送到选中 Listener。
-5. 未命中透明代理路由的目标仍直连原 Server；UDP 首版也保持原目标直连。
-6. 如果原始域名无法解析、Listener 不存在/未启动或 ADB reverse 建立失败，Rust 拒绝启动方案并显示
-   中文原因，不会悄然绕过代理。
+## 5. 协议包
 
-### 9.5 停止与恢复
+“协议包”页面统一显示 HTTP Body 与 Socket 内置包；Socket 外部包在线状态也在此处体现。
 
-- 桌面“停止”、设备通知“停止”和 Android VPN 设置均能恢复。
-- Rust/JNI/TUN 失败时设备端组件会先关闭 TUN，保持故障时放行。
-- 5 分钟失败 3 次后不会自动重启。
-- 用户手动停止后，重启设备也保持停止。
-- 开机恢复仅在用户开启后生效，并等待解锁、网络可用和 30 秒宽限。
+### 5.1 内置 Rhai 包
 
-## 10. 设置
+导入 ZIP 前应确认：
 
-- 系统设置只管理全局超时、Body 上限、会话容量、内存容量和数据策略。
-- 监听地址、端口、上游 URL、TLS 与启停不在系统设置中出现，统一由“入口配置”管理。
-- 超时和容量由 Rust 校验。
-- 会话容量达到上限时优先淘汰最旧的已完成会话，不淘汰待处理断点。
-- 数据导出目录使用 Tauri Dialog 选择。
-- 修改监听地址、端口、TLS 或上游后，需要在“入口配置”保存并重新启动对应 Listener。
-- 恢复系统默认值只恢复全局设置草稿，不删除 Workspace、入口、证书或规则。
-- 需要迁移整台工具的配置时，使用“导出整个应用配置”生成单个 `.intercept-config` 文件。
-  确认对话框会列出可能携带的 Listener 外部证书、服务端私钥、PKCS12/PFX 原文和明文 P12 密码。导入会把这些材料恢复到新机器的受保护存储。文件绝不携带本机 MITM Root CA 私钥、HTTP Basic 明文密码、抓包 Payload 或运行状态。
+- `manifest.toml`、`protocol.rhai`、`display.rhai` 和上下行 Schema 齐全；
+- Socket 包上下行都声明 Frame；HTTP 包两边都不声明 Frame；
+- 包 ID + SemVer 是不可变身份，新内容使用新版本；
+- Decode/Encode/Display 函数签名符合当前 API。
 
-## 11. 兼容性测试示例
+导入会先完成 ZIP、Manifest、Schema、Rhai 和入口签名校验；任一步失败都不会留下半安装包。
 
-测试某个既有双端口、mTLS、Shift-JIS 客户端时，应从空 Workspace 手工建立两个 Listener，
-分别启用固定 Server，并配置
-导入测试人员提供的证书并配置通用响应断言。具体业务配置可以进入测试报告，但不得保存为应用
-默认模板或打入安装包。
+### 5.2 外部 Socket 包
 
-真实设备验收必须分别确认：TLS/mTLS、HTTP/报文解析、设备端业务返回、非目标应用网络。仅看到
-HTTP 200 或抓包记录不能代替设备端结果。
+外部包连接设置页公布的 loopback WebSocket `/packages`，注册后必须实现：
 
-开发阶段可以运行 Android 模拟器“类 D48”回归：它使用本地模拟上游和测试期望值来证明动态
-Workspace、Listener 固定 Server、Shift-JIS、Header、响应断言与字节透传链路。该结果必须标记
-为“模拟上游”，不能写成真实 GMO-FG 业务通过，也不能替代 A920MAX 的真实设备验收。
+- `hooks.upstream.<frame|decode|encode>`
+- `hooks.downstream.<frame|decode|encode>`
+- `document.upstream.display`
+- `document.downstream.display`
+
+外部包断线后精确版本变为 offline；绑定它的 Listener fail-closed，不切换其他版本或透明模式。
+
+### 5.3 Display
+
+Display 是协议包生成的 HTML 展示结果。App 会清洗并放入无能力 sandbox iframe：
+
+- 不显示 Document JSON；
+- 不执行 script、事件属性、URL 导航或表单；
+- Display 失败时 HTTP 回退 Body、Socket 回退 Hex；
+- Display 失败属于观测失败，不改变已经成功的网络交易。
+
+## 6. 统一规则页面
+
+HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“阶段”区分。点击一行后在右侧编辑。
+
+### 6.1 新建方式
+
+- 空白规则：新建 HTTP 基础规则。
+- Body 报文规则：新建 HTTP Body 的协议 Document 规则。
+- Socket 报文规则：新建 Socket 四方向 Document 规则。
+- 从故障预设创建：把常见故障模板转换为普通 HTTP 规则。
+
+“新建规则”对话框关闭后可以再次打开；选择规则或新建草稿不会自动保存。
+
+### 6.2 HTTP 阶段能力
+
+编辑器选项由 Rust 返回，保存时领域层再次校验：
+
+| 阶段 | 可以配置 | 不能配置 |
+| --- | --- | --- |
+| 请求 | 请求字段、上行延迟/限速、Mock、上游连接/读写故障 | HTTP 响应状态、响应损坏、下行限速 |
+| 响应 | 响应字段、状态码、下行延迟/限速、截断/错误长度/下行断连 | Mock、上游超时、上行断连 |
+| TLS 握手 | 证书指纹、第 N 次命中、拒绝 TLS 握手 | HTTP 字段和其他内容/网络动作 |
+
+额外约束：
+
+- 限速与间歇通断方向由阶段固定，界面不允许手工选错；
+- 一条规则最多一个终止动作；
+- 终止动作必须是最后一个动作；
+- 添加终止动作后，“添加动作”禁用；
+- 条件按 AND 匹配，动作按声明顺序执行；
+- 终止动作命中后停止当前规则剩余动作和后续规则。
+
+“Proxy → Server 设置 response code”在概念上不成立，因此请求阶段不会显示自定义 HTTP 状态码；
+该动作只属于 Server response 经过 Proxy 返回 App 的响应阶段。
+
+### 6.3 Document 规则
+
+Document 规则只能选择当前 Listener、精确协议包版本、方向 Schema 中存在的字段。值必须与
+Schema 类型一致，不执行字符串到整数或 Blob 的隐式转换。
+
+Socket 四阶段依次是：
+
+1. App → Proxy
+2. Proxy → Server
+3. Server → Proxy
+4. Proxy → App
+
+后一个阶段看到前一个阶段修改后的 Document。一次读取产生一个 Envelope，长连接中的新报文追加
+新事件，不覆盖之前数据。
+
+## 7. 实时抓包
+
+HTTP 和 Socket 同时显示在一个页面，不通过协议 Tab 隐藏另一类记录。
+
+### 7.1 HTTP
+
+HTTP 表格显示时间、终端 IP、通道、方向、方法、路径/请求类型、状态码、结果、耗时、规则和大小。
+页面停留时新请求应立即追加，不需要切换页面。
+
+### 7.2 Socket
+
+Socket 表格一行对应一个 App connection/Exchange。详情按发生顺序显示：
+
+1. Opened
+2. App → Proxy Received
+3. Proxy → Server Sent
+4. Server → Proxy Received
+5. Proxy → App Sent
+6. Failed（如有）
+7. Closed
+
+详情显示原始字节/Hex、固定 Display 和失败阶段，不渲染 Document JSON，也不显示无意义的字节
+上一页/下一页按钮。长连接中 D2 追加在 D1 后面。
+
+“暂停列表滚动”只暂停视图滚动，不暂停网络、规则或记录；“清空当前显示/运行记录”只清理内存
+展示，不修改 Workspace 或数据库配置。
+
+## 8. 断点与故障
+
+规则命中“暂停”后进入断点队列。可以查看当前消息并选择继续、修改后继续或终止。断点超时、容量
+和取消都由 Rust 管理；页面关闭不能绕过既定处理结果。
+
+延迟、抖动、限速、间歇通断属于可调度故障；Mock、拒绝、断开、丢弃和截断属于终止动作。故障
+预设最终生成普通规则，后续仍在统一规则页面编辑和审计。
+
+## 9. 诊断日志与 MCP
+
+排障建议顺序：
+
+1. 确认 Workspace、Listener、模式和 runtime epoch。
+2. 检查抓包是否有 Opened。
+3. 对照同一 Exchange 的 Received/Sent。
+4. 若失败，先看 Failed stage 和稳定错误码。
+5. 再查询普通运行日志、外部包 generation/RPC request ID。
+6. 检查 evidence dropped/ignored/evicted 计数。
+7. 最后生成复现报告。
+
+内嵌 MCP 只绑定 loopback，提供只读应用快照、日志、ExchangeObservation、诊断和复现报告。它不能
+启停 Listener、修改规则、重放交易或写数据库。
+
+## 10. 应用数据导入导出
+
+应用导出 ZIP 包含 Workspace、可移植 Settings、精确内置协议包源文件，以及用户选择的 Listener
+TLS 可移植材料。它不包含运行时报文、ExchangeObservation 或本机安装级 Root CA 私钥。
+
+导入步骤：
+
+1. 选择 ZIP。
+2. App 有界读取并校验路径、大小、压缩比、Manifest、Schema、Rhai 和证书材料。
+3. 查看替换预览。
+4. commit 前再次比较 Workspace/Settings revision、包与证书 generation。
+5. 原子替换成功后重启 App。
+
+本机已存在相同协议包不会因唯一键直接失败；完整应用导入以备份注册表为候选，事务内替换，失败
+则完整回滚。
+
+## 11. Android 应用网络接管
+
+1. 连接 Android 设备并允许 ADB。
+2. 安装/更新 Companion。
+3. 选择需要接管的应用 allowlist。
+4. 生成 Profile，确认桌面 Listener 地址可被设备访问。
+5. 启动设备侧 VPN，并在 Android 权限弹窗中确认。
+6. 检查 TUN、SOCKS5、ADB reverse 或 LAN 路由状态。
+7. 完成后停止 Profile 并清理遗留 reverse/owner 状态。
+
+设备能连接桌面端口只证明网络可达；还要分别证明 TLS、代理转发、规则命中和业务回复。
+
+## 12. 完成一次测试的判定
+
+一次完整验证至少应分别记录：
+
+- Listener 已启动且端口正确；
+- App 请求进入同一 Exchange；
+- Proxy 实际向 Server 写入；
+- Server 回复被 Proxy 读取；
+- Proxy 实际写回 App；
+- 规则命中和实际 wire 内容符合预期；
+- TLS/mTLS 两侧身份分别通过；
+- 成功或失败记录实时出现在抓包页；
+- 没有被忽略的观测丢失；
+- 停止后端口可重新绑定。
+
+完整场景、固定端口、脚本和判定标准见
+[发布级验证矩阵](testing/release-validation-matrix.md)。

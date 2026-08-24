@@ -25,31 +25,19 @@ pub struct CaptureRepositoryAdapter {
     sessions: Arc<InMemorySessionStore>,
     view_floor: AtomicU64,
     latest_runtime_epoch: RwLock<Option<RuntimeEpoch>>,
-    socket: Arc<super::SocketCaptureRepositoryAdapter>,
 }
 
 impl CaptureRepositoryAdapter {
     const MAX_ROWS: usize = 4_096;
 
     #[must_use]
-    pub fn new(
-        sessions: Arc<InMemorySessionStore>,
-        socket: Arc<super::SocketCaptureRepositoryAdapter>,
-    ) -> Self {
+    pub fn new(sessions: Arc<InMemorySessionStore>) -> Self {
         Self {
             rows: RwLock::new(Vec::new()),
             sessions,
             view_floor: AtomicU64::new(0),
             latest_runtime_epoch: RwLock::new(None),
-            socket,
         }
-    }
-
-    pub fn record_socket(
-        &self,
-        record: intercept_proxy_application::SocketCaptureRecord,
-    ) -> AppResult<intercept_proxy_application::SocketCaptureRowViewModel> {
-        self.socket.record(record)
     }
 
     pub fn push_for_epoch(&self, row: CaptureRowViewModel, runtime_epoch: RuntimeEpoch) {
@@ -219,27 +207,6 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
         self.view_floor.store(latest, AtomicOrdering::Release);
         Ok(latest)
     }
-
-    async fn query_socket(
-        &self,
-        query: intercept_proxy_application::SocketCaptureQuery,
-    ) -> AppResult<intercept_proxy_application::SocketCapturePageViewModel> {
-        self.socket.query(&query)
-    }
-
-    async fn get_socket_detail(
-        &self,
-        capture_id: intercept_proxy_application::SocketCaptureId,
-    ) -> AppResult<intercept_proxy_application::SocketCaptureDetailViewModel> {
-        self.socket.get_detail(capture_id)
-    }
-
-    async fn clear_socket_completed(
-        &self,
-        workspace_id: intercept_proxy_application::WorkspaceId,
-    ) -> AppResult<usize> {
-        self.socket.clear_completed(workspace_id)
-    }
 }
 
 fn fingerprint_suffix(fingerprint: &str) -> String {
@@ -279,11 +246,7 @@ mod tests {
     use super::*;
 
     fn test_adapter() -> CaptureRepositoryAdapter {
-        let store = Arc::new(crate::SqliteStore::in_memory().unwrap());
-        CaptureRepositoryAdapter::new(
-            Arc::new(InMemorySessionStore::default()),
-            Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(store)),
-        )
+        CaptureRepositoryAdapter::new(Arc::new(InMemorySessionStore::default()))
     }
 
     fn row(event_id: u64, terminal: &str) -> CaptureRowViewModel {

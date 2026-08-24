@@ -11,7 +11,7 @@ async fn records_request_response_terminal_events_and_real_metrics() {
     let mut request = request_message(r#"{"amount":100}"#);
     assert!(
         pipeline
-            .request(&context, &mut request)
+            .apply_request_policy(&context, &mut request)
             .await
             .expect("request")
             .is_empty()
@@ -23,7 +23,7 @@ async fn records_request_response_terminal_events_and_real_metrics() {
     let mut response = response_message();
     assert!(
         pipeline
-            .response(&context, &mut response)
+            .apply_response_policy(&context, &mut response)
             .await
             .expect("response")
             .is_empty()
@@ -108,7 +108,7 @@ async fn stores_upstream_security_evidence_on_the_active_session() {
     let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
     pipeline.connection_opened(&context).await;
     pipeline
-        .request(&context, &mut request_message(r#"{"amount":100}"#))
+        .apply_request_policy(&context, &mut request_message(r#"{"amount":100}"#))
         .await
         .unwrap();
     let session_id = pipeline
@@ -196,7 +196,7 @@ async fn reports_capacity_failure_and_keeps_previous_upstream_security_evidence(
     let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
     pipeline.connection_opened(&context).await;
     pipeline
-        .request(&context, &mut request_message(r#"{"amount":100}"#))
+        .apply_request_policy(&context, &mut request_message(r#"{"amount":100}"#))
         .await
         .unwrap();
     let session_id = pipeline
@@ -255,17 +255,17 @@ async fn isolates_interleaved_workspace_metrics_and_ignores_late_stop_events() {
 
     let mut request_a = request_message(r#"{"workspace":"a"}"#);
     pipeline
-        .request(&context_a, &mut request_a)
+        .apply_request_policy(&context_a, &mut request_a)
         .await
         .expect("workspace A request");
     let mut request_b = request_message(r#"{"workspace":"b"}"#);
     pipeline
-        .request(&context_b, &mut request_b)
+        .apply_request_policy(&context_b, &mut request_b)
         .await
         .expect("workspace B request");
     let mut response_b = response_message();
     pipeline
-        .response(&context_b, &mut response_b)
+        .apply_response_policy(&context_b, &mut response_b)
         .await
         .expect("workspace B response");
     pipeline
@@ -340,7 +340,7 @@ async fn isolates_interleaved_workspace_metrics_and_ignores_late_stop_events() {
     pipeline.connection_opened(&late_context_a).await;
     let mut late_request_a = request_message(r#"{"workspace":"late-a"}"#);
     let late_request_error = pipeline
-        .request(&late_context_a, &mut late_request_a)
+        .apply_request_policy(&late_context_a, &mut late_request_a)
         .await
         .expect_err("stopped epoch must reject a late request");
     assert_eq!(late_request_error.code, ErrorCode::ProxyStopped.as_str());

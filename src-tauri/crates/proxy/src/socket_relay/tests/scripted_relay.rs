@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpListener,
-    sync::Barrier,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -79,20 +78,22 @@ async fn scripted_relay_transforms_both_directions_and_creates_each_processor_on
 }
 
 #[tokio::test]
-async fn scripted_relay_processes_opposite_directions_concurrently() {
+async fn scripted_exchange_processes_multiple_interactions_sequentially() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
     let upstream_task = tokio::spawn(async move {
         let (mut stream, _) = upstream.accept().await.unwrap();
-        stream.write_all(&[1, b's']).await.unwrap();
-        let mut request = [0_u8; 2];
-        stream.read_exact(&mut request).await.unwrap();
-        assert_eq!(&request, b"Uc");
+        for (request_payload, response_payload) in [(b'c', b's'), (b'd', b't')] {
+            let mut request = [0_u8; 2];
+            stream.read_exact(&mut request).await.unwrap();
+            assert_eq!(request, [b'U', request_payload]);
+            stream.write_all(&[1, response_payload]).await.unwrap();
+        }
         stream.shutdown().await.unwrap();
     });
 
     let bind_addr = reserve_address();
-    let factory = Arc::new(ScriptedFactory::new(Some(Arc::new(Barrier::new(2)))));
+    let factory = Arc::new(ScriptedFactory::new(None));
     let service = Arc::new(
         SocketRelayService::build_scripted(
             relay_config(bind_addr, upstream_address),
@@ -109,30 +110,27 @@ async fn scripted_relay_processes_opposite_directions_concurrently() {
     tokio::time::timeout(TEST_TIMEOUT, async {
         let mut client = connect_retry(bind_addr).await;
         client.write_all(&[1, b'c']).await.unwrap();
+        let mut first = [0_u8; 2];
+        client.read_exact(&mut first).await.unwrap();
+        assert_eq!(&first, b"Ds");
+        client.write_all(&[1, b'd']).await.unwrap();
         client.shutdown().await.unwrap();
-        let mut response = Vec::new();
-        client.read_to_end(&mut response).await.unwrap();
-        assert_eq!(response, b"Ds");
+        let mut second = Vec::new();
+        client.read_to_end(&mut second).await.unwrap();
+        assert_eq!(second, b"Dt");
         upstream_task.await.unwrap();
     })
     .await
-    .expect("both direction processors must reach the barrier concurrently");
+    .expect("sequential request-response interactions must not deadlock");
 
     cancellation.cancel();
     server.await.unwrap().unwrap();
 }
 
 #[tokio::test]
-async fn scripted_relay_preserves_frame_fifo_and_emits_one_terminal_event() {
+async fn scripted_exchange_rejects_pipelined_app_frames_and_emits_one_terminal_event() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
-    let upstream_task = tokio::spawn(async move {
-        let (mut stream, _) = upstream.accept().await.unwrap();
-        let mut request = Vec::new();
-        stream.read_to_end(&mut request).await.unwrap();
-        assert_eq!(request, b"UaUbUccc");
-        stream.shutdown().await.unwrap();
-    });
 
     let bind_addr = reserve_address();
     let observer = Arc::new(TestObserver::default());
@@ -151,18 +149,22 @@ async fn scripted_relay_preserves_frame_fifo_and_emits_one_terminal_event() {
     let server = tokio::spawn(async move { running.serve(server_cancel).await });
 
     let mut client = connect_retry(bind_addr).await;
-    client
-        .write_all(&[1, b'a', 1, b'b', 3, b'c', b'c', b'c'])
-        .await
-        .unwrap();
+    client.write_all(&[1, b'a', 1, b'b']).await.unwrap();
     client.shutdown().await.unwrap();
-    client.read_to_end(&mut Vec::new()).await.unwrap();
+    let _ = client.read_to_end(&mut Vec::new()).await;
     observer
         .wait_until(|event| matches!(event, SocketConnectionEvent::Closed { .. }))
         .await;
     cancellation.cancel();
     server.await.unwrap().unwrap();
-    upstream_task.await.unwrap();
+
+    // 同一次 transport read 已包含一个完整 Frame 之外的数据，Reader Pipeline 必须在
+    // 建立固定 Server connection 之前失败，不能先转发第一帧再丢弃尾部。
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), upstream.accept())
+            .await
+            .is_err()
+    );
 
     assert_eq!(
         observer
@@ -172,4 +174,11 @@ async fn scripted_relay_preserves_frame_fifo_and_emits_one_terminal_event() {
             .count(),
         1
     );
+    assert!(observer.events().iter().any(|event| matches!(
+        event,
+        SocketConnectionEvent::Closed {
+            failure: Some(_),
+            ..
+        }
+    )));
 }

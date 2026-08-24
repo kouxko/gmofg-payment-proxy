@@ -7,12 +7,12 @@ async fn records_the_effective_downstream_status_after_response_rules() {
 
     let mut request = request_message(r#"{"amount":100}"#);
     pipeline
-        .request(&context, &mut request)
+        .apply_request_policy(&context, &mut request)
         .await
         .expect("request");
     let mut response = response_message();
     let actions = pipeline
-        .response(&context, &mut response)
+        .apply_response_policy(&context, &mut response)
         .await
         .expect("response");
     assert!(matches!(
@@ -48,7 +48,7 @@ async fn pending_breakpoints_are_never_evicted_and_stop_unblocks_waiters() {
         let context = first_context.clone();
         tokio::spawn(async move {
             let mut message = request_message(r#"{"requestId":"first"}"#);
-            pipeline.request(&context, &mut message).await
+            pipeline.apply_request_policy(&context, &mut message).await
         })
     };
     for _ in 0..100 {
@@ -63,7 +63,7 @@ async fn pending_breakpoints_are_never_evicted_and_stop_unblocks_waiters() {
     pipeline.connection_opened(&second_context).await;
     let mut second_message = request_message(r#"{"requestId":"second"}"#);
     let exhausted = pipeline
-        .request(&second_context, &mut second_message)
+        .apply_request_policy(&second_context, &mut second_message)
         .await
         .expect_err("pending session consumes the full capacity");
     assert_eq!(exhausted.code, "RESOURCE_EXHAUSTED");
@@ -102,7 +102,7 @@ async fn one_shot_action_is_not_returned_when_runtime_commit_fails() {
     let mut message = request_message(r#"{"amount":100}"#);
 
     let error = pipeline
-        .request(&context, &mut message)
+        .apply_request_policy(&context, &mut message)
         .await
         .expect_err("commit failure must fail closed before returning actions");
     assert_eq!(error.code, "REVISION_CONFLICT");
@@ -145,7 +145,7 @@ async fn concurrent_rule_hits_commit_without_lost_updates() {
         pipeline.connection_opened(&context).await;
         tasks.push(tokio::spawn(async move {
             let mut message = request_message(r#"{"amount":100}"#);
-            pipeline.request(&context, &mut message).await
+            pipeline.apply_request_policy(&context, &mut message).await
         }));
     }
     for task in tasks {

@@ -18,6 +18,23 @@ fn upstream_executes_decode_encode_and_display_as_one_complete_chain() {
 }
 
 #[test]
+fn socket_pipeline_can_call_decode_display_and_encode_as_independent_stages() {
+    let package = package_with_all_entries();
+    let origin = vec![0x10, 0x20];
+    let mut executor = executor(&package, ProtocolDirection::Upstream);
+
+    let mut document = executor.decode_document(&origin).unwrap();
+    assert_eq!(
+        executor.display_document(&document).unwrap(),
+        "upstream-html"
+    );
+    document.set("amount", DocumentValue::Int(42)).unwrap();
+    let written = executor.encode_document(&origin, document).unwrap();
+
+    assert_eq!(written, [0x55, 42]);
+}
+
+#[test]
 fn bidirectional_complete_chains_are_isolated() {
     let package = package_with_all_entries();
     let mut upstream = executor(&package, ProtocolDirection::Upstream);

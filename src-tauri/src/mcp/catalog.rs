@@ -36,6 +36,33 @@ fn general_tools() -> Vec<Tool> {
             ),
         ),
         tool(
+            "exchange_observation_query",
+            "Exchange observations",
+            "Read connection-level Exchange events from the same bounded memory store used by the UI.",
+            object_schema(
+                json!({
+                    "workspace_id": {"type": "string", "format": "uuid"},
+                    "listener_id": {"type": ["string", "null"], "format": "uuid"},
+                    "page": {
+                        "type": "object",
+                        "properties": {
+                            "page": {"type": "integer", "minimum": 1},
+                            "page_size": {"type": "integer", "minimum": 1, "maximum": 200}
+                        },
+                        "required": ["page", "page_size"],
+                        "additionalProperties": false
+                    }
+                }),
+                &["workspace_id", "page"],
+            ),
+        ),
+        tool(
+            "exchange_observation_get",
+            "Exchange observation detail",
+            "Read one retained connection-level Exchange record by exchange_id.",
+            required_string("exchange_id", "Exchange tracing correlation ID."),
+        ),
+        tool(
             "reproduction_report",
             "Reproduction report",
             "Build one bounded diagnostic bundle and copyable Markdown report for an exact Workspace and Listener, optionally anchored to one Socket capture.",
@@ -182,18 +209,6 @@ fn traffic_tools() -> Vec<Tool> {
                 }),
                 &["session_id", "runtime_epoch"],
             ),
-        ),
-        tool(
-            "socket_capture_query",
-            "Socket captures",
-            "Read a bounded page of Socket captures.",
-            socket_capture_schema(),
-        ),
-        tool(
-            "socket_capture_get",
-            "Socket capture detail",
-            "Read bytes, Documents, display HTML and matched rules for one Socket capture.",
-            required_string("capture_id", "Socket capture UUID."),
         ),
         tool(
             "breakpoint_query",
@@ -361,8 +376,7 @@ fn reproduction_report_schema() -> Value {
     object_schema(
         json!({
             "workspace_id": {"type": "string", "format": "uuid"},
-            "listener_id": {"type": "string", "format": "uuid"},
-            "capture_id": {"type": "string", "format": "uuid"}
+            "listener_id": {"type": "string", "format": "uuid"}
         }),
         &["workspace_id", "listener_id"],
     )
@@ -408,24 +422,6 @@ fn http_capture_schema() -> Value {
             "direction".to_owned(),
             json!({"type": "string", "enum": ["asc", "desc"]}),
         ),
-    ]));
-    object_schema(Value::Object(properties), &[])
-}
-
-fn socket_capture_schema() -> Value {
-    let mut properties = page_properties();
-    properties.extend(Map::from_iter([
-        ("workspace_id".to_owned(), json!({"type": "string", "format": "uuid"})),
-        ("listener_id".to_owned(), json!({"type": "string", "format": "uuid"})),
-        ("session_id".to_owned(), json!({"type": "string", "format": "uuid"})),
-        ("connection_id".to_owned(), json!({"type": "string", "format": "uuid"})),
-        ("package".to_owned(), json!({"type": "object", "properties": {"id": {"type": "string"}, "version": {"type": "string"}}, "required": ["id", "version"]})),
-        ("direction".to_owned(), json!({"type": "string", "enum": ["upstream", "downstream"]})),
-        ("kind".to_owned(), json!({"type": "string", "enum": ["relay_frame", "local_exchange"]})),
-        ("occurred_from".to_owned(), json!({"type": "string", "format": "date-time"})),
-        ("occurred_to".to_owned(), json!({"type": "string", "format": "date-time"})),
-        ("sort".to_owned(), json!({"type": "string", "enum": ["occurred_at", "completed_at", "size"]})),
-        ("direction_sort".to_owned(), json!({"type": "string", "enum": ["asc", "desc"]})),
     ]));
     object_schema(Value::Object(properties), &[])
 }

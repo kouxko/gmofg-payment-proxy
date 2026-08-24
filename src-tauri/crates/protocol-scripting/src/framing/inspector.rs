@@ -1,4 +1,4 @@
-//! 供 Socket Frame Pump 使用的无 FIFO 生产切帧入口。
+//! 供 Socket transport 使用的无 FIFO 生产切帧入口。
 
 use std::{fmt, sync::Arc};
 
@@ -6,8 +6,8 @@ use crate::{
     CompiledProtocolPackage, ProtocolDirection, ProtocolExecutionCancellation,
     ProtocolRuntimeLimits,
     framing::{
-        FrameDecider, FramingDecision, ProtocolFramingError, ProtocolFramingLimits, ProtocolReader,
-        ReaderSegment, RhaiFrameDecider, validate_decision,
+        FramingDecision, ProtocolFramingError, ProtocolFramingLimits, ProtocolReader,
+        RhaiFrameDecider, validate_decision,
     },
 };
 
@@ -58,8 +58,8 @@ impl fmt::Debug for ProtocolFrameInspection {
 /// 单连接、单方向绑定的无 FIFO Frame Inspector。
 ///
 /// Inspector 保存 Rhai Engine、已编译 Frame 入口、资源限制和不可变 Context 身份，但不保存任何
-/// 输入字节或消费位置。每次 [`Self::inspect`] 只读取调用方传入的当前完整缓冲区，因此 T22 Socket
-/// Frame Pump 仍是 FIFO 和消费顺序的唯一所有者。
+/// 输入字节或消费位置。每次 [`Self::inspect`] 只读取调用方传入的当前完整缓冲区，因此 Socket
+/// transport 仍是 FIFO 和消费顺序的唯一所有者。
 pub struct ProtocolFrameInspector {
     decider: RhaiFrameDecider,
     framing_limits: ProtocolFramingLimits,
@@ -67,30 +67,9 @@ pub struct ProtocolFrameInspector {
     direction: ProtocolDirection,
     connection_id: String,
     listener_id: String,
-    cancellation: ProtocolExecutionCancellation,
 }
 
 impl ProtocolFrameInspector {
-    /// 为一个精确协议包、连接、Listener 和方向创建 Inspector。
-    pub fn new(
-        package: &CompiledProtocolPackage,
-        direction: ProtocolDirection,
-        connection_id: impl Into<String>,
-        listener_id: impl Into<String>,
-        runtime_limits: ProtocolRuntimeLimits,
-        framing_limits: ProtocolFramingLimits,
-    ) -> Self {
-        Self::new_with_cancellation(
-            package,
-            direction,
-            connection_id,
-            listener_id,
-            runtime_limits,
-            framing_limits,
-            ProtocolExecutionCancellation::new(),
-        )
-    }
-
     /// 使用调用方提供的共享取消句柄创建 Inspector。
     ///
     /// 同一连接方向可以把同一个句柄同时传给 Frame Inspector 和方向执行器，使 Frame、Decode、
@@ -113,32 +92,25 @@ impl ProtocolFrameInspector {
                 connection_id.clone(),
                 listener_id.clone(),
                 runtime_limits,
-                cancellation.clone(),
+                cancellation,
             ),
             framing_limits,
             package: package.package().clone(),
             direction,
             connection_id,
             listener_id,
-            cancellation,
         }
     }
 
-    /// 返回与该方向所有协议入口共享的取消句柄克隆。
-    #[must_use]
-    pub fn cancellation(&self) -> ProtocolExecutionCancellation {
-        self.cancellation.clone()
-    }
-
-    /// 检查当前从 Frame 起点开始的完整只读缓冲区，不保存也不消费输入。
+    /// 检查当前从 Frame 起点开始的完整只读缓冲区快照，不保存也不消费输入。
     ///
     /// 输入超过 FIFO 上限会在调用脚本前 fail-closed。其余路径使用与测试切帧器相同的 Reader、
     /// Rhai Frame 入口和 Decision 校验；普通脚本错误返回
     /// [`ProtocolFramingError::FrameEntryFailed`]，显式取消返回
     /// [`ProtocolFramingError::FrameExecutionCancelled`]。两者都不包含源码、底层错误或输入字节。
-    pub fn inspect(
+    pub fn inspect_owned(
         &mut self,
-        buffered: &[u8],
+        buffered: Arc<[u8]>,
     ) -> Result<ProtocolFrameInspection, ProtocolFramingError> {
         if u64::try_from(buffered.len())
             .map_or(true, |length| length > self.framing_limits.max_fifo_bytes())
@@ -148,17 +120,14 @@ impl ProtocolFrameInspector {
             });
         }
 
-        // Reader 只活到本次调用结束。这里复制一次当前快照是为了不让 Rhai Dynamic 借用调用方
-        // 内存；Inspector 不保留 Arc，返回后输入快照立即释放。
-        let bytes: Arc<[u8]> = buffered.to_vec().into();
-        let reader = ProtocolReader::from_segments(
-            vec![ReaderSegment::new(bytes, 0..buffered.len())],
-            buffered.len(),
-        );
+        // 调用方跨 blocking worker 边界时已经创建一次 owned 快照；Reader 只克隆 Arc，避免
+        // Inspector 再复制不断增长的累计缓冲区。
+        let buffered_len = buffered.len();
+        let reader = ProtocolReader::new(buffered);
         let decision = self.decider.decide(reader)?;
         let decision = validate_decision(
             decision,
-            buffered.len(),
+            buffered_len,
             self.framing_limits.max_frame_usize(),
         )?;
         Ok(match decision {
@@ -166,6 +135,14 @@ impl ProtocolFrameInspector {
             FramingDecision::Complete(bytes) => ProtocolFrameInspection::Complete { bytes },
             FramingDecision::Reject(reason) => ProtocolFrameInspection::Reject { reason },
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn inspect(
+        &mut self,
+        buffered: &[u8],
+    ) -> Result<ProtocolFrameInspection, ProtocolFramingError> {
+        self.inspect_owned(Arc::from(buffered))
     }
 }
 

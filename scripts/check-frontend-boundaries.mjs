@@ -70,8 +70,7 @@ const themeStorageFiles = new Set([
   "src/features/theme/theme-provider.test.tsx",
 ]);
 const iconCloseTriggerFiles = new Set([
-  "src/features/capture/capture-detail-panel.tsx",
-  "src/features/capture/socket-capture-detail.tsx",
+  "src/features/capture/exchange-observation-detail.tsx",
   "src/features/listeners/socket-protocol-package-dialog.tsx",
   "src/features/protocol-packages/protocol-package-dialog.tsx",
   "src/features/rules/rule-creation-dialogs.tsx",
@@ -143,8 +142,7 @@ for (const file of sourceFiles(sourceRoot)) {
 }
 
 for (const [path, label] of [
-  ["src/features/capture/capture-detail-panel.tsx", "关闭详情并释放报文"],
-  ["src/features/capture/socket-capture-detail.tsx", "关闭 Socket 抓包详情"],
+  ["src/features/capture/exchange-observation-detail.tsx", "关闭 Exchange 详情"],
 ]) {
   const source = readFileSync(join(root, path), "utf8");
   const contract = new RegExp(
@@ -284,7 +282,6 @@ if (
 }
 
 const productChannelUiContracts = [
-  ["capture", "features/capture/capture-view.tsx", ["channel_catalog", "channel_text"]],
   ["breakpoints", "features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
   ["rules", "features/rules/rules-view.tsx", ["channel_catalog", "channel_text"]],
   ["faults", "features/faults/faults-view.tsx", ["channel_catalog"]],
@@ -305,24 +302,6 @@ for (const [featureName, relativePath, requiredContracts] of productChannelUiCon
   }
 }
 
-const httpInspectionUiContracts = [
-  [
-    "capture",
-    "features/capture/capture-view.tsx",
-    ["http_status", ".headers", "HTTP 状态码"],
-  ],
-];
-for (const [featureName, relativePath, requiredContracts] of httpInspectionUiContracts) {
-  const source = featureModuleSource(featureName);
-  for (const contract of requiredContracts) {
-    if (!source.includes(contract)) {
-      failures.push(
-        `src/${relativePath}: 缺少 Rust HTTP 报文检查契约 ${contract}`,
-      );
-    }
-  }
-}
-
 const settingsSource = readFileSync(
   join(sourceRoot, "features/settings/settings-view.tsx"),
   "utf8",
@@ -336,70 +315,72 @@ if (
   );
 }
 
-const captureSourceForResume = captureSource;
-if (/after_event_id:\s*pauseCursor/.test(captureSourceForResume)) {
-  failures.push(
-    "src/features/capture/capture-view.tsx: 恢复滚动必须请求完整 Rust 显示快照，不能永久切换到增量游标",
-  );
-}
-
-// Socket 抓包有独立 Rust DTO 和查询面，不能重新借用 HTTP Message 控件。
+// Exchange observation 有独立 Rust DTO 和查询面，不能重新借用 HTTP Message 控件。
 // Display HTML 永远是不可信输入：应用 DOM 不直接注入，只允许进入无能力 iframe，
 // 并由 iframe 内层 deny-by-default CSP 再封一层外链和应用 API 边界。
-const socketCaptureFiles = readdirSync(join(sourceRoot, "features", "capture"))
+const exchangeObservationFiles = readdirSync(join(sourceRoot, "features", "capture"))
   .filter(
     (name) =>
-      /^socket-.*\.(?:ts|tsx)$/.test(name) &&
+      /^exchange-observation-.*\.(?:ts|tsx)$/.test(name) &&
       !/\.(?:test|spec)\.(?:ts|tsx)$/.test(name),
   );
-const socketCaptureSource = socketCaptureFiles
+const exchangeObservationSource = exchangeObservationFiles
   .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
   .join("\n");
 for (const contract of [
-  "commands.socketCaptureQuery",
-  "commands.socketCaptureGetDetail",
-  "commands.socketCaptureClear(targetWorkspaceId, true)",
+  "commands.exchangeObservationQuery",
+  "commands.exchangeObservationGet",
+  "commands.exchangeObservationClear(targetWorkspaceId, true)",
+]) {
+  if (!exchangeObservationSource.includes(contract)) {
+    failures.push(
+      `src/features/capture/exchange-observation-*: 缺少 Exchange observation 契约 ${contract}`,
+    );
+  }
+}
+const protocolSafeDisplayPath = "src/features/shared/protocol-safe-display.tsx";
+const protocolSafeDisplaySource = readFileSync(join(root, protocolSafeDisplayPath), "utf8");
+const sharedFeatureDirectory = join(sourceRoot, "features", "shared");
+for (const name of readdirSync(sharedFeatureDirectory)) {
+  if (!/\.(?:ts|tsx)$/.test(name) || isTestArtifact(name)) continue;
+  const source = readFileSync(join(sharedFeatureDirectory, name), "utf8");
+  if (/from\s+["'](?:@\/features\/(?!shared\/)|\.\.\/)/.test(source)) {
+    failures.push(
+      `src/features/shared/${name}: shared 组件不得反向依赖具体 feature`,
+    );
+  }
+}
+for (const contract of [
   'sandbox=""',
   'referrerPolicy="no-referrer"',
   "default-src 'none'",
   "connect-src 'none'",
   "frame-src 'none'",
 ]) {
-  if (!socketCaptureSource.includes(contract)) {
+  if (!protocolSafeDisplaySource.includes(contract)) {
     failures.push(
-      `src/features/capture/socket-*: 缺少 Socket 抓包或安全 Display 契约 ${contract}`,
+      `${protocolSafeDisplayPath}: 缺少安全 Display 契约 ${contract}`,
     );
   }
 }
-if (/dangerouslySetInnerHTML/.test(socketCaptureSource)) {
+if (/dangerouslySetInnerHTML/.test(protocolSafeDisplaySource)) {
   failures.push(
-    "src/features/capture/socket-*: 不可信 Display 禁止注入应用 DOM，必须使用无能力 sandbox iframe",
+    `${protocolSafeDisplayPath}: 不可信 Display 禁止注入应用 DOM，必须使用无能力 sandbox iframe`,
   );
 }
-if (/allow-(?:scripts|same-origin|forms|popups|top-navigation|downloads)/.test(socketCaptureSource)) {
+if (/allow-(?:scripts|same-origin|forms|popups|top-navigation|downloads)/.test(protocolSafeDisplaySource)) {
   failures.push(
-    "src/features/capture/socket-*: Display sandbox 禁止获得脚本、同源、表单、弹窗、顶层导航或下载能力",
+    `${protocolSafeDisplayPath}: Display sandbox 禁止获得脚本、同源、表单、弹窗、顶层导航或下载能力`,
   );
 }
-const socketCaptureUiFiles = socketCaptureFiles
-  .filter((name) => name !== "socket-safe-display.tsx");
-const socketCaptureUiSource = socketCaptureUiFiles
+const exchangeObservationUiFiles = exchangeObservationFiles
+  .filter((name) => name !== "exchange-observation-test-fixture.ts");
+const exchangeObservationUiSource = exchangeObservationUiFiles
   .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
   .join("\n");
-const socketCaptureDisplaySource = socketCaptureUiFiles
-  .filter((name) => name !== "socket-capture-model.ts")
-  .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
-  .join("\n");
-const socketCaptureModelSource = readFileSync(
-  join(sourceRoot, "features", "capture", "socket-capture-model.ts"),
-  "utf8",
-);
-if (/\.headers\b|\.http_status\b|\.target\b|JSONPath|HTTP 状态码|Cookie/.test(socketCaptureUiSource)
-  || /\.method\b/.test(socketCaptureDisplaySource)
-  || !socketCaptureModelSource.includes("isExternalPackageCallDiagnostic")
-  || !socketCaptureModelSource.includes("isText(value.method)")) {
+if (/\.headers\b|\.http_status\b|\.target\b|JSONPath|HTTP 状态码|Cookie/.test(exchangeObservationUiSource)) {
   failures.push(
-    "src/features/capture/socket-*: 禁止消费 HTTP Header/Cookie/Status/Method/Target/JSONPath；外部 RPC method 仅允许在 strict 诊断模型中验证",
+    "src/features/capture/exchange-observation-*: 禁止消费 HTTP Header/Cookie/Status/Target/JSONPath",
   );
 }
 

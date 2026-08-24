@@ -1,211 +1,226 @@
-# Android VPN 与透明代理路由
+# Android VPN、TUN 与透明路由
 
-本文说明 Intercept Proxy 如何在不修改业务 App URL、Host 和端口的前提下，只接管指定 Android 应用的网络，并把目标连接透明转发到桌面 Listener；同时说明弱网注入、ADB reverse、运行指纹和 fail-open 的职责边界。
+本文说明桌面端、ADB、Android Companion、VpnService、JNI Rust 数据面和桌面 Listener 如何协作，
+在不修改目标 App URL/Host/端口的情况下转发指定应用流量，并可独立注入弱网。
 
 ## 1. 总体链路
 
-业务 App 仍访问原始 Server。Android Companion 通过 `VpnService` 只接管用户选中的应用，Rust 数据面从 TUN 读取连接后分别判断“去哪里”和“是否施加弱网”。
-
 ```text
-目标应用
-  -> Android VpnService allowlist
+目标 App
+  -> VpnService allowlist
   -> TUN
-  -> JNI / Rust DataPlane
-  -> FailOpenEngine
-  -> tun2proxy
+  -> Kotlin 持有主 fd / JNI 把 dup fd 交给 Rust
+  -> Rust 弱网双向 pump
+  -> tun2proxy（Virtual DNS）
   -> 进程内 SOCKS5
-  -> 命中 proxy_routes：ADB reverse 或 LAN 端点 -> 桌面 Listener
-  -> 未命中 proxy_routes：protect(fd) -> 原始目标
+       ├─ 命中 ProxyRouteTable -> ADB reverse 或 LAN -> 桌面 Listener
+       └─ 未命中 -> VpnService.protect(fd) -> 原始 Server
 ```
 
-非目标应用、Android 系统流量、ADB 和 Companion 自身不进入该 VPN。
+非目标 App 不进入 TUN。Companion 自身禁止加入目标列表；所有对外 Socket 必须先 `protect(fd)`，
+否则会再次进入自己的 VPN 形成递归。
 
-## 2. 控制面与数据面分离
+## 2. 三个职责边界
 
-### 2.1 桌面控制面
+### 2.1 桌面 Application/Infrastructure
 
 桌面端负责：
 
-1. 选择设备和目标应用；
-2. 校验 Profile、Workspace 与 Listener；
-3. 把可移植的 `proxy_routes` 解析成当次运行端点；
-4. 建立 ADB forward/reverse；
-5. 通过版本化、长度前缀 JSON 协议发送 `start`、`apply`、`stop`；
-6. 持续核对设备回报的状态与运行指纹。
+- 选择设备、Workspace、Profile 和 Listener；
+- 根据当前设备包清单校验目标应用和 UID；
+- 把可移植 `proxy_routes` 解析成当次运行端点；
+- 建立/清理 ADB forward 和 reverse；
+- 通过版本化控制协议发送 start/apply/stop/status；
+- 持久化 runtime owner，并核对运行指纹。
 
-控制通道使用：
-
-```text
-adb forward tcp:<临时端口> localabstract:intercept_proxy_vpn
-```
-
-Companion 的 LocalSocket 服务只接受 `shell` 或 `root` peer UID。Activity 被唤醒仅表示命令已送达，不能作为 VPN 已运行的证据。
-
-### 2.2 Android 数据面
+### 2.2 Kotlin Companion
 
 Kotlin 只负责 Android 平台边界：
 
-- `VpnService` 生命周期和授权；
+- VPN 授权、前台 Service 和通知；
 - `addAllowedApplication()`；
-- 创建、关闭和移交 TUN fd；
-- 前台通知；
-- JNI 调用和 socket `protect()`。
+- TUN 建立、复用、关闭和 fd 所有权；
+- LocalAbstractSocket 控制服务；
+- JNI 启停与 `VpnService.protect()`；
+- 原生故障回调后在主线程关闭 TUN。
 
-Rust 负责：
+### 2.3 Rust Android 数据面
 
-- Profile 与运行配置校验；
-- TCP/UDP 转发；
-- 透明代理路由匹配；
-- 弱网调度；
-- 运行统计、故障和状态。
+`android-engine` 负责 Profile/运行路由校验、弱网决策、TUN pump、tun2proxy、SOCKS5 路由和统计。
+Kotlin 不复制弱网或透明路由语义。
 
-Kotlin 不维护第二套规则语义，避免桌面 Rust 与 Android 实现产生漂移。
+## 3. Profile 与启动校验
 
-## 3. 只接管指定应用
+Workspace 保存可移植 `AndroidNetworkProfile`：
 
-Companion 为 Profile 中的包名调用 `VpnService.Builder.addAllowedApplication()`。启动前 Rust 使用设备当前包清单重新校验：
+- `target_applications`：包名与保存时 UID；
+- `destination_targets`：弱网匹配 IP/CIDR 和可选端口；
+- `proxy_routes`：原始 destination/ports 到 Listener ID；
+- `confirmed_shared_uids`；
+- `auto_resume_after_reboot`；
+- `weak_network`。
 
-- 包必须仍然安装；
-- UID 必须和保存快照一致；
-- shared UID 必须整组选择并确认；
-- Companion 自身不能加入目标列表；
-- 一个 Profile 最多选择 64 个包。
+每次启动使用当前安装清单 fail-closed 校验：
 
-应用签名只用于展示和诊断，不作为启动阻断条件。UID 和 shared UID 才是 Android 路由隔离所依赖的运行事实。
+- 至少一个且最多 64 个目标 App；
+- 包名合法、仍安装且 UID 未变化；
+- Companion 自身未被选择；
+- shared UID 必须整组选择并显式确认；
+- destination/route 数量、CIDR/host、端口和重复项合法；
+- 丢包概率、速率、MTU/MSS、位翻转和第 N 个 TCP flag 参数在范围内。
 
-## 4. `proxy_routes` 与 `destination_targets`
+签名目前用于展示/诊断，不是启动阻断依据；Linux UID 才是 VpnService allowlist 的运行事实。
 
-两者是独立维度。
+## 4. `destination_targets` 与 `proxy_routes`
 
-### 4.1 `proxy_routes` 决定连接去向
+两者互相独立：
 
-每条透明代理路由包含：
+- `destination_targets` 只决定哪些远端流量应用弱网；为空表示目标 App 的全部流量；
+- `proxy_routes` 只决定哪些原目标送到桌面 Listener；未命中保持原目标转发。
 
-- 原始目标域名、单个 IP 或 CIDR；
-- 一个或多个明确端口；
-- 当前 Workspace 中的 Listener ID。
+配置透明路由不会自动扩大弱网覆盖，配置弱网也不会改变连接目标。
 
-启动时桌面端会：
+Workspace 里的 `proxy_routes` 不保存桌面 IP、临时端口或 DNS 结果。桌面启动时生成
+`ProxyRuntimeConfiguration`，每条 resolved route 包含原目标、端口、桌面解析 IP 快照以及当前
+ADB reverse/LAN 入口。
 
-1. 找到被引用的 Listener；
-2. 确认 Listener 已启用且正在运行；
-3. 解析域名的 A/AAAA 地址；
-4. 为 USB 场景分配设备侧临时 reverse 端口；
-5. 生成只属于本次运行的路由表。
+## 5. DNS 与路由匹配
 
-命中的 TCP 连接被送到对应 Listener。未命中连接通过 `VpnService.protect(fd)` 访问原始目标。首版 UDP 不送入 HTTP Listener，而是保持原目标转发。
+TUN 把 DNS 指向本地基准地址，tun2proxy 使用 Virtual/Fake-IP DNS 在设备内回答。后续 SOCKS5
+尽量携带原始域名，`ProxyRouteTable.for_domain()` 可精确命中。
 
-### 4.2 `destination_targets` 决定弱网范围
+域名真实 IP 由桌面启动时解析，并通过 `resolved_original_ips` 下发，用于兼容 App 已缓存 DNS、
+直接连接真实 IP 的情况。Android 启动阶段不会依赖设备物理网络再次解析原域名。
 
-`destination_targets` 只决定哪些连接应用延迟、丢包、限速、乱序等弱网：
+数值 IP 的匹配顺序是：
 
-- 为空：目标应用的全部远端连接应用弱网；
-- 非空：仅匹配的地址和端口应用弱网；
-- 未命中：正常转发，不注入弱网。
+1. IP/CIDR；
+2. 桌面下发的域名解析 IP 快照；
+3. 若同一端口只有唯一一条域名路由，可按端口补偿匹配；
+4. 同端口多条域名路由时不猜测，保持未命中。
 
-配置透明代理不会自动扩大弱网覆盖范围，配置弱网也不会改变连接目标。
+运行路由必须与 Profile 中 Listener/destination/ports 集合完全一致，否则数据面拒绝启动。
 
-## 5. TUN 启动步骤
+## 6. TUN 和 Rust 数据面启动
 
-`InterceptVpnService` 的启动顺序是：
+`InterceptVpnService` 的关键顺序：
 
-1. 接收 `ACTION_START`；
-2. 校验 generation，拒绝 stop 之后迟到的旧启动请求；
-3. 解析 Profile 与 proxy runtime JSON；
-4. 调用 Rust 校验 Profile 和设备包清单；
-5. 确认 VPN 授权有效；
-6. 根据目标 UID 和 MTU 判断复用或重建 TUN；
-7. 复制 TUN fd，`detachFd()` 后交给 Rust；
-8. Rust 启动 `DataPlaneHandle`；
-9. 数据面就绪后才发布 `running`。
+1. generation 校验，拒绝晚到的旧 start；
+2. 解析 Profile、运行路由并读取当前包清单；
+3. Rust 启动前校验；
+4. 确认 VPN 授权；
+5. 目标包集合和 MTU 未变时可复用 TUN，否则先关闭旧 TUN；
+6. Builder 配置 IPv4/IPv6 地址、全路由、Virtual DNS 和 allowlist；
+7. Kotlin 原子持有主 TUN fd，并复制 fd 给 Rust；
+8. Rust 创建弱网桥接 datagram、SOCKS5 和 tun2proxy 任务；
+9. 所有核心任务至少被 poll 且无早期失败后报告 ready；
+10. Companion 发布带指纹的 Running。
 
-Rust 数据面内部顺序：
+四个核心任务为 upload pump、download pump、SOCKS5 server 和 tun2proxy。任一异常退出都会通知
+Kotlin fail-open。
 
-```text
-TUN fd
-  -> ManagedTunFile
-  -> TUN 双向 pump
-  -> FailOpenEngine
-  -> tun2proxy
-  -> SOCKS5
-  -> ProxyRouteTable
-  -> SocketProtector.protect(fd)
-```
+## 7. ADB 控制与数据路由
 
-对外 socket 必须先 `protect(fd)`，否则 Companion 发出的连接会再次进入自身 VPN，形成递归。
+### 7.1 控制通道：adb forward
 
-## 6. ADB reverse 两阶段切换
-
-USB 场景中，设备通过如下映射访问桌面 Listener：
+桌面建立：
 
 ```text
-设备 127.0.0.1:<device_port> -> 桌面 127.0.0.1:<listener_port>
+adb forward tcp:<desktop-temporary-port> localabstract:intercept_proxy_vpn
 ```
 
-为避免应用修改过程中撤销仍可能被设备使用的端口，桌面端采用两阶段切换。
+控制帧是 4 字节大端长度 + JSON，协议版本为 1，最大 1 MiB，request/response 必须匹配 UUID。
+操作白名单包含 profile、start/apply/stop/emergency_restore/status。设备 LocalSocket 服务仅接受
+shell/root peer UID。
 
-### 6.1 Prepare
+Activity 救援通道只能作为授权/恢复入口；“Intent 已送达”不等于 VPN 已运行。
 
-1. 锁定设备 serial；
-2. 读取旧 reverse ownership；
-3. 先解析全部域名；
-4. 分配不冲突的设备端口；
-5. 创建新 reverse；
-6. 生成 proxy runtime 和运行指纹；
-7. 记录 prepared facts。
+### 7.2 数据通道：adb reverse
 
-准备失败时清理本轮新映射；清理失败的端口仍保留 ownership，供后续停止或紧急恢复继续处理。
+USB 模式为每条 Listener 路由建立：
 
-### 6.2 Commit、Rollback 与 Uncertain
+```text
+设备 127.0.0.1:<device-port>
+  -> adb reverse
+  -> 桌面 127.0.0.1:<listener-port>
+```
 
-- 设备进入匹配本次指纹的 `Running`：提交新映射，再清理旧映射；
-- 设备明确拒绝且尚未接受切换：回滚新映射；
-- 设备已接受但桌面超时、无法确认最终状态：同时保留新旧映射，标记为不确定态并返回可重试错误。
+LAN 模式使用当前可达桌面地址和 Listener 端口，不创建 reverse。桌面会检查 Listener 正在运行、
+bind 地址、allowed client CIDR 和端点健康。
 
-不确定态不能立即删除新映射，否则设备可能在桌面超时后才完成切换，并连接到已被撤销的端口。
+## 8. ADB reverse 两阶段更新
 
-## 7. 运行指纹
+更新不能先删除旧映射。当前流程是：
 
-桌面端和 Companion 共同核对：
+### Prepare
 
-- `profile_fingerprint`：稳定 Profile JSON 的指纹；
-- `route_fingerprint`：实际运行路由、临时 host/port 和解析结果的指纹；
-- `route_count`：透明代理路由数量。
+1. 串行化同一设备网络操作；
+2. 读取并持久化旧 runtime owner；
+3. 解析全部目标与 Listener；
+4. 分配不冲突设备端口并建立新 reverse；
+5. 生成运行路由和 profile/route fingerprint；
+6. 把 owner 标记为 cleanup-required/准备中。
 
-只有 state、Profile ID、两个指纹和 route count 全部匹配，桌面端才把状态视为当前方案的已验证 `Running`。
+### Commit / Rollback / Uncertain
 
-## 8. 启动、应用修改、停止与紧急恢复
+- 设备确认匹配指纹的 Running：提交新 owner，再清理旧映射；
+- 设备明确拒绝且未接受：回滚新映射；
+- 命令已可能被接受但桌面超时或断联：同时保留新旧映射，标记 Uncertain；
+- 清理失败：保留 ownership 和 CleanupRequired/StopFailed，后续恢复继续处理。
 
-### 8.1 启动和应用修改
+不确定态不能立即删除新端口，否则设备可能稍后完成切换并连接到已撤销映射。
 
-Application 层先持有 mutation gate，防止 Workspace、Listener 或 Profile 在操作中并发变化；ADB adapter 再用 network-operation 锁串行化设备网络变更。然后依次执行校验、prepare、发送命令、确认 `Running` 和 commit/rollback/retain。
+## 9. 运行指纹与 owner
 
-只改弱网参数且目标 UID、MTU 不变时可以复用 TUN，但 Rust 数据面仍会重启；启动失败则进入 fail-open。
+桌面与 Companion 共同核对：
 
-### 8.2 停止
+- profile ID；
+- `profile_fingerprint`；
+- `route_fingerprint`；
+- `route_count`；
+- 设备 serial 和当前 generation/epoch。
 
-停止会推进 generation、请求 Companion 关闭 TUN，并且无论控制请求成功与否都尝试清理当前 reverse ownership。控制错误和清理错误会合并返回，避免隐藏残留资源。
+只有状态和这些事实匹配才视为 verified Running。
 
-### 8.3 紧急恢复
+SQLite 的 `android_runtime_owner` 保存模式（device-only/LAN/ADB reverse）、Profile、状态、来源、
+reverse ports、runtime endpoints 和 transition reason。进程重启或设备重连时依据它继续清理/恢复，
+而不是猜测 ADB 当前端口属于哪个运行实例。
 
-紧急恢复通过 ADB force-stop Companion，利用进程退出关闭 TUN fd，再清理所有已知 reverse 端口。它用于控制 socket 不可信或普通 stop 无法完成时优先恢复设备网络。
+## 10. Fail-open 与停止顺序
 
-## 9. Fail-open
+Android VPN 不是 kill switch。Profile 无效、授权失效、JNI/原生数据面异常、运行指纹不一致、TUN
+任务退出或外部 stop 超时都优先关闭 Kotlin 持有的主 TUN，使 Android 立即撤销目标 UID 路由，然后
+再停止 Rust 副本和后台任务。
 
-系统不是 kill switch。Profile 无效、授权失效、TUN/JNI/Rust/SOCKS5 异常、运行指纹不一致或原生数据面退出时，Companion 会关闭 TUN，让目标应用恢复系统网络。
+停止顺序：
 
-关闭顺序强调恢复速度：Kotlin 先关闭主 TUN，使 Android 立即撤销 UID 路由；随后 Rust 在有限时间内停止运行时并释放副本。原生线程不能无限阻塞 Android Service 主线程。
+```text
+close main TUN -> clear TUN configuration -> stop native runtime -> unregister receiver -> stop service
+```
 
-含透明代理路由的 Profile 不自动恢复，因为 ADB reverse 和 LAN 端点属于当次运行事实，重启后必须由桌面重新解析并建立。
+控制线程等待 Android 主线程超时时也可原子取得并关闭 TUN。普通 stop 失败时保留 owner；紧急恢复
+可 force-stop Companion 并清理已知 forward/reverse。
 
-## 10. 证据边界
+只有不含透明路由的 Profile 可以保存自动恢复 activation。透明路由依赖当次 ADB reverse/LAN 与
+桌面 DNS 快照，重启后必须由桌面重新 prepare。
 
-验证结论必须分层记录：
+## 11. 弱网数据面
 
-1. 源码事实：协议、状态机、TUN/JNI/Rust 实现；
-2. 单元测试：校验器、路由表、状态迁移和弱网决策；
-3. 模拟器门禁：ADB reverse、本地 upstream、Listener 与 VPN 联动；
-4. 真机网络门禁：指定应用接管、非目标应用隔离、ADB 存活和停止恢复；
-5. 真实业务验收：真实设备、真实证书、真实上游和真实业务响应。
+Rust `FailOpenEngine` 对每个包生成确定性决策，支持延迟、随机/突发丢包、重复、乱序、限速、blackout、
+DNS blackhole、指定 TCP flag 第 N 次丢弃、位翻转和 PMTU/MSS 行为。`destination_targets` 决定是否
+应用这些动作。
 
-Listener 显示运行只证明本地端口已监听；VPN 显示 `Running` 只证明设备进入匹配指纹的运行态。两者都不能单独证明真实业务请求成功。
+无法解析或当前不支持的包形态保持原样通过，并增加未实施/诊断计数；不能因为观测或弱网引擎内部
+错误永久阻断设备网络。统计按方向聚合，shared UID 不伪造成单包名统计。
+
+## 12. 验证分层
+
+1. Rust 单元测试：Profile、CIDR、路由表、Fake-IP/domain/IP 匹配、弱网决策；
+2. Kotlin 单元测试：控制帧、VPN 授权、资源释放顺序、generation、TUN 超时关闭；
+3. Infrastructure 测试：forward/reverse prepare/commit/rollback/uncertain、owner 崩溃恢复；
+4. 模拟器门禁：安装 Companion、授权、ADB control、reverse、Listener、本地 upstream；
+5. 真机门禁：目标 App 被接管、非目标 App 不受影响、ADB 保持可用、stop/fault 恢复网络；
+6. 业务验收：真实 App、真实 Listener/TLS、真实 Server 和完整请求响应。
+
+Listener running、VPN verified Running 和 ADB reverse 存在分别只证明一个局部事实。最终成功必须在
+同一运行 epoch 中看到 App 请求、Proxy 转发、Server 回复、Proxy 返回 App 以及业务端结果。

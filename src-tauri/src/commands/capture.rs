@@ -2,11 +2,12 @@
 
 use std::sync::Arc;
 
+use chrono::Utc;
 use intercept_proxy_application::{
     AppError, BreakpointDecision, BreakpointDetailViewModel, BreakpointDraft, BreakpointId,
     BreakpointSummaryViewModel, BreakpointValidationViewModel, CaptureDetailViewModel,
-    CapturePageViewModel, CaptureQuery, OperationResultViewModel, RuntimeEpoch, SessionId,
-    SocketCaptureDetailViewModel, SocketCaptureId, SocketCapturePageViewModel, SocketCaptureQuery,
+    CapturePageViewModel, CaptureQuery, ExchangeObservationPage, ExchangeObservationQuery,
+    ExchangeObservationRecord, OperationResultViewModel, RuntimeEpoch, SessionId, UiEventPayload,
     WorkspaceId,
 };
 use tauri::State;
@@ -54,48 +55,57 @@ pub async fn capture_clear_view(
         .map_err(command_error)
 }
 
-/// 查询独立的 Socket Frame/LocalExchange 时间线。
-///
-/// 该命令不返回 HTTP start line、Header、status 或 JSONPath；T28 只需消费这一套
-/// 协议中立 DTO，不必从 HTTP 抓包字段推断 Socket 语义。
+/// 查询 tracing UI Layer 与 MCP 共享的连接级 Exchange 时间线。
 #[tauri::command]
 #[specta::specta]
-pub async fn socket_capture_query(
+pub async fn exchange_observation_query(
     state: State<'_, AppState>,
-    query: SocketCaptureQuery,
-) -> CommandResult<SocketCapturePageViewModel> {
-    state
-        .application
-        .socket_capture_query(query)
-        .await
-        .map_err(command_error)
+    query: ExchangeObservationQuery,
+) -> CommandResult<ExchangeObservationPage> {
+    Ok(state.exchange_observations().query(&query))
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn socket_capture_get_detail(
+pub async fn exchange_observation_get(
     state: State<'_, AppState>,
-    capture_id: SocketCaptureId,
-) -> CommandResult<SocketCaptureDetailViewModel> {
+    exchange_id: String,
+) -> CommandResult<ExchangeObservationRecord> {
     state
-        .application
-        .socket_capture_get_detail(capture_id)
-        .await
-        .map_err(command_error)
+        .exchange_observations()
+        .get(&exchange_id)
+        .ok_or_else(|| {
+            command_error(AppError::new(
+                "EXCHANGE_OBSERVATION_NOT_FOUND",
+                "Exchange 运行记录不存在或已被内存淘汰。",
+            ))
+        })
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn socket_capture_clear(
+pub async fn exchange_observation_clear(
     state: State<'_, AppState>,
     workspace_id: WorkspaceId,
     confirmed: bool,
 ) -> CommandResult<OperationResultViewModel> {
-    state
-        .application
-        .socket_capture_clear(workspace_id, confirmed)
-        .await
-        .map_err(command_error)
+    if !confirmed {
+        return Err(command_error(AppError::new(
+            "CONFIRMATION_REQUIRED",
+            "清空 Exchange 运行记录需要确认。",
+        )));
+    }
+    let count = state.exchange_observations().clear_workspace(workspace_id);
+    state.host().events().publish(
+        None,
+        Utc::now(),
+        Some(workspace_id.to_string()),
+        None,
+        UiEventPayload::ExchangeObservationChanged,
+    );
+    Ok(OperationResultViewModel::success(format!(
+        "已清空 {count} 条 Exchange 运行记录。"
+    )))
 }
 
 #[tauri::command]
@@ -176,7 +186,3 @@ pub async fn breakpoint_resolve(
         })?
         .map_err(command_error)
 }
-
-#[cfg(test)]
-#[path = "capture/tests.rs"]
-mod tests;

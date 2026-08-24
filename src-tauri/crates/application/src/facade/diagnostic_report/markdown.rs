@@ -3,9 +3,8 @@
 use std::fmt::Write as _;
 
 use crate::{
-    DIAGNOSTIC_REPORT_MARKDOWN_MAX_CHARS, DIAGNOSTIC_REPORT_MAX_CAPTURES,
-    DIAGNOSTIC_REPORT_MAX_DIAGNOSTICS, DiagnosticReportBundle, HttpBodyProcessing,
-    ListenerDataPlane, SocketPayloadProcessing,
+    DIAGNOSTIC_REPORT_MARKDOWN_MAX_CHARS, DIAGNOSTIC_REPORT_MAX_DIAGNOSTICS,
+    DiagnosticReportBundle, HttpBodyProcessing, ListenerDataPlane, SocketPayloadProcessing,
 };
 
 use super::bound_package;
@@ -21,7 +20,7 @@ pub(super) fn render_markdown(bundle: &DiagnosticReportBundle) -> String {
     );
     let (data_plane, topology, processing, forwarding) = listener_shape(&bundle.listener);
     let mut markdown = format!(
-        "# Intercept Proxy 故障复现报告\n\n生成时间：{}\n\n## 环境\n\n- 产品：{} {}\n- 系统：{} / {}\n- Workspace：{} (`{}`)\n- Listener：{} (`{}`)\n- 监听地址：{}:{}\n- 运行状态：{}\n- 协议包：{}\n- 诊断日志：{} 条（最多 {} 条）\n- Socket 抓包：{} 条（最多 {} 条）\n\n## 复现步骤\n\n",
+        "# Intercept Proxy 故障复现报告\n\n生成时间：{}\n\n## 环境\n\n- 产品：{} {}\n- 系统：{} / {}\n- Workspace：{} (`{}`)\n- Listener：{} (`{}`)\n- 监听地址：{}:{}\n- 运行状态：{}\n- 协议包：{}\n- 诊断日志：{} 条（最多 {} 条）\n\n## 复现步骤\n\n",
         bundle.generated_at.to_rfc3339(),
         bundle.environment.product_name,
         bundle.environment.application_version,
@@ -37,8 +36,6 @@ pub(super) fn render_markdown(bundle: &DiagnosticReportBundle) -> String {
         package,
         bundle.diagnostics.len(),
         DIAGNOSTIC_REPORT_MAX_DIAGNOSTICS,
-        bundle.socket_captures.rows.len(),
-        DIAGNOSTIC_REPORT_MAX_CAPTURES,
     );
     writeln!(markdown, "- 数据平面：{data_plane}").expect("writing to String cannot fail");
     writeln!(markdown, "- 网络拓扑：{topology}").expect("writing to String cannot fail");
@@ -56,30 +53,6 @@ pub(super) fn render_markdown(bundle: &DiagnosticReportBundle) -> String {
             row.level_text,
             row.stage_text,
             row.summary
-        )
-        .expect("writing to String cannot fail");
-    }
-    markdown.push_str("\n## Socket 抓包索引\n\n");
-    for row in &bundle.socket_captures.rows {
-        writeln!(
-            markdown,
-            "- `{}` {} 原始 {} B / 写出 {} B\n",
-            row.capture_id,
-            row.occurred_at.to_rfc3339(),
-            row.origin_size_bytes,
-            row.written_size_bytes
-        )
-        .expect("writing to String cannot fail");
-    }
-    if let Some(detail) = &bundle.capture_detail {
-        let (input, written) = capture_wire_summary(detail);
-        markdown.push_str("\n## 指定 Capture 测试数据\n\n");
-        writeln!(markdown, "- 输入：{} B，Hex 预览 `{}`", input.0, input.1)
-            .expect("writing to String cannot fail");
-        writeln!(
-            markdown,
-            "- 写出：{} B，Hex 预览 `{}`",
-            written.0, written.1
         )
         .expect("writing to String cannot fail");
     }
@@ -144,38 +117,6 @@ fn listener_shape(listener: &crate::ProxyListener) -> (String, String, String, S
             ("Socket".into(), topology, processing, forwarding)
         }
     }
-}
-
-fn capture_wire_summary(
-    detail: &crate::SocketCaptureDetailViewModel,
-) -> ((usize, String), (usize, String)) {
-    use crate::SocketCapturePayload;
-
-    let (input, written) = match &detail.record.payload {
-        SocketCapturePayload::RelayFrame(capture) => (&capture.origin, &capture.written),
-        SocketCapturePayload::LocalExchange(capture) => {
-            (&capture.request_origin, &capture.written_response)
-        }
-        SocketCapturePayload::LocalExchangeFailure(capture) => {
-            (&capture.request_origin, &capture.written_response_prefix)
-        }
-    };
-    (
-        (input.len(), hex_preview(input)),
-        (written.len(), hex_preview(written)),
-    )
-}
-
-fn hex_preview(bytes: &[u8]) -> String {
-    const MAX_PREVIEW_BYTES: usize = 64;
-    let mut preview = String::with_capacity(MAX_PREVIEW_BYTES * 2 + 1);
-    for byte in bytes.iter().take(MAX_PREVIEW_BYTES) {
-        write!(preview, "{byte:02x}").expect("writing to String cannot fail");
-    }
-    if bytes.len() > MAX_PREVIEW_BYTES {
-        preview.push('…');
-    }
-    preview
 }
 
 pub(super) fn bounded_markdown(markdown: String) -> String {

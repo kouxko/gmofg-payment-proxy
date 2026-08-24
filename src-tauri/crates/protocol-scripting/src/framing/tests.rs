@@ -6,9 +6,8 @@ use crate::{
 };
 
 use super::{
-    FrameBuffer, FramingDecision, ProtocolFrameInspection, ProtocolFrameInspector,
-    ProtocolFramingError, ProtocolFramingErrorCode, ProtocolFramingLimit, ProtocolFramingLimits,
-    ProtocolReader, ReaderSegment, framer::SingleDirectionFramer, script::RhaiFrameDecider,
+    ProtocolFrameInspection, ProtocolFrameInspector, ProtocolFramingError,
+    ProtocolFramingErrorCode, ProtocolFramingLimit, ProtocolFramingLimits, ProtocolReader,
 };
 
 const DOCUMENT_SCHEMA: &str = r#"id = "framing-test"
@@ -22,7 +21,6 @@ type = "int"
 "#;
 
 include!("tests/reader_and_limits.rs");
-include!("tests/framer.rs");
 include!("tests/inspector.rs");
 include!("tests/rhai.rs");
 include!("tests/support.rs");

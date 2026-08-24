@@ -184,6 +184,24 @@ pub enum RuleActionKind {
     DisconnectDuringDownstreamWrite,
 }
 
+/// 单个动作在指定 HTTP 阶段中的可用能力。
+///
+/// 前端只渲染这里返回的动作，不再根据动作名称推断请求、响应或 TLS 语义。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct RuleActionCapabilityViewModel {
+    pub kind: RuleActionKind,
+    pub terminal: bool,
+    pub traffic_direction: Option<RuleTrafficDirection>,
+}
+
+/// HTTP 规则编辑器针对一个阶段的完整能力表。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct RuleStageCapabilityViewModel {
+    pub stage: MessageStage,
+    pub match_field_kinds: Vec<RuleMatchFieldKind>,
+    pub actions: Vec<RuleActionCapabilityViewModel>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct RuleByteInputViewModel {
     pub bytes: Vec<u8>,

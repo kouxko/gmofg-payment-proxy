@@ -1,7 +1,8 @@
 use super::{
-    AsyncWriteExt, BodyExt, BoxIo, Bytes, CancellationToken, Duration, ErrorCode, FaultAction,
-    Future, HeaderMap, Incoming, IntentionalWireFault, Message, MessageLimits, ProxyError,
-    RawHeader, Response, ResponseDisposition, Result, StatusCode, StdMutex, WireBody,
+    AsyncWriteExt, BodyExt, BoxIo, Bytes, CancellationToken, CanonicalResponseHead, Duration,
+    ErrorCode, FaultAction, Future, HeaderMap, Incoming, IntentionalWireFault, Message,
+    MessageLimits, ProxyError, Response, ResponseDisposition, Result, StatusCode, StdMutex,
+    WireBody,
 };
 
 pub(super) async fn finish_downstream_write(
@@ -65,7 +66,7 @@ pub(super) fn intentional_fault_or(
 
 pub(super) fn response_from_disposition(
     disposition: ResponseDisposition,
-    canonical_response_head: &StdMutex<Option<Bytes>>,
+    canonical_response_head: &CanonicalResponseHead,
     raw_tail: &StdMutex<Option<Bytes>>,
     intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
     cancellation: &CancellationToken,
@@ -114,6 +115,7 @@ pub(super) fn response_from_disposition(
     let disposition_fault = disposition_fault.or(scheduled_abort).or_else(|| {
         (claimed_length != body.len()).then_some(IntentionalWireFault::IncorrectContentLength)
     });
+    let force_close = disposition_fault.is_some();
     if let Some(fault) = disposition_fault {
         *intentional_wire_fault
             .lock()
@@ -126,17 +128,16 @@ pub(super) fn response_from_disposition(
     } else {
         body
     };
-    message.remove_header("connection");
-    message.headers.push(RawHeader::new(
-        Bytes::from_static(b"Connection"),
-        Bytes::from_static(b"close"),
-    ));
+    if force_close {
+        message.remove_header("connection");
+        message
+            .headers
+            .push(crate::message::RawHeader::new("Connection", "close"));
+    }
     if message.declared_content_length().is_none() {
         message.set_content_length(message.body.len());
     }
-    *canonical_response_head
-        .lock()
-        .expect("canonical HTTP response head mutex poisoned") = Some(message_wire_head(&message)?);
+    canonical_response_head.publish(message_wire_head(&message)?);
     let mut response = Response::builder()
         .status(status)
         .version(http::Version::HTTP_11)

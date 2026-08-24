@@ -1,15 +1,12 @@
 //! 非升级 HTTP/1.1 请求的目标解析、转发与应用管线接入。
 
 use super::{
-    CancellationToken, ConnectionContext, ConnectionTaskScope, DropResponseMode, ErrorCode,
-    ForwardPipelineRuntime, ForwardProxyService, HOST, HeaderValue, HttpTarget, Incoming,
-    ProxyBody, ProxyError, Request, Response, Result, TokioIo, TrafficDirection, Uri,
-    absolute_http_target, absolute_uri_to_origin_form, client_http1, collect_pipeline_body,
-    completion_body, config_error, connect_target, drain_upstream_body, drop_response_mode,
-    finish_pipeline_response, incoming_body, intentional_drop_error, is_websocket_upgrade,
-    prepare_pipeline_request, request_terminal_response, scheduled_body,
-    send_request_then_drop_after_write, spawn_connection_task, strip_hop_by_hop_headers,
-    timeout_or_cancel, traffic_schedule,
+    CancellationToken, ConnectionContext, ConnectionTaskScope, ErrorCode, ForwardPipelineRuntime,
+    ForwardProxyService, HOST, HeaderValue, HttpTarget, Incoming, ProxyBody, ProxyError, Request,
+    Response, Result, TokioIo, Uri, absolute_http_target, absolute_uri_to_origin_form,
+    client_http1, collect_pipeline_body, config_error, connect_target, incoming_body,
+    is_websocket_upgrade, spawn_connection_task, strip_hop_by_hop_headers, text_response,
+    timeout_or_cancel,
 };
 
 impl ForwardProxyService {
@@ -19,11 +16,13 @@ impl ForwardProxyService {
         context: Option<&ConnectionContext>,
         cancellation: CancellationToken,
         task_scope: &ConnectionTaskScope,
+        exchange: &super::SharedForwardExchange,
     ) -> Result<Response<ProxyBody>> {
         if is_websocket_upgrade(&request) {
-            return self
-                .forward_websocket(request, context, cancellation, task_scope)
-                .await;
+            return Ok(text_response(
+                http::StatusCode::NOT_IMPLEMENTED,
+                "HTTP Upgrade is not supported by the Exchange runtime",
+            ));
         }
         let (mut parts, body) = request.into_parts();
         let captured_uri = parts.uri.clone();
@@ -50,6 +49,7 @@ impl ForwardProxyService {
                     context,
                     &cancellation,
                     task_scope,
+                    exchange,
                 )
                 .await;
         }
@@ -105,7 +105,7 @@ impl ForwardProxyService {
     #[allow(clippy::too_many_arguments)]
     async fn forward_http_through_pipeline(
         &self,
-        mut parts: http::request::Parts,
+        parts: http::request::Parts,
         body: Incoming,
         captured_uri: Uri,
         target: HttpTarget,
@@ -113,6 +113,7 @@ impl ForwardProxyService {
         context: &ConnectionContext,
         cancellation: &CancellationToken,
         task_scope: &ConnectionTaskScope,
+        connection_exchange: &super::SharedForwardExchange,
     ) -> Result<Response<ProxyBody>> {
         let body = collect_pipeline_body(
             body,
@@ -121,113 +122,55 @@ impl ForwardProxyService {
             self.config.read_timeout,
         )
         .await?;
-        let (message, actions) = prepare_pipeline_request(
-            pipeline,
-            context,
-            &parts.method,
-            &captured_uri,
-            &parts.headers,
-            body,
-            cancellation,
-        )
-        .await?;
-        if let Some(response) = request_terminal_response(&actions, cancellation)? {
-            return Ok(response);
-        }
-        parts.headers = message.header_map()?;
-        strip_hop_by_hop_headers(&mut parts.headers);
-        if !parts.headers.contains_key(HOST) {
-            parts.headers.insert(
-                HOST,
-                HeaderValue::from_str(&target.host_header).map_err(|error| {
-                    config_error(format!("invalid target Host header: {error}"))
-                })?,
-            );
-        }
-        parts.headers.remove(http::header::CONTENT_LENGTH);
-        parts.headers.insert(
-            http::header::CONTENT_LENGTH,
-            HeaderValue::from_str(&message.body.len().to_string())
-                .map_err(|error| config_error(format!("invalid content length: {error}")))?,
-        );
-        let stream = connect_target(
-            &target.connect_authority,
-            self.config.connect_timeout,
-            cancellation,
-        )
-        .await?;
-        let (mut sender, connection) = client_http1::handshake(TokioIo::new(stream))
-            .await
-            .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
-        let upstream_shutdown = CancellationToken::new();
-        let connection_shutdown = upstream_shutdown.clone();
-        spawn_connection_task(
-            task_scope,
-            "forward pipeline origin connection",
-            async move {
-                tokio::select! {
-                    () = connection_shutdown.cancelled() => Ok(()),
-                    result = connection => result.map_err(|error| ProxyError::new(
-                        ErrorCode::Io,
-                        format!("forward pipeline origin connection ended: {error}"),
-                    )),
-                }
-            },
-        )?;
-        let schedule = traffic_schedule(&actions, TrafficDirection::Upstream)?;
-        let effective_timeout = self
-            .config
-            .write_timeout
-            .saturating_add(self.config.read_timeout)
-            .saturating_add(schedule.estimated_delay(message.body.len()));
-        let mode = drop_response_mode(&actions);
-        let body = scheduled_body(
-            message.body.clone(),
-            message.body.len(),
-            schedule,
-            cancellation,
-        );
-        let (body, body_written) = if mode == Some(DropResponseMode::AfterRequestWrite) {
-            let (body, completed) = completion_body(body);
-            (body, Some(completed))
-        } else {
-            (body, None)
+        let message =
+            crate::message::Message::request(&parts.method, &captured_uri, &parts.headers, body);
+        message.validate(pipeline.limits)?;
+        let endpoint = target.connect_authority.clone();
+        let exchange = {
+            let mut connection_exchange = connection_exchange.lock().await;
+            if let Some(connection_exchange) = connection_exchange.as_ref() {
+                std::sync::Arc::clone(&connection_exchange.exchange)
+            } else {
+                let connector = super::ForwardHttpExchangeConnector {
+                    connect_authority: target.connect_authority,
+                    host_header: target.host_header,
+                    connect_timeout: self.config.connect_timeout,
+                    write_timeout: self.config.write_timeout,
+                    read_timeout: self.config.read_timeout,
+                    limits: pipeline.limits,
+                    task_scope: task_scope.clone(),
+                };
+                let exchange = std::sync::Arc::new(
+                    crate::http::HttpExchangeRuntime {
+                        context: context.clone(),
+                        ports: std::sync::Arc::clone(&pipeline.ports),
+                        upstream: std::sync::Arc::new(connector),
+                        clock: std::sync::Arc::new(crate::SystemClock),
+                        cancellation: cancellation.clone(),
+                        informational: None,
+                        capabilities: std::sync::Arc::clone(&pipeline.capabilities),
+                        endpoint: endpoint.clone(),
+                    }
+                    .start(task_scope)?,
+                );
+                *connection_exchange = Some(super::ForwardConnectionExchange {
+                    exchange: std::sync::Arc::clone(&exchange),
+                });
+                exchange
+            }
         };
-        let outgoing = Request::from_parts(parts, body);
-        if let Some(body_written) = body_written {
-            return send_request_then_drop_after_write(
-                &mut sender,
-                outgoing,
-                body_written,
-                &upstream_shutdown,
-                cancellation,
-                effective_timeout,
-                "forward",
+        let output = exchange
+            .exchange(
+                endpoint,
+                crate::http::HttpExchangeRequest {
+                    method: parts.method,
+                    uri: parts.uri,
+                    message,
+                },
             )
-            .await
-            .map(|_| unreachable!("drop helper only returns errors"));
-        }
-        let response = timeout_or_cancel(
-            effective_timeout,
-            cancellation,
-            sender.send_request(outgoing),
-            ErrorCode::UpstreamReadTimeout,
+            .await?;
+        super::response_from_pipeline_disposition(output.disposition, cancellation)?.ok_or_else(
+            || ProxyError::new(ErrorCode::ClientDisconnected, "forward response dropped"),
         )
-        .await?
-        .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
-        if mode == Some(DropResponseMode::AfterUpstreamBody) {
-            drain_upstream_body(response.into_body(), cancellation, self.config.read_timeout)
-                .await?;
-            upstream_shutdown.cancel();
-            return Err(intentional_drop_error("forward"));
-        }
-        finish_pipeline_response(
-            pipeline,
-            context,
-            response,
-            cancellation,
-            self.config.read_timeout,
-        )
-        .await
     }
 }
