@@ -41,6 +41,12 @@ impl ReadOnlyMcpHandler {
                 "message": format!("tool arguments exceed {MAX_TOOL_INPUT_BYTES} logical JSON bytes")
             }));
         }
+        if let Err(message) = catalog::validate_top_level_arguments(name, &arguments) {
+            return CallToolResult::structured_error(json!({
+                "code": "INVALID_ARGUMENTS",
+                "message": message
+            }));
+        }
         match timeout(TOOL_DEADLINE, self.backend.call_tool(name, arguments)).await {
             Ok(Ok(value)) => bounded_result(value, false),
             Ok(Err(failure)) => bounded_result(failure.as_value(), true),

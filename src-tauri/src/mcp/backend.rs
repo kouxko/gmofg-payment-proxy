@@ -86,6 +86,46 @@ impl From<AppError> for ToolFailure {
 
 pub type ToolResult = Result<Value, ToolFailure>;
 
+pub(super) const DISPATCHED_TOOL_NAMES: &[&str] = &[
+    "application_snapshot",
+    "application_log_query",
+    "application_log_get",
+    "exchange_observation_query",
+    "exchange_observation_get",
+    "reproduction_report",
+    "settings_get",
+    "workspace_list",
+    "workspace_get",
+    "entry_overview",
+    "entry_status_list",
+    "diagnostics_query",
+    "diagnose_recent_failures",
+    "external_package_service_status",
+    "android_adb_get",
+    "android_device_list",
+    "android_package_list",
+    "android_package_get",
+    "android_profile_list",
+    "android_profile_get",
+    "android_network_status",
+    "android_runtime_owner",
+    "android_network_endpoints",
+    "certificate_overview",
+    "workspace_certificate_overview",
+    "http_capture_query",
+    "http_capture_get",
+    "breakpoint_query",
+    "breakpoint_get",
+    "http_rule_list",
+    "http_rule_get",
+    "protocol_rule_list",
+    "workspace_protocol_rule_list",
+    "protocol_package_list",
+    "protocol_package_catalog",
+    "protocol_package_detail",
+    "protocol_package_usage",
+];
+
 #[async_trait]
 pub trait ReadOnlyMcpBackend: Debug + Send + Sync {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult;
@@ -202,6 +242,9 @@ impl ApplicationBackend {
 #[async_trait]
 impl ReadOnlyMcpBackend for ApplicationBackend {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult {
+        if !DISPATCHED_TOOL_NAMES.contains(&name) {
+            return unknown_tool(name);
+        }
         match name {
             "application_snapshot"
             | "application_log_query"

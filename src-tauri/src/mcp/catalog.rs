@@ -1,7 +1,13 @@
 //! Static read-only MCP tool catalog.
 
+mod contract;
+
 use rmcp::model::{Tool, ToolAnnotations};
 use serde_json::{Map, Value, json};
+
+pub(super) fn validate_top_level_arguments(name: &str, arguments: &Value) -> Result<(), String> {
+    contract::validate_top_level_arguments(name, arguments)
+}
 
 pub fn tools() -> Vec<Tool> {
     let mut tools = Vec::new();
@@ -65,7 +71,7 @@ fn general_tools() -> Vec<Tool> {
         tool(
             "reproduction_report",
             "Reproduction report",
-            "Build one bounded diagnostic bundle and copyable Markdown report for an exact Workspace and Listener, optionally anchored to one Socket capture.",
+            "Build one bounded diagnostic bundle and copyable Markdown report for an exact Workspace and Listener. Exchange observations and HTTP captures are queried separately.",
             reproduction_report_schema(),
         ),
         tool(
@@ -292,7 +298,8 @@ fn tool(name: &str, title: &str, description: &str, input_schema: Value) -> Tool
         panic!("static MCP tool input schema must be an object");
     };
     let mut tool = Tool::new(name.to_owned(), description.to_owned(), input_schema)
-        .with_title(title.to_owned());
+        .with_title(title.to_owned())
+        .with_raw_output_schema(contract::output_schema(name));
     tool.annotations = Some(
         ToolAnnotations::new()
             .read_only(true)
@@ -332,9 +339,10 @@ fn package_schema() -> Value {
 }
 
 fn object_schema(properties: Value, required: &[&str]) -> Value {
-    let Value::Object(properties) = properties else {
+    let Value::Object(mut properties) = properties else {
         panic!("static MCP schema properties must be an object");
     };
+    contract::describe_properties(&mut properties);
     json!({
         "type": "object",
         "additionalProperties": false,
@@ -425,3 +433,6 @@ fn http_capture_schema() -> Value {
     ]));
     object_schema(Value::Object(properties), &[])
 }
+
+#[cfg(test)]
+mod tests;
