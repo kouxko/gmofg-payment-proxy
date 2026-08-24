@@ -115,9 +115,36 @@ fn resources_include_authoring_manifest_and_official_zip() {
             && resource.mime_type.as_deref() == Some("text/markdown")
     }));
     assert!(resources.iter().any(|resource| {
+        resource.uri == resources::TOOL_REFERENCE_URI
+            && resource.mime_type.as_deref() == Some("text/markdown")
+    }));
+    assert!(resources.iter().any(|resource| {
         resource.uri == resources::ISO8583_ARCHIVE_URI
             && resource.mime_type.as_deref() == Some("application/zip")
     }));
+}
+
+#[test]
+fn tool_reference_names_every_public_tool_and_explains_the_result_contract() {
+    let (_, reference) = resources::text(resources::TOOL_REFERENCE_URI).expect("tool reference");
+    for tool in protocol::tools() {
+        assert!(
+            reference.contains(tool.name.as_ref()),
+            "reference is missing {}",
+            tool.name
+        );
+    }
+    for required in [
+        "成功结果",
+        "错误结果",
+        "additionalProperties",
+        "ExchangeObservationStore",
+    ] {
+        assert!(
+            reference.contains(required),
+            "reference is missing {required}"
+        );
+    }
 }
 
 #[test]
@@ -219,6 +246,39 @@ async fn current_protocol_discovery_and_tool_call_use_stateless_metadata() {
     assert_eq!(
         called["result"]["structuredContent"]["tool"],
         "application_snapshot"
+    );
+    server.shutdown().await;
+}
+
+#[tokio::test]
+async fn closed_input_schema_is_enforced_before_backend_execution() {
+    let server = start_test_server(backend()).await.expect("bind MCP server");
+    let response = post(
+        server.local_addr(),
+        "tools/call",
+        Some("application_snapshot"),
+        json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {
+                "_meta": request_meta(),
+                "name": "application_snapshot",
+                "arguments": {"unexpected": true}
+            }
+        }),
+    )
+    .await;
+
+    assert_eq!(response["result"]["isError"], true, "{response}");
+    assert_eq!(
+        response["result"]["structuredContent"]["code"],
+        "INVALID_ARGUMENTS"
+    );
+    assert!(
+        response["result"]["structuredContent"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("unexpected"))
     );
     server.shutdown().await;
 }

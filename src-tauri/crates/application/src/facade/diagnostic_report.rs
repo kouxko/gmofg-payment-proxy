@@ -14,7 +14,7 @@ mod markdown;
 use markdown::{bounded_markdown, render_markdown};
 
 impl Application {
-    /// 聚合一个精确 Listener 的配置、运行态、日志、抓包和协议包现场。
+    /// 聚合一个精确 Listener 的配置、运行态、结构化诊断和协议包现场。
     ///
     /// Workspace 或 Listener 身份错误会直接失败；其他只读观测失败会写入
     /// `collection_errors`，确保发生部分故障时仍能导出已有复现证据。

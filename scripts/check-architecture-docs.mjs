@@ -42,6 +42,14 @@ const rootDocuments = [
   "docs/testing/release-validation-matrix.md",
 ];
 
+const mcpDocuments = [
+  "app-integration-guide.md",
+  "diagnostic-architecture.md",
+  "external-package-integration-guide.md",
+  "certificate-concepts.md",
+  "tool-reference.md",
+];
+
 const forbiddenCurrentDocuments = [
   "data-planes.md",
   "exchange-flow-clean-slate.md",
@@ -171,6 +179,46 @@ for (const relative of rootDocuments) {
   }
 }
 
+const mcpRoot = path.join(docsRoot, "mcp");
+const mcpSources = new Map();
+for (const name of mcpDocuments) {
+  const absolute = path.join(mcpRoot, name);
+  if (!(await exists(absolute))) {
+    failures.push(`docs/mcp/${name}: required MCP document is missing`);
+    continue;
+  }
+  const source = await readFile(absolute, "utf8");
+  mcpSources.set(name, source);
+  const lineCount = source.split(/\r?\n/u).length;
+  if (lineCount > 500) failures.push(`docs/mcp/${name}: ${lineCount} lines exceeds the 500 line limit`);
+  if (!source.startsWith("# ")) failures.push(`docs/mcp/${name}: missing top-level title`);
+  for (const linked of relativeMarkdownLinks(source)) {
+    const target = path.resolve(path.dirname(absolute), linked);
+    if (!(await exists(target))) failures.push(`docs/mcp/${name}: broken relative link ${linked}`);
+  }
+}
+
+const catalogSource = await readFile(
+  path.join(repositoryRoot, "src-tauri/src/mcp/catalog.rs"),
+  "utf8",
+);
+const toolNames = [...catalogSource.matchAll(/\btool\(\s*\n?\s*"([a-z0-9_]+)"/gu)]
+  .map((match) => match[1]);
+const toolReference = mcpSources.get("tool-reference.md") ?? "";
+for (const toolName of toolNames) {
+  if (!toolReference.includes(`\`${toolName}\``)) {
+    failures.push(`docs/mcp/tool-reference.md: missing public tool ${toolName}`);
+  }
+}
+for (const required of ["成功结果", "错误结果", "additionalProperties", "ExchangeObservationStore"]) {
+  if (!toolReference.includes(required)) {
+    failures.push(`docs/mcp/tool-reference.md: missing contract term ${required}`);
+  }
+}
+if (toolNames.length !== 37 || new Set(toolNames).size !== toolNames.length) {
+  failures.push(`src-tauri/src/mcp/catalog.rs: expected 37 unique documented tools, found ${toolNames.length}`);
+}
+
 for (const name of currentDocuments) {
   const absolute = path.join(architectureRoot, name);
   if (!(await exists(absolute))) {
@@ -234,6 +282,6 @@ if (failures.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Architecture documentation gate passed (${currentDocuments.length} current documents, ${decisions.size} ADRs).`,
+    `Architecture documentation gate passed (${currentDocuments.length} current documents, ${decisions.size} ADRs, ${mcpDocuments.length} MCP documents).`,
   );
 }

@@ -154,9 +154,10 @@ MCP 输入逻辑预算为 256 KiB，输出预算为 8 MiB，单工具截止时�
 
 ## 9. 复现报告
 
-复现报告把同一范围内的配置快照、Listener 状态、规则/协议包身份、结构化诊断、运行日志和可选
-Exchange 证据组合成可复制 Markdown。它用于共享“当时观察到了什么”，不是数据库备份，也不保证
-包含已被容量策略淘汰的历史。
+复现报告把同一范围内的配置快照、Listener 状态、规则/协议包身份、结构化诊断和运行日志组合成
+可复制 Markdown。它不读取 `ExchangeObservationStore`，也不聚合 HTTP 抓包；线路证据必须通过
+`exchange_observation_query/get` 或 `http_capture_query/get` 独立查询。报告用于共享“当时观察到了
+什么”，不是数据库备份，也不保证包含已被容量策略淘汰的历史。
 
 报告生成失败不能影响 Listener；部分来源失败应进入 collection errors，而不是丢弃已取得的证据。
 

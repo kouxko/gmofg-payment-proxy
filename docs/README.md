@@ -36,6 +36,7 @@ ADR-006 仅作为决策历史保留；当前实现以 ADR-007 和源码为准。
 
 ## MCP 与外部包
 
+- [MCP 只读工具参考](mcp/tool-reference.md)
 - [应用接入 MCP 指南](mcp/app-integration-guide.md)
 - [诊断架构](mcp/diagnostic-architecture.md)
 - [外部协议包接入](mcp/external-package-integration-guide.md)

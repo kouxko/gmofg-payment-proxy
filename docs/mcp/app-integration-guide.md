@@ -33,12 +33,13 @@
 
 ## AI 应如何给建议
 
-1. 先用 `reproduction_report` 读取精确 Workspace/Listener 的配置、运行状态、转发方式、端点、规则、协议包、抓包索引和复现步骤。
-2. 用 `application_log_query` 按时间、级别、模块、Listener/connection/package ID 或关键字分页读取持久运行日志；关键记录再用 `application_log_get` 获取。
-3. 明确失败发生在 App→代理、代理处理、代理→上游或返回路径。
-4. 给出一个最小修改方案，并补充 1 至 2 个合理替代方案。
-5. 每个方案说明影响范围、风险、回退方法和可观察的验证结果。
-6. 如果证据不足，列出 `has_more`、淘汰范围、采集错误及需要补充的日志/抓包字段，不把猜测写成结论。
+1. 先用 `reproduction_report` 读取精确 Workspace/Listener 的配置、运行状态、转发方式、端点、规则、协议包和复现步骤。
+2. 报告不包含 Exchange observation 或 HTTP 抓包；分别用 `exchange_observation_query/get`、`http_capture_query/get` 补充线路证据。
+3. 用 `application_log_query` 按时间、级别、模块、Listener/connection/package ID 或关键字分页读取持久运行日志；关键记录再用 `application_log_get` 获取。
+4. 明确失败发生在 App→代理、代理处理、代理→上游或返回路径。
+5. 给出一个最小修改方案，并补充 1 至 2 个合理替代方案。
+6. 每个方案说明影响范围、风险、回退方法和可观察的验证结果。
+7. 如果证据不足，列出 `has_more`、淘汰范围、采集错误及需要补充的日志/抓包字段，不把猜测写成结论。
 
 MCP 只提供读取和建议能力。AI 不会修改 App、代理配置、证书、规则、协议包或本机文件。
 桌面用户可在“日志”页选择精确入口并通过原生保存对话框导出同源 Markdown 报告。

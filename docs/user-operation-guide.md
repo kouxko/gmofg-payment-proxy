@@ -257,6 +257,8 @@ Socket 表格一行对应一个 App connection/Exchange。详情按发生顺序�
 
 内嵌 MCP 只绑定 loopback，提供只读应用快照、日志、ExchangeObservation、诊断和复现报告。它不能
 启停 Listener、修改规则、重放交易或写数据库。
+完整的工具参数、结果和错误契约见 [MCP 只读工具参考](mcp/tool-reference.md)。复现报告本身不包含
+ExchangeObservation 或 HTTP 抓包，线路证据需要通过对应查询工具单独获取。
 
 ## 10. 应用数据导入导出
 
