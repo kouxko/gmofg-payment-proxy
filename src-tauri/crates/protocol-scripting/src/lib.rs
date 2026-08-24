@@ -1,14 +1,14 @@
-//! Socket 协议包的隔离编译与执行边界。
+//! HTTP/Socket 协议包的隔离编译与单阶段执行边界。
 //!
-//! 本 crate 最终负责 ZIP/Manifest 校验、Rhai 编译以及受限入口调用，但不会访问真实 Socket、
-//! 数据库、进程或 UI。这样现有 Direct relay 不需要依赖或初始化脚本引擎；只有选择 Scripted 的
-//! Listener 才会由外层基础设施显式构造本 crate 的对象。
+//! 本 crate 负责 ZIP/Manifest 校验、Rhai 编译以及受限入口调用，但不会访问真实 HTTP/Socket、
+//! 数据库、进程或 UI。未绑定协议包的流量不需要初始化脚本引擎；只有显式选择协议包的 Listener
+//! 才会由外层基础设施构造本 crate 的对象。
 //!
 //! 导入链路会在内存中依次完成 ZIP 限额读取、Manifest/Schema 解析、包内模块解析、Rhai 语法编译
 //! 和入口签名校验。只有整条链路全部成功，才会产生 [`CompiledProtocolPackage`]；调用方因而无法把
 //! “只解析了一半”的协议包误当成可执行对象。当前运行时已经实现受限 `frame(reader, context)` 与
-//! 单方向有界 FIFO，以及完整 Frame 上的 Decode/Encode/Display 四态执行器；代理数据面接线由后续
-//! 阶段完成。
+//! 单方向有界 FIFO，以及 Frame/Decode/Encode/Display 单阶段执行器；HTTP/Socket 数据面由外层
+//! runtime 通过 Exchange capability factory 显式接线。
 
 #![deny(missing_docs)]
 
@@ -23,6 +23,7 @@ mod host;
 mod limits;
 mod manifest;
 mod parse_error;
+mod rhai_identifier;
 mod runtime;
 mod schema_parser;
 mod toml_parser;
@@ -50,9 +51,8 @@ pub use error::{
     ProtocolRuntimeError, ProtocolRuntimeResult,
 };
 pub use framing::{
-    DEFAULT_MAX_FRAME_BYTES, DEFAULT_MAX_FRAME_FIFO_BYTES, MAX_FRAME_BYTES_LIMIT,
-    MAX_FRAME_FIFO_BYTES_LIMIT, ProtocolFrameInspection, ProtocolFrameInspector,
-    ProtocolFramingError, ProtocolFramingErrorCode, ProtocolFramingLimit, ProtocolFramingLimits,
+    ProtocolFrameInspection, ProtocolFrameInspector, ProtocolFramingError,
+    ProtocolFramingErrorCode, ProtocolFramingLimit, ProtocolFramingLimits,
 };
 pub use host::context::ProtocolDirection;
 pub use limits::{

@@ -15,14 +15,11 @@ use crate::{
 use super::{
     DiagnosticLogRowViewModel, ExternalPackageServiceStatusViewModel, ListenerId,
     ListenerStatusViewModel, ProtocolDocumentRuleDefinition, ProtocolPackageDetailViewModel,
-    ProxyListener, ProxyWorkspace, SettingsViewModel, SocketCaptureDetailViewModel,
-    SocketCaptureId, SocketCapturePageViewModel, WorkspaceId,
+    ProxyListener, ProxyWorkspace, SettingsViewModel, WorkspaceId,
 };
 
 /// 单份报告最多包含的入口诊断行数。
 pub const DIAGNOSTIC_REPORT_MAX_DIAGNOSTICS: usize = 100;
-/// 单份报告最多查询的 Socket capture 摘要数。
-pub const DIAGNOSTIC_REPORT_MAX_CAPTURES: u32 = 50;
 /// Markdown 投影的字符上限；结构化 bundle 仍保留有界的完整字段。
 pub const DIAGNOSTIC_REPORT_MARKDOWN_MAX_CHARS: usize = 64 * 1024;
 
@@ -32,8 +29,6 @@ pub const DIAGNOSTIC_REPORT_MARKDOWN_MAX_CHARS: usize = 64 * 1024;
 pub struct DiagnosticReportQuery {
     pub workspace_id: WorkspaceId,
     pub listener_id: ListenerId,
-    /// 指定时额外收集该条 Socket capture 详情；不自动选择其他记录。
-    pub capture_id: Option<SocketCaptureId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -44,8 +39,6 @@ pub enum DiagnosticReportSection {
     Settings,
     ProtocolPackageDetail,
     ExternalPackageService,
-    SocketCaptures,
-    CaptureDetail,
     AndroidNetworkStatus,
     AndroidRuntimeOwner,
     AndroidRuntimeEndpoints,
@@ -79,8 +72,6 @@ pub struct DiagnosticReportBundle {
     pub protocol_package_detail: Option<ProtocolPackageDetailViewModel>,
     pub external_package_service: Option<ExternalPackageServiceStatusViewModel>,
     pub diagnostics: Vec<DiagnosticLogRowViewModel>,
-    pub socket_captures: SocketCapturePageViewModel,
-    pub capture_detail: Option<SocketCaptureDetailViewModel>,
     pub android_network_status: Option<AndroidNetworkStatusViewModel>,
     pub android_runtime_owner: Option<AndroidRuntimeOwnerViewModel>,
     pub android_runtime_endpoints: Vec<AndroidRuntimeEndpointViewModel>,

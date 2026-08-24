@@ -18,6 +18,7 @@ use crate::{
 };
 
 mod helpers;
+mod stages;
 
 use helpers::{compiled_direction, exceeds_limit, find_resource_limit, validate_document_schema};
 

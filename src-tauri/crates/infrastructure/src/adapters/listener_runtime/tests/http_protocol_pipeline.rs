@@ -1,35 +1,23 @@
 use std::{
     io::{Cursor, Write},
-    net::SocketAddr,
     sync::Arc,
-    time::UNIX_EPOCH,
 };
 
-use bytes::Bytes;
-use intercept_proxy_application::{
-    HttpProtocolBodyViewModel, HttpProtocolDisplayFallbackReason, HttpProtocolDisplayViewModel,
-    HttpProtocolFailureKind, HttpProtocolFailureViewModel,
-};
+use intercept_proxy_application::AppResult;
 use intercept_proxy_domain::{
     DocumentAction, DocumentCondition, DocumentFieldName, DocumentValue, HttpBodyProcessing,
     HttpListenerSettings, ListenerDataPlane, ProtocolDocumentRuleDefinition,
     ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
     ProtocolRuleStage, ProxyListener, ProxyWorkspace,
 };
-use intercept_proxy_protocol_scripting::ProtocolDirection;
-use intercept_proxy_runtime::{
-    ChannelId, ConnectionContext, ErrorCode, HandshakePolicy, Message, NoopPipelinePorts,
-    PipelinePorts, RawHeader,
-};
-use parking_lot::Mutex;
+use intercept_proxy_exchange::HttpContext;
+use intercept_proxy_runtime::{HttpConnectionIdentity, HttpProtocolCapabilityFactory};
 use uuid::Uuid;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 use crate::{ProtocolPackageRepositoryAdapter, SqliteStore};
 
-use super::super::http_protocol_pipeline::{
-    HttpProtocolObservationSink, HttpProtocolRuntimeSnapshot,
-};
+use super::super::http_protocol_pipeline::HttpProtocolRuntimeSnapshot;
 use super::test_listener_runtime_with_packages;
 
 const HTTP_MANIFEST: &str = r#"
@@ -107,7 +95,7 @@ fn display(document, context) {
 }
 "#;
 
-const ENCODE_MUST_NOT_RUN_SCRIPT: &str = r#"
+const DECODE_ONLY_SCRIPT: &str = r#"
 fn decode(origin, context) {
     let value = document::create();
     if context.direction() == "upstream" {
@@ -117,36 +105,8 @@ fn decode(origin, context) {
     }
     value
 }
-
-fn encode(origin, document, context) { throw "encode must not run"; }
-
-fn display(document, context) {
-    if context.direction() == "upstream" {
-        "<p>upstream:" + document.get("route") + "</p>"
-    } else {
-        "<p>downstream:" + document.get("result") + "</p>"
-    }
-}
-"#;
-
-const DECODE_FAILURE_SCRIPT: &str = r#"
-fn decode(origin, context) { throw "decode failed"; }
-fn encode(origin, document, context) { origin }
-fn display(document, context) { "<p>unused</p>" }
-"#;
-
-const ENCODE_FAILURE_SCRIPT: &str = r#"
-fn decode(origin, context) {
-    let value = document::create();
-    if context.direction() == "upstream" {
-        value.set("route", "decoded");
-    } else {
-        value.set("result", "decoded");
-    }
-    value
-}
-fn encode(origin, document, context) { throw "encode failed"; }
-fn display(document, context) { "<p>ok</p>" }
+fn encode(origin, document, context) { throw "encode invoked"; }
+fn display(document, context) { "decoded" }
 "#;
 
 const NON_UTF8_ENCODE_SCRIPT: &str = r#"
@@ -160,7 +120,13 @@ fn decode(origin, context) {
     value
 }
 fn encode(origin, document, context) { blob(1, 255) }
-fn display(document, context) { "<p>ok</p>" }
+fn display(document, context) { "ok" }
+"#;
+
+const DECODE_FAILURE_SCRIPT: &str = r#"
+fn decode(origin, context) { throw "decode failed"; }
+fn encode(origin, document, context) { origin }
+fn display(document, context) { "unused" }
 "#;
 
 const DISPLAY_FAILURE_SCRIPT: &str = r#"
@@ -173,127 +139,243 @@ fn decode(origin, context) {
     }
     value
 }
-fn encode(origin, document, context) {
-    if context.direction() == "upstream" {
-        origin + ("|" + document.get("route")).to_blob()
-    } else {
-        origin + ("|" + document.get("result")).to_blob()
-    }
-}
+fn encode(origin, document, context) { origin }
 fn display(document, context) { throw "display failed"; }
 "#;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct RecordedHttpObservation {
-    direction: ProtocolDirection,
-    final_body: Bytes,
-    observation: HttpProtocolBodyViewModel,
+#[tokio::test]
+async fn upstream_capabilities_are_independent_and_rules_run_in_order() {
+    let listener = http_listener();
+    let rules = vec![
+        set_string_rule(
+            &listener,
+            ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(1)),
+            ProtocolRuleStage::AppToProxy,
+            1,
+            "route",
+            Vec::new(),
+            "after_app",
+        ),
+        set_string_rule(
+            &listener,
+            ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(2)),
+            ProtocolRuleStage::ProxyToUpstream,
+            2,
+            "route",
+            vec![DocumentCondition::Equals {
+                field: DocumentFieldName::new("route").unwrap(),
+                value: DocumentValue::String("after_app".into()),
+            }],
+            "after_proxy",
+        ),
+    ];
+    let (snapshot, workspace) = snapshot(PIPELINE_SCRIPT, &listener, rules);
+    let metadata = snapshot.observation_metadata();
+    assert_eq!(metadata.workspace_id, workspace.id.to_string());
+    assert_eq!(metadata.listener_id, listener.id.to_string());
+
+    let mut capabilities = snapshot.create_upstream(identity()).unwrap();
+    let original = context("POST /sale HTTP/1.1\r\n\r\n", "wire");
+    let document = capabilities.decode.decode(&original).await.unwrap();
+    assert_eq!(
+        capabilities.display.display(&document).await.unwrap(),
+        "<p>upstream:decoded</p>"
+    );
+    let document = capabilities.rules.apply(document).await.unwrap();
+    assert_eq!(
+        document.get("route").unwrap(),
+        &DocumentValue::String("after_proxy".into())
+    );
+    let written = capabilities
+        .encode
+        .encode(&original, &document)
+        .await
+        .unwrap();
+    assert_eq!(written.header, original.header);
+    assert_eq!(written.body, "wire|after_proxy");
 }
 
-#[derive(Debug, Default)]
-struct RecordingHttpObservationSink {
-    records: Mutex<Vec<RecordedHttpObservation>>,
-    failures: Mutex<Vec<HttpProtocolFailureViewModel>>,
+#[tokio::test]
+async fn downstream_uses_downstream_schema_and_rule_stages() {
+    let listener = http_listener();
+    let rules = vec![
+        set_string_rule(
+            &listener,
+            ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(3)),
+            ProtocolRuleStage::UpstreamToProxy,
+            1,
+            "result",
+            Vec::new(),
+            "after_server",
+        ),
+        set_string_rule(
+            &listener,
+            ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(4)),
+            ProtocolRuleStage::ProxyToApp,
+            2,
+            "result",
+            vec![DocumentCondition::Equals {
+                field: DocumentFieldName::new("result").unwrap(),
+                value: DocumentValue::String("after_server".into()),
+            }],
+            "after_proxy",
+        ),
+    ];
+    let (snapshot, _) = snapshot(PIPELINE_SCRIPT, &listener, rules);
+    let mut capabilities = snapshot.create_downstream(identity()).unwrap();
+    let original = context("HTTP/1.1 200 OK\r\n\r\n", "reply");
+
+    let document = capabilities.decode.decode(&original).await.unwrap();
+    let document = capabilities.rules.apply(document).await.unwrap();
+    let written = capabilities
+        .encode
+        .encode(&original, &document)
+        .await
+        .unwrap();
+
+    assert_eq!(written.header, original.header);
+    assert_eq!(written.body, "reply|after_proxy");
 }
 
-#[derive(Debug)]
-struct RewritingHttpPipeline {
-    request_body: Bytes,
-    response_body: Bytes,
-}
+#[test]
+fn http_snapshot_rejects_rule_package_and_schema_drift_below_application() {
+    let listener = http_listener();
+    let cases = [
+        (
+            ProtocolPackageRef {
+                id: ProtocolPackageId::new("other-http-package").unwrap(),
+                version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+            },
+            1,
+        ),
+        (http_package(), 2),
+    ];
 
-impl HandshakePolicy for RewritingHttpPipeline {}
+    for (index, (package, schema_version)) in cases.into_iter().enumerate() {
+        let rule_id = ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(100 + index as u128));
+        let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
+            rule_id,
+            "invalid runtime binding".into(),
+            true,
+            10,
+            1,
+            listener.id,
+            package,
+            schema_version,
+            ProtocolRuleStage::AppToProxy,
+            Vec::new(),
+            vec![DocumentAction::RecordMatch],
+        )
+        .unwrap();
 
-#[async_trait::async_trait]
-impl PipelinePorts for RewritingHttpPipeline {
-    async fn request(
-        &self,
-        _context: &ConnectionContext,
-        message: &mut Message,
-    ) -> intercept_proxy_runtime::Result<Vec<intercept_proxy_runtime::FaultAction>> {
-        message.replace_body(self.request_body.clone());
-        Ok(Vec::new())
-    }
-
-    async fn response(
-        &self,
-        _context: &ConnectionContext,
-        message: &mut Message,
-    ) -> intercept_proxy_runtime::Result<Vec<intercept_proxy_runtime::FaultAction>> {
-        message.replace_body(self.response_body.clone());
-        Ok(Vec::new())
-    }
-}
-
-impl RecordingHttpObservationSink {
-    fn records(&self) -> Vec<RecordedHttpObservation> {
-        self.records.lock().clone()
-    }
-
-    fn failures(&self) -> Vec<HttpProtocolFailureViewModel> {
-        self.failures.lock().clone()
-    }
-}
-
-impl HttpProtocolObservationSink for RecordingHttpObservationSink {
-    fn record_http_protocol_observation(
-        &self,
-        _context: &ConnectionContext,
-        direction: ProtocolDirection,
-        message: &Message,
-        observation: HttpProtocolBodyViewModel,
-    ) -> intercept_proxy_runtime::Result<()> {
-        self.records.lock().push(RecordedHttpObservation {
-            direction,
-            final_body: message.body.clone(),
-            observation,
-        });
-        Ok(())
-    }
-
-    fn record_http_protocol_failure(
-        &self,
-        _context: &ConnectionContext,
-        _message: &Message,
-        failure: HttpProtocolFailureViewModel,
-    ) -> intercept_proxy_runtime::Result<()> {
-        self.failures.lock().push(failure);
-        Ok(())
+        let (result, _) = prepare_snapshot(PIPELINE_SCRIPT, &listener, vec![rule]);
+        let error = result.unwrap_err();
+        assert_eq!(
+            error.view_model.code,
+            "DOCUMENT_RULE_RUNTIME_BINDING_MISMATCH"
+        );
+        assert_eq!(
+            error.view_model.entity_id.as_deref(),
+            Some(rule_id.to_string().as_str())
+        );
     }
 }
 
-#[path = "http_protocol_pipeline/failures.rs"]
-mod failures;
-#[path = "http_protocol_pipeline/success.rs"]
-mod success;
+#[tokio::test]
+async fn decode_does_not_invoke_encode() {
+    let listener = http_listener();
+    let (snapshot, _) = snapshot(DECODE_ONLY_SCRIPT, &listener, Vec::new());
+    let mut capabilities = snapshot.create_upstream(identity()).unwrap();
 
-fn pipeline(
+    let document = capabilities
+        .decode
+        .decode(&context("POST / HTTP/1.1\r\n\r\n", "wire"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        document.get("route").unwrap(),
+        &DocumentValue::String("decoded".into())
+    );
+}
+
+#[tokio::test]
+async fn non_utf8_encode_output_is_rejected_without_mutating_input() {
+    let listener = http_listener();
+    let rule = set_string_rule(
+        &listener,
+        ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(5)),
+        ProtocolRuleStage::AppToProxy,
+        1,
+        "route",
+        Vec::new(),
+        "changed",
+    );
+    let (snapshot, _) = snapshot(NON_UTF8_ENCODE_SCRIPT, &listener, vec![rule]);
+    let mut capabilities = snapshot.create_upstream(identity()).unwrap();
+    let original = context("POST / HTTP/1.1\r\n\r\n", "wire");
+    let document = capabilities.decode.decode(&original).await.unwrap();
+    let document = capabilities.rules.apply(document).await.unwrap();
+
+    let error = capabilities
+        .encode
+        .encode(&original, &document)
+        .await
+        .unwrap_err();
+
+    assert!(error.message.contains("HTTP_PROTOCOL_OUTPUT_NOT_UTF8"));
+    assert_eq!(original.body, "wire");
+}
+
+#[tokio::test]
+async fn decode_failure_stays_in_decode_capability() {
+    let listener = http_listener();
+    let (snapshot, _) = snapshot(DECODE_FAILURE_SCRIPT, &listener, Vec::new());
+    let mut capabilities = snapshot.create_upstream(identity()).unwrap();
+
+    let error = capabilities
+        .decode
+        .decode(&context("POST / HTTP/1.1\r\n\r\n", "wire"))
+        .await
+        .unwrap_err();
+
+    assert!(error.message.starts_with("ENTRY_POINT_FAILED\n"));
+}
+
+#[tokio::test]
+async fn display_failure_is_returned_for_reader_fallback_policy() {
+    let listener = http_listener();
+    let (snapshot, _) = snapshot(DISPLAY_FAILURE_SCRIPT, &listener, Vec::new());
+    let mut capabilities = snapshot.create_downstream(identity()).unwrap();
+    let document = capabilities
+        .decode
+        .decode(&context("HTTP/1.1 200 OK\r\n\r\n", "reply"))
+        .await
+        .unwrap();
+
+    let error = capabilities.display.display(&document).await.unwrap_err();
+
+    assert!(error.message.starts_with("ENTRY_POINT_FAILED\n"));
+}
+
+fn snapshot(
     script: &str,
+    listener: &ProxyListener,
+    rules: Vec<ProtocolDocumentRuleDefinition>,
+) -> (Arc<HttpProtocolRuntimeSnapshot>, ProxyWorkspace) {
+    let (result, workspace) = prepare_snapshot(script, listener, rules);
+    let snapshot = result.unwrap().expect("HTTP protocol snapshot");
+    (snapshot, workspace)
+}
+
+fn prepare_snapshot(
+    script: &str,
+    listener: &ProxyListener,
     rules: Vec<ProtocolDocumentRuleDefinition>,
 ) -> (
-    Arc<dyn PipelinePorts>,
-    Arc<RecordingHttpObservationSink>,
-    ProxyListener,
+    AppResult<Option<Arc<HttpProtocolRuntimeSnapshot>>>,
+    ProxyWorkspace,
 ) {
-    let listener = http_listener();
-    let (pipeline, observations) = pipeline_for_listener(script, &listener, rules);
-    (pipeline, observations, listener)
-}
-
-fn pipeline_for_listener(
-    script: &str,
-    listener: &ProxyListener,
-    rules: Vec<ProtocolDocumentRuleDefinition>,
-) -> (Arc<dyn PipelinePorts>, Arc<RecordingHttpObservationSink>) {
-    pipeline_for_listener_with_inner(script, listener, rules, Arc::new(NoopPipelinePorts))
-}
-
-fn pipeline_for_listener_with_inner(
-    script: &str,
-    listener: &ProxyListener,
-    rules: Vec<ProtocolDocumentRuleDefinition>,
-    inner: Arc<dyn PipelinePorts>,
-) -> (Arc<dyn PipelinePorts>, Arc<RecordingHttpObservationSink>) {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
         Arc::clone(&store),
@@ -311,15 +393,23 @@ fn pipeline_for_listener_with_inner(
         protocol_rules: rules,
         ..ProxyWorkspace::default()
     };
-    let snapshot = HttpProtocolRuntimeSnapshot::prepare(&runtime, &workspace, listener)
-        .unwrap()
-        .expect("HTTP protocol snapshot");
-    let observations = Arc::new(RecordingHttpObservationSink::default());
-    let pipeline = snapshot.wrap(
-        inner,
-        Arc::clone(&observations) as Arc<dyn HttpProtocolObservationSink>,
-    );
-    (pipeline, observations)
+    let result = HttpProtocolRuntimeSnapshot::prepare(&runtime, &workspace, listener);
+    (result, workspace)
+}
+
+fn identity() -> HttpConnectionIdentity {
+    HttpConnectionIdentity {
+        runtime_epoch: Uuid::from_u128(10),
+        connection_id: Uuid::from_u128(11),
+        peer: "127.0.0.1:12345".into(),
+    }
+}
+
+fn context(header: &str, body: &str) -> HttpContext {
+    HttpContext {
+        header: header.into(),
+        body: body.into(),
+    }
 }
 
 fn http_listener() -> ProxyListener {
@@ -361,41 +451,6 @@ fn set_string_rule(
         }],
     )
     .unwrap()
-}
-
-fn request_message(body: Bytes) -> Message {
-    Message {
-        start_line: "POST /pay HTTP/1.1".into(),
-        headers: vec![RawHeader::new(
-            Bytes::from_static(b"Content-Length"),
-            Bytes::from(body.len().to_string()),
-        )],
-        body,
-        body_modified: false,
-    }
-}
-
-fn response_message(body: Bytes) -> Message {
-    Message {
-        start_line: "HTTP/1.1 200 OK".into(),
-        headers: vec![RawHeader::new(
-            Bytes::from_static(b"Content-Length"),
-            Bytes::from(body.len().to_string()),
-        )],
-        body,
-        body_modified: false,
-    }
-}
-
-fn test_http_context() -> ConnectionContext {
-    ConnectionContext {
-        runtime_epoch: Uuid::from_u128(10),
-        connection_id: Uuid::from_u128(11),
-        channel: ChannelId::new("http-test").unwrap(),
-        peer_addr: "127.0.0.1:12345".parse::<SocketAddr>().unwrap(),
-        accepted_at: UNIX_EPOCH,
-        tls_peer: None,
-    }
 }
 
 fn http_package() -> ProtocolPackageRef {

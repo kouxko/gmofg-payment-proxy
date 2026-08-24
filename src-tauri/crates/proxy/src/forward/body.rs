@@ -99,13 +99,6 @@ pub(super) fn scheduled_body(
         .boxed_unsync()
 }
 
-pub(super) fn empty_response(status: StatusCode) -> Response<ProxyBody> {
-    Response::builder()
-        .status(status)
-        .body(full_body(Bytes::new()))
-        .expect("static response is valid")
-}
-
 pub(super) fn text_response(status: StatusCode, message: &str) -> Response<ProxyBody> {
     Response::builder()
         .status(status)

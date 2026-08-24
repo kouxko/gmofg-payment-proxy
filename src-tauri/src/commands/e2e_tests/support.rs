@@ -155,8 +155,8 @@ impl CrossLayerFixture {
                 protocol_package_detail,
                 protocol_package_enable,
                 protocol_rule_save,
-                socket_capture_query,
-                socket_capture_get_detail,
+                exchange_observation_query,
+                exchange_observation_get,
                 diagnostic_log_query,
                 diagnostic_reproduction_report_export,
             ])
@@ -211,7 +211,11 @@ impl CrossLayerFixture {
 
     pub(super) fn call_mcp_tool(&self, name: &str, arguments: Value) -> Value {
         let state = self.app.state::<AppState>();
-        let backend = ApplicationBackend::new(Arc::clone(&state.application), state.runtime_logs());
+        let backend = ApplicationBackend::new(
+            Arc::clone(&state.application),
+            state.runtime_logs(),
+            state.exchange_observations(),
+        );
         tauri::async_runtime::block_on(backend.call_tool(name, arguments))
             .unwrap_or_else(|error| panic!("MCP {name} failed: {} {}", error.code, error.message))
     }

@@ -8,9 +8,9 @@ use serde::Deserialize;
 
 use crate::{
     DirectionExecutionPlan, PackageFilePath, ProtocolDirection, ProtocolDirectionExecutor,
-    ProtocolDisplayResult, ProtocolFramingLimits, ProtocolPackageCompilationError,
+    ProtocolDisplayResult, ProtocolExecutionCancellation, ProtocolFrameInspection,
+    ProtocolFrameInspector, ProtocolFramingLimits, ProtocolPackageCompilationError,
     ProtocolPackageCompiler, ProtocolPackageFiles, ProtocolRuntimeLimits,
-    framing::{RhaiFrameDecider, SingleDirectionFramer},
     test_support::CompiledProtocolPackageTestBuilder,
     tests::fixtures::{
         TEMPLATE_DISPLAY, TEMPLATE_LIBRARY, TEMPLATE_MANIFEST, TEMPLATE_PROTOCOL,
@@ -338,20 +338,33 @@ fn frame_chunks(
     direction: ProtocolDirection,
     chunks: &[String],
 ) -> Vec<Vec<u8>> {
-    let decider = RhaiFrameDecider::for_package(
+    let mut inspector = ProtocolFrameInspector::new_with_cancellation(
         package,
         direction,
         "conformance-connection",
         "conformance-listener",
         ProtocolRuntimeLimits::default(),
-    );
-    let mut framer = SingleDirectionFramer::new(
-        decider,
         ProtocolFramingLimits::new(65_535, 131_070).unwrap(),
+        ProtocolExecutionCancellation::new(),
     );
+    let mut buffered = Vec::new();
     let mut completed = Vec::new();
     for chunk in chunks {
-        completed.extend(framer.push(hex(chunk)).unwrap());
+        buffered.extend(hex(chunk));
+        loop {
+            match inspector.inspect(&buffered).unwrap() {
+                ProtocolFrameInspection::NeedMore { .. } => break,
+                ProtocolFrameInspection::Complete { bytes } => {
+                    completed.push(buffered.drain(..bytes).collect());
+                    if buffered.is_empty() {
+                        break;
+                    }
+                }
+                ProtocolFrameInspection::Reject { reason } => {
+                    panic!("official package rejected its fixture: {reason}")
+                }
+            }
+        }
     }
     completed
 }

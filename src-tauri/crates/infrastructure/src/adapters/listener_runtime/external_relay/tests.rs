@@ -1,28 +1,24 @@
 //! 外部 Socket Relay processor 的合同测试。
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
+use async_trait::async_trait;
 use intercept_proxy_domain::{
-    DocumentAction, DocumentFieldName, DocumentValue, ExternalDecodeResponse,
-    ExternalDisplayResponse, ExternalEncodeResponse, ExternalPackageRegistration, ListenerId,
-    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
-    SocketTopology,
+    DocumentAction, DocumentFieldName, DocumentValue, ExternalDecodeRequest,
+    ExternalDecodeResponse, ExternalDisplayRequest, ExternalDisplayResponse, ExternalDocumentWire,
+    ExternalEncodeRequest, ExternalEncodeResponse, ExternalFrameRequest, ExternalFrameResult,
+    ExternalPackageRegistration, ListenerId, ProtocolDocumentRuleDefinition,
+    ProtocolDocumentRuleId, ProtocolDocumentRuleProgram, SocketTopology,
 };
+use intercept_proxy_exchange::{FrameResult, SocketContext};
 use parking_lot::Mutex;
 use serde_json::json;
-use tokio::sync::{Semaphore, mpsc};
 use uuid::Uuid;
 
 use super::*;
-use crate::adapters::external_packages::ExternalPackageRemoteError;
-
-#[test]
-fn external_frame_need_more_has_unknown_total() {
-    assert_eq!(
-        external_frame_boundary(&ExternalFrameResult::NeedMore),
-        FrameBoundary::NeedMoreUnknown
-    );
-}
+use crate::adapters::external_packages::{
+    ExternalPackageConnectionError, ExternalPackageRemoteError,
+};
 
 #[test]
 fn remote_data_diagnostic_is_shape_only() {
@@ -37,6 +33,23 @@ fn remote_data_diagnostic_is_shape_only() {
 }
 
 #[test]
+fn remote_data_diagnostic_summarizes_every_json_shape_without_values() {
+    let cases = [
+        (None, "none"),
+        (Some(serde_json::Value::Null), "null"),
+        (Some(json!(true)), "bool"),
+        (Some(json!(42)), "number"),
+        (Some(json!("secret")), "string(bytes=6)"),
+        (Some(json!(["first", "second"])), "array(items=2)"),
+        (Some(json!({"first": 1, "second": 2})), "object(fields=2)"),
+    ];
+
+    for (data, expected) in cases {
+        assert_eq!(redacted_data_summary(data.as_ref()), expected);
+    }
+}
+
+#[test]
 fn remote_error_diagnostic_preserves_correlation_without_payload_values() {
     let package = registration().package().identity().clone();
     let error = ExternalPackageConnectionError::Remote {
@@ -48,12 +61,6 @@ fn remote_error_diagnostic_preserves_correlation_without_payload_values() {
             Some(json!({"pan": "4111111111111111"})),
         ),
     };
-    let capture = SocketCaptureContext {
-        workspace_id: intercept_proxy_domain::WorkspaceId::new(),
-        listener_id: listener_id(),
-        publisher: None,
-    };
-
     let diagnostic = trace_external_rpc_failure(
         &package,
         &connection(),
@@ -61,7 +68,6 @@ fn remote_error_diagnostic_preserves_correlation_without_payload_values() {
         ExternalPackageCallStage::Decode,
         "hooks.upstream.decrypt_and_decode",
         &error,
-        &capture,
     );
 
     assert_eq!(diagnostic.request_id.as_deref(), Some("g7-c42"));
@@ -77,8 +83,52 @@ fn remote_error_diagnostic_preserves_correlation_without_payload_values() {
     assert!(!format!("{diagnostic:?}").contains("4111111111111111"));
 }
 
+#[test]
+fn timeout_diagnostic_preserves_request_id_without_remote_error_fields() {
+    let package = registration().package().identity().clone();
+    let error = ExternalPackageConnectionError::Timeout {
+        request_id: "timeout-request-7".to_owned(),
+        method: "hooks.upstream.split_frame".to_owned(),
+    };
+
+    let diagnostic = trace_external_rpc_failure(
+        &package,
+        &connection(),
+        ProtocolDirection::Upstream,
+        ExternalPackageCallStage::Frame,
+        "hooks.upstream.split_frame",
+        &error,
+    );
+
+    assert_eq!(diagnostic.request_id.as_deref(), Some("timeout-request-7"));
+    assert_eq!(diagnostic.remote_code, None);
+    assert_eq!(diagnostic.remote_message, None);
+    assert_eq!(diagnostic.remote_data_summary, None);
+}
+
+#[test]
+fn non_rpc_error_diagnostic_is_uncorrelated_and_supports_downstream_direction() {
+    let package = registration().package().identity().clone();
+
+    let diagnostic = trace_external_rpc_failure(
+        &package,
+        &connection(),
+        ProtocolDirection::Downstream,
+        ExternalPackageCallStage::Encode,
+        "hooks.downstream.encode_and_encrypt",
+        &ExternalPackageConnectionError::Disconnected,
+    );
+
+    assert_eq!(diagnostic.direction, ProtocolDirection::Downstream);
+    assert_eq!(diagnostic.stage, ExternalPackageCallStage::Encode);
+    assert_eq!(diagnostic.request_id, None);
+    assert_eq!(diagnostic.remote_code, None);
+    assert_eq!(diagnostic.remote_message, None);
+    assert_eq!(diagnostic.remote_data_summary, None);
+}
+
 #[tokio::test]
-async fn processor_runs_external_decode_existing_rules_and_external_encode_in_order() {
+async fn capabilities_run_frame_decode_display_rules_encode_in_order() {
     let registration = registration();
     let rpc = Arc::new(FakeExternalRpc::default());
     let snapshot = ExternalSocketRuntimeSnapshot::new(
@@ -86,35 +136,36 @@ async fn processor_runs_external_decode_existing_rules_and_external_encode_in_or
         rules(&registration),
         SocketTopology::default(),
     );
-    let factory = ExternalRelayProcessorFactoryAdapter::new(
-        &snapshot,
-        SocketCaptureContext {
-            workspace_id: intercept_proxy_domain::WorkspaceId::new(),
-            listener_id: listener_id(),
-            publisher: None,
-        },
-    );
-    let mut processor =
-        factory.create_direction(connection(), SocketPayloadDirection::AppToUpstream);
+    let factory = ExternalSocketCapabilityFactoryAdapter::new(&snapshot, observation_metadata());
+    let mut capabilities = factory.create_upstream(connection()).unwrap();
 
     assert_eq!(
-        processor.inspect(Bytes::from_static(b"abc")).await.unwrap(),
-        FrameBoundary::Complete { bytes: 3 }
+        capabilities.frame.split(b"abc").await.unwrap(),
+        FrameResult::Complete { consumed: 3 }
     );
+    let context = SocketContext {
+        data: b"abc".to_vec(),
+    };
+    let document = capabilities.decode.decode(&context).await.unwrap();
     assert_eq!(
-        processor.process(Bytes::from_static(b"abc")).await.unwrap(),
-        Bytes::from_static(b"encoded")
+        capabilities.display.display(&document).await.unwrap(),
+        "<p>ok</p>"
     );
-    processor.output_committed();
-    tokio::task::yield_now().await;
+    let document = capabilities.rules.apply(document).await.unwrap();
+    let encoded = capabilities
+        .encode
+        .encode(&context, &document)
+        .await
+        .unwrap();
+    assert_eq!(encoded.data, b"encoded");
 
     assert_eq!(
         rpc.calls.lock().as_slice(),
         [
             "hooks.upstream.split_frame",
             "hooks.upstream.decrypt_and_decode",
-            "hooks.upstream.encode_and_encrypt",
             "document.upstream.render_message",
+            "hooks.upstream.encode_and_encrypt",
         ]
     );
     let encoded_document = rpc.encoded_document.lock().clone().unwrap();
@@ -136,77 +187,22 @@ async fn decode_timeout_is_fail_closed_and_never_reaches_encode() {
         rules(&registration),
         SocketTopology::default(),
     );
-    let factory = ExternalRelayProcessorFactoryAdapter::new(
-        &snapshot,
-        SocketCaptureContext {
-            workspace_id: intercept_proxy_domain::WorkspaceId::new(),
-            listener_id: listener_id(),
-            publisher: None,
-        },
-    );
-    let mut processor =
-        factory.create_direction(connection(), SocketPayloadDirection::AppToUpstream);
+    let factory = ExternalSocketCapabilityFactoryAdapter::new(&snapshot, observation_metadata());
+    let mut capabilities = factory.create_upstream(connection()).unwrap();
 
-    let failure = processor
-        .process(Bytes::from_static(b"abc"))
+    let failure = capabilities
+        .decode
+        .decode(&SocketContext {
+            data: b"abc".to_vec(),
+        })
         .await
         .unwrap_err();
 
-    assert_eq!(failure.kind, SocketProcessingFailureKind::ProcessingTimeout);
+    assert!(failure.message.contains("PROCESSING_TIMEOUT"));
     assert_eq!(
         rpc.calls.lock().as_slice(),
         ["hooks.upstream.decrypt_and_decode"]
     );
-}
-
-#[tokio::test]
-async fn committed_displays_are_serialized_in_frame_order() {
-    let registration = registration();
-    let (entered_tx, mut entered_rx) = mpsc::unbounded_channel();
-    let release_first = Arc::new(Semaphore::new(0));
-    let rpc = Arc::new(FakeExternalRpc {
-        display_probe: Some(DisplayProbe {
-            entered: entered_tx,
-            release_first: Arc::clone(&release_first),
-        }),
-        ..FakeExternalRpc::default()
-    });
-    let snapshot = ExternalSocketRuntimeSnapshot::new(
-        ExternalSocketPackageBinding::new(registration.clone(), rpc),
-        rules(&registration),
-        SocketTopology::default(),
-    );
-    let factory = ExternalRelayProcessorFactoryAdapter::new(
-        &snapshot,
-        SocketCaptureContext {
-            workspace_id: intercept_proxy_domain::WorkspaceId::new(),
-            listener_id: listener_id(),
-            publisher: None,
-        },
-    );
-    let mut processor =
-        factory.create_direction(connection(), SocketPayloadDirection::AppToUpstream);
-
-    processor.process(Bytes::from_static(b"one")).await.unwrap();
-    processor.output_committed();
-    processor.process(Bytes::from_static(b"two")).await.unwrap();
-    processor.output_committed();
-
-    assert_eq!(entered_rx.recv().await, Some(1));
-    assert!(
-        tokio::time::timeout(Duration::from_millis(50), entered_rx.recv())
-            .await
-            .is_err(),
-        "the second display must wait until the first display completes"
-    );
-    release_first.add_permits(1);
-    assert_eq!(entered_rx.recv().await, Some(2));
-}
-
-#[derive(Debug)]
-struct DisplayProbe {
-    entered: mpsc::UnboundedSender<usize>,
-    release_first: Arc<Semaphore>,
 }
 
 #[derive(Debug, Default)]
@@ -214,7 +210,6 @@ struct FakeExternalRpc {
     calls: Mutex<Vec<&'static str>>,
     encoded_document: Mutex<Option<ExternalDocumentWire>>,
     fail_decode: bool,
-    display_probe: Option<DisplayProbe>,
 }
 
 impl FakeExternalRpc {
@@ -279,18 +274,6 @@ impl ExternalPackageRpc for FakeExternalRpc {
         _request: &ExternalDisplayRequest,
     ) -> Result<ExternalDisplayResponse, ExternalPackageConnectionError> {
         self.record_method(method);
-        if let Some(probe) = &self.display_probe {
-            let display_number = self
-                .calls
-                .lock()
-                .iter()
-                .filter(|call| **call == "document.upstream.render_message")
-                .count();
-            probe.entered.send(display_number).unwrap();
-            if display_number == 1 {
-                probe.release_first.acquire().await.unwrap().forget();
-            }
-        }
         Ok(ExternalDisplayResponse {
             html: "<p>ok</p>".to_owned(),
         })
@@ -345,6 +328,13 @@ fn registration() -> ExternalPackageRegistration {
         }
     }))
     .unwrap()
+}
+
+fn observation_metadata() -> SocketObservationMetadata {
+    SocketObservationMetadata {
+        workspace_id: "test-workspace".to_owned(),
+        listener_id: listener_id().to_string(),
+    }
 }
 
 fn listener_id() -> ListenerId {
@@ -404,7 +394,3 @@ fn rules(registration: &ExternalPackageRegistration) -> ProtocolDocumentRuleConn
     )
     .unwrap()
 }
-
-mod coverage;
-mod network_e2e;
-mod network_e2e_runtime;

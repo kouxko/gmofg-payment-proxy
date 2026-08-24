@@ -26,7 +26,7 @@ use super::common::{infra, json_error};
 
 const PERSISTENCE_VERSION_FIELD: &str = "_persistence_version";
 // 外部软件包服务配置是启动期网络合同；旧结构缺少该字段，必须显式拒绝而不是静默补默认值。
-const SETTINGS_PERSISTENCE_VERSION: u64 = 2;
+const SETTINGS_PERSISTENCE_VERSION: u64 = 3;
 
 trait LocalAddressProvider: Debug + Send + Sync {
     fn preferred_lan_ipv4(&self) -> Option<Ipv4Addr>;

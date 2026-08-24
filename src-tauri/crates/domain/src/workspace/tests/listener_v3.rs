@@ -33,6 +33,7 @@ fn socket_target_and_capacity_are_validated_without_http_state() {
             SocketRelaySecurity::Transparent,
         ),
         maximum_connections: DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
+        runtime_limits: SocketRuntimeLimits::default(),
         processing: SocketPayloadProcessing::Direct,
     });
     workspace.validate().expect("valid socket relay");
@@ -61,6 +62,24 @@ fn socket_target_and_capacity_are_validated_without_http_state() {
         settings.maximum_connections = MAX_SOCKET_MAXIMUM_CONNECTIONS + 1;
     }
     assert!(workspace.validate().is_err());
+}
+
+#[test]
+fn socket_runtime_limits_reject_zero_without_normalization() {
+    let mut workspace = ProxyWorkspace::default();
+    workspace.listeners[0].data_plane = ListenerDataPlane::Socket(SocketRelaySettings::default());
+    for mutate in [
+        |limits: &mut SocketRuntimeLimits| limits.read_chunk_bytes = 0,
+        |limits: &mut SocketRuntimeLimits| limits.diagnostic_event_capacity = 0,
+        |limits: &mut SocketRuntimeLimits| limits.diagnostic_memory_bytes = 0,
+    ] {
+        let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane else {
+            unreachable!()
+        };
+        settings.runtime_limits = SocketRuntimeLimits::default();
+        mutate(&mut settings.runtime_limits);
+        assert!(workspace.validate().is_err());
+    }
 }
 
 #[test]
@@ -118,6 +137,7 @@ fn socket_tls_roles_are_exhaustive_and_round_trip() {
             },
         ),
         maximum_connections: 500,
+        runtime_limits: SocketRuntimeLimits::default(),
         processing: SocketPayloadProcessing::Direct,
     });
 
@@ -275,6 +295,7 @@ fn cloned_socket_workspace_edits_only_the_selected_package_binding() {
             SocketRelaySecurity::Transparent,
         ),
         maximum_connections: DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
+        runtime_limits: SocketRuntimeLimits::default(),
         processing: scripted_processing(),
     });
     let original = workspace.clone();

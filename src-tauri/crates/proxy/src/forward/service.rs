@@ -1,8 +1,8 @@
-//! 标准 HTTP/1.1 正向代理与 CONNECT 隧道的运行时实现。
+//! 标准 HTTP/1.1 正向代理运行时。
 //!
 //! 该模块不依赖 Tauri、产品配置或证书存储。Host 负责把经过领域校验的监听配置和认证
-//! 适配器注入进来；运行时负责协议语义、目标连接、背压、half-close、超时和取消。
-//! HTTPS MITM 会在独立 TLS 适配层显式启用；本模块的 CONNECT 默认始终是透明隧道。
+//! 适配器注入进来；运行时负责协议语义、目标连接、背压、超时和取消。
+//! 当前 Exchange 架构明确拒绝 CONNECT 与 Upgrade，不建立 Exchange 外旁路隧道。
 
 #[cfg(test)]
 use std::convert::Infallible;
@@ -11,10 +11,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use bytes::Bytes;
 use http::header::{HOST, HeaderValue, PROXY_AUTHENTICATE, PROXY_AUTHORIZATION};
 use http::{Method, Request, Response, StatusCode, Uri};
-use http_body_util::BodyExt;
 #[cfg(test)]
 use http_body_util::Full;
 use hyper::body::Incoming;
@@ -22,15 +20,14 @@ use hyper::client::conn::http1 as client_http1;
 use hyper::server::conn::http1 as server_http1;
 use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::net::TcpListener;
 #[cfg(test)]
 use tokio::net::TcpStream;
-use tokio_rustls::TlsAcceptor;
+use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::http::{PipelinePorts, traffic_schedule};
+use crate::http::{HttpProtocolCapabilityFactory, PipelinePorts, traffic_schedule};
 use crate::listener::{ChildTaskError, ConnectionTaskScope};
 use crate::message::MessageLimits;
 use crate::reverse::{DownstreamTlsAcceptor, ReverseDownstreamTls};
@@ -43,6 +40,8 @@ use crate::{ErrorCode, ProxyError, Result};
 mod body;
 #[path = "config.rs"]
 mod config;
+#[path = "exchange_connector.rs"]
+mod exchange_connector;
 #[path = "headers.rs"]
 mod headers;
 #[path = "pipeline.rs"]
@@ -52,43 +51,38 @@ mod target;
 #[path = "tunnel.rs"]
 mod tunnel;
 
-use body::{
-    ProxyBody, empty_response, error_response, full_body, incoming_body, scheduled_body,
-    text_response,
-};
+use body::{ProxyBody, error_response, incoming_body, scheduled_body, text_response};
+use config::ForwardPipelineRuntime;
 pub use config::{
-    ForwardAuthenticationMode, ForwardMitmConfig, ForwardProxyAuthenticator, ForwardProxyConfig,
-    MitmCertificateAuthority, MitmServerIdentity, MitmUpstreamConnector, NativeRootMitmConnector,
-    NoAuthentication,
+    ForwardAuthenticationMode, ForwardProxyAuthenticator, ForwardProxyConfig,
+    MitmCertificateAuthority, MitmServerIdentity, NoAuthentication,
 };
-use config::{ForwardMitmRuntime, ForwardPipelineRuntime};
+use exchange_connector::ForwardHttpExchangeConnector;
+use headers::is_websocket_upgrade;
 pub use headers::strip_hop_by_hop_headers;
-use headers::{
-    ensure_websocket_upgrade_headers, is_websocket_upgrade,
-    strip_hop_by_hop_headers_preserving_upgrade,
-};
 use pipeline::{
     DropResponseMode, collect_pipeline_body, completion_body, drain_upstream_body,
-    drop_response_mode, finish_pipeline_response, intentional_drop_error,
-    intentional_response_drop, prepare_pipeline_request, record_websocket_response,
-    reject_websocket_drop, request_terminal_response, send_request_then_drop_after_write,
+    drop_response_mode, intentional_drop_error, intentional_response_drop,
+    response_from_pipeline_disposition, send_request_then_drop_after_write,
 };
 pub use target::absolute_uri_to_origin_form;
 pub(crate) use target::authority_is_allowed;
-use target::{HttpTarget, absolute_http_target, authority_host, connect_authority};
-use tunnel::{
-    PrefixIo, client_hello_requires_tunnel, connect_target, read_client_hello_prefix, run_tunnel,
-    timeout_or_cancel,
-};
+use target::{HttpTarget, absolute_http_target};
+use tunnel::{connect_target, timeout_or_cancel};
 
 #[derive(Debug, Clone)]
 pub struct ForwardProxyService {
     config: ForwardProxyConfig,
     authenticator: Arc<dyn ForwardProxyAuthenticator>,
-    mitm: Option<Arc<ForwardMitmRuntime>>,
     pipeline: Option<Arc<ForwardPipelineRuntime>>,
     downstream_tls: Option<DownstreamTlsAcceptor>,
 }
+
+struct ForwardConnectionExchange {
+    exchange: Arc<crate::http::HttpExchangeConnection>,
+}
+
+type SharedForwardExchange = Arc<AsyncMutex<Option<ForwardConnectionExchange>>>;
 
 impl ForwardProxyService {
     pub fn new(
@@ -99,7 +93,6 @@ impl ForwardProxyService {
         Ok(Self {
             config,
             authenticator,
-            mitm: None,
             pipeline: None,
             downstream_tls: None,
         })
@@ -111,54 +104,37 @@ impl ForwardProxyService {
         Ok(self)
     }
 
-    /// 将可解析的正向 HTTP/1.1 消息接入与 Reverse Listener 相同的应用管线。
+    /// 将正向 HTTP/1.1 消息接入与 Reverse Listener 相同的 Exchange/Pipeline。
     ///
-    /// CONNECT tunnel 本身不作为 HTTP 业务报文进入管线；只有 absolute-form HTTP 和
-    /// allowlist 命中的 MITM 内层 HTTP/1.1 请求进入。未命中 allowlist 的 TLS/h2/h3
-    /// 字节流继续透明转发。
+    /// 当前架构只接受可解析的 absolute-form HTTP 请求。CONNECT 与 Upgrade 会在任何
+    /// 上游连接建立前明确失败，绝不进入 Exchange 外的透明隧道或降级路径。
     #[must_use]
     pub fn with_pipeline(
         mut self,
         channel: ChannelId,
         runtime_epoch: Uuid,
         ports: Arc<dyn PipelinePorts>,
+        capabilities: Arc<dyn HttpProtocolCapabilityFactory>,
         limits: MessageLimits,
     ) -> Self {
         self.pipeline = Some(Arc::new(ForwardPipelineRuntime {
             channel,
             runtime_epoch,
             ports,
+            capabilities,
             limits,
         }));
         self
     }
 
-    /// 为显式 authority 允许列表启用 HTTPS MITM。
-    ///
-    /// 未命中允许列表的 CONNECT 仍严格走原始透明 tunnel。该方法不改变默认构造行为，
-    /// 因此未提供安装级 CA 时不可能意外拦截 HTTPS。
-    pub fn with_mitm(
-        mut self,
-        config: ForwardMitmConfig,
-        certificate_authority: Arc<dyn MitmCertificateAuthority>,
-        upstream_connector: Arc<dyn MitmUpstreamConnector>,
-    ) -> Result<Self> {
-        config.validate()?;
-        self.mitm = Some(Arc::new(ForwardMitmRuntime::new(
-            config,
-            certificate_authority,
-            upstream_connector,
-        )));
-        Ok(self)
-    }
-
     async fn handle(
         &self,
-        mut request: Request<Incoming>,
+        request: Request<Incoming>,
         peer: SocketAddr,
         context: Option<ConnectionContext>,
         cancellation: CancellationToken,
         task_scope: ConnectionTaskScope,
+        exchange: SharedForwardExchange,
     ) -> Result<Response<ProxyBody>> {
         if self.config.authentication == ForwardAuthenticationMode::Required
             && !self
@@ -177,17 +153,29 @@ impl ForwardProxyService {
         }
 
         if request.method() == Method::CONNECT {
-            return Ok(self
-                .handle_connect(&mut request, context, cancellation, &task_scope)
-                .await
-                .unwrap_or_else(|error| error_response(&error)));
+            return Ok(text_response(
+                StatusCode::NOT_IMPLEMENTED,
+                "HTTP CONNECT is not supported by the Exchange runtime",
+            ));
         }
         match self
-            .forward_http(request, context.as_ref(), cancellation, &task_scope)
+            .forward_http(
+                request,
+                context.as_ref(),
+                cancellation,
+                &task_scope,
+                &exchange,
+            )
             .await
         {
             Ok(response) => Ok(response),
-            Err(error) if intentional_response_drop(&error) => Err(error),
+            Err(error)
+                if intentional_response_drop(&error)
+                    || error.message.contains("HTTP connection Endpoint changed")
+                    || error.message.contains("HTTP connection Exchange is closed") =>
+            {
+                Err(error)
+            }
             Err(error) => Ok(error_response(&error)),
         }
     }
@@ -225,27 +213,13 @@ where
         })
 }
 
-#[path = "service/connect.rs"]
-mod connect;
 #[path = "service/http.rs"]
 mod http_flow;
 #[path = "service/lifecycle.rs"]
 mod lifecycle;
-use lifecycle::drain_connection_scope;
-#[path = "mitm.rs"]
-mod mitm;
-#[path = "service/websocket.rs"]
-mod websocket;
 
 pub(crate) fn config_error(message: impl Into<String>) -> ProxyError {
     ProxyError::new(ErrorCode::ConfigInvalid, message)
-}
-
-fn tls_config_error(error: impl std::fmt::Display) -> ProxyError {
-    ProxyError::new(
-        ErrorCode::CertificateInvalid,
-        format!("MITM TLS configuration failed: {error}"),
-    )
 }
 
 #[cfg(test)]

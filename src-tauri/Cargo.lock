@@ -2423,6 +2423,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "intercept-proxy-exchange"
+version = "1.0.0"
+dependencies = [
+ "async-trait",
+ "intercept-proxy-domain",
+ "parking_lot",
+ "serde_json",
+ "thiserror 2.0.19",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "intercept-proxy-host"
 version = "1.0.0"
 dependencies = [
@@ -2455,6 +2469,7 @@ dependencies = [
  "http",
  "intercept-proxy-application",
  "intercept-proxy-domain",
+ "intercept-proxy-exchange",
  "intercept-proxy-product-api",
  "intercept-proxy-protocol-scripting",
  "intercept-proxy-runtime",
@@ -2513,6 +2528,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "intercept-proxy-exchange",
  "openssl",
  "rcgen",
  "ring",

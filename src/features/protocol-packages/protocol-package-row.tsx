@@ -29,7 +29,12 @@ export function ProtocolPackageRow({
       }}
     >
       <span className="min-w-0">
-        <span className="block truncate font-medium">{group.name}</span>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate font-medium">{group.name}</span>
+          <Chip size="sm" variant="soft">
+            {group.kind === "http" ? "HTTP" : "Socket"}
+          </Chip>
+        </span>
         {versions.some(isBuiltInPackage) && (
           <Chip size="sm" color="accent" variant="soft">内置示例</Chip>
         )}

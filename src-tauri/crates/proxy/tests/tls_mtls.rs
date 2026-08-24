@@ -350,6 +350,11 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
         acceptor: Arc::new(acceptor),
         upstream: Arc::new(UnusedUpstream),
         ports: Arc::new(NoopPipelinePorts),
+        capabilities: Arc::new(intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
+            "tls-test-workspace",
+            "tls-test-listener",
+        )),
+        endpoint: "unused.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(4).unwrap(),
         allowed_client_cidrs: Vec::new(),
@@ -417,6 +422,11 @@ async fn silent_inbound_tls_handshake_times_out_and_releases_its_permit() {
         acceptor: Arc::new(acceptor),
         upstream: Arc::new(UnusedUpstream),
         ports: Arc::new(NoopPipelinePorts),
+        capabilities: Arc::new(intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
+            "tls-test-workspace",
+            "tls-timeout-listener",
+        )),
+        endpoint: "unused.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(1).unwrap(),
         allowed_client_cidrs: Vec::new(),

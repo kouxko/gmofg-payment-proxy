@@ -21,9 +21,30 @@ pub(super) fn build_probe(
     bind_addr: SocketAddr,
     security: SocketRelaySecurity,
 ) -> AppResult<PreparedListenerRuntime> {
-    let observer = Arc::new(SocketDiagnosticObserver::new(
-        adapter.socket_diagnostic_events.read().clone(),
-    ));
+    let capacity =
+        usize::try_from(socket.runtime_limits.diagnostic_event_capacity).map_err(|_| {
+            runtime_error(
+                listener,
+                "CONFIG_INVALID",
+                "Socket 诊断事件容量超出平台范围".into(),
+            )
+        })?;
+    let max_logical_bytes = usize::try_from(socket.runtime_limits.diagnostic_memory_bytes)
+        .map_err(|_| {
+            runtime_error(
+                listener,
+                "CONFIG_INVALID",
+                "Socket 诊断内存容量超出平台范围".into(),
+            )
+        })?;
+    let observer = Arc::new(
+        SocketDiagnosticObserver::new(
+            adapter.socket_diagnostic_events.read().clone(),
+            capacity,
+            max_logical_bytes,
+        )
+        .map_err(|error| runtime_error(listener, error.code, error.message))?,
+    );
     let service = SocketRelayService::build_with_observer(
         SocketRelayConfig {
             bind_addr,
@@ -34,6 +55,15 @@ pub(super) fn build_probe(
             },
             security,
             maximum_connections: socket.maximum_connections,
+            read_chunk_bytes: usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(
+                |_| {
+                    runtime_error(
+                        listener,
+                        "CONFIG_INVALID",
+                        "Socket 单次读取字节数超出平台范围".into(),
+                    )
+                },
+            )?,
             connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
             read_timeout: Duration::from_millis(listener.read_timeout_ms),
             write_timeout: Duration::from_millis(listener.write_timeout_ms),

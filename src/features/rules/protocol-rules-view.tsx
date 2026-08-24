@@ -53,10 +53,11 @@ export function ProtocolRulesView({
 }
 
 export function ProtocolRuleEditorView({
+  kind,
   source,
   ...props
-}: Omit<ProtocolRulesViewProps, "kind"> & { source: ProtocolRuleSource }) {
-  return <ProtocolRulesController kind="http" source={source} editorOnly {...props} />;
+}: ProtocolRulesViewProps & { source: ProtocolRuleSource }) {
+  return <ProtocolRulesController kind={kind} source={source} editorOnly {...props} />;
 }
 
 function ProtocolRulesController({

@@ -14,15 +14,19 @@ use std::{
 };
 
 use async_trait::async_trait;
-use bytes::Bytes;
+use intercept_proxy_exchange::{
+    Decode, Direction, Display, Document, DocumentField, DocumentFieldName, DocumentFieldType,
+    DocumentSchema, DocumentSchemaId, DocumentValue, Downstream, Encode, Error, Frame, FrameResult,
+    Rules, Socket, SocketContext, Upstream,
+};
 use tokio::{net::TcpStream, sync::Barrier};
 
 use super::super::{
-    FrameBoundary, LocalResponderProcessorFactory, ScriptedRelayProcessorFactory,
     SocketConnectionEvent, SocketConnectionIdentity, SocketConnectionObserver,
-    SocketDownstreamSecurity, SocketEndpoint, SocketFrameProcessor, SocketFramePumpLimits,
-    SocketLocalResponderConfig, SocketPayloadDirection, SocketProcessingFailure,
-    SocketProcessingFailureKind, SocketRelayConfig, SocketRelaySecurity,
+    SocketDirectionCapabilities, SocketDownstreamSecurity, SocketEndpoint,
+    SocketLocalResponderConfig, SocketObservationMetadata, SocketPayloadDirection,
+    SocketPipelineLimits, SocketProcessingFailure, SocketProcessingFailureKind,
+    SocketProtocolCapabilityFactory, SocketRelayConfig, SocketRelaySecurity,
 };
 
 pub(super) const TEST_TIMEOUT: Duration = Duration::from_secs(3);
@@ -85,6 +89,7 @@ pub(super) fn relay_config(bind_addr: SocketAddr, upstream: SocketAddr) -> Socke
         },
         security: SocketRelaySecurity::Transparent,
         maximum_connections: 8,
+        read_chunk_bytes: 16 * 1024,
         connect_timeout: Duration::from_secs(1),
         read_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),
@@ -97,14 +102,15 @@ pub(super) fn local_config(bind_addr: SocketAddr) -> SocketLocalResponderConfig 
         allowed_client_cidrs: Vec::new(),
         security: SocketDownstreamSecurity::Tcp,
         maximum_connections: 8,
+        read_chunk_bytes: 16 * 1024,
         handshake_timeout: Duration::from_secs(1),
         read_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),
     }
 }
 
-pub(super) fn limits() -> SocketFramePumpLimits {
-    SocketFramePumpLimits::new(1_024, 1_024, 7, Duration::from_secs(1)).unwrap()
+pub(super) fn limits() -> SocketPipelineLimits {
+    SocketPipelineLimits::new(1_024, 1_024, 7, Duration::from_secs(1)).unwrap()
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -114,51 +120,112 @@ pub(super) enum ProcessorOutcome {
     Panic,
 }
 
-pub(super) struct LengthPrefixedProcessor {
-    tag: u8,
-    outcome: ProcessorOutcome,
-    barrier: Option<Arc<Barrier>>,
+struct TestFrame<D: Direction>(std::marker::PhantomData<fn() -> D>);
+
+#[async_trait]
+impl<D: Direction> Frame<D> for TestFrame<D> {
+    async fn split(&mut self, buffered: &[u8]) -> Result<FrameResult, Error> {
+        let total = usize::from(buffered[0]) + 1;
+        Ok(if buffered.len() < total {
+            FrameResult::NeedMore
+        } else {
+            FrameResult::Complete { consumed: total }
+        })
+    }
 }
 
-impl LengthPrefixedProcessor {
-    fn new(tag: u8, outcome: ProcessorOutcome, barrier: Option<Arc<Barrier>>) -> Self {
-        Self {
-            tag,
-            outcome,
-            barrier,
-        }
-    }
+struct TestDecode<D: Direction> {
+    barrier: Option<Arc<Barrier>>,
+    marker: std::marker::PhantomData<fn() -> D>,
 }
 
 #[async_trait]
-impl SocketFrameProcessor for LengthPrefixedProcessor {
-    async fn inspect(&mut self, buffered: Bytes) -> Result<FrameBoundary, SocketProcessingFailure> {
-        let total = usize::from(buffered[0]) + 1;
-        if buffered.len() < total {
-            Ok(FrameBoundary::NeedMore { total })
-        } else {
-            Ok(FrameBoundary::Complete { bytes: total })
-        }
-    }
-
-    async fn process(&mut self, origin: Bytes) -> Result<Bytes, SocketProcessingFailure> {
+impl<D: Direction> Decode<Socket, D> for TestDecode<D> {
+    async fn decode(&mut self, context: &SocketContext) -> Result<Document, Error> {
         if let Some(barrier) = &self.barrier {
             barrier.wait().await;
         }
+        wire_document(context.data.clone())
+    }
+}
+
+struct TestDisplay;
+
+#[async_trait]
+impl Display for TestDisplay {
+    async fn display(&mut self, _document: &Document) -> Result<String, Error> {
+        Ok("test-frame".to_owned())
+    }
+}
+
+struct TestRules<D: Direction> {
+    tag: Option<u8>,
+    outcome: ProcessorOutcome,
+    marker: std::marker::PhantomData<fn() -> D>,
+}
+
+#[async_trait]
+impl<D: Direction> Rules for TestRules<D> {
+    async fn apply(&mut self, mut document: Document) -> Result<Document, Error> {
         match self.outcome {
             ProcessorOutcome::Transform => {
-                let mut output = Vec::with_capacity(origin.len());
-                output.push(self.tag);
-                output.extend_from_slice(&origin[1..]);
-                Ok(Bytes::from(output))
+                if let Some(tag) = self.tag {
+                    let mut data = blob(&document)?.clone();
+                    data[0] = tag;
+                    document
+                        .set("data", DocumentValue::Blob(data))
+                        .map_err(|error| domain_error(&error))?;
+                }
+                Ok(document)
             }
-            ProcessorOutcome::Fail => Err(SocketProcessingFailure::new(
-                SocketProcessingFailureKind::ProcessingFailed,
-                "injected integration-test processor failure",
-            )),
-            ProcessorOutcome::Panic => panic!("injected integration-test processor panic"),
+            ProcessorOutcome::Fail => Err(Error::new(format!(
+                "{:?}|{}: injected integration-test Rules failure",
+                D::KIND,
+                SocketProcessingFailureKind::ProcessingFailed.as_str()
+            ))),
+            ProcessorOutcome::Panic => Err(Error::new(format!(
+                "{:?}|{}: injected integration-test capability panic",
+                D::KIND,
+                SocketProcessingFailureKind::ProcessorPanicked.as_str()
+            ))),
         }
     }
+}
+
+struct TestEncode<D: Direction>(std::marker::PhantomData<fn() -> D>);
+
+#[async_trait]
+impl<D: Direction> Encode<Socket, D> for TestEncode<D> {
+    async fn encode(
+        &mut self,
+        _original: &SocketContext,
+        document: &Document,
+    ) -> Result<SocketContext, Error> {
+        Ok(SocketContext {
+            data: blob(document)?.clone(),
+        })
+    }
+}
+
+fn capabilities<D: Direction>(
+    tag: Option<u8>,
+    outcome: ProcessorOutcome,
+    barrier: Option<Arc<Barrier>>,
+) -> SocketDirectionCapabilities<D> {
+    SocketDirectionCapabilities::new(
+        Box::new(TestFrame::<D>(std::marker::PhantomData)),
+        Box::new(TestDecode::<D> {
+            barrier,
+            marker: std::marker::PhantomData,
+        }),
+        Box::new(TestDisplay),
+        Box::new(TestRules::<D> {
+            tag,
+            outcome,
+            marker: std::marker::PhantomData,
+        }),
+        Box::new(TestEncode::<D>(std::marker::PhantomData)),
+    )
 }
 
 pub(super) struct ScriptedFactory {
@@ -179,20 +246,39 @@ impl ScriptedFactory {
     }
 }
 
-impl ScriptedRelayProcessorFactory for ScriptedFactory {
-    fn create_direction(
+impl SocketProtocolCapabilityFactory for ScriptedFactory {
+    fn observation_metadata(&self) -> SocketObservationMetadata {
+        SocketObservationMetadata {
+            workspace_id: "test-workspace".to_owned(),
+            listener_id: "test-listener".to_owned(),
+        }
+    }
+
+    fn create_upstream(
         &self,
         _connection: SocketConnectionIdentity,
-        direction: SocketPayloadDirection,
-    ) -> Box<dyn SocketFrameProcessor> {
-        self.directions.lock().unwrap().push(direction);
-        let tag = match direction {
-            SocketPayloadDirection::AppToUpstream => b'U',
-            SocketPayloadDirection::UpstreamToApp => b'D',
-            SocketPayloadDirection::LocalExchange => unreachable!(),
-        };
-        Box::new(LengthPrefixedProcessor::new(
-            tag,
+    ) -> Result<SocketDirectionCapabilities<Upstream>, SocketProcessingFailure> {
+        self.directions
+            .lock()
+            .unwrap()
+            .push(SocketPayloadDirection::AppToUpstream);
+        Ok(capabilities(
+            Some(b'U'),
+            ProcessorOutcome::Transform,
+            self.barrier.clone(),
+        ))
+    }
+
+    fn create_downstream(
+        &self,
+        _connection: SocketConnectionIdentity,
+    ) -> Result<SocketDirectionCapabilities<Downstream>, SocketProcessingFailure> {
+        self.directions
+            .lock()
+            .unwrap()
+            .push(SocketPayloadDirection::UpstreamToApp);
+        Ok(capabilities(
+            Some(b'D'),
             ProcessorOutcome::Transform,
             self.barrier.clone(),
         ))
@@ -217,12 +303,60 @@ impl LocalFactory {
     }
 }
 
-impl LocalResponderProcessorFactory for LocalFactory {
-    fn create_exchange(
+impl SocketProtocolCapabilityFactory for LocalFactory {
+    fn observation_metadata(&self) -> SocketObservationMetadata {
+        SocketObservationMetadata {
+            workspace_id: "test-workspace".to_owned(),
+            listener_id: "test-listener".to_owned(),
+        }
+    }
+
+    fn create_upstream(
         &self,
         _connection: SocketConnectionIdentity,
-    ) -> Box<dyn SocketFrameProcessor> {
+    ) -> Result<SocketDirectionCapabilities<Upstream>, SocketProcessingFailure> {
         self.created.fetch_add(1, Ordering::SeqCst);
-        Box::new(LengthPrefixedProcessor::new(b'R', self.outcome, None))
+        Ok(capabilities(None, self.outcome, None))
     }
+
+    fn create_downstream(
+        &self,
+        _connection: SocketConnectionIdentity,
+    ) -> Result<SocketDirectionCapabilities<Downstream>, SocketProcessingFailure> {
+        self.created.fetch_add(1, Ordering::SeqCst);
+        Ok(capabilities(None, self.outcome, None))
+    }
+}
+
+fn wire_document(data: Vec<u8>) -> Result<Document, Error> {
+    let schema = DocumentSchema::new(
+        DocumentSchemaId::new("socket-test").unwrap(),
+        1,
+        "Socket Test",
+        vec![
+            DocumentField::new(
+                DocumentFieldName::new("data").unwrap(),
+                DocumentFieldType::Blob,
+                "data",
+            )
+            .unwrap(),
+        ],
+    )
+    .unwrap();
+    let mut document = Document::new(schema);
+    document
+        .set("data", DocumentValue::Blob(data))
+        .map_err(|error| domain_error(&error))?;
+    Ok(document)
+}
+
+fn blob(document: &Document) -> Result<&Vec<u8>, Error> {
+    match document.get("data").map_err(|error| domain_error(&error))? {
+        DocumentValue::Blob(value) => Ok(value),
+        _ => Err(Error::new("test document data must be Blob")),
+    }
+}
+
+fn domain_error(error: &intercept_proxy_exchange::DomainError) -> Error {
+    Error::new(format!("{}: {error}", error.code.as_str()))
 }

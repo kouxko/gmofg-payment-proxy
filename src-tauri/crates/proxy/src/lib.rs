@@ -4,16 +4,12 @@
 //! HTTP/1 字节传输、取消与故障动作。绑定器、连接器和时间相关行为可替换，以便测试能
 //! 确定性验证生命周期，而无需真实支付上游。
 
-#![allow(clippy::missing_errors_doc, clippy::too_many_lines)]
-
 pub mod fault;
 pub mod forward;
 pub mod http;
-#[allow(dead_code)]
 pub(crate) mod listener;
 pub mod message;
 pub mod metrics;
-pub mod production_factory;
 pub mod reverse;
 pub mod socket_relay;
 pub mod supervisor;
@@ -23,37 +19,34 @@ pub mod transport;
 
 pub use fault::{FaultAction, ResponseDisposition};
 pub use forward::{
-    ForwardAuthenticationMode, ForwardMitmConfig, ForwardProxyAuthenticator, ForwardProxyConfig,
-    ForwardProxyService, MitmCertificateAuthority, MitmServerIdentity, MitmUpstreamConnector,
-    NativeRootMitmConnector, NoAuthentication, absolute_uri_to_origin_form,
+    ForwardAuthenticationMode, ForwardProxyAuthenticator, ForwardProxyConfig, ForwardProxyService,
+    MitmCertificateAuthority, MitmServerIdentity, NoAuthentication, absolute_uri_to_origin_form,
     strip_hop_by_hop_headers,
 };
 pub use http::{
-    ConnectionAdmission, ConnectionService, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
+    ConnectionAdmission, ConnectionService, HttpConnectionIdentity, HttpDirectionCapabilities,
+    HttpObservationMetadata, HttpProtocolCapabilityFactory, NoopPipelinePorts, PipelinePorts,
+    PlainHttpCapabilityFactory, RulesChain, UpstreamConnector,
 };
 pub use message::{Message, MessageLimits, RawHeader};
 pub use metrics::{ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot};
-pub use production_factory::{
-    RustlsRuntimeServiceFactory, TlsMaterialProvider, TlsMaterialSnapshot,
-};
 pub use reverse::{
     ReverseClientIdentity, ReverseDownstreamTls, ReverseProxyConfig, ReverseProxyService,
     ReverseUpstreamTls, UpstreamConnectionTestResult, UpstreamScheme, UpstreamTlsHandshakeResult,
     UpstreamTransport,
 };
 pub use socket_relay::{
-    BoundedSocketConnectionObserver, FrameBoundary, LocalResponderDiagnostics,
-    LocalResponderProcessorFactory, NoopSocketConnectionObserver, ScriptedRelayProcessorFactory,
+    BoundedSocketConnectionObserver, FrameBoundary, NoopSocketConnectionObserver,
     SocketConnectionEvent, SocketConnectionIdentity, SocketConnectionObserver,
-    SocketConnectionTarget, SocketDocumentFieldPreview, SocketDocumentPreview,
-    SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint, SocketFrameProcessor,
-    SocketFramePumpLimits, SocketLocalRequestPreview, SocketLocalResponderConfig,
-    SocketOpenedEvidence, SocketPayloadDirection, SocketProcessingFailure,
-    SocketProcessingFailureKind, SocketRejectionReason, SocketRelayBytes, SocketRelayConfig,
-    SocketRelayDirection, SocketRelayFailure, SocketRelayMetricsSnapshot, SocketRelayRunContext,
-    SocketRelaySecurity, SocketRelayService, SocketRelayStage, SocketTlsEvidence,
-    SocketTlsIdentity, SocketTransportMode, SocketUpstreamConnectionTestResult,
-    SocketUpstreamTlsConfig, SocketUpstreamTransport,
+    SocketConnectionTarget, SocketDirectionCapabilities, SocketDocumentFieldPreview,
+    SocketDocumentPreview, SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint,
+    SocketLocalRequestPreview, SocketLocalResponderConfig, SocketObservationMetadata,
+    SocketOpenedEvidence, SocketPayloadDirection, SocketPipelineLimits, SocketProcessingFailure,
+    SocketProcessingFailureKind, SocketProtocolCapabilityFactory, SocketRejectionReason,
+    SocketRelayBytes, SocketRelayConfig, SocketRelayDirection, SocketRelayFailure,
+    SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity, SocketRelayService,
+    SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity, SocketTransportMode,
+    SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig, SocketUpstreamTransport,
 };
 pub use supervisor::{
     ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,
@@ -160,6 +153,57 @@ impl ErrorCode {
             Self::Internal => "INTERNAL_ERROR",
         }
     }
+
+    /// 把跨 trait 边界携带的稳定错误码还原为运行时分类。
+    ///
+    /// Exchange 的错误对象拥有 `String` code，而公开的 `ProxyError` 使用静态 code；集中
+    /// 维护反向映射可避免各协议适配器把真实故障降级成 `INTERNAL_ERROR`。
+    pub fn from_stable_str(value: &str) -> Option<Self> {
+        [
+            Self::ProxyAlreadyRunning,
+            Self::OperationInProgress,
+            Self::PortInUse,
+            Self::ConfigInvalid,
+            Self::CertificateNotReady,
+            Self::CertificateInvalid,
+            Self::Pkcs12PasswordInvalid,
+            Self::DpapiUnprotectFailed,
+            Self::KeychainUnprotectFailed,
+            Self::TlsHandshakeFailed,
+            Self::DownstreamTlsHandshakeFailed,
+            Self::UpstreamConnectTimeout,
+            Self::UpstreamWriteTimeout,
+            Self::UpstreamReadTimeout,
+            Self::SocketCidrDenied,
+            Self::SocketCapacityExhausted,
+            Self::SocketDnsFailed,
+            Self::SocketDnsTimeout,
+            Self::SocketConnectFailed,
+            Self::SocketConnectTimeout,
+            Self::SocketDownstreamTlsFailed,
+            Self::SocketDownstreamTlsTimeout,
+            Self::SocketUpstreamTlsFailed,
+            Self::SocketUpstreamTlsTimeout,
+            Self::SocketReadFailed,
+            Self::SocketReadTimeout,
+            Self::SocketWriteFailed,
+            Self::SocketWriteTimeout,
+            Self::SocketRelayCancelled,
+            Self::SocketConnectionTaskPanicked,
+            Self::BodyTooLarge,
+            Self::HeaderLimitExceeded,
+            Self::IncorrectContentLength,
+            Self::TruncatedResponse,
+            Self::FaultStreamAborted,
+            Self::FaultExecutionCancelled,
+            Self::ClientDisconnected,
+            Self::ProxyStopped,
+            Self::Io,
+            Self::Internal,
+        ]
+        .into_iter()
+        .find(|code| code.as_str() == value)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -194,5 +238,17 @@ mod tests {
             ErrorCode::KeychainUnprotectFailed.as_str(),
             "KEYCHAIN_UNPROTECT_FAILED"
         );
+    }
+
+    #[test]
+    fn stable_error_codes_round_trip_across_exchange_boundaries() {
+        for code in [
+            ErrorCode::ClientDisconnected,
+            ErrorCode::UpstreamConnectTimeout,
+            ErrorCode::SocketReadFailed,
+        ] {
+            assert_eq!(ErrorCode::from_stable_str(code.as_str()), Some(code));
+        }
+        assert_eq!(ErrorCode::from_stable_str("UNKNOWN"), None);
     }
 }

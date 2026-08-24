@@ -7,25 +7,19 @@ use uuid::Uuid;
 use crate::listener::{ConnectionHandler, ConnectionTaskScope, PrimaryConnectionOutcome, sealed};
 use crate::transport::BoxIo;
 use crate::transport::ConnectionContext;
-use crate::transport::relay::{
-    RelayBytes, RelayFailure, RelayProgress, RelayTimeoutCodes, RelayTimeouts,
-    relay_bidirectional_with_progress,
-};
+use crate::transport::relay::{RelayBytes, RelayFailure, RelayProgress};
 use crate::{ErrorCode, ProxyError, Result};
 
 use super::connector::PreparedSocketSecurity;
-use super::frame_pump::{
-    SocketFramePumpTimeouts, relay_framed_bidirectional, respond_framed_locally_observed,
-};
 use super::handler_support::{
     SocketHandlerConfig, SocketHandlerProcessing, connection_identity, normalize_cancelled,
     processing_failure, socket_failure,
 };
 use super::{
-    LocalResponderProcessorFactory, ScriptedRelayProcessorFactory, SocketConnectionEvent,
-    SocketConnectionObserver, SocketFramePumpLimits, SocketLocalResponderConfig,
-    SocketOpenedEvidence, SocketProcessingFailure, SocketRelayConfig, SocketRelayDirection,
-    SocketRelayFailure, SocketRelayMetrics, SocketRelayRunContext, SocketRelayStage,
+    SocketConnectionEvent, SocketConnectionObserver, SocketLocalResponderConfig,
+    SocketOpenedEvidence, SocketPipelineLimits, SocketProcessingFailure,
+    SocketProtocolCapabilityFactory, SocketRelayConfig, SocketRelayDirection, SocketRelayFailure,
+    SocketRelayMetrics, SocketRelayRunContext, SocketRelayStage,
     SocketUpstreamConnectionTestResult,
 };
 
@@ -38,6 +32,9 @@ pub(crate) struct SocketConnectionHandler {
     metrics: Arc<SocketRelayMetrics>,
     run: Arc<std::sync::RwLock<SocketRelayRunContext>>,
 }
+
+mod exchange;
+mod local_raw;
 
 impl SocketConnectionHandler {
     pub(crate) fn build_direct(
@@ -58,10 +55,28 @@ impl SocketConnectionHandler {
         })
     }
 
+    pub(crate) fn build_direct_local(
+        config: SocketLocalResponderConfig,
+        observer: Arc<dyn SocketConnectionObserver>,
+        metrics: Arc<SocketRelayMetrics>,
+        run: Arc<std::sync::RwLock<SocketRelayRunContext>>,
+    ) -> Result<Self> {
+        config.validate()?;
+        let security = PreparedSocketSecurity::build_downstream(&config.security)?;
+        Ok(Self {
+            config: SocketHandlerConfig::LocalResponder(config),
+            security,
+            processing: SocketHandlerProcessing::DirectLocal,
+            observer,
+            metrics,
+            run,
+        })
+    }
+
     pub(crate) fn build_scripted(
         config: SocketRelayConfig,
-        factory: Arc<dyn ScriptedRelayProcessorFactory>,
-        limits: SocketFramePumpLimits,
+        factory: Arc<dyn SocketProtocolCapabilityFactory>,
+        limits: SocketPipelineLimits,
         observer: Arc<dyn SocketConnectionObserver>,
         metrics: Arc<SocketRelayMetrics>,
         run: Arc<std::sync::RwLock<SocketRelayRunContext>>,
@@ -80,8 +95,8 @@ impl SocketConnectionHandler {
 
     pub(crate) fn build_local_responder(
         config: SocketLocalResponderConfig,
-        factory: Arc<dyn LocalResponderProcessorFactory>,
-        limits: SocketFramePumpLimits,
+        factory: Arc<dyn SocketProtocolCapabilityFactory>,
+        limits: SocketPipelineLimits,
         observer: Arc<dyn SocketConnectionObserver>,
         metrics: Arc<SocketRelayMetrics>,
         run: Arc<std::sync::RwLock<SocketRelayRunContext>>,
@@ -148,84 +163,19 @@ impl SocketConnectionHandler {
                 )
                 .await
             }
-            _ => unreachable!("socket handler topology and processing mode are built together"),
-        }
-    }
-
-    #[allow(clippy::too_many_arguments)]
-    async fn handle_relay(
-        &self,
-        io: BoxIo,
-        peer: SocketAddr,
-        connection_id: Uuid,
-        run: SocketRelayRunContext,
-        config: &SocketRelayConfig,
-        processing: &SocketHandlerProcessing,
-        cancellation: CancellationToken,
-        progress: Arc<RelayProgress>,
-    ) -> Result<()> {
-        let connected = self
-            .security
-            .connect(
-                io,
-                peer,
-                &config.upstream,
-                config.connect_timeout,
-                &cancellation,
-            )
-            .await;
-        let connected = match connected {
-            Ok(connected) => connected,
-            Err(preparation) => {
-                return self.finish_preparation_failure(run, connection_id, preparation);
-            }
-        };
-        self.open(
-            &run,
-            connection_id,
-            SocketOpenedEvidence::Relay {
-                resolved_address: connected.resolved_address,
-                downstream_tls_peer: connected.downstream_tls_peer,
-                upstream_tls: connected.upstream_tls,
-            },
-        );
-
-        match processing {
-            SocketHandlerProcessing::Direct => {
-                let result = relay_bidirectional_with_progress(
-                    connected.downstream,
-                    connected.upstream,
-                    RelayTimeouts::new(
-                        config.read_timeout,
-                        config.write_timeout,
-                        RelayTimeoutCodes {
-                            read: ErrorCode::SocketReadTimeout,
-                            write: ErrorCode::SocketWriteTimeout,
-                        },
-                    ),
-                    cancellation,
-                    Arc::clone(&progress),
-                )
-                .await;
-                self.finish_direct(run, connection_id, result)
-            }
-            SocketHandlerProcessing::ScriptedRelay { factory, limits } => {
-                let result = relay_framed_bidirectional(
-                    connected.downstream,
-                    connected.upstream,
-                    connection_identity(&run, connection_id, peer),
-                    factory.as_ref(),
-                    *limits,
-                    SocketFramePumpTimeouts::new(config.read_timeout, config.write_timeout),
+            (SocketHandlerConfig::LocalResponder(config), SocketHandlerProcessing::DirectLocal) => {
+                self.handle_local_raw_responder(
+                    io,
+                    peer,
+                    connection_id,
+                    run,
+                    config,
                     cancellation,
                     progress,
                 )
-                .await;
-                self.finish_processing(run, connection_id, result)
+                .await
             }
-            SocketHandlerProcessing::LocalResponder { .. } => {
-                unreachable!("relay config cannot carry a local responder processor")
-            }
+            _ => unreachable!("socket handler topology and processing mode are built together"),
         }
     }
 
@@ -237,8 +187,8 @@ impl SocketConnectionHandler {
         connection_id: Uuid,
         run: SocketRelayRunContext,
         config: &SocketLocalResponderConfig,
-        factory: &dyn LocalResponderProcessorFactory,
-        limits: SocketFramePumpLimits,
+        factory: &dyn SocketProtocolCapabilityFactory,
+        limits: SocketPipelineLimits,
         cancellation: CancellationToken,
         progress: Arc<RelayProgress>,
     ) -> Result<()> {
@@ -276,21 +226,23 @@ impl SocketConnectionHandler {
                 downstream_tls_peer: accepted.downstream_tls_peer,
             },
         );
-        let result = respond_framed_locally_observed(
+        let result = super::protocol_exchange::run_local_exchange(
             accepted.downstream,
             connection_identity(&run, connection_id, peer),
             factory,
-            super::LocalResponderDiagnostics::new(
-                run.clone(),
-                connection_id,
-                Arc::clone(&self.observer),
-            ),
             limits,
-            SocketFramePumpTimeouts::new(config.read_timeout, config.write_timeout),
+            config.read_timeout,
+            config.write_timeout,
             cancellation,
             progress,
         )
-        .await;
+        .await
+        .map_err(|failure| match failure {
+            super::protocol_exchange::ProtocolExchangeFailure::Processing(failure) => failure,
+            super::protocol_exchange::ProtocolExchangeFailure::Preparation(_) => {
+                unreachable!("LocalServer never prepares a remote connection")
+            }
+        });
         self.finish_processing(run, connection_id, result)
     }
 

@@ -4,13 +4,14 @@ fn inspector(
     runtime_limits: ProtocolRuntimeLimits,
     framing_limits: ProtocolFramingLimits,
 ) -> ProtocolFrameInspector {
-    ProtocolFrameInspector::new(
+    ProtocolFrameInspector::new_with_cancellation(
         package,
         direction,
         "connection-production",
         "listener-production",
         runtime_limits,
         framing_limits,
+        ProtocolExecutionCancellation::new(),
     )
 }
 
@@ -211,7 +212,7 @@ fn decode(origin, context) { () }
         ProtocolFramingLimits::new(8, 8).unwrap(),
         cancellation.clone(),
     );
-    assert!(!inspector.cancellation().is_cancelled());
+    assert!(!cancellation.is_cancelled());
 
     let canceller = cancellation.clone();
     let cancel_thread = std::thread::spawn(move || {

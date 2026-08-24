@@ -9,14 +9,15 @@ use http::{HeaderName, HeaderValue};
 
 use super::{
     Application,
+    rule_capabilities::{action_capability, match_field_supported},
     validation::{ensure_valid, require_confirmation},
 };
 use crate::{
     ActiveFaultViewModel, AppError, AppResult, FaultConfigurationDraft, FaultTemplateViewModel,
-    OperationResultViewModel, RuleAction, RuleActionKind, RuleByteInputViewModel, RuleCondition,
-    RuleConditionKind, RuleDraft, RuleDropResponseMode, RuleHeaderInputViewModel, RuleId,
-    RuleJitterScope, RuleMatchField, RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind,
-    RuleSummaryViewModel, RuleTerminalAction, RuleTrafficDirection, RuleViewModel, SessionId,
+    MessageStage, OperationResultViewModel, RuleAction, RuleActionKind, RuleByteInputViewModel,
+    RuleCondition, RuleConditionKind, RuleDraft, RuleDropResponseMode, RuleHeaderInputViewModel,
+    RuleId, RuleJitterScope, RuleMatchField, RuleMatchFieldKind, RuleMatchOperator,
+    RuleMatchOperatorKind, RuleSummaryViewModel, RuleTerminalAction, RuleViewModel, SessionId,
 };
 
 impl Application {
@@ -34,27 +35,45 @@ impl Application {
         self.rules.new_draft().await
     }
 
-    pub fn rule_condition_draft(&self, kind: RuleConditionKind) -> RuleCondition {
-        match kind {
+    pub fn rule_condition_draft(
+        &self,
+        kind: RuleConditionKind,
+        stage: MessageStage,
+    ) -> AppResult<RuleCondition> {
+        Ok(match kind {
             RuleConditionKind::Field => RuleCondition::Field {
-                field: RuleMatchField::PathOrRequestType,
+                field: if stage == MessageStage::TlsHandshake {
+                    RuleMatchField::CertificateFingerprint
+                } else {
+                    RuleMatchField::PathOrRequestType
+                },
                 operator: RuleMatchOperator::Equals {
                     value: String::new(),
                 },
             },
             RuleConditionKind::NthHit => RuleCondition::NthHit { count: 1 },
-        }
+        })
     }
 
-    pub fn rule_match_field_draft(&self, kind: RuleMatchFieldKind) -> RuleMatchField {
-        match kind {
+    pub fn rule_match_field_draft(
+        &self,
+        kind: RuleMatchFieldKind,
+        stage: MessageStage,
+    ) -> AppResult<RuleMatchField> {
+        if !match_field_supported(stage, kind) {
+            return Err(AppError::new(
+                "RULE_INVALID",
+                "匹配字段与当前规则阶段不兼容。",
+            ));
+        }
+        Ok(match kind {
             RuleMatchFieldKind::TerminalIp => RuleMatchField::TerminalIp,
             RuleMatchFieldKind::CertificateFingerprint => RuleMatchField::CertificateFingerprint,
             RuleMatchFieldKind::PathOrRequestType => RuleMatchField::PathOrRequestType,
             RuleMatchFieldKind::JsonPath => RuleMatchField::JsonPath {
                 path: "$.field".into(),
             },
-        }
+        })
     }
 
     pub fn rule_match_operator_draft(&self, kind: RuleMatchOperatorKind) -> RuleMatchOperator {
@@ -71,8 +90,15 @@ impl Application {
         }
     }
 
-    pub fn rule_action_draft(&self, kind: RuleActionKind) -> RuleAction {
-        match kind {
+    pub fn rule_action_draft(
+        &self,
+        kind: RuleActionKind,
+        stage: MessageStage,
+    ) -> AppResult<RuleAction> {
+        let capability = action_capability(stage, kind)
+            .ok_or_else(|| AppError::new("RULE_INVALID", "动作与当前规则阶段不兼容。"))?;
+        let traffic_direction = capability.traffic_direction;
+        Ok(match kind {
             RuleActionKind::SetJsonField => RuleAction::SetJsonField {
                 path: "$.field".into(),
                 value_json: "null".into(),
@@ -93,12 +119,12 @@ impl Application {
             RuleActionKind::Throttle => RuleAction::Throttle {
                 bytes_per_second: 1024,
                 chunk_bytes: 16 * 1024,
-                direction: RuleTrafficDirection::Upstream,
+                direction: traffic_direction.expect("throttle capability has a direction"),
             },
             RuleActionKind::Intermittent => RuleAction::Intermittent {
                 available_milliseconds: 1000,
                 blocked_milliseconds: 1000,
-                direction: RuleTrafficDirection::Upstream,
+                direction: traffic_direction.expect("intermittent capability has a direction"),
             },
             RuleActionKind::Pause => RuleAction::Pause,
             RuleActionKind::CustomHttpStatus => RuleAction::CustomHttpStatus { status: 500 },
@@ -152,7 +178,7 @@ impl Application {
             RuleActionKind::DisconnectDuringDownstreamWrite => RuleAction::Terminal {
                 action: RuleTerminalAction::DisconnectDuringDownstreamWrite { after_bytes: 1 },
             },
-        }
+        })
     }
 
     pub fn rule_parse_byte_input(&self, raw: &str) -> AppResult<RuleByteInputViewModel> {

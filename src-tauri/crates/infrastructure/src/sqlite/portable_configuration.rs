@@ -3,8 +3,6 @@
 //! 文件恢复、Manifest/Schema/Rhai 编译都必须在进入这里之前完成。本模块只负责在一个
 //! `IMMEDIATE` 事务内再次比较持久化身份，并把协议包与配置行一起提交或一起回滚。
 
-use std::collections::HashSet;
-
 use rusqlite::{Transaction, TransactionBehavior, params};
 
 use super::{
@@ -31,10 +29,11 @@ impl SqliteStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(database_error)?;
 
-        let imported = packages
-            .iter()
-            .map(|package| package.header.package.clone())
-            .collect::<HashSet<_>>();
+        // 完整应用导入的备份是协议包注册表的权威快照。同身份的本地包即使内容不同，
+        // 也必须由备份版本替换；删除和后续写入位于同一事务，任何失败都会恢复原注册表。
+        transaction
+            .execute("DELETE FROM protocol_packages", [])
+            .map_err(database_error)?;
         for package in packages {
             compare_or_insert_protocol_package(
                 &transaction,
@@ -42,7 +41,6 @@ impl SqliteStore {
                 Some(package.header.enabled),
             )?;
         }
-        delete_extra_protocol_packages(&transaction, &imported)?;
         replace_workspaces_and_settings(&transaction, selected_id, records, settings)?;
         transaction.commit().map_err(database_error)?;
         Ok(())
@@ -59,14 +57,6 @@ impl SqliteStore {
         if records.len() != 1 || records[0].id != selected_id {
             return Err(InfrastructureError::RevisionConflict);
         }
-        let _completion_gate = self.capture_coordination.completion_gate.write();
-        let _capture_gate = self.capture_coordination.mutation_gate.lock();
-        self.capture_coordination.bump_reset().map_err(|message| {
-            InfrastructureError::PersistenceCorrupt {
-                entity: "socket_capture",
-                message: message.to_owned(),
-            }
-        })?;
         let mut connection = self.connection.lock();
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -77,7 +67,6 @@ impl SqliteStore {
                  DELETE FROM certificate_material;
                  UPDATE certificate_state SET revision = revision + 1 WHERE singleton_id = 1;
                  DELETE FROM android_runtime_owner;
-                 DELETE FROM socket_captures;
                  DELETE FROM protocol_packages;
                  DELETE FROM workspaces;",
             )
@@ -171,37 +160,6 @@ fn replace_workspaces_and_settings(
             ],
         )
         .map_err(database_error)?;
-    Ok(())
-}
-
-fn delete_extra_protocol_packages(
-    transaction: &Transaction<'_>,
-    imported: &HashSet<intercept_proxy_domain::ProtocolPackageRef>,
-) -> Result<(), InfrastructureError> {
-    let mut statement = transaction
-        .prepare("SELECT package_id, version FROM protocol_packages")
-        .map_err(database_error)?;
-    let identities = statement
-        .query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })
-        .map_err(database_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(database_error)?;
-    drop(statement);
-    for (id, version) in identities {
-        let keep = imported
-            .iter()
-            .any(|package| package.id.as_str() == id && package.version.as_str() == version);
-        if !keep {
-            transaction
-                .execute(
-                    "DELETE FROM protocol_packages WHERE package_id = ?1 AND version = ?2",
-                    params![id, version],
-                )
-                .map_err(database_error)?;
-        }
-    }
     Ok(())
 }
 

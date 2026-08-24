@@ -19,10 +19,6 @@ impl BlockingCommandSlots {
         Self::new(maximum_connections, 2)
     }
 
-    pub(in crate::adapters::listener_runtime) fn new_local(maximum_connections: u16) -> Self {
-        Self::new(maximum_connections, 1)
-    }
-
     fn new(maximum_connections: u16, directions_per_connection: usize) -> Self {
         static GLOBAL: OnceLock<Arc<Semaphore>> = OnceLock::new();
         let global = Arc::clone(
@@ -43,7 +39,7 @@ impl BlockingCommandSlots {
     ) -> Self {
         // Relay 每连接两个方向，LocalResponder 每连接一个 exchange；二者分别只允许当前
         // maximum_connections 对应的阻塞脚本数，避免关闭连接后的协作取消期间继续积压。
-        let listener_limit = usize::from(maximum_connections).max(1) * directions_per_connection;
+        let listener_limit = usize::from(maximum_connections) * directions_per_connection;
         Self {
             global,
             listener: Arc::new(Semaphore::new(listener_limit)),
@@ -54,17 +50,6 @@ impl BlockingCommandSlots {
         // 所有调用统一先拿 Listener、再拿全局许可，避免跨 Listener 的反向锁序。
         let listener = Arc::clone(&self.listener).acquire_owned().await.ok()?;
         let global = Arc::clone(&self.global).acquire_owned().await.ok()?;
-        Some(BlockingCommandPermits {
-            _listener: listener,
-            _global: global,
-        })
-    }
-
-    pub(in crate::adapters::listener_runtime) fn try_acquire(
-        &self,
-    ) -> Option<BlockingCommandPermits> {
-        let listener = Arc::clone(&self.listener).try_acquire_owned().ok()?;
-        let global = Arc::clone(&self.global).try_acquire_owned().ok()?;
         Some(BlockingCommandPermits {
             _listener: listener,
             _global: global,
@@ -82,11 +67,10 @@ pub(super) async fn acquire_command_permits(
     command: &mut DirectionCommand,
 ) -> Option<BlockingCommandPermits> {
     match command {
-        DirectionCommand::Inspect { reply, .. } => acquire_for_reply(slots, reply).await,
-        DirectionCommand::Process { reply, .. } => acquire_for_reply(slots, reply).await,
-        // Display 已在线路提交之后，只是旁路结果；资源繁忙时直接丢弃本次展示，不能让已关闭
-        // 连接留下无界等待任务，也不能反向阻塞下一 Frame。
-        DirectionCommand::CommitDisplay { .. } => slots.try_acquire(),
+        DirectionCommand::Frame { reply, .. } => acquire_for_reply(slots, reply).await,
+        DirectionCommand::Decode { reply, .. } => acquire_for_reply(slots, reply).await,
+        DirectionCommand::Display { reply, .. } => acquire_for_reply(slots, reply).await,
+        DirectionCommand::Encode { reply, .. } => acquire_for_reply(slots, reply).await,
     }
 }
 
@@ -107,8 +91,7 @@ mod tests {
 
     use tokio::sync::{Semaphore, oneshot};
 
-    use super::{BlockingCommandSlots, acquire_command_permits, acquire_for_reply};
-    use crate::adapters::listener_runtime::scripted_relay::DirectionCommand;
+    use super::{BlockingCommandSlots, acquire_for_reply};
 
     #[tokio::test]
     async fn global_and_listener_limits_bound_detached_blocking_work() {
@@ -142,26 +125,6 @@ mod tests {
         drop(receive);
 
         assert!(acquire_for_reply(&slots, &mut reply).await.is_none());
-        assert_eq!(global.available_permits(), 1);
-    }
-
-    #[tokio::test]
-    async fn display_is_skipped_when_the_global_blocking_limit_is_full() {
-        let global = Arc::new(Semaphore::new(1));
-        let slots = BlockingCommandSlots::with_global(1, Arc::clone(&global));
-        let permit = global.clone().acquire_owned().await.unwrap();
-        let mut command = DirectionCommand::CommitDisplay {
-            completed_at: chrono::Utc::now(),
-            ticket: None,
-        };
-
-        assert!(
-            acquire_command_permits(&slots, &mut command)
-                .await
-                .is_none()
-        );
-
-        drop(permit);
         assert_eq!(global.available_permits(), 1);
     }
 }

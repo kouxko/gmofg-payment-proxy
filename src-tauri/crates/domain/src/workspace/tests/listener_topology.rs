@@ -16,6 +16,7 @@ fn local_responder(downstream_security: SocketDownstreamSecurity) -> SocketRelay
             downstream_security,
         }),
         maximum_connections: 32,
+        runtime_limits: SocketRuntimeLimits::default(),
         processing: scripted_processing(),
     }
 }
@@ -96,7 +97,7 @@ fn local_responder_tls_references_are_validated_at_exact_wire_paths() {
 }
 
 #[test]
-fn local_responder_requires_protocol_processing() {
+fn local_responder_accepts_direct_or_protocol_processing() {
     let valid = local_responder(SocketDownstreamSecurity::Tcp);
     let mut workspace = ProxyWorkspace::default();
     workspace.listeners[0].data_plane = ListenerDataPlane::Socket(valid.clone());
@@ -105,7 +106,9 @@ fn local_responder_requires_protocol_processing() {
     if let ListenerDataPlane::Socket(settings) = &mut workspace.listeners[0].data_plane {
         settings.processing = SocketPayloadProcessing::Direct;
     }
-    assert!(workspace.validate().is_err());
+    workspace
+        .validate()
+        .expect("Direct LocalResponder is a raw Echo endpoint");
 }
 
 #[test]

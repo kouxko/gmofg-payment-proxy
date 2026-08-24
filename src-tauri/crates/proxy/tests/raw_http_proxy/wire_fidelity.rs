@@ -12,6 +12,7 @@ async fn informational_continue_is_forwarded_before_the_canonical_final_response
         .write_all(
             b"POST /continue HTTP/1.1\r\n\
 Host: app\r\n\
+Connection: close\r\n\
 Expect: 100-continue\r\n\
 Content-Length: 4\r\n\r\n",
         )
@@ -39,6 +40,7 @@ async fn request_pipeline_captures_exact_binary_header_bytes_case_and_interleavi
     let started = supervisor.start(config()).await.unwrap();
     let request = b"POST /raw HTTP/1.1\r\n\
 Host: app\r\n\
+Connection: close\r\n\
 X-Trace:\t  first\x80 \t\r\n\
 x-Other: middle\xff\r\n\
 x-TRACE: second\r\n\
@@ -84,7 +86,7 @@ async fn downstream_wire_preserves_nonstandard_reason_and_exact_header_sequence(
     let started = supervisor.start(config()).await.unwrap();
     let response = exchange_raw(
         started.listeners[&channel_id("alpha")],
-        b"GET / HTTP/1.1\r\nHost: app\r\nContent-Length: 0\r\n\r\n",
+        b"GET / HTTP/1.1\r\nHost: app\r\nConnection: close\r\nContent-Length: 0\r\n\r\n",
     )
     .await;
 

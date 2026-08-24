@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "au-eftex"
+version = "1.1.0"
+description = "AU EFTEX DUKPT external Socket package for Intercept Proxy"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pycryptodome==3.23.0",
+  "websockets==17.0.1",
+]
+
+[project.scripts]
+au-eftex = "au_eftex.main:main"
+
+[tool.setuptools]
+packages = ["au_eftex"]

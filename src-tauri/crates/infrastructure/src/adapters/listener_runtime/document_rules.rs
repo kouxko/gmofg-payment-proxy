@@ -6,10 +6,12 @@
 
 use std::{fmt, sync::Arc};
 
+use async_trait::async_trait;
 use intercept_proxy_domain::{
     Document, DomainError, ErrorCode, ListenerId, ProtocolDocumentRuleExecution,
     ProtocolDocumentRuleProgram, ProtocolPackageRef, ProtocolRuleStage,
 };
+use intercept_proxy_exchange::{Error as ExchangeError, Rules};
 use intercept_proxy_runtime::SocketConnectionIdentity;
 use parking_lot::RwLock;
 
@@ -193,6 +195,17 @@ impl ProtocolDocumentRuleConnection {
             ));
         }
         program.execute_with_cancellation(document.document, is_cancelled)
+    }
+}
+
+#[async_trait]
+impl Rules for ProtocolDocumentRuleConnection {
+    async fn apply(&mut self, document: Document) -> Result<Document, ExchangeError> {
+        let execution = self
+            .execute(self.bind_document(document))
+            .map_err(|error| ExchangeError::new(format!("{}\n{}", error.code.as_str(), error)))?;
+        let (document, _) = execution.into_parts();
+        Ok(document)
     }
 }
 

@@ -4,16 +4,19 @@ import path from "node:path";
 const policy = new Map([
   ["intercept-proxy-domain", new Set()],
   ["intercept-proxy-product-api", new Set()],
-  ["intercept-proxy-runtime", new Set()],
+  ["intercept-proxy-exchange", new Set(["intercept-proxy-domain"])],
+  ["intercept-proxy-runtime", new Set(["intercept-proxy-exchange"])],
   ["intercept-proxy-protocol-scripting", new Set(["intercept-proxy-domain"])],
   ["intercept-proxy-application", new Set([
     "intercept-proxy-domain",
+    "intercept-proxy-exchange",
     "intercept-proxy-product-api",
   ])],
   ["intercept-proxy-android-engine", new Set(["intercept-proxy-domain"])],
   ["intercept-proxy-infrastructure", new Set([
     "intercept-proxy-application",
     "intercept-proxy-domain",
+    "intercept-proxy-exchange",
     "intercept-proxy-product-api",
     "intercept-proxy-protocol-scripting",
     "intercept-proxy-runtime",

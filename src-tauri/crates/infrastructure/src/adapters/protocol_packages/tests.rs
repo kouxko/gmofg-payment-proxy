@@ -8,11 +8,13 @@ use intercept_proxy_protocol_scripting::ProtocolPackageKind;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::*;
+use crate::InfrastructureError;
 
 #[path = "tests/concurrent_imports.rs"]
 mod concurrent_imports;
 
 mod application_ports;
+#[path = "tests/cache.rs"]
 mod cache;
 mod external_identity_conflicts;
 

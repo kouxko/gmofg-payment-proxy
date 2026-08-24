@@ -437,6 +437,7 @@ fn scripted_listener(topology: SocketTopology) -> ProxyListener {
         data_plane: intercept_proxy_domain::ListenerDataPlane::Socket(SocketRelaySettings {
             topology,
             maximum_connections: 8,
+            runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
             processing: SocketPayloadProcessing::Scripted(processing),
         }),
         ..ProxyListener::default()

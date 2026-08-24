@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::{
     ProtocolPackageFile, ProtocolPackageParseError, ProtocolPackageParseErrorCode,
-    toml_parser::parse_toml,
+    rhai_identifier::is_rhai_reserved_word, toml_parser::parse_toml,
 };
 
 /// `document.toml` 的独立解析上限；字段数量仍由 T03 的 [`DocumentSchema`] 限制。
@@ -58,6 +58,9 @@ fn field_from_wire(
 ) -> Result<DocumentField, ProtocolPackageParseError> {
     let name = DocumentFieldName::new(wire.name)
         .map_err(|_| invalid_schema(&format!("fields[{index}].name")))?;
+    if is_rhai_reserved_word(name.as_str()) {
+        return Err(invalid_schema(&format!("fields[{index}].name")));
+    }
     let field_type = match wire.field_type.as_str() {
         "string" => DocumentFieldType::String,
         "int" => DocumentFieldType::Int,

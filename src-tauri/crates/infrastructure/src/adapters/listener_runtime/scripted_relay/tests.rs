@@ -1,4 +1,4 @@
-//! Scripted Relay processor 资源预算、取消与提交状态回归。
+//! Scripted Socket capability worker 的资源预算与取消回归。
 
 use intercept_proxy_protocol_scripting::ProtocolExecutionCancellation;
 
@@ -21,7 +21,7 @@ fn command_future_drop_cancels_only_while_the_guard_is_armed() {
 fn processing_budget_covers_display_then_frame_and_decode_then_encode() {
     assert_eq!(processing_budget_ms(10_000, 1), Some(20_250));
     assert_eq!(processing_budget_ms(10_000, 2), Some(20_250));
-    assert_eq!(processing_budget_ms(250, 0), Some(750));
+    assert_eq!(processing_budget_ms(250, 0), None);
 }
 
 #[test]

@@ -1,10 +1,16 @@
-import { Button, FieldError, Label, ListBox, Select } from "@heroui/react";
+import { useEffect } from "react";
+import { Button, Label, ListBox, Select } from "@heroui/react";
 import { Plus, TrashBin } from "@gravity-ui/icons";
-import type { RuleAction, RuleDraft } from "@/generated/rust-types";
+import type {
+  RuleAction,
+  RuleActionCapabilityViewModel,
+  RuleDraft,
+  RuleStageCapabilityViewModel,
+  MessageStage,
+} from "@/generated/rust-types";
 import { ActionFields } from "./action-fields";
 import {
   actionKind,
-  actionKinds,
   actionLabels,
   errorText,
   requestActionDraft,
@@ -20,13 +26,34 @@ function ActionEditor({
   onChange,
   asyncStateKey,
   onAsyncStateChange,
+  capabilities,
+  draftStage,
 }: {
   action: RuleAction;
   onChange: (update: ActionUpdate) => void;
   asyncStateKey: string;
   onAsyncStateChange: AsyncStateChange;
+  capabilities: RuleActionCapabilityViewModel[];
+  draftStage: MessageStage;
 }) {
   const runAsync = useAsyncRequestSlots(asyncStateKey, onAsyncStateChange);
+  const capability = capabilities.find(
+    (candidate) => candidate.kind === actionKind(action),
+  );
+  useEffect(() => {
+    if (
+      capability?.traffic_direction == null ||
+      (action.type !== "throttle" && action.type !== "intermittent") ||
+      action.direction === capability.traffic_direction
+    ) {
+      return;
+    }
+    onChange((current) =>
+      current.type === "throttle" || current.type === "intermittent"
+        ? { ...current, direction: capability.traffic_direction! }
+        : current,
+    );
+  }, [action, capability, onChange]);
   return (
     <div className="grid gap-3">
       <div className="grid gap-1">
@@ -37,7 +64,7 @@ function ActionEditor({
           onSelectionChange={(kind) => {
             void runAsync(
               "kind",
-              () => requestActionDraft(kind as ActionKind),
+              () => requestActionDraft(kind as ActionKind, draftStage),
               (next) => onChange(() => next),
             );
           }}
@@ -48,7 +75,7 @@ function ActionEditor({
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
-              {actionKinds.map((kind) => (
+              {capabilities.map(({ kind }) => (
                 <ListBox.Item
                   key={kind}
                   id={kind}
@@ -61,12 +88,19 @@ function ActionEditor({
           </Select.Popover>
         </Select>
       </div>
-      <ActionFields
-        action={action}
-        onChange={onChange}
-        asyncStateKey={asyncStateKey}
-        onAsyncStateChange={onAsyncStateChange}
-      />
+      {capability ? (
+        <ActionFields
+          action={action}
+          trafficDirection={capability.traffic_direction ?? undefined}
+          onChange={onChange}
+          asyncStateKey={asyncStateKey}
+          onAsyncStateChange={onAsyncStateChange}
+        />
+      ) : (
+        <p className="text-sm text-[var(--telemetry-danger)]" role="alert">
+          当前动作不支持所选阶段或所在位置，请改为下拉框中的可用动作。
+        </p>
+      )}
     </div>
   );
 }
@@ -76,11 +110,13 @@ export function ActionsEditor({
   fieldErrors,
   onChange,
   onAsyncStateChange,
+  capability,
 }: {
   draft: RuleDraft;
   fieldErrors: Record<string, string[]>;
   onChange: (change: RuleDraftChange) => void;
   onAsyncStateChange: AsyncStateChange;
+  capability?: RuleStageCapabilityViewModel;
 }) {
   const editorKey = draft.rule_id ?? "new";
   const runAsync = useAsyncRequestSlots(
@@ -97,10 +133,15 @@ export function ActionsEditor({
   return (
     <div className="grid gap-3">
       {fieldErrors.actions && (
-        <FieldError>{fieldErrors.actions.join("；")}</FieldError>
+        <p className="text-sm text-[var(--telemetry-danger)]" role="alert">
+          {fieldErrors.actions.join("；")}
+        </p>
       )}
       {draft.actions.map((action, index) => {
         const rowError = errorText(fieldErrors, `actions.${index}`);
+        const available = (capability?.actions ?? []).filter(
+          (candidate) => !candidate.terminal || index === draft.actions.length - 1,
+        );
         return (
           <div
             key={`${editorKey}:${draft.actions.length}:${index}:${actionKind(action)}`}
@@ -129,17 +170,36 @@ export function ActionsEditor({
               onChange={(next) => update(index, next)}
               asyncStateKey={`${editorKey}:${index}`}
               onAsyncStateChange={onAsyncStateChange}
+              capabilities={available}
+              draftStage={draft.stage!}
             />
-            {rowError && <FieldError className="mt-2">{rowError}</FieldError>}
+            {rowError && (
+              <p
+                className="mt-2 text-sm text-[var(--telemetry-danger)]"
+                role="alert"
+              >
+                {rowError}
+              </p>
+            )}
           </div>
         );
       })}
       <Button
         variant="outline"
+        isDisabled={
+          draft.stage == null ||
+          capability == null ||
+          draft.actions.some((action) => action.type === "terminal")
+        }
         onPress={() => {
+          if (draft.stage == null || capability == null) return;
+          const defaultKind = capability.actions.find(
+            (candidate) => candidate.kind === "delay",
+          )?.kind ?? capability.actions[0]?.kind;
+          if (defaultKind == null) return;
           void runAsync(
             "add",
-            () => requestActionDraft("delay"),
+            () => requestActionDraft(defaultKind, draft.stage!),
             (action) =>
               onChange((current) => ({
                 ...current,

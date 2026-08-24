@@ -3,8 +3,8 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{
     DiagnosticLogEntryViewModel, DiagnosticLogLevel, DiagnosticLogStage, EventHub,
-    SocketCaptureFailureDiagnostic, SocketConnectionRouteViewModel,
-    SocketDiagnosticContextViewModel, SocketRelayRouteEvidenceViewModel, UiEventPayload,
+    SocketConnectionRouteViewModel, SocketDiagnosticContextViewModel, SocketFailureDiagnostic,
+    SocketRelayRouteEvidenceViewModel, UiEventPayload,
 };
 use intercept_proxy_runtime::{
     BoundedSocketConnectionObserver, SocketConnectionEvent, SocketConnectionObserver,
@@ -12,13 +12,10 @@ use intercept_proxy_runtime::{
     SocketRelayFailure, SocketRelayRunContext, SocketRelayStage, SocketTransportMode,
 };
 
-const DEFAULT_SOCKET_DIAGNOSTIC_CAPACITY: usize = 256;
-const SOCKET_DIAGNOSTIC_LOGICAL_BYTES: usize = 1024 * 1024;
-
 #[path = "socket_diagnostics/mapping.rs"]
 mod mapping;
 use mapping::{
-    application_direction, application_stage, capture_failure, diagnostic_stage, route_from_target,
+    application_direction, application_stage, diagnostic_stage, route_from_target, socket_failure,
     tls_evidence,
 };
 
@@ -29,18 +26,15 @@ pub(super) struct SocketDiagnosticObserver {
 }
 
 impl SocketDiagnosticObserver {
-    pub(super) fn new(events: Arc<EventHub>) -> Self {
-        Self::with_capacity(events, DEFAULT_SOCKET_DIAGNOSTIC_CAPACITY)
-    }
-
-    pub(super) fn with_capacity(events: Arc<EventHub>, capacity: usize) -> Self {
-        Self {
-            retained: BoundedSocketConnectionObserver::with_limits(
-                capacity,
-                SOCKET_DIAGNOSTIC_LOGICAL_BYTES,
-            ),
+    pub(super) fn new(
+        events: Arc<EventHub>,
+        capacity: usize,
+        max_logical_bytes: usize,
+    ) -> intercept_proxy_runtime::Result<Self> {
+        Ok(Self {
+            retained: BoundedSocketConnectionObserver::with_limits(capacity, max_logical_bytes)?,
             events,
-        }
+        })
     }
 }
 
@@ -218,14 +212,27 @@ fn admitted_detail(
 ) -> String {
     match target {
         SocketConnectionTarget::Relay(target) => format!(
-            "listener-run：{}；连接：{connection_id}；客户端：{peer}；目标：{target}；模式：{mode:?}",
-            run.listener_run_epoch
+            "listener-run：{}；连接：{connection_id}；客户端：{peer}；目标：{target}；传输：{}",
+            run.listener_run_epoch,
+            relay_transport_text(mode)
         ),
         SocketConnectionTarget::LocalResponder => format!(
             "listener-run：{}；连接：{connection_id}；客户端：{peer}；处理：本地应答（无上游）；App 侧传输：{}",
             run.listener_run_epoch,
             downstream_transport_text(mode)
         ),
+    }
+}
+
+/// 这里描述的是连接两端的传输层，不是报文处理模式。协议包是否参与处理由
+/// Listener 的 `SocketPayloadProcessing` 单独决定，不能再把 `Transparent`
+/// 误展示成整个 Listener 的业务模式。
+fn relay_transport_text(mode: &SocketTransportMode) -> &'static str {
+    match mode {
+        SocketTransportMode::Transparent => "TCP → TCP",
+        SocketTransportMode::TcpToTls => "TCP → TLS",
+        SocketTransportMode::TlsToTcp => "TLS → TCP",
+        SocketTransportMode::TlsToTls => "TLS → TLS",
     }
 }
 
@@ -371,7 +378,7 @@ fn closed_entry(
             run,
             Some(connection_id),
             Some(route_from_target(target)),
-            failure.and_then(capture_failure),
+            failure.and_then(socket_failure),
             failure.map_or(SocketRelayStage::Shutdown, |failure| failure.stage),
             failure.and_then(|failure| failure.direction),
             bytes,
@@ -383,7 +390,7 @@ fn socket_context(
     run: &SocketRelayRunContext,
     connection_id: Option<uuid::Uuid>,
     route: Option<SocketConnectionRouteViewModel>,
-    capture_failure: Option<SocketCaptureFailureDiagnostic>,
+    socket_failure: Option<SocketFailureDiagnostic>,
     stage: SocketRelayStage,
     direction: Option<SocketRelayDirection>,
     bytes: SocketRelayBytes,
@@ -393,7 +400,7 @@ fn socket_context(
         workspace_runtime_epoch: run.workspace_runtime_epoch.to_string(),
         listener_run_epoch: run.listener_run_epoch.to_string(),
         route,
-        capture_failure,
+        socket_failure,
         external_package_call: None,
         stage: application_stage(stage),
         direction: direction.map(application_direction),

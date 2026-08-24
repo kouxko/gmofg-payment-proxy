@@ -9,6 +9,7 @@ mod bundle;
 mod capture;
 mod certificates;
 pub(crate) mod common;
+mod exchange_observation;
 mod external_package_registry;
 mod external_package_server;
 pub mod external_packages;
@@ -25,7 +26,6 @@ mod protocol_package_usage;
 mod protocol_packages;
 mod rules;
 mod settings;
-mod socket_capture;
 mod workspaces;
 
 pub use android_adb::AndroidAdbAdapter;
@@ -33,6 +33,7 @@ pub use body_codecs::{HeaderBodyCodecResolver, WorkspaceBodyCodecResolver};
 pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;
+pub use exchange_observation::{ExchangeObservationCounters, ExchangeObservationStore};
 pub use external_package_registry::{
     AcceptedExternalPackageConnection, ExternalPackageConnectionId, ExternalPackageRegistryAdapter,
     external_package_registration_fingerprint,
@@ -48,8 +49,8 @@ pub use faults::FaultServiceAdapter;
 pub use files::{FileSelection, NativeFileDialog};
 pub use listener_certificates::ManagedListenerCertificateAdapter;
 pub use listener_runtime::{
-    BoundSocketDocument, HttpProtocolObservationSink, ListenerRuntimeAdapter,
-    ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
+    BoundSocketDocument, ListenerRuntimeAdapter, ProtocolDocumentRuleConnection,
+    ProtocolDocumentRuleConnectionFactory,
 };
 pub use pipeline::{
     RuntimeBodyCodecResolver, RuntimePipelineAdapter, RuntimePipelineProductHooks,
@@ -66,5 +67,4 @@ pub use protocol_packages::{
 };
 pub use rules::RuleRepositoryAdapter;
 pub use settings::SettingsRepositoryAdapter;
-pub use socket_capture::SocketCaptureRepositoryAdapter;
 pub use workspaces::WorkspaceRepositoryAdapter;

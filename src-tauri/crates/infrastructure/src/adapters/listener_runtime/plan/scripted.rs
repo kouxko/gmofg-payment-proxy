@@ -8,19 +8,16 @@ use intercept_proxy_domain::{
     SocketRelaySettings, SocketTopology,
 };
 use intercept_proxy_runtime::{
-    SocketDownstreamSecurity as RuntimeDownstreamSecurity, SocketEndpoint, SocketFramePumpLimits,
-    SocketLocalResponderConfig, SocketRelayConfig, SocketRelayService,
+    SocketDownstreamSecurity as RuntimeDownstreamSecurity, SocketEndpoint,
+    SocketLocalResponderConfig, SocketObservationMetadata, SocketPipelineLimits, SocketRelayConfig,
+    SocketRelayService,
 };
 
 use super::{ListenerRuntimePlanBuilder, PreparedListenerRuntime, runtime_error};
 use crate::adapters::listener_runtime::{
-    external_local_responder::ExternalLocalResponderProcessorFactoryAdapter,
-    external_relay::{ExternalRelayProcessorFactoryAdapter, ExternalSocketRuntimeSnapshot},
-    local_responder::{LocalResponderProcessorFactoryAdapter, local_frame_pump_limits},
-    scripted_relay::{ScriptedRelayProcessorFactoryAdapter, frame_pump_limits},
+    external_relay::{ExternalSocketCapabilityFactoryAdapter, ExternalSocketRuntimeSnapshot},
+    scripted_relay::{ScriptedSocketCapabilityFactoryAdapter, pipeline_limits},
     scripted_snapshot::{ScriptedSocketRuntimeSnapshot, ScriptedSocketSecuritySnapshot},
-    socket_capture_publisher::SocketCaptureContext,
-    socket_diagnostics::SocketDiagnosticObserver,
 };
 
 impl ListenerRuntimePlanBuilder<'_> {
@@ -69,9 +66,16 @@ impl ListenerRuntimePlanBuilder<'_> {
             .entity(listener.id.to_string()));
         };
         let framing_limits = intercept_proxy_protocol_scripting::ProtocolFramingLimits::default();
-        let pump_limits: SocketFramePumpLimits = frame_pump_limits(
+        let pipeline_limits: SocketPipelineLimits = pipeline_limits(
             snapshot.runtime_limits(),
             framing_limits,
+            usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(|_| {
+                runtime_error(
+                    listener,
+                    "CONFIG_INVALID",
+                    "Socket 单次读取字节数超出平台范围".into(),
+                )
+            })?,
             snapshot.upstream(),
             snapshot.downstream(),
         )
@@ -82,15 +86,13 @@ impl ListenerRuntimePlanBuilder<'_> {
                 "脚本 Frame 资源限制无效".to_owned(),
             )
         })?;
-        let factory = Arc::new(ScriptedRelayProcessorFactoryAdapter::new(
+        let factory = Arc::new(ScriptedSocketCapabilityFactoryAdapter::new(
             &snapshot,
             listener.id.to_string(),
             framing_limits,
-            self.capture_context(workspace, listener),
+            Self::observation_metadata(workspace, listener),
         ));
-        let observer = Arc::new(SocketDiagnosticObserver::new(
-            self.adapter.socket_diagnostic_events.read().clone(),
-        ));
+        let observer = self.socket_observer(listener, socket)?;
         let service = SocketRelayService::build_scripted_with_observer(
             SocketRelayConfig {
                 bind_addr,
@@ -101,12 +103,21 @@ impl ListenerRuntimePlanBuilder<'_> {
                 },
                 security: security.clone(),
                 maximum_connections: socket.maximum_connections,
+                read_chunk_bytes: usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(
+                    |_| {
+                        runtime_error(
+                            listener,
+                            "CONFIG_INVALID",
+                            "Socket 单次读取字节数超出平台范围".into(),
+                        )
+                    },
+                )?,
                 connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
                 read_timeout: Duration::from_millis(listener.read_timeout_ms),
                 write_timeout: Duration::from_millis(listener.write_timeout_ms),
             },
             factory,
-            pump_limits,
+            pipeline_limits,
             observer,
         )
         .map_err(|error| runtime_error(listener, error.code, error.message))?;
@@ -142,10 +153,10 @@ impl ListenerRuntimePlanBuilder<'_> {
             rules,
             socket.topology.clone(),
         ));
-        let pump_limits = SocketFramePumpLimits::new(
+        let pipeline_limits = SocketPipelineLimits::new(
             max_frame_bytes,
             max_frame_bytes,
-            (16 * 1024).min(max_frame_bytes),
+            read_chunk_bytes(listener, socket)?,
             rpc_timeout,
         )
         .map_err(|error| {
@@ -155,14 +166,12 @@ impl ListenerRuntimePlanBuilder<'_> {
                 "外部协议包 Frame 资源限制无效".to_owned(),
             )
         })?;
-        let observer = Arc::new(SocketDiagnosticObserver::new(
-            self.adapter.socket_diagnostic_events.read().clone(),
-        ));
+        let observer = self.socket_observer(listener, socket)?;
         let service = match &socket.topology {
             SocketTopology::Relay(relay) => {
-                let factory = Arc::new(ExternalRelayProcessorFactoryAdapter::new(
+                let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new(
                     &snapshot,
-                    self.capture_context(workspace, listener),
+                    Self::observation_metadata(workspace, listener),
                 ));
                 SocketRelayService::build_scripted_with_observer(
                     SocketRelayConfig {
@@ -174,12 +183,13 @@ impl ListenerRuntimePlanBuilder<'_> {
                         },
                         security: self.socket_security(workspace, &relay.security)?,
                         maximum_connections: socket.maximum_connections,
+                        read_chunk_bytes: read_chunk_bytes(listener, socket)?,
                         connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
                         read_timeout: Duration::from_millis(listener.read_timeout_ms),
                         write_timeout: Duration::from_millis(listener.write_timeout_ms),
                     },
                     factory,
-                    pump_limits,
+                    pipeline_limits,
                     observer,
                 )
             }
@@ -193,9 +203,9 @@ impl ListenerRuntimePlanBuilder<'_> {
                     )
                     .entity(listener.id.to_string()));
                 };
-                let factory = Arc::new(ExternalLocalResponderProcessorFactoryAdapter::new(
-                    Arc::clone(&snapshot),
-                    self.capture_context(workspace, listener),
+                let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new(
+                    &snapshot,
+                    Self::observation_metadata(workspace, listener),
                 ));
                 SocketRelayService::build_local_responder_with_observer(
                     SocketLocalResponderConfig {
@@ -208,12 +218,13 @@ impl ListenerRuntimePlanBuilder<'_> {
                             },
                         ),
                         maximum_connections: socket.maximum_connections,
+                        read_chunk_bytes: read_chunk_bytes(listener, socket)?,
                         handshake_timeout: Duration::from_millis(listener.connect_timeout_ms),
                         read_timeout: Duration::from_millis(listener.read_timeout_ms),
                         write_timeout: Duration::from_millis(listener.write_timeout_ms),
                     },
                     factory,
-                    pump_limits,
+                    pipeline_limits,
                     observer,
                 )
             }
@@ -243,9 +254,16 @@ impl ListenerRuntimePlanBuilder<'_> {
             .entity(listener.id.to_string()));
         };
         let framing_limits = intercept_proxy_protocol_scripting::ProtocolFramingLimits::default();
-        let pump_limits = local_frame_pump_limits(
+        let pipeline_limits = pipeline_limits(
             snapshot.runtime_limits(),
             framing_limits,
+            usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(|_| {
+                runtime_error(
+                    listener,
+                    "CONFIG_INVALID",
+                    "Socket 单次读取字节数超出平台范围".into(),
+                )
+            })?,
             snapshot.upstream(),
             snapshot.downstream(),
         )
@@ -256,15 +274,13 @@ impl ListenerRuntimePlanBuilder<'_> {
                 "LocalResponder 脚本资源限制无效".to_owned(),
             )
         })?;
-        let factory = Arc::new(LocalResponderProcessorFactoryAdapter::new(
+        let factory = Arc::new(ScriptedSocketCapabilityFactoryAdapter::new(
             &snapshot,
             listener.id.to_string(),
             framing_limits,
-            self.capture_context(workspace, listener),
+            Self::observation_metadata(workspace, listener),
         ));
-        let observer = Arc::new(SocketDiagnosticObserver::new(
-            self.adapter.socket_diagnostic_events.read().clone(),
-        ));
+        let observer = self.socket_observer(listener, socket)?;
         let service = SocketRelayService::build_local_responder_with_observer(
             SocketLocalResponderConfig {
                 bind_addr,
@@ -276,6 +292,15 @@ impl ListenerRuntimePlanBuilder<'_> {
                     },
                 ),
                 maximum_connections: socket.maximum_connections,
+                read_chunk_bytes: usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(
+                    |_| {
+                        runtime_error(
+                            listener,
+                            "CONFIG_INVALID",
+                            "Socket 单次读取字节数超出平台范围".into(),
+                        )
+                    },
+                )?,
                 // LocalResponder 没有 connect；沿用 Listener 的 connect timeout 作为唯一 App TLS
                 // handshake 上限，保证现有配置无需增加一个只对该拓扑生效的隐藏字段。
                 handshake_timeout: Duration::from_millis(listener.connect_timeout_ms),
@@ -283,7 +308,7 @@ impl ListenerRuntimePlanBuilder<'_> {
                 write_timeout: Duration::from_millis(listener.write_timeout_ms),
             },
             factory,
-            pump_limits,
+            pipeline_limits,
             observer,
         )
         .map_err(|error| runtime_error(listener, error.code, error.message))?;
@@ -294,15 +319,13 @@ impl ListenerRuntimePlanBuilder<'_> {
         })
     }
 
-    fn capture_context(
-        &self,
+    fn observation_metadata(
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
-    ) -> SocketCaptureContext {
-        SocketCaptureContext {
-            workspace_id: workspace.id,
-            listener_id: listener.id,
-            publisher: self.adapter.socket_capture_publisher.read().clone(),
+    ) -> SocketObservationMetadata {
+        SocketObservationMetadata {
+            workspace_id: workspace.id.to_string(),
+            listener_id: listener.id.to_string(),
         }
     }
 
@@ -327,4 +350,14 @@ impl ListenerRuntimePlanBuilder<'_> {
             }
         }
     }
+}
+
+fn read_chunk_bytes(listener: &ProxyListener, socket: &SocketRelaySettings) -> AppResult<usize> {
+    usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(|_| {
+        runtime_error(
+            listener,
+            "CONFIG_INVALID",
+            "Socket 单次读取字节数超出平台范围".into(),
+        )
+    })
 }

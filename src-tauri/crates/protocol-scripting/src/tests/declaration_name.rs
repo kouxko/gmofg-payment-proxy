@@ -1,3 +1,4 @@
+use super::rhai_identifier::RHAI_RESERVED_WORDS;
 use crate::{
     MAX_PACKAGE_FILE_PATH_BYTES, MAX_PROTOCOL_FUNCTION_NAME_BYTES, PackageFilePath,
     ProtocolFunctionName, ProtocolPackageParseErrorCode,
@@ -61,4 +62,16 @@ fn function_names_cover_valid_boundaries_and_invalid_identifiers() {
         ProtocolFunctionName::new(format!("f{}", "x".repeat(MAX_PROTOCOL_FUNCTION_NAME_BYTES)))
             .is_err()
     );
+}
+
+#[test]
+fn function_names_reject_every_host_api_v1_rhai_reserved_word() {
+    for reserved in RHAI_RESERVED_WORDS {
+        let error = ProtocolFunctionName::new(*reserved).unwrap_err();
+        assert_eq!(
+            error.code(),
+            ProtocolPackageParseErrorCode::ManifestInvalid,
+            "{reserved}"
+        );
+    }
 }

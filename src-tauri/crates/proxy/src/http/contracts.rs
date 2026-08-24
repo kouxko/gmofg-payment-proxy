@@ -4,7 +4,13 @@ use super::{
 };
 use crate::transport::{ConnectionContext, HandshakePolicy, UpstreamSecurityEvidence};
 
-/// Application-facing hooks. Implementations must not block on UI subscribers.
+/// Application-facing HTTP wire policy and lifecycle hooks.
+///
+/// `apply_*_policy` runs once on the framed HTTP `Message` before that direction enters Exchange
+/// Decode. It may implement product HTTP mutation, breakpoint, session, capture and fault-action
+/// semantics, but it must never invoke a protocol package or an Exchange capability. Consequently
+/// Decode/Display/Rules/Encode remain the only protocol stages and cannot be hidden behind this
+/// port. Implementations must not block on UI subscribers.
 #[async_trait]
 pub trait PipelinePorts: HandshakePolicy {
     async fn runtime_stopping(&self, _epoch: Uuid) {}
@@ -19,14 +25,14 @@ pub trait PipelinePorts: HandshakePolicy {
         _evidence: &UpstreamSecurityEvidence,
     ) {
     }
-    async fn request(
+    async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
         _message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         Ok(Vec::new())
     }
-    async fn response(
+    async fn apply_response_policy(
         &self,
         _context: &ConnectionContext,
         _message: &mut Message,

@@ -15,7 +15,7 @@ use std::{
 use async_trait::async_trait;
 use chrono::{DateTime, TimeZone, Utc};
 use intercept_proxy_domain::{
-    DocumentSchemaId, DownstreamClientAuthentication, FixedServerSettings, UpstreamTlsSettings,
+    DownstreamClientAuthentication, FixedServerSettings, UpstreamTlsSettings,
 };
 use intercept_proxy_product_api::{BodyCodec, ProductError};
 use uuid::Uuid;
@@ -38,5 +38,4 @@ mod local_responder_topology;
 mod protocol_package_lifecycle;
 mod protocol_rule_values;
 mod settings_lifecycle;
-mod socket_capture;
 mod workspace_configuration;

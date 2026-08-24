@@ -48,7 +48,13 @@ pub(super) fn to_domain_settings(
             max_sessions,
             max_memory_bytes: draft.max_memory_bytes,
             max_body_bytes: draft.max_body_bytes,
-            ui_event_capacity: 4_096,
+            ui_event_capacity: u32::try_from(draft.ui_event_capacity).map_err(|_| {
+                intercept_proxy_domain::DomainError::new(
+                    intercept_proxy_domain::ErrorCode::ConfigInvalid,
+                    "UI 事件容量超出支持范围",
+                )
+                .with_field_error("ui_event_capacity", "数值过大")
+            })?,
         },
         leaf_certificate_sans: draft.leaf_sans.clone(),
     })

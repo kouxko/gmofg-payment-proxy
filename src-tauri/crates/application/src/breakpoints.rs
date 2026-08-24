@@ -11,7 +11,7 @@ use tokio::sync::oneshot;
 use crate::{
     AppError, AppResult, BreakpointActionOptionViewModel, BreakpointDecision,
     BreakpointDecisionKind, BreakpointDetailViewModel, BreakpointId, BreakpointState,
-    BreakpointSummaryViewModel, DisabledReason, Revision, RuntimeEpoch, UiTone,
+    BreakpointSummaryViewModel, DisabledReason, RuntimeEpoch, UiTone,
     breakpoint_validation::validate_breakpoint_decision_structure,
 };
 
@@ -354,9 +354,6 @@ fn apply_summary_display(summary: &mut BreakpointSummaryViewModel) {
     summary.state_text = text.into();
     summary.ui_tone = tone;
 }
-
-#[allow(dead_code)]
-fn _revision_is_contract(_: Revision) {}
 
 #[cfg(test)]
 mod tests {

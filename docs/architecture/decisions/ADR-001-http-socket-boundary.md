@@ -25,7 +25,8 @@ registry、Schema/Document 值对象和 UI shell。HTTP 与 Socket 保持独立 
 ## Consequences
 
 - 跨平面复用必须先证明抽取内容不含 HTTP 或 Socket 词汇/DTO。
-- UI 可共享导航、Tab 和布局，但协议内容条件挂载并消费各自 Rust ViewModel。
+- UI 可在同一页面并列展示两类工作区，但协议内容仍分别挂载并消费各自 Rust ViewModel；统一展示不等于
+  合并数据平面或协议语义。
 - `scripts/check-architecture-boundaries.mjs` 对四条依赖禁令 fail-closed。
 
 ## Open items

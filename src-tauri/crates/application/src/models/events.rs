@@ -6,7 +6,7 @@ use super::{
     BreakpointSummaryViewModel, CapturePageViewModel, CaptureRowViewModel,
     CertificateOverviewViewModel, ChannelPresentationViewModel, ListenerStatusViewModel, Revision,
     RuleSummaryViewModel, RuntimeEpoch, SessionSummaryViewModel, SettingsViewModel,
-    SocketCaptureRowViewModel, WorkspaceChangedViewModel,
+    WorkspaceChangedViewModel,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -36,9 +36,8 @@ pub enum UiEventPayload {
     WorkspaceChanged(WorkspaceChangedViewModel),
     ListenerStatusChanged(ListenerStatusViewModel),
     CaptureRowsAdded(Vec<CaptureRowViewModel>),
-    /// 一个 Socket Frame 或 `LocalExchange` 已完整写出并进入正式 capture 仓储。
-    /// `RequestParsed` 仍只走有界诊断事件，不能构造此完成事件。
-    SocketCaptureCompleted(SocketCaptureRowViewModel),
+    /// 一条连接级 Exchange 观测证据已成功写入内存；正文仍由查询接口按需读取。
+    ExchangeObservationChanged,
     DiagnosticLogAdded(crate::DiagnosticLogEntryViewModel),
     SessionUpdated(SessionSummaryViewModel),
     BreakpointQueued(BreakpointSummaryViewModel),

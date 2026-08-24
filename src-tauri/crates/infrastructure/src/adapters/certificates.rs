@@ -16,7 +16,7 @@ use intercept_proxy_application::{
 use intercept_proxy_product_api::{ProductCertificatePolicy, ProductProfile};
 use intercept_proxy_runtime::{
     ErrorCode as ProxyErrorCode, MitmCertificateAuthority, MitmServerIdentity, ProxyError,
-    ReverseClientIdentity, TlsMaterialProvider, TlsMaterialSnapshot,
+    ReverseClientIdentity,
 };
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -464,8 +464,8 @@ mod helpers;
 mod ports;
 
 use helpers::{
-    from_bundle, item, leaf_request, material_matches, parse_fingerprint, proxy_app_error,
-    proxy_infra_error, status_item, verify_revision,
+    from_bundle, item, leaf_request, material_matches, proxy_app_error, proxy_infra_error,
+    status_item, verify_revision,
 };
 
 #[cfg(test)]

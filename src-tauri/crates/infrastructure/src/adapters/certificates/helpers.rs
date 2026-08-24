@@ -133,17 +133,6 @@ pub(super) fn verify_revision(actual: u64, expected: u64) -> AppResult<()> {
     }
 }
 
-pub(super) fn parse_fingerprint(value: &str) -> intercept_proxy_runtime::Result<Vec<u8>> {
-    value
-        .split(':')
-        .map(|part| {
-            u8::from_str_radix(part, 16).map_err(|error| {
-                ProxyError::new(ProxyErrorCode::CertificateInvalid, error.to_string())
-            })
-        })
-        .collect()
-}
-
 #[allow(clippy::needless_pass_by_value)]
 pub(super) fn proxy_app_error(error: AppError) -> ProxyError {
     let code = match error.view_model.code.as_str() {

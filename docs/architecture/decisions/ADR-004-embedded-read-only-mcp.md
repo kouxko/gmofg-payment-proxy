@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - 日期：2026-08-19
+- Refined by: [ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md)
 
 ## 决策
 
@@ -9,10 +10,14 @@
 `http://127.0.0.1:17653/mcp`。实现使用官方 Rust SDK `rmcp 3.1.3`，只声明并支持
 MCP `2026-07-28`，使用无会话 Streamable HTTP。
 
-MCP 仅调用共享的 `Arc<Application>` 只读 facade。它不能直接打开 SQLite、读取任意文件，
+MCP 以共享的 `Arc<Application>` 只读 facade 为主，并持有 `RuntimeLogStore` 与
+`ExchangeObservationStore` 两个进程内窄只读句柄。它不能直接打开 SQLite、读取任意文件，
 也不提供保存、导入、导出、清空、启停或其他写操作。已安装协议包的源码和 ZIP 不在
 Application 只读模型中，因此 MCP 只能读取其 Manifest 投影、能力、Schema、引用关系，
 以及应用内置官方模板 ZIP。
+
+两个窄句柄只允许有界查询自身拥有的日志或内存观察记录，不接受文件路径、不暴露网络/数据库能力，
+也不把 Exchange observation 并入 reproduction report。
 
 ## 用户接受的本机信任边界
 
@@ -21,8 +26,9 @@ Application 只读模型中，因此 MCP 只能读取其 Manifest 投影、能�
 会话、规则、Android 信息和公开证书元数据。loopback 绑定只阻止远程主机直接连接，不能
 隔离本机进程。
 
-证书工具只返回 Application 已公开的证书元数据，不返回私钥、密码或原始密钥库内容。
-这属于数据最小化的 API 边界，不应描述为认证或隐私保护。
+证书工具当前只返回 Application 已公开的证书元数据，不返回私钥、密码或原始密钥库内容。
+这是当前类型化 API 的能力边界，不是认证或隐私保证。产品允许后续把更多完整诊断数据加入只读 MCP，
+但只有相应 Application DTO、资源预算和测试落地后才能记为已实现能力。
 
 ## 可用性与资源边界
 

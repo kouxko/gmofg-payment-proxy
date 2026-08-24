@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ListenerEditor } from "./listener-editor";
+import { defaultSocketRuntimeLimits } from "./listener-data-plane";
 import type { ProxyListener } from "@/generated/rust-types";
 import {
   dynamicListener,
@@ -60,6 +61,7 @@ describe("Socket listener editor", () => {
             },
           },
           maximum_connections: 500,
+          runtime_limits: defaultSocketRuntimeLimits(),
           processing: { mode: "direct" },
         },
       },

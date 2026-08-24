@@ -3,6 +3,7 @@ import type {
   ProtocolDocumentRuleDefinition,
   ProtocolRuleCapabilityCatalog,
 } from "@/generated/rust-types";
+import { defaultSocketRuntimeLimits } from "@/features/listeners/listener-data-plane";
 
 export const packageRef = { id: "iso8583", version: "1.2.3" };
 
@@ -24,6 +25,7 @@ export function socketListener(id: string, mode: "relay" | "local" | "direct" = 
           ? { mode: "local_responder", settings: { downstream_security: { mode: "tcp" } } }
           : { mode: "relay", settings: { upstream: { host: "example.test", port: 9001 }, security: { mode: "transparent" } } },
         maximum_connections: 8,
+        runtime_limits: defaultSocketRuntimeLimits(),
         processing: mode === "direct" ? { mode: "direct" } : {
           mode: "scripted",
           settings: {

@@ -1,31 +1,49 @@
 fn reader(parts: &[&[u8]]) -> ProtocolReader {
-    let mut available = 0;
-    let segments = parts
-        .iter()
-        .map(|part| {
-            available += part.len();
-            let bytes: Arc<[u8]> = part.to_vec().into();
-            ReaderSegment::new(bytes, 0..part.len())
-        })
-        .collect();
-    ProtocolReader::from_segments(segments, available)
+    ProtocolReader::new(Arc::from(parts.concat()))
 }
 
-fn closure_framer<F>(max_frame: u64, max_fifo: u64, decider: F) -> SingleDirectionFramer<F>
-where
-    F: FnMut(ProtocolReader) -> Result<FramingDecision, ProtocolFramingError>,
-{
-    SingleDirectionFramer::new(
-        decider,
-        ProtocolFramingLimits::new(max_frame, max_fifo).unwrap(),
+fn frame_inspector(
+    package: &crate::CompiledProtocolPackage,
+    direction: ProtocolDirection,
+    connection_id: impl Into<String>,
+    runtime_limits: ProtocolRuntimeLimits,
+    framing_limits: ProtocolFramingLimits,
+) -> ProtocolFrameInspector {
+    ProtocolFrameInspector::new_with_cancellation(
+        package,
+        direction,
+        connection_id,
+        "listener-1",
+        runtime_limits,
+        framing_limits,
+        ProtocolExecutionCancellation::new(),
     )
 }
 
-fn assert_state_error(decision: FramingDecision, expected: &ProtocolFramingError) {
-    let mut decision = Some(decision);
-    let mut framer = closure_framer(8, 8, move |_| Ok(decision.take().unwrap()));
-    assert_eq!(&framer.push(vec![1]).unwrap_err(), expected);
-    assert_eq!(framer.buffered_bytes(), 0);
+fn inspect_chunks(
+    inspector: &mut ProtocolFrameInspector,
+    chunks: impl IntoIterator<Item = Vec<u8>>,
+) -> Result<Vec<Vec<u8>>, ProtocolFramingError> {
+    let mut buffered = Vec::new();
+    let mut frames = Vec::new();
+    for chunk in chunks {
+        buffered.extend(chunk);
+        loop {
+            match inspector.inspect(&buffered)? {
+                ProtocolFrameInspection::NeedMore { .. } => break,
+                ProtocolFrameInspection::Complete { bytes } => {
+                    frames.push(buffered.drain(..bytes).collect());
+                    if buffered.is_empty() {
+                        break;
+                    }
+                }
+                ProtocolFrameInspection::Reject { reason } => {
+                    return Err(ProtocolFramingError::Rejected { reason });
+                }
+            }
+        }
+    }
+    Ok(frames)
 }
 
 fn valid_fixed_script() -> &'static str {

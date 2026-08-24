@@ -60,35 +60,6 @@ pub fn absolute_uri_to_origin_form(uri: &Uri) -> Result<Uri> {
         .map_err(|error| config_error(format!("invalid origin-form request-target: {error}")))
 }
 
-pub(super) fn connect_authority(uri: &Uri) -> Result<String> {
-    let authority = uri
-        .authority()
-        .map_or_else(|| uri.path(), http::uri::Authority::as_str);
-    if authority.is_empty() || authority.contains('@') || authority.contains('/') {
-        return Err(config_error(
-            "CONNECT requires a valid authority-form target",
-        ));
-    }
-    let parsed = authority
-        .parse::<http::uri::Authority>()
-        .map_err(|error| config_error(format!("invalid CONNECT authority: {error}")))?;
-    let host = unbracket_host(parsed.host());
-    let port = parsed.port_u16().unwrap_or(443);
-    if port == 0 {
-        return Err(config_error(
-            "CONNECT target port must be greater than zero",
-        ));
-    }
-    Ok(format_authority(host, port))
-}
-
-pub(super) fn authority_host(authority: &str) -> Result<String> {
-    authority
-        .parse::<http::uri::Authority>()
-        .map(|parsed| unbracket_host(parsed.host()).to_ascii_lowercase())
-        .map_err(|error| config_error(format!("invalid authority host: {error}")))
-}
-
 /// 精确主机/IP 或 `*.example.test` 后缀匹配。通配符不匹配裸根域，且边界必须是 `.`。
 pub(crate) fn authority_is_allowed(host: &str, patterns: &[String]) -> bool {
     let host = host.trim_end_matches('.').to_ascii_lowercase();
@@ -102,23 +73,6 @@ pub(crate) fn authority_is_allowed(host: &str, patterns: &[String]) -> bool {
             host == pattern
         }
     })
-}
-
-pub(super) fn valid_authority_pattern(pattern: &str) -> bool {
-    let value = pattern.trim();
-    if value.is_empty() || value.contains(['/', ':', '@']) {
-        return value.parse::<IpAddr>().is_ok();
-    }
-    let host = value.strip_prefix("*.").unwrap_or(value);
-    !host.is_empty()
-        && host.split('.').all(|label| {
-            !label.is_empty()
-                && !label.starts_with('-')
-                && !label.ends_with('-')
-                && label
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-        })
 }
 
 fn unbracket_host(host: &str) -> &str {

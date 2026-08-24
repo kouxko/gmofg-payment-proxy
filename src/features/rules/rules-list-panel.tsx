@@ -1,5 +1,5 @@
 import { Alert, Button, Chip, Switch, Table } from "@heroui/react";
-import { FileArrowRightOut, FileArrowUp, Plus } from "@gravity-ui/icons";
+import { Plus } from "@gravity-ui/icons";
 import type {
   ProtocolDocumentRuleDefinition,
   RuleSummaryViewModel,
@@ -11,21 +11,22 @@ type RulesListPanelProps = {
   rules?: RuleSummaryViewModel[];
   bodyRules?: ProtocolDocumentRuleDefinition[];
   bodyListenerNames?: Map<string, string>;
+  socketRules?: ProtocolDocumentRuleDefinition[];
+  socketListenerNames?: Map<string, string>;
   error?: string;
   isLoading: boolean;
   selectedId?: string;
-  selectedKind?: "standard" | "body";
+  selectedKind?: "standard" | "body" | "socket";
   writePending: boolean;
   editorBlocked: boolean;
   pendingAction?: string;
   onNew: () => void;
-  onImport: () => void;
-  onExport: () => void;
   onRefresh: () => void;
   onSelect: (ruleId: string) => void;
-  onSelectBody?: (ruleId: string) => void;
+  onSelectProtocol?: (kind: "body" | "socket", ruleId: string) => void;
   onToggle: (rule: RuleSummaryViewModel, enabled: boolean) => void;
-  onToggleBody?: (
+  onToggleProtocol?: (
+    kind: "body" | "socket",
     rule: ProtocolDocumentRuleDefinition,
     enabled: boolean,
   ) => void;
@@ -35,6 +36,8 @@ export function RulesListPanel({
   rules,
   bodyRules = [],
   bodyListenerNames = new Map(),
+  socketRules = [],
+  socketListenerNames = new Map(),
   error,
   isLoading,
   selectedId,
@@ -43,44 +46,45 @@ export function RulesListPanel({
   editorBlocked,
   pendingAction,
   onNew,
-  onImport,
-  onExport,
   onRefresh,
   onSelect,
-  onSelectBody,
+  onSelectProtocol,
   onToggle,
-  onToggleBody,
+  onToggleProtocol,
 }: RulesListPanelProps) {
+  const protocolRows = [
+    ...bodyRules.map((rule) => ({
+      kind: "body" as const,
+      label: "HTTP Body",
+      listenerName: bodyListenerNames.get(rule.listener_id),
+      rule,
+    })),
+    ...socketRules.map((rule) => ({
+      kind: "socket" as const,
+      label: "Socket",
+      listenerName: socketListenerNames.get(rule.listener_id),
+      rule,
+    })),
+  ];
   return (
-    <div className="min-w-0 space-y-5 overflow-auto p-5">
-      <div className="flex items-center">
-        <h2 className="text-lg font-semibold">HTTP 拦截规则</h2>
-        <div className="ml-auto flex gap-3">
-          <Button
-            variant="primary"
-            isDisabled={writePending || editorBlocked}
-            onPress={onNew}
-          >
-            <Plus className="size-4" />
-            {pendingAction === "new" ? "正在新建…" : "新建规则"}
-          </Button>
-          <Button
-            variant="outline"
-            isDisabled={writePending}
-            onPress={onImport}
-          >
-            <FileArrowUp className="size-4" />
-            {pendingAction === "import" ? "正在导入…" : "导入规则"}
-          </Button>
-          <Button
-            variant="outline"
-            isDisabled={writePending}
-            onPress={onExport}
-          >
-            <FileArrowRightOut className="size-4" />
-            {pendingAction === "export" ? "正在导出…" : "导出规则"}
-          </Button>
+    <div className="min-w-0 space-y-4 overflow-auto p-5">
+      <div className="flex items-center gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">规则</h2>
+          <p className="text-sm text-[var(--telemetry-muted)]">
+            规则按优先级数值从小到大逐条匹配；同优先级按创建顺序执行。
+          </p>
         </div>
+        <Button
+          className="ml-auto"
+          variant="primary"
+          // 无效草稿只应阻止保存，不能阻止用户放弃草稿并重新开始。
+          isDisabled={writePending}
+          onPress={onNew}
+        >
+          <Plus className="size-4" />
+          {pendingAction === "new" ? "正在新建…" : "新建规则"}
+        </Button>
       </div>
       {error && (
         <Alert status="danger">
@@ -107,8 +111,11 @@ export function RulesListPanel({
               if (first == null) return;
               const [kind, ...idParts] = String(first).split(":");
               const ruleId = idParts.join(":");
-              if (kind === "body") onSelectBody?.(ruleId);
-              else onSelect(ruleId);
+              if (kind === "body" || kind === "socket") {
+                onSelectProtocol?.(kind, ruleId);
+              } else {
+                onSelect(ruleId);
+              }
             }}
           >
             <Table.Header>
@@ -129,7 +136,7 @@ export function RulesListPanel({
                     ? "正在读取规则…"
                     : error
                       ? "规则列表暂不可用"
-                      : "暂无 HTTP 拦截规则，请选择新建规则开始配置"}
+                      : "暂无规则，请选择新建规则开始配置"}
                 </div>
               )}
             >
@@ -158,9 +165,10 @@ export function RulesListPanel({
                   <Table.Cell>{rule.priority}</Table.Cell>
                   <Table.Cell className="font-medium">{rule.name}</Table.Cell>
                   <Table.Cell>
-                    <Chip size="sm" color="accent" variant="soft">
-                      {rule.channel_text}
-                    </Chip>
+                    <div className="flex items-center gap-2">
+                      <Chip size="sm" color="accent" variant="soft">HTTP</Chip>
+                      <span>{rule.channel_text}</span>
+                    </div>
                   </Table.Cell>
                   <Table.Cell>{rule.stage_text}</Table.Cell>
                   <Table.Cell>{rule.match_summary}</Table.Cell>
@@ -169,17 +177,17 @@ export function RulesListPanel({
                   <Table.Cell>{formatTimestamp(rule.last_hit_at)}</Table.Cell>
                 </Table.Row>
               ))}
-              {bodyRules.map((rule) => (
+              {protocolRows.map(({ kind, label, listenerName, rule }) => (
                 <Table.Row
-                  key={`body:${rule.rule_id}`}
-                  id={`body:${rule.rule_id}`}
+                  key={`${kind}:${rule.rule_id}`}
+                  id={`${kind}:${rule.rule_id}`}
                 >
                   <Table.Cell>
                     <Switch
-                      aria-label={`${rule.enabled ? "停用" : "启用"} Body 报文规则 ${rule.name}`}
+                      aria-label={`${rule.enabled ? "停用" : "启用"} ${kind === "body" ? "Body" : "Socket"} 报文规则 ${rule.name}`}
                       isSelected={rule.enabled}
                       isDisabled={writePending || editorBlocked}
-                      onChange={(enabled) => onToggleBody?.(rule, enabled)}
+                      onChange={(enabled) => onToggleProtocol?.(kind, rule, enabled)}
                     >
                       <Switch.Content>
                         <Switch.Control>
@@ -192,8 +200,8 @@ export function RulesListPanel({
                   <Table.Cell className="font-medium">{rule.name}</Table.Cell>
                   <Table.Cell>
                     <div className="flex items-center gap-2">
-                      <Chip size="sm" color="accent" variant="soft">Body 报文</Chip>
-                      <span>{bodyListenerNames.get(rule.listener_id) ?? "—"}</span>
+                      <Chip size="sm" color="accent" variant="soft">{label}</Chip>
+                      <span>{listenerName ?? "—"}</span>
                     </div>
                   </Table.Cell>
                   <Table.Cell>{protocolRuleStageLabel(rule.stage)}</Table.Cell>
@@ -207,16 +215,6 @@ export function RulesListPanel({
           </Table.Content>
         </Table.ScrollContainer>
       </Table>
-      <Alert status="accent">
-        <Alert.Indicator />
-        <Alert.Content>
-          <Alert.Title>执行顺序</Alert.Title>
-          <Alert.Description>
-            先执行 HTTP 基础规则，再执行 Body 报文规则；每类内部按优先级升序、
-            同优先级按创建顺序执行，命中终止动作后停止该类后续规则。
-          </Alert.Description>
-        </Alert.Content>
-      </Alert>
     </div>
   );
 }

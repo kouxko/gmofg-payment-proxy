@@ -1,8 +1,8 @@
 use std::fmt;
 
-use intercept_proxy_domain::is_rhai_reserved_word;
 use serde::Serialize;
 
+use crate::rhai_identifier::is_rhai_reserved_word;
 use crate::{ProtocolPackageFile, ProtocolPackageParseError, ProtocolPackageParseErrorCode};
 
 /// Manifest 内相对 UTF-8 文件路径的最大字节数。

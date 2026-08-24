@@ -28,8 +28,6 @@ impl SqliteStore {
             .map_err(|source| InfrastructureError::Database { source })?;
         let store = Self {
             connection: Mutex::new(connection),
-            capture_coordination:
-                super::socket_capture_coordination::SocketCaptureCoordination::default(),
         };
         store.ensure_current_schema()?;
         Ok(store)
@@ -56,7 +54,6 @@ impl SqliteStore {
             }
             if database_is_empty || reset_required {
                 create_current_schema(&transaction)?;
-                super::socket_captures::create_schema(&transaction)?;
                 let certificate_revision = stored_certificate_revision(&transaction)?;
                 initialize_singleton_state(&transaction, certificate_revision)?;
             }

@@ -13,7 +13,10 @@ import {
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RuleDraft } from "@/generated/rust-types";
+import type {
+  RuleDraft,
+  RuleStageCapabilityViewModel,
+} from "@/generated/rust-types";
 import { ActionsEditor, ConditionsEditor } from "./rule-editor";
 
 const commandMocks = vi.hoisted(() => ({
@@ -54,6 +57,20 @@ const draft: RuleDraft = {
   ],
   one_shot: false,
 };
+const requestCapability: RuleStageCapabilityViewModel = {
+  stage: "request",
+  match_field_kinds: [
+    "terminal_ip",
+    "certificate_fingerprint",
+    "path_or_request_type",
+    "json_path",
+  ],
+  actions: [
+    { kind: "delay", terminal: false, traffic_direction: null },
+    { kind: "pause", terminal: false, traffic_direction: null },
+    { kind: "mock_response", terminal: true, traffic_direction: null },
+  ],
+};
 
 describe("RULE-016/RULE-017 production rule editor async safety", () => {
   beforeEach(() => {
@@ -90,6 +107,7 @@ describe("RULE-016/RULE-017 production rule editor async safety", () => {
         fieldErrors={{}}
         onChange={onChange}
         onAsyncStateChange={onAsyncStateChange}
+        capability={requestCapability}
       />,
     );
 
@@ -159,6 +177,7 @@ describe("RULE-016/RULE-017 production rule editor async safety", () => {
         fieldErrors={{}}
         onChange={onChange}
         onAsyncStateChange={vi.fn()}
+        capability={requestCapability}
       />,
     );
 
@@ -237,6 +256,7 @@ describe("RULE-016/RULE-017 production rule editor async safety", () => {
               )
             }
             onAsyncStateChange={vi.fn()}
+            capability={requestCapability}
           />
         );
       }

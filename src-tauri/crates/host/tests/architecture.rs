@@ -6,13 +6,15 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const CORE_CRATES: [(&str, &str); 7] = [
+const CORE_CRATES: [(&str, &str); 9] = [
     ("domain", "intercept-proxy-domain"),
     ("application", "intercept-proxy-application"),
+    ("exchange", "intercept-proxy-exchange"),
     ("android-engine", "intercept-proxy-android-engine"),
     ("proxy", "intercept-proxy-runtime"),
     ("product-api", "intercept-proxy-product-api"),
     ("infrastructure", "intercept-proxy-infrastructure"),
+    ("protocol-scripting", "intercept-proxy-protocol-scripting"),
     ("host", "intercept-proxy-host"),
 ];
 
@@ -50,10 +52,12 @@ fn generic_core_does_not_depend_on_removed_legacy_product_fixture() {
     for crate_name in [
         "intercept-proxy-domain",
         "intercept-proxy-application",
+        "intercept-proxy-exchange",
         "intercept-proxy-android-engine",
         "intercept-proxy-runtime",
         "intercept-proxy-product-api",
         "intercept-proxy-infrastructure",
+        "intercept-proxy-protocol-scripting",
         "intercept-proxy-host",
     ] {
         let packages = resolved_dependencies(crate_name);

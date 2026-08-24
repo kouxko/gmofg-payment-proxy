@@ -1,3 +1,30 @@
+# 2026-08-24 规则页统一 HTTP/Socket 列表验收
+
+- 问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-WEVW7p.png`
+- 验收对象：规则页在一个列表和一个右侧编辑区内统一展示 HTTP 常规、HTTP Body 与 Socket 报文规则。
+
+## 已完成验证
+
+- 组件契约确认页面只有一个“规则”标题、一张规则表和一个“新建规则”入口。
+- HTTP 常规、HTTP Body、Socket 报文规则使用不同协议标签显示在同一张表内。
+- 选择 HTTP Body 或 Socket 行时，在同一个右侧区域切换到对应协议编辑器。
+- 新建规则弹窗统一提供空白 HTTP、HTTP Body、Socket 报文规则和 HTTP 故障预设。
+- 规则定向测试 48 项、UI 契约 440 项、完整前端测试 639 项通过；TypeScript、ESLint、前端边界和源码行数门禁通过。
+- macOS release `.app` 已成功构建。
+
+## 原生应用视觉验收
+
+- HTTP 与 Socket 规则已显示在同一张规则表中，没有协议切换 Tab，也没有上下分区。
+- 选择 Socket 规则后，右侧同一编辑区正确切换为 Socket 条件和动作编辑器。
+- 页面只有一个“新建规则”按钮；弹窗统一提供空白 HTTP、HTTP Body、Socket 报文规则与故障预设。
+- HTTP 规则截图：`/tmp/intercept-proxy-unified-rules-20260824.png`
+- Socket 编辑器截图：`/tmp/intercept-proxy-unified-rules-socket-20260824.png`
+- 统一新建入口截图：`/tmp/intercept-proxy-unified-rules-create-20260824.png`
+
+**final result: passed**
+
+---
+
 # Workspace 页面视觉验收
 
 - 参考截图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-97b5b831-e193-43b8-9f6e-6c139ed2b136.png`
@@ -76,6 +103,38 @@
 - 聚焦区域：右栏能看到方案基本信息、包名筛选、应用结果和后续 TCP/IP 弱网参数；左栏保持设备选择及网络接管控制，不与配置字段混排。
 - 核心路径：选择设备 → 新建弱网方案 → 按包名筛选 → 选择应用 → 配置弱网参数，控件均在打包应用中可达。
 - 视觉对比未发现新的 P0、P1 或 P2 阻断问题。
+
+**final result: passed**
+
+---
+
+# 2026-08-22 抓包页统一 HTTP/Socket 运行记录验收
+
+- 问题参考图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/codex-clipboard-JM4QO5.png`
+- 最终实现图：`/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/com.openai.sky.CUAService/Intercept Proxy Screenshot 2026-08-22 at 22.33.45.jpeg`
+- 并排对比图：`/tmp/intercept-proxy-unified-comparison-settled.jpg`
+- 验收对象：同一个运行记录区域内统一显示 HTTP 与 Socket Exchange。
+
+## 本次调整
+
+- 删除旧 HTTP Session 列表，抓包页只挂载 `ExchangeObservationView`。
+- HTTP 与 Socket 共用“运行记录”标题、清空操作、分页、空状态和一张表格。
+- 表格按协议列区分 `HTTP` 与 `SOCKET`，两类记录继续共用连接级 Exchange 时间线与详情页。
+
+## 功能证据
+
+- UI 定向回归 12/12 通过；完整前端测试 66 个文件、645 项通过。
+- Python 真实验收通过：HTTP 请求/响应规则命中，Socket ISO8583 分片组帧和四阶段规则命中。
+- Accessibility 控件树只返回一个“统一运行记录工作区”和一张“HTTP 与 Socket 运行记录”表格。
+- App 内存观测立即在同一表格返回 HTTP 与 Socket 两条 Exchange；每条均按 `opened → received → sent → received → sent → closed` 排列，未发生覆盖。
+- HTTP 详情保留 Header、Body、Display 与规则修改结果；Socket 详情保留字节证据、ISO8583 Display 与上下行规则修改结果。
+- macOS release `.app` 构建成功并启动；两个 E2E 监听器保持运行。
+
+## 视觉验收
+
+- 已将问题参考图与真实打包应用的稳定状态截图合并比较。
+- 原上下两个独立区域已收敛成一个共享表格，标题、清空操作、分页和空白空间均只保留一套。
+- 未发现新的溢出、裁切、错位、异常间距或重复控件问题。
 
 **final result: passed**
 

@@ -1,3 +1,4 @@
+use intercept_proxy_application::AppError;
 use intercept_proxy_domain::ListenerId;
 
 use super::*;

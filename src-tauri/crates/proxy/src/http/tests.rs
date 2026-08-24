@@ -2,6 +2,8 @@ use super::*;
 
 #[path = "tests/tail_write.rs"]
 mod tail_write;
+#[path = "tests/unsupported_requests.rs"]
+mod unsupported_requests;
 use std::net::{IpAddr, Ipv4Addr};
 
 #[test]
@@ -125,6 +127,11 @@ fn downstream_test_service(
             declared_content_length,
         }),
         ports: Arc::new(NoopPipelinePorts),
+        capabilities: Arc::new(PlainHttpCapabilityFactory::new(
+            "http-test-workspace",
+            "http-test-listener",
+        )),
+        endpoint: "fixed.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(1).expect("valid test capacity"),
         allowed_client_cidrs: Vec::new(),
@@ -154,7 +161,7 @@ async fn write_test_request(client: &mut tokio::io::DuplexStream) {
 
 #[tokio::test]
 async fn response_from_disposition_without_body_declares_zero_length() {
-    let canonical_head = StdMutex::new(None);
+    let canonical_head = CanonicalResponseHead::default();
     let raw_tail = StdMutex::new(None);
     let fault = StdMutex::new(None);
 
@@ -183,7 +190,7 @@ async fn response_from_disposition_without_body_declares_zero_length() {
 
 #[tokio::test]
 async fn response_from_disposition_updates_content_length_after_body_text_change() {
-    let canonical_head = StdMutex::new(None);
+    let canonical_head = CanonicalResponseHead::default();
     let raw_tail = StdMutex::new(None);
     let fault = StdMutex::new(None);
 
@@ -300,7 +307,7 @@ async fn intentional_content_length_and_truncation_faults_have_stable_classifica
     ];
 
     for (disposition, expected_fault, expected_code) in cases {
-        let canonical_head = StdMutex::new(None);
+        let canonical_head = CanonicalResponseHead::default();
         let raw_tail = StdMutex::new(None);
         let fault = StdMutex::new(None);
         response_from_disposition(
@@ -322,7 +329,7 @@ async fn intentional_content_length_and_truncation_faults_have_stable_classifica
 
 #[tokio::test]
 async fn downstream_mid_body_disconnect_sends_exact_prefix_and_keeps_declared_length() {
-    let canonical_head = StdMutex::new(None);
+    let canonical_head = CanonicalResponseHead::default();
     let raw_tail = StdMutex::new(None);
     let fault = StdMutex::new(None);
     let response = response_from_disposition(

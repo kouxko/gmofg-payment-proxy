@@ -130,6 +130,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         let tcp_listener = bind_tcp_listener(plan.bind_addr(), listener_id).await?;
         let cancellation = CancellationToken::new();
         let task_cancellation = cancellation.clone();
+        let workspace_id = workspace.id.to_string();
         let fault = Arc::new(RwLock::new(None));
         let task_fault = Arc::clone(&fault);
         let socket_service = match &plan {
@@ -146,6 +147,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 plan,
                 tcp_listener,
                 listener_id,
+                workspace_id,
                 runtime_epoch,
                 task_cancellation,
             )
@@ -357,6 +359,7 @@ async fn serve_prepared_listener(
     plan: PreparedListenerRuntime,
     tcp_listener: tokio::net::TcpListener,
     listener_id: ListenerId,
+    workspace_id: String,
     runtime_epoch: uuid::Uuid,
     cancellation: CancellationToken,
 ) -> Result<(), intercept_proxy_runtime::ProxyError> {
@@ -379,6 +382,7 @@ async fn serve_prepared_listener(
                 .serve_listener_with_context(
                     tcp_listener,
                     intercept_proxy_runtime::SocketRelayRunContext {
+                        workspace_id,
                         listener_id: listener_id.to_string(),
                         workspace_runtime_epoch: runtime_epoch,
                         listener_run_epoch: uuid::Uuid::new_v4(),

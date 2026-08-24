@@ -1,4 +1,4 @@
-//! Read-only MCP backend implemented exclusively through the application facade.
+//! Read-only MCP backend over the application facade plus bounded runtime-log and Exchange-observation stores.
 
 mod dispatch;
 mod guidance;
@@ -10,7 +10,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use intercept_proxy_application::{
     AppError, AppErrorViewModel, Application, BreakpointId, DiagnosticLogQuery, ProtocolPackageRef,
-    RuleId, RuntimeEpoch, SessionId, SocketCaptureId, WorkspaceId,
+    RuleId, RuntimeEpoch, SessionId, WorkspaceId,
 };
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 use super::{query, resources};
 use crate::runtime_logs::RuntimeLogStore;
 use guidance::diagnostic_guidance;
+use intercept_proxy_infrastructure::ExchangeObservationStore;
 
 #[derive(Debug, Clone)]
 pub struct ToolFailure {
@@ -95,13 +96,19 @@ pub trait ReadOnlyMcpBackend: Debug + Send + Sync {
 pub struct ApplicationBackend {
     application: Arc<Application>,
     runtime_logs: Arc<RuntimeLogStore>,
+    exchange_observations: Arc<ExchangeObservationStore>,
 }
 
 impl ApplicationBackend {
-    pub(crate) fn new(application: Arc<Application>, runtime_logs: Arc<RuntimeLogStore>) -> Self {
+    pub(crate) fn new(
+        application: Arc<Application>,
+        runtime_logs: Arc<RuntimeLogStore>,
+        exchange_observations: Arc<ExchangeObservationStore>,
+    ) -> Self {
         Self {
             application,
             runtime_logs,
+            exchange_observations,
         }
     }
 
@@ -199,6 +206,8 @@ impl ReadOnlyMcpBackend for ApplicationBackend {
             "application_snapshot"
             | "application_log_query"
             | "application_log_get"
+            | "exchange_observation_query"
+            | "exchange_observation_get"
             | "reproduction_report"
             | "settings_get"
             | "workspace_list"
@@ -207,12 +216,9 @@ impl ReadOnlyMcpBackend for ApplicationBackend {
             | "entry_status_list"
             | "diagnostics_query"
             | "diagnose_recent_failures" => self.call_general_tool(name, arguments).await,
-            "http_capture_query"
-            | "http_capture_get"
-            | "socket_capture_query"
-            | "socket_capture_get"
-            | "breakpoint_query"
-            | "breakpoint_get" => self.call_traffic_tool(name, arguments).await,
+            "http_capture_query" | "http_capture_get" | "breakpoint_query" | "breakpoint_get" => {
+                self.call_traffic_tool(name, arguments).await
+            }
             "http_rule_list"
             | "http_rule_get"
             | "protocol_rule_list"
@@ -272,12 +278,6 @@ struct ApplicationLogDetailArguments {
 struct HttpCaptureDetailArguments {
     session_id: SessionId,
     runtime_epoch: RuntimeEpoch,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct SocketCaptureDetailArguments {
-    capture_id: SocketCaptureId,
 }
 
 #[derive(Debug, Deserialize)]

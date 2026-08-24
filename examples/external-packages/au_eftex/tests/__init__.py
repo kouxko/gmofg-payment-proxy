@@ -1,0 +1,1 @@
+"""AU EFTEX package tests."""

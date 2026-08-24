@@ -11,10 +11,10 @@ use crate::transport::{ConnectionContext, SystemClock, TokioBoundListener, Tokio
 use crate::{ChannelId, ErrorCode, Result};
 
 use super::{
-    LocalResponderProcessorFactory, NoopSocketConnectionObserver, ScriptedRelayProcessorFactory,
-    SocketConnectionEvent, SocketConnectionObserver, SocketFramePumpLimits,
-    SocketLocalResponderConfig, SocketRejectionReason, SocketRelayConfig, SocketRelayFailure,
-    SocketRelayMetrics, SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelayStage,
+    NoopSocketConnectionObserver, SocketConnectionEvent, SocketConnectionObserver,
+    SocketLocalResponderConfig, SocketPipelineLimits, SocketProtocolCapabilityFactory,
+    SocketRejectionReason, SocketRelayConfig, SocketRelayFailure, SocketRelayMetrics,
+    SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelayStage,
     SocketUpstreamConnectionTestResult, handler::SocketConnectionHandler,
 };
 
@@ -70,8 +70,8 @@ impl SocketRelayService {
     /// 构造使用脚本 processor 的固定上游双向 Relay。
     pub fn build_scripted(
         config: SocketRelayConfig,
-        factory: Arc<dyn ScriptedRelayProcessorFactory>,
-        limits: SocketFramePumpLimits,
+        factory: Arc<dyn SocketProtocolCapabilityFactory>,
+        limits: SocketPipelineLimits,
     ) -> Result<Self> {
         Self::build_scripted_with_observer(
             config,
@@ -84,8 +84,8 @@ impl SocketRelayService {
     /// 构造带 observer 的 Scripted Relay；processor 每连接每方向各创建一次。
     pub fn build_scripted_with_observer(
         config: SocketRelayConfig,
-        factory: Arc<dyn ScriptedRelayProcessorFactory>,
-        limits: SocketFramePumpLimits,
+        factory: Arc<dyn SocketProtocolCapabilityFactory>,
+        limits: SocketPipelineLimits,
         observer: Arc<dyn SocketConnectionObserver>,
     ) -> Result<Self> {
         let handler_factory = factory;
@@ -110,8 +110,8 @@ impl SocketRelayService {
     /// 构造不包含任何上游能力的本地应答 Listener。
     pub fn build_local_responder(
         config: SocketLocalResponderConfig,
-        factory: Arc<dyn LocalResponderProcessorFactory>,
-        limits: SocketFramePumpLimits,
+        factory: Arc<dyn SocketProtocolCapabilityFactory>,
+        limits: SocketPipelineLimits,
     ) -> Result<Self> {
         Self::build_local_responder_with_observer(
             config,
@@ -121,11 +121,27 @@ impl SocketRelayService {
         )
     }
 
+    /// 构造使用核心 `LocalRawServer` 的透明本地 Echo Listener。
+    pub fn build_local_raw_responder_with_observer(
+        config: SocketLocalResponderConfig,
+        observer: Arc<dyn SocketConnectionObserver>,
+    ) -> Result<Self> {
+        let handler_config = config.clone();
+        let handler_builder = move |observer, metrics, run| {
+            SocketConnectionHandler::build_direct_local(handler_config, observer, metrics, run)
+        };
+        Self::build_inner(
+            SocketListenerConfig::LocalResponder(config),
+            observer,
+            handler_builder,
+        )
+    }
+
     /// 构造带 observer 的本地应答 Listener。
     pub fn build_local_responder_with_observer(
         config: SocketLocalResponderConfig,
-        factory: Arc<dyn LocalResponderProcessorFactory>,
-        limits: SocketFramePumpLimits,
+        factory: Arc<dyn SocketProtocolCapabilityFactory>,
+        limits: SocketPipelineLimits,
         observer: Arc<dyn SocketConnectionObserver>,
     ) -> Result<Self> {
         let handler_factory = factory;
@@ -162,6 +178,7 @@ impl SocketRelayService {
         let metrics = Arc::new(SocketRelayMetrics::default());
         let events = Arc::new(SocketEventCoordinator::new(observer));
         let run = Arc::new(std::sync::RwLock::new(SocketRelayRunContext {
+            workspace_id: String::new(),
             listener_id: format!("socket-{}", config.bind_addr().port()),
             workspace_runtime_epoch: uuid::Uuid::nil(),
             listener_run_epoch: uuid::Uuid::nil(),
@@ -275,6 +292,7 @@ impl SocketRelayService {
 
     fn compatible_run_context(&self, run_id: uuid::Uuid) -> SocketRelayRunContext {
         SocketRelayRunContext {
+            workspace_id: String::new(),
             listener_id: format!("socket-{}", self.config.bind_addr().port()),
             workspace_runtime_epoch: run_id,
             listener_run_epoch: run_id,

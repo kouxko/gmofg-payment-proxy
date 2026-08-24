@@ -18,6 +18,7 @@ import {
   setSocketTopology,
   socketCatalogOptions,
 } from "./socket-listener-model";
+import { defaultSocketRuntimeLimits } from "./listener-data-plane";
 
 function option(
   version = "1.0.0",
@@ -48,6 +49,7 @@ function relaySettings(): SocketRelaySettings {
       },
     },
     maximum_connections: 64,
+    runtime_limits: defaultSocketRuntimeLimits(),
     processing: {
       mode: "scripted",
       settings: {
@@ -217,6 +219,7 @@ describe("Socket Listener model", () => {
 
     expect(setSocketTopology(settings, "local_responder")).toEqual({
       maximum_connections: 64,
+      runtime_limits: defaultSocketRuntimeLimits(),
       topology: {
         mode: "local_responder",
         settings: {
@@ -266,6 +269,7 @@ describe("Socket Listener model", () => {
         settings: { upstream: { host: "", port: 0 }, security: { mode: "transparent" } },
       },
       maximum_connections: 64,
+      runtime_limits: defaultSocketRuntimeLimits(),
       processing: { mode: "direct" },
     });
   });

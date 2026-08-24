@@ -89,7 +89,7 @@ export const commands = {
 	listenerOverview: (workspaceId: WorkspaceId) => typedError<ListenerOverviewViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_overview", { workspaceId })),
 	listenerStart: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_start", { workspaceId, expectedWorkspaceRevision, listenerId })),
 	listenerStop: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_stop", { workspaceId, expectedWorkspaceRevision, listenerId })),
-	listenerTestUpstreamConnection: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamConnectionTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_connection", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
+	listenerTestUpstreamConnection: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamConnectionTestViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_connection", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	listenerTestUpstreamTls: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	protocolPackageList: () => typedError<ProtocolPackageGroupViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_list")),
 	externalPackageServiceStatus: () => typedError<ExternalPackageServiceStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("external_package_service_status")),
@@ -139,15 +139,10 @@ export const commands = {
 	captureQuery: (query: CaptureQuery) => typedError<CapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_query", { query })),
 	captureGetDetail: (sessionId: string, runtimeEpoch: string) => typedError<CaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_get_detail", { sessionId, runtimeEpoch })),
 	captureClearView: (currentCursor: number) => typedError<number, AppErrorViewModel>(__TAURI_INVOKE("capture_clear_view", { currentCursor })),
-	/**
-	 *  查询独立的 Socket Frame/LocalExchange 时间线。
-	 *
-	 *  该命令不返回 HTTP start line、Header、status 或 JSONPath；T28 只需消费这一套
-	 *  协议中立 DTO，不必从 HTTP 抓包字段推断 Socket 语义。
-	 */
-	socketCaptureQuery: (query: SocketCaptureQuery) => typedError<SocketCapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_query", { query })),
-	socketCaptureGetDetail: (captureId: SocketCaptureId) => typedError<SocketCaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_get_detail", { captureId })),
-	socketCaptureClear: (workspaceId: WorkspaceId, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("socket_capture_clear", { workspaceId, confirmed })),
+	/**  查询 tracing UI Layer 与 MCP 共享的连接级 Exchange 时间线。 */
+	exchangeObservationQuery: (query: ExchangeObservationQuery) => typedError<ExchangeObservationPage, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_query", { query })),
+	exchangeObservationGet: (exchangeId: string) => typedError<ExchangeObservationRecord, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_get", { exchangeId })),
+	exchangeObservationClear: (workspaceId: WorkspaceId, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_clear", { workspaceId, confirmed })),
 	breakpointQuery: (runtimeEpoch: string | null) => typedError<BreakpointSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("breakpoint_query", { runtimeEpoch })),
 	breakpointGet: (breakpointId: string, runtimeEpoch: string) => typedError<BreakpointDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_get", { breakpointId, runtimeEpoch })),
 	breakpointFormatJson: (draft: BreakpointDraft) => typedError<BreakpointDraft, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_format_json", { draft })),
@@ -157,9 +152,10 @@ export const commands = {
 	ruleList: () => typedError<RuleSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("rule_list")),
 	ruleGet: (ruleId: string) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_get", { ruleId })),
 	ruleNewDraft: () => typedError<RuleDraft, AppErrorViewModel>(__TAURI_INVOKE("rule_new_draft")),
-	ruleConditionDraft: (kind: RuleConditionKind) => typedError<RuleCondition, AppErrorViewModel>(__TAURI_INVOKE("rule_condition_draft", { kind })),
-	ruleActionDraft: (kind: RuleActionKind) => typedError<RuleAction, AppErrorViewModel>(__TAURI_INVOKE("rule_action_draft", { kind })),
-	ruleMatchFieldDraft: (kind: RuleMatchFieldKind) => typedError<RuleMatchField, AppErrorViewModel>(__TAURI_INVOKE("rule_match_field_draft", { kind })),
+	ruleCapabilities: () => typedError<RuleStageCapabilityViewModel[], AppErrorViewModel>(__TAURI_INVOKE("rule_capabilities")),
+	ruleConditionDraft: (kind: RuleConditionKind, stage: MessageStage) => typedError<RuleCondition, AppErrorViewModel>(__TAURI_INVOKE("rule_condition_draft", { kind, stage })),
+	ruleActionDraft: (kind: RuleActionKind, stage: MessageStage) => typedError<RuleAction, AppErrorViewModel>(__TAURI_INVOKE("rule_action_draft", { kind, stage })),
+	ruleMatchFieldDraft: (kind: RuleMatchFieldKind, stage: MessageStage) => typedError<RuleMatchField, AppErrorViewModel>(__TAURI_INVOKE("rule_match_field_draft", { kind, stage })),
 	ruleMatchOperatorDraft: (kind: RuleMatchOperatorKind) => typedError<RuleMatchOperator, AppErrorViewModel>(__TAURI_INVOKE("rule_match_operator_draft", { kind })),
 	ruleParseByteInput: (raw: string) => typedError<RuleByteInputViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_byte_input", { raw })),
 	ruleParseHeaderInput: (raw: string) => typedError<RuleHeaderInputViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_header_input", { raw })),
@@ -727,8 +723,6 @@ export type DiagnosticReportExportOutcome = {
 export type DiagnosticReportQuery = {
 	workspace_id: WorkspaceId,
 	listener_id: ListenerId,
-	/**  指定时额外收集该条 Socket capture 详情；不自动选择其他记录。 */
-	capture_id: SocketCaptureId | null,
 };
 
 /**  Rust 判断某操作不可用时给出的稳定原因。 */
@@ -779,9 +773,10 @@ value: DocumentValue };
 export type DocumentField = DocumentFieldWire;
 
 /**
- *  Schema 字段名，同时也是脚本和 协议报文规则使用的稳定变量名。
- *  名称必须匹配 `[a-z][a-z0-9_]*`，并拒绝全部 Rhai active/reserved 关键字，
- *  防止同一个字段在 Schema 中合法、注册到脚本时却无法使用。
+ *  Schema 字段名，也是协议报文规则使用的稳定变量名。
+ *
+ *  名称只遵循协议无关的 `[a-z][a-z0-9_]*` 语法。脚本语言关键字由相应脚本边界校验，
+ *  不属于通用 Document 领域模型。
  */
 export type DocumentFieldName = string;
 
@@ -857,6 +852,49 @@ export type DownstreamTlsSettings = {
 	dynamic_sni_allowlist: string[],
 	client_authentication: DownstreamClientAuthentication,
 };
+
+/**  Reader/Writer 的强类型网络上下文；HTTP 保留文本 Header/Body，Socket 保留字节。 */
+export type ExchangeContext = { protocol: "http"; header: string; body: string } | { protocol: "socket"; bytes: number[] };
+
+export type ExchangeObservationEvent = { event: "opened"; observed_at: string } | { event: "received"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext;
+/**  协议 Pipeline 提供 Document；透明 Socket chunk 没有 Document。 */
+document: unknown | null;
+/**  协议 Reader 固定 Display；透明 Socket 不调用 Display。 */
+display: string | null } | { event: "sent"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext } | { event: "failed"; observed_at: string; direction: ProtocolDirection | null; stage: string; context: ExchangeContext | null; error: string } | { event: "closed"; observed_at: string; outcome: string; error: string | null };
+
+export type ExchangeObservationPage = {
+	rows: ExchangeObservationRecord[],
+	page: number,
+	page_size: number,
+	total: number,
+	/**  当前查询 Workspace 已被整体淘汰、因此无法再返回详情的连接记录数量。 */
+	evicted_records: number,
+	/**
+	 *  应用进程全局未记录事件数：包含生产者队列丢弃、字段解析失败、缺少 opened、
+	 *  身份不匹配及内存容量拒绝。无法可信归属的事件不会被猜测到某个 Workspace。
+	 */
+	ignored_events: number,
+};
+
+export type ExchangeObservationQuery = {
+	workspace_id: WorkspaceId,
+	listener_id: ListenerId | null,
+	page: PageRequest,
+};
+
+export type ExchangeObservationRecord = {
+	exchange_id: string,
+	workspace_id: WorkspaceId,
+	listener_id: ListenerId,
+	runtime_epoch: string,
+	peer_address: string,
+	protocol: ExchangeProtocol,
+	events: ExchangeObservationEvent[],
+	/**  `true` 表示该连接或更早连接的观测数据因容量不足发生过淘汰。 */
+	evidence_evicted: boolean,
+};
+
+export type ExchangeProtocol = "http" | "socket";
 
 /**  外部 JSON-RPC 调用的可查询脱敏诊断；绝不携带业务报文或远端 `data` 值。 */
 export type ExternalPackageCallDiagnosticViewModel = {
@@ -1168,7 +1206,26 @@ export type ListenerStatusViewModel = {
 };
 
 /**  对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。 */
-export type ListenerUpstreamConnectionTestViewModel = {
+export type ListenerUpstreamConnectionTestViewModel = ListenerUpstreamConnectionTestViewModel_Serialize | ListenerUpstreamConnectionTestViewModel_Deserialize;
+
+/**  对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。 */
+export type ListenerUpstreamConnectionTestViewModel_Deserialize = {
+	listener_id: ListenerId,
+	data_plane: ListenerDataPlaneKind,
+	upstream_origin: string,
+	resolved_address: string,
+	scheme: string,
+	transport: string,
+	tls: ListenerUpstreamTlsEvidenceViewModel | null,
+	socket_transport_mode: SocketTransportMode | null,
+	tls_server_name_candidates?: string[],
+	elapsed_millis: number,
+	message: string,
+	ui_tone: UiTone,
+};
+
+/**  对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。 */
+export type ListenerUpstreamConnectionTestViewModel_Serialize = {
 	listener_id: ListenerId,
 	data_plane: ListenerDataPlaneKind,
 	upstream_origin: string,
@@ -1296,7 +1353,7 @@ export type PathMtuProfile = {
 /**  超过路径 MTU 时的处理语义。 */
 export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
 
-/**  Socket Frame 相对于代理的稳定数据方向。 */
+/**  协议 Document 在 App 与 Server 之间相对于代理的稳定数据方向。 */
 export type ProtocolDirection =
 /**  App 到 Server，或 `LocalResponder` 的请求方向。 */
 "upstream" |
@@ -1554,7 +1611,11 @@ export type ProtocolRuleSaveInput = {
 	actions: DocumentAction[],
 };
 
-/**  Socket 报文经过代理时可独立配置的处理阶段。 */
+/**
+ *  协议 Document 经过 App、Proxy、Server 边界时可独立配置的处理阶段。
+ *
+ *  阶段只表达处理位置，不表示连接、传输协议或可共享的运行时状态。
+ */
 export type ProtocolRuleStage =
 /**  应用发出的报文刚进入代理。 */
 "app_to_proxy" |
@@ -1611,6 +1672,17 @@ export type Revision = number;
 
 export type RuleAction = { type: "set_json_field"; path: string; value_json: string } | { type: "replace_body_text"; text: string } | { type: "set_header"; name: string; value: string } | { type: "delay"; milliseconds: number } | { type: "jitter"; minimum_milliseconds: number; maximum_milliseconds: number; scope: RuleJitterScope } | { type: "throttle"; bytes_per_second: number; chunk_bytes: number; direction: RuleTrafficDirection } | { type: "intermittent"; available_milliseconds: number; blocked_milliseconds: number; direction: RuleTrafficDirection } | { type: "pause" } | { type: "custom_http_status"; status: number } | { type: "terminal"; action: RuleTerminalAction };
 
+/**
+ *  单个动作在指定 HTTP 阶段中的可用能力。
+ *
+ *  前端只渲染这里返回的动作，不再根据动作名称推断请求、响应或 TLS 语义。
+ */
+export type RuleActionCapabilityViewModel = {
+	kind: RuleActionKind,
+	terminal: boolean,
+	traffic_direction: RuleTrafficDirection | null,
+};
+
 export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "pause" | "custom_http_status" | "reject_tls_handshake" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
 
 export type RuleByteInputViewModel = {
@@ -1653,6 +1725,13 @@ export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "pa
 export type RuleMatchOperator = { type: "equals"; value: string } | { type: "contains"; value: string } | { type: "regex"; pattern: string };
 
 export type RuleMatchOperatorKind = "equals" | "contains" | "regex";
+
+/**  HTTP 规则编辑器针对一个阶段的完整能力表。 */
+export type RuleStageCapabilityViewModel = {
+	stage: MessageStage,
+	match_field_kinds: RuleMatchFieldKind[],
+	actions: RuleActionCapabilityViewModel[],
+};
 
 export type RuleSummaryViewModel = {
 	rule_id: string,
@@ -1727,6 +1806,8 @@ export type SettingsDraft = {
 	max_body_bytes: number,
 	max_sessions: number,
 	max_memory_bytes: number,
+	/**  Exchange observation producer queue; validated settings are the only source. */
+	ui_event_capacity: number,
 	leaf_sans: string[],
 	/**  固定路径 `/packages` 的外部软件包服务配置。 */
 	external_package_service: ExternalPackageServiceSettingsDraft,
@@ -1743,125 +1824,6 @@ export type SettingsViewModel = {
 	retries_enabled: boolean,
 	payload_policy_text: string,
 };
-
-/**  完整详情；`record` 是网络写出成功后的原子证据。 */
-export type SocketCaptureDetailViewModel = {
-	record: SocketCaptureRecord,
-};
-
-/**  捕获时的完整 Schema 与稀疏值槽；值顺序与 Schema 字段顺序严格一致。 */
-export type SocketCaptureDocument = {
-	/**  捕获时冻结的完整 Schema。 */
-	schema: DocumentSchema,
-	/**  与 Schema 字段顺序一一对应的可选值槽。 */
-	values: (SocketCaptureDocumentValue | null)[],
-};
-
-/**  Capture Document 的类型化值；整数使用十进制字符串保持 `i64` 精度。 */
-export type SocketCaptureDocumentValue =
-/**  UTF-8 文本值。 */
-{ type: "string"; value: string } |
-/**  使用规范十进制字符串承载的完整 `i64`。 */
-{ type: "int"; value: SocketCaptureInteger } |
-/**  布尔值。 */
-{ type: "bool"; value: boolean } |
-/**  原始字节值。 */
-{ type: "blob"; value: number[] };
-
-/**  已脱敏的 capture 失败证据；不携带 Document、原始帧或部分 written bytes。 */
-export type SocketCaptureFailureDiagnostic = {
-	stage: SocketCaptureFailureStage,
-	code: string,
-};
-
-export type SocketCaptureFailureStage = "frame" | "decode" | "rule" | "encode" | "write";
-
-export type SocketCaptureFailureViewModel = {
-	stage: SocketLocalExchangeFailureStage,
-	code: string,
-	message: string,
-};
-
-/** 一条已完成 Socket capture 的稳定标识。 */
-export type SocketCaptureId = string;
-
-/**  一个规范、可无损往返的 `i64` 十进制文本。 */
-export type SocketCaptureInteger = string;
-
-export type SocketCaptureKind = "relay_frame" | "local_exchange";
-
-export type SocketCapturePageViewModel = {
-	rows: SocketCaptureRowViewModel[],
-	total: number,
-	page: number,
-	page_size: number,
-	total_pages: number,
-	empty_message: string,
-};
-
-/**  Socket capture 的封闭联合类型；本地 exchange 不伪装为 Server frame。 */
-export type SocketCapturePayload = { kind: "relay_frame"; capture: SocketRelayFrameCapture } | { kind: "local_exchange"; capture: SocketLocalExchangeCapture } | { kind: "local_exchange_failure"; capture: SocketLocalExchangeFailureCapture };
-
-/**  Socket 页面专用查询；刻意不接受 HTTP stage、status、Header 或 `JSONPath` 条件。 */
-export type SocketCaptureQuery = {
-	workspace_id: WorkspaceId | null,
-	listener_id: ListenerId | null,
-	session_id: string | null,
-	connection_id: SocketConnectionId | null,
-	package: ProtocolPackageRef | null,
-	direction: ProtocolDirection | null,
-	kind: SocketCaptureKind | null,
-	occurred_from: string | null,
-	occurred_to: string | null,
-	sort: SocketCaptureSort,
-	direction_sort: SortDirection,
-	page: PageRequest,
-};
-
-/**  仓储保存的完整 Socket capture 聚合根。 */
-export type SocketCaptureRecord = {
-	capture_id: SocketCaptureId,
-	runtime_epoch: string,
-	workspace_id: WorkspaceId,
-	listener_id: ListenerId,
-	session_id: string,
-	connection_id: SocketConnectionId,
-	peer_address: string,
-	occurred_at: string,
-	completed_at: string,
-	payload: SocketCapturePayload,
-};
-
-/**  分页列表中的轻量行，不重复返回 Document、HTML 或完整字节。 */
-export type SocketCaptureRowViewModel = {
-	capture_id: SocketCaptureId,
-	runtime_epoch: string,
-	session_id: string,
-	connection_id: SocketConnectionId,
-	listener_id: ListenerId,
-	occurred_at: string,
-	completed_at: string,
-	kind: SocketCaptureKind,
-	direction: ProtocolDirection | null,
-	package: ProtocolPackageRef,
-	schema: SocketCaptureSchemaRef,
-	origin_size_bytes: number,
-	written_size_bytes: number,
-	logical_size_bytes: number,
-	matched_rule_ids: ProtocolDocumentRuleId[],
-	failure: SocketCaptureFailureViewModel | null,
-};
-
-/**  捕获时实际使用的精确 Schema 身份。 */
-export type SocketCaptureSchemaRef = {
-	id: DocumentSchemaId,
-	version: number,
-};
-
-export type SocketCaptureSort = "occurred_at" | "completed_at" | "size";
-
-/** 一条 Socket 连接的稳定标识；同一运行周期内不得复用。 */
-export type SocketConnectionId = string;
 
 /**  连接建立时的模式化路由证据；LocalResponder 分支不存在可伪造的上游字段。 */
 export type SocketConnectionRouteViewModel = {
@@ -1881,7 +1843,7 @@ export type SocketDiagnosticContextViewModel = {
 	workspace_runtime_epoch: string,
 	listener_run_epoch: string,
 	route: SocketConnectionRouteViewModel | null,
-	capture_failure: SocketCaptureFailureDiagnostic | null,
+	socket_failure: SocketFailureDiagnostic | null,
 	external_package_call: ExternalPackageCallDiagnosticViewModel | null,
 	stage: SocketDiagnosticStage,
 	direction: SocketDiagnosticDirection | null,
@@ -1894,19 +1856,6 @@ export type SocketDiagnosticContextViewModel = {
 export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_server" | "server_to_client" | "local_exchange";
 
 export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "frame_inspect" | "decode" | "rule" | "encode" | "frame_process" | "relay_write" | "shutdown";
-
-/**  Display 失败时允许持久化的脱敏诊断。 */
-export type SocketDisplayDiagnostic = {
-	code: string,
-	message: string,
-	external_package_call: ExternalPackageCallDiagnosticViewModel | null,
-};
-
-/**  Hex fallback 的稳定原因；不保存脚本异常文本或原始 payload。 */
-export type SocketDisplayFallbackReason = "entry_point_failed" | "resource_limit_exceeded";
-
-/**  协议展示结果。HTML 即使经过脚本生成也仍按不可信内容处理。 */
-export type SocketDisplayResult = { type: "untrusted_html"; html: string } | { type: "hex_fallback"; reason: SocketDisplayFallbackReason; diagnostic: SocketDisplayDiagnostic | null };
 
 /**  `LocalResponder` 只面向连接到 Listener 的 App，因此安全配置只能描述 App 侧传输。 */
 export type SocketDownstreamSecurity = { mode: "tcp" } | { mode: "tls"; downstream_tls: SocketDownstreamTlsSettings };
@@ -1921,54 +1870,13 @@ export type SocketEndpoint = {
 	port: number,
 };
 
-/** 一次 `LocalResponder` request/response 原子交换的稳定标识。 */
-export type SocketExchangeId = string;
-
-/**  `LocalResponder` 中一次完整、已写出的 request/response exchange。 */
-export type SocketLocalExchangeCapture = {
-	exchange_id: SocketExchangeId,
-	package: ProtocolPackageRef,
-	request_schema: SocketCaptureSchemaRef,
-	response_schema: SocketCaptureSchemaRef,
-	request_origin: number[],
-	/**  Decode 与 App -> Proxy 请求规则完成后的上行 Document。 */
-	request_document: SocketCaptureDocument,
-	/**  同一协议包的请求 Display 或明确 Hex 回退。 */
-	request_display: SocketDisplayResult,
-	/**  Proxy -> App 响应规则只修改该下行 Document，不得覆盖 request Document。 */
-	response_document: SocketCaptureDocument,
-	/**  App -> Proxy 请求阶段按执行顺序命中的规则。 */
-	matched_request_rule_ids: ProtocolDocumentRuleId[],
-	/**  Proxy -> App 响应阶段按执行顺序命中的规则。 */
-	matched_response_rule_ids: ProtocolDocumentRuleId[],
-	written_response: number[],
-	response_display: SocketDisplayResult,
+/**  已脱敏的 Socket 失败证据。 */
+export type SocketFailureDiagnostic = {
+	stage: SocketFailureStage,
+	code: string,
 };
 
-/**  请求已解析但 response 未完整写出的失败证据；不伪装成成功 exchange。 */
-export type SocketLocalExchangeFailureCapture = {
-	exchange_id: SocketExchangeId,
-	package: ProtocolPackageRef,
-	request_schema: SocketCaptureSchemaRef,
-	response_schema: SocketCaptureSchemaRef,
-	request_origin: number[],
-	request_document: SocketCaptureDocument,
-	request_display: SocketDisplayResult,
-	matched_request_rule_ids: ProtocolDocumentRuleId[],
-	matched_response_rule_ids: ProtocolDocumentRuleId[],
-	/**  response 规则已经完成时保留；规则或 Encode 构造失败时为空。 */
-	response_document: SocketCaptureDocument | null,
-	failure_stage: SocketLocalExchangeFailureStage,
-	/**  仅允许稳定枚举 code，不保存 I/O、脚本或 payload 动态文本。 */
-	failure_code: string,
-	/**  仅允许 `failure_stage.stable_message()`，便于 UI 直接展示且保持脱敏。 */
-	failure_message: string,
-	/**  实际已写入应用的 response 前缀；未开始写时为空。 */
-	written_response_prefix: number[],
-};
-
-/**  `LocalResponder` 在请求已经解析后失败的稳定阶段。 */
-export type SocketLocalExchangeFailureStage = "response_rule" | "response_encode" | "response_write";
+export type SocketFailureStage = "frame" | "decode" | "rule" | "encode" | "write";
 
 /**  不连接 Server、而是由协议包在本机生成响应的 Socket 拓扑。 */
 export type SocketLocalResponderTopology = {
@@ -1985,33 +1893,12 @@ export type SocketLocalResponderTopology = {
  */
 export type SocketPayloadProcessing = { mode: "direct" } | { mode: "scripted"; settings: ScriptedSocketProcessing };
 
-/**  Relay 中一个方向已成功写出的完整 Frame。 */
-export type SocketRelayFrameCapture = {
-	direction: ProtocolDirection,
-	package: ProtocolPackageRef,
-	schema: SocketCaptureSchemaRef,
-	/**  网络读取到的完整原始 Frame。 */
-	origin: number[],
-	/**  当前方向固定两段规则的独立后置快照，按线路顺序保存。 */
-	stages: SocketRelayRuleStageCapture[],
-	/**  实际成功写入另一端的完整字节；不得记录部分写入缓冲区。 */
-	written: number[],
-	display: SocketDisplayResult,
-};
-
 export type SocketRelayRouteEvidenceViewModel = {
 	configured_address: string | null,
 	resolved_address: string | null,
 	downstream_tls_peer: string | null,
 	upstream_tls: SocketTlsEvidenceViewModel | null,
 	connection_test: SocketConnectionTestEvidenceViewModel | null,
-};
-
-/**  Relay 中一段规则执行完成后的不可变 Document 快照。 */
-export type SocketRelayRuleStageCapture = {
-	stage: ProtocolRuleStage,
-	matched_rule_ids: ProtocolDocumentRuleId[],
-	document: SocketCaptureDocument,
 };
 
 export type SocketRelaySecurity = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsSettings; upstream_tls: SocketUpstreamTlsSettings };
@@ -2021,6 +1908,8 @@ export type SocketRelaySettings = {
 	topology: SocketTopology,
 	/**  Listener 同时接受的最大 Socket 连接数。 */
 	maximum_connections: number,
+	/**  经过 Workspace 校验后原样注入 Proxy/diagnostic runtime；运行时不得静默修正。 */
+	runtime_limits: SocketRuntimeLimits,
 	/**  Frame/payload 处理方式。 */
 	processing: SocketPayloadProcessing,
 };
@@ -2029,6 +1918,13 @@ export type SocketRelaySettings = {
 export type SocketRelayTopology = {
 	upstream: SocketEndpoint,
 	security: SocketRelaySecurity,
+};
+
+/**  Socket 运行时所有内存队列和单次 OS read 的显式资源合同。 */
+export type SocketRuntimeLimits = {
+	read_chunk_bytes: number,
+	diagnostic_event_capacity: number,
+	diagnostic_memory_bytes: number,
 };
 
 /**  上游 TLS 握手的结构化证据；不保存证书原文。 */
@@ -2048,7 +1944,7 @@ export type SocketTransportMode = "transparent" | "tcp_to_tls" | "tls_to_tcp" | 
 
 export type SocketUpstreamTlsSettings = {
 	verify_hostname: boolean,
-	tls_server_name: string | null,
+	tls_server_name?: string | null,
 	server_trust: CertificateReferenceId | null,
 	client_identity: CertificateReferenceId | null,
 };
@@ -2077,11 +1973,8 @@ export type UiEventEnvelope = {
 
 /**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
 export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } |
-/**
- *  一个 Socket Frame 或 `LocalExchange` 已完整写出并进入正式 capture 仓储。
- *  `RequestParsed` 仍只走有界诊断事件，不能构造此完成事件。
- */
-{ type: "socket_capture_completed"; data: SocketCaptureRowViewModel } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } |
+/**  一条连接级 Exchange 观测证据已成功写入内存；正文仍由查询接口按需读取。 */
+{ type: "exchange_observation_changed" } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } |
 /**  外部软件包服务绑定状态或在线连接数发生变化。 */
 { type: "external_package_service_status_changed"; data: ExternalPackageServiceStatusViewModel } |
 /**  外部精确版本注册、断线、启停或删除后，目录消费者应重新读取权威快照。 */

@@ -10,17 +10,14 @@ mod common;
 mod diagnostic_report;
 mod diagnostics;
 mod events;
+mod exchange_observation;
 mod fault;
 mod protocol_package;
 mod protocol_rule;
 mod rule;
 mod session;
-mod socket_capture;
-mod socket_capture_diagnostics;
+mod socket_diagnostics;
 mod workspace;
-
-#[cfg(test)]
-mod socket_capture_tests;
 
 pub use breakpoint::*;
 pub use capture::*;
@@ -29,11 +26,11 @@ pub use common::*;
 pub use diagnostic_report::*;
 pub use diagnostics::*;
 pub use events::*;
+pub use exchange_observation::*;
 pub use fault::*;
 pub use protocol_package::*;
 pub use protocol_rule::*;
 pub use rule::*;
 pub use session::*;
-pub use socket_capture::*;
-pub use socket_capture_diagnostics::*;
+pub use socket_diagnostics::*;
 pub use workspace::*;

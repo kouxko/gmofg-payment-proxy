@@ -1,5 +1,5 @@
-#[tokio::test]
-async fn tls_snapshot_distinguishes_corrupt_material_from_missing_material() {
+#[test]
+fn installation_identity_distinguishes_corrupt_material_from_missing_material() {
     let store = Arc::new(SqliteStore::in_memory().expect("store"));
     store
         .compare_and_swap_certificate_materials(
@@ -22,10 +22,9 @@ async fn tls_snapshot_distinguishes_corrupt_material_from_missing_material() {
         test_profile(),
     );
     let corrupt_error = corrupt
-        .load_epoch_snapshot(&["127.0.0.1".into()])
-        .await
+        .load_installation_server_identity()
         .expect_err("corrupt material must fail");
-    assert_eq!(corrupt_error.code, "INTERNAL_ERROR");
+    assert_eq!(corrupt_error.view_model.code, "INTERNAL_ERROR");
 
     let missing = CertificateServiceAdapter::new(
         Arc::new(SqliteStore::in_memory().expect("store")),
@@ -34,10 +33,9 @@ async fn tls_snapshot_distinguishes_corrupt_material_from_missing_material() {
         test_profile(),
     );
     let missing_error = missing
-        .load_epoch_snapshot(&["127.0.0.1".into()])
-        .await
+        .load_installation_server_identity()
         .expect_err("missing material must fail");
-    assert_eq!(missing_error.code, "CERTIFICATE_NOT_READY");
+    assert_eq!(missing_error.view_model.code, "CERTIFICATE_NOT_READY");
 }
 
 #[tokio::test]

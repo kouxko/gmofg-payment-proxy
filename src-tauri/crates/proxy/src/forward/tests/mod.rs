@@ -4,24 +4,15 @@
 //! 同时不会为了测试拆分而扩大任何运行时 API 的可见性。
 
 use super::*;
+use bytes::Bytes;
 use http::HeaderMap;
 use http::header::{CONNECTION, UPGRADE};
 use http_body_util::BodyExt;
-use rcgen::{
-    BasicConstraints, CertificateParams, IsCa, Issuer, KeyPair, KeyUsagePurpose,
-    PKCS_ECDSA_P256_SHA256, SanType,
-};
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName};
-use rustls::{ClientConfig, RootCertStore, ServerConfig};
-use std::net::IpAddr;
 use std::sync::Mutex as StdMutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, oneshot};
-use tokio_rustls::TlsConnector;
+use tokio::sync::oneshot;
 
-use super::config::MitmLeafCache;
 use super::pipeline::response_from_pipeline_disposition;
 use crate::fault::{FaultAction, ResponseDisposition};
 use crate::message::Message;
@@ -37,7 +28,6 @@ fn loopback_config() -> ForwardProxyConfig {
         connect_timeout: Duration::from_secs(1),
         read_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),
-        tunnel_idle_timeout: Duration::from_secs(1),
     }
 }
 
@@ -53,7 +43,7 @@ impl HandshakePolicy for CapturingPipelinePorts {}
 
 #[async_trait::async_trait]
 impl PipelinePorts for CapturingPipelinePorts {
-    async fn request(
+    async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
         message: &mut Message,
@@ -66,7 +56,7 @@ impl PipelinePorts for CapturingPipelinePorts {
         Ok(self.request_actions.clone())
     }
 
-    async fn response(
+    async fn apply_response_policy(
         &self,
         _context: &ConnectionContext,
         message: &mut Message,
@@ -80,98 +70,125 @@ impl PipelinePorts for CapturingPipelinePorts {
     }
 }
 
-#[derive(Debug, Default)]
-struct CountingCertificateAuthority {
-    issued: AtomicUsize,
+fn plain_capabilities(listener_id: &str) -> Arc<dyn crate::http::HttpProtocolCapabilityFactory> {
+    Arc::new(crate::http::PlainHttpCapabilityFactory::new(
+        "forward-test-workspace",
+        listener_id,
+    ))
 }
 
-impl CountingCertificateAuthority {
-    fn count(&self) -> usize {
-        self.issued.load(Ordering::SeqCst)
+#[derive(Debug)]
+struct CountingHttpCapabilities {
+    inner: crate::http::PlainHttpCapabilityFactory,
+    upstream: std::sync::atomic::AtomicUsize,
+    downstream: std::sync::atomic::AtomicUsize,
+}
+
+impl CountingHttpCapabilities {
+    fn new(listener_id: &str) -> Self {
+        Self {
+            inner: crate::http::PlainHttpCapabilityFactory::new(
+                "forward-test-workspace",
+                listener_id,
+            ),
+            upstream: std::sync::atomic::AtomicUsize::new(0),
+            downstream: std::sync::atomic::AtomicUsize::new(0),
+        }
     }
 }
 
-impl MitmCertificateAuthority for CountingCertificateAuthority {
-    fn issue_server_identity(&self, authority_host: &str) -> Result<MitmServerIdentity> {
-        self.issued.fetch_add(1, Ordering::SeqCst);
-        let key = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
-        let mut params = CertificateParams::default();
-        params.subject_alt_names = authority_host.parse::<IpAddr>().map_or_else(
-            |_| {
-                vec![SanType::DnsName(
-                    authority_host.to_owned().try_into().unwrap(),
-                )]
-            },
-            |address| vec![SanType::IpAddress(address)],
-        );
-        let certificate = params.self_signed(&key).unwrap();
-        Ok(MitmServerIdentity {
-            certificate_chain_der: vec![certificate.der().to_vec()],
-            private_key_pkcs8_der: zeroize::Zeroizing::new(key.serialize_der()),
-        })
+impl crate::http::HttpProtocolCapabilityFactory for CountingHttpCapabilities {
+    fn observation_metadata(&self) -> crate::http::HttpObservationMetadata {
+        self.inner.observation_metadata()
+    }
+
+    fn create_upstream(
+        &self,
+        connection: crate::http::HttpConnectionIdentity,
+    ) -> std::result::Result<
+        crate::http::HttpDirectionCapabilities<intercept_proxy_exchange::Upstream>,
+        intercept_proxy_exchange::Error,
+    > {
+        self.upstream
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.inner.create_upstream(connection)
+    }
+
+    fn create_downstream(
+        &self,
+        connection: crate::http::HttpConnectionIdentity,
+    ) -> std::result::Result<
+        crate::http::HttpDirectionCapabilities<intercept_proxy_exchange::Downstream>,
+        intercept_proxy_exchange::Error,
+    > {
+        self.downstream
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.inner.create_downstream(connection)
     }
 }
 
 #[derive(Debug)]
-struct NeverMitmUpstreamConnector;
+struct PanickingHttpCapabilities;
 
-#[async_trait::async_trait]
-impl MitmUpstreamConnector for NeverMitmUpstreamConnector {
-    async fn connect(
+impl crate::http::HttpProtocolCapabilityFactory for PanickingHttpCapabilities {
+    fn observation_metadata(&self) -> crate::http::HttpObservationMetadata {
+        crate::http::HttpObservationMetadata {
+            workspace_id: "forward-test-workspace".into(),
+            listener_id: "panic-capability".into(),
+        }
+    }
+
+    fn create_upstream(
         &self,
-        _authority_host: &str,
-        _upstream: TcpStream,
-        _cancellation: &CancellationToken,
-    ) -> Result<BoxIo> {
-        panic!("allowlist-excluded CONNECT must never enter MITM upstream TLS")
+        _connection: crate::http::HttpConnectionIdentity,
+    ) -> std::result::Result<
+        crate::http::HttpDirectionCapabilities<intercept_proxy_exchange::Upstream>,
+        intercept_proxy_exchange::Error,
+    > {
+        panic!("test capability factory panic")
+    }
+
+    fn create_downstream(
+        &self,
+        _connection: crate::http::HttpConnectionIdentity,
+    ) -> std::result::Result<
+        crate::http::HttpDirectionCapabilities<intercept_proxy_exchange::Downstream>,
+        intercept_proxy_exchange::Error,
+    > {
+        unreachable!("upstream capability construction fails first")
     }
 }
 
-fn client_hello_with_alpn(protocol: &[u8]) -> Bytes {
-    let mut alpn = Vec::new();
-    let list_len = 1 + protocol.len();
-    alpn.extend_from_slice(&u16::try_from(list_len).unwrap().to_be_bytes());
-    alpn.push(u8::try_from(protocol.len()).unwrap());
-    alpn.extend_from_slice(protocol);
-    let mut extensions = Vec::new();
-    extensions.extend_from_slice(&16u16.to_be_bytes());
-    extensions.extend_from_slice(&u16::try_from(alpn.len()).unwrap().to_be_bytes());
-    extensions.extend_from_slice(&alpn);
-    let mut hello = Vec::new();
-    hello.extend_from_slice(&[0x03, 0x03]);
-    hello.extend_from_slice(&[0x42; 32]);
-    hello.push(0); // session ID
-    hello.extend_from_slice(&2u16.to_be_bytes());
-    hello.extend_from_slice(&0x1301u16.to_be_bytes());
-    hello.push(1);
-    hello.push(0);
-    hello.extend_from_slice(&u16::try_from(extensions.len()).unwrap().to_be_bytes());
-    hello.extend_from_slice(&extensions);
-    let mut handshake = vec![1];
-    let length = hello.len();
-    handshake.extend_from_slice(&[
-        u8::try_from((length >> 16) & 0xff).unwrap(),
-        u8::try_from((length >> 8) & 0xff).unwrap(),
-        u8::try_from(length & 0xff).unwrap(),
-    ]);
-    handshake.extend_from_slice(&hello);
-    let mut record = vec![22, 0x03, 0x01];
-    record.extend_from_slice(&u16::try_from(handshake.len()).unwrap().to_be_bytes());
-    record.extend_from_slice(&handshake);
-    Bytes::from(record)
-}
-
-fn fragmented_client_hello_with_alpn(protocol: &[u8]) -> Bytes {
-    let record = client_hello_with_alpn(protocol);
-    let payload = &record[5..];
-    let split = 7.min(payload.len());
-    let mut records = Vec::new();
-    for fragment in [&payload[..split], &payload[split..]] {
-        records.extend_from_slice(&[22, 0x03, 0x01]);
-        records.extend_from_slice(&u16::try_from(fragment.len()).unwrap().to_be_bytes());
-        records.extend_from_slice(fragment);
+async fn read_raw_http_request_body(stream: &mut TcpStream) -> Bytes {
+    let mut request = Vec::new();
+    let header_end = loop {
+        if let Some(index) = request.windows(4).position(|part| part == b"\r\n\r\n") {
+            break index + 4;
+        }
+        let mut buffer = [0_u8; 512];
+        let read = stream.read(&mut buffer).await.unwrap();
+        assert_ne!(read, 0);
+        request.extend_from_slice(&buffer[..read]);
+    };
+    let headers = std::str::from_utf8(&request[..header_end]).unwrap();
+    let length = headers
+        .lines()
+        .find_map(|line| {
+            line.to_ascii_lowercase()
+                .strip_prefix("content-length:")
+                .map(str::trim)
+                .map(str::parse::<usize>)
+        })
+        .transpose()
+        .unwrap()
+        .unwrap_or(0);
+    while request.len() - header_end < length {
+        let mut buffer = [0_u8; 512];
+        let read = stream.read(&mut buffer).await.unwrap();
+        assert_ne!(read, 0);
+        request.extend_from_slice(&buffer[..read]);
     }
-    Bytes::from(records)
+    Bytes::copy_from_slice(&request[header_end..header_end + length])
 }
 
 // 基础协议转换与管线语义。
@@ -180,13 +197,9 @@ include!("request_semantics.rs");
 include!("configuration.rs");
 // 普通 HTTP 转发及 DropResponse 边界。
 include!("plain_http.rs");
-// CONNECT 透明隧道、双向复制与 HTTP/2 透传。
-include!("connect_tunnel.rs");
-// WebSocket 仅拦截握手，升级后透明转发。
+include!("connection_exchange.rs");
+include!("capability_sequence.rs");
+// CONNECT/Upgrade 在当前 Exchange 模型中严格拒绝。
 include!("websocket.rs");
-// HTTPS MITM、原始字节透传与响应丢弃边界。
-// HTTPS MITM 专用证书、TLS 与响应丢弃测试夹具。
-include!("mitm_support.rs");
-include!("mitm.rs");
 // Listener 取消和空闲连接回收。
 include!("listener_lifecycle.rs");

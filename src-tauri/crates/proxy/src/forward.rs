@@ -5,5 +5,5 @@
 
 mod service;
 
+pub(crate) use service::authority_is_allowed;
 pub use service::*;
-pub(crate) use service::{authority_is_allowed, config_error};

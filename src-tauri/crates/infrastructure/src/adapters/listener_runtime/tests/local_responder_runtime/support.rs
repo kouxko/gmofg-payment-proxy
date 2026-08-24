@@ -49,42 +49,12 @@ fn decode(origin, context) {
 
 fn encode(origin, document, context) {
     let result = blob(2, 0);
-    result[0] = 209;
+    result[0] = 2;
     result[1] = if document.has("amount") { document.get("amount") } else { 0 };
     result
 }
 
 fn display(document, context) { "<p>local response</p>" }
-"#;
-
-pub(super) const ISO_SCHEMA: &str = r#"
-id = "local-iso8583"
-version = 1
-title = "Local ISO8583"
-
-[[fields]]
-name = "message"
-label = "Message"
-type = "blob"
-"#;
-
-pub(super) const ISO_SCRIPT: &str = r#"
-fn frame(reader, context) {
-    if reader.available() < 18 { framing::need_more(18) }
-    else { framing::complete(18) }
-}
-
-fn decode(origin, context) {
-    let result = document::create();
-    result.set("message", origin);
-    result
-}
-
-fn encode(origin, document, context) {
-    document.get("message")
-}
-
-fn display(document, context) { "<p>iso8583 response</p>" }
 "#;
 
 pub(super) fn package_ref(id: &str) -> ProtocolPackageRef {
@@ -104,22 +74,13 @@ pub(super) fn local_listener(id: &str, listener_port: u16) -> ProxyListener {
                 downstream_security: SocketDownstreamSecurity::Tcp,
             }),
             maximum_connections: 8,
+            runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
             processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
                 package: package_ref(id),
             }),
         }),
         ..ProxyListener::default()
     }
-}
-
-pub(super) fn listener_package_id(listener: &ProxyListener) -> &str {
-    let ListenerDataPlane::Socket(settings) = &listener.data_plane else {
-        unreachable!("fixture is always Socket")
-    };
-    let SocketPayloadProcessing::Scripted(scripted) = &settings.processing else {
-        unreachable!("fixture is always Scripted")
-    };
-    scripted.package.id.as_str()
 }
 
 pub(super) fn workspace(
@@ -146,109 +107,17 @@ pub(super) async fn start_local_runtime(
     workspace: ProxyWorkspace,
     listener: &ProxyListener,
 ) -> ListenerRuntimeAdapter {
-    start_local_runtime_inner(id, schema, schema, script, workspace, listener, None)
-        .await
-        .0
-}
-
-pub(super) async fn start_local_runtime_with_events(
-    id: &str,
-    schema: &str,
-    script: &str,
-    workspace: ProxyWorkspace,
-    listener: &ProxyListener,
-    events: Arc<intercept_proxy_application::EventHub>,
-) -> ListenerRuntimeAdapter {
-    start_local_runtime_inner(
-        id,
-        schema,
-        schema,
-        script,
-        workspace,
-        listener,
-        Some(events),
-    )
-    .await
-    .0
-}
-
-pub(super) async fn start_local_runtime_with_capture(
-    id: &str,
-    schema: &str,
-    script: &str,
-    workspace: ProxyWorkspace,
-    listener: &ProxyListener,
-    events: Arc<intercept_proxy_application::EventHub>,
-) -> (
-    ListenerRuntimeAdapter,
-    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
-) {
-    start_local_runtime_inner(
-        id,
-        schema,
-        schema,
-        script,
-        workspace,
-        listener,
-        Some(events),
-    )
-    .await
-}
-
-pub(super) async fn start_local_runtime_with_directional_schemas_and_capture(
-    id: &str,
-    upstream_schema: &str,
-    downstream_schema: &str,
-    script: &str,
-    workspace: ProxyWorkspace,
-    listener: &ProxyListener,
-    events: Arc<intercept_proxy_application::EventHub>,
-) -> (
-    ListenerRuntimeAdapter,
-    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
-) {
-    start_local_runtime_inner(
-        id,
-        upstream_schema,
-        downstream_schema,
-        script,
-        workspace,
-        listener,
-        Some(events),
-    )
-    .await
-}
-
-async fn start_local_runtime_inner(
-    id: &str,
-    upstream_schema: &str,
-    downstream_schema: &str,
-    script: &str,
-    workspace: ProxyWorkspace,
-    listener: &ProxyListener,
-    events: Option<Arc<intercept_proxy_application::EventHub>>,
-) -> (
-    ListenerRuntimeAdapter,
-    Arc<crate::adapters::SocketCaptureRepositoryAdapter>,
-) {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
         Arc::clone(&store),
     ));
     repository
-        .install_zip(&package_zip(id, upstream_schema, downstream_schema, script))
+        .install_zip(&package_zip(id, schema, schema, script))
         .unwrap();
     repository.set_enabled(&package_ref(id), true).unwrap();
-    let capture = Arc::new(crate::adapters::SocketCaptureRepositoryAdapter::new(
-        Arc::clone(&store),
-    ));
     let runtime = test_listener_runtime_with_packages(store, repository);
-    runtime.set_socket_capture_repository(Arc::clone(&capture));
-    if let Some(events) = events {
-        runtime.set_socket_diagnostic_events(events);
-    }
     runtime.start(workspace, listener.clone()).await.unwrap();
-    (runtime, capture)
+    runtime
 }
 
 pub(super) async fn request_once(port: u16, request: &[u8]) -> Vec<u8> {

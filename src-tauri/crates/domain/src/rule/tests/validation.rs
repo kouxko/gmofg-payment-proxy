@@ -48,6 +48,46 @@ fn validates_every_action_against_its_exact_stage_contract() {
             vec![MessageStage::Request, MessageStage::Response],
         ),
         (
+            RuleAction::Jitter {
+                minimum_milliseconds: 1,
+                maximum_milliseconds: 2,
+                scope: JitterScope::PerChunk,
+            },
+            vec![MessageStage::Request, MessageStage::Response],
+        ),
+        (
+            RuleAction::Throttle {
+                bytes_per_second: 1_024,
+                chunk_bytes: 256,
+                direction: TrafficDirection::Upstream,
+            },
+            vec![MessageStage::Request],
+        ),
+        (
+            RuleAction::Throttle {
+                bytes_per_second: 1_024,
+                chunk_bytes: 256,
+                direction: TrafficDirection::Downstream,
+            },
+            vec![MessageStage::Response],
+        ),
+        (
+            RuleAction::Intermittent {
+                available_milliseconds: 10,
+                blocked_milliseconds: 10,
+                direction: TrafficDirection::Upstream,
+            },
+            vec![MessageStage::Request],
+        ),
+        (
+            RuleAction::Intermittent {
+                available_milliseconds: 10,
+                blocked_milliseconds: 10,
+                direction: TrafficDirection::Downstream,
+            },
+            vec![MessageStage::Response],
+        ),
+        (
             RuleAction::Pause,
             vec![MessageStage::Request, MessageStage::Response],
         ),
@@ -107,6 +147,18 @@ fn validates_every_action_against_its_exact_stage_contract() {
         ),
         (
             RuleAction::Terminal(TerminalAction::TruncateResponse { bytes: 0 }),
+            vec![MessageStage::Response],
+        ),
+        (
+            RuleAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite {
+                after_bytes: 0,
+            }),
+            vec![MessageStage::Request],
+        ),
+        (
+            RuleAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
+                after_bytes: 0,
+            }),
             vec![MessageStage::Response],
         ),
     ];

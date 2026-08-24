@@ -3,7 +3,8 @@
 //! 本模块与 HTTP [`crate::Rule`] 完全独立：条件只认识 Schema 字段和值类型，动作只认识
 //! Document，不暴露 Method、Header、Status、JSONPath 或 HTTP Body 能力。包安装状态及
 //! Manifest 入口能力需要查询外部注册表，仍由 Application 层校验。
-
+//! [`ProtocolRuleStage`] 只描述 App、Proxy、Server 三者之间的协议处理位置；HTTP 或 Socket
+//! 连接身份、读写通道及生命周期始终由各自运行时适配器持有，不能进入规则领域模型。
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -35,7 +36,7 @@ pub const MAX_PROTOCOL_DOCUMENT_RULE_BLOB_BYTES: usize = 64 * 1_024;
 /// 规则名称的最大 UTF-8 字节数。
 pub const MAX_PROTOCOL_DOCUMENT_RULE_NAME_BYTES: usize = 128;
 
-/// Socket Frame 相对于代理的稳定数据方向。
+/// 协议 Document 在 App 与 Server 之间相对于代理的稳定数据方向。
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProtocolDirection {
@@ -45,7 +46,9 @@ pub enum ProtocolDirection {
     Downstream,
 }
 
-/// Socket 报文经过代理时可独立配置的处理阶段。
+/// 协议 Document 经过 App、Proxy、Server 边界时可独立配置的处理阶段。
+///
+/// 阶段只表达处理位置，不表示连接、传输协议或可共享的运行时状态。
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProtocolRuleStage {
@@ -175,7 +178,7 @@ pub struct ProtocolDocumentRuleDraft {
     pub enabled: bool,
     /// 越小越先执行的显式优先级。
     pub priority: i32,
-    /// 冻结绑定的 Socket Listener。
+    /// 冻结绑定的 Listener；其 HTTP/Socket 类型由外层运行时校验。
     pub listener_id: ListenerId,
     /// 冻结绑定的精确协议包版本。
     pub package: ProtocolPackageRef,

@@ -3,14 +3,15 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, BufRead as _, BufReader, Write as _},
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
 use chrono::Utc;
 
 use super::{ApplicationLogEntry, ApplicationLogLevel, ApplicationLogPage, ApplicationLogQuery};
+use crate::runtime_logs::runtime_log_counters::RuntimeLogQueueCounters;
 
-const MAX_LOG_MESSAGE_CHARS: usize = 65_536;
+pub(super) const MAX_LOG_MESSAGE_CHARS: usize = 65_536;
 const MAX_LOG_TARGET_CHARS: usize = 1_024;
 const MIN_FILE_BYTES: u64 = 256;
 const ROTATION_TARGET_PERCENT: u64 = 75;
@@ -21,6 +22,7 @@ pub(crate) struct RuntimeLogStore {
     capacity: usize,
     max_file_bytes: u64,
     state: Mutex<RuntimeLogState>,
+    queue_counters: Arc<RuntimeLogQueueCounters>,
 }
 
 #[derive(Debug)]
@@ -69,6 +71,7 @@ impl RuntimeLogStore {
                 #[cfg(test)]
                 persistence_rewrite_count: 0,
             }),
+            queue_counters: Arc::new(RuntimeLogQueueCounters::default()),
         }
     }
 
@@ -155,10 +158,21 @@ impl RuntimeLogStore {
                 #[cfg(test)]
                 persistence_rewrite_count: u64::from(needs_rewrite),
             }),
+            queue_counters: Arc::new(RuntimeLogQueueCounters::default()),
         })
     }
 
     pub(crate) fn record(&self, level: ApplicationLogLevel, target: &str, message: &str) -> u64 {
+        self.record_at(level, target, message, Utc::now())
+    }
+
+    pub(super) fn record_at(
+        &self,
+        level: ApplicationLogLevel,
+        target: &str,
+        message: &str,
+        occurred_at: chrono::DateTime<Utc>,
+    ) -> u64 {
         let mut state = self
             .state
             .lock()
@@ -171,7 +185,7 @@ impl RuntimeLogStore {
         let (message, message_truncated) = bounded_message(message);
         let entry = ApplicationLogEntry {
             log_id,
-            occurred_at: Utc::now(),
+            occurred_at,
             level,
             target: bounded_text(target, MAX_LOG_TARGET_CHARS),
             message,
@@ -272,6 +286,10 @@ impl RuntimeLogStore {
             retained_capacity: self.capacity,
             max_file_bytes: self.max_file_bytes,
         }
+    }
+
+    pub(super) fn queue_counters(&self) -> Arc<RuntimeLogQueueCounters> {
+        Arc::clone(&self.queue_counters)
     }
 
     #[cfg(test)]

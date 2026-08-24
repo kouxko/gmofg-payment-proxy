@@ -96,6 +96,8 @@ pub struct SettingsDraft {
     pub max_body_bytes: u64,
     pub max_sessions: usize,
     pub max_memory_bytes: u64,
+    /// Exchange observation producer queue; validated settings are the only source.
+    pub ui_event_capacity: usize,
     pub leaf_sans: Vec<String>,
     /// 固定路径 `/packages` 的外部软件包服务配置。
     pub external_package_service: ExternalPackageServiceSettingsDraft,
@@ -114,6 +116,7 @@ impl Default for SettingsDraft {
             max_body_bytes: 4 * 1024 * 1024,
             max_sessions: 500,
             max_memory_bytes: 256 * 1024 * 1024,
+            ui_event_capacity: 4_096,
             leaf_sans: Vec::new(),
             external_package_service: ExternalPackageServiceSettingsDraft::default(),
         }

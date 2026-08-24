@@ -16,6 +16,17 @@ async fn full_replace_late_conflict_restores_every_sqlite_and_cache_snapshot() {
         .unwrap();
     repository.compiled(&package()).unwrap();
     repository.compiled(&extra_ref).unwrap();
+    store
+        .execute_test_batch(
+            "INSERT INTO external_protocol_packages(
+                package_id, version, registration_json, registration_fingerprint,
+                enabled, first_connected_at, last_connected_at
+             ) VALUES (
+                'portable-test', '1.0.0', '{}', zeroblob(32), 0,
+                '2026-08-22T00:00:00Z', '2026-08-22T00:00:00Z'
+             );",
+        )
+        .unwrap();
 
     let baseline_document = application_document(ProxyWorkspace::default(), Vec::new());
     let (records, settings) = application_records(&baseline_document).unwrap();

@@ -1,4 +1,4 @@
-//! `SQLite` 持久化边界：保存设置、Workspace、Socket 抓包和加密后的证书材料。
+//! `SQLite` 持久化边界：保存设置、Workspace 和加密后的证书材料。
 //!
 //! 本模块用单连接互斥锁串行化事务，并用 revision 做 CAS（比较后更新）：调用方必须带上
 //! 自己读到的版本，版本不一致就返回冲突，避免两个窗口或后台任务静默覆盖彼此的数据。
@@ -66,7 +66,6 @@ pub struct ProtectedSecretRecord {
 pub struct SqliteStore {
     // rusqlite 的 Connection 不是并发事务池；单锁明确规定本进程内只有一个事务所有者。
     connection: Mutex<Connection>,
-    capture_coordination: socket_capture_coordination::SocketCaptureCoordination,
 }
 
 #[cfg(test)]
@@ -89,8 +88,6 @@ mod schema;
 
 /// 当前 1.0 数据库格式版本。低于该版本的预发布数据由 Host 清空后重建。
 pub const CURRENT_APPLICATION_SCHEMA_VERSION: i64 = schema::CURRENT_SCHEMA_VERSION;
-pub(crate) mod socket_capture_coordination;
-pub(crate) mod socket_captures;
 mod workspaces;
 
 use schema::create_current_schema;

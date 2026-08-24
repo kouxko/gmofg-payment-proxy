@@ -269,10 +269,13 @@ impl ApplicationHostBuilder {
         let background_cancellation = CancellationToken::new();
         // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle
         // 都归 Host 所有，确保不同展示适配器有相同的关闭行为。
-        let event_task = events.spawn_capture_flush_task(background_cancellation.child_token());
+        let event_task =
+            Arc::clone(&events).spawn_capture_flush_task(background_cancellation.child_token());
 
         Ok(ApplicationHost {
             application,
+            capacity,
+            events,
             file_dialog,
             application_backup_importer: Arc::new(ApplicationBackupImportPreparer::new()),
             background_cancellation,
@@ -401,6 +404,8 @@ fn build_runtime_pipeline(
 #[derive(Debug)]
 pub struct ApplicationHost {
     application: Arc<Application>,
+    capacity: Arc<CapacityLedger>,
+    events: Arc<EventHub>,
     file_dialog: Arc<dyn NativeFileDialog>,
     application_backup_importer: Arc<ApplicationBackupImportPreparer>,
     background_cancellation: CancellationToken,
@@ -414,6 +419,18 @@ impl ApplicationHost {
     #[must_use]
     pub fn application(&self) -> Arc<Application> {
         Arc::clone(&self.application)
+    }
+
+    /// 返回 Settings 已校验并动态维护的共享运行时容量账本。
+    #[must_use]
+    pub fn capacity(&self) -> Arc<CapacityLedger> {
+        Arc::clone(&self.capacity)
+    }
+
+    /// 返回展示适配器共享的有序事件中心；数据面只负责发布，不等待 `WebView` 消费。
+    #[must_use]
+    pub fn events(&self) -> Arc<EventHub> {
+        Arc::clone(&self.events)
     }
 
     #[must_use]

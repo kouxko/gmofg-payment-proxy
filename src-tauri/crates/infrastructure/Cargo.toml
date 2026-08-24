@@ -14,6 +14,7 @@ futures-util.workspace = true
 http.workspace = true
 intercept-proxy-application = { path = "../application" }
 intercept-proxy-domain = { path = "../domain" }
+intercept-proxy-exchange = { path = "../exchange" }
 intercept-proxy-product-api = { path = "../product-api" }
 intercept-proxy-protocol-scripting = { path = "../protocol-scripting" }
 intercept-proxy-runtime = { path = "../proxy" }

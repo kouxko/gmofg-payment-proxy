@@ -9,5 +9,6 @@ mod host;
 mod limits;
 mod manifest;
 mod parse_error;
+mod rhai_identifier;
 mod runtime;
 mod schema_parser;

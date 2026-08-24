@@ -11,12 +11,12 @@ use std::{
 use uuid::Uuid;
 
 use crate::transport::relay::{RelayBytes, RelayIoBytes, RelayProgress};
+use crate::{ErrorCode, ProxyError, Result};
 
 mod local_request;
 
 pub use local_request::{
-    LocalResponderDiagnostics, SocketDocumentFieldPreview, SocketDocumentPreview,
-    SocketLocalRequestPreview,
+    SocketDocumentFieldPreview, SocketDocumentPreview, SocketLocalRequestPreview,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -73,6 +73,7 @@ pub struct SocketTlsEvidence {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SocketRelayRunContext {
+    pub workspace_id: String,
     pub listener_id: String,
     pub workspace_runtime_epoch: Uuid,
     pub listener_run_epoch: Uuid,
@@ -215,21 +216,25 @@ pub struct BoundedSocketConnectionObserver {
 }
 
 impl BoundedSocketConnectionObserver {
-    #[must_use]
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(capacity: usize) -> Result<Self> {
         Self::with_limits(capacity, usize::MAX)
     }
 
     /// 创建同时受事件条数和逻辑字节数约束的内存观察队列。
-    #[must_use]
-    pub fn with_limits(capacity: usize, max_logical_bytes: usize) -> Self {
-        Self {
-            capacity: capacity.max(1),
-            max_logical_bytes: max_logical_bytes.max(1),
-            retained: Mutex::new(VecDeque::with_capacity(capacity.max(1))),
+    pub fn with_limits(capacity: usize, max_logical_bytes: usize) -> Result<Self> {
+        if capacity == 0 || max_logical_bytes == 0 {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "socket diagnostic limits must be greater than zero",
+            ));
+        }
+        Ok(Self {
+            capacity,
+            max_logical_bytes,
+            retained: Mutex::new(VecDeque::with_capacity(capacity)),
             retained_logical_bytes: Mutex::new(0),
             dropped: AtomicU64::new(0),
-        }
+        })
     }
 
     #[must_use]
@@ -457,34 +462,4 @@ impl SocketRelayMetrics {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn rejected(index: u16) -> SocketConnectionEvent {
-        SocketConnectionEvent::Rejected {
-            run: SocketRelayRunContext {
-                listener_id: "listener-1".into(),
-                workspace_runtime_epoch: Uuid::nil(),
-                listener_run_epoch: Uuid::nil(),
-            },
-            peer: SocketAddr::from(([127, 0, 0, 1], index)),
-            reason: SocketRejectionReason::Capacity,
-            code: "SOCKET_CAPACITY_EXHAUSTED",
-        }
-    }
-
-    #[test]
-    fn bounded_retention_evicts_oldest_without_blocking_and_counts_drops() {
-        let observer = BoundedSocketConnectionObserver::new(2);
-        observer.record(rejected(1));
-        observer.record(rejected(2));
-        observer.record(rejected(3));
-
-        assert_eq!(observer.snapshot(), vec![rejected(2), rejected(3)]);
-        assert_eq!(observer.retained_diagnostic_evictions(), 1);
-
-        observer.begin_run();
-        assert!(observer.snapshot().is_empty());
-        assert_eq!(observer.retained_diagnostic_evictions(), 0);
-    }
-}
+mod tests;

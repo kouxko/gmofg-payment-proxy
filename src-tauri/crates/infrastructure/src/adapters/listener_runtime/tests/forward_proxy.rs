@@ -101,7 +101,9 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
         }
         assert!(request.ends_with(b"\x00\x81\xff\x7f"));
         stream
-            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\n\xff\x00ok")
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\nConnection: close\r\n\r\n\xff\x00ok",
+            )
             .await
             .unwrap();
     });
@@ -156,7 +158,7 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
     let mut client = TcpStream::connect(bind_address).await.unwrap();
     client
             .write_all(
-                b"POST /binary HTTP/1.1\r\nHost: preserved.test\r\nContent-Length: 4\r\n\r\n\x00\x81\xff\x7f",
+                b"POST /binary HTTP/1.1\r\nHost: preserved.test\r\nContent-Length: 4\r\nConnection: close\r\n\r\n\x00\x81\xff\x7f",
             )
             .await
             .unwrap();

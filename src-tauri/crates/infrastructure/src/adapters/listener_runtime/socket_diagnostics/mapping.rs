@@ -1,6 +1,6 @@
 use intercept_proxy_application::{
-    DiagnosticLogStage, SocketCaptureFailureDiagnostic, SocketCaptureFailureStage,
-    SocketConnectionRouteViewModel, SocketDiagnosticDirection, SocketDiagnosticStage,
+    DiagnosticLogStage, SocketConnectionRouteViewModel, SocketDiagnosticDirection,
+    SocketDiagnosticStage, SocketFailureDiagnostic, SocketFailureStage,
     SocketRelayRouteEvidenceViewModel, SocketTlsEvidenceViewModel,
 };
 use intercept_proxy_runtime::{
@@ -38,15 +38,13 @@ pub(super) fn tls_evidence(
     }
 }
 
-pub(super) fn capture_failure(
-    failure: &SocketRelayFailure,
-) -> Option<SocketCaptureFailureDiagnostic> {
+pub(super) fn socket_failure(failure: &SocketRelayFailure) -> Option<SocketFailureDiagnostic> {
     let stage = match failure.stage {
-        SocketRelayStage::FrameInspect => SocketCaptureFailureStage::Frame,
-        SocketRelayStage::Decode => SocketCaptureFailureStage::Decode,
-        SocketRelayStage::Rule => SocketCaptureFailureStage::Rule,
-        SocketRelayStage::Encode => SocketCaptureFailureStage::Encode,
-        SocketRelayStage::RelayWrite => SocketCaptureFailureStage::Write,
+        SocketRelayStage::FrameInspect => SocketFailureStage::Frame,
+        SocketRelayStage::Decode => SocketFailureStage::Decode,
+        SocketRelayStage::Rule => SocketFailureStage::Rule,
+        SocketRelayStage::Encode => SocketFailureStage::Encode,
+        SocketRelayStage::RelayWrite => SocketFailureStage::Write,
         SocketRelayStage::Admission
         | SocketRelayStage::DownstreamTls
         | SocketRelayStage::Dns
@@ -56,15 +54,15 @@ pub(super) fn capture_failure(
         | SocketRelayStage::FrameProcess
         | SocketRelayStage::Shutdown => return None,
     };
-    Some(SocketCaptureFailureDiagnostic {
+    Some(SocketFailureDiagnostic {
         stage,
         code: sanitized_failure_code(stage, failure.code),
     })
 }
 
-fn sanitized_failure_code(stage: SocketCaptureFailureStage, code: &str) -> String {
+fn sanitized_failure_code(stage: SocketFailureStage, code: &str) -> String {
     let allowed = match stage {
-        SocketCaptureFailureStage::Frame => matches!(
+        SocketFailureStage::Frame => matches!(
             code,
             "INVALID_LIMITS"
                 | "INVALID_FRAME_BOUNDARY"
@@ -72,13 +70,13 @@ fn sanitized_failure_code(stage: SocketCaptureFailureStage, code: &str) -> Strin
                 | "BUFFER_LIMIT_EXCEEDED"
                 | "TRUNCATED_FRAME"
         ),
-        SocketCaptureFailureStage::Decode => code == "DECODE_FAILED",
-        SocketCaptureFailureStage::Rule => code == "RULE_FAILED",
-        SocketCaptureFailureStage::Encode => matches!(
+        SocketFailureStage::Decode => code == "DECODE_FAILED",
+        SocketFailureStage::Rule => code == "RULE_FAILED",
+        SocketFailureStage::Encode => matches!(
             code,
             "ENCODE_FAILED" | "EMPTY_OUTPUT" | "OUTPUT_LIMIT_EXCEEDED"
         ),
-        SocketCaptureFailureStage::Write => matches!(
+        SocketFailureStage::Write => matches!(
             code,
             "WRITE_FAILED" | "WRITE_TIMEOUT" | "SOCKET_WRITE_FAILED" | "SOCKET_WRITE_TIMEOUT"
         ),
@@ -86,7 +84,7 @@ fn sanitized_failure_code(stage: SocketCaptureFailureStage, code: &str) -> Strin
     if allowed {
         code.to_owned()
     } else {
-        "SOCKET_CAPTURE_FAILED".to_owned()
+        "SOCKET_FAILURE".to_owned()
     }
 }
 
@@ -149,9 +147,6 @@ mod tests {
             direction: None,
             code: "PAN_4111111111111111",
         };
-        assert_eq!(
-            capture_failure(&failure).unwrap().code,
-            "SOCKET_CAPTURE_FAILED"
-        );
+        assert_eq!(socket_failure(&failure).unwrap().code, "SOCKET_FAILURE");
     }
 }

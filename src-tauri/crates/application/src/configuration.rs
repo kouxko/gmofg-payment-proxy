@@ -17,7 +17,7 @@ use crate::{
     WorkspaceId, validate_certificate_materials, validate_configuration_package_references,
 };
 
-pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 6;
+pub const APPLICATION_CONFIGURATION_FORMAT_VERSION: u16 = 7;
 pub const MAX_APPLICATION_CONFIGURATION_BYTES: usize = 128 * 1024 * 1024;
 /// 监听证书只能引用应用受保护存储中的材料，不能携带文件路径或环境变量密码。
 pub const MANAGED_LISTENER_CERTIFICATE_PREFIX: &str = "managed:listener-tls:";
@@ -67,6 +67,7 @@ pub struct PortableSettings {
     pub max_body_bytes: u64,
     pub max_sessions: usize,
     pub max_memory_bytes: u64,
+    pub ui_event_capacity: usize,
     pub leaf_sans: Vec<String>,
     pub external_package_service: ExternalPackageServiceSettingsDraft,
 }
@@ -83,6 +84,7 @@ impl From<&SettingsDraft> for PortableSettings {
             max_body_bytes: value.max_body_bytes,
             max_sessions: value.max_sessions,
             max_memory_bytes: value.max_memory_bytes,
+            ui_event_capacity: value.ui_event_capacity,
             leaf_sans: value.leaf_sans.clone(),
             external_package_service: value.external_package_service.clone(),
         }
@@ -103,6 +105,7 @@ impl PortableSettings {
             max_body_bytes: self.max_body_bytes,
             max_sessions: self.max_sessions,
             max_memory_bytes: self.max_memory_bytes,
+            ui_event_capacity: self.ui_event_capacity,
             leaf_sans: self.leaf_sans.clone(),
             external_package_service: self.external_package_service.clone(),
         }

@@ -10,12 +10,10 @@ use std::{
 
 use intercept_proxy_application::{
     DiagnosticLogPageViewModel, DiagnosticReportQuery, DocumentAction, DocumentFieldName,
-    DocumentValue, PageRequest, ProtocolDocumentRuleDefinition, ProtocolPackageDetailViewModel,
+    DocumentValue, ProtocolDocumentRuleDefinition, ProtocolPackageDetailViewModel,
     ProtocolPackageImportPreviewViewModel, ProtocolPackageImportViewModel,
     ProtocolPackageVersionViewModel, ProtocolRuleSaveInput, ProtocolRuleStage, ProxyListener,
-    ProxyWorkspace, SocketCaptureDetailViewModel, SocketCaptureDocumentValue, SocketCaptureKind,
-    SocketCapturePageViewModel, SocketCapturePayload, SocketCaptureQuery, SocketCaptureSort,
-    SocketDisplayResult, SortDirection, WorkspaceSummaryViewModel,
+    ProxyWorkspace, WorkspaceSummaryViewModel,
 };
 use intercept_proxy_domain::{
     ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
@@ -49,7 +47,6 @@ fn diagnostic_report_export_uses_native_dialog_and_writes_copyable_markdown() {
             "query": DiagnosticReportQuery {
                 workspace_id: workspace.id,
                 listener_id: listener.id,
-                capture_id: None,
             }
         }),
     );
@@ -143,6 +140,7 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
             downstream_security: SocketDownstreamSecurity::Tcp,
         }),
         maximum_connections: 4,
+        runtime_limits: intercept_proxy_domain::SocketRuntimeLimits::default(),
         processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
             package: package.clone(),
         }),
@@ -159,7 +157,7 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
     );
     assert!(saved.listeners.contains(&listener));
 
-    let rule: ProtocolDocumentRuleDefinition = fixture.invoke_ok(
+    let _rule: ProtocolDocumentRuleDefinition = fixture.invoke_ok(
         &webview,
         "protocol_rule_save",
         json!({
@@ -208,29 +206,6 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
             diagnostics.rows
         );
     }
-    let capture = wait_for_capture(&fixture, &webview, selected.id, listener.id);
-    let SocketCapturePayload::LocalExchange(exchange) = capture.record.payload else {
-        panic!("expected a formal LocalExchange capture")
-    };
-    assert_eq!(exchange.request_origin, REQUEST);
-    assert_eq!(exchange.written_response, RESPONSE);
-    assert_eq!(
-        exchange.response_display,
-        SocketDisplayResult::UntrustedHtml {
-            html: "<p>T30 ISO response</p>".into(),
-        }
-    );
-    assert!(exchange.matched_request_rule_ids.is_empty());
-    assert_eq!(exchange.matched_response_rule_ids, [rule.rule_id()]);
-    let request_document = exchange.request_document;
-    assert_eq!(
-        request_document.get("message"),
-        Some(&SocketCaptureDocumentValue::Blob(REQUEST.to_vec()))
-    );
-    assert_eq!(
-        exchange.response_document.get("message"),
-        Some(&SocketCaptureDocumentValue::Blob(RESPONSE.to_vec()))
-    );
 
     let _: serde_json::Value = fixture.invoke_ok(
         &webview,
@@ -289,47 +264,4 @@ fn tcp_exchange(port: u16, request: &[u8], response_len: usize) -> Vec<u8> {
     response.truncate(received);
     let _ = stream.shutdown(Shutdown::Both);
     response
-}
-
-fn wait_for_capture(
-    fixture: &CrossLayerFixture,
-    webview: &tauri::WebviewWindow<tauri::test::MockRuntime>,
-    workspace_id: intercept_proxy_application::WorkspaceId,
-    listener_id: intercept_proxy_application::ListenerId,
-) -> SocketCaptureDetailViewModel {
-    let deadline = Instant::now() + Duration::from_secs(2);
-    loop {
-        let page: SocketCapturePageViewModel = fixture.invoke_ok(
-            webview,
-            "socket_capture_query",
-            json!({
-                "query": SocketCaptureQuery {
-                    workspace_id: Some(workspace_id),
-                    listener_id: Some(listener_id),
-                    session_id: None,
-                    connection_id: None,
-                    package: Some(package_ref()),
-                    direction: None,
-                    kind: Some(SocketCaptureKind::LocalExchange),
-                    occurred_from: None,
-                    occurred_to: None,
-                    sort: SocketCaptureSort::OccurredAt,
-                    direction_sort: SortDirection::Asc,
-                    page: PageRequest { page: 1, page_size: 10 },
-                }
-            }),
-        );
-        if let Some(row) = page.rows.first() {
-            return fixture.invoke_ok(
-                webview,
-                "socket_capture_get_detail",
-                json!({ "captureId": row.capture_id }),
-            );
-        }
-        assert!(
-            Instant::now() < deadline,
-            "formal capture was not persisted"
-        );
-        std::thread::sleep(Duration::from_millis(10));
-    }
 }

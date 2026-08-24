@@ -71,7 +71,6 @@ struct RunningListener {
 #[derive(Clone, Debug)]
 struct RuntimePipelineServices {
     ports: Arc<dyn PipelinePorts>,
-    http_protocol_observations: Arc<dyn HttpProtocolObservationSink>,
 }
 
 #[derive(Debug)]
@@ -87,7 +86,6 @@ pub struct ListenerRuntimeAdapter {
     protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
     external_package_provider:
         RwLock<Option<Arc<dyn external_relay::ExternalSocketPackageProvider>>>,
-    socket_capture_publisher: RwLock<Option<socket_capture_publisher::SocketCapturePublisher>>,
     pipeline_services: RwLock<Option<RuntimePipelineServices>>,
     socket_diagnostic_events: Arc<RwLock<Arc<EventHub>>>,
 }
@@ -109,7 +107,6 @@ impl ListenerRuntimeAdapter {
             managed_listener_certificates: None,
             protocol_packages,
             external_package_provider: RwLock::new(None),
-            socket_capture_publisher: RwLock::new(None),
             pipeline_services: RwLock::new(None),
             socket_diagnostic_events: Arc::new(RwLock::new(Arc::new(EventHub::default()))),
         }
@@ -163,43 +160,13 @@ impl ListenerRuntimeAdapter {
     /// setter；运行中的 Listener 会克隆不可变 `Arc`，不会在连接处理中热换实现。
     pub fn set_pipeline_ports<T>(&self, ports: Arc<T>)
     where
-        T: PipelinePorts + HttpProtocolObservationSink + 'static,
+        T: PipelinePorts + 'static,
     {
-        *self.pipeline_services.write() = Some(RuntimePipelineServices {
-            ports: ports.clone(),
-            http_protocol_observations: ports,
-        });
+        *self.pipeline_services.write() = Some(RuntimePipelineServices { ports });
     }
 
     pub fn set_socket_diagnostic_events(&self, events: Arc<EventHub>) {
         *self.socket_diagnostic_events.write() = events;
-    }
-
-    /// 注入正式 Socket capture 仓储，并在 infrastructure 内建立有界 drain worker。
-    ///
-    /// 连接与 Rhai worker 只持有非阻塞 publisher；SQLite I/O 永远不会进入网络数据面。
-    pub fn set_socket_capture_repository(
-        &self,
-        repository: Arc<super::SocketCaptureRepositoryAdapter>,
-    ) {
-        *self.socket_capture_publisher.write() =
-            Some(socket_capture_publisher::SocketCapturePublisher::new(
-                repository,
-                Arc::clone(&self.socket_diagnostic_events),
-            ));
-    }
-
-    #[cfg(test)]
-    fn block_next_socket_capture_display_for_test(
-        &self,
-        entered: std::sync::mpsc::SyncSender<()>,
-        release: std::sync::mpsc::Receiver<()>,
-    ) {
-        self.socket_capture_publisher
-            .read()
-            .as_ref()
-            .expect("socket capture publisher must be configured")
-            .block_next_display(entered, release);
     }
 
     fn runtime_epoch_for_start(&self, workspace_id: WorkspaceId) -> Uuid {
@@ -237,21 +204,16 @@ impl Drop for ListenerRuntimeAdapter {
 }
 
 mod document_rules;
-mod external_local_responder;
 mod external_relay;
 mod helpers;
 mod http_protocol_pipeline;
-mod local_responder;
 mod plan;
 mod port;
 mod scripted_relay;
 mod scripted_snapshot;
-mod socket_capture_publisher;
 mod socket_diagnostics;
 mod socket_plan;
 mod tls_material;
-
-pub use http_protocol_pipeline::HttpProtocolObservationSink;
 
 pub use document_rules::{
     BoundSocketDocument, ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,

@@ -5,34 +5,46 @@ use super::{
 };
 
 #[derive(Debug, Default)]
+pub(super) struct ResponseWriteTracker {
+    pending: AtomicBool,
+    changed: Notify,
+}
+
+impl ResponseWriteTracker {
+    pub(super) fn begin(&self) {
+        self.pending.store(true, Ordering::Release);
+        self.changed.notify_waiters();
+    }
+
+    pub(super) fn complete(&self) {
+        self.pending.store(false, Ordering::Release);
+        self.changed.notify_waiters();
+    }
+
+    pub(super) async fn wait_for_pending(&self) {
+        self.wait_for(true).await;
+    }
+
+    pub(super) async fn wait_for_clear(&self) {
+        self.wait_for(false).await;
+    }
+
+    async fn wait_for(&self, pending: bool) {
+        loop {
+            let changed = self.changed.notified();
+            if self.pending.load(Ordering::Acquire) == pending {
+                return;
+            }
+            changed.await;
+        }
+    }
+}
+
+#[derive(Debug, Default)]
 pub(super) struct RequestWriteTracker {
     body_complete: AtomicBool,
     request_flushed: AtomicBool,
     flushed: Notify,
-}
-
-#[derive(Debug, Default)]
-pub(super) struct ResponseWriteTracker {
-    response_ready: AtomicBool,
-    ready: Notify,
-}
-
-impl ResponseWriteTracker {
-    pub(super) fn mark_response_ready(&self) {
-        if !self.response_ready.swap(true, Ordering::AcqRel) {
-            self.ready.notify_waiters();
-        }
-    }
-
-    pub(super) async fn wait_until_ready(&self) {
-        loop {
-            let notified = self.ready.notified();
-            if self.response_ready.load(Ordering::Acquire) {
-                return;
-            }
-            notified.await;
-        }
-    }
 }
 
 impl RequestWriteTracker {

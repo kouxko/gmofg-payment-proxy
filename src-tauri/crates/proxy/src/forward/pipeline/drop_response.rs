@@ -13,7 +13,6 @@ use crate::fault::FaultAction;
 use crate::{ErrorCode, ProxyError, Result};
 
 use super::super::body::{CompletionBody, ProxyBody};
-use super::super::config_error;
 use super::super::tunnel::timeout_or_cancel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,15 +43,6 @@ pub(in crate::forward) fn intentional_drop_error(scope: &str) -> ProxyError {
         ErrorCode::ClientDisconnected,
         format!("{scope} response intentionally dropped"),
     )
-}
-
-pub(in crate::forward) fn reject_websocket_drop(actions: &[FaultAction]) -> Result<()> {
-    if drop_response_mode(actions).is_some() {
-        return Err(config_error(
-            "DropResponse is not supported for WebSocket Upgrade; use a connection fault after the 101 handshake",
-        ));
-    }
-    Ok(())
 }
 
 pub(in crate::forward) fn completion_body(body: ProxyBody) -> (ProxyBody, oneshot::Receiver<()>) {

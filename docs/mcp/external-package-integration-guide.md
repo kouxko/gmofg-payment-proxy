@@ -57,8 +57,8 @@
 3. 调用 `protocol_package_usage`，确认哪些 Workspace/Listener 引用了该版本。
 4. 调用 `diagnostics_query`，用包 ID、连接 ID、`external package`、`外部软件包`、方法名或稳定错误码筛选。
 5. 调用 `diagnose_recent_failures` 获取不执行修改的建议。
-6. 对已产生业务流量的连接，使用 `socket_capture_query` 按 package、listener、connection 和 direction 查询，再用
-   `socket_capture_get` 查看 frame、Document、规则、display fallback 与外部 RPC 诊断。
+6. 对已产生业务流量的连接，使用 `exchange_observation_query` 按 Workspace、Listener 查询，再用
+   `exchange_observation_get` 查看同一连接按顺序追加的收到、发送、失败与关闭证据。
 
 生命周期日志只包含阶段、包身份、连接 ID、远端地址、稳定错误码和安全消息。业务报文、注册原文、密码、密钥与远端
 JSON-RPC `data` 值不会写入 diagnostics；`data` 只允许记录 `string(bytes=N)`、`array(items=N)`、

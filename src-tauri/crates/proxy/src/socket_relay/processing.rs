@@ -2,13 +2,12 @@ use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
 use std::time::Duration;
 
-use async_trait::async_trait;
-use bytes::Bytes;
+use intercept_proxy_exchange::{
+    Decode, Direction, Display, Downstream, Encode, Frame, Rules, Socket, Upstream,
+};
 use uuid::Uuid;
 
 use crate::transport::relay::RelayBytes;
-
-use super::LocalResponderDiagnostics;
 
 /// 一条完整 Frame 在 Socket 拓扑中的处理方向。
 ///
@@ -41,7 +40,7 @@ pub enum FrameBoundary {
     NeedMore { total: usize },
     /// 还需读取，但处理器无法提前知道完整 Frame 的总长度。
     ///
-    /// 该语义适用于由外部协议实现逐步检查分隔符或密文边界的场景。Frame Pump 仍拥有
+    /// 该语义适用于由外部协议实现逐步检查分隔符或密文边界的场景。Socket Pipeline 仍拥有
     /// 读取节奏与最大缓冲区限制；处理器不得用伪造的 `current + 1` 长度表达未知边界。
     NeedMoreUnknown,
     /// 缓冲区开头已有完整 Frame；`bytes` 是需要精确消费的字节数。
@@ -50,7 +49,7 @@ pub enum FrameBoundary {
     Reject { reason: String },
 }
 
-/// Frame Pump 的稳定失败分类。
+/// Socket Pipeline 的稳定失败分类。
 ///
 /// 该分类不携带原始 payload、脚本源码或第三方错误文本；Handler 只把稳定 code 发送给
 /// observer。网络写入失败时，failure 内部还会保存已经成功提交的字节计数。
@@ -161,16 +160,16 @@ impl Debug for SocketProcessingFailure {
 /// 每连接、每方向的硬资源限制。
 ///
 /// Buffer/output 上限在开始下一次读取或写入前检查；processing timeout 同时覆盖
-/// `inspect` 与 `process`。读写 timeout 来自 Listener 配置，由 Frame Pump 调用方提供。
+/// `inspect` 与 `process`。读写 timeout 来自 Listener 配置，由 Socket Pipeline 调用方提供。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct SocketFramePumpLimits {
+pub struct SocketPipelineLimits {
     max_buffer_bytes: usize,
     max_output_bytes: usize,
     read_chunk_bytes: usize,
     processing_timeout: Duration,
 }
 
-impl SocketFramePumpLimits {
+impl SocketPipelineLimits {
     /// 构造严格非零的限制；read chunk 不能大于总 buffer 上限。
     pub fn new(
         max_buffer_bytes: usize,
@@ -186,7 +185,7 @@ impl SocketFramePumpLimits {
         {
             return Err(SocketProcessingFailure::new(
                 SocketProcessingFailureKind::InvalidLimits,
-                "frame pump limits must be non-zero and read chunk must fit the buffer",
+                "socket pipeline limits must be non-zero and read chunk must fit the buffer",
             ));
         }
         Ok(Self {
@@ -218,59 +217,191 @@ impl SocketFramePumpLimits {
     }
 }
 
-/// 面向一个连接方向的、有状态 Frame processor。
+/// 一个连接方向独占的五项协议能力。
 ///
-/// 实现必须保持连接隔离。`inspect` 与 `process` 可以执行外部协议 RPC 等有界异步 I/O，
-/// 但不得绕过 Frame Pump 自行读写当前业务连接；Pump 会用 [`SocketFramePumpLimits`] 的
-/// processing timeout 约束每次调用。Pump 保证同一实例严格串行调用：先用 `inspect` 判定
-/// 完整 Frame，再把精确 origin 交给 `process`，并在完整写出返回值后才处理下一 Frame。
-#[async_trait]
-pub trait SocketFrameProcessor: Send {
-    /// 检查当前从 Frame 起点开始的完整有界缓冲区，不消费输入。
-    async fn inspect(&mut self, buffered: Bytes) -> Result<FrameBoundary, SocketProcessingFailure>;
-
-    /// 处理一个完整 origin，返回一次且仅一次写出的完整输出 Blob。
-    async fn process(&mut self, origin: Bytes) -> Result<Bytes, SocketProcessingFailure>;
-
-    /// 注入 `LocalResponder` request 的协议中立旁路观察句柄。
-    ///
-    /// Relay 与既有 fake processor 使用默认空实现；LocalResponder processor 只保存句柄，
-    /// 并在 request Frame/可选 Decode 成功后发布有界预览。
-    fn set_local_diagnostics(&mut self, _diagnostics: LocalResponderDiagnostics) {}
-
-    /// 通知 processor：上一次 `process` 的输出已经完整写入并 flush 成功。
-    ///
-    /// 默认实现为空，现有 Direct/fake processor 无需感知。通知发生在 Writing 之后，因而只能
-    /// 用于 Display、捕获等旁路工作；实现不得再修改线路输出，也不得把失败升级为连接失败。
-    fn output_committed(&mut self) {}
-
-    /// 通知 processor：上一次 `process` 的输出未能完整写入。
-    ///
-    /// `written_bytes` 是 Pump 已确认成功写出的 response 前缀长度。默认实现为空；该通知
-    /// 只允许形成失败诊断或失败 capture，不得重试写入，也不得发布成功完成事件。
-    fn output_failed(&mut self, _failure: &SocketProcessingFailure, _written_bytes: usize) {}
+/// 类型参数把方向固定在装配期；运行时不能把 upstream 能力误装到 downstream Pipeline。
+/// 每个字段是真实执行边界，不允许再用组合 `process()` 或 Identity adapter 冒充阶段。
+pub struct SocketDirectionCapabilities<D: Direction> {
+    pub frame: Box<dyn Frame<D>>,
+    pub decode: Box<dyn Decode<Socket, D>>,
+    pub display: Box<dyn Display>,
+    pub rules: Box<dyn Rules>,
+    pub encode: Box<dyn Encode<Socket, D>>,
 }
 
-/// 为 Scripted Relay 的两个方向分别创建连接级 processor。
-///
-/// 该同步方法必须快速、无阻塞；Factory panic 会被隔离成当前连接的 typed failure。
-pub trait ScriptedRelayProcessorFactory: Send + Sync {
-    /// 每个连接的每个 Relay 方向恰好调用一次。
-    fn create_direction(
-        &self,
-        connection: SocketConnectionIdentity,
-        direction: SocketPayloadDirection,
-    ) -> Box<dyn SocketFrameProcessor>;
+impl<D: Direction> Debug for SocketDirectionCapabilities<D> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SocketDirectionCapabilities")
+            .field("direction", &D::KIND)
+            .finish_non_exhaustive()
+    }
 }
 
-/// 为 `LocalResponder` 创建一体化 request-response processor。
+/// Factory 拥有的稳定 Listener 观测归属；连接字段由 accept loop 的 identity 补齐。
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SocketObservationMetadata {
+    pub workspace_id: String,
+    pub listener_id: String,
+}
+
+impl SocketObservationMetadata {
+    /// Creates the connection-level parent span shared by raw and protocol Socket exchanges.
+    ///
+    /// All fields are recorded as primitive strings so the UI tracing layer can export the
+    /// metadata without depending on Socket runtime types.
+    pub(crate) fn exchange_span(
+        &self,
+        identity: &SocketConnectionIdentity,
+        endpoint: &str,
+    ) -> tracing::Span {
+        let runtime_epoch = identity.runtime_epoch.to_string();
+        let connection_id = identity.connection_id.to_string();
+        let peer = identity.peer_addr.to_string();
+        tracing::info_span!(
+            target: "intercept_proxy::exchange",
+            "socket_connection",
+            workspace_id = self.workspace_id.as_str(),
+            listener_id = self.listener_id.as_str(),
+            runtime_epoch = runtime_epoch.as_str(),
+            connection_id = connection_id.as_str(),
+            peer = peer.as_str(),
+            protocol = "socket",
+            endpoint,
+        )
+    }
+}
+
+impl<D: Direction> SocketDirectionCapabilities<D> {
+    pub fn new(
+        frame: Box<dyn Frame<D>>,
+        decode: Box<dyn Decode<Socket, D>>,
+        display: Box<dyn Display>,
+        rules: Box<dyn Rules>,
+        encode: Box<dyn Encode<Socket, D>>,
+    ) -> Self {
+        Self {
+            frame,
+            decode,
+            display,
+            rules,
+            encode,
+        }
+    }
+}
+
+/// 为每个 Socket connection 创建两组方向强类型的真实 Pipeline 能力。
 ///
-/// 它不是某个伪造的 upstream 方向 processor；同一连接只创建一个 exchange，并由 Pump
-/// 严格串行执行 request -> response write/flush。
-pub trait LocalResponderProcessorFactory: Send + Sync {
-    /// 每个 `LocalResponder` 连接恰好调用一次。
-    fn create_exchange(
+/// Factory 只冻结连接级协议状态，不读取或写入业务 Socket。构造失败直接结束该 Exchange，
+/// 不生成失败 processor，也不降级为透明转发。
+pub trait SocketProtocolCapabilityFactory: Send + Sync {
+    fn observation_metadata(&self) -> SocketObservationMetadata;
+
+    fn create_upstream(
         &self,
         connection: SocketConnectionIdentity,
-    ) -> Box<dyn SocketFrameProcessor>;
+    ) -> Result<SocketDirectionCapabilities<Upstream>, SocketProcessingFailure>;
+
+    fn create_downstream(
+        &self,
+        connection: SocketConnectionIdentity,
+    ) -> Result<SocketDirectionCapabilities<Downstream>, SocketProcessingFailure>;
+}
+
+#[cfg(test)]
+mod observation_tests {
+    use std::collections::BTreeMap;
+    use std::sync::{Arc, Mutex};
+
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::{Event, Metadata, Subscriber};
+
+    use super::{SocketConnectionIdentity, SocketObservationMetadata};
+
+    #[test]
+    fn exchange_parent_span_exports_stable_primitive_metadata() {
+        let fields = Arc::new(Mutex::new(BTreeMap::new()));
+        let subscriber = RecordingSubscriber {
+            fields: Arc::clone(&fields),
+        };
+        let connection_id = uuid::Uuid::parse_str("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+            .expect("fixed connection UUID");
+        let runtime_epoch = uuid::Uuid::parse_str("11111111-2222-3333-4444-555555555555")
+            .expect("fixed runtime UUID");
+        let identity = SocketConnectionIdentity {
+            runtime_epoch,
+            connection_id,
+            peer_addr: "10.0.28.197:43210".parse().expect("fixed peer address"),
+        };
+        let metadata = SocketObservationMetadata {
+            workspace_id: "workspace-1".to_owned(),
+            listener_id: "listener-1".to_owned(),
+        };
+
+        tracing::subscriber::with_default(subscriber, || {
+            let span = metadata.exchange_span(&identity, "10.0.34.151:9000");
+            let span_metadata = span.metadata().expect("enabled parent span metadata");
+            assert_eq!(span_metadata.target(), "intercept_proxy::exchange");
+            assert_eq!(span_metadata.name(), "socket_connection");
+        });
+
+        assert_eq!(
+            *fields.lock().expect("recorded span fields"),
+            BTreeMap::from([
+                ("connection_id".to_owned(), connection_id.to_string()),
+                ("endpoint".to_owned(), "10.0.34.151:9000".to_owned()),
+                ("listener_id".to_owned(), "listener-1".to_owned()),
+                ("peer".to_owned(), "10.0.28.197:43210".to_owned()),
+                ("protocol".to_owned(), "socket".to_owned()),
+                ("runtime_epoch".to_owned(), runtime_epoch.to_string()),
+                ("workspace_id".to_owned(), "workspace-1".to_owned()),
+            ])
+        );
+    }
+
+    struct RecordingSubscriber {
+        fields: Arc<Mutex<BTreeMap<String, String>>>,
+    }
+
+    impl Subscriber for RecordingSubscriber {
+        fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+            true
+        }
+
+        fn new_span(&self, attributes: &Attributes<'_>) -> Id {
+            attributes.record(&mut FieldRecorder(&self.fields));
+            Id::from_u64(1)
+        }
+
+        fn record(&self, _span: &Id, values: &Record<'_>) {
+            values.record(&mut FieldRecorder(&self.fields));
+        }
+
+        fn record_follows_from(&self, _span: &Id, _follows: &Id) {}
+
+        fn event(&self, _event: &Event<'_>) {}
+
+        fn enter(&self, _span: &Id) {}
+
+        fn exit(&self, _span: &Id) {}
+    }
+
+    struct FieldRecorder<'a>(&'a Mutex<BTreeMap<String, String>>);
+
+    impl Visit for FieldRecorder<'_> {
+        fn record_str(&mut self, field: &Field, value: &str) {
+            self.0
+                .lock()
+                .expect("span fields lock")
+                .insert(field.name().to_owned(), value.to_owned());
+        }
+
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            self.0
+                .lock()
+                .expect("span fields lock")
+                .insert(field.name().to_owned(), format!("{value:?}"));
+        }
+    }
 }
