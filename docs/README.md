@@ -45,7 +45,8 @@ ADR-006 仅作为决策历史保留；当前实现以 ADR-007 和源码为准。
 ## 测试与发布
 
 - [发布级验证矩阵](testing/release-validation-matrix.md)：固定层级、端口、场景、命令和判定标准。
-- [2026-08-24 验证结果](testing/release-validation-results-20260824.md)：最近一次自动化、真实 App 和外部包证据。
+- [2026-08-25 App 测试结果](testing/release-validation-results-20260825.md)：最新 release App 测试用例与结果。
+- [2026-08-24 发布验证结果](testing/release-validation-results-20260824.md)：完整自动化、真实 App 和外部包证据。
 
 验证结果只能证明当次源码与环境。修复任何功能后，应从受影响层开始重跑，并在最终 App 构建后
 重新进行真实 UI/网络冒烟。

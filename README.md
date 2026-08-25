@@ -73,7 +73,8 @@ LocalServer 与 RemoteServer 实现同一个 Server 端口：LocalServer 只是�
 - [安全与持久化](docs/architecture/security-and-persistence.md)：TLS/mTLS、SQLite、证书和导入导出。
 - [用户操作说明](docs/user-operation-guide.md)：从 Workspace 到真实交易验证的操作步骤。
 - [发布级验证矩阵](docs/testing/release-validation-matrix.md)：可重复执行的完整验收合同。
-- [2026-08-24 验证结果](docs/testing/release-validation-results-20260824.md)：本次自动化与真实 App 证据。
+- [2026-08-25 App 测试结果](docs/testing/release-validation-results-20260825.md)：最新 release App 测试用例与结果。
+- [2026-08-24 发布验证结果](docs/testing/release-validation-results-20260824.md)：完整自动化、真实 App 与外部包证据。
 
 ## 开发
 
