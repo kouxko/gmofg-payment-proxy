@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260825-003",
+  "case_id": "DOC-GOV-003",
+  "executed_at": "2026-08-25T17:07:48+08:00",
+  "base_head": "d63ba271387ec353d66f1f02bb304d74268df6de",
+  "result": "PASS",
+  "derived_from": {
+    "task_id": "TASK-20260825-001",
+    "case_id": "DOC-GOV-001",
+    "evidence": "2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md"
+  },
+  "resources": [
+    "resources/requirements.md",
+    "steps/replay.md",
+    "inputs/task-related-state.txt",
+    "outputs/replay-command-output.txt",
+    "outputs/actual-rules.txt"
+  ],
+  "tested_state": {
+    "record": "inputs/task-related-state.txt",
+    "staged_diff": "empty",
+    "related_files_changed_during_test": false
+  },
+  "replay": "Follow steps/replay.md from the repository root"
+}

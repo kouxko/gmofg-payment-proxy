@@ -1,0 +1,12 @@
+Manual acceptance summary; raw command output is saved in replay-command-output.txt.
+
+AGENTS.md contains:
+- Test resources must become part of the task archive.
+- File resources are stored in the evidence case.
+- External non-copyable dependencies record rebuild information.
+- Active fixtures and immutable evidence snapshots have separate authority.
+- Derived requirements reference parent task, case, and evidence path.
+- Compatible changes replay the original test and require PASS.
+- Replaced contracts preserve historical PASS and allow documented expected differences.
+- Original evidence is never overwritten.
+- No file or working-tree Hash is required.
