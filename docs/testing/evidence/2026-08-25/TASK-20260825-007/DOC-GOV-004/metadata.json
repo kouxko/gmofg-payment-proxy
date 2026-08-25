@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260825-007",
+  "case_id": "DOC-GOV-004",
+  "executed_at": "2026-08-25 23:57:15 +08:00",
+  "result": "PASS",
+  "resources": [
+    "resources/requirements.md",
+    "steps/replay.md",
+    "replay/lock-protocol.sh",
+    "outputs/static-check.txt",
+    "outputs/lock-check.txt"
+  ],
+  "proof_basis": [
+    "current authoritative file contents",
+    "task and index relationship checks",
+    "lock ownership and transition replay output"
+  ],
+  "git_evidence": "N/A: Git history, commit IDs, status, and diffs are not task-management acceptance proof",
+  "replay": "Follow steps/replay.md from the repository root"
+}
