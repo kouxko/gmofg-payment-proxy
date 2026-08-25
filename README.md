@@ -64,6 +64,7 @@ LocalServer 与 RemoteServer 实现同一个 Server 端口：LocalServer 只是�
 
 ## 文档导航
 
+- [新人接手与项目全景指南](docs/onboarding-guide.md)：从零开始理解系统、运行项目、定位代码、测试和发布。
 - [文档总览](docs/README.md)：产品、架构、操作、诊断和测试文档入口。
 - [架构总览](docs/architecture/README.md)：推荐阅读顺序与当前架构结论。
 - [Exchange 与 Pipeline](docs/architecture/exchange-pipeline.md)：核心 trait、泛型约束和连接生命周期。
