@@ -1,0 +1,72 @@
+Captured at: 2026-08-25 17:07:48 +08:00
+Repository root: /Users/codin/Code/gmofg-payment-proxy
+Base HEAD: d63ba271387ec353d66f1f02bb304d74268df6de
+
+Task-related stable file list:
+AGENTS.md
+docs/README.md
+docs/tasks/README.md
+docs/tasks/completed/2026-08-25/archive-reusable-test-resources.md
+docs/testing/evidence/README.md
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/README.md
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/inputs/task-related-state.txt
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/metadata.json
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/outputs/actual-rules.txt
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/outputs/replay-command-output.txt
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/resources/requirements.md
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/steps/replay.md
+
+Status before test:
+ M docs/README.md
+ M docs/tasks/README.md
+ M docs/testing/evidence/README.md
+?? docs/tasks/completed/2026-08-25/archive-reusable-test-resources.md
+?? docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/
+
+Staged diff before test:
+N/A: empty; no task files were staged.
+
+Task-related unstaged tracked diff before test:
+diff --git a/docs/tasks/README.md b/docs/tasks/README.md
+--- a/docs/tasks/README.md
++++ b/docs/tasks/README.md
+@@ -6,5 +6,6 @@
+
+ | 完成时间 | 任务 | 实现功能 | 验收结果 | Commit | 关键词 |
+ | --- | --- | --- | --- | --- | --- |
++| 17:07:48 +08:00 | [建立测试资源归档与跨任务复用规范](completed/2026-08-25/archive-reusable-test-resources.md) | 将证书、报文、配置、步骤和结果纳入任务归档，并建立派生需求复用关系 | PASS | `d63ba27` | 测试资源、证书、报文、复测、归档、派生需求 |
+ | 16:52:35 +08:00 | [调整小任务对抗审查门禁](completed/2026-08-25/optional-subtask-adversarial-review.md) | 将小任务对抗审查改为风险触发的可选项，并保留整体任务最终强制审查 | PASS | `adacabc` | 对抗审查、小任务、风险门禁、AGENTS |
+ | 16:41:05 +08:00 | [生成项目执行治理规范](completed/2026-08-25/generate-project-agents-governance.md) | 固化任务登记、零假设、测试证据、对抗审查、文档同步、Git 和 CI 执行边界 | PASS | `a5c6b1b` | AGENTS、任务治理、测试证据、对抗审查、Git、CI |
+diff --git a/docs/testing/evidence/README.md b/docs/testing/evidence/README.md
+--- a/docs/testing/evidence/README.md
++++ b/docs/testing/evidence/README.md
+@@ -7,5 +7,6 @@
+
+ | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+ | --- | --- | --- | --- | --- | --- | --- | --- |
++| TASK-20260825-003 | DOC-GOV-003 | 验证测试资源归档和跨任务复用规范 | PASS | TASK-20260825-001 | DOC-GOV-001 | [父证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) | [证据](2026-08-25/TASK-20260825-003/DOC-GOV-003/README.md) |
+ | TASK-20260825-002 | DOC-GOV-002 | 验证小任务对抗审查改为可选、整体审查保持强制 | PASS | TASK-20260825-001 | DOC-GOV-001 | [父证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) | [证据](2026-08-25/TASK-20260825-002/DOC-GOV-002/README.md) |
+ | TASK-20260825-001 | DOC-GOV-001 | 验证项目 AGENTS 治理规范 | PASS | 无 | 无 | 无 | [证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) |
+
+The content diff is complete. Git blob identity lines are intentionally omitted because this project does not archive file or working-tree hashes.
+
+Untracked task files before test:
+docs/tasks/completed/2026-08-25/archive-reusable-test-resources.md
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/README.md
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/inputs/task-related-state.txt
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/metadata.json
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/outputs/actual-rules.txt
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/outputs/replay-command-output.txt
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/resources/requirements.md
+docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/steps/replay.md
+
+docs/README.md note:
+The test-evidence index navigation entry is already committed in the base HEAD. Its current unstaged diff contains only other pending-task entries and is excluded from this task's archive commit.
+
+Status after test:
+Same as "Status before test".
+
+Task-related staged and unstaged diff after test:
+Same as before test.
+
+Task-related files changed during test: no.

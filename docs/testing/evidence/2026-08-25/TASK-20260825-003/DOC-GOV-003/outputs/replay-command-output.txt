@@ -1,0 +1,20 @@
+Command: rg -n '测试资源必须成为任务归档的一部分|后续任务必须引用和复用原测试|活动 fixture|不可复制依赖|derived_from|明确替代旧合同' AGENTS.md
+
+198:活动 fixture 代表当前合同下自动化测试使用的资源；证据目录中的 resources 是某次测试实际使用
+199:资源的不可变快照。测试执行时允许把活动 fixture 复制到证据目录，但必须在 README 或 metadata
+201:使用活动 fixture。fixture 行为发生变化时创建新用例或明确版本，不覆盖历史证据快照。
+240:### 10.3 测试资源必须成为任务归档的一部分
+270:远程服务、系统工具、运行时、硬件或其他不可复制依赖不要求复制其本体，但必须保存名称、版本、
+281:### 10.4 后续任务必须引用和复用原测试
+293:中记录 `derived_from`、变化内容和原因。`derived_from` 必须同时包含父任务 ID、父用例 ID 和父证据
+303:- 明确替代旧合同：保留并引用原历史 PASS；在新任务中执行旧用例作为差异证据，允许其按已确认的
+
+Command: rg -n 'TASK-20260825-003|DOC-GOV-003|TASK-20260825-001|DOC-GOV-001' docs/testing/evidence/README.md
+
+10:| TASK-20260825-003 | DOC-GOV-003 | 验证测试资源归档和跨任务复用规范 | PASS | TASK-20260825-001 | DOC-GOV-001 | [父证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) | [证据](2026-08-25/TASK-20260825-003/DOC-GOV-003/README.md) |
+11:| TASK-20260825-002 | DOC-GOV-002 | 验证小任务对抗审查改为可选、整体审查保持强制 | PASS | TASK-20260825-001 | DOC-GOV-001 | [父证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) | [证据](2026-08-25/TASK-20260825-002/DOC-GOV-002/README.md) |
+12:| TASK-20260825-001 | DOC-GOV-001 | 验证项目 AGENTS 治理规范 | PASS | 无 | 无 | 无 | [证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) |
+
+Command: jq empty docs/testing/evidence/2026-08-25/TASK-20260825-003/DOC-GOV-003/metadata.json
+
+Exit status: 0
