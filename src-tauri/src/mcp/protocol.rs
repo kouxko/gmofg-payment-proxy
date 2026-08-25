@@ -41,14 +41,22 @@ impl ReadOnlyMcpHandler {
                 "message": format!("tool arguments exceed {MAX_TOOL_INPUT_BYTES} logical JSON bytes")
             }));
         }
-        if let Err(message) = catalog::validate_top_level_arguments(name, &arguments) {
+        if let Err(message) = catalog::validate_arguments(name, &arguments) {
             return CallToolResult::structured_error(json!({
                 "code": "INVALID_ARGUMENTS",
                 "message": message
             }));
         }
         match timeout(TOOL_DEADLINE, self.backend.call_tool(name, arguments)).await {
-            Ok(Ok(value)) => bounded_result(value, false),
+            Ok(Ok(value)) => {
+                if let Err(message) = catalog::validate_successful_output(name, &value) {
+                    return CallToolResult::structured_error(json!({
+                        "code": "OUTPUT_SCHEMA_MISMATCH",
+                        "message": message
+                    }));
+                }
+                bounded_result(value, false)
+            }
             Ok(Err(failure)) => bounded_result(failure.as_value(), true),
             Err(_) => CallToolResult::structured_error(json!({
                 "code": "TOOL_DEADLINE_EXCEEDED",

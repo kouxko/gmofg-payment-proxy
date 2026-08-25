@@ -4,9 +4,9 @@
 
 ## 通用调用契约
 
-- 参数必须是 JSON object。每个工具发布的 input schema 都声明 `additionalProperties: false`，未知顶层字段会返回 `INVALID_ARGUMENTS`，不会被静默忽略。
-- 工具目录同时发布 output schema。成功结果通过 MCP `structuredContent` 返回；下表的“成功结果”描述其根类型和语义投影。
-- 错误结果同样是结构化对象，至少包含 `code`、`message`，应用错误还可包含 `details`。常见代码包括 `INVALID_ARGUMENTS`、`NOT_FOUND`、`INPUT_BUDGET_EXCEEDED`、`OUTPUT_BUDGET_EXCEEDED` 和 `TOOL_DEADLINE_EXCEEDED`。
+- 参数必须是 JSON object。每个工具发布的 input schema 都声明 `additionalProperties: false`；该约束递归应用到 `page`、`package` 等嵌套对象，任意层级的未知字段都会返回 `INVALID_ARGUMENTS`，不会被静默忽略。
+- 工具目录同时发布 output schema。成功结果通过 MCP `structuredContent` 返回；运行时会校验 object、array、object/null 根类型与公开 Schema 一致，下表的“成功结果”描述其根类型和语义投影。
+- 错误结果同样是结构化对象，至少包含 `code`、`message`，应用错误还可包含 `details`。常见代码包括 `INVALID_ARGUMENTS`、`NOT_FOUND`、`INPUT_BUDGET_EXCEEDED`、`OUTPUT_BUDGET_EXCEEDED`、`OUTPUT_SCHEMA_MISMATCH` 和 `TOOL_DEADLINE_EXCEEDED`。`OUTPUT_SCHEMA_MISMATCH` 表示后端成功值违反公开输出合同，应视为服务端缺陷，而不是客户端重试条件。
 - 单次输入逻辑 JSON 上限为 256 KiB，单次输出上限为 8 MiB，执行期限为 8 秒。
 - 分页工具只返回当前保留窗口中的数据；日志、诊断、HTTP 抓包和 Exchange 观察都可能因有界保留策略而淘汰旧记录。调用方应保存稳定 ID、游标和 `runtime_epoch`，并显式处理记录已不在保留范围的情况。
 - 所有 UUID 参数均以字符串传入。标为“无”的参数应传 `{}` 或省略 `arguments`。

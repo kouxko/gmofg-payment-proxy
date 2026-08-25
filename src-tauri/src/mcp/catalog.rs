@@ -5,8 +5,12 @@ mod contract;
 use rmcp::model::{Tool, ToolAnnotations};
 use serde_json::{Map, Value, json};
 
-pub(super) fn validate_top_level_arguments(name: &str, arguments: &Value) -> Result<(), String> {
-    contract::validate_top_level_arguments(name, arguments)
+pub(super) fn validate_arguments(name: &str, arguments: &Value) -> Result<(), String> {
+    contract::validate_arguments(name, arguments)
+}
+
+pub(super) fn validate_successful_output(name: &str, value: &Value) -> Result<(), String> {
+    contract::validate_successful_output(name, value)
 }
 
 pub fn tools() -> Vec<Tool> {
@@ -90,13 +94,13 @@ fn general_tools() -> Vec<Tool> {
             "workspace_get",
             "Workspace detail",
             "Read one complete Workspace, including entries, Android profiles, certificate references and protocol rule bindings.",
-            required_string("workspace_id", "Workspace UUID."),
+            required_uuid("workspace_id", "Workspace UUID."),
         ),
         tool(
             "entry_overview",
             "Entry runtime overview",
             "Read configured entries merged with current runtime state for one Workspace.",
-            required_string("workspace_id", "Workspace UUID."),
+            required_uuid("workspace_id", "Workspace UUID."),
         ),
         tool(
             "entry_status_list",
@@ -191,7 +195,7 @@ fn runtime_tools() -> Vec<Tool> {
             "workspace_certificate_overview",
             "Workspace certificate metadata",
             "Read public metadata for managed certificate references in one Workspace; no private key material.",
-            required_string("workspace_id", "Workspace UUID."),
+            required_uuid("workspace_id", "Workspace UUID."),
         ),
     ]
 }
@@ -252,7 +256,7 @@ fn configuration_tools() -> Vec<Tool> {
             "http_rule_get",
             "HTTP rule detail",
             "Read one complete HTTP rule.",
-            required_string("rule_id", "HTTP rule UUID."),
+            required_uuid("rule_id", "HTTP rule UUID."),
         ),
         tool(
             "protocol_rule_list",
@@ -264,7 +268,7 @@ fn configuration_tools() -> Vec<Tool> {
             "workspace_protocol_rule_list",
             "Workspace protocol rules",
             "Read protocol Document rules from any saved Workspace through its application model.",
-            required_string("workspace_id", "Workspace UUID."),
+            required_uuid("workspace_id", "Workspace UUID."),
         ),
         tool(
             "protocol_package_list",
@@ -319,6 +323,16 @@ fn required_string(name: &str, description: &str) -> Value {
         Value::Object(Map::from_iter([(
             name.to_owned(),
             json!({"type": "string", "description": description}),
+        )])),
+        &[name],
+    )
+}
+
+fn required_uuid(name: &str, description: &str) -> Value {
+    object_schema(
+        Value::Object(Map::from_iter([(
+            name.to_owned(),
+            json!({"type": "string", "format": "uuid", "description": description}),
         )])),
         &[name],
     )

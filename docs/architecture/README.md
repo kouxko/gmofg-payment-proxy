@@ -66,4 +66,5 @@ flowchart LR
 - [ADR-006](decisions/ADR-006-unified-exchange-observation.md) 已被替代，仅保留历史原因和被否决方案。
 - 全部 ADR 入口见 [文档总览](../README.md#架构决策)。
 - 固定验收合同见 [发布级验证矩阵](../testing/release-validation-matrix.md)。
-- 最近一次执行证据见 [2026-08-24 验证结果](../testing/release-validation-results-20260824.md)。
+- 最新 release App 测试用例与结果见 [2026-08-25 App 测试结果](../testing/release-validation-results-20260825.md)；
+  完整真实 App 与外部包证据见 [2026-08-24 发布验证结果](../testing/release-validation-results-20260824.md)。

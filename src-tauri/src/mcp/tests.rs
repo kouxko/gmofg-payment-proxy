@@ -10,16 +10,23 @@ use super::{
     server::start_test_server,
 };
 
+mod protocol_contract;
+
 #[derive(Debug)]
 struct FakeBackend;
 
 #[async_trait]
 impl ReadOnlyMcpBackend for FakeBackend {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult {
-        if name == "application_snapshot" {
-            Ok(json!({ "tool": name, "arguments": arguments }))
-        } else {
-            Err(ToolFailure::not_found(format!("Unknown tool: {name}")))
+        match name {
+            "application_snapshot" => Ok(json!({ "tool": name, "arguments": arguments })),
+            "workspace_list" | "settings_get" => Ok(json!([])),
+            "android_runtime_owner" => Ok(Value::Null),
+            "diagnostics_query" => Ok(json!({"rows": []})),
+            "certificate_overview" => Ok(json!({
+                "payload": "x".repeat(protocol::MAX_LOGICAL_OUTPUT_BYTES)
+            })),
+            _ => Err(ToolFailure::not_found(format!("Unknown tool: {name}"))),
         }
     }
 
@@ -129,7 +136,7 @@ fn tool_reference_names_every_public_tool_and_explains_the_result_contract() {
     let (_, reference) = resources::text(resources::TOOL_REFERENCE_URI).expect("tool reference");
     for tool in protocol::tools() {
         assert!(
-            reference.contains(tool.name.as_ref()),
+            reference.contains(&format!("`{}`", tool.name)),
             "reference is missing {}",
             tool.name
         );

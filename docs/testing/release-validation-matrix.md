@@ -225,6 +225,27 @@ examples/external-packages/au_eftex/.venv/bin/python -m unittest discover \
   -s examples/external-packages/au_eftex/tests -v
 ```
 
+### 8.1.1 MCP 契约专项
+
+修改 `src-tauri/src/mcp`、MCP 资源文档或 Application 只读返回投影时，先执行定向测试，再执行上面的
+完整门禁：
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml mcp:: --lib
+pnpm scan:architecture-docs
+```
+
+定向套件必须同时锁定：
+
+- 37 个公开工具名唯一，并与后端分发清单完全一致；
+- 每个输入字段（包括 `page`、`package` 等嵌套字段）有说明，所有对象层级均封闭未知字段；
+- object、array、object/null 三类成功根类型与生产返回合同一致，运行时拒绝错误根类型；
+- 输入 256 KiB、输出 8 MiB 的逻辑预算及结构化错误码；
+- MCP 工具参考以精确反引号名称覆盖全部公开工具，并说明成功、错误和保留边界。
+
+该套件证明工具目录、协议适配器和返回根类型合同一致，但不能单独证明 Listener 已监听、外部包在线、
+真实 Exchange 完成或厂商业务响应；这些仍按 L2–L4 场景分别取证。
+
 ### 8.2 release App 真实 loopback
 
 ```bash

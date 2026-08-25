@@ -150,7 +150,9 @@ MCP 使用官方 `rmcp`，当前协议版本为 `2026-07-28`。服务只绑定 l
 - Listener、规则、协议包、证书和 Android 状态的只读查询。
 
 MCP 输入逻辑预算为 256 KiB，输出预算为 8 MiB，单工具截止时间为 8 秒。超预算或超时返回结构化
-错误，不执行删除、重连、启停、规则修改或文件写入。
+错误，不执行删除、重连、启停、规则修改或文件写入。输入 Schema 的封闭对象约束会递归校验，成功
+值也必须符合工具目录声明的 object、array 或 object/null 根类型；契约漂移返回
+`OUTPUT_SCHEMA_MISMATCH`，不得把不匹配数据伪装成成功结果。
 
 ## 9. 复现报告
 
@@ -187,4 +189,5 @@ Exchange 流程完成。任何一项都不能单独证明外部业务系统已�
 - Pipeline 失败产生 Failed + Closed failed；
 - JSONL 重开、坏行、重复 ID、低水位滚动和写失败；
 - MCP 只读标注、输入输出预算与 deadline；
+- MCP 顶层/嵌套封闭输入、37 个工具目录/分发一致性、成功输出根类型与文档全量工具名；
 - UI、MCP 查询同一个 ExchangeObservationStore。
