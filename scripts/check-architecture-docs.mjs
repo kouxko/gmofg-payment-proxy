@@ -37,6 +37,7 @@ const decisions = new Map([
 const rootDocuments = [
   "README.md",
   "docs/README.md",
+  "docs/onboarding-guide.md",
   "docs/requirements.md",
   "docs/user-operation-guide.md",
   "docs/testing/release-validation-matrix.md",
@@ -158,8 +159,12 @@ function relativeMarkdownLinks(source) {
     .map((match) => match[1]);
 }
 
+function hasBalancedCodeFences(source) {
+  return (source.match(/^```/gmu) ?? []).length % 2 === 0;
+}
+
 function referencedRepositoryPaths(source) {
-  return [...source.matchAll(/`((?:src(?:-tauri)?|android-companion|scripts|templates)\/[A-Za-z0-9_./-]+)`/gu)]
+  return [...source.matchAll(/`((?:src(?:-tauri)?|android-companion|scripts|templates|examples|test-support|\.github)\/[A-Za-z0-9_./-]+)`/gu)]
     .map((match) => match[1]);
 }
 
@@ -173,9 +178,15 @@ for (const relative of rootDocuments) {
     continue;
   }
   const source = await readFile(absolute, "utf8");
+  if (!hasBalancedCodeFences(source)) failures.push(`${relative}: unbalanced Markdown code fences`);
   for (const linked of relativeMarkdownLinks(source)) {
     const target = path.resolve(path.dirname(absolute), linked);
     if (!(await exists(target))) failures.push(`${relative}: broken relative link ${linked}`);
+  }
+  for (const referenced of referencedRepositoryPaths(source)) {
+    if (!(await exists(path.join(repositoryRoot, referenced)))) {
+      failures.push(`${relative}: missing repository anchor ${referenced}`);
+    }
   }
 }
 
@@ -189,6 +200,7 @@ for (const name of mcpDocuments) {
   }
   const source = await readFile(absolute, "utf8");
   mcpSources.set(name, source);
+  if (!hasBalancedCodeFences(source)) failures.push(`docs/mcp/${name}: unbalanced Markdown code fences`);
   const lineCount = source.split(/\r?\n/u).length;
   if (lineCount > 500) failures.push(`docs/mcp/${name}: ${lineCount} lines exceeds the 500 line limit`);
   if (!source.startsWith("# ")) failures.push(`docs/mcp/${name}: missing top-level title`);
@@ -227,6 +239,7 @@ for (const name of currentDocuments) {
   }
   const source = await readFile(absolute, "utf8");
   documents.set(name, source);
+  if (!hasBalancedCodeFences(source)) failures.push(`${name}: unbalanced Markdown code fences`);
   const lineCount = source.split(/\r?\n/u).length;
   if (lineCount > 500) failures.push(`${name}: ${lineCount} lines exceeds the 500 line limit`);
   if (!source.startsWith("# ")) failures.push(`${name}: missing top-level title`);
