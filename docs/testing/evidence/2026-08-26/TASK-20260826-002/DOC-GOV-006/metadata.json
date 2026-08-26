@@ -1,0 +1,58 @@
+{
+  "task_id": "TASK-20260826-002",
+  "case_id": "DOC-GOV-006",
+  "purpose": "验证独立快速配置验证通道、分层结论、证据复用、清理门禁和正式任务升级规则",
+  "executed_at": "2026-08-26 12:34:00 +08:00",
+  "environment": {
+    "os": "Darwin 27.0.0 arm64",
+    "shell": "zsh 5.9",
+    "ripgrep": "15.2.0",
+    "jq": "1.7.1-apple"
+  },
+  "tested_objects": [
+    "AGENTS.md",
+    "docs/README.md",
+    "docs/testing/quick-validations/README.md",
+    "docs/testing/quick-validations/TEMPLATE.md",
+    "docs/tasks/completed/2026-08-26/rapid-configuration-validation-workflow.md"
+  ],
+  "tested_objects_changed_during_test": false,
+  "result": "PASS",
+  "checker_failures_before_final_pass": {
+    "count": 7,
+    "result": "CHECKER_FAILED",
+    "reason": "七次检查均因不同跨行或旧措辞谓词被错误地按单行或过窄文本匹配而中止",
+    "resolution": "对跨行谓词统一使用换行归一化后复测；没有删除规则或放宽预期",
+    "product_or_rule_failure": false
+  },
+  "final_checks": [
+    "section_10_5_unique",
+    "three_branch_qv_task_routing_and_promotion",
+    "qv_lock_and_index_lifecycle",
+    "reserved_running_final_state_machine",
+    "inactive_runner_recovery_and_finalization_race",
+    "eight_layer_four_state_matrix",
+    "path_id_and_same_connection_causality",
+    "result_and_cleanup_aggregation",
+    "exact_configuration_snapshot",
+    "environment_and_external_dependencies",
+    "cleanup_gate",
+    "no_hidden_fallback_or_unauthorized_probe",
+    "resource_snapshot_and_finalized_qv_immutability",
+    "document_and_template_links",
+    "metadata_json_parse",
+    "deterministic_state_scenarios"
+    ,"real_concurrent_id_allocation"
+    ,"reserved_and_running_runner_exit"
+    ,"recovery_owner_persisted_to_metadata_and_index"
+    ,"stale_runner_write_rejected"
+    ,"two_finalizer_single_winner"
+    ,"repeat_execution_creates_derived_qv"
+  ],
+  "replay": "steps/replay.md",
+  "not_applicable": [
+    "真实证书、报文、TCP chunks、Frame、响应和截图：治理文档测试不涉及",
+    "产品测试、构建、运行、真实设备和真实后台：未改变产品行为",
+    "CI：用户未要求"
+  ]
+}

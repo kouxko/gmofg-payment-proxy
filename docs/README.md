@@ -55,6 +55,8 @@ ADR-006 仅作为决策历史保留；当前实现以 ADR-007 和源码为准。
 
 ## 测试与发布
 
+- [快速配置验证索引与模板](testing/quick-validations/README.md)：用于证书、URL、Host、Port、TLS/mTLS
+  和临时 Proxy 配置的分层观察、清理记录与复测，不替代正式任务验收。
 - [可复用测试证据索引](testing/evidence/README.md)：按任务和用例查询测试资源、步骤、结果与派生关系。
 - [发布级验证矩阵](testing/release-validation-matrix.md)：固定层级、端口、场景、命令和判定标准。
 - [2026-08-25 App 测试结果](testing/release-validation-results-20260825.md)：最新 release App 测试用例与结果。
