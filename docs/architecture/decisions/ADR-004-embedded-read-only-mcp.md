@@ -1,8 +1,12 @@
 # ADR-004: 本机只读 MCP 信任边界
 
-- Status: Accepted
+- Status: Superseded by [ADR-008](ADR-008-mcp-environment-configuration.md)
 - 日期：2026-08-19
 - Refined by: [ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md)
+
+> 实施阶段说明：ADR-008 已接受新的环境配置方向，但当前运行时仍保持本文定义的 loopback-only、
+> read-only MCP。五个环境配置工具只完成合同登记，待后续 G036 接入 catalog、dispatch、server 与
+> endpoint 后，运行时边界才随实现切换。
 
 ## 决策
 

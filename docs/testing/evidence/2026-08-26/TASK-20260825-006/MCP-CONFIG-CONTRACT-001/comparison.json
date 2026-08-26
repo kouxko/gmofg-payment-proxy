@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "expected": "inputs/expected-results.json",
+  "actual": "actual.json",
+  "checks": [
+    { "name": "application", "match": true },
+    { "name": "mcp", "match": true },
+    { "name": "strict_clippy", "match": true },
+    { "name": "rust_fmt", "match": true },
+    { "name": "architecture_scan", "match": true },
+    { "name": "source_size_scan", "match": true },
+    { "name": "git_diff_check", "match": true },
+    { "name": "adversarial_review", "match": true },
+    { "name": "fixture_snapshots", "match": true },
+    { "name": "patch_manifest", "match": true }
+  ],
+  "mismatches": 0,
+  "result": "PASS"
+}

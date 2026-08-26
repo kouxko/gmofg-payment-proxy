@@ -7,6 +7,7 @@
 
 mod backend;
 mod catalog;
+pub mod environment_contract;
 mod protocol;
 mod query;
 mod resources;
