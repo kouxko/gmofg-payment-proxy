@@ -1,0 +1,12 @@
+[package]
+name = "nuvei-tango-rhai-tests"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+intercept-proxy-domain = { path = "../../../../src-tauri/crates/domain" }
+intercept-proxy-protocol-scripting = { path = "../../../../src-tauri/crates/protocol-scripting" }
+serde_json = "1"
+
+[workspace]

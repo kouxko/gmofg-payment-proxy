@@ -1,0 +1,1 @@
+{"AccptrAuthstnRspn":{"Hdr":{"MsgFct":"FAUP"},"TxRspn":{"Rspn":"APPR","Description":"synthetic response","Metadata":null},"SecurityTrailer":{"MAC":"synthetic-response-mac"}}}

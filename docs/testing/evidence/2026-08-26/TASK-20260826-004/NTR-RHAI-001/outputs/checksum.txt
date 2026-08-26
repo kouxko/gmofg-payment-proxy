@@ -1,0 +1,3 @@
+0595af171e20ae9eee21da42a8327971c99689a278cab6ffd7612ba20a4049ea  nuvei-tango-json-rhai-1.0.0.zip
+
+The builder was run twice consecutively. Both runs and both independent shasum commands returned the same digest.
