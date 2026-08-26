@@ -7,7 +7,7 @@
 - 任务日期：2026-08-25
 - 创建时间：2026-08-25 21:58:53 +08:00
 - 开始时间：2026-08-26 00:05:01 +08:00
-- 最后更新时间：2026-08-26 08:41:43 +08:00
+- 最后更新时间：2026-08-26 11:36:39 +08:00
 - 完成时间：未完成
 - 创建路径：`docs/tasks/pending/2026-08-25/mcp-environment-configuration.md`
 - 归档路径：未归档
@@ -142,6 +142,7 @@ Rules、Encode、Server 响应或业务结果成功。每个层级独立报告�
 | 8 | 选择 C | 候选有效至 App 退出，但一次性且状态/指纹变化立即失效。 |
 | 9–10 | 所有 IP、无需验证；随后选择 A | 所有接口开放且不做客户端身份认证；技术验证、预览和确认继续保留。 |
 | 11 | 选择 B | 继续使用明文 HTTP，不增加传输 TLS。 |
+| 12 | 用户明确“不要证据” | G034 不创建单次执行证据目录、不更新测试证据索引；保留源码测试、独立审查和本地提交，任务整体继续进行中。 |
 
 ## 未确认事项
 
@@ -168,7 +169,7 @@ Rules、Encode、Server 响应或业务结果成功。每个层级独立报告�
 | ID | 小任务 | 依赖 | 可并行 | 负责人 | 状态 | 验收标准 | Commit | 小任务审查 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | T1 | 架构计划、ADR、安全边界和行为回归锁 | 无 | 否 | 主 Agent + 独立 Architect/Critic | 已完成 | 写入权限、候选、验证、原子性和明文远程风险形成可测合同 | 未创建 | 已执行；Architect16 与 Critic7 均 APPROVE，P0/P1/P2 为 0 |
-| T2 | Domain/Application 完整环境候选模型与生命周期 | T1 | 否 | 主 Agent | 进行中 | 类型化候选、预算、一次性令牌、失效和清理测试通过 | `a185cc8d4300e3bd5fabff82c045896543964642`（G033） | G033 合同切片已执行三轮独立复审；最终 APPROVE，P0/P1/P2 为 0 |
+| T2 | Domain/Application 完整环境候选模型与生命周期 | T1 | 否 | 主 Agent | 已完成 | 类型化候选、预算、一次性令牌、失效和清理测试通过 | `a185cc8d4300e3bd5fabff82c045896543964642`（G033）；`62c081441194519c80952ff7e46a47fcaebe4630`（G034） | G033、G034 均完成独立整体复审；最终 APPROVE，P0/P1/P2 为 0 |
 | T3 | 分层静态、证书、网络和 TLS 验证编排 | T2 | 否 | 主 Agent | 待实现 | 六层结果独立、失败 fail-closed、无业务报文 | 未创建 | 执行，涉及 TLS/协议边界 |
 | T4 | Workspace 完整链路原子应用与回滚 | T2、T3 | 否 | 主 Agent | 待实现 | 所有资源全成或全败，运行 Listener 拒绝，失败无残留 | 未创建 | 执行，涉及持久化和跨资源原子性 |
 | T5 | MCP 全接口明文传输与写工具合同 | T2、T3、T4 | 否 | 主 Agent | 待实现 | 远程可调用、无认证、严格 Schema/预算、注解和错误合同正确 | 未创建 | 执行，涉及远程公共接口和安全 |
@@ -331,6 +332,27 @@ Rules、Encode、Server 响应或业务结果成功。每个层级独立报告�
 - 本地实现提交：`a185cc8d4300e3bd5fabff82c045896543964642`。
 - CI：未执行；未 Push。
 
+### 2026-08-26 11:36:39 +08:00 — G034 Application 候选生命周期完成
+
+- 先以 50 项外部 RED 合同锁定候选状态、容量、一次性 token、FIFO apply、取消、shutdown、终态保留、
+  私密材料清理和进程内生命周期；独立审查发现公开 transition 可伪造、shutdown drain 丢通知、诊断
+  可携带秘密和 public `target_key` 漂移后，新增 6 项回归并把测试机械迁入 crate 内。
+- Application 现在唯一持有 candidate registry；验证完成、worker claim、invalidate 和 shutdown transition
+  均为 crate-sealed。公开 DTO 只允许序列化，不能从外部伪造 snapshot、diagnostic 或 committed receipt。
+- New target 内部容量 identity 使用 trim 后 exact UTF-8 十六进制，保持大小写和 NFC/NFD 差异；公开
+  `target_key` 继续符合 G033 权威合同 `new:store lab`，且不信任 wire 中提供的 key。
+- apply queue 为 Application-owned FIFO；未完成 work guard 的 Drop/panic 以 `COMMIT_FAILED` 收尾；
+  shutdown drain 在 registry 锁内发布计数，并由确定性双 worker 逆序测试覆盖丢通知窗口。
+- token 与未提交材料使用现有 workspace `zeroize`；token 消耗标记保留至终态淘汰；diagnostic message
+  仅由注册状态码映射到稳定安全文本，私钥、密码、PEM 和 AQID 不进入 status、Debug 或序列化诊断。
+- 三轮独立整体复审最终结论：代码审查 `APPROVE`、验证 `VERIFIED`，P0/P1/P2 均为 0。
+- staged-only 临时 worktree 验证：lifecycle 56/56、Application 305/305、strict Clippy 和 Rust fmt 全部通过；
+  临时 worktree 已删除。
+- 本地实现提交：`62c081441194519c80952ff7e46a47fcaebe4630`。
+- 按用户明确要求，本切片不创建 `MCP-CONFIG-CANDIDATE-001` 证据目录、不更新证据索引；这不改变
+  G035–G038 及任务整体仍待实现的状态。
+- CI：未执行；未 Push。
+
 ## 修改文件
 
 - `docs/tasks/pending/2026-08-25/mcp-environment-configuration.md`
@@ -342,6 +364,11 @@ Rules、Encode、Server 响应或业务结果成功。每个层级独立报告�
 - `scripts/check-architecture-docs.mjs`
 - `scripts/check-architecture-docs.test.mjs`
 - `src-tauri/crates/application/src/environment_configuration/**`
+- `src-tauri/crates/application/src/facade/environment_candidates.rs`
+- `src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle.rs`
+- `src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/**`
+- `src-tauri/crates/application/Cargo.toml`
+- `src-tauri/Cargo.lock`
 - `src-tauri/crates/application/src/lib.rs`
 - `src-tauri/crates/application/tests/environment_configuration_contract.rs`
 - `src-tauri/crates/application/tests/environment_configuration_document_contract.rs`
@@ -372,8 +399,10 @@ Rules、Encode、Server 响应或业务结果成功。每个层级独立报告�
 - 任务登记：PASS。
 - T1 架构计划与回归合同：PASS；Architect16/Critic7 双 `APPROVE`，P0/P1/P2 为 0。
 - G033 合同、DTO、Schema 与回归锁：PASS；第三轮独立审查 `APPROVE`，P0/P1/P2 为 0。
+- G034 Application 候选生命周期：PASS；56 项 focused 与 Application 305 项全绿，第三轮独立审查
+  `APPROVE` / `VERIFIED`，P0/P1/P2 为 0。
 - 运行时写工具接入：未开始；五个工具仍未进入 active catalog/dispatch/server/backend。
-- 候选生命周期、租约、验证、原子提交和全接口传输：未完成，继续后续 Goal。
+- 候选生命周期已完成；租约、分层验证、原子提交和全接口传输未完成，继续后续 Goal。
 - 整体对抗审查：未执行。
 
 ## 测试结果
@@ -381,6 +410,8 @@ Rules、Encode、Server 响应或业务结果成功。每个层级独立报告�
 - 任务 ID 唯一性、README 唯一入口、路径、必填字段、章节和 diff：PASS。
 - 架构规划审查：Architect16 与 Critic7 均 `APPROVE`；最终 revision 16 无待解决 P0/P1/P2。
 - Application：211 个单元测试及 14/7/5/12 个合同/集成测试全部通过，共 249/249。
+- G034 staged-only：candidate lifecycle 56/56；Application all-targets/all-features 305/305；strict
+  Clippy `-D warnings`、Rust fmt、architecture、source-size、`git diff --check` 全部通过。
 - MCP：31/31 相关测试通过；现有 read-tool 256 KiB 输入、8 MiB 输出、8 秒 deadline 未改变。
 - strict Clippy（Application + Tauri all-targets/all-features，`-D warnings`）、Rust fmt、architecture、
   source-size 与 `git diff --check`：PASS。
@@ -395,6 +426,6 @@ Rules、Encode、Server 响应或业务结果成功。每个层级独立报告�
 
 ## 完成总结
 
-未完成。任务登记、T1 架构共识和 G033 合同/DTO/Schema/回归锁已经完成并形成可复现证据；下一步
-进入 G034 候选生命周期。后续仍需完成租约、验证、原子提交、全接口 MCP 接入、完整 App 证据、
-整体对抗审查和归档。
+未完成。任务登记、T1 架构共识、G033 合同/DTO/Schema/回归锁和 G034 Application 候选生命周期
+已经完成；下一步进入 G035 分层验证与租约编排。后续仍需完成原子提交、全接口 MCP 接入、完整 App
+验证、整体对抗审查和归档。G034 单次执行证据按用户明确要求未创建。
