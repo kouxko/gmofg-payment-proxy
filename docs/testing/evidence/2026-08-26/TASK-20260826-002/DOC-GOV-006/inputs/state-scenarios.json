@@ -1,0 +1,144 @@
+{
+  "aggregation": [
+    {
+      "id": "direct_tls_verified_cleanup_na",
+      "lifecycle": "FINAL",
+      "target": "VERIFIED",
+      "prerequisites": ["VERIFIED", "VERIFIED", "N/A"],
+      "cleanup": "N/A",
+      "any_action": true,
+      "expected": "VERIFIED"
+    },
+    {
+      "id": "split_segments_do_not_prove_full_path",
+      "lifecycle": "FINAL",
+      "target": "NOT_RUN",
+      "prerequisites": ["VERIFIED", "VERIFIED"],
+      "cleanup": "VERIFIED",
+      "any_action": true,
+      "expected": "INCONCLUSIVE"
+    },
+    {
+      "id": "attempted_full_path_without_causal_link",
+      "lifecycle": "FINAL",
+      "target": "INCONCLUSIVE",
+      "prerequisites": ["VERIFIED", "VERIFIED"],
+      "cleanup": "VERIFIED",
+      "any_action": true,
+      "expected": "INCONCLUSIVE"
+    },
+    {
+      "id": "verified_target_with_cleanup_failure",
+      "lifecycle": "FINAL",
+      "target": "VERIFIED",
+      "prerequisites": ["VERIFIED"],
+      "cleanup": "FAILED",
+      "any_action": true,
+      "expected": "FAILED"
+    },
+    {
+      "id": "recovered_partial_execution",
+      "lifecycle": "FINAL",
+      "target": "INCONCLUSIVE",
+      "prerequisites": ["VERIFIED", "INCONCLUSIVE"],
+      "cleanup": "INCONCLUSIVE",
+      "any_action": true,
+      "expected": "INCONCLUSIVE"
+    },
+    {
+      "id": "final_without_any_validation_action",
+      "lifecycle": "FINAL",
+      "target": "NOT_RUN",
+      "prerequisites": [],
+      "cleanup": "N/A",
+      "any_action": false,
+      "expected": "NOT_RUN"
+    },
+    {
+      "id": "running_record_has_no_final_result",
+      "lifecycle": "RUNNING",
+      "target": "VERIFIED",
+      "prerequisites": ["VERIFIED"],
+      "cleanup": "N/A",
+      "any_action": true,
+      "expected": null
+    }
+  ],
+  "transitions": [
+    {"from": "RESERVED", "to": "RUNNING", "allowed": true},
+    {"from": "RESERVED", "to": "FINAL", "allowed": true},
+    {"from": "RUNNING", "to": "FINAL", "allowed": true},
+    {"from": "FINAL", "to": "FINAL", "allowed": false},
+    {"from": "RUNNING", "to": "RESERVED", "allowed": false},
+    {"from": "FINAL", "to": "RUNNING", "allowed": false}
+  ],
+  "routing": [
+    {
+      "id": "existing_task_before_qv",
+      "existing_task": true,
+      "entry_conditions_met": true,
+      "qv_active": false,
+      "upgrade_triggered": false,
+      "expected": "USE_EXISTING_TASK_NO_QV"
+    },
+    {
+      "id": "entry_condition_failed_without_task",
+      "existing_task": false,
+      "entry_conditions_met": false,
+      "qv_active": false,
+      "upgrade_triggered": false,
+      "expected": "CREATE_TASK_NO_QV"
+    },
+    {
+      "id": "valid_new_quick_validation",
+      "existing_task": false,
+      "entry_conditions_met": true,
+      "qv_active": false,
+      "upgrade_triggered": false,
+      "expected": "CREATE_QV"
+    },
+    {
+      "id": "active_qv_triggers_upgrade",
+      "existing_task": false,
+      "entry_conditions_met": true,
+      "qv_active": true,
+      "upgrade_triggered": true,
+      "expected": "FINALIZE_QV_THEN_CREATE_OR_REUSE_TASK"
+    }
+  ],
+  "allocation": {
+    "existing_ids": ["QV-20260826-001"],
+    "contenders": ["agent-a", "agent-b"],
+    "expected_allocations": ["QV-20260826-002", "QV-20260826-003"]
+  },
+  "repeat_execution": {
+    "original_lifecycle": "FINAL",
+    "replay_requested": true,
+    "expected": "NEW_QV_WITH_DERIVED_FROM"
+  },
+  "file_state": {
+    "mechanism": "temporary directories, atomic mkdir lock, separate processes, persisted metadata and index JSON",
+    "inactive_runners": [
+      {
+        "session_id": "original-reserved",
+        "lifecycle_at_exit": "RESERVED",
+        "heartbeat": "stale",
+        "recovery_session_id": "recovery-reserved",
+        "expected_original_runner_write": "REJECTED"
+      },
+      {
+        "session_id": "original-running",
+        "lifecycle_at_exit": "RUNNING",
+        "heartbeat": "stale",
+        "recovery_session_id": "recovery-running",
+        "expected_finalizer_results": ["REJECTED", "SUCCESS"]
+      }
+    ],
+    "expected": {
+      "concurrent_allocations": ["QV-20260826-002", "QV-20260826-003"],
+      "recovery_owner_persisted_to_metadata_and_index": true,
+      "cleanup_runs_without_lock": true,
+      "repeat_execution": "NEW_QV_WITH_DERIVED_FROM"
+    }
+  }
+}
