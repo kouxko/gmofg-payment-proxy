@@ -3,12 +3,12 @@
 ## 任务信息
 
 - 任务 ID：`TASK-20260826-004`
-- 状态：已阻塞
+- 状态：已完成
 - 任务日期：2026-08-26
 - 创建时间：2026-08-26 16:12:47 +08:00
 - 开始时间：2026-08-26 16:18:08 +08:00
-- 最后更新时间：2026-08-26 16:37:44 +08:00
-- 完成时间：N/A
+- 最后更新时间：2026-08-26 16:54:53 +08:00
+- 完成时间：2026-08-26 16:54:53 +08:00
 - 创建路径：`docs/tasks/pending/2026-08-26/nuvei-tango-rhai-read-only-package.md`
 - 归档路径：`docs/tasks/completed/2026-08-26/nuvei-tango-rhai-read-only-package.md`
 - 关键词：Nuvei、Tango、Socket、Rhai、协议包、ZIP、Python parity、只读解析
@@ -46,6 +46,21 @@
 - 2026-08-26：用户要求先规划，本次不实现、不生成 ZIP。
 - 2026-08-26 16:14:43 +08:00：用户明确 Rhai 版不脱敏。该变更替代原“展示与 Python 掩码结果一致”
   的验收项；Python 继续作为 Frame、字段结构、错误和 Encode 的 oracle，JSON 展示改为原文验收。
+- 2026-08-26 16:54:53 +08:00：用户明确最终验收口径为 Python 与 Rhai 对同一输入的输出一致即成功，
+  并要求归档。该确认替代真实 Proxy 导入、启用、Listener 与交易必须 PASS 的原完成门禁。
+
+## 需求变更与重新验收
+
+- 原需求：除 Python parity 外，还要求真实 Proxy 导入、启用、Listener 和三组实际 Exchange 全部 PASS。
+- 变化内容：最终成功标准收敛为 Python 与 Rhai 对相同输入的 Frame decision、六字段、错误结果和
+  Encode 输出一致；真实链路不再是本任务完成门禁。
+- 变化原因与确认：用户于 2026-08-26 16:54:53 +08:00 明确“认为和 python 输入输出一样测试就算是成功了”。
+- 影响范围：原验收项 6、`NTR-005` 的真实链路完成要求及“已阻塞”状态失效；已完成的包实现、
+  Python oracle、包级 Host runtime 测试、确定性 ZIP 和证据不变。
+- 新验收项：`NTR-RHAI-001` 的 Python/Rhai 同输入输出对照、6/6 包级测试、只读 Encode 与失败路径、
+  确定性 ZIP 全部 PASS 即完成。
+- 保留事实：`NTR-RHAI-002` 仍如实记录为 NOT_RUN，仅作为未执行的真实链路观察，不改写为 PASS，
+  也不影响本任务按新口径完成。
 
 ## 需求就绪检查
 
@@ -73,7 +88,7 @@
 | NTR-002 | 实现 Frame、Decode、原文 JSON Display | 已完成；JSON 字段名和值全部保留，无 `[redacted]` 或其他替换 |
 | NTR-003 | 实现只读 Encode | 已完成；未修改时 byte-exact，六字段修改/删除均 fail-closed |
 | NTR-004 | 构建确定性 ZIP | 已完成；连续两次 SHA-256 相同，ZIP 通过真实 Host 导入编译执行 |
-| NTR-005 | 真实双向 Exchange 与归档 | 已阻塞；当前没有 Proxy 写入控制面或授权测试 App，真实用例 NOT_RUN |
+| NTR-005 | 按最终 Python parity 口径归档 | 已完成；真实链路由用户确认不再是完成门禁，`NTR-RHAI-002` 保留 NOT_RUN |
 
 ## 测试计划与最终验收
 
@@ -82,7 +97,8 @@
 3. 未修改 Encode 输出必须与输入 Frame 逐字节相同。
 4. 六字段逐一修改、删除、context 篡改和跨方向复用必须与 Python 一样失败，线路输出 0 B。
 5. 覆盖 TCP 分段、粘包、长度边界、非法 sequence、JSON 语法/顶层结构；非法 UTF-8与重复 key 标记 N/A。
-6. ZIP 导入、启用、Listener 双向运行以及 1602/647、1602/914、1322/896 B 实际 Exchange 全部 PASS。
+6. 最终验收以 `NTR-RHAI-001` 的 Python/Rhai 同输入输出对照、6/6 包级测试和确定性 ZIP 全部 PASS；
+   ZIP 真实导入、Listener 双向运行及实际交易不再要求。
 7. 除已确认的“Rhai 展示不脱敏”差异外，任一非排除项输入输出与 Python 不一致，任务不验收、不交付 ZIP。
 
 ## 文档、证据和提交
@@ -106,6 +122,9 @@
 - 2026-08-26 16:37:44 +08:00：真实链路检查确认 `10.0.28.85:8765` 只提供 external-package
   WebSocket，当前主机没有本地 Listener 或 ADB 设备，MCP 仍为只读，无法导入/启用 Rhai 包并由授权
   App 发起交易。`NTR-RHAI-002` 保持 NOT_RUN，任务转为已阻塞，不归档为完成。
+- 2026-08-26 16:54:53 +08:00：用户调整最终验收口径并要求归档；重新确认 `NTR-RHAI-001` 已满足
+  Python/Rhai 同输入输出一致、6/6 包级测试和确定性 ZIP，任务转为已完成。`NTR-RHAI-002` 的
+  NOT_RUN 历史事实保留，但不再作为完成门禁。
 
 ## 实施结果
 
@@ -120,13 +139,12 @@
   `examples/protocol-packages/nuvei_tango_rhai/dist/nuvei-tango-json-rhai-1.0.0.zip`。
 - SHA-256：`0595af171e20ae9eee21da42a8327971c99689a278cab6ffd7612ba20a4049ea`。
 
-### 未完成与阻塞
+### 非完成门禁与保留事实
 
 - 未在 `10.0.28.85` 的真实 Proxy UI 导入或启用 Rhai ZIP。
 - 未绑定真实 Nuvei Listener，未由授权测试 App 产生三组当前 Exchange。
 - `TASK-20260826-003 / NUVEI-PKG-003` 的历史真实交易只作为派生背景，不作为本任务 PASS。
-- 解除条件：取得真实 Proxy UI 或等价已授权写入控制面，并连接授权测试 App；按
-  `NTR-RHAI-002/steps/replay.md` 执行后才能完成验收与归档。
+- 上述事实由 `NTR-RHAI-002` 保留为 NOT_RUN；按用户最终确认，它们不影响本任务成功与归档。
 
 ## 测试与验收结果
 
@@ -138,7 +156,7 @@
 | 六字段修改/删除/context/跨方向失败路径 | PASS | `NTR-RHAI-001` |
 | 1602/647、1602/914、1322/896 B 合成双向运行 | PASS | `NTR-RHAI-001` |
 | ZIP 确定性、安全读取、导入编译和执行 | PASS | 两次同 SHA-256；`NTR-RHAI-001` |
-| 真实 Proxy 导入、启用、Listener 与交易 | NOT_RUN | `NTR-RHAI-002` |
+| 真实 Proxy 导入、启用、Listener 与交易 | NOT_RUN（非完成门禁） | `NTR-RHAI-002` |
 | CI | N/A | 未获授权触发远程 CI |
 
 ## 修改文件与附加文件
@@ -158,8 +176,8 @@
 | 文档 | 结论 |
 | --- | --- |
 | 包 README | 需要更新；已新增范围、线路合同、构建、导入、启用、复测和限制 |
-| `docs/README.md` | 无需更新内容；pending 入口保持有效，任务尚未完成 |
-| `docs/tasks/README.md` | 无需更新；任务未完成，不得加入完成索引 |
+| `docs/README.md` | 需要更新；归档时删除 pending 入口 |
+| `docs/tasks/README.md` | 需要更新；归档时加入 2026-08-26 完成索引 |
 | `docs/testing/evidence/README.md` | 需要更新；已登记 PASS 包级证据和 NOT_RUN 真实链路证据 |
 | 架构、需求、MCP、前端和发布文档 | 无需更新；未修改公共合同或产品代码 |
 
@@ -167,4 +185,12 @@
 
 未执行独立对抗审查。任务为隔离的低优先级示例包，不修改公共合同或产品源码；风险由真实 Host runtime
 编译执行、Python parity、逐字段 fail-closed、Clippy `-D warnings`、确定性 ZIP 和证据一致性检查覆盖。
-任务当前也未进入完成归档门禁。
+用户确认的最终验收口径已由 `NTR-RHAI-001` 完整覆盖；真实链路 NOT_RUN 已显式保留且不被误报为 PASS。
+
+## 完成总结
+
+- 交付 `nuvei-tango-json-rhai@1.0.0` 源码、Schema、构建脚本、测试和确定性 ZIP。
+- `NTR-RHAI-001` 证明 Python 与 Rhai 同输入输出一致，6/6 包级 Host runtime 测试全部 PASS。
+- ZIP SHA-256：`0595af171e20ae9eee21da42a8327971c99689a278cab6ffd7612ba20a4049ea`。
+- 实现提交：`a984304`。
+- `NTR-RHAI-002` 保持 NOT_RUN，不作为最终成功声明，也不再阻塞归档。
