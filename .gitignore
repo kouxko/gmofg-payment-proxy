@@ -34,6 +34,8 @@ __pycache__/
 # Local agent/runtime state and generated scratch assets
 /.omx/
 /tmp/
+/.task-manager.lock/
+/.task-manager.abandoned.*/
 
 # Local diagnostics and launch helpers
 /scripts/run-latest-app.sh

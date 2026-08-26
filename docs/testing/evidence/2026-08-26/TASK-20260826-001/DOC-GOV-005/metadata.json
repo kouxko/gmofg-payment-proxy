@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260826-001",
+  "case_id": "DOC-GOV-005",
+  "executed_at": "2026-08-26T10:37:12+08:00",
+  "result": "PASS",
+  "tested_objects": [
+    "AGENTS.md",
+    ".gitignore",
+    "docs/README.md",
+    "docs/tasks/completed/2026-08-26/agent-workflow-governance-optimization.md"
+  ],
+  "proof_basis": [
+    "current authoritative content",
+    "required section and rule presence",
+    "version-management terminology absent outside the code-submission section",
+    "priority classification and workflow checks",
+    "root task lock paths excluded as local runtime state",
+    "task path and README relationship"
+  ],
+  "tested_objects_changed_during_test": false,
+  "resources": [
+    "resources/requirements.md",
+    "steps/replay.md",
+    "outputs/static-check.txt"
+  ],
+  "replay": "Follow steps/replay.md from the repository root"
+}

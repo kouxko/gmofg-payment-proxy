@@ -1,0 +1,25 @@
+72:### 4.1 需求就绪门禁
+89:### 4.2 问题与根因分析
+136:### 5.3 任务优先级与流程等级
+161:### 5.4 单工作区全局任务锁
+289:上述自然语言锁协议是统一锁工具落地前的可执行合同，不得由各 Agent 自行简化或发明不兼容变体。
+388:已经受影响的高层行为。最低验证要求如下：
+152:高优先级执行完整流程：历史读取、任务登记、需求就绪、适用的根因分析、最小与最优方案比较、任务
+155:低优先级执行必要流程：任务登记、需求确认、最小改动分析、针对性验证、适用的文档同步和日期归档
+159:条件开始适用，无论是否在示例中重复列出，都必须立即停止并重新确认优先级。
+586:全部小任务完成后，高优先级任务必须进行一次整体对抗审查，作为完成和归档的强制门禁；低优先级
+37:/.task-manager.lock/
+38:/.task-manager.abandoned.*/
+.gitignore:37:/.task-manager.lock/\t.task-manager.lock/
+.gitignore:38:/.task-manager.abandoned.*/\t.task-manager.abandoned.replay/
+57:- 具体示例：低优先级文档修正若调查中发现公共接口说明与实现合同冲突，必须停止原流程、重新确认
+requirement_ready_gate=PASS
+root_cause_process=PASS
+priority_workflow=PASS
+version_terms_outside_submission=PASS
+task_lock_runtime_exclusion=PASS
+task_registration=PASS
+metadata_json=PASS
+tested_objects_changed_during_test=false
+trailing_whitespace=PASS
+result=PASS
