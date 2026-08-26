@@ -37,8 +37,18 @@ pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket
 pub use capacity::CapacityLedger;
 pub use configuration::*;
 pub use environment_configuration::{
-    EnvironmentConfigurationCandidateV1, EnvironmentTerminalResult,
+    DiagnosticSeverity, EnvironmentApplyQueuedResult, EnvironmentApplyTaskId,
+    EnvironmentCancelResult, EnvironmentCancelStatus, EnvironmentCandidateCreateResult,
+    EnvironmentCandidateEpoch, EnvironmentCandidateId, EnvironmentCandidateLifecycleError,
+    EnvironmentCandidateMetrics, EnvironmentCandidatePublicSnapshot, EnvironmentCandidateStatus,
+    EnvironmentCandidateStatusResult, EnvironmentConfigurationCandidateV1,
+    EnvironmentConfirmationToken, EnvironmentDiagnostic, EnvironmentDiagnosticScope,
+    EnvironmentStatusCode, EnvironmentTerminalResult, EnvironmentValidationLayerResult,
     parse_environment_configuration_candidate_v1,
+};
+#[cfg(test)]
+pub(crate) use environment_configuration::{
+    EnvironmentApplyWork, EnvironmentCandidatePolicy, EnvironmentCandidateRegistry,
 };
 pub use error::{AppError, AppErrorDiagnosticViewModel, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};

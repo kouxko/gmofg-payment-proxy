@@ -31,6 +31,7 @@ mod breakpoints;
 mod capacity;
 mod diagnostic_report;
 mod diagnostics;
+mod environment_configuration_candidate_lifecycle;
 mod events;
 mod external_package_lifecycle;
 mod listener_certificates;
