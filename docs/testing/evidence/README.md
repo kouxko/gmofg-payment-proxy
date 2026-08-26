@@ -7,6 +7,9 @@
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260826-003 | NUVEI-PKG-003 | 验证 external Document int wire 修复及真实上下行 split/decode/display/encode 逐字节保持 | PASS | TASK-20260826-003 | NUVEI-PKG-002 | [父证据](2026-08-26/TASK-20260826-003/NUVEI-PKG-002/README.md) | [证据](2026-08-26/TASK-20260826-003/NUVEI-PKG-003/README.md) |
+| TASK-20260826-003 | NUVEI-PKG-002 | 验证 Python 外部包连接与 RPC 结构化诊断日志不泄露报文或字段内容 | PASS | TASK-20260826-003 | NUVEI-PKG-001 | [父证据](2026-08-26/TASK-20260826-003/NUVEI-PKG-001/README.md) | [证据](2026-08-26/TASK-20260826-003/NUVEI-PKG-002/README.md) |
+| TASK-20260826-003 | NUVEI-PKG-001 | 验证 Nuvei Tango 长度前缀 JSON 的只读 Python 外部包、掩码和逐字节保持 | PASS | 无 | 无 | 无 | [证据](2026-08-26/TASK-20260826-003/NUVEI-PKG-001/README.md) |
 | TASK-20260826-002 | DOC-GOV-006 | 验证快速配置验证分流、生命周期、分层结论、清理门禁和正式任务升级合同 | PASS | 无 | 无 | 无 | [证据](2026-08-26/TASK-20260826-002/DOC-GOV-006/README.md) |
 | TASK-20260826-001 | DOC-GOV-005 | 验证需求就绪、根因分析、高低优先级、风险分级测试和锁目录规则 | PASS | 无 | 无 | 无 | [证据](2026-08-26/TASK-20260826-001/DOC-GOV-005/README.md) |
 | TASK-20260825-006 | MCP-CONFIG-CONTRACT-001 | 验证环境配置 v1 DTO、严格 Schema、公共 literal、fixture、终态合同和 active MCP 隔离 | PASS | 无 | 无 | 无 | [证据](2026-08-26/TASK-20260825-006/MCP-CONFIG-CONTRACT-001/README.md) |

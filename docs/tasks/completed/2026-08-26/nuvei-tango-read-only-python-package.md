@@ -3,15 +3,15 @@
 ## 任务信息
 
 - 任务 ID：`TASK-20260826-003`
-- 状态：进行中
+- 状态：已完成
 - 任务日期：2026-08-26
 - 创建时间：2026-08-26 14:25:34 +08:00
 - 开始时间：2026-08-26 14:25:34 +08:00
-- 最后更新时间：2026-08-26 15:39:13 +08:00
-- 完成时间：N/A
+- 最后更新时间：2026-08-26 15:42:02 +08:00
+- 完成时间：2026-08-26 15:42:02 +08:00
 - 创建路径：`docs/tasks/pending/2026-08-26/nuvei-tango-read-only-python-package.md`
-- 归档路径：`docs/tasks/completed/<实际完成日期>/nuvei-tango-read-only-python-package.md`
-- 关联提交：无
+- 归档路径：`docs/tasks/completed/2026-08-26/nuvei-tango-read-only-python-package.md`
+- 关联提交：`ca6cf66`（实现、测试与证据）；本次任务关闭提交（归档与索引）
 - 关键词：Nuvei、Tango、Socket、Python、外部协议包、JSON、只读解析、字节保持
 - 任务优先级：低。用户明确这是小任务；改动隔离在新增 Python 示例包内，只读、可逆且不改变
   Proxy 公共合同或生产源码。
@@ -156,7 +156,7 @@ N/A。用户明确这是低优先级小任务且无须对抗审查。边界输�
 - `docs/testing/evidence/2026-08-26/TASK-20260826-003/NUVEI-PKG-002/`
 - `docs/testing/evidence/2026-08-26/TASK-20260826-003/NUVEI-PKG-003/`
 - `docs/testing/evidence/README.md`
-- `docs/README.md`
+- `docs/tasks/README.md`
 - 本任务文档
 
 ### 测试结果
@@ -177,5 +177,6 @@ N/A。用户明确这是低优先级小任务且无须对抗审查。边界输�
 
 ### 当前总结
 
-Python 外部包实现、RPC wire 修复、自动化和真实双向 Exchange 均已完成；等待本任务独立提交后移动
-completed 归档并更新索引。共享工作区的其他 Agent 修改不纳入本任务提交。
+Python 外部包实现、RPC wire 修复、自动化和真实双向 Exchange 均已完成。实现、测试与证据已由
+`ca6cf66` 提交；任务已移动 completed 归档并更新完成与测试索引。共享工作区的其他 Agent 修改未纳入
+本任务提交。
