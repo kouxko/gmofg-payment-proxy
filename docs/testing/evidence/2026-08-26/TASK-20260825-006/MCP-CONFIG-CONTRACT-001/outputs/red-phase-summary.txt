@@ -1,0 +1,17 @@
+Source: main-agent collection from the test-engineer RED run.
+Exact execution time: not separately retained.
+Complete raw stdout/stderr: not separately retained; this file does not reconstruct it.
+
+environment_configuration_negative_contract:
+  4 passed, 1 failed
+  Failure: nested unknown field was accepted instead of rejected.
+
+environment_configuration_document_contract:
+  6 passed, 1 failed
+  Failure: unknown field in a terminal result was accepted instead of rejected.
+
+environment_configuration_schema_contract:
+  4 passed, 3 failed
+  Failures: published JSON Schema and closed public literal coverage were incomplete.
+
+RED conclusion: PASS as a TDD red gate because tests failed only on the intended missing contracts.

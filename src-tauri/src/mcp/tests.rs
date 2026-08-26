@@ -10,6 +10,8 @@ use super::{
     server::start_test_server,
 };
 
+mod environment_configuration_contract;
+mod environment_configuration_schema_contract;
 mod protocol_contract;
 
 #[derive(Debug)]

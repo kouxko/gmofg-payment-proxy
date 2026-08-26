@@ -1,5 +1,6 @@
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const docsRoot = path.join(repositoryRoot, "docs");
@@ -25,13 +26,38 @@ const mermaidDocuments = new Set([
 ]);
 
 const decisions = new Map([
-  ["decisions/ADR-001-http-socket-boundary.md", "Accepted"],
-  ["decisions/ADR-002-protocol-packages-http.md", "Accepted"],
-  ["decisions/ADR-003-application-zip-ownership.md", "Accepted"],
-  ["decisions/ADR-004-embedded-read-only-mcp.md", "Accepted"],
-  ["decisions/ADR-005-runtime-evidence-and-reproduction-report.md", "Accepted"],
-  ["decisions/ADR-006-unified-exchange-observation.md", "Superseded"],
-  ["decisions/ADR-007-exchange-pipeline-runtime-boundary.md", "Accepted"],
+  ["decisions/ADR-001-http-socket-boundary.md", { status: "Accepted" }],
+  ["decisions/ADR-002-protocol-packages-http.md", { status: "Accepted" }],
+  ["decisions/ADR-003-application-zip-ownership.md", { status: "Accepted and implemented" }],
+  [
+    "decisions/ADR-004-embedded-read-only-mcp.md",
+    {
+      status: "Superseded by [ADR-008](ADR-008-mcp-environment-configuration.md)",
+      supersededBy: "decisions/ADR-008-mcp-environment-configuration.md",
+    },
+  ],
+  ["decisions/ADR-005-runtime-evidence-and-reproduction-report.md", { status: "Accepted" }],
+  [
+    "decisions/ADR-006-unified-exchange-observation.md",
+    {
+      status: "Superseded by [ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md) on 2026-08-24",
+      supersededBy: "decisions/ADR-007-exchange-pipeline-runtime-boundary.md",
+    },
+  ],
+  [
+    "decisions/ADR-007-exchange-pipeline-runtime-boundary.md",
+    {
+      status: "Accepted",
+      supersedes: "decisions/ADR-006-unified-exchange-observation.md",
+    },
+  ],
+  [
+    "decisions/ADR-008-mcp-environment-configuration.md",
+    {
+      status: "Accepted; implementation staged",
+      supersedes: "decisions/ADR-004-embedded-read-only-mcp.md",
+    },
+  ],
 ]);
 
 const rootDocuments = [
@@ -168,6 +194,55 @@ function referencedRepositoryPaths(source) {
     .map((match) => match[1]);
 }
 
+function adrIdentifier(name) {
+  return path.basename(name).match(/^(ADR-\d+)/u)?.[1] ?? path.basename(name);
+}
+
+function rejectedAlternativesAreExplicit(source) {
+  const afterHeading = source.match(/^## Alternatives\s*$([\s\S]*)/mu)?.[1] ?? "";
+  const alternatives = afterHeading.split(/^## /mu, 1)[0];
+  return /(?:^|\n)\s*-\s*(?:Rejected(?:：|:)|[^\n]+(?:：|:)\s*拒绝(?:，|,|。|\s))/u.test(alternatives);
+}
+
+export function validateDecisionPolicy(decisionSources, decisionContracts) {
+  const policyFailures = [];
+  for (const [name, contract] of decisionContracts) {
+    const source = decisionSources.get(name);
+    if (source === undefined) continue;
+
+    const statusLines = [...source.matchAll(/^- Status: (.+)$/gmu)].map((match) => match[1]);
+    if (statusLines.length !== 1 || statusLines[0] !== contract.status) {
+      policyFailures.push(`${name}: expected exact Status: ${contract.status}`);
+    }
+    if (contract.status.startsWith("Accepted") && !rejectedAlternativesAreExplicit(source)) {
+      policyFailures.push(`${name}: rejected alternatives are not explicit`);
+    }
+
+    if (contract.supersedes !== undefined) {
+      const predecessor = decisionContracts.get(contract.supersedes);
+      const predecessorId = adrIdentifier(contract.supersedes);
+      const predecessorFile = path.basename(contract.supersedes);
+      const reverseLink = `- Supersedes: [${predecessorId}](${predecessorFile})`;
+      if (!source.split(/\r?\n/u).includes(reverseLink)) {
+        policyFailures.push(`${name}: missing exact reverse link ${reverseLink}`);
+      }
+      if (predecessor?.supersededBy !== name) {
+        policyFailures.push(`${name}: successor relation is not bidirectional with ${contract.supersedes}`);
+      }
+    }
+
+    if (contract.supersededBy !== undefined) {
+      const successor = decisionContracts.get(contract.supersededBy);
+      if (successor?.supersedes !== name) {
+        policyFailures.push(`${name}: superseded relation is not bidirectional with ${contract.supersededBy}`);
+      }
+    }
+  }
+  return policyFailures;
+}
+
+async function main() {
+
 const failures = [];
 const documents = new Map();
 
@@ -252,21 +327,18 @@ for (const name of forbiddenCurrentDocuments) {
   }
 }
 
-for (const [name, expectedStatus] of decisions) {
+const decisionSources = new Map();
+for (const name of decisions.keys()) {
   const absolute = path.join(architectureRoot, name);
   if (!(await exists(absolute))) {
     failures.push(`${name}: required ADR is missing`);
     continue;
   }
   const source = await readFile(absolute, "utf8");
+  decisionSources.set(name, source);
   documents.set(name, source);
-  if (!source.includes(`Status: ${expectedStatus}`)) {
-    failures.push(`${name}: expected Status: ${expectedStatus}`);
-  }
-  if (expectedStatus === "Accepted" && !/Rejected/u.test(source)) {
-    failures.push(`${name}: rejected alternatives are not explicit`);
-  }
 }
+failures.push(...validateDecisionPolicy(decisionSources, decisions));
 
 for (const [name, source] of documents) {
   for (const linked of relativeMarkdownLinks(source)) {
@@ -297,4 +369,12 @@ if (failures.length > 0) {
   console.log(
     `Architecture documentation gate passed (${currentDocuments.length} current documents, ${decisions.size} ADRs, ${mcpDocuments.length} MCP documents).`,
   );
+}
+}
+
+if (
+  process.argv[1] !== undefined
+  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  await main();
 }

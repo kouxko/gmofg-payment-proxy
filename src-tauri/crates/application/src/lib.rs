@@ -15,6 +15,7 @@ mod breakpoints;
 mod capacity;
 mod configuration;
 mod document_security;
+mod environment_configuration;
 mod error;
 mod events;
 mod facade;
@@ -35,6 +36,10 @@ pub use breakpoint_validation::{BreakpointBodyCodecResolver, BreakpointValidator
 pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket};
 pub use capacity::CapacityLedger;
 pub use configuration::*;
+pub use environment_configuration::{
+    EnvironmentConfigurationCandidateV1, EnvironmentTerminalResult,
+    parse_environment_configuration_candidate_v1,
+};
 pub use error::{AppError, AppErrorDiagnosticViewModel, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
 pub use facade::{

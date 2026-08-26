@@ -1,0 +1,17 @@
+[
+  {"name":"http_match_condition_unknown_field","pointer":"/workspace/http_rules/0/conditions/0/Field/unexpected","operation":"add","value":true},
+  {"name":"http_rule_action_unknown_field","pointer":"/workspace/http_rules/0/actions/1/SetJsonField/unexpected","operation":"add","value":true},
+  {"name":"terminal_payload_unknown_field","pointer":"/workspace/http_rules/0/actions/18/Terminal/TruncateResponse/unexpected","operation":"add","value":true},
+  {"name":"truncate_uses_after_bytes","pointer":"/workspace/http_rules/0/actions/18/Terminal/TruncateResponse","operation":"replace","value":{"after_bytes":1}},
+  {"name":"disconnect_uses_bytes","pointer":"/workspace/http_rules/0/actions/19/Terminal/DisconnectDuringUpstreamWrite","operation":"replace","value":{"bytes":1}},
+  {"name":"terminal_alternate_tag","pointer":"/workspace/http_rules/0/actions/18/Terminal","operation":"replace","value":{"truncate_response":{"bytes":1}}},
+  {"name":"terminal_alternate_case","pointer":"/workspace/http_rules/0/actions/9/Terminal","operation":"replace","value":"reject_tls_handshake"},
+  {"name":"weak_network_scalar","pointer":"/workspace/android_network_profiles/0/weak_network","operation":"replace","value":1},
+  {"name":"weak_network_zero_upload_rate","pointer":"/workspace/android_network_profiles/0/weak_network/upload_bytes_per_second","operation":"replace","value":0},
+  {"name":"weak_network_basis_over_10000","pointer":"/workspace/android_network_profiles/0/weak_network/random_loss_basis_points","operation":"replace","value":10001},
+  {"name":"weak_network_nth_zero","pointer":"/workspace/android_network_profiles/0/weak_network/nth_tcp_flag_drops/0/nth","operation":"replace","value":0},
+  {"name":"weak_network_mtu_too_small","pointer":"/workspace/android_network_profiles/0/weak_network/path_mtu/mtu","operation":"replace","value":67},
+  {"name":"weak_network_mss_zero","pointer":"/workspace/android_network_profiles/0/weak_network/path_mtu/mss_clamp","operation":"replace","value":0},
+  {"name":"weak_network_mss_equal_mtu","pointer":"/workspace/android_network_profiles/0/weak_network/path_mtu","operation":"replace","value":{"mtu":1280,"mss_clamp":1280,"mode":"pass"}},
+  {"name":"weak_network_bits_over_64","pointer":"/workspace/android_network_profiles/0/weak_network/corruption/bits_per_packet","operation":"replace","value":65}
+]

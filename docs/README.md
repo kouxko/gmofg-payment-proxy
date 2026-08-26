@@ -13,6 +13,11 @@
 - [需求与验收基线](requirements.md)：产品边界、功能要求和不支持能力。
 - [用户操作说明](user-operation-guide.md)：Workspace、Listener、规则、协议包、抓包、日志和证书操作。
 
+## 待实现任务
+
+- [MCP 对话式完整环境配置](tasks/pending/2026-08-25/mcp-environment-configuration.md)：
+  允许远程 MCP 客户端提交完整 Workspace 环境，分层验证并预览确认后原子应用；按用户确认使用所有 IP、明文 HTTP 且无客户端认证。
+
 ## 架构
 
 - [架构文档入口](architecture/README.md)
@@ -34,6 +39,7 @@
 - [ADR-005：运行证据与复现报告](architecture/decisions/ADR-005-runtime-evidence-and-reproduction-report.md)
 - [ADR-006：统一 Exchange 观测（已被替代）](architecture/decisions/ADR-006-unified-exchange-observation.md)
 - [ADR-007：Exchange/Pipeline 运行边界](architecture/decisions/ADR-007-exchange-pipeline-runtime-boundary.md)
+- [ADR-008：MCP 环境配置合同与分阶段启用](architecture/decisions/ADR-008-mcp-environment-configuration.md)
 
 ADR-006 仅作为决策历史保留；当前实现以 ADR-007 和源码为准。讨论期的 Exchange
 概念代码保存在 [Exchange Pipeline Template](architecture/exchange-pipeline-template/README.md)，它用于解释

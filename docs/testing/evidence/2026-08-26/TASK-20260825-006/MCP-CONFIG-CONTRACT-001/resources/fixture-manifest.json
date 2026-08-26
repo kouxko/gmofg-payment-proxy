@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "source_directory": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1",
+  "snapshot_directory": "resources/active-fixtures/environment_configuration_candidate_v1",
+  "snapshot_method": "byte-preserving apply_patch copy",
+  "files": [
+    {
+      "name": "existing-target-retained-selector.json",
+      "sha256": "c2a32a1181fe044039142f0864408acd67c5db9a30690518d7970d9b4773426e",
+      "purpose": "Valid existing-target rule identity and retained selector contract",
+      "required": true
+    },
+    {
+      "name": "expected-preview.json",
+      "sha256": "368507cfa16bfef8048959f526b006787e01ec6884dba428956abe54d3f3ef07",
+      "purpose": "Expected validation preview document shape",
+      "required": true
+    },
+    {
+      "name": "full-shape.json",
+      "sha256": "2193f511661349a6dff350fa16a0091d7a651e492cb175f356db9c4fd6ce335f",
+      "purpose": "Canonical complete candidate input",
+      "required": true
+    },
+    {
+      "name": "literal-coverage.json",
+      "sha256": "d98e403d75ab714ed2c95c9075a64ccd838d91b63ea68cada3f8475cdac844d7",
+      "purpose": "Closed public literal coverage",
+      "required": true
+    },
+    {
+      "name": "negative-cases.json",
+      "sha256": "d43d4fbf93ca85be55c90b98e6e20e8e709bee74fc4a9cc88172873ec83be2d7",
+      "purpose": "Named invalid candidate mutations and stable failures",
+      "required": true
+    },
+    {
+      "name": "schema.snapshot.json",
+      "sha256": "d6e826c5c7869f3fe0874dbdd1e7c8693729ea7e87e5ac300f99ed1bc932a9f6",
+      "purpose": "Manual published MCP tool and output schema snapshot",
+      "required": true
+    },
+    {
+      "name": "weak-network-null.json",
+      "sha256": "c66dd07b51d522f33e37ee4bf44c28a914065929f16c8b95cc4de6d0542b9f43",
+      "purpose": "Required-present nullable WeakNetwork fields",
+      "required": true
+    }
+  ],
+  "source_snapshot_hash_mismatches": 0,
+  "result": "PASS"
+}
