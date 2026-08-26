@@ -28,6 +28,7 @@ mod certificates;
 mod configuration;
 mod diagnostic_report;
 mod diagnostics;
+mod environment_candidates;
 mod lifecycle;
 mod listener_certificates;
 mod listeners;
@@ -81,6 +82,7 @@ pub struct Application {
     protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
     mutation_gate: tokio::sync::Mutex<()>,
+    environment_candidates: crate::environment_configuration::EnvironmentCandidateRegistry,
 }
 
 /// 应用门面所需的全部、与 UI 无关的依赖。
@@ -136,6 +138,8 @@ impl Application {
             protected_secrets,
             events: dependencies.events,
             mutation_gate: tokio::sync::Mutex::new(()),
+            environment_candidates:
+                crate::environment_configuration::EnvironmentCandidateRegistry::default(),
         }
     }
 

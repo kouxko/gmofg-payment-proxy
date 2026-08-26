@@ -5,6 +5,7 @@
 //! beyond the explicitly accepted existing-target selectors.
 
 mod android;
+mod lifecycle;
 mod listener;
 mod materials;
 mod rules;
@@ -16,12 +17,26 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use android::AndroidNetworkProfileTemplate;
+#[cfg(test)]
+pub(crate) use lifecycle::EnvironmentCandidatePolicy;
+pub use lifecycle::{
+    EnvironmentApplyQueuedResult, EnvironmentApplyTaskId, EnvironmentCancelResult,
+    EnvironmentCancelStatus, EnvironmentCandidateCreateResult, EnvironmentCandidateEpoch,
+    EnvironmentCandidateId, EnvironmentCandidateLifecycleError, EnvironmentCandidateMetrics,
+    EnvironmentCandidatePublicSnapshot, EnvironmentCandidateStatus,
+    EnvironmentCandidateStatusResult, EnvironmentConfirmationToken,
+    EnvironmentValidationLayerResult,
+};
+pub(crate) use lifecycle::{EnvironmentApplyWork, EnvironmentCandidateRegistry};
 use listener::ListenerTemplate;
 use materials::EnvironmentMaterials;
 use rules::{HttpRuleTemplate, ProtocolDocumentRuleTemplate};
-pub use terminal::EnvironmentTerminalResult;
+pub use terminal::{
+    DiagnosticSeverity, EnvironmentDiagnostic, EnvironmentDiagnosticScope, EnvironmentStatusCode,
+    EnvironmentTerminalResult,
+};
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct EnvironmentConfigurationCandidateV1 {
     schema_version: u8,
@@ -76,6 +91,21 @@ pub fn parse_environment_configuration_candidate_v1(
 }
 
 impl EnvironmentConfigurationCandidateV1 {
+    pub(super) fn lifecycle_target(&self) -> EnvironmentAdmittedTarget {
+        match &self.target {
+            EnvironmentTarget::Existing {
+                workspace_id,
+                expected_revision,
+            } => EnvironmentAdmittedTarget::Existing {
+                workspace_id: *workspace_id,
+                expected_revision: *expected_revision,
+            },
+            EnvironmentTarget::New { name } => EnvironmentAdmittedTarget::New {
+                name: name.trim().to_owned(),
+            },
+        }
+    }
+
     fn validate_selector_contract(&self) -> Result<(), EnvironmentConfigurationParseError> {
         if matches!(self.target, EnvironmentTarget::New { .. })
             && (self
@@ -122,6 +152,35 @@ impl EnvironmentConfigurationCandidateV1 {
                 .filter_map(|rule| rule.existing_rule_id),
             EnvironmentConfigurationParseError::DuplicateProtocolRuleSelector,
         )
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum EnvironmentAdmittedTarget {
+    Existing {
+        workspace_id: Uuid,
+        expected_revision: u64,
+    },
+    New {
+        name: String,
+    },
+}
+
+impl EnvironmentAdmittedTarget {
+    pub(super) fn capacity_identity(&self) -> String {
+        match self {
+            Self::Existing { workspace_id, .. } => format!("existing:{workspace_id}"),
+            Self::New { name } => {
+                let mut encoded = String::with_capacity(name.len() * 2 + 4);
+                encoded.push_str("new:");
+                for byte in name.as_bytes() {
+                    use std::fmt::Write as _;
+                    write!(encoded, "{byte:02x}")
+                        .expect("writing hexadecimal bytes to String cannot fail");
+                }
+                encoded
+            }
+        }
     }
 }
 
