@@ -1,0 +1,10 @@
+Command:
+PYTHONPATH=examples/external-packages/nuvei_tango_json:examples/external-packages/nuvei_tango_json/tests python3 -m unittest test_rpc.TangoJsonRpcTests.test_decode_serializes_int_as_canonical_decimal_string_for_proxy_wire
+
+Result: EXPECTED FAIL
+
+AssertionError:
+{'type': 'int', 'value': 245} != {'type': 'int', 'value': '245'}
+
+Ran 1 test in 0.001s
+FAILED (failures=1)

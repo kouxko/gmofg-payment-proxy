@@ -1,0 +1,9 @@
+Command:
+python3 -m pip wheel --no-deps --wheel-dir <temporary-directory> examples/external-packages/nuvei_tango_json
+
+Initial no-build-isolation attempt: environment failure because setuptools.build_meta was not installed.
+Normal isolated build installed the declared build dependency and passed.
+
+Result: PASS
+Wheel: nuvei_tango_json-1.0.0-py3-none-any.whl
+Type: py3-none-any

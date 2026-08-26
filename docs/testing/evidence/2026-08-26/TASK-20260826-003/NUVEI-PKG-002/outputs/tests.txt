@@ -1,0 +1,10 @@
+Result: PASS
+Tests: 13
+
+Logging assertions:
+- normal frame logs direction=upstream, operation=frame, input byte count, complete, consumed bytes and duration
+- invalid downstream decode logs input byte count, outcome=error, JSON-RPC code -32002 and DECODE_FAILED
+- serialized logs exclude frame Base64, invalid-frame Base64, synthetic sensitive values and json_preview
+
+compileall: PASS
+git diff --check: PASS

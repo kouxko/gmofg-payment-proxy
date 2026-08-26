@@ -1,0 +1,25 @@
+{
+  "task_id": "TASK-20260826-003",
+  "case_id": "NUVEI-PKG-002",
+  "executed_at": "2026-08-26 14:45:00 +08:00",
+  "result": "PASS",
+  "derived_from": {
+    "task_id": "TASK-20260826-003",
+    "case_id": "NUVEI-PKG-001",
+    "evidence": "docs/testing/evidence/2026-08-26/TASK-20260826-003/NUVEI-PKG-001/"
+  },
+  "subject": "examples/external-packages/nuvei_tango_json/nuvei_tango_json/client.py",
+  "inputs": ["inputs/log-contract.json"],
+  "outputs": [
+    "outputs/tdd-red.txt",
+    "outputs/tests.txt",
+    "outputs/safe-log-sample.jsonl"
+  ],
+  "replay": "steps/replay.md",
+  "result_detail": {
+    "tests": 13,
+    "payload_logged": false,
+    "base64_logged": false,
+    "stable_error_code": "DECODE_FAILED"
+  }
+}

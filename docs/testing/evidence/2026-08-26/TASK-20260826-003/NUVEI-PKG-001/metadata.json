@@ -1,0 +1,29 @@
+{
+  "task_id": "TASK-20260826-003",
+  "case_id": "NUVEI-PKG-001",
+  "executed_at": "2026-08-26 14:40:14 +08:00",
+  "result": "PASS",
+  "environment": {
+    "python": "3.14.7",
+    "openssl": "3.6.3",
+    "websockets": "17.0.1"
+  },
+  "subject": "examples/external-packages/nuvei_tango_json",
+  "inputs": [
+    "inputs/synthetic-contract.json",
+    "examples/external-packages/nuvei_tango_json/tests/test_codec.py"
+  ],
+  "outputs": [
+    "outputs/tdd-red.txt",
+    "outputs/tests-and-static.txt",
+    "outputs/wheel-build.txt",
+    "outputs/actual-report-sanitized-check.txt"
+  ],
+  "replay": "steps/replay.md",
+  "not_applicable": {
+    "real_transaction_replay": "prohibited to avoid duplicate financial transactions",
+    "rust_tauri_frontend": "not modified",
+    "ci": "not authorized",
+    "adversarial_review": "explicitly waived by user for this low-priority small task"
+  }
+}

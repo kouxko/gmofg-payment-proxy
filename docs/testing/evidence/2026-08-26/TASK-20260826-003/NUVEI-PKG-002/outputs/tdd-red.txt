@@ -1,0 +1,7 @@
+Focused log test result: RED as expected
+
+Failure:
+StopIteration while locating event=rpc_started and method=hooks.upstream.split_frame.
+
+Cause:
+The initial client logged only connection lifecycle and had no RPC diagnostic events.

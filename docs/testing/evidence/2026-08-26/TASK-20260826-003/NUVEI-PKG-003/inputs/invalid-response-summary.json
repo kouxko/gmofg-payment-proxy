@@ -1,0 +1,15 @@
+{
+  "direction": "upstream",
+  "stage": "decode",
+  "proxy_error": "Fatal(InvalidResponse)",
+  "exchange_error": "Upstream|DECODE_FAILED: external package RPC failed",
+  "observed_frame_bytes": 1602,
+  "invalid_wire": {
+    "type": "int",
+    "value_kind": "JSON number"
+  },
+  "required_wire": {
+    "type": "int",
+    "value_kind": "canonical decimal JSON string"
+  }
+}

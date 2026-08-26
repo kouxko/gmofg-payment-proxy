@@ -1,0 +1,12 @@
+Source: user-provided reproduction report, read in memory only and not archived
+Network replay: false
+
+frame_bytes=647
+declared_body_bytes=643
+message_type=AccptrCmpltnAdvcRspn
+sequence=00000018
+masked_field_count=7
+proxy_received_equals_sent=true
+decode_encode_byte_exact=true
+
+No original payload or sensitive field value is included in this output.
