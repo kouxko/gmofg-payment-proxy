@@ -1,0 +1,23 @@
+Commands:
+cargo fmt --manifest-path examples/protocol-packages/nuvei_tango_rhai/tests/Cargo.toml -- --check
+cargo clippy --manifest-path examples/protocol-packages/nuvei_tango_rhai/tests/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path examples/protocol-packages/nuvei_tango_rhai/tests/Cargo.toml
+python3 -m compileall -q examples/protocol-packages/nuvei_tango_rhai/build_package.py examples/protocol-packages/nuvei_tango_rhai/tests/python_oracle.py
+git diff --check -- examples/protocol-packages/nuvei_tango_rhai docs/tasks/pending/2026-08-26/nuvei-tango-rhai-read-only-package.md
+
+Result: PASS
+
+- cargo fmt --check: PASS
+- cargo clippy --all-targets -- -D warnings: PASS
+- cargo test: 6 passed, 0 failed
+- doctests: 0 passed, 0 failed
+- Python compileall: PASS
+- git diff --check: PASS
+
+Passing tests:
+- every_field_change_removal_and_cross_direction_reuse_fail_closed
+- deterministic_zip_imports_and_executes_through_the_host_runtime
+- same_frames_match_python_oracle_and_preserve_raw_json_values
+- invalid_sequence_json_and_top_level_shape_fail_closed_like_python
+- known_exchange_sizes_execute_in_both_directions_without_changing_bytes
+- fragmentation_sticky_frames_and_length_boundaries_match_python

@@ -1,0 +1,25 @@
+{
+  "result": "PASS",
+  "same_input_frames": true,
+  "frame_decision_match": true,
+  "document_field_names_and_types_match": true,
+  "frame_length_match": true,
+  "control_header_match": true,
+  "sequence_match": true,
+  "message_type_match": true,
+  "encode_bytes_match": true,
+  "fail_closed_cases_match": true,
+  "confirmed_display_difference": {
+    "python": "masked preview",
+    "rhai": "all original synthetic field names and values retained",
+    "authorized_by_task": true
+  },
+  "encoding_context_comparison": {
+    "field_type_match": true,
+    "opaque_bytes_compared": false,
+    "reason": "Python uses a random authenticated process token; Rhai uses a deterministic direction marker and re-decodes trusted origin",
+    "tamper_rejected": true,
+    "cross_direction_reuse_rejected": true
+  },
+  "excluded_cases": ["invalid UTF-8", "duplicate JSON keys"]
+}
