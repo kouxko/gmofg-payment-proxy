@@ -1,0 +1,18 @@
+Python unit and loopback WebSocket tests:
+- Ran 12 tests
+- Result: OK
+
+Covered:
+- fragmented and sticky-buffer framing
+- strict length, sequence, UTF-8 and JSON validation
+- duplicate key and non-finite number rejection
+- sensitive-field redaction and HTML escaping
+- byte-exact read-only decode/encode
+- public field, context and direction tamper rejection
+- API 1 registration and JSON-RPC dispatch
+- remote plaintext WebSocket rejection by default
+
+compileall: PASS
+git diff --check: PASS
+ruff: N/A, not installed
+mypy: N/A, not installed

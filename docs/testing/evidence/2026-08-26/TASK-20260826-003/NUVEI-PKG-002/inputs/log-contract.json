@@ -1,0 +1,25 @@
+{
+  "required_lifecycle_events": [
+    "connection_attempt",
+    "connected",
+    "disconnected",
+    "connection_error"
+  ],
+  "required_rpc_events": ["rpc_started", "rpc_completed", "protocol_error"],
+  "allowed_rpc_metadata": [
+    "method",
+    "direction",
+    "operation",
+    "input_bytes",
+    "document_field_count",
+    "outcome",
+    "frame_status",
+    "consumed_bytes",
+    "output_bytes",
+    "html_bytes",
+    "jsonrpc_error_code",
+    "error_code",
+    "duration_ms"
+  ],
+  "forbidden": ["frame Base64", "payload bytes", "JSON content", "field names", "field values"]
+}
