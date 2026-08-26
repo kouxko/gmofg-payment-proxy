@@ -15,8 +15,6 @@
 
 ## 待实现任务
 
-- [Nuvei Tango 只读 Rhai 协议包](tasks/pending/2026-08-26/nuvei-tango-rhai-read-only-package.md)：
-  以现有 Python codec 为 Frame/Encode oracle，实现不修改 Proxy 源码的 Rhai ZIP；JSON 原样展示、不脱敏。
 - [MCP 对话式完整环境配置](tasks/pending/2026-08-25/mcp-environment-configuration.md)：
   允许远程 MCP 客户端提交完整 Workspace 环境，分层验证并预览确认后原子应用；按用户确认使用所有 IP、明文 HTTP 且无客户端认证。
 
