@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
-
 import "@testing-library/jest-dom/vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AndroidNetworkView } from "./android-network-view";
-
 const mocks = vi.hoisted(() => ({
   androidAdbGet: vi.fn(),
   androidDeviceList: vi.fn(),
@@ -40,6 +38,16 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
 
 function ok<T>(data: T) {
   return Promise.resolve({ status: "ok" as const, data });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 const ownerA = {
@@ -211,6 +219,142 @@ describe("Android runtime owner view", () => {
 
     expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledTimes(2);
     expect(mocks.deviceNetworkStatus).not.toHaveBeenCalled();
+  });
+
+  it("keeps the selected device enabled while the one-second discovery refresh is pending", async () => {
+    vi.useFakeTimers();
+    const refresh = deferred<Awaited<ReturnType<typeof ok<unknown[]>>>>();
+    mocks.androidDeviceList
+      .mockReturnValueOnce(ok([
+        { serial: "device-a", state: "device", product: null, model: "A920MAX", device: null, transport_id: "1", selected: false },
+        { serial: "device-b", state: "device", product: null, model: "A8700", device: null, transport_id: "2", selected: true },
+      ]))
+      .mockReturnValueOnce(refresh.promise);
+
+    const view = render(<AndroidNetworkView />);
+    try {
+      await act(async () => undefined);
+      const deviceSelect = screen.getByLabelText("目标设备");
+      expect(deviceSelect).toHaveTextContent("A8700");
+      expect(deviceSelect).toBeEnabled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      expect(mocks.androidDeviceList).toHaveBeenCalledTimes(2);
+      expect(deviceSelect).toHaveTextContent("A8700");
+      expect(deviceSelect).toBeEnabled();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps start available while a background runtime-owner refresh is pending", async () => {
+    const refresh = deferred<Awaited<ReturnType<typeof ok<typeof ownerA[]>>>>();
+    mocks.deviceNetworkRuntimeOwners
+      .mockReturnValueOnce(ok([ownerA]))
+      .mockReturnValueOnce(refresh.promise);
+    render(<AndroidNetworkView />);
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledOnce());
+    fireEvent.click(await screen.findByRole("button", { name: /设备 A 方案/ }));
+    expect(await screen.findByRole("button", { name: "启动" })).toBeEnabled();
+    const refreshOwners = mocks.useAppEventRefresh.mock.calls
+      .find((call) => call.length === 2)?.[1];
+    act(() => { void refreshOwners(); });
+    await act(async () => undefined);
+    expect(screen.getByRole("button", { name: "启动" })).toBeEnabled();
+    expect(screen.queryByText("正在确认实际运行设备；确认完成前不能启动或应用方案。"))
+      .not.toBeInTheDocument();
+    await act(async () => refresh.resolve(await ok([ownerA])));
+  });
+
+  it("keeps the target disabled while the first device snapshot is pending", async () => {
+    const initial = deferred<Awaited<ReturnType<typeof ok<unknown[]>>>>();
+    mocks.androidDeviceList.mockReturnValue(initial.promise);
+    const view = render(<AndroidNetworkView />);
+    try {
+      await act(async () => undefined);
+      expect(screen.getByLabelText("目标设备")).toBeDisabled();
+      expect(screen.getAllByText("正在读取设备列表…").length).toBeGreaterThan(0);
+      expect(screen.queryByText(/离线运行设备/)).not.toBeInTheDocument();
+    } finally {
+      view.unmount();
+    }
+  });
+
+  it("does not call a failed initial device discovery offline", async () => {
+    mocks.androidDeviceList.mockRejectedValueOnce({ message: "ADB discovery failed", field_errors: {} });
+    render(<AndroidNetworkView />);
+    expect(await screen.findByText("ADB discovery failed")).toBeVisible();
+    expect(screen.getByText("设备列表读取失败，当前无法确认在线状态。")).toBeVisible();
+    expect(screen.getByLabelText("目标设备")).toHaveTextContent("无法确认设备状态");
+    expect(screen.queryByText(/离线运行设备/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the previous device snapshot selectable when a discovery refresh fails", async () => {
+    vi.useFakeTimers();
+    mocks.androidDeviceList
+      .mockReturnValueOnce(ok([
+        { serial: "device-a", state: "device", product: null, model: "A920MAX", device: null, transport_id: "1", selected: false },
+        { serial: "device-b", state: "device", product: null, model: "A8700", device: null, transport_id: "2", selected: true },
+      ]))
+      .mockRejectedValueOnce({ message: "ADB discovery failed", field_errors: {} });
+
+    const view = render(<AndroidNetworkView />);
+    try {
+      await act(async () => undefined);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      const deviceSelect = screen.getByLabelText("目标设备");
+      expect(deviceSelect).toHaveTextContent("A8700");
+      expect(deviceSelect).toBeEnabled();
+      expect(screen.getByText("ADB discovery failed")).toBeVisible();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows a hot-plugged device and ignores an older discovery response that arrives later", async () => {
+    vi.useFakeTimers();
+    const olderRefresh = deferred<Awaited<ReturnType<typeof ok<unknown[]>>>>();
+    const initialDevices = [
+      { serial: "device-a", state: "device", product: null, model: "A920MAX", device: null, transport_id: "1", selected: false },
+      { serial: "device-b", state: "device", product: null, model: "A8700", device: null, transport_id: "2", selected: true },
+    ];
+    const hotPluggedDevices = [
+      ...initialDevices,
+      { serial: "device-c", state: "device", product: null, model: "PAX C", device: null, transport_id: "3", selected: false },
+    ];
+    mocks.androidDeviceList
+      .mockReturnValueOnce(ok(initialDevices))
+      .mockReturnValueOnce(olderRefresh.promise)
+      .mockReturnValueOnce(ok(hotPluggedDevices));
+
+    const view = render(<AndroidNetworkView />);
+    try {
+      await act(async () => undefined);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "刷新设备列表" }));
+      await act(async () => undefined);
+      const deviceSelect = screen.getByLabelText("目标设备");
+      fireEvent.click(deviceSelect);
+      expect(screen.getByRole("option", { name: /PAX C/ })).toBeVisible();
+
+      await act(async () => olderRefresh.resolve(await ok(initialDevices)));
+
+      expect(screen.getByRole("option", { name: /PAX C/ })).toBeVisible();
+      expect(deviceSelect).toHaveTextContent("A8700");
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it("does not query runtime status from selection when no owner exists", async () => {

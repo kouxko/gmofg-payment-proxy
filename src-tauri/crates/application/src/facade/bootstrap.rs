@@ -1,4 +1,5 @@
 use super::{AppError, AppResult, Application, ChannelPresentationViewModel};
+use crate::ListenerDataPlane;
 
 impl Application {
     /// 返回当前 Workspace 可供规则、故障和筛选使用的真实 Listener 目录。
@@ -22,6 +23,7 @@ impl Application {
             .await?
             .listeners
             .into_iter()
+            .filter(|listener| matches!(listener.data_plane, ListenerDataPlane::Http(_)))
             .map(|listener| {
                 let id = listener.id;
                 let display_name = listener.name;

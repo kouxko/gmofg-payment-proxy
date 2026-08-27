@@ -10,21 +10,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@heroui/react";
-import type {
-  ProtocolDocumentRuleDefinition,
-  RuleDraft,
-  RuleStageCapabilityViewModel,
-  RuleSummaryViewModel,
-  RuleViewModel,
-} from "@/generated/rust-types";
+import type { ProtocolDocumentRuleDefinition, RuleDraft, RuleStageCapabilityViewModel, RuleSummaryViewModel, RuleViewModel } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
-import {
-  useAppEventRefresh,
-  useBootstrap,
-} from "@/features/shell/bootstrap-context";
+import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import type { RuleDraftChange } from "./rule-editor";
 import { RuleEditorPanel } from "./rule-editor-panel";
@@ -32,6 +23,7 @@ import { RulesListPanel } from "./rules-list-panel";
 import { ProtocolRuleEditorView } from "./protocol-rules-view";
 import { RulesWorkspaceShell } from "./rules-workspace-shell";
 import { RuleCreationDialogs } from "./rule-creation-dialogs";
+import { ruleCreationOption, ruleCreationReasons, useRuleEditorRequestGuard } from "./rule-creation-capability";
 import { useProtocolRuleSource } from "./use-protocol-rule-source";
 import { toggleResponseMatches } from "./protocol-rule-model";
 
@@ -75,8 +67,6 @@ function HttpStandardRulesView({
   createProtocolOnMount: boolean;
   onProtocolCreateHandled: () => void;
 }) {
-  const { bootstrap } = useBootstrap();
-  const channelCatalog = bootstrap?.channel_catalog ?? [];
   const { navigate, searchParams } = useWorkspaceNavigation();
   const sourceSessionId = searchParams.get("sessionId");
   const sourceExchangeId = searchParams.get("exchangeId");
@@ -91,6 +81,10 @@ function HttpStandardRulesView({
   );
   const bodySource = useProtocolRuleSource("http");
   const socketSource = useProtocolRuleSource("socket");
+  const channelCatalog = useMemo(() => bodySource.workspaceListeners
+    .filter((listener) => listener.data_plane.kind === "http")
+    .map((listener) => ({ id: listener.id, display_name: listener.name })),
+  [bodySource.workspaceListeners]);
   const bodyListenerNames = useMemo(
     () => new Map(bodySource.listeners.map((listener) => [listener.id, listener.name])),
     [bodySource.listeners],
@@ -114,9 +108,10 @@ function HttpStandardRulesView({
   );
   const [protocolEditorPending, setProtocolEditorPending] = useState(false);
   const [editorAsyncStates, setEditorAsyncStates] = useState<
-    Record<string, { pending: boolean; invalid: boolean }>
-  >({});
+    Record<string, { pending: boolean; invalid: boolean }>>({});
   const editorPanelRef = useRef<HTMLElement>(null);
+  const creationContext = `${bodySource.workspaceId ?? "none"}:${channelCatalog.map((listener) => listener.id).join("|")}`;
+  const editorRequestGuard = useRuleEditorRequestGuard(creationContext);
 
   useEffect(() => {
     if (requestedCreate !== "fault") return;
@@ -187,10 +182,11 @@ function HttpStandardRulesView({
   useEffect(() => {
     // 从抓包进入时只携带内部 sessionId，Rust 负责生成合法的预填草稿。
     if (!sourceSessionId) return;
+    const request = editorRequestGuard.begin();
     let active = true;
     void callCommand(commands.ruleCreateFromSession(sourceSessionId))
       .then((value) => {
-        if (!active) return;
+        if (!active || !editorRequestGuard.isCurrent(request)) return;
         setDraft(value);
         setEditorAsyncStates({});
         setSelectedId("new");
@@ -202,7 +198,7 @@ function HttpStandardRulesView({
     return () => {
       active = false;
     };
-  }, [navigate, sourceSessionId]);
+  }, [editorRequestGuard, navigate, sourceSessionId]);
 
   useEffect(() => {
     if (!sourceExchangeId || sourceResponseEvent == null) return;
@@ -212,6 +208,7 @@ function HttpStandardRulesView({
       navigate("/rules");
       return;
     }
+    const request = editorRequestGuard.begin();
     let active = true;
     void callCommand(
       commands.ruleCreateFromExchangeObservation(
@@ -220,7 +217,7 @@ function HttpStandardRulesView({
       ),
     )
       .then((value) => {
-        if (!active) return;
+        if (!active || !editorRequestGuard.isCurrent(request)) return;
         setDraft(value);
         setEditorAsyncStates({});
         setSelectedId("new");
@@ -233,14 +230,21 @@ function HttpStandardRulesView({
     return () => {
       active = false;
     };
-  }, [navigate, sourceExchangeId, sourceResponseEvent]);
+  }, [editorRequestGuard, navigate, sourceExchangeId, sourceResponseEvent]);
 
-  async function newRule() {
+  async function newHttpRule() {
     // 新建会替换当前草稿，因此当前草稿无效不应把用户锁在编辑器里。
     if (writePending) return;
+    const request = editorRequestGuard.begin();
     setPendingAction("new");
     try {
-      setDraft(await callCommand(commands.ruleNewDraft()));
+      const listener = channelCatalog[0];
+      if (!listener) return;
+      const nextDraft = await callCommand(commands.ruleNewHttpDraft(listener.id));
+      if (
+        !editorRequestGuard.isCurrent(request)
+      ) return;
+      setDraft(nextDraft);
       setEditorAsyncStates({});
       setSelectedId("new");
       revealEditor();
@@ -380,12 +384,14 @@ function HttpStandardRulesView({
           socketSource.refresh(),
         ])}
         onSelect={(ruleId) => {
+          editorRequestGuard.invalidate();
           navigate("/rules");
           setDraft(undefined);
           setSelectedId(ruleId);
           revealEditor();
         }}
         onSelectProtocol={(kind, ruleId) => {
+          editorRequestGuard.invalidate();
           navigate(`/rules?category=${kind}&ruleId=${encodeURIComponent(ruleId)}`);
           revealEditor();
         }}
@@ -440,12 +446,30 @@ function HttpStandardRulesView({
       <RuleCreationDialogs
         choiceOpen={creationChoiceOpen}
         faultPresetOpen={faultPresetOpen}
+        http={ruleCreationOption(
+          bodySource.workspaceLoading,
+          bodySource.workspaceError,
+          channelCatalog.length > 0,
+          ruleCreationReasons.http,
+        )}
+        body={ruleCreationOption(
+          bodySource.workspaceLoading,
+          bodySource.workspaceError,
+          bodySource.listeners.length > 0,
+          ruleCreationReasons.body,
+        )}
+        socket={ruleCreationOption(
+          socketSource.workspaceLoading,
+          socketSource.workspaceError,
+          socketSource.listeners.length > 0,
+          ruleCreationReasons.socket,
+        )}
         onChoiceOpenChange={setCreationChoiceOpen}
         onFaultPresetOpenChange={setFaultPresetOpen}
-        onBlankRule={() => {
+        onHttpRule={() => {
           setCreationChoiceOpen(false);
           navigate("/rules");
-          void newRule();
+          void newHttpRule();
         }}
         onBodyRule={() => {
           setCreationChoiceOpen(false);

@@ -1,13 +1,17 @@
 import { Button, Modal } from "@heroui/react";
 import { Xmark } from "@gravity-ui/icons";
 import { FaultPresetsView } from "@/features/faults/faults-view";
+import type { RuleCreationOption } from "./rule-creation-capability";
 
 interface RuleCreationDialogsProps {
   choiceOpen: boolean;
   faultPresetOpen: boolean;
   onChoiceOpenChange: (open: boolean) => void;
   onFaultPresetOpenChange: (open: boolean) => void;
-  onBlankRule: () => void;
+  http: RuleCreationOption;
+  body: RuleCreationOption;
+  socket: RuleCreationOption;
+  onHttpRule: () => void;
   onBodyRule: () => void;
   onSocketRule: () => void;
   onFaultPreset: () => void;
@@ -19,7 +23,10 @@ export function RuleCreationDialogs({
   faultPresetOpen,
   onChoiceOpenChange,
   onFaultPresetOpenChange,
-  onBlankRule,
+  http,
+  body,
+  socket,
+  onHttpRule,
   onBodyRule,
   onSocketRule,
   onFaultPreset,
@@ -53,18 +60,21 @@ export function RuleCreationDialogs({
                     slot="close"
                     variant="primary"
                     className="h-auto w-full min-w-0 justify-start whitespace-normal px-5 py-4 text-left"
-                    onPress={onBlankRule}
+                    isDisabled={http.disabled}
+                    onPress={onHttpRule}
                   >
                     <span className="min-w-0 flex-1 text-left">
-                      <span className="block font-semibold">空白规则</span>
+                      <span className="block font-semibold">HTTP 规则</span>
                       <span className="mt-1 block break-words text-sm font-normal opacity-80">
-                        自己配置匹配条件和执行动作
+                        绑定 HTTP 入口，再配置请求、响应或 TLS 匹配与动作
                       </span>
+                      {http.reason && <span className="mt-1 block break-words text-sm font-normal text-[var(--telemetry-danger)]">{http.reason}</span>}
                     </span>
                   </Button>
                   <Button
                     slot="close"
                     variant="outline"
+                    isDisabled={body.disabled}
                     className="h-auto w-full min-w-0 justify-start whitespace-normal px-5 py-4 text-left"
                     onPress={onBodyRule}
                   >
@@ -73,11 +83,13 @@ export function RuleCreationDialogs({
                       <span className="mt-1 block break-words text-sm font-normal text-[var(--telemetry-muted)]">
                         解析 HTTP Body，再按协议字段匹配和改写
                       </span>
+                      {body.reason && <span className="mt-1 block break-words text-sm font-normal text-[var(--telemetry-danger)]">{body.reason}</span>}
                     </span>
                   </Button>
                   <Button
                     slot="close"
                     variant="outline"
+                    isDisabled={socket.disabled}
                     className="h-auto w-full min-w-0 justify-start whitespace-normal px-5 py-4 text-left"
                     onPress={onSocketRule}
                   >
@@ -86,11 +98,13 @@ export function RuleCreationDialogs({
                       <span className="mt-1 block break-words text-sm font-normal text-[var(--telemetry-muted)]">
                         解析 Socket 报文，再按协议字段匹配和改写
                       </span>
+                      {socket.reason && <span className="mt-1 block break-words text-sm font-normal text-[var(--telemetry-danger)]">{socket.reason}</span>}
                     </span>
                   </Button>
                   <Button
                     slot="close"
                     variant="outline"
+                    isDisabled={http.disabled}
                     className="h-auto w-full min-w-0 justify-start whitespace-normal px-5 py-4 text-left"
                     onPress={onFaultPreset}
                   >
@@ -99,6 +113,7 @@ export function RuleCreationDialogs({
                       <span className="mt-1 block break-words text-sm font-normal text-[var(--telemetry-muted)]">
                         选择延迟、拒绝、断开、丢弃等模板，再生成普通规则
                       </span>
+                      {http.reason && <span className="mt-1 block break-words text-sm font-normal text-[var(--telemetry-danger)]">{http.reason}</span>}
                     </span>
                   </Button>
                 </Modal.Body>

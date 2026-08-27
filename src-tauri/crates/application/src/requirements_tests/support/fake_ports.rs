@@ -334,7 +334,7 @@ impl RuleRepositoryPort for FakePorts {
     async fn get(&self, _: RuleId) -> AppResult<RuleViewModel> {
         unused()
     }
-    async fn new_draft(&self) -> AppResult<RuleDraft> {
+    async fn new_http_draft(&self, channel: ChannelId) -> AppResult<RuleDraft> {
         Ok(RuleDraft {
             rule_id: None,
             expected_revision: None,
@@ -342,7 +342,7 @@ impl RuleRepositoryPort for FakePorts {
             description: String::new(),
             enabled: true,
             priority: 100,
-            channel: None,
+            channel: Some(channel),
             stage: Some(MessageStage::Request),
             conditions: Vec::new(),
             actions: Vec::new(),

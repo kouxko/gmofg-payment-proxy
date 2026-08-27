@@ -44,7 +44,13 @@ async fn request_and_response_wait_for_durable_sqlite_without_blocking_runtime_p
     };
     let mut request_rule = view_to_domain_rule(one_shot_delay_rule()).unwrap();
     request_rule.one_shot = false;
-    let response_rule = view_to_domain_rule(response_status_rule(503)).unwrap();
+    request_rule.channel = Some(
+        intercept_proxy_domain::ChannelId::new(listener.id.to_string()).unwrap(),
+    );
+    let mut response_rule = view_to_domain_rule(response_status_rule(503)).unwrap();
+    response_rule.channel = Some(
+        intercept_proxy_domain::ChannelId::new(listener.id.to_string()).unwrap(),
+    );
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
         rules: vec![request_rule, response_rule],

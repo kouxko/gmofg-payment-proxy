@@ -25,6 +25,8 @@ interface DeviceControlCardProps {
   adbLoading: boolean;
   devices: AndroidDeviceViewModel[];
   devicesLoading: boolean;
+  devicesReady: boolean;
+  devicesError?: string;
   selectedSerial?: string | null;
   runtimeOwners: AndroidRuntimeOwnerViewModel[];
   busySerials: ReadonlySet<string>;
@@ -44,6 +46,8 @@ export function DeviceControlCard({
   adbLoading,
   devices,
   devicesLoading,
+  devicesReady,
+  devicesError,
   selectedSerial,
   runtimeOwners,
   busySerials,
@@ -100,7 +104,7 @@ export function DeviceControlCard({
           <Select
             aria-label="目标设备"
             selectedKey={selectedSerial ?? null}
-            isDisabled={globalBusy || devicesLoading || targets.length === 0}
+            isDisabled={globalBusy || !devicesReady || targets.length === 0}
             onSelectionChange={(serial) => {
               if (serial) onSelectDevice(String(serial));
             }}
@@ -108,7 +112,11 @@ export function DeviceControlCard({
             <Label>目标设备</Label>
             <Select.Trigger>
               <Select.Value>
-                {selectedDevice
+                {!devicesReady
+                  ? devicesError
+                    ? "无法确认设备状态"
+                    : "正在读取设备列表…"
+                  : selectedDevice
                   ? deviceDisplayName(selectedDevice)
                   : selectedTarget
                     ? `离线运行设备 · ${selectedTarget.serial}`
@@ -139,7 +147,14 @@ export function DeviceControlCard({
             </Select.Popover>
           </Select>
           <p className="pb-2 text-xs text-[var(--telemetry-muted)]">
-            {deviceStatusText(selectedSerial, selectedOnline, devicesLoading, devices.length)}
+            {deviceStatusText(
+              selectedSerial,
+              selectedOnline,
+              devicesLoading,
+              devicesReady,
+              devicesError,
+              devices.length,
+            )}
           </p>
         </div>
 
@@ -224,12 +239,15 @@ function deviceStatusText(
   selectedSerial: string | null | undefined,
   selectedOnline: boolean,
   loading: boolean,
+  ready: boolean,
+  error: string | undefined,
   deviceCount: number,
 ): string {
+  if (!ready && loading) return "正在读取设备列表…";
+  if (!ready && error) return "设备列表读取失败，当前无法确认在线状态。";
   if (selectedSerial) return selectedOnline
     ? `设备序列号：${selectedSerial}`
     : `离线运行设备：${selectedSerial}`;
-  if (loading) return "正在读取设备列表…";
   if (deviceCount > 0) return `已发现 ${deviceCount} 台在线设备，请从下拉框选择。`;
   return "没有检测到在线设备";
 }

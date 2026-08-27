@@ -2,7 +2,10 @@ use super::*;
 
 #[tokio::test]
 async fn new_rule_defaults_are_owned_by_the_rust_repository() {
-    let draft = adapter().new_draft().await.expect("new draft");
+    let draft = adapter()
+        .new_http_draft(test_channel())
+        .await
+        .expect("new HTTP draft");
     assert_eq!(draft.name, "新建规则");
     assert_eq!(draft.priority, 100);
     assert_eq!(draft.stage, Some(AppMessageStage::Request));
@@ -10,6 +13,7 @@ async fn new_rule_defaults_are_owned_by_the_rust_repository() {
     assert!(draft.expected_revision.is_none());
     assert!(draft.conditions.is_empty());
     assert!(draft.actions.is_empty());
+    assert_eq!(draft.channel, Some(test_channel()));
 }
 
 #[tokio::test]
@@ -141,7 +145,7 @@ async fn selected_workspace_owns_rule_list_runtime_snapshot_and_revision() {
     assert_eq!(listed[0].name, "second workspace rule");
     let runtime = runtime_snapshot(&adapter).await;
     assert_eq!(runtime.collection_revision, second_workspace.revision.get());
-    assert_eq!(runtime.rules, vec![second_rule]);
+    assert_eq!(runtime.rules, second_workspace.rules);
 
     store
         .select_workspace(first_workspace.id.as_uuid())
@@ -165,7 +169,7 @@ async fn runtime_snapshot_commit_stays_bound_to_owning_workspace_after_ui_switch
 
     let second = ProxyWorkspace {
         revision: Revision::new(stale.collection_revision),
-        rules: stale.rules.clone(),
+        rules: Vec::new(),
         ..ProxyWorkspace::default()
     };
     store

@@ -1,7 +1,10 @@
 use std::collections::BTreeSet;
 
 use super::*;
-use crate::{AndroidProxyRoute, AndroidTargetApplication, WeakNetworkProfile};
+use crate::{
+    AndroidProxyRoute, AndroidTargetApplication, ChannelId, MessageStage, RuleAction, RuleId,
+    WeakNetworkProfile,
+};
 
 mod listener_topology;
 mod listener_v3;
@@ -34,6 +37,55 @@ fn default_workspace_is_empty_safe_and_serializable() {
     for forbidden in ["private_key", "password", "pkcs12"] {
         assert!(!json.to_ascii_lowercase().contains(forbidden));
     }
+}
+
+#[test]
+fn standard_http_rules_require_one_existing_http_listener() {
+    let standard_rule = |channel| Rule {
+        id: RuleId::new(),
+        revision: Revision::INITIAL,
+        name: "HTTP rule".into(),
+        description: String::new(),
+        enabled: true,
+        priority: 10,
+        created_order: 1,
+        channel,
+        stage: MessageStage::Request,
+        conditions: Vec::new(),
+        actions: vec![RuleAction::Delay { milliseconds: 10 }],
+        one_shot: false,
+        hit_count: 0,
+        last_hit_at: None,
+    };
+
+    let mut workspace = ProxyWorkspace {
+        rules: vec![standard_rule(None)],
+        ..ProxyWorkspace::default()
+    };
+    assert_eq!(
+        workspace.validate().unwrap_err().field_errors["rules.0.channel"],
+        vec!["普通 HTTP 规则必须绑定单个 HTTP 代理入口"]
+    );
+
+    let http_channel = ChannelId::new(workspace.listeners[0].id.to_string()).expect("channel");
+    workspace.rules = vec![standard_rule(Some(http_channel))];
+    workspace.validate().expect("HTTP listener binding");
+
+    let socket_id = ListenerId::new();
+    workspace.listeners.push(ProxyListener {
+        id: socket_id,
+        name: "Socket".into(),
+        port: 9000,
+        data_plane: ListenerDataPlane::Socket(SocketRelaySettings::default()),
+        ..ProxyListener::default()
+    });
+    workspace.rules = vec![standard_rule(Some(
+        ChannelId::new(socket_id.to_string()).expect("channel"),
+    ))];
+    assert_eq!(
+        workspace.validate().unwrap_err().field_errors["rules.0.channel"],
+        vec!["普通 HTTP 规则只能绑定 HTTP 代理入口"]
+    );
 }
 
 #[test]

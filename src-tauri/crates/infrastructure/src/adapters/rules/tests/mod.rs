@@ -73,7 +73,7 @@ fn request_delay_draft(name: &str, one_shot: bool) -> AppRuleDraft {
         description: String::new(),
         enabled: true,
         priority: 10,
-        channel: None,
+        channel: Some(test_channel()),
         stage: Some(AppMessageStage::Request),
         conditions: Vec::new(),
         actions: vec![AppRuleAction::Delay { milliseconds: 10 }],
@@ -81,11 +81,33 @@ fn request_delay_draft(name: &str, one_shot: bool) -> AppRuleDraft {
     }
 }
 
+fn test_listener_id() -> intercept_proxy_domain::ListenerId {
+    intercept_proxy_domain::ListenerId::from_uuid(
+        uuid::Uuid::parse_str("00000000-0000-4000-8000-000000000123").expect("listener UUID"),
+    )
+}
+
+fn test_channel() -> intercept_proxy_domain::ChannelId {
+    intercept_proxy_domain::ChannelId::new(test_listener_id().to_string()).expect("channel")
+}
+
 fn seed_workspace(store: &Arc<SqliteStore>, rules: Vec<Rule>) -> ProxyWorkspace {
-    let workspace = ProxyWorkspace {
+    let first_workspace = store
+        .load_workspaces()
+        .expect("workspaces")
+        .records
+        .is_empty();
+    let mut workspace = ProxyWorkspace {
         rules,
         ..ProxyWorkspace::default()
     };
+    if first_workspace {
+        workspace.listeners[0].id = test_listener_id();
+    }
+    let channel = ChannelId::new(workspace.listeners[0].id.to_string()).expect("channel");
+    for rule in &mut workspace.rules {
+        rule.channel = Some(channel.clone());
+    }
     store
         .insert_workspace(&RuleRepositoryAdapter::workspace_record(&workspace).expect("record"))
         .expect("seed workspace");

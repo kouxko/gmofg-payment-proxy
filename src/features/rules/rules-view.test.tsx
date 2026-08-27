@@ -1,16 +1,9 @@
 // @vitest-environment jsdom
-
-/** 验证规则列表、默认首选、启停/一次性开关、保存、复制与删除交互。 */
-
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  RuleDraft,
-  RuleStageCapabilityViewModel,
-  RuleSummaryViewModel,
-} from "@/generated/rust-types";
+import type { RuleDraft, RuleStageCapabilityViewModel, RuleSummaryViewModel } from "@/generated/rust-types";
 import { RulesView } from "./rules-view";
 
 const commandMocks = vi.hoisted(() => ({
@@ -44,15 +37,6 @@ vi.mock("@/lib/ipc/client", () => ({
 
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
-  useBootstrap: () => ({
-    bootstrap: {
-      channel_catalog: [
-        { id: "alpha", display_name: "Alpha" },
-        { id: "beta", display_name: "Beta" },
-        { id: "gamma", display_name: "Gamma" },
-      ],
-    },
-  }),
 }));
 
 vi.mock("@/features/shell/workspace-navigation", () => ({
@@ -146,8 +130,24 @@ const capabilities: RuleStageCapabilityViewModel[] = [
 ];
 
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
-  useIpcQuery: (key: string) =>
-    key === "rule-list"
+  useIpcQuery: (key: string) => {
+    if (key === "protocol-rule-workspaces") {
+      return { data: [{ id: "workspace", selected: true }], error: undefined,
+        isLoading: false, refresh: vi.fn().mockResolvedValue(undefined) };
+    }
+    if (key.startsWith("protocol-rule-workspace:")) {
+      return { data: { listeners: ["alpha", "beta", "gamma"].map((id) => ({
+            id,
+            name: id[0].toUpperCase() + id.slice(1),
+            data_plane: { kind: "http", settings: { body_processing: { mode: "plain" } } },
+          })) }, error: undefined, isLoading: false,
+        refresh: vi.fn().mockResolvedValue(undefined) };
+    }
+    if (key.startsWith("protocol-rule-list:")) {
+      return { data: [], error: undefined, isLoading: false,
+        refresh: vi.fn().mockResolvedValue(undefined) };
+    }
+    return key === "rule-list"
       ? {
           data: [summary],
           error: undefined,
@@ -166,7 +166,8 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
           isLoading: false,
           refresh: queryMocks.detailRefresh,
           invalidate: queryMocks.detailInvalidate,
-        },
+        };
+  },
 }));
 
 describe("production RulesView async save guard", () => {
@@ -382,7 +383,7 @@ describe("production RulesView async save guard", () => {
     expect(queryMocks.listRefresh).toHaveBeenCalled();
   });
 
-  it("renders every generic product channel from the Rust bootstrap catalog", async () => {
+  it("renders every HTTP listener from the current Workspace query", async () => {
     const user = userEvent.setup();
     render(<RulesView />);
 

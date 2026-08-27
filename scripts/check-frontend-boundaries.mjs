@@ -468,7 +468,7 @@ if (
 
 const productChannelUiContracts = [
   ["breakpoints", "features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
-  ["rules", "features/rules/rules-view.tsx", ["channel_catalog", "channel_text"]],
+  ["rules", "features/rules/rules-view.tsx", ["workspaceListeners", "channel_text"]],
   ["faults", "features/faults/faults-view.tsx", ["channel_catalog"]],
 ];
 for (const [featureName, relativePath, requiredContracts] of productChannelUiContracts) {

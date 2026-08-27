@@ -18,9 +18,10 @@ use intercept_proxy_application::{
     RuleValidationViewModel, RuleViewModel, SessionId, SessionQueryPort, UiTone,
 };
 use intercept_proxy_domain::{
-    ChannelId, DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator,
-    MessageStage, Revision, Rule, RuleAction, RuleDraft, RuleEngine, RuleId, RuleRuntimeSnapshot,
-    RuleSetSignature, RuntimeEpoch, TerminalAction, TrafficDirection, validate_rule_draft,
+    ChannelId, DropResponseMode, JitterScope, ListenerDataPlane, MatchCondition, MatchField,
+    MatchOperator, MessageStage, Revision, Rule, RuleAction, RuleDraft, RuleEngine, RuleId,
+    RuleRuntimeSnapshot, RuleSetSignature, RuntimeEpoch, TerminalAction, TrafficDirection,
+    validate_rule_draft,
 };
 use intercept_proxy_product_api::ProductChannel;
 #[cfg(test)]

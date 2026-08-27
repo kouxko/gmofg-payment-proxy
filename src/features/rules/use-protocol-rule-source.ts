@@ -67,6 +67,11 @@ export function useProtocolRuleSource(kind: ProtocolRuleKind) {
 
   return {
     workspaceId,
+    workspaceListeners: Array.isArray(workspace.data?.listeners)
+      ? workspace.data.listeners
+      : [],
+    workspaceError: workspaces.error ?? workspace.error,
+    workspaceLoading: workspaces.isLoading || workspace.isLoading,
     listeners,
     rules,
     error: workspaces.error

@@ -17,8 +17,11 @@ async fn production_host_covers_rule_and_fault_lifecycle_without_ui() {
         .id
         .clone();
 
+    let listener_id = intercept_proxy_application::ListenerId::from_uuid(
+        uuid::Uuid::parse_str(workspace_channel.as_str()).expect("listener UUID channel"),
+    );
     let mut rule = application
-        .rule_new_draft()
+        .rule_new_http_draft(listener_id)
         .await
         .expect("create Rust-owned rule draft");
     rule.name = "无 UI 集成规则".into();

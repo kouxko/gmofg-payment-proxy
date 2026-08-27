@@ -12,20 +12,42 @@ const navigationMocks = vi.hoisted(() => ({
   searchParams: new URLSearchParams(),
 }));
 
-vi.mock("@/generated/rust-types", () => ({ commands: {} }));
+const commandMocks = vi.hoisted(() => ({
+  ruleNewHttpDraft: vi.fn(),
+}));
+const compatibleListeners = vi.hoisted(() => ([
+  {
+    id: "http-protocol",
+    name: "HTTP Protocol",
+    data_plane: { kind: "http", settings: { body_processing: { mode: "protocol", package: { id: "pkg", version: "1" } } } },
+  },
+  {
+    id: "socket-scripted",
+    name: "Socket Scripted",
+    data_plane: { kind: "socket", settings: { processing: { mode: "scripted", settings: { package: { id: "pkg", version: "1" } } } } },
+  },
+]));
+
+vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
   appErrorViewModel: () => undefined,
   callCommand: async <T,>(value: Promise<T> | T) => value,
   errorMessage: () => "Rust 操作失败",
 }));
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
-  useIpcQuery: (key: string) => key === "rule-list"
-    ? { data: [], error: undefined, isLoading: false, refresh: vi.fn() }
-    : { data: undefined, error: undefined, isLoading: false, refresh: vi.fn(), invalidate: vi.fn() },
+  useIpcQuery: (key: string) => {
+    const base = { error: undefined, isLoading: false, refresh: vi.fn(), invalidate: vi.fn() };
+    if (key === "rule-list") return { ...base, data: [] };
+    if (key === "rule-capabilities") return { ...base, data: [] };
+    if (key === "protocol-rule-workspaces") return { ...base, data: [{ id: "workspace", selected: true }] };
+    if (key.startsWith("protocol-rule-workspace:")) return { ...base, data: { listeners: compatibleListeners } };
+    if (key.startsWith("protocol-rule-list:")) return { ...base, data: [] };
+    return { ...base, data: undefined };
+  },
 }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
-  useBootstrap: () => ({ bootstrap: { channel_catalog: [] } }),
+  useBootstrap: () => ({ bootstrap: { channel_catalog: [{ id: "http-protocol", display_name: "HTTP Protocol" }] } }),
 }));
 vi.mock("@/features/shell/workspace-navigation", () => ({
   useWorkspaceNavigation: () => ({ pathname: "/rules", searchParams: navigationMocks.searchParams, navigate: navigationMocks.navigate }),
@@ -96,18 +118,19 @@ describe("unified HTTP and Socket rule workspace", () => {
     expect(screen.queryByRole("tab", { name: "Body 报文规则" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "新建规则" }));
-    expect(screen.getByRole("button", { name: /空白规则/ })).toHaveAttribute("slot", "close");
+    expect(screen.queryByText("空白规则")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /HTTP 规则/ })).toHaveAttribute("slot", "close");
     expect(screen.getByRole("button", { name: /Body 报文规则/ })).toHaveAttribute("slot", "close");
     expect(screen.getByRole("button", { name: /Socket 报文规则/ })).toHaveAttribute("slot", "close");
     expect(screen.getByRole("button", { name: /从故障预设创建/ })).toHaveAttribute("slot", "close");
   });
 
-  it("offers blank, Body and fault-preset creation from the regular new-rule action", async () => {
+  it("offers HTTP, Body and fault-preset creation from the regular new-rule action", async () => {
     const user = userEvent.setup();
     render(<RulesView />);
 
     await user.click(screen.getByRole("button", { name: "新建规则" }));
-    expect(screen.getByRole("button", { name: /空白规则/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^HTTP 规则/ })).toBeVisible();
     expect(screen.getByRole("button", { name: /Body 报文规则/ })).toBeVisible();
     await user.click(screen.getByRole("button", { name: /从故障预设创建/ }));
     expect(screen.getByLabelText("HTTP 故障预设已挂载")).toBeVisible();
@@ -115,13 +138,13 @@ describe("unified HTTP and Socket rule workspace", () => {
     expect(screen.queryByRole("tab", { name: "故障预设" })).not.toBeInTheDocument();
   });
 
-  it("returns to the standard workspace when blank creation starts from a protocol editor", async () => {
+  it("returns to the standard workspace when HTTP creation starts from a protocol editor", async () => {
     const user = userEvent.setup();
     navigationMocks.searchParams = new URLSearchParams("category=socket&ruleId=socket-1");
     render(<RulesView />);
 
     await user.click(screen.getByRole("button", { name: "新建规则" }));
-    await user.click(screen.getByRole("button", { name: /空白规则/ }));
+    await user.click(screen.getByRole("button", { name: /^HTTP 规则/ }));
 
     expect(navigationMocks.navigate).toHaveBeenCalledWith("/rules");
   });

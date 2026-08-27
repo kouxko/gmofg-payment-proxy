@@ -16,10 +16,11 @@ use super::{
 };
 use crate::{
     ActiveFaultViewModel, AppError, AppResult, FaultConfigurationDraft, FaultTemplateViewModel,
-    MessageStage, OperationResultViewModel, RuleAction, RuleActionKind, RuleByteInputViewModel,
-    RuleCondition, RuleConditionKind, RuleDraft, RuleDropResponseMode, RuleHeaderInputViewModel,
-    RuleId, RuleJitterScope, RuleMatchField, RuleMatchFieldKind, RuleMatchOperator,
-    RuleMatchOperatorKind, RuleSummaryViewModel, RuleTerminalAction, RuleViewModel, SessionId,
+    ListenerDataPlane, ListenerId, MessageStage, OperationResultViewModel, RuleAction,
+    RuleActionKind, RuleByteInputViewModel, RuleCondition, RuleConditionKind, RuleDraft,
+    RuleDropResponseMode, RuleHeaderInputViewModel, RuleId, RuleJitterScope, RuleMatchField,
+    RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind, RuleSummaryViewModel,
+    RuleTerminalAction, RuleViewModel, SessionId,
 };
 
 impl Application {
@@ -33,8 +34,33 @@ impl Application {
         self.rules.get(rule_id).await
     }
 
-    pub async fn rule_new_draft(&self) -> AppResult<RuleDraft> {
-        self.rules.new_draft().await
+    pub async fn rule_new_http_draft(&self, listener_id: ListenerId) -> AppResult<RuleDraft> {
+        let selected = self
+            .workspaces
+            .list()
+            .await?
+            .into_iter()
+            .find(|workspace| workspace.selected)
+            .ok_or_else(|| AppError::new("LISTENER_REQUIRED", "当前没有选中的 Workspace。"))?;
+        let workspace = self.workspaces.get(selected.id).await?;
+        let listener = workspace
+            .listeners
+            .into_iter()
+            .find(|listener| listener.id == listener_id)
+            .ok_or_else(|| {
+                AppError::new("LISTENER_REQUIRED", "所选 HTTP 入口不存在，请刷新后重试。")
+                    .entity(listener_id.to_string())
+            })?;
+        if !matches!(listener.data_plane, ListenerDataPlane::Http(_)) {
+            return Err(AppError::new(
+                "LISTENER_INCOMPATIBLE",
+                "普通 HTTP 规则只能绑定 HTTP 代理入口。",
+            )
+            .entity(listener_id.to_string()));
+        }
+        self.rules
+            .new_http_draft(crate::ChannelId::new(listener_id.to_string()).map_err(AppError::from)?)
+            .await
     }
 
     pub fn rule_condition_draft(
