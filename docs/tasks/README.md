@@ -6,6 +6,9 @@
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
 | --- | --- | --- | --- | --- | --- |
+| 22:27:08 +08:00 | [最终归档场景复跑与 MCP 验证经验指南](completed/2026-08-27/final-archive-replay-and-mcp-validation-playbook.md) | 重跑归档和运行中 App 场景，并发布 MCP 只读验证指南，完成完整 CI 与 Windows 测试包交付 | PASS_WITH_NOT_RUN；自动化、App/MCP、完整 CI 与 Windows 构建通过；真机和授权外部交易保持 NOT_RUN | 高 | final validation、replay、MCP、Windows CI |
+| 22:27:05 +08:00 | [规则创建入口与协议入口绑定修复](completed/2026-08-27/rule-creation-entry-requirements.md) | 删除空白规则并要求普通 HTTP/Body/Socket 规则绑定当前 Workspace 的兼容 Listener，完成旧数据原子迁移 | PASS；全量回归、对抗审查、完整 CI 与 Windows 构建通过 | 高 | 规则、Listener、Workspace、SQLite 迁移 |
+| 22:27:02 +08:00 | [Android 目标设备后台刷新抖动修复](completed/2026-08-27/android-device-list-refresh-jitter.md) | 保留每秒设备发现并分离首次加载与后台刷新，消除已有选择的周期性禁用抖动 | PASS；前端回归、完整 CI 与 Windows 构建通过 | 低 | Android、ADB、后台刷新、轮询、UI |
 | 15:27:02 +08:00 | [Proxy 上游多 CA PEM Bundle 支持](completed/2026-08-27/upstream-multi-ca-pem-bundle.md) | 一个上游信任 PEM 文件可严格承载多个 CA，并完整保持规范化、持久化、恢复和 Socket TLS Trust Store 成员 | PASS；解析/持久化/运行时/真实 First Data TLS 分层验收通过，未发送业务报文 | 高 | Socket、上游 TLS、多 CA、PEM Bundle、OpenSSL |
 | 14:50:20 +08:00 | [日志倒序与 HTTP 抓包响应生成 Mock 规则草稿](completed/2026-08-27/log-order-and-http-capture-mock-draft.md) | 诊断日志稳定倒序；从完整服务器 HTTP 响应生成未保存、禁用且经过 Header/编码校验的 Mock 草稿 | PASS；Application、UI 与全量门禁通过；对抗审查 finding 已关闭 | 高 | 日志、Exchange、HTTP、MockResponse、规则草稿 |
 | 14:49:30 +08:00 | [Android 多设备 VPN 并行运行与逐设备管理](completed/2026-08-27/android-multi-device-vpn-management.md) | 将单一 owner 升级为最多 8 台按 serial+epoch 的独立运行集合，覆盖 ADB Reverse/LAN/device-only、逐设备命令、断线重连、Environment 与 UI 隔离 | PASS；自动化与本地门禁通过；真机 A/B 场景因无设备保持 NOT_RUN | 高 | Android、VPN、多设备、serial、epoch、ADB、重连 |
