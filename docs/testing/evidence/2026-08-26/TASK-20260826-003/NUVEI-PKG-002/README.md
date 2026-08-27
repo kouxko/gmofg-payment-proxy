@@ -21,7 +21,7 @@
 
 - TDD RED：新增测试因找不到 `rpc_started` 事件产生预期失败。
 - GREEN：13/13 包测试 PASS；日志成功覆盖正常与错误路径。
-- `compileall` 和 `git diff --check` PASS。
+- `compileall` PASS。
 - 安全日志样例见 `outputs/safe-log-sample.jsonl`。
 
 ## 复测与不适用

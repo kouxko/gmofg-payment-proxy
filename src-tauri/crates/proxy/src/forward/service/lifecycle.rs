@@ -6,10 +6,9 @@ use super::{
     server_http1, service_fn,
 };
 use async_trait::async_trait;
-use tokio::io::AsyncWriteExt;
 
 use crate::listener::{
-    ConnectionHandler, ListenerCapacity, ListenerConfig, ListenerRejection, ListenerSupervisor,
+    ConnectionHandler, ListenerCapacity, ListenerConfig, ListenerSupervisor,
     NoopConnectionLifecycleObserver, PrimaryConnectionOutcome, sealed,
 };
 use crate::transport::{SystemClock, TokioBoundListener, TokioListenerBinder};
@@ -179,7 +178,6 @@ impl ForwardProxyService {
                 bind_addr: self.config.bind_addr,
                 runtime_epoch: epoch,
                 listener_id,
-                allowed_client_cidrs: self.config.allowed_client_cidrs.clone(),
                 capacity: ListenerCapacity::new(tokio::sync::Semaphore::MAX_PERMITS)?,
                 shutdown_grace: CONNECTION_CHILD_GRACE,
             },
@@ -195,41 +193,6 @@ impl sealed::Sealed for ForwardProxyService {}
 
 #[async_trait]
 impl ConnectionHandler for ForwardProxyService {
-    async fn reject(
-        &self,
-        io: BoxIo,
-        context: ConnectionContext,
-        reason: ListenerRejection,
-        cancellation: CancellationToken,
-    ) {
-        if reason != ListenerRejection::NetworkDenied {
-            return;
-        }
-        let mut io = if let Some(acceptor) = &self.downstream_tls {
-            tokio::select! {
-                () = cancellation.cancelled() => return,
-                accepted = tokio::time::timeout(
-                    self.config.connect_timeout,
-                    acceptor.accept(io, &context),
-                ) => match accepted {
-                    Ok(Ok(accepted)) => accepted.io,
-                    Ok(Err(_)) | Err(_) => return,
-                },
-            }
-        } else {
-            io
-        };
-        let response = b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 29\r\n\r\nclient address is not allowed";
-        let write = async {
-            io.write_all(response).await?;
-            io.shutdown().await
-        };
-        tokio::select! {
-            () = cancellation.cancelled() => {}
-            _ = tokio::time::timeout(self.config.write_timeout, write) => {}
-        }
-    }
-
     async fn handle(
         &self,
         io: BoxIo,

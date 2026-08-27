@@ -1,11 +1,9 @@
 use std::path::PathBuf;
 
-use intercept_proxy_application::{
-    AppResult, ExternalPackageServiceStateViewModel, SettingsRepositoryPort,
-};
+use intercept_proxy_application::{AppResult, ExternalPackageServiceStateViewModel};
 use intercept_proxy_infrastructure::{
-    CURRENT_APPLICATION_SCHEMA_VERSION, InfrastructureError, NativeFileDialog, SecretProtector,
-    SettingsRepositoryAdapter, SqliteStore, adapters::FileSelection,
+    CURRENT_APPLICATION_SCHEMA_VERSION, FileSelection, InfrastructureError, NativeFileDialog,
+    SecretProtector, SqliteStore,
 };
 use intercept_proxy_product_api::InterceptProxyProfile;
 use rusqlite::Connection;
@@ -95,6 +93,48 @@ async fn builds_and_invokes_application_without_tauri() {
     assert!(host.shutdown_completed());
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn host_build_keeps_current_thread_progressing_while_schema_open_waits() {
+    let temp = tempfile::tempdir().expect("temporary host directory");
+    let database = temp.path().join("intercept-proxy.sqlite3");
+    drop(SqliteStore::open(&database).expect("initialize current schema"));
+    let blocker = Connection::open(&database).expect("open schema blocker");
+    blocker
+        .execute_batch("PRAGMA busy_timeout = 5000; BEGIN EXCLUSIVE;")
+        .expect("hold writer lock during Host bootstrap");
+
+    let build = tokio::spawn({
+        let data_dir = temp.path().to_path_buf();
+        async move {
+            ApplicationHostBuilder::new(
+                data_dir,
+                HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
+                Arc::new(InterceptProxyProfile),
+            )
+            .build()
+            .await
+        }
+    });
+    tokio::time::timeout(std::time::Duration::from_millis(250), async {
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    })
+    .await
+    .expect("Host SQLite bootstrap did not block the current-thread runtime");
+    assert!(
+        !build.is_finished(),
+        "schema open must still be waiting for lock"
+    );
+
+    blocker
+        .execute_batch("COMMIT;")
+        .expect("release schema lock");
+    let host = build
+        .await
+        .expect("Host build task joined")
+        .expect("Host build completed after schema lock release");
+    host.shutdown().await.expect("shutdown Host");
+}
+
 #[tokio::test]
 async fn keychain_refusal_does_not_prevent_host_or_bootstrap_startup() {
     let temp = tempfile::tempdir().expect("temporary host directory");
@@ -126,21 +166,35 @@ async fn keychain_refusal_does_not_prevent_host_or_bootstrap_startup() {
 #[tokio::test]
 async fn external_package_bind_failure_is_visible_without_blocking_host_startup() {
     let temp = tempfile::tempdir().expect("temporary host directory");
+    let initial = ApplicationHostBuilder::new(
+        temp.path(),
+        HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
+        Arc::new(InterceptProxyProfile),
+    )
+    .build()
+    .await
+    .expect("build host before changing persisted settings");
+
     let occupied = std::net::TcpListener::bind("127.0.0.1:0").expect("reserve local port");
     let port = occupied.local_addr().expect("reserved address").port();
-    let database = temp.path().join("intercept-proxy.sqlite3");
-    let product = InterceptProxyProfile;
-    let store = Arc::new(SqliteStore::open(&database).expect("open settings database"));
-    let settings = SettingsRepositoryAdapter::new(store, &product);
-    let mut draft = settings.defaults().await.expect("default settings");
+    let application = initial.application();
+    let mut draft = application
+        .settings_get()
+        .await
+        .expect("load settings through Application")
+        .stored;
     draft.external_package_service.bind_address = "127.0.0.1".into();
     draft.external_package_service.port = port;
-    settings.save(draft).await.expect("persist occupied port");
+    application
+        .settings_save(draft)
+        .await
+        .expect("persist occupied port through Application");
+    initial.shutdown().await.expect("shutdown initial host");
 
     let host = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
-        Arc::new(product),
+        Arc::new(InterceptProxyProfile),
     )
     .build()
     .await

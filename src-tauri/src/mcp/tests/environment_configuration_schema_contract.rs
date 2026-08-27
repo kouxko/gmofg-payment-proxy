@@ -243,7 +243,7 @@ fn expected_preview_has_exact_public_field_by_field_contract() {
         .collect();
     assert_eq!(actual_root, expected_root);
     assert_eq!(preview["target"], json!({"mode":"new","name":"Store Lab"}));
-    assert_eq!(preview["target_key"], "new:store lab");
+    assert_eq!(preview["target_key"], "new:53746f7265204c6162");
     assert_eq!(preview["baseline_public"]["workspace_id"], Value::Null);
     assert_eq!(preview["baseline_public"]["revision"], Value::Null);
     assert_eq!(preview["validation_layers"].as_array().unwrap().len(), 7);
@@ -469,14 +469,23 @@ fn old_read_tool_catalog_and_budgets_remain_unchanged() {
         8 * 1024 * 1024
     );
     let active = super::super::protocol::tools();
-    assert!(active.iter().all(|tool| {
+    let environment_names = [
+        "mcp_environment_capabilities",
+        "environment_candidate_create",
+        "environment_candidate_status",
+        "environment_candidate_cancel",
+        "environment_candidate_apply",
+    ]
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    let existing_reads = active
+        .iter()
+        .filter(|tool| !environment_names.contains(tool.name.as_ref()))
+        .collect::<Vec<_>>();
+    assert_eq!(existing_reads.len(), 37);
+    assert!(existing_reads.iter().all(|tool| {
         tool.annotations
             .as_ref()
             .is_some_and(|a| a.read_only_hint == Some(true))
     }));
-    assert!(
-        active
-            .iter()
-            .all(|tool| !tool.name.starts_with("environment_candidate_"))
-    );
 }

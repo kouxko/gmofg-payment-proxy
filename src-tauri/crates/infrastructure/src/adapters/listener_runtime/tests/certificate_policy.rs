@@ -18,18 +18,6 @@ use super::*;
 use crate::WorkspaceRecord;
 
 #[derive(Debug)]
-struct StaticInstallationIdentity;
-
-impl InstallationServerIdentityProvider for StaticInstallationIdentity {
-    fn load_installation_server_identity(&self) -> AppResult<ReverseClientIdentity> {
-        Ok(ReverseClientIdentity {
-            certificate_chain_der: vec![vec![1, 2, 3]],
-            private_key_pkcs8_der: Zeroizing::new(vec![4, 5, 6]),
-        })
-    }
-}
-
-#[derive(Debug)]
 struct StaticDynamicAuthority;
 
 impl MitmCertificateAuthority for StaticDynamicAuthority {
@@ -44,8 +32,21 @@ impl MitmCertificateAuthority for StaticDynamicAuthority {
     }
 }
 
-#[test]
-fn installation_root_enables_allowlisted_sni_dynamic_signing() {
+#[async_trait]
+impl ListenerMitmAuthorityProvider for StaticDynamicAuthority {
+    async fn freeze_installation_tls_material(&self) -> AppResult<InstallationTlsMaterial> {
+        Ok(InstallationTlsMaterial {
+            server_identity: ReverseClientIdentity {
+                certificate_chain_der: vec![vec![1, 2, 3]],
+                private_key_pkcs8_der: Zeroizing::new(vec![4, 5, 6]),
+            },
+            dynamic_authority: Arc::new(Self),
+        })
+    }
+}
+
+#[tokio::test]
+async fn installation_root_enables_allowlisted_sni_dynamic_signing() {
     let listener = ProxyListener {
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
             downstream_tls: intercept_proxy_domain::DownstreamTlsSettings {
@@ -63,7 +64,6 @@ fn installation_root_enables_allowlisted_sni_dynamic_signing() {
         ..ProxyWorkspace::default()
     };
     let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()))
-        .with_installation_server_identity(Arc::new(StaticInstallationIdentity))
         .with_mitm_certificate_authority(Arc::new(StaticDynamicAuthority));
 
     let tls = runtime
@@ -72,6 +72,7 @@ fn installation_root_enables_allowlisted_sni_dynamic_signing() {
             &listener,
             listener.http().expect("HTTP listener"),
         )
+        .await
         .unwrap()
         .expect("downstream TLS");
     assert!(tls.dynamic_server_identity.is_some());

@@ -4,7 +4,7 @@ async fn records_request_response_terminal_events_and_real_metrics() {
     let epoch = Uuid::new_v4();
     let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
 
-    pipeline.connection_opened(&context).await;
+    open_test_connection(&pipeline, &context).await;
     let opened = pipeline.snapshot(Some(epoch)).await.expect("metrics");
     assert_eq!(opened.channels[&transaction_channel()].connected_clients, 1);
 
@@ -89,7 +89,7 @@ async fn records_request_response_terminal_events_and_real_metrics() {
     assert!(session_id.is_none(), "closed connection state is removed");
 
     let next_context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
-    pipeline.connection_opened(&next_context).await;
+    open_test_connection(&pipeline, &next_context).await;
     let next_epoch = pipeline
         .snapshot(Some(next_context.runtime_epoch))
         .await
@@ -106,7 +106,7 @@ async fn records_request_response_terminal_events_and_real_metrics() {
 async fn stores_upstream_security_evidence_on_the_active_session() {
     let pipeline = adapter(Vec::new(), 10);
     let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
-    pipeline.connection_opened(&context).await;
+    open_test_connection(&pipeline, &context).await;
     pipeline
         .apply_request_policy(&context, &mut request_message(r#"{"amount":100}"#))
         .await
@@ -135,7 +135,7 @@ async fn stores_upstream_security_evidence_on_the_active_session() {
 async fn reports_upstream_security_evidence_when_connection_has_no_session() {
     let pipeline = adapter(Vec::new(), 10);
     let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
-    pipeline.connection_opened(&context).await;
+    open_test_connection(&pipeline, &context).await;
 
     pipeline
         .upstream_security_established(&context, &upstream_tls_evidence("CN=orphan-upstream.test"))
@@ -194,7 +194,7 @@ async fn reports_pre_session_tls_failure_with_listener_context() {
 async fn reports_capacity_failure_and_keeps_previous_upstream_security_evidence() {
     let pipeline = adapter(Vec::new(), 10);
     let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
-    pipeline.connection_opened(&context).await;
+    open_test_connection(&pipeline, &context).await;
     pipeline
         .apply_request_policy(&context, &mut request_message(r#"{"amount":100}"#))
         .await
@@ -250,8 +250,8 @@ async fn isolates_interleaved_workspace_metrics_and_ignores_late_stop_events() {
     let context_a = test_context(epoch_a, Uuid::new_v4(), transaction_channel());
     let context_b = test_context(epoch_b, Uuid::new_v4(), dll_channel());
 
-    pipeline.connection_opened(&context_a).await;
-    pipeline.connection_opened(&context_b).await;
+    open_test_connection(&pipeline, &context_a).await;
+    open_test_connection(&pipeline, &context_b).await;
 
     let mut request_a = request_message(r#"{"workspace":"a"}"#);
     pipeline

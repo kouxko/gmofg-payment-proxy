@@ -9,4 +9,3 @@ AGENTS.md contains:
 - Compatible changes replay the original test and require PASS.
 - Replaced contracts preserve historical PASS and allow documented expected differences.
 - Original evidence is never overwritten.
-- No file or working-tree Hash is required.

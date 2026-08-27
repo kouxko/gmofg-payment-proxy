@@ -4,7 +4,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde_json::Value;
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    time::{Instant, MissedTickBehavior},
+    time::{Instant, MissedTickBehavior, timeout_at},
 };
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
@@ -23,11 +23,15 @@ pub(super) async fn register<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    websocket
-        .send(Message::Text(request.to_string().into()))
-        .await
-        .map_err(ExternalPackageConnectionError::from)?;
-    let deadline = tokio::time::sleep(config.registration_timeout);
+    let deadline_at = Instant::now() + config.registration_timeout;
+    timeout_at(
+        deadline_at,
+        websocket.send(Message::Text(request.to_string().into())),
+    )
+    .await
+    .map_err(|_| registration_timeout(register_id))?
+    .map_err(ExternalPackageConnectionError::from)?;
+    let deadline = tokio::time::sleep_until(deadline_at);
     tokio::pin!(deadline);
     let mut heartbeat = tokio::time::interval_at(
         Instant::now() + config.heartbeat_interval,
@@ -57,7 +61,10 @@ where
                         Err(kind) => Err(ExternalPackageConnectionError::Fatal(kind)),
                     };
                 }
-                Some(Ok(Message::Ping(_))) => websocket.flush().await.map_err(ExternalPackageConnectionError::from)?,
+                Some(Ok(Message::Ping(_))) => timeout_at(deadline_at, websocket.flush())
+                    .await
+                    .map_err(|_| registration_timeout(register_id))?
+                    .map_err(ExternalPackageConnectionError::from)?,
                 Some(Ok(Message::Pong(_))) => last_pong = Instant::now(),
                 Some(Ok(Message::Close(_))) | None => return Err(ExternalPackageConnectionError::Disconnected),
                 Some(Err(error)) => return Err(ExternalPackageConnectionError::Transport(error.to_string())),
@@ -67,8 +74,21 @@ where
                 if Instant::now().duration_since(last_pong) >= config.heartbeat_timeout {
                     return Err(ExternalPackageConnectionError::Disconnected);
                 }
-                websocket.send(Message::Ping(Vec::new().into())).await.map_err(ExternalPackageConnectionError::from)?;
+                timeout_at(
+                    deadline_at,
+                    websocket.send(Message::Ping(Vec::new().into())),
+                )
+                .await
+                .map_err(|_| registration_timeout(register_id))?
+                .map_err(ExternalPackageConnectionError::from)?;
             }
         }
+    }
+}
+
+fn registration_timeout(register_id: &str) -> ExternalPackageConnectionError {
+    ExternalPackageConnectionError::Timeout {
+        request_id: register_id.to_owned(),
+        method: "package.register".into(),
     }
 }

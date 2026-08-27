@@ -20,7 +20,6 @@ async fn forward_downstream_tls_round_trip(require_client_identity: bool) {
         ForwardProxyConfig {
             bind_addr: listener_address,
             authentication: ForwardAuthenticationMode::None,
-            allowed_client_cidrs: Vec::new(),
             connect_timeout: Duration::from_secs(2),
             read_timeout: Duration::from_secs(2),
             write_timeout: Duration::from_secs(2),

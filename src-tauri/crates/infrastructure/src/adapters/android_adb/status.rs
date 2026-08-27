@@ -55,6 +55,7 @@ pub(super) fn companion_install_view_model(
 pub(super) fn consent_opened_status(serial: String) -> AndroidNetworkStatusViewModel {
     AndroidNetworkStatusViewModel {
         serial,
+        runtime_epoch: None,
         state: AndroidNetworkState::Unknown,
         state_text: "状态未知".into(),
         ui_tone: UiTone::Warning,
@@ -77,6 +78,7 @@ pub(super) fn control_unavailable_status(
 ) -> AndroidNetworkStatusViewModel {
     AndroidNetworkStatusViewModel {
         serial,
+        runtime_epoch: None,
         state: AndroidNetworkState::Unknown,
         state_text: "状态未知".into(),
         ui_tone: UiTone::Warning,
@@ -94,9 +96,10 @@ pub(super) fn control_unavailable_status(
     }
 }
 
-pub(super) fn no_runtime_owner_status() -> AndroidNetworkStatusViewModel {
+pub(super) fn no_runtime_owner_status(serial: String) -> AndroidNetworkStatusViewModel {
     AndroidNetworkStatusViewModel {
-        serial: String::new(),
+        serial,
+        runtime_epoch: None,
         state: AndroidNetworkState::Stopped,
         state_text: "已停止".into(),
         ui_tone: UiTone::Neutral,
@@ -116,6 +119,7 @@ pub(super) fn no_runtime_owner_status() -> AndroidNetworkStatusViewModel {
 pub(super) fn owner_disconnected_status(serial: String) -> AndroidNetworkStatusViewModel {
     AndroidNetworkStatusViewModel {
         serial,
+        runtime_epoch: None,
         state: AndroidNetworkState::Unknown,
         state_text: "等待设备重连".into(),
         ui_tone: UiTone::Warning,

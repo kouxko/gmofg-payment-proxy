@@ -174,7 +174,8 @@ pub(super) async fn run_actor<S>(
                         limit_bytes: max_size,
                     };
                 }
-                Some(Ok(Message::Close(_)) | Err(_)) | None => break ExternalPackageConnectionError::Disconnected,
+                Some(Ok(Message::Close(_))) | None => break ExternalPackageConnectionError::Disconnected,
+                Some(Err(error)) => break ExternalPackageConnectionError::from(error),
                 Some(Ok(Message::Binary(_))) => break ExternalPackageConnectionError::Fatal(ExternalPackageFatalProtocolError::InvalidResponse),
                 Some(Ok(Message::Frame(_))) => {}
             },

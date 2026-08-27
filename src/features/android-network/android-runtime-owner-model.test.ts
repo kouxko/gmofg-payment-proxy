@@ -5,34 +5,75 @@ import type {
   AndroidRuntimeOwnerTransitionReason,
 } from "@/generated/rust-types";
 import {
-  isForeignRuntimeOwner,
   runtimeOwnerModeText,
   runtimeOwnerQueryKey,
+  clearOwnerConditionally,
+  mergeAndroidDeviceTargets,
+  runtimeResponseMatches,
   runtimeOwnerStateText,
   runtimeOwnerTransitionText,
-  type RuntimeOwnerDisplay,
 } from "./android-runtime-owner-model";
 
 const owner = {
   serial: "device-a",
+  epoch: "11111111-1111-4111-8111-111111111111",
   mode: "adb_reverse",
+  profile_id: "profile-a",
   state: "active",
+  source: "start",
   transition_reason: "activation_confirmed",
-} satisfies RuntimeOwnerDisplay;
+  updated_at: "2026-08-17T00:00:00Z",
+} as const;
 
 describe("Android runtime owner model", () => {
+  it("unions online devices and retained owners by serial", () => {
+    const targets = mergeAndroidDeviceTargets([
+      { serial: "device-b", state: "device", product: null, model: "B", device: null, transport_id: "2", selected: true },
+    ], [
+      { ...owner, serial: "device-a" },
+      { ...owner, serial: "device-b" },
+    ]);
+
+    expect(targets.map((target) => [target.serial, target.online, Boolean(target.owner)])).toEqual([
+      ["device-a", false, true],
+      ["device-b", true, true],
+    ]);
+  });
+
+  it("rejects a late response from another serial or an old epoch", () => {
+    const target = { serial: "device-a", epoch: owner.epoch };
+    expect(runtimeResponseMatches(target, {
+      serial: "device-a",
+      runtime_epoch: owner.epoch,
+    })).toBe(true);
+    expect(runtimeResponseMatches(target, {
+      serial: "device-b",
+      runtime_epoch: owner.epoch,
+    })).toBe(false);
+    expect(runtimeResponseMatches(target, {
+      serial: "device-a",
+      runtime_epoch: "22222222-2222-4222-8222-222222222222",
+    })).toBe(false);
+  });
+
+  it("clears only the exact serial and epoch captured by a completed action", () => {
+    const owners = [
+      { ...owner },
+      { ...owner, serial: "device-b", epoch: "22222222-2222-4222-8222-222222222222" },
+    ];
+    expect(clearOwnerConditionally(owners, {
+      serial: "device-a",
+      epoch: "stale-epoch",
+    })).toEqual(owners);
+    expect(clearOwnerConditionally(owners, owner)).toEqual([owners[1]]);
+  });
+
   it("keys runtime requests by owner serial and epoch only", () => {
     expect(runtimeOwnerQueryKey({
       serial: "device-a",
       epoch: "11111111-1111-4111-8111-111111111111",
     })).toBe("owner:device-a:11111111-1111-4111-8111-111111111111");
     expect(runtimeOwnerQueryKey(null)).toBeUndefined();
-  });
-
-  it("identifies only a different owner as foreign", () => {
-    expect(isForeignRuntimeOwner("device-b", "device-a")).toBe(true);
-    expect(isForeignRuntimeOwner("device-a", "device-a")).toBe(false);
-    expect(isForeignRuntimeOwner(null, null)).toBe(false);
   });
 
   it.each([

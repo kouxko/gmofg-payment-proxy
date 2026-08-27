@@ -12,9 +12,8 @@ use async_trait::async_trait;
 use intercept_proxy_application::{
     AppError, AppResult, ListenerRuntimePort, ListenerRuntimeState, ProtocolPackageRef,
     ProtocolPackageUsageCount, ProtocolPackageUsageQueryPort, ProtocolPackageUsageViewModel,
-    WorkspaceRepositoryPort,
+    WorkspaceRepositoryPort, listener_protocol_package,
 };
-use intercept_proxy_domain::{ListenerDataPlane, SocketPayloadProcessing};
 
 #[derive(Debug)]
 pub struct ProtocolPackageUsageQueryAdapter {
@@ -37,25 +36,36 @@ impl ProtocolPackageUsageQueryAdapter {
     async fn all_usages(
         &self,
     ) -> AppResult<Vec<(ProtocolPackageRef, ProtocolPackageUsageViewModel)>> {
-        let runtime_states = self
-            .listener_runtime
-            .statuses()
-            .await?
-            .into_iter()
-            .map(|status| (status.listener_id, status.state))
+        let statuses = self.listener_runtime.statuses().await?;
+        let workspaces = self.workspaces.snapshot().await?;
+        let mut usages = Self::usages_from_snapshot(&workspaces.details, &statuses);
+        usages.sort_by(|left, right| {
+            left.0
+                .id
+                .cmp(&right.0.id)
+                .then_with(|| left.0.version.cmp(&right.0.version))
+                .then_with(|| left.1.workspace_id.cmp(&right.1.workspace_id))
+                .then_with(|| left.1.listener_id.cmp(&right.1.listener_id))
+        });
+        Ok(usages)
+    }
+
+    fn usages_from_snapshot(
+        workspaces: &[intercept_proxy_application::ProxyWorkspace],
+        statuses: &[intercept_proxy_application::ListenerStatusViewModel],
+    ) -> Vec<(ProtocolPackageRef, ProtocolPackageUsageViewModel)> {
+        let runtime_states = statuses
+            .iter()
+            .map(|status| (status.listener_id, status.state.clone()))
             .collect::<BTreeMap<_, _>>();
         let mut usages = Vec::new();
-        for summary in self.workspaces.list().await? {
-            let workspace = self.workspaces.get(summary.id).await?;
+        for workspace in workspaces {
             for listener in &workspace.listeners {
-                let ListenerDataPlane::Socket(socket) = &listener.data_plane else {
-                    continue;
-                };
-                let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
+                let Some(package) = listener_protocol_package(listener) else {
                     continue;
                 };
                 usages.push((
-                    scripted.package.clone(),
+                    package.clone(),
                     ProtocolPackageUsageViewModel {
                         workspace_id: workspace.id,
                         workspace_name: workspace.name.clone(),
@@ -70,35 +80,14 @@ impl ProtocolPackageUsageQueryAdapter {
                 ));
             }
         }
-        usages.sort_by(|left, right| {
-            left.0
-                .id
-                .cmp(&right.0.id)
-                .then_with(|| left.0.version.cmp(&right.0.version))
-                .then_with(|| left.1.workspace_id.cmp(&right.1.workspace_id))
-                .then_with(|| left.1.listener_id.cmp(&right.1.listener_id))
-        });
-        Ok(usages)
-    }
-}
-
-#[async_trait]
-impl ProtocolPackageUsageQueryPort for ProtocolPackageUsageQueryAdapter {
-    async fn usages(
-        &self,
-        package: &ProtocolPackageRef,
-    ) -> AppResult<Vec<ProtocolPackageUsageViewModel>> {
-        Ok(self
-            .all_usages()
-            .await?
-            .into_iter()
-            .filter_map(|(candidate, usage)| (candidate == *package).then_some(usage))
-            .collect())
+        usages
     }
 
-    async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>> {
+    fn counts_from_usages(
+        usages: impl IntoIterator<Item = (ProtocolPackageRef, ProtocolPackageUsageViewModel)>,
+    ) -> AppResult<Vec<ProtocolPackageUsageCount>> {
         let mut counts = HashMap::<ProtocolPackageRef, (usize, usize)>::new();
-        for (package, usage) in self.all_usages().await? {
+        for (package, usage) in usages {
             let count = counts.entry(package).or_default();
             count.0 = count.0.checked_add(1).ok_or_else(usage_count_error)?;
             if usage.blocks_disable() {
@@ -122,6 +111,33 @@ impl ProtocolPackageUsageQueryPort for ProtocolPackageUsageQueryAdapter {
                 .then_with(|| left.package.version.cmp(&right.package.version))
         });
         Ok(counts)
+    }
+}
+
+#[async_trait]
+impl ProtocolPackageUsageQueryPort for ProtocolPackageUsageQueryAdapter {
+    async fn usages(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<Vec<ProtocolPackageUsageViewModel>> {
+        Ok(self
+            .all_usages()
+            .await?
+            .into_iter()
+            .filter_map(|(candidate, usage)| (candidate == *package).then_some(usage))
+            .collect())
+    }
+
+    async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>> {
+        Self::counts_from_usages(self.all_usages().await?)
+    }
+
+    async fn usage_counts_for_snapshot(
+        &self,
+        workspaces: &[intercept_proxy_application::ProxyWorkspace],
+        listener_statuses: &[intercept_proxy_application::ListenerStatusViewModel],
+    ) -> AppResult<Vec<ProtocolPackageUsageCount>> {
+        Self::counts_from_usages(Self::usages_from_snapshot(workspaces, listener_statuses))
     }
 }
 

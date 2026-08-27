@@ -7,6 +7,8 @@ import type {
   ProtocolRuleStage,
   ProtocolDocumentRuleDefinition,
   ProtocolRuleCapabilityCatalog,
+  ProtocolRuleEditorContext,
+  ProtocolRuleEditorStage,
   ProtocolRuleFieldCapability,
   ProtocolRuleSaveInput,
 } from "@/generated/rust-types";
@@ -53,16 +55,6 @@ export function protocolRuleEntryDescription(listener: ProxyListener) {
   return `Socket · 转发至上游 · ${packageRef.id}@${packageRef.version}`;
 }
 
-export function listenerStages(listener: ProxyListener): ProtocolRuleStage[] {
-  if (
-    listener.data_plane.kind === "socket" &&
-    listener.data_plane.settings.topology.mode === "local_responder"
-  ) {
-    return ["app_to_proxy", "proxy_to_app"];
-  }
-  return ["app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app"];
-}
-
 export function protocolRuleStageLabel(stage: ProtocolRuleStage) {
   switch (stage) {
     case "app_to_proxy": return "应用 → 代理";
@@ -72,28 +64,52 @@ export function protocolRuleStageLabel(stage: ProtocolRuleStage) {
   }
 }
 
-export function newProtocolRuleDraft(
-  listener: ProxyListener,
-  stage: ProtocolRuleStage,
-  catalog: ProtocolRuleCapabilityCatalog,
+export function draftFromEditorStage(
+  stage: ProtocolRuleEditorStage,
 ): ProtocolRuleDraft {
-  const localResponse = listener.data_plane.kind === "socket"
-    && listener.data_plane.settings.topology.mode === "local_responder";
   return {
-    rule_id: null,
-    expected_revision: null,
-    name: "新规则",
-    enabled: true,
-    priority: 100,
-    listener_id: listener.id,
-    package: catalog.package,
-    schema_version: catalog.schema_version,
-    stage,
-    conditions: [],
-    actions: localResponse && catalog.common_actions.includes("clear_document")
-      ? [{ type: "clear_document" }]
-      : [{ type: "record_match" }],
+    ...stage.new_rule_draft,
+    package: { ...stage.new_rule_draft.package },
+    conditions: [...stage.new_rule_draft.conditions],
+    actions: [...stage.new_rule_draft.actions],
   };
+}
+
+export function catalogFromEditorStage(
+  context: ProtocolRuleEditorContext,
+  stage: ProtocolRuleEditorStage,
+): ProtocolRuleCapabilityCatalog {
+  return {
+    package: context.package,
+    schema_version: stage.schema_version,
+    stage: stage.stage,
+    fields: stage.fields,
+    common_actions: stage.common_actions,
+  };
+}
+
+export function validateProtocolRuleEditorContext(context: ProtocolRuleEditorContext) {
+  if (!context || typeof context !== "object") return "规则编辑上下文无效。";
+  if (typeof context.listener_id !== "string" || context.listener_id.length === 0) return "规则编辑上下文缺少入口身份。";
+  if (!context.package || typeof context.package.id !== "string" || typeof context.package.version !== "string") return "规则编辑上下文缺少协议包身份。";
+  if (!Array.isArray(context.stages) || context.stages.length === 0) return "规则编辑上下文没有可用处理阶段。";
+  const stages = new Set<ProtocolRuleStage>();
+  for (const stage of context.stages) {
+    if (!stage || typeof stage !== "object" || stages.has(stage.stage)) return "规则编辑上下文包含无效或重复阶段。";
+    stages.add(stage.stage);
+    const catalog = catalogFromEditorStage(context, stage);
+    const catalogError = validateCapabilityCatalog(catalog);
+    if (catalogError) return catalogError;
+    const draft = stage.new_rule_draft;
+    if (!draft || draft.rule_id !== null || draft.expected_revision !== null) return "Rust 新规则草稿包含无效身份。";
+    if (draft.listener_id !== context.listener_id
+      || draft.package.id !== context.package.id
+      || draft.package.version !== context.package.version
+      || draft.schema_version !== stage.schema_version
+      || draft.stage !== stage.stage) return "Rust 新规则草稿绑定与编辑上下文不一致。";
+    const draftError = validateProtocolRuleDraft(draft, catalog);
+    if (draftError) return draftError;
+  }
 }
 
 export function draftFromRule(rule: ProtocolDocumentRuleDefinition): ProtocolRuleDraft {

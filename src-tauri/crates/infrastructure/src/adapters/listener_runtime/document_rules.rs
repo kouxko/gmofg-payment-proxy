@@ -145,12 +145,9 @@ impl ProtocolDocumentRuleConnection {
     ///
     /// 每次调用都创建新的值槽，Always + `SetField` 可以生成静态响应，而带字段条件的规则会因
     /// 未赋值稳定 non-match；上一 request 的值不会被复用。
+    #[cfg(test)]
     pub fn empty_document(&self) -> BoundSocketDocument {
         self.bind_document(Document::new(self.program().schema().clone()))
-    }
-
-    pub const fn stage(&self) -> ProtocolRuleStage {
-        self.stage
     }
 
     /// 复核运行时归属后执行整组规则，并只返回一个聚合结果。

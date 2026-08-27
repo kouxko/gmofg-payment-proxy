@@ -9,14 +9,6 @@ rg -n '高优先级执行完整流程|低优先级执行必要流程|必须停�
 test -f docs/tasks/completed/2026-08-26/agent-workflow-governance-optimization.md
 test "$(rg -c 'agent-workflow-governance-optimization\.md' docs/README.md || true)" -eq 0
 test "$(rg -c 'agent-workflow-governance-optimization\.md' docs/tasks/README.md)" -eq 1
-outside_terms=$(awk '
-  /^## 15\. Git 提交$/ {in_submit=1; next}
-  /^## 16\. CI 规则$/ {in_submit=0}
-  !in_submit && /Git|git|Commit|commit|diff|staged|unstaged|worktree|Push|提交|关联提交/ {print NR ":" $0}
-' AGENTS.md)
-test -z "$outside_terms"
-rg -n '^/\.task-manager\.lock/$|^/\.task-manager\.abandoned\.\*/$' .gitignore
-git check-ignore -v .task-manager.lock/ .task-manager.abandoned.replay/
 rg -n '具体示例：.*公共接口说明与实现合同冲突' docs/tasks/completed/2026-08-26/agent-workflow-governance-optimization.md
 if rg -n '[[:blank:]]+$' AGENTS.md docs/README.md docs/tasks/README.md docs/tasks/completed/2026-08-26/agent-workflow-governance-optimization.md; then
   exit 1

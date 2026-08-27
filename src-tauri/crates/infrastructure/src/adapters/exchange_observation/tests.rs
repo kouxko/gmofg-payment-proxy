@@ -59,6 +59,7 @@ fn appends_events_in_vec_order_without_sequence_or_interaction_id() {
 
 #[test]
 fn missing_open_is_ignored_without_synthesizing_connection_metadata() {
+    let workspace = WorkspaceId::new();
     let store = ExchangeObservationStore::new(Arc::new(CapacityLedger::new(4096)));
     assert!(
         store
@@ -76,6 +77,16 @@ fn missing_open_is_ignored_without_synthesizing_connection_metadata() {
     );
     assert!(store.get("unknown").is_none());
     assert_eq!(store.ignored_events(), 1);
+    let page = store.query(&ExchangeObservationQuery {
+        workspace_id: workspace,
+        listener_id: None,
+        page: PageRequest {
+            page: 1,
+            page_size: 20,
+        },
+    });
+    assert_eq!(page.dropped_events, 0);
+    assert_eq!(page.ignored_events, 1);
 }
 
 #[test]
@@ -134,7 +145,8 @@ fn producer_drop_counter_is_lock_free_and_visible_to_queries() {
             page_size: 20,
         },
     });
-    assert_eq!(page.ignored_events, 1);
+    assert_eq!(page.dropped_events, 1);
+    assert_eq!(page.ignored_events, 0);
 }
 
 #[test]

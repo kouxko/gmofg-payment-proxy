@@ -3,15 +3,102 @@
 use serde_json::Value;
 
 use super::{
-    AndroidEndpointArguments, AndroidPackageArguments, AndroidProfileArguments, ApplicationBackend,
-    ApplicationLogDetailArguments, BreakpointDetailArguments, BreakpointQueryArguments,
-    HttpCaptureDetailArguments, HttpRuleArguments, ProtocolPackageArguments, ToolFailure,
-    ToolResult, WorkspaceArguments, json_value, parse, query, unknown_tool,
+    AndroidDeviceArguments, AndroidEndpointArguments, AndroidPackageArguments,
+    AndroidProfileArguments, ApplicationBackend, ApplicationLogDetailArguments,
+    BreakpointDetailArguments, BreakpointQueryArguments, EnvironmentApplyArguments,
+    EnvironmentCandidateArguments, EnvironmentCreateArguments, EnvironmentToolRequest,
+    HttpCaptureDetailArguments, HttpRuleArguments, McpCallContext, ProtocolPackageArguments,
+    ToolFailure, ToolResult, WorkspaceArguments, json_value, parse, query, unknown_tool,
 };
 use crate::{reproduction_report, runtime_logs::ApplicationLogQuery};
-use intercept_proxy_application::ExchangeObservationQuery;
+use intercept_proxy_application::{
+    EnvironmentCandidateId, EnvironmentCandidateLifecycleError, EnvironmentConfirmationToken,
+    ExchangeObservationQuery,
+};
+
+use crate::mcp::environment_contract::{
+    EnvironmentIpBindingProjection, EnvironmentToolKind, EnvironmentTransportProjection,
+    environment_capabilities_output,
+};
 
 impl ApplicationBackend {
+    pub(super) fn environment_tool_request(
+        kind: EnvironmentToolKind,
+        arguments: Value,
+        context: McpCallContext,
+    ) -> Result<EnvironmentToolRequest, ToolFailure> {
+        match kind {
+            EnvironmentToolKind::Capabilities => Ok(EnvironmentToolRequest::Capabilities {
+                transport_capabilities: context.transport_capabilities,
+            }),
+            EnvironmentToolKind::Create => {
+                let arguments: EnvironmentCreateArguments = parse_environment(arguments)?;
+                Ok(EnvironmentToolRequest::Create {
+                    candidate: arguments.candidate,
+                    request_cancellation: context.request_cancellation,
+                })
+            }
+            EnvironmentToolKind::Status => {
+                let arguments: EnvironmentCandidateArguments = parse_environment(arguments)?;
+                Ok(EnvironmentToolRequest::Status {
+                    candidate_id: environment_candidate_id(arguments.candidate_id)?,
+                })
+            }
+            EnvironmentToolKind::Cancel => {
+                let arguments: EnvironmentCandidateArguments = parse_environment(arguments)?;
+                Ok(EnvironmentToolRequest::Cancel {
+                    candidate_id: environment_candidate_id(arguments.candidate_id)?,
+                })
+            }
+            EnvironmentToolKind::Apply => {
+                let arguments: EnvironmentApplyArguments = parse_environment(arguments)?;
+                Ok(EnvironmentToolRequest::Apply {
+                    candidate_id: environment_candidate_id(arguments.candidate_id)?,
+                    confirmation_token: EnvironmentConfirmationToken::new(
+                        arguments.confirmation_token,
+                    )
+                    .map_err(|_| environment_arguments_failure())?,
+                })
+            }
+        }
+    }
+
+    pub(super) async fn call_environment_tool(
+        &self,
+        request: EnvironmentToolRequest,
+    ) -> ToolResult {
+        match request {
+            EnvironmentToolRequest::Capabilities {
+                transport_capabilities,
+            } => Ok(environment_capabilities_output(transport_projection(
+                &transport_capabilities,
+            ))),
+            EnvironmentToolRequest::Create {
+                candidate,
+                request_cancellation,
+            } => json_value(
+                self.application
+                    .environment_candidate_create(candidate, request_cancellation)
+                    .await
+                    .map_err(|error| environment_lifecycle_failure(&error))?,
+            ),
+            EnvironmentToolRequest::Status { candidate_id } => {
+                json_value(self.application.environment_candidate_status(&candidate_id))
+            }
+            EnvironmentToolRequest::Cancel { candidate_id } => {
+                json_value(self.application.environment_candidate_cancel(&candidate_id))
+            }
+            EnvironmentToolRequest::Apply {
+                candidate_id,
+                confirmation_token,
+            } => json_value(
+                self.application
+                    .environment_candidate_queue_and_start_apply(&candidate_id, &confirmation_token)
+                    .map_err(|error| environment_lifecycle_failure(&error))?,
+            ),
+        }
+    }
+
     pub(super) async fn call_general_tool(&self, name: &str, arguments: Value) -> ToolResult {
         match name {
             "application_snapshot" => self.application_snapshot().await,
@@ -157,12 +244,15 @@ impl ApplicationBackend {
             }
             "android_adb_get" => json_value(self.application.android_adb_get().await?),
             "android_device_list" => json_value(self.application.android_device_list().await?),
-            "android_package_list" => json_value(self.application.android_package_list().await?),
+            "android_package_list" => {
+                let args: AndroidDeviceArguments = parse(arguments)?;
+                json_value(self.application.android_package_list(args.serial).await?)
+            }
             "android_package_get" => {
                 let args: AndroidPackageArguments = parse(arguments)?;
                 json_value(
                     self.application
-                        .android_package_get(args.package_name)
+                        .android_package_get(args.serial, args.package_name)
                         .await?,
                 )
             }
@@ -177,15 +267,18 @@ impl ApplicationBackend {
                         .await?,
                 )
             }
-            "android_network_status" => json_value(self.application.device_network_status().await?),
-            "android_runtime_owner" => {
-                json_value(self.application.device_network_runtime_owner().await?)
+            "android_network_status" => {
+                let args: AndroidDeviceArguments = parse(arguments)?;
+                json_value(self.application.device_network_status(args.serial).await?)
+            }
+            "android_runtime_owner_list" => {
+                json_value(self.application.device_network_runtime_owners().await?)
             }
             "android_network_endpoints" => {
                 let args: AndroidEndpointArguments = parse(arguments)?;
                 json_value(
                     self.application
-                        .device_network_endpoints(args.profile_id)
+                        .device_network_endpoints(args.serial, args.profile_id)
                         .await?,
                 )
             }
@@ -200,5 +293,103 @@ impl ApplicationBackend {
             }
             _ => unknown_tool(name),
         }
+    }
+}
+
+fn parse_environment<T: serde::de::DeserializeOwned>(arguments: Value) -> Result<T, ToolFailure> {
+    serde_json::from_value(arguments).map_err(|_| environment_arguments_failure())
+}
+
+fn environment_candidate_id(value: String) -> Result<EnvironmentCandidateId, ToolFailure> {
+    EnvironmentCandidateId::new(value).map_err(|_| environment_arguments_failure())
+}
+
+fn environment_arguments_failure() -> ToolFailure {
+    ToolFailure {
+        code: "MCP_TOOL_ARGUMENTS_INVALID".to_owned(),
+        message: "environment tool arguments violate the published schema".to_owned(),
+        details: None,
+    }
+}
+
+fn environment_lifecycle_failure(error: &EnvironmentCandidateLifecycleError) -> ToolFailure {
+    let (code, message) = match error {
+        EnvironmentCandidateLifecycleError::CandidateCapacityExceeded => (
+            "CANDIDATE_CAPACITY_EXCEEDED",
+            "environment candidate capacity was exceeded",
+        ),
+        EnvironmentCandidateLifecycleError::TargetCandidateAlreadyActive => (
+            "TARGET_CANDIDATE_ALREADY_ACTIVE",
+            "the target already has an active environment candidate",
+        ),
+        EnvironmentCandidateLifecycleError::ApplyAlreadyActive => (
+            "APPLY_ALREADY_ACTIVE",
+            "an environment apply task is already active",
+        ),
+        EnvironmentCandidateLifecycleError::TokenConsumed => (
+            "TOKEN_CONSUMED",
+            "the environment confirmation token was already consumed",
+        ),
+        EnvironmentCandidateLifecycleError::ConfirmationTokenMissing => (
+            "CONFIRMATION_TOKEN_MISSING",
+            "the environment confirmation token is missing",
+        ),
+        EnvironmentCandidateLifecycleError::ConfirmationTokenInvalid => (
+            "CONFIRMATION_TOKEN_INVALID",
+            "the environment confirmation token is invalid",
+        ),
+        EnvironmentCandidateLifecycleError::CandidateNotFound => (
+            "CANDIDATE_NOT_FOUND",
+            "the environment candidate was not found",
+        ),
+        EnvironmentCandidateLifecycleError::ShutdownInProgress => (
+            "SHUTDOWN_IN_PROGRESS",
+            "application shutdown is in progress",
+        ),
+        EnvironmentCandidateLifecycleError::PrivateMaterialEncodingFailed
+        | EnvironmentCandidateLifecycleError::TerminalProjectionEncodingFailed
+        | EnvironmentCandidateLifecycleError::InvalidState
+        | EnvironmentCandidateLifecycleError::ValidatedTargetMismatch
+        | EnvironmentCandidateLifecycleError::CandidateEpochExhausted
+        | EnvironmentCandidateLifecycleError::InvalidPolicy => (
+            "VALIDATION_LAYER_FAILED",
+            "the environment operation failed before producing a public result",
+        ),
+    };
+    ToolFailure {
+        code: code.to_owned(),
+        message: message.to_owned(),
+        details: None,
+    }
+}
+
+fn transport_projection(
+    capabilities: &crate::mcp::server::McpTransportCapabilities,
+) -> EnvironmentTransportProjection {
+    let ip = |binding: &crate::mcp::server::McpIpCapability| EnvironmentIpBindingProjection {
+        available: binding.available(),
+        bind_address: binding.bind_address(),
+        port: binding.port(),
+        warning_codes: binding
+            .warning_codes()
+            .iter()
+            .copied()
+            .map(crate::mcp::server::McpTransportWarningCode::as_str)
+            .collect(),
+    };
+    EnvironmentTransportProjection {
+        endpoint: format!(
+            "http://{}:{}/mcp",
+            capabilities.ipv4().bind_address(),
+            capabilities.ipv4().port()
+        ),
+        ipv4: ip(capabilities.ipv4()),
+        ipv6: ip(capabilities.ipv6()),
+        warnings: capabilities
+            .warnings()
+            .iter()
+            .copied()
+            .map(crate::mcp::server::McpTransportWarningCode::as_str)
+            .collect(),
     }
 }

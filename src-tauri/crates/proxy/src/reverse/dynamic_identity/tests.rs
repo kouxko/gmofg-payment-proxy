@@ -19,6 +19,7 @@ struct TestAuthority {
     active: AtomicUsize,
     max_active: AtomicUsize,
     fail: AtomicBool,
+    panic: AtomicBool,
     gate: Gate,
 }
 
@@ -59,6 +60,7 @@ impl TestAuthority {
             active: AtomicUsize::new(0),
             max_active: AtomicUsize::new(0),
             fail: AtomicBool::new(fail),
+            panic: AtomicBool::new(false),
             gate: Gate::default(),
         }
     }
@@ -71,6 +73,10 @@ impl MitmCertificateAuthority for TestAuthority {
         self.max_active.fetch_max(active, Ordering::SeqCst);
         self.gate.wait();
         self.active.fetch_sub(1, Ordering::SeqCst);
+        assert!(
+            !self.panic.load(Ordering::SeqCst),
+            "injected dynamic identity signer panic"
+        );
         if self.fail.load(Ordering::SeqCst) {
             return Err(ProxyError::new(
                 ErrorCode::CertificateInvalid,
@@ -82,6 +88,56 @@ impl MitmCertificateAuthority for TestAuthority {
             private_key_pkcs8_der: self.material.private_key.clone().into(),
         })
     }
+}
+
+#[test]
+fn panicking_owner_releases_all_waiters_and_same_sni_can_retry() {
+    const THREADS: usize = 8;
+    let authority = Arc::new(TestAuthority::new(false));
+    authority.panic.store(true, Ordering::SeqCst);
+    let resolver = resolver(authority.clone());
+    let start = Arc::new(Barrier::new(THREADS));
+    let (result_tx, result_rx) = std::sync::mpsc::channel();
+    let handles = (0..THREADS)
+        .map(|_| {
+            let resolver = Arc::clone(&resolver);
+            let start = Arc::clone(&start);
+            let result_tx = result_tx.clone();
+            thread::spawn(move || {
+                start.wait();
+                result_tx
+                    .send(resolver.resolve_identity("panic.example.test"))
+                    .unwrap();
+            })
+        })
+        .collect::<Vec<_>>();
+
+    wait_for_calls(&authority, 1);
+    let flight = Arc::clone(
+        lock_recover(&resolver.state)
+            .in_flight
+            .get("panic.example.test")
+            .expect("owner flight exists"),
+    );
+    flight.wait_for_waiters(THREADS - 1);
+    authority.gate.release();
+    for _ in 0..THREADS {
+        let error = result_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("panic owner must release every waiter")
+            .unwrap_err();
+        assert_eq!(error.code, ErrorCode::Internal.as_str());
+    }
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    assert!(lock_recover(&resolver.state).in_flight.is_empty());
+
+    authority.panic.store(false, Ordering::SeqCst);
+    resolver
+        .resolve_identity("panic.example.test")
+        .expect("same SNI retries after panic cleanup");
+    assert_eq!(authority.calls.load(Ordering::SeqCst), 2);
 }
 
 #[test]

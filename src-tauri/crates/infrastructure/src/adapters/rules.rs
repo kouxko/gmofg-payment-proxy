@@ -23,11 +23,15 @@ use intercept_proxy_domain::{
     RuleSetSignature, RuntimeEpoch, TerminalAction, TrafficDirection, validate_rule_draft,
 };
 use intercept_proxy_product_api::ProductChannel;
+#[cfg(test)]
 use parking_lot::Mutex;
 use serde_json::{Map, Value};
 
 use crate::files::RULE_IMPORT_MAX_BYTES;
-use crate::{AtomicFileExporter, InfrastructureError, SqliteStore, WorkspaceRecord};
+use crate::{
+    AtomicFileExporter, InfrastructureError, IntoSqlitePersistence, SqliteExecutor, SqliteStore,
+    WorkspaceRecord,
+};
 
 use super::{
     common::{app_error, decode_workspace_record, encode_workspace_record, infra, json_error},
@@ -39,10 +43,13 @@ const RULE_PERSISTENCE_VERSION: u64 = 1;
 
 #[derive(Debug)]
 pub struct RuleRepositoryAdapter {
+    #[cfg(test)]
     store: Arc<SqliteStore>,
+    executor: SqliteExecutor,
     dialog: Arc<dyn NativeFileDialog>,
     sessions: Arc<dyn SessionQueryPort>,
     exporter: AtomicFileExporter,
+    #[cfg(test)]
     operations: Mutex<()>,
     channel_names: BTreeMap<ChannelId, String>,
 }
@@ -50,16 +57,22 @@ pub struct RuleRepositoryAdapter {
 impl RuleRepositoryAdapter {
     #[must_use]
     pub fn new(
-        store: Arc<SqliteStore>,
+        persistence: impl IntoSqlitePersistence,
         dialog: Arc<dyn NativeFileDialog>,
         sessions: Arc<dyn SessionQueryPort>,
         channels: &[ProductChannel],
     ) -> Self {
+        let (executor, store) = persistence.into_sqlite_persistence();
+        #[cfg(not(test))]
+        drop(store);
         Self {
+            #[cfg(test)]
             store,
+            executor,
             dialog,
             sessions,
             exporter: AtomicFileExporter,
+            #[cfg(test)]
             operations: Mutex::new(()),
             channel_names: channels
                 .iter()
@@ -75,8 +88,13 @@ impl RuleRepositoryAdapter {
     }
 
     /// 规则属于当前选中的 Workspace 聚合；独立 `rules` 表只保留旧 schema，不再读取。
+    #[cfg(test)]
     fn load_selected_workspace(&self) -> AppResult<ProxyWorkspace> {
-        let snapshot = infra(self.store.load_workspaces())?;
+        Self::load_selected_workspace_from(&self.store)
+    }
+
+    fn load_selected_workspace_from(store: &SqliteStore) -> AppResult<ProxyWorkspace> {
+        let snapshot = infra(store.load_workspaces())?;
         let selected_id = snapshot
             .selected_id
             .ok_or_else(|| AppError::new("WORKSPACE_NOT_FOUND", "当前没有选中的 Workspace。"))?;
@@ -88,12 +106,20 @@ impl RuleRepositoryAdapter {
         decode_workspace_record(record).map_err(persisted_rule_error)
     }
 
+    #[cfg(test)]
     fn load(&self) -> AppResult<Vec<Rule>> {
         Ok(self.load_selected_workspace()?.rules)
     }
 
-    fn load_workspace_for_channel(&self, channel: &str) -> AppResult<ProxyWorkspace> {
-        let snapshot = infra(self.store.load_workspaces())?;
+    fn load_from(store: &SqliteStore) -> AppResult<Vec<Rule>> {
+        Ok(Self::load_selected_workspace_from(store)?.rules)
+    }
+
+    fn load_workspace_for_channel_from(
+        store: &SqliteStore,
+        channel: &str,
+    ) -> AppResult<ProxyWorkspace> {
+        let snapshot = infra(store.load_workspaces())?;
         let mut matches = Vec::new();
         for record in snapshot.records {
             let workspace = decode_workspace_record(record).map_err(persisted_rule_error)?;
@@ -122,8 +148,8 @@ impl RuleRepositoryAdapter {
         Ok(workspace)
     }
 
-    fn load_workspace_by_id(&self, id: uuid::Uuid) -> AppResult<ProxyWorkspace> {
-        let snapshot = infra(self.store.load_workspaces())?;
+    fn load_workspace_by_id_from(store: &SqliteStore, id: uuid::Uuid) -> AppResult<ProxyWorkspace> {
+        let snapshot = infra(store.load_workspaces())?;
         let record = snapshot
             .records
             .into_iter()
@@ -144,15 +170,30 @@ impl RuleRepositoryAdapter {
         })
     }
 
-    fn save_selected_workspace(
-        &self,
+    fn save_selected_workspace_to(
+        store: &SqliteStore,
+        mut workspace: ProxyWorkspace,
+        expected_revision: u64,
+    ) -> AppResult<ProxyWorkspace> {
+        workspace.revision = Revision::new(expected_revision).next();
+        workspace.validate().map_err(AppError::from)?;
+        infra(store.compare_and_swap_selected_workspace(
+            workspace.id.as_uuid(),
+            expected_revision,
+            &Self::workspace_record(&workspace)?,
+        ))?;
+        Ok(workspace)
+    }
+
+    fn save_workspace_to(
+        store: &SqliteStore,
         mut workspace: ProxyWorkspace,
         expected_revision: u64,
     ) -> AppResult<ProxyWorkspace> {
         workspace.revision = Revision::new(expected_revision).next();
         workspace.validate().map_err(AppError::from)?;
         infra(
-            self.store.compare_and_swap_workspace(
+            store.compare_and_swap_workspace(
                 expected_revision,
                 &Self::workspace_record(&workspace)?,
             ),
@@ -160,8 +201,8 @@ impl RuleRepositoryAdapter {
         Ok(workspace)
     }
 
-    fn save_locked(&self, draft: &AppRuleDraft) -> AppResult<Rule> {
-        let mut workspace = self.load_selected_workspace()?;
+    fn save_locked_to(store: &SqliteStore, draft: &AppRuleDraft) -> AppResult<Rule> {
+        let mut workspace = Self::load_selected_workspace_from(store)?;
         let mut rules = workspace.rules.clone();
         let creation_order = draft
             .rule_id
@@ -201,10 +242,11 @@ impl RuleRepositoryAdapter {
         }
         let expected_workspace_revision = workspace.revision.get();
         workspace.rules = rules;
-        self.save_selected_workspace(workspace, expected_workspace_revision)?;
+        Self::save_selected_workspace_to(store, workspace, expected_workspace_revision)?;
         Ok(changed)
     }
 
+    #[cfg(test)]
     pub(crate) fn get_domain(&self, id: AppRuleId) -> AppResult<Rule> {
         self.load()?
             .into_iter()
@@ -212,6 +254,7 @@ impl RuleRepositoryAdapter {
             .ok_or_else(|| AppError::new("RULE_INVALID", "规则不存在。").entity(id.to_string()))
     }
 
+    #[cfg(test)]
     pub(crate) fn toggle_domain(
         &self,
         id: AppRuleId,
@@ -219,7 +262,16 @@ impl RuleRepositoryAdapter {
         enabled: bool,
     ) -> AppResult<Rule> {
         let _operation = self.operations.lock();
-        let mut workspace = self.load_selected_workspace()?;
+        Self::toggle_domain_to(&self.store, id, expected_revision, enabled)
+    }
+
+    fn toggle_domain_to(
+        store: &SqliteStore,
+        id: AppRuleId,
+        expected_revision: u64,
+        enabled: bool,
+    ) -> AppResult<Rule> {
+        let mut workspace = Self::load_selected_workspace_from(store)?;
         let mut rules = workspace.rules.clone();
         let domain_id = RuleId::from_uuid(id);
         let mut engine = RuleEngine::new(RuntimeEpoch::new(), rules);
@@ -234,63 +286,75 @@ impl RuleRepositoryAdapter {
             .expect("domain engine retained toggled rule");
         let expected_workspace_revision = workspace.revision.get();
         workspace.rules = rules;
-        self.save_selected_workspace(workspace, expected_workspace_revision)?;
+        Self::save_selected_workspace_to(store, workspace, expected_workspace_revision)?;
         Ok(changed)
     }
 
-    pub fn runtime_snapshot(&self, channel: &str) -> AppResult<RuleRuntimeSnapshot> {
-        let _operation = self.operations.lock();
-        let workspace = self.load_workspace_for_channel(channel)?;
-        Ok(RuleRuntimeSnapshot::with_collection_identity(
-            Some(workspace.id.as_uuid()),
-            workspace.revision.get(),
-            workspace.rules,
-        ))
+    pub async fn runtime_snapshot(&self, channel: &str) -> AppResult<RuleRuntimeSnapshot> {
+        let channel = channel.to_owned();
+        self.executor
+            .execute(move |store| {
+                let workspace = Self::load_workspace_for_channel_from(store, &channel)?;
+                Ok(RuleRuntimeSnapshot::with_collection_identity(
+                    Some(workspace.id.as_uuid()),
+                    workspace.revision.get(),
+                    workspace.rules,
+                ))
+            })
+            .await
     }
 
-    pub fn commit_runtime_snapshot(
+    pub async fn commit_runtime_snapshot(
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
     ) -> AppResult<u64> {
-        let _operation = self.operations.lock();
-        if RuleSetSignature::from_rules(&snapshot.rules) != snapshot.signature {
-            return Err(AppError::new(
-                "REVISION_CONFLICT",
-                "规则运行快照签名与内容不一致。",
-            ));
-        }
-        let collection_id = snapshot.collection_id.ok_or_else(|| {
-            AppError::new("REVISION_CONFLICT", "规则运行快照缺少 Workspace 标识。")
-        })?;
-        let mut workspace = self.load_workspace_by_id(collection_id)?;
-        if snapshot.collection_id != Some(workspace.id.as_uuid())
-            || workspace.revision.get() != snapshot.collection_revision
-            || RuleSetSignature::from_rules(&workspace.rules) != snapshot.signature
-        {
-            return Err(AppError::new(
-                "REVISION_CONFLICT",
-                "Workspace 或规则集合已在运行快照之后发生变化。",
-            ));
-        }
-        workspace.rules = runtime_rules(snapshot, evaluated_rules)?;
-        let expected_revision = workspace.revision.get();
-        Ok(self
-            .save_selected_workspace(workspace, expected_revision)?
-            .revision
-            .get())
+        let snapshot = snapshot.clone();
+        let evaluated_rules = evaluated_rules.to_vec();
+        self.executor
+            .execute(move |store| {
+                if RuleSetSignature::from_rules(&snapshot.rules) != snapshot.signature {
+                    return Err(AppError::new(
+                        "REVISION_CONFLICT",
+                        "规则运行快照签名与内容不一致。",
+                    ));
+                }
+                let collection_id = snapshot.collection_id.ok_or_else(|| {
+                    AppError::new("REVISION_CONFLICT", "规则运行快照缺少 Workspace 标识。")
+                })?;
+                let mut workspace = Self::load_workspace_by_id_from(store, collection_id)?;
+                if snapshot.collection_id != Some(workspace.id.as_uuid())
+                    || workspace.revision.get() != snapshot.collection_revision
+                    || RuleSetSignature::from_rules(&workspace.rules) != snapshot.signature
+                {
+                    return Err(AppError::new(
+                        "REVISION_CONFLICT",
+                        "Workspace 或规则集合已在运行快照之后发生变化。",
+                    ));
+                }
+                workspace.rules = runtime_rules(&snapshot, &evaluated_rules)?;
+                let expected_revision = workspace.revision.get();
+                Ok(
+                    Self::save_workspace_to(store, workspace, expected_revision)?
+                        .revision
+                        .get(),
+                )
+            })
+            .await
     }
 
-    pub fn reset_runtime_hit_metadata(&self, collection_id: uuid::Uuid) -> AppResult<()> {
-        let _operation = self.operations.lock();
-        let mut workspace = self.load_workspace_by_id(collection_id)?;
-        let expected_revision = workspace.revision.get();
-        for rule in &mut workspace.rules {
-            rule.hit_count = 0;
-            rule.last_hit_at = None;
-        }
-        self.save_selected_workspace(workspace, expected_revision)
-            .map(|_| ())
+    pub async fn reset_runtime_hit_metadata(&self, collection_id: uuid::Uuid) -> AppResult<()> {
+        self.executor
+            .execute(move |store| {
+                let mut workspace = Self::load_workspace_by_id_from(store, collection_id)?;
+                let expected_revision = workspace.revision.get();
+                for rule in &mut workspace.rules {
+                    rule.hit_count = 0;
+                    rule.last_hit_at = None;
+                }
+                Self::save_workspace_to(store, workspace, expected_revision).map(|_| ())
+            })
+            .await
     }
 }
 

@@ -44,12 +44,12 @@ fn terminal_count_retains_32_and_evicts_oldest_at_33() {
 fn cumulative_terminal_bytes_retain_exact_4_mib_and_evict_at_b_plus_one() {
     let probe = registry();
     let probe_candidate = insert_validating(&probe, "Byte Target", 1);
-    probe
-        .complete_preview_ready(
-            probe_candidate.candidate_id(),
-            public_snapshot_with_padding("Byte Target", 0),
-        )
-        .expect("typed public probe snapshot validates");
+    complete_preview_ready(
+        &probe,
+        probe_candidate.candidate_id(),
+        public_snapshot_with_padding("Byte Target", 0),
+    )
+    .expect("typed public probe snapshot validates");
     probe.cancel(probe_candidate.candidate_id());
     let base_bytes = probe.metrics().terminal_public_bytes();
     let half_budget = TERMINAL_BYTES_BUDGET / 2;
@@ -58,22 +58,22 @@ fn cumulative_terminal_bytes_retain_exact_4_mib_and_evict_at_b_plus_one() {
 
     let exact = registry();
     let exact_first = insert_validating(&exact, "Byte Target", 1);
-    exact
-        .complete_preview_ready(
-            exact_first.candidate_id(),
-            public_snapshot_with_padding("Byte Target", public_padding_bytes),
-        )
-        .expect("first typed terminal snapshot validates");
+    complete_preview_ready(
+        &exact,
+        exact_first.candidate_id(),
+        public_snapshot_with_padding("Byte Target", public_padding_bytes),
+    )
+    .expect("first typed terminal snapshot validates");
     exact.cancel(exact_first.candidate_id());
     assert_eq!(exact.metrics().terminal_public_bytes(), half_budget);
 
     let exact_second = insert_validating(&exact, "Byte Target", 1);
-    exact
-        .complete_preview_ready(
-            exact_second.candidate_id(),
-            public_snapshot_with_padding("Byte Target", public_padding_bytes),
-        )
-        .expect("second typed terminal snapshot validates");
+    complete_preview_ready(
+        &exact,
+        exact_second.candidate_id(),
+        public_snapshot_with_padding("Byte Target", public_padding_bytes),
+    )
+    .expect("second typed terminal snapshot validates");
     exact.cancel(exact_second.candidate_id());
     assert_eq!(
         exact.metrics().terminal_public_bytes(),
@@ -86,20 +86,20 @@ fn cumulative_terminal_bytes_retain_exact_4_mib_and_evict_at_b_plus_one() {
 
     let overflow = registry();
     let overflow_first = insert_validating(&overflow, "Byte Target", 1);
-    overflow
-        .complete_preview_ready(
-            overflow_first.candidate_id(),
-            public_snapshot_with_padding("Byte Target", public_padding_bytes),
-        )
-        .expect("first half-budget terminal snapshot validates");
+    complete_preview_ready(
+        &overflow,
+        overflow_first.candidate_id(),
+        public_snapshot_with_padding("Byte Target", public_padding_bytes),
+    )
+    .expect("first half-budget terminal snapshot validates");
     overflow.cancel(overflow_first.candidate_id());
     let overflow_second = insert_validating(&overflow, "Byte Target", 1);
-    overflow
-        .complete_preview_ready(
-            overflow_second.candidate_id(),
-            public_snapshot_with_padding("Byte Target", public_padding_bytes + 1),
-        )
-        .expect("exact B+1 cumulative snapshot validates");
+    complete_preview_ready(
+        &overflow,
+        overflow_second.candidate_id(),
+        public_snapshot_with_padding("Byte Target", public_padding_bytes + 1),
+    )
+    .expect("exact B+1 cumulative snapshot validates");
     overflow.cancel(overflow_second.candidate_id());
 
     assert_eq!(

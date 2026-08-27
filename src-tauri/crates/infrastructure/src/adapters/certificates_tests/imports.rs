@@ -1,5 +1,5 @@
-#[test]
-fn installation_identity_distinguishes_corrupt_material_from_missing_material() {
+#[tokio::test]
+async fn installation_identity_distinguishes_corrupt_material_from_missing_material() {
     let store = Arc::new(SqliteStore::in_memory().expect("store"));
     store
         .compare_and_swap_certificate_materials(
@@ -23,6 +23,7 @@ fn installation_identity_distinguishes_corrupt_material_from_missing_material() 
     );
     let corrupt_error = corrupt
         .load_installation_server_identity()
+        .await
         .expect_err("corrupt material must fail");
     assert_eq!(corrupt_error.view_model.code, "INTERNAL_ERROR");
 
@@ -34,6 +35,7 @@ fn installation_identity_distinguishes_corrupt_material_from_missing_material() 
     );
     let missing_error = missing
         .load_installation_server_identity()
+        .await
         .expect_err("missing material must fail");
     assert_eq!(missing_error.view_model.code, "CERTIFICATE_NOT_READY");
 }
@@ -144,6 +146,7 @@ async fn listener_can_load_certificate_page_leaf_as_server_identity() {
 
     let identity = adapter
         .load_installation_server_identity()
+        .await
         .expect("load installation leaf");
 
     assert_eq!(identity.certificate_chain_der.len(), 1);
@@ -151,7 +154,7 @@ async fn listener_can_load_certificate_page_leaf_as_server_identity() {
     assert!(!identity.private_key_pkcs8_der.is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "current_thread")]
 async fn mitm_signer_uses_the_protected_installation_root_for_each_authority() {
     let adapter = CertificateServiceAdapter::new(
         Arc::new(SqliteStore::in_memory().expect("store")),
@@ -165,9 +168,29 @@ async fn mitm_signer_uses_the_protected_installation_root_for_each_authority() {
         .generate_ca(vec!["127.0.0.1".into()])
         .await
         .expect("generate installation Root CA");
-    let identity = adapter
+    let authority = adapter
+        .freeze_installation_tls_material()
+        .await
+        .expect("freeze installation Root CA")
+        .dynamic_authority;
+    let executor = adapter.executor.clone();
+    let (entered_tx, entered_rx) = tokio::sync::oneshot::channel();
+    let (release_tx, release_rx) = std::sync::mpsc::channel();
+    let blocker = tokio::spawn(async move {
+        executor
+            .execute(move |_| {
+                entered_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+                Ok::<_, InfrastructureError>(())
+            })
+            .await
+    });
+    entered_rx.await.unwrap();
+    let identity = authority
         .issue_server_identity("api.example.test")
         .expect("issue dynamic MITM leaf");
+    release_tx.send(()).unwrap();
+    blocker.await.unwrap().unwrap();
     let snapshot = adapter.load_snapshot(&[ROOT]).expect("load protected Root");
     let root = snapshot.materials.get(ROOT).expect("Root material");
     let metadata = CertificateService

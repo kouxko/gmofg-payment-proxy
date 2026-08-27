@@ -12,6 +12,7 @@ pub const EXTERNAL_PACKAGE_INTEGRATION_GUIDE_URI: &str =
     "intercept-proxy://docs/external-package-integration-guide/1.0";
 pub const DIAGNOSTIC_ARCHITECTURE_URI: &str = "intercept-proxy://docs/diagnostic-architecture/1.0";
 pub const TOOL_REFERENCE_URI: &str = "intercept-proxy://docs/tool-reference/1.0";
+pub const VALIDATION_PLAYBOOK_URI: &str = "intercept-proxy://docs/validation-playbook/1.0";
 pub const ISO8583_MANIFEST_URI: &str =
     "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/manifest.toml";
 pub const ISO8583_SCHEMA_URI: &str =
@@ -35,6 +36,7 @@ const EXTERNAL_PACKAGE_INTEGRATION_GUIDE: &str =
     include_str!("../../../docs/mcp/external-package-integration-guide.md");
 const DIAGNOSTIC_ARCHITECTURE: &str = include_str!("../../../docs/mcp/diagnostic-architecture.md");
 const TOOL_REFERENCE: &str = include_str!("../../../docs/mcp/tool-reference.md");
+const VALIDATION_PLAYBOOK: &str = include_str!("../../../docs/mcp/validation-playbook.md");
 const ISO8583_MANIFEST: &str =
     include_str!("../../../templates/socket-protocol/iso8583-standard/manifest.toml");
 const ISO8583_SCHEMA: &str =
@@ -94,9 +96,15 @@ pub fn list() -> Vec<Resource> {
             )
             .with_mime_type("text/markdown"),
         Resource::new(TOOL_REFERENCE_URI, "tool-reference")
-            .with_title("Complete read-only MCP tool reference")
+            .with_title("Complete MCP tool reference: 37 reads and 5 environment tools")
             .with_description(
                 "Arguments, successful structured results, errors, paging, retention and evidence boundaries for every public tool.",
+            )
+            .with_mime_type("text/markdown"),
+        Resource::new(VALIDATION_PLAYBOOK_URI, "validation-playbook")
+            .with_title("Proxy validation and troubleshooting playbook")
+            .with_description(
+                "Evidence-based validation order, stop conditions and safe troubleshooting guidance for HTTP, Socket, TLS, protocol packages, Android and environment candidates.",
             )
             .with_mime_type("text/markdown"),
         Resource::new(ISO8583_MANIFEST_URI, "official-iso8583-manifest")
@@ -136,6 +144,7 @@ pub fn text(uri: &str) -> Option<(&'static str, &'static str)> {
         }
         DIAGNOSTIC_ARCHITECTURE_URI => Some(("text/markdown", DIAGNOSTIC_ARCHITECTURE)),
         TOOL_REFERENCE_URI => Some(("text/markdown", TOOL_REFERENCE)),
+        VALIDATION_PLAYBOOK_URI => Some(("text/markdown", VALIDATION_PLAYBOOK)),
         ISO8583_MANIFEST_URI => Some(("application/toml", ISO8583_MANIFEST)),
         ISO8583_SCHEMA_URI => Some(("application/toml", ISO8583_SCHEMA)),
         ISO8583_PROTOCOL_SOURCE_URI => Some(("text/x-rhai", ISO8583_PROTOCOL_SOURCE)),

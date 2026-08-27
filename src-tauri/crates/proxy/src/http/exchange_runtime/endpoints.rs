@@ -422,6 +422,7 @@ fn message_context(message: &Message) -> HttpContext {
     HttpContext {
         header: message_header_text(message),
         body: String::from_utf8_lossy(&message.body).into_owned(),
+        body_is_utf8: std::str::from_utf8(&message.body).is_ok(),
     }
 }
 

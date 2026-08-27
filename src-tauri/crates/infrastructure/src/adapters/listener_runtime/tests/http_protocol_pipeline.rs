@@ -15,7 +15,7 @@ use intercept_proxy_runtime::{HttpConnectionIdentity, HttpProtocolCapabilityFact
 use uuid::Uuid;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
-use crate::{ProtocolPackageRepositoryAdapter, SqliteStore};
+use crate::{SqliteStore, adapters::ProtocolPackageRepositoryAdapter};
 
 use super::super::http_protocol_pipeline::HttpProtocolRuntimeSnapshot;
 use super::test_listener_runtime_with_packages;
@@ -409,6 +409,7 @@ fn context(header: &str, body: &str) -> HttpContext {
     HttpContext {
         header: header.into(),
         body: body.into(),
+        body_is_utf8: true,
     }
 }
 

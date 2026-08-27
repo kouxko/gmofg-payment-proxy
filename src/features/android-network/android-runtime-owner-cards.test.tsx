@@ -28,15 +28,20 @@ const deviceB = {
 
 const ownerA = {
   serial: "device-a",
+  epoch: "11111111-1111-4111-8111-111111111111",
   mode: "adb_reverse",
+  profile_id: "profile-a",
   state: "active",
+  source: "start",
   transition_reason: "activation_confirmed",
-} satisfies RuntimeOwnerDisplay;
+  updated_at: "2026-08-17T00:00:00Z",
+} as const;
 
 function renderDeviceControl(
   selectedSerial: string | null,
   onStop = vi.fn(),
   runtimeOwner: RuntimeOwnerDisplay = ownerA,
+  devices = [deviceA, deviceB],
 ) {
   render(
     <DeviceControlCard
@@ -47,11 +52,12 @@ function renderDeviceControl(
         selected_serial: selectedSerial,
       }}
       adbLoading={false}
-      devices={[deviceA, deviceB]}
+      devices={devices}
       devicesLoading={false}
       selectedSerial={selectedSerial}
-      runtimeOwner={runtimeOwner}
-      busy={false}
+      runtimeOwners={[{ ...ownerA, ...runtimeOwner }]}
+      busySerials={new Set()}
+      globalBusy={false}
       onRefreshDevices={vi.fn()}
       onSelectDevice={vi.fn()}
       onInstall={vi.fn()}
@@ -68,12 +74,14 @@ function renderProfileActions(
   selectedSerial: string | null,
   ownerSerial: string | null,
   runtimeOwnerReady = true,
+  runtimeOwnerCount = ownerSerial ? 1 : 0,
 ) {
   render(
     <ProfileActions
       busy={false}
       selectedSerial={selectedSerial}
-      runtimeOwnerSerial={ownerSerial}
+      runtimeOwner={ownerSerial && ownerSerial === selectedSerial ? { ...ownerA, serial: ownerSerial } : undefined}
+      runtimeOwnerCount={runtimeOwnerCount}
       runtimeOwnerReady={runtimeOwnerReady}
       dangerousConfirmed={false}
       onDangerousConfirmedChange={vi.fn()}
@@ -90,11 +98,10 @@ describe("Android runtime owner controls", () => {
 
     expect(screen.getByLabelText("目标设备")).toHaveTextContent("A8700");
     expect(screen.getByLabelText("设备网络运行所有者")).toHaveTextContent("device-a");
-    expect(screen.getByText(/停止、状态查询和紧急恢复只作用于实际运行设备/)).toBeVisible();
     expect(screen.getByRole("button", { name: "安装设备端组件" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "授权网络接管" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "刷新运行状态" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "紧急恢复网络" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "刷新运行状态 device-a" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "紧急恢复网络 device-a" })).toBeEnabled();
   });
 
   it("keeps owner stop and recovery available without a selected device", async () => {
@@ -106,10 +113,10 @@ describe("Android runtime owner controls", () => {
     expect(screen.getByRole("button", { name: "安装设备端组件" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "更新设备端组件" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "授权网络接管" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "刷新运行状态" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "停止网络接管" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "紧急恢复网络" })).toBeEnabled();
-    await user.click(screen.getByRole("button", { name: "停止网络接管" }));
+    expect(screen.getByRole("button", { name: "刷新运行状态 device-a" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "停止网络接管 device-a" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "紧急恢复网络 device-a" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "停止网络接管 device-a" }));
     expect(onStop).toHaveBeenCalledOnce();
   });
 
@@ -124,23 +131,34 @@ describe("Android runtime owner controls", () => {
     expect(ownerRegion).toHaveTextContent("等待同一序列号 device-a 重连");
     expect(ownerRegion).toHaveTextContent("最近变化：设备已断开");
     expect(ownerRegion).not.toHaveTextContent("运行记录有效");
-    expect(screen.getByRole("button", { name: "停止网络接管" })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "紧急恢复网络" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "停止网络接管 device-a" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "紧急恢复网络 device-a" })).toBeEnabled();
   });
 
-  it("blocks takeover on B without duplicating the owner stop action", () => {
+  it("keeps an offline owner selectable while disabling ADB-only actions", () => {
+    renderDeviceControl("device-a", vi.fn(), ownerA, [deviceB]);
+
+    expect(screen.getByLabelText("目标设备")).toHaveTextContent("离线运行设备 · device-a");
+    expect(screen.getByText("离线运行设备：device-a")).toBeVisible();
+    expect(screen.getByText(/ADB 安装、更新和授权不可用/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "安装设备端组件" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "更新设备端组件" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "授权网络接管" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "停止网络接管 device-a" })).toBeEnabled();
+  });
+
+  it("allows B to start independently from owner A", () => {
     renderProfileActions("device-b", "device-a");
 
-    expect(screen.getByRole("button", { name: "启动" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "启动" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "应用修改" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "停止网络接管" })).not.toBeInTheDocument();
-    expect(screen.getByText(/请先停止它/)).toBeVisible();
   });
 
   it("allows the selected owner to apply without duplicating the owner stop action", () => {
     renderProfileActions("device-a", "device-a");
 
-    expect(screen.getByRole("button", { name: "启动" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "启动" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "应用修改" })).toBeEnabled();
     expect(screen.queryByRole("button", { name: "停止网络接管" })).not.toBeInTheDocument();
   });
@@ -151,5 +169,13 @@ describe("Android runtime owner controls", () => {
     expect(screen.getByRole("button", { name: "启动" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "应用修改" })).toBeDisabled();
     expect(screen.getByText(/确认完成前不能启动或应用方案/)).toBeVisible();
+  });
+
+  it("blocks only a new start when the eight-owner capacity is full", () => {
+    renderProfileActions("device-b", null, true, 8);
+
+    expect(screen.getByRole("button", { name: "启动" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "应用修改" })).toBeDisabled();
+    expect(screen.getByText(/已达到 8 台运行设备上限/)).toBeVisible();
   });
 });

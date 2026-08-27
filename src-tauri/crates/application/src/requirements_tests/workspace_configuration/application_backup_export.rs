@@ -1,8 +1,15 @@
-use std::{collections::BTreeMap, path::Path, sync::Arc};
+use std::{collections::BTreeMap, future::Future, path::Path, pin::Pin, sync::Arc, task::Poll};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::*;
+
+async fn poll_once<F>(future: &mut F) -> Poll<F::Output>
+where
+    F: Future + Unpin,
+{
+    std::future::poll_fn(|context| Poll::Ready(Pin::new(&mut *future).poll(context))).await
+}
 
 #[derive(Debug, Default)]
 struct RecordingBackupExport {
@@ -47,6 +54,27 @@ impl ApplicationBackupExportPort for RecordingBackupExport {
 }
 
 #[tokio::test]
+async fn backup_reads_workspace_summaries_and_details_from_one_aggregate_snapshot() {
+    let ports = Arc::new(FakePorts::default());
+    let workspaces = Arc::new(SnapshotProbeWorkspaceRepository::default());
+    let (application, _) = application_with_workspace_configuration_and_packages(
+        ports,
+        workspaces.clone(),
+        Arc::new(NoopApplicationConfigurationStore),
+    );
+    let destination = RecordingBackupExport::default();
+
+    application
+        .application_backup_export(&destination)
+        .await
+        .expect("backup export");
+
+    assert_eq!(workspaces.snapshot_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(workspaces.list_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(workspaces.get_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn backup_snapshot_holds_mutation_gate_across_all_authoritative_reads() {
     let ports = Arc::new(FakePorts::default());
     let workspaces = Arc::new(InMemoryWorkspaceStore::default());
@@ -69,7 +97,7 @@ async fn backup_snapshot_holds_mutation_gate_across_all_authoritative_reads() {
     portability.application_export_entered.notified().await;
 
     let (workspace_started, workspace_attempting) = tokio::sync::oneshot::channel();
-    let workspace_mutation = {
+    let mut workspace_mutation = {
         let application = application.clone();
         tokio::spawn(async move {
             workspace_started.send(()).unwrap();
@@ -77,7 +105,7 @@ async fn backup_snapshot_holds_mutation_gate_across_all_authoritative_reads() {
         })
     };
     let (settings_started, settings_attempting) = tokio::sync::oneshot::channel();
-    let settings_mutation = {
+    let mut settings_mutation = {
         let application = application.clone();
         let mut draft = ports.settings.lock().stored.clone();
         draft.bind_address = "127.0.0.9".into();
@@ -88,7 +116,7 @@ async fn backup_snapshot_holds_mutation_gate_across_all_authoritative_reads() {
     };
     let exact_package = protocol_package("concurrent", "1.0.0");
     let (package_started, package_attempting) = tokio::sync::oneshot::channel();
-    let package_mutation = {
+    let mut package_mutation = {
         let application = application.clone();
         tokio::spawn(async move {
             package_started.send(()).unwrap();
@@ -102,7 +130,7 @@ async fn backup_snapshot_holds_mutation_gate_across_all_authoritative_reads() {
         reference: format!("{MANAGED_LISTENER_CERTIFICATE_PREFIX}discard-after-snapshot"),
     };
     let (certificate_started, certificate_attempting) = tokio::sync::oneshot::channel();
-    let certificate_mutation = {
+    let mut certificate_mutation = {
         let application = application.clone();
         tokio::spawn(async move {
             certificate_started.send(()).unwrap();
@@ -114,11 +142,22 @@ async fn backup_snapshot_holds_mutation_gate_across_all_authoritative_reads() {
     settings_attempting.await.unwrap();
     package_attempting.await.unwrap();
     certificate_attempting.await.unwrap();
-    tokio::task::yield_now().await;
-    assert!(!workspace_mutation.is_finished());
-    assert!(!settings_mutation.is_finished());
-    assert!(!package_mutation.is_finished());
-    assert!(!certificate_mutation.is_finished());
+    assert!(matches!(
+        poll_once(&mut workspace_mutation).await,
+        Poll::Pending
+    ));
+    assert!(matches!(
+        poll_once(&mut settings_mutation).await,
+        Poll::Pending
+    ));
+    assert!(matches!(
+        poll_once(&mut package_mutation).await,
+        Poll::Pending
+    ));
+    assert!(matches!(
+        poll_once(&mut certificate_mutation).await,
+        Poll::Pending
+    ));
 
     portability.continue_application_export.notify_one();
     exporting.await.unwrap().unwrap();
@@ -164,7 +203,7 @@ async fn concurrent_exports_release_mutation_gate_before_destination_write() {
     assert_eq!(destination.entered.load(Ordering::SeqCst), 2);
 
     let (started, attempting) = tokio::sync::oneshot::channel();
-    let mutation = {
+    let mut mutation = {
         let application = application.clone();
         tokio::spawn(async move {
             started.send(()).unwrap();
@@ -174,9 +213,10 @@ async fn concurrent_exports_release_mutation_gate_before_destination_write() {
         })
     };
     attempting.await.unwrap();
-    tokio::task::yield_now().await;
-    assert!(mutation.is_finished());
-    mutation.await.unwrap().unwrap();
+    let Poll::Ready(mutation) = poll_once(&mut mutation).await else {
+        panic!("mutation gate remained held while destination writes were blocked");
+    };
+    mutation.unwrap().unwrap();
 
     destination.release.notify_waiters();
     first.await.unwrap().unwrap();

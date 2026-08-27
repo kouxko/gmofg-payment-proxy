@@ -1,0 +1,16 @@
+# Run from /Users/codin/Code/gmofg-payment-proxy.
+
+pnpm test
+pnpm test
+pnpm test
+
+cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -q
+cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -q
+cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -q
+
+pnpm check
+cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features
+cargo fmt --manifest-path test-support/socket-relay-gate/Cargo.toml -- --check
+cargo test --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets
+pnpm scan:architecture
+pnpm scan:source-size

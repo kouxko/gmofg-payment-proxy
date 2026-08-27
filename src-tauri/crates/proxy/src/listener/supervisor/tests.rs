@@ -10,7 +10,6 @@ use std::{
 use async_trait::async_trait;
 use tokio::{
     io::duplex,
-    net::TcpStream,
     sync::{Mutex as AsyncMutex, Notify, mpsc},
 };
 
@@ -19,7 +18,7 @@ use crate::{
     listener::{
         CONNECTION_CHILD_TASK_PANICKED, ChildTaskError, LISTENER_SHUTDOWN_GRACE_EXCEEDED, sealed,
     },
-    transport::{BoxIo, SystemClock, TokioListenerBinder},
+    transport::{BoxIo, SystemClock, TokioBoundListener, TokioListenerBinder},
 };
 
 use super::*;
@@ -70,15 +69,34 @@ struct RecordingObserver {
     rejected: Mutex<Vec<(SocketAddr, ListenerRejection)>>,
     admitted: Mutex<Vec<ConnectionContext>>,
     terminal: Mutex<Vec<(ConnectionContext, TerminalConnectionOutcome)>>,
+    changed: Notify,
+}
+
+impl RecordingObserver {
+    async fn wait_until(&self, predicate: impl Fn() -> bool) {
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let changed = self.changed.notified();
+                if predicate() {
+                    return;
+                }
+                changed.await;
+            }
+        })
+        .await
+        .expect("observer condition became true");
+    }
 }
 
 impl ConnectionLifecycleObserver for RecordingObserver {
     fn connection_rejected(&self, peer_addr: SocketAddr, reason: ListenerRejection) {
         lock(&self.rejected).push((peer_addr, reason));
+        self.changed.notify_waiters();
     }
 
     fn connection_admitted(&self, context: &ConnectionContext) {
         lock(&self.admitted).push(context.clone());
+        self.changed.notify_waiters();
     }
 
     fn connection_terminal(
@@ -87,6 +105,7 @@ impl ConnectionLifecycleObserver for RecordingObserver {
         outcome: &TerminalConnectionOutcome,
     ) {
         lock(&self.terminal).push((context.clone(), outcome.clone()));
+        self.changed.notify_waiters();
     }
 }
 
@@ -222,7 +241,6 @@ fn supervisor(
             bind_addr: "127.0.0.1:0".parse().unwrap(),
             runtime_epoch: uuid::Uuid::new_v4(),
             listener_id: ChannelId::new("listener-contract").unwrap(),
-            allowed_client_cidrs: vec!["10.0.0.0/8".to_owned()],
             capacity: ListenerCapacity::new(capacity).unwrap(),
             shutdown_grace: grace,
         },
@@ -262,7 +280,9 @@ async fn capacity_is_per_listener_and_rejections_do_not_emit_admission() {
     send_connection(&sender, "10.1.1.1:1001".parse().unwrap());
     entered.notified().await;
     send_connection(&sender, "10.1.1.2:1002".parse().unwrap());
-    tokio::task::yield_now().await;
+    observer
+        .wait_until(|| lock(&observer.rejected).len() == 1)
+        .await;
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(lock(&observer.admitted).len(), 1);
     assert_eq!(
@@ -279,40 +299,6 @@ async fn capacity_is_per_listener_and_rejections_do_not_emit_admission() {
         ListenerRunOutcome::Stopped { .. }
     ));
     assert_eq!(finished.load(Ordering::SeqCst), 1);
-}
-
-#[tokio::test]
-async fn cidr_rejection_emits_no_admission_or_terminal_event() {
-    let observer = Arc::new(RecordingObserver::default());
-    let supervisor = Arc::new(supervisor(
-        Arc::new(FakeHandler(HandlerMode::Immediate)),
-        Arc::clone(&observer),
-        1,
-        Duration::from_millis(50),
-    ));
-    let (listener, sender) = fake_listener();
-    let cancellation = CancellationToken::new();
-    let task = tokio::spawn({
-        let supervisor = Arc::clone(&supervisor);
-        let cancellation = cancellation.clone();
-        async move { supervisor.run_bound(listener, cancellation).await }
-    });
-    send_connection(&sender, "192.168.1.2:1001".parse().unwrap());
-    wait_for(|| lock(&observer.rejected).len() == 1).await;
-    cancellation.cancel();
-    assert!(matches!(
-        task.await.unwrap().unwrap(),
-        ListenerRunOutcome::Stopped { .. }
-    ));
-    assert_eq!(
-        lock(&observer.rejected).as_slice(),
-        &[(
-            "192.168.1.2:1001".parse().unwrap(),
-            ListenerRejection::NetworkDenied,
-        )]
-    );
-    assert!(lock(&observer.admitted).is_empty());
-    assert!(lock(&observer.terminal).is_empty());
 }
 
 #[tokio::test]
@@ -335,7 +321,9 @@ async fn ordinary_connection_error_is_isolated_and_ids_reach_one_terminal_event(
     });
     send_connection(&sender, "10.1.1.1:1001".parse().unwrap());
     send_connection(&sender, "10.1.1.2:1002".parse().unwrap());
-    wait_for(|| lock(&observer.terminal).len() == 2).await;
+    observer
+        .wait_until(|| lock(&observer.terminal).len() == 2)
+        .await;
     cancellation.cancel();
     assert!(matches!(
         task.await.unwrap().unwrap(),
@@ -446,7 +434,9 @@ async fn forced_abort_after_grace_emits_one_terminal_and_faults_listener() {
         async move { supervisor.run_bound(listener, cancellation).await }
     });
     send_connection(&sender, "10.1.1.1:1001".parse().unwrap());
-    wait_for(|| lock(&observer.admitted).len() == 1).await;
+    observer
+        .wait_until(|| lock(&observer.admitted).len() == 1)
+        .await;
     cancellation.cancel();
     assert!(matches!(
         task.await.unwrap().unwrap(),
@@ -461,24 +451,6 @@ async fn forced_abort_after_grace_emits_one_terminal_and_faults_listener() {
         terminal[0].1,
         TerminalConnectionOutcome::ShutdownGraceExceeded
     );
-}
-
-async fn wait_for(predicate: impl Fn() -> bool) {
-    wait_for_async(|| async { predicate() }).await;
-}
-
-async fn wait_for_async<F, Fut>(mut predicate: F)
-where
-    F: FnMut() -> Fut,
-    Fut: std::future::Future<Output = bool>,
-{
-    tokio::time::timeout(Duration::from_secs(2), async {
-        while !predicate().await {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
-    })
-    .await
-    .expect("condition became true");
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

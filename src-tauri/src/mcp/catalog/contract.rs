@@ -8,7 +8,6 @@ use serde_json::{Map, Value, json};
 enum OutputRoot {
     Object,
     Array,
-    ObjectOrNull,
 }
 
 pub(super) fn output_schema(name: &str) -> Arc<Map<String, Value>> {
@@ -19,11 +18,6 @@ pub(super) fn output_schema(name: &str) -> Arc<Map<String, Value>> {
             "type": "array",
             "description": "Successful structured result. See the MCP tool reference resource for the retained fields and paging contract.",
             "items": {}
-        }),
-        OutputRoot::ObjectOrNull => json!({
-            "type": ["object", "null"],
-            "description": "Successful structured result. Null means no Android profile currently owns the runtime.",
-            "additionalProperties": true
         }),
         OutputRoot::Object => json!({
             "type": "object",
@@ -43,7 +37,6 @@ pub(super) fn validate_successful_output(name: &str, value: &Value) -> Result<()
     let matches = match expected {
         OutputRoot::Object => value.is_object(),
         OutputRoot::Array => value.is_array(),
-        OutputRoot::ObjectOrNull => value.is_object() || value.is_null(),
     };
     if matches {
         return Ok(());
@@ -51,7 +44,6 @@ pub(super) fn validate_successful_output(name: &str, value: &Value) -> Result<()
     let expected = match expected {
         OutputRoot::Object => "object",
         OutputRoot::Array => "array",
-        OutputRoot::ObjectOrNull => "object or null",
     };
     Err(format!(
         "{name} returned {}, but its successful output schema requires {expected}",
@@ -80,7 +72,7 @@ pub(super) fn validate_arguments(name: &str, arguments: &Value) -> Result<(), St
     let tool = super::tools()
         .into_iter()
         .find(|tool| tool.name == name)
-        .ok_or_else(|| format!("unknown read-only tool: {name}"))?;
+        .ok_or_else(|| format!("unknown MCP tool: {name}"))?;
     let mut violations = Vec::new();
     validate_object(arguments, tool.input_schema.as_ref(), "", &mut violations);
     violations.sort();
@@ -230,6 +222,7 @@ fn output_root(name: &str) -> Option<OutputRoot> {
         | "entry_status_list"
         | "android_device_list"
         | "android_package_list"
+        | "android_runtime_owner_list"
         | "android_profile_list"
         | "workspace_certificate_overview"
         | "breakpoint_query"
@@ -238,7 +231,6 @@ fn output_root(name: &str) -> Option<OutputRoot> {
         | "workspace_protocol_rule_list"
         | "protocol_package_list"
         | "protocol_package_usage" => Some(OutputRoot::Array),
-        "android_runtime_owner" => Some(OutputRoot::ObjectOrNull),
         "application_snapshot"
         | "application_log_query"
         | "application_log_get"

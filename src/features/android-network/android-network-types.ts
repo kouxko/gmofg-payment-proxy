@@ -2,6 +2,7 @@ import type {
   PacketDirection,
   PmtuMode,
   TcpFlag,
+  UiTone,
   WeakNetworkProfile,
 } from "@/generated/rust-types";
 
@@ -26,3 +27,10 @@ export const PMTU_MODES: Array<{ id: PmtuMode; label: string }> = [
   { id: "signal_too_big", label: "返回 Fragmentation Needed / Packet Too Big" },
   { id: "blackhole", label: "PMTU 黑洞" },
 ];
+
+export function runtimeAlertStatus(tone: UiTone): "danger" | "success" | "warning" | "accent" {
+  if (tone === "danger") return "danger";
+  if (tone === "positive") return "success";
+  if (tone === "warning") return "warning";
+  return "accent";
+}

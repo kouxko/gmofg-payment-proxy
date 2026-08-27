@@ -3,7 +3,6 @@
   "task_id": "TASK-20260825-002",
   "case_id": "DOC-GOV-002",
   "executed_at": "2026-08-25T16:52:35+08:00",
-  "base_head": "adacabc9389064b47dfaf01a2d918b1272fb5dfc",
   "result": "PASS",
   "tested_files": [
     "AGENTS.md",

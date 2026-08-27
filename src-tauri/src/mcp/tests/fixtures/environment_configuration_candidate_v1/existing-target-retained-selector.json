@@ -53,7 +53,7 @@
               }
             },
             "fixed_server": {
-              "upstream_url": "https://pay.example.test/transactions",
+              "upstream_url": "https://pay.example.test",
               "upstream_tls": {
                 "verify_hostname": true,
                 "server_trust_alias": "upstream-trust",
@@ -123,8 +123,8 @@
     "http_rules": [
       {
         "existing_rule_id": "00000000-0000-0000-0000-000000000020",
-        "name": "Exercise every HTTP action",
-        "description": "Canonical environment contract fixture",
+        "name": "Retained HTTP request rule",
+        "description": "Canonical retained-selector fixture",
         "enabled": true,
         "priority": 10,
         "listener_alias": "http-entry",
@@ -186,106 +186,6 @@
               "bytes_per_second": 1024,
               "chunk_bytes": 128,
               "direction": "Upstream"
-            }
-          },
-          {
-            "Intermittent": {
-              "available_milliseconds": 10,
-              "blocked_milliseconds": 5,
-              "direction": "Downstream"
-            }
-          },
-          {
-            "CustomHttpStatus": {
-              "status": 503
-            }
-          },
-          {
-            "Terminal": "RejectTlsHandshake"
-          },
-          {
-            "Terminal": "DisconnectBeforeUpstream"
-          },
-          {
-            "Terminal": {
-              "UpstreamConnectTimeout": {
-                "milliseconds": 1
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "UpstreamWriteTimeout": {
-                "milliseconds": 1
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "UpstreamReadTimeout": {
-                "milliseconds": 1
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "DropUpstreamResponse": {
-                "mode": "ReadCompleteResponse"
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "MockResponse": {
-                "status": 200,
-                "headers": [
-                  [
-                    "X-Test",
-                    "yes"
-                  ]
-                ],
-                "body_bytes": [
-                  79,
-                  75
-                ]
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "InvalidJson": {
-                "body_bytes": [
-                  123
-                ]
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "IncorrectContentLength": {
-                "delta": 1
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "TruncateResponse": {
-                "bytes": 1
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "DisconnectDuringUpstreamWrite": {
-                "after_bytes": 1
-              }
-            }
-          },
-          {
-            "Terminal": {
-              "DisconnectDuringDownstreamWrite": {
-                "after_bytes": 1
-              }
             }
           }
         ],

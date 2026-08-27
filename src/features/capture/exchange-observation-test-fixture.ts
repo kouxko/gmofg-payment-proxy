@@ -34,10 +34,10 @@ export function httpExchangeRecord(): ExchangeObservationRecord {
     evidence_evicted: false,
     events: [
       { event: "opened", observed_at: "2026-08-22T10:01:00Z" },
-      { event: "received", observed_at: "2026-08-22T10:01:01Z", direction: "upstream", context: { protocol: "http", header: "POST /pay HTTP/1.1", body: "request" }, document: { amount: 100 }, display: "<p>request</p>" },
-      { event: "sent", observed_at: "2026-08-22T10:01:02Z", direction: "upstream", context: { protocol: "http", header: "POST /pay HTTP/1.1", body: "request" } },
-      { event: "received", observed_at: "2026-08-22T10:01:03Z", direction: "downstream", context: { protocol: "http", header: "HTTP/1.1 200 OK", body: "response" }, document: { approved: true }, display: "<p>response</p>" },
-      { event: "sent", observed_at: "2026-08-22T10:01:04Z", direction: "downstream", context: { protocol: "http", header: "HTTP/1.1 200 OK", body: "response" } },
+      { event: "received", observed_at: "2026-08-22T10:01:01Z", direction: "upstream", context: { protocol: "http", header: "POST /pay HTTP/1.1", body: "request", body_is_utf8: true }, document: { amount: 100 }, display: "<p>request</p>" },
+      { event: "sent", observed_at: "2026-08-22T10:01:02Z", direction: "upstream", context: { protocol: "http", header: "POST /pay HTTP/1.1", body: "request", body_is_utf8: true } },
+      { event: "received", observed_at: "2026-08-22T10:01:03Z", direction: "downstream", context: { protocol: "http", header: "HTTP/1.1 200 OK", body: "response", body_is_utf8: true }, document: { approved: true }, display: "<p>response</p>" },
+      { event: "sent", observed_at: "2026-08-22T10:01:04Z", direction: "downstream", context: { protocol: "http", header: "HTTP/1.1 200 OK", body: "response", body_is_utf8: true } },
       { event: "closed", observed_at: "2026-08-22T10:01:05Z", outcome: "completed", error: null },
     ],
   };
@@ -50,6 +50,7 @@ export function exchangePage(): ExchangeObservationPage {
     page_size: 50,
     total: 2,
     evicted_records: 0,
+    dropped_events: 0,
     ignored_events: 0,
   };
 }

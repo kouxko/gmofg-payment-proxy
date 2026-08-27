@@ -85,6 +85,10 @@ Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 3. 只有 Server 明确要求 mTLS 时才选择 Client Identity。
 4. 使用“测试连接/TLS”检查 DNS、TCP、CA、hostname 和客户端身份。
 
+私有上游未发送完整签发链时，可把 Intermediate CA 到 Root CA 按顺序放入同一个 PEM
+Bundle，再通过现有的单文件 Server Trust 入口导入。Proxy 会解析、保存并加载其中全部 CA；
+不提供多文件选择或自动合并。单证书 PEM、DER、CRT 和 CER 仍按原方式使用。
+
 下游认证成功不代表上游认证成功；两边必须分别验证。
 
 ## 4. Socket Listener
@@ -217,6 +221,11 @@ HTTP 和 Socket 同时显示在一个页面，不通过协议 Tab 隐藏另一�
 HTTP 表格显示时间、终端 IP、通道、方向、方法、路径/请求类型、状态码、结果、耗时、规则和大小。
 页面停留时新请求应立即追加，不需要切换页面。
 
+在 Exchange 详情中，服务器返回的完整 HTTP 响应会显示“用此服务器响应创建 Mock 草稿”。该操作
+使用配对请求的完整 request-target，并复制状态码、可保留 Header 与 UTF-8 Body；草稿默认禁用且
+不会自动保存。压缩、二进制、非 UTF-8 或证据不完整的响应会被拒绝。打开规则编辑器后仍需人工
+检查并保存，保存前不会改变代理运行行为。
+
 ### 7.2 Socket
 
 Socket 表格一行对应一个 App connection/Exchange。详情按发生顺序显示：
@@ -245,6 +254,9 @@ Socket 表格一行对应一个 App connection/Exchange。详情按发生顺序�
 
 ## 9. 诊断日志与 MCP
 
+诊断日志默认按发生时间从新到旧排列；时间相同的记录按事件 ID 从大到小稳定排列，因此刷新和分页
+不会把较旧记录插到较新记录上方。
+
 排障建议顺序：
 
 1. 确认 Workspace、Listener、模式和 runtime epoch。
@@ -255,10 +267,26 @@ Socket 表格一行对应一个 App connection/Exchange。详情按发生顺序�
 6. 检查 evidence dropped/ignored/evicted 计数。
 7. 最后生成复现报告。
 
-内嵌 MCP 只绑定 loopback，提供只读应用快照、日志、ExchangeObservation、诊断和复现报告。它不能
-启停 Listener、修改规则、重放交易或写数据库。
-完整的工具参数、结果和错误契约见 [MCP 只读工具参考](mcp/tool-reference.md)。复现报告本身不包含
-ExchangeObservation 或 HTTP 抓包，线路证据需要通过对应查询工具单独获取。
+内嵌 MCP 在端口 `17653` 监听全接口 IPv4，并在平台支持时监听全接口 IPv6。它使用明文 HTTP，
+不校验 Host/Origin、来源 IP、Authorization、API key、Cookie 或其他调用方身份。任何能够连接该端口
+的主机都可以读取公开数据并调用环境配置工具；网络观察者也可能看到提交的私钥、密码和确认令牌。
+
+现有 37 个工具继续只读。完整环境配置使用五步工具合同：
+
+1. 调用 `mcp_environment_capabilities`，确认 IPv4/IPv6 capability、warning、预算和 schema。
+2. 调用 `environment_candidate_create` 提交明确的现有或新 Workspace 目标；等待全部验证层完成并检查
+   公开预览。create 返回前断开会取消候选并清理未提交私有材料。
+3. 使用 `environment_candidate_status` 复查候选仍为 `preview_ready`。配置、运行态或 baseline 变化会
+   使候选 stale，必须重新创建。
+4. 确认预览后，把一次性 confirmation token 传给 `environment_candidate_apply`。成功响应只表示
+   `apply_queued`；响应后断开不会取消 Application 已接管的任务。
+5. 持续查询 status，直到 `committed` 或明确失败终态。MCP 不会自动停止、启动或重启 Listener；
+   受影响 Listener 仍在运行或存在活动连接时 apply 拒绝。
+
+预览、status、终态、错误、日志和 diagnostics 不返回私钥、密码、confirmation token、保护后字节或
+原始请求体。MCP 仍不能重放交易，候选技术验证也不证明业务报文或交易成功。完整参数、注解、预算、
+结果和错误契约见 [MCP 工具参考](mcp/tool-reference.md)。复现报告本身不包含 ExchangeObservation 或
+HTTP 抓包，线路证据需要通过对应查询工具单独获取。
 
 ## 10. 应用数据导入导出
 
@@ -278,13 +306,15 @@ TLS 可移植材料。它不包含运行时报文、ExchangeObservation 或本�
 
 ## 11. Android 应用网络接管
 
-1. 连接 Android 设备并允许 ADB。
-2. 安装/更新 Companion。
-3. 选择需要接管的应用 allowlist。
-4. 生成 Profile，确认桌面 Listener 地址可被设备访问。
-5. 启动设备侧 VPN，并在 Android 权限弹窗中确认。
-6. 检查 TUN、SOCKS5、ADB reverse 或 LAN 路由状态。
-7. 完成后停止 Profile 并清理遗留 reverse/owner 状态。
+1. 连接一台或多台 Android 设备并允许 ADB；桌面最多保留 8 台设备的运行 owner。
+2. 在目标设备卡片安装/更新 Companion，所有安装、授权和包查询都只作用于该 serial。
+3. 为目标设备选择需要接管的应用 allowlist；包名、UID 和 shared UID 校验读取同一设备清单。
+4. 选择该设备使用的 Profile，确认桌面 Listener 地址可被设备访问。
+5. 启动设备侧 VPN，并在对应 Android 权限弹窗中确认。不同设备可使用各自 Profile 并行运行。
+6. 在每台设备卡片分别检查 TUN、SOCKS5、ADB reverse 或 LAN 路由状态；离线 owner 会保留并等待同
+   serial 重连，不影响其他设备。
+7. 应用、停止和紧急恢复都绑定设备 serial 与当前 runtime epoch；完成后逐设备停止并清理其
+   forward/reverse/owner 状态。
 
 设备能连接桌面端口只证明网络可达；还要分别证明 TLS、代理转发、规则命中和业务回复。
 

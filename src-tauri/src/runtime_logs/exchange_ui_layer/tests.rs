@@ -385,6 +385,7 @@ fn http_failure_keeps_typed_context_and_available_error_fields() {
             stage = "write",
             context_header = "HTTP/1.1 500\r\nContent-Length: 4\r\n\r\n",
             context_body = "fail",
+            context_body_is_utf8 = true,
             error = "peer reset"
         );
     });
@@ -400,6 +401,7 @@ fn http_failure_keeps_typed_context_and_available_error_fields() {
         &Some(ExchangeContext::Http {
             header: "HTTP/1.1 500\r\nContent-Length: 4\r\n\r\n".to_owned(),
             body: "fail".to_owned(),
+            body_is_utf8: true,
         })
     );
 }

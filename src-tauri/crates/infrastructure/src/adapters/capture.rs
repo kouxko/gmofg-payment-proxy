@@ -62,6 +62,7 @@ impl CaptureRepositoryAdapter {
         }
     }
 
+    #[cfg(test)]
     pub fn push(&self, row: CaptureRowViewModel) {
         let runtime_epoch = row.runtime_epoch;
         self.push_for_epoch(row, runtime_epoch);

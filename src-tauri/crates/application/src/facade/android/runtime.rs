@@ -6,6 +6,18 @@ use crate::{
 use chrono::Utc;
 
 impl Application {
+    pub(super) async fn android_error_context(&self, serial: &str, error: AppError) -> AppError {
+        let fallback_epoch = error.view_model.runtime_epoch;
+        let runtime_epoch = match self.android.runtime_owners().await {
+            Ok(owners) => owners
+                .into_iter()
+                .find(|owner| owner.serial == serial)
+                .map(|owner| owner.epoch),
+            Err(_) => fallback_epoch,
+        };
+        error.runtime_context(serial, runtime_epoch)
+    }
+
     pub(super) fn faulted_runtime_status(
         mut status: AndroidNetworkStatusViewModel,
         message: impl Into<String>,
@@ -20,7 +32,7 @@ impl Application {
     /// 查询本身不发布事件，避免“查询 -> 事件 -> 再查询”的反馈循环。
     pub(super) fn publish_android_vpn_status(&self, status: &AndroidNetworkStatusViewModel) {
         self.events.publish(
-            None,
+            status.runtime_epoch,
             Utc::now(),
             Some(status.serial.clone()),
             None,
@@ -62,7 +74,7 @@ impl Application {
             stage,
             error.view_model.message.clone(),
             Some(format!("错误码：{}", error.view_model.code)),
-            None,
+            error.view_model.entity_id.clone(),
             profile_id,
         );
     }

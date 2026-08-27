@@ -6,15 +6,22 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
     task::{Context, Poll},
-    time::Duration,
 };
 
 use tokio::sync::Notify;
 
 use super::{ChildTaskError, ConnectionTaskScope, ScopePhase};
 
+async fn poll_once<F>(mut future: Pin<&mut F>) -> Poll<F::Output>
+where
+    F: Future,
+{
+    std::future::poll_fn(|context| Poll::Ready(future.as_mut().poll(context))).await
+}
+
 struct PollCountingPending {
     polls: Arc<AtomicUsize>,
+    first_poll: Option<Arc<Notify>>,
 }
 
 impl Future for PollCountingPending {
@@ -22,6 +29,9 @@ impl Future for PollCountingPending {
 
     fn poll(self: Pin<&mut Self>, _context: &mut Context<'_>) -> Poll<Self::Output> {
         self.polls.fetch_add(1, Ordering::SeqCst);
+        if let Some(first_poll) = &self.first_poll {
+            first_poll.notify_one();
+        }
         Poll::Pending
     }
 }
@@ -66,6 +76,7 @@ async fn close_spawn_barrier_accepts_and_drains_or_rejects_without_polling() {
             scope
                 .spawn_owned(PollCountingPending {
                     polls: Arc::clone(&rejected_polls),
+                    first_poll: None,
                 })
                 .is_err()
         );
@@ -93,20 +104,21 @@ async fn fast_completion_does_not_leave_an_abort_handle() {
 async fn cancellation_ignorant_pending_child_is_forced_to_abort_and_drain() {
     let scope = ConnectionTaskScope::new();
     let polls = Arc::new(AtomicUsize::new(0));
+    let first_poll = Arc::new(Notify::new());
+    let polled = first_poll.notified();
     let id = scope
         .spawn_owned(PollCountingPending {
             polls: Arc::clone(&polls),
+            first_poll: Some(Arc::clone(&first_poll)),
         })
         .expect("open scope accepts child");
-    tokio::task::yield_now().await;
+    polled.await;
     assert!(polls.load(Ordering::SeqCst) > 0);
 
     scope.close();
-    assert!(
-        tokio::time::timeout(Duration::from_millis(10), scope.drain())
-            .await
-            .is_err()
-    );
+    let mut drain = Box::pin(scope.drain());
+    assert!(matches!(poll_once(drain.as_mut()).await, Poll::Pending));
+    drop(drain);
     let aborted = scope.abort_live();
     assert_eq!(aborted, vec![id]);
     scope.drain().await;
@@ -128,7 +140,7 @@ async fn ordinary_errors_use_lowest_registered_id_not_completion_order() {
         .spawn_owned(async { Err(ChildTaskError::new("HIGH", "high id")) })
         .expect("second child accepted");
     assert!(low < high);
-    tokio::task::yield_now().await;
+    scope.wait_for_completed_count(1).await;
     release_low.notify_one();
     let aggregate = scope.close_and_drain().await;
 
@@ -175,9 +187,7 @@ async fn many_sequential_children_return_live_state_to_constant_size() {
         scope
             .spawn_owned(async { Ok(()) })
             .expect("open scope accepts child");
-        while scope.snapshot().aggregate.completed_count < expected {
-            tokio::task::yield_now().await;
-        }
+        scope.wait_for_completed_count(expected).await;
         let snapshot = scope.snapshot();
         assert_eq!(snapshot.live_count, 0);
         assert_eq!(std::mem::size_of_val(&snapshot.aggregate), state_size);
@@ -196,9 +206,7 @@ async fn forced_abort_targets_only_current_live_children() {
             .spawn_owned(async { Ok(()) })
             .expect("completed child accepted");
     }
-    while scope.snapshot().aggregate.completed_count < 128 {
-        tokio::task::yield_now().await;
-    }
+    scope.wait_for_completed_count(128).await;
 
     let first = scope
         .spawn_owned(std::future::pending())

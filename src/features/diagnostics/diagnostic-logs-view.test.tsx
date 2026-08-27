@@ -47,13 +47,15 @@ const workspace = {
   name: workspaceSummary.name,
   listeners: [listener],
 } as ProxyWorkspace;
-const page = {
+const page: DiagnosticLogPageViewModel = {
   rows: [],
   current_cursor: 0,
+  oldest_retained_event_id: null,
+  snapshot_required: false,
   retained_count: 0,
   truncated: false,
   empty_message: "暂无诊断日志",
-} satisfies DiagnosticLogPageViewModel;
+};
 
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
   useIpcQuery: (key: string) => ({
@@ -69,6 +71,7 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
 describe("DiagnosticLogsView reproduction report", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    page.snapshot_required = false;
     commandMocks.diagnosticReproductionReportExport.mockResolvedValue({
       bytes_written: 4096,
       replaced_existing: false,
@@ -94,5 +97,13 @@ describe("DiagnosticLogsView reproduction report", () => {
     render(<DiagnosticLogsView />);
 
     expect(screen.queryByRole("button", { name: "清除" })).not.toBeInTheDocument();
+  });
+
+  it("shows an explicit refresh warning when the requested cursor was evicted", () => {
+    page.snapshot_required = true;
+
+    render(<DiagnosticLogsView />);
+
+    expect(screen.getByText("诊断事件游标已过期")).toBeVisible();
   });
 });

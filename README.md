@@ -16,7 +16,7 @@ Socket 数据。桌面端使用 Tauri + Next.js，Android Companion 通过按应
 - Frame、Decode、Document Rules、Encode、Display 的强类型 Pipeline。
 - HTTP 基础规则、协议 Document 规则、断点、Mock、弱网与故障注入。
 - HTTP/Socket 统一规则列表和统一实时抓包列表。
-- 连接级 ExchangeObservation、运行日志、只读 MCP 和复现报告。
+- 连接级 ExchangeObservation、运行日志、37 个 MCP 只读查询、五个环境配置工具和复现报告。
 - Workspace、协议包、Listener TLS 材料和设置的应用级导入导出。
 
 当前不支持 HTTP CONNECT、HTTP Upgrade/WebSocket tunnel、CONNECT MITM 和 HTTP 外部

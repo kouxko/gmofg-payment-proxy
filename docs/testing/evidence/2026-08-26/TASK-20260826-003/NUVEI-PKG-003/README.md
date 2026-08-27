@@ -22,7 +22,7 @@
 
 - TDD RED：新增合同测试准确失败，实际值 `245`、期望值 `"245"`。
 - GREEN：14/14 Python 测试 PASS。
-- `compileall` PASS；`git diff --check` PASS。
+- `compileall` PASS。
 
 ## 真实链路结果
 

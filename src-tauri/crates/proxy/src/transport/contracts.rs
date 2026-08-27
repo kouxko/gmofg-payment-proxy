@@ -1,10 +1,17 @@
-use std::{fmt::Debug, net::SocketAddr, time::SystemTime};
+use std::{
+    fmt::Debug,
+    net::SocketAddr,
+    time::{Duration, SystemTime},
+};
 
+use async_trait::async_trait;
 use uuid::Uuid;
 
 use crate::{Result, supervisor::ChannelId};
 
 use super::TlsPeerIdentity;
+
+pub const TLS_HANDSHAKE_POLICY_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Clone)]
 pub struct ConnectionContext {
@@ -17,7 +24,12 @@ pub struct ConnectionContext {
 }
 
 /// Synchronous, handshake-safe policy surface used from certificate verification.
+#[async_trait]
 pub trait HandshakePolicy: Debug + Send + Sync {
+    async fn prepare_tls_handshake(&self, _context: &ConnectionContext) -> Result<()> {
+        Ok(())
+    }
+
     fn reject_tls_handshake(
         &self,
         _context: &ConnectionContext,

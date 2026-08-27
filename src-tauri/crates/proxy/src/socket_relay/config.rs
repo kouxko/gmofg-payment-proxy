@@ -109,7 +109,6 @@ impl SocketRelaySecurity {
 #[derive(Clone, Debug)]
 pub struct SocketRelayConfig {
     pub bind_addr: SocketAddr,
-    pub allowed_client_cidrs: Vec<String>,
     pub upstream: SocketEndpoint,
     pub security: SocketRelaySecurity,
     pub maximum_connections: u16,
@@ -126,7 +125,6 @@ pub struct SocketRelayConfig {
 #[derive(Clone, Debug)]
 pub struct SocketLocalResponderConfig {
     pub bind_addr: SocketAddr,
-    pub allowed_client_cidrs: Vec<String>,
     pub security: SocketDownstreamSecurity,
     pub maximum_connections: u16,
     pub read_chunk_bytes: usize,

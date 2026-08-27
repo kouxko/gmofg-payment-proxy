@@ -83,8 +83,8 @@ impl Application {
             protocol_package_detail,
             external_package_service,
             diagnostics,
-            android_network_status: android.network_status,
-            android_runtime_owner: android.runtime_owner,
+            android_network_statuses: android.network_statuses,
+            android_runtime_owners: android.runtime_owners,
             android_runtime_endpoints: android.runtime_endpoints,
             environment,
             reproduction_steps,
@@ -117,7 +117,8 @@ impl Application {
     ) -> Vec<crate::DiagnosticLogRowViewModel> {
         let listener_id = listener_id.to_string();
         self.events
-            .diagnostic_log_snapshot()
+            .diagnostic_log_page_snapshot(None)
+            .rows
             .into_iter()
             .filter(|row| row.listener_id.as_deref() == Some(listener_id.as_str()))
             .rev()
@@ -129,29 +130,48 @@ impl Application {
         &self,
         errors: &mut Vec<DiagnosticReportCollectionError>,
     ) -> ReportAndroidObservations {
-        ReportAndroidObservations {
-            network_status: observe(
-                self.android.network_status().await,
+        let Some(runtime_owners) = observe(
+            self.android.runtime_owners().await,
+            DiagnosticReportSection::AndroidRuntimeOwner,
+            errors,
+        ) else {
+            return ReportAndroidObservations::default();
+        };
+        let mut network_statuses = Vec::with_capacity(runtime_owners.len());
+        let mut runtime_endpoints = Vec::new();
+        for owner in &runtime_owners {
+            let target = crate::AndroidDeviceTarget {
+                serial: owner.serial.clone(),
+            };
+            if let Some(status) = observe_android(
+                self.android.network_status(target.clone()).await,
                 DiagnosticReportSection::AndroidNetworkStatus,
+                owner,
                 errors,
-            ),
-            runtime_owner: observe_optional(
-                self.android.runtime_owner().await,
-                DiagnosticReportSection::AndroidRuntimeOwner,
-                errors,
-            ),
-            runtime_endpoints: observe_vec(
-                self.android.network_runtime_endpoints(None).await,
+            ) {
+                network_statuses.push(status);
+            }
+            if let Some(mut endpoints) = observe_android(
+                self.android.network_runtime_endpoints(target, None).await,
                 DiagnosticReportSection::AndroidRuntimeEndpoints,
+                owner,
                 errors,
-            ),
+            ) {
+                runtime_endpoints.append(&mut endpoints);
+            }
+        }
+        ReportAndroidObservations {
+            network_statuses,
+            runtime_owners,
+            runtime_endpoints,
         }
     }
 }
 
+#[derive(Default)]
 struct ReportAndroidObservations {
-    network_status: Option<crate::AndroidNetworkStatusViewModel>,
-    runtime_owner: Option<crate::AndroidRuntimeOwnerViewModel>,
+    network_statuses: Vec<crate::AndroidNetworkStatusViewModel>,
+    runtime_owners: Vec<crate::AndroidRuntimeOwnerViewModel>,
     runtime_endpoints: Vec<crate::AndroidRuntimeEndpointViewModel>,
 }
 
@@ -188,6 +208,7 @@ fn bound_package(listener: &crate::ProxyListener) -> Option<ProtocolPackageRef> 
 fn stopped_status(listener: &crate::ProxyListener) -> ListenerStatusViewModel {
     ListenerStatusViewModel {
         listener_id: listener.id,
+        runtime_epoch: None,
         state: ListenerRuntimeState::Stopped,
         state_text: "已停止".into(),
         ui_tone: UiTone::Neutral,
@@ -225,23 +246,34 @@ fn collect_error(
         section,
         code: error.view_model.code,
         message: error.view_model.message,
+        entity_id: error.view_model.entity_id,
+        runtime_epoch: error.view_model.runtime_epoch,
     });
 }
 
-fn observe_optional<T>(
-    result: AppResult<Option<T>>,
+fn observe_android<T>(
+    result: AppResult<T>,
     section: DiagnosticReportSection,
+    owner: &crate::AndroidRuntimeOwnerViewModel,
     errors: &mut Vec<DiagnosticReportCollectionError>,
 ) -> Option<T> {
-    observe(result, section, errors).flatten()
-}
-
-fn observe_vec<T>(
-    result: AppResult<Vec<T>>,
-    section: DiagnosticReportSection,
-    errors: &mut Vec<DiagnosticReportCollectionError>,
-) -> Vec<T> {
-    observe(result, section, errors).unwrap_or_default()
+    match result {
+        Ok(value) => Some(value),
+        Err(error) => {
+            let error = if error.view_model.entity_id.is_some() {
+                error
+            } else {
+                error.entity(owner.serial.clone())
+            };
+            let error = if error.view_model.runtime_epoch.is_some() {
+                error
+            } else {
+                error.epoch(owner.epoch)
+            };
+            collect_error(errors, section, error);
+            None
+        }
+    }
 }
 
 fn reproduction_steps(

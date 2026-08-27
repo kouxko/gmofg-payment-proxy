@@ -14,12 +14,14 @@ use rustls::{
     version::TLS12,
 };
 use tokio_rustls::TlsAcceptor;
+use tokio_util::sync::CancellationToken;
 
 use super::support::{
     application_verification_failure, certified_key, peer_identity, tls_config, tls_handshake,
 };
 use crate::transport::{
     AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionContext, HandshakePolicy,
+    TLS_HANDSHAKE_POLICY_TIMEOUT,
 };
 use crate::{ErrorCode, ProxyError, Result};
 
@@ -29,7 +31,10 @@ pub struct ServerTlsAdapter {
     client_ca_der: Arc<Vec<u8>>,
     allowed_client_fingerprint: Option<Vec<u8>>,
     handshake_policy: Arc<dyn HandshakePolicy>,
+    handshake_capacity: Arc<tokio::sync::Semaphore>,
 }
+
+const MAX_BLOCKING_HANDSHAKES: usize = 16;
 
 impl fmt::Debug for ServerTlsAdapter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -78,6 +83,7 @@ impl ServerTlsAdapter {
             client_ca_der: Arc::new(client_ca_der),
             allowed_client_fingerprint,
             handshake_policy,
+            handshake_capacity: Arc::new(tokio::sync::Semaphore::new(MAX_BLOCKING_HANDSHAKES)),
         })
     }
 
@@ -111,25 +117,98 @@ impl ServerTlsAdapter {
 #[async_trait]
 impl ConnectionAcceptor for ServerTlsAdapter {
     async fn accept(&self, io: BoxIo, context: &ConnectionContext) -> Result<AcceptedConnection> {
-        // rustls 先完成链校验、客户端证书要求和策略验证；只有全部通过，连接及对端身份
-        // 才能进入 HTTP pipeline。失败的裸 TCP 连接不会被记作已认证客户端。
-        let stream = self
-            .acceptor_for(context)?
-            .accept(io)
+        self.handshake_policy.prepare_tls_handshake(context).await?;
+        let acceptor = self.acceptor_for(context)?;
+        let permit = Arc::clone(&self.handshake_capacity)
+            .acquire_owned()
             .await
-            .map_err(tls_handshake)?;
-        let certificate = stream
-            .get_ref()
-            .1
-            .peer_certificates()
-            .and_then(|certificates| certificates.first())
-            .ok_or_else(|| {
-                ProxyError::new(ErrorCode::TlsHandshakeFailed, "client certificate missing")
+            .map_err(|_| {
+                ProxyError::new(
+                    ErrorCode::TlsHandshakeFailed,
+                    "TLS handshake capacity closed",
+                )
             })?;
-        Ok(AcceptedConnection {
-            tls_peer: Some(peer_identity(certificate.as_ref())?),
-            io: Box::new(stream),
+        let runtime = tokio::runtime::Handle::try_current().map_err(|error| {
+            ProxyError::new(
+                ErrorCode::TlsHandshakeFailed,
+                format!("TLS handshake runtime unavailable: {error}"),
+            )
+        })?;
+        let cancellation = CancellationToken::new();
+        let mut cancellation_guard = HandshakeCancellation::new(cancellation.clone());
+        let joined = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            runtime.block_on(async move {
+                tokio::time::timeout(TLS_HANDSHAKE_POLICY_TIMEOUT, async move {
+                    tokio::select! {
+                        biased;
+                        () = cancellation.cancelled() => Err(ProxyError::new(
+                            ErrorCode::TlsHandshakeFailed,
+                            "TLS handshake cancelled",
+                        )),
+                        result = acceptor.accept(io) => {
+                            let stream = result.map_err(tls_handshake)?;
+                            accepted_tls_connection(stream)
+                        }
+                    }
+                })
+                .await
+                .map_err(|_| {
+                    ProxyError::new(ErrorCode::TlsHandshakeFailed, "TLS handshake timed out")
+                })?
+            })
         })
+        .await;
+        cancellation_guard.disarm();
+        joined.map_err(|error| {
+            ProxyError::new(
+                ErrorCode::TlsHandshakeFailed,
+                format!("TLS handshake task failed: {error}"),
+            )
+        })?
+    }
+}
+
+fn accepted_tls_connection(
+    stream: tokio_rustls::server::TlsStream<BoxIo>,
+) -> Result<AcceptedConnection> {
+    let certificate = stream
+        .get_ref()
+        .1
+        .peer_certificates()
+        .and_then(|certificates| certificates.first())
+        .ok_or_else(|| {
+            ProxyError::new(ErrorCode::TlsHandshakeFailed, "client certificate missing")
+        })?;
+    Ok(AcceptedConnection {
+        tls_peer: Some(peer_identity(certificate.as_ref())?),
+        io: Box::new(stream),
+    })
+}
+
+struct HandshakeCancellation {
+    cancellation: CancellationToken,
+    armed: bool,
+}
+
+impl HandshakeCancellation {
+    fn new(cancellation: CancellationToken) -> Self {
+        Self {
+            cancellation,
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for HandshakeCancellation {
+    fn drop(&mut self) {
+        if self.armed {
+            self.cancellation.cancel();
+        }
     }
 }
 

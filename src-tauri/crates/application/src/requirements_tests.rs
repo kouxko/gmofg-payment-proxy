@@ -26,14 +26,19 @@ mod support;
 
 use support::*;
 
+mod android_multi_device;
 mod android_runtime;
+mod application_snapshot;
 mod breakpoints;
 mod capacity;
 mod diagnostic_report;
 mod diagnostics;
+mod environment_configuration_atomic_apply;
 mod environment_configuration_candidate_lifecycle;
+mod environment_configuration_validation;
 mod events;
 mod external_package_lifecycle;
+mod http_mock_draft;
 mod listener_certificates;
 mod local_responder_topology;
 mod protocol_package_lifecycle;

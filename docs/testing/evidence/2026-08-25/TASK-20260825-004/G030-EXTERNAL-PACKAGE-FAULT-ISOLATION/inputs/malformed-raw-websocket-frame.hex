@@ -1,0 +1,5 @@
+83 80 00 00 00 00
+
+# FIN=1, reserved opcode=0x3, masked empty client payload.
+# Expected: offending connection => EXTERNAL_PACKAGE_TRANSPORT_ERROR;
+# healthy package connection => continues and completes its RPC.

@@ -25,7 +25,7 @@ use super::{
             SocketTlsIdentity,
         },
         support::{
-            LocalFactory, ProcessorOutcome, connect_retry, limits, local_config, reserve_address,
+            LocalFactory, ProcessorOutcome, bind_listener, connect_retry, limits, local_config,
         },
     },
     *,
@@ -41,7 +41,7 @@ struct Identity {
 #[tokio::test]
 async fn tls_app_connection_receives_the_local_response() {
     let server_identity = identity("local responder server", false);
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let mut config = local_config(bind_addr);
     config.security = SocketDownstreamSecurity::Tls {
         downstream_tls: SocketDownstreamTlsConfig {
@@ -61,7 +61,11 @@ async fn tls_app_connection_receives_the_local_response() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let tcp = connect_retry(bind_addr).await;
     let mut tls = tls_connect(tcp, &server_identity.ca, None).await.unwrap();
@@ -79,7 +83,7 @@ async fn tls_app_connection_receives_the_local_response() {
 async fn required_mtls_rejects_missing_and_accepts_the_trusted_app_identity() {
     let server_identity = identity("local responder mTLS server", false);
     let client_identity = identity("trusted local app", true);
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let mut config = local_config(bind_addr);
     config.security = SocketDownstreamSecurity::Tls {
         downstream_tls: SocketDownstreamTlsConfig {
@@ -99,7 +103,11 @@ async fn required_mtls_rejects_missing_and_accepts_the_trusted_app_identity() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let missing = connect_retry(bind_addr).await;
     let missing = tls_connect(missing, &server_identity.ca, None).await;
@@ -122,7 +130,7 @@ async fn required_mtls_rejects_missing_and_accepts_the_trusted_app_identity() {
 #[tokio::test]
 async fn direct_tls_local_responder_echoes_binary_after_app_half_close() {
     let server_identity = identity("direct local TLS server", false);
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let mut config = local_config(bind_addr);
     config.security = SocketDownstreamSecurity::Tls {
         downstream_tls: SocketDownstreamTlsConfig {
@@ -141,7 +149,11 @@ async fn direct_tls_local_responder_echoes_binary_after_app_half_close() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
     let tcp = connect_retry(bind_addr).await;
     let mut tls = tls_connect(tcp, &server_identity.ca, None).await.unwrap();
     let payload = [0, 0xff, 0x10, b'd', b'i', b'r', b'e', b'c', b't'];
@@ -160,7 +172,7 @@ async fn direct_tls_local_responder_echoes_binary_after_app_half_close() {
 async fn direct_mtls_local_responder_rejects_an_app_without_identity() {
     let server_identity = identity("direct local mTLS server", false);
     let client_identity = identity("direct trusted local app", true);
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let mut config = local_config(bind_addr);
     config.security = SocketDownstreamSecurity::Tls {
         downstream_tls: SocketDownstreamTlsConfig {
@@ -179,7 +191,11 @@ async fn direct_mtls_local_responder_rejects_an_app_without_identity() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let missing = connect_retry(bind_addr).await;
     assert!(
@@ -195,7 +211,7 @@ async fn direct_mtls_local_responder_rejects_an_app_without_identity() {
 async fn direct_mtls_local_responder_echoes_for_a_trusted_app_identity() {
     let server_identity = identity("direct trusted local mTLS server", false);
     let client_identity = identity("direct trusted local app", true);
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let mut config = local_config(bind_addr);
     config.security = SocketDownstreamSecurity::Tls {
         downstream_tls: SocketDownstreamTlsConfig {
@@ -214,7 +230,11 @@ async fn direct_mtls_local_responder_echoes_for_a_trusted_app_identity() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
     let trusted = connect_retry(bind_addr).await;
     let mut trusted = tls_connect(trusted, &server_identity.ca, Some(&client_identity))
         .await

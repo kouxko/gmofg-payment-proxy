@@ -3,7 +3,7 @@
 /**
  * 跨桌面、ADB、设备端 VPN/TUN 和代理链路的统一诊断日志页。
  *
- * 页面只查询、筛选和显示 Rust 生成的脱敏 ViewModel。控制通道与业务数据通道
+ * 页面只查询、筛选和显示 Rust 生成的有界控制面 ViewModel。控制通道与业务数据通道
  * 必须分开记录：adb forward 只承载桌面到 Companion 的控制命令，adb reverse
  * 承载设备到桌面代理入口的业务连接。
  */
@@ -131,6 +131,18 @@ export function DiagnosticLogsView() {
           </Alert.Description>
         </Alert.Content>
       </Alert>
+
+      {page.data?.snapshot_required && (
+        <Alert status="warning">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>诊断事件游标已过期</Alert.Title>
+            <Alert.Description>
+              旧事件已超出 EventHub 的条数或字节保留窗口；当前列表是重新读取的完整保留快照。
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
+      )}
 
       <Card className="border border-[var(--telemetry-line)] shadow-sm">
         <Card.Header>

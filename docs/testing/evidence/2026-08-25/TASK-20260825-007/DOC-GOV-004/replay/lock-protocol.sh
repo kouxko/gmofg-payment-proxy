@@ -447,19 +447,21 @@ mkdir "$mismatch_outer"
 write_recovery_owner \
   "$mismatch_outer" 'inactive-recovery-mismatch' '99999994' \
   'missing' '' 'null' '[]'
-mismatch_lock_before="$(shasum -a 256 "$lock_dir/owner.json")"
-mismatch_recovery_before="$(shasum -a 256 "$mismatch_outer/recovery-owner.json")"
+cp "$lock_dir/owner.json" "$test_root/mismatch-lock-before.json"
+cp "$mismatch_outer/recovery-owner.json" "$test_root/mismatch-recovery-before.json"
 if isolate_interrupted_recovery_lock \
   "$mismatch_outer" 'interrupted-recovery-lock.20260825T232500.mismatch' >/dev/null; then
   printf 'mismatched_recovered_from=FAIL\n'
   exit 1
 fi
-test "$mismatch_lock_before" = "$(shasum -a 256 "$lock_dir/owner.json")"
-test "$mismatch_recovery_before" = "$(shasum -a 256 "$mismatch_outer/recovery-owner.json")"
+cmp -s "$test_root/mismatch-lock-before.json" "$lock_dir/owner.json"
+cmp -s "$test_root/mismatch-recovery-before.json" "$mismatch_outer/recovery-owner.json"
 test ! -e "$mismatch_outer/interrupted-recovery-lock.20260825T232500.mismatch"
 rm -- "$lock_dir/owner.json"
 rmdir "$lock_dir"
-rm -- "$mismatch_outer/recovery-owner.json"
+rm -- "$mismatch_outer/recovery-owner.json" \
+  "$test_root/mismatch-lock-before.json" \
+  "$test_root/mismatch-recovery-before.json"
 rmdir "$mismatch_outer"
 printf 'mismatched_recovered_from=REFUSED\n'
 
@@ -471,8 +473,10 @@ write_recovery_owner \
 write_recovery_owner \
   "$test_root/task-manager.abandoned.two" 'inactive-recovery-two' '99999992' \
   'missing' '' 'null' '[]'
-multiple_one_before="$(shasum -a 256 "$test_root/task-manager.abandoned.one/recovery-owner.json")"
-multiple_two_before="$(shasum -a 256 "$test_root/task-manager.abandoned.two/recovery-owner.json")"
+cp "$test_root/task-manager.abandoned.one/recovery-owner.json" \
+  "$test_root/multiple-one-before.json"
+cp "$test_root/task-manager.abandoned.two/recovery-owner.json" \
+  "$test_root/multiple-two-before.json"
 if isolate_interrupted_recovery_lock \
   "$test_root/task-manager.abandoned.one" \
   'interrupted-recovery-lock.20260825T232600.multiple' >/dev/null; then
@@ -480,11 +484,15 @@ if isolate_interrupted_recovery_lock \
   exit 1
 fi
 test -d "$lock_dir"
-test "$multiple_one_before" = "$(shasum -a 256 "$test_root/task-manager.abandoned.one/recovery-owner.json")"
-test "$multiple_two_before" = "$(shasum -a 256 "$test_root/task-manager.abandoned.two/recovery-owner.json")"
+cmp -s "$test_root/multiple-one-before.json" \
+  "$test_root/task-manager.abandoned.one/recovery-owner.json"
+cmp -s "$test_root/multiple-two-before.json" \
+  "$test_root/task-manager.abandoned.two/recovery-owner.json"
 rm -- \
   "$test_root/task-manager.abandoned.one/recovery-owner.json" \
-  "$test_root/task-manager.abandoned.two/recovery-owner.json"
+  "$test_root/task-manager.abandoned.two/recovery-owner.json" \
+  "$test_root/multiple-one-before.json" \
+  "$test_root/multiple-two-before.json"
 rmdir \
   "$lock_dir" \
   "$test_root/task-manager.abandoned.one" \
@@ -502,8 +510,8 @@ write_owner \
   '"task-manager.abandoned.collision"'
 collision_target="$collision_outer/interrupted-recovery-lock.20260825T233000.collision"
 mkdir "$collision_target"
-collision_lock_before="$(shasum -a 256 "$lock_dir/owner.json")"
-collision_recovery_before="$(shasum -a 256 "$collision_outer/recovery-owner.json")"
+cp "$lock_dir/owner.json" "$test_root/collision-lock-before.json"
+cp "$collision_outer/recovery-owner.json" "$test_root/collision-recovery-before.json"
 if isolate_interrupted_recovery_lock \
   "$collision_outer" "$(basename "$collision_target")" >/dev/null; then
   printf 'interrupted_target_collision=FAIL\n'
@@ -511,9 +519,11 @@ if isolate_interrupted_recovery_lock \
 fi
 test -d "$lock_dir"
 test -d "$collision_target"
-test "$collision_lock_before" = "$(shasum -a 256 "$lock_dir/owner.json")"
-test "$collision_recovery_before" = "$(shasum -a 256 "$collision_outer/recovery-owner.json")"
-rm -- "$lock_dir/owner.json" "$collision_outer/recovery-owner.json"
+cmp -s "$test_root/collision-lock-before.json" "$lock_dir/owner.json"
+cmp -s "$test_root/collision-recovery-before.json" "$collision_outer/recovery-owner.json"
+rm -- "$lock_dir/owner.json" "$collision_outer/recovery-owner.json" \
+  "$test_root/collision-lock-before.json" \
+  "$test_root/collision-recovery-before.json"
 rmdir "$lock_dir" "$collision_target" "$collision_outer"
 printf 'interrupted_target_collision=REFUSED\n'
 

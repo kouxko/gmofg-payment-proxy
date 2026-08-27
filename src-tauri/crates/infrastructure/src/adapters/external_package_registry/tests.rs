@@ -52,8 +52,12 @@ fn registration(name: &str) -> ExternalPackageRegistration {
     .expect("valid external registration")
 }
 
+mod async_persistence;
 mod coverage;
 mod diagnostics;
+mod environment_apply_gate_revision16;
+mod error_views;
+mod lifecycle;
 
 async fn connected_client(
     registration: &ExternalPackageRegistration,
@@ -130,7 +134,9 @@ async fn service_status_is_explicit_and_never_claims_authentication() {
     assert_eq!(initial.fixed_path, "/packages");
     assert!(!initial.authentication_enabled);
 
-    registry.mark_service_listening("ws://127.0.0.1:9000/packages");
+    registry
+        .mark_service_listening("ws://127.0.0.1:9000/packages")
+        .await;
     let listening = registry.service_status().await.unwrap();
     assert_eq!(listening.websocket_url, "ws://127.0.0.1:9000/packages");
     assert_eq!(listening.online_connection_count, 0);
@@ -139,15 +145,17 @@ async fn service_status_is_explicit_and_never_claims_authentication() {
         ExternalPackageServiceStateViewModel::Listening
     );
 
-    registry.mark_service_failed("ws://127.0.0.1:9000/packages", "端口已被其他进程占用。");
+    registry
+        .mark_service_failed("ws://127.0.0.1:9000/packages", "端口已被其他进程占用。")
+        .await;
     assert!(matches!(
         registry.service_status().await.unwrap().state,
         ExternalPackageServiceStateViewModel::Failed { .. }
     ));
 }
 
-#[test]
-fn runtime_provider_distinguishes_internal_disabled_and_offline() {
+#[tokio::test]
+async fn runtime_provider_distinguishes_internal_disabled_and_offline() {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let registry = ExternalPackageRegistryAdapter::new(Arc::clone(&store));
     let registration = registration("Vendor ISO8583");
@@ -159,6 +167,7 @@ fn runtime_provider_distinguishes_internal_disabled_and_offline() {
 
     assert!(
         ExternalSocketPackageProvider::resolve(&registry, &unknown)
+            .await
             .unwrap()
             .is_none()
     );
@@ -169,11 +178,15 @@ fn runtime_provider_distinguishes_internal_disabled_and_offline() {
             Utc::now(),
         )
         .unwrap();
-    let disabled = ExternalSocketPackageProvider::resolve(&registry, &package).unwrap_err();
+    let disabled = ExternalSocketPackageProvider::resolve(&registry, &package)
+        .await
+        .unwrap_err();
     assert_eq!(disabled.view_model.code, "EXTERNAL_PACKAGE_DISABLED");
 
     assert!(store.set_external_package_enabled(&package, true).unwrap());
-    let offline = ExternalSocketPackageProvider::resolve(&registry, &package).unwrap_err();
+    let offline = ExternalSocketPackageProvider::resolve(&registry, &package)
+        .await
+        .unwrap_err();
     assert_eq!(offline.view_model.code, "EXTERNAL_PACKAGE_OFFLINE");
 }
 
@@ -212,6 +225,7 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
     let (first_client, _first_peer) = connected_client(&registration, 1).await;
     let invalid_fingerprint = registry
         .accept_registration(&registration, [0_u8; 32], first_client.clone())
+        .await
         .unwrap_err();
     assert_eq!(
         invalid_fingerprint.view_model.code,
@@ -220,6 +234,7 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
     assert!(registry.get(&package).await.unwrap().is_none());
     let first = registry
         .accept_registration(&registration, fingerprint, first_client.clone())
+        .await
         .unwrap();
     assert!(!first.enabled);
     registry.set_enabled(&package, true).await.unwrap();
@@ -227,6 +242,7 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
     let (duplicate_client, _duplicate_peer) = connected_client(&registration, 2).await;
     let duplicate = registry
         .accept_registration(&registration, fingerprint, duplicate_client.clone())
+        .await
         .unwrap_err();
     assert_eq!(duplicate.view_model.code, "EXTERNAL_PACKAGE_ALREADY_ONLINE");
     duplicate_client.disconnect().await;
@@ -245,9 +261,14 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
     let (reconnected_client, _reconnected_peer) = connected_client(&registration, 3).await;
     let reconnected = registry
         .accept_registration(&registration, fingerprint, reconnected_client)
+        .await
         .unwrap();
     assert!(reconnected.enabled);
-    assert!(!registry.mark_disconnected(&package, first.connection_id));
+    assert!(
+        !registry
+            .mark_disconnected(&package, first.connection_id)
+            .await
+    );
     assert!(
         registry
             .record_remote_address(
@@ -255,6 +276,7 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
                 reconnected.connection_id,
                 "127.0.0.1:49153".parse().unwrap(),
             )
+            .await
             .unwrap()
     );
     assert!(
@@ -264,6 +286,7 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
                 first.connection_id,
                 &ExternalPackageConnectionError::Transport("stale secret".to_owned()),
             )
+            .await
             .unwrap()
     );
     let detail = registry.detail(&package).await.unwrap();
@@ -293,6 +316,7 @@ async fn detail_projects_connection_fingerprint_methods_timeout_and_recent_error
     let (client, _peer) = connected_client(&registration, 30).await;
     let accepted = registry
         .accept_registration(&registration, fingerprint, client)
+        .await
         .unwrap();
     registry
         .record_remote_address(
@@ -300,6 +324,7 @@ async fn detail_projects_connection_fingerprint_methods_timeout_and_recent_error
             accepted.connection_id,
             "127.0.0.1:49152".parse().unwrap(),
         )
+        .await
         .unwrap();
     registry
         .record_connection_error(
@@ -307,6 +332,7 @@ async fn detail_projects_connection_fingerprint_methods_timeout_and_recent_error
             accepted.connection_id,
             &ExternalPackageConnectionError::Disconnected,
         )
+        .await
         .unwrap();
 
     let detail = registry.detail(&package).await.unwrap();
@@ -341,9 +367,11 @@ async fn detail_restores_safe_connection_history_without_faking_online_state() {
         let (client, _peer) = connected_client(&registration, 31).await;
         let accepted = registry
             .accept_registration(&registration, fingerprint, client)
+            .await
             .unwrap();
         registry
             .record_remote_address(&package, accepted.connection_id, remote_address)
+            .await
             .unwrap();
         registry
             .record_connection_error(
@@ -351,8 +379,13 @@ async fn detail_restores_safe_connection_history_without_faking_online_state() {
                 accepted.connection_id,
                 &ExternalPackageConnectionError::Disconnected,
             )
+            .await
             .unwrap();
-        assert!(registry.mark_disconnected(&package, accepted.connection_id));
+        assert!(
+            registry
+                .mark_disconnected(&package, accepted.connection_id)
+                .await
+        );
     }
 
     let restarted =
@@ -378,6 +411,7 @@ async fn online_delete_closes_connection_and_next_registration_is_first_install(
     let (client, _peer) = connected_client(&registration, 4).await;
     registry
         .accept_registration(&registration, fingerprint, client)
+        .await
         .unwrap();
     registry.set_enabled(&package, true).await.unwrap();
 
@@ -388,6 +422,7 @@ async fn online_delete_closes_connection_and_next_registration_is_first_install(
     let (new_client, _new_peer) = connected_client(&registration, 5).await;
     let new_registration = registry
         .accept_registration(&registration, fingerprint, new_client)
+        .await
         .unwrap();
     assert!(!new_registration.enabled);
     registry.disconnect(&package).await.unwrap();

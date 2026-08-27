@@ -15,7 +15,7 @@ use intercept_proxy_runtime::{
 use super::{ListenerRuntimePlanBuilder, PreparedListenerRuntime, runtime_error};
 
 impl ListenerRuntimePlanBuilder<'_> {
-    pub(super) fn build_socket(
+    pub(super) async fn build_socket(
         &self,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
@@ -24,10 +24,14 @@ impl ListenerRuntimePlanBuilder<'_> {
         full_runtime: bool,
     ) -> AppResult<PreparedListenerRuntime> {
         if !full_runtime {
-            return self.build_socket_probe(workspace, listener, socket, bind_addr);
+            return self
+                .build_socket_probe(workspace, listener, socket, bind_addr)
+                .await;
         }
         if matches!(&socket.processing, SocketPayloadProcessing::Scripted(_)) {
-            return self.build_scripted_socket(workspace, listener, socket, bind_addr);
+            return self
+                .build_scripted_socket(workspace, listener, socket, bind_addr)
+                .await;
         }
         let observer = self.socket_observer(listener, socket)?;
         let read_chunk_bytes =
@@ -42,12 +46,11 @@ impl ListenerRuntimePlanBuilder<'_> {
             SocketTopology::Relay(relay) => SocketRelayService::build_with_observer(
                 SocketRelayConfig {
                     bind_addr,
-                    allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
                     upstream: SocketEndpoint {
                         host: relay.upstream.host.clone(),
                         port: relay.upstream.port,
                     },
-                    security: self.socket_security(workspace, &relay.security)?,
+                    security: self.socket_security(workspace, &relay.security).await?,
                     maximum_connections: socket.maximum_connections,
                     read_chunk_bytes,
                     connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
@@ -62,14 +65,14 @@ impl ListenerRuntimePlanBuilder<'_> {
                     DomainSocketDownstreamSecurity::Tls { downstream_tls } => {
                         RuntimeSocketDownstreamSecurity::Tls {
                             downstream_tls: self
-                                .socket_downstream_tls(workspace, downstream_tls)?,
+                                .socket_downstream_tls(workspace, downstream_tls)
+                                .await?,
                         }
                     }
                 };
                 SocketRelayService::build_local_raw_responder_with_observer(
                     SocketLocalResponderConfig {
                         bind_addr,
-                        allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
                         security,
                         maximum_connections: socket.maximum_connections,
                         read_chunk_bytes,

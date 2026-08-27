@@ -12,7 +12,6 @@ use http::HeaderValue;
 use uuid::Uuid;
 
 use super::config_error;
-use super::target::Network;
 use crate::Result;
 use crate::http::{HttpProtocolCapabilityFactory, PipelinePorts};
 use crate::message::MessageLimits;
@@ -28,7 +27,6 @@ pub enum ForwardAuthenticationMode {
 pub struct ForwardProxyConfig {
     pub bind_addr: SocketAddr,
     pub authentication: ForwardAuthenticationMode,
-    pub allowed_client_cidrs: Vec<String>,
     pub connect_timeout: Duration,
     pub read_timeout: Duration,
     pub write_timeout: Duration,
@@ -51,17 +49,11 @@ impl ForwardProxyConfig {
             ));
         }
         if !self.bind_addr.ip().is_loopback()
-            && (self.authentication != ForwardAuthenticationMode::Required
-                || self.allowed_client_cidrs.is_empty())
+            && self.authentication != ForwardAuthenticationMode::Required
         {
             return Err(config_error(
-                "non-loopback forward proxy listeners require authentication and a client CIDR allowlist",
+                "non-loopback forward proxy listeners require authentication",
             ));
-        }
-        for cidr in &self.allowed_client_cidrs {
-            Network::parse(cidr).ok_or_else(|| {
-                config_error(format!("invalid forward proxy client CIDR {cidr:?}"))
-            })?;
         }
         Ok(())
     }

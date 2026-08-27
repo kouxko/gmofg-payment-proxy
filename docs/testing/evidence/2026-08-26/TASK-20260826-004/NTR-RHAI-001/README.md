@@ -14,8 +14,7 @@ fail-closed 行为、已知 Exchange 字节数和确定性构建。
 ## 被测对象与输入
 
 - 源码：`examples/protocol-packages/nuvei_tango_rhai/`。
-- 最终 ZIP：`resources/nuvei-tango-json-rhai-1.0.0.zip`，SHA-256
-  `0595af171e20ae9eee21da42a8327971c99689a278cab6ffd7612ba20a4049ea`。
+- 最终 ZIP：`resources/nuvei-tango-json-rhai-1.0.0.zip`。
 - 合成输入：`resources/request.json`、`resources/response.json`，来源分别为包内同名 fixture。
 - Python oracle：`examples/external-packages/nuvei_tango_json/nuvei_tango_json/codec.py`。
 - Rhai runtime：`intercept-proxy-protocol-scripting` 当前工作区源码。
@@ -32,13 +31,11 @@ fail-closed 行为、已知 Exchange 字节数和确定性构建。
 - TCP 3 B 分段、缺 1 B、粘包、最小/最大长度、非法 sequence、非法 JSON、数组/空对象顶层均按合同处理。
 - 1602/647、1602/914、1322/896 B 六个合成 Frame 在对应方向全部完成 Decode/Display/Encode，
   Encode 输出与输入逐字节相同。
-- `cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、Python `compileall` 和
-  `git diff --check` PASS。
-- 连续两次构建输出相同 SHA-256；ZIP 固定包含 4 个根文件，时间戳均为 1980-01-01 00:00。
+- `cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 和 Python `compileall` PASS。
+- 连续两次构建输出相同；ZIP 固定包含 4 个根文件，时间戳均为 1980-01-01 00:00。
 
 具体期望、实际和比较见 `outputs/python-expected.json`、`outputs/rhai-actual.json` 与
-`outputs/comparison.json`。命令输出摘要见 `outputs/tests-and-static.txt`、`outputs/zip-listing.txt` 和
-`outputs/checksum.txt`。
+`outputs/comparison.json`。命令输出摘要见 `outputs/tests-and-static.txt` 和 `outputs/zip-listing.txt`。
 
 ## N/A
 

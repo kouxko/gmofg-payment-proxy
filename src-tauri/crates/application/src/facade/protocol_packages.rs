@@ -15,8 +15,8 @@ use crate::{
     AppError, AppResult, ExternalPackageServiceStatusViewModel, HttpBodyProcessing,
     ListenerDataPlane, OperationResultViewModel, ProtocolPackageDetailViewModel,
     ProtocolPackageGroupViewModel, ProtocolPackageRef, ProtocolPackageSourceViewModel,
-    ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel, SocketPayloadProcessing,
-    UiTone,
+    ProtocolPackageUsageCount, ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel,
+    SocketPayloadProcessing, UiTone,
 };
 
 impl Application {
@@ -30,11 +30,32 @@ impl Application {
     /// 按稳定 ID 分组列出所有精确版本，不隐式编译或改变启用状态。
     pub async fn protocol_package_list(&self) -> AppResult<Vec<ProtocolPackageGroupViewModel>> {
         let versions = self.protocol_package_versions().await?;
+        let usage_counts = self.protocol_package_usage.usage_counts().await?;
+        Self::group_protocol_package_versions(versions, usage_counts)
+    }
+
+    pub(super) async fn protocol_package_list_for_snapshot(
+        &self,
+        workspaces: &[crate::ProxyWorkspace],
+        listener_statuses: &[crate::ListenerStatusViewModel],
+    ) -> AppResult<Vec<ProtocolPackageGroupViewModel>> {
+        let versions = self.protocol_package_versions().await?;
+        let usage_counts = self
+            .protocol_package_usage
+            .usage_counts_for_snapshot(workspaces, listener_statuses)
+            .await?;
+        Self::group_protocol_package_versions(versions, usage_counts)
+    }
+
+    fn group_protocol_package_versions(
+        versions: Vec<ProtocolPackageVersionViewModel>,
+        counts: Vec<ProtocolPackageUsageCount>,
+    ) -> AppResult<Vec<ProtocolPackageGroupViewModel>> {
         if versions.is_empty() {
             return Ok(Vec::new());
         }
         let mut usage_counts = HashMap::new();
-        for count in self.protocol_package_usage.usage_counts().await? {
+        for count in counts {
             let totals = usage_counts
                 .entry(count.package)
                 .or_insert((0_usize, 0_usize));

@@ -11,7 +11,7 @@ impl crate::SecretProtector for ListenerRuntimeTestProtector {
     }
 }
 
-fn test_listener_runtime(store: Arc<SqliteStore>) -> ListenerRuntimeAdapter {
+pub(super) fn test_listener_runtime(store: Arc<SqliteStore>) -> ListenerRuntimeAdapter {
     let protocol_packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
         Arc::clone(&store),
     ));
@@ -30,10 +30,14 @@ fn test_listener_runtime_with_packages(
 }
 
 include!("tests/certificate_policy.rs");
+include!("tests/body_codec_lifecycle.rs");
+include!("tests/body_codec_epoch_cleanup.rs");
+include!("tests/body_codec_cancellation.rs");
 include!("tests/forward_proxy.rs");
 include!("tests/fixed_server.rs");
 include!("tests/socket_runtime.rs");
 include!("tests/validation.rs");
+include!("tests/environment_apply_gate_revision16.rs");
 
 #[path = "tests/external_package_runtime.rs"]
 mod external_package_runtime_tests;
@@ -41,6 +45,8 @@ mod external_package_runtime_tests;
 mod http_protocol_pipeline_tests;
 #[path = "tests/local_responder_runtime.rs"]
 mod local_responder_runtime_tests;
+#[path = "tests/runtime_epoch_aba.rs"]
+mod runtime_epoch_aba_tests;
 #[path = "tests/scripted_relay_runtime.rs"]
 mod scripted_relay_runtime_tests;
 #[path = "tests/scripted_snapshot.rs"]

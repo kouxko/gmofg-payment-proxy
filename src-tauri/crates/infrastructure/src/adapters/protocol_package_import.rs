@@ -163,7 +163,8 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
         let description = application_description(compiled);
         let disposition = self
             .repository
-            .prepared_disposition(&prepared)
+            .prepared_disposition_async(&prepared)
+            .await
             .map_err(|error| app_error_from_storage(&error))?;
         let (disposition, token) = match disposition {
             PreparedProtocolPackageDisposition::New => (
@@ -200,7 +201,8 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
         let description = application_description(prepared.compiled());
         let outcome = self
             .repository
-            .install_prepared(prepared)
+            .install_prepared_async(prepared)
+            .await
             .map_err(|error| app_error_from_storage(&error))?;
         let (outcome_kind, summary) = match outcome {
             ProtocolPackageInstallOutcome::Installed(summary) => (

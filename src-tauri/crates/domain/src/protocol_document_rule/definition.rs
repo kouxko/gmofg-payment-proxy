@@ -26,6 +26,12 @@ impl DocumentAction {
 }
 
 impl ProtocolDocumentRuleDefinition {
+    /// Returns the stable rule identity.
+    #[must_use]
+    pub const fn id(&self) -> ProtocolDocumentRuleId {
+        self.rule_id
+    }
+
     #[must_use]
     pub const fn rule_id(&self) -> ProtocolDocumentRuleId {
         self.rule_id

@@ -3,8 +3,8 @@ import { Alert, Button, Card, Chip, Input, Label, Switch } from "@heroui/react";
 import type {
   AndroidNetworkProfile,
   AndroidNetworkProfileSummary,
+  AndroidRuntimeOwnerViewModel,
 } from "@/generated/rust-types";
-import { isForeignRuntimeOwner } from "./android-runtime-owner-model";
 
 interface ProfileSelectorCardProps {
   profiles: AndroidNetworkProfileSummary[];
@@ -142,7 +142,8 @@ export function ProfileBasicsCard({
 interface ProfileActionsProps {
   busy: boolean;
   selectedSerial?: string | null;
-  runtimeOwnerSerial?: string | null;
+  runtimeOwner?: AndroidRuntimeOwnerViewModel;
+  runtimeOwnerCount: number;
   runtimeOwnerReady: boolean;
   dangerousConfirmed: boolean;
   onDangerousConfirmedChange: (confirmed: boolean) => void;
@@ -154,7 +155,8 @@ interface ProfileActionsProps {
 export function ProfileActions({
   busy,
   selectedSerial,
-  runtimeOwnerSerial,
+  runtimeOwner,
+  runtimeOwnerCount,
   runtimeOwnerReady,
   dangerousConfirmed,
   onDangerousConfirmedChange,
@@ -162,10 +164,7 @@ export function ProfileActions({
   onStart,
   onApply,
 }: ProfileActionsProps): ReactElement {
-  const foreignRuntimeOwner = isForeignRuntimeOwner(
-    selectedSerial,
-    runtimeOwnerSerial,
-  );
+  const ownerCapacityReached = runtimeOwnerCount >= 8 && !runtimeOwner;
   return (
     <div className="flex flex-wrap items-center gap-2 pb-5">
       <Switch isSelected={dangerousConfirmed} onChange={onDangerousConfirmedChange}>
@@ -174,20 +173,20 @@ export function ProfileActions({
           <span>确认 100% 丢包或黑洞风险</span>
         </Switch.Content>
       </Switch>
-      <Button variant="outline" isDisabled={busy} onPress={onSave}>保存方案</Button>
+      <Button variant="outline" isDisabled={busy || !selectedSerial} onPress={onSave}>保存方案</Button>
       <Button
         variant="primary"
-        isDisabled={busy || !selectedSerial || !runtimeOwnerReady || foreignRuntimeOwner}
+        isDisabled={busy || !selectedSerial || !runtimeOwnerReady || Boolean(runtimeOwner) || ownerCapacityReached}
         onPress={onStart}
       >启动</Button>
       <Button
         variant="outline"
-        isDisabled={busy || !selectedSerial || !runtimeOwnerReady || foreignRuntimeOwner}
+        isDisabled={busy || !selectedSerial || !runtimeOwnerReady || !runtimeOwner}
         onPress={onApply}
       >应用修改</Button>
-      {foreignRuntimeOwner && (
+      {ownerCapacityReached && (
         <p className="basis-full text-xs text-[var(--telemetry-warning)]">
-          实际运行设备为 {runtimeOwnerSerial}，请先停止它，再对当前选择设备启动或应用方案。
+          已达到 8 台运行设备上限；请先停止一台设备，再启动新的设备。
         </p>
       )}
       {!runtimeOwnerReady && (

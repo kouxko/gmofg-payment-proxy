@@ -6,8 +6,8 @@ use super::{
     AndroidNetworkProfile, AppError, AppResult, Application, apply_package_toggle,
     validate_package_name, validate_profile_id,
 };
+use crate::OperationResultViewModel;
 use crate::{AndroidNetworkProfileSummary, AndroidProfileEditIntent};
-use crate::{AndroidNetworkState, OperationResultViewModel};
 use std::collections::{BTreeMap, BTreeSet};
 use uuid::Uuid;
 
@@ -59,6 +59,7 @@ impl Application {
     /// 将页面编辑意图规范化为完整 Profile。
     pub async fn device_network_profile_apply_intent(
         &self,
+        serial: String,
         mut profile: AndroidNetworkProfile,
         intent: AndroidProfileEditIntent,
     ) -> AppResult<AndroidNetworkProfile> {
@@ -68,7 +69,7 @@ impl Application {
         } = &intent
         {
             validate_package_name(package_name)?;
-            let packages = self.android_package_list().await?;
+            let packages = self.android_package_list(serial).await?;
             apply_package_toggle(&mut profile, &packages, package_name, *selected)?;
         } else {
             intent.apply_defaults(&mut profile);
@@ -78,10 +79,12 @@ impl Application {
 
     pub async fn device_network_profile_save(
         &self,
+        serial: String,
         profile: AndroidNetworkProfile,
     ) -> AppResult<AndroidNetworkProfile> {
         profile.validate().map_err(AppError::from)?;
-        self.validate_profile_against_device(&profile).await?;
+        self.validate_profile_against_device(serial, &profile)
+            .await?;
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.selected_workspace().await?;
         let current = workspace.clone();
@@ -110,23 +113,17 @@ impl Application {
         // 状态检查与持久化删除必须属于同一个原子边界；否则 start 可在两者之间完成，
         // 导致刚进入运行态的方案仍被删除。
         let _gate = self.mutation_gate.lock().await;
-        let status = self.android.network_status().await.map_err(|error| {
+        let owners = self.android.runtime_owners().await.map_err(|error| {
             AppError::new(
                 "ANDROID_PROFILE_DELETE_STATUS_UNAVAILABLE",
                 format!(
-                    "删除前无法确认设备网络运行状态：{}",
+                    "删除前无法确认设备网络运行记录：{}",
                     error.view_model.message
                 ),
             )
             .retryable("请连接目标设备并刷新运行状态，或先执行紧急恢复网络。")
         })?;
-        if matches!(
-            status.state,
-            AndroidNetworkState::StartRequested
-                | AndroidNetworkState::Running
-                | AndroidNetworkState::StopRequested
-        ) && status.active_profile_id.as_deref() == Some(profile_id.as_str())
-        {
+        if owners.iter().any(|owner| owner.profile_id == profile_id) {
             return Err(AppError::new(
                 "ANDROID_PROFILE_ACTIVE",
                 "设备网络方案仍在运行，不能删除。",
@@ -175,11 +172,12 @@ impl Application {
 
     pub(super) async fn validate_profile_against_device(
         &self,
+        serial: String,
         profile: &AndroidNetworkProfile,
     ) -> AppResult<()> {
         // 启动和应用方案不能复用页面浏览时的包清单缓存。应用可能在页面打开后被
         // ADB 安装、升级或卸载；这里必须重新读取包名、UID 与 shared UID 分组。
-        let packages = self.refresh_android_package_inventory().await?;
+        let packages = self.refresh_android_package_inventory(serial).await?;
         let inventory = packages
             .iter()
             .map(|package| (package.package_name.as_str(), package))

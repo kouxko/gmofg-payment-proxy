@@ -20,7 +20,11 @@ where
         return;
     };
     match P::observed(envelope.context()) {
-        ObservedContext::Http { header, body } => {
+        ObservedContext::Http {
+            header,
+            body,
+            body_is_utf8,
+        } => {
             if !fits_projection(&[header, body, &document_json, envelope.display()]) {
                 observation_lost("http_received_projection_too_large");
                 return;
@@ -32,6 +36,7 @@ where
                 direction = direction::<D>(),
                 context_header = header,
                 context_body = body,
+                context_body_is_utf8 = body_is_utf8,
                 context_bytes_hex = tracing::field::Empty,
                 document_json = document_json.as_str(),
                 display = envelope.display(),
@@ -67,7 +72,11 @@ where
     D: Direction,
 {
     match P::observed(context) {
-        ObservedContext::Http { header, body } if fits_projection(&[header, body]) => {
+        ObservedContext::Http {
+            header,
+            body,
+            body_is_utf8,
+        } if fits_projection(&[header, body]) => {
             tracing::info!(
                 target: "intercept_proxy::exchange::ui",
                 event = "sent",
@@ -75,6 +84,7 @@ where
                 direction = direction::<D>(),
                 context_header = header,
                 context_body = body,
+                context_body_is_utf8 = body_is_utf8,
                 context_bytes_hex = tracing::field::Empty,
             );
         }
@@ -114,9 +124,11 @@ where
     D: Direction,
 {
     match P::observed(context) {
-        ObservedContext::Http { header, body }
-            if fits_projection(&[header, body, error.message.as_str()]) =>
-        {
+        ObservedContext::Http {
+            header,
+            body,
+            body_is_utf8,
+        } if fits_projection(&[header, body, error.message.as_str()]) => {
             tracing::error!(
                 target: "intercept_proxy::exchange::ui",
                 event = "failed",
@@ -125,6 +137,7 @@ where
                 stage,
                 context_header = header,
                 context_body = body,
+                context_body_is_utf8 = body_is_utf8,
                 context_bytes_hex = tracing::field::Empty,
                 error = error.message.as_str(),
             );

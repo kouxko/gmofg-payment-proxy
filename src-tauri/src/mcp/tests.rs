@@ -12,6 +12,9 @@ use super::{
 
 mod environment_configuration_contract;
 mod environment_configuration_schema_contract;
+mod g036_adapter_transport_contract;
+mod g036_behavior_contract;
+mod g036_protocol_error_contract;
 mod protocol_contract;
 
 #[derive(Debug)]
@@ -22,8 +25,7 @@ impl ReadOnlyMcpBackend for FakeBackend {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult {
         match name {
             "application_snapshot" => Ok(json!({ "tool": name, "arguments": arguments })),
-            "workspace_list" | "settings_get" => Ok(json!([])),
-            "android_runtime_owner" => Ok(Value::Null),
+            "workspace_list" | "settings_get" | "android_runtime_owner_list" => Ok(json!([])),
             "diagnostics_query" => Ok(json!({"rows": []})),
             "certificate_overview" => Ok(json!({
                 "payload": "x".repeat(protocol::MAX_LOGICAL_OUTPUT_BYTES)
@@ -50,9 +52,17 @@ fn backend() -> Arc<dyn ReadOnlyMcpBackend> {
 }
 
 #[test]
-fn tool_catalog_is_read_only_and_covers_runtime_and_portable_protocol_data() {
+fn tool_catalog_preserves_the_existing_read_only_runtime_and_portable_protocol_tools() {
     let tools = protocol::tools();
-    let names = tools
+    let read_tools = tools
+        .iter()
+        .filter(|tool| {
+            tool.annotations
+                .as_ref()
+                .is_some_and(|annotation| annotation.read_only_hint == Some(true))
+        })
+        .collect::<Vec<_>>();
+    let names = read_tools
         .iter()
         .map(|tool| tool.name.as_ref())
         .collect::<Vec<_>>();
@@ -65,6 +75,7 @@ fn tool_catalog_is_read_only_and_covers_runtime_and_portable_protocol_data() {
         "diagnostics_query",
         "external_package_service_status",
         "android_network_endpoints",
+        "android_runtime_owner_list",
         "certificate_overview",
         "workspace_protocol_rule_list",
         "protocol_package_catalog",
@@ -73,11 +84,11 @@ fn tool_catalog_is_read_only_and_covers_runtime_and_portable_protocol_data() {
     ] {
         assert!(names.contains(&required), "missing {required}");
     }
-    assert!(tools.iter().all(|tool| {
-        tool.annotations
-            .as_ref()
-            .is_some_and(|annotation| annotation.read_only_hint == Some(true))
-    }));
+    assert_eq!(
+        read_tools.len(),
+        39,
+        "existing reads plus capabilities/status"
+    );
     for forbidden in [
         "save", "create", "delete", "clear", "reset", "start", "stop", "import", "export",
         "execute", "write", "sql", "shell",
@@ -126,11 +137,36 @@ fn resources_include_authoring_manifest_and_official_zip() {
     assert!(resources.iter().any(|resource| {
         resource.uri == resources::TOOL_REFERENCE_URI
             && resource.mime_type.as_deref() == Some("text/markdown")
+            && resource.title.as_deref()
+                == Some("Complete MCP tool reference: 37 reads and 5 environment tools")
+    }));
+    assert!(resources.iter().any(|resource| {
+        resource.uri == resources::VALIDATION_PLAYBOOK_URI
+            && resource.mime_type.as_deref() == Some("text/markdown")
     }));
     assert!(resources.iter().any(|resource| {
         resource.uri == resources::ISO8583_ARCHIVE_URI
             && resource.mime_type.as_deref() == Some("application/zip")
     }));
+}
+
+#[test]
+fn validation_playbook_keeps_advice_evidence_based_and_fail_closed() {
+    let (_, guide) =
+        resources::text(resources::VALIDATION_PLAYBOOK_URI).expect("validation playbook");
+    for required in [
+        "已观测事实",
+        "推断",
+        "未知",
+        "NOT_RUN",
+        "exchange_observation_get",
+        "verify_hostname=false",
+        "runtime epoch",
+        "Frame → Decode → Display → Rules → Encode",
+        "HTTP_MOCK_DRAFT",
+    ] {
+        assert!(guide.contains(required), "playbook is missing {required}");
+    }
 }
 
 #[test]
@@ -300,7 +336,14 @@ async fn missing_current_protocol_metadata_is_rejected_before_tool_execution() {
         json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
     )
     .await;
-    assert!(response.get("error").is_some(), "{response}");
+    assert_eq!(
+        response,
+        json!({
+            "code": "MCP_PROTOCOL_INVALID",
+            "message": "MCP protocol request is invalid",
+            "details": null
+        })
+    );
     server.shutdown().await;
 }
 

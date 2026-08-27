@@ -7,7 +7,8 @@ pub(crate) mod relay;
 mod stream_io;
 
 pub use contracts::{
-    ConnectionContext, HandshakePolicy, UpstreamSecurityEvidence, UpstreamTransportSecurity,
+    ConnectionContext, HandshakePolicy, TLS_HANDSHAKE_POLICY_TIMEOUT, UpstreamSecurityEvidence,
+    UpstreamTransportSecurity,
 };
 // Compatibility for callers migrating to the canonical `http::ConnectionService` path.
 pub use crate::ConnectionService;

@@ -348,6 +348,34 @@ mod tests {
     }
 
     #[test]
+    fn runtime_log_queue_losses_are_exposed_by_the_query_contract() {
+        let store = Arc::new(RuntimeLogStore::memory(8));
+        let (sender, receiver) = sync_channel(1);
+        let counters = store.queue_counters();
+        let factory = RuntimeLogWriterFactory::from_sender_for_test(
+            sender,
+            Arc::clone(&counters),
+            Arc::new(QueueByteBudget::new(64 * 1024)),
+        );
+
+        let mut first = factory.make_writer();
+        first.write_all(b"first").unwrap();
+        drop(first);
+        let mut dropped = factory.make_writer();
+        dropped.write_all(b"dropped").unwrap();
+        drop(dropped);
+        drop(receiver);
+        let mut disconnected = factory.make_writer();
+        disconnected.write_all(b"disconnected").unwrap();
+        drop(disconnected);
+
+        let page = store.query(&ApplicationLogQuery::default());
+        assert_eq!(page.queue_dropped_full, 1);
+        assert_eq!(page.queue_dropped_disconnected, 1);
+        assert_eq!(page.queue_dropped_contended, 0);
+    }
+
+    #[test]
     fn formatting_writer_bounds_message_before_queue_admission() {
         let store = Arc::new(RuntimeLogStore::memory(8));
         let (sender, receiver) = sync_channel(1);

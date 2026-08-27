@@ -44,6 +44,7 @@ __pycache__/
 # misc
 .DS_Store
 *.pem
+!docs/testing/evidence/**/resources/*.pem
 
 # debug
 npm-debug.log*

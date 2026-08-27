@@ -1,6 +1,13 @@
 //! Scripted Socket Listener 的不可变启动快照。
 
-use std::{collections::BTreeSet, sync::Arc, time::Duration};
+use std::{
+    collections::BTreeSet,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::Duration,
+};
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
@@ -28,9 +35,9 @@ pub(super) struct ScriptedSocketRuntimeSnapshot {
     upstream: DirectionExecutionPlan,
     downstream: DirectionExecutionPlan,
     document_rules: ProtocolDocumentRuleConnectionFactory,
+    rule_generation: Arc<AtomicU64>,
     certificate_references: Arc<[CertificateReference]>,
     security: ScriptedSocketSecuritySnapshot,
-    allowed_client_cidrs: Arc<[String]>,
     maximum_connections: u16,
     connect_timeout: Duration,
     read_timeout: Duration,
@@ -47,7 +54,7 @@ pub(super) enum ScriptedSocketSecuritySnapshot {
 }
 
 impl ScriptedSocketRuntimeSnapshot {
-    pub(super) fn prepare(
+    pub(super) async fn prepare_async(
         adapter: &ListenerRuntimeAdapter,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
@@ -61,7 +68,8 @@ impl ScriptedSocketRuntimeSnapshot {
         };
         let package = adapter
             .protocol_packages
-            .freeze_for_listener_start(&scripted.package)?;
+            .freeze_for_listener_start_async(&scripted.package)
+            .await?;
         if package.compiled().kind() != ProtocolPackageKind::Socket {
             return Err(AppError::new(
                 "PROTOCOL_PACKAGE_KIND_MISMATCH",
@@ -72,23 +80,39 @@ impl ScriptedSocketRuntimeSnapshot {
         let upstream = DirectionExecutionPlan::new(ProtocolDirection::Upstream);
         let downstream = DirectionExecutionPlan::new(ProtocolDirection::Downstream);
 
-        let document_rules = compile_document_rules(
-            workspace,
-            listener,
-            &scripted.package,
-            package.compiled().schema(ProtocolDirection::Upstream),
-            package.compiled().schema(ProtocolDirection::Downstream),
-            &socket.topology,
-        )?;
+        let workspace_for_compile = workspace.clone();
+        let listener_for_compile = listener.clone();
+        let package_ref = scripted.package.clone();
+        let upstream_schema = package
+            .compiled()
+            .schema(ProtocolDirection::Upstream)
+            .clone();
+        let downstream_schema = package
+            .compiled()
+            .schema(ProtocolDirection::Downstream)
+            .clone();
+        let topology = socket.topology.clone();
+        let document_rules = adapter
+            .compile_document_rules_on_blocking_owner(move || {
+                compile_document_rules(
+                    &workspace_for_compile,
+                    &listener_for_compile,
+                    &package_ref,
+                    &upstream_schema,
+                    &downstream_schema,
+                    &topology,
+                )
+            })
+            .await?;
         Ok(Some(Arc::new(Self {
             package,
             topology: socket.topology.clone(),
             upstream,
             downstream,
             document_rules,
+            rule_generation: Arc::new(AtomicU64::new(0)),
             certificate_references: selected_certificate_references(workspace, &socket.topology),
             security,
-            allowed_client_cidrs: listener.allowed_client_cidrs.clone().into(),
             maximum_connections: socket.maximum_connections,
             connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
             read_timeout: Duration::from_millis(listener.read_timeout_ms),
@@ -145,8 +169,9 @@ impl ScriptedSocketRuntimeSnapshot {
         &self.document_rules
     }
 
-    pub(super) fn replace_document_rules(
+    pub(super) async fn replace_document_rules(
         &self,
+        adapter: &ListenerRuntimeAdapter,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
     ) -> AppResult<()> {
@@ -156,17 +181,36 @@ impl ScriptedSocketRuntimeSnapshot {
         let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
             return Ok(());
         };
-        let replacement = compile_document_rules(
-            workspace,
-            listener,
-            &scripted.package,
-            self.package.compiled().schema(ProtocolDirection::Upstream),
-            self.package
-                .compiled()
-                .schema(ProtocolDirection::Downstream),
-            &socket.topology,
-        )?;
-        self.document_rules.replace(&replacement);
+        let generation = self.rule_generation.fetch_add(1, Ordering::AcqRel) + 1;
+        let workspace = workspace.clone();
+        let listener = listener.clone();
+        let package = scripted.package.clone();
+        let upstream_schema = self
+            .package
+            .compiled()
+            .schema(ProtocolDirection::Upstream)
+            .clone();
+        let downstream_schema = self
+            .package
+            .compiled()
+            .schema(ProtocolDirection::Downstream)
+            .clone();
+        let topology = socket.topology.clone();
+        let replacement = adapter
+            .compile_document_rules_on_blocking_owner(move || {
+                compile_document_rules(
+                    &workspace,
+                    &listener,
+                    &package,
+                    &upstream_schema,
+                    &downstream_schema,
+                    &topology,
+                )
+            })
+            .await?;
+        if self.rule_generation.load(Ordering::Acquire) == generation {
+            self.document_rules.replace(&replacement);
+        }
         Ok(())
     }
 
@@ -202,10 +246,6 @@ impl std::fmt::Debug for ScriptedSocketRuntimeSnapshot {
                 &self.certificate_references.len(),
             )
             .field("security", &self.security)
-            .field(
-                "allowed_client_cidr_count",
-                &self.allowed_client_cidrs.len(),
-            )
             .field("maximum_connections", &self.maximum_connections)
             .field("connect_timeout", &self.connect_timeout)
             .field("read_timeout", &self.read_timeout)

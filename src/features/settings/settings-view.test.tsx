@@ -87,14 +87,19 @@ const settings: SettingsViewModel = {
 
 const mcpInfo: McpInfoViewModel = {
   available: true,
-  endpoint: "http://127.0.0.1:17653/mcp",
+  endpoint: "http://0.0.0.0:17653/mcp",
   protocol_version: "2026-07-28",
-  transport: "Streamable HTTP",
-  access_scope: "仅本机回环地址",
-  authentication: "无认证",
-  tool_count: 33,
+  transport: "Streamable HTTP（明文）",
+  access_scope: "所有可达网络接口；客户端须把 0.0.0.0 替换为本机可达地址",
+  authentication: "无认证；任何可达主机均可读取并修改 Proxy 配置",
+  plaintext_http: true,
+  ipv4: { available: true, bind_address: "0.0.0.0", port: 17653, warning_codes: [] },
+  ipv6: { available: false, bind_address: "[::]", port: 17653, warning_codes: ["IPV6_DEGRADED"] },
+  warning_codes: ["IPV6_DEGRADED"],
+  tool_count: 42,
   resource_count: 11,
 };
+let mcpAvailable = true;
 
 const externalStatus: ExternalPackageServiceStatusViewModel = {
   websocket_url: "ws://0.0.0.0:8765/packages",
@@ -107,7 +112,7 @@ const externalStatus: ExternalPackageServiceStatusViewModel = {
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
   useIpcQuery: (key: string) => {
     const [data, setData] = useState(key === "mcp-info"
-      ? mcpInfo
+      ? { ...mcpInfo, available: mcpAvailable }
       : key === "external-package-service-status" ? externalStatus : settings);
     return {
       data,
@@ -129,6 +134,7 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
 describe("production SettingsView overlay", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mcpAvailable = true;
     commandMocks.settingsValidate.mockResolvedValue({
       valid: true,
       field_errors: {},
@@ -280,11 +286,26 @@ describe("production SettingsView overlay", () => {
 
     await user.click(screen.getByRole("tab", { name: "AI 助手（MCP）" }));
 
-    expect(screen.getByText("http://127.0.0.1:17653/mcp")).toBeVisible();
-    expect(screen.getByText("33 个只读工具 · 11 个参考资源")).toBeVisible();
-    expect(screen.getByText(/App 端的修改建议/)).toBeVisible();
+    expect(screen.getByText("http://0.0.0.0:17653/mcp")).toBeVisible();
+    expect(screen.getByText("42 个工具（含读写能力） · 11 个参考资源")).toBeVisible();
+    expect(screen.getByText(/技术验证、预览和一次性确认流程/)).toBeVisible();
     expect(screen.getByText(/Root CA、服务端证书、客户端证书/)).toBeVisible();
     expect(screen.getByText(/"type": "http"/)).toBeVisible();
+    expect(screen.getByText(/<本机可达地址>/)).toBeVisible();
+    expect(screen.getByText(/IPV6_DEGRADED/)).toBeVisible();
+    expect(screen.getByText(/任何能访问该端口的主机/)).toBeVisible();
+  });
+
+  it("treats a missing MCP runtime as an invariant failure instead of a restartable port conflict", async () => {
+    mcpAvailable = false;
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("tab", { name: "AI 助手（MCP）" }));
+
+    expect(screen.getByText("运行状态异常")).toBeVisible();
+    expect(screen.getByText(/IPv4 MCP 绑定失败会直接阻止应用完成启动/)).toBeVisible();
+    expect(screen.queryByText(/确认本机 17653 端口没有被其他程序占用/)).not.toBeInTheDocument();
   });
 
   it("shows the authoritative external package service status and restart boundary", async () => {

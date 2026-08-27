@@ -133,6 +133,29 @@ pub async fn rule_create_from_session(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn rule_create_from_exchange_observation(
+    state: State<'_, AppState>,
+    exchange_id: String,
+    response_event_index: u32,
+) -> CommandResult<RuleDraft> {
+    let record = state
+        .exchange_observations()
+        .get(&exchange_id)
+        .ok_or_else(|| {
+            command_error(intercept_proxy_application::AppError::new(
+                "EXCHANGE_OBSERVATION_NOT_FOUND",
+                "Exchange 运行记录不存在或已被内存淘汰。",
+            ))
+        })?;
+    state
+        .application
+        .rule_create_from_exchange_observation(&record, response_event_index as usize)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn rule_save(
     state: State<'_, AppState>,
     draft: RuleDraft,

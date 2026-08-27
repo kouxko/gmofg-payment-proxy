@@ -1,16 +1,19 @@
 # 外部软件包接入与 MCP 诊断指南
 
-本指南描述第三方进程如何通过 WebSocket 为 Socket Listener 提供协议处理，以及 AI 如何使用只读 MCP
-确认服务、注册、运行和失败阶段。MCP 不会启用、停用、删除、重连或修改软件包配置。
+本指南描述第三方进程如何通过 WebSocket 为 Socket Listener 提供协议处理，以及 AI 如何使用 MCP
+查询工具确认服务、注册、运行和失败阶段。这些查询工具保持只读；MCP 不会启用、停用、删除或重连
+软件包。
 
 ## 1. 找到权威服务地址
 
 先调用 `external_package_service_status`。只有状态为 `listening` 时才连接返回的 `ws://` 地址；路径固定为
-`/packages`，不能增加 query 或改用其他路径。服务当前没有认证，同一可达网络范围内的进程都可能尝试连接，
-因此应把监听地址限制在受信任环境。
+`/packages`，不能增加 query 或改用其他路径。服务不要求 token、HMAC、mTLS、Origin、注册身份或授权；所有能够
+到达该地址并正确实现 wire 合同的外部包都按受信任包接纳。监听范围只由配置的 bind address 决定，不存在额外的
+loopback、CIDR 或来源身份门禁。
 
-设置页修改监听地址、端口、RPC timeout 或并发额度后，需要重启 Proxy 才会改变实际服务。MCP 是只读接口，
-不能代替设置页完成这些操作。
+设置页修改监听地址、端口、RPC timeout 或并发额度后，需要重启 Proxy 才会改变实际服务。环境配置
+MCP 工具可以在目标 Workspace 候选中配置精确外部包引用，但不能修改这些应用级服务设置，也不会
+启动、停止、注册或探测外部包。
 
 ## 2. 完成唯一一次注册
 
@@ -38,8 +41,17 @@
 每个响应必须关联当前连接代次中的请求 ID。错误 ID、重复响应、非法 envelope 或类型不匹配会使软件包协议失效并
 断开。普通 JSON-RPC error、调用 timeout 或低于 transport wire 上限的调用级大小错误只失败对应处理调用。
 
-整个连接的单条 JSON-RPC wire message 上限为 1 MiB，display 结果上限为 128 KiB。入站消息超过 1 MiB 时
-无法安全取得请求 ID，因此属于连接致命错误，软件包会离线并停止引用它的活动 Listener。
+资源边界为：WebSocket handshake 10 秒、服务最多 256 条已接纳连接、注册 30 秒、默认单包 256 个在途 RPC、
+默认 RPC timeout 5 秒、单条 JSON-RPC wire message 1 MiB、display 结果 128 KiB。连接额度满时立即拒绝该次连接并
+记录 `EXTERNAL_PACKAGE_CONNECTION_LIMIT_REACHED`；失败连接退出后立即释放额度。入站消息超过 1 MiB 时无法安全
+取得请求 ID，因此属于连接致命错误，软件包会离线并停止引用它的活动 Listener。
+
+注册 30 秒期限覆盖初始 `package.register` 写出、等待响应和期间的 heartbeat 写出，阻塞写不能绕过期限。
+这些额度按连接或精确包隔离：一个包的 stalled/timeout RPC 不占用另一个包的在途额度；非法 JSON、非法 envelope、
+错误/重复 ID 或 malformed WebSocket frame 只关闭该条外部包连接；malformed transport 记录稳定
+`EXTERNAL_PACKAGE_TRANSPORT_ERROR`，正常 Close/EOF 记录 disconnect。`frame` 返回超过当前累积 buffer 的
+`consumed_bytes` 时，只关闭当前业务连接；外部包连接和 Listener 继续服务后续业务连接。一个精确包离线时只停止
+引用该精确 `id + version` 的 Listener，不影响无关包及其 Listener。
 
 ## 4. 在 Proxy 中启用和绑定
 
@@ -60,9 +72,10 @@
 6. 对已产生业务流量的连接，使用 `exchange_observation_query` 按 Workspace、Listener 查询，再用
    `exchange_observation_get` 查看同一连接按顺序追加的收到、发送、失败与关闭证据。
 
-生命周期日志只包含阶段、包身份、连接 ID、远端地址、稳定错误码和安全消息。业务报文、注册原文、密码、密钥与远端
-JSON-RPC `data` 值不会写入 diagnostics；`data` 只允许记录 `string(bytes=N)`、`array(items=N)`、
-`object(fields=N)` 等形状摘要。
+控制面 diagnostics 只承担生命周期、阶段、包身份、连接 ID、远端地址和稳定错误码，因此不会复制业务报文或远端
+JSON-RPC `data`；`data` 在该通道只投影 `string(bytes=N)`、`array(items=N)`、`object(fields=N)` 等形状。
+完整 Socket bytes、Document、处理输入输出和错误数据允许保存在其专用有界日志、Exchange observation、复现证据或
+外部包自身日志中；这是存储责任分离，不是隐私过滤要求。
 
 ## 6. 常见判断
 
@@ -74,4 +87,4 @@ JSON-RPC `data` 值不会写入 diagnostics；`data` 只允许记录 `string(byt
 - RPC `frame/decode/encode/display`：按日志中的 direction、method、request ID 和 connection ID 对齐第三方进程日志。
 - offline：查看最近稳定错误，再检查第三方进程退出、心跳、wire 大小和 transport 状态；不要盲目自动重试。
 
-第三方进程自己的日志也应只记录请求 ID、方法、耗时、结果分类和字节计数，不应默认记录完整 ISO8583、密码或密钥。
+第三方进程可按排障需要记录完整报文和结果；应自行设置容量、轮转与保留期限，避免无界增长。

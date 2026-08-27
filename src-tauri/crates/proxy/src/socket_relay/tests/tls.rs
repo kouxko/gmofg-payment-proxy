@@ -28,7 +28,8 @@ use tokio_rustls::{TlsAcceptor, TlsConnector};
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    SocketEndpoint, SocketRelayConfig, SocketRelayService, connect_retry, reserve_address,
+    SocketEndpoint, SocketRelayConfig, SocketRelayService, bind_listener, connect_retry,
+    reserve_address,
 };
 use crate::socket_relay::{
     SocketDownstreamTlsConfig, SocketRelaySecurity, SocketTlsIdentity, SocketUpstreamTlsConfig,
@@ -69,7 +70,7 @@ async fn required_downstream_mtls_rejects_missing_then_accepts_trusted_client() 
         let (stream, _) = upstream.accept().await.unwrap();
         echo_after_eof(stream, Arc::new(b"trusted-payload".to_vec())).await;
     });
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let service = Arc::new(
         SocketRelayService::build(base_config(
             bind_addr,
@@ -87,7 +88,11 @@ async fn required_downstream_mtls_rejects_missing_then_accepts_trusted_client() 
     let cancellation = CancellationToken::new();
     let server_cancel = cancellation.clone();
     let running = Arc::clone(&service);
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let missing = connect_retry(bind_addr).await;
     assert!(tls_connect_result(missing, &proxy.ca, None).await.is_err());
@@ -110,7 +115,6 @@ fn base_config(
 ) -> SocketRelayConfig {
     SocketRelayConfig {
         bind_addr,
-        allowed_client_cidrs: Vec::new(),
         upstream: SocketEndpoint {
             host: "127.0.0.1".into(),
             port: upstream.port(),
@@ -148,7 +152,7 @@ async fn bridge_roundtrip(mode: BridgeMode) {
         }
     });
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let downstream_config = SocketDownstreamTlsConfig {
         server_identity: socket_identity(&proxy_identity),
         client_trust_der: Vec::new(),
@@ -175,7 +179,6 @@ async fn bridge_roundtrip(mode: BridgeMode) {
     let service = Arc::new(
         SocketRelayService::build(SocketRelayConfig {
             bind_addr,
-            allowed_client_cidrs: Vec::new(),
             upstream: SocketEndpoint {
                 host: "127.0.0.1".into(),
                 port: upstream_address.port(),
@@ -192,7 +195,11 @@ async fn bridge_roundtrip(mode: BridgeMode) {
     let cancellation = CancellationToken::new();
     let server_cancel = cancellation.clone();
     let running = Arc::clone(&service);
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
     let stream = connect_retry(bind_addr).await;
     if downstream_tls {
         let stream = tls_connect(stream, &proxy_identity.ca).await;

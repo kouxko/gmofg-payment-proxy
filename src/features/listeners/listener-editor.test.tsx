@@ -79,24 +79,6 @@ describe("ListenerEditor", () => {
     expect(props.onChange).toHaveBeenLastCalledWith({ [field]: value });
   });
 
-  it.each([
-    [["127.0.0.1/32"], "", []],
-    [[], " 127.0.0.1/32, 10.0.0.0/8,  ", ["127.0.0.1/32", "10.0.0.0/8"]],
-  ] as const)("将 CIDR 输入 %j 规范化为列表", (initial, input, expected) => {
-    const props = editorProps({
-      listener: { ...dynamicListener(), allowed_client_cidrs: [...initial] },
-    });
-    render(<ListenerEditor {...props} />);
-
-    fireEvent.change(screen.getByRole("textbox", { name: "允许的客户端 CIDR" }), {
-      target: { value: input },
-    });
-
-    expect(props.onChange).toHaveBeenLastCalledWith({
-      allowed_client_cidrs: expected,
-    });
-  });
-
   it("启用 Basic Auth 时创建系统安全凭据引用意图", async () => {
     const props = editorProps();
     const user = userEvent.setup();

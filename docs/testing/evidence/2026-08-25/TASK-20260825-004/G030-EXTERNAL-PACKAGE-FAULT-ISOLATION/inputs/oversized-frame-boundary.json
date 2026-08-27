@@ -1,0 +1,18 @@
+{
+  "malformed_business_input": {
+    "bytes_hex": "03 61 62",
+    "buffer_length": 3,
+    "external_frame_result": {
+      "status": "complete",
+      "consumed_bytes": 4
+    }
+  },
+  "follow_up_business_input": {
+    "bytes_hex": "03 78 79",
+    "buffer_length": 3,
+    "external_frame_result": {
+      "status": "complete",
+      "consumed_bytes": 3
+    }
+  }
+}

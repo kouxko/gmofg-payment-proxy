@@ -1,6 +1,4 @@
-//! 正向代理目标地址、authority 与客户端 CIDR 的纯解析逻辑。
-
-use std::net::IpAddr;
+//! 正向代理目标地址与 authority 的纯解析逻辑。
 
 use http::Uri;
 
@@ -91,16 +89,4 @@ fn format_host(host: &str) -> String {
 
 fn format_authority(host: &str, port: u16) -> String {
     format!("{}:{port}", format_host(host))
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(super) struct Network;
-
-impl Network {
-    pub(super) fn parse(value: &str) -> Option<Self> {
-        let (address, prefix) = value.split_once('/')?;
-        let address = address.parse::<IpAddr>().ok()?;
-        let prefix = prefix.parse::<u8>().ok()?;
-        (prefix <= if address.is_ipv4() { 32 } else { 128 }).then_some(Self)
-    }
 }

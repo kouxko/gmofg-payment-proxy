@@ -11,13 +11,13 @@ import {
 import type {
   AndroidAdbViewModel,
   AndroidDeviceViewModel,
+  AndroidRuntimeOwnerViewModel,
 } from "@/generated/rust-types";
 import {
-  isForeignRuntimeOwner,
+  mergeAndroidDeviceTargets,
   runtimeOwnerModeText,
   runtimeOwnerStateText,
   runtimeOwnerTransitionText,
-  type RuntimeOwnerDisplay,
 } from "./android-runtime-owner-model";
 
 interface DeviceControlCardProps {
@@ -26,16 +26,17 @@ interface DeviceControlCardProps {
   devices: AndroidDeviceViewModel[];
   devicesLoading: boolean;
   selectedSerial?: string | null;
-  runtimeOwner?: RuntimeOwnerDisplay | null;
-  busy: boolean;
+  runtimeOwners: AndroidRuntimeOwnerViewModel[];
+  busySerials: ReadonlySet<string>;
+  globalBusy: boolean;
   onRefreshDevices: () => void;
   onSelectDevice: (serial: string) => void;
   onInstall: () => void;
   onUpdate: () => void;
   onConsent: () => void;
-  onRefreshStatus: () => void;
-  onStop: () => void;
-  onEmergencyRestore: () => void;
+  onRefreshStatus: (owner: AndroidRuntimeOwnerViewModel) => void;
+  onStop: (owner: AndroidRuntimeOwnerViewModel) => void;
+  onEmergencyRestore: (owner: AndroidRuntimeOwnerViewModel) => void;
 }
 
 export function DeviceControlCard({
@@ -44,8 +45,9 @@ export function DeviceControlCard({
   devices,
   devicesLoading,
   selectedSerial,
-  runtimeOwner,
-  busy,
+  runtimeOwners,
+  busySerials,
+  globalBusy,
   onRefreshDevices,
   onSelectDevice,
   onInstall,
@@ -55,11 +57,11 @@ export function DeviceControlCard({
   onStop,
   onEmergencyRestore,
 }: DeviceControlCardProps): ReactElement {
-  const selectedDevice = devices.find((device) => device.serial === selectedSerial);
-  const foreignRuntimeOwner = isForeignRuntimeOwner(
-    selectedSerial,
-    runtimeOwner?.serial,
-  );
+  const targets = mergeAndroidDeviceTargets(devices, runtimeOwners);
+  const selectedTarget = targets.find((target) => target.serial === selectedSerial);
+  const selectedDevice = selectedTarget?.device;
+  const selectedOnline = selectedTarget?.online ?? false;
+  const selectedBusy = selectedSerial ? busySerials.has(selectedSerial) : false;
 
   return (
     <Card className="h-fit border border-[var(--telemetry-line)] shadow-sm">
@@ -87,7 +89,7 @@ export function DeviceControlCard({
           <Button
             size="sm"
             variant="outline"
-            isDisabled={busy || !adb?.available}
+            isDisabled={globalBusy || !adb?.available}
             onPress={onRefreshDevices}
           >
             刷新设备列表
@@ -98,7 +100,7 @@ export function DeviceControlCard({
           <Select
             aria-label="目标设备"
             selectedKey={selectedSerial ?? null}
-            isDisabled={busy || devicesLoading || devices.length === 0}
+            isDisabled={globalBusy || devicesLoading || targets.length === 0}
             onSelectionChange={(serial) => {
               if (serial) onSelectDevice(String(serial));
             }}
@@ -106,23 +108,29 @@ export function DeviceControlCard({
             <Label>目标设备</Label>
             <Select.Trigger>
               <Select.Value>
-                {selectedDevice ? deviceDisplayName(selectedDevice) : "请选择在线设备"}
+                {selectedDevice
+                  ? deviceDisplayName(selectedDevice)
+                  : selectedTarget
+                    ? `离线运行设备 · ${selectedTarget.serial}`
+                    : "请选择在线设备"}
               </Select.Value>
               <Select.Indicator />
             </Select.Trigger>
             <Select.Popover>
               <ListBox>
-                {devices.map((device) => (
+                {targets.map((target) => (
                   <ListBox.Item
-                    key={device.serial}
-                    id={device.serial}
-                    isDisabled={device.state !== "device"}
-                    textValue={deviceDisplayName(device)}
+                    key={target.serial}
+                    id={target.serial}
+                    textValue={target.device ? deviceDisplayName(target.device) : target.serial}
                   >
                     <div className="flex min-w-0 flex-col">
-                      <span className="truncate">{deviceDisplayName(device)}</span>
+                      <span className="truncate">
+                        {target.device ? deviceDisplayName(target.device) : "离线运行设备"}
+                        {!target.online && " · 离线"}
+                      </span>
                       <span className="truncate font-mono text-xs text-[var(--telemetry-muted)]">
-                        {device.serial}
+                        {target.serial}
                       </span>
                     </div>
                   </ListBox.Item>
@@ -131,7 +139,7 @@ export function DeviceControlCard({
             </Select.Popover>
           </Select>
           <p className="pb-2 text-xs text-[var(--telemetry-muted)]">
-            {deviceStatusText(selectedSerial, devicesLoading, devices.length)}
+            {deviceStatusText(selectedSerial, selectedOnline, devicesLoading, devices.length)}
           </p>
         </div>
 
@@ -140,35 +148,46 @@ export function DeviceControlCard({
           aria-label="设备网络运行所有者"
         >
           <p className="text-sm font-medium">实际运行设备</p>
-          {runtimeOwner ? (
-            <>
-              <p className="font-mono text-xs">{runtimeOwner.serial}</p>
-              <p className="text-xs text-[var(--telemetry-muted)]">
-                {runtimeOwnerModeText(runtimeOwner.mode)} · {runtimeOwnerStateText(runtimeOwner)}
-              </p>
-              <p className="text-xs text-[var(--telemetry-muted)]">
-                最近变化：{runtimeOwnerTransitionText(runtimeOwner.transition_reason)}
-              </p>
-              {foreignRuntimeOwner && (
-                <p className="text-xs text-[var(--telemetry-warning)]">
-                  当前选择的是 {selectedSerial ?? "无"}；停止、状态查询和紧急恢复只作用于实际运行设备。
-                  请先停止 {runtimeOwner.serial}，再在当前选择的设备上启动或应用方案。
-                </p>
-              )}
-            </>
+          {runtimeOwners.length ? (
+            <div className="grid gap-3">
+              {runtimeOwners.map((owner) => {
+                const online = targets.find((target) => target.serial === owner.serial)?.online ?? false;
+                return (
+                  <div key={`${owner.serial}:${owner.epoch}`} className="grid gap-1 rounded-lg bg-[var(--telemetry-soft)] p-3">
+                    <p className="font-mono text-xs">{owner.serial}</p>
+                    <p className="text-xs text-[var(--telemetry-muted)]">
+                      {runtimeOwnerModeText(owner.mode)} · {runtimeOwnerStateText(owner)}
+                    </p>
+                    <p className="text-xs text-[var(--telemetry-muted)]">
+                      最近变化：{runtimeOwnerTransitionText(owner.transition_reason)}
+                    </p>
+                    {!online && (
+                      <p className="text-xs text-[var(--telemetry-warning)]">
+                        设备离线；ADB 安装、更新和授权不可用，运行记录仍保留。
+                      </p>
+                    )}
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      <DeviceAction label="刷新运行状态" accessibleSuffix={owner.serial} disabled={busySerials.has(owner.serial)} onPress={() => onRefreshStatus(owner)} />
+                      <DeviceAction label="停止网络接管" accessibleSuffix={owner.serial} disabled={busySerials.has(owner.serial)} onPress={() => onStop(owner)} />
+                      <DeviceAction label="紧急恢复网络" accessibleSuffix={owner.serial} disabled={busySerials.has(owner.serial)} onPress={() => onEmergencyRestore(owner)} danger />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <p className="text-xs text-[var(--telemetry-muted)]">当前没有设备网络接管运行记录。</p>
           )}
         </div>
 
-        <div className="grid grid-cols-6 gap-2 max-[1200px]:grid-cols-3 max-[680px]:grid-cols-1">
-          <DeviceAction label="安装设备端组件" disabled={!selectedSerial || busy} onPress={onInstall} />
-          <DeviceAction label="更新设备端组件" disabled={!selectedSerial || busy} onPress={onUpdate} />
-          <DeviceAction label="授权网络接管" disabled={!selectedSerial || busy} onPress={onConsent} />
-          <DeviceAction label="刷新运行状态" disabled={!runtimeOwner || busy} onPress={onRefreshStatus} />
-          <DeviceAction label="停止网络接管" disabled={!runtimeOwner || busy} onPress={onStop} />
-          <DeviceAction label="紧急恢复网络" disabled={!runtimeOwner || busy} onPress={onEmergencyRestore} danger />
+        <div className="grid grid-cols-3 gap-2 max-[680px]:grid-cols-1">
+          <DeviceAction label="安装设备端组件" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onInstall} />
+          <DeviceAction label="更新设备端组件" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onUpdate} />
+          <DeviceAction label="授权网络接管" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onConsent} />
         </div>
+        <p className="text-xs text-[var(--telemetry-muted)]">
+          已保留 {runtimeOwners.length}/8 个运行设备记录。
+        </p>
       </Card.Content>
     </Card>
   );
@@ -179,6 +198,7 @@ interface DeviceActionProps {
   disabled: boolean;
   onPress: () => void;
   danger?: boolean;
+  accessibleSuffix?: string;
 }
 
 function DeviceAction({
@@ -186,10 +206,12 @@ function DeviceAction({
   disabled,
   onPress,
   danger = false,
+  accessibleSuffix,
 }: DeviceActionProps): ReactElement {
   return (
     <Button
       variant={danger ? "danger-soft" : "outline"}
+      aria-label={accessibleSuffix ? `${label} ${accessibleSuffix}` : undefined}
       isDisabled={disabled}
       onPress={onPress}
     >
@@ -200,10 +222,13 @@ function DeviceAction({
 
 function deviceStatusText(
   selectedSerial: string | null | undefined,
+  selectedOnline: boolean,
   loading: boolean,
   deviceCount: number,
 ): string {
-  if (selectedSerial) return `设备序列号：${selectedSerial}`;
+  if (selectedSerial) return selectedOnline
+    ? `设备序列号：${selectedSerial}`
+    : `离线运行设备：${selectedSerial}`;
   if (loading) return "正在读取设备列表…";
   if (deviceCount > 0) return `已发现 ${deviceCount} 台在线设备，请从下拉框选择。`;
   return "没有检测到在线设备";

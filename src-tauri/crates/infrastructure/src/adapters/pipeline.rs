@@ -13,6 +13,7 @@ use std::{
     time::Duration,
 };
 
+use async_trait::async_trait;
 use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{
@@ -65,31 +66,33 @@ macro_rules! proxy_status {
 }
 
 /// One adapter instance is shared by both listeners for the lifetime of the app.
+#[async_trait]
 pub trait RuntimeRuleRepository: std::fmt::Debug + Send + Sync {
-    fn runtime_snapshot(&self, channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot>;
-    fn commit_runtime_snapshot(
+    async fn runtime_snapshot(&self, channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot>;
+    async fn commit_runtime_snapshot(
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
     ) -> AppResult<u64>;
-    fn reset_runtime_hit_metadata(&self, collection_id: Uuid) -> AppResult<()>;
+    async fn reset_runtime_hit_metadata(&self, collection_id: Uuid) -> AppResult<()>;
 }
 
+#[async_trait]
 impl RuntimeRuleRepository for RuleRepositoryAdapter {
-    fn runtime_snapshot(&self, channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
-        RuleRepositoryAdapter::runtime_snapshot(self, channel.as_str())
+    async fn runtime_snapshot(&self, channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
+        RuleRepositoryAdapter::runtime_snapshot(self, channel.as_str()).await
     }
 
-    fn commit_runtime_snapshot(
+    async fn commit_runtime_snapshot(
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
     ) -> AppResult<u64> {
-        RuleRepositoryAdapter::commit_runtime_snapshot(self, snapshot, evaluated_rules)
+        RuleRepositoryAdapter::commit_runtime_snapshot(self, snapshot, evaluated_rules).await
     }
 
-    fn reset_runtime_hit_metadata(&self, collection_id: Uuid) -> AppResult<()> {
-        RuleRepositoryAdapter::reset_runtime_hit_metadata(self, collection_id)
+    async fn reset_runtime_hit_metadata(&self, collection_id: Uuid) -> AppResult<()> {
+        RuleRepositoryAdapter::reset_runtime_hit_metadata(self, collection_id).await
     }
 }
 
@@ -135,7 +138,7 @@ struct PipelineState {
     connections: HashMap<RuntimeEpoch, HashMap<Uuid, ConnectionRuntime>>,
     live_sessions: HashMap<Uuid, LiveSession>,
     channels: HashMap<RuntimeEpoch, BTreeMap<ChannelId, ChannelRuntimeMetrics>>,
-    stopped_epochs: HashSet<RuntimeEpoch>,
+    active_epochs: HashSet<RuntimeEpoch>,
 }
 
 impl PipelineState {

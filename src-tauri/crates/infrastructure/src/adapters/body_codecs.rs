@@ -3,20 +3,16 @@
 //! 新 Listener 使用 `Auto`，最终展示投影以每条消息的 Content-Type charset 为准。
 //! 旧 Workspace 的 Raw、UTF-8 和 Shift-JIS 仍可加载，避免配置升级破坏运行现场。
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use encoding_rs::SHIFT_JIS;
-use intercept_proxy_domain::MessageStage;
+use intercept_proxy_domain::{BodyCodecKind, MessageStage, ProxyListener};
 use intercept_proxy_product_api::{BodyCodec, ProductError};
 use intercept_proxy_runtime::{
     ConnectionContext, ErrorCode, Message, ProxyError, Result as ProxyResult,
 };
 
-use crate::SqliteStore;
-
-#[cfg(test)]
-use super::common::encode_workspace_record;
-use super::{common::decode_workspace_record, pipeline::RuntimeBodyCodecResolver};
+use super::pipeline::RuntimeBodyCodecResolver;
 
 mod content_type;
 pub use content_type::HeaderBodyCodecResolver;
@@ -25,14 +21,82 @@ pub(crate) use content_type::resolve_message_codec;
 
 #[derive(Debug)]
 pub struct WorkspaceBodyCodecResolver {
-    store: Arc<SqliteStore>,
+    snapshots: parking_lot::RwLock<HashMap<(uuid::Uuid, String), InstalledBodyCodecSnapshot>>,
 }
 
 impl WorkspaceBodyCodecResolver {
     #[must_use]
-    pub fn new(store: Arc<SqliteStore>) -> Self {
-        Self { store }
+    pub fn new() -> Self {
+        Self {
+            snapshots: parking_lot::RwLock::new(HashMap::new()),
+        }
     }
+
+    pub(crate) fn install_listener(
+        &self,
+        runtime_epoch: uuid::Uuid,
+        run_token: uuid::Uuid,
+        listener: &ProxyListener,
+    ) {
+        let snapshot = listener
+            .http()
+            .map_or(ListenerBodyCodecSnapshot::ProductDefault, |http| {
+                ListenerBodyCodecSnapshot::Http {
+                    request: http.request_body_codec,
+                    response: http.response_body_codec,
+                }
+            });
+        self.snapshots.write().insert(
+            (runtime_epoch, listener.id.to_string()),
+            InstalledBodyCodecSnapshot {
+                run_token,
+                codec: snapshot,
+            },
+        );
+    }
+
+    pub(crate) fn remove_listener(
+        &self,
+        runtime_epoch: uuid::Uuid,
+        listener_id: intercept_proxy_domain::ListenerId,
+        run_token: uuid::Uuid,
+    ) {
+        let key = (runtime_epoch, listener_id.to_string());
+        let mut snapshots = self.snapshots.write();
+        if snapshots
+            .get(&key)
+            .is_some_and(|snapshot| snapshot.run_token == run_token)
+        {
+            snapshots.remove(&key);
+        }
+    }
+
+    pub(crate) fn remove_epoch(&self, runtime_epoch: uuid::Uuid) {
+        self.snapshots
+            .write()
+            .retain(|(epoch, _), _| *epoch != runtime_epoch);
+    }
+}
+
+impl Default for WorkspaceBodyCodecResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ListenerBodyCodecSnapshot {
+    ProductDefault,
+    Http {
+        request: BodyCodecKind,
+        response: BodyCodecKind,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
+struct InstalledBodyCodecSnapshot {
+    run_token: uuid::Uuid,
+    codec: ListenerBodyCodecSnapshot,
 }
 
 impl RuntimeBodyCodecResolver for WorkspaceBodyCodecResolver {
@@ -45,59 +109,27 @@ impl RuntimeBodyCodecResolver for WorkspaceBodyCodecResolver {
         if matches!(stage, MessageStage::TlsHandshake) {
             return Ok(None);
         }
-        let snapshot = self.store.load_workspaces().map_err(|error| {
-            ProxyError::new(
-                ErrorCode::Internal,
-                format!("cannot load Workspace codec snapshot: {error}"),
-            )
-        })?;
-        // 运行中的 Listener 以自身 ID 绑定启动时所属 Workspace。切换“当前 Workspace”
-        // 只是 UI 编辑上下文，不得让已经建立的连接突然改用另一个 Workspace 的 Codec。
-        // 正常写入路径会禁止修改含运行中 Listener 的 Workspace，因此按全局唯一 Listener
-        // ID 定位既保持运行快照语义，也避免把 UI 选择状态带进数据面。
-        let mut matches = Vec::new();
-        for record in snapshot.records {
-            let workspace = decode_workspace_record(record).map_err(|message| {
+        let snapshot = self
+            .snapshots
+            .read()
+            .get(&(context.runtime_epoch, context.channel.as_str().to_owned()))
+            .map(|snapshot| snapshot.codec)
+            .ok_or_else(|| {
                 ProxyError::new(
                     ErrorCode::Internal,
-                    format!("Workspace persistence corrupt: {message}"),
+                    format!(
+                        "body codec runtime snapshot missing for epoch {} channel {}",
+                        context.runtime_epoch,
+                        context.channel.as_str()
+                    ),
                 )
             })?;
-            if workspace
-                .listeners
-                .iter()
-                .any(|listener| listener.id.to_string() == context.channel.as_str())
-            {
-                matches.push(workspace);
-            }
-        }
-        if matches.len() > 1 {
-            return Err(ProxyError::new(
-                ErrorCode::Internal,
-                format!(
-                    "Workspace persistence corrupt: listener {} belongs to multiple Workspaces",
-                    context.channel.as_str()
-                ),
-            ));
-        }
-        let workspace = matches.pop();
-        let Some(workspace) = workspace else {
-            return Ok(None);
-        };
-        let Some(listener) = workspace
-            .listeners
-            .iter()
-            .find(|listener| listener.id.to_string() == context.channel.as_str())
-        else {
-            // 旧 supervisor 通道当前没有 Listener 级 Codec 引用。
-            return Ok(None);
-        };
-        let Some(http) = listener.http() else {
+        let ListenerBodyCodecSnapshot::Http { request, response } = snapshot else {
             return Ok(None);
         };
         let selected = match stage {
-            MessageStage::Request => http.request_body_codec,
-            MessageStage::Response => http.response_body_codec,
+            MessageStage::Request => request,
+            MessageStage::Response => response,
             MessageStage::TlsHandshake => return Ok(None),
         };
         Ok(Some(resolve_message_codec(selected, message)))
@@ -192,7 +224,6 @@ impl BodyCodec for ShiftJisBodyCodec {
 mod tests {
     use std::{collections::BTreeMap, net::SocketAddr, time::SystemTime};
 
-    use chrono::Utc;
     use intercept_proxy_application::{
         BreakpointBodyCodecResolver, MessageContentKind, MessageContentViewModel,
     };
@@ -204,10 +235,8 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
-    use crate::WorkspaceRecord;
-
     #[test]
-    fn selected_workspace_resolves_shift_jis_per_listener_and_stage() {
+    fn started_epoch_resolves_frozen_shift_jis_per_listener_and_stage() {
         let listener_id = ListenerId::new();
         let workspace = ProxyWorkspace {
             listeners: vec![ProxyListener {
@@ -226,18 +255,11 @@ mod tests {
             ..ProxyWorkspace::default()
         };
         workspace.validate().unwrap();
-        let store = Arc::new(SqliteStore::in_memory().unwrap());
-        store
-            .insert_workspace(&WorkspaceRecord {
-                id: workspace.id.as_uuid(),
-                revision: workspace.revision.get(),
-                value: encode_workspace_record(&workspace).unwrap(),
-                updated_at: Utc::now(),
-            })
-            .unwrap();
-        let resolver = WorkspaceBodyCodecResolver::new(store);
+        let resolver = WorkspaceBodyCodecResolver::new();
+        let runtime_epoch = Uuid::new_v4();
+        resolver.install_listener(runtime_epoch, Uuid::new_v4(), &workspace.listeners[0]);
         let context = ConnectionContext {
-            runtime_epoch: Uuid::new_v4(),
+            runtime_epoch,
             connection_id: Uuid::new_v4(),
             channel: ChannelId::new(listener_id.to_string()).unwrap(),
             peer_addr: "127.0.0.1:12345".parse::<SocketAddr>().unwrap(),
@@ -258,6 +280,12 @@ mod tests {
         let encoded = codec.encode("結果D48").unwrap();
         assert_eq!(codec.decode(&encoded).unwrap(), "結果D48");
         assert!(codec.encode("😀").is_err());
+
+        resolver.remove_epoch(runtime_epoch);
+        let stale = resolver
+            .resolve(&context, MessageStage::Response, &message)
+            .expect_err("stopped epoch cannot resolve a codec");
+        assert_eq!(stale.code, ErrorCode::Internal.as_str());
     }
 
     #[test]

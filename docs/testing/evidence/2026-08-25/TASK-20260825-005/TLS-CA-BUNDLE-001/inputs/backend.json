@@ -1,0 +1,17 @@
+{
+  "host": "195.160.171.102",
+  "port": 63002,
+  "transport": "tcp",
+  "upstream_security": "tls",
+  "trust_source": "explicit_pem_bundle",
+  "bundle_output": "FirstData-trust-chain.pem",
+  "source_certificates": [
+    "resources/sub.pem",
+    "resources/DigiCertCA.pem"
+  ],
+  "expected_certificate_count": 2,
+  "expected_subjects": [
+    "First Data Latvia Internal CA",
+    "First Data Baltics root CA"
+  ]
+}

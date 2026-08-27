@@ -36,6 +36,36 @@
   有效期和签发链。
 - **上游客户端身份**：远端服务要求 mTLS 时，代理用它向远端服务证明身份。
 
+### 上游缺少 Intermediate CA 时
+
+如果远端 Server 没有发送完整证书链，可以把 Intermediate CA 和 Root CA 合并为一个 PEM
+Bundle，再通过现有的单文件 Server Trust 入口导入。Proxy 会加载 Bundle 中的全部证书；
+它不会执行 Shell、写文件、替你合并多个文件或关闭 hostname/证书链校验。
+
+```bash
+{
+  openssl x509 -in intermediate.pem -outform PEM
+  openssl x509 -in root.pem -outform PEM
+} > upstream-trust-chain.pem
+```
+
+查看 Bundle 中的证书：
+
+```bash
+openssl crl2pkcs7 -nocrl -certfile upstream-trust-chain.pem |
+  openssl pkcs7 -print_certs -noout
+```
+
+先验证 Intermediate，再验证目标 TLS：
+
+```bash
+openssl verify -CAfile root.pem intermediate.pem
+openssl s_client -connect server.example:443 \
+  -servername server.example \
+  -CAfile upstream-trust-chain.pem \
+  -showcerts -verify_return_error
+```
+
 ## 常见错误怎么理解
 
 - **Trust anchor not found / 未找到信任根**：应用或设备不信任签发当前服务端证书的

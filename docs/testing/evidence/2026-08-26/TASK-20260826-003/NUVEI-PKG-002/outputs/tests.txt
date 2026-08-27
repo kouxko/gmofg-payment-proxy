@@ -7,4 +7,3 @@ Logging assertions:
 - serialized logs exclude frame Base64, invalid-frame Base64, synthetic sensitive values and json_preview
 
 compileall: PASS
-git diff --check: PASS

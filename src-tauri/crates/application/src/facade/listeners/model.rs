@@ -87,6 +87,7 @@ pub(super) fn build_listener_overview(
             let (address, port) = listener.bind_endpoint();
             let status = statuses.remove(&id).unwrap_or(ListenerStatusViewModel {
                 listener_id: id,
+                runtime_epoch: None,
                 state: ListenerRuntimeState::Stopped,
                 state_text: "已停止".into(),
                 ui_tone: UiTone::Neutral,

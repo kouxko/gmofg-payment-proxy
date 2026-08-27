@@ -6,6 +6,7 @@ import type {
   ProxyWorkspace,
   ProtocolDocumentRuleDefinition,
   ProtocolRuleCapabilityCatalog,
+  ProtocolRuleEditorContext,
   ProtocolRuleStage,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
@@ -15,16 +16,16 @@ import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { ProtocolRuleEditor } from "./protocol-rule-editor";
 import {
   capabilityCompatible,
+  catalogFromEditorStage,
   deleteResponseMatches,
   draftFromRule,
+  draftFromEditorStage,
   isProtocolRuleList,
-  listenerStages,
-  newProtocolRuleDraft,
   protocolRulePackage,
   saveResponseMatches,
   type ProtocolRuleKind,
   type ProtocolRuleDraft,
-  validateCapabilityCatalog,
+  validateProtocolRuleEditorContext,
   validateProtocolRuleDraft,
   toggleResponseMatches,
 } from "./protocol-rule-model";
@@ -80,7 +81,7 @@ function ProtocolRulesController({
   const [selectedId, setSelectedId] = useState<string>();
   const [creating, setCreating] = useState(false);
   const [listenerId, setListenerId] = useState<string>();
-  const [stage, setStage] = useState<ProtocolRuleStage>("app_to_proxy");
+  const [stage, setStage] = useState<ProtocolRuleStage>();
   const [draft, setDraft] = useState<ProtocolRuleDraft>();
   const [editorWorkspaceId, setEditorWorkspaceId] = useState<string>();
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
@@ -93,30 +94,35 @@ function ProtocolRulesController({
   const editorContextCurrent = Boolean(workspaceId && editorWorkspaceId === workspaceId);
   const activeListenerId = editorContextCurrent ? listenerId : undefined;
   const selectedListener = listeners.find((listener) => listener.id === activeListenerId);
-  const capabilities = useIpcQuery<ProtocolRuleCapabilityCatalog>(
-    `protocol-rule-capabilities:${activeListenerId ?? "none"}:${stage}`,
-    () => callCommand(commands.protocolRuleCapabilities(activeListenerId!, stage)),
+  const editorContextQuery = useIpcQuery<ProtocolRuleEditorContext>(
+    `protocol-rule-editor-context:${activeListenerId ?? "none"}`,
+    () => callCommand(commands.protocolRuleEditorContext(activeListenerId!)),
     undefined,
     { enabled: Boolean(activeListenerId) },
   );
-  const refreshCapabilities = capabilities.refresh;
+  const refreshCapabilities = editorContextQuery.refresh;
   useAppEventRefresh(["workspace_changed", "snapshot_required"], refreshCapabilities);
 
-  const receivedCatalogValidation = capabilities.data !== undefined
-    ? validateCapabilityCatalog(capabilities.data)
+  const receivedContextValidation = editorContextQuery.data !== undefined
+    ? validateProtocolRuleEditorContext(editorContextQuery.data)
     : undefined;
-  const usableCatalog = !receivedCatalogValidation && capabilityMatchesSelection(
-    capabilities.data,
+  const usableContext = !receivedContextValidation && editorContextMatchesSelection(
+    editorContextQuery.data,
     selectedListener,
-    stage,
-  ) ? capabilities.data : undefined;
-  const bindingError = capabilities.data && !receivedCatalogValidation && !usableCatalog
-    ? "规则能力与当前入口的协议版本或数据方向不一致。"
+  ) ? editorContextQuery.data : undefined;
+  const selectedEditorStage = usableContext?.stages.find((item) => item.stage === stage)
+    ?? (creating ? usableContext?.stages[0] : undefined);
+  const activeStage = selectedEditorStage?.stage ?? stage;
+  const usableCatalog = usableContext && selectedEditorStage
+    ? catalogFromEditorStage(usableContext, selectedEditorStage)
+    : undefined;
+  const bindingError = editorContextQuery.data && !receivedContextValidation && !usableContext
+    ? "规则编辑上下文与当前入口或协议版本不一致。"
     : undefined;
 
   const preparedDraft = draft ?? (
-    creating && selectedListener && usableCatalog
-      ? newProtocolRuleDraft(selectedListener, stage, usableCatalog)
+    creating && selectedEditorStage
+      ? draftFromEditorStage(selectedEditorStage)
       : undefined
   );
   useEffect(() => {
@@ -131,11 +137,11 @@ function ProtocolRulesController({
     editorWorkspaceId,
     selectedId,
     listenerId,
-    stage,
+    stage: activeStage,
     draft: preparedDraft,
     listener: selectedListener,
     catalog: usableCatalog,
-  }), [editorWorkspaceId, listenerId, preparedDraft, selectedId, selectedListener, stage, usableCatalog, workspaceId]);
+  }), [activeStage, editorWorkspaceId, listenerId, preparedDraft, selectedId, selectedListener, usableCatalog, workspaceId]);
   const mutationContextRef = useRef(mutationContext);
   const mutationContextKey = JSON.stringify(mutationContext);
   useLayoutEffect(() => {
@@ -144,6 +150,13 @@ function ProtocolRulesController({
       mutationContextRef.current = mutationContext;
     }
   }, [mutationContext, mutationContextKey]);
+
+  useEffect(() => {
+    if (!creating || draft || !selectedEditorStage || selectedEditorStage.stage === stage) return;
+    editorGeneration.current += 1;
+    const task = window.setTimeout(() => setStage(selectedEditorStage.stage), 0);
+    return () => window.clearTimeout(task);
+  }, [creating, draft, selectedEditorStage, stage]);
 
   useEffect(() => {
     if (!creating || !draft || !usableCatalog || capabilityCompatible(draft, usableCatalog)) return;
@@ -179,13 +192,12 @@ function ProtocolRulesController({
     if (sourceBlocked) return;
     const listener = listeners[0];
     if (!listener) return;
-    const nextStage = listenerStages(listener)[0];
     editorGeneration.current += 1;
     setCreating(true);
     setEditorWorkspaceId(workspaceId);
     setSelectedId(undefined);
     setListenerId(listener.id);
-    setStage(nextStage);
+    setStage(undefined);
     setDraft(undefined);
     resetDerivedState();
     requestAnimationFrame(() => editorHeadingRef.current?.focus());
@@ -221,11 +233,10 @@ function ProtocolRulesController({
 
   function changeListener(nextId: string) {
     if (sourceBlocked) return;
-    const listener = listeners.find((item) => item.id === nextId);
-    if (!listener) return;
+    if (!listeners.some((item) => item.id === nextId)) return;
     editorGeneration.current += 1;
     setListenerId(nextId);
-    setStage(listenerStages(listener)[0]);
+    setStage(undefined);
     setDraft(undefined);
     resetDerivedState();
   }
@@ -345,7 +356,7 @@ function ProtocolRulesController({
   const draftValidation = effectiveDraft && usableCatalog
     ? validateProtocolRuleDraft(effectiveDraft, usableCatalog)
     : undefined;
-  const editorError = capabilities.error ?? receivedCatalogValidation ?? bindingError;
+  const editorError = editorContextQuery.error ?? receivedContextValidation ?? bindingError;
   const editor = (
     <div aria-label="报文规则编辑区" ref={editorHeadingRef} role="region" tabIndex={-1}>
       <ProtocolRuleEditor
@@ -357,7 +368,8 @@ function ProtocolRulesController({
         fieldErrors={fieldErrors}
         listener={editingListener}
         listeners={listeners}
-        loading={Boolean(listenerId) && capabilities.isLoading}
+        stages={usableContext?.stages.map((item) => item.stage) ?? []}
+        loading={Boolean(listenerId) && editorContextQuery.isLoading}
         onChange={(next) => {
           editorGeneration.current += 1;
           setDraft((current) => {
@@ -370,7 +382,7 @@ function ProtocolRulesController({
         onDelete={() => void remove()}
         onStageChange={changeStage}
         onListenerChange={changeListener}
-        onReload={() => void capabilities.refresh()}
+        onReload={() => void editorContextQuery.refresh()}
         onReloadRule={() => void reloadSelectedRule()}
         onResetInvalidValues={() => setValueStates({})}
         onSave={() => void save()}
@@ -413,7 +425,7 @@ type MutationContext = {
   editorWorkspaceId?: string;
   selectedId?: string;
   listenerId?: string;
-  stage: ProtocolRuleStage;
+  stage?: ProtocolRuleStage;
   draft?: ProtocolRuleDraft;
   listener?: ProxyWorkspace["listeners"][number];
   catalog?: ProtocolRuleCapabilityCatalog;
@@ -431,13 +443,12 @@ function mutationRequestCurrent(
   return request.generation === generation && request.context === JSON.stringify(context);
 }
 
-function capabilityMatchesSelection(
-  catalog: ProtocolRuleCapabilityCatalog | undefined,
+function editorContextMatchesSelection(
+  context: ProtocolRuleEditorContext | undefined,
   listener: ProxyWorkspace["listeners"][number] | undefined,
-  stage: ProtocolRuleStage,
 ) {
-  if (!catalog || !listener || catalog.stage !== stage) return false;
+  if (!context || !listener || context.listener_id !== listener.id) return false;
   const packageRef = protocolRulePackage(listener);
   if (!packageRef) return false;
-  return catalog.package.id === packageRef.id && catalog.package.version === packageRef.version;
+  return context.package.id === packageRef.id && context.package.version === packageRef.version;
 }

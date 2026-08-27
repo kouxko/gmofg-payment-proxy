@@ -41,7 +41,7 @@ async fn runtime_commit_is_full_signature_cas_and_reset_preserves_enabled() {
         .save(request_delay_draft("one-shot", true))
         .await
         .expect("create");
-    let snapshot = runtime_snapshot(&adapter);
+    let snapshot = runtime_snapshot(&adapter).await;
     let epoch = RuntimeEpoch::new();
     let terminal = TerminalIdentity {
         source_ip: "127.0.0.1".into(),
@@ -61,6 +61,7 @@ async fn runtime_commit_is_full_signature_cas_and_reset_preserves_enabled() {
     );
     adapter
         .commit_runtime_snapshot(&snapshot, engine.rules())
+        .await
         .expect("runtime commit");
 
     let fired = adapter
@@ -73,6 +74,7 @@ async fn runtime_commit_is_full_signature_cas_and_reset_preserves_enabled() {
 
     adapter
         .reset_runtime_hit_metadata(snapshot.collection_id.expect("workspace id"))
+        .await
         .expect("explicit reset");
     let reset = adapter
         .get_domain(created.summary.rule_id)
@@ -82,12 +84,13 @@ async fn runtime_commit_is_full_signature_cas_and_reset_preserves_enabled() {
     assert_eq!(reset.hit_count, 0);
     assert_eq!(reset.last_hit_at, None);
 
-    let stale = runtime_snapshot(&adapter);
+    let stale = runtime_snapshot(&adapter).await;
     adapter
         .toggle_domain(created.summary.rule_id, 2, true)
         .expect("concurrent config update");
     let error = adapter
         .commit_runtime_snapshot(&stale, &stale.rules)
+        .await
         .expect_err("stale runtime commit");
     assert_eq!(error.view_model.code, "REVISION_CONFLICT");
     let configured = adapter

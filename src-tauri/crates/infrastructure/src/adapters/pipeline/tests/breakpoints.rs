@@ -3,7 +3,7 @@ async fn records_the_effective_downstream_status_after_response_rules() {
     let pipeline = adapter(vec![response_status_rule(503)], 10);
     let epoch = Uuid::new_v4();
     let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
-    pipeline.connection_opened(&context).await;
+    open_test_connection(&pipeline, &context).await;
 
     let mut request = request_message(r#"{"amount":100}"#);
     pipeline
@@ -41,7 +41,7 @@ async fn pending_breakpoints_are_never_evicted_and_stop_unblocks_waiters() {
     let pipeline = adapter(vec![pause_rule()], 1);
     let epoch = Uuid::new_v4();
     let first_context = test_context(epoch, Uuid::new_v4(), transaction_channel());
-    pipeline.connection_opened(&first_context).await;
+    open_test_connection(&pipeline, &first_context).await;
 
     let first = {
         let pipeline = Arc::clone(&pipeline);
@@ -60,7 +60,7 @@ async fn pending_breakpoints_are_never_evicted_and_stop_unblocks_waiters() {
     assert_eq!(pipeline.breakpoints.query(Some(epoch)).len(), 1);
 
     let second_context = test_context(epoch, Uuid::new_v4(), dll_channel());
-    pipeline.connection_opened(&second_context).await;
+    open_test_connection(&pipeline, &second_context).await;
     let mut second_message = request_message(r#"{"requestId":"second"}"#);
     let exhausted = pipeline
         .apply_request_policy(&second_context, &mut second_message)
@@ -98,7 +98,7 @@ async fn one_shot_action_is_not_returned_when_runtime_commit_fails() {
     );
     let epoch = Uuid::new_v4();
     let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
-    pipeline.connection_opened(&context).await;
+    open_test_connection(&pipeline, &context).await;
     let mut message = request_message(r#"{"amount":100}"#);
 
     let error = pipeline
@@ -142,7 +142,7 @@ async fn concurrent_rule_hits_commit_without_lost_updates() {
     for index in 0..20_u128 {
         let pipeline = pipeline.clone();
         let context = test_context(epoch, Uuid::from_u128(index + 1), transaction_channel());
-        pipeline.connection_opened(&context).await;
+        open_test_connection(&pipeline, &context).await;
         tasks.push(tokio::spawn(async move {
             let mut message = request_message(r#"{"amount":100}"#);
             pipeline.apply_request_policy(&context, &mut message).await

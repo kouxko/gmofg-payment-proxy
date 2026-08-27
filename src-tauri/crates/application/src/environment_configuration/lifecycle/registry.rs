@@ -1,23 +1,27 @@
 use std::sync::Arc;
 
+#[path = "registry_admission.rs"]
+mod registry_admission;
+
+#[cfg(test)]
+use super::types::EnvironmentCandidateEpoch;
 use super::{
     snapshot::{EnvironmentCandidatePublicSnapshot, EnvironmentValidationLayerResult},
-    state::{
-        CandidateEntry, EnvironmentApplyWork, PrivateCandidateMaterial, RegistryShared,
-        RegistryState, TokenState,
-    },
+    state::{CandidateEntry, EnvironmentApplyWork, RegistryShared, RegistryState, TokenState},
     types::{
         EnvironmentApplyQueuedResult, EnvironmentApplyTaskId, EnvironmentCancelResult,
-        EnvironmentCancelStatus, EnvironmentCandidateCreateResult, EnvironmentCandidateEpoch,
-        EnvironmentCandidateId, EnvironmentCandidateLifecycleError, EnvironmentCandidatePolicy,
-        EnvironmentCandidateStatus, EnvironmentCandidateStatusResult, EnvironmentConfirmationToken,
+        EnvironmentCancelStatus, EnvironmentCandidateCreateResult, EnvironmentCandidateId,
+        EnvironmentCandidateLifecycleError, EnvironmentCandidatePolicy, EnvironmentCandidateStatus,
+        EnvironmentCandidateStatusResult, EnvironmentConfirmationToken,
     },
+    validation::{discard_validation_cancellation_code, signal_validation_cancellation},
 };
+use crate::ProxyWorkspace;
 use crate::environment_configuration::{
-    EnvironmentConfigurationCandidateV1, EnvironmentDiagnostic, EnvironmentStatusCode,
-    EnvironmentTerminalResult,
+    EnvironmentDiagnostic, EnvironmentStatusCode, EnvironmentTerminalResult,
 };
 
+#[derive(Clone)]
 pub struct EnvironmentCandidateRegistry {
     pub(super) shared: Arc<RegistryShared>,
 }
@@ -39,93 +43,28 @@ impl std::fmt::Debug for EnvironmentCandidateRegistry {
 }
 
 impl EnvironmentCandidateRegistry {
-    pub fn new(policy: EnvironmentCandidatePolicy) -> Self {
-        let (drain_count, _) = tokio::sync::watch::channel(0);
-        Self {
-            shared: Arc::new(RegistryShared {
-                policy,
-                state: parking_lot::Mutex::new(RegistryState::default()),
-                drain_count,
-            }),
-        }
-    }
-
-    pub fn insert_validating(
+    pub(crate) fn create_result(
         &self,
-        candidate: EnvironmentConfigurationCandidateV1,
-        epoch: EnvironmentCandidateEpoch,
+        candidate_id: &EnvironmentCandidateId,
     ) -> Result<EnvironmentCandidateCreateResult, EnvironmentCandidateLifecycleError> {
-        let admitted_target = candidate.lifecycle_target();
-        let internal_target_identity = admitted_target.capacity_identity();
-        let material = PrivateCandidateMaterial::new(&candidate)?;
-        let private_bytes = material.byte_len();
-        drop(candidate);
-        let mut state = self.shared.state.lock();
-        if state.shutting_down {
-            return Err(EnvironmentCandidateLifecycleError::ShutdownInProgress);
-        }
-        if state
+        self.shared
+            .state
+            .lock()
             .candidates
-            .values()
-            .filter(|entry| entry.status.is_active())
-            .count()
-            >= self.shared.policy.candidate_capacity
-        {
-            return Err(EnvironmentCandidateLifecycleError::CandidateCapacityExceeded);
-        }
-        if state
-            .candidates
-            .values()
-            .filter(|entry| {
-                entry.status.is_active()
-                    && entry.internal_target_identity == internal_target_identity
-            })
-            .count()
-            >= self.shared.policy.per_target_capacity
-        {
-            return Err(EnvironmentCandidateLifecycleError::TargetCandidateAlreadyActive);
-        }
-
-        let id = EnvironmentCandidateId::generate();
-        state.candidates.insert(
-            id.clone(),
-            CandidateEntry {
-                id: id.clone(),
-                internal_target_identity,
-                admitted_target,
-                epoch,
-                status: EnvironmentCandidateStatus::Validating,
-                material: Some(material),
-                private_bytes,
-                token: None,
-                apply_task_id: None,
-                target_key: None,
-                baseline_public: None,
-                validation_layers: Vec::new(),
-                preview: None,
-                terminal_result: None,
-                errors: Vec::new(),
-                terminal_public_bytes: 0,
-            },
-        );
-        Ok(EnvironmentCandidateCreateResult {
-            candidate_id: id,
-            confirmation_token: None,
-            status: EnvironmentCandidateStatus::Validating,
-            target_key: None,
-            baseline_public: None,
-            validation_layers: Vec::new(),
-            preview: None,
-            expires_on: "app_exit_or_invalidation",
-            errors: Vec::new(),
-        })
+            .get(candidate_id)
+            .map(CandidateEntry::public_create_result)
+            .ok_or(EnvironmentCandidateLifecycleError::CandidateNotFound)
     }
 
     pub(crate) fn complete_preview_ready(
         &self,
         candidate_id: &EnvironmentCandidateId,
         snapshot: EnvironmentCandidatePublicSnapshot,
+        workspace: ProxyWorkspace,
     ) -> Result<EnvironmentCandidateCreateResult, EnvironmentCandidateLifecycleError> {
+        workspace
+            .validate()
+            .map_err(|_| EnvironmentCandidateLifecycleError::InvalidState)?;
         let snapshot_target = snapshot.admitted_target();
         let mut state = self.shared.state.lock();
         if state.shutting_down {
@@ -141,6 +80,11 @@ impl EnvironmentCandidateRegistry {
         if entry.admitted_target != snapshot_target {
             return Err(EnvironmentCandidateLifecycleError::ValidatedTargetMismatch);
         }
+        let mut baseline = entry
+            .validated_apply_baseline
+            .take()
+            .ok_or(EnvironmentCandidateLifecycleError::InvalidState)?;
+        baseline.bind_target_workspace(workspace.id.as_uuid());
         let (target_key, baseline_public, validation_layers, preview) = snapshot.into_parts();
         let token = EnvironmentConfirmationToken::generate();
         entry.status = EnvironmentCandidateStatus::PreviewReady;
@@ -149,6 +93,12 @@ impl EnvironmentCandidateRegistry {
         entry.baseline_public = Some(baseline_public.clone());
         entry.validation_layers.clone_from(&validation_layers);
         entry.preview = Some(preview.clone());
+        entry
+            .material
+            .as_mut()
+            .ok_or(EnvironmentCandidateLifecycleError::InvalidState)?
+            .set_validated_workspace(workspace);
+        entry.validated_apply_baseline = Some(baseline);
         Ok(EnvironmentCandidateCreateResult {
             candidate_id: entry.id.clone(),
             confirmation_token: Some(token),
@@ -162,6 +112,7 @@ impl EnvironmentCandidateRegistry {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn complete_validation_failed(
         &self,
         candidate_id: &EnvironmentCandidateId,
@@ -275,6 +226,10 @@ impl EnvironmentCandidateRegistry {
                 .apply_task_id
                 .clone()
                 .ok_or(EnvironmentCandidateLifecycleError::InvalidState)?;
+            let validated_apply_baseline = entry
+                .validated_apply_baseline
+                .take()
+                .ok_or(EnvironmentCandidateLifecycleError::InvalidState)?;
             entry.status = EnvironmentCandidateStatus::ApplyInProgress;
             return Ok(Some(EnvironmentApplyWork {
                 shared: Arc::clone(&self.shared),
@@ -282,12 +237,14 @@ impl EnvironmentCandidateRegistry {
                 apply_task_id,
                 epoch: entry.epoch,
                 material: Some(material),
+                validated_apply_baseline,
                 completed: false,
             }));
         }
         Ok(None)
     }
 
+    #[cfg(test)]
     pub(crate) fn invalidate_if_epoch_changed(
         &self,
         candidate_id: &EnvironmentCandidateId,
@@ -325,6 +282,10 @@ impl EnvironmentCandidateRegistry {
             EnvironmentCandidateStatus::Validating
             | EnvironmentCandidateStatus::PreviewReady
             | EnvironmentCandidateStatus::ApplyQueued => {
+                signal_validation_cancellation(
+                    &state.candidates[candidate_id].validation_cancellation,
+                    EnvironmentStatusCode::CandidateCancelled,
+                );
                 self.shared
                     .publish_terminal(
                         &mut state,
@@ -425,6 +386,7 @@ impl RegistryShared {
         entry.validation_layers = projection.validation_layers;
         entry.terminal_result = Some(terminal_result);
         entry.errors = projection.errors;
+        entry.validated_apply_baseline = None;
         entry.terminal_public_bytes = public_bytes;
         state.terminal_public_bytes += public_bytes;
         state.terminal_order.push_back(candidate_id.clone());
@@ -436,6 +398,7 @@ impl RegistryShared {
                 break;
             };
             if let Some(evicted) = state.candidates.remove(&oldest) {
+                discard_validation_cancellation_code(&evicted.validation_cancellation);
                 state.terminal_public_bytes -= evicted.terminal_public_bytes;
             }
         }

@@ -163,7 +163,6 @@ function CommonFields({ listener, locked = false, onChange }: Pick<Props, "liste
         onChange={(value) => onChange({ [field]: value })}
       />
     ))}
-    <CidrField listener={listener} locked={locked} onChange={onChange} />
   </>;
 }
 
@@ -350,16 +349,6 @@ function TimeoutField({ label, value, disabled, onChange }: {
     <Label>{label}（ms）</Label><NumberField.Group><NumberField.DecrementButton />
       <NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
   </NumberField>;
-}
-
-function CidrField({ listener, locked, onChange }: Pick<Props, "listener" | "locked" | "onChange">): ReactNode {
-  return <div className="col-span-2 grid gap-1 max-[700px]:col-span-1">
-    <Label>允许的客户端 CIDR</Label>
-    <Input aria-label="允许的客户端 CIDR" value={listener.allowed_client_cidrs.join(", ")} disabled={locked}
-      onChange={(event) => onChange({ allowed_client_cidrs: splitValues(event.target.value) })}
-      placeholder="留空允许所有设备连接" />
-    <p className="text-xs text-[var(--telemetry-muted)]">留空时允许任意客户端地址连接。</p>
-  </div>;
 }
 
 function splitValues(value: string): string[] {

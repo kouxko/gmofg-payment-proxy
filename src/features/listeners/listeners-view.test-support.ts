@@ -45,7 +45,6 @@ export const mocks = {
 export function dynamicListener(id = "listener-1", name = "默认代理监听", port = 8080) {
   return {
     id, name, enabled: false, bind_address: "127.0.0.1", port,
-    allowed_client_cidrs: [],
     connect_timeout_ms: 30000, read_timeout_ms: 70000, write_timeout_ms: 70000,
     data_plane: {
       kind: "http" as const,

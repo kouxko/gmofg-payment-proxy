@@ -11,7 +11,7 @@ impl SocketConnectionObserver for RecordingObserver {
 }
 
 #[tokio::test]
-async fn lifecycle_rejections_distinguish_cidr_and_capacity() {
+async fn lifecycle_capacity_rejections_are_typed() {
     let observer = Arc::new(RecordingObserver::default());
     let events = Arc::new(SocketEventCoordinator::new(observer.clone()));
     let metrics = Arc::new(SocketRelayMetrics::default());
@@ -27,24 +27,18 @@ async fn lifecycle_rejections_distinguish_cidr_and_capacity() {
         run: Arc::new(std::sync::RwLock::new(run.clone())),
     };
     lifecycle.connection_rejected(
-        "192.0.2.1:1234".parse().unwrap(),
-        ListenerRejection::NetworkDenied,
-    );
-    lifecycle.connection_rejected(
         "192.0.2.2:1234".parse().unwrap(),
         ListenerRejection::CapacityExhausted,
     );
-    assert_eq!(metrics.snapshot(0).rejected_connections, 2);
+    assert_eq!(metrics.snapshot(0).rejected_connections, 1);
     let recorded = observer.0.lock().unwrap();
-    assert!(
-        matches!(&recorded[0], SocketConnectionEvent::Rejected { run: actual, reason: SocketRejectionReason::Cidr, .. } if actual == &run)
-    );
     assert!(matches!(
-        &recorded[1],
+        &recorded[0],
         SocketConnectionEvent::Rejected {
+            run: actual,
             reason: SocketRejectionReason::Capacity,
             ..
-        }
+        } if actual == &run
     ));
 }
 

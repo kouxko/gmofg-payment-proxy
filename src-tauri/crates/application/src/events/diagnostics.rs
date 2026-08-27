@@ -5,11 +5,26 @@ use crate::{
 };
 
 impl EventHub {
-    /// 从有界事件回放生成统一诊断日志，不复制报文正文或敏感材料。
+    /// Backward-compatible read used by outer adapters that only need retained diagnostic rows.
     #[must_use]
     pub fn diagnostic_log_snapshot(&self) -> Vec<DiagnosticLogRowViewModel> {
-        self.state
-            .lock()
+        self.diagnostic_log_page_snapshot(None).rows
+    }
+
+    /// 从有界事件回放生成统一诊断日志与游标连续性元数据。
+    #[must_use]
+    pub(crate) fn diagnostic_log_page_snapshot(
+        &self,
+        after_event_id: Option<u64>,
+    ) -> DiagnosticLogSnapshot {
+        let state = self.state.lock();
+        let current_cursor = state.next_id.saturating_sub(1);
+        let oldest_retained_event_id = state.retained.front().map(|event| event.event_id);
+        let oldest_for_gap = oldest_retained_event_id.unwrap_or(state.next_id);
+        let snapshot_required = after_event_id.is_some_and(|cursor| {
+            cursor < current_cursor && cursor.saturating_add(1) < oldest_for_gap
+        });
+        let rows = state
             .retained
             .iter()
             .filter_map(|event| {
@@ -17,8 +32,21 @@ impl EventHub {
                     DiagnosticLogRowViewModel::from_entry(event.event_id, event.occurred_at, &entry)
                 })
             })
-            .collect()
+            .collect();
+        DiagnosticLogSnapshot {
+            rows,
+            current_cursor,
+            oldest_retained_event_id,
+            snapshot_required,
+        }
     }
+}
+
+pub(crate) struct DiagnosticLogSnapshot {
+    pub(crate) rows: Vec<DiagnosticLogRowViewModel>,
+    pub(crate) current_cursor: u64,
+    pub(crate) oldest_retained_event_id: Option<u64>,
+    pub(crate) snapshot_required: bool,
 }
 
 fn diagnostic_entry(payload: &UiEventPayload) -> Option<DiagnosticLogEntryViewModel> {
@@ -178,7 +206,6 @@ pub(crate) fn stage_for_error_code(code: &str) -> DiagnosticLogStage {
         | "SHIFT_JIS_ENCODE_FAILED"
         | "UTF8_DECODE_FAILED" => DiagnosticLogStage::Http,
         "SOCKET_TARGET_INVALID"
-        | "SOCKET_CIDR_DENIED"
         | "SOCKET_CAPACITY_EXHAUSTED"
         | "SOCKET_DNS_FAILED"
         | "SOCKET_DNS_TIMEOUT"
@@ -238,7 +265,7 @@ fn error_context(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, sync::Arc};
 
     use chrono::Utc;
     use uuid::Uuid;
@@ -257,6 +284,98 @@ mod tests {
             runtime_epoch: None,
             diagnostic: None,
         })
+    }
+
+    fn diagnostic_payload(summary: &str, detail: Option<String>) -> UiEventPayload {
+        UiEventPayload::DiagnosticLogAdded(DiagnosticLogEntryViewModel {
+            level: DiagnosticLogLevel::Info,
+            stage: DiagnosticLogStage::System,
+            summary: summary.to_owned(),
+            detail,
+            device_serial: None,
+            listener_id: None,
+            profile_id: None,
+            socket_context: None,
+        })
+    }
+
+    #[test]
+    fn diagnostic_snapshot_reports_count_retention_gap_at_n_plus_one() {
+        let hub = EventHub::new(3);
+        for index in 1..=3 {
+            hub.publish(
+                None,
+                Utc::now(),
+                None,
+                None,
+                diagnostic_payload(&format!("event-{index}"), None),
+            );
+        }
+
+        let at_capacity = hub.diagnostic_log_page_snapshot(Some(0));
+        assert_eq!(at_capacity.rows.len(), 3);
+        assert_eq!(at_capacity.oldest_retained_event_id, Some(1));
+        assert!(!at_capacity.snapshot_required);
+
+        hub.publish(
+            None,
+            Utc::now(),
+            None,
+            None,
+            diagnostic_payload("event-4", None),
+        );
+
+        let over_capacity = hub.diagnostic_log_page_snapshot(Some(1));
+        assert_eq!(over_capacity.rows.len(), 3);
+        assert_eq!(over_capacity.oldest_retained_event_id, Some(3));
+        assert!(over_capacity.snapshot_required);
+    }
+
+    #[test]
+    fn diagnostic_snapshot_reports_byte_gap_for_a_b_plus_one_event() {
+        let occurred_at = chrono::DateTime::parse_from_rfc3339("2026-08-25T09:00:00Z")
+            .expect("fixed timestamp")
+            .with_timezone(&Utc);
+        let base = diagnostic_payload("byte-boundary", Some("x".repeat(256)));
+        let probe = EventHub::new(8);
+        let bytes = probe
+            .publish(None, occurred_at, None, None, base.clone())
+            .logical_bytes();
+        let oversized_bytes = EventHub::new(8)
+            .publish(
+                None,
+                occurred_at,
+                None,
+                None,
+                diagnostic_payload("byte-boundary", Some("x".repeat(257))),
+            )
+            .logical_bytes();
+        assert_eq!(bytes, 569, "fixed fixture defines byte budget B");
+        assert_eq!(oversized_bytes, bytes + 1, "fixture must be exactly B+1");
+
+        let exact = EventHub::with_capacity_ledger(8, Arc::new(crate::CapacityLedger::new(bytes)));
+        exact.publish(None, occurred_at, None, None, base);
+        let exact_snapshot = exact.diagnostic_log_page_snapshot(Some(0));
+        assert_eq!(exact_snapshot.rows[0].summary, "byte-boundary");
+        assert!(!exact_snapshot.snapshot_required);
+
+        let overflow =
+            EventHub::with_capacity_ledger(8, Arc::new(crate::CapacityLedger::new(bytes)));
+        overflow.publish(
+            None,
+            occurred_at,
+            None,
+            None,
+            diagnostic_payload("byte-boundary", Some("x".repeat(257))),
+        );
+        let overflow_snapshot = overflow.diagnostic_log_page_snapshot(Some(0));
+        assert!(
+            overflow_snapshot
+                .rows
+                .iter()
+                .all(|row| row.summary != "byte-boundary")
+        );
+        assert!(overflow_snapshot.snapshot_required);
     }
 
     #[test]
@@ -297,7 +416,6 @@ mod tests {
     fn every_socket_error_code_has_an_explicit_diagnostic_stage() {
         for (code, expected) in [
             ("SOCKET_TARGET_INVALID", DiagnosticLogStage::Socket),
-            ("SOCKET_CIDR_DENIED", DiagnosticLogStage::Socket),
             ("SOCKET_CAPACITY_EXHAUSTED", DiagnosticLogStage::Socket),
             ("SOCKET_DNS_FAILED", DiagnosticLogStage::Socket),
             ("SOCKET_DNS_TIMEOUT", DiagnosticLogStage::Socket),

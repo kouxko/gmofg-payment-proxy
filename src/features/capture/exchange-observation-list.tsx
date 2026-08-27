@@ -37,13 +37,13 @@ export function ExchangeObservationList(props: Props) {
           <TrashBin className="size-4" />清空运行记录
         </Button>
       </header>
-      {Boolean(props.page?.evicted_records || props.page?.ignored_events) && (
+      {Boolean(props.page?.evicted_records || props.page?.dropped_events || props.page?.ignored_events) && (
         <Alert status="warning">
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>观测数据发生淘汰</Alert.Title>
             <Alert.Description>
-              当前工作区已淘汰连接 {props.page?.evicted_records ?? 0} 条；应用全局未记录事件 {props.page?.ignored_events ?? 0} 条。交易数据面未受影响。
+              当前工作区已淘汰连接 {props.page?.evicted_records ?? 0} 条；producer 队列丢弃 {props.page?.dropped_events ?? 0} 条；consumer/store 忽略 {props.page?.ignored_events ?? 0} 条。交易数据面未受影响。
             </Alert.Description>
           </Alert.Content>
         </Alert>

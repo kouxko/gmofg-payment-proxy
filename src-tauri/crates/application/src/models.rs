@@ -3,6 +3,7 @@
 //! 输入模型表达“用户想做什么”，ViewModel 表达“界面应显示什么”。各领域模型按页面和
 //! 运行时职责拆分；本模块统一重导出，保持原有 `models::*` 公共 API 稳定。
 
+mod application_snapshot;
 mod breakpoint;
 mod capture;
 mod certificate_settings;
@@ -19,6 +20,7 @@ mod session;
 mod socket_diagnostics;
 mod workspace;
 
+pub use application_snapshot::*;
 pub use breakpoint::*;
 pub use capture::*;
 pub use certificate_settings::*;

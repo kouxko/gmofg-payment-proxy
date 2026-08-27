@@ -29,7 +29,7 @@ impl CertificateServiceAdapter {
         }
     }
 
-    pub(super) fn generate_locked(
+    pub(super) async fn generate_async(
         &self,
         sans: &[String],
         mut snapshot: MaterialSnapshot,
@@ -52,6 +52,6 @@ impl CertificateServiceAdapter {
         snapshot
             .materials
             .insert(LEAF.into(), from_bundle(snapshot.revision, &leaf));
-        self.commit_snapshot(snapshot)
+        self.commit_snapshot_async(snapshot).await
     }
 }

@@ -66,7 +66,7 @@ impl SqliteStore {
                 "DELETE FROM protected_secrets;
                  DELETE FROM certificate_material;
                  UPDATE certificate_state SET revision = revision + 1 WHERE singleton_id = 1;
-                 DELETE FROM android_runtime_owner;
+                 DELETE FROM android_runtime_owners;
                  DELETE FROM protocol_packages;
                  DELETE FROM workspaces;",
             )

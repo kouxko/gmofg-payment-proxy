@@ -60,7 +60,6 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getByText("固定 Server 目标")).toBeVisible();
     expect(screen.getByText(/仅用 Server URL 替换目标 host\/port/)).toBeVisible();
     expect(screen.getByText(/原请求 path 与 query 原样保留/)).toBeVisible();
-    expect(screen.getByRole("textbox", { name: "允许的客户端 CIDR" })).toBeVisible();
     expect(screen.getByRole("switch", { name: "启用 HTTP Basic 认证" })).toBeVisible();
     expect(screen.getByRole("switch", { name: "为此监听启用 TLS" })).toBeVisible();
     expect(screen.queryByRole("switch", { name: "启用 allowlist MITM" })).not.toBeInTheDocument();
@@ -76,10 +75,9 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getByText("按原请求目标转发")).toBeVisible();
   });
 
-  it("固定 Server 关闭时保留 Basic、CIDR 与 MITM 设置", async () => {
+  it("固定 Server 关闭时保留 Basic 与 MITM 设置", async () => {
     render(<ListenersView />);
-    expect(await screen.findByRole("textbox", { name: "允许的客户端 CIDR" })).toBeVisible();
-    expect(screen.getByRole("switch", { name: "启用 HTTP Basic 认证" })).toBeVisible();
+    expect(await screen.findByRole("switch", { name: "启用 HTTP Basic 认证" })).toBeVisible();
     expect(screen.getByRole("switch", { name: "启用 allowlist MITM" })).toBeVisible();
   });
 

@@ -23,8 +23,15 @@ pub enum ExchangeProtocol {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "protocol", rename_all = "snake_case")]
 pub enum ExchangeContext {
-    Http { header: String, body: String },
-    Socket { bytes: Vec<u8> },
+    Http {
+        header: String,
+        body: String,
+        /// `false` means the text is only a lossy display projection and cannot seed a rule.
+        body_is_utf8: bool,
+    },
+    Socket {
+        bytes: Vec<u8>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -102,8 +109,10 @@ pub struct ExchangeObservationPage {
     pub total: u64,
     /// 当前查询 Workspace 已被整体淘汰、因此无法再返回详情的连接记录数量。
     pub evicted_records: u64,
-    /// 应用进程全局未记录事件数：包含生产者队列丢弃、字段解析失败、缺少 opened、
-    /// 身份不匹配及内存容量拒绝。无法可信归属的事件不会被猜测到某个 Workspace。
+    /// 应用进程全局在 tracing producer 队列入口丢弃的事件数。
+    pub dropped_events: u64,
+    /// 应用进程全局由 consumer/store 忽略的事件数：字段解析失败、缺少 opened、
+    /// 身份不匹配或内存容量拒绝。无法可信归属的事件不会被猜测到某个 Workspace。
     pub ignored_events: u64,
 }
 
@@ -139,7 +148,7 @@ fn event_bytes(event: &ExchangeObservationEvent) -> u64 {
 
 fn context_bytes(context: &ExchangeContext) -> u64 {
     match context {
-        ExchangeContext::Http { header, body } => (header.len() + body.len()) as u64,
+        ExchangeContext::Http { header, body, .. } => (header.len() + body.len()) as u64,
         ExchangeContext::Socket { bytes } => bytes.len() as u64,
     }
 }

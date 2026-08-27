@@ -24,35 +24,26 @@ export const commands = {
 	androidAdbGet: () => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_get")),
 	androidAdbSelect: (serial: string) => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_select", { serial })),
 	androidDeviceList: () => typedError<AndroidDeviceViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_device_list")),
-	androidPackageList: () => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_list")),
-	androidPackageRefresh: () => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_refresh")),
-	androidPackageQuery: (query: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_query", { query })),
-	androidPackageGet: (packageName: string) => typedError<AndroidPackageViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_package_get", { packageName })),
-	androidCompanionInstall: () => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_install")),
-	androidCompanionUpdate: () => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_update")),
-	androidVpnOpenConsent: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_vpn_open_consent")),
+	androidPackageList: (serial: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_list", { serial })),
+	androidPackageRefresh: (serial: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_refresh", { serial })),
+	androidPackageQuery: (serial: string, query: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_query", { serial, query })),
+	androidPackageGet: (serial: string, packageName: string) => typedError<AndroidPackageViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_package_get", { serial, packageName })),
+	androidCompanionInstall: (serial: string) => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_install", { serial })),
+	androidCompanionUpdate: (serial: string) => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_update", { serial })),
+	androidVpnOpenConsent: (serial: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_vpn_open_consent", { serial })),
 	deviceNetworkProfileList: () => typedError<AndroidNetworkProfileSummary[], AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_list")),
 	deviceNetworkProfileNew: () => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_new")),
 	deviceNetworkProfileGet: (profileId: string) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_get", { profileId })),
-	deviceNetworkProfileApplyIntent: (profile: AndroidNetworkProfile, intent: AndroidProfileEditIntent) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_apply_intent", { profile, intent })),
-	deviceNetworkProfileSave: (profile: AndroidNetworkProfile) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_save", { profile })),
+	deviceNetworkProfileApplyIntent: (serial: string, profile: AndroidNetworkProfile, intent: AndroidProfileEditIntent) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_apply_intent", { serial, profile, intent })),
+	deviceNetworkProfileSave: (serial: string, profile: AndroidNetworkProfile) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_save", { serial, profile })),
 	deviceNetworkProfileDelete: (profileId: string) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_delete", { profileId })),
-	deviceNetworkStart: (profileId: string, dangerousConfirmed: boolean) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_start", { profileId, dangerousConfirmed })),
-	deviceNetworkApply: (profileId: string, dangerousConfirmed: boolean) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_apply", { profileId, dangerousConfirmed })),
-	deviceNetworkStop: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_stop")),
-	deviceNetworkEmergencyRestore: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_emergency_restore")),
-	deviceNetworkStatus: () => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_status")),
-	deviceNetworkEndpoints: (profileId: string | null) => typedError<AndroidNetworkEndpointSnapshotViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_endpoints", { profileId })),
-	deviceNetworkRuntimeOwner: () => typedError<{
-	serial: string,
-	epoch: string,
-	mode: AndroidRuntimeOwnerMode,
-	profile_id: string,
-	state: AndroidRuntimeOwnerState,
-	source: AndroidRuntimeOwnerSource,
-	transition_reason: AndroidRuntimeOwnerTransitionReason,
-	updated_at: string,
-} | null, AppErrorViewModel>(__TAURI_INVOKE("device_network_runtime_owner")),
+	deviceNetworkStart: (serial: string, profileId: string, dangerousConfirmed: boolean) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_start", { serial, profileId, dangerousConfirmed })),
+	deviceNetworkApply: (serial: string, expectedEpoch: string, profileId: string, dangerousConfirmed: boolean) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_apply", { serial, expectedEpoch, profileId, dangerousConfirmed })),
+	deviceNetworkStop: (serial: string, expectedEpoch: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_stop", { serial, expectedEpoch })),
+	deviceNetworkEmergencyRestore: (serial: string, expectedEpoch: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_emergency_restore", { serial, expectedEpoch })),
+	deviceNetworkStatus: (serial: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_status", { serial })),
+	deviceNetworkEndpoints: (serial: string, profileId: string | null) => typedError<AndroidNetworkEndpointSnapshotViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_endpoints", { serial, profileId })),
+	deviceNetworkRuntimeOwners: () => typedError<AndroidRuntimeOwnerViewModel[], AppErrorViewModel>(__TAURI_INVOKE("device_network_runtime_owners")),
 	workspaceList: () => typedError<WorkspaceSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("workspace_list")),
 	workspaceGet: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_get", { workspaceId })),
 	workspaceSecretStoreBasic: (username: string, password: string) => typedError<SecretReference, AppErrorViewModel>(__TAURI_INVOKE("workspace_secret_store_basic", { username, password })),
@@ -160,6 +151,7 @@ export const commands = {
 	ruleParseByteInput: (raw: string) => typedError<RuleByteInputViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_byte_input", { raw })),
 	ruleParseHeaderInput: (raw: string) => typedError<RuleHeaderInputViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_header_input", { raw })),
 	ruleCreateFromSession: (sessionId: string) => typedError<RuleDraft, AppErrorViewModel>(__TAURI_INVOKE("rule_create_from_session", { sessionId })),
+	ruleCreateFromExchangeObservation: (exchangeId: string, responseEventIndex: number) => typedError<RuleDraft, AppErrorViewModel>(__TAURI_INVOKE("rule_create_from_exchange_observation", { exchangeId, responseEventIndex })),
 	ruleSave: (draft: RuleDraft) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_save", { draft })),
 	ruleCopy: (ruleId: string) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_copy", { ruleId })),
 	ruleDelete: (ruleId: string, expectedRevision: number, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_delete", { ruleId, expectedRevision, confirmed })),
@@ -167,7 +159,9 @@ export const commands = {
 	ruleImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_import")),
 	ruleExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_export")),
 	protocolRuleList: () => typedError<ProtocolDocumentRuleDefinition[], AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_list")),
+	/**  保留给非编辑器调用方的单阶段只读查询；WebView 编辑器必须使用完整上下文命令。 */
 	protocolRuleCapabilities: (listenerId: ListenerId, stage: ProtocolRuleStage) => typedError<ProtocolRuleCapabilityCatalog, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_capabilities", { listenerId, stage })),
+	protocolRuleEditorContext: (listenerId: ListenerId) => typedError<ProtocolRuleEditorContext, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_editor_context", { listenerId })),
 	/**
 	 *  把规则编辑器文本解析为 Rust/Schema 认可的类型化值。
 	 *
@@ -287,6 +281,7 @@ export type AndroidNetworkState = "unknown" | "start_requested" | "running" | "s
 
 export type AndroidNetworkStatusViewModel = {
 	serial: string,
+	runtime_epoch: string | null,
 	state: AndroidNetworkState,
 	/**  Rust 根据状态机生成的稳定中文文案，展示层不得重复维护状态映射。 */
 	state_text: string,
@@ -667,7 +662,10 @@ export type ChannelSettingsDraft = {
 	upstream_url: string,
 };
 
-/**  生产者提交的脱敏日志。禁止写入报文正文、密码、私钥或 PKCS12 字节。 */
+/**
+ *  生产者提交的有界控制面诊断。完整报文由 capture/Exchange observation 负责；密码、私钥和
+ *  PKCS12 字节只属于专用凭据边界。
+ */
 export type DiagnosticLogEntryViewModel = {
 	level: DiagnosticLogLevel,
 	stage: DiagnosticLogStage,
@@ -684,6 +682,10 @@ export type DiagnosticLogLevel = "info" | "warning" | "error";
 export type DiagnosticLogPageViewModel = {
 	rows: DiagnosticLogRowViewModel[],
 	current_cursor: number,
+	/**  `EventHub` 当前仍保留的最早全局事件；诊断行是该有界历史的类型化投影。 */
+	oldest_retained_event_id: number | null,
+	/**  `after_event_id` 早于保留窗口时为 true，调用方必须重新读取完整诊断快照。 */
+	snapshot_required: boolean,
 	retained_count: number,
 	truncated: boolean,
 	empty_message: string,
@@ -854,7 +856,9 @@ export type DownstreamTlsSettings = {
 };
 
 /**  Reader/Writer 的强类型网络上下文；HTTP 保留文本 Header/Body，Socket 保留字节。 */
-export type ExchangeContext = { protocol: "http"; header: string; body: string } | { protocol: "socket"; bytes: number[] };
+export type ExchangeContext = { protocol: "http"; header: string; body: string;
+/**  `false` means the text is only a lossy display projection and cannot seed a rule. */
+body_is_utf8: boolean } | { protocol: "socket"; bytes: number[] };
 
 export type ExchangeObservationEvent = { event: "opened"; observed_at: string } | { event: "received"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext;
 /**  协议 Pipeline 提供 Document；透明 Socket chunk 没有 Document。 */
@@ -869,9 +873,11 @@ export type ExchangeObservationPage = {
 	total: number,
 	/**  当前查询 Workspace 已被整体淘汰、因此无法再返回详情的连接记录数量。 */
 	evicted_records: number,
+	/**  应用进程全局在 tracing producer 队列入口丢弃的事件数。 */
+	dropped_events: number,
 	/**
-	 *  应用进程全局未记录事件数：包含生产者队列丢弃、字段解析失败、缺少 opened、
-	 *  身份不匹配及内存容量拒绝。无法可信归属的事件不会被猜测到某个 Workspace。
+	 *  应用进程全局由 consumer/store 忽略的事件数：字段解析失败、缺少 opened、
+	 *  身份不匹配或内存容量拒绝。无法可信归属的事件不会被猜测到某个 Workspace。
 	 */
 	ignored_events: number,
 };
@@ -896,7 +902,10 @@ export type ExchangeObservationRecord = {
 
 export type ExchangeProtocol = "http" | "socket";
 
-/**  外部 JSON-RPC 调用的可查询脱敏诊断；绝不携带业务报文或远端 `data` 值。 */
+/**
+ *  外部 JSON-RPC 调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
+ *  在此仅提供有界形状，避免同一 payload 在两个生命周期不同的 store 中重复分配。
+ */
 export type ExternalPackageCallDiagnosticViewModel = {
 	package: ProtocolPackageRef,
 	direction: ProtocolDirection,
@@ -1192,6 +1201,7 @@ export type ListenerRuntimeState = "stopped" | "starting" | "running" | "stoppin
 /**  单个 Workspace Listener 的运行快照。所有文案与状态均由 Rust 提供。 */
 export type ListenerStatusViewModel = {
 	listener_id: ListenerId,
+	runtime_epoch: string | null,
 	state: ListenerRuntimeState,
 	state_text: string,
 	ui_tone: UiTone,
@@ -1277,8 +1287,19 @@ export type McpInfoViewModel = {
 	transport: string,
 	access_scope: string,
 	authentication: string,
+	plaintext_http: boolean,
+	ipv4: McpIpCapabilityViewModel,
+	ipv6: McpIpCapabilityViewModel,
+	warning_codes: string[],
 	tool_count: number,
 	resource_count: number,
+};
+
+export type McpIpCapabilityViewModel = {
+	available: boolean,
+	bind_address: string,
+	port: number,
+	warning_codes: string[],
 };
 
 export type MessageContentKind = "json" | "xml" | "text" | "binary" | "unknown";
@@ -1584,6 +1605,26 @@ export type ProtocolRuleCapabilityCatalog = {
 
 export type ProtocolRuleCommonActionCapability = "record_match" | "clear_document";
 
+/**  规则编辑器针对一个 Listener 的 Rust 权威上下文。 */
+export type ProtocolRuleEditorContext = {
+	listener_id: ListenerId,
+	package: ProtocolPackageRef,
+	stages: ProtocolRuleEditorStage[],
+};
+
+/**
+ *  单个处理阶段的完整编辑合同。
+ *
+ *  Schema 版本属于阶段，因为同一个协议包的上行与下行 Schema 可以独立演进。
+ */
+export type ProtocolRuleEditorStage = {
+	stage: ProtocolRuleStage,
+	schema_version: number,
+	fields: ProtocolRuleFieldCapability[],
+	common_actions: ProtocolRuleCommonActionCapability[],
+	new_rule_draft: ProtocolRuleSaveInput,
+};
+
 export type ProtocolRuleFieldActionCapability = "set_field" | "clear_field";
 
 export type ProtocolRuleFieldCapability = {
@@ -1632,7 +1673,6 @@ export type ProxyListener = {
 	enabled: boolean,
 	bind_address: string,
 	port: number,
-	allowed_client_cidrs: string[],
 	connect_timeout_ms: number,
 	read_timeout_ms: number,
 	write_timeout_ms: number,

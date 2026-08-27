@@ -5,20 +5,48 @@
 //! beyond the explicitly accepted existing-target selectors.
 
 mod android;
+mod apply;
+mod identity;
 mod lifecycle;
 mod listener;
 mod materials;
+mod preview;
 mod rules;
 mod terminal;
+mod validation;
+mod workspace_projection;
 
+pub const ENVIRONMENT_VALIDATION_ENGINE_VERSION: u32 = 1;
+
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
+use crate::{AppError, AppResult};
+
 use android::AndroidNetworkProfileTemplate;
+use apply::PreparedMaterialCapabilityHandle;
+pub use apply::{
+    EnvironmentAffectedListenerBaseline, EnvironmentAndroidOwnerBaseline,
+    EnvironmentApplyBaselineCapturePort, EnvironmentApplyBaselineCaptureRequest,
+    EnvironmentApplyGenerations, EnvironmentApplyLease, EnvironmentApplyLeaseOutcome,
+    EnvironmentApplyLeasePort, EnvironmentApplyLeaseRequest, EnvironmentCommitFailure,
+    EnvironmentCommitPort, EnvironmentCommitReceipt, EnvironmentCommitRequest,
+    EnvironmentCommitResult, EnvironmentCommitRollbackOutcome, EnvironmentCommitTarget,
+    EnvironmentConsumedCommitRequest, EnvironmentConsumedPreparedMaterials,
+    EnvironmentExactPackageBaseline, EnvironmentMaterialInventoryBaseline,
+    EnvironmentPreparedMaterialCapability, EnvironmentPreparedMaterialKind,
+    EnvironmentPreparedMaterialVisitor, EnvironmentPreparedMaterials,
+    EnvironmentProtectedMaterialPreparePort, EnvironmentSelectionPolicy,
+    EnvironmentValidatedApplyBaseline, EnvironmentValidatedApplyBaselineCollector, MaterialAlias,
+    StagedProtectedMaterialHandle,
+};
+pub use identity::EnvironmentIdentityAllocator;
 #[cfg(test)]
-pub(crate) use lifecycle::EnvironmentCandidatePolicy;
+pub(crate) use identity::EnvironmentIdentityAllocatorPort;
 pub use lifecycle::{
     EnvironmentApplyQueuedResult, EnvironmentApplyTaskId, EnvironmentCancelResult,
     EnvironmentCancelStatus, EnvironmentCandidateCreateResult, EnvironmentCandidateEpoch,
@@ -27,14 +55,31 @@ pub use lifecycle::{
     EnvironmentCandidateStatusResult, EnvironmentConfirmationToken,
     EnvironmentValidationLayerResult,
 };
-pub(crate) use lifecycle::{EnvironmentApplyWork, EnvironmentCandidateRegistry};
+#[cfg(test)]
+pub(crate) use lifecycle::{EnvironmentApplyWork, EnvironmentCandidatePolicy};
+pub(crate) use lifecycle::{EnvironmentApplyWorker, EnvironmentCandidateRegistry};
 use listener::ListenerTemplate;
 use materials::EnvironmentMaterials;
+pub(crate) use preview::candidate_preview_snapshot;
 use rules::{HttpRuleTemplate, ProtocolDocumentRuleTemplate};
 pub use terminal::{
     DiagnosticSeverity, EnvironmentDiagnostic, EnvironmentDiagnosticScope, EnvironmentStatusCode,
     EnvironmentTerminalResult,
 };
+#[cfg(test)]
+pub(crate) use validation::EnvironmentCpuWorkProbe;
+pub use validation::{
+    EnvironmentCandidateValidator, EnvironmentDnsTcpTarget, EnvironmentMaterialProbe,
+    EnvironmentMaterialProbeKind, EnvironmentTlsMtlsTarget, EnvironmentValidationLayer,
+    EnvironmentValidationLayerPort, EnvironmentValidationLayerRequest, EnvironmentValidationReport,
+    EnvironmentValidationResult, EnvironmentValidationStatus,
+};
+pub(crate) use validation::{
+    EnvironmentDomainProjectionPort, EnvironmentPreviewBaselinePort,
+    EnvironmentPreviewBaselineRequest, EnvironmentProjectedCandidate,
+    EnvironmentValidationCheckpoint,
+};
+pub(crate) use workspace_projection::project_candidate_workspace;
 
 #[derive(Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -80,18 +125,100 @@ pub enum EnvironmentConfigurationParseError {
     DuplicateProtocolRuleSelector,
     #[error("weak-network numeric values violate the v1 contract")]
     WeakNetworkValueInvalid,
+    #[error("candidate contains an unknown field")]
+    UnknownField,
+    #[error("candidate contains a server-owned forbidden field")]
+    ForbiddenField,
+    #[error("protocol Document value wire is invalid")]
+    DocumentValueWireInvalid,
+    #[error("weak-network wire is invalid")]
+    WeakNetworkWireInvalid,
+    #[error("certificate material role is unsupported")]
+    UnsupportedMaterialRole,
+    #[error("secret material role is unsupported")]
+    UnsupportedSecretRole,
 }
 
 pub fn parse_environment_configuration_candidate_v1(
     bytes: &[u8],
 ) -> Result<EnvironmentConfigurationCandidateV1, EnvironmentConfigurationParseError> {
-    let candidate: EnvironmentConfigurationCandidateV1 = serde_json::from_slice(bytes)?;
+    let wire: Value = serde_json::from_slice(bytes)?;
+    preflight_wire(&wire)?;
+    let candidate: EnvironmentConfigurationCandidateV1 =
+        serde_json::from_value(wire).map_err(|error| {
+            if error.to_string().contains("unknown field") {
+                EnvironmentConfigurationParseError::UnknownField
+            } else {
+                EnvironmentConfigurationParseError::InvalidJson(error)
+            }
+        })?;
     candidate.validate_selector_contract()?;
     Ok(candidate)
 }
 
+fn preflight_wire(wire: &Value) -> Result<(), EnvironmentConfigurationParseError> {
+    if wire.get("validation_request").is_some() {
+        return Err(EnvironmentConfigurationParseError::ForbiddenField);
+    }
+    let materials = &wire["materials"];
+    if materials["certificates"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|material| material["role"].as_str())
+        .any(|role| {
+            !matches!(
+                role,
+                "downstream_server_identity"
+                    | "downstream_client_trust"
+                    | "upstream_client_identity"
+                    | "upstream_server_trust"
+            )
+        })
+    {
+        return Err(EnvironmentConfigurationParseError::UnsupportedMaterialRole);
+    }
+    if materials["secrets"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|material| material["role"].as_str())
+        .any(|role| role != "proxy_basic_auth")
+    {
+        return Err(EnvironmentConfigurationParseError::UnsupportedSecretRole);
+    }
+    let workspace = &wire["workspace"];
+    if workspace["protocol_rules"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .flat_map(|rule| {
+            rule["conditions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .chain(rule["actions"].as_array().into_iter().flatten())
+        })
+        .filter_map(|entry| entry.get("value"))
+        .any(|value| !value.is_object())
+    {
+        return Err(EnvironmentConfigurationParseError::DocumentValueWireInvalid);
+    }
+    if workspace["android_network_profiles"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|profile| profile["weak_network"].as_object())
+        .filter_map(|weak| weak.get("burst_loss"))
+        .any(|burst| !burst.is_null() && !burst.is_object())
+    {
+        return Err(EnvironmentConfigurationParseError::WeakNetworkWireInvalid);
+    }
+    Ok(())
+}
+
 impl EnvironmentConfigurationCandidateV1 {
-    pub(super) fn lifecycle_target(&self) -> EnvironmentAdmittedTarget {
+    pub(crate) fn lifecycle_target(&self) -> EnvironmentAdmittedTarget {
         match &self.target {
             EnvironmentTarget::Existing {
                 workspace_id,
@@ -155,8 +282,93 @@ impl EnvironmentConfigurationCandidateV1 {
     }
 }
 
+impl StagedProtectedMaterialHandle {
+    /// Parses the sealed candidate into its typed Application contract and only lends
+    /// zeroizing serialized material records to the platform protector.
+    pub fn prepare_with(
+        self,
+        mut protect: impl FnMut(
+            &[u8],
+            MaterialAlias,
+            [u8; 32],
+        ) -> AppResult<Box<dyn EnvironmentPreparedMaterialCapability>>,
+    ) -> AppResult<EnvironmentPreparedMaterials> {
+        let (candidate_json, workspace) = self.into_candidate_json();
+        let candidate =
+            parse_environment_configuration_candidate_v1(&candidate_json).map_err(|_| {
+                AppError::new("PROTECTED_MATERIAL_PREPARE_FAILED", "受保护材料准备失败。")
+            })?;
+        let target = match candidate.target {
+            EnvironmentTarget::Existing {
+                workspace_id,
+                expected_revision,
+            } => EnvironmentCommitTarget::Existing {
+                workspace_id,
+                expected_revision,
+            },
+            EnvironmentTarget::New { name } => EnvironmentCommitTarget::New {
+                workspace_id: workspace.id.as_uuid(),
+                display_name: name.trim().to_owned(),
+            },
+        };
+        let mut aliases = BTreeSet::new();
+        let mut prepared_certificate_handles = BTreeMap::new();
+        for material in candidate.materials.certificates {
+            let alias = MaterialAlias::parse(material.alias.clone())?;
+            if !aliases.insert(alias.clone()) {
+                return Err(AppError::new(
+                    "MATERIAL_ALIAS_DUPLICATE",
+                    "受保护材料别名重复。",
+                ));
+            }
+            let plaintext =
+                zeroize::Zeroizing::new(serde_json::to_vec(&material).map_err(|_| {
+                    AppError::new("PROTECTED_MATERIAL_PREPARE_FAILED", "受保护材料准备失败。")
+                })?);
+            let fingerprint = ring::digest::digest(&ring::digest::SHA256, &plaintext);
+            let mut fingerprint_bytes = [0_u8; 32];
+            fingerprint_bytes.copy_from_slice(fingerprint.as_ref());
+            let handle = PreparedMaterialCapabilityHandle::from_capability(protect(
+                &plaintext,
+                alias.clone(),
+                fingerprint_bytes,
+            )?);
+            prepared_certificate_handles.insert(alias, handle);
+        }
+        let mut prepared_secret_handles = BTreeMap::new();
+        for material in candidate.materials.secrets {
+            let alias = MaterialAlias::parse(material.alias.clone())?;
+            if !aliases.insert(alias.clone()) {
+                return Err(AppError::new(
+                    "MATERIAL_ALIAS_DUPLICATE",
+                    "受保护材料别名重复。",
+                ));
+            }
+            let plaintext =
+                zeroize::Zeroizing::new(serde_json::to_vec(&material).map_err(|_| {
+                    AppError::new("PROTECTED_MATERIAL_PREPARE_FAILED", "受保护材料准备失败。")
+                })?);
+            let fingerprint = ring::digest::digest(&ring::digest::SHA256, &plaintext);
+            let mut fingerprint_bytes = [0_u8; 32];
+            fingerprint_bytes.copy_from_slice(fingerprint.as_ref());
+            let handle = PreparedMaterialCapabilityHandle::from_capability(protect(
+                &plaintext,
+                alias.clone(),
+                fingerprint_bytes,
+            )?);
+            prepared_secret_handles.insert(alias, handle);
+        }
+        Ok(EnvironmentPreparedMaterials::new(
+            target,
+            workspace,
+            prepared_certificate_handles,
+            prepared_secret_handles,
+        ))
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(super) enum EnvironmentAdmittedTarget {
+pub(crate) enum EnvironmentAdmittedTarget {
     Existing {
         workspace_id: Uuid,
         expected_revision: u64,

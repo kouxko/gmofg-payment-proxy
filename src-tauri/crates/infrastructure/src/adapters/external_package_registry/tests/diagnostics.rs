@@ -25,15 +25,17 @@ fn rendered_diagnostics(events: &EventHub) -> String {
         .join("\n")
 }
 
-#[test]
-fn connection_attempt_failures_are_queryable_without_secret_values() {
+#[tokio::test]
+async fn connection_attempt_failures_are_queryable_without_secret_values() {
     let (registry, events) = diagnostic_registry();
     let remote_address = "127.0.0.1:49061".parse().unwrap();
 
-    registry.mark_service_failed(
-        "ws://127.0.0.1:9000/packages",
-        "password=do-not-leak; bind failed",
-    );
+    registry
+        .mark_service_failed(
+            "ws://127.0.0.1:9000/packages",
+            "password=do-not-leak; bind failed",
+        )
+        .await;
     registry.record_connection_attempt_failure(
         "websocket_handshake",
         remote_address,

@@ -94,6 +94,7 @@ async fn request_reader_preserves_original_and_writer_reports_effective_wire_mes
         .write(HttpContext {
             header: read.header,
             body: "app-request".into(),
+            body_is_utf8: true,
         })
         .await
         .unwrap();
@@ -144,6 +145,7 @@ async fn response_reader_preserves_original_and_writer_reports_effective_wire_me
         .write(HttpContext {
             header: read.header,
             body: "origin-response".into(),
+            body_is_utf8: true,
         })
         .await
         .unwrap();

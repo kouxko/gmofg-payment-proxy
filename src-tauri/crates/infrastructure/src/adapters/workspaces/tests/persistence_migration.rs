@@ -17,7 +17,7 @@ async fn current_workspace_persistence_round_trips() {
 
 #[tokio::test]
 async fn missing_or_old_workspace_persistence_version_is_rejected() {
-    for version in [None, Some(4_u16)] {
+    for version in [None, Some(5_u16)] {
         let store = Arc::new(SqliteStore::in_memory().expect("in-memory store"));
         let workspace = ProxyWorkspace::default();
         let mut value = serde_json::to_value(&workspace).unwrap();

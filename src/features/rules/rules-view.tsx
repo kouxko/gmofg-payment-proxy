@@ -79,6 +79,8 @@ function HttpStandardRulesView({
   const channelCatalog = bootstrap?.channel_catalog ?? [];
   const { navigate, searchParams } = useWorkspaceNavigation();
   const sourceSessionId = searchParams.get("sessionId");
+  const sourceExchangeId = searchParams.get("exchangeId");
+  const sourceResponseEvent = searchParams.get("responseEvent");
   const requestedCreate = searchParams.get("create");
   const rules = useIpcQuery<RuleSummaryViewModel[]>("rule-list", () =>
     callCommand(commands.ruleList()),
@@ -201,6 +203,37 @@ function HttpStandardRulesView({
       active = false;
     };
   }, [navigate, sourceSessionId]);
+
+  useEffect(() => {
+    if (!sourceExchangeId || sourceResponseEvent == null) return;
+    const responseEventIndex = Number(sourceResponseEvent);
+    if (!Number.isSafeInteger(responseEventIndex) || responseEventIndex < 0) {
+      toast("抓包响应事件索引无效。", { variant: "danger" });
+      navigate("/rules");
+      return;
+    }
+    let active = true;
+    void callCommand(
+      commands.ruleCreateFromExchangeObservation(
+        sourceExchangeId,
+        responseEventIndex,
+      ),
+    )
+      .then((value) => {
+        if (!active) return;
+        setDraft(value);
+        setEditorAsyncStates({});
+        setSelectedId("new");
+        navigate("/rules");
+        revealEditor();
+      })
+      .catch((reason) => {
+        if (active) toast(errorMessage(reason), { variant: "danger" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [navigate, sourceExchangeId, sourceResponseEvent]);
 
   async function newRule() {
     // 新建会替换当前草稿，因此当前草稿无效不应把用户锁在编辑器里。

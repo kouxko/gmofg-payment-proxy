@@ -9,7 +9,7 @@ use super::{
 use intercept_proxy_domain::HttpListenerSettings;
 
 impl ListenerRuntimeAdapter {
-    pub(super) fn downstream_tls(
+    pub(super) async fn downstream_tls(
         &self,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
@@ -20,27 +20,45 @@ impl ListenerRuntimeAdapter {
         }
 
         let dynamic_sni = http.downstream_tls.server_identity.is_none();
+        let installation_material = if dynamic_sni {
+            Some(
+                self.mitm_certificate_authority
+                    .clone()
+                    .ok_or_else(|| {
+                        AppError::new(
+                            "CERTIFICATE_NOT_READY",
+                            "动态 SNI 服务端证书已启用，但安装级 Root CA 签发能力尚未就绪。",
+                        )
+                        .entity(listener.id.to_string())
+                    })?
+                    .freeze_installation_tls_material()
+                    .await?,
+            )
+        } else {
+            None
+        };
         let server_identity = match http.downstream_tls.server_identity {
             Some(identity_id) => {
-                self.load_identity(certificate_reference(workspace, identity_id)?)?
+                self.load_identity(certificate_reference(workspace, identity_id)?)
+                    .await?
             }
-            None => self
-                .installation_server_identity
+            None => installation_material
                 .as_ref()
-                .ok_or_else(|| {
-                    AppError::new("CERTIFICATE_NOT_READY", "本机叶子证书服务尚未装配。")
-                })?
-                .load_installation_server_identity()?,
+                .expect("dynamic SNI material was loaded above")
+                .server_identity
+                .clone(),
         };
         let (client_trust_der, client_authentication_required) =
             match http.downstream_tls.client_authentication {
                 DownstreamClientAuthentication::Disabled => (Vec::new(), false),
                 DownstreamClientAuthentication::Optional { trust } => (
-                    self.load_trust(certificate_reference(workspace, trust)?)?,
+                    self.load_trust(certificate_reference(workspace, trust)?)
+                        .await?,
                     false,
                 ),
                 DownstreamClientAuthentication::Required { trust } => (
-                    self.load_trust(certificate_reference(workspace, trust)?)?,
+                    self.load_trust(certificate_reference(workspace, trust)?)
+                        .await?,
                     true,
                 ),
             };
@@ -53,14 +71,14 @@ impl ListenerRuntimeAdapter {
                 )
                 .entity(listener.id.to_string()));
             }
-            let authority = self.mitm_certificate_authority.clone().ok_or_else(|| {
-                AppError::new(
-                    "CERTIFICATE_NOT_READY",
-                    "动态 SNI 服务端证书已启用，但安装级 Root CA 签发能力尚未就绪。",
-                )
-                .entity(listener.id.to_string())
-            })?;
-            (Some(authority), allowlist)
+            (
+                Some(
+                    installation_material
+                        .expect("dynamic SNI material was loaded above")
+                        .dynamic_authority,
+                ),
+                allowlist,
+            )
         } else {
             (None, Vec::new())
         };
@@ -73,7 +91,7 @@ impl ListenerRuntimeAdapter {
         }))
     }
 
-    pub(super) fn upstream_tls(
+    pub(super) async fn upstream_tls(
         &self,
         workspace: &ProxyWorkspace,
         fixed_server: &FixedServerSettings,
@@ -82,21 +100,20 @@ impl ListenerRuntimeAdapter {
             return Ok(None);
         }
 
-        let server_trust_der = fixed_server
-            .upstream_tls
-            .server_trust
-            .map(|id| certificate_reference(workspace, id))
-            .transpose()?
-            .map(|reference| self.load_trust(reference))
-            .transpose()?
-            .unwrap_or_default();
-        let client_identity = fixed_server
-            .upstream_tls
-            .client_identity
-            .map(|id| certificate_reference(workspace, id))
-            .transpose()?
-            .map(|reference| self.load_identity(reference))
-            .transpose()?;
+        let server_trust_der = match fixed_server.upstream_tls.server_trust {
+            Some(id) => {
+                self.load_trust(certificate_reference(workspace, id)?)
+                    .await?
+            }
+            None => Vec::new(),
+        };
+        let client_identity = match fixed_server.upstream_tls.client_identity {
+            Some(id) => Some(
+                self.load_identity(certificate_reference(workspace, id)?)
+                    .await?,
+            ),
+            None => None,
+        };
         Ok(Some(ReverseUpstreamTls {
             server_trust_der,
             client_identity,
@@ -104,45 +121,45 @@ impl ListenerRuntimeAdapter {
         }))
     }
 
-    pub(super) fn load_trust(&self, reference: &CertificateReference) -> AppResult<Vec<Vec<u8>>> {
-        if let Some(result) = self
-            .managed_listener_certificates
-            .as_ref()
-            .and_then(|resolver| resolver.resolve_trust(reference))
+    pub(super) async fn load_trust(
+        &self,
+        reference: &CertificateReference,
+    ) -> AppResult<Vec<Vec<u8>>> {
+        if let Some(resolver) = self.managed_listener_certificates.as_ref()
+            && let Some(result) = resolver.resolve_trust(reference).await
         {
             return result;
         }
         Err(unmanaged_certificate_reference(reference))
     }
 
-    pub(super) fn load_identity(
+    pub(super) async fn load_identity(
         &self,
         reference: &CertificateReference,
     ) -> AppResult<ReverseClientIdentity> {
-        if let Some(result) = self
-            .managed_listener_certificates
-            .as_ref()
-            .and_then(|resolver| resolver.resolve_identity(reference))
+        if let Some(resolver) = self.managed_listener_certificates.as_ref()
+            && let Some(result) = resolver.resolve_identity(reference).await
         {
             return result;
         }
         Err(unmanaged_certificate_reference(reference))
     }
 
-    pub(super) fn load_trust_by_id(
+    pub(super) async fn load_trust_by_id(
         &self,
         workspace: &ProxyWorkspace,
         id: CertificateReferenceId,
     ) -> AppResult<Vec<Vec<u8>>> {
-        self.load_trust(certificate_reference(workspace, id)?)
+        self.load_trust(certificate_reference(workspace, id)?).await
     }
 
-    pub(super) fn load_identity_by_id(
+    pub(super) async fn load_identity_by_id(
         &self,
         workspace: &ProxyWorkspace,
         id: CertificateReferenceId,
     ) -> AppResult<ReverseClientIdentity> {
         self.load_identity(certificate_reference(workspace, id)?)
+            .await
     }
 }
 

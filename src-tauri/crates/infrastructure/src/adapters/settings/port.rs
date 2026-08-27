@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use super::{
     AppError, AppResult, SettingsDraft, SettingsRepositoryAdapter, SettingsRepositoryPort,
-    SettingsValidationViewModel, SettingsViewModel, infra, json_error, serialize_settings,
+    SettingsValidationViewModel, SettingsViewModel, app_error, json_error, serialize_settings,
 };
 
 #[async_trait]
@@ -12,7 +12,7 @@ impl SettingsRepositoryPort for SettingsRepositoryAdapter {
     }
 
     async fn get(&self) -> AppResult<SettingsViewModel> {
-        self.view()
+        self.view().await
     }
 
     async fn validate(&self, draft: &SettingsDraft) -> AppResult<SettingsValidationViewModel> {
@@ -38,7 +38,10 @@ impl SettingsRepositoryPort for SettingsRepositoryAdapter {
         draft.expected_revision = Some(expected.saturating_add(1));
         let value =
             serialize_settings(&draft).map_err(|error| json_error("设置序列化失败", error))?;
-        infra(self.store.save_settings(expected, &value))?;
-        self.view()
+        self.executor
+            .execute(move |store| store.save_settings(expected, &value))
+            .await
+            .map_err(app_error)?;
+        self.view().await
     }
 }

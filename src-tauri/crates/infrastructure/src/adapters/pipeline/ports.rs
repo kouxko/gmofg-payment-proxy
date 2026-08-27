@@ -10,6 +10,15 @@ use super::{
 
 #[async_trait]
 impl PipelinePorts for RuntimePipelineAdapter {
+    async fn runtime_started(&self, epoch: Uuid) {
+        if self.rule_runtime.runtime_started(epoch).is_ok() {
+            self.state
+                .lock()
+                .active_epochs
+                .insert(RuntimeEpoch::from_uuid(epoch));
+        }
+    }
+
     async fn runtime_stopping(&self, epoch: Uuid) {
         let resolved = self.breakpoints.proxy_stopped(epoch);
         for summary in resolved {
@@ -21,17 +30,17 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 UiEventPayload::BreakpointResolved(summary),
             );
         }
-        self.rule_runtime.runtime_stopping(epoch);
+        self.rule_runtime.runtime_stopping(epoch).await;
         let epoch = RuntimeEpoch::from_uuid(epoch);
         let mut state = self.state.lock();
         state.channels.remove(&epoch);
-        state.stopped_epochs.insert(epoch);
+        state.active_epochs.remove(&epoch);
     }
 
     async fn connection_opened(&self, context: &ConnectionContext) {
         let mut state = self.state.lock();
         let epoch = RuntimeEpoch::from_uuid(context.runtime_epoch);
-        if state.stopped_epochs.contains(&epoch) {
+        if !state.active_epochs.contains(&epoch) {
             return;
         }
         state.connections.entry(epoch).or_default().insert(
@@ -111,12 +120,14 @@ impl PipelinePorts for RuntimePipelineAdapter {
         let body_codec = self.codec_for(context, DomainMessageStage::Request, message)?;
         let original = message.clone();
         self.begin_session(context, &original, body_codec.as_ref())?;
-        let evaluated = self.evaluate(
-            context,
-            DomainMessageStage::Request,
-            Some(message),
-            body_codec.as_ref(),
-        )?;
+        let evaluated = self
+            .evaluate(
+                context,
+                DomainMessageStage::Request,
+                Some(message),
+                body_codec.as_ref(),
+            )
+            .await?;
         let seed = weak_network_seed(context, DomainMessageStage::Request, &evaluated.hit_rules);
         let (mut actions, pause) =
             apply_rule_actions(body_codec.as_ref(), message, &evaluated.actions, seed)?;
@@ -202,12 +213,14 @@ impl PipelinePorts for RuntimePipelineAdapter {
             }
         }
         let original = message.clone();
-        let evaluated = self.evaluate(
-            context,
-            DomainMessageStage::Response,
-            Some(message),
-            body_codec.as_ref(),
-        )?;
+        let evaluated = self
+            .evaluate(
+                context,
+                DomainMessageStage::Response,
+                Some(message),
+                body_codec.as_ref(),
+            )
+            .await?;
         let seed = weak_network_seed(context, DomainMessageStage::Response, &evaluated.hit_rules);
         let (mut actions, pause) =
             apply_rule_actions(body_codec.as_ref(), message, &evaluated.actions, seed)?;
@@ -298,7 +311,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
         if let Err(error) = result {
             // TLS 接受失败发生在 connection_opened 之前，因此没有 SessionUpdated 可以
             // 承载错误。如果只更新计数，Android 侧只能看到模糊的 EOF，诊断页也无法
-            // 区分 CIDR、TLS 协议、证书或 HTTP 管线错误。统一发布稳定错误码，同时用
+            // 区分 TLS 协议、证书或 HTTP 管线错误。统一发布稳定错误码，同时用
             // channel 作为实体 ID，使诊断日志能准确归属到发生失败的代理入口。
             self.events.publish(
                 Some(context.runtime_epoch),

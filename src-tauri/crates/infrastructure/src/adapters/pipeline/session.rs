@@ -16,7 +16,7 @@ impl RuntimePipelineAdapter {
         {
             let state = self.state.lock();
             let epoch = RuntimeEpoch::from_uuid(context.runtime_epoch);
-            if state.stopped_epochs.contains(&epoch) {
+            if !state.active_epochs.contains(&epoch) {
                 return Err(ProxyError::new(
                     ErrorCode::ProxyStopped,
                     "runtime epoch is already stopping",

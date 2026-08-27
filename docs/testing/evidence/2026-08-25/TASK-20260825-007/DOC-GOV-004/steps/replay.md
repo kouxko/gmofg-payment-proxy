@@ -12,7 +12,7 @@
 
 ```bash
 rg -n \
-  '单工作区全局任务锁|\.git/task-manager\.lock|原子 `mkdir|必须使用同一把锁|不得在持锁期间执行耗时|original_owner_state|interrupted_recovery_locks|主锁状态变化|并行批次' \
+  '单工作区全局任务锁|\.task-manager\.lock|原子 `mkdir|必须使用同一把锁|不得在持锁期间执行耗时|original_owner_state|interrupted_recovery_locks|主锁状态变化|并行批次' \
   AGENTS.md
 
 primary_ids=$(rg --no-filename \

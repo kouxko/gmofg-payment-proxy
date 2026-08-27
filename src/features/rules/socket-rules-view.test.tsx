@@ -3,103 +3,29 @@
 import "@testing-library/jest-dom/vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import type { ProtocolDocumentRuleDefinition } from "@/generated/rust-types";
-import { ProtocolRulesView } from "./protocol-rules-view";
 import {
-  capability,
   deleted,
-  httpListener,
+  editorContext,
   packageRef,
   rule,
   savedFromInput,
   socketListener,
 } from "./socket-rules-view.test-support";
+import {
+  getCommandMocks,
+  getQueryState,
+  HttpRulesView,
+  resetSocketRulesViewTestState,
+  SocketRulesView,
+} from "./socket-rules-view.test-runtime";
 
-const commandMocks = vi.hoisted(() => ({
-  workspaceList: vi.fn(),
-  workspaceGet: vi.fn(),
-  protocolRuleList: vi.fn(),
-  protocolRuleCapabilities: vi.fn(),
-  protocolRuleSave: vi.fn(),
-  protocolRuleToggle: vi.fn(),
-  protocolRuleDelete: vi.fn(),
-  protocolRuleParseValue: vi.fn(),
-}));
-const queryState = vi.hoisted(() => ({
-  listeners: [] as unknown[],
-  rules: [] as unknown[],
-  capabilityError: undefined as string | undefined,
-  blockedSource: undefined as undefined | "workspaces" | "workspace" | "rules",
-  blockedState: "loading" as "loading" | "error",
-  capabilities: new Map<string, unknown>(),
-  refresh: vi.fn(),
-  eventRefresh: undefined as undefined | (() => Promise<void>),
-}));
-
-const SocketRulesView = () => <ProtocolRulesView kind="socket" />;
-
-vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
-vi.mock("@/features/shell/bootstrap-context", () => ({
-  useAppEventRefresh: (_events: unknown, refresh: () => Promise<void>) => { queryState.eventRefresh = refresh; },
-}));
-vi.mock("@/lib/ipc/client", () => ({
-  appErrorViewModel: (reason: unknown) => reason && typeof reason === "object" ? reason : undefined,
-  callCommand: async <T,>(value: Promise<T> | T) => value,
-  errorMessage: (reason: unknown) => reason instanceof Error ? reason.message : "Rust 操作失败",
-}));
-vi.mock("@/lib/ipc/use-ipc-query", () => ({
-  useIpcQuery: (key: string) => {
-    let data: unknown;
-    let error: string | undefined;
-    const source = key === "protocol-rule-workspaces" ? "workspaces" : key.startsWith("protocol-rule-workspace:") ? "workspace" : key.startsWith("protocol-rule-list:") ? "rules" : undefined;
-    if (key === "protocol-rule-workspaces") {
-      data = [{ id: "workspace-1", name: "工作区", revision: 1, listener_count: queryState.listeners.length, enabled_listener_count: queryState.listeners.length, selected: true }];
-    } else if (key.startsWith("protocol-rule-workspace:")) {
-      data = { id: "workspace-1", name: "工作区", revision: 1, listeners: queryState.listeners, metadata_extractors: [], response_assertions: [], fault_presets: [], certificate_references: [] };
-    } else if (key.startsWith("protocol-rule-list:")) {
-      data = queryState.rules;
-    } else if (key.startsWith("protocol-rule-capabilities:")) {
-      data = queryState.capabilities.get(key);
-      error = queryState.capabilityError;
-    }
-    const blocked = source != null && source === queryState.blockedSource;
-    if (blocked && queryState.blockedState === "error") error = "事实源不可用";
-    return { data, error, isLoading: blocked && queryState.blockedState === "loading", refresh: queryState.refresh, invalidate: vi.fn() };
-  },
-}));
-
-function installCapabilities() {
-  for (const stage of ["app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app"] as const) {
-    queryState.capabilities.set(`protocol-rule-capabilities:relay:${stage}`, capability(stage));
-  }
-  queryState.capabilities.set("protocol-rule-capabilities:local:app_to_proxy", capability("app_to_proxy", 8));
-  queryState.capabilities.set("protocol-rule-capabilities:local:proxy_to_app", capability("proxy_to_app", 8));
-  for (const stage of ["app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app"] as const) {
-    queryState.capabilities.set(`protocol-rule-capabilities:http:${stage}`, capability(stage));
-  }
-}
+const commandMocks = getCommandMocks();
+const queryState = getQueryState();
 
 describe("Socket rules view state and command contracts", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    queryState.listeners = [socketListener("relay"), socketListener("local", "local"), socketListener("direct", "direct"), httpListener(), httpListener("plain-http", false)];
-    queryState.rules = [];
-    queryState.capabilityError = undefined;
-    queryState.blockedSource = undefined;
-    queryState.blockedState = "loading";
-    queryState.capabilities.clear();
-    installCapabilities();
-    queryState.refresh.mockResolvedValue(undefined);
-    queryState.eventRefresh = undefined;
-    commandMocks.protocolRuleParseValue.mockImplementation(async (type: string, raw: string) => {
-      if (type === "string") return { type, value: raw };
-      if (type === "int") return { type, value: Number(raw) };
-      if (type === "bool") return { type, value: raw === "true" };
-      return { type, value: [] };
-    });
-    commandMocks.protocolRuleSave.mockImplementation(async (input: Record<string, unknown>) => savedFromInput(input));
-  });
+  beforeEach(resetSocketRulesViewTestState);
 
   it("lists only scripted Socket entries in the Socket workspace", async () => {
     const user = userEvent.setup();
@@ -115,12 +41,68 @@ describe("Socket rules view state and command contracts", () => {
 
   it("lists only HTTP protocol entries in the HTTP Body workspace", async () => {
     const user = userEvent.setup();
-    render(<ProtocolRulesView kind="http" />);
+    render(<HttpRulesView />);
     await user.click(screen.getByRole("button", { name: "新建报文规则" }));
     await user.click(screen.getByLabelText("协议入口"));
     expect(await screen.findByRole("option", { name: /http.*HTTP/ })).toBeVisible();
     expect(screen.queryByRole("option", { name: /relay.*Socket/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /local.*本机应答/ })).not.toBeInTheDocument();
+  });
+
+  it("renders only the stages returned by the Rust editor context", async () => {
+    queryState.capabilities.set(
+      "protocol-rule-editor-context:relay",
+      editorContext("relay", [{ stage: "proxy_to_app" }]),
+    );
+    const user = userEvent.setup();
+    render(<SocketRulesView />);
+    await user.click(screen.getByRole("button", { name: "新建报文规则" }));
+    await user.click(screen.getByLabelText("报文处理阶段"));
+    expect(await screen.findByRole("option", { name: "代理 → 应用" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "应用 → 代理" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "代理 → 上游服务" })).not.toBeInTheDocument();
+  });
+
+  it("uses the Rust-provided new-rule draft without replacing its defaults", async () => {
+    const context = editorContext("relay", [{ stage: "app_to_proxy" }], "clear_document");
+    context.stages[0].new_rule_draft.name = "Rust 草稿";
+    context.stages[0].new_rule_draft.priority = 321;
+    queryState.capabilities.set("protocol-rule-editor-context:relay", context);
+    const user = userEvent.setup();
+    render(<SocketRulesView />);
+    await user.click(screen.getByRole("button", { name: "新建报文规则" }));
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Rust 草稿");
+    expect(screen.getByRole("textbox", { name: "优先级" })).toHaveValue("321");
+    await user.click(screen.getByRole("button", { name: "保存报文规则" }));
+    expect(commandMocks.protocolRuleSave).toHaveBeenCalledWith(expect.objectContaining({
+      name: "Rust 草稿",
+      priority: 321,
+      actions: [{ type: "clear_document" }],
+    }));
+  });
+
+  it("shows a Rust context load failure without creating a local fallback draft", async () => {
+    queryState.capabilityError = "Rust 编辑上下文不可用";
+    const user = userEvent.setup();
+    render(<SocketRulesView />);
+    await user.click(screen.getByRole("button", { name: "新建报文规则" }));
+    expect(await screen.findByText("Rust 编辑上下文不可用")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "保存报文规则" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "规则名称" })).not.toBeInTheDocument();
+  });
+
+  it("fails closed when a late context response belongs to the previous listener", async () => {
+    const user = userEvent.setup();
+    render(<SocketRulesView />);
+    await user.click(screen.getByRole("button", { name: "新建报文规则" }));
+    await user.click(screen.getByLabelText("协议入口"));
+    queryState.capabilities.set(
+      "protocol-rule-editor-context:local",
+      editorContext("relay", [{ stage: "app_to_proxy" }]),
+    );
+    await user.click(await screen.findByRole("option", { name: /local/ }));
+    expect(await screen.findByText("规则编辑上下文与当前入口或协议版本不一致。")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "保存报文规则" })).not.toBeInTheDocument();
   });
 
   it("uses the shared rule workspace columns for protocol rules", () => {
@@ -144,14 +126,14 @@ describe("Socket rules view state and command contracts", () => {
     expect(screen.queryByText("HTTP 金额规则")).not.toBeInTheDocument();
 
     socketView.unmount();
-    render(<ProtocolRulesView kind="http" />);
+    render(<HttpRulesView />);
     expect(screen.getByText("HTTP 金额规则")).toBeVisible();
     expect(screen.queryByText("Socket 金额规则")).not.toBeInTheDocument();
   });
 
   it("saves an HTTP protocol rule through the existing protocolRuleSave facade", async () => {
     const user = userEvent.setup();
-    render(<ProtocolRulesView kind="http" />);
+    render(<HttpRulesView />);
     await user.click(screen.getByRole("button", { name: "新建报文规则" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "保存报文规则" })).toBeEnabled());
     await user.click(screen.getByRole("button", { name: "保存报文规则" }));
@@ -393,14 +375,15 @@ describe("Socket rules view state and command contracts", () => {
   });
 
   it("rejects an unknown capability enum before rendering an editor", async () => {
-    queryState.capabilities.set("protocol-rule-capabilities:relay:app_to_proxy", {
-      ...capability("app_to_proxy"),
-      fields: [{ name: "amount", label: "金额", type: "decimal", operators: ["equals"], actions: ["set_field"] }],
-    });
+    const malformed = editorContext("relay", [{ stage: "app_to_proxy" }]);
+    malformed.stages[0].fields = [
+      { name: "amount", label: "金额", type: "decimal", operators: ["equals"], actions: ["set_field"] } as never,
+    ];
+    queryState.capabilities.set("protocol-rule-editor-context:relay", malformed);
     const user = userEvent.setup();
     render(<SocketRulesView />);
     await user.click(screen.getByRole("button", { name: "新建报文规则" }));
-    expect(screen.getByText(/规则能力.*(?:未知字段类型|精确包版本或方向不一致)/)).toBeVisible();
+    expect(screen.getByText(/规则能力.*未知字段类型/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "保存报文规则" })).not.toBeInTheDocument();
   });
 
@@ -457,7 +440,17 @@ describe("Socket rules view state and command contracts", () => {
       changedListener.data_plane.settings.processing.settings.package = { id: "iso8583", version: "2.0.0" };
     }
     queryState.listeners = [changedListener];
-    queryState.capabilities.set("protocol-rule-capabilities:relay:app_to_proxy", { ...capability("app_to_proxy", 8), package: { id: "iso8583", version: "2.0.0" } });
+    const changedContext = editorContext("relay", [
+      { stage: "app_to_proxy", schemaVersion: 8 },
+      { stage: "proxy_to_upstream", schemaVersion: 8 },
+      { stage: "upstream_to_proxy", schemaVersion: 8 },
+      { stage: "proxy_to_app", schemaVersion: 8 },
+    ]);
+    changedContext.package = { id: "iso8583", version: "2.0.0" };
+    for (const item of changedContext.stages) {
+      item.new_rule_draft.package = changedContext.package;
+    }
+    queryState.capabilities.set("protocol-rule-editor-context:relay", changedContext);
     await act(async () => { await queryState.eventRefresh?.(); });
     view.rerender(<SocketRulesView />);
     const refreshCount = queryState.refresh.mock.calls.length;

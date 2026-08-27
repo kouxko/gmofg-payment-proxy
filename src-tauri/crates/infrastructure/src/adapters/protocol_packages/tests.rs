@@ -17,6 +17,8 @@ mod application_ports;
 #[path = "tests/cache.rs"]
 mod cache;
 mod external_identity_conflicts;
+#[path = "tests/runtime_snapshot_async.rs"]
+mod runtime_snapshot_async;
 
 const MANIFEST: &str = r#"
 api = 1

@@ -5,10 +5,7 @@ use std::net::IpAddr;
 
 use super::{
     push_field_error,
-    value::{
-        is_valid_authority_pattern, is_valid_cidr, is_valid_dns_authority_pattern,
-        is_valid_upstream_origin,
-    },
+    value::{is_valid_authority_pattern, is_valid_dns_authority_pattern, is_valid_upstream_origin},
 };
 use crate::{
     CertificateReferenceId, CertificateReferenceKind, DomainError, DownstreamClientAuthentication,
@@ -63,15 +60,6 @@ fn validate_common(listener: &ProxyListener, prefix: &str, error: &mut DomainErr
         || listener.write_timeout_ms == 0
     {
         push_field_error(error, format!("{prefix}.timeouts"), "超时必须大于 0 毫秒");
-    }
-    for (index, cidr) in listener.allowed_client_cidrs.iter().enumerate() {
-        if !is_valid_cidr(cidr) {
-            push_field_error(
-                error,
-                format!("{prefix}.allowed_client_cidrs.{index}"),
-                "必须是有效 IPv4/IPv6 CIDR",
-            );
-        }
     }
 }
 

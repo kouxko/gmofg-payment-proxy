@@ -27,7 +27,7 @@
 
 - TDD RED：包尚不存在时，2 个测试模块因 `ModuleNotFoundError` 失败。
 - GREEN：12 个单元/本机 WebSocket 测试全部 PASS。
-- `compileall` PASS；`git diff --check` PASS。
+- `compileall` PASS。
 - wheel 构建 PASS，产物名 `nuvei_tango_json-1.0.0-py3-none-any.whl`。
 - 额外只读观察：从用户报告在内存提取一条完整后台响应，647 字节；声明 body 643 字节；消息类型
   `AccptrCmpltnAdvcRspn`；Proxy 收到与发回 App 的字节一致；package decode/encode 字节一致；7 个

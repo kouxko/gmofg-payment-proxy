@@ -1,5 +1,5 @@
-#[test]
-fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message() {
+#[tokio::test]
+async fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message() {
     let rule = view_to_domain_rule({
         let mut view = one_shot_delay_rule();
         view.draft.conditions =
@@ -22,6 +22,7 @@ fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message()
         test_capture_repository(),
     );
     let epoch = Uuid::new_v4();
+    pipeline.runtime_started(epoch).await;
     let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
     let message = request_message(r#"{"amount":100}"#);
     let body_codec = test_body_codec();
@@ -33,6 +34,7 @@ fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message()
             Some(&message),
             body_codec.as_ref(),
         )
+        .await
         .expect("first evaluation");
     assert!(
         first.actions.is_empty(),
@@ -47,6 +49,7 @@ fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message()
             Some(&message),
             body_codec.as_ref(),
         )
+        .await
         .expect("second evaluation retries after the injected conflict");
     assert_eq!(
         second.actions,
@@ -74,6 +77,7 @@ fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message()
             Some(&message),
             body_codec.as_ref(),
         )
+        .await
         .expect("third evaluation");
     assert!(
         third.actions.is_empty(),
@@ -86,32 +90,240 @@ fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message()
     );
 }
 
-#[test]
-fn tls_handshake_policy_matches_the_peer_under_current_verification() {
+#[tokio::test]
+async fn tls_handshake_policy_matches_the_peer_under_current_verification() {
     let fingerprint = "11:22:33:44";
     let pipeline = adapter(vec![tls_fingerprint_reject_rule(fingerprint)], 10);
     let epoch = Uuid::new_v4();
     let mut context = test_context(epoch, Uuid::new_v4(), transaction_channel());
     context.tls_peer = None;
+    pipeline.runtime_started(epoch).await;
+    pipeline.rule_runtime.prepare_epoch(epoch).unwrap();
     let matching_peer = TlsPeerIdentity {
         sha256_fingerprint: fingerprint.into(),
         subject_summary: "CN=blocked".into(),
     };
-    assert!(
-        pipeline
-            .reject_tls_handshake(&context, &matching_peer)
-            .expect("policy")
-    );
+    let rejected = tokio::task::spawn_blocking({
+        let pipeline = Arc::clone(&pipeline);
+        let context = context.clone();
+        move || pipeline.reject_tls_handshake(&context, &matching_peer)
+    })
+    .await
+    .unwrap()
+    .expect("policy");
+    assert!(rejected);
 
     let other_peer = TlsPeerIdentity {
         sha256_fingerprint: "AA:BB".into(),
         subject_summary: "CN=allowed".into(),
     };
-    assert!(
-        !pipeline
-            .reject_tls_handshake(&context, &other_peer)
-            .expect("policy")
+    let rejected = tokio::task::spawn_blocking({
+        let pipeline = Arc::clone(&pipeline);
+        let context = context.clone();
+        move || pipeline.reject_tls_handshake(&context, &other_peer)
+    })
+    .await
+    .unwrap()
+    .expect("policy");
+    assert!(!rejected);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine() {
+    let rule = view_to_domain_rule(one_shot_delay_rule()).unwrap();
+    let commit_entered = Arc::new(tokio::sync::Notify::new());
+    let commit_release = Arc::new(tokio::sync::Notify::new());
+    let rules = Arc::new(BlockingCommitRules {
+        snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
+        commit_entered: Arc::clone(&commit_entered),
+        commit_release: Arc::clone(&commit_release),
+    });
+    let pipeline = Arc::new(RuntimePipelineAdapter::new(
+        test_product_hooks(),
+        rules.clone(),
+        Arc::new(InMemorySessionStore::new(10, 64 * 1024 * 1024)),
+        Arc::new(BreakpointCoordinator::default()),
+        Arc::new(EventHub::new(128)),
+        test_capture_repository(),
+    ));
+    let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
+    pipeline.runtime_started(context.runtime_epoch).await;
+    let message = request_message(r#"{"amount":100}"#);
+    let entered_wait = commit_entered.notified();
+    let caller = tokio::spawn({
+        let pipeline = Arc::clone(&pipeline);
+        let context = context.clone();
+        let message = message.clone();
+        async move {
+            pipeline
+                .evaluate(
+                    &context,
+                    DomainMessageStage::Request,
+                    Some(&message),
+                    test_body_codec().as_ref(),
+                )
+                .await
+        }
+    });
+    entered_wait.await;
+
+    caller.abort();
+    assert!(caller.await.unwrap_err().is_cancelled());
+    commit_release.notify_one();
+
+    let next = pipeline
+        .evaluate(
+            &context,
+            DomainMessageStage::Request,
+            Some(&message),
+            test_body_codec().as_ref(),
+        )
+        .await
+        .unwrap();
+    assert!(next.actions.is_empty(), "durable one-shot was consumed exactly once");
+    let persisted = rules.snapshot.lock();
+    assert!(!persisted.rules[0].enabled);
+    assert_eq!(persisted.rules[0].hit_count, 1);
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn aborted_runtime_stopping_still_retires_epoch_and_resets_actor() {
+    let collection_id = Uuid::new_v4();
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let completed = Arc::new(tokio::sync::Notify::new());
+    let rules = Arc::new(BlockingStopRules {
+        snapshot: Mutex::new(RuleRuntimeSnapshot::with_collection_identity(
+            Some(collection_id), 1, vec![view_to_domain_rule(one_shot_delay_rule()).unwrap()],
+        )),
+        reset_calls: AtomicUsize::new(0),
+        stop_reset_entered: Arc::clone(&entered),
+        stop_reset_release: Arc::clone(&release),
+        stop_reset_completed: Arc::clone(&completed),
+    });
+    let pipeline = Arc::new(RuntimePipelineAdapter::new(
+        test_product_hooks(), rules.clone(), Arc::new(InMemorySessionStore::default()),
+        Arc::new(BreakpointCoordinator::default()), Arc::new(EventHub::new(16)),
+        test_capture_repository(),
+    ));
+    let epoch = Uuid::new_v4();
+    let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
+    pipeline.runtime_started(epoch).await;
+    pipeline.evaluate(
+        &context, DomainMessageStage::Request, Some(&request_message("body")),
+        test_body_codec().as_ref(),
+    ).await.unwrap();
+    let entered_wait = entered.notified();
+    let completed_wait = completed.notified();
+    let stopping = tokio::spawn({
+        let pipeline = Arc::clone(&pipeline);
+        async move { pipeline.rule_runtime.runtime_stopping(epoch).await }
+    });
+    entered_wait.await;
+
+    stopping.abort();
+    assert!(stopping.await.unwrap_err().is_cancelled());
+    release.notify_one();
+    completed_wait.await;
+
+    assert_eq!(rules.snapshot.lock().rules[0].hit_count, 0);
+    assert!(pipeline.rule_runtime.prepare_epoch(epoch).is_err());
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn cancelling_before_mailbox_capacity_is_acquired_never_executes_the_command() {
+    let mut rule = view_to_domain_rule(one_shot_delay_rule()).unwrap();
+    rule.one_shot = false;
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let rules = Arc::new(CapacityRules {
+        snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
+        commit_calls: AtomicUsize::new(0),
+        first_commit_entered: Arc::clone(&entered),
+        first_commit_release: Arc::clone(&release),
+    });
+    let pipeline = Arc::new(RuntimePipelineAdapter::new(
+        test_product_hooks(), rules.clone(), Arc::new(InMemorySessionStore::default()),
+        Arc::new(BreakpointCoordinator::default()), Arc::new(EventHub::new(16)),
+        test_capture_repository(),
+    ));
+    let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
+    pipeline.runtime_started(context.runtime_epoch).await;
+    let message = request_message("body");
+    let first = tokio::spawn({
+        let pipeline = Arc::clone(&pipeline);
+        let context = context.clone();
+        let message = message.clone();
+        async move { pipeline.evaluate(
+            &context, DomainMessageStage::Request, Some(&message), test_body_codec().as_ref(),
+        ).await }
+    });
+    entered.notified().await;
+
+    let mut queued = Vec::new();
+    for _ in 0..super::rule_runtime::MAILBOX_CAPACITY {
+        let (enqueued, enqueued_wait) = tokio::sync::oneshot::channel();
+        queued.push(tokio::spawn({
+            let pipeline = Arc::clone(&pipeline);
+            let context = context.clone();
+            let message = message.clone();
+            async move { pipeline.rule_runtime.evaluate_with_enqueue_notification(
+                &context, DomainMessageStage::Request, Some(&message),
+                test_body_codec().as_ref(), enqueued,
+            ).await }
+        }));
+        enqueued_wait.await.unwrap();
+    }
+    let (overflow_enqueued, overflow_wait) = tokio::sync::oneshot::channel();
+    let overflow_codec = test_body_codec();
+    let mut overflow = Box::pin(pipeline.rule_runtime.evaluate_with_enqueue_notification(
+        &context, DomainMessageStage::Request, Some(&message), overflow_codec.as_ref(),
+        overflow_enqueued,
+    ));
+    assert!(matches!(poll_body_codec_policy_once(overflow.as_mut()).await, std::task::Poll::Pending));
+    drop(overflow);
+    assert!(overflow_wait.await.is_err(), "cancelled waiter never enqueued");
+
+    release.notify_one();
+    first.await.unwrap().unwrap();
+    for task in queued { task.await.unwrap().unwrap(); }
+    assert_eq!(
+        rules.commit_calls.load(AtomicOrdering::Acquire),
+        super::rule_runtime::MAILBOX_CAPACITY + 1,
     );
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn repeated_epoch_restart_returns_actor_registry_to_baseline_and_old_epochs_fail_closed() {
+    let pipeline = RuntimePipelineAdapter::new(
+        test_product_hooks(),
+        Arc::new(StaticRules {
+            snapshot: Mutex::new(RuleRuntimeSnapshot::new(Vec::new())),
+        }),
+        Arc::new(InMemorySessionStore::default()),
+        Arc::new(BreakpointCoordinator::default()),
+        Arc::new(EventHub::new(16)),
+        test_capture_repository(),
+    );
+    let mut retired = Vec::new();
+    for _ in 0..128 {
+        let epoch = Uuid::new_v4();
+        pipeline.runtime_started(epoch).await;
+        assert_eq!(pipeline.rule_runtime.registry_counts(), (1, 1));
+        pipeline.runtime_stopping(epoch).await;
+        assert_eq!(pipeline.rule_runtime.registry_counts(), (0, 0));
+        retired.push(epoch);
+    }
+
+    let current = Uuid::new_v4();
+    pipeline.runtime_started(current).await;
+    assert!(pipeline.rule_runtime.prepare_epoch(current).is_ok());
+    for epoch in retired {
+        assert!(pipeline.rule_runtime.prepare_epoch(epoch).is_err());
+    }
+    pipeline.runtime_stopping(current).await;
+    assert_eq!(pipeline.rule_runtime.registry_counts(), (0, 0));
+    assert!(pipeline.state.lock().active_epochs.is_empty());
 }
 
 #[test]

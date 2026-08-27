@@ -21,7 +21,7 @@ use crate::adapters::listener_runtime::{
 };
 
 impl ListenerRuntimePlanBuilder<'_> {
-    pub(super) fn build_scripted_socket(
+    pub(super) async fn build_scripted_socket(
         &self,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
@@ -36,26 +36,33 @@ impl ListenerRuntimePlanBuilder<'_> {
             .entity(listener.id.to_string()));
         };
         let provider = self.adapter.external_package_provider.read().clone();
-        if let Some(binding) = provider
-            .as_ref()
-            .map(|provider| provider.resolve(&scripted.package))
-            .transpose()?
-            .flatten()
-        {
+        let binding = match provider {
+            Some(provider) => provider.resolve(&scripted.package).await?,
+            None => None,
+        };
+        if let Some(binding) = binding {
             return self
-                .build_external_scripted_socket(workspace, listener, socket, bind_addr, binding);
+                .build_external_scripted_socket(workspace, listener, socket, bind_addr, binding)
+                .await;
         }
-        let security = self.scripted_socket_security(workspace, &socket.topology)?;
-        let snapshot =
-            ScriptedSocketRuntimeSnapshot::prepare(self.adapter, workspace, listener, security)?
-                .ok_or_else(|| {
-                    AppError::new(
-                        "SCRIPTED_SOCKET_PLAN_INVALID",
-                        "Scripted Socket 未能生成不可变运行计划。",
-                    )
-                    .entity(listener.id.to_string())
-                })?;
-        let SocketTopology::Relay(relay) = &socket.topology else {
+        let security = self
+            .scripted_socket_security(workspace, &socket.topology)
+            .await?;
+        let snapshot = ScriptedSocketRuntimeSnapshot::prepare_async(
+            self.adapter,
+            workspace,
+            listener,
+            security,
+        )
+        .await?
+        .ok_or_else(|| {
+            AppError::new(
+                "SCRIPTED_SOCKET_PLAN_INVALID",
+                "Scripted Socket 未能生成不可变运行计划。",
+            )
+            .entity(listener.id.to_string())
+        })?;
+        let SocketTopology::Relay(_) = &socket.topology else {
             return self.build_local_responder(workspace, listener, socket, bind_addr, snapshot);
         };
         let ScriptedSocketSecuritySnapshot::Relay(security) = snapshot.security() else {
@@ -64,6 +71,24 @@ impl ListenerRuntimePlanBuilder<'_> {
                 "Scripted Relay 快照的传输安全模式不一致。",
             )
             .entity(listener.id.to_string()));
+        };
+        let security = security.clone();
+        self.build_internal_scripted_relay(
+            workspace, listener, socket, bind_addr, snapshot, security,
+        )
+    }
+
+    fn build_internal_scripted_relay(
+        &self,
+        workspace: &ProxyWorkspace,
+        listener: &ProxyListener,
+        socket: &SocketRelaySettings,
+        bind_addr: SocketAddr,
+        snapshot: Arc<ScriptedSocketRuntimeSnapshot>,
+        security: intercept_proxy_runtime::SocketRelaySecurity,
+    ) -> AppResult<PreparedListenerRuntime> {
+        let SocketTopology::Relay(relay) = &socket.topology else {
+            unreachable!("relay topology was checked before building the scripted relay")
         };
         let framing_limits = intercept_proxy_protocol_scripting::ProtocolFramingLimits::default();
         let pipeline_limits: SocketPipelineLimits = pipeline_limits(
@@ -96,12 +121,11 @@ impl ListenerRuntimePlanBuilder<'_> {
         let service = SocketRelayService::build_scripted_with_observer(
             SocketRelayConfig {
                 bind_addr,
-                allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
                 upstream: SocketEndpoint {
                     host: relay.upstream.host.clone(),
                     port: relay.upstream.port,
                 },
-                security: security.clone(),
+                security,
                 maximum_connections: socket.maximum_connections,
                 read_chunk_bytes: usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(
                     |_| {
@@ -128,7 +152,7 @@ impl ListenerRuntimePlanBuilder<'_> {
         })
     }
 
-    fn build_external_scripted_socket(
+    async fn build_external_scripted_socket(
         &self,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
@@ -139,15 +163,9 @@ impl ListenerRuntimePlanBuilder<'_> {
         let max_frame_bytes = binding.max_frame_bytes();
         let rpc_timeout = binding.rpc_timeout();
         let registration = binding.registration();
-        let package = registration.package().identity();
-        let rules = super::super::scripted_snapshot::compile_document_rules(
-            workspace,
-            listener,
-            package,
-            registration.document().upstream().schema(),
-            registration.document().downstream().schema(),
-            &socket.topology,
-        )?;
+        let rules = self
+            .compile_external_document_rules(workspace, listener, socket, registration)
+            .await?;
         let snapshot = Arc::new(ExternalSocketRuntimeSnapshot::new(
             binding,
             rules,
@@ -176,12 +194,11 @@ impl ListenerRuntimePlanBuilder<'_> {
                 SocketRelayService::build_scripted_with_observer(
                     SocketRelayConfig {
                         bind_addr,
-                        allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
                         upstream: SocketEndpoint {
                             host: relay.upstream.host.clone(),
                             port: relay.upstream.port,
                         },
-                        security: self.socket_security(workspace, &relay.security)?,
+                        security: self.socket_security(workspace, &relay.security).await?,
                         maximum_connections: socket.maximum_connections,
                         read_chunk_bytes: read_chunk_bytes(listener, socket)?,
                         connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
@@ -194,8 +211,9 @@ impl ListenerRuntimePlanBuilder<'_> {
                 )
             }
             SocketTopology::LocalResponder(_) => {
-                let ScriptedSocketSecuritySnapshot::LocalResponder { downstream_tls } =
-                    self.scripted_socket_security(workspace, &socket.topology)?
+                let ScriptedSocketSecuritySnapshot::LocalResponder { downstream_tls } = self
+                    .scripted_socket_security(workspace, &socket.topology)
+                    .await?
                 else {
                     return Err(AppError::new(
                         "SCRIPTED_SOCKET_PLAN_INVALID",
@@ -210,7 +228,6 @@ impl ListenerRuntimePlanBuilder<'_> {
                 SocketRelayService::build_local_responder_with_observer(
                     SocketLocalResponderConfig {
                         bind_addr,
-                        allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
                         security: downstream_tls.as_ref().map_or(
                             RuntimeDownstreamSecurity::Tcp,
                             |tls| RuntimeDownstreamSecurity::Tls {
@@ -235,6 +252,33 @@ impl ListenerRuntimePlanBuilder<'_> {
             snapshot,
             service: Arc::new(service),
         })
+    }
+
+    async fn compile_external_document_rules(
+        &self,
+        workspace: &ProxyWorkspace,
+        listener: &ProxyListener,
+        socket: &SocketRelaySettings,
+        registration: &intercept_proxy_domain::ExternalPackageRegistration,
+    ) -> AppResult<crate::adapters::listener_runtime::ProtocolDocumentRuleConnectionFactory> {
+        let workspace_for_compile = workspace.clone();
+        let listener_for_compile = listener.clone();
+        let package = registration.package().identity().clone();
+        let upstream_schema = registration.document().upstream().schema().clone();
+        let downstream_schema = registration.document().downstream().schema().clone();
+        let topology = socket.topology.clone();
+        self.adapter
+            .compile_document_rules_on_blocking_owner(move || {
+                super::super::scripted_snapshot::compile_document_rules(
+                    &workspace_for_compile,
+                    &listener_for_compile,
+                    &package,
+                    &upstream_schema,
+                    &downstream_schema,
+                    &topology,
+                )
+            })
+            .await
     }
 
     fn build_local_responder(
@@ -284,7 +328,6 @@ impl ListenerRuntimePlanBuilder<'_> {
         let service = SocketRelayService::build_local_responder_with_observer(
             SocketLocalResponderConfig {
                 bind_addr,
-                allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
                 security: downstream_tls.as_ref().map_or(
                     RuntimeDownstreamSecurity::Tcp,
                     |downstream_tls| RuntimeDownstreamSecurity::Tls {
@@ -329,22 +372,23 @@ impl ListenerRuntimePlanBuilder<'_> {
         }
     }
 
-    fn scripted_socket_security(
+    async fn scripted_socket_security(
         &self,
         workspace: &ProxyWorkspace,
         topology: &SocketTopology,
     ) -> AppResult<ScriptedSocketSecuritySnapshot> {
         match topology {
             SocketTopology::Relay(relay) => Ok(ScriptedSocketSecuritySnapshot::Relay(
-                self.socket_security(workspace, &relay.security)?,
+                self.socket_security(workspace, &relay.security).await?,
             )),
             SocketTopology::LocalResponder(local) => {
                 Ok(ScriptedSocketSecuritySnapshot::LocalResponder {
                     downstream_tls: match &local.downstream_security {
                         SocketDownstreamSecurity::Tcp => None,
-                        SocketDownstreamSecurity::Tls { downstream_tls } => {
-                            Some(self.socket_downstream_tls(workspace, downstream_tls)?)
-                        }
+                        SocketDownstreamSecurity::Tls { downstream_tls } => Some(
+                            self.socket_downstream_tls(workspace, downstream_tls)
+                                .await?,
+                        ),
                     },
                 })
             }

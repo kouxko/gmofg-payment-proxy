@@ -10,6 +10,18 @@ use tauri::{
 use super::protocol_rule_parse_value;
 
 #[test]
+fn editor_context_command_is_registered_and_exported_with_camel_case_arguments() {
+    let command_registry = include_str!("../mod.rs");
+    assert!(command_registry.contains("protocol_rule_editor_context,"));
+
+    let bindings = include_str!("../../../../src/generated/rust-types.ts");
+    assert!(bindings.contains("protocolRuleEditorContext: (listenerId: ListenerId)"));
+    assert!(bindings.contains("__TAURI_INVOKE(\"protocol_rule_editor_context\", { listenerId })"));
+    assert!(bindings.contains("export type ProtocolRuleEditorContext = {"));
+    assert!(bindings.contains("new_rule_draft: ProtocolRuleSaveInput"));
+}
+
+#[test]
 fn ipc_returns_all_four_strict_document_value_variants() {
     let app = test_app();
     let webview = test_webview(&app);

@@ -19,7 +19,10 @@ use intercept_proxy_exchange::{
     DocumentSchema, DocumentSchemaId, DocumentValue, Downstream, Encode, Error, Frame, FrameResult,
     Rules, Socket, SocketContext, Upstream,
 };
-use tokio::{net::TcpStream, sync::Barrier};
+use tokio::{
+    net::TcpStream,
+    sync::{Barrier, Notify},
+};
 
 use super::super::{
     SocketConnectionEvent, SocketConnectionIdentity, SocketConnectionObserver,
@@ -32,26 +35,31 @@ use super::super::{
 pub(super) const TEST_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug, Default)]
-pub(super) struct TestObserver(Mutex<Vec<SocketConnectionEvent>>);
+pub(super) struct TestObserver {
+    events: Mutex<Vec<SocketConnectionEvent>>,
+    changed: Notify,
+}
 
 impl SocketConnectionObserver for TestObserver {
     fn record(&self, event: SocketConnectionEvent) {
-        self.0.lock().unwrap().push(event);
+        self.events.lock().unwrap().push(event);
+        self.changed.notify_waiters();
     }
 }
 
 impl TestObserver {
     pub(super) fn events(&self) -> Vec<SocketConnectionEvent> {
-        self.0.lock().unwrap().clone()
+        self.events.lock().unwrap().clone()
     }
 
     pub(super) async fn wait_until(&self, predicate: impl Fn(&SocketConnectionEvent) -> bool) {
         tokio::time::timeout(TEST_TIMEOUT, async {
             loop {
-                if self.0.lock().unwrap().iter().any(&predicate) {
+                let changed = self.changed.notified();
+                if self.events.lock().unwrap().iter().any(&predicate) {
                     return;
                 }
-                tokio::task::yield_now().await;
+                changed.await;
             }
         })
         .await
@@ -59,30 +67,23 @@ impl TestObserver {
     }
 }
 
-pub(super) fn reserve_address() -> SocketAddr {
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = listener.local_addr().unwrap();
-    drop(listener);
-    address
+pub(super) async fn connect_retry(address: SocketAddr) -> TcpStream {
+    TcpStream::connect(address)
+        .await
+        .unwrap_or_else(|error| panic!("connect to prebound socket listener {address}: {error}"))
 }
 
-pub(super) async fn connect_retry(address: SocketAddr) -> TcpStream {
-    tokio::time::timeout(TEST_TIMEOUT, async {
-        loop {
-            if let Ok(stream) = TcpStream::connect(address).await {
-                return stream;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("socket listener did not start before timeout")
+pub(super) async fn bind_listener() -> (tokio::net::TcpListener, SocketAddr) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind socket test listener");
+    let address = listener.local_addr().expect("socket test address");
+    (listener, address)
 }
 
 pub(super) fn relay_config(bind_addr: SocketAddr, upstream: SocketAddr) -> SocketRelayConfig {
     SocketRelayConfig {
         bind_addr,
-        allowed_client_cidrs: Vec::new(),
         upstream: SocketEndpoint {
             host: upstream.ip().to_string(),
             port: upstream.port(),
@@ -99,7 +100,6 @@ pub(super) fn relay_config(bind_addr: SocketAddr, upstream: SocketAddr) -> Socke
 pub(super) fn local_config(bind_addr: SocketAddr) -> SocketLocalResponderConfig {
     SocketLocalResponderConfig {
         bind_addr,
-        allowed_client_cidrs: Vec::new(),
         security: SocketDownstreamSecurity::Tcp,
         maximum_connections: 8,
         read_chunk_bytes: 16 * 1024,

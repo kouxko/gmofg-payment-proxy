@@ -271,11 +271,17 @@ impl RuntimeLogStore {
             .collect::<Vec<_>>();
         let has_more = matching.len() > limit;
         matching.truncate(limit);
+        let queue_dropped_full = self.queue_counters.full();
+        let queue_dropped_disconnected = self.queue_counters.disconnected();
+        let queue_dropped_contended = self.queue_counters.contended();
         ApplicationLogPage {
             rows: matching,
             oldest_retained_log_id: state.entries.front().map(|stored| stored.entry.log_id),
             newest_retained_log_id: state.entries.back().map(|stored| stored.entry.log_id),
             evicted_count: state.evicted_count,
+            queue_dropped_full,
+            queue_dropped_disconnected,
+            queue_dropped_contended,
             corrupt_line_count: state.corrupt_line_count,
             has_more,
             persistence_error: state.persistence_error.clone(),

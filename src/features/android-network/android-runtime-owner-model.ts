@@ -1,4 +1,5 @@
 import type {
+  AndroidDeviceViewModel,
   AndroidRuntimeOwnerMode,
   AndroidRuntimeOwnerTransitionReason,
   AndroidRuntimeOwnerViewModel,
@@ -9,17 +10,58 @@ export type RuntimeOwnerDisplay = Pick<
   "serial" | "mode" | "state" | "transition_reason"
 >;
 
+export interface AndroidDeviceTargetDisplay {
+  serial: string;
+  device?: AndroidDeviceViewModel;
+  owner?: AndroidRuntimeOwnerViewModel;
+  online: boolean;
+}
+
+export function mergeAndroidDeviceTargets(
+  devices: AndroidDeviceViewModel[],
+  owners: AndroidRuntimeOwnerViewModel[],
+): AndroidDeviceTargetDisplay[] {
+  const targets = new Map<string, AndroidDeviceTargetDisplay>();
+  for (const device of devices) {
+    targets.set(device.serial, {
+      serial: device.serial,
+      device,
+      owner: undefined,
+      online: device.state === "device",
+    });
+  }
+  for (const owner of owners) {
+    const current = targets.get(owner.serial);
+    targets.set(owner.serial, {
+      serial: owner.serial,
+      device: current?.device,
+      owner,
+      online: current?.online ?? false,
+    });
+  }
+  return [...targets.values()].sort((left, right) => left.serial.localeCompare(right.serial));
+}
+
+export function runtimeResponseMatches(
+  target: Pick<AndroidRuntimeOwnerViewModel, "serial" | "epoch">,
+  response: { serial: string; runtime_epoch?: string | null },
+): boolean {
+  return response.serial === target.serial && response.runtime_epoch === target.epoch;
+}
+
+export function clearOwnerConditionally(
+  owners: AndroidRuntimeOwnerViewModel[],
+  target: Pick<AndroidRuntimeOwnerViewModel, "serial" | "epoch">,
+): AndroidRuntimeOwnerViewModel[] {
+  return owners.filter((owner) => (
+    owner.serial !== target.serial || owner.epoch !== target.epoch
+  ));
+}
+
 export function runtimeOwnerQueryKey(
   owner: Pick<AndroidRuntimeOwnerViewModel, "serial" | "epoch"> | null | undefined,
 ): string | undefined {
   return owner ? `owner:${owner.serial}:${owner.epoch}` : undefined;
-}
-
-export function isForeignRuntimeOwner(
-  selectedSerial: string | null | undefined,
-  ownerSerial: string | null | undefined,
-): boolean {
-  return Boolean(ownerSerial && ownerSerial !== selectedSerial);
 }
 
 export function runtimeOwnerModeText(mode: AndroidRuntimeOwnerMode): string {

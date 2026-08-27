@@ -8,7 +8,6 @@
     "sequence": "00000020",
     "message_type": "AccptrAuthstnReq",
     "field_types": ["int", "blob", "string", "string", "string", "blob"],
-    "json_semantics_sha256": "815dd1541646e69257c6c9ffeeb90c6441d386e56bd6d6bf2224e584a1aabd16",
     "display_contains_all_synthetic_values": true,
     "display_contains_redacted_marker": false,
     "encode_equals_input": true
@@ -22,7 +21,6 @@
     "sequence": "00000020",
     "message_type": "AccptrAuthstnRspn",
     "field_types": ["int", "blob", "string", "string", "string", "blob"],
-    "json_semantics_sha256": "9e749daa1b879685808f3c24968c415b00077d2722e01343f393ca6d07217a81",
     "display_contains_all_synthetic_values": true,
     "display_contains_redacted_marker": false,
     "encode_equals_input": true

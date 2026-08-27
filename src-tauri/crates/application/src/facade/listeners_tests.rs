@@ -64,6 +64,7 @@ fn overview_uses_workspace_as_the_only_listener_catalog() {
         workspace,
         vec![ListenerStatusViewModel {
             listener_id: forward_id,
+            runtime_epoch: None,
             state: ListenerRuntimeState::Running,
             state_text: "运行中".into(),
             ui_tone: UiTone::Positive,
@@ -101,6 +102,7 @@ fn overview_preserves_faulted_listener_stop_capability() {
         workspace,
         vec![ListenerStatusViewModel {
             listener_id,
+            runtime_epoch: None,
             state: ListenerRuntimeState::Faulted,
             state_text: "故障".into(),
             ui_tone: UiTone::Danger,

@@ -134,18 +134,6 @@ pub(super) fn verify_revision(actual: u64, expected: u64) -> AppResult<()> {
 }
 
 #[allow(clippy::needless_pass_by_value)]
-pub(super) fn proxy_app_error(error: AppError) -> ProxyError {
-    let code = match error.view_model.code.as_str() {
-        "DPAPI_UNPROTECT_FAILED" => ProxyErrorCode::DpapiUnprotectFailed,
-        "KEYCHAIN_UNPROTECT_FAILED" => ProxyErrorCode::KeychainUnprotectFailed,
-        "CERTIFICATE_INVALID" => ProxyErrorCode::CertificateInvalid,
-        "CERTIFICATE_NOT_READY" => ProxyErrorCode::CertificateNotReady,
-        _ => ProxyErrorCode::Internal,
-    };
-    ProxyError::new(code, error.view_model.message.clone())
-}
-
-#[allow(clippy::needless_pass_by_value)]
 pub(super) fn proxy_infra_error(error: crate::InfrastructureError) -> ProxyError {
     ProxyError::new(ProxyErrorCode::CertificateInvalid, error.to_string())
 }

@@ -210,6 +210,15 @@ pub(super) fn fixture_with_workspaces(
             listener_certificates: ports,
             protocol_packages,
             events: Arc::new(EventHub::default()),
+            environment_baseline_capture:
+                crate::requirements_tests::test_environment_baseline_capture(),
+            environment_identity_allocator:
+                crate::requirements_tests::test_environment_identity_allocator(),
+            environment_apply_lease: crate::requirements_tests::test_environment_apply_lease(),
+            environment_material_preparer:
+                crate::requirements_tests::test_environment_material_preparer(),
+            environment_commit: crate::requirements_tests::test_environment_commit(),
+            environment_validator: crate::requirements_tests::test_environment_validator(),
         },
         Arc::new(UnusedAndroidControlPort),
         Arc::new(UnusedProtectedSecretPort),
@@ -273,6 +282,7 @@ impl ListenerRuntimePort for TrackingRuntime {
         self.stopped.lock().push(listener_id);
         Ok(ListenerStatusViewModel {
             listener_id,
+            runtime_epoch: None,
             state: ListenerRuntimeState::Stopped,
             state_text: "已停止".into(),
             ui_tone: UiTone::Neutral,

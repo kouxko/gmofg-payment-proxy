@@ -4,7 +4,6 @@
 //! 只提供文件选择等平台服务；用例、持久化、证书、规则和网络实现统一在这里组装。
 
 use std::{
-    collections::BTreeMap,
     io,
     path::{Path, PathBuf},
     sync::{
@@ -14,15 +13,12 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    AppError, AppResult, Application, ApplicationDependencies, BreakpointCoordinator,
-    BreakpointValidator, CapacityLedger, CertificateServicePort, EventHub,
-    OperationResultViewModel, ProtocolPackageApplicationServices, SettingsRepositoryPort,
-    WorkspaceRepositoryPort,
+    AppError, AppResult, Application, BreakpointCoordinator, CapacityLedger,
+    EnvironmentConfigurationApplicationServices, EventHub, OperationResultViewModel,
 };
 use intercept_proxy_infrastructure::{
-    AndroidAdbAdapter, ApplicationBackupImportPreparer, ExternalPackageServer,
-    HeaderBodyCodecResolver, InfrastructureError, InfrastructureServiceBundle, NativeFileDialog,
-    RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector, SqliteStore,
+    ApplicationBackupImportPreparer, ExternalPackageServer, InfrastructureError,
+    InfrastructureServiceBundle, NativeFileDialog, SecretProtector,
 };
 use intercept_proxy_product_api::{ProductError, ProductProfile, validate_product_profile};
 use parking_lot::Mutex;
@@ -30,10 +26,8 @@ use thiserror::Error;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
-use external_server::start_external_package_server;
 use platform::{create_data_directory, platform_secret_protector};
 
-mod external_server;
 mod platform;
 
 #[derive(Debug, Error)]
@@ -123,6 +117,7 @@ pub struct ApplicationHostBuilder {
     platform: HostPlatformServices,
     product: Arc<dyn ProductProfile>,
     breakpoint_coordinator: Option<Arc<BreakpointCoordinator>>,
+    environment_configuration_services: Option<EnvironmentConfigurationApplicationServices>,
 }
 
 impl ApplicationHostBuilder {
@@ -139,6 +134,7 @@ impl ApplicationHostBuilder {
             platform,
             product,
             breakpoint_coordinator: None,
+            environment_configuration_services: None,
         }
     }
 
@@ -168,6 +164,20 @@ impl ApplicationHostBuilder {
         self
     }
 
+    /// Replaces the complete Application environment-configuration port group.
+    ///
+    /// The Host still assembles the real Application and all other production adapters. This
+    /// seam supports deterministic embedding and lifecycle tests without exposing candidate
+    /// registry internals or selecting cfg-specific behavior.
+    #[must_use]
+    pub fn with_environment_configuration_services(
+        mut self,
+        services: EnvironmentConfigurationApplicationServices,
+    ) -> Self {
+        self.environment_configuration_services = Some(services);
+        self
+    }
+
     pub async fn build(self) -> Result<ApplicationHost, HostBuildError> {
         // 必须先验证纯静态产品配置，再创建目录和打开数据库。若产品契约错误，构建过程
         // 不应在磁盘留下任何新状态。
@@ -182,7 +192,7 @@ impl ApplicationHostBuilder {
             Err(error) if incompatible_persisted_data(&error) => {
                 tracing::warn!(
                     path = %database_path.display(),
-                    "database schema older than the 1.0 baseline was cleared"
+                    "incompatible pre-release database schema was cleared"
                 );
                 remove_sqlite_database(&database_path)?;
                 self.build_once(&database_path).await
@@ -192,85 +202,55 @@ impl ApplicationHostBuilder {
     }
 
     async fn build_once(self, database_path: &Path) -> Result<ApplicationHost, HostBuildError> {
-        let store = Arc::new(SqliteStore::open(database_path)?);
+        let persistence =
+            intercept_proxy_infrastructure::open_sqlite_persistence(database_path.to_path_buf())
+                .await?;
         let secret_protector = self
             .platform
             .secret_protector_override
             .unwrap_or_else(|| platform_secret_protector(self.product.storage()));
         let capacity = Arc::new(CapacityLedger::default());
-        let android_store = Arc::clone(&store);
         let file_dialog = Arc::clone(&self.platform.file_dialog);
         let services = InfrastructureServiceBundle::new(
-            store,
+            persistence,
             secret_protector,
             &file_dialog,
             Arc::clone(&self.product),
-            Arc::clone(&capacity),
+            &capacity,
             self.builtin_protocol_package,
         );
-        initialize_installation_state(&services).await?;
+        services.initialize_installation_state().await?;
 
         let breakpoints = self
             .breakpoint_coordinator
             .unwrap_or_else(|| Arc::new(BreakpointCoordinator::default()));
-        let events = Arc::new(EventHub::with_capacity_ledger(
-            EventHub::DEFAULT_CAPACITY,
-            Arc::clone(&services.capacity),
-        ));
-        let pipeline = build_runtime_pipeline(
-            self.product.as_ref(),
-            &services,
-            breakpoints.clone(),
-            events.clone(),
-        );
-        services
-            .listener_runtime
-            .set_pipeline_ports(pipeline.clone());
-        services
-            .listener_runtime
-            .set_socket_diagnostic_events(events.clone());
-        services.external_packages.set_event_hub(events.clone());
-        let android = Arc::new(AndroidAdbAdapter::new(
-            self.android_companion_apk,
-            android_store,
-        )?);
-        let protocol_packages = ProtocolPackageApplicationServices {
-            store: services.protocol_packages.clone(),
-            compiler: services.protocol_packages.clone(),
-            importer: services.protocol_package_import.clone(),
-            builtin: services.protocol_packages.clone(),
-            usage_query: services.protocol_package_usage.clone(),
-            portability: services.protocol_packages.clone(),
-            external: services.external_packages.clone(),
-        };
-        let external_package_server = Arc::new(start_external_package_server(&services).await?);
-        let application = Arc::new(Application::new(
-            self.product.name().to_owned(),
-            ApplicationDependencies {
-                capture: services.capture,
-                sessions: services.sessions,
-                breakpoints,
-                breakpoint_validation: Arc::new(BreakpointValidator::new_with_resolver(Arc::new(
-                    HeaderBodyCodecResolver,
-                ))),
-                rules: services.rules,
-                faults: services.faults,
-                certificates: services.certificates,
-                settings: services.settings,
-                workspaces: services.workspaces,
-                listener_runtime: services.listener_runtime,
-                listener_certificates: services.listener_certificates,
-                protocol_packages,
-                events: events.clone(),
-            },
-            android,
-            services.protected_secrets,
-        ));
-        let background_cancellation = CancellationToken::new();
-        // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle
-        // 都归 Host 所有，确保不同展示适配器有相同的关闭行为。
-        let event_task =
-            Arc::clone(&events).spawn_capture_flush_task(background_cancellation.child_token());
+        let events = host_event_hub(&capacity);
+        services.configure_runtime(self.product.as_ref(), breakpoints.clone(), events.clone());
+        let external_package_server = Arc::new(services.start_external_package_server().await?);
+        let application = Arc::new(match self.environment_configuration_services {
+            Some(environment) => {
+                services
+                    .into_application_with_environment_configuration_services(
+                        self.product.name().to_owned(),
+                        self.android_companion_apk,
+                        breakpoints,
+                        events.clone(),
+                        environment,
+                    )
+                    .await?
+            }
+            None => {
+                services
+                    .into_application(
+                        self.product.name().to_owned(),
+                        self.android_companion_apk,
+                        breakpoints,
+                        events.clone(),
+                    )
+                    .await?
+            }
+        });
+        let (background_cancellation, event_task) = spawn_capture_flush_task(&events);
 
         Ok(ApplicationHost {
             application,
@@ -285,6 +265,21 @@ impl ApplicationHostBuilder {
             shutdown_completed: AtomicBool::new(false),
         })
     }
+}
+
+fn spawn_capture_flush_task(events: &Arc<EventHub>) -> (CancellationToken, JoinHandle<()>) {
+    // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle
+    // 都归 Host 所有，确保不同展示适配器有相同的关闭行为。
+    let cancellation = CancellationToken::new();
+    let task = Arc::clone(events).spawn_capture_flush_task(cancellation.child_token());
+    (cancellation, task)
+}
+
+fn host_event_hub(capacity: &Arc<CapacityLedger>) -> Arc<EventHub> {
+    Arc::new(EventHub::with_capacity_ledger(
+        EventHub::DEFAULT_CAPACITY,
+        Arc::clone(capacity),
+    ))
 }
 
 fn incompatible_persisted_data(error: &HostBuildError) -> bool {
@@ -320,81 +315,6 @@ fn sqlite_sidecar(database_path: &Path, suffix: &str) -> PathBuf {
     let mut path = database_path.as_os_str().to_owned();
     path.push(suffix);
     PathBuf::from(path)
-}
-
-async fn initialize_installation_state(services: &InfrastructureServiceBundle) -> AppResult<()> {
-    // feature marker 与官方精确身份在同一 SQLite 事务提交。marker 已存在时
-    // 这一调用不会重建用户删除或损坏的包，只能由显式恢复用例处理。
-    services.protocol_packages.ensure_builtin_seeded()?;
-    // 每次启动都执行幂等同步：全新安装写入包内固定测试 Root；旧安装如果仍保存
-    // 每机器随机 Root，则原子替换 Root 并按原 SAN 重签叶子证书。密钥库拒绝或用户
-    // 取消授权仍是可恢复状态，Host 必须继续启动并由 UI 展示证书未就绪原因。
-    if let Err(error) = services
-        .certificates
-        .synchronize_installation_ca(vec!["localhost".into(), "127.0.0.1".into()])
-        .await
-    {
-        if is_recoverable_secret_store_error(&error) {
-            tracing::warn!(
-                code = %error.view_model.code,
-                message = %error.view_model.message,
-                "installation certificate synchronization was deferred"
-            );
-        } else {
-            return Err(error);
-        }
-    }
-
-    // 全新命名空间第一次启动只创建一个通用 Workspace。它仅含禁用的
-    // 127.0.0.1:8080 正向代理草稿，不会自动监听端口或携带任何业务配置。
-    if services.workspaces.list().await?.is_empty() {
-        services.workspaces.create("默认 Workspace".into()).await?;
-    }
-    let stored = services.settings.get().await?.stored;
-    // 会话仓储必须在接收任何 runtime 数据前使用持久化配置的容量限制，不能短暂按
-    // 默认值运行后再缩小，否则启动阶段可能已经超额接纳。
-    services
-        .sessions
-        .set_limits(stored.max_sessions, stored.max_memory_bytes)?;
-    Ok(())
-}
-
-fn is_recoverable_secret_store_error(error: &AppError) -> bool {
-    matches!(
-        error.view_model.code.as_str(),
-        "KEYCHAIN_PROTECT_FAILED"
-            | "KEYCHAIN_UNPROTECT_FAILED"
-            | "DPAPI_PROTECT_FAILED"
-            | "DPAPI_UNPROTECT_FAILED"
-    )
-}
-
-fn build_runtime_pipeline(
-    product: &dyn ProductProfile,
-    services: &InfrastructureServiceBundle,
-    breakpoints: Arc<BreakpointCoordinator>,
-    events: Arc<EventHub>,
-) -> Arc<RuntimePipelineAdapter> {
-    let channel_labels = product
-        .channels()
-        .iter()
-        .map(|channel| (channel.id.to_owned(), channel.display_name.to_owned()))
-        .collect::<BTreeMap<_, _>>();
-    Arc::new(
-        RuntimePipelineAdapter::new(
-            RuntimePipelineProductHooks {
-                body_codec: product.body_codec(),
-                request_classifier: product.request_classifier(),
-                channel_labels,
-            },
-            services.rules.clone(),
-            services.sessions.clone(),
-            breakpoints,
-            events,
-            services.capture.clone(),
-        )
-        .with_body_codec_resolver(services.workspace_body_codecs.clone()),
-    )
 }
 
 /// 持有与 UI 无关的应用门面及其后台任务生命周期。
@@ -458,6 +378,9 @@ impl ApplicationHost {
 
     /// 停止网络、完成应用关闭状态，并等待所有与 UI 无关的后台任务退出。
     pub async fn shutdown(&self) -> AppResult<OperationResultViewModel> {
+        self.application
+            .environment_candidate_shutdown_and_drain()
+            .await;
         let result = self.application.app_shutdown().await;
         self.stop_background_tasks().await;
         self.shutdown_completed.store(true, Ordering::Release);

@@ -11,16 +11,29 @@ use super::{
 #[async_trait]
 impl RuleRepositoryPort for RuleRepositoryAdapter {
     async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>> {
-        self.load().and_then(|rules| {
-            rules
-                .iter()
-                .map(|rule| summary(rule, &self.channel_names))
-                .collect()
-        })
+        let rules = self
+            .executor
+            .execute(RuleRepositoryAdapter::load_from)
+            .await?;
+        rules
+            .iter()
+            .map(|rule| summary(rule, &self.channel_names))
+            .collect()
     }
 
     async fn get(&self, rule_id: AppRuleId) -> AppResult<RuleViewModel> {
-        view(&self.get_domain(rule_id)?, &self.channel_names)
+        let rule = self
+            .executor
+            .execute(move |store| {
+                RuleRepositoryAdapter::load_from(store)?
+                    .into_iter()
+                    .find(|rule| rule.id.as_uuid() == rule_id)
+                    .ok_or_else(|| {
+                        AppError::new("RULE_INVALID", "规则不存在。").entity(rule_id.to_string())
+                    })
+            })
+            .await?;
+        view(&rule, &self.channel_names)
     }
 
     async fn new_draft(&self) -> AppResult<AppRuleDraft> {
@@ -64,8 +77,11 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
     }
 
     async fn validate(&self, draft: &AppRuleDraft) -> AppResult<RuleValidationViewModel> {
-        let creation_order = self
-            .load()?
+        let rules = self
+            .executor
+            .execute(RuleRepositoryAdapter::load_from)
+            .await?;
+        let creation_order = rules
             .iter()
             .map(|rule| rule.created_order)
             .max()
@@ -78,7 +94,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
             Ok(candidate) => {
                 let mut warnings = Vec::new();
                 if let Ok(rule) = Rule::create(candidate) {
-                    let mut all = self.load()?;
+                    let mut all = rules;
                     all.push(rule);
                     warnings.extend(
                         RuleEngine::new(RuntimeEpoch::new(), all)
@@ -98,24 +114,31 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
     }
 
     async fn save(&self, draft: AppRuleDraft) -> AppResult<RuleViewModel> {
-        let _operation = self.operations.lock();
-        view(&self.save_locked(&draft)?, &self.channel_names)
+        let saved = self
+            .executor
+            .execute(move |store| RuleRepositoryAdapter::save_locked_to(store, &draft))
+            .await?;
+        view(&saved, &self.channel_names)
     }
 
     async fn copy(&self, rule_id: AppRuleId) -> AppResult<RuleViewModel> {
-        let _operation = self.operations.lock();
-        let source = self
-            .load()?
-            .into_iter()
-            .find(|rule| rule.id.as_uuid() == rule_id)
-            .ok_or_else(|| {
-                AppError::new("RULE_INVALID", "规则不存在。").entity(rule_id.to_string())
-            })?;
-        let mut draft = app_draft(&source)?;
-        draft.rule_id = None;
-        draft.expected_revision = None;
-        draft.name = format!("{}（副本）", draft.name);
-        view(&self.save_locked(&draft)?, &self.channel_names)
+        let saved = self
+            .executor
+            .execute(move |store| {
+                let source = RuleRepositoryAdapter::load_from(store)?
+                    .into_iter()
+                    .find(|rule| rule.id.as_uuid() == rule_id)
+                    .ok_or_else(|| {
+                        AppError::new("RULE_INVALID", "规则不存在。").entity(rule_id.to_string())
+                    })?;
+                let mut draft = app_draft(&source)?;
+                draft.rule_id = None;
+                draft.expected_revision = None;
+                draft.name = format!("{}（副本）", draft.name);
+                RuleRepositoryAdapter::save_locked_to(store, &draft)
+            })
+            .await?;
+        view(&saved, &self.channel_names)
     }
 
     async fn delete(
@@ -123,19 +146,27 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         rule_id: AppRuleId,
         expected_revision: u64,
     ) -> AppResult<OperationResultViewModel> {
-        let _operation = self.operations.lock();
-        let mut workspace = self.load_selected_workspace()?;
-        let rule = workspace
-            .rules
-            .iter()
-            .find(|rule| rule.id.as_uuid() == rule_id)
-            .ok_or_else(|| AppError::new("RULE_INVALID", "规则不存在。"))?;
-        if rule.revision.get() != expected_revision {
-            return Err(AppError::new("REVISION_CONFLICT", "规则已被其他操作更新。"));
-        }
-        let expected_workspace_revision = workspace.revision.get();
-        workspace.rules.retain(|rule| rule.id.as_uuid() != rule_id);
-        self.save_selected_workspace(workspace, expected_workspace_revision)?;
+        self.executor
+            .execute(move |store| {
+                let mut workspace = RuleRepositoryAdapter::load_selected_workspace_from(store)?;
+                let rule = workspace
+                    .rules
+                    .iter()
+                    .find(|rule| rule.id.as_uuid() == rule_id)
+                    .ok_or_else(|| AppError::new("RULE_INVALID", "规则不存在。"))?;
+                if rule.revision.get() != expected_revision {
+                    return Err(AppError::new("REVISION_CONFLICT", "规则已被其他操作更新。"));
+                }
+                let expected_workspace_revision = workspace.revision.get();
+                workspace.rules.retain(|rule| rule.id.as_uuid() != rule_id);
+                RuleRepositoryAdapter::save_selected_workspace_to(
+                    store,
+                    workspace,
+                    expected_workspace_revision,
+                )?;
+                Ok(())
+            })
+            .await?;
         Ok(OperationResultViewModel::success("规则已删除。"))
     }
 
@@ -145,14 +176,20 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         expected_revision: u64,
         enabled: bool,
     ) -> AppResult<RuleViewModel> {
-        view(
-            &self.toggle_domain(rule_id, expected_revision, enabled)?,
-            &self.channel_names,
-        )
+        let changed = self
+            .executor
+            .execute(move |store| {
+                RuleRepositoryAdapter::toggle_domain_to(store, rule_id, expected_revision, enabled)
+            })
+            .await?;
+        view(&changed, &self.channel_names)
     }
 
     async fn import(&self) -> AppResult<OperationResultViewModel> {
-        let selected = self.load_selected_workspace()?;
+        let selected = self
+            .executor
+            .execute(RuleRepositoryAdapter::load_selected_workspace_from)
+            .await?;
         let expected_workspace_id = selected.id;
         let expected_workspace_revision = selected.revision.get();
         let Some(path) = self.dialog.choose_open_file("rules_json")? else {
@@ -170,18 +207,26 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
             validate_persisted_rule(rule).map_err(AppError::from)?;
         }
         let imported_count = rules.len();
-        let _operation = self.operations.lock();
-        let mut current = self.load_selected_workspace()?;
-        if current.id != expected_workspace_id
-            || current.revision.get() != expected_workspace_revision
-        {
-            return Err(AppError::new(
-                "REVISION_CONFLICT",
-                "导入期间当前 Workspace 已切换或被更新。",
-            ));
-        }
-        current.rules = RuleEngine::new(RuntimeEpoch::new(), rules).rules().to_vec();
-        self.save_selected_workspace(current, expected_workspace_revision)?;
+        self.executor
+            .execute(move |store| {
+                let mut current = RuleRepositoryAdapter::load_selected_workspace_from(store)?;
+                if current.id != expected_workspace_id
+                    || current.revision.get() != expected_workspace_revision
+                {
+                    return Err(AppError::new(
+                        "REVISION_CONFLICT",
+                        "导入期间当前 Workspace 已切换或被更新。",
+                    ));
+                }
+                current.rules = RuleEngine::new(RuntimeEpoch::new(), rules).rules().to_vec();
+                RuleRepositoryAdapter::save_selected_workspace_to(
+                    store,
+                    current,
+                    expected_workspace_revision,
+                )?;
+                Ok(())
+            })
+            .await?;
         Ok(OperationResultViewModel::success(format!(
             "已导入 {imported_count} 条规则。"
         )))
@@ -192,7 +237,9 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
             return Ok(cancelled("已取消规则导出。"));
         };
         let rules = self
-            .load()?
+            .executor
+            .execute(RuleRepositoryAdapter::load_from)
+            .await?
             .iter()
             .map(serialize_persisted_rule)
             .collect::<Result<Vec<_>, _>>()

@@ -38,7 +38,8 @@ impl AppState {
         )
     }
 
-    /// Builds production state. MCP is best-effort so a local port conflict cannot block proxy use.
+    /// Builds production state after the required IPv4 MCP listener has started successfully.
+    /// The optional shape is retained only for command tests that omit outer adapters.
     pub fn production(
         host: ApplicationHost,
         mcp: Option<ReadOnlyMcpServer>,

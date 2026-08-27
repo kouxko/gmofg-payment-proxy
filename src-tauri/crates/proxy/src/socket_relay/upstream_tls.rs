@@ -5,7 +5,7 @@ use openssl::{
     nid::Nid,
     pkey::PKey,
     ssl::{SslConnector, SslMethod, SslVerifyMode},
-    x509::{X509, X509VerifyResult, store::X509StoreBuilder},
+    x509::{X509, X509VerifyResult, store::X509StoreBuilder, verify::X509VerifyFlags},
 };
 use tokio_openssl::SslStream;
 
@@ -269,6 +269,11 @@ fn trust_store(explicit_roots: &[Vec<u8>]) -> Result<openssl::x509::store::X509S
         explicit_roots.iter().map(Vec::as_slice).collect::<Vec<_>>()
     };
     let mut builder = X509StoreBuilder::new().map_err(config_error)?;
+    if !explicit_roots.is_empty() {
+        builder
+            .set_flags(X509VerifyFlags::PARTIAL_CHAIN)
+            .map_err(config_error)?;
+    }
     let mut unique = HashSet::new();
     for certificate in roots {
         if unique.insert(certificate.to_vec()) {

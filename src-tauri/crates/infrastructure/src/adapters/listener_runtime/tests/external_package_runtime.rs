@@ -104,5 +104,55 @@ async fn external_peer_disconnect_marks_package_offline_and_stops_exact_listener
     harness.shutdown().await;
 }
 
+#[tokio::test]
+async fn oversized_external_frame_boundary_closes_only_the_business_connection() {
+    let mut harness = ExternalRuntimeHarness::start().await;
+    let listener_address = reserve_address().await;
+    let listener = external_local_listener(listener_address, &harness.package);
+    let workspace = external_workspace(listener.clone(), Vec::new());
+    harness.start_listener(workspace, listener.clone()).await;
+
+    harness.peer().return_oversized_frame_boundary_once();
+    let mut malformed = TcpStream::connect(listener_address).await.unwrap();
+    malformed.write_all(&[3, b'a', b'b']).await.unwrap();
+    malformed.shutdown().await.unwrap();
+    let mut malformed_response = Vec::new();
+    timeout(TEST_TIMEOUT, malformed.read_to_end(&mut malformed_response))
+        .await
+        .expect("malformed business connection closes")
+        .unwrap();
+    assert!(malformed_response.is_empty());
+    assert!(
+        harness
+            .registry
+            .get(&harness.package)
+            .await
+            .unwrap()
+            .is_some_and(|version| version.source.external_online() == Some(true))
+    );
+    assert!(
+        harness
+            .runtime
+            .statuses()
+            .await
+            .unwrap()
+            .iter()
+            .any(|status| status.listener_id == listener.id)
+    );
+
+    let mut healthy = TcpStream::connect(listener_address).await.unwrap();
+    healthy.write_all(&[3, b'x', b'y']).await.unwrap();
+    healthy.shutdown().await.unwrap();
+    let mut healthy_response = Vec::new();
+    timeout(TEST_TIMEOUT, healthy.read_to_end(&mut healthy_response))
+        .await
+        .expect("next business connection completes")
+        .unwrap();
+    assert_eq!(healthy_response, [3, b'x', b'y']);
+
+    harness.stop_listener(listener.id).await;
+    harness.shutdown().await;
+}
+
 #[path = "external_package_runtime/support.rs"]
 mod external_package_runtime_support;

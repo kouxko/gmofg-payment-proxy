@@ -23,7 +23,6 @@ import type {
 import {
   clearActionFor,
   conditionFor,
-  listenerStages,
   protocolRuleEntryDescription,
   setActionFor,
   protocolRuleStageLabel,
@@ -38,6 +37,7 @@ export function ProtocolRuleEditor(props: {
   catalog?: ProtocolRuleCapabilityCatalog;
   listener?: ProxyListener;
   listeners: ProxyListener[];
+  stages: ProtocolRuleStage[];
   creating: boolean;
   loading: boolean;
   error?: string;
@@ -90,6 +90,7 @@ export function ProtocolRuleEditor(props: {
             stage={draft.stage}
             listener={listener}
             listeners={props.listeners}
+            stages={props.stages}
             pending={draftDisabled}
             onStageChange={props.onStageChange}
             onListenerChange={props.onListenerChange}
@@ -153,12 +154,12 @@ function EditorShell({ children }: { children: React.ReactNode }) {
 function CreationBinding(props: {
   listener: ProxyListener;
   listeners: ProxyListener[];
+  stages: ProtocolRuleStage[];
   stage: ProtocolRuleStage;
   onListenerChange: (id: string) => void;
   onStageChange: (stage: ProtocolRuleStage) => void;
   pending?: boolean;
 }) {
-  const stages = listenerStages(props.listener);
   return <div aria-label="入口和处理阶段" className="grid items-start gap-4 sm:grid-cols-2" role="group">
     <div className="grid min-w-0 gap-1"><Label className="flex h-6 items-center leading-none">入口</Label><Select aria-label="协议入口" isDisabled={props.pending} selectedKey={props.listener.id} onSelectionChange={(key) => props.onListenerChange(String(key))}>
       <Select.Trigger className="h-12 min-h-12 w-full min-w-0 items-center py-0"><Select.Value className="min-w-0 flex-1 truncate">{({ selectedText }) => selectedText}</Select.Value><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
@@ -170,7 +171,7 @@ function CreationBinding(props: {
     </Select></div>
     <div className="grid min-w-0 gap-1"><Label className="flex h-6 items-center leading-none">处理阶段</Label><Select aria-label="报文处理阶段" isDisabled={props.pending} selectedKey={props.stage} onSelectionChange={(key) => props.onStageChange(key as ProtocolRuleStage)}>
       <Select.Trigger className="h-12 min-h-12 w-full min-w-0 items-center py-0"><Select.Value className="min-w-0 flex-1 truncate" /><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>
-        {stages.map((stage) => <ListBox.Item id={stage} key={stage} textValue={protocolRuleStageLabel(stage)}>{protocolRuleStageLabel(stage)}</ListBox.Item>)}
+        {props.stages.map((stage) => <ListBox.Item id={stage} key={stage} textValue={protocolRuleStageLabel(stage)}>{protocolRuleStageLabel(stage)}</ListBox.Item>)}
       </ListBox></Select.Popover>
     </Select></div>
   </div>;

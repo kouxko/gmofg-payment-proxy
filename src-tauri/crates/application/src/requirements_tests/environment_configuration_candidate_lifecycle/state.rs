@@ -19,8 +19,7 @@ fn preview_ready_create_serializes_the_exact_typed_g033_snapshot() {
     let registry = registry();
     let admitted = insert_validating(&registry, "Store Lab", 1);
 
-    let ready = registry
-        .complete_preview_ready(admitted.candidate_id(), public_snapshot())
+    let ready = complete_preview_ready(&registry, admitted.candidate_id(), public_snapshot())
         .expect("typed snapshot completes validation");
     let actual = json(&ready);
     let expected = expected_preview_value();
@@ -61,7 +60,8 @@ fn mismatched_snapshot_target_cannot_mint_a_confirmation_token() {
     let registry = registry();
     let admitted = insert_validating(&registry, "Admitted Target", 1);
 
-    let result = registry.complete_preview_ready(
+    let result = complete_preview_ready(
+        &registry,
         admitted.candidate_id(),
         public_snapshot_named("Different Target"),
     );
@@ -74,13 +74,16 @@ fn mismatched_snapshot_target_cannot_mint_a_confirmation_token() {
 }
 
 #[test]
-fn public_target_key_uses_g033_canonical_format_without_trusting_wire_key() {
+fn public_target_key_uses_exact_utf8_bytes_without_trusting_wire_key() {
     let registry = registry();
     let ready = admit_preview_ready(&registry, "Case Sensitive Lab", 1);
 
     let status = json(&registry.status(ready.candidate_id()));
 
-    assert_eq!(status["target_key"], "new:case sensitive lab");
+    assert_eq!(
+        status["target_key"],
+        "new:436173652053656e736974697665204c6162"
+    );
 }
 
 #[test]

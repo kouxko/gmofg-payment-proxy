@@ -2,8 +2,9 @@ use super::super::*;
 use super::{RecordingRunner, test_activation};
 use async_trait::async_trait;
 use intercept_proxy_application::{
-    AndroidRuntimeEndpointHealth, AndroidRuntimeEndpointViewModel, AndroidRuntimeOwnerMode,
-    AndroidRuntimeOwnerSource, AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason,
+    AndroidDeviceTarget, AndroidRuntimeEndpointHealth, AndroidRuntimeEndpointViewModel,
+    AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource, AndroidRuntimeOwnerState,
+    AndroidRuntimeOwnerTransitionReason,
 };
 use intercept_proxy_domain::ListenerId;
 use std::{net::Ipv4Addr, path::Path, sync::Arc};
@@ -77,8 +78,14 @@ async fn lan_address_change_reapplies_only_owner_and_failure_becomes_faulted() {
     *adapter.selected_serial.write().unwrap() = Some("SELECTED-B".into());
     let owner = owner(AndroidRuntimeOwnerMode::Lan);
     let old_endpoint = endpoint(&owner, "192.168.1.10");
-    *adapter.runtime_endpoints.lock().await = vec![old_endpoint];
     adapter.save_owner(owner.clone()).await.unwrap();
+    adapter
+        .owner_states
+        .lock()
+        .await
+        .get_mut("OWNER-A")
+        .unwrap()
+        .runtime_endpoints = vec![old_endpoint];
     let activation = test_activation(
         "profile-a",
         "203.0.113.10",
@@ -89,13 +96,18 @@ async fn lan_address_change_reapplies_only_owner_and_failure_becomes_faulted() {
     );
 
     let endpoints = adapter
-        .network_runtime_endpoints(Some(activation))
+        .network_runtime_endpoints(
+            AndroidDeviceTarget {
+                serial: "OWNER-A".into(),
+            },
+            Some(activation),
+        )
         .await
         .unwrap();
 
     assert_eq!(endpoints[0].proxy_host, "192.168.1.20");
     assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Faulted);
-    let stored = adapter.runtime_owner_snapshot().await.unwrap();
+    let stored = adapter.runtime_owner_snapshot_for("OWNER-A").await.unwrap();
     assert_eq!(stored.serial, "OWNER-A");
     assert_eq!(stored.epoch, owner.epoch);
     assert_eq!(stored.state, AndroidRuntimeOwnerState::Faulted);
@@ -124,10 +136,24 @@ async fn healthy_reverse_endpoint_is_noop_even_when_another_device_is_selected()
     *adapter.selected_serial.write().unwrap() = Some("SELECTED-B".into());
     let owner = owner(AndroidRuntimeOwnerMode::AdbReverse);
     let runtime_endpoint = endpoint(&owner, "127.0.0.1");
-    *adapter.runtime_endpoints.lock().await = vec![runtime_endpoint.clone()];
     adapter.save_owner(owner).await.unwrap();
+    adapter
+        .owner_states
+        .lock()
+        .await
+        .get_mut("OWNER-A")
+        .unwrap()
+        .runtime_endpoints = vec![runtime_endpoint.clone()];
 
-    let endpoints = adapter.network_runtime_endpoints(None).await.unwrap();
+    let endpoints = adapter
+        .network_runtime_endpoints(
+            AndroidDeviceTarget {
+                serial: "OWNER-A".into(),
+            },
+            None,
+        )
+        .await
+        .unwrap();
 
     assert_eq!(endpoints, vec![runtime_endpoint]);
     assert!(runner.calls.lock().unwrap().is_empty());

@@ -24,7 +24,6 @@ fn loopback_config() -> ForwardProxyConfig {
     ForwardProxyConfig {
         bind_addr: "127.0.0.1:8080".parse().unwrap(),
         authentication: ForwardAuthenticationMode::None,
-        allowed_client_cidrs: Vec::new(),
         connect_timeout: Duration::from_secs(1),
         read_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),
@@ -193,7 +192,7 @@ async fn read_raw_http_request_body(stream: &mut TcpStream) -> Bytes {
 
 // 基础协议转换与管线语义。
 include!("request_semantics.rs");
-// 监听安全、CIDR 与 MITM 缓存配置。
+// 监听安全与 MITM 缓存配置。
 include!("configuration.rs");
 // 普通 HTTP 转发及 DropResponse 边界。
 include!("plain_http.rs");

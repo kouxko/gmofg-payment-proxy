@@ -16,8 +16,14 @@ pub trait Protocol: Send + Sync + 'static {
 #[derive(Debug)]
 #[doc(hidden)]
 pub enum ObservedContext<'a> {
-    Http { header: &'a str, body: &'a str },
-    Socket { data: &'a [u8] },
+    Http {
+        header: &'a str,
+        body: &'a str,
+        body_is_utf8: bool,
+    },
+    Socket {
+        data: &'a [u8],
+    },
 }
 
 #[doc(hidden)]
@@ -38,6 +44,8 @@ pub struct Socket;
 pub struct HttpContext {
     pub header: String,
     pub body: String,
+    /// `false` means `body` is only a lossy display projection of the wire bytes.
+    pub body_is_utf8: bool,
 }
 
 /// Socket 协议模式的一次 transport read 或一个完整 Frame 所持有的字节。
@@ -61,6 +69,7 @@ impl ObservedProtocol for Http {
         ObservedContext::Http {
             header: &context.header,
             body: &context.body,
+            body_is_utf8: context.body_is_utf8,
         }
     }
 }

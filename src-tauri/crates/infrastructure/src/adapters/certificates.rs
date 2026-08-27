@@ -18,21 +18,23 @@ use intercept_proxy_runtime::{
     ErrorCode as ProxyErrorCode, MitmCertificateAuthority, MitmServerIdentity, ProxyError,
     ReverseClientIdentity,
 };
-use parking_lot::Mutex;
-use serde::{Deserialize, Serialize};
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroizing;
 
+#[cfg(test)]
+use crate::SqliteStore;
 use crate::files::{CA_IMPORT_MAX_BYTES, PKCS12_IMPORT_MAX_BYTES};
 use crate::{
-    AtomicFileExporter, CertificateMaterialRecord, CertificateService, LeafCertificateRequest,
-    SecretProtector, SqliteStore,
+    AtomicFileExporter, CertificateMaterialRecord, CertificateService, IntoSqlitePersistence,
+    LeafCertificateRequest, SecretProtector, SqliteExecutor,
 };
 
 use super::{
     common::{app_error, infra, json_error},
     files::{NativeFileDialog, cancelled},
-    listener_runtime::InstallationServerIdentityProvider,
+    listener_runtime::ListenerMitmAuthorityProvider,
 };
+#[cfg(test)]
+use crate::adapters::listener_runtime::InstallationServerIdentityProvider;
 
 const ROOT: &str = "local_root_ca";
 const LEAF: &str = "proxy_leaf";
@@ -40,67 +42,15 @@ const PKCS12: &str = "shared_pkcs12";
 const UPSTREAM_CA: &str = "upstream_ca";
 const MATERIAL_KINDS: [&str; 4] = [ROOT, LEAF, PKCS12, UPSTREAM_CA];
 
-#[derive(Clone, Serialize, Deserialize)]
-struct ProtectedMaterial {
-    revision: u64,
-    certificate_der: Vec<u8>,
-    private_key_der: Vec<u8>,
-    chain_der: Vec<Vec<u8>>,
-    subject: String,
-    fingerprint: String,
-    sans: Vec<String>,
-    not_before: String,
-    not_after: String,
-}
-
-struct MaterialSnapshot {
-    revision: u64,
-    materials: BTreeMap<String, ProtectedMaterial>,
-}
-
-/// 可直接用于状态栏和列表的非敏感证书元数据。
-///
-/// 它刻意不包含证书 DER、私钥或保护后的密文，因此读取该结构不需要访问系统密钥库。
-#[derive(Debug, Clone, Deserialize)]
-struct MaterialStatus {
-    revision: u64,
-    subject: String,
-    fingerprint: String,
-    sans: Vec<String>,
-    not_before: Option<String>,
-    not_after: Option<String>,
-}
-
-impl fmt::Debug for ProtectedMaterial {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("ProtectedMaterial")
-            .field("revision", &self.revision)
-            .field("subject", &self.subject)
-            .field("fingerprint", &self.fingerprint)
-            .field("sans", &self.sans)
-            .field("secret_material", &"<redacted>")
-            .finish_non_exhaustive()
-    }
-}
-
-impl Drop for ProtectedMaterial {
-    fn drop(&mut self) {
-        self.private_key_der.zeroize();
-        for certificate in &mut self.chain_der {
-            certificate.zeroize();
-        }
-    }
-}
-
 pub struct CertificateServiceAdapter {
+    #[cfg(test)]
     store: Arc<SqliteStore>,
+    executor: SqliteExecutor,
     protector: Arc<dyn SecretProtector>,
     dialog: Arc<dyn NativeFileDialog>,
     certificates: CertificateService,
     product: Arc<dyn ProductProfile>,
     exporter: AtomicFileExporter,
-    material_lock: Mutex<()>,
 }
 
 impl fmt::Debug for CertificateServiceAdapter {
@@ -116,19 +66,23 @@ impl fmt::Debug for CertificateServiceAdapter {
 impl CertificateServiceAdapter {
     #[must_use]
     pub fn new(
-        store: Arc<SqliteStore>,
+        persistence: impl IntoSqlitePersistence,
         protector: Arc<dyn SecretProtector>,
         dialog: Arc<dyn NativeFileDialog>,
         product: Arc<dyn ProductProfile>,
     ) -> Self {
+        let (executor, store) = persistence.into_sqlite_persistence();
+        #[cfg(not(test))]
+        drop(store);
         Self {
+            #[cfg(test)]
             store,
+            executor,
             protector,
             dialog,
             certificates: CertificateService,
             product,
             exporter: AtomicFileExporter,
-            material_lock: Mutex::new(()),
         }
     }
 
@@ -136,8 +90,33 @@ impl CertificateServiceAdapter {
         self.product.certificates()
     }
 
+    #[cfg(test)]
     fn load_snapshot(&self, kinds: &[&str]) -> AppResult<MaterialSnapshot> {
         let snapshot = infra(self.store.load_certificate_materials_snapshot(kinds))?;
+        self.decode_snapshot(snapshot)
+    }
+
+    async fn load_snapshot_async(&self, kinds: &[&str]) -> AppResult<MaterialSnapshot> {
+        let kinds = kinds
+            .iter()
+            .map(|kind| (*kind).to_owned())
+            .collect::<Vec<_>>();
+        let snapshot = self
+            .executor
+            .execute(move |store| {
+                let references = kinds.iter().map(String::as_str).collect::<Vec<_>>();
+                store
+                    .load_certificate_materials_snapshot(&references)
+                    .map_err(AppError::from)
+            })
+            .await?;
+        self.decode_snapshot(snapshot)
+    }
+
+    fn decode_snapshot(
+        &self,
+        snapshot: crate::CertificateMaterialSnapshot,
+    ) -> AppResult<MaterialSnapshot> {
         let mut materials = BTreeMap::new();
         for record in snapshot.records {
             let plaintext = Zeroizing::new(
@@ -166,16 +145,11 @@ impl CertificateServiceAdapter {
         })
     }
 
-    /// 读取不会触发 Keychain/DPAPI 的证书状态快照。
-    ///
-    /// 完整证书校验仍由 `overview_locked`/`validate` 执行；启动快照只需要知道材料是否
-    /// 已配置以及它们公开的主题、指纹和 SAN。
-    fn status_locked(&self) -> AppResult<CertificateOverviewViewModel> {
+    fn status_from_snapshot(
+        &self,
+        snapshot: crate::CertificateMaterialSnapshot,
+    ) -> AppResult<CertificateOverviewViewModel> {
         let labels = self.certificate_policy().labels();
-        let snapshot = infra(
-            self.store
-                .load_certificate_materials_snapshot(&MATERIAL_KINDS),
-        )?;
         let mut statuses = BTreeMap::new();
         for record in snapshot.records {
             let status: MaterialStatus = serde_json::from_value(record.metadata)
@@ -279,6 +253,7 @@ impl CertificateServiceAdapter {
         })
     }
 
+    #[cfg(test)]
     fn commit_snapshot(&self, mut snapshot: MaterialSnapshot) -> AppResult<u64> {
         let next_revision = snapshot.revision.saturating_add(1);
         let records = snapshot
@@ -295,6 +270,26 @@ impl CertificateServiceAdapter {
         )
     }
 
+    async fn commit_snapshot_async(&self, mut snapshot: MaterialSnapshot) -> AppResult<u64> {
+        let expected_revision = snapshot.revision;
+        let next_revision = expected_revision.saturating_add(1);
+        let records = snapshot
+            .materials
+            .iter_mut()
+            .map(|(kind, material)| {
+                material.revision = next_revision;
+                self.record(kind, material)
+            })
+            .collect::<AppResult<Vec<_>>>()?;
+        self.executor
+            .execute(move |store| {
+                store
+                    .compare_and_swap_certificate_materials(expected_revision, &records)
+                    .map_err(AppError::from)
+            })
+            .await
+    }
+
     fn bundled_upstream_material(&self, revision: u64) -> AppResult<Option<ProtectedMaterial>> {
         let Some(certificates_pem) = self.certificate_policy().bundled_upstream_ca_pem() else {
             return Ok(None);
@@ -303,11 +298,12 @@ impl CertificateServiceAdapter {
             .certificates
             .load_bundled_upstream_ca(certificates_pem)
             .map_err(app_error)?;
+        let canonical_bytes = bundled.canonical_bytes().to_vec();
         Ok(Some(ProtectedMaterial {
             revision,
-            certificate_der: bundled.certificate_der,
+            certificate_der: canonical_bytes,
             private_key_der: Vec::new(),
-            chain_der: Vec::new(),
+            chain_der: bundled.certificate_chain_der,
             subject: bundled.metadata.subject,
             fingerprint: bundled.metadata.fingerprint_sha256,
             sans: bundled.metadata.san,
@@ -316,9 +312,16 @@ impl CertificateServiceAdapter {
         }))
     }
 
-    fn overview_locked(&self) -> AppResult<CertificateOverviewViewModel> {
+    async fn overview_async(&self) -> AppResult<CertificateOverviewViewModel> {
+        let snapshot = self.load_snapshot_async(&MATERIAL_KINDS).await?;
+        self.overview_from_snapshot(&snapshot)
+    }
+
+    fn overview_from_snapshot(
+        &self,
+        snapshot: &MaterialSnapshot,
+    ) -> AppResult<CertificateOverviewViewModel> {
         let labels = self.certificate_policy().labels();
-        let snapshot = self.load_snapshot(&MATERIAL_KINDS)?;
         let upstream_is_override = snapshot.materials.contains_key(UPSTREAM_CA);
         let upstream = match snapshot.materials.get(UPSTREAM_CA).cloned() {
             Some(material) => Some(material),
@@ -448,8 +451,11 @@ impl CertificateServiceAdapter {
             }
         }
         if let Some(upstream) = find(UPSTREAM_CA) {
-            match self.certificates.validate_ca_der(&upstream.certificate_der) {
-                Ok(metadata) if material_matches(upstream, &metadata) => {}
+            match self
+                .certificates
+                .parse_upstream_ca(&upstream.certificate_der)
+            {
+                Ok(parsed) if material_matches(upstream, &parsed.metadata) => {}
                 Ok(_) | Err(_) => {
                     errors.insert(UPSTREAM_CA.into(), vec!["上游 CA 校验失败。".into()]);
                 }
@@ -461,12 +467,14 @@ impl CertificateServiceAdapter {
 
 mod fixed_root;
 mod helpers;
+mod material;
 mod ports;
 
 use helpers::{
-    from_bundle, item, leaf_request, material_matches, proxy_app_error, proxy_infra_error,
-    status_item, verify_revision,
+    from_bundle, item, leaf_request, material_matches, proxy_infra_error, status_item,
+    verify_revision,
 };
+use material::{MaterialSnapshot, MaterialStatus, ProtectedMaterial};
 
 #[cfg(test)]
 #[path = "certificates_tests.rs"]

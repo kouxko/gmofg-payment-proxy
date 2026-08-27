@@ -3,26 +3,18 @@
 //! 查询和写入都从入口的精确协议包绑定重新取得编译描述；任何包、Schema、方向或
 //! 编译缓存身份不一致都 fail-closed，前端能力目录不能替代保存门禁。
 
-use intercept_proxy_domain::{
-    DocumentField, DocumentFieldType, DocumentSchema, DocumentSchemaId,
-    MAX_JAVASCRIPT_SAFE_INTEGER, Revision, sort_protocol_document_rules,
-};
+use intercept_proxy_domain::{MAX_JAVASCRIPT_SAFE_INTEGER, Revision, sort_protocol_document_rules};
 
-use super::{
-    Application,
-    protocol_packages::{ensure_description_identity, ensure_external_description},
-    validation::require_confirmation,
-};
+mod editor_context;
+
+use editor_context::capability_catalog;
+
+use super::{Application, validation::require_confirmation};
 use crate::{
-    AppError, AppResult, HttpBodyProcessing, ListenerDataPlane, ListenerId,
-    OperationResultViewModel, ProtocolDirection, ProtocolDocumentRuleDefinition,
-    ProtocolDocumentRuleDraft, ProtocolDocumentRuleId, ProtocolPackageDescriptionViewModel,
-    ProtocolPackageKindViewModel, ProtocolPackageRef, ProtocolPackageSchemaFieldTypeViewModel,
-    ProtocolPackageSourceViewModel, ProtocolRuleCapabilityCatalog,
-    ProtocolRuleCommonActionCapability, ProtocolRuleFieldActionCapability,
-    ProtocolRuleFieldCapability, ProtocolRuleFieldOperatorCapability, ProtocolRuleSaveInput,
-    ProtocolRuleStage, ProxyListener, ProxyWorkspace, SocketPayloadProcessing, SocketTopology,
-    UiTone, WorkspaceChangeKind,
+    AppError, AppResult, ListenerId, OperationResultViewModel, ProtocolDocumentRuleDefinition,
+    ProtocolDocumentRuleDraft, ProtocolDocumentRuleId, ProtocolPackageRef,
+    ProtocolRuleCapabilityCatalog, ProtocolRuleSaveInput, ProtocolRuleStage, ProxyListener,
+    ProxyWorkspace, UiTone, WorkspaceChangeKind,
 };
 
 impl Application {
@@ -45,7 +37,7 @@ impl Application {
         let workspace = self.selected_protocol_rule_workspace().await?;
         let listener = find_listener(&workspace, listener_id)?;
         let context = self.protocol_rule_context(listener, stage).await?;
-        Ok(capability_catalog(context, stage))
+        Ok(capability_catalog(&context, stage))
     }
 
     /// 新建或乐观锁更新规则。更新不能改变 Listener/包/Schema/方向绑定。
@@ -272,80 +264,6 @@ impl Application {
             .ok_or_else(|| AppError::new("WORKSPACE_NOT_SELECTED", "请先选择一个 Workspace。"))?;
         self.workspaces.get(selected.id).await
     }
-
-    async fn protocol_rule_context(
-        &self,
-        listener: &ProxyListener,
-        stage: ProtocolRuleStage,
-    ) -> AppResult<ProtocolRuleContext> {
-        let package = match &listener.data_plane {
-            ListenerDataPlane::Http(settings) => match &settings.body_processing {
-                HttpBodyProcessing::Plain => {
-                    return Err(AppError::new(
-                        "DOCUMENT_RULE_PROTOCOL_REQUIRED",
-                        "报文规则只能绑定已选择协议方案的入口。",
-                    )
-                    .entity(listener.id.to_string()));
-                }
-                HttpBodyProcessing::Protocol { package } => package,
-            },
-            ListenerDataPlane::Socket(settings) => {
-                let SocketPayloadProcessing::Scripted(scripted) = &settings.processing else {
-                    return Err(AppError::new(
-                        "DOCUMENT_RULE_PROTOCOL_REQUIRED",
-                        "报文规则只能绑定已选择协议方案的入口。",
-                    )
-                    .entity(listener.id.to_string()));
-                };
-                &scripted.package
-            }
-        };
-        let version = self.require_protocol_package(package).await?;
-        let description = match version.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => {
-                let description = self.protocol_package_compiler.describe(package).await?;
-                ensure_description_identity(package, &description)?;
-                description
-            }
-            ProtocolPackageSourceViewModel::External { .. } => {
-                let description = self.external_packages.describe(package).await?;
-                ensure_external_description(package, &description)?;
-                description
-            }
-        };
-        match (&listener.data_plane, description.kind) {
-            (ListenerDataPlane::Http(_), ProtocolPackageKindViewModel::Http)
-            | (ListenerDataPlane::Socket(_), ProtocolPackageKindViewModel::Socket) => {}
-            _ => {
-                return Err(AppError::new(
-                    "PROTOCOL_PACKAGE_KIND_MISMATCH",
-                    "协议包类型与入口数据平面不一致。",
-                )
-                .entity(listener.id.to_string()));
-            }
-        }
-        if matches!(&listener.data_plane, ListenerDataPlane::Socket(settings)
-            if matches!(&settings.topology, SocketTopology::LocalResponder(_))
-                && !matches!(stage, ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToApp))
-        {
-            return Err(AppError::new(
-                "PROTOCOL_RULE_DIRECTION_INVALID",
-                "本机应答只允许配置“应用 → 代理”和“代理 → 应用”阶段。",
-            ));
-        }
-        let schema = domain_schema(schema_for_stage(&description, stage))?;
-        Ok(ProtocolRuleContext {
-            package: package.clone(),
-            description,
-            schema,
-        })
-    }
-}
-
-struct ProtocolRuleContext {
-    package: ProtocolPackageRef,
-    description: ProtocolPackageDescriptionViewModel,
-    schema: DocumentSchema,
 }
 
 fn find_listener(workspace: &ProxyWorkspace, listener_id: ListenerId) -> AppResult<&ProxyListener> {
@@ -360,73 +278,6 @@ fn find_listener(workspace: &ProxyWorkspace, listener_id: ListenerId) -> AppResu
             )
             .entity(listener_id.to_string())
         })
-}
-
-fn schema_for_stage(
-    description: &ProtocolPackageDescriptionViewModel,
-    stage: ProtocolRuleStage,
-) -> &crate::ProtocolPackageSchemaViewModel {
-    match stage.direction() {
-        ProtocolDirection::Upstream => &description.upstream_schema,
-        ProtocolDirection::Downstream => &description.downstream_schema,
-    }
-}
-
-fn domain_schema(schema: &crate::ProtocolPackageSchemaViewModel) -> AppResult<DocumentSchema> {
-    let fields = schema
-        .fields
-        .iter()
-        .map(|field| {
-            DocumentField::new(
-                field.name.parse()?,
-                match field.field_type {
-                    ProtocolPackageSchemaFieldTypeViewModel::String => DocumentFieldType::String,
-                    ProtocolPackageSchemaFieldTypeViewModel::Int => DocumentFieldType::Int,
-                    ProtocolPackageSchemaFieldTypeViewModel::Bool => DocumentFieldType::Bool,
-                    ProtocolPackageSchemaFieldTypeViewModel::Blob => DocumentFieldType::Blob,
-                },
-                field.label.clone(),
-            )
-        })
-        .collect::<Result<Vec<_>, intercept_proxy_domain::DomainError>>()?;
-    Ok(DocumentSchema::new(
-        DocumentSchemaId::new(schema.id.clone())?,
-        schema.version,
-        schema.title.clone(),
-        fields,
-    )?)
-}
-
-fn capability_catalog(
-    context: ProtocolRuleContext,
-    stage: ProtocolRuleStage,
-) -> ProtocolRuleCapabilityCatalog {
-    let field_actions = vec![
-        ProtocolRuleFieldActionCapability::SetField,
-        ProtocolRuleFieldActionCapability::ClearField,
-    ];
-    let fields = schema_for_stage(&context.description, stage)
-        .fields
-        .iter()
-        .map(|field| ProtocolRuleFieldCapability {
-            name: field.name.clone(),
-            label: field.label.clone(),
-            field_type: field.field_type,
-            operators: vec![ProtocolRuleFieldOperatorCapability::Equals],
-            actions: field_actions.clone(),
-        })
-        .collect();
-    let common_actions = vec![
-        ProtocolRuleCommonActionCapability::RecordMatch,
-        ProtocolRuleCommonActionCapability::ClearDocument,
-    ];
-    ProtocolRuleCapabilityCatalog {
-        package: context.package,
-        schema_version: context.schema.version(),
-        stage,
-        fields,
-        common_actions,
-    }
 }
 
 fn ensure_requested_binding(

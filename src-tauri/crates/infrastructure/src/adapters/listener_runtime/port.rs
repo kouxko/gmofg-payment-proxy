@@ -1,5 +1,10 @@
 use std::sync::Arc;
 
+use super::{
+    ListenerRuntimeAdapter, ListenerRuntimePlanBuilder, PreparedListenerRuntime,
+    upstream_tls_test_error,
+};
+use crate::adapters::external_package_server::ExternalPackageListenerRuntime;
 use async_trait::async_trait;
 use intercept_proxy_application::{
     AppError, AppResult, ListenerDataPlaneKind, ListenerId, ListenerRuntimePort,
@@ -11,53 +16,14 @@ use intercept_proxy_domain::{
     SocketRelaySecurity as DomainSocketSecurity, SocketTopology as DomainSocketTopology,
 };
 use intercept_proxy_runtime::{SocketRelayMetricsSnapshot, UpstreamScheme, UpstreamTransport};
-use parking_lot::RwLock;
-use tokio_util::sync::CancellationToken;
-
-use super::{
-    ListenerRuntimeAdapter, ListenerRuntimePlanBuilder, PreparedListenerRuntime, RunningListener,
-    bind_tcp_listener, running_status, upstream_tls_test_error,
-};
-use crate::adapters::external_package_server::ExternalPackageListenerRuntime;
 
 mod status;
 
 use status::{http_probe_view, socket_probe_view, status_from_snapshot};
 
-impl ListenerRuntimeAdapter {
-    async fn finish_stopping(
-        &self,
-        listener_id: ListenerId,
-        handle: RunningListener,
-        workspace_stopped: bool,
-    ) -> AppResult<ListenerStatusViewModel> {
-        handle.cancellation.cancel();
-        let stop_error = match handle.task.await {
-            Err(error) if !error.is_cancelled() => Some(
-                AppError::new(
-                    "LISTENER_STOP_FAILED",
-                    format!("Listener 任务停止失败：{error}"),
-                )
-                .entity(listener_id.to_string()),
-            ),
-            _ => None,
-        };
-        let stopped_epoch = workspace_stopped
-            .then(|| self.runtime_epochs.write().remove(&handle.workspace.id))
-            .flatten();
-        let pipeline_services = self.pipeline_services.read().clone();
-        if let (Some(epoch), Some(services)) = (stopped_epoch, pipeline_services) {
-            services.ports.runtime_stopping(epoch).await;
-        }
-        if let Some(error) = stop_error {
-            return Err(error);
-        }
-        Ok(Self::stopped(listener_id, handle.listen_address))
-    }
-}
-
 struct StatusSnapshot {
     listener_id: ListenerId,
+    runtime_epoch: uuid::Uuid,
     finished: bool,
     listen_address: String,
     fault_reason: Option<String>,
@@ -73,6 +39,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 .iter()
                 .map(|(id, handle)| StatusSnapshot {
                     listener_id: *id,
+                    runtime_epoch: handle.runtime_epoch,
                     finished: handle.task.is_finished(),
                     listen_address: handle.listen_address.clone(),
                     fault_reason: handle.fault.read().clone(),
@@ -97,92 +64,18 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         listener: ProxyListener,
     ) -> AppResult<ListenerStatusViewModel> {
         let listener_id = listener.id;
-        if self.running.lock().await.contains_key(&listener_id) {
-            return Err(
-                AppError::new("LISTENER_ALREADY_RUNNING", "Listener 已在运行。")
-                    .entity(listener_id.to_string()),
-            );
-        }
-        workspace.validate().map_err(AppError::from)?;
-        let runtime_epoch = self.runtime_epoch_for_start(workspace.id);
-        let plan = ListenerRuntimePlanBuilder::new(self)
-            .build(&workspace, &listener, runtime_epoch)
-            .await?;
-        let scripted_snapshot = plan.scripted_snapshot();
-        let external_socket_snapshot = plan.external_socket_snapshot();
-        let http_protocol_snapshot = plan.http_protocol_snapshot();
-        if let Some(snapshot) = plan.scripted_snapshot()
-            && matches!(snapshot.topology(), DomainSocketTopology::LocalResponder(_))
-            && matches!(
-                &plan,
-                PreparedListenerRuntime::ScriptedSocket { service: None, .. }
-            )
-        {
-            // T25 之后 LocalResponder 必须在 bind 前已经持有专用本地 service。继续保留这个
-            // 防御门禁，避免未来计划重构时把“已校验但不可服务”的旧占位状态重新暴露为 Running。
-            return Err(AppError::new(
-                "LOCAL_RESPONDER_PLAN_INVALID",
-                "LocalResponder 未能构造本地应答运行服务。",
-            )
-            .entity(listener_id.to_string()));
-        }
-        let listen_address = plan.bind_addr().to_string();
-        let tcp_listener = bind_tcp_listener(plan.bind_addr(), listener_id).await?;
-        let cancellation = CancellationToken::new();
-        let task_cancellation = cancellation.clone();
-        let workspace_id = workspace.id.to_string();
-        let fault = Arc::new(RwLock::new(None));
-        let task_fault = Arc::clone(&fault);
-        let socket_service = match &plan {
-            PreparedListenerRuntime::Socket { service, .. }
-            | PreparedListenerRuntime::ExternalScriptedSocket { service, .. }
-            | PreparedListenerRuntime::ScriptedSocket {
-                service: Some(service),
-                ..
-            } => Some(Arc::clone(service)),
-            _ => None,
-        };
-        let task = tokio::spawn(async move {
-            let result = serve_prepared_listener(
-                plan,
-                tcp_listener,
-                listener_id,
-                workspace_id,
-                runtime_epoch,
-                task_cancellation,
+        let _environment_apply_gate = self
+            .environment_apply_resource_gates
+            .acquire(
+                super::super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
+                    listener_id.as_uuid(),
+                ),
             )
             .await;
-            if let Err(error) = result
-                && !is_orderly_stop(error.code)
-            {
-                *task_fault.write() = Some(error.message);
-            }
-        });
-        let mut running = self.running.lock().await;
-        if running.contains_key(&listener_id) {
-            cancellation.cancel();
-            task.abort();
-            return Err(
-                AppError::new("LISTENER_ALREADY_RUNNING", "Listener 已在运行。")
-                    .entity(listener_id.to_string()),
-            );
-        }
-        running.insert(
-            listener_id,
-            RunningListener {
-                run_token: uuid::Uuid::new_v4(),
-                cancellation,
-                task,
-                listen_address: listen_address.clone(),
-                fault,
-                workspace,
-                socket_service,
-                scripted_snapshot,
-                external_socket_snapshot,
-                http_protocol_snapshot,
-            },
-        );
-        Ok(running_status(listener_id, listen_address))
+        workspace.validate().map_err(AppError::from)?;
+        let runtime_epoch = self.reserve_start(workspace.id, listener_id).await?;
+        self.finish_start_owned(workspace, listener, runtime_epoch)
+            .await
     }
 
     async fn replace_protocol_rules(
@@ -190,6 +83,14 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
         workspace: ProxyWorkspace,
         listener_id: ListenerId,
     ) -> AppResult<()> {
+        let _environment_apply_gate = self
+            .environment_apply_resource_gates
+            .acquire(
+                super::super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
+                    listener_id.as_uuid(),
+                ),
+            )
+            .await;
         let (socket_snapshot, external_socket_snapshot, http_snapshot) = self
             .running
             .lock()
@@ -211,13 +112,19 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                     .entity(listener_id.to_string())
             })?;
         if let Some(snapshot) = socket_snapshot {
-            snapshot.replace_document_rules(&workspace, listener)?;
+            snapshot
+                .replace_document_rules(self, &workspace, listener)
+                .await?;
         }
         if let Some(snapshot) = external_socket_snapshot {
-            snapshot.replace_document_rules(&workspace, listener)?;
+            snapshot
+                .replace_document_rules(self, &workspace, listener)
+                .await?;
         }
         if let Some(snapshot) = http_snapshot {
-            snapshot.replace_document_rules(&workspace, listener)?;
+            snapshot
+                .replace_document_rules(self, &workspace, listener)
+                .await?;
         }
 
         for running in self
@@ -233,18 +140,40 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
     }
 
     async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel> {
-        let (handle, workspace_stopped) = {
+        let environment_apply_gate = self
+            .environment_apply_resource_gates
+            .acquire(
+                super::super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
+                    listener_id.as_uuid(),
+                ),
+            )
+            .await;
+        let handle = {
             let mut running = self.running.lock().await;
             let handle = running.remove(&listener_id).ok_or_else(|| {
                 AppError::new("LISTENER_NOT_RUNNING", "Listener 当前未运行。")
                     .entity(listener_id.to_string())
             })?;
-            let workspace_stopped = running
+            self.stopping.write().insert(
+                handle.run_token,
+                super::StoppingListener {
+                    runtime_epoch: handle.runtime_epoch,
+                },
+            );
+            let active_epoch_owned = running
                 .values()
-                .all(|candidate| candidate.workspace.id != handle.workspace.id);
-            (handle, workspace_stopped)
+                .any(|candidate| candidate.runtime_epoch == handle.runtime_epoch)
+                || self
+                    .pending_starts
+                    .read()
+                    .values()
+                    .any(|candidate| candidate.runtime_epoch == handle.runtime_epoch);
+            if !active_epoch_owned {
+                self.retire_runtime_epoch(handle.workspace.id, handle.runtime_epoch);
+            }
+            handle
         };
-        self.finish_stopping(listener_id, handle, workspace_stopped)
+        self.finish_stopping_owned(listener_id, handle, environment_apply_gate)
             .await
     }
 
@@ -330,6 +259,14 @@ impl ExternalPackageListenerRuntime for ListenerRuntimeAdapter {
         listener_id: ListenerId,
         expected_run_token: uuid::Uuid,
     ) -> AppResult<Option<ListenerStatusViewModel>> {
+        let environment_apply_gate = self
+            .environment_apply_resource_gates
+            .acquire(
+                super::super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
+                    listener_id.as_uuid(),
+                ),
+            )
+            .await;
         let removed = {
             let mut running = self.running.lock().await;
             match running.get(&listener_id) {
@@ -337,66 +274,35 @@ impl ExternalPackageListenerRuntime for ListenerRuntimeAdapter {
                     let handle = running
                         .remove(&listener_id)
                         .expect("listener existence was checked while holding the running lock");
-                    let workspace_stopped = running
+                    self.stopping.write().insert(
+                        handle.run_token,
+                        super::StoppingListener {
+                            runtime_epoch: handle.runtime_epoch,
+                        },
+                    );
+                    let active_epoch_owned = running
                         .values()
-                        .all(|candidate| candidate.workspace.id != handle.workspace.id);
-                    Some((handle, workspace_stopped))
+                        .any(|candidate| candidate.runtime_epoch == handle.runtime_epoch)
+                        || self
+                            .pending_starts
+                            .read()
+                            .values()
+                            .any(|candidate| candidate.runtime_epoch == handle.runtime_epoch);
+                    if !active_epoch_owned {
+                        self.retire_runtime_epoch(handle.workspace.id, handle.runtime_epoch);
+                    }
+                    Some(handle)
                 }
                 Some(_) | None => None,
             }
         };
-        let Some((handle, workspace_stopped)) = removed else {
+        let Some(handle) = removed else {
             return Ok(None);
         };
         Ok(Some(
-            self.finish_stopping(listener_id, handle, workspace_stopped)
+            self.finish_stopping_owned(listener_id, handle, environment_apply_gate)
                 .await?,
         ))
-    }
-}
-
-async fn serve_prepared_listener(
-    plan: PreparedListenerRuntime,
-    tcp_listener: tokio::net::TcpListener,
-    listener_id: ListenerId,
-    workspace_id: String,
-    runtime_epoch: uuid::Uuid,
-    cancellation: CancellationToken,
-) -> Result<(), intercept_proxy_runtime::ProxyError> {
-    match plan {
-        PreparedListenerRuntime::HttpForward { service, .. } => {
-            service.serve_listener(tcp_listener, cancellation).await
-        }
-        PreparedListenerRuntime::HttpFixed { service, .. } => {
-            service
-                .serve_listener_with_epoch(tcp_listener, runtime_epoch, cancellation)
-                .await
-        }
-        PreparedListenerRuntime::Socket { service, .. }
-        | PreparedListenerRuntime::ExternalScriptedSocket { service, .. }
-        | PreparedListenerRuntime::ScriptedSocket {
-            service: Some(service),
-            ..
-        } => {
-            service
-                .serve_listener_with_context(
-                    tcp_listener,
-                    intercept_proxy_runtime::SocketRelayRunContext {
-                        workspace_id,
-                        listener_id: listener_id.to_string(),
-                        workspace_runtime_epoch: runtime_epoch,
-                        listener_run_epoch: uuid::Uuid::new_v4(),
-                    },
-                    cancellation,
-                )
-                .await
-        }
-        PreparedListenerRuntime::ScriptedSocket { service: None, .. } => {
-            Err(intercept_proxy_runtime::ProxyError::new(
-                intercept_proxy_runtime::ErrorCode::Internal,
-                "scripted socket plan reached serve without a runtime service",
-            ))
-        }
     }
 }
 
@@ -436,11 +342,4 @@ fn ensure_upstream_tls_enabled(listener: &ProxyListener) -> AppResult<()> {
                 .entity(listener.id.to_string()),
         )
     }
-}
-
-fn is_orderly_stop(code: &'static str) -> bool {
-    matches!(
-        code,
-        "PROXY_STOPPED" | "BREAKPOINT_PROXY_STOPPED" | "SOCKET_RELAY_CANCELLED"
-    )
 }

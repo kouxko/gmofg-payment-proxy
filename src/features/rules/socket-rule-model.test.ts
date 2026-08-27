@@ -2,23 +2,27 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   ProxyListener,
   ProtocolRuleCapabilityCatalog,
+  ProtocolRuleEditorContext,
+  ProtocolRuleEditorStage,
+  ProtocolRuleSaveInput,
 } from "@/generated/rust-types";
 import {
   capabilityCompatible,
   conditionFor,
   deleteResponseMatches,
   draftFromRule,
+  draftFromEditorStage,
   emptyValue,
   isDocumentValueForType,
   isProtocolRuleDefinition,
-  listenerStages,
-  newProtocolRuleDraft,
+  catalogFromEditorStage,
   parseProtocolRuleValue,
   protocolRuleListeners,
   saveResponseMatches,
   setActionFor,
   toggleResponseMatches,
   validateCapabilityCatalog,
+  validateProtocolRuleEditorContext,
   validateProtocolRuleDraft,
   valueText,
 } from "./protocol-rule-model";
@@ -44,7 +48,6 @@ function listener(
     enabled: true,
     bind_address: "127.0.0.1",
     port: 9000,
-    allowed_client_cidrs: [],
     connect_timeout_ms: 1_000,
     read_timeout_ms: 1_000,
     write_timeout_ms: 1_000,
@@ -104,6 +107,35 @@ const catalog: ProtocolRuleCapabilityCatalog = {
   common_actions: ["record_match", "clear_document"],
 };
 
+function editorStage(
+  value: ProtocolRuleCapabilityCatalog,
+  actions: ProtocolRuleSaveInput["actions"] = [{ type: "record_match" }],
+): ProtocolRuleEditorStage {
+  return {
+    stage: value.stage,
+    schema_version: value.schema_version,
+    fields: value.fields,
+    common_actions: value.common_actions,
+    new_rule_draft: {
+      rule_id: null,
+      expected_revision: null,
+      name: "新规则",
+      enabled: true,
+      priority: 100,
+      listener_id: "relay",
+      package: value.package,
+      schema_version: value.schema_version,
+      stage: value.stage,
+      conditions: [],
+      actions,
+    },
+  };
+}
+
+function editorContext(...stages: ProtocolRuleEditorStage[]): ProtocolRuleEditorContext {
+  return { listener_id: "relay", package: packageRef, stages };
+}
+
 describe("protocol document rule model", () => {
   it("keeps HTTP protocol and Socket protocol entries in separate workspaces", () => {
     const listeners = [
@@ -119,19 +151,19 @@ describe("protocol document rule model", () => {
       .toEqual(["http"]);
   });
 
-  it("offers all four stages for Relay and the two app-facing stages for LocalResponder", () => {
-    expect(listenerStages(listener("relay"))).toEqual(["app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app"]);
-    expect(listenerStages(listener("local", { local: true }))).toEqual(["app_to_proxy", "proxy_to_app"]);
-  });
-
-  it("offers all four stages for an HTTP protocol entry", () => {
-    expect(listenerStages(listener("http", { kind: "http" }))).toEqual([
-      "app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app",
-    ]);
-  });
-
-  it("creates a bound empty rule with one RecordMatch action", () => {
-    expect(newProtocolRuleDraft(listener("relay"), "app_to_proxy", catalog)).toEqual({
+  it("projects stages and the new draft exclusively from the Rust editor context", () => {
+    const appToProxy = editorStage(catalog, [{ type: "clear_document" }]);
+    const proxyToApp = editorStage({ ...catalog, stage: "proxy_to_app", schema_version: 8 });
+    const context = editorContext(appToProxy, proxyToApp);
+    expect(context.stages.map((item) => item.stage)).toEqual(["app_to_proxy", "proxy_to_app"]);
+    expect(catalogFromEditorStage(context, proxyToApp)).toEqual({
+      package: packageRef,
+      schema_version: 8,
+      stage: "proxy_to_app",
+      fields: catalog.fields,
+      common_actions: catalog.common_actions,
+    });
+    expect(draftFromEditorStage(appToProxy)).toEqual({
       rule_id: null,
       expected_revision: null,
       name: "新规则",
@@ -142,15 +174,14 @@ describe("protocol document rule model", () => {
       schema_version: 7,
       stage: "app_to_proxy",
       conditions: [],
-      actions: [{ type: "record_match" }],
+      actions: [{ type: "clear_document" }],
     });
   });
 
-  it("uses RecordMatch for a new HTTP protocol rule", () => {
-    expect(newProtocolRuleDraft(listener("http", { kind: "http" }), "proxy_to_app", {
-      ...catalog,
-      stage: "proxy_to_app",
-    }).actions).toEqual([{ type: "record_match" }]);
+  it("rejects a Rust editor context whose draft binding does not match its stage", () => {
+    const invalid = editorContext(editorStage(catalog));
+    invalid.stages[0].new_rule_draft.stage = "proxy_to_app";
+    expect(validateProtocolRuleEditorContext(invalid)).toContain("绑定");
   });
 
   it("preserves an existing rule identity and revision in its editable draft", () => {
@@ -232,7 +263,7 @@ describe("protocol document rule model", () => {
   });
 
   it("requires save responses to persist the exact draft and advance revision once", () => {
-    const create = newProtocolRuleDraft(listener("relay"), "app_to_proxy", catalog);
+    const create = draftFromEditorStage(editorStage(catalog));
     const created = {
       ...create, rule_id: "rule-1", revision: 1, created_order: 9,
     };
@@ -296,12 +327,12 @@ describe("protocol document rule model", () => {
 
   it("accepts an empty Schema with a no-condition RecordMatch rule", () => {
     const emptyCatalog = { ...catalog, fields: [], common_actions: ["record_match" as const] };
-    const draft = newProtocolRuleDraft(listener("relay"), "app_to_proxy", emptyCatalog);
+    const draft = draftFromEditorStage(editorStage(emptyCatalog));
     expect(validateProtocolRuleDraft(draft, emptyCatalog)).toBeUndefined();
   });
 
   it("rejects stale package, schema, or stage bindings", () => {
-    const draft = newProtocolRuleDraft(listener("relay"), "app_to_proxy", catalog);
+    const draft = draftFromEditorStage(editorStage(catalog));
     expect(validateProtocolRuleDraft({ ...draft, package: { ...packageRef, id: "other" } }, catalog)).toContain("绑定");
     expect(validateProtocolRuleDraft({ ...draft, package: { ...packageRef, version: "9.9.9" } }, catalog)).toContain("绑定");
     expect(validateProtocolRuleDraft({ ...draft, schema_version: 6 }, catalog)).toContain("绑定");
@@ -309,14 +340,14 @@ describe("protocol document rule model", () => {
   });
 
   it("rejects an unknown condition field, operator, or typed value", () => {
-    const draft = newProtocolRuleDraft(listener("relay"), "app_to_proxy", catalog);
+    const draft = draftFromEditorStage(editorStage(catalog));
     expect(validateProtocolRuleDraft({ ...draft, conditions: [{ operator: "equals", field: "missing", value: { type: "string", value: "x" } }] }, catalog)).toContain("条件");
     expect(validateProtocolRuleDraft({ ...draft, conditions: [{ operator: "contains", field: "message_type", value: { type: "string", value: "x" } } as never] }, catalog)).toContain("条件");
     expect(validateProtocolRuleDraft({ ...draft, conditions: [{ operator: "equals", field: "amount", value: { type: "string", value: "100" } }] }, catalog)).toContain("类型或大小");
   });
 
   it("rejects duplicate condition fields", () => {
-    const draft = newProtocolRuleDraft(listener("relay"), "app_to_proxy", catalog);
+    const draft = draftFromEditorStage(editorStage(catalog));
     const condition = conditionFor(catalog.fields[0]);
     expect(validateProtocolRuleDraft({ ...draft, conditions: [condition, condition] }, catalog)).toContain("重复条件");
   });
@@ -327,20 +358,20 @@ describe("protocol document rule model", () => {
       fields: catalog.fields.map((field) => ({ ...field, actions: [] })),
       common_actions: ["record_match" as const],
     };
-    const draft = newProtocolRuleDraft(listener("relay"), "app_to_proxy", recordOnly);
+    const draft = draftFromEditorStage(editorStage(recordOnly));
     expect(validateProtocolRuleDraft({ ...draft, actions: [{ type: "clear_document" }] }, recordOnly)).toContain("清空全部字段");
     expect(validateProtocolRuleDraft({ ...draft, actions: [setActionFor(catalog.fields[0])] }, recordOnly)).toContain("设置字段");
   });
 
   it("rejects RecordMatch when it is absent and unknown action tags", () => {
     const noCommon = { ...catalog, common_actions: ["clear_document" as const] };
-    const draft = newProtocolRuleDraft(listener("relay"), "app_to_proxy", noCommon);
+    const draft = draftFromEditorStage(editorStage(noCommon));
     expect(validateProtocolRuleDraft(draft, noCommon)).toContain("RecordMatch");
     expect(validateProtocolRuleDraft({ ...draft, actions: [{ type: "stop" }] as never }, catalog)).toContain("未知动作");
   });
 
   it("rejects out-of-range Blob bytes in conditions and actions", () => {
-    const draft = newProtocolRuleDraft(listener("relay"), "app_to_proxy", catalog);
+    const draft = draftFromEditorStage(editorStage(catalog));
     const invalidBlob = { type: "blob" as const, value: [256] };
     expect(validateProtocolRuleDraft({ ...draft, conditions: [{ operator: "equals", field: "bitmap", value: invalidBlob }] }, catalog)).toContain("类型或大小");
     expect(validateProtocolRuleDraft({ ...draft, actions: [{ type: "set_field", field: "bitmap", value: invalidBlob }] }, catalog)).toContain("设置字段");

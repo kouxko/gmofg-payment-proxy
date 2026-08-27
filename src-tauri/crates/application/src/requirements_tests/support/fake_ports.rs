@@ -42,10 +42,13 @@ pub(super) fn fake_certificate_overview() -> CertificateOverviewViewModel {
 
 #[derive(Debug)]
 pub(in crate::requirements_tests) struct FakePorts {
+    pub(in crate::requirements_tests) rule_validation_calls: AtomicUsize,
+    pub(in crate::requirements_tests) rule_save_calls: AtomicUsize,
     pub(in crate::requirements_tests) settings_validations: AtomicUsize,
     pub(in crate::requirements_tests) settings_validation_override:
         parking_lot::Mutex<Option<SettingsValidationViewModel>>,
     pub(in crate::requirements_tests) settings_save_calls: AtomicUsize,
+    pub(in crate::requirements_tests) settings_get_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_import_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_status_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_overview_calls: AtomicUsize,
@@ -67,9 +70,12 @@ pub(in crate::requirements_tests) struct FakePorts {
 impl Default for FakePorts {
     fn default() -> Self {
         Self {
+            rule_validation_calls: AtomicUsize::new(0),
+            rule_save_calls: AtomicUsize::new(0),
             settings_validations: AtomicUsize::new(0),
             settings_validation_override: parking_lot::Mutex::new(None),
             settings_save_calls: AtomicUsize::new(0),
+            settings_get_calls: AtomicUsize::new(0),
             certificate_import_calls: AtomicUsize::new(0),
             certificate_status_calls: AtomicUsize::new(0),
             certificate_overview_calls: AtomicUsize::new(0),
@@ -176,54 +182,81 @@ impl AndroidControlPort for UnusedAndroidControlPort {
     async fn device_list(&self) -> AppResult<Vec<AndroidDeviceViewModel>> {
         unused()
     }
-    async fn package_list(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
+    async fn package_list(
+        &self,
+        _: AndroidDeviceTarget,
+    ) -> AppResult<Vec<AndroidPackageViewModel>> {
         unused()
     }
-    async fn package_get(&self, _: String) -> AppResult<AndroidPackageViewModel> {
+    async fn package_get(
+        &self,
+        _: AndroidDeviceTarget,
+        _: String,
+    ) -> AppResult<AndroidPackageViewModel> {
         unused()
     }
-    async fn companion_install(&self, _: bool) -> AppResult<AndroidCompanionInstallViewModel> {
+    async fn companion_install(
+        &self,
+        _: AndroidDeviceTarget,
+        _: bool,
+    ) -> AppResult<AndroidCompanionInstallViewModel> {
         unused()
     }
-    async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn vpn_open_consent(
+        &self,
+        _: AndroidDeviceTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
     async fn network_start(
         &self,
+        _: AndroidDeviceTarget,
         _: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
     async fn network_apply(
         &self,
+        _: AndroidRuntimeTarget,
         _: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
     async fn network_runtime_ready(
         &self,
+        _: AndroidDeviceTarget,
         _: &AndroidNetworkActivation,
         _: &AndroidNetworkStatusViewModel,
     ) -> AppResult<bool> {
         unused()
     }
-    async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn network_stop(
+        &self,
+        _: AndroidRuntimeTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
-    async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn emergency_restore(
+        &self,
+        _: AndroidRuntimeTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
-    async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn network_status(
+        &self,
+        _: AndroidDeviceTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         Err(AppError::new(
             "ANDROID_DEVICE_NOT_SELECTED",
             "测试场景没有选择 Android 设备。",
         ))
     }
-    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
-        Ok(None)
+    async fn runtime_owners(&self) -> AppResult<Vec<AndroidRuntimeOwnerViewModel>> {
+        Ok(Vec::new())
     }
     async fn network_runtime_endpoints(
         &self,
+        _: AndroidDeviceTarget,
         _: Option<AndroidNetworkActivation>,
     ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
         Ok(Vec::new())
@@ -320,9 +353,15 @@ impl RuleRepositoryPort for FakePorts {
         unused()
     }
     async fn validate(&self, _: &RuleDraft) -> AppResult<RuleValidationViewModel> {
-        unused()
+        self.rule_validation_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(FieldValidationViewModel {
+            valid: true,
+            field_errors: BTreeMap::new(),
+            warnings: Vec::new(),
+        })
     }
     async fn save(&self, _: RuleDraft) -> AppResult<RuleViewModel> {
+        self.rule_save_calls.fetch_add(1, Ordering::SeqCst);
         unused()
     }
     async fn copy(&self, _: RuleId) -> AppResult<RuleViewModel> {
@@ -416,6 +455,7 @@ impl SettingsRepositoryPort for FakePorts {
     }
 
     async fn get(&self) -> AppResult<SettingsViewModel> {
+        self.settings_get_calls.fetch_add(1, Ordering::SeqCst);
         Ok(self.settings.lock().clone())
     }
     async fn validate(&self, _: &SettingsDraft) -> AppResult<SettingsValidationViewModel> {

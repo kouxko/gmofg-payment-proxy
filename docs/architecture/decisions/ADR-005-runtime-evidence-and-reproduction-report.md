@@ -3,6 +3,7 @@
 - Status: Accepted
 - 日期：2026-08-21
 - Refined by: [ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md)
+- Current MCP transport/security: [ADR-008](ADR-008-mcp-environment-configuration.md)
 
 ## Context
 
@@ -25,15 +26,16 @@ Application 层提供 `diagnostic_report_generate`，聚合精确 Workspace/List
 规则、协议包、外部服务、Android 网络和结构化诊断。桌面组合根追加最近持久日志，
 形成同源 `reproduction_report`：
 
-- MCP 返回结构化 bundle、日志页和 Markdown，不写本机文件；
+- `reproduction_report` 返回结构化 bundle、日志页和 Markdown，不写本机文件；
 - 桌面“导出复现 Markdown”通过原生保存对话框和原子文件写入显式落盘；
 - 报告、单条日志、分页和日志文件均有明确上限，并公开淘汰、损坏、截断和持久化错误状态。
 
 ## Boundary
 
-这是 ADR-004 的窄扩展，不是任意文件读取例外。MCP 仍以只读 Application facade 为主，只额外接收
-进程创建并持有的 `RuntimeLogStore` 只读句柄。该句柄只认识自己的 JSONL 文件，不接受 MCP 提供的
-路径，也不暴露写入方法。
+这是 ADR-004 的窄扩展，不是任意文件读取例外。`application_log_*` 与 `reproduction_report` 仍通过
+只读 Application facade 和进程创建并持有的 `RuntimeLogStore` 只读句柄取证。该句柄只认识自己的
+JSONL 文件，不接受 MCP 提供的路径，也不暴露写入方法；ADR-008 的环境配置工具不复用该句柄或报告
+路径执行 mutation。
 
 本决策中的“持久化运行证据”只指专用、容量受限的进程 JSONL 日志。Exchange observation、连接时间线和
 运行报文继续存放在有界内存中，不写入 SQLite；配置数据库、内存观察记录和诊断日志具有独立生命周期。
@@ -42,15 +44,16 @@ Application 层提供 `diagnostic_report_generate`，聚合精确 Workspace/List
 MCP 对该 store 的只读句柄是 ADR-004 的窄例外：它只查询有界内存记录，不接受路径、不访问 SQLite、
 不提供清空或其他写操作。
 
-本机 MCP 的无认证、无隐私保证继续以 ADR-004 为准。日志可以包含故障复现需要的连接、端点、模块、
-错误和关联 ID；容量与结构边界用于可靠性和可诊断性，不宣称提供访问控制。
+当前 MCP 的全接口明文、无认证远程风险以 ADR-008 为准。日志可以包含故障复现需要的连接、端点、
+模块、错误和关联 ID；容量与结构边界用于可靠性和可诊断性，不宣称提供访问控制。
 
 ## Alternatives
 
 - Rejected：让 MCP 读取日志目录或任意路径。这样会扩大权限并破坏稳定分页/保留语义。
 - Rejected：只导出结构化 diagnostics。它无法覆盖底层启动、I/O 和进程生命周期。
 - Rejected：只返回全量 dump。它无法在 MCP 输出预算内稳定传输，也无法继续分页。
-- Rejected：在 MCP 工具中直接保存 Markdown。MCP 必须保持只读；文件写入属于桌面用户显式操作。
+- Rejected：让 `reproduction_report` 直接保存 Markdown。该工具只返回内容；文件写入属于桌面用户
+  通过原生对话框触发的显式操作，不能与环境配置 mutation 混用。
 
 ## Consequences
 
@@ -58,6 +61,11 @@ MCP 对该 store 的只读句柄是 ADR-004 的窄例外：它只查询有界内
 磁盘写入，且只保留容量范围内的历史；报告必须把 `has_more`、保留 ID 范围、
 `evicted_count`、损坏行、持久化错误、容量、文件上限、消息截断统计和
 `collection_errors` 视为证据缺口，不能将未查询到误写成未发生。
+
+Runtime log producer 的当前进程丢失必须分别公开为 `queue_dropped_full`（条数或共享字节预算）、
+`queue_dropped_disconnected`（consumer 已关闭）和 `queue_dropped_contended`（producer 不等待锁）；
+这些计数由 `application_log_query` 和 `reproduction_report.application_logs` 返回，并写入 Markdown。
+它们不能与已经进入 Store 后发生的 `evicted_count` 混为一个数字。
 
 ## Open items
 

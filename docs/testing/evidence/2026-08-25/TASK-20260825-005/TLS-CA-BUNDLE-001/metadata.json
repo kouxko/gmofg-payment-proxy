@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260825-005",
+  "case_id": "TLS-CA-BUNDLE-001",
+  "prepared_at": "2026-08-25T20:44:12+08:00",
+  "status": "PREPARED",
+  "registration_validation": "PASS",
+  "archived_resources_match_original_bytes": true,
+  "resource_validation": "PASS",
+  "proxy_functional_test": "NOT_RUN",
+  "resources": [
+    "resources/sub.pem",
+    "resources/DigiCertCA.pem",
+    "inputs/backend.json",
+    "steps/replay.md",
+    "outputs/resource-validation.txt"
+  ],
+  "target": {
+    "host": "195.160.171.102",
+    "port": 63002,
+    "transport": "tcp",
+    "upstream_security": "tls"
+  },
+  "expected_certificate_count": 2,
+  "observed_bundle_certificate_count": 2,
+  "result": "Resources are ready; Proxy implementation and functional validation have not run"
+}

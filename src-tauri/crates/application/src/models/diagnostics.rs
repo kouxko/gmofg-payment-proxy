@@ -87,7 +87,8 @@ impl DiagnosticLogLevel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 生产者提交的脱敏日志。禁止写入报文正文、密码、私钥或 PKCS12 字节。
+/// 生产者提交的有界控制面诊断。完整报文由 capture/Exchange observation 负责；密码、私钥和
+/// PKCS12 字节只属于专用凭据边界。
 pub struct DiagnosticLogEntryViewModel {
     pub level: DiagnosticLogLevel,
     pub stage: DiagnosticLogStage,
@@ -125,7 +126,8 @@ pub enum ExternalPackageCallStage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 外部 JSON-RPC 调用的可查询脱敏诊断；绝不携带业务报文或远端 `data` 值。
+/// 外部 JSON-RPC 调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
+/// 在此仅提供有界形状，避免同一 payload 在两个生命周期不同的 store 中重复分配。
 pub struct ExternalPackageCallDiagnosticViewModel {
     pub package: ProtocolPackageRef,
     pub direction: ProtocolDirection,
@@ -183,10 +185,10 @@ pub enum SocketDiagnosticDirection {
 }
 
 impl DiagnosticLogEntryViewModel {
-    /// 诊断 DTO 离开应用层前统一执行脱敏和长度限制。
+    /// 诊断 DTO 离开应用层前统一执行控制面文本长度限制。
     ///
-    /// 生产者可以提交便于定位的上下文，但所有 UI、Channel 与查询结果都只能使用该
-    /// 规范化副本，避免某个新生产者漏掉密码、PEM 或超长编码材料。
+    /// 生产者可以提交便于定位的上下文，但所有 UI、Channel 与查询结果都使用同一规范化副本；
+    /// 完整 HTTP/Socket/Document 证据通过专用观测 store 查询，不在诊断 `EventHub` 中复制。
     #[must_use]
     pub fn sanitized(self) -> Self {
         Self {
@@ -277,6 +279,10 @@ impl Default for DiagnosticLogQuery {
 pub struct DiagnosticLogPageViewModel {
     pub rows: Vec<DiagnosticLogRowViewModel>,
     pub current_cursor: u64,
+    /// `EventHub` 当前仍保留的最早全局事件；诊断行是该有界历史的类型化投影。
+    pub oldest_retained_event_id: Option<u64>,
+    /// `after_event_id` 早于保留窗口时为 true，调用方必须重新读取完整诊断快照。
+    pub snapshot_required: bool,
     pub retained_count: usize,
     pub truncated: bool,
     pub empty_message: String,

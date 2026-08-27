@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use futures_util::{StreamExt, stream::FuturesUnordered};
 use tokio::{
-    io::AsyncWriteExt,
+    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpStream, lookup_host},
 };
 use tokio_util::sync::CancellationToken;
@@ -167,18 +167,42 @@ impl PreparedSocketSecurity {
         let (mut io, tls, tls_server_name_candidates) = self
             .test_connect_upstream(tcp, endpoint, connect_timeout, cancellation)
             .await?;
-        let _ = io.shutdown().await;
-        Ok(SocketUpstreamConnectionTestResult {
+        if tls.is_some() {
+            match io.shutdown().await {
+                Ok(()) => {}
+                Err(error) if is_normal_tls_probe_close(&error) => {
+                    return Ok(upstream_test_result(
+                        started,
+                        resolved_address,
+                        tls,
+                        tls_server_name_candidates,
+                    ));
+                }
+                Err(error) => return Err(final_authentication_error(&error)),
+            }
+            let mut final_alert = [0_u8; 1];
+            let final_read = tokio::time::timeout(connect_timeout, io.read(&mut final_alert))
+                .await
+                .map_err(|_| {
+                    ProxyError::new(
+                        ErrorCode::TlsHandshakeFailed,
+                        "socket upstream TLS peer did not confirm final handshake authentication",
+                    )
+                })?;
+            if let Err(error) = final_read
+                && !is_normal_tls_probe_close(&error)
+            {
+                return Err(final_authentication_error(&error));
+            }
+        } else {
+            let _ = io.shutdown().await;
+        }
+        Ok(upstream_test_result(
+            started,
             resolved_address,
-            transport: if tls.is_some() {
-                SocketUpstreamTransport::Tls
-            } else {
-                SocketUpstreamTransport::Tcp
-            },
             tls,
             tls_server_name_candidates,
-            elapsed_millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
-        })
+        ))
     }
 
     /// 接纳 App 侧连接；纯 TCP 原样返回，TLS 模式仅在本地完成服务端握手。
@@ -279,6 +303,39 @@ impl PreparedSocketSecurity {
             Vec::new()
         };
         Ok((connected.io, Some(connected.evidence), candidates))
+    }
+}
+
+fn is_normal_tls_probe_close(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::UnexpectedEof
+    )
+}
+
+fn final_authentication_error(error: &std::io::Error) -> ProxyError {
+    ProxyError::new(
+        ErrorCode::TlsHandshakeFailed,
+        format!("socket upstream TLS peer rejected final handshake authentication: {error}"),
+    )
+}
+
+fn upstream_test_result(
+    started: std::time::Instant,
+    resolved_address: SocketAddr,
+    tls: Option<SocketTlsEvidence>,
+    tls_server_name_candidates: Vec<String>,
+) -> SocketUpstreamConnectionTestResult {
+    SocketUpstreamConnectionTestResult {
+        resolved_address,
+        transport: if tls.is_some() {
+            SocketUpstreamTransport::Tls
+        } else {
+            SocketUpstreamTransport::Tcp
+        },
+        tls,
+        tls_server_name_candidates,
+        elapsed_millis: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
     }
 }
 

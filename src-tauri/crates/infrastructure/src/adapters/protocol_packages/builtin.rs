@@ -8,6 +8,7 @@ use intercept_proxy_application::{
     AppError, AppResult, BuiltinProtocolPackagePort, ProtocolPackageImportOutcomeViewModel,
     ProtocolPackageImportViewModel, builtin_iso8583_package_ref,
 };
+#[cfg(test)]
 use serde_json::Value;
 use uuid::Uuid;
 
@@ -16,10 +17,12 @@ use super::{
     ProtocolPackageStorageError, application_description, application_summary,
     protocol_package_app_error,
 };
+#[cfg(test)]
 use crate::WorkspaceRecord;
+#[cfg(test)]
+use crate::sqlite::protocol_packages::StoredProtocolPackageWrite;
 use crate::sqlite::protocol_packages::{
     StoredBuiltinSeedOutcome, StoredProtocolPackageHeader, StoredProtocolPackageValidation,
-    StoredProtocolPackageWrite,
 };
 
 impl ProtocolPackageRepositoryAdapter {
@@ -36,6 +39,7 @@ impl ProtocolPackageRepositoryAdapter {
     }
 
     /// 只在独立 feature marker 尚未提交时安装官方包。
+    #[cfg(test)]
     pub fn ensure_builtin_seeded(&self) -> AppResult<()> {
         if self.builtin_archive.is_none() {
             return Ok(());
@@ -60,6 +64,34 @@ impl ProtocolPackageRepositoryAdapter {
         Ok(())
     }
 
+    pub async fn ensure_builtin_seeded_async(&self) -> AppResult<()> {
+        if self.builtin_archive.is_none() {
+            return Ok(());
+        }
+        let prepared = self.prepare_builtin()?;
+        let header = builtin_header(&prepared);
+        let package = header.package.clone();
+        let cache = Arc::clone(&self.cache);
+        self.executor
+            .execute(move |store| {
+                let mut cache = cache.lock();
+                let outcome = store
+                    .seed_builtin_protocol_package(&header, &prepared.files)
+                    .map_err(super::portability::bundle_app_error)?;
+                if let StoredBuiltinSeedOutcome::Ready(generation) = outcome {
+                    cache.insert(
+                        package,
+                        CachedCompiledPackage {
+                            generation,
+                            compiled: Arc::new(prepared.compiled),
+                        },
+                    );
+                }
+                Ok(())
+            })
+            .await
+    }
+
     pub(super) fn prepare_builtin(&self) -> AppResult<PreparedProtocolPackage> {
         let archive = self.builtin_archive.as_deref().ok_or_else(|| {
             AppError::new(
@@ -79,6 +111,7 @@ impl ProtocolPackageRepositoryAdapter {
         Ok(prepared)
     }
 
+    #[cfg(test)]
     pub(super) fn reset_with_builtin(
         &self,
         selected_workspace_id: Uuid,
@@ -137,26 +170,33 @@ impl BuiltinProtocolPackagePort for ProtocolPackageRepositoryAdapter {
         let description = application_description(&prepared.compiled);
         let header = builtin_header(&prepared);
         let package = header.package.clone();
-        let mut cache = self.cache.lock();
-        let generation = self
-            .store
-            .restore_builtin_protocol_package(&header, &prepared.files)
-            .map_err(super::portability::bundle_app_error)?;
-        cache.insert(
-            package.clone(),
-            CachedCompiledPackage {
-                generation,
-                compiled: Arc::new(prepared.compiled),
-            },
-        );
+        let cache = Arc::clone(&self.cache);
         let summary = self
-            .summary(&package)
-            .map_err(|error| protocol_package_app_error(&error))?;
-        let summary = summary.ok_or_else(|| {
-            protocol_package_app_error(&ProtocolPackageStorageError::NotFound {
-                package: package.clone(),
+            .executor
+            .execute(move |store| {
+                let mut cache = cache.lock();
+                let generation = store
+                    .restore_builtin_protocol_package(&header, &prepared.files)
+                    .map_err(super::portability::bundle_app_error)?;
+                cache.insert(
+                    package.clone(),
+                    CachedCompiledPackage {
+                        generation,
+                        compiled: Arc::new(prepared.compiled),
+                    },
+                );
+                store
+                    .load_protocol_package_header(&package)
+                    .map_err(ProtocolPackageStorageError::from)
+                    .map_err(|error| protocol_package_app_error(&error))?
+                    .map(super::summary_from_header)
+                    .ok_or_else(|| {
+                        protocol_package_app_error(&ProtocolPackageStorageError::NotFound {
+                            package,
+                        })
+                    })
             })
-        })?;
+            .await?;
         Ok(ProtocolPackageImportViewModel {
             outcome: ProtocolPackageImportOutcomeViewModel::Installed,
             version: application_summary(summary),

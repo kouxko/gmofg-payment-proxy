@@ -15,6 +15,20 @@ import { productionRustSource, productionRustWithStrings } from "./rust-lexical-
 const repositoryRoot = path.resolve(import.meta.dirname, "..");
 const runtimeCrate = "src-tauri/crates/proxy";
 const exchangeCrate = "src-tauri/crates/exchange";
+const infrastructureCrate = "src-tauri/crates/infrastructure";
+const infrastructureCleanupFiles = [
+  "src/adapters/external_package_registry/application_port.rs",
+  "src/adapters/external_package_registry/cleanup.rs",
+  "src/adapters/listener_runtime/port.rs",
+  "src/adapters/listener_runtime/start.rs",
+  "src/adapters/listener_runtime/lifecycle.rs",
+  "src/adapters/listener_runtime/document_rule_compiler.rs",
+  "src/adapters/pipeline/rule_runtime.rs",
+  "src/adapters/pipeline/rule_runtime/actor.rs",
+  "src/adapters/protocol_packages/runtime_snapshot.rs",
+  "src/adapters/android_adb/owner.rs",
+  "src/sqlite/executor.rs",
+];
 const requireZeroDebt =
   process.argv.includes("--require-zero-debt") ||
   process.env.RUNTIME_ARCH_REQUIRE_ZERO_DEBT === "1";
@@ -30,7 +44,8 @@ const productionSpawnLedger = [
   ledger("src/http/tracking.rs", "spawn", "tokio::spawn", "lifecycle-facility", "upstream HTTP/1 connection ended", "src/http/tests.rs", "downstream_response_write_stops_when_supervisor_cancels"),
   ledger("src/listener/task_scope.rs", "spawn_owned", "TaskTracker::spawn", "connection-task-scope", "task", "src/listener/task_scope/tests.rs", "close_spawn_barrier_accepts_and_drains_or_rejects_without_polling"),
   ledger("src/listener/supervisor.rs", "run_bound", "JoinSet::spawn", "listener-supervisor", "run_connection", "src/listener/supervisor/tests.rs", "child_panic_faults_listener_and_cancels_sibling"),
-  ledger("src/listener/supervisor.rs", "run_bound", "JoinSet::spawn", "listener-supervisor", "handler.reject", "src/listener/supervisor/tests.rs", "cidr_rejection_emits_no_admission_or_terminal_event"),
+  ledger("src/tls/server.rs", "accept", "tokio::task::spawn_blocking", "tls-handshake", "runtime.block_on", "tests/tls_mtls.rs", "stop_cancels_a_silent_inbound_tls_handshake"),
+  ledger("src/reverse/admission.rs", "accept", "tokio::task::spawn_blocking", "reverse-tls-handshake", "runtime.block_on", "tests/reverse_listener/downstream_tls.rs", "cancelling_silent_reverse_tls_handshake_drains_blocking_owner_without_starving_runtime"),
 ];
 
 // Phase-1 migration debt is intentionally separate from the permanent ownership ledger. Delete
@@ -38,6 +53,20 @@ const productionSpawnLedger = [
 // (`--require-zero-debt` or RUNTIME_ARCH_REQUIRE_ZERO_DEBT=1) turns every remaining row into a
 // failure, so these sites cannot become a permanent allow-list.
 const productionSpawnDebt = [];
+
+const infrastructureCleanupSpawnLedger = [
+  ledger("src/adapters/external_package_registry/cleanup.rs", "begin_disconnect", "tokio::spawn", "external-package-registry", "client.disconnect().await", "src/adapters/external_package_registry/tests/lifecycle.rs", "cancelled_disconnect_cleanup_survives_and_other_package_progresses"),
+  ledger("src/adapters/external_package_registry/application_port.rs", "delete", "tokio::spawn", "external-package-registry", "registry.begin_disconnect(&package, None).await", "src/adapters/external_package_registry/tests/lifecycle.rs", "cancelled_delete_finishes_owned_cleanup_and_allows_fresh_install"),
+  ledger("src/adapters/listener_runtime/start.rs", "commit_prepared_start", "tokio::spawn", "listener-runtime", "serve_prepared_listener", "src/adapters/listener_runtime/tests/body_codec_lifecycle.rs", "body_codec_snapshot_is_installed_for_exact_epoch_and_removed_on_stop"),
+  ledger("src/adapters/listener_runtime/lifecycle.rs", "finish_start_owned", "tokio::spawn", "listener-runtime", "owner.start_reserved", "src/adapters/listener_runtime/tests/body_codec_cancellation.rs", "aborted_start_caller_releases_pending_epoch_and_allows_restart"),
+  ledger("src/adapters/listener_runtime/lifecycle.rs", "finish_stopping_owned", "tokio::spawn", "listener-runtime", "owner.finish_stopping(listener_id, handle).await", "src/adapters/listener_runtime/tests/body_codec_cancellation.rs", "aborted_stop_caller_cannot_cancel_epoch_cleanup"),
+  ledger("src/adapters/pipeline/rule_runtime/actor.rs", "spawn", "tokio::spawn", "rule-runtime", "run(", "src/adapters/pipeline/tests/rules_and_faults.rs", "aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine"),
+  ledger("src/adapters/pipeline/rule_runtime.rs", "runtime_stopping", "tokio::spawn", "rule-runtime", "sender.send(Command::Stop", "src/adapters/pipeline/tests/rules_and_faults.rs", "aborted_runtime_stopping_still_retires_epoch_and_resets_actor"),
+  ledger("src/adapters/protocol_packages/runtime_snapshot.rs", "freeze_for_listener_start_async", "tokio::task::spawn_blocking", "protocol-runtime", "freeze_loaded", "src/adapters/protocol_packages/tests/runtime_snapshot_async.rs", "listener_snapshot_waits_asynchronously_and_queued_cancel_does_not_run_sqlite_work"),
+  ledger("src/adapters/listener_runtime/document_rule_compiler.rs", "compile", "tokio::task::spawn_blocking", "document-rule-compiler", "compile()", "src/adapters/listener_runtime/external_relay/contract_tests.rs", "queued_rule_compile_cancellation_keeps_runtime_responsive_and_rules_unchanged"),
+  ledger("src/sqlite/executor.rs", "execute", "tokio::task::spawn_blocking", "sqlite-executor", "operation(&store)", "src/sqlite/executor.rs", "cancelling_waiter_does_not_strand_the_sqlite_connection_lock"),
+  ledger("src/sqlite/executor.rs", "open_sqlite_persistence_with", "tokio::task::spawn_blocking", "sqlite-bootstrap", "open", "src/sqlite/executor.rs", "cancelling_started_sqlite_open_only_stops_waiting"),
+];
 
 // These are the pre-Phase-2 HTTP transport implementation files. They are not the neutral
 // transport kernel and are enumerated so a newly added transport file is neutral by default.
@@ -204,6 +233,8 @@ function ownerIsValid(entry) {
   if (entry.owner === "listener-supervisor") return /(?:^|\/)supervisor(?:\/|\.rs$)/u.test(entry.file) || /(?:^|\/)listener\/supervisor\.rs$/u.test(entry.file);
   if (entry.owner === "connection-task-scope") return /task_scope\.rs$/u.test(entry.file) && entry.symbol === "spawn_owned";
   if (entry.owner === "lifecycle-facility") return !/(?:^|\/)(?:http|forward|socket_relay)\/.*(?:handler|connect|websocket|http|mitm)\.rs$/u.test(entry.file);
+  if (entry.owner === "tls-handshake") return entry.file === "src/tls/server.rs" && entry.symbol === "accept" && entry.api === "tokio::task::spawn_blocking";
+  if (entry.owner === "reverse-tls-handshake") return entry.file === "src/reverse/admission.rs" && entry.symbol === "accept" && entry.api === "tokio::task::spawn_blocking";
   return false;
 }
 
@@ -250,6 +281,53 @@ async function checkSpawnLedger(root, ledgerEntries, debtEntries, zeroDebt) {
   return { violations, sites, activeDebt: debtEntries.filter((_, index) => matchedDebt.has(index)) };
 }
 
+async function checkInfrastructureCleanupLedger(root, ledgerEntries) {
+  const crateRoot = path.join(root, infrastructureCrate);
+  const sources = [];
+  for (const file of infrastructureCleanupFiles) {
+    try {
+      const raw = await readFile(path.join(crateRoot, file), "utf8");
+      sources.push({ file, source: productionRustWithStrings(raw) });
+    } catch {
+      // Fixtures may omit either scoped file; a ledger row for an omitted file is still stale.
+    }
+  }
+  const sites = sources.flatMap(({ file, source }) => taskSites(file, source));
+  const violations = [];
+  const matched = new Set();
+  for (const site of sites) {
+    const index = ledgerEntries.findIndex((entry) => entryMatches(entry, site));
+    if (index < 0) {
+      violations.push(problem("INFRA_SPAWN_UNREGISTERED", site.file, `${site.symbol} creates an unowned scoped infrastructure task`, site.line));
+      continue;
+    }
+    const entry = ledgerEntries[index];
+    matched.add(index);
+    const validOwner = (entry.owner === "external-package-registry"
+        && entry.file.startsWith("src/adapters/external_package_registry/"))
+      || (entry.owner === "listener-runtime"
+        && entry.file.startsWith("src/adapters/listener_runtime/"))
+      || (entry.owner === "rule-runtime"
+        && entry.file.startsWith("src/adapters/pipeline/"))
+      || (entry.owner === "protocol-runtime"
+        && entry.file === "src/adapters/protocol_packages/runtime_snapshot.rs")
+      || (entry.owner === "document-rule-compiler"
+        && entry.file === "src/adapters/listener_runtime/document_rule_compiler.rs")
+      || (entry.owner === "android-runtime-owner"
+        && entry.file === "src/adapters/android_adb/owner.rs")
+      || (entry.owner === "sqlite-bootstrap"
+        && entry.file === "src/sqlite/executor.rs")
+      || (entry.owner === "sqlite-executor"
+        && entry.file === "src/sqlite/executor.rs");
+    if (!validOwner) violations.push(problem("INFRA_SPAWN_OWNER", site.file, `${site.symbol} has an invalid scoped infrastructure owner`, site.line));
+    else if (!(await proofIsValid(crateRoot, entry))) violations.push(problem("INFRA_SPAWN_PROOF", site.file, `${site.symbol} lacks its registered cancellation proof`, site.line));
+  }
+  ledgerEntries.forEach((entry, index) => {
+    if (!matched.has(index)) violations.push(problem("INFRA_SPAWN_LEDGER_STALE", entry.file, `${entry.symbol} / ${entry.anchor} is registered but absent`));
+  });
+  return { sites, violations };
+}
+
 async function checkExchangeTaskBoundary(root) {
   return (await exchangeSources(root)).flatMap(({ file, source }) =>
     taskSites(file, source).map((site) =>
@@ -267,20 +345,23 @@ function problem(code, file, message, line) {
   return { code, file, line, message };
 }
 
-async function scan(root, { ledgerEntries = [], debtEntries = [], zeroDebt = false } = {}) {
-  const [crateViolations, boundaryViolations, exchangeTaskViolations, spawn] = await Promise.all([
+async function scan(root, { ledgerEntries = [], debtEntries = [], infrastructureLedgerEntries = [], zeroDebt = false } = {}) {
+  const [crateViolations, boundaryViolations, exchangeTaskViolations, spawn, infrastructureSpawn] = await Promise.all([
     checkCrateDependencies(root),
     checkSourceBoundaries(root),
     checkExchangeTaskBoundary(root),
     checkSpawnLedger(root, ledgerEntries, debtEntries, zeroDebt),
+    checkInfrastructureCleanupLedger(root, infrastructureLedgerEntries),
   ]);
   return {
     ...spawn,
+    infrastructureSites: infrastructureSpawn.sites,
     violations: [
       ...crateViolations,
       ...boundaryViolations,
       ...exchangeTaskViolations,
       ...spawn.violations,
+      ...infrastructureSpawn.violations,
     ],
   };
 }
@@ -419,6 +500,99 @@ const fixtureCases = [
     files: { "src-tauri/crates/proxy/src/other.rs": `pub async fn detach() { tokio::spawn(async {}); }\n` },
   },
   {
+    name: "unregistered infrastructure registry cleanup spawn fails",
+    expected: ["INFRA_SPAWN_UNREGISTERED"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/external_package_registry/cleanup.rs":
+        `pub async fn begin_disconnect() { tokio::spawn(async { close().await }); }\n`,
+    },
+  },
+  {
+    name: "stale infrastructure registry cleanup ledger fails",
+    expected: ["INFRA_SPAWN_LEDGER_STALE"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/external_package_registry/cleanup.rs":
+        `pub async fn begin_disconnect() { close().await; }\n`,
+      "src-tauri/crates/infrastructure/src/adapters/external_package_registry/tests/lifecycle.rs":
+        `fn cancellation_proof() {}\n`,
+    },
+    infrastructureLedger: [ledger("src/adapters/external_package_registry/cleanup.rs", "begin_disconnect", "tokio::spawn", "external-package-registry", "close().await", "src/adapters/external_package_registry/tests/lifecycle.rs", "cancellation_proof")],
+  },
+  {
+    name: "unregistered infrastructure rule actor spawn fails",
+    expected: ["INFRA_SPAWN_UNREGISTERED"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs":
+        `pub fn spawn() { tokio::spawn(async { run_actor().await }); }\n`,
+    },
+  },
+  {
+    name: "stale infrastructure rule actor ledger fails",
+    expected: ["INFRA_SPAWN_LEDGER_STALE"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs":
+        `pub async fn spawn() { run_actor().await; }\n`,
+      "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/rules_and_faults.rs":
+        `fn actor_cancellation_proof() {}\n`,
+    },
+    infrastructureLedger: [ledger("src/adapters/pipeline/rule_runtime/actor.rs", "spawn", "tokio::spawn", "rule-runtime", "run_actor", "src/adapters/pipeline/tests/rules_and_faults.rs", "actor_cancellation_proof")],
+  },
+  {
+    name: "unregistered Android owner transition spawn fails",
+    expected: ["INFRA_SPAWN_UNREGISTERED"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/android_adb/owner.rs":
+        `pub async fn run_owner_transition() { tokio::spawn(async { persist().await }); }\n`,
+    },
+  },
+  {
+    name: "stale SQLite bootstrap ledger fails",
+    expected: ["INFRA_SPAWN_LEDGER_STALE"],
+    files: {
+      "src-tauri/crates/infrastructure/src/sqlite/executor.rs":
+        `pub async fn open_sqlite_persistence_with() { open(); }\nfn cancelling_started_sqlite_open_only_stops_waiting() {}\n`,
+    },
+    infrastructureLedger: [ledger("src/sqlite/executor.rs", "open_sqlite_persistence_with", "tokio::task::spawn_blocking", "sqlite-bootstrap", "open", "src/sqlite/executor.rs", "cancelling_started_sqlite_open_only_stops_waiting")],
+  },
+  {
+    name: "unregistered infrastructure protocol compile spawn fails",
+    expected: ["INFRA_SPAWN_UNREGISTERED"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/protocol_packages/runtime_snapshot.rs":
+        `pub async fn freeze_for_listener_start_async() { tokio::task::spawn_blocking(freeze_loaded).await; }\n`,
+    },
+  },
+  {
+    name: "stale infrastructure protocol compile ledger fails",
+    expected: ["INFRA_SPAWN_LEDGER_STALE"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/protocol_packages/runtime_snapshot.rs":
+        `pub async fn freeze_for_listener_start_async() { freeze_loaded(); }\n`,
+      "src-tauri/crates/infrastructure/src/adapters/protocol_packages/tests/runtime_snapshot_async.rs":
+        `fn compile_cancellation_proof() {}\n`,
+    },
+    infrastructureLedger: [ledger("src/adapters/protocol_packages/runtime_snapshot.rs", "freeze_for_listener_start_async", "tokio::task::spawn_blocking", "protocol-runtime", "freeze_loaded", "src/adapters/protocol_packages/tests/runtime_snapshot_async.rs", "compile_cancellation_proof")],
+  },
+  {
+    name: "unregistered infrastructure document rule compiler spawn fails",
+    expected: ["INFRA_SPAWN_UNREGISTERED"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rule_compiler.rs":
+        `pub async fn compile() { tokio::task::spawn_blocking(|| compile()).await; }\n`,
+    },
+  },
+  {
+    name: "stale infrastructure document rule compiler ledger fails",
+    expected: ["INFRA_SPAWN_LEDGER_STALE"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rule_compiler.rs":
+        `pub async fn compile() { compile_rules(); }\n`,
+      "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/contract_tests.rs":
+        `fn queued_rule_compile_cancellation_keeps_runtime_responsive_and_rules_unchanged() {}\n`,
+    },
+    infrastructureLedger: [ledger("src/adapters/listener_runtime/document_rule_compiler.rs", "compile", "tokio::task::spawn_blocking", "document-rule-compiler", "compile()", "src/adapters/listener_runtime/external_relay/contract_tests.rs", "queued_rule_compile_cancellation_keeps_runtime_responsive_and_rules_unchanged")],
+  },
+  {
     name: "externally-polled Exchange core cannot create background tasks",
     expected: ["EXCHANGE_TASK"],
     files: {
@@ -478,6 +652,7 @@ async function runFixtureTests() {
       const result = await scan(fixtureRoot, {
         ledgerEntries: fixture.ledger ?? [],
         debtEntries: fixture.debt ?? [],
+        infrastructureLedgerEntries: fixture.infrastructureLedger ?? [],
         zeroDebt: fixture.zeroDebt ?? false,
       });
       const actual = result.violations.map(({ code }) => code).sort();
@@ -505,6 +680,7 @@ await runFixtureTests();
 const result = await scan(repositoryRoot, {
   ledgerEntries: productionSpawnLedger,
   debtEntries: productionSpawnDebt,
+  infrastructureLedgerEntries: infrastructureCleanupSpawnLedger,
   zeroDebt: requireZeroDebt,
 });
 
@@ -514,6 +690,7 @@ if (result.violations.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(`Runtime architecture gate passed (${result.sites.length} owned production task sites).`);
+  console.log(`Infrastructure owned-task gate passed (${result.infrastructureSites.length} owned task sites).`);
 }
 
 if (result.activeDebt.length > 0) {

@@ -9,11 +9,15 @@ use intercept_proxy_application::{
     AppError, AppResult, CertificateItemViewModel, CertificateReference, CertificateReferenceKind,
     ListenerCertificateImportPort, ListenerCertificateImportViewModel, PortableCertificateMaterial,
 };
-use intercept_proxy_runtime::ReverseClientIdentity;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::{CertificateService, ProtectedSecretRecord, SecretProtector, SqliteStore};
+#[cfg(test)]
+use crate::SqliteStore;
+use crate::{
+    CertificateService, IntoSqlitePersistence, ProtectedSecretRecord, SecretProtector,
+    SqliteExecutor,
+};
 
 use super::{
     NativeFileDialog,
@@ -42,7 +46,7 @@ const KIND_UPSTREAM_CLIENT_IDENTITY_PEM: u8 = 5;
 const MAX_PORTABLE_MATERIAL_BYTES: usize = 16 * 1024 * 1024;
 
 pub struct ManagedListenerCertificateAdapter {
-    store: Arc<SqliteStore>,
+    executor: SqliteExecutor,
     protector: Arc<dyn SecretProtector>,
     dialog: Arc<dyn NativeFileDialog>,
 }
@@ -51,7 +55,7 @@ impl fmt::Debug for ManagedListenerCertificateAdapter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ManagedListenerCertificateAdapter")
-            .field("store", &self.store)
+            .field("executor", &self.executor)
             .field("protector", &"<system secret protector>")
             .field("dialog", &self.dialog)
             .finish()
@@ -61,108 +65,33 @@ impl fmt::Debug for ManagedListenerCertificateAdapter {
 impl ManagedListenerCertificateAdapter {
     #[must_use]
     pub fn new(
-        store: Arc<SqliteStore>,
+        persistence: impl IntoSqlitePersistence,
         protector: Arc<dyn SecretProtector>,
         dialog: Arc<dyn NativeFileDialog>,
     ) -> Self {
+        let (executor, store) = persistence.into_sqlite_persistence();
+        drop(store);
         Self {
-            store,
+            executor,
             protector,
             dialog,
         }
     }
 
-    pub fn resolve_trust(
-        &self,
-        reference: &CertificateReference,
-    ) -> Option<AppResult<Vec<Vec<u8>>>> {
-        let key = match managed_key(&reference.reference)? {
-            Ok(key) => key,
-            Err(error) => return Some(Err(error)),
-        };
-        Some(self.load(key).and_then(|material| {
-            let trusted = match (reference.kind, material.kind) {
-                (CertificateReferenceKind::UpstreamServerTrust, KIND_UPSTREAM_SERVER_TRUST) => {
-                    CertificateService.parse_upstream_ca(&material.bytes)
-                }
-                (CertificateReferenceKind::DownstreamClientTrust, KIND_DOWNSTREAM_CLIENT_TRUST) => {
-                    CertificateService.parse_client_trust_anchor(&material.bytes)
-                }
-                _ => return Err(kind_mismatch()),
-            }
-            .map_err(app_error)?;
-            Ok(vec![trusted.certificate_der])
-        }))
+    async fn persist_async(&self, kind: u8, password: &[u8], bytes: &[u8]) -> AppResult<String> {
+        let (key, record) = self.protected_record(kind, password, bytes)?;
+        self.executor
+            .execute(move |store| store.save_protected_secret(&record).map_err(AppError::from))
+            .await?;
+        Ok(key)
     }
 
-    pub fn resolve_identity(
+    fn protected_record(
         &self,
-        reference: &CertificateReference,
-    ) -> Option<AppResult<ReverseClientIdentity>> {
-        let key = match managed_key(&reference.reference)? {
-            Ok(key) => key,
-            Err(error) => return Some(Err(error)),
-        };
-        Some(
-            self.load(key)
-                .and_then(|material| match (reference.kind, material.kind) {
-                    (
-                        CertificateReferenceKind::UpstreamClientIdentity,
-                        KIND_UPSTREAM_CLIENT_IDENTITY,
-                    ) => {
-                        let password = std::str::from_utf8(&material.password).map_err(|_| {
-                            AppError::new("CERTIFICATE_NOT_READY", "受保护的 PKCS12 密码编码无效。")
-                        })?;
-                        let mut parsed = CertificateService
-                            .parse_pkcs12(&material.bytes, password)
-                            .map_err(app_error)?;
-                        let mut chain = vec![std::mem::take(&mut parsed.certificate_der)];
-                        chain.extend(std::mem::take(&mut parsed.chain_der));
-                        Ok(ReverseClientIdentity {
-                            certificate_chain_der: chain,
-                            private_key_pkcs8_der: std::mem::take(
-                                &mut parsed.private_key_pkcs8_der,
-                            ),
-                        })
-                    }
-                    (
-                        CertificateReferenceKind::UpstreamClientIdentity,
-                        KIND_UPSTREAM_CLIENT_IDENTITY_PEM,
-                    ) => {
-                        let mut parsed = CertificateService
-                            .parse_client_identity_pem(&material.bytes)
-                            .map_err(app_error)?;
-                        Ok(ReverseClientIdentity {
-                            certificate_chain_der: std::mem::take(
-                                &mut parsed.certificate_chain_der,
-                            ),
-                            private_key_pkcs8_der: std::mem::take(
-                                &mut parsed.private_key_pkcs8_der,
-                            ),
-                        })
-                    }
-                    (
-                        CertificateReferenceKind::ReverseServerIdentity,
-                        KIND_DOWNSTREAM_SERVER_IDENTITY,
-                    ) => {
-                        let mut parsed = CertificateService
-                            .parse_server_identity_pem(&material.bytes, "")
-                            .map_err(app_error)?;
-                        Ok(ReverseClientIdentity {
-                            certificate_chain_der: std::mem::take(
-                                &mut parsed.certificate_chain_der,
-                            ),
-                            private_key_pkcs8_der: std::mem::take(
-                                &mut parsed.private_key_pkcs8_der,
-                            ),
-                        })
-                    }
-                    _ => Err(kind_mismatch()),
-                }),
-        )
-    }
-
-    fn persist(&self, kind: u8, password: &[u8], bytes: &[u8]) -> AppResult<String> {
+        kind: u8,
+        password: &[u8],
+        bytes: &[u8],
+    ) -> AppResult<(String, ProtectedSecretRecord)> {
         let mut plaintext = Zeroizing::new(Vec::with_capacity(6 + password.len() + bytes.len()));
         plaintext.push(FORMAT_VERSION);
         plaintext.push(kind);
@@ -173,26 +102,37 @@ impl ManagedListenerCertificateAdapter {
         plaintext.extend_from_slice(bytes);
         let protected_blob = infra(self.protector.protect(&plaintext))?;
         let key = Uuid::new_v4().to_string();
-        infra(self.store.save_protected_secret(&ProtectedSecretRecord {
+        let record = ProtectedSecretRecord {
             provider: PROVIDER.into(),
             key: key.clone(),
             protected_blob,
             updated_at: Utc::now(),
-        }))?;
-        Ok(key)
+        };
+        Ok((key, record))
     }
 
-    fn load(&self, key: &str) -> AppResult<ManagedMaterial> {
-        let record = infra(self.store.load_protected_secret(PROVIDER, key))?.ok_or_else(|| {
-            AppError::new(
-                "CERTIFICATE_NOT_READY",
-                "Listener TLS 安全引用不存在，请重新导入证书材料。",
-            )
-        })?;
+    async fn load_async(&self, key: &str) -> AppResult<ManagedMaterial> {
+        let key = key.to_owned();
+        let record = self
+            .executor
+            .execute(move |store| {
+                store
+                    .load_protected_secret(PROVIDER, &key)
+                    .map_err(AppError::from)
+            })
+            .await?
+            .ok_or_else(|| {
+                AppError::new(
+                    "CERTIFICATE_NOT_READY",
+                    "Listener TLS 安全引用不存在，请重新导入证书材料。",
+                )
+            })?;
         let plaintext = Zeroizing::new(infra(self.protector.unprotect(&record.protected_blob))?);
         decode_material(plaintext)
     }
 }
+
+mod resolution;
 
 #[async_trait]
 impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
@@ -225,7 +165,9 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
             }
         };
         let canonical_pem = parsed.canonical_pem();
-        let key = self.persist(KIND_DOWNSTREAM_SERVER_IDENTITY, &[], &canonical_pem)?;
+        let key = self
+            .persist_async(KIND_DOWNSTREAM_SERVER_IDENTITY, &[], &canonical_pem)
+            .await?;
         let reference = reference(label, CertificateReferenceKind::ReverseServerIdentity, &key);
         Ok(Some(imported(
             reference,
@@ -247,7 +189,9 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         let trusted = CertificateService
             .parse_client_trust_anchor(&bytes)
             .map_err(app_error)?;
-        let key = self.persist(KIND_DOWNSTREAM_CLIENT_TRUST, &[], &trusted.certificate_der)?;
+        let key = self
+            .persist_async(KIND_DOWNSTREAM_CLIENT_TRUST, &[], &trusted.certificate_der)
+            .await?;
         let reference = reference(label, CertificateReferenceKind::DownstreamClientTrust, &key);
         Ok(Some(imported(
             reference,
@@ -300,7 +244,9 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
                 ));
             }
         };
-        let key = self.persist(stored_kind, stored_password, &bytes)?;
+        let key = self
+            .persist_async(stored_kind, stored_password, &bytes)
+            .await?;
         let reference = reference(
             label,
             CertificateReferenceKind::UpstreamClientIdentity,
@@ -323,7 +269,9 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         let trusted = CertificateService
             .parse_upstream_ca(&bytes)
             .map_err(app_error)?;
-        let key = self.persist(KIND_UPSTREAM_SERVER_TRUST, &[], &trusted.certificate_der)?;
+        let key = self
+            .persist_async(KIND_UPSTREAM_SERVER_TRUST, &[], trusted.canonical_bytes())
+            .await?;
         let reference = reference(label, CertificateReferenceKind::UpstreamServerTrust, &key);
         Ok(Some(imported(
             reference,
@@ -341,7 +289,7 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         let Some(key) = managed_key(&reference.reference) else {
             return inspect_file_reference(&reference);
         };
-        let material = self.load(key?)?;
+        let material = self.load_async(key?).await?;
         let metadata = match (reference.kind, material.kind) {
             (CertificateReferenceKind::UpstreamClientIdentity, KIND_UPSTREAM_CLIENT_IDENTITY) => {
                 let password = std::str::from_utf8(&material.password).map_err(|_| {
@@ -395,7 +343,7 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
                 "只能导出由 Intercept Proxy 托管的 Listener TLS 证书材料。",
             )
         })??;
-        let material = self.load(key)?;
+        let material = self.load_async(key).await?;
         ensure_kind_matches(reference.kind, material.kind)?;
         // PKCS#12 的空密码与“不提供密码”含义不同。可移植文档必须保留 Some("")，
         // 否则导出后再导入会被 `validate_portable_material` 判定为缺少密码。
@@ -425,7 +373,9 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
         material: PortableCertificateMaterial,
     ) -> AppResult<CertificateReference> {
         let (stored_kind, password, stored_bytes) = decode_portable_material(&material)?;
-        let key = self.persist(stored_kind, password.as_bytes(), &stored_bytes)?;
+        let key = self
+            .persist_async(stored_kind, password.as_bytes(), &stored_bytes)
+            .await?;
         Ok(CertificateReference {
             id: material.reference_id,
             label: material.label,
@@ -439,7 +389,13 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
     }
 
     async fn application_backup_baseline(&self) -> AppResult<[u8; 32]> {
-        infra(self.store.protected_secret_fingerprint(PROVIDER))
+        self.executor
+            .execute(|store| {
+                store
+                    .protected_secret_fingerprint(PROVIDER)
+                    .map_err(AppError::from)
+            })
+            .await
     }
 
     async fn discard(&self, reference: CertificateReference) -> AppResult<()> {
@@ -449,9 +405,17 @@ impl ListenerCertificateImportPort for ManagedListenerCertificateAdapter {
                 "只能清理由 Intercept Proxy 托管且尚未保存的证书材料。",
             )
         })??;
-        let material = self.load(key)?;
+        let material = self.load_async(key).await?;
         ensure_kind_matches(reference.kind, material.kind)?;
-        let deleted = infra(self.store.delete_protected_secret(PROVIDER, key))?;
+        let key = key.to_owned();
+        let deleted = self
+            .executor
+            .execute(move |store| {
+                store
+                    .delete_protected_secret(PROVIDER, &key)
+                    .map_err(AppError::from)
+            })
+            .await?;
         if !deleted {
             return Err(AppError::new(
                 "CERTIFICATE_NOT_READY",

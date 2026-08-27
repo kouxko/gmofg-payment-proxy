@@ -12,6 +12,7 @@ pub(super) fn status_from_snapshot(
     let faulted = snapshot.finished || snapshot.fault_reason.is_some();
     ListenerStatusViewModel {
         listener_id: snapshot.listener_id,
+        runtime_epoch: Some(snapshot.runtime_epoch),
         state: if faulted {
             ListenerRuntimeState::Faulted
         } else {
@@ -165,6 +166,7 @@ mod tests {
         let status = status_from_snapshot(
             StatusSnapshot {
                 listener_id,
+                runtime_epoch: uuid::Uuid::nil(),
                 finished: false,
                 listen_address: "127.0.0.1:1234".into(),
                 fault_reason: None,

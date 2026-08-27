@@ -2,7 +2,7 @@
 
 use super::{Application, validation::require_confirmation};
 use crate::{
-    APPLICATION_CONFIGURATION_FORMAT_VERSION, AndroidNetworkState, AppError, AppResult,
+    APPLICATION_CONFIGURATION_FORMAT_VERSION, AndroidRuntimeTarget, AppError, AppResult,
     ApplicationConfigurationDocument, OperationResultViewModel, PortableSettings, ProxyWorkspace,
     SettingsDraft, UiTone,
 };
@@ -15,24 +15,48 @@ impl Application {
         require_confirmation(confirmed, "清除全部配置和测试数据需要显式确认。")?;
         let _gate = self.mutation_gate.lock().await;
 
-        if let Ok(status) = self.android.network_status().await
-            && matches!(
-                status.state,
-                AndroidNetworkState::StartRequested
-                    | AndroidNetworkState::Running
-                    | AndroidNetworkState::StopRequested
+        let owners = self.android.runtime_owners().await.map_err(|error| {
+            AppError::new(
+                "APPLICATION_DATA_RESET_BLOCKED",
+                format!(
+                    "无法读取设备网络运行实例，未清除数据：{}",
+                    error.view_model.message
+                ),
             )
-        {
-            self.android.network_stop().await.map_err(|error| {
-                AppError::new(
-                    "APPLICATION_DATA_RESET_BLOCKED",
-                    format!(
-                        "设备网络接管停止失败，未清除数据：{}",
-                        error.view_model.message
-                    ),
-                )
-                .retryable("请先在设备网络页执行紧急恢复，再重试清除。")
-            })?;
+            .retryable("请恢复所有设备连接并重试清除。")
+        })?;
+        let mut stop_errors = Vec::new();
+        for owner in owners {
+            if let Err(error) = self
+                .android
+                .network_stop(AndroidRuntimeTarget {
+                    serial: owner.serial.clone(),
+                    expected_epoch: owner.epoch,
+                })
+                .await
+            {
+                stop_errors.push(format!(
+                    "{} [{}] {}",
+                    owner.serial, error.view_model.code, error.view_model.message
+                ));
+            }
+        }
+        if !stop_errors.is_empty() {
+            return Err(AppError::new(
+                "APPLICATION_DATA_RESET_BLOCKED",
+                format!(
+                    "设备网络接管停止失败，未清除数据：{}",
+                    stop_errors.join("；")
+                ),
+            )
+            .retryable("请先对失败设备执行紧急恢复，再重试清除。"));
+        }
+        if !self.android.runtime_owners().await?.is_empty() {
+            return Err(AppError::new(
+                "APPLICATION_DATA_RESET_BLOCKED",
+                "设备网络运行实例仍未清空，未清除数据。",
+            )
+            .retryable("请刷新设备状态并执行紧急恢复后重试。"));
         }
         self.app_shutdown_inner().await?;
 
@@ -51,7 +75,7 @@ impl Application {
         self.protocol_package_portability
             .reset_application_bundle(document)
             .await?;
-        *self.android_package_cache.lock().await = None;
+        self.android_package_cache.lock().await.clear();
 
         Ok(OperationResultViewModel {
             success: true,
@@ -67,8 +91,7 @@ impl Application {
     pub(super) async fn workspaces_before_replacement(&self) -> AppResult<Vec<ProxyWorkspace>> {
         let mut has_android_network_profiles = false;
         let mut old_workspaces = Vec::new();
-        for summary in self.workspaces.list().await? {
-            let current = self.workspaces.get(summary.id).await?;
+        for current in self.workspaces.snapshot().await?.details {
             self.ensure_workspace_not_running(&current).await?;
             has_android_network_profiles |= !current.android_network_profiles.is_empty();
             old_workspaces.push(current);

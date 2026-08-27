@@ -1,7 +1,4 @@
-//! Contract-only registry for the staged MCP environment configuration workflow.
-//!
-//! These tools are deliberately not merged into the active catalog or dispatch path. G036 owns
-//! runtime exposure after the Application lifecycle and persistence behavior exists.
+//! Contract registry and public projection authority for MCP environment configuration.
 
 mod schema;
 
@@ -9,51 +6,154 @@ use std::collections::BTreeSet;
 
 use intercept_proxy_application::parse_environment_configuration_candidate_v1;
 use rmcp::model::{Tool, ToolAnnotations};
-use serde_json::Value;
+use serde_json::{Value, json};
+
+pub(crate) const ENVIRONMENT_TOOL_NAMES: [&str; 5] = [
+    "mcp_environment_capabilities",
+    "environment_candidate_create",
+    "environment_candidate_status",
+    "environment_candidate_cancel",
+    "environment_candidate_apply",
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum EnvironmentToolKind {
+    Capabilities,
+    Create,
+    Status,
+    Cancel,
+    Apply,
+}
+
+#[derive(Debug)]
+pub(crate) struct EnvironmentIpBindingProjection {
+    pub available: bool,
+    pub bind_address: &'static str,
+    pub port: u16,
+    pub warning_codes: Vec<&'static str>,
+}
+
+#[derive(Debug)]
+pub(crate) struct EnvironmentTransportProjection {
+    pub endpoint: String,
+    pub ipv4: EnvironmentIpBindingProjection,
+    pub ipv6: EnvironmentIpBindingProjection,
+    pub warnings: Vec<&'static str>,
+}
 
 pub fn environment_contract_tools() -> Vec<Tool> {
     vec![
         tool(
-            "mcp_environment_capabilities",
+            ENVIRONMENT_TOOL_NAMES[0],
             "Environment configuration capabilities",
             "Describe the staged environment configuration contract.",
-            contract_schema("mcp_environment_capabilities", "inputSchema"),
-            contract_schema("mcp_environment_capabilities", "outputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[0], "inputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[0], "outputSchema"),
             (true, false, true),
         ),
         tool(
-            "environment_candidate_create",
+            ENVIRONMENT_TOOL_NAMES[1],
             "Create environment candidate",
             "Parse and validate one complete environment configuration candidate.",
-            contract_schema("environment_candidate_create", "inputSchema"),
-            contract_schema("environment_candidate_create", "outputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[1], "inputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[1], "outputSchema"),
             (false, false, false),
         ),
         tool(
-            "environment_candidate_status",
+            ENVIRONMENT_TOOL_NAMES[2],
             "Environment candidate status",
             "Read one candidate's process-local status.",
-            contract_schema("environment_candidate_status", "inputSchema"),
-            contract_schema("environment_candidate_status", "outputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[2], "inputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[2], "outputSchema"),
             (true, false, true),
         ),
         tool(
-            "environment_candidate_cancel",
+            ENVIRONMENT_TOOL_NAMES[3],
             "Cancel environment candidate",
             "Cancel one candidate before apply owns its commit work.",
-            contract_schema("environment_candidate_cancel", "inputSchema"),
-            contract_schema("environment_candidate_cancel", "outputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[3], "inputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[3], "outputSchema"),
             (false, true, true),
         ),
         tool(
-            "environment_candidate_apply",
+            ENVIRONMENT_TOOL_NAMES[4],
             "Apply environment candidate",
             "Consume one confirmation token and queue the candidate for Application-owned apply.",
-            contract_schema("environment_candidate_apply", "inputSchema"),
-            contract_schema("environment_candidate_apply", "outputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[4], "inputSchema"),
+            contract_schema(ENVIRONMENT_TOOL_NAMES[4], "outputSchema"),
             (false, true, false),
         ),
     ]
+}
+
+pub(crate) fn environment_tool_kind(name: &str) -> Option<EnvironmentToolKind> {
+    match name {
+        name if name == ENVIRONMENT_TOOL_NAMES[0] => Some(EnvironmentToolKind::Capabilities),
+        name if name == ENVIRONMENT_TOOL_NAMES[1] => Some(EnvironmentToolKind::Create),
+        name if name == ENVIRONMENT_TOOL_NAMES[2] => Some(EnvironmentToolKind::Status),
+        name if name == ENVIRONMENT_TOOL_NAMES[3] => Some(EnvironmentToolKind::Cancel),
+        name if name == ENVIRONMENT_TOOL_NAMES[4] => Some(EnvironmentToolKind::Apply),
+        _ => None,
+    }
+}
+
+pub(crate) fn environment_capabilities_output(transport: EnvironmentTransportProjection) -> Value {
+    let ip_binding = |binding: EnvironmentIpBindingProjection| {
+        json!({
+            "available": binding.available,
+            "bind_address": binding.bind_address,
+            "port": binding.port,
+            "warning_codes": binding.warning_codes,
+        })
+    };
+    json!({
+        "protocol_version": "environment_configuration_candidate.v1",
+        "endpoint": transport.endpoint,
+        "plaintext_http": true,
+        "authentication": "none",
+        "source_ip_filter": "none",
+        "host_header_policy": "accept_any_syntactically_valid_http_host",
+        "origin_policy": "ignored",
+        "authorization_policy": "ignored_and_not_required",
+        "ipv4": ip_binding(transport.ipv4),
+        "ipv6": ip_binding(transport.ipv6),
+        "warnings": transport.warnings,
+        "read_budgets": {
+            "input_bytes": 262_144,
+            "output_bytes": 8_388_608,
+            "deadline_ms": 8_000,
+        },
+        "write_budgets": {
+            "create_input_bytes": 1_048_576,
+            "create_output_bytes": 1_048_576,
+            "create_deadline_ms": 30_000,
+            "status_cancel_apply_input_bytes": 16_384,
+            "status_cancel_apply_output_bytes": 1_048_576,
+            "status_cancel_apply_deadline_ms": 8_000,
+        },
+        "candidate_limits": {
+            "active_candidates": 4,
+            "active_per_target": 1,
+            "active_apply_global": 1,
+            "active_apply_per_target": 1,
+        },
+        "terminal_retention": {
+            "max_terminal_candidates": 32,
+            "max_terminal_public_bytes": 4_194_304,
+            "eviction": "oldest_first",
+            "evicted_status_code": "CANDIDATE_NOT_FOUND",
+        },
+        "schema_versions": ["environment_configuration_candidate.v1"],
+        "validation_layers": [
+            "schema",
+            "domain",
+            "material",
+            "package_projection",
+            "dns_tcp_port",
+            "tls_mtls",
+            "preview_baseline",
+        ],
+    })
 }
 
 pub fn validate_environment_contract_arguments(
@@ -64,11 +164,13 @@ pub fn validate_environment_contract_arguments(
         .as_object()
         .ok_or_else(|| "environment tool arguments must be an object".to_owned())?;
     let expected = match name {
-        "mcp_environment_capabilities" => &[][..],
-        "environment_candidate_create" => &["candidate"][..],
-        "environment_candidate_status" | "environment_candidate_cancel" => &["candidate_id"][..],
-        "environment_candidate_apply" => &["candidate_id", "confirmation_token"][..],
-        _ => return Err(format!("unknown environment contract tool: {name}")),
+        name if name == ENVIRONMENT_TOOL_NAMES[0] => &[][..],
+        name if name == ENVIRONMENT_TOOL_NAMES[1] => &["candidate"][..],
+        name if name == ENVIRONMENT_TOOL_NAMES[2] || name == ENVIRONMENT_TOOL_NAMES[3] => {
+            &["candidate_id"][..]
+        }
+        name if name == ENVIRONMENT_TOOL_NAMES[4] => &["candidate_id", "confirmation_token"][..],
+        _ => return Err("unknown environment contract tool".to_owned()),
     };
     let actual = object.keys().map(String::as_str).collect::<BTreeSet<_>>();
     let expected = expected.iter().copied().collect::<BTreeSet<_>>();
@@ -76,12 +178,14 @@ pub fn validate_environment_contract_arguments(
         return Err(format!("invalid top-level arguments for {name}"));
     }
 
-    if name == "environment_candidate_create" {
+    if name == ENVIRONMENT_TOOL_NAMES[1] {
         let candidate = object
             .get("candidate")
             .expect("candidate key was checked above");
-        let bytes = serde_json::to_vec(candidate).map_err(|error| error.to_string())?;
-        parse_environment_configuration_candidate_v1(&bytes).map_err(|error| error.to_string())?;
+        let bytes = serde_json::to_vec(candidate)
+            .map_err(|_| "environment candidate is not valid JSON".to_owned())?;
+        parse_environment_configuration_candidate_v1(&bytes)
+            .map_err(|_| "environment candidate violates the published schema".to_owned())?;
     } else {
         for field in expected {
             if object.get(field).and_then(Value::as_str).is_none() {

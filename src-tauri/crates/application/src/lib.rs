@@ -36,25 +36,53 @@ pub use breakpoint_validation::{BreakpointBodyCodecResolver, BreakpointValidator
 pub use breakpoints::{BreakpointCoordinator, BreakpointOutcome, BreakpointTicket};
 pub use capacity::CapacityLedger;
 pub use configuration::*;
+pub use environment_configuration::ENVIRONMENT_VALIDATION_ENGINE_VERSION;
+#[cfg(test)]
+pub(crate) use environment_configuration::EnvironmentIdentityAllocatorPort;
 pub use environment_configuration::{
-    DiagnosticSeverity, EnvironmentApplyQueuedResult, EnvironmentApplyTaskId,
-    EnvironmentCancelResult, EnvironmentCancelStatus, EnvironmentCandidateCreateResult,
-    EnvironmentCandidateEpoch, EnvironmentCandidateId, EnvironmentCandidateLifecycleError,
-    EnvironmentCandidateMetrics, EnvironmentCandidatePublicSnapshot, EnvironmentCandidateStatus,
-    EnvironmentCandidateStatusResult, EnvironmentConfigurationCandidateV1,
-    EnvironmentConfirmationToken, EnvironmentDiagnostic, EnvironmentDiagnosticScope,
-    EnvironmentStatusCode, EnvironmentTerminalResult, EnvironmentValidationLayerResult,
+    DiagnosticSeverity, EnvironmentAffectedListenerBaseline, EnvironmentAndroidOwnerBaseline,
+    EnvironmentApplyBaselineCapturePort, EnvironmentApplyBaselineCaptureRequest,
+    EnvironmentApplyGenerations, EnvironmentApplyLease, EnvironmentApplyLeaseOutcome,
+    EnvironmentApplyLeasePort, EnvironmentApplyLeaseRequest, EnvironmentApplyQueuedResult,
+    EnvironmentApplyTaskId, EnvironmentCancelResult, EnvironmentCancelStatus,
+    EnvironmentCandidateCreateResult, EnvironmentCandidateEpoch, EnvironmentCandidateId,
+    EnvironmentCandidateLifecycleError, EnvironmentCandidateMetrics,
+    EnvironmentCandidatePublicSnapshot, EnvironmentCandidateStatus,
+    EnvironmentCandidateStatusResult, EnvironmentCandidateValidator, EnvironmentCommitFailure,
+    EnvironmentCommitPort, EnvironmentCommitReceipt, EnvironmentCommitRequest,
+    EnvironmentCommitResult, EnvironmentCommitRollbackOutcome, EnvironmentCommitTarget,
+    EnvironmentConfigurationCandidateV1, EnvironmentConfirmationToken,
+    EnvironmentConsumedCommitRequest, EnvironmentConsumedPreparedMaterials, EnvironmentDiagnostic,
+    EnvironmentDiagnosticScope, EnvironmentDnsTcpTarget, EnvironmentExactPackageBaseline,
+    EnvironmentIdentityAllocator, EnvironmentMaterialInventoryBaseline, EnvironmentMaterialProbe,
+    EnvironmentMaterialProbeKind, EnvironmentPreparedMaterialCapability,
+    EnvironmentPreparedMaterialKind, EnvironmentPreparedMaterialVisitor,
+    EnvironmentPreparedMaterials, EnvironmentProtectedMaterialPreparePort,
+    EnvironmentSelectionPolicy, EnvironmentStatusCode, EnvironmentTerminalResult,
+    EnvironmentTlsMtlsTarget, EnvironmentValidatedApplyBaseline,
+    EnvironmentValidatedApplyBaselineCollector, EnvironmentValidationLayer,
+    EnvironmentValidationLayerPort, EnvironmentValidationLayerRequest,
+    EnvironmentValidationLayerResult, EnvironmentValidationReport, EnvironmentValidationResult,
+    EnvironmentValidationStatus, MaterialAlias, StagedProtectedMaterialHandle,
     parse_environment_configuration_candidate_v1,
 };
 #[cfg(test)]
 pub(crate) use environment_configuration::{
     EnvironmentApplyWork, EnvironmentCandidatePolicy, EnvironmentCandidateRegistry,
 };
+#[cfg(test)]
+#[allow(
+    unused_imports,
+    reason = "crate-internal validation contract is consumed by requirement tests"
+)]
+pub(crate) use environment_configuration::{
+    EnvironmentPreviewBaselinePort, EnvironmentPreviewBaselineRequest,
+};
 pub use error::{AppError, AppErrorDiagnosticViewModel, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
 pub use facade::{
-    Application, ApplicationDependencies, parse_protocol_rule_value,
-    validate_portable_protocol_bindings,
+    Application, ApplicationDependencies, EnvironmentConfigurationApplicationServices,
+    ExchangeObservationQueries, parse_protocol_rule_value, validate_portable_protocol_bindings,
 };
 pub use listeners::InMemoryListenerRuntime;
 pub use models::*;

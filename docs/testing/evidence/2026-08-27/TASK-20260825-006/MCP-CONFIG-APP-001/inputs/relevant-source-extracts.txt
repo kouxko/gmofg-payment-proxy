@@ -1,0 +1,168 @@
+pub struct EnvironmentApplyGenerations {
+    pub selected_workspace_id: Option<Uuid>,
+    pub listener: u64,
+    pub android: u64,
+    /// Process-local generation for exact package runtime projections.
+    pub package: u64,
+    /// Stable fingerprint of the exact package inventory persisted in `SQLite`.
+    pub package_inventory: u64,
+    pub certificate_inventory: u64,
+    pub protected_secret_inventory: u64,
+    pub application_mutation: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EnvironmentApplyLeaseRequest {
+    }
+}
+
+fn check_baseline(
+    transaction: &Transaction<'_>,
+    baseline: &intercept_proxy_application::EnvironmentApplyGenerations,
+) -> AppResult<u64> {
+    let package_inventory = exact_package_inventory(transaction)?;
+    let certificate_revision = transaction
+        .query_row(
+            "SELECT revision FROM certificate_state WHERE singleton_id = 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|_| commit_failed())?;
+    let certificate_revision = u64::try_from(certificate_revision).map_err(|_| commit_failed())?;
+    let certificate_inventory = exact_certificate_inventory(transaction, certificate_revision)?;
+    let protected_secret_inventory = exact_secret_inventory(transaction)?;
+    if certificate_inventory != baseline.certificate_inventory
+        || protected_secret_inventory != baseline.protected_secret_inventory
+        || package_inventory != baseline.package_inventory
+    {
+        return Err(baseline_mismatch());
+    }
+    Ok(certificate_revision)
+}
+fn write_workspace(
+    transaction: &Transaction<'_>,
+    target: EnvironmentCommitTarget,
+    mut workspace: ProxyWorkspace,
+) -> AppResult<WorkspaceWrite> {
+    match target {
+        EnvironmentCommitTarget::Existing {
+            workspace_id,
+            expected_revision,
+        } => {
+            let revision = expected_revision.checked_add(1).ok_or_else(commit_failed)?;
+            workspace.id = WorkspaceId::from_uuid(workspace_id);
+            workspace.revision = Revision::new(revision);
+            workspace.validate().map_err(AppError::from)?;
+            let encoded = encode_workspace_record(&workspace)
+                .map_err(|_| commit_failed())?
+                .to_string();
+            let changed = transaction
+                .execute(
+                    "UPDATE workspaces SET revision = ?1, json = ?2, updated_at = ?3
+                 WHERE id = ?4 AND revision = ?5",
+                    params![
+                        revision_to_i64(revision).map_err(|_| commit_failed())?,
+                        encoded,
+                        Utc::now().to_rfc3339(),
+                        workspace_id.to_string(),
+                        revision_to_i64(expected_revision).map_err(|_| commit_failed())?
+                    ],
+                )
+                .map_err(|_| commit_failed())?;
+            if changed != 1 {
+                return Err(baseline_mismatch());
+            }
+            Ok(WorkspaceWrite {
+                workspace_id,
+                revision,
+                preserve_existing_selection: true,
+            })
+        }
+        EnvironmentCommitTarget::New {
+            workspace_id,
+            display_name,
+        } => {
+            let new_workspace_revision = 1_u64;
+            workspace.id = WorkspaceId::from_uuid(workspace_id);
+            workspace.revision = Revision::new(new_workspace_revision);
+            workspace.name = display_name;
+            workspace.validate().map_err(AppError::from)?;
+            let encoded = encode_workspace_record(&workspace)
+                .map_err(|_| commit_failed())?
+                .to_string();
+            transaction.execute(
+                "INSERT INTO workspaces(id, revision, json, updated_at) VALUES (?1, ?2, ?3, ?4)",
+                params![workspace_id.to_string(), revision_to_i64(new_workspace_revision).map_err(|_| commit_failed())?, encoded, Utc::now().to_rfc3339()],
+            ).map_err(|_| baseline_mismatch())?;
+            Ok(WorkspaceWrite {
+            .query_row(
+                "SELECT revision FROM certificate_state WHERE singleton_id = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map_err(|_| commit_failed())?;
+        let certificate_revision =
+            u64::try_from(certificate_revision).map_err(|_| commit_failed())?;
+        let package_inventory = exact_package_inventory(&transaction)?;
+        Ok(EnvironmentApplyGenerations {
+            selected_workspace_id,
+            listener: 0,
+            android: 0,
+            package: 0,
+            package_inventory,
+            certificate_inventory: exact_certificate_inventory(&transaction, certificate_revision)?,
+            protected_secret_inventory: exact_secret_inventory(&transaction)?,
+            application_mutation,
+        })
+    }
+}
+
+pub(super) fn check_workspace_baseline(
+    transaction: &Transaction<'_>,
+    target: &EnvironmentCommitTarget,
+    baseline: &EnvironmentApplyGenerations,
+) -> AppResult<()> {
+    let EnvironmentCommitTarget::Existing {
+        workspace_id,
+        expected_revision,
+    } = target
+    else {
+        return Ok(());
+    };
+    let json = transaction
+        .query_row(
+            "SELECT json FROM workspaces WHERE id = ?1 AND revision = ?2",
+            params![
+                workspace_id.to_string(),
+                revision_to_i64(*expected_revision).map_err(|_| commit_failed())?
+            ],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(|_| commit_failed())?
+        .ok_or_else(baseline_mismatch)?;
+    let value = serde_json::from_str(&json).map_err(|_| baseline_mismatch())?;
+    decode_workspace_record(WorkspaceRecord {
+        id: *workspace_id,
+        revision: *expected_revision,
+        value,
+        updated_at: chrono::Utc::now(),
+    })
+    .map_err(|_| baseline_mismatch())?;
+    if baseline.application_mutation != 0
+        && stable_digest_u64([json.as_bytes()]) != baseline.application_mutation
+    {
+        return Err(baseline_mismatch());
+    }
+    Ok(())
+}
+
+pub(super) fn exact_package_inventory(transaction: &Transaction<'_>) -> AppResult<u64> {
+    let mut statement = transaction
+        .prepare(
+            "SELECT package_id, version, name, generation, enabled
+             FROM protocol_packages ORDER BY package_id, version",
+        )
+        .map_err(|_| commit_failed())?;
+    let rows = statement
+        .query_map([], |row| {

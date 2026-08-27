@@ -13,6 +13,7 @@ use crate::transport::{ConnectionContext, HandshakePolicy, UpstreamSecurityEvide
 /// port. Implementations must not block on UI subscribers.
 #[async_trait]
 pub trait PipelinePorts: HandshakePolicy {
+    async fn runtime_started(&self, _epoch: Uuid) {}
     async fn runtime_stopping(&self, _epoch: Uuid) {}
     async fn connection_opened(&self, _context: &ConnectionContext) {}
     /// Reports the security properties of the concrete upstream connection used by this request.

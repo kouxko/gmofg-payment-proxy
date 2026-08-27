@@ -26,12 +26,12 @@
 
 桌面端负责：
 
-- 选择设备、Workspace、Profile 和 Listener；
-- 根据当前设备包清单校验目标应用和 UID；
+- 选择 Workspace、Profile 和 Listener，并为每次操作显式指定设备 serial；
+- 根据目标设备包清单校验目标应用和 UID；
 - 把可移植 `proxy_routes` 解析成当次运行端点；
 - 建立/清理 ADB forward 和 reverse；
 - 通过版本化控制协议发送 start/apply/stop/status；
-- 持久化 runtime owner，并核对运行指纹。
+- 按设备持久化 runtime owner，并以 serial + runtime epoch 核对运行指纹。
 
 ### 2.2 Kotlin Companion
 
@@ -146,7 +146,7 @@ USB 模式为每条 Listener 路由建立：
 ```
 
 LAN 模式使用当前可达桌面地址和 Listener 端口，不创建 reverse。桌面会检查 Listener 正在运行、
-bind 地址、allowed client CIDR 和端点健康。
+bind 地址和端点健康。
 
 ## 8. ADB reverse 两阶段更新
 
@@ -154,8 +154,8 @@ bind 地址、allowed client CIDR 和端点健康。
 
 ### Prepare
 
-1. 串行化同一设备网络操作；
-2. 读取并持久化旧 runtime owner；
+1. 串行化同一设备网络操作；不同设备可并行；
+2. 读取并持久化目标设备的旧 runtime owner；
 3. 解析全部目标与 Listener；
 4. 分配不冲突设备端口并建立新 reverse；
 5. 生成运行路由和 profile/route fingerprint；
@@ -182,9 +182,10 @@ bind 地址、allowed client CIDR 和端点健康。
 
 只有状态和这些事实匹配才视为 verified Running。
 
-SQLite 的 `android_runtime_owner` 保存模式（device-only/LAN/ADB reverse）、Profile、状态、来源、
-reverse ports、runtime endpoints 和 transition reason。进程重启或设备重连时依据它继续清理/恢复，
-而不是猜测 ADB 当前端口属于哪个运行实例。
+SQLite 的 `android_runtime_owners` 以设备 serial 为主键，最多保留 8 个 owner。每条记录保存模式
+（device-only/LAN/ADB reverse）、Profile、状态、来源、reverse ports、runtime endpoints、epoch 和
+transition reason。进程重启或设备重连时按 serial 排序恢复全部 owner；任一设备失败不得阻断其他设备
+继续清理或恢复，也不能猜测 ADB 当前端口属于哪个运行实例。
 
 ## 10. Fail-open 与停止顺序
 
@@ -198,8 +199,9 @@ Android VPN 不是 kill switch。Profile 无效、授权失效、JNI/原生数�
 close main TUN -> clear TUN configuration -> stop native runtime -> unregister receiver -> stop service
 ```
 
-控制线程等待 Android 主线程超时时也可原子取得并关闭 TUN。普通 stop 失败时保留 owner；紧急恢复
-可 force-stop Companion 并清理已知 forward/reverse。
+控制线程等待 Android 主线程超时时也可原子取得并关闭 TUN。普通 stop 失败时保留该设备 owner；紧急
+恢复只 force-stop 目标设备 Companion 并清理其已知 forward/reverse。stop/apply/emergency restore 都
+携带 expected epoch，迟到操作不得清除同一设备的新运行实例。
 
 只有不含透明路由的 Profile 可以保存自动恢复 activation。透明路由依赖当次 ADB reverse/LAN 与
 桌面 DNS 快照，重启后必须由桌面重新 prepare。

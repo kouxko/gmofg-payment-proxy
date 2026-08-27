@@ -1,9 +1,18 @@
+use std::{future::Future, pin::Pin, task::Poll};
+
 use intercept_proxy_application::{
-    ProtocolPackageCompilerPort, ProtocolPackageKindViewModel, ProtocolPackageStorePort,
+    AppError, ProtocolPackageCompilerPort, ProtocolPackageKindViewModel, ProtocolPackageStorePort,
     ProtocolPackageValidationViewModel,
 };
 
 use super::*;
+
+async fn poll_once<F>(future: &mut F) -> Poll<F::Output>
+where
+    F: Future + Unpin,
+{
+    std::future::poll_fn(|context| Poll::Ready(Pin::new(&mut *future).poll(context))).await
+}
 
 #[tokio::test]
 async fn application_store_and_compiler_ports_preserve_exact_versions_and_safe_models() {
@@ -158,6 +167,74 @@ async fn enable_validation_bypasses_a_warm_ast_cache_and_keeps_enabled_false_on_
             code: "SCRIPT_SYNTAX_INVALID".into(),
         }
     );
+}
+
+#[tokio::test]
+async fn revalidation_holds_sqlite_gate_through_cache_publication_against_reinstall() {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
+        Arc::clone(&store),
+    ));
+    repository
+        .install_zip(&package_zip(MANIFEST, SCRIPT))
+        .unwrap();
+    let target = package("1.0.0");
+    let replacement_script = SCRIPT.replace("{ origin }", "{ blob() }");
+    let replacement = repository
+        .prepare_zip(&package_zip(MANIFEST, &replacement_script))
+        .expect("prepare replacement");
+    let (loaded_rx, release_tx) = repository.pause_next_revalidate_after_load();
+
+    let compiling = tokio::spawn({
+        let repository = Arc::clone(&repository);
+        let target = target.clone();
+        async move { repository.revalidate_async(&target).await }
+    });
+    loaded_rx.await.expect("revalidation loaded old generation");
+
+    let (replacement_started_tx, replacement_started_rx) = tokio::sync::oneshot::channel();
+    let mut replacing = tokio::spawn({
+        let repository = Arc::clone(&repository);
+        let target = target.clone();
+        async move {
+            replacement_started_tx
+                .send(())
+                .expect("replacement start observed");
+            ProtocolPackageStorePort::delete(repository.as_ref(), &target).await?;
+            let outcome = repository
+                .install_prepared_async(replacement)
+                .await
+                .map_err(|error| protocol_package_app_error(&error))?;
+            Ok::<_, AppError>(outcome)
+        }
+    });
+    replacement_started_rx
+        .await
+        .expect("replacement future reached SQLite executor");
+    assert!(matches!(poll_once(&mut replacing).await, Poll::Pending));
+
+    release_tx.send(()).expect("release revalidation");
+    compiling
+        .await
+        .expect("compile task joined")
+        .expect("old generation revalidated");
+    replacing
+        .await
+        .expect("replacement task joined")
+        .expect("replacement installed");
+
+    let stored_generation = store
+        .load_protocol_package_header(&target)
+        .expect("load replacement header")
+        .expect("replacement header")
+        .generation;
+    let cached_generation = repository
+        .cache
+        .lock()
+        .get(&target)
+        .expect("replacement cache")
+        .generation;
+    assert_eq!(cached_generation, stored_generation);
 }
 
 #[test]

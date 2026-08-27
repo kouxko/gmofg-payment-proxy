@@ -9,7 +9,7 @@ use intercept_proxy_domain::{
     ProxyListener, Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings,
     WeakNetworkProfile,
 };
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 #[tokio::test]
 async fn sqlite_store_round_trips_and_rejects_stale_workspace_writes() {
@@ -24,6 +24,29 @@ async fn sqlite_store_round_trips_and_rejects_stale_workspace_writes() {
     let saved = repository.save(edited).await.expect("save");
     assert_eq!(saved.revision, DomainRevision::new(2));
     assert!(repository.save(created).await.is_err());
+}
+
+#[tokio::test]
+async fn point_lookup_does_not_load_or_decode_unrelated_workspaces() {
+    let store = Arc::new(SqliteStore::in_memory().expect("in-memory store"));
+    let repository = WorkspaceRepositoryAdapter::new(store.clone());
+    let target = repository.create("Target".into()).await.expect("target");
+    let unrelated = repository
+        .create("Unrelated".into())
+        .await
+        .expect("unrelated");
+    store
+        .execute_test_batch(&format!(
+            "UPDATE workspaces SET json = '{{not-json' WHERE id = '{}';",
+            unrelated.id
+        ))
+        .expect("corrupt unrelated row");
+
+    assert_eq!(
+        repository.get(target.id).await.expect("point lookup").id,
+        target.id
+    );
+    assert!(repository.snapshot().await.is_err());
 }
 
 #[tokio::test]
