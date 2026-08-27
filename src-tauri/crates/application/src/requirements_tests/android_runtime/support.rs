@@ -5,6 +5,9 @@ struct RunningAndroidControl {
     status: AndroidNetworkStatusViewModel,
     observed_activation: parking_lot::Mutex<Option<AndroidNetworkActivation>>,
     runtime_ready: AtomicBool,
+    runtime_ready_fails: AtomicBool,
+    network_status_fails: AtomicBool,
+    network_stop_fails: AtomicBool,
     network_start_calls: AtomicUsize,
     network_apply_calls: AtomicUsize,
     block_start: AtomicBool,
@@ -23,24 +26,25 @@ impl AndroidControlPort for RunningAndroidControl {
     async fn device_list(&self) -> AppResult<Vec<AndroidDeviceViewModel>> {
         unused()
     }
-    async fn package_list(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
+    async fn package_list(&self, _: AndroidDeviceTarget) -> AppResult<Vec<AndroidPackageViewModel>> {
         Ok(vec![AndroidPackageViewModel {
             package_name: "example.target".into(),
             uid: 10_001,
             shared_uid: None,
         }])
     }
-    async fn package_get(&self, _: String) -> AppResult<AndroidPackageViewModel> {
+    async fn package_get(&self, _: AndroidDeviceTarget, _: String) -> AppResult<AndroidPackageViewModel> {
         unused()
     }
-    async fn companion_install(&self, _: bool) -> AppResult<AndroidCompanionInstallViewModel> {
+    async fn companion_install(&self, _: AndroidDeviceTarget, _: bool) -> AppResult<AndroidCompanionInstallViewModel> {
         unused()
     }
-    async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn vpn_open_consent(&self, _: AndroidDeviceTarget) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
     async fn network_start(
         &self,
+        _: AndroidDeviceTarget,
         _: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         self.network_start_calls.fetch_add(1, Ordering::SeqCst);
@@ -52,6 +56,7 @@ impl AndroidControlPort for RunningAndroidControl {
     }
     async fn network_apply(
         &self,
+        _: AndroidRuntimeTarget,
         _: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         self.network_apply_calls.fetch_add(1, Ordering::SeqCst);
@@ -59,26 +64,61 @@ impl AndroidControlPort for RunningAndroidControl {
     }
     async fn network_runtime_ready(
         &self,
+        _: AndroidDeviceTarget,
         activation: &AndroidNetworkActivation,
         _: &AndroidNetworkStatusViewModel,
     ) -> AppResult<bool> {
         *self.observed_activation.lock() = Some(activation.clone());
+        if self.runtime_ready_fails.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                "ANDROID_RUNTIME_READINESS_FAILED",
+                "runtime readiness failed",
+            ));
+        }
         Ok(self.runtime_ready.load(Ordering::SeqCst))
     }
-    async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn network_stop(&self, _: AndroidRuntimeTarget) -> AppResult<AndroidNetworkStatusViewModel> {
+        if self.network_stop_fails.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                "ANDROID_ADB_COMMAND_FAILED",
+                "raw stop failure",
+            ));
+        }
         unused()
     }
-    async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn emergency_restore(&self, _: AndroidRuntimeTarget) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
-    async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn network_status(&self, _: AndroidDeviceTarget) -> AppResult<AndroidNetworkStatusViewModel> {
+        if self.network_status_fails.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                "ANDROID_RUNTIME_STATUS_FAILED",
+                "runtime status failed",
+            ));
+        }
         Ok(self.status.clone())
     }
-    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
-        Ok(None)
+    async fn runtime_owners(&self) -> AppResult<Vec<AndroidRuntimeOwnerViewModel>> {
+        let Some(epoch) = self.status.runtime_epoch else {
+            return Ok(Vec::new());
+        };
+        let Some(profile_id) = self.status.active_profile_id.clone() else {
+            return Ok(Vec::new());
+        };
+        Ok(vec![AndroidRuntimeOwnerViewModel {
+            serial: self.status.serial.clone(),
+            epoch,
+            mode: AndroidRuntimeOwnerMode::AdbReverse,
+            profile_id,
+            state: AndroidRuntimeOwnerState::Active,
+            source: AndroidRuntimeOwnerSource::Recovery,
+            transition_reason: AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage,
+            updated_at: Utc::now(),
+        }])
     }
     async fn network_runtime_endpoints(
         &self,
+        _: AndroidDeviceTarget,
         _: Option<AndroidNetworkActivation>,
     ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
         Ok(Vec::new())
@@ -136,6 +176,8 @@ struct RunningVpnFixture {
     original_id: WorkspaceId,
     profile_id: String,
     listener_id: ListenerId,
+    serial: String,
+    runtime_epoch: Uuid,
 }
 
 fn running_android_control(profile_id: &str, stale_profile: bool) -> Arc<RunningAndroidControl> {
@@ -155,6 +197,7 @@ fn running_android_control(profile_id: &str, stale_profile: bool) -> Arc<Running
             active_profile_fingerprint: Some("profile-fingerprint".into()),
             active_route_fingerprint: Some("route-fingerprint".into()),
             active_route_count: 1,
+            runtime_epoch: Some(Uuid::new_v4()),
             companion_process_running: Some(true),
             message: "运行中".into(),
             unsupported_fields: Vec::new(),
@@ -162,6 +205,9 @@ fn running_android_control(profile_id: &str, stale_profile: bool) -> Arc<Running
         },
         observed_activation: parking_lot::Mutex::new(None),
         runtime_ready: AtomicBool::new(true),
+        runtime_ready_fails: AtomicBool::new(false),
+        network_status_fails: AtomicBool::new(false),
+        network_stop_fails: AtomicBool::new(false),
         network_start_calls: AtomicUsize::new(0),
         network_apply_calls: AtomicUsize::new(0),
         block_start: AtomicBool::new(false),
@@ -174,6 +220,7 @@ async fn running_vpn_fixture_with_stale_profile(stale_profile: bool) -> RunningV
     running_vpn_fixture_with_listener_state(stale_profile, None).await
 }
 
+#[allow(clippy::too_many_lines)]
 async fn running_vpn_fixture_with_listener_state(
     stale_profile: bool,
     listener_state: Option<ListenerRuntimeState>,
@@ -225,6 +272,7 @@ async fn running_vpn_fixture_with_listener_state(
         statuses: listener_state
             .map(|state| ListenerStatusViewModel {
                 listener_id,
+                runtime_epoch: None,
                 state,
                 state_text: "测试状态".into(),
                 ui_tone: UiTone::Neutral,
@@ -256,11 +304,22 @@ async fn running_vpn_fixture_with_listener_state(
             listener_runtime,
             protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
+            environment_baseline_capture:
+                crate::requirements_tests::test_environment_baseline_capture(),
+            environment_identity_allocator:
+                crate::requirements_tests::test_environment_identity_allocator(),
+            environment_apply_lease: crate::requirements_tests::test_environment_apply_lease(),
+            environment_material_preparer:
+                crate::requirements_tests::test_environment_material_preparer(),
+            environment_commit: crate::requirements_tests::test_environment_commit(),
+            environment_validator: crate::requirements_tests::test_environment_validator(),
         },
         android.clone(),
         Arc::new(UnusedProtectedSecretPort),
     );
 
+    let serial = android.status.serial.clone();
+    let runtime_epoch = android.status.runtime_epoch.expect("running status epoch");
     RunningVpnFixture {
         application,
         android,
@@ -268,6 +327,8 @@ async fn running_vpn_fixture_with_listener_state(
         original_id,
         profile_id,
         listener_id,
+        serial,
+        runtime_epoch,
     }
 }
 

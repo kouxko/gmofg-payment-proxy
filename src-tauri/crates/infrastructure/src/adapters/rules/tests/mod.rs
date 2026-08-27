@@ -119,13 +119,14 @@ fn adapter() -> Arc<RuleRepositoryAdapter> {
     )
 }
 
-fn runtime_snapshot(adapter: &RuleRepositoryAdapter) -> RuleRuntimeSnapshot {
+async fn runtime_snapshot(adapter: &RuleRepositoryAdapter) -> RuleRuntimeSnapshot {
     let workspace = adapter
         .load_selected_workspace()
         .expect("selected workspace");
     let channel = workspace.listeners[0].id().to_string();
     adapter
         .runtime_snapshot(&channel)
+        .await
         .expect("runtime snapshot")
 }
 

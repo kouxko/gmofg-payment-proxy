@@ -15,8 +15,8 @@
 
 ## 待实现任务
 
-- [MCP 对话式完整环境配置](tasks/pending/2026-08-25/mcp-environment-configuration.md)：
-  允许远程 MCP 客户端提交完整 Workspace 环境，分层验证并预览确认后原子应用；按用户确认使用所有 IP、明文 HTTP 且无客户端认证。
+- [最终归档场景复跑与 MCP 验证经验指南](tasks/pending/2026-08-27/final-archive-replay-and-mcp-validation-playbook.md)：
+  最终提交前重跑归档测试与运行中 Proxy 场景，并把稳定诊断方法发布为 MCP 只读验证指南。
 
 ## 架构
 

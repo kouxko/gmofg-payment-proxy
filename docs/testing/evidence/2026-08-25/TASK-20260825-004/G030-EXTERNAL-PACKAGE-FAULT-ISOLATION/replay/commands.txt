@@ -1,0 +1,12 @@
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --all-targets -- -D warnings
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure external_package -- --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain external_package -- --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application external_package -- --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host external_package -- --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy mcp -- --nocapture
+pnpm scan:architecture
+pnpm scan:frontend-boundaries
+pnpm scan:source-size
+# Exact raw malformed WebSocket input is written by the Rust test as:
+# [0x83, 0x80, 0x00, 0x00, 0x00, 0x00]

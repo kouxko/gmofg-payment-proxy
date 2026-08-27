@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+use crate::{AppError, AppResult};
+
+mod projection;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct AndroidNetworkProfileTemplate {
@@ -14,9 +18,49 @@ pub(super) struct AndroidNetworkProfileTemplate {
 }
 
 impl AndroidNetworkProfileTemplate {
+    pub(super) fn id(&self) -> Option<&str> {
+        self.id.as_deref()
+    }
     pub(super) fn validate_weak_network(&self) -> bool {
         self.weak_network.is_valid()
     }
+
+    pub(super) fn listener_aliases(&self) -> impl Iterator<Item = &str> {
+        self.proxy_routes
+            .iter()
+            .map(|route| route.listener_alias.as_str())
+    }
+
+    pub(super) fn validate_domain_limits(&self) -> AppResult<()> {
+        let weak_network_bytes = serde_json::to_vec(&self.weak_network)
+            .map_err(|_| dto_limit_error())?
+            .len();
+        if self.id.as_ref().is_some_and(|id| !valid_id(id, 128))
+            || self.name.chars().count() > 80
+            || !(1..=64).contains(&self.target_applications.len())
+            || self.destination_targets.len() > 128
+            || self.proxy_routes.len() > 128
+            || weak_network_bytes > 256 * 1024
+        {
+            return Err(dto_limit_error());
+        }
+        Ok(())
+    }
+}
+
+fn valid_id(value: &str, maximum_bytes: usize) -> bool {
+    !value.is_empty()
+        && value.len() <= maximum_bytes
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
+
+fn dto_limit_error() -> AppError {
+    AppError::new(
+        "DTO_LIMIT_EXCEEDED",
+        "environment candidate exceeds its DTO limit",
+    )
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

@@ -70,6 +70,7 @@ pub(super) fn running_status(
 ) -> ListenerStatusViewModel {
     ListenerStatusViewModel {
         listener_id,
+        runtime_epoch: None,
         state: ListenerRuntimeState::Running,
         state_text: "运行中".into(),
         ui_tone: UiTone::Positive,

@@ -66,7 +66,15 @@ pub use server_identity::ParsedServerIdentity;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TrustedCa {
     pub certificate_der: Vec<u8>,
+    pub certificate_chain_der: Vec<Vec<u8>>,
     pub metadata: CertificateMetadata,
+    canonical_bytes: Vec<u8>,
+}
+
+impl TrustedCa {
+    pub fn canonical_bytes(&self) -> &[u8] {
+        &self.canonical_bytes
+    }
 }
 
 impl fmt::Debug for CertificateBundle {
@@ -324,22 +332,35 @@ impl CertificateService {
             let metadata = validate(&self, bytes)?;
             return Ok(TrustedCa {
                 certificate_der: bytes.to_vec(),
+                certificate_chain_der: vec![bytes.to_vec()],
                 metadata,
+                canonical_bytes: bytes.to_vec(),
             });
         }
 
-        for pem in pem_entries.into_iter().rev() {
+        let mut certificate_chain_der = Vec::new();
+        let mut metadata_chain = Vec::new();
+        for pem in pem_entries {
             if pem.label != "CERTIFICATE" {
                 continue;
             }
-            if let Ok(metadata) = validate(&self, &pem.contents) {
-                return Ok(TrustedCa {
-                    certificate_der: pem.contents,
-                    metadata,
-                });
-            }
+            metadata_chain.push(validate(&self, &pem.contents)?);
+            certificate_chain_der.push(pem.contents);
         }
-        Err(invalid("证书文件不包含当前有效且受支持的 CA 信任锚"))
+        let metadata = metadata_chain
+            .pop()
+            .ok_or_else(|| invalid("证书文件不包含当前有效且受支持的 CA 信任锚"))?;
+        let certificate_der = certificate_chain_der
+            .last()
+            .cloned()
+            .ok_or_else(|| invalid("证书文件不包含当前有效且受支持的 CA 信任锚"))?;
+        let canonical_bytes = certificate_chain_to_pem(&certificate_chain_der);
+        Ok(TrustedCa {
+            certificate_der,
+            certificate_chain_der,
+            metadata,
+            canonical_bytes,
+        })
     }
 
     pub fn validate_root(
@@ -444,6 +465,9 @@ mod pem_identity;
 use pem_identity::{ParsedPemIdentity, parse_pem_identity};
 
 mod server_identity;
+
+mod trust_anchor;
+use trust_anchor::certificate_chain_to_pem;
 
 mod validation;
 use validation::{

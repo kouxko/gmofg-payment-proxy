@@ -2,7 +2,7 @@ use std::{
     net::{Ipv4Addr, SocketAddr},
     sync::{
         Arc,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
 };
@@ -34,8 +34,11 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 
 use super::super::{test_listener_runtime, *};
 use crate::{
-    ExternalPackageConnectionConfig, ExternalPackageRegistryAdapter, ExternalPackageServer,
-    ExternalPackageServerConfig, SqliteStore,
+    ExternalPackageServer, SqliteStore,
+    adapters::{
+        ExternalPackageConnectionConfig, ExternalPackageRegistryAdapter,
+        ExternalPackageServerConfig,
+    },
 };
 
 pub(super) const TEST_TIMEOUT: Duration = Duration::from_secs(5);
@@ -200,6 +203,7 @@ impl ExternalRuntimeHarness {
 
 pub(super) struct TestExternalPeer {
     registrations: Arc<AtomicUsize>,
+    invalid_boundary_once: Arc<AtomicBool>,
     need_more: tokio::sync::Mutex<mpsc::UnboundedReceiver<()>>,
     close: Option<oneshot::Sender<()>>,
     task: JoinHandle<()>,
@@ -208,9 +212,11 @@ pub(super) struct TestExternalPeer {
 impl TestExternalPeer {
     fn spawn(address: SocketAddr, registration: ExternalPackageRegistration) -> Self {
         let registrations = Arc::new(AtomicUsize::new(0));
+        let invalid_boundary_once = Arc::new(AtomicBool::new(false));
         let (need_more_tx, need_more_rx) = mpsc::unbounded_channel();
         let (close_tx, mut close_rx) = oneshot::channel();
         let task_registrations = Arc::clone(&registrations);
+        let task_invalid_boundary_once = Arc::clone(&invalid_boundary_once);
         let task = tokio::spawn(async move {
             let (mut socket, _) = timeout(
                 TEST_TIMEOUT,
@@ -232,6 +238,7 @@ impl TestExternalPeer {
                                 &mut socket,
                                 &registration,
                                 &task_registrations,
+                                &task_invalid_boundary_once,
                                 &need_more_tx,
                                 &text,
                             ).await,
@@ -246,6 +253,7 @@ impl TestExternalPeer {
         });
         Self {
             registrations,
+            invalid_boundary_once,
             need_more: tokio::sync::Mutex::new(need_more_rx),
             close: Some(close_tx),
             task,
@@ -254,6 +262,10 @@ impl TestExternalPeer {
 
     pub(super) fn registration_count(&self) -> usize {
         self.registrations.load(Ordering::Acquire)
+    }
+
+    pub(super) fn return_oversized_frame_boundary_once(&self) {
+        self.invalid_boundary_once.store(true, Ordering::Release);
     }
 
     pub(super) async fn wait_for_need_more(&self) {
@@ -278,6 +290,7 @@ async fn respond<S>(
     socket: &mut tokio_tungstenite::WebSocketStream<S>,
     registration: &ExternalPackageRegistration,
     registrations: &AtomicUsize,
+    invalid_boundary_once: &AtomicBool,
     need_more: &mpsc::UnboundedSender<()>,
     text: &str,
 ) where
@@ -294,7 +307,11 @@ async fn respond<S>(
             let frame: ExternalFrameRequest =
                 serde_json::from_value(request["params"].clone()).unwrap();
             let bytes = frame.bytes().unwrap();
-            let boundary = if bytes
+            let boundary = if invalid_boundary_once.swap(false, Ordering::AcqRel) {
+                ExternalFrameResult::Complete {
+                    consumed_bytes: bytes.len() + 1,
+                }
+            } else if bytes
                 .first()
                 .is_some_and(|length| bytes.len() >= usize::from(*length))
             {

@@ -27,7 +27,6 @@ pub struct ConnectionService {
     pub endpoint: String,
     pub clock: Arc<dyn Clock>,
     pub admission: ConnectionAdmission,
-    pub allowed_client_cidrs: Vec<String>,
     pub limits: MessageLimits,
     /// Covers the inbound TLS handshake and the downstream request body.
     pub read_timeout: Duration,
@@ -103,7 +102,6 @@ impl ConnectionService {
                 bind_addr,
                 runtime_epoch: epoch,
                 listener_id: channel,
-                allowed_client_cidrs: self.allowed_client_cidrs.clone(),
                 capacity: self.admission.listener_capacity(),
                 shutdown_grace: HTTP_LISTENER_SHUTDOWN_GRACE,
             },

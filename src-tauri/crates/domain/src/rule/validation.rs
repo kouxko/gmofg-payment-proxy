@@ -135,6 +135,11 @@ fn validate_action_compatibility(
 
 fn validate_action_limits(error: &mut DomainError, index: usize, action: &RuleAction) {
     match action {
+        RuleAction::Delay { milliseconds } if *milliseconds == 0 => push_field_error(
+            error,
+            format!("actions.{index}.milliseconds"),
+            "延迟必须大于 0 毫秒",
+        ),
         RuleAction::Jitter {
             minimum_milliseconds,
             maximum_milliseconds,

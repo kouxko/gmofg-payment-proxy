@@ -44,6 +44,7 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
         let (address, port) = listener.bind_endpoint();
         let status = ListenerStatusViewModel {
             listener_id: id,
+            runtime_epoch: Some(uuid::Uuid::new_v4()),
             state: ListenerRuntimeState::Running,
             state_text: "运行中".into(),
             ui_tone: UiTone::Positive,
@@ -67,6 +68,7 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
         })?;
         Ok(ListenerStatusViewModel {
             listener_id,
+            runtime_epoch: running.runtime_epoch,
             state: ListenerRuntimeState::Stopped,
             state_text: "已停止".into(),
             ui_tone: UiTone::Neutral,

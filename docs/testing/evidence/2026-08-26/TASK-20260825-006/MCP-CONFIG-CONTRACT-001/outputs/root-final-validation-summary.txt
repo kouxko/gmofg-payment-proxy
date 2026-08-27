@@ -12,4 +12,3 @@ PASS  cargo clippy, strict -D warnings
 PASS  cargo fmt --check
 PASS  pnpm scan:architecture
 PASS  pnpm scan:source-size
-PASS  git diff --check

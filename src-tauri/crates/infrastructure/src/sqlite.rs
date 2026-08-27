@@ -66,6 +66,8 @@ pub struct ProtectedSecretRecord {
 pub struct SqliteStore {
     // rusqlite 的 Connection 不是并发事务池；单锁明确规定本进程内只有一个事务所有者。
     connection: Mutex<Connection>,
+    // 所有由该 Store 派生的异步执行器共享同一个准入门，避免阻塞线程池堆积等待连接锁。
+    blocking_gate: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
 #[cfg(test)]
@@ -81,12 +83,18 @@ mod android_runtime_owner;
 mod certificates;
 mod core;
 pub use android_runtime_owner::AndroidRuntimeOwnerRecord;
+mod environment_configuration;
+mod environment_configuration_baseline;
+mod executor;
+pub use environment_configuration::EnvironmentCommitFaultPoint;
+pub(crate) use environment_configuration::EnvironmentConfigurationCommitAdapter;
+pub use executor::{IntoSqlitePersistence, SqliteExecutor, open_sqlite_persistence};
 pub(crate) mod external_packages;
 mod portable_configuration;
 pub(crate) mod protocol_packages;
 mod schema;
 
-/// 当前 1.0 数据库格式版本。低于该版本的预发布数据由 Host 清空后重建。
+/// 当前预发布数据库格式版本。低于该版本的数据由 Host 清空后重建。
 pub const CURRENT_APPLICATION_SCHEMA_VERSION: i64 = schema::CURRENT_SCHEMA_VERSION;
 mod workspaces;
 
@@ -254,32 +262,40 @@ fn load_workspace_records(
     rows.map(|row| {
         let (id, revision, json, updated_at) =
             row.map_err(|source| InfrastructureError::Database { source })?;
-        Ok(WorkspaceRecord {
-            id: Uuid::parse_str(&id).map_err(|error| InfrastructureError::PersistenceCorrupt {
-                entity: "workspace",
-                message: format!("id 无效：{error}"),
-            })?,
-            revision: u64::try_from(revision).map_err(|_| {
-                InfrastructureError::PersistenceCorrupt {
-                    entity: "workspace",
-                    message: "revision 不能为负数".into(),
-                }
-            })?,
-            value: serde_json::from_str(&json).map_err(|error| {
-                InfrastructureError::PersistenceCorrupt {
-                    entity: "workspace",
-                    message: format!("JSON 无效：{error}"),
-                }
-            })?,
-            updated_at: DateTime::parse_from_rfc3339(&updated_at)
-                .map_err(|error| InfrastructureError::PersistenceCorrupt {
-                    entity: "workspace",
-                    message: format!("updated_at 无效：{error}"),
-                })?
-                .with_timezone(&Utc),
-        })
+        let id = Uuid::parse_str(&id).map_err(|error| InfrastructureError::PersistenceCorrupt {
+            entity: "workspace",
+            message: format!("id 无效：{error}"),
+        })?;
+        parse_workspace_record(id, revision, &json, &updated_at)
     })
     .collect()
+}
+
+fn parse_workspace_record(
+    id: Uuid,
+    revision: i64,
+    json: &str,
+    updated_at: &str,
+) -> Result<WorkspaceRecord, InfrastructureError> {
+    Ok(WorkspaceRecord {
+        id,
+        revision: u64::try_from(revision).map_err(|_| InfrastructureError::PersistenceCorrupt {
+            entity: "workspace",
+            message: "revision 不能为负数".into(),
+        })?,
+        value: serde_json::from_str(json).map_err(|error| {
+            InfrastructureError::PersistenceCorrupt {
+                entity: "workspace",
+                message: format!("JSON 无效：{error}"),
+            }
+        })?,
+        updated_at: DateTime::parse_from_rfc3339(updated_at)
+            .map_err(|error| InfrastructureError::PersistenceCorrupt {
+                entity: "workspace",
+                message: format!("updated_at 无效：{error}"),
+            })?
+            .with_timezone(&Utc),
+    })
 }
 
 #[cfg(test)]

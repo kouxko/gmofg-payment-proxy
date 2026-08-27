@@ -12,10 +12,7 @@ use intercept_proxy_application::{
 };
 
 use super::owner::runtime_mode;
-use super::{
-    ActiveReverseOwnership, AndroidAdbAdapter, COMMAND_TIMEOUT, PreparedUsbProxyRuntime,
-    ReverseCleanupOutcome,
-};
+use super::{AndroidAdbAdapter, COMMAND_TIMEOUT, PreparedUsbProxyRuntime, ReverseCleanupOutcome};
 use crate::adapters::android_adb::command::is_missing_adb_listener_error;
 
 mod lan;
@@ -39,7 +36,10 @@ impl AndroidAdbAdapter {
         &self,
         owner: &intercept_proxy_application::AndroidRuntimeOwnerViewModel,
     ) -> AppResult<()> {
-        let active = self.active_reverse.lock().await.clone();
+        let active = self
+            .owner_state_snapshot_for(&owner.serial)
+            .await
+            .active_reverse;
         if let Some(active) =
             active.filter(|active| active.serial == owner.serial && active.epoch == owner.epoch)
         {
@@ -47,11 +47,12 @@ impl AndroidAdbAdapter {
                 .remove_reverse_ports(&active.serial, active.ports)
                 .await;
             if !outcome.remaining_ports.is_empty() {
-                *self.active_reverse.lock().await = Some(ActiveReverseOwnership {
-                    ports: outcome.remaining_ports,
-                    ..active
-                });
-                self.save_owner(owner.clone()).await?;
+                let updated = self
+                    .replace_owner_if_epoch(owner.clone(), outcome.remaining_ports.clone())
+                    .await?;
+                if !updated {
+                    return Err(self.runtime_owner_conflict_error(&owner.serial).await);
+                }
             }
             return outcome.error.map_or(Ok(()), Err);
         }
@@ -90,30 +91,6 @@ impl AndroidAdbAdapter {
             remaining_ports,
             error: first_error,
         }
-    }
-
-    #[cfg(test)]
-    pub(super) async fn clear_active_reverse_ports(&self) -> AppResult<()> {
-        // 清理成功前保留所有权；失败端口继续登记，后续 stop/紧急恢复可以重试。
-        // 锁跨越 adb 调用，避免另一次 start 在清理期间覆盖所有权。
-        let mut active = self.active_reverse.lock().await;
-        let Some(ownership) = active.clone() else {
-            *self.active_runtime.lock().await = None;
-            return Ok(());
-        };
-        let outcome = self
-            .remove_reverse_ports(&ownership.serial, ownership.ports)
-            .await;
-        if outcome.remaining_ports.is_empty() {
-            *active = None;
-            *self.active_runtime.lock().await = None;
-        } else {
-            *active = Some(ActiveReverseOwnership {
-                ports: outcome.remaining_ports,
-                ..ownership
-            });
-        }
-        outcome.error.map_or(Ok(()), Err)
     }
 
     /// 同网段 LAN 可用时直接连接桌面 Listener。部分定制 Android 固件会让
@@ -181,7 +158,6 @@ impl AndroidAdbAdapter {
         prepared: PreparedUsbProxyRuntime,
         error: AppError,
     ) -> AppResult<T> {
-        *self.active_runtime.lock().await = Some(prepared.runtime.clone());
         self.publish_prepared_owner(
             &prepared,
             AndroidRuntimeOwnerState::Uncertain,
@@ -224,7 +200,6 @@ impl AndroidAdbAdapter {
         &self,
         prepared: PreparedUsbProxyRuntime,
     ) -> AppResult<()> {
-        *self.active_runtime.lock().await = Some(prepared.runtime.clone());
         // 清理旧端口前，磁盘必须已经记录新旧端口全集和新 epoch。
         self.publish_prepared_owner(
             &prepared,
@@ -253,15 +228,12 @@ impl AndroidAdbAdapter {
         } else {
             AndroidRuntimeOwnerTransitionReason::ReverseCleanupRequired
         };
-        let replaced = self.replace_owner_if_epoch(owner, final_ports).await;
-        let persistence = replaced.and_then(|replaced| {
-            replaced.then_some(()).ok_or_else(|| {
-                AppError::new(
-                    "ANDROID_RUNTIME_OWNER_STALE_EPOCH",
-                    "Android 运行设备记录已被更新，本次清理结果未覆盖新记录。",
-                )
-            })
-        });
+        let serial = owner.serial.clone();
+        let persistence = match self.replace_owner_if_epoch(owner, final_ports).await {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(self.runtime_owner_conflict_error(&serial).await),
+            Err(error) => Err(error),
+        };
         match (outcome.error, persistence) {
             (Some(error), Err(persistence)) => {
                 Err(combine_operation_and_cleanup(error, &persistence))
@@ -280,15 +252,11 @@ impl AndroidAdbAdapter {
         owner.state = AndroidRuntimeOwnerState::CleanupRequired;
         owner.transition_reason = AndroidRuntimeOwnerTransitionReason::ReverseCleanupRequired;
         let ports = prepared.cleanup_ports_with(remaining_new_ports);
-        self.replace_owner_if_epoch(owner, ports)
-            .await
-            .and_then(|updated| {
-                updated.then_some(()).ok_or_else(|| {
-                    AppError::new(
-                        "ANDROID_RUNTIME_OWNER_STALE_EPOCH",
-                        "Android 运行设备记录已被更新，本次回滚结果未覆盖新记录。",
-                    )
-                })
-            })
+        let serial = owner.serial.clone();
+        match self.replace_owner_if_epoch(owner, ports).await {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(self.runtime_owner_conflict_error(&serial).await),
+            Err(error) => Err(error),
+        }
     }
 }

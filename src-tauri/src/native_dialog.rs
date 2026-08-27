@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use intercept_proxy_application::{AppError, AppResult};
-use intercept_proxy_infrastructure::{NativeFileDialog, adapters::FileSelection};
+use intercept_proxy_infrastructure::{FileSelection, NativeFileDialog};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 

@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use uuid::Uuid;
 
 use super::{ListenerId, ProxyWorkspace, Revision, UiTone, WorkspaceId};
 
@@ -25,6 +26,15 @@ pub struct WorkspaceSummaryViewModel {
     pub listener_count: usize,
     pub enabled_listener_count: usize,
     pub selected: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 在仓储的一次一致性读取中得到的 Workspace 摘要和完整聚合。
+///
+/// 摘要与详情按相同顺序一一对应；调用者不得再按摘要逐项回查仓储。
+pub struct WorkspaceCollectionViewModel {
+    pub summaries: Vec<WorkspaceSummaryViewModel>,
+    pub details: Vec<ProxyWorkspace>,
 }
 
 impl WorkspaceSummaryViewModel {
@@ -85,6 +95,7 @@ pub enum ListenerRuntimeState {
 /// 单个 Workspace Listener 的运行快照。所有文案与状态均由 Rust 提供。
 pub struct ListenerStatusViewModel {
     pub listener_id: ListenerId,
+    pub runtime_epoch: Option<Uuid>,
     pub state: ListenerRuntimeState,
     pub state_text: String,
     pub ui_tone: UiTone,

@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260827-003",
+  "case_id": "FINAL-REPLAY-001",
+  "executed_at": "2026-08-27 14:46:35 +08:00",
+  "platform": "macOS arm64",
+  "result": "PASS_WITH_NOT_RUN",
+  "isolated_identifier": "com.interceptproxy.desktop.finalreplay",
+  "mcp_endpoint": "http://127.0.0.1:17653/mcp",
+  "expected": {
+    "local_gates": "PASS",
+    "playbook_resource_readable": true,
+    "create_status": "preview_ready",
+    "apply_status": "apply_queued",
+    "terminal_status": "committed",
+    "restart_recovers": true,
+    "port_released_after_exit": true
+  },
+  "actual": {
+    "local_gates": "PASS",
+    "playbook_resource_readable": true,
+    "create_status": "preview_ready",
+    "apply_status": "apply_queued",
+    "terminal_status": "committed",
+    "restart_recovers": true,
+    "port_released_after_exit": true
+  },
+  "not_run": [
+    "Android two-device live execution: no devices connected",
+    "Nuvei Tango authorized transaction: no authorized endpoint or test window",
+    "Production non-loopback IPv4 MCP exchange: local transparent proxy intercepts same-host LAN traffic and the strict exchange deadline expires"
+  ],
+  "remote_windows_validation": "PENDING",
+  "private_materials": "N/A: no private key or password used",
+  "business_payload": "N/A: no production transaction sent"
+}

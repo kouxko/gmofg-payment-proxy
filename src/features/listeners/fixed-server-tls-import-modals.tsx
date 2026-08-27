@@ -202,8 +202,9 @@ export function ImportTrustModal({
                 />
               </TextField>
               <p className="text-sm text-[var(--telemetry-muted)]">
-                选择签发上游 Server 证书的单个 CA 锚（.cer / .crt / .pem /
-                .der）。不要选择证书链、带私钥的 Server 身份文件或 client.p12。
+                选择签发上游 Server 证书的单个 CA，或选择一个按签发顺序包含多张 CA
+                的 PEM Bundle（.cer / .crt / .pem / .der）。不要选择带私钥的 Server
+                身份文件或 client.p12；多个独立文件请先在 Proxy 外合并为一个 PEM。
               </p>
               <p className="text-xs text-[var(--telemetry-muted)]">
                 导入时会立即解析证书，并在当前页面显示主题、SAN、有效期和

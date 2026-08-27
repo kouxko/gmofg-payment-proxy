@@ -15,14 +15,14 @@ use ring::hmac;
 use uuid::Uuid;
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::{ProtectedSecretRecord, SecretProtector, SqliteStore};
+use crate::{IntoSqlitePersistence, ProtectedSecretRecord, SecretProtector, SqliteExecutor};
 
-use super::common::infra;
+use super::common::{app_error, infra};
 
 const PROVIDER: &str = "system";
 
 pub struct ProtectedSecretAdapter {
-    store: Arc<SqliteStore>,
+    executor: SqliteExecutor,
     protector: Arc<dyn SecretProtector>,
 }
 
@@ -30,7 +30,7 @@ impl fmt::Debug for ProtectedSecretAdapter {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ProtectedSecretAdapter")
-            .field("store", &self.store)
+            .field("executor", &self.executor)
             .field("protector", &"<system secret protector>")
             .finish()
     }
@@ -38,11 +38,19 @@ impl fmt::Debug for ProtectedSecretAdapter {
 
 impl ProtectedSecretAdapter {
     #[must_use]
-    pub fn new(store: Arc<SqliteStore>, protector: Arc<dyn SecretProtector>) -> Self {
-        Self { store, protector }
+    pub fn new(
+        persistence: impl IntoSqlitePersistence,
+        protector: Arc<dyn SecretProtector>,
+    ) -> Self {
+        let (executor, store) = persistence.into_sqlite_persistence();
+        drop(store);
+        Self {
+            executor,
+            protector,
+        }
     }
 
-    pub fn resolve_basic_authenticator(
+    pub async fn resolve_basic_authenticator(
         &self,
         reference: &SecretReference,
     ) -> AppResult<Arc<dyn ForwardProxyAuthenticator>> {
@@ -52,16 +60,22 @@ impl ProtectedSecretAdapter {
                 "代理认证安全引用无效或不属于当前安装实例。",
             ));
         }
-        let record = infra(
-            self.store
-                .load_protected_secret(&reference.provider, &reference.key),
-        )?
-        .ok_or_else(|| {
-            AppError::new(
-                "SECRET_NOT_FOUND",
-                "代理认证安全引用不存在，请重新输入用户名和密码。",
-            )
-        })?;
+        let provider = reference.provider.clone();
+        let key = reference.key.clone();
+        let record = self
+            .executor
+            .execute(move |store| {
+                store
+                    .load_protected_secret(&provider, &key)
+                    .map_err(AppError::from)
+            })
+            .await?
+            .ok_or_else(|| {
+                AppError::new(
+                    "SECRET_NOT_FOUND",
+                    "代理认证安全引用不存在，请重新输入用户名和密码。",
+                )
+            })?;
         let plaintext = Zeroizing::new(infra(self.protector.unprotect(&record.protected_blob))?);
         let comparison_key = hmac::Key::new(
             hmac::HMAC_SHA256,
@@ -96,12 +110,16 @@ impl ProtectedSecretPort for ProtectedSecretAdapter {
         let protected_blob = infra(self.protector.protect(&authorization))?;
 
         let key = Uuid::new_v4().to_string();
-        infra(self.store.save_protected_secret(&ProtectedSecretRecord {
+        let record = ProtectedSecretRecord {
             provider: PROVIDER.into(),
             key: key.clone(),
             protected_blob,
             updated_at: Utc::now(),
-        }))?;
+        };
+        self.executor
+            .execute(move |store| store.save_protected_secret(&record))
+            .await
+            .map_err(app_error)?;
         Ok(SecretReference {
             provider: PROVIDER.into(),
             key,
@@ -133,8 +151,11 @@ impl ForwardProxyAuthenticator for ConstantTimeBasicAuthenticator {
 
 #[cfg(test)]
 mod tests {
+    use std::{future::Future, pin::Pin, sync::mpsc, task::Poll};
+
     use super::*;
-    use crate::InfrastructureError;
+    use crate::{InfrastructureError, SqliteStore};
+    use tokio::sync::oneshot;
 
     #[derive(Debug)]
     struct TestProtector;
@@ -166,7 +187,10 @@ mod tests {
             .unwrap();
         assert_ne!(persisted.protected_blob, b"Basic b3BlcmF0b3I6c2VjcmV0");
 
-        let authenticator = adapter.resolve_basic_authenticator(&reference).unwrap();
+        let authenticator = adapter
+            .resolve_basic_authenticator(&reference)
+            .await
+            .unwrap();
         let peer = "127.0.0.1:12345".parse().unwrap();
         assert!(authenticator.authorize(
             peer,
@@ -178,5 +202,45 @@ mod tests {
             !authenticator.authorize(peer, Some(&http::HeaderValue::from_static("Basic invalid")))
         );
         assert!(!authenticator.authorize(peer, None));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn basic_auth_resolution_waits_asynchronously_and_queued_cancel_is_safe() {
+        let store = Arc::new(SqliteStore::in_memory().unwrap());
+        let adapter = ProtectedSecretAdapter::new(store, Arc::new(TestProtector));
+        let reference = adapter
+            .store_basic_auth("operator".into(), "secret".into())
+            .await
+            .unwrap();
+        let executor = adapter.executor.clone();
+        let (entered_tx, entered_rx) = oneshot::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let blocker = tokio::spawn(async move {
+            executor
+                .execute(move |_| {
+                    entered_tx.send(()).unwrap();
+                    release_rx.recv().unwrap();
+                    Ok::<_, InfrastructureError>(())
+                })
+                .await
+        });
+        entered_rx.await.unwrap();
+
+        let mut resolution = Box::pin(adapter.resolve_basic_authenticator(&reference));
+        let polled =
+            std::future::poll_fn(|context| Poll::Ready(Pin::new(&mut resolution).poll(context)))
+                .await;
+        assert!(matches!(polled, Poll::Pending));
+        let (progress_tx, progress_rx) = oneshot::channel();
+        tokio::spawn(async move { progress_tx.send(()).unwrap() });
+        progress_rx.await.unwrap();
+        drop(resolution);
+
+        release_tx.send(()).unwrap();
+        blocker.await.unwrap().unwrap();
+        adapter
+            .resolve_basic_authenticator(&reference)
+            .await
+            .expect("later resolution succeeds");
     }
 }

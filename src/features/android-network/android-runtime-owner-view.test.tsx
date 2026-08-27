@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   deviceNetworkProfileNew: vi.fn(),
   deviceNetworkProfileApplyIntent: vi.fn(),
   deviceNetworkProfileSave: vi.fn(),
-  deviceNetworkRuntimeOwner: vi.fn(),
+  deviceNetworkRuntimeOwners: vi.fn(),
   deviceNetworkEndpoints: vi.fn(),
   deviceNetworkStatus: vi.fn(),
   androidCompanionInstall: vi.fn(),
@@ -55,6 +55,7 @@ const ownerA = {
 
 const runningA = {
   serial: "device-a",
+  runtime_epoch: ownerA.epoch,
   state: "running",
   state_text: "运行中",
   ui_tone: "positive",
@@ -117,9 +118,9 @@ describe("Android runtime owner view", () => {
       auto_resume_after_reboot: false,
     }]));
     mocks.deviceNetworkProfileGet.mockReturnValue(ok(profile));
-    mocks.deviceNetworkProfileSave.mockImplementation((value) => ok(value));
-    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(ownerA));
-    mocks.deviceNetworkEndpoints.mockImplementation((profileId) => ok({
+    mocks.deviceNetworkProfileSave.mockImplementation((_serial, value) => ok(value));
+    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([ownerA]));
+    mocks.deviceNetworkEndpoints.mockImplementation((serial, profileId) => ok({
       configured_profile_id: profileId,
       configured: profileId ? [{
         profile_id: profileId,
@@ -130,7 +131,7 @@ describe("Android runtime owner view", () => {
         listener_bind_address: "0.0.0.0",
         listener_port: 16627,
       }] : [],
-      runtime_owner: ownerA,
+      runtime_owner: serial === ownerA.serial ? ownerA : null,
       runtime: [{
         serial: "device-a",
         epoch: ownerA.epoch,
@@ -171,37 +172,55 @@ describe("Android runtime owner view", () => {
     mocks.deviceNetworkEmergencyRestore.mockReturnValue(ok({ ...runningA, state: "stopped" }));
   });
 
-  it("renders owner A status while selected device is B and blocks takeover", async () => {
+  it("keeps owner A separate while selected device B can start independently", async () => {
     const user = userEvent.setup();
     render(<AndroidNetworkView />);
 
-    expect(await screen.findByText("设备 A 正在运行。")).toBeVisible();
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledOnce());
+    expect(screen.queryByText("设备 A 正在运行。")).not.toBeInTheDocument();
     expect(screen.getByLabelText("目标设备")).toHaveTextContent("A8700");
     expect(screen.getByLabelText("设备网络运行所有者")).toHaveTextContent("device-a");
-    expect(screen.getByLabelText("实际运行端点")).toHaveTextContent("device-a");
+    expect(screen.getByLabelText("实际运行端点")).not.toHaveTextContent("device-a");
     await user.click(screen.getByRole("button", { name: /设备 A 方案/ }));
     await waitFor(() =>
-      expect(mocks.deviceNetworkEndpoints).toHaveBeenCalledWith("profile-a"),
+      expect(mocks.deviceNetworkEndpoints).toHaveBeenCalledWith("device-b", "profile-a"),
     );
     expect(screen.getByLabelText("方案配置端点")).toHaveTextContent("当前方案入口");
-    expect(await screen.findByRole("button", { name: "启动" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "启动" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "应用修改" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "停止网络接管" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "停止网络接管 device-a" })).toBeEnabled();
     expect(mocks.useAppEventRefresh).toHaveBeenCalledWith(
       ["android_vpn_status_changed"],
       expect.any(Function),
-      { paused: false, entityId: "device-a" },
+    );
+    expect(mocks.useAppEventRefresh).toHaveBeenCalledWith(
+      ["android_vpn_status_changed"],
+      expect.any(Function),
+      { paused: true, entityId: undefined },
     );
   });
 
+  it("refreshes all owner cards when an unselected device emits a runtime event", async () => {
+    render(<AndroidNetworkView />);
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledOnce());
+    const globalRefresh = mocks.useAppEventRefresh.mock.calls.find(
+      (call) => call.length === 2,
+    )?.[1];
+
+    await act(async () => globalRefresh());
+
+    expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledTimes(2);
+    expect(mocks.deviceNetworkStatus).not.toHaveBeenCalled();
+  });
+
   it("does not query runtime status from selection when no owner exists", async () => {
-    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(null));
+    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([]));
     render(<AndroidNetworkView />);
 
-    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwner).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledOnce());
     expect(mocks.deviceNetworkStatus).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "刷新运行状态" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "紧急恢复网络" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /刷新运行状态/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /紧急恢复网络/ })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "授权网络接管" })).toBeEnabled();
   });
 
@@ -215,33 +234,40 @@ describe("Android runtime owner view", () => {
     }));
     render(<AndroidNetworkView />);
 
-    expect(await screen.findByText("设备 A 正在运行。")).toBeVisible();
-    expect(screen.getByRole("button", { name: "刷新运行状态" })).toBeEnabled();
-    const restore = screen.getByRole("button", { name: "紧急恢复网络" });
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledOnce());
+    const restore = screen.getByRole("button", { name: "紧急恢复网络 device-a" });
     expect(restore).toBeEnabled();
     await user.click(restore);
     await waitFor(() => expect(mocks.deviceNetworkEmergencyRestore).toHaveBeenCalledOnce());
     await waitFor(() => expect(mocks.androidAdbGet).toHaveBeenCalledTimes(2));
-    expect(mocks.deviceNetworkRuntimeOwner.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(mocks.deviceNetworkStatus).toHaveBeenCalled();
+    expect(mocks.deviceNetworkRuntimeOwners.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mocks.deviceNetworkStatus).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "授权网络接管" })).toBeDisabled();
   });
 
   it("drops a stale runtime response after the owner epoch changes", async () => {
+    mocks.androidAdbGet.mockReturnValue(ok({
+      available: true,
+      executable: "/sdk/adb",
+      version: "adb",
+      selected_serial: "device-a",
+    }));
     let resolveOldStatus: ((value: ReturnType<typeof statusResult>) => void) | undefined;
     const nextOwner = { ...ownerA, epoch: "22222222-2222-4222-8222-222222222222" };
-    mocks.deviceNetworkRuntimeOwner
-      .mockReturnValueOnce(ok(ownerA))
-      .mockReturnValue(ok(nextOwner));
+    mocks.deviceNetworkRuntimeOwners
+      .mockReturnValueOnce(ok([ownerA]))
+      .mockReturnValue(ok([nextOwner]));
     mocks.deviceNetworkStatus
       .mockReturnValueOnce(new Promise((resolve) => {
         resolveOldStatus = resolve;
       }))
-      .mockReturnValue(ok({ ...runningA, message: "新 epoch 的设备 A 状态" }));
+      .mockReturnValue(ok({ ...runningA, runtime_epoch: nextOwner.epoch, message: "新 epoch 的设备 A 状态" }));
 
     render(<AndroidNetworkView />);
     await waitFor(() => expect(mocks.deviceNetworkStatus).toHaveBeenCalledOnce());
-    const refresh = mocks.useAppEventRefresh.mock.calls.at(-1)?.[1];
+    const refresh = mocks.useAppEventRefresh.mock.calls.find(
+      (call) => call.length === 3 && call[2]?.entityId === ownerA.serial,
+    )?.[1];
     await act(async () => refresh());
     expect(await screen.findByText("新 epoch 的设备 A 状态")).toBeVisible();
     await act(async () => resolveOldStatus?.(statusResult({
@@ -253,6 +279,52 @@ describe("Android runtime owner view", () => {
     expect(screen.getByText("新 epoch 的设备 A 状态")).toBeVisible();
   });
 
+  it("does not let a late stop for epoch one remove epoch two when refresh fails", async () => {
+    const user = userEvent.setup();
+    const nextOwner = { ...ownerA, epoch: "22222222-2222-4222-8222-222222222222" };
+    const nextStatus = {
+      ...runningA,
+      runtime_epoch: nextOwner.epoch,
+      message: "新 epoch 的设备 A 状态",
+    };
+    let resolveStop: ((value: ReturnType<typeof ok<typeof runningA>>) => void) | undefined;
+    mocks.androidAdbGet.mockReturnValue(ok({
+      available: true,
+      executable: "/sdk/adb",
+      version: "adb",
+      selected_serial: "device-a",
+    }));
+    mocks.androidDeviceList.mockReturnValue(ok([
+      { serial: "device-a", state: "device", product: null, model: "A920MAX", device: null, transport_id: "1", selected: true },
+    ]));
+    mocks.deviceNetworkRuntimeOwners
+      .mockReturnValueOnce(ok([ownerA]))
+      .mockReturnValue(ok([nextOwner]));
+    mocks.deviceNetworkStatus
+      .mockReturnValueOnce(ok(runningA))
+      .mockReturnValue(ok(nextStatus));
+    mocks.deviceNetworkStop.mockReturnValue(new Promise((resolve) => {
+      resolveStop = resolve;
+    }));
+    render(<AndroidNetworkView />);
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledOnce());
+    expect(await screen.findByText("设备 A 正在运行。")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "停止网络接管 device-a" }));
+    await waitFor(() => expect(mocks.deviceNetworkStop).toHaveBeenCalledOnce());
+    const globalRefresh = mocks.useAppEventRefresh.mock.calls.find(
+      (call) => call.length === 2,
+    )?.[1];
+    await act(async () => globalRefresh());
+    expect(await screen.findByText("新 epoch 的设备 A 状态")).toBeVisible();
+    mocks.deviceNetworkRuntimeOwners.mockReturnValue(Promise.reject(new Error("refresh failed")));
+
+    await act(async () => resolveStop?.(ok({ ...runningA, state: "stopped" })));
+
+    expect(screen.getByRole("button", { name: "停止网络接管 device-a" })).toBeEnabled();
+    expect(screen.getByText("新 epoch 的设备 A 状态")).toBeVisible();
+  });
+
   it("stops an owner outside the current Workspace without selection or draft", async () => {
     const user = userEvent.setup();
     mocks.androidAdbGet.mockReturnValue(ok({
@@ -261,25 +333,18 @@ describe("Android runtime owner view", () => {
       version: "adb",
       selected_serial: null,
     }));
-    mocks.deviceNetworkRuntimeOwner
-      .mockReturnValueOnce(ok({ ...ownerA, profile_id: "outside-profile" }))
-      .mockReturnValue(ok(null));
-    mocks.deviceNetworkStatus.mockReturnValue(ok({
-      ...runningA,
-      active_profile_id: "outside-profile",
-    }));
+    mocks.deviceNetworkRuntimeOwners
+      .mockReturnValueOnce(ok([{ ...ownerA, profile_id: "outside-profile" }]))
+      .mockReturnValue(ok([]));
     render(<AndroidNetworkView />);
 
-    await waitFor(() => expect(mocks.deviceNetworkStatus).toHaveBeenCalledOnce());
-    expect(screen.getByText("其他 Workspace 的方案正在运行")).toBeVisible();
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledOnce());
     expect(screen.getByText("尚未选择设备网络方案")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "停止网络接管" }));
+    await user.click(screen.getByRole("button", { name: "停止网络接管 device-a" }));
     await waitFor(() => expect(mocks.deviceNetworkStop).toHaveBeenCalledOnce());
-    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwner).toHaveBeenCalledTimes(2));
-    expect(Math.max(...mocks.deviceNetworkStatus.mock.invocationCallOrder)).toBeLessThan(
-      mocks.deviceNetworkStop.mock.invocationCallOrder[0],
-    );
-    expect(screen.getByRole("button", { name: "停止网络接管" })).toBeDisabled();
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledTimes(2));
+    expect(mocks.deviceNetworkStop).toHaveBeenCalledWith(ownerA.serial, ownerA.epoch);
+    expect(screen.queryByRole("button", { name: "停止网络接管 device-a" })).not.toBeInTheDocument();
   });
 });
 

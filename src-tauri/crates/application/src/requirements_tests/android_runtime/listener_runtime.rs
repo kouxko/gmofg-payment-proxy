@@ -10,7 +10,7 @@ async fn device_network_start_rejects_enabled_listener_without_running_runtime()
 
         let error = fixture
             .application
-            .device_network_start(fixture.profile_id.clone(), false)
+            .device_network_start(fixture.serial.clone(), fixture.profile_id.clone(), false)
             .await
             .expect_err("enabled listener without running runtime must block start");
 
@@ -38,7 +38,12 @@ async fn device_network_apply_rejects_enabled_listener_without_running_runtime()
 
         let error = fixture
             .application
-            .device_network_apply(fixture.profile_id.clone(), false)
+            .device_network_apply(
+                fixture.serial.clone(),
+                fixture.runtime_epoch,
+                fixture.profile_id.clone(),
+                false,
+            )
             .await
             .expect_err("enabled listener without running runtime must block apply");
 
@@ -66,12 +71,17 @@ async fn device_network_start_and_apply_accept_running_listener_runtime() {
 
     fixture
         .application
-        .device_network_start(fixture.profile_id.clone(), false)
+        .device_network_start(fixture.serial.clone(), fixture.profile_id.clone(), false)
         .await
         .unwrap();
     fixture
         .application
-        .device_network_apply(fixture.profile_id.clone(), false)
+        .device_network_apply(
+            fixture.serial.clone(),
+            fixture.runtime_epoch,
+            fixture.profile_id.clone(),
+            false,
+        )
         .await
         .unwrap();
 
@@ -97,7 +107,6 @@ async fn device_network_start_rejects_listener_unreachable_from_adb_reverse() {
 
     let mut workspace = fixture.workspaces.get(fixture.original_id).await.unwrap();
     workspace.listeners[0].bind_address = "192.0.2.10".into();
-    workspace.listeners[0].allowed_client_cidrs = vec!["10.0.0.0/8".into()];
     workspace.listeners[0].http_mut().unwrap().authentication =
         intercept_proxy_domain::ForwardProxyAuthentication::Basic {
             credential: intercept_proxy_domain::SecretReference {
@@ -109,7 +118,7 @@ async fn device_network_start_rejects_listener_unreachable_from_adb_reverse() {
 
     let error = fixture
         .application
-        .device_network_start(fixture.profile_id.clone(), false)
+        .device_network_start(fixture.serial.clone(), fixture.profile_id.clone(), false)
         .await
         .expect_err("ADB reverse 只能连接本机回环或未指定地址上的监听");
 

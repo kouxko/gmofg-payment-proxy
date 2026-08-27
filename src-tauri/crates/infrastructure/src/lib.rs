@@ -4,7 +4,7 @@
 //! 请求/响应正文只属于内存会话，不在这里落盘。上层只依赖应用端口，因此 `SQLite`、
 //! DPAPI/Keychain 或证书库失败时可以被统一映射，而不会污染领域模型。
 
-pub mod adapters;
+mod adapters;
 pub mod application_backup;
 mod application_backup_export;
 mod application_backup_import;
@@ -18,21 +18,9 @@ pub mod sqlite;
 mod windows_process;
 
 pub use adapters::{
-    AcceptedExternalPackageConnection, AndroidAdbAdapter, BoundSocketDocument,
-    CaptureRepositoryAdapter, CertificateServiceAdapter, ExchangeObservationCounters,
-    ExchangeObservationStore, ExternalPackageClient, ExternalPackageConnectionConfig,
-    ExternalPackageConnectionError, ExternalPackageConnectionId, ExternalPackageFatalProtocolError,
-    ExternalPackageListenerRuntime, ExternalPackageRegistryAdapter, ExternalPackageRemoteError,
-    ExternalPackageServer, ExternalPackageServerConfig, FaultServiceAdapter,
-    HeaderBodyCodecResolver, InfrastructureServiceBundle, ListenerRuntimeAdapter, NativeFileDialog,
-    ProtectedSecretAdapter, ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
-    ProtocolPackageImportAdapter, ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure,
-    ProtocolPackageRecoveryReport, ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError,
-    ProtocolPackageStorageErrorCode, ProtocolPackageSummary, ProtocolPackageUsageQueryAdapter,
-    ProtocolPackageValidationStatus, RuleRepositoryAdapter, RuntimePipelineAdapter,
-    RuntimePipelineProductHooks, RuntimeRuleRepository, SettingsRepositoryAdapter,
-    WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter, accept_packages_websocket,
-    external_package_registration_fingerprint,
+    EnvironmentApplyLeaseAdapter, EnvironmentConfigurationMaterialPreparer,
+    ExchangeObservationCounters, ExchangeObservationStore, ExternalPackageServer, FileSelection,
+    InfrastructureServiceBundle, NativeFileDialog,
 };
 pub use application_backup::{
     ApplicationBackupArchive, ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode,
@@ -59,6 +47,7 @@ pub use files::{
 pub use keychain::MacKeychainProtector;
 pub use sqlite::{
     AndroidRuntimeOwnerRecord, CURRENT_APPLICATION_SCHEMA_VERSION, CertificateMaterialRecord,
-    CertificateMaterialSnapshot, ProtectedSecretRecord, SqliteStore, StoredSettings,
-    WorkspaceCollectionSnapshot, WorkspaceRecord,
+    CertificateMaterialSnapshot, EnvironmentCommitFaultPoint, IntoSqlitePersistence,
+    ProtectedSecretRecord, SqliteExecutor, SqliteStore, StoredSettings,
+    WorkspaceCollectionSnapshot, WorkspaceRecord, open_sqlite_persistence,
 };

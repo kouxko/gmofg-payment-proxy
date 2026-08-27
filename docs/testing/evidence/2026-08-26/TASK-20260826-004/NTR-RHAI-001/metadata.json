@@ -26,7 +26,6 @@
     "outputs/rhai-actual.json",
     "outputs/comparison.json",
     "outputs/tests-and-static.txt",
-    "outputs/checksum.txt",
     "outputs/zip-listing.txt"
   ],
   "replay": "steps/replay.md",
@@ -35,7 +34,6 @@
     "tests_failed": 0,
     "known_size_frames": [1602, 647, 1602, 914, 1322, 896],
     "zip_entries": 4,
-    "zip_sha256": "0595af171e20ae9eee21da42a8327971c99689a278cab6ffd7612ba20a4049ea",
     "byte_exact_encode": true,
     "raw_json_values_preserved": true,
     "payload_logged": false

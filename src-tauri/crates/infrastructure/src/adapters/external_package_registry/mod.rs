@@ -13,7 +13,9 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{ExternalPackageRegistration, ProtocolPackageRef};
 use parking_lot::{Mutex, RwLock};
 
+#[cfg(test)]
 use crate::SqliteStore;
+use crate::{IntoSqlitePersistence, SqliteExecutor};
 
 use super::{
     common::app_error,
@@ -23,11 +25,15 @@ use super::{
 use crate::sqlite::external_packages::StoredExternalPackageRegistrationOutcome;
 
 mod application_port;
+mod cleanup;
 mod connection;
 mod diagnostics;
 mod identity;
+mod service;
 mod views;
 
+#[cfg(test)]
+use cleanup::DisconnectBarrier;
 pub use connection::{AcceptedExternalPackageConnection, ExternalPackageConnectionId};
 use connection::{ConnectionDetailSnapshot, ExternalPackageServiceSnapshot, OnlineConnection};
 pub use identity::external_package_registration_fingerprint;
@@ -35,33 +41,92 @@ use identity::{not_found, package_error};
 use views::recent_error_view;
 
 /// 外部协议包的 `SQLite` + 活动连接组合注册表。
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ExternalPackageRegistryAdapter {
+    environment_apply_resource_gates: Arc<super::EnvironmentApplyResourceGateRegistry>,
+    #[cfg(test)]
     store: Arc<SqliteStore>,
-    online: Mutex<HashMap<ProtocolPackageRef, OnlineConnection>>,
-    service: Mutex<ExternalPackageServiceSnapshot>,
-    events: RwLock<Option<Arc<EventHub>>>,
-    connection_details: Mutex<HashMap<ProtocolPackageRef, ConnectionDetailSnapshot>>,
+    executor: SqliteExecutor,
+    connection_mutations: Arc<Mutex<HashMap<ProtocolPackageRef, Arc<tokio::sync::Mutex<()>>>>>,
+    online: Arc<Mutex<HashMap<ProtocolPackageRef, OnlineConnection>>>,
+    service: Arc<Mutex<ExternalPackageServiceSnapshot>>,
+    events: Arc<RwLock<Option<Arc<EventHub>>>>,
+    connection_details: Arc<Mutex<HashMap<ProtocolPackageRef, ConnectionDetailSnapshot>>>,
+    #[cfg(test)]
+    disconnect_barriers: Arc<Mutex<HashMap<ProtocolPackageRef, DisconnectBarrier>>>,
+    #[cfg(test)]
+    cleanup_complete: Arc<tokio::sync::Notify>,
+    #[cfg(test)]
+    deletion_complete: Arc<tokio::sync::Notify>,
 }
 
 impl ExternalPackageRegistryAdapter {
+    pub(crate) async fn environment_apply_projection(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<Option<intercept_proxy_application::ProtocolPackageVersionViewModel>> {
+        intercept_proxy_application::ExternalPackageApplicationPort::get(self, package).await
+    }
+
+    pub(crate) async fn environment_apply_projections(
+        &self,
+    ) -> AppResult<Vec<intercept_proxy_application::ProtocolPackageVersionViewModel>> {
+        intercept_proxy_application::ExternalPackageApplicationPort::list(self).await
+    }
+
     /// 从持久化仓储创建注册表。
     ///
     /// 构造时不会从 `SQLite` 恢复在线状态；只有当前进程完成注册握手的 client 才能进入内存表。
     #[must_use]
-    pub fn new(store: Arc<SqliteStore>) -> Self {
+    pub fn new(persistence: impl IntoSqlitePersistence) -> Self {
+        let (executor, store) = persistence.into_sqlite_persistence();
+        #[cfg(not(test))]
+        drop(store);
         Self {
+            environment_apply_resource_gates: Arc::new(
+                super::EnvironmentApplyResourceGateRegistry::default(),
+            ),
+            #[cfg(test)]
             store,
-            online: Mutex::new(HashMap::new()),
-            service: Mutex::new(ExternalPackageServiceSnapshot {
+            executor,
+            connection_mutations: Arc::new(Mutex::new(HashMap::new())),
+            online: Arc::new(Mutex::new(HashMap::new())),
+            service: Arc::new(Mutex::new(ExternalPackageServiceSnapshot {
                 websocket_url: "ws://0.0.0.0:8765/packages".to_owned(),
                 state: ExternalPackageServiceStateViewModel::Failed {
                     error: "外部软件包服务尚未完成启动。".to_owned(),
                 },
-            }),
-            events: RwLock::new(None),
-            connection_details: Mutex::new(HashMap::new()),
+            })),
+            events: Arc::new(RwLock::new(None)),
+            connection_details: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(test)]
+            disconnect_barriers: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(test)]
+            cleanup_complete: Arc::new(tokio::sync::Notify::new()),
+            #[cfg(test)]
+            deletion_complete: Arc::new(tokio::sync::Notify::new()),
         }
+    }
+
+    pub(crate) fn with_environment_apply_resource_gates(
+        mut self,
+        gates: Arc<super::EnvironmentApplyResourceGateRegistry>,
+    ) -> Self {
+        self.environment_apply_resource_gates = gates;
+        self
+    }
+
+    pub(super) async fn acquire_environment_apply_package_gate(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> tokio::sync::OwnedMutexGuard<()> {
+        self.environment_apply_resource_gates
+            .acquire(
+                super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::ExactPackage(
+                    package.clone(),
+                ),
+            )
+            .await
     }
 
     /// 注入应用级事件中心，使注册、断线和服务状态变化能刷新所有展示适配器。
@@ -69,36 +134,11 @@ impl ExternalPackageRegistryAdapter {
         *self.events.write() = Some(events);
     }
 
-    /// 记录 Host 已成功绑定的本次进程实际 WebSocket 地址。
-    pub fn mark_service_listening(&self, websocket_url: impl Into<String>) {
-        let websocket_url = websocket_url.into();
-        *self.service.lock() = ExternalPackageServiceSnapshot {
-            websocket_url: websocket_url.clone(),
-            state: ExternalPackageServiceStateViewModel::Listening,
-        };
-        self.publish_service_status();
-        self.publish_service_listening(&websocket_url);
-    }
-
-    /// 记录 Host 非致命的监听失败；内置协议包不受此状态影响。
-    pub fn mark_service_failed(&self, websocket_url: impl Into<String>, error: impl Into<String>) {
-        let websocket_url = websocket_url.into();
-        let error = error.into();
-        *self.service.lock() = ExternalPackageServiceSnapshot {
-            websocket_url: websocket_url.clone(),
-            state: ExternalPackageServiceStateViewModel::Failed {
-                error: error.clone(),
-            },
-        };
-        self.publish_service_status();
-        self.publish_service_failed(&websocket_url);
-    }
-
     /// 原子接纳完成握手的注册结果，并发布活动 client。
     ///
     /// `fingerprint` 必须由 [`external_package_registration_fingerprint`] 计算；本方法会再次计算并
     /// 比较，避免接线层传错摘要。相同精确身份已有 Active 或 Closing 连接时，后注册者被拒绝。
-    pub fn accept_registration(
+    pub async fn accept_registration(
         &self,
         registration: &ExternalPackageRegistration,
         fingerprint: [u8; 32],
@@ -106,6 +146,7 @@ impl ExternalPackageRegistryAdapter {
     ) -> AppResult<AcceptedExternalPackageConnection> {
         let computed = external_package_registration_fingerprint(registration)?;
         let package = registration.package().identity().clone();
+        let _environment_apply_gate = self.acquire_environment_apply_package_gate(&package).await;
         if computed != fingerprint {
             return Err(package_error(
                 "EXTERNAL_PACKAGE_FINGERPRINT_INVALID",
@@ -114,17 +155,26 @@ impl ExternalPackageRegistryAdapter {
             ));
         }
 
-        let mut online = self.online.lock();
-        if online.contains_key(&package) {
+        let gate = self.connection_mutation(&package);
+        let mutation = gate.lock().await;
+        if self.online.lock().contains_key(&package) {
             return Err(package_error(
                 "EXTERNAL_PACKAGE_ALREADY_ONLINE",
                 "相同外部协议包精确版本已有在线连接。",
                 &package,
             ));
         }
+        let stored_registration = registration.clone();
         let enabled = match self
-            .store
-            .accept_external_package_registration(registration, fingerprint, Utc::now())
+            .executor
+            .execute(move |store| {
+                store.accept_external_package_registration(
+                    &stored_registration,
+                    fingerprint,
+                    Utc::now(),
+                )
+            })
+            .await
             .map_err(app_error)?
         {
             StoredExternalPackageRegistrationOutcome::IdentityConflict => {
@@ -139,25 +189,28 @@ impl ExternalPackageRegistryAdapter {
         };
         let connection_id = ExternalPackageConnectionId::new();
         let rpc_timeout = client.rpc_timeout();
-        // 始终按 online -> connection_details 的顺序持锁。详情先安装、在线代次后发布；
-        // 因此观察到 Active 新代次的调用必然也能观察到同一代次的详情快照。
-        self.connection_details.lock().insert(
-            package.clone(),
-            ConnectionDetailSnapshot {
-                connection_id,
-                remote_address: None,
-                rpc_timeout,
-                recent_error: None,
-            },
-        );
-        online.insert(
-            package.clone(),
-            OnlineConnection::Active {
-                id: connection_id,
-                client,
-            },
-        );
-        drop(online);
+        {
+            // SQLite 完成后才发布内存代次；所有 parking_lot guard 都局限在无 await 的作用域内。
+            // 始终按 online -> connection_details 的顺序持锁，使 Active 与详情快照一起可见。
+            let mut online = self.online.lock();
+            self.connection_details.lock().insert(
+                package.clone(),
+                ConnectionDetailSnapshot {
+                    connection_id,
+                    remote_address: None,
+                    rpc_timeout,
+                    recent_error: None,
+                },
+            );
+            online.insert(
+                package.clone(),
+                OnlineConnection::Active {
+                    id: connection_id,
+                    client,
+                },
+            );
+        }
+        drop(mutation);
         self.publish_catalog_changed(&package);
         self.publish_service_status();
         Ok(AcceptedExternalPackageConnection {
@@ -168,18 +221,28 @@ impl ExternalPackageRegistryAdapter {
     }
 
     /// 将 TCP accept 得到的远端地址关联到已接纳的连接代次；迟到写入不会覆盖后续连接。
-    pub fn record_remote_address(
+    pub async fn record_remote_address(
         &self,
         package: &ProtocolPackageRef,
         connection_id: ExternalPackageConnectionId,
         remote_address: SocketAddr,
     ) -> AppResult<bool> {
-        let online = self.online.lock();
-        if !matches!(
-            online.get(package),
-            Some(OnlineConnection::Active { id, .. }) if *id == connection_id
-        ) {
+        let _environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
+        let gate = self.connection_mutation(package);
+        let mutation = gate.lock().await;
+        if !self.is_active_connection(package, connection_id) {
             return Ok(false);
+        }
+        let selected = package.clone();
+        if !self
+            .executor
+            .execute(move |store| {
+                store.record_external_package_remote_address(&selected, remote_address)
+            })
+            .await
+            .map_err(app_error)?
+        {
+            return Err(not_found(package));
         }
         let mut details = self.connection_details.lock();
         let Some(detail) = details
@@ -188,34 +251,44 @@ impl ExternalPackageRegistryAdapter {
         else {
             return Ok(false);
         };
-        if !self
-            .store
-            .record_external_package_remote_address(package, remote_address)
-            .map_err(app_error)?
-        {
-            return Err(not_found(package));
-        }
         detail.remote_address = Some(remote_address);
         detail.recent_error = None;
         drop(details);
-        drop(online);
+        drop(mutation);
         self.publish_connection_online(package, connection_id, remote_address);
         Ok(true)
     }
 
     /// 记录连接终止的安全摘要，供详情页和后续 MCP 投影复用。
-    pub fn record_connection_error(
+    pub async fn record_connection_error(
         &self,
         package: &ProtocolPackageRef,
         connection_id: ExternalPackageConnectionId,
         reason: &ExternalPackageConnectionError,
     ) -> AppResult<bool> {
-        let online = self.online.lock();
-        if !matches!(
-            online.get(package),
-            Some(OnlineConnection::Active { id, .. }) if *id == connection_id
-        ) {
+        let _environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
+        let gate = self.connection_mutation(package);
+        let mutation = gate.lock().await;
+        if !self.is_active_connection(package, connection_id) {
             return Ok(false);
+        }
+        let recent_error = recent_error_view(reason);
+        let selected = package.clone();
+        let stored_error = recent_error.clone();
+        if !self
+            .executor
+            .execute(move |store| {
+                store.record_external_package_recent_error(
+                    &selected,
+                    &stored_error.code,
+                    &stored_error.message,
+                    stored_error.occurred_at,
+                )
+            })
+            .await
+            .map_err(app_error)?
+        {
+            return Err(not_found(package));
         }
         let mut details = self.connection_details.lock();
         let Some(detail) = details
@@ -224,22 +297,9 @@ impl ExternalPackageRegistryAdapter {
         else {
             return Ok(false);
         };
-        let recent_error = recent_error_view(reason);
-        if !self
-            .store
-            .record_external_package_recent_error(
-                package,
-                &recent_error.code,
-                &recent_error.message,
-                recent_error.occurred_at,
-            )
-            .map_err(app_error)?
-        {
-            return Err(not_found(package));
-        }
         detail.recent_error = Some(recent_error);
         drop(details);
-        drop(online);
+        drop(mutation);
         self.publish_connection_offline(package, connection_id, reason);
         Ok(true)
     }
@@ -256,11 +316,14 @@ impl ExternalPackageRegistryAdapter {
     /// 处理 actor 的断线通知；只有连接 ID 仍匹配当前所有者时才移除在线状态。
     ///
     /// 该比较使迟到通知无法把同一精确版本的后续连接错误标记为离线。
-    pub fn mark_disconnected(
+    pub async fn mark_disconnected(
         &self,
         package: &ProtocolPackageRef,
         connection_id: ExternalPackageConnectionId,
     ) -> bool {
+        let _environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
+        let gate = self.connection_mutation(package);
+        let mutation = gate.lock().await;
         let mut online = self.online.lock();
         // Closing 由 disconnect/delete 操作持有门禁；actor 的 wait_closed 通知不能提前移除它，
         // 否则新注册可能在 SQLite 删除完成前穿过临界区。
@@ -272,6 +335,7 @@ impl ExternalPackageRegistryAdapter {
             online.remove(package);
         }
         drop(online);
+        drop(mutation);
         if matches {
             self.publish_catalog_changed(package);
             self.publish_service_status();
@@ -279,13 +343,26 @@ impl ExternalPackageRegistryAdapter {
         matches
     }
 
-    /// 核验指定连接仍是最近一次、且尚未被重连取代的离线代次。
-    /// 按既定锁顺序取得一致快照，避免旧连接的迟到清理作用于新连接。
-    pub(crate) fn is_still_offline_after(
+    fn is_active_connection(
         &self,
         package: &ProtocolPackageRef,
         connection_id: ExternalPackageConnectionId,
     ) -> bool {
+        matches!(
+            self.online.lock().get(package),
+            Some(OnlineConnection::Active { id, .. }) if *id == connection_id
+        )
+    }
+
+    /// 核验指定连接仍是最近一次、且尚未被重连取代的离线代次。
+    /// 按既定锁顺序取得一致快照，避免旧连接的迟到清理作用于新连接。
+    pub(crate) async fn is_still_offline_after(
+        &self,
+        package: &ProtocolPackageRef,
+        connection_id: ExternalPackageConnectionId,
+    ) -> bool {
+        let gate = self.connection_mutation(package);
+        let _mutation = gate.lock().await;
         let online = self.online.lock();
         if online.contains_key(package) {
             return false;
@@ -294,46 +371,6 @@ impl ExternalPackageRegistryAdapter {
             .lock()
             .get(package)
             .is_some_and(|detail| detail.connection_id == connection_id)
-    }
-
-    async fn disconnect_active(&self, package: &ProtocolPackageRef, keep_gate: bool) {
-        let (connection_id, client) = {
-            let mut online = self.online.lock();
-            match online.get(package) {
-                Some(OnlineConnection::Active { id, client }) => {
-                    let id = *id;
-                    let client = client.clone();
-                    online.insert(
-                        package.clone(),
-                        OnlineConnection::Closing {
-                            id,
-                            client: Some(client.clone()),
-                        },
-                    );
-                    (Some(id), Some(client))
-                }
-                Some(OnlineConnection::Closing { id, client }) => (Some(*id), client.clone()),
-                None => (None, None),
-            }
-        };
-        if let Some(client) = client {
-            client.disconnect().await;
-        }
-        if !keep_gate && let Some(connection_id) = connection_id {
-            let mut online = self.online.lock();
-            let owns_closing_gate = matches!(
-                online.get(package),
-                Some(OnlineConnection::Closing { id, .. }) if *id == connection_id
-            );
-            if owns_closing_gate {
-                online.remove(package);
-            }
-            drop(online);
-            if owns_closing_gate {
-                self.publish_catalog_changed(package);
-                self.publish_service_status();
-            }
-        }
     }
 
     fn is_online(&self, package: &ProtocolPackageRef) -> bool {
@@ -389,14 +426,17 @@ impl ExternalPackageRegistryAdapter {
     }
 }
 
+#[async_trait::async_trait]
 impl ExternalSocketPackageProvider for ExternalPackageRegistryAdapter {
-    fn resolve(
+    async fn resolve(
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<Option<ExternalSocketPackageBinding>> {
+        let selected = package.clone();
         let Some(stored) = self
-            .store
-            .get_external_package(package)
+            .executor
+            .execute(move |store| store.get_external_package(&selected))
+            .await
             .map_err(app_error)?
         else {
             return Ok(None);

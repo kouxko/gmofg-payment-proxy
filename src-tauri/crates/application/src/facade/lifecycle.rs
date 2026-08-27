@@ -2,8 +2,9 @@
 
 use super::Application;
 use crate::{
-    AppBootstrapViewModel, AppError, AppResult, CaptureQuery, EventSubscription,
-    ListenerRuntimeState, OperationResultViewModel, PageRequest, UiEventEnvelope,
+    AndroidRuntimeTarget, AppBootstrapViewModel, AppError, AppResult, CaptureQuery,
+    EventSubscription, ListenerRuntimeState, OperationResultViewModel, PageRequest,
+    UiEventEnvelope,
 };
 
 impl Application {
@@ -67,16 +68,24 @@ impl Application {
 
     pub(super) async fn app_shutdown_inner(&self) -> AppResult<OperationResultViewModel> {
         let mut listener_cleanup_errors = Vec::new();
-        match self.android.runtime_owner().await {
-            Ok(Some(owner)) => {
-                if let Err(error) = self.android.network_stop().await {
-                    listener_cleanup_errors.push(format!(
-                        "Android 运行设备 {} 停止失败 [{}] {}",
-                        owner.serial, error.view_model.code, error.view_model.message
-                    ));
+        match self.android.runtime_owners().await {
+            Ok(owners) => {
+                for owner in owners {
+                    if let Err(error) = self
+                        .android
+                        .network_stop(AndroidRuntimeTarget {
+                            serial: owner.serial.clone(),
+                            expected_epoch: owner.epoch,
+                        })
+                        .await
+                    {
+                        listener_cleanup_errors.push(format!(
+                            "Android 运行设备 {} 停止失败 [{}] {}",
+                            owner.serial, error.view_model.code, error.view_model.message
+                        ));
+                    }
                 }
             }
-            Ok(None) => {}
             Err(error) => listener_cleanup_errors.push(format!(
                 "Android 运行设备读取失败 [{}] {}",
                 error.view_model.code, error.view_model.message

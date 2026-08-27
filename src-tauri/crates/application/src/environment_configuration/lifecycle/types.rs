@@ -179,6 +179,8 @@ pub enum EnvironmentCandidateLifecycleError {
     PrivateMaterialEncodingFailed,
     #[error("candidate public terminal projection could not be encoded")]
     TerminalProjectionEncodingFailed,
+    #[error("candidate epoch sequence is exhausted")]
+    CandidateEpochExhausted,
     #[error("candidate policy values must all be greater than zero")]
     InvalidPolicy,
 }

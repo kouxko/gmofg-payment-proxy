@@ -2,6 +2,7 @@ use super::{
     AndroidAdbViewModel, AndroidDeviceViewModel, AndroidNetworkProfile, AndroidPackageViewModel,
     AndroidTargetApplication, AppError, AppResult, Application, BTreeSet,
 };
+use crate::AndroidDeviceTarget;
 
 impl Application {
     pub async fn android_adb_get(&self) -> AppResult<AndroidAdbViewModel> {
@@ -12,24 +13,54 @@ impl Application {
         validate_serial(&serial)?;
         let _gate = self.mutation_gate.lock().await;
         let selected = self.android.adb_select(serial).await?;
-        // 即便用户重新选择同一设备，也视为显式刷新包清单。这样安装、卸载或升级
-        // 应用后不需要重启桌面端，同时包名筛选仍可复用包清单结果。
-        *self.android_package_cache.lock().await = None;
         Ok(selected)
     }
 
     pub async fn android_device_list(&self) -> AppResult<Vec<AndroidDeviceViewModel>> {
-        self.android.device_list().await
+        let _gate = self.mutation_gate.read().await;
+        let devices = self.android.device_list().await?;
+        let owners = self.android.runtime_owners().await?;
+        let retained = devices
+            .iter()
+            .map(|device| device.serial.as_str())
+            .chain(owners.iter().map(|owner| owner.serial.as_str()))
+            .collect::<BTreeSet<_>>();
+        self.android_package_cache
+            .lock()
+            .await
+            .retain(|serial, _| retained.contains(serial.as_str()));
+        Ok(devices)
     }
 
-    pub async fn android_package_list(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
-        let mut cache = self.android_package_cache.lock().await;
-        if let Some(packages) = cache.as_ref() {
-            return Ok(packages.clone());
+    pub async fn android_package_list(
+        &self,
+        serial: String,
+    ) -> AppResult<Vec<AndroidPackageViewModel>> {
+        validate_serial(&serial)?;
+        if let Some(packages) = self
+            .android_package_cache
+            .lock()
+            .await
+            .get(&serial)
+            .cloned()
+        {
+            return Ok(packages);
         }
-        let mut packages = self.android.package_list().await?;
+        let packages = self
+            .android
+            .package_list(AndroidDeviceTarget {
+                serial: serial.clone(),
+            })
+            .await;
+        let mut packages = match packages {
+            Ok(packages) => packages,
+            Err(error) => return Err(self.android_error_context(&serial, error).await),
+        };
         packages.retain(|package| package.package_name != crate::ANDROID_COMPANION_PACKAGE);
-        *cache = Some(packages.clone());
+        self.android_package_cache
+            .lock()
+            .await
+            .insert(serial, packages.clone());
         Ok(packages)
     }
 
@@ -37,34 +68,66 @@ impl Application {
     ///
     /// APK 安装、卸载或升级不会主动通知桌面进程，因此所有宿主（桌面 UI、未来
     /// CLI/TUI 和无界面测试）都通过该用例获得一致的显式刷新语义。
-    pub async fn android_package_refresh(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
-        self.refresh_android_package_inventory().await
+    pub async fn android_package_refresh(
+        &self,
+        serial: String,
+    ) -> AppResult<Vec<AndroidPackageViewModel>> {
+        self.refresh_android_package_inventory(serial).await
     }
 
     /// 包名筛选由 Rust 完成，前端只提交用户输入并渲染返回结果。
     /// 空关键字等价于完整列表；比较时忽略 ASCII 大小写。
     pub async fn android_package_query(
         &self,
+        serial: String,
         query: String,
     ) -> AppResult<Vec<AndroidPackageViewModel>> {
-        let packages = self.android_package_list().await?;
+        let packages = self.android_package_list(serial).await?;
         filter_packages(packages, &query)
     }
 
     pub async fn android_package_get(
         &self,
+        serial: String,
         package_name: String,
     ) -> AppResult<AndroidPackageViewModel> {
+        validate_serial(&serial)?;
         validate_package_name(&package_name)?;
-        self.android.package_get(package_name).await
+        let result = self
+            .android
+            .package_get(
+                AndroidDeviceTarget {
+                    serial: serial.clone(),
+                },
+                package_name,
+            )
+            .await;
+        match result {
+            Ok(package) => Ok(package),
+            Err(error) => Err(self.android_error_context(&serial, error).await),
+        }
     }
 
     pub(super) async fn refresh_android_package_inventory(
         &self,
+        serial: String,
     ) -> AppResult<Vec<AndroidPackageViewModel>> {
-        let mut packages = self.android.package_list().await?;
+        validate_serial(&serial)?;
+        let packages = self
+            .android
+            .package_list(AndroidDeviceTarget {
+                serial: serial.clone(),
+            })
+            .await;
+        let mut packages = match packages {
+            Ok(packages) => packages,
+            Err(error) => return Err(self.android_error_context(&serial, error).await),
+        };
         packages.retain(|package| package.package_name != crate::ANDROID_COMPANION_PACKAGE);
-        *self.android_package_cache.lock().await = Some(packages.clone());
+        self.android_package_cache
+            .lock()
+            .await
+            .insert(serial, packages.clone());
         Ok(packages)
     }
 }

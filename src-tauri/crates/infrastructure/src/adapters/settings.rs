@@ -20,9 +20,9 @@ use intercept_proxy_domain::{
 use intercept_proxy_product_api::ProductProfile;
 use serde_json::{Map, Value};
 
-use crate::SqliteStore;
+use crate::{SqliteExecutor, SqliteStore};
 
-use super::common::{infra, json_error};
+use super::common::{app_error, json_error};
 
 const PERSISTENCE_VERSION_FIELD: &str = "_persistence_version";
 // 外部软件包服务配置是启动期网络合同；旧结构缺少该字段，必须显式拒绝而不是静默补默认值。
@@ -58,35 +58,40 @@ fn is_usable_lan_ipv4(address: Ipv4Addr) -> bool {
 
 #[derive(Debug)]
 pub struct SettingsRepositoryAdapter {
-    store: Arc<SqliteStore>,
+    executor: SqliteExecutor,
     defaults: SettingsDraft,
     local_address: Arc<dyn LocalAddressProvider>,
 }
 
 impl SettingsRepositoryAdapter {
     #[must_use]
-    pub fn new(store: Arc<SqliteStore>, product: &dyn ProductProfile) -> Self {
+    pub fn new(persistence: impl Into<SqliteExecutor>, product: &dyn ProductProfile) -> Self {
         Self::with_local_address_provider(
-            store,
+            persistence,
             default_settings(product),
             Arc::new(SystemLocalAddressProvider),
         )
     }
 
     fn with_local_address_provider(
-        store: Arc<SqliteStore>,
+        persistence: impl Into<SqliteExecutor>,
         defaults: SettingsDraft,
         local_address: Arc<dyn LocalAddressProvider>,
     ) -> Self {
         Self {
-            store,
+            executor: persistence.into(),
             defaults,
             local_address,
         }
     }
 
-    fn load_stored(&self) -> AppResult<(SettingsDraft, u64)> {
-        let (mut draft, revision) = match infra(self.store.load_settings())? {
+    async fn load_stored(&self) -> AppResult<(SettingsDraft, u64)> {
+        let stored = self
+            .executor
+            .execute(SqliteStore::load_settings)
+            .await
+            .map_err(app_error)?;
+        let (mut draft, revision) = match stored {
             Some(stored) => {
                 let mut draft = deserialize_settings(stored.value)
                     .map_err(|error| json_error("持久化设置无效", error))?;
@@ -104,8 +109,8 @@ impl SettingsRepositoryAdapter {
         Ok((draft, revision))
     }
 
-    fn view(&self) -> AppResult<SettingsViewModel> {
-        let (stored, revision) = self.load_stored()?;
+    async fn view(&self) -> AppResult<SettingsViewModel> {
+        let (stored, revision) = self.load_stored().await?;
         Ok(SettingsViewModel {
             stored,
             revision,

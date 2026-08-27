@@ -207,6 +207,7 @@ impl<D: Direction> Encode<Http, D> for TextEncode<D> {
         Ok(HttpContext {
             header: text(document, HEADER_FIELD)?.clone(),
             body: text(document, BODY_FIELD)?.clone(),
+            body_is_utf8: true,
         })
     }
 }
@@ -257,6 +258,7 @@ mod tests {
         let context = HttpContext {
             header: "POST /sale HTTP/1.1\r\n\r\n".into(),
             body: "0200".into(),
+            body_is_utf8: true,
         };
         let mut decode = TextDecode::<Upstream>(PhantomData);
         let document = decode.decode(&context).await.unwrap();

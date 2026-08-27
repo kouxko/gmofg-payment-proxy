@@ -1,5 +1,5 @@
 {
-  "target_key": "new:store lab",
+  "target_key": "new:53746f7265204c6162",
   "target": {
     "mode": "new",
     "name": "Store Lab"
@@ -81,6 +81,84 @@
         "candidate_local_id": "00000000-0000-0000-0000-000000000120",
         "created_order": 10,
         "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 1,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000121",
+        "created_order": 11,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 2,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000122",
+        "created_order": 12,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 3,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000123",
+        "created_order": 13,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 4,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000124",
+        "created_order": 14,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 5,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000125",
+        "created_order": 15,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 6,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000126",
+        "created_order": 16,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 7,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000127",
+        "created_order": 17,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 8,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000128",
+        "created_order": 18,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 9,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000129",
+        "created_order": 19,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 10,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000012a",
+        "created_order": 20,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 11,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000012b",
+        "created_order": 21,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 12,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000012c",
+        "created_order": 22,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 13,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000012d",
+        "created_order": 23,
+        "listener_alias": "http-entry"
       }
     ],
     "protocol_rules": [
@@ -148,12 +226,11 @@
       }
     ],
     "secrets": [
-      {
-        "alias": "proxy-admin",
-        "role": "proxy_basic_auth",
-        "username": "operator",
-        "label": "Proxy operator"
-      }
+    {
+      "alias": "proxy-admin",
+      "role": "proxy_basic_auth",
+      "label": "Proxy operator"
+    }
     ]
   },
   "protocol_document_values": [

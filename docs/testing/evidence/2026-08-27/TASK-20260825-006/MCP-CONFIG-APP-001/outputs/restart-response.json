@@ -1,0 +1,74 @@
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "resultType": "complete",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"authentication\":\"none\",\"authorization_policy\":\"ignored_and_not_required\",\"candidate_limits\":{\"active_apply_global\":1,\"active_apply_per_target\":1,\"active_candidates\":4,\"active_per_target\":1},\"endpoint\":\"http://0.0.0.0:17653/mcp\",\"host_header_policy\":\"accept_any_syntactically_valid_http_host\",\"ipv4\":{\"available\":true,\"bind_address\":\"0.0.0.0\",\"port\":17653,\"warning_codes\":[]},\"ipv6\":{\"available\":true,\"bind_address\":\"[::]\",\"port\":17653,\"warning_codes\":[]},\"origin_policy\":\"ignored\",\"plaintext_http\":true,\"protocol_version\":\"environment_configuration_candidate.v1\",\"read_budgets\":{\"deadline_ms\":8000,\"input_bytes\":262144,\"output_bytes\":8388608},\"schema_versions\":[\"environment_configuration_candidate.v1\"],\"source_ip_filter\":\"none\",\"terminal_retention\":{\"evicted_status_code\":\"CANDIDATE_NOT_FOUND\",\"eviction\":\"oldest_first\",\"max_terminal_candidates\":32,\"max_terminal_public_bytes\":4194304},\"validation_layers\":[\"schema\",\"domain\",\"material\",\"package_projection\",\"dns_tcp_port\",\"tls_mtls\",\"preview_baseline\"],\"warnings\":[],\"write_budgets\":{\"create_deadline_ms\":30000,\"create_input_bytes\":1048576,\"create_output_bytes\":1048576,\"status_cancel_apply_deadline_ms\":8000,\"status_cancel_apply_input_bytes\":16384,\"status_cancel_apply_output_bytes\":1048576}}"
+      }
+    ],
+    "structuredContent": {
+      "authentication": "none",
+      "authorization_policy": "ignored_and_not_required",
+      "candidate_limits": {
+        "active_apply_global": 1,
+        "active_apply_per_target": 1,
+        "active_candidates": 4,
+        "active_per_target": 1
+      },
+      "endpoint": "http://0.0.0.0:17653/mcp",
+      "host_header_policy": "accept_any_syntactically_valid_http_host",
+      "ipv4": {
+        "available": true,
+        "bind_address": "0.0.0.0",
+        "port": 17653,
+        "warning_codes": []
+      },
+      "ipv6": {
+        "available": true,
+        "bind_address": "[::]",
+        "port": 17653,
+        "warning_codes": []
+      },
+      "origin_policy": "ignored",
+      "plaintext_http": true,
+      "protocol_version": "environment_configuration_candidate.v1",
+      "read_budgets": {
+        "deadline_ms": 8000,
+        "input_bytes": 262144,
+        "output_bytes": 8388608
+      },
+      "schema_versions": [
+        "environment_configuration_candidate.v1"
+      ],
+      "source_ip_filter": "none",
+      "terminal_retention": {
+        "evicted_status_code": "CANDIDATE_NOT_FOUND",
+        "eviction": "oldest_first",
+        "max_terminal_candidates": 32,
+        "max_terminal_public_bytes": 4194304
+      },
+      "validation_layers": [
+        "schema",
+        "domain",
+        "material",
+        "package_projection",
+        "dns_tcp_port",
+        "tls_mtls",
+        "preview_baseline"
+      ],
+      "warnings": [],
+      "write_budgets": {
+        "create_deadline_ms": 30000,
+        "create_input_bytes": 1048576,
+        "create_output_bytes": 1048576,
+        "status_cancel_apply_deadline_ms": 8000,
+        "status_cancel_apply_input_bytes": 16384,
+        "status_cancel_apply_output_bytes": 1048576
+      }
+    },
+    "isError": false
+  }
+}

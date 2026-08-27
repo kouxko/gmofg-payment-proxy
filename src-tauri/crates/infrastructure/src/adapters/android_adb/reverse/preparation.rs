@@ -69,22 +69,27 @@ impl AndroidAdbAdapter {
 
     pub(in crate::adapters::android_adb) async fn prepare_usb_proxy_runtime(
         &self,
+        serial: &str,
+        expected_epoch: Option<uuid::Uuid>,
         activation: &AndroidNetworkActivation,
         source: AndroidRuntimeOwnerSource,
     ) -> AppResult<PreparedUsbProxyRuntime> {
-        let serial = self.selected_serial()?;
-        self.ensure_selected_can_activate(&serial).await?;
+        if expected_epoch.is_none() {
+            self.ensure_can_start(serial).await?;
+        }
         let epoch = uuid::Uuid::new_v4();
-        let previous_owner = self.runtime_owner_snapshot().await;
-        let previous_resume_state = *self.runtime_resume_state.lock().await;
-        let previous_reverse = self.active_reverse.lock().await.clone();
-        let previous_runtime = self.active_runtime.lock().await.clone();
-        let previous_endpoints = self.runtime_endpoints.lock().await.clone();
+        let previous = self.owner_state_snapshot_for(serial).await;
+        validate_expected_epoch(serial, expected_epoch, &previous)?;
+        let previous_owner = previous.runtime_owner;
+        let previous_resume_state = previous.runtime_resume_state;
+        let previous_reverse = previous.active_reverse;
+        let previous_runtime = previous.active_runtime;
+        let previous_endpoints = previous.runtime_endpoints;
         let reserved_ports = previous_reverse
             .as_ref()
             .map_or_else(Vec::new, |ownership| ownership.ports.clone());
         let resolved_routes = resolve_routes(activation).await?;
-        let lan_host = self.preferred_lan_proxy_host(&serial, activation).await;
+        let lan_host = self.preferred_lan_proxy_host(serial, activation).await;
         let uses_adb_reverse = lan_host.is_none();
         let listener_ports = if uses_adb_reverse {
             allocated_reverse_ports_avoiding(
@@ -100,7 +105,7 @@ impl AndroidAdbAdapter {
             resolved_routes,
             lan_host,
             &listener_ports,
-            &serial,
+            serial,
             epoch,
             mode,
         );
@@ -116,13 +121,13 @@ impl AndroidAdbAdapter {
         let planned_ports = listener_ports.values().copied().collect::<Vec<_>>();
         let reverse = (!planned_ports.is_empty()).then(|| ActiveReverseOwnership {
             epoch,
-            serial: serial.clone(),
+            serial: serial.to_owned(),
             profile_id: activation.profile.id.clone(),
             ports: planned_ports.clone(),
         });
         let runtime = ActiveRuntimeFacts {
             epoch,
-            serial,
+            serial: serial.to_owned(),
             profile_id: activation.profile.id.clone(),
             profile_fingerprint,
             route_fingerprint,
@@ -149,7 +154,7 @@ impl AndroidAdbAdapter {
             previous_endpoints,
         };
         let cleanup_ports = prepared.all_cleanup_ports();
-        self.stage_prepared_cleanup(&prepared, cleanup_ports)
+        self.stage_prepared_cleanup(&prepared, cleanup_ports, expected_epoch)
             .await?;
         if let Some(reverse) = prepared.reverse.as_ref()
             && let Err(failure) = self
@@ -211,15 +216,44 @@ impl AndroidAdbAdapter {
             self.restore_previous_owner(prepared).await
         } else {
             let mut owner = prepared.owner.clone();
+            let serial = owner.serial.clone();
             owner.state = AndroidRuntimeOwnerState::CleanupRequired;
             owner.transition_reason = AndroidRuntimeOwnerTransitionReason::ReverseCleanupRequired;
             let ports = prepared.cleanup_ports_with(failure.remaining_ports);
-            self.replace_owner_if_epoch(owner, ports).await.map(|_| ())
+            match self.replace_owner_if_epoch(owner, ports).await {
+                Ok(true) => Ok(()),
+                Ok(false) => Err(self.runtime_owner_conflict_error(&serial).await),
+                Err(error) => Err(error),
+            }
         };
         match recovery {
             Ok(()) => failure.error,
             Err(error) => combine_operation_and_cleanup(failure.error, &error),
         }
+    }
+}
+
+fn validate_expected_epoch(
+    serial: &str,
+    expected_epoch: Option<uuid::Uuid>,
+    state: &super::super::AndroidOwnerState,
+) -> AppResult<()> {
+    let Some(expected_epoch) = expected_epoch else {
+        return Ok(());
+    };
+    match state.runtime_owner.as_ref() {
+        Some(owner) if owner.epoch == expected_epoch => Ok(()),
+        Some(owner) => Err(AppError::new(
+            "ANDROID_RUNTIME_EPOCH_STALE",
+            format!("设备 {serial} 的运行记录已变化。"),
+        )
+        .entity(serial)
+        .epoch(owner.epoch)),
+        None => Err(AppError::new(
+            "ANDROID_RUNTIME_NOT_MANAGED",
+            format!("设备 {serial} 当前没有登记中的网络运行态。"),
+        )
+        .entity(serial)),
     }
 }
 

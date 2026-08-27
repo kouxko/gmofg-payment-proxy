@@ -171,6 +171,22 @@ fn require_empty_diagnostics(diagnostics: &[serde::de::IgnoredAny]) -> Result<()
 }
 
 impl EnvironmentTerminalResult {
+    pub(super) fn committed(
+        workspace_id: Uuid,
+        revision: u64,
+        selected_workspace_id: Option<Uuid>,
+        apply_task_id: Option<String>,
+    ) -> Self {
+        Self::Committed {
+            workspace_id,
+            revision,
+            selected_workspace_id,
+            apply_task_id,
+            status_code: (),
+            diagnostics: Vec::new(),
+        }
+    }
+
     pub(super) fn failed_before_commit(status_code: EnvironmentStatusCode) -> Self {
         Self::FailedBeforeCommit {
             status_code,
@@ -185,13 +201,6 @@ impl EnvironmentTerminalResult {
         }
     }
 
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "G034 defines rollback terminalization for the G038 apply worker"
-        )
-    )]
     pub(super) fn rolled_back(status_code: EnvironmentStatusCode) -> Self {
         Self::RolledBack {
             status_code,
@@ -199,9 +208,17 @@ impl EnvironmentTerminalResult {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn stale() -> Self {
         Self::Stale {
             status_code: EnvironmentStatusCode::CandidateStale,
+            diagnostics: Vec::new(),
+        }
+    }
+
+    pub(super) fn stale_with(status_code: EnvironmentStatusCode) -> Self {
+        Self::Stale {
+            status_code,
             diagnostics: Vec::new(),
         }
     }

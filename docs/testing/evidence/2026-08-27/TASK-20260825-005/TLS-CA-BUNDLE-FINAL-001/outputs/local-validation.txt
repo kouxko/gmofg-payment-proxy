@@ -1,0 +1,22 @@
+TLS-CA-BUNDLE-FINAL-001 local validation
+Executed: 2026-08-27 15:12:00 +08:00
+
+PASS certificate bundle focused tests: 3 passed, 0 failed
+- preserves every valid certificate in input order
+- rejects the whole input when any certificate is not a CA
+- persists and resolves every member after adapter restart
+
+PASS certificate regression group: 55 passed, 0 failed
+PASS listener certificate group: 12 passed, 0 failed
+PASS environment validation group: 11 passed, 0 failed
+PASS Socket TLS group: 9 passed, 0 failed
+
+The Socket TLS bundle test first uses only the Root and observes the expected
+certificate-chain failure. It then uses Intermediate plus Root and succeeds while
+the test server sends only its leaf certificate.
+
+PASS infrastructure strict lint
+PASS runtime strict lint
+PASS Rust formatting
+PASS source file size policy
+PASS listener certificate UI and frontend regression suite: 659 passed, 0 failed

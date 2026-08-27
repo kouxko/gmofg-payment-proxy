@@ -17,9 +17,7 @@ use super::{
         SocketConnectionEvent, SocketDownstreamTlsConfig, SocketRelaySecurity, SocketRelayService,
         SocketRelayStage, SocketUpstreamTlsConfig,
     },
-    support::{
-        ScriptedFactory, TestObserver, connect_retry, limits, relay_config, reserve_address,
-    },
+    support::{ScriptedFactory, TestObserver, bind_listener, connect_retry, limits, relay_config},
     tls::{Identity, identity, mtls_accept, socket_identity, tls_accept, tls_connect_result},
 };
 
@@ -27,12 +25,13 @@ use super::{
 async fn scripted_tcp_to_tls_transforms_both_directions() {
     let upstream_identity = identity("scripted tcp to tls upstream", false);
     let (upstream, upstream_address) = tls_upstream(upstream_identity.clone()).await;
-    let mut config = relay_config(reserve_address(), upstream_address);
+    let (listener, bind_addr) = bind_listener().await;
+    let mut config = relay_config(bind_addr, upstream_address);
     config.security = SocketRelaySecurity::TcpToTls {
         upstream_tls: upstream_tls(&upstream_identity, None),
     };
 
-    let response = scripted_roundtrip(config, None).await;
+    let response = scripted_roundtrip(listener, config, None).await;
 
     assert_eq!(response, b"Dr");
     upstream.await.unwrap();
@@ -47,12 +46,13 @@ async fn scripted_tls_to_tcp_transforms_both_directions() {
         let (mut stream, _) = upstream.accept().await.unwrap();
         assert_scripted_request_and_reply(&mut stream).await;
     });
-    let mut config = relay_config(reserve_address(), upstream_address);
+    let (listener, bind_addr) = bind_listener().await;
+    let mut config = relay_config(bind_addr, upstream_address);
     config.security = SocketRelaySecurity::TlsToTcp {
         downstream_tls: downstream_tls(&proxy_identity, None, false),
     };
 
-    let response = scripted_roundtrip(config, Some((&proxy_identity, None))).await;
+    let response = scripted_roundtrip(listener, config, Some((&proxy_identity, None))).await;
 
     assert_eq!(response, b"Dr");
     upstream_task.await.unwrap();
@@ -66,13 +66,19 @@ async fn scripted_tls_to_tls_accepts_trusted_identities_on_both_sides() {
     let proxy_client_identity = identity("scripted trusted proxy", true);
     let (upstream, upstream_address) =
         mtls_upstream(upstream_identity.clone(), proxy_client_identity.ca.clone()).await;
-    let mut config = relay_config(reserve_address(), upstream_address);
+    let (listener, bind_addr) = bind_listener().await;
+    let mut config = relay_config(bind_addr, upstream_address);
     config.security = SocketRelaySecurity::TlsToTls {
         downstream_tls: downstream_tls(&proxy_identity, Some(&app_identity), true),
         upstream_tls: upstream_tls(&upstream_identity, Some(&proxy_client_identity)),
     };
 
-    let response = scripted_roundtrip(config, Some((&proxy_identity, Some(&app_identity)))).await;
+    let response = scripted_roundtrip(
+        listener,
+        config,
+        Some((&proxy_identity, Some(&app_identity))),
+    )
+    .await;
 
     assert_eq!(response, b"Dr");
     upstream.await.unwrap();
@@ -85,7 +91,7 @@ async fn scripted_tls_to_tls_rejects_an_app_without_required_identity_before_ups
     let upstream_identity = identity("scripted untouched upstream", false);
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let mut config = relay_config(bind_addr, upstream_address);
     config.security = SocketRelaySecurity::TlsToTls {
         downstream_tls: downstream_tls(&proxy_identity, Some(&app_identity), true),
@@ -98,7 +104,11 @@ async fn scripted_tls_to_tls_rejects_an_app_without_required_identity_before_ups
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let tcp = connect_retry(bind_addr).await;
     let rejected = tls_connect_result(tcp, &proxy_identity.ca, None).await;
@@ -121,7 +131,7 @@ async fn scripted_tls_to_tls_fails_closed_when_upstream_requires_missing_client_
     let required_identity = identity("scripted required proxy identity", true);
     let (upstream, upstream_address) =
         rejecting_mtls_upstream(upstream_identity.clone(), required_identity.ca.clone()).await;
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(TestObserver::default());
     let mut config = relay_config(bind_addr, upstream_address);
     config.security = SocketRelaySecurity::TlsToTls {
@@ -140,7 +150,11 @@ async fn scripted_tls_to_tls_fails_closed_when_upstream_requires_missing_client_
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
     let tcp = connect_retry(bind_addr).await;
     let mut app = tls_connect_result(tcp, &proxy_identity.ca, None)
         .await
@@ -168,6 +182,7 @@ async fn scripted_tls_to_tls_fails_closed_when_upstream_requires_missing_client_
 }
 
 async fn scripted_roundtrip(
+    listener: TcpListener,
     config: super::super::SocketRelayConfig,
     downstream_tls: Option<(&Identity, Option<&Identity>)>,
 ) -> Vec<u8> {
@@ -179,7 +194,11 @@ async fn scripted_roundtrip(
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
     let tcp = connect_retry(bind_addr).await;
     let mut response = Vec::new();
     if let Some((server_identity, client_identity)) = downstream_tls {

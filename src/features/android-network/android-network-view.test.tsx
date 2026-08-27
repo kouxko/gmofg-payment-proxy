@@ -9,7 +9,7 @@ import { AndroidNetworkView } from "./android-network-view";
 const mocks = vi.hoisted(() => ({
   androidAdbGet: vi.fn(), androidDeviceList: vi.fn(), androidAdbSelect: vi.fn(),
   androidPackageList: vi.fn(), androidPackageRefresh: vi.fn(), androidPackageQuery: vi.fn(), deviceNetworkProfileList: vi.fn(), deviceNetworkStatus: vi.fn(),
-  deviceNetworkRuntimeOwner: vi.fn(),
+  deviceNetworkRuntimeOwners: vi.fn(),
   deviceNetworkEndpoints: vi.fn(),
   deviceNetworkProfileNew: vi.fn(), deviceNetworkProfileGet: vi.fn(), deviceNetworkProfileApplyIntent: vi.fn(), deviceNetworkProfileSave: vi.fn(),
   androidCompanionInstall: vi.fn(), androidCompanionUpdate: vi.fn(), androidVpnOpenConsent: vi.fn(),
@@ -50,7 +50,7 @@ describe("Android targeted network page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.androidAdbGet.mockReturnValue(ok({ available: true, executable: "/sdk/adb", version: "adb", selected_serial: "device-1" }));
-    mocks.androidDeviceList.mockReturnValue(ok([{ serial: "device-1", state: "device", product: null, model: "A920MAX", device: null, transport_id: "1", selected: true }]));
+    mocks.androidDeviceList.mockReturnValue(ok([{ serial: "device-1", runtime_epoch: "11111111-1111-4111-8111-111111111111", state: "device", product: null, model: "A920MAX", device: null, transport_id: "1", selected: true }]));
     mocks.androidPackageList.mockReturnValue(ok([{ package_name: "example.target", uid: 10001, shared_uid: null }]));
     mocks.androidPackageRefresh.mockReturnValue(ok([{ package_name: "example.target", uid: 10001, shared_uid: null }]));
     mocks.androidPackageQuery.mockReturnValue(ok([{ package_name: "example.target", uid: 10001, shared_uid: null }]));
@@ -64,8 +64,8 @@ describe("Android targeted network page", () => {
       ],
       metadata_extractors: [], response_assertions: [], fault_presets: [], certificate_references: [], android_network_profiles: [],
     }));
-    mocks.deviceNetworkStatus.mockReturnValue(ok({ serial: "device-1", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null }));
-    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(null));
+    mocks.deviceNetworkStatus.mockReturnValue(ok({ serial: "device-1", runtime_epoch: "11111111-1111-4111-8111-111111111111", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null }));
+    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([]));
     mocks.deviceNetworkEndpoints.mockReturnValue(ok({
       configured_profile_id: null,
       configured: [],
@@ -73,7 +73,7 @@ describe("Android targeted network page", () => {
       runtime: [],
     }));
     mocks.deviceNetworkProfileNew.mockReturnValue(ok(profile));
-    mocks.deviceNetworkProfileApplyIntent.mockImplementation((value, intent) => {
+    mocks.deviceNetworkProfileApplyIntent.mockImplementation((_serial, value, intent) => {
       if (intent.kind === "toggle_package") {
         return ok({
           ...value,
@@ -103,8 +103,8 @@ describe("Android targeted network page", () => {
       }
       return ok({ ...value, weak_network: { ...value.weak_network, nth_tcp_flag_drops: [{ direction: "upload", flag: "syn", nth: 1 }] } });
     });
-    mocks.deviceNetworkProfileSave.mockImplementation((value) => ok(value));
-    mocks.deviceNetworkStart.mockReturnValue(ok({ serial: "device-1", state: "running", state_text: "运行中", ui_tone: "positive", verified: true, transport: "local_abstract_socket", active_profile_id: "profile-1", companion_process_running: true, message: "运行中", unsupported_fields: [], stats: null }));
+    mocks.deviceNetworkProfileSave.mockImplementation((_serial, value) => ok(value));
+    mocks.deviceNetworkStart.mockReturnValue(ok({ serial: "device-1", runtime_epoch: "11111111-1111-4111-8111-111111111111", state: "running", state_text: "运行中", ui_tone: "positive", verified: true, transport: "local_abstract_socket", active_profile_id: "profile-1", companion_process_running: true, message: "运行中", unsupported_fields: [], stats: null }));
   });
 
   it("uses compact Chinese labels for the initial operation flow", async () => {
@@ -141,7 +141,7 @@ describe("Android targeted network page", () => {
   });
 
   it("uses a wrapping profile flow and marks the profile currently executed by VPN", async () => {
-    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(owner()));
+    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([owner()]));
     mocks.deviceNetworkProfileList.mockReturnValue(ok([
       {
         id: "profile-1",
@@ -158,6 +158,7 @@ describe("Android targeted network page", () => {
     ]));
     mocks.deviceNetworkStatus.mockReturnValue(ok({
       serial: "device-1",
+      runtime_epoch: "11111111-1111-4111-8111-111111111111",
       state: "running",
       state_text: "运行中",
       ui_tone: "positive",
@@ -179,9 +180,10 @@ describe("Android targeted network page", () => {
   });
 
   it("keeps showing a running profile that belongs to another Workspace", async () => {
-    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(owner()));
+    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([owner()]));
     mocks.deviceNetworkStatus.mockReturnValue(ok({
       serial: "device-1",
+      runtime_epoch: "11111111-1111-4111-8111-111111111111",
       state: "running",
       state_text: "运行中",
       ui_tone: "positive",
@@ -201,13 +203,13 @@ describe("Android targeted network page", () => {
   });
 
   it("waits for the previous runtime poll before scheduling the next one", async () => {
-    mocks.deviceNetworkRuntimeOwner.mockReturnValue(ok(owner()));
+    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([owner()]));
     vi.useFakeTimers();
     let resolvePoll: (() => void) | undefined;
     mocks.deviceNetworkStatus
-      .mockReturnValueOnce(ok({ serial: "device-1", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null }))
+      .mockReturnValueOnce(ok({ serial: "device-1", runtime_epoch: "11111111-1111-4111-8111-111111111111", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null }))
       .mockImplementation(() => new Promise((resolve) => {
-        resolvePoll = () => resolve({ status: "ok" as const, data: { serial: "device-1", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null } });
+        resolvePoll = () => resolve({ status: "ok" as const, data: { serial: "device-1", runtime_epoch: "11111111-1111-4111-8111-111111111111", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null } });
       }));
 
     const view = render(<AndroidNetworkView />);
@@ -243,7 +245,7 @@ describe("Android targeted network page", () => {
   it("selects the target device from a dropdown and delegates persistence to Rust", async () => {
     const user = userEvent.setup();
     mocks.androidDeviceList.mockReturnValue(ok([
-      { serial: "device-1", state: "device", product: null, model: "A920MAX", device: null, transport_id: "1", selected: true },
+      { serial: "device-1", runtime_epoch: "11111111-1111-4111-8111-111111111111", state: "device", product: null, model: "A920MAX", device: null, transport_id: "1", selected: true },
       { serial: "device-2", state: "device", product: null, model: "备用设备", device: null, transport_id: "2", selected: false },
     ]));
 
@@ -288,6 +290,7 @@ describe("Android targeted network page", () => {
     const packageRow = await screen.findByRole("row", { name: /example\.target/ });
     await user.click(packageRow);
     await waitFor(() => expect(mocks.deviceNetworkProfileApplyIntent).toHaveBeenCalledWith(
+      "device-1",
       profile,
       { kind: "toggle_package", package_name: "example.target", selected: true },
     ));
@@ -298,7 +301,7 @@ describe("Android targeted network page", () => {
     expect(screen.getByRole("row", { name: /example\.target/ })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "保存方案" }));
     await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
-    expect(mocks.deviceNetworkProfileSave.mock.calls[0][0].target_applications[0].package_name).toBe("example.target");
+    expect(mocks.deviceNetworkProfileSave.mock.calls[0][1].target_applications[0].package_name).toBe("example.target");
   });
 
   it("keeps auto-resume track inside the clickable HeroUI switch hit area", async () => {
@@ -326,7 +329,7 @@ describe("Android targeted network page", () => {
 
     await user.click(screen.getByRole("button", { name: "保存方案" }));
     await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
-    expect(mocks.deviceNetworkProfileSave.mock.calls[0][0].auto_resume_after_reboot).toBe(true);
+    expect(mocks.deviceNetworkProfileSave.mock.calls[0][1].auto_resume_after_reboot).toBe(true);
   });
 
   it("sends package-name filters to Rust instead of filtering the inventory in the page", async () => {
@@ -336,7 +339,7 @@ describe("Android targeted network page", () => {
     await user.type(screen.getByRole("textbox", { name: "包名筛选" }), "example.target");
     await user.click(screen.getByRole("button", { name: "筛选" }));
 
-    await waitFor(() => expect(mocks.androidPackageQuery).toHaveBeenCalledWith("example.target"));
+    await waitFor(() => expect(mocks.androidPackageQuery).toHaveBeenCalledWith("device-1", "example.target"));
     expect(screen.getByText("example.target")).toBeVisible();
   });
 
@@ -398,7 +401,7 @@ describe("Android targeted network page", () => {
     await user.click(await screen.findByRole("button", { name: "新建设备网络方案" }));
     await user.click(await screen.findByRole("row", { name: /example\.target/ }));
     await user.click(screen.getByRole("button", { name: "启动" }));
-    await waitFor(() => expect(mocks.deviceNetworkStart).toHaveBeenCalledWith("profile-1", false));
+    await waitFor(() => expect(mocks.deviceNetworkStart).toHaveBeenCalledWith("device-1", "profile-1", false));
     expect(mocks.deviceNetworkProfileSave.mock.invocationCallOrder[0]).toBeLessThan(mocks.deviceNetworkStart.mock.invocationCallOrder[0]);
   });
 
@@ -429,7 +432,7 @@ describe("Android targeted network page", () => {
     await user.click(screen.getByRole("button", { name: "保存方案" }));
 
     await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
-    expect(mocks.deviceNetworkProfileSave.mock.calls[0][0].proxy_routes).toEqual([
+    expect(mocks.deviceNetworkProfileSave.mock.calls[0][1].proxy_routes).toEqual([
       { destination: "api.example.test", ports: [443, 8443], listener_id: "listener-1" },
       { destination: "10.0.34.50", ports: [], listener_id: "listener-2" },
     ]);
@@ -453,7 +456,7 @@ describe("Android targeted network page", () => {
 
     await user.click(screen.getByRole("button", { name: "保存方案" }));
     await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
-    expect(mocks.deviceNetworkProfileSave.mock.calls[0][0].destination_targets).toEqual([
+    expect(mocks.deviceNetworkProfileSave.mock.calls[0][1].destination_targets).toEqual([
       { cidr: "10.0.34.50", ports: [16127] },
       { cidr: "2001:db8::/32", ports: [] },
     ]);
@@ -479,7 +482,7 @@ describe("Android targeted network page", () => {
 
     await user.click(screen.getByRole("button", { name: "保存方案" }));
     await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
-    const savedWeak = mocks.deviceNetworkProfileSave.mock.calls[0][0].weak_network;
+    const savedWeak = mocks.deviceNetworkProfileSave.mock.calls[0][1].weak_network;
     expect(savedWeak.burst_loss).toEqual({
       enter_bad_state_basis_points: 0,
       leave_bad_state_basis_points: 0,

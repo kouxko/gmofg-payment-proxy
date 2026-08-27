@@ -3,7 +3,7 @@
 use intercept_proxy_application::{
     DocumentValue, ListenerId, OperationResultViewModel, ProtocolDocumentRuleDefinition,
     ProtocolDocumentRuleId, ProtocolPackageSchemaFieldTypeViewModel, ProtocolRuleCapabilityCatalog,
-    ProtocolRuleSaveInput, ProtocolRuleStage, parse_protocol_rule_value,
+    ProtocolRuleEditorContext, ProtocolRuleSaveInput, ProtocolRuleStage, parse_protocol_rule_value,
 };
 use tauri::State;
 
@@ -37,6 +37,7 @@ pub async fn protocol_rule_list(
         .map_err(command_error)
 }
 
+/// 保留给非编辑器调用方的单阶段只读查询；WebView 编辑器必须使用完整上下文命令。
 #[tauri::command]
 #[specta::specta]
 pub async fn protocol_rule_capabilities(
@@ -47,6 +48,19 @@ pub async fn protocol_rule_capabilities(
     app_state
         .application
         .protocol_rule_capabilities(listener_id, stage)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn protocol_rule_editor_context(
+    app_state: State<'_, AppState>,
+    listener_id: ListenerId,
+) -> CommandResult<ProtocolRuleEditorContext> {
+    app_state
+        .application
+        .protocol_rule_editor_context(listener_id)
         .await
         .map_err(command_error)
 }

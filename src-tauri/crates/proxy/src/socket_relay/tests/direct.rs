@@ -4,13 +4,17 @@ use super::*;
 async fn transparent_relay_dials_upstream_only_after_the_first_app_bytes() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let service = Arc::new(
         SocketRelayService::build(transparent_config(bind_addr, upstream_address)).unwrap(),
     );
     let cancellation = CancellationToken::new();
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { service.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        service
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     assert!(
@@ -69,13 +73,17 @@ async fn transparent_relay_preserves_arbitrary_write_boundaries_and_coalesced_fr
         stream.shutdown().await.unwrap();
     });
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let service = Arc::new(
         SocketRelayService::build(transparent_config(bind_addr, upstream_address)).unwrap(),
     );
     let cancellation = CancellationToken::new();
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { service.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        service
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     for (frame_index, frame) in request_frames.iter().enumerate() {
@@ -129,13 +137,17 @@ async fn transparent_relay_supports_simultaneous_bidirectional_binary_traffic() 
         tokio::join!(receive, send);
     });
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let service = Arc::new(
         SocketRelayService::build(transparent_config(bind_addr, upstream_address)).unwrap(),
     );
     let cancellation = CancellationToken::new();
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { service.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        service
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let client = connect_retry(bind_addr).await;
     let (mut reader, mut writer) = client.into_split();

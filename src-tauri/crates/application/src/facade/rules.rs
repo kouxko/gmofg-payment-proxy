@@ -5,6 +5,8 @@
 
 use std::collections::BTreeMap;
 
+mod exchange_mock;
+
 use http::{HeaderName, HeaderValue};
 
 use super::{

@@ -18,23 +18,31 @@ pub(in crate::adapters) enum PreparedProtocolPackageDisposition {
 }
 
 impl ProtocolPackageRepositoryAdapter {
-    /// 只读比较已验证包与当前精确身份；最终 commit 仍必须在写事务中重复这项判断。
-    pub(in crate::adapters) fn prepared_disposition(
+    pub(in crate::adapters) async fn prepared_disposition_async(
         &self,
         prepared: &PreparedProtocolPackage,
     ) -> Result<PreparedProtocolPackageDisposition, ProtocolPackageStorageError> {
-        let package = prepared.compiled.package();
-        let Some(existing) = self.store.load_protocol_package(package)? else {
-            return Ok(PreparedProtocolPackageDisposition::New);
-        };
-        let manifest = prepared.compiled.manifest();
+        let package = prepared.compiled.package().clone();
+        let manifest_name = prepared.compiled.manifest().package().name().to_owned();
+        let host_api = prepared.compiled.manifest().api();
         let expected_files = prepared
             .files
             .iter()
             .map(|(path, bytes)| (path.as_str().to_owned(), bytes.to_vec()))
             .collect::<Vec<_>>();
-        let reusable = existing.header.name == manifest.package().name()
-            && existing.header.host_api == manifest.api()
+        let Some(existing) = self
+            .executor
+            .execute(move |store| {
+                store
+                    .load_protocol_package(&package)
+                    .map_err(ProtocolPackageStorageError::from)
+            })
+            .await?
+        else {
+            return Ok(PreparedProtocolPackageDisposition::New);
+        };
+        let reusable = existing.header.name == manifest_name
+            && existing.header.host_api == host_api
             && existing.header.generation != Uuid::nil()
             && !matches!(
                 existing.header.validation,

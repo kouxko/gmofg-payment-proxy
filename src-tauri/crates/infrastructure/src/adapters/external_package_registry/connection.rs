@@ -9,6 +9,7 @@ use intercept_proxy_domain::ProtocolPackageRef;
 use uuid::Uuid;
 
 use crate::adapters::external_packages::ExternalPackageClient;
+use tokio::sync::watch;
 
 /// 一次在线注册的稳定标识，用于忽略被新连接取代后的迟到断线通知。
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -46,7 +47,7 @@ pub(super) enum OnlineConnection {
     },
     Closing {
         id: ExternalPackageConnectionId,
-        client: Option<ExternalPackageClient>,
+        completion: watch::Receiver<bool>,
     },
 }
 

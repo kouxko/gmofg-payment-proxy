@@ -90,6 +90,17 @@ impl AppError {
     }
 
     #[must_use]
+    pub fn runtime_context(
+        mut self,
+        entity_id: impl Into<String>,
+        runtime_epoch: Option<RuntimeEpoch>,
+    ) -> Self {
+        self.view_model.entity_id = Some(entity_id.into());
+        self.view_model.runtime_epoch = runtime_epoch;
+        self
+    }
+
+    #[must_use]
     pub fn diagnostic(mut self, diagnostic: AppErrorDiagnosticViewModel) -> Self {
         self.view_model.diagnostic = Some(diagnostic);
         self

@@ -60,6 +60,24 @@ fn append_runtime_logs(mut markdown: String, logs: &ApplicationLogPage) -> Strin
     writeln!(markdown, "- 保留 ID 范围：{retained_range}").expect("writing to String cannot fail");
     writeln!(markdown, "- 容量淘汰：{} 条", logs.evicted_count)
         .expect("writing to String cannot fail");
+    writeln!(
+        markdown,
+        "- 队列丢弃（容量/字节）：{} 条",
+        logs.queue_dropped_full
+    )
+    .expect("writing to String cannot fail");
+    writeln!(
+        markdown,
+        "- 队列丢弃（消费者断开）：{} 条",
+        logs.queue_dropped_disconnected
+    )
+    .expect("writing to String cannot fail");
+    writeln!(
+        markdown,
+        "- 队列丢弃（生产者竞争）：{} 条",
+        logs.queue_dropped_contended
+    )
+    .expect("writing to String cannot fail");
     writeln!(markdown, "- 损坏行：{} 条", logs.corrupt_line_count)
         .expect("writing to String cannot fail");
     writeln!(markdown, "- 持久化错误：{persistence_error}").expect("writing to String cannot fail");
@@ -160,6 +178,9 @@ mod tests {
         assert!(markdown.contains("has_more：true"));
         assert!(markdown.contains("保留 ID 范围：2..=4"));
         assert!(markdown.contains("容量淘汰：1 条"));
+        assert!(markdown.contains("队列丢弃（容量/字节）：0 条"));
+        assert!(markdown.contains("队列丢弃（消费者断开）：0 条"));
+        assert!(markdown.contains("队列丢弃（生产者竞争）：0 条"));
         assert!(markdown.contains("损坏行：2 条"));
         assert!(markdown.contains("持久化错误：disk unavailable"));
         assert!(markdown.contains("保留容量：3 条"));

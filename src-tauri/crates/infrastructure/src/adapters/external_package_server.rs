@@ -78,14 +78,16 @@ impl ExternalPackageServer {
         let listener = match TcpListener::bind(config.bind_address).await {
             Ok(listener) => listener,
             Err(error) => {
-                registry.mark_service_failed(websocket_url, error.to_string());
+                registry
+                    .mark_service_failed(websocket_url, error.to_string())
+                    .await;
                 return Self {
                     cancellation,
                     task: Mutex::new(None),
                 };
             }
         };
-        registry.mark_service_listening(websocket_url);
+        registry.mark_service_listening(websocket_url).await;
         let task_cancellation = cancellation.clone();
         let task = tokio::spawn(async move {
             run_accept_loop(
@@ -155,8 +157,11 @@ async fn run_accept_loop(
             () = cancellation.cancelled() => break,
             accepted = listener.accept() => match accepted {
                 Ok((stream, remote_address)) => {
-                    let Ok(permit) = Arc::clone(&admission).try_acquire_owned() else {
-                        tracing::warn!(%remote_address, "external package connection limit reached");
+                    let Some(permit) = try_admit_connection(
+                        &admission,
+                        services.registry.as_ref(),
+                        remote_address,
+                    ) else {
                         continue;
                     };
                     let connection_generation = generation;
@@ -187,6 +192,24 @@ async fn run_accept_loop(
     // 每个连接任务都收到同一个取消树，并负责显式关闭 actor/WebSocket 及发布离线状态。
     // 直接 abort handler 会遗留 detached actor 和错误的 online 投影。
     while connections.join_next().await.is_some() {}
+}
+
+fn try_admit_connection(
+    admission: &Arc<Semaphore>,
+    registry: &ExternalPackageRegistryAdapter,
+    remote_address: SocketAddr,
+) -> Option<tokio::sync::OwnedSemaphorePermit> {
+    if let Ok(permit) = Arc::clone(admission).try_acquire_owned() {
+        Some(permit)
+    } else {
+        tracing::warn!(%remote_address, "external package connection limit reached");
+        registry.record_connection_attempt_failure(
+            "connection_admission",
+            remote_address,
+            "EXTERNAL_PACKAGE_CONNECTION_LIMIT_REACHED",
+        );
+        None
+    }
 }
 
 async fn handle_connection(
@@ -258,6 +281,7 @@ async fn handle_connection(
     let accepted = match services
         .registry
         .accept_registration(&registration, fingerprint, client)
+        .await
     {
         Ok(accepted) => accepted,
         Err(error) => {
@@ -289,7 +313,7 @@ async fn monitor_connection(
         %remote_address,
         "external package connected"
     );
-    persist_remote_address(&services.registry, &accepted, remote_address);
+    persist_remote_address(&services.registry, &accepted, remote_address).await;
     let reason = tokio::select! {
         () = cancellation.cancelled() => {
             monitor.disconnect().await;
@@ -297,10 +321,11 @@ async fn monitor_connection(
         }
         reason = monitor.wait_closed() => reason,
     };
-    persist_connection_error(&services.registry, &accepted, &reason);
+    persist_connection_error(&services.registry, &accepted, &reason).await;
     if services
         .registry
         .mark_disconnected(&accepted.package, accepted.connection_id)
+        .await
     {
         tracing::warn!(
             package_id = %accepted.package.id,
@@ -321,13 +346,14 @@ async fn monitor_connection(
     }
 }
 
-fn persist_remote_address(
+async fn persist_remote_address(
     registry: &ExternalPackageRegistryAdapter,
     accepted: &AcceptedExternalPackageConnection,
     remote_address: SocketAddr,
 ) {
-    if let Err(error) =
-        registry.record_remote_address(&accepted.package, accepted.connection_id, remote_address)
+    if let Err(error) = registry
+        .record_remote_address(&accepted.package, accepted.connection_id, remote_address)
+        .await
     {
         tracing::error!(
             code = %error.view_model.code,
@@ -338,13 +364,14 @@ fn persist_remote_address(
     }
 }
 
-fn persist_connection_error(
+async fn persist_connection_error(
     registry: &ExternalPackageRegistryAdapter,
     accepted: &AcceptedExternalPackageConnection,
     reason: &ExternalPackageConnectionError,
 ) {
-    if let Err(error) =
-        registry.record_connection_error(&accepted.package, accepted.connection_id, reason)
+    if let Err(error) = registry
+        .record_connection_error(&accepted.package, accepted.connection_id, reason)
+        .await
     {
         tracing::error!(
             code = %error.view_model.code,
@@ -392,7 +419,10 @@ async fn stop_exact_package_listeners(
         // `usages()` 与前一个 Listener 的 `stop()` 都是异步边界。旧连接离线后，同一精确
         // 版本可以在任一边界期间完成重连，并由用户重新启动 Listener。每次停止前必须重新
         // 核验原 connection ID 仍是当前离线代次，不能让旧清理任务作用于新连接的运行代次。
-        if !registry.is_still_offline_after(package, disconnected_connection_id) {
+        if !registry
+            .is_still_offline_after(package, disconnected_connection_id)
+            .await
+        {
             tracing::info!(
                 package_id = %package.id,
                 package_version = %package.version,

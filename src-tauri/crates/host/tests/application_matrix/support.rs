@@ -6,7 +6,7 @@ use intercept_proxy_application::{
 };
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::{
-    InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
+    FileSelection, InfrastructureError, NativeFileDialog, SecretProtector,
 };
 use intercept_proxy_product_api::InterceptProxyProfile;
 use intercept_proxy_product_api::{

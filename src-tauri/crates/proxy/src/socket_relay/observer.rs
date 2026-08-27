@@ -136,7 +136,6 @@ pub enum SocketRelayDirection {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SocketRejectionReason {
-    Cidr,
     Capacity,
 }
 

@@ -11,10 +11,11 @@ async fn profile_delete_checks_runtime_only_after_inflight_start_finishes() {
     let application = Arc::new(fixture.application);
 
     let start_application = Arc::clone(&application);
+    let serial = fixture.serial.clone();
     let profile_id = fixture.profile_id.clone();
     let start = tokio::spawn(async move {
         start_application
-            .device_network_start(profile_id, false)
+            .device_network_start(serial, profile_id, false)
             .await
     });
     fixture.android.start_entered.notified().await;

@@ -28,16 +28,14 @@ impl Application {
     }
 
     async fn application_backup_snapshot(&self) -> AppResult<ApplicationBackupExportSnapshot> {
-        let summaries = self.workspaces.list().await?;
-        let selected_workspace_id = summaries
+        let workspace_snapshot = self.workspaces.snapshot().await?;
+        let selected_workspace_id = workspace_snapshot
+            .summaries
             .iter()
             .find(|summary| summary.selected)
             .map(|summary| summary.id)
             .ok_or_else(|| AppError::new("WORKSPACE_NOT_SELECTED", "请先选择一个 Workspace。"))?;
-        let mut workspaces = Vec::with_capacity(summaries.len());
-        for summary in summaries {
-            workspaces.push(self.workspaces.get(summary.id).await?);
-        }
+        let workspaces = workspace_snapshot.details;
 
         let settings = self.settings.get().await?;
         let certificate_materials = self.export_certificate_materials(&workspaces).await?;

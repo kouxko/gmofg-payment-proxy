@@ -10,6 +10,9 @@ use specta::Type;
 use uuid::Uuid;
 
 use super::{ListenerId, ListenerRuntimeState, ProtocolPackageId, ProtocolPackageRef, WorkspaceId};
+use intercept_proxy_domain::{
+    HttpBodyProcessing, ListenerDataPlane, ProxyListener, SocketPayloadProcessing,
+};
 
 pub const BUILTIN_ISO8583_PACKAGE_ID: &str = "iso8583-ascii-standard";
 pub const BUILTIN_ISO8583_PACKAGE_VERSION: &str = "1.0.0";
@@ -28,6 +31,21 @@ pub fn builtin_iso8583_package_ref() -> ProtocolPackageRef {
 pub fn is_builtin_protocol_package(package: &ProtocolPackageRef) -> bool {
     package.id.as_str() == BUILTIN_ISO8583_PACKAGE_ID
         && package.version.as_str() == BUILTIN_ISO8583_PACKAGE_VERSION
+}
+
+/// 返回 Listener 数据面绑定的精确协议包；Plain HTTP 与 Direct Socket 不产生引用。
+#[must_use]
+pub fn listener_protocol_package(listener: &ProxyListener) -> Option<&ProtocolPackageRef> {
+    match &listener.data_plane {
+        ListenerDataPlane::Http(http) => match &http.body_processing {
+            HttpBodyProcessing::Plain => None,
+            HttpBodyProcessing::Protocol { package } => Some(package),
+        },
+        ListenerDataPlane::Socket(socket) => match &socket.processing {
+            SocketPayloadProcessing::Direct => None,
+            SocketPayloadProcessing::Scripted(scripted) => Some(&scripted.package),
+        },
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

@@ -38,6 +38,7 @@ impl Reader<Http, Upstream> for AppReader {
         Ok(Some(HttpContext {
             header: "POST /sale HTTP/1.1".to_owned(),
             body,
+            body_is_utf8: true,
         }))
     }
 }
@@ -189,6 +190,7 @@ impl<D: Direction> Encode<Http, D> for TextCodec {
         Ok(HttpContext {
             header: original.header.clone(),
             body: text(document),
+            body_is_utf8: true,
         })
     }
 }

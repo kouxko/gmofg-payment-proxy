@@ -5,6 +5,29 @@ use super::{
 };
 
 impl SqliteStore {
+    /// 按主键读取一个 Workspace，不扫描或解码其他聚合。
+    pub fn load_workspace(&self, id: Uuid) -> Result<Option<WorkspaceRecord>, InfrastructureError> {
+        let connection = self.connection.lock();
+        connection
+            .query_row(
+                "SELECT revision, json, updated_at FROM workspaces WHERE id = ?1",
+                [id.to_string()],
+                |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(|source| InfrastructureError::Database { source })?
+            .map(|(revision, value, updated_at)| {
+                super::parse_workspace_record(id, revision, &value, &updated_at)
+            })
+            .transpose()
+    }
+
     /// 在一个读事务内返回 Workspace 列表和当前选中项，避免 UI 看到不一致快照。
     pub fn load_workspaces(&self) -> Result<WorkspaceCollectionSnapshot, InfrastructureError> {
         let mut connection = self.connection.lock();
@@ -317,7 +340,7 @@ impl SqliteStore {
                 "DELETE FROM protected_secrets;
                  DELETE FROM certificate_material;
                  UPDATE certificate_state SET revision = revision + 1 WHERE singleton_id = 1;
-                 DELETE FROM android_runtime_owner;
+                 DELETE FROM android_runtime_owners;
                  DELETE FROM external_protocol_packages;
                  DELETE FROM protocol_packages;
                  DELETE FROM workspaces;",

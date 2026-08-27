@@ -2,6 +2,15 @@
 
 本文按任务最终完成日期记录已经实现并验收的功能。最新日期排在最前面；同一天按完成时间倒序排列。
 
+## 2026-08-27
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 15:27:02 +08:00 | [Proxy 上游多 CA PEM Bundle 支持](completed/2026-08-27/upstream-multi-ca-pem-bundle.md) | 一个上游信任 PEM 文件可严格承载多个 CA，并完整保持规范化、持久化、恢复和 Socket TLS Trust Store 成员 | PASS；解析/持久化/运行时/真实 First Data TLS 分层验收通过，未发送业务报文 | 高 | Socket、上游 TLS、多 CA、PEM Bundle、OpenSSL |
+| 14:50:20 +08:00 | [日志倒序与 HTTP 抓包响应生成 Mock 规则草稿](completed/2026-08-27/log-order-and-http-capture-mock-draft.md) | 诊断日志稳定倒序；从完整服务器 HTTP 响应生成未保存、禁用且经过 Header/编码校验的 Mock 草稿 | PASS；Application、UI 与全量门禁通过；对抗审查 finding 已关闭 | 高 | 日志、Exchange、HTTP、MockResponse、规则草稿 |
+| 14:49:30 +08:00 | [Android 多设备 VPN 并行运行与逐设备管理](completed/2026-08-27/android-multi-device-vpn-management.md) | 将单一 owner 升级为最多 8 台按 serial+epoch 的独立运行集合，覆盖 ADB Reverse/LAN/device-only、逐设备命令、断线重连、Environment 与 UI 隔离 | PASS；自动化与本地门禁通过；真机 A/B 场景因无设备保持 NOT_RUN | 高 | Android、VPN、多设备、serial、epoch、ADB、重连 |
+| 12:17:47 +08:00 | [MCP 对话式完整环境配置](completed/2026-08-27/mcp-environment-configuration.md) | 新增完整环境候选、七层验证、公开预览、一次性确认、原子应用、全接口明文 MCP 传输与打包 App 重启恢复 | PASS；整体审查 APPROVE；独立复验 VERIFIED；打包 App 完整资源提交与重启恢复 PASS | 高 | MCP、环境配置、Workspace、TLS、原子应用、候选生命周期 |
+
 ## 2026-08-26
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
@@ -16,6 +25,7 @@
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
 | --- | --- | --- | --- | --- | --- |
+| 23:30:42 +08:00 | [完成架构优秀化优先任务](completed/2026-08-25/architecture-excellence-delivery.md) | 完成 Rust 规则合同、Listener CIDR 删除、SQLite executor/聚合快照、Infrastructure 收窄、确定性生命周期、可观测性和受信任外部包故障隔离 | PASS；code reviewer APPROVE；architect APPROVE/CLEAR | 未记录（历史任务） | 整洁架构、Rust 合同、Listener CIDR、SQLite、生命周期、故障隔离 |
 | 17:07:48 +08:00 | [建立测试资源归档与跨任务复用规范](completed/2026-08-25/archive-reusable-test-resources.md) | 将证书、报文、配置、步骤和结果纳入任务归档，并建立派生需求复用关系 | PASS | 未记录（历史任务） | 测试资源、证书、报文、复测、归档、派生需求 |
 | 16:52:35 +08:00 | [调整小任务对抗审查门禁](completed/2026-08-25/optional-subtask-adversarial-review.md) | 将小任务对抗审查改为风险触发的可选项，并保留整体任务最终强制审查 | PASS | 未记录（历史任务） | 对抗审查、小任务、风险门禁、AGENTS |
 | 16:41:05 +08:00 | [生成项目执行治理规范](completed/2026-08-25/generate-project-agents-governance.md) | 固化任务登记、零假设、测试证据、对抗审查、文档同步和 CI 执行边界 | PASS | 未记录（历史任务） | AGENTS、任务治理、测试证据、对抗审查、CI |

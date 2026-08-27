@@ -70,6 +70,7 @@ impl<D: Direction> Encode<Http, D> for TextEncode {
         Ok(HttpContext {
             header: original.header.clone(),
             body: text(document),
+            body_is_utf8: true,
         })
     }
 }
@@ -109,6 +110,7 @@ async fn http_reader_fixes_display_and_writer_mutates_only_a_document_clone() {
     let original = HttpContext {
         header: "POST /sale HTTP/1.1".to_owned(),
         body: "sale".to_owned(),
+        body_is_utf8: true,
     };
     let mut reader = QueueReader::<Http, Upstream>::contexts([original.clone()]);
     let mut pipeline = Pipeline::new(
@@ -142,6 +144,7 @@ async fn display_failure_is_fail_open_with_protocol_specific_evidence() {
     let mut http_reader = QueueReader::<Http, Upstream>::contexts([HttpContext {
         header: "POST / HTTP/1.1".to_owned(),
         body: "plain body".to_owned(),
+        body_is_utf8: true,
     }]);
     let mut http = HttpRead::new(
         Box::new(TextDecode),
@@ -173,6 +176,7 @@ async fn rules_failure_preserves_envelope_and_performs_no_transport_write() {
     let mut reader = QueueReader::<Http, Upstream>::contexts([HttpContext {
         header: String::new(),
         body: "sale".to_owned(),
+        body_is_utf8: true,
     }]);
     let mut pipeline = Pipeline::new(
         Box::new(HttpRead::new(
@@ -258,6 +262,7 @@ async fn writer_failure_is_a_single_error_without_partial_commit_model() {
     let mut reader = QueueReader::<Http, Upstream>::contexts([HttpContext {
         header: String::new(),
         body: "sale".to_owned(),
+        body_is_utf8: true,
     }]);
     let mut pipeline = Pipeline::new(
         Box::new(HttpRead::new(

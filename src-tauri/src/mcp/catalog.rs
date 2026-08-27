@@ -1,15 +1,28 @@
-//! Static read-only MCP tool catalog.
+//! Static MCP tool catalog for 37 reads and 5 environment tools.
 
 mod contract;
+
+use std::sync::Arc;
 
 use rmcp::model::{Tool, ToolAnnotations};
 use serde_json::{Map, Value, json};
 
+use super::environment_contract;
+
 pub(super) fn validate_arguments(name: &str, arguments: &Value) -> Result<(), String> {
+    if environment_contract::environment_tool_kind(name).is_some() {
+        return environment_contract::validate_environment_contract_arguments(name, arguments);
+    }
     contract::validate_arguments(name, arguments)
 }
 
 pub(super) fn validate_successful_output(name: &str, value: &Value) -> Result<(), String> {
+    if environment_contract::environment_tool_kind(name).is_some() {
+        return value
+            .is_object()
+            .then_some(())
+            .ok_or_else(|| "environment tool output must be an object".to_owned());
+    }
     contract::validate_successful_output(name, value)
 }
 
@@ -19,7 +32,22 @@ pub fn tools() -> Vec<Tool> {
     tools.extend(runtime_tools());
     tools.extend(traffic_tools());
     tools.extend(configuration_tools());
+    tools.extend(active_environment_tools());
     tools
+}
+
+fn active_environment_tools() -> Vec<Tool> {
+    environment_contract::environment_contract_tools()
+        .into_iter()
+        .map(|mut tool| {
+            if let Some(Value::Object(properties)) =
+                Arc::make_mut(&mut tool.input_schema).get_mut("properties")
+            {
+                contract::describe_properties(properties);
+            }
+            tool
+        })
+        .collect()
 }
 
 fn general_tools() -> Vec<Tool> {
@@ -27,7 +55,7 @@ fn general_tools() -> Vec<Tool> {
         tool(
             "application_snapshot",
             "Application snapshot",
-            "Read one optimistic, generation-validated snapshot of settings, workspaces, runtime state, packages, rules and diagnostics.",
+            "Read one Application-coordinated snapshot of settings, workspaces, runtime state, packages, rules and diagnostics with an explicit generation fingerprint.",
             empty_schema(),
         ),
         tool(
@@ -146,14 +174,20 @@ fn runtime_tools() -> Vec<Tool> {
         tool(
             "android_package_list",
             "Android packages",
-            "Read the cached package inventory for the selected device.",
-            empty_schema(),
+            "Read the cached package inventory for one explicit device.",
+            required_string("serial", "Android device serial."),
         ),
         tool(
             "android_package_get",
             "Android package detail",
-            "Read one Android package from the selected device.",
-            required_string("package_name", "Android package name."),
+            "Read one Android package from one explicit device.",
+            object_schema(
+                json!({
+                    "serial": {"type": "string"},
+                    "package_name": {"type": "string"}
+                }),
+                &["serial", "package_name"],
+            ),
         ),
         tool(
             "android_profile_list",
@@ -170,20 +204,26 @@ fn runtime_tools() -> Vec<Tool> {
         tool(
             "android_network_status",
             "Android network status",
-            "Read current Android network state.",
-            empty_schema(),
+            "Read one explicit device's Android network state.",
+            required_string("serial", "Android device serial."),
         ),
         tool(
-            "android_runtime_owner",
-            "Android runtime owner",
-            "Read the persisted profile that owns the active Android runtime.",
+            "android_runtime_owner_list",
+            "Android runtime owners",
+            "Read every persisted Android runtime owner in stable serial order.",
             empty_schema(),
         ),
         tool(
             "android_network_endpoints",
             "Android runtime endpoints",
             "Read configured and active runtime endpoints without changing the device.",
-            object_schema(json!({"profile_id": {"type": "string"}}), &[]),
+            object_schema(
+                json!({
+                    "serial": {"type": "string"},
+                    "profile_id": {"type": "string"}
+                }),
+                &["serial"],
+            ),
         ),
         tool(
             "certificate_overview",

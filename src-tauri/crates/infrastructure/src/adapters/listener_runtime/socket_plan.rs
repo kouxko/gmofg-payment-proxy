@@ -48,7 +48,6 @@ pub(super) fn build_probe(
     let service = SocketRelayService::build_with_observer(
         SocketRelayConfig {
             bind_addr,
-            allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
             upstream: SocketEndpoint {
                 host: relay.upstream.host.clone(),
                 port: relay.upstream.port,

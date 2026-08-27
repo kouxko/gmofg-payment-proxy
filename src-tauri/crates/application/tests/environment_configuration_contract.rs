@@ -261,16 +261,26 @@ fn current_domain_terminal_byte_offsets_round_trip_with_exact_field_names() {
 #[test]
 fn canonical_fixture_contains_every_terminal_action_variant_once() {
     let fixture = full_shape_value();
-    let actions = fixture["workspace"]["http_rules"][0]["actions"]
+    let actions = fixture["workspace"]["http_rules"]
         .as_array()
         .unwrap()
         .iter()
+        .flat_map(|rule| rule["actions"].as_array().unwrap())
         .filter_map(|action| action.get("Terminal"))
         .map(|terminal| match terminal {
             Value::String(name) => name.as_str(),
             Value::Object(object) => object.keys().next().unwrap().as_str(),
             _ => panic!("terminal action must use the canonical external tag"),
         })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        actions.len(),
+        12,
+        "each terminal variant appears exactly once"
+    );
+    let actions = actions
+        .into_iter()
         .collect::<std::collections::BTreeSet<_>>();
 
     assert_eq!(

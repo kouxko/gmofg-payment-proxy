@@ -73,6 +73,15 @@ fn mcp_reproduction_report_and_runtime_logs_are_read_only_and_queryable() {
     let listener = before.listeners.first().expect("default listener");
 
     let logs = fixture.call_mcp_tool("application_log_query", json!({ "limit": 10 }));
+    let diagnostics = fixture.call_mcp_tool("diagnostics_query", json!({ "limit": 10 }));
+    let exchanges = fixture.call_mcp_tool(
+        "exchange_observation_query",
+        json!({
+            "workspace_id": before.id,
+            "page": { "page": 1, "page_size": 10 },
+        }),
+    );
+    let captures = fixture.call_mcp_tool("http_capture_query", json!({ "page_size": 10 }));
     let report = fixture.call_mcp_tool(
         "reproduction_report",
         json!({
@@ -87,6 +96,48 @@ fn mcp_reproduction_report_and_runtime_logs_are_read_only_and_queryable() {
     );
 
     assert!(logs["rows"].is_array());
+    assert!(logs["queue_dropped_full"].is_u64());
+    assert!(logs["queue_dropped_disconnected"].is_u64());
+    assert!(logs["queue_dropped_contended"].is_u64());
+    for field in [
+        "rows",
+        "current_cursor",
+        "oldest_retained_event_id",
+        "snapshot_required",
+        "retained_count",
+        "truncated",
+    ] {
+        assert!(
+            diagnostics.get(field).is_some(),
+            "diagnostics missing {field}"
+        );
+    }
+    for field in [
+        "rows",
+        "page",
+        "page_size",
+        "total",
+        "evicted_records",
+        "dropped_events",
+        "ignored_events",
+    ] {
+        assert!(exchanges.get(field).is_some(), "exchanges missing {field}");
+    }
+    for field in [
+        "rows",
+        "total",
+        "page",
+        "page_size",
+        "event_cursor",
+        "oldest_event_id",
+        "snapshot_required",
+    ] {
+        assert!(captures.get(field).is_some(), "captures missing {field}");
+    }
+    assert!(report["bundle"].is_object());
+    assert!(report["application_logs"].is_object());
+    assert!(report["application_logs"]["queue_dropped_full"].is_u64());
+    assert!(report["markdown"].is_string());
     assert!(
         report["markdown"]
             .as_str()

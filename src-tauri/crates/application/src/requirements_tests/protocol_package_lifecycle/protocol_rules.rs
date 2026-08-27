@@ -168,6 +168,15 @@ async fn http_and_socket_entries_reject_cross_kind_rule_capabilities_and_save() 
             "PROTOCOL_PACKAGE_KIND_MISMATCH"
         );
 
+        let editor_context_error = application
+            .protocol_rule_editor_context(listener_id)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error_code(&editor_context_error),
+            "PROTOCOL_PACKAGE_KIND_MISMATCH"
+        );
+
         let save_error = application
             .protocol_rule_save(input(listener_id, package, ProtocolDirection::Upstream, 0))
             .await

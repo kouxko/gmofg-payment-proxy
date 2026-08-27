@@ -51,7 +51,7 @@ impl Application {
             requires_restart: true,
         };
         self.restore_and_replace_configuration(document).await?;
-        *self.android_package_cache.lock().await = None;
+        self.android_package_cache.lock().await.clear();
         Ok(outcome)
     }
 

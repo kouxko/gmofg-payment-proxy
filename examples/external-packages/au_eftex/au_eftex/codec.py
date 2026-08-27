@@ -53,6 +53,15 @@ _MAC_FIELDS = {
     "message_authentication_code",
     "message_authentication_code_extended",
 }
+_DE48_FIXED_SUBFIELD_LENGTHS = {
+    1: 19,
+    2: 2,
+    4: 4,
+    7: 48,
+    10: 1,
+    11: 1,
+}
+_DE48_VARIABLE_SUBFIELD = 16
 
 
 @dataclass(frozen=True)
@@ -442,11 +451,95 @@ def _display_value(name: str, value: object) -> str:
         raise ValueError(f"{name} must be a tagged value")
     if value.get("type") == "blob" and isinstance(value.get("value_base64"), str):
         try:
-            size = len(base64.b64decode(value["value_base64"], validate=True))
+            blob = base64.b64decode(value["value_base64"], validate=True)
         except (binascii.Error, ValueError) as error:
             raise ValueError(f"{name} contains invalid Base64") from error
+        if name == "additional_private":
+            decoded = _display_de48_f0(blob)
+            if decoded is not None:
+                return decoded
+        size = len(blob)
         return f"[redacted blob: {size} bytes]"
     if value.get("type") in {"string", "int"} and isinstance(value.get("value"), str):
         text = value["value"]
         return f"[redacted: {len(text)} chars]" if name in _SENSITIVE_DISPLAY_FIELDS else text
     raise ValueError(f"{name} must be a tagged value")
+
+
+def _display_de48_f0(value: bytes) -> str | None:
+    try:
+        subfields = _parse_de48_f0(value)
+        displayed = ["DE48 F0 dataset"]
+        for number, raw in subfields:
+            if number == 1:
+                text = _de48_ascii(raw)
+                terminal_id = text[:8].rstrip(" ")
+                transaction_number = text[8:14]
+                operator_id = text[14:19].rstrip(" ")
+                operator_display = (
+                    f"[redacted: {len(operator_id)} chars]"
+                    if operator_id
+                    else "[not present]"
+                )
+                displayed.append(
+                    "F0.1 POS data: "
+                    f"terminal ID={terminal_id}, "
+                    f"transaction number={transaction_number}, "
+                    f"operator ID={operator_display}"
+                )
+            elif number == 2:
+                displayed.append(f"F0.2 authorisation profile={_de48_ascii(raw)}")
+            elif number == 4:
+                displayed.append(
+                    f"F0.4 extended transaction type={_de48_ascii(raw)}"
+                )
+            elif number == 7:
+                displayed.append(f"F0.7 routing information=[redacted: {len(raw)} bytes]")
+            elif number in {10, 11}:
+                displayed.append(f"F0.{number}=[redacted: {len(raw)} byte]")
+            elif number == _DE48_VARIABLE_SUBFIELD:
+                displayed.append(
+                    f"F0.16 structured data=[redacted: {len(raw)} bytes]"
+                )
+        return "; ".join(displayed)
+    except (UnicodeDecodeError, ValueError):
+        return None
+
+
+def _parse_de48_f0(value: bytes) -> list[tuple[int, bytes]]:
+    if len(value) < 5 or value[0] != 0xF0:
+        raise ValueError("DE48 is not an F0 dataset")
+    declared_length = int.from_bytes(value[1:3], "big")
+    if declared_length < 2 or declared_length != len(value) - 3:
+        raise ValueError("DE48 F0 dataset length is invalid")
+
+    bitmap = value[3:5]
+    numbers = [
+        number
+        for number in range(1, 17)
+        if bitmap[(number - 1) // 8] & (0x80 >> ((number - 1) % 8))
+    ]
+    offset = 5
+    parsed: list[tuple[int, bytes]] = []
+    for number in numbers:
+        if number == _DE48_VARIABLE_SUBFIELD:
+            length = len(value) - offset
+        else:
+            length = _DE48_FIXED_SUBFIELD_LENGTHS.get(number)
+            if length is None:
+                raise ValueError(f"unsupported DE48 F0 subfield {number}")
+        end = offset + length
+        if end > len(value):
+            raise ValueError(f"truncated DE48 F0 subfield {number}")
+        parsed.append((number, value[offset:end]))
+        offset = end
+    if offset != len(value):
+        raise ValueError("DE48 F0 dataset has trailing bytes")
+    return parsed
+
+
+def _de48_ascii(value: bytes) -> str:
+    text = value.decode("ascii")
+    if any(character < " " or character > "~" for character in text):
+        raise ValueError("DE48 contains non-printable ASCII")
+    return text

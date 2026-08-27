@@ -77,8 +77,6 @@ pub struct UpstreamConnectionTestResult {
 #[derive(Clone, Debug)]
 pub struct ReverseProxyConfig {
     pub bind_addr: SocketAddr,
-    /// 允许连接当前监听的客户端网络。回环监听可留空；非回环监听必须显式配置。
-    pub allowed_client_cidrs: Vec<String>,
     pub upstream_origin: String,
     pub downstream_tls: Option<ReverseDownstreamTls>,
     pub upstream_tls: Option<ReverseUpstreamTls>,

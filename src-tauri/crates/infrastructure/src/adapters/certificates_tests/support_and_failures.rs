@@ -132,8 +132,8 @@ fn assert_raw_pkcs12_secrets_are_not_persisted(store: &SqliteStore) {
     assert!(persisted.get("pkcs12_der").is_none());
 }
 
-#[test]
-fn installation_identity_preserves_keychain_unprotect_error_code() {
+#[tokio::test]
+async fn installation_identity_preserves_keychain_unprotect_error_code() {
     let store = Arc::new(SqliteStore::in_memory().expect("store"));
     store
         .compare_and_swap_certificate_materials(
@@ -157,6 +157,7 @@ fn installation_identity_preserves_keychain_unprotect_error_code() {
 
     let error = adapter
         .load_installation_server_identity()
+        .await
         .expect_err("identity load must fail");
 
     assert_eq!(error.view_model.code, "KEYCHAIN_UNPROTECT_FAILED");

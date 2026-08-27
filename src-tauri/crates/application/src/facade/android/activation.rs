@@ -1,19 +1,30 @@
 //! Android device-network activation and runtime reconciliation.
 
-use super::{AndroidNetworkProfile, AppError, AppResult, Application, validate_profile_id};
+use super::{
+    AndroidNetworkProfile, AppError, AppResult, Application, validate_profile_id, validate_serial,
+};
 use crate::{
-    AndroidConfiguredEndpointViewModel, AndroidNetworkActivation,
+    AndroidConfiguredEndpointViewModel, AndroidDeviceTarget, AndroidNetworkActivation,
     AndroidNetworkEndpointSnapshotViewModel, AndroidNetworkState, AndroidNetworkStatusViewModel,
-    AndroidProxyRouteActivation,
+    AndroidProxyRouteActivation, AndroidRuntimeTarget,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 impl Application {
     pub async fn device_network_endpoints(
         &self,
+        serial: String,
         profile_id: Option<String>,
     ) -> AppResult<AndroidNetworkEndpointSnapshotViewModel> {
-        let runtime_owner = self.android.runtime_owner().await?;
+        validate_serial(&serial)?;
+        let _gate = self.mutation_gate.read().await;
+        let target = AndroidDeviceTarget {
+            serial: serial.clone(),
+        };
+        let runtime_owner = match self.android.runtime_owners().await {
+            Ok(owners) => owners.into_iter().find(|owner| owner.serial == serial),
+            Err(error) => return Err(self.android_error_context(&serial, error).await),
+        };
         let configured_profile_id = profile_id
             .as_deref()
             .or_else(|| {
@@ -59,10 +70,14 @@ impl Application {
             }
             None => None,
         };
-        let runtime = self
+        let runtime = match self
             .android
-            .network_runtime_endpoints(runtime_activation)
-            .await?;
+            .network_runtime_endpoints(target, runtime_activation)
+            .await
+        {
+            Ok(runtime) => runtime,
+            Err(error) => return Err(self.android_error_context(&serial, error).await),
+        };
         Ok(AndroidNetworkEndpointSnapshotViewModel {
             configured_profile_id,
             configured,
@@ -73,14 +88,16 @@ impl Application {
 
     pub async fn device_network_start(
         &self,
+        serial: String,
         profile_id: String,
         dangerous_confirmed: bool,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
+        validate_serial(&serial)?;
         // 设备网络运行态、Workspace、监听和方案持久化共享同一组引用关系。
         // 启动期间必须阻止方案删除、Workspace 切换及监听变更，避免校验完成后引用被并发修改。
-        let _gate = self.mutation_gate.lock().await;
+        let _gate = self.mutation_gate.read().await;
         let profile = self
-            .validate_network_activation(&profile_id, dangerous_confirmed)
+            .validate_network_activation(&serial, &profile_id, dangerous_confirmed)
             .await?;
         let workspace = self.selected_workspace().await?;
         let activation = Self::android_activation(&workspace, profile)?;
@@ -99,9 +116,19 @@ impl Application {
             None,
             Some(profile_id.clone()),
         );
-        let status = match self.android.network_start(activation).await {
+        let status = match self
+            .android
+            .network_start(
+                AndroidDeviceTarget {
+                    serial: serial.clone(),
+                },
+                activation,
+            )
+            .await
+        {
             Ok(status) => status,
             Err(error) => {
+                let error = self.android_error_context(&serial, error).await;
                 self.publish_device_network_error(&error, Some(profile_id));
                 return Err(error);
             }
@@ -120,12 +147,15 @@ impl Application {
 
     pub async fn device_network_apply(
         &self,
+        serial: String,
+        expected_epoch: uuid::Uuid,
         profile_id: String,
         dangerous_confirmed: bool,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
-        let _gate = self.mutation_gate.lock().await;
+        validate_serial(&serial)?;
+        let _gate = self.mutation_gate.read().await;
         let profile = self
-            .validate_network_activation(&profile_id, dangerous_confirmed)
+            .validate_network_activation(&serial, &profile_id, dangerous_confirmed)
             .await?;
         let workspace = self.selected_workspace().await?;
         let activation = Self::android_activation(&workspace, profile)?;
@@ -143,9 +173,20 @@ impl Application {
             None,
             Some(profile_id.clone()),
         );
-        let status = match self.android.network_apply(activation).await {
+        let status = match self
+            .android
+            .network_apply(
+                AndroidRuntimeTarget {
+                    serial: serial.clone(),
+                    expected_epoch,
+                },
+                activation,
+            )
+            .await
+        {
             Ok(status) => status,
             Err(error) => {
+                let error = self.android_error_context(&serial, error).await;
                 self.publish_device_network_error(&error, Some(profile_id));
                 return Err(error);
             }
@@ -154,11 +195,24 @@ impl Application {
         Ok(status)
     }
 
-    pub async fn device_network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        let status = match self.android.network_stop().await {
+    pub async fn device_network_stop(
+        &self,
+        serial: String,
+        expected_epoch: uuid::Uuid,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        validate_serial(&serial)?;
+        let _gate = self.mutation_gate.read().await;
+        let status = match self
+            .android
+            .network_stop(AndroidRuntimeTarget {
+                serial: serial.clone(),
+                expected_epoch,
+            })
+            .await
+        {
             Ok(status) => status,
             Err(error) => {
+                let error = self.android_error_context(&serial, error).await;
                 self.publish_device_network_error(&error, None);
                 return Err(error);
             }
@@ -191,11 +245,22 @@ impl Application {
 
     pub async fn device_network_emergency_restore(
         &self,
+        serial: String,
+        expected_epoch: uuid::Uuid,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        let status = match self.android.emergency_restore().await {
+        validate_serial(&serial)?;
+        let _gate = self.mutation_gate.read().await;
+        let status = match self
+            .android
+            .emergency_restore(AndroidRuntimeTarget {
+                serial: serial.clone(),
+                expected_epoch,
+            })
+            .await
+        {
             Ok(status) => status,
             Err(error) => {
+                let error = self.android_error_context(&serial, error).await;
                 self.publish_device_network_error(&error, None);
                 return Err(error);
             }
@@ -212,8 +277,19 @@ impl Application {
         Ok(status)
     }
 
-    pub async fn device_network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
-        let status = self.android.network_status().await?;
+    pub async fn device_network_status(
+        &self,
+        serial: String,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        validate_serial(&serial)?;
+        let _gate = self.mutation_gate.read().await;
+        let target = AndroidDeviceTarget {
+            serial: serial.clone(),
+        };
+        let status = match self.android.network_status(target.clone()).await {
+            Ok(status) => status,
+            Err(error) => return Err(self.android_error_context(&serial, error).await),
+        };
         if status.state != AndroidNetworkState::Running {
             return Ok(status);
         }
@@ -234,13 +310,17 @@ impl Application {
             ));
         };
         let activation = Self::android_activation(&workspace, profile)?;
-        let _runtime_endpoints = self
+        let _runtime_endpoints = match self
             .android
-            .network_runtime_endpoints(Some(activation.clone()))
-            .await?;
+            .network_runtime_endpoints(target.clone(), Some(activation.clone()))
+            .await
+        {
+            Ok(endpoints) => endpoints,
+            Err(error) => return Err(self.android_error_context(&serial, error).await),
+        };
         match self
             .android
-            .network_runtime_ready(&activation, &status)
+            .network_runtime_ready(target, &activation, &status)
             .await
         {
             Ok(true) => Ok(status),
@@ -248,18 +328,13 @@ impl Application {
                 status,
                 "VPN 进程仍在运行，但代理路由运行状态与当前方案不一致。请点击“应用修改”显式恢复。",
             )),
-            Err(error) => Ok(Self::faulted_runtime_status(
-                status,
-                format!(
-                    "无法核对 VPN 代理路由运行状态：{}。请点击“应用修改”显式恢复。",
-                    error.view_model.message
-                ),
-            )),
+            Err(error) => Err(self.android_error_context(&serial, error).await),
         }
     }
 
     async fn validate_network_activation(
         &self,
+        serial: &str,
         profile_id: &str,
         confirmed: bool,
     ) -> AppResult<AndroidNetworkProfile> {
@@ -268,7 +343,8 @@ impl Application {
             .device_network_profile_get(profile_id.to_owned())
             .await?;
         profile.validate().map_err(AppError::from)?;
-        self.validate_profile_against_device(&profile).await?;
+        self.validate_profile_against_device(serial.to_owned(), &profile)
+            .await?;
         if profile.requires_dangerous_confirmation() && !confirmed {
             return Err(AppError::new(
                 "ANDROID_DANGEROUS_CONFIRMATION_REQUIRED",
@@ -330,7 +406,6 @@ impl Application {
                 original_ports: route.ports.clone(),
                 desktop_listener_bind_address: listener.bind_address.clone(),
                 desktop_listener_port: listener.port,
-                allowed_client_cidrs: listener.allowed_client_cidrs.clone(),
             });
         }
         Ok(AndroidNetworkActivation {
@@ -389,8 +464,7 @@ impl Application {
     ) -> AppResult<(crate::ProxyWorkspace, AndroidNetworkProfile)> {
         validate_profile_id(profile_id)?;
         let mut found = None;
-        for summary in self.workspaces.list().await? {
-            let workspace = self.workspaces.get(summary.id).await?;
+        for workspace in self.workspaces.snapshot().await?.details {
             let Some(profile) = workspace
                 .android_network_profiles
                 .iter()

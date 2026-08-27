@@ -1,39 +1,45 @@
-//! 串行化规则求值，并协调内存快照与持久化运行元数据。
-//!
-//! 单个互斥操作保证“读取快照、匹配、增加命中信息、CAS 持久化”的次序可解释；revision
-//! 冲突会重新加载或显式失败，不会覆盖用户刚编辑的规则。持久化错误与消息动作结果分层
-//! 处理，避免数据库故障导致已处理网络消息被重复执行。
-
-use std::{collections::BTreeMap, sync::Arc};
+//! Epoch-owned rule actors serialize evaluation and durable metadata commits.
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, mpsc as std_mpsc},
+};
 
 use chrono::Utc;
-use intercept_proxy_application::{EventHub, RuleSummaryViewModel, UiEventPayload, UiTone};
-use intercept_proxy_domain::{
-    MatchContext, MessageStage, Rule, RuleAction, RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch,
+use intercept_proxy_application::{
+    AppError, EventHub, RuleSummaryViewModel, UiEventPayload, UiTone,
 };
+use intercept_proxy_domain::{MessageStage, Rule, RuleAction};
 use intercept_proxy_product_api::BodyCodec;
-use intercept_proxy_runtime::{ConnectionContext, Message, Result as ProxyResult};
+use intercept_proxy_runtime::{
+    ConnectionContext, ErrorCode, Message, ProxyError, Result as ProxyResult,
+    TLS_HANDSHAKE_POLICY_TIMEOUT,
+};
 use parking_lot::Mutex;
+use tokio::sync::oneshot;
 use uuid::Uuid;
 
+mod actor;
+
+use actor::{Command, EvaluationInput, Reply, RuleActorSender};
+
 use super::{
-    RuntimeRuleRepository, app_to_proxy, domain_channel,
+    RuntimeRuleRepository,
     message_projection::{decode_json, message_target},
-    rule_actions::terminal_identity,
 };
 
+pub(super) const MAILBOX_CAPACITY: usize = 64;
 #[derive(Debug)]
 pub(super) struct RuleRuntimeService {
-    channel_labels: BTreeMap<String, String>,
+    channel_labels: Arc<BTreeMap<String, String>>,
     rules: Arc<dyn RuntimeRuleRepository>,
     events: Arc<EventHub>,
-    runtimes: Mutex<BTreeMap<Uuid, RuleRuntime>>,
+    actors: Mutex<ActorRegistry>,
 }
 
-#[derive(Debug)]
-struct RuleRuntime {
-    snapshot: RuleRuntimeSnapshot,
-    engine: RuleEngine,
+#[derive(Debug, Default)]
+struct ActorRegistry {
+    senders: BTreeMap<Uuid, RuleActorSender>,
+    active_epochs: BTreeSet<Uuid>,
 }
 
 #[derive(Debug)]
@@ -51,160 +57,170 @@ impl RuleRuntimeService {
         events: Arc<EventHub>,
     ) -> Self {
         Self {
-            channel_labels,
+            channel_labels: Arc::new(channel_labels),
             rules,
             events,
-            runtimes: Mutex::new(BTreeMap::new()),
+            actors: Mutex::new(ActorRegistry::default()),
         }
     }
 
-    pub(super) fn evaluate(
-        &self,
-        context: &ConnectionContext,
-        stage: MessageStage,
-        message: Option<&Message>,
-        body_codec: &dyn BodyCodec,
-    ) -> ProxyResult<EvaluatedRules> {
-        // 重试只处理 CAS 冲突：每次都恢复引擎检查点并重新读取持久化快照，不能直接重放
-        // 上一次 actions，否则 NthHit/一次性规则可能被消费两次。
-        self.evaluate_with_retries(context, stage, message, body_codec, 3)
+    pub(super) fn prepare_epoch(&self, epoch: Uuid) -> ProxyResult<()> {
+        self.sender_for(epoch).map(|_| ())
     }
 
-    fn evaluate_with_retries(
+    pub(super) fn runtime_started(&self, epoch: Uuid) -> ProxyResult<()> {
+        self.actors.lock().active_epochs.insert(epoch);
+        self.sender_for(epoch).map(|_| ())
+    }
+
+    pub(super) async fn evaluate(
         &self,
         context: &ConnectionContext,
         stage: MessageStage,
         message: Option<&Message>,
         body_codec: &dyn BodyCodec,
-        remaining_retries: usize,
     ) -> ProxyResult<EvaluatedRules> {
-        let terminal = terminal_identity(context);
-        let json = message.and_then(|message| decode_json(body_codec, &message.body).ok());
-        let target = message.and_then(|message| message_target(&message.start_line));
-        let runtime_epoch = RuntimeEpoch::from_uuid(context.runtime_epoch);
+        let input = EvaluationInput {
+            context: context.clone(),
+            stage,
+            json: message.and_then(|message| decode_json(body_codec, &message.body).ok()),
+            target: message
+                .and_then(|message| message_target(&message.start_line).map(str::to_owned)),
+        };
+        self.submit(input, None).await
+    }
 
-        // Evaluation and its durable runtime metadata commit are one serialized
-        // operation. Actions are never returned to the transport until the
-        // corresponding hit count / one-shot disable transaction commits.
-        let mut runtime_state = self.runtimes.lock();
-        self.prepare_runtime(&mut runtime_state, context, runtime_epoch)?;
-        let runtime = runtime_state
-            .get_mut(&context.runtime_epoch)
-            .expect("rule runtime was initialized");
+    #[cfg(test)]
+    pub(super) async fn evaluate_with_enqueue_notification(
+        &self,
+        context: &ConnectionContext,
+        stage: MessageStage,
+        message: Option<&Message>,
+        body_codec: &dyn BodyCodec,
+        enqueued: oneshot::Sender<()>,
+    ) -> ProxyResult<EvaluatedRules> {
+        let input = EvaluationInput {
+            context: context.clone(),
+            stage,
+            json: message.and_then(|message| decode_json(body_codec, &message.body).ok()),
+            target: message
+                .and_then(|message| message_target(&message.start_line).map(str::to_owned)),
+        };
+        self.submit(input, Some(enqueued)).await
+    }
 
-        // A failed durable commit must not consume this message's transient
-        // NthHit increments. Restore this checkpoint before re-evaluating
-        // against the newer persisted collection snapshot.
-        let engine_before_evaluation = runtime.engine.clone();
-        let evaluation = runtime.engine.evaluate(
-            &MatchContext {
-                runtime_epoch,
-                channel: domain_channel(&context.channel)?,
-                stage,
-                terminal: &terminal,
-                path_or_request_type: target,
-                json_body: json.as_ref(),
-            },
-            Utc::now(),
+    async fn submit(
+        &self,
+        input: EvaluationInput,
+        enqueued: Option<oneshot::Sender<()>>,
+    ) -> ProxyResult<EvaluatedRules> {
+        let epoch = input.context.runtime_epoch;
+        let sender = self.sender_for(epoch)?;
+        let (reply, response) = oneshot::channel();
+        sender
+            .send(Command::Evaluate {
+                input: Box::new(input),
+                reply: Reply::Async(reply),
+            })
+            .await
+            .map_err(|_| unavailable(epoch))?;
+        if let Some(enqueued) = enqueued {
+            let _ = enqueued.send(());
+        }
+        response.await.map_err(|_| unavailable(epoch))?
+    }
+
+    pub(super) fn evaluate_handshake(
+        &self,
+        context: &ConnectionContext,
+    ) -> ProxyResult<EvaluatedRules> {
+        let sender = self.existing_sender(context.runtime_epoch)?;
+        let (reply, response) = std_mpsc::sync_channel(1);
+        sender
+            .try_send(Command::Evaluate {
+                input: Box::new(EvaluationInput {
+                    context: context.clone(),
+                    stage: MessageStage::TlsHandshake,
+                    json: None,
+                    target: None,
+                }),
+                reply: Reply::Handshake(reply),
+            })
+            .map_err(|error| {
+                self.publish_failure(
+                    context.runtime_epoch,
+                    "TLS_RULE_ACTOR_UNAVAILABLE",
+                    format!("TLS 规则 actor 无法接收握手策略请求：{error}"),
+                );
+                unavailable(context.runtime_epoch)
+            })?;
+        response
+            .recv_timeout(TLS_HANDSHAKE_POLICY_TIMEOUT)
+            .map_err(|error| {
+                self.publish_failure(
+                    context.runtime_epoch,
+                    "TLS_RULE_POLICY_TIMEOUT",
+                    format!("TLS 握手规则策略未在限定时间内完成：{error}"),
+                );
+                ProxyError::new(
+                    ErrorCode::TlsHandshakeFailed,
+                    "TLS handshake rule policy timed out",
+                )
+            })?
+    }
+
+    fn sender_for(&self, epoch: Uuid) -> ProxyResult<RuleActorSender> {
+        let mut actors = self.actors.lock();
+        if !actors.active_epochs.contains(&epoch) {
+            return Err(unavailable(epoch));
+        }
+        if let Some(sender) = actors.senders.get(&epoch) {
+            return Ok(sender.clone());
+        }
+        let sender = actor::spawn(
+            epoch,
+            Arc::clone(&self.rules),
+            Arc::clone(&self.events),
+            Arc::clone(&self.channel_labels),
         );
-        let hit_rules =
-            matched_rule_summaries(&evaluation, runtime.engine.rules(), &self.channel_labels);
-        let matched = evaluation.traces.iter().any(|trace| trace.matched);
-        if matched {
-            let base_snapshot = runtime.snapshot.clone();
-            let evaluated_rules = runtime.engine.rules().to_vec();
-            let next_collection_revision = match self
-                .rules
-                .commit_runtime_snapshot(&base_snapshot, &evaluated_rules)
-            {
-                Ok(revision) => revision,
-                Err(error)
-                    if error.view_model.code == "REVISION_CONFLICT" && remaining_retries > 0 =>
-                {
-                    runtime.engine = engine_before_evaluation;
-                    drop(runtime_state);
-                    return self.evaluate_with_retries(
-                        context,
-                        stage,
-                        message,
-                        body_codec,
-                        remaining_retries - 1,
-                    );
-                }
-                Err(error) => {
-                    runtime_state.remove(&context.runtime_epoch);
-                    drop(runtime_state);
-                    self.events.publish(
-                        Some(context.runtime_epoch),
-                        Utc::now(),
-                        error.view_model.entity_id.clone(),
-                        None,
-                        UiEventPayload::OperationFailed((*error.view_model).clone()),
-                    );
-                    return Err(app_to_proxy(error));
-                }
-            };
-            runtime.snapshot = RuleRuntimeSnapshot::with_collection_identity(
-                base_snapshot.collection_id,
-                next_collection_revision,
-                evaluated_rules,
-            );
-        }
-
-        let traces = rule_trace_text(&evaluation);
-        let matched_ids = evaluation
-            .traces
-            .iter()
-            .filter(|trace| trace.matched)
-            .map(|trace| trace.rule_id.as_uuid())
-            .collect();
-        drop(runtime_state);
-        Ok(EvaluatedRules {
-            actions: evaluation.composed_actions,
-            traces,
-            matched_ids,
-            hit_rules,
-        })
+        actors.senders.insert(epoch, sender.clone());
+        Ok(sender)
     }
 
-    fn prepare_runtime(
-        &self,
-        runtimes: &mut BTreeMap<Uuid, RuleRuntime>,
-        context: &ConnectionContext,
-        runtime_epoch: RuntimeEpoch,
-    ) -> ProxyResult<()> {
-        let mut snapshot = self
-            .rules
-            .runtime_snapshot(&context.channel)
-            .map_err(app_to_proxy)?;
-        match runtimes.entry(context.runtime_epoch) {
-            std::collections::btree_map::Entry::Vacant(entry) => {
-                if let Some(collection_id) = snapshot.collection_id {
-                    self.rules
-                        .reset_runtime_hit_metadata(collection_id)
-                        .map_err(app_to_proxy)?;
-                    snapshot = self
-                        .rules
-                        .runtime_snapshot(&context.channel)
-                        .map_err(app_to_proxy)?;
-                }
-                entry.insert(RuleRuntime {
-                    engine: RuleEngine::new(runtime_epoch, snapshot.rules.clone()),
-                    snapshot,
-                });
+    fn existing_sender(&self, epoch: Uuid) -> ProxyResult<RuleActorSender> {
+        self.actors
+            .lock()
+            .senders
+            .get(&epoch)
+            .cloned()
+            .ok_or_else(|| unavailable(epoch))
+    }
+
+    fn publish_failure(&self, epoch: Uuid, code: &'static str, message: String) {
+        let error = AppError::new(code, message);
+        self.events.publish(
+            Some(epoch),
+            Utc::now(),
+            None,
+            None,
+            UiEventPayload::OperationFailed((*error.view_model).clone()),
+        );
+    }
+
+    pub(super) async fn runtime_stopping(&self, epoch: Uuid) {
+        let sender = {
+            let mut actors = self.actors.lock();
+            actors.active_epochs.remove(&epoch);
+            actors.senders.remove(&epoch)
+        };
+        let Some(sender) = sender else { return };
+        let cleanup = tokio::spawn(async move {
+            let (completed, completion) = oneshot::channel();
+            if sender.send(Command::Stop { completed }).await.is_ok() {
+                let _ = completion.await;
             }
-            std::collections::btree_map::Entry::Occupied(mut entry) => {
-                let runtime = entry.get_mut();
-                if runtime.snapshot.collection_id != snapshot.collection_id
-                    || runtime.snapshot.collection_revision != snapshot.collection_revision
-                    || runtime.snapshot.signature != snapshot.signature
-                {
-                    runtime.engine.reconcile(snapshot.rules.clone());
-                    runtime.snapshot = snapshot;
-                }
-            }
-        }
-        Ok(())
+        });
+        let _ = cleanup.await;
     }
 
     pub(super) fn publish_rule_hits(&self, epoch: Uuid, rules: Vec<RuleSummaryViewModel>) {
@@ -219,20 +235,28 @@ impl RuleRuntimeService {
         }
     }
 
-    pub(super) fn runtime_stopping(&self, epoch: Uuid) {
-        let runtime = self.runtimes.lock().remove(&epoch);
-        if let Some(collection_id) = runtime.and_then(|item| item.snapshot.collection_id)
-            && let Err(error) = self.rules.reset_runtime_hit_metadata(collection_id)
-        {
-            self.events.publish(
-                Some(epoch),
-                Utc::now(),
-                error.view_model.entity_id.clone(),
-                None,
-                UiEventPayload::OperationFailed((*error.view_model).clone()),
-            );
-        }
+    #[cfg(test)]
+    pub(super) fn registry_counts(&self) -> (usize, usize) {
+        let actors = self.actors.lock();
+        (actors.active_epochs.len(), actors.senders.len())
     }
+}
+
+fn publish_repository_error(events: &EventHub, epoch: Uuid, error: &AppError) {
+    events.publish(
+        Some(epoch),
+        Utc::now(),
+        error.view_model.entity_id.clone(),
+        None,
+        UiEventPayload::OperationFailed((*error.view_model).clone()),
+    );
+}
+
+fn unavailable(epoch: Uuid) -> ProxyError {
+    ProxyError::new(
+        ErrorCode::Internal,
+        format!("rule runtime actor unavailable for epoch {epoch}"),
+    )
 }
 
 fn matched_rule_summaries(

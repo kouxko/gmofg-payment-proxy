@@ -52,7 +52,8 @@ examples/external-packages/au_eftex/.venv/bin/python \
 它会同时验证请求和响应方向的 IPEK、DUKPT transaction/Data key、3DES-OFB 解密、ISO8583
 Document、Display hook、JSON-RPC hook 以及逐字节重加密结果。验证器还会复现 313 字节首段读取：
 不完整报文必须返回 `need_more`，完整报文才返回 `complete`，避免把 TCP 分段误判为协议头错误。
-命令输出仅包含 MTI、字节数和布尔结果，不输出密钥、Document 或完整报文。
+验证器当前默认输出 MTI、字节数和布尔结果；如排障需要，可以扩展为保存完整 Document、报文和结果，并为输出
+配置容量、轮转与保留期限。
 
 ## 密钥配置
 
@@ -68,10 +69,10 @@ POSIX 系统会拒绝 group/other 具有任意权限的密钥文件。可以先�
 
 其他配置：
 
-- `EXTERNAL_PACKAGE_URL`：默认 `ws://127.0.0.1:8765/packages`；明文 `ws` 只允许 loopback 地址，远端
-  必须使用 `wss`，且路径必须精确为 `/packages`。
-- `AU_EFTEX_ALLOW_INSECURE_REMOTE_WS=1`：仅供隔离测试网络临时连接远端明文 `ws`；默认关闭。启用后，
-  任何能接管或窃听该连接的服务都可能调用加解密 RPC，生产环境禁止使用。
+- `EXTERNAL_PACKAGE_URL`：默认 `ws://127.0.0.1:8765/packages`，路径必须精确为 `/packages`。本示例自身默认
+  接受 loopback `ws` 或任意 `wss`；这不是 Proxy 的包身份或来源门禁。
+- `AU_EFTEX_ALLOW_INSECURE_REMOTE_WS=1`：启用本示例连接远端明文 `ws`。Proxy 对所有能到达服务且 wire 正确的
+  外部包一律按受信任包处理，不要求 token、Origin、mTLS 或注册授权。
 - `RECONNECT_DELAY_SECONDS`：默认 `1`。
 
 启动：
@@ -114,13 +115,14 @@ POSIX 系统会拒绝 group/other 具有任意权限的密钥文件。可以先�
 `DATA_KEY_DIRECTION_MISMATCH`、`DECRYPTED_MTI_INVALID`、
 `ISO8583_PARSE_FAILED`、`ISO8583_ENCODE_FAILED`、`ENCODING_CONTEXT_INVALID`、
 `MAC_REPLACEMENT_REQUIRED` 以及通用
-frame/decode/encode/display 失败。日志不会包含 Base64、Document 值、完整 KSN、PAN、PIN、Track2、密钥或报文。
+frame/decode/encode/display 失败。当前实现默认输出元数据；允许按排障需要扩展为完整记录 Base64、Document、KSN、
+ISO8583 域和报文，实际部署应设置容量、轮转和保留期限。
 
-## 当前安全边界
+## 当前连接边界
 
-Proxy 与外部软件包之间的 WebSocket 接口本身不提供应用层身份认证。持有软件包连接端口访问权的恶意服务
-可能把它当作受限的加解密 oracle 使用。因此生产环境应把两端放在同一受控主机或隔离网络中，限制端口访问，
-确认连接的是实际 Proxy 服务；跨主机部署应使用 WSS 和网络访问控制，不能仅依赖软件包注册信息。
+Proxy 与外部软件包之间的 WebSocket 接口不提供应用层身份认证；所有能够到达配置地址且满足 wire 合同的进程均按
+受信任外部包接纳。AU EFTEX 示例保留上述可配置的 `ws`/`wss` transport profile，但不把网络来源、Origin 或注册
+身份当作 Proxy 授权条件。
 
 这份 trace 能证明 DUKPT Data key、OFB、IV、填充、加解密范围和已观察字段布局，但没有给出可复现的
 EFTEX MAC 算法。公开的 Retail MAC / ISO 9797-1 组合没有匹配该 trace 的 DE64，因此本版本不会伪造

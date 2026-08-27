@@ -134,6 +134,7 @@ tokio-util.workspace = true
 tower-service.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

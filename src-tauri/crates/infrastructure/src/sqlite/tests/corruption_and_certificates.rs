@@ -1,6 +1,44 @@
 use super::*;
 
 #[test]
+fn schema_19_is_reset_to_current_pre_release_schema() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("state.sqlite");
+    let connection = Connection::open(&path).expect("open legacy database");
+    connection
+        .execute_batch(
+            "CREATE TABLE application_schema (
+                singleton_id INTEGER PRIMARY KEY,
+                version INTEGER NOT NULL
+             );
+             INSERT INTO application_schema(singleton_id, version) VALUES (1, 19);
+             CREATE TABLE legacy_listener_policy (value TEXT NOT NULL);
+             INSERT INTO legacy_listener_policy(value) VALUES ('obsolete');",
+        )
+        .expect("seed schema 19");
+    drop(connection);
+
+    let store = SqliteStore::open(&path).expect("reset legacy database");
+    let connection = store.connection.lock();
+    let version = connection
+        .query_row(
+            "SELECT version FROM application_schema WHERE singleton_id = 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("current schema marker");
+    let legacy_exists = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'legacy_listener_policy')",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .expect("legacy table probe");
+    assert_eq!(version, crate::sqlite::schema::CURRENT_SCHEMA_VERSION);
+    assert!(!legacy_exists);
+}
+
+#[test]
 fn certificate_batch_write_rolls_back_on_failure() {
     let store = SqliteStore::in_memory().expect("store");
     store

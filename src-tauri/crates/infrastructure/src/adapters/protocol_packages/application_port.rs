@@ -2,6 +2,8 @@
 //!
 //! 此处只转换无源码元数据与稳定错误；启停、引用和删除规则仍由 Application 用例决定。
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use intercept_proxy_application::{
     AppError, AppErrorDiagnosticViewModel, AppResult, ProtocolPackageCapabilitiesViewModel,
@@ -24,7 +26,19 @@ use super::{
 #[async_trait]
 impl ProtocolPackageStorePort for ProtocolPackageRepositoryAdapter {
     async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
-        ProtocolPackageRepositoryAdapter::list(self)
+        self.executor
+            .execute(|store| {
+                store
+                    .list_protocol_package_headers()
+                    .map(|headers| {
+                        headers
+                            .into_iter()
+                            .map(super::summary_from_header)
+                            .collect::<Vec<ProtocolPackageSummary>>()
+                    })
+                    .map_err(ProtocolPackageStorageError::from)
+            })
+            .await
             .map(|items| items.into_iter().map(application_summary).collect())
             .map_err(|error| protocol_package_app_error(&error))
     }
@@ -33,18 +47,47 @@ impl ProtocolPackageStorePort for ProtocolPackageRepositoryAdapter {
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
-        self.summary(package)
+        let selected = package.clone();
+        self.executor
+            .execute(move |store| {
+                store
+                    .load_protocol_package_header(&selected)
+                    .map(|header| header.map(super::summary_from_header))
+                    .map_err(ProtocolPackageStorageError::from)
+            })
+            .await
             .map(|summary| summary.map(application_summary))
             .map_err(|error| protocol_package_app_error(&error))
     }
 
     async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()> {
-        ProtocolPackageRepositoryAdapter::set_enabled(self, package, enabled)
+        let selected = package.clone();
+        self.executor
+            .execute(move |store| {
+                if store.set_protocol_package_enabled(&selected, enabled)? {
+                    Ok(())
+                } else {
+                    Err(ProtocolPackageStorageError::NotFound { package: selected })
+                }
+            })
+            .await
             .map_err(|error| protocol_package_app_error(&error))
     }
 
     async fn delete(&self, package: &ProtocolPackageRef) -> AppResult<()> {
-        ProtocolPackageRepositoryAdapter::delete(self, package)
+        let selected = package.clone();
+        let cache = Arc::clone(&self.cache);
+        self.executor
+            .execute(move |store| {
+                let mut cache = cache.lock();
+                if store.delete_protocol_package(&selected)? {
+                    cache.remove(&selected);
+                    Ok(())
+                } else {
+                    Err(ProtocolPackageStorageError::NotFound { package: selected })
+                }
+            })
+            .await
             .map_err(|error| protocol_package_app_error(&error))
     }
 }
@@ -56,7 +99,8 @@ impl ProtocolPackageCompilerPort for ProtocolPackageRepositoryAdapter {
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageCompilationReceipt> {
         let compiled = self
-            .revalidate(package)
+            .revalidate_async(package)
+            .await
             .map_err(|error| protocol_package_app_error(&error))?;
         Ok(ProtocolPackageCompilationReceipt {
             package: compiled.package().clone(),
@@ -71,7 +115,8 @@ impl ProtocolPackageCompilerPort for ProtocolPackageRepositoryAdapter {
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageDescriptionViewModel> {
-        self.compiled(package)
+        self.revalidate_async(package)
+            .await
             .map(|compiled| application_description(&compiled))
             .map_err(|error| protocol_package_app_error(&error))
     }

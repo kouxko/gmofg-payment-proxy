@@ -1,5 +1,56 @@
 use super::*;
 
+fn diagnostic_entry(summary: &str) -> DiagnosticLogEntryViewModel {
+    DiagnosticLogEntryViewModel {
+        level: DiagnosticLogLevel::Info,
+        stage: DiagnosticLogStage::System,
+        summary: summary.into(),
+        detail: None,
+        device_serial: None,
+        listener_id: None,
+        profile_id: None,
+        socket_context: None,
+    }
+}
+
+#[test]
+fn diagnostic_logs_are_sorted_by_time_then_event_id_newest_first() {
+    let events = Arc::new(EventHub::default());
+    let application =
+        application_with_fake_ports_and_events(Arc::new(FakePorts::default()), Arc::clone(&events));
+    let same_time = Utc.with_ymd_and_hms(2026, 8, 27, 4, 0, 0).unwrap();
+    events.publish(
+        None,
+        same_time + chrono::Duration::seconds(1),
+        None,
+        None,
+        UiEventPayload::DiagnosticLogAdded(diagnostic_entry("latest-time")),
+    );
+    events.publish(
+        None,
+        same_time,
+        None,
+        None,
+        UiEventPayload::DiagnosticLogAdded(diagnostic_entry("same-time-older-id")),
+    );
+    events.publish(
+        None,
+        same_time,
+        None,
+        None,
+        UiEventPayload::DiagnosticLogAdded(diagnostic_entry("same-time-newer-id")),
+    );
+
+    let page = application.diagnostic_log_query(&DiagnosticLogQuery::default());
+    assert_eq!(
+        page.rows
+            .iter()
+            .map(|row| row.summary.as_str())
+            .collect::<Vec<_>>(),
+        vec!["latest-time", "same-time-newer-id", "same-time-older-id"]
+    );
+}
+
 #[test]
 fn diagnostic_log_query_returns_rust_labels_and_filters_in_rust() {
     let application = application_with_fake_ports(Arc::new(FakePorts::default()));
@@ -33,6 +84,8 @@ fn diagnostic_log_query_returns_rust_labels_and_filters_in_rust() {
     assert_eq!(page.rows[0].stage_text, "ADB 控制通道");
     assert_eq!(page.rows[0].level_text, "信息");
     assert_eq!(page.rows[0].ui_tone, UiTone::Info);
+    assert_eq!(page.oldest_retained_event_id, Some(1));
+    assert!(!page.snapshot_required);
 }
 
 #[test]

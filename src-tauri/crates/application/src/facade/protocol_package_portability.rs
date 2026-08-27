@@ -7,9 +7,8 @@
 use std::collections::{HashMap, HashSet};
 
 use intercept_proxy_domain::{
-    DocumentField, DocumentFieldType, DocumentSchema, DocumentSchemaId, HttpBodyProcessing,
-    ListenerDataPlane, ProtocolDirection, ProtocolPackageRef, ProxyWorkspace,
-    SocketPayloadProcessing,
+    DocumentField, DocumentFieldType, DocumentSchema, DocumentSchemaId, ListenerDataPlane,
+    ProtocolDirection, ProtocolPackageRef, ProxyWorkspace,
 };
 
 use super::protocol_packages::ensure_description_identity;
@@ -75,7 +74,7 @@ pub(super) fn validate_listener_protocol_binding(
         .iter()
         .find(|listener| listener.id == listener_id)
         .ok_or_else(|| portability_error("待校验的 Listener 不存在。"))?;
-    let Some(package) = listener_protocol_package(listener) else {
+    let Some(package) = crate::listener_protocol_package(listener) else {
         return Ok(());
     };
     ensure_description_identity(package, description)?;
@@ -95,7 +94,7 @@ fn validate_workspace_bindings(
     descriptions: &HashMap<ProtocolPackageRef, &ProtocolPackageDescriptionViewModel>,
 ) -> AppResult<()> {
     for listener in &workspace.listeners {
-        let Some(package) = listener_protocol_package(listener) else {
+        let Some(package) = crate::listener_protocol_package(listener) else {
             continue;
         };
         let description = required_description(descriptions, package)?;
@@ -111,7 +110,7 @@ fn validate_workspace_bindings(
             .iter()
             .find(|listener| listener.id == rule.listener_id())
             .ok_or_else(|| portability_error("协议报文规则引用的 Listener 不存在。"))?;
-        let package = listener_protocol_package(listener)
+        let package = crate::listener_protocol_package(listener)
             .ok_or_else(|| portability_error("报文规则只能绑定已选择协议方案的入口。"))?;
         ensure_kind(&listener.data_plane, description.kind)?;
         validate_rule_binding(package, rule, description)?;
@@ -140,21 +139,6 @@ fn required_description<'a>(
         portability_error("文档引用的精确协议包没有通过预检。")
             .entity(format!("{}@{}", package.id, package.version))
     })
-}
-
-fn listener_protocol_package(
-    listener: &intercept_proxy_domain::ProxyListener,
-) -> Option<&ProtocolPackageRef> {
-    match &listener.data_plane {
-        ListenerDataPlane::Http(http) => match &http.body_processing {
-            HttpBodyProcessing::Plain => None,
-            HttpBodyProcessing::Protocol { package } => Some(package),
-        },
-        ListenerDataPlane::Socket(socket) => match &socket.processing {
-            SocketPayloadProcessing::Direct => None,
-            SocketPayloadProcessing::Scripted(scripted) => Some(&scripted.package),
-        },
-    }
 }
 
 fn ensure_kind(

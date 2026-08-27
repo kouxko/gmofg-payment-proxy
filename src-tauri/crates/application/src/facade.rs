@@ -3,7 +3,7 @@
 //! `Application` 是桌面 UI、未来 TUI/CLI 和无界面测试共同入口。它仅依赖端口 trait，
 //! 不知道 Tauri、WebView 或具体数据库；实现按规则、设置、流量、校验分在子模块中。
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 
 use chrono::Utc;
 
@@ -22,6 +22,7 @@ use crate::{
 mod android;
 mod application_backup;
 mod application_backup_import;
+mod application_snapshot;
 mod bootstrap;
 mod certificate_portability;
 mod certificates;
@@ -29,6 +30,8 @@ mod configuration;
 mod diagnostic_report;
 mod diagnostics;
 mod environment_candidates;
+mod exchange_observations;
+pub use exchange_observations::ExchangeObservationQueries;
 mod lifecycle;
 mod listener_certificates;
 mod listeners;
@@ -48,7 +51,6 @@ mod workspaces;
 
 use validation::{normalize_sans, require_confirmation};
 
-#[derive(Debug)]
 /// 全部业务用例的统一入口。
 ///
 /// 调用者应通过公开用例方法操作，不能绕过权限检查、事件发布和事务顺序直接使用端口。
@@ -64,12 +66,9 @@ pub struct Application {
     settings: Arc<dyn SettingsRepositoryPort>,
     workspaces: Arc<dyn WorkspaceRepositoryPort>,
     android: Arc<dyn AndroidControlPort>,
-    /// 当前已选择设备的完整应用清单。
-    ///
-    /// Android 包清单按设备选择缓存；显式刷新与启动校验会重新读取。
-    /// 因此首次读取后由 Rust 应用层缓存；切换（或重新选择）设备时立即失效。
-    /// UI、未来 CLI/TUI 都只能通过同一组用例读取和筛选，不能各自维护业务缓存。
-    android_package_cache: tokio::sync::Mutex<Option<Vec<crate::AndroidPackageViewModel>>>,
+    /// 按设备序列号隔离的完整应用清单缓存。缓存不是运行所有权来源。
+    android_package_cache:
+        tokio::sync::Mutex<BTreeMap<String, Vec<crate::AndroidPackageViewModel>>>,
     listener_runtime: Arc<dyn ListenerRuntimePort>,
     listener_certificates: Arc<dyn ListenerCertificateImportPort>,
     protocol_package_store: Arc<dyn ProtocolPackageStorePort>,
@@ -81,15 +80,42 @@ pub struct Application {
     external_packages: Arc<dyn ExternalPackageApplicationPort>,
     protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
-    mutation_gate: tokio::sync::Mutex<()>,
+    mutation_gate: Arc<ApplicationMutationGate>,
     environment_candidates: crate::environment_configuration::EnvironmentCandidateRegistry,
+    environment_baseline_capture: Arc<dyn crate::EnvironmentApplyBaselineCapturePort>,
+    environment_identity_allocator: crate::EnvironmentIdentityAllocator,
+    environment_apply_lease: Arc<dyn crate::EnvironmentApplyLeasePort>,
+    environment_material_preparer: Arc<dyn crate::EnvironmentProtectedMaterialPreparePort>,
+    environment_commit: Arc<dyn crate::EnvironmentCommitPort>,
+    environment_validator: Arc<dyn crate::EnvironmentValidationLayerPort>,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct ApplicationMutationGate(tokio::sync::RwLock<()>);
+
+impl ApplicationMutationGate {
+    pub(crate) async fn lock(&self) -> tokio::sync::RwLockWriteGuard<'_, ()> {
+        self.0.write().await
+    }
+
+    async fn read(&self) -> tokio::sync::RwLockReadGuard<'_, ()> {
+        self.0.read().await
+    }
+}
+
+impl std::fmt::Debug for Application {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Application")
+            .field("product_name", &self.product_name)
+            .finish_non_exhaustive()
+    }
 }
 
 /// 应用门面所需的全部、与 UI 无关的依赖。
 ///
 /// 使用具名字段而不是十几个位置参数，使桌面、TUI、CLI 和无界面测试的装配代码容易
 /// 阅读，也避免交换两个同类型依赖。每个具体能力仍由独立端口约束。
-#[derive(Debug)]
 pub struct ApplicationDependencies {
     pub capture: Arc<dyn crate::CaptureRepositoryPort>,
     pub sessions: Arc<dyn SessionQueryPort>,
@@ -104,6 +130,43 @@ pub struct ApplicationDependencies {
     pub listener_certificates: Arc<dyn ListenerCertificateImportPort>,
     pub protocol_packages: ProtocolPackageApplicationServices,
     pub events: Arc<EventHub>,
+    pub environment_baseline_capture: Arc<dyn crate::EnvironmentApplyBaselineCapturePort>,
+    pub environment_identity_allocator: crate::EnvironmentIdentityAllocator,
+    pub environment_apply_lease: Arc<dyn crate::EnvironmentApplyLeasePort>,
+    pub environment_material_preparer: Arc<dyn crate::EnvironmentProtectedMaterialPreparePort>,
+    pub environment_commit: Arc<dyn crate::EnvironmentCommitPort>,
+    pub environment_validator: Arc<dyn crate::EnvironmentValidationLayerPort>,
+}
+
+/// Application-owned environment configuration ports supplied by an outer composition root.
+///
+/// Production uses Infrastructure implementations. Tests and embedding hosts may replace the
+/// complete group to exercise the same public candidate lifecycle with controlled boundaries;
+/// the registry and transition methods remain private to Application.
+#[derive(Clone)]
+pub struct EnvironmentConfigurationApplicationServices {
+    pub baseline_capture: Arc<dyn crate::EnvironmentApplyBaselineCapturePort>,
+    pub identity_allocator: crate::EnvironmentIdentityAllocator,
+    pub apply_lease: Arc<dyn crate::EnvironmentApplyLeasePort>,
+    pub material_preparer: Arc<dyn crate::EnvironmentProtectedMaterialPreparePort>,
+    pub commit: Arc<dyn crate::EnvironmentCommitPort>,
+    pub validator: Arc<dyn crate::EnvironmentValidationLayerPort>,
+}
+
+impl std::fmt::Debug for EnvironmentConfigurationApplicationServices {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("EnvironmentConfigurationApplicationServices")
+            .finish_non_exhaustive()
+    }
+}
+
+impl std::fmt::Debug for ApplicationDependencies {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ApplicationDependencies")
+            .finish_non_exhaustive()
+    }
 }
 
 impl Application {
@@ -125,7 +188,7 @@ impl Application {
             settings: dependencies.settings,
             workspaces: dependencies.workspaces,
             android,
-            android_package_cache: tokio::sync::Mutex::new(None),
+            android_package_cache: tokio::sync::Mutex::new(BTreeMap::new()),
             listener_runtime: dependencies.listener_runtime,
             listener_certificates: dependencies.listener_certificates,
             protocol_package_store: dependencies.protocol_packages.store,
@@ -137,9 +200,15 @@ impl Application {
             external_packages: dependencies.protocol_packages.external,
             protected_secrets,
             events: dependencies.events,
-            mutation_gate: tokio::sync::Mutex::new(()),
+            mutation_gate: Arc::new(ApplicationMutationGate::default()),
             environment_candidates:
                 crate::environment_configuration::EnvironmentCandidateRegistry::default(),
+            environment_baseline_capture: dependencies.environment_baseline_capture,
+            environment_identity_allocator: dependencies.environment_identity_allocator,
+            environment_apply_lease: dependencies.environment_apply_lease,
+            environment_material_preparer: dependencies.environment_material_preparer,
+            environment_commit: dependencies.environment_commit,
+            environment_validator: dependencies.environment_validator,
         }
     }
 

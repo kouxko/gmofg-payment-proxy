@@ -10,10 +10,7 @@ import type {
   ProtocolRuleCapabilityCatalog,
 } from "@/generated/rust-types";
 import { ProtocolRuleEditor } from "./protocol-rule-editor";
-import {
-  newProtocolRuleDraft,
-  type ProtocolRuleDraft,
-} from "./protocol-rule-model";
+import { type ProtocolRuleDraft } from "./protocol-rule-model";
 import { packageRef, socketRuleListener as listener } from "./socket-rule-editor.test-support";
 const commandMocks = vi.hoisted(() => ({ protocolRuleParseValue: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
@@ -45,6 +42,24 @@ function catalog(stage: ProtocolRuleStage = "app_to_proxy"): ProtocolRuleCapabil
     common_actions: ["record_match", "clear_document"],
   };
 }
+function rustDraft(
+  activeListener: ProxyListener,
+  activeCatalog: ProtocolRuleCapabilityCatalog,
+): ProtocolRuleDraft {
+  return {
+    rule_id: null,
+    expected_revision: null,
+    name: "新规则",
+    enabled: true,
+    priority: 100,
+    listener_id: activeListener.id,
+    package: activeCatalog.package,
+    schema_version: activeCatalog.schema_version,
+    stage: activeCatalog.stage,
+    conditions: [],
+    actions: [{ type: "record_match" }],
+  };
+}
 function Harness({
   activeListener = listener("relay"),
   activeCatalog = catalog(),
@@ -54,6 +69,7 @@ function Harness({
   error,
   fieldErrors = {},
   pending = false,
+  stages = ["app_to_proxy", "proxy_to_upstream", "upstream_to_proxy", "proxy_to_app"],
   invalidInitially = false,
   onSave = vi.fn(),
   onDelete = vi.fn(),
@@ -67,13 +83,14 @@ function Harness({
   error?: string;
   fieldErrors?: Record<string, string[]>;
   pending?: boolean;
+  stages?: ProtocolRuleStage[];
   invalidInitially?: boolean;
   onSave?: (draft: ProtocolRuleDraft) => void;
   onDelete?: () => void;
   onReload?: () => void;
 }) {
   const [draft, setDraft] = useState(
-    initialDraft ?? newProtocolRuleDraft(activeListener, activeCatalog.stage, activeCatalog),
+    initialDraft ?? rustDraft(activeListener, activeCatalog),
   );
   const [valueStates, setValueStates] = useState<Record<string, { pending: boolean; invalid: boolean }>>(
     invalidInitially ? { invalid: { pending: false, invalid: true } } : {},
@@ -87,6 +104,7 @@ function Harness({
     valueStates={valueStates}
     listener={activeListener}
     listeners={[listener("relay"), listener("local", true)]}
+    stages={stages}
     loading={loading}
     onChange={setDraft}
     onDelete={onDelete}
@@ -127,7 +145,7 @@ describe("Socket rule editor product boundary", () => {
   });
   it("keeps an existing entry, package, schema, and stage binding read-only", () => {
     const relay = listener("relay");
-    const draft = { ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), rule_id: "rule-1", expected_revision: 4 };
+    const draft = { ...rustDraft(relay, catalog()), rule_id: "rule-1", expected_revision: 4 };
     render(<Harness activeListener={relay} creating={false} initialDraft={draft} />);
     expect(screen.getByLabelText("固定规则绑定")).toHaveTextContent("交易中继");
     expect(screen.getByLabelText("固定规则绑定")).toHaveTextContent("iso8583@1.2.3");
@@ -146,7 +164,11 @@ describe("Socket rule editor product boundary", () => {
   it("offers the two app-facing stages for local response", async () => {
     const user = userEvent.setup();
     const local = listener("local", true);
-    render(<Harness activeCatalog={catalog("proxy_to_app")} activeListener={local} />);
+    render(<Harness
+      activeCatalog={catalog("proxy_to_app")}
+      activeListener={local}
+      stages={["app_to_proxy", "proxy_to_app"]}
+    />);
     await user.click(screen.getByLabelText("报文处理阶段"));
     expect(await screen.findByRole("option", { name: "应用 → 代理" })).toBeVisible();
     expect(screen.getByRole("option", { name: "代理 → 应用" })).toBeVisible();
@@ -179,7 +201,7 @@ describe("Socket rule editor product boundary", () => {
     commandMocks.protocolRuleParseValue.mockReturnValue(new Promise(() => undefined));
     const relay = listener("relay");
     const draft = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       actions: [{ type: "set_field" as const, field: "message_type", value: { type: "string" as const, value: "0200" } }],
     };
     const save = vi.fn();
@@ -195,7 +217,7 @@ describe("Socket rule editor product boundary", () => {
     commandMocks.protocolRuleParseValue.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
     const relay = listener("relay");
     const draft = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       actions: [
         { type: "set_field" as const, field: "message_type", value: { type: "string" as const, value: "0200" } },
         { type: "set_field" as const, field: "amount", value: { type: "int" as const, value: 100 } },
@@ -221,7 +243,7 @@ describe("Socket rule editor product boundary", () => {
   it("renders stale condition and action fields fail-closed", () => {
     const relay = listener("relay");
     const draft = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       conditions: [{ operator: "equals" as const, field: "removed", value: { type: "string" as const, value: "x" } }],
       actions: [{ type: "set_field" as const, field: "removed", value: { type: "string" as const, value: "x" } }],
     };
@@ -233,7 +255,7 @@ describe("Socket rule editor product boundary", () => {
   it("disables additions at the 64-condition and 64-action limits", () => {
     const relay = listener("relay");
     const draft = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       conditions: Array.from({ length: 64 }, () => ({ operator: "equals" as const, field: "removed", value: { type: "string" as const, value: "x" } })),
       actions: Array.from({ length: 64 }, () => ({ type: "record_match" as const })),
     };
@@ -276,7 +298,7 @@ describe("Socket rule editor product boundary", () => {
   it("keeps condition fields and values in a responsive two-column row without duplicate labels", () => {
     const relay = listener("relay");
     const initial = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       conditions: [
         { operator: "equals" as const, field: "message_type", value: { type: "string" as const, value: "0200" } },
       ],
@@ -295,7 +317,7 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       conditions: [
         { operator: "equals" as const, field: "message_type", value: { type: "string" as const, value: "0200" } },
         { operator: "equals" as const, field: "amount", value: { type: "int" as const, value: 100 } },
@@ -311,7 +333,7 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const saved = vi.fn();
-    render(<Harness initialDraft={{ ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), actions: [{ type: "clear_document" }] }} onSave={saved} />);
+    render(<Harness initialDraft={{ ...rustDraft(relay, catalog()), actions: [{ type: "clear_document" }] }} onSave={saved} />);
     await user.click(screen.getByRole("button", { name: "添加：记录命中" }));
     await user.click(screen.getByRole("button", { name: "保存报文规则" }));
     expect(saved.mock.calls[0][0].actions).toEqual([{ type: "clear_document" }, { type: "record_match" }]);
@@ -321,7 +343,7 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       actions: [{ type: "clear_document" as const }],
     };
     const saved = vi.fn();
@@ -340,7 +362,7 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       actions: [{ type: "record_match" as const }, { type: "clear_document" as const }],
     };
     const saved = vi.fn();
@@ -354,7 +376,7 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       actions: [{ type: "record_match" as const }, { type: "clear_document" as const }],
     };
     const saved = vi.fn();
@@ -368,7 +390,7 @@ describe("Socket rule editor product boundary", () => {
     const user = userEvent.setup();
     const relay = listener("relay");
     const initial = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       actions: [{ type: "set_field" as const, field: "message_type", value: { type: "string" as const, value: "0210" } }],
     };
     const saved = vi.fn();
@@ -388,7 +410,7 @@ describe("Socket rule editor product boundary", () => {
         : field),
     };
     const initial = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", longLabelCatalog),
+      ...rustDraft(relay, longLabelCatalog),
       actions: [{ type: "set_field" as const, field: "amount", value: { type: "int" as const, value: 100 } }],
     };
     render(<Harness activeCatalog={longLabelCatalog} initialDraft={initial} />);
@@ -425,7 +447,7 @@ describe("Socket rule editor product boundary", () => {
   it("requires explicit confirmation before deleting a saved rule", async () => {
     const user = userEvent.setup();
     const relay = listener("relay");
-    const draft = { ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), rule_id: "rule-1", expected_revision: 2 };
+    const draft = { ...rustDraft(relay, catalog()), rule_id: "rule-1", expected_revision: 2 };
     const remove = vi.fn();
     render(<Harness activeListener={relay} creating={false} initialDraft={draft} onDelete={remove} />);
     await user.click(screen.getByRole("button", { name: "删除规则" }));
@@ -438,7 +460,7 @@ describe("Socket rule editor product boundary", () => {
   it("does not open deletion confirmation while another mutation is pending", async () => {
     const user = userEvent.setup();
     const relay = listener("relay");
-    const draft = { ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()), rule_id: "rule-1", expected_revision: 2 };
+    const draft = { ...rustDraft(relay, catalog()), rule_id: "rule-1", expected_revision: 2 };
     render(<Harness activeListener={relay} creating={false} initialDraft={draft} pending />);
     const remove = screen.getByRole("button", { name: "删除规则" });
     expect(remove).toBeDisabled();
@@ -449,7 +471,7 @@ describe("Socket rule editor product boundary", () => {
   it("locks every draft and context control while a mutation is pending", () => {
     const relay = listener("relay");
     const draft = {
-      ...newProtocolRuleDraft(relay, "app_to_proxy", catalog()),
+      ...rustDraft(relay, catalog()),
       conditions: [{ operator: "equals" as const, field: "message_type", value: { type: "string" as const, value: "0200" } }],
       actions: [{ type: "record_match" as const }, { type: "set_field" as const, field: "message_type", value: { type: "string" as const, value: "0210" } }],
     };

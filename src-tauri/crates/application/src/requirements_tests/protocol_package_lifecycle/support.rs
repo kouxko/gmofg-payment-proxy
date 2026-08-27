@@ -430,6 +430,15 @@ pub(super) fn application_with_proxy_ports(
                 external: Arc::new(UnusedExternalPackagePort),
             },
             events: Arc::new(EventHub::default()),
+            environment_baseline_capture:
+                crate::requirements_tests::test_environment_baseline_capture(),
+            environment_identity_allocator:
+                crate::requirements_tests::test_environment_identity_allocator(),
+            environment_apply_lease: crate::requirements_tests::test_environment_apply_lease(),
+            environment_material_preparer:
+                crate::requirements_tests::test_environment_material_preparer(),
+            environment_commit: crate::requirements_tests::test_environment_commit(),
+            environment_validator: crate::requirements_tests::test_environment_validator(),
         },
         Arc::new(UnusedAndroidControlPort),
         Arc::new(UnusedProtectedSecretPort),

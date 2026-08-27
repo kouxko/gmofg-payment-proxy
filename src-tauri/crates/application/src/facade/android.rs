@@ -15,7 +15,7 @@ mod runtime_owner;
 
 #[cfg(test)]
 use packages::filter_packages;
-use packages::{apply_package_toggle, validate_package_name, validate_profile_id};
+use packages::{apply_package_toggle, validate_package_name, validate_profile_id, validate_serial};
 
 #[cfg(test)]
 #[path = "android_tests.rs"]

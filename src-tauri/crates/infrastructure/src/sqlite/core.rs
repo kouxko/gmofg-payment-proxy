@@ -28,6 +28,7 @@ impl SqliteStore {
             .map_err(|source| InfrastructureError::Database { source })?;
         let store = Self {
             connection: Mutex::new(connection),
+            blocking_gate: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
         };
         store.ensure_current_schema()?;
         Ok(store)

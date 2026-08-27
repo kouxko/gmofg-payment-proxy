@@ -31,6 +31,41 @@ async fn raw_pair_with_actor_message_limit(limit: usize) -> (WebSocketStream<Dup
     (actor, peer)
 }
 
+#[tokio::test(start_paused = true)]
+async fn blocked_initial_registration_write_obeys_the_registration_phase_deadline() {
+    let config = ExternalPackageConnectionConfig::new(
+        Duration::from_secs(30),
+        Duration::from_secs(5),
+        Duration::from_secs(10),
+        Duration::from_secs(30),
+        1,
+        1024,
+        1024,
+        1024,
+        128,
+    );
+    let (actor_socket, _peer) = raw_pair_with_capacity(1).await;
+    let attempt = tokio::time::timeout(
+        Duration::from_secs(31),
+        ExternalPackageClient::connect(actor_socket, 7, config),
+    );
+    tokio::pin!(attempt);
+    assert!(futures_util::poll!(attempt.as_mut()).is_pending());
+    // `connect` owns a spawned actor; yield once only to let that actor register its paused-time
+    // deadline before advancing the deterministic clock.
+    tokio::task::yield_now().await;
+    tokio::time::advance(Duration::from_secs(30)).await;
+
+    assert!(matches!(
+        attempt
+            .await
+            .expect("registration phase must finish before outer deadline")
+            .expect_err("blocked registration write must time out"),
+        ExternalPackageConnectionError::Timeout { ref method, .. }
+            if method == "package.register"
+    ));
+}
+
 #[tokio::test]
 async fn registration_preserves_a_ping_prefetched_in_the_same_transport_read() {
     let (actor_socket, mut peer) = raw_pair().await;

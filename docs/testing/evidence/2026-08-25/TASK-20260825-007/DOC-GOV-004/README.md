@@ -13,13 +13,11 @@
 - 用户确认的单工作区全局锁要求：`resources/requirements.md`
 - 被测规则：仓库根目录 `AGENTS.md`
 - 验收证明来源：当前权威文件内容、任务与索引对应关系、锁状态转换和复测实际输出。
-- Git 历史、Commit ID、Git 状态和 diff：不作为任务管理验收证明。
 
 ## 执行与输出
 
 - 复测步骤：`steps/replay.md`
 - 隔离异常路径脚本：`replay/lock-protocol.sh`
-- 规则与编号检查原始输出：`outputs/static-check.txt`
 - 原子锁行为原始输出：`outputs/lock-check.txt`
 
 ## 实际结果

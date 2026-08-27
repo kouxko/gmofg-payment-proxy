@@ -17,6 +17,7 @@ interface Props {
   loading: boolean;
   onClose: () => void;
   onRetry: () => void;
+  onCreateMockDraft: (exchangeId: string, responseEventIndex: number) => void;
 }
 
 function ContextEvidence({ context }: { context: ExchangeContext }) {
@@ -44,7 +45,13 @@ function EventEvidence({ event }: { event: ExchangeObservationEvent }) {
   </div>;
 }
 
-function Timeline({ record }: { record: ExchangeObservationRecord }) {
+function Timeline({
+  record,
+  onCreateMockDraft,
+}: {
+  record: ExchangeObservationRecord;
+  onCreateMockDraft: Props["onCreateMockDraft"];
+}) {
   return <ol className="space-y-4" aria-label="Exchange 事件时间线">
     {record.events.map((event, index) => <li key={`${event.observed_at}-${index}`} className="rounded-xl border border-[var(--telemetry-line)] p-4">
       <header className="mb-3 flex flex-wrap items-center gap-2">
@@ -53,6 +60,16 @@ function Timeline({ record }: { record: ExchangeObservationRecord }) {
         <time className="ml-auto text-xs text-[var(--telemetry-muted)]">{formatTimestamp(event.observed_at)}</time>
       </header>
       <EventEvidence event={event} />
+      {event.event === "received" && event.direction === "downstream" && event.context.protocol === "http" && (
+        <Button
+          className="mt-3"
+          size="sm"
+          variant="outline"
+          onPress={() => onCreateMockDraft(record.exchange_id, index)}
+        >
+          用此服务器响应创建 Mock 草稿
+        </Button>
+      )}
     </li>)}
   </ol>;
 }
@@ -71,7 +88,7 @@ export function ExchangeObservationDetail(props: Props) {
         {props.detail?.evidence_evicted && <Alert status="warning"><Alert.Indicator /><Alert.Content><Alert.Title>该时间线存在观测淘汰</Alert.Title><Alert.Description>下列事件只代表当前仍保留的有序证据，交易数据面未受影响。</Alert.Description></Alert.Content></Alert>}
         {props.error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>详情读取失败</Alert.Title><Alert.Description>{props.error}</Alert.Description></Alert.Content><Button size="sm" variant="outline" onPress={props.onRetry}>重试</Button></Alert>}
         {props.loading && <div className="grid min-h-48 place-items-center"><Spinner aria-label="正在读取 Exchange 详情" /></div>}
-        {!props.loading && !props.error && props.detail && <Timeline record={props.detail} />}
+        {!props.loading && !props.error && props.detail && <Timeline record={props.detail} onCreateMockDraft={props.onCreateMockDraft} />}
       </Modal.Body>
     </Modal.Dialog></Modal.Container></Modal.Backdrop>
   </Modal>;

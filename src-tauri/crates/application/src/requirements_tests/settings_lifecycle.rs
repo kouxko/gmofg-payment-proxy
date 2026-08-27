@@ -17,52 +17,79 @@ impl AndroidControlPort for FailingShutdownAndroid {
     async fn device_list(&self) -> AppResult<Vec<AndroidDeviceViewModel>> {
         unused()
     }
-    async fn package_list(&self) -> AppResult<Vec<AndroidPackageViewModel>> {
+    async fn package_list(
+        &self,
+        _: AndroidDeviceTarget,
+    ) -> AppResult<Vec<AndroidPackageViewModel>> {
         unused()
     }
-    async fn package_get(&self, _: String) -> AppResult<AndroidPackageViewModel> {
+    async fn package_get(
+        &self,
+        _: AndroidDeviceTarget,
+        _: String,
+    ) -> AppResult<AndroidPackageViewModel> {
         unused()
     }
-    async fn companion_install(&self, _: bool) -> AppResult<AndroidCompanionInstallViewModel> {
+    async fn companion_install(
+        &self,
+        _: AndroidDeviceTarget,
+        _: bool,
+    ) -> AppResult<AndroidCompanionInstallViewModel> {
         unused()
     }
-    async fn vpn_open_consent(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn vpn_open_consent(
+        &self,
+        _: AndroidDeviceTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
     async fn network_start(
         &self,
+        _: AndroidDeviceTarget,
         _: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
     async fn network_apply(
         &self,
+        _: AndroidRuntimeTarget,
         _: AndroidNetworkActivation,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
     async fn network_runtime_ready(
         &self,
+        _: AndroidDeviceTarget,
         _: &AndroidNetworkActivation,
         _: &AndroidNetworkStatusViewModel,
     ) -> AppResult<bool> {
         unused()
     }
-    async fn network_stop(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn network_stop(
+        &self,
+        _: AndroidRuntimeTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         self.stop_calls.fetch_add(1, Ordering::SeqCst);
         Err(AppError::new("ANDROID_OWNER_OFFLINE", "owner offline"))
     }
-    async fn emergency_restore(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn emergency_restore(
+        &self,
+        _: AndroidRuntimeTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
-    async fn network_status(&self) -> AppResult<AndroidNetworkStatusViewModel> {
+    async fn network_status(
+        &self,
+        _: AndroidDeviceTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
         unused()
     }
-    async fn runtime_owner(&self) -> AppResult<Option<AndroidRuntimeOwnerViewModel>> {
-        Ok(Some(self.owner.clone()))
+    async fn runtime_owners(&self) -> AppResult<Vec<AndroidRuntimeOwnerViewModel>> {
+        Ok(vec![self.owner.clone()])
     }
     async fn network_runtime_endpoints(
         &self,
+        _: AndroidDeviceTarget,
         _: Option<AndroidNetworkActivation>,
     ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
         Ok(Vec::new())
@@ -222,9 +249,11 @@ async fn application_shutdown_reports_owner_stop_failure_but_completes_other_cle
     let application = application_with_fake_ports_and_android(ports.clone(), android.clone());
     assert_eq!(
         application
-            .device_network_runtime_owner()
+            .device_network_runtime_owners()
             .await
             .unwrap()
+            .into_iter()
+            .next()
             .unwrap()
             .serial,
         "DEVICE-A"
@@ -271,6 +300,12 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
             listener_runtime: listener_runtime.clone(),
             protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
+            environment_baseline_capture: test_environment_baseline_capture(),
+            environment_identity_allocator: test_environment_identity_allocator(),
+            environment_apply_lease: test_environment_apply_lease(),
+            environment_material_preparer: test_environment_material_preparer(),
+            environment_commit: test_environment_commit(),
+            environment_validator: test_environment_validator(),
         },
         Arc::new(UnusedAndroidControlPort),
         Arc::new(UnusedProtectedSecretPort),

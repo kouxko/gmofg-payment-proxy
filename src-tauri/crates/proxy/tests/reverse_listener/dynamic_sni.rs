@@ -27,7 +27,6 @@ async fn concurrent_connections_issue_one_dynamic_identity_per_sni() {
     let cancellation = CancellationToken::new();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("http://127.0.0.1:{}", upstream_address.port()),
         downstream_tls: Some(ReverseDownstreamTls {
             server_identity: ReverseClientIdentity {
@@ -100,7 +99,6 @@ async fn reverse_listener_rejects_sni_outside_dynamic_allowlist() {
     let cancellation = CancellationToken::new();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: "http://127.0.0.1:9".into(),
         downstream_tls: Some(ReverseDownstreamTls {
             server_identity: ReverseClientIdentity {
@@ -155,7 +153,6 @@ async fn reverse_listener_uses_fallback_identity_when_client_sends_ip_without_sn
     let cancellation = CancellationToken::new();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: "http://127.0.0.1:9".into(),
         downstream_tls: Some(ReverseDownstreamTls {
             server_identity: ReverseClientIdentity {
@@ -207,7 +204,6 @@ async fn dynamic_ecdsa_identity_accepts_android_compatible_tls12_client_hello() 
     let cancellation = CancellationToken::new();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: "http://127.0.0.1:9".into(),
         downstream_tls: Some(ReverseDownstreamTls {
             server_identity: ReverseClientIdentity {
@@ -262,7 +258,6 @@ async fn dynamic_ecdsa_identity_rejects_client_hello_without_ecdsa_signature_sch
     let cancellation = CancellationToken::new();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: "http://127.0.0.1:9".into(),
         downstream_tls: Some(ReverseDownstreamTls {
             server_identity: ReverseClientIdentity {

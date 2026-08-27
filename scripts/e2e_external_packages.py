@@ -126,7 +126,6 @@ def _listener(
         "enabled": True,
         "bind_address": "127.0.0.1",
         "port": proxy_port,
-        "allowed_client_cidrs": [],
         "connect_timeout_ms": 5_000,
         "read_timeout_ms": 10_000,
         "write_timeout_ms": 10_000,

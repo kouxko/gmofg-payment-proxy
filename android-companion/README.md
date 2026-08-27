@@ -32,7 +32,7 @@ Payload 只存在于 TUN 读写缓冲区，不写入 SharedPreferences、文件�
 
 ### 无线网络不可用时的 USB/ADB 路径
 
-- 设备与电脑处于同一 IPv4 子网、Listener 对 LAN 地址开放且 CIDR 允许设备时，透明代理
+- 设备与电脑处于同一 IPv4 子网且 Listener 对 LAN 地址开放时，透明代理
   路由直接连接电脑 LAN 地址；否则使用 `adb reverse`。ADB 路径中设备只连接
   `127.0.0.1:<临时端口>`，因此设备没有 Wi-Fi/蜂窝外网时仍可工作。
 - TUN 使用 tun2proxy 的虚拟 DNS。Android 不再依赖当前 Wi-Fi/蜂窝网络提供 DNS；域名会在

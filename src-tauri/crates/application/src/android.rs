@@ -23,6 +23,19 @@ pub const ANDROID_CONTROL_PROTOCOL_VERSION: u16 = 1;
 pub const ANDROID_CONTROL_MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct AndroidDeviceTarget {
+    pub serial: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct AndroidRuntimeTarget {
+    pub serial: String,
+    pub expected_epoch: Uuid,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 pub struct AndroidAdbViewModel {
     pub available: bool,
     pub executable: Option<String>,
@@ -125,7 +138,6 @@ pub struct AndroidProxyRouteActivation {
     pub original_ports: Vec<u16>,
     pub desktop_listener_bind_address: String,
     pub desktop_listener_port: u16,
-    pub allowed_client_cidrs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -168,6 +180,7 @@ pub enum AndroidNetworkState {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct AndroidNetworkStatusViewModel {
     pub serial: String,
+    pub runtime_epoch: Option<Uuid>,
     pub state: AndroidNetworkState,
     /// Rust 根据状态机生成的稳定中文文案，展示层不得重复维护状态映射。
     pub state_text: String,
@@ -235,6 +248,7 @@ impl AndroidCompanionStatus {
     pub fn into_view_model(self) -> AndroidNetworkStatusViewModel {
         AndroidNetworkStatusViewModel {
             serial: self.serial,
+            runtime_epoch: None,
             state: self.state,
             state_text: String::new(),
             ui_tone: UiTone::Neutral,

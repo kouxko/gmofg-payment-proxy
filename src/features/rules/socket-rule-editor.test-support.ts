@@ -10,7 +10,6 @@ export function socketRuleListener(id: string, local = false): ProxyListener {
     enabled: true,
     bind_address: "127.0.0.1",
     port: local ? 9002 : 9001,
-    allowed_client_cidrs: [],
     connect_timeout_ms: 1_000,
     read_timeout_ms: 1_000,
     write_timeout_ms: 1_000,

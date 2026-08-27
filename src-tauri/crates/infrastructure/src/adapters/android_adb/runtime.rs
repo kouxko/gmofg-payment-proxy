@@ -3,7 +3,7 @@ use std::{
     fmt::Debug,
     net::{IpAddr, Ipv4Addr, UdpSocket},
     path::PathBuf,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex as StdMutex, RwLock, Weak},
 };
 
 use chrono::Utc;
@@ -20,49 +20,97 @@ use super::{
     command::{SystemAdbCommandRunner, discover_adb, discover_companion_apk},
 };
 
+#[derive(Debug, Default, Clone)]
+pub(super) struct AndroidOwnerState {
+    pub(super) active_reverse: Option<ActiveReverseOwnership>,
+    pub(super) active_runtime: Option<ActiveRuntimeFacts>,
+    pub(super) runtime_endpoints: Vec<AndroidRuntimeEndpointViewModel>,
+    pub(super) runtime_owner: Option<AndroidRuntimeOwnerViewModel>,
+    pub(super) runtime_resume_state: Option<AndroidRuntimeOwnerState>,
+}
+
+#[derive(Debug, Default)]
+pub(super) struct DeviceOperationGateRegistry {
+    gates: StdMutex<BTreeMap<String, Weak<Mutex<()>>>>,
+}
+
+impl DeviceOperationGateRegistry {
+    pub(super) fn gate(&self, serial: &str) -> Arc<Mutex<()>> {
+        let mut gates = self.gates.lock().expect("android device gate registry");
+        gates.retain(|_, gate| gate.strong_count() > 0);
+        if let Some(gate) = gates.get(serial).and_then(Weak::upgrade) {
+            return gate;
+        }
+        let gate = Arc::new(Mutex::new(()));
+        gates.insert(serial.to_owned(), Arc::downgrade(&gate));
+        gate
+    }
+}
+
 impl AndroidAdbAdapter {
-    pub fn new(
+    pub async fn new(
         companion_apk: Option<PathBuf>,
-        runtime_store: Arc<crate::SqliteStore>,
+        persistence: impl crate::IntoSqlitePersistence,
     ) -> Result<Self, crate::InfrastructureError> {
+        let (sqlite_executor, runtime_store) = persistence.into_sqlite_persistence();
+        #[cfg(not(test))]
+        let _ = &runtime_store;
         // 优先使用桌面外壳解析的安装资源；无界面测试和其他 Host 再按约定位置回退发现。
         let companion_apk = companion_apk
             .filter(|path| path.is_file())
             .or_else(discover_companion_apk);
-        let persisted = runtime_store.load_android_runtime_owner()?.map(|mut record| {
-            record.owner.source = AndroidRuntimeOwnerSource::Recovery;
-            record.owner.transition_reason =
-                intercept_proxy_application::AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage;
-            record.owner.updated_at = Utc::now();
-            record
-        });
-        if let Some(record) = persisted.as_ref() {
-            runtime_store.save_android_runtime_owner(record)?;
-        }
+        let persisted = sqlite_executor
+            .execute(|store| {
+                let persisted = store.load_android_runtime_owners()?.into_iter().map(|mut record| {
+                    record.owner.source = AndroidRuntimeOwnerSource::Recovery;
+                    record.owner.transition_reason = intercept_proxy_application::AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage;
+                    record.owner.updated_at = Utc::now();
+                    record
+                }).collect::<Vec<_>>();
+                for record in &persisted {
+                    store.replace_android_runtime_owner_if_epoch(
+                        &record.owner.serial,
+                        record.owner.epoch,
+                        record,
+                    )?;
+                }
+                Ok::<_, crate::InfrastructureError>(persisted)
+            })
+            .await?;
         Ok(Self {
+            environment_apply_resource_gates: Arc::new(
+                super::super::EnvironmentApplyResourceGateRegistry::default(),
+            ),
             adb_path: discover_adb(),
             companion_apk,
             selected_serial: RwLock::new(None),
-            network_operation: Mutex::new(()),
-            active_reverse: Mutex::new(persisted.as_ref().and_then(|record| {
-                (!record.reverse_ports.is_empty()).then(|| ActiveReverseOwnership {
-                    epoch: record.owner.epoch,
-                    serial: record.owner.serial.clone(),
-                    profile_id: record.owner.profile_id.clone(),
-                    ports: record.reverse_ports.clone(),
-                })
-            })),
-            active_runtime: Mutex::new(None),
-            runtime_endpoints: Mutex::new(
+            device_operations: DeviceOperationGateRegistry::default(),
+            owner_states: Arc::new(Mutex::new(
                 persisted
-                    .as_ref()
-                    .map_or_else(Vec::new, |record| record.runtime_endpoints.clone()),
-            ),
-            runtime_resume_state: Mutex::new(
-                persisted.as_ref().and_then(|record| record.resume_state),
-            ),
-            runtime_owner: Mutex::new(persisted.map(|record| record.owner)),
+                    .into_iter()
+                    .map(|record| {
+                        let serial = record.owner.serial.clone();
+                        let state = AndroidOwnerState {
+                            active_reverse: (!record.reverse_ports.is_empty()).then(|| {
+                                ActiveReverseOwnership {
+                                    epoch: record.owner.epoch,
+                                    serial: record.owner.serial.clone(),
+                                    profile_id: record.owner.profile_id.clone(),
+                                    ports: record.reverse_ports.clone(),
+                                }
+                            }),
+                            active_runtime: None,
+                            runtime_endpoints: record.runtime_endpoints,
+                            runtime_resume_state: record.resume_state,
+                            runtime_owner: Some(record.owner),
+                        };
+                        (serial, state)
+                    })
+                    .collect(),
+            )),
+            #[cfg(test)]
             runtime_store,
+            sqlite_executor,
             runner: Arc::new(SystemAdbCommandRunner),
             lan_address: Arc::new(SystemDeviceLanAddressProvider),
         })
@@ -91,7 +139,7 @@ pub(super) struct ActiveRuntimeFacts {
     pub(super) endpoints: Vec<AndroidRuntimeEndpointViewModel>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(super) struct PreparedUsbProxyRuntime {
     pub(super) payload: Value,
     pub(super) reverse: Option<ActiveReverseOwnership>,

@@ -50,10 +50,11 @@ pub async fn android_device_list(
 #[specta::specta]
 pub async fn android_package_list(
     state: State<'_, AppState>,
+    serial: String,
 ) -> CommandResult<Vec<AndroidPackageViewModel>> {
     state
         .application
-        .android_package_list()
+        .android_package_list(serial)
         .await
         .map_err(command_error)
 }
@@ -62,10 +63,11 @@ pub async fn android_package_list(
 #[specta::specta]
 pub async fn android_package_refresh(
     state: State<'_, AppState>,
+    serial: String,
 ) -> CommandResult<Vec<AndroidPackageViewModel>> {
     state
         .application
-        .android_package_refresh()
+        .android_package_refresh(serial)
         .await
         .map_err(command_error)
 }
@@ -74,11 +76,12 @@ pub async fn android_package_refresh(
 #[specta::specta]
 pub async fn android_package_query(
     state: State<'_, AppState>,
+    serial: String,
     query: String,
 ) -> CommandResult<Vec<AndroidPackageViewModel>> {
     state
         .application
-        .android_package_query(query)
+        .android_package_query(serial, query)
         .await
         .map_err(command_error)
 }
@@ -87,11 +90,12 @@ pub async fn android_package_query(
 #[specta::specta]
 pub async fn android_package_get(
     state: State<'_, AppState>,
+    serial: String,
     package_name: String,
 ) -> CommandResult<AndroidPackageViewModel> {
     state
         .application
-        .android_package_get(package_name)
+        .android_package_get(serial, package_name)
         .await
         .map_err(command_error)
 }
@@ -100,10 +104,11 @@ pub async fn android_package_get(
 #[specta::specta]
 pub async fn android_companion_install(
     state: State<'_, AppState>,
+    serial: String,
 ) -> CommandResult<AndroidCompanionInstallViewModel> {
     state
         .application
-        .android_companion_install()
+        .android_companion_install(serial)
         .await
         .map_err(command_error)
 }
@@ -112,10 +117,11 @@ pub async fn android_companion_install(
 #[specta::specta]
 pub async fn android_companion_update(
     state: State<'_, AppState>,
+    serial: String,
 ) -> CommandResult<AndroidCompanionInstallViewModel> {
     state
         .application
-        .android_companion_update()
+        .android_companion_update(serial)
         .await
         .map_err(command_error)
 }
@@ -124,10 +130,11 @@ pub async fn android_companion_update(
 #[specta::specta]
 pub async fn android_vpn_open_consent(
     state: State<'_, AppState>,
+    serial: String,
 ) -> CommandResult<AndroidNetworkStatusViewModel> {
     state
         .application
-        .android_vpn_open_consent()
+        .android_vpn_open_consent(serial)
         .await
         .map_err(command_error)
 }
@@ -176,12 +183,13 @@ pub async fn device_network_profile_get(
 #[specta::specta]
 pub async fn device_network_profile_apply_intent(
     state: State<'_, AppState>,
+    serial: String,
     profile: AndroidNetworkProfile,
     intent: AndroidProfileEditIntent,
 ) -> CommandResult<AndroidNetworkProfile> {
     state
         .application
-        .device_network_profile_apply_intent(profile, intent)
+        .device_network_profile_apply_intent(serial, profile, intent)
         .await
         .map_err(command_error)
 }
@@ -190,11 +198,12 @@ pub async fn device_network_profile_apply_intent(
 #[specta::specta]
 pub async fn device_network_profile_save(
     state: State<'_, AppState>,
+    serial: String,
     profile: AndroidNetworkProfile,
 ) -> CommandResult<AndroidNetworkProfile> {
     state
         .application
-        .device_network_profile_save(profile)
+        .device_network_profile_save(serial, profile)
         .await
         .map_err(command_error)
 }
@@ -216,12 +225,13 @@ pub async fn device_network_profile_delete(
 #[specta::specta]
 pub async fn device_network_start(
     state: State<'_, AppState>,
+    serial: String,
     profile_id: String,
     dangerous_confirmed: bool,
 ) -> CommandResult<AndroidNetworkStatusViewModel> {
     state
         .application
-        .device_network_start(profile_id, dangerous_confirmed)
+        .device_network_start(serial, profile_id, dangerous_confirmed)
         .await
         .map_err(command_error)
 }
@@ -230,12 +240,14 @@ pub async fn device_network_start(
 #[specta::specta]
 pub async fn device_network_apply(
     state: State<'_, AppState>,
+    serial: String,
+    expected_epoch: uuid::Uuid,
     profile_id: String,
     dangerous_confirmed: bool,
 ) -> CommandResult<AndroidNetworkStatusViewModel> {
     state
         .application
-        .device_network_apply(profile_id, dangerous_confirmed)
+        .device_network_apply(serial, expected_epoch, profile_id, dangerous_confirmed)
         .await
         .map_err(command_error)
 }
@@ -244,10 +256,12 @@ pub async fn device_network_apply(
 #[specta::specta]
 pub async fn device_network_stop(
     state: State<'_, AppState>,
+    serial: String,
+    expected_epoch: uuid::Uuid,
 ) -> CommandResult<AndroidNetworkStatusViewModel> {
     state
         .application
-        .device_network_stop()
+        .device_network_stop(serial, expected_epoch)
         .await
         .map_err(command_error)
 }
@@ -256,10 +270,12 @@ pub async fn device_network_stop(
 #[specta::specta]
 pub async fn device_network_emergency_restore(
     state: State<'_, AppState>,
+    serial: String,
+    expected_epoch: uuid::Uuid,
 ) -> CommandResult<AndroidNetworkStatusViewModel> {
     state
         .application
-        .device_network_emergency_restore()
+        .device_network_emergency_restore(serial, expected_epoch)
         .await
         .map_err(command_error)
 }
@@ -268,10 +284,11 @@ pub async fn device_network_emergency_restore(
 #[specta::specta]
 pub async fn device_network_status(
     state: State<'_, AppState>,
+    serial: String,
 ) -> CommandResult<AndroidNetworkStatusViewModel> {
     state
         .application
-        .device_network_status()
+        .device_network_status(serial)
         .await
         .map_err(command_error)
 }
@@ -280,23 +297,26 @@ pub async fn device_network_status(
 #[specta::specta]
 pub async fn device_network_endpoints(
     state: State<'_, AppState>,
+    serial: String,
     profile_id: Option<String>,
 ) -> CommandResult<AndroidNetworkEndpointSnapshotViewModel> {
     state
         .application
-        .device_network_endpoints(profile_id)
+        .device_network_endpoints(serial, profile_id)
         .await
         .map_err(command_error)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn device_network_runtime_owner(
+pub async fn device_network_runtime_owners(
     state: State<'_, AppState>,
-) -> CommandResult<Option<AndroidRuntimeOwnerViewModel>> {
-    state
+) -> CommandResult<Vec<AndroidRuntimeOwnerViewModel>> {
+    let mut owners = state
         .application
-        .device_network_runtime_owner()
+        .device_network_runtime_owners()
         .await
-        .map_err(command_error)
+        .map_err(command_error)?;
+    owners.sort_by(|left, right| left.serial.cmp(&right.serial));
+    Ok(owners)
 }

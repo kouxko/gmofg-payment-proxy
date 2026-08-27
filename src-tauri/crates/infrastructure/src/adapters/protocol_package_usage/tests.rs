@@ -8,9 +8,9 @@ use intercept_proxy_application::{
     WorkspaceRepositoryPort,
 };
 use intercept_proxy_domain::{
-    ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
-    SocketRelaySettings,
+    HttpBodyProcessing, HttpListenerSettings, ListenerDataPlane, ProtocolPackageId,
+    ProtocolPackageRef, ProtocolPackageVersion, ScriptedSocketProcessing, SocketEndpoint,
+    SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings,
 };
 
 use super::ProtocolPackageUsageQueryAdapter;
@@ -27,6 +27,7 @@ async fn usages_match_exact_identity_across_workspaces_and_merge_runtime_state()
             "Alpha",
             vec![
                 scripted_listener("alpha-target", 18_101, target.clone()),
+                protocol_http_listener("alpha-http-target", 18_104, target.clone()),
                 scripted_listener("alpha-other-version", 18_102, other_version),
                 ProxyListener {
                     name: "alpha-http".into(),
@@ -60,7 +61,7 @@ async fn usages_match_exact_identity_across_workspaces_and_merge_runtime_state()
 
     let usages = adapter.usages(&target).await.unwrap();
 
-    assert_eq!(usages.len(), 2);
+    assert_eq!(usages.len(), 3);
     assert!(
         usages
             .windows(2)
@@ -70,7 +71,7 @@ async fn usages_match_exact_identity_across_workspaces_and_merge_runtime_state()
     );
     let running = usages
         .iter()
-        .find(|usage| usage.workspace_id == first.id)
+        .find(|usage| usage.listener_id == first.listeners[0].id)
         .unwrap();
     assert_eq!(running.workspace_name, "Alpha");
     assert_eq!(running.listener_name, "alpha-target");
@@ -78,7 +79,7 @@ async fn usages_match_exact_identity_across_workspaces_and_merge_runtime_state()
 
     let stopped = usages
         .iter()
-        .find(|usage| usage.workspace_id == second.id)
+        .find(|usage| usage.listener_id == second.listeners[0].id)
         .unwrap();
     assert_eq!(stopped.workspace_name, "Beta");
     assert_eq!(stopped.listener_name, "beta-target");
@@ -87,12 +88,39 @@ async fn usages_match_exact_identity_across_workspaces_and_merge_runtime_state()
     let counts = adapter.usage_counts().await.unwrap();
     assert_eq!(counts.len(), 3);
     let target_count = counts.iter().find(|count| count.package == target).unwrap();
-    assert_eq!(target_count.reference_count, 2);
+    assert_eq!(target_count.reference_count, 3);
     assert_eq!(target_count.active_reference_count, 1);
     assert!(counts.windows(2).all(|pair| {
         (&pair[0].package.id, &pair[0].package.version)
             < (&pair[1].package.id, &pair[1].package.version)
     }));
+}
+
+#[tokio::test]
+async fn supplied_snapshot_counts_http_protocol_without_reading_runtime_or_workspaces() {
+    let target = package("http-protocol", "1.0.0");
+    let workspace = workspace(
+        "HTTP",
+        vec![protocol_http_listener(
+            "http-target",
+            18_401,
+            target.clone(),
+        )],
+    );
+    let adapter = ProtocolPackageUsageQueryAdapter::new(
+        Arc::new(InMemoryWorkspaceStore::new_empty()),
+        Arc::new(FailingRuntime),
+    );
+
+    let counts = adapter
+        .usage_counts_for_snapshot(&[workspace], &[])
+        .await
+        .expect("snapshot counts do not read failing runtime");
+
+    assert_eq!(counts.len(), 1);
+    assert_eq!(counts[0].package, target);
+    assert_eq!(counts[0].reference_count, 1);
+    assert_eq!(counts[0].active_reference_count, 0);
 }
 
 #[tokio::test]
@@ -139,6 +167,19 @@ fn scripted_listener(name: &str, port: u16, package: ProtocolPackageRef) -> Prox
             intercept_proxy_domain::DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
             SocketPayloadProcessing::Scripted(ScriptedSocketProcessing { package }),
         )),
+        ..ProxyListener::default()
+    }
+}
+
+fn protocol_http_listener(name: &str, port: u16, package: ProtocolPackageRef) -> ProxyListener {
+    ProxyListener {
+        name: name.into(),
+        enabled: true,
+        port,
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            body_processing: HttpBodyProcessing::Protocol { package },
+            ..HttpListenerSettings::default()
+        }),
         ..ProxyListener::default()
     }
 }

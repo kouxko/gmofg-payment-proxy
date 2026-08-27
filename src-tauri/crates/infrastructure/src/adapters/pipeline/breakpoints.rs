@@ -1,9 +1,10 @@
+use async_trait::async_trait;
+
 use super::{
     AppMessageStage, BodyCodec, BreakpointOutcome, BreakpointSummaryViewModel, CapturePublication,
-    ConnectionContext, DomainMessageStage, ErrorCode, EvaluatedRules, FaultAction, HandshakePolicy,
-    Message, ProxyError, ProxyResult, RuleAction, RuntimePipelineAdapter, TerminalAction,
-    TlsPeerIdentity, UiEventPayload, UiTone, Utc, Uuid, app_to_proxy, apply_breakpoint_decision,
-    breakpoint_detail,
+    ConnectionContext, ErrorCode, EvaluatedRules, FaultAction, HandshakePolicy, Message,
+    ProxyError, ProxyResult, RuleAction, RuntimePipelineAdapter, TerminalAction, TlsPeerIdentity,
+    UiEventPayload, UiTone, Utc, Uuid, app_to_proxy, apply_breakpoint_decision, breakpoint_detail,
 };
 
 impl RuntimePipelineAdapter {
@@ -150,7 +151,12 @@ impl RuntimePipelineAdapter {
     }
 }
 
+#[async_trait]
 impl HandshakePolicy for RuntimePipelineAdapter {
+    async fn prepare_tls_handshake(&self, context: &ConnectionContext) -> ProxyResult<()> {
+        self.rule_runtime.prepare_epoch(context.runtime_epoch)
+    }
+
     fn reject_tls_handshake(
         &self,
         context: &ConnectionContext,
@@ -161,12 +167,7 @@ impl HandshakePolicy for RuntimePipelineAdapter {
         // Evaluate against a temporary context containing the verified peer.
         let mut verified_context = context.clone();
         verified_context.tls_peer = Some(peer.clone());
-        let evaluated = self.evaluate(
-            &verified_context,
-            DomainMessageStage::TlsHandshake,
-            None,
-            self.body_codec.as_ref(),
-        )?;
+        let evaluated = self.rule_runtime.evaluate_handshake(&verified_context)?;
         self.rule_runtime
             .publish_rule_hits(verified_context.runtime_epoch, evaluated.hit_rules);
         Ok(evaluated.actions.into_iter().any(|action| {

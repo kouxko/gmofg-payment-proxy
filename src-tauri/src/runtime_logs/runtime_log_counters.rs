@@ -21,17 +21,14 @@ impl RuntimeLogQueueCounters {
         counter.fetch_add(1, Ordering::Relaxed);
     }
 
-    #[cfg(test)]
     pub(super) fn full(&self) -> u64 {
         self.full.load(Ordering::Relaxed)
     }
 
-    #[cfg(test)]
     pub(super) fn disconnected(&self) -> u64 {
         self.disconnected.load(Ordering::Relaxed)
     }
 
-    #[cfg(test)]
     pub(super) fn contended(&self) -> u64 {
         self.contended.load(Ordering::Relaxed)
     }

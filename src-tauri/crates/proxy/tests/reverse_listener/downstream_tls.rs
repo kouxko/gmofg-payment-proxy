@@ -34,7 +34,6 @@ async fn reverse_listener_negotiates_mtls_on_both_sides_and_preserves_body_bytes
     let cancellation = CancellationToken::new();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("https://127.0.0.1:{}", upstream_address.port()),
         downstream_tls: Some(ReverseDownstreamTls {
             server_identity: ReverseClientIdentity {
@@ -94,6 +93,54 @@ async fn reverse_listener_negotiates_mtls_on_both_sides_and_preserves_body_bytes
     reverse_task.await.unwrap().unwrap();
 }
 
+#[tokio::test(flavor = "current_thread")]
+async fn cancelling_silent_reverse_tls_handshake_drains_blocking_owner_without_starving_runtime() {
+    let downstream_server = identity("reverse-server", false);
+    let reverse_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let reverse_address = reverse_listener.local_addr().unwrap();
+    let cancellation = CancellationToken::new();
+    let service = ReverseProxyService::build(ReverseProxyConfig {
+        bind_addr: reverse_address,
+        upstream_origin: "http://127.0.0.1:9".into(),
+        downstream_tls: Some(ReverseDownstreamTls {
+            server_identity: ReverseClientIdentity {
+                certificate_chain_der: vec![downstream_server.cert, downstream_server.ca],
+                private_key_pkcs8_der: downstream_server.key.into(),
+            },
+            dynamic_server_identity: None,
+            dynamic_server_name_allowlist: Vec::new(),
+            client_trust_der: Vec::new(),
+            client_authentication_required: false,
+        }),
+        upstream_tls: None,
+        connect_timeout: Duration::from_secs(2),
+        read_timeout: Duration::from_secs(2),
+        write_timeout: Duration::from_secs(2),
+    })
+    .await
+    .unwrap();
+    let task_cancellation = cancellation.clone();
+    let reverse_task = tokio::spawn(async move {
+        service
+            .serve_listener(reverse_listener, task_cancellation)
+            .await
+    });
+    let _silent_client = TcpStream::connect(reverse_address).await.unwrap();
+
+    let (progress_tx, progress_rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move { progress_tx.send(()).unwrap() });
+    progress_rx
+        .await
+        .expect("current-thread runtime progresses during silent TLS handshake");
+
+    cancellation.cancel();
+    tokio::time::timeout(Duration::from_secs(1), reverse_task)
+        .await
+        .expect("reverse TLS blocking owner drains after cancellation")
+        .unwrap()
+        .unwrap();
+}
+
 #[tokio::test]
 async fn reverse_listener_without_explicit_identity_issues_leaf_for_client_sni() {
     let authority = Arc::new(DynamicAuthority::new());
@@ -115,7 +162,6 @@ async fn reverse_listener_without_explicit_identity_issues_leaf_for_client_sni()
     let cancellation = CancellationToken::new();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("http://127.0.0.1:{}", upstream_address.port()),
         downstream_tls: Some(ReverseDownstreamTls {
             server_identity: ReverseClientIdentity {

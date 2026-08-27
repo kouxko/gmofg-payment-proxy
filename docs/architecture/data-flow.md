@@ -153,7 +153,7 @@ flowchart LR
     STORE --> EVENTS[EventHub]
     EVENTS --> BOOT[BootstrapProvider]
     BOOT --> CAPTURE[抓包页面刷新]
-    STORE --> MCP[只读 MCP]
+    STORE --> MCP[37 个 MCP 只读查询]
 ```
 
 业务事件按实际发生顺序追加：
@@ -172,6 +172,9 @@ flowchart LR
 - tracing 回调只做有界 `try_send`；队列满、字段超限或 UI 变慢时丢观察并计数，不能阻塞交易。
 - Store 更新后发布 `exchange_observation_changed`；前端 `useAppEventRefresh` 使列表和详情查询失效。
 - UI 与 MCP 共享同一个 `Arc<ExchangeObservationStore>`，看到的是同一连接时间线。
+- 五个环境配置工具不经过 Observation Store。它们由 MCP transport 类型化适配到 Application 的
+  create/preview/token/apply 生命周期，并由 Application 持有候选、确认令牌、apply task、mutation
+  gate 与清理所有权。
 
 ## 8. 错误传播
 
@@ -212,7 +215,7 @@ Writer 必须循环处理底层 partial write；只有整个 Context/chunk 和 f
 
 ### 9.3 Infrastructure 与 Runtime
 
-- Listener 启动前冻结 Workspace、协议包和规则快照；校验证书用途、Endpoint、CIDR 和资源限制。
+- Listener 启动前冻结 Workspace、协议包和规则快照；校验证书用途、Endpoint 和资源限制。
 - TLS/mTLS 在真实握手时验证 CA、hostname、client identity 和 downstream client authentication。
 - Frame、Decode 和 Encode 受 buffer、输出、操作数、调用深度和 wall-time 限制。
 - 外部软件包必须完成精确身份注册；超时、非法 JSON、错误结果类型和背压均有稳定失败路径。

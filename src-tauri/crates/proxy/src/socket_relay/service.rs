@@ -238,6 +238,17 @@ impl SocketRelayService {
             .await
     }
 
+    /// Runs against an already-bound listener with an internally generated compatibility epoch.
+    /// This keeps external contract tests deterministic without exposing listener-start polling.
+    pub async fn serve_prebound_listener(
+        &self,
+        listener: tokio::net::TcpListener,
+        cancellation: CancellationToken,
+    ) -> Result<()> {
+        self.serve_listener(listener, uuid::Uuid::new_v4(), cancellation)
+            .await
+    }
+
     pub async fn serve_listener_with_context(
         &self,
         listener: tokio::net::TcpListener,
@@ -279,7 +290,6 @@ impl SocketRelayService {
                 bind_addr: self.config.bind_addr(),
                 runtime_epoch: run.listener_run_epoch,
                 listener_id,
-                allowed_client_cidrs: self.config.allowed_client_cidrs().to_vec(),
                 capacity: ListenerCapacity::new(usize::from(self.config.maximum_connections()))?,
                 shutdown_grace: DEFAULT_SHUTDOWN_GRACE,
             },
@@ -314,13 +324,6 @@ impl SocketListenerConfig {
         }
     }
 
-    fn allowed_client_cidrs(&self) -> &[String] {
-        match self {
-            Self::Relay(config) => &config.allowed_client_cidrs,
-            Self::LocalResponder(config) => &config.allowed_client_cidrs,
-        }
-    }
-
     fn maximum_connections(&self) -> u16 {
         match self {
             Self::Relay(config) => config.maximum_connections,
@@ -337,28 +340,18 @@ struct SocketLifecycleAdapter {
 }
 
 impl ConnectionLifecycleObserver for SocketLifecycleAdapter {
-    fn connection_rejected(&self, peer: SocketAddr, reason: ListenerRejection) {
+    fn connection_rejected(&self, peer: SocketAddr, _reason: ListenerRejection) {
         let run = self
             .run
             .read()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone();
-        let (reason, code) = match reason {
-            ListenerRejection::NetworkDenied => (
-                SocketRejectionReason::Cidr,
-                ErrorCode::SocketCidrDenied.as_str(),
-            ),
-            ListenerRejection::CapacityExhausted => (
-                SocketRejectionReason::Capacity,
-                ErrorCode::SocketCapacityExhausted.as_str(),
-            ),
-        };
         self.metrics.rejected();
         self.events.record(SocketConnectionEvent::Rejected {
             run,
             peer,
-            reason,
-            code,
+            reason: SocketRejectionReason::Capacity,
+            code: ErrorCode::SocketCapacityExhausted.as_str(),
         });
     }
 

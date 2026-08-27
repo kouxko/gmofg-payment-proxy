@@ -1,4 +1,4 @@
-//! Read-only MCP backend over the application facade plus bounded runtime-log and Exchange-observation stores.
+//! MCP backend over the application facade plus bounded runtime-log and Exchange-observation stores.
 
 mod dispatch;
 mod guidance;
@@ -7,18 +7,17 @@ use std::{fmt::Debug, sync::Arc};
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use chrono::Utc;
 use intercept_proxy_application::{
-    AppError, AppErrorViewModel, Application, BreakpointId, DiagnosticLogQuery, ProtocolPackageRef,
-    RuleId, RuntimeEpoch, SessionId, WorkspaceId,
+    AppError, AppErrorViewModel, Application, BreakpointId, ExchangeObservationQueries,
+    ProtocolPackageRef, RuleId, RuntimeEpoch, SessionId, WorkspaceId,
 };
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
+use tokio_util::sync::CancellationToken;
 
-use super::{query, resources};
+use super::{query, resources, server::McpTransportCapabilities};
 use crate::runtime_logs::RuntimeLogStore;
 use guidance::diagnostic_guidance;
-use intercept_proxy_infrastructure::ExchangeObservationStore;
 
 #[derive(Debug, Clone)]
 pub struct ToolFailure {
@@ -108,7 +107,7 @@ pub(super) const DISPATCHED_TOOL_NAMES: &[&str] = &[
     "android_profile_list",
     "android_profile_get",
     "android_network_status",
-    "android_runtime_owner",
+    "android_runtime_owner_list",
     "android_network_endpoints",
     "certificate_overview",
     "workspace_certificate_overview",
@@ -124,11 +123,52 @@ pub(super) const DISPATCHED_TOOL_NAMES: &[&str] = &[
     "protocol_package_catalog",
     "protocol_package_detail",
     "protocol_package_usage",
+    super::environment_contract::ENVIRONMENT_TOOL_NAMES[0],
+    super::environment_contract::ENVIRONMENT_TOOL_NAMES[1],
+    super::environment_contract::ENVIRONMENT_TOOL_NAMES[2],
+    super::environment_contract::ENVIRONMENT_TOOL_NAMES[3],
+    super::environment_contract::ENVIRONMENT_TOOL_NAMES[4],
 ];
+
+#[derive(Clone, Debug)]
+pub(crate) struct McpCallContext {
+    pub request_cancellation: CancellationToken,
+    pub transport_capabilities: Arc<McpTransportCapabilities>,
+}
+
+pub(crate) enum EnvironmentToolRequest {
+    Capabilities {
+        transport_capabilities: Arc<McpTransportCapabilities>,
+    },
+    Create {
+        candidate: intercept_proxy_application::EnvironmentConfigurationCandidateV1,
+        // Application::environment_candidate_create owns environment_candidate_run_validation;
+        // this request-scoped token is forwarded only through that create path.
+        request_cancellation: CancellationToken,
+    },
+    Status {
+        candidate_id: intercept_proxy_application::EnvironmentCandidateId,
+    },
+    Cancel {
+        candidate_id: intercept_proxy_application::EnvironmentCandidateId,
+    },
+    Apply {
+        candidate_id: intercept_proxy_application::EnvironmentCandidateId,
+        confirmation_token: intercept_proxy_application::EnvironmentConfirmationToken,
+    },
+}
 
 #[async_trait]
 pub trait ReadOnlyMcpBackend: Debug + Send + Sync {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult;
+    async fn call_tool_with_context(
+        &self,
+        name: &str,
+        arguments: Value,
+        _context: McpCallContext,
+    ) -> ToolResult {
+        self.call_tool(name, arguments).await
+    }
     async fn read_resource(&self, uri: &str) -> ToolResult;
 }
 
@@ -136,68 +176,35 @@ pub trait ReadOnlyMcpBackend: Debug + Send + Sync {
 pub struct ApplicationBackend {
     application: Arc<Application>,
     runtime_logs: Arc<RuntimeLogStore>,
-    exchange_observations: Arc<ExchangeObservationStore>,
+    exchange_observations: ExchangeObservationQueries,
 }
 
 impl ApplicationBackend {
     pub(crate) fn new(
         application: Arc<Application>,
         runtime_logs: Arc<RuntimeLogStore>,
-        exchange_observations: Arc<ExchangeObservationStore>,
+        exchange_observations: impl Into<ExchangeObservationQueries>,
     ) -> Self {
         Self {
             application,
             runtime_logs,
-            exchange_observations,
+            exchange_observations: exchange_observations.into(),
         }
     }
 
     async fn application_snapshot(&self) -> ToolResult {
-        const MAX_ATTEMPTS: u8 = 3;
-        for attempt in 1..=MAX_ATTEMPTS {
-            let first = self.read_snapshot().await?;
-            let second = self.read_snapshot().await?;
-            if first == second {
-                return Ok(json!({
-                    "snapshot": second,
-                    "consistency": {
-                        "strategy": "bounded_generation_validation",
-                        "attempt": attempt,
-                        "generation": snapshot_fingerprint(&first)?,
-                        "observed_at": Utc::now(),
-                        "status": "validated_no_observed_change"
-                    }
-                }));
+        let snapshot = self.application.application_snapshot().await?;
+        let generation = snapshot.generation.clone();
+        let observed_at = snapshot.observed_at;
+        Ok(json!({
+            "snapshot": snapshot,
+            "consistency": {
+                "strategy": "application_mutation_gate",
+                "attempt": 1,
+                "generation": generation,
+                "observed_at": observed_at,
+                "status": "captured_once_under_mutation_gate"
             }
-        }
-        Err(ToolFailure {
-            code: "SNAPSHOT_UNSTABLE".to_owned(),
-            message: "Application state changed during all bounded snapshot attempts.".to_owned(),
-            details: Some(json!({ "attempts": MAX_ATTEMPTS })),
-        })
-    }
-
-    async fn read_snapshot(&self) -> ToolResult {
-        let settings = self.application.settings_get().await?;
-        let workspaces = self.application.workspace_list().await?;
-        let mut workspace_details = Vec::with_capacity(workspaces.len());
-        for workspace in &workspaces {
-            workspace_details.push(self.application.workspace_get(workspace.id).await?);
-        }
-        let entry_statuses = self.application.listener_statuses().await?;
-        let protocol_packages = self.application.protocol_package_list().await?;
-        let external_package_service = self.application.external_package_service_status().await?;
-        let diagnostics = self
-            .application
-            .diagnostic_log_query(&DiagnosticLogQuery::default());
-        json_value(json!({
-            "settings": settings,
-            "workspaces": workspaces,
-            "workspace_details": workspace_details,
-            "entry_statuses": entry_statuses,
-            "protocol_packages": protocol_packages,
-            "external_package_service": external_package_service,
-            "diagnostics": diagnostics,
         }))
     }
 
@@ -278,12 +285,25 @@ impl ReadOnlyMcpBackend for ApplicationBackend {
             | "android_profile_list"
             | "android_profile_get"
             | "android_network_status"
-            | "android_runtime_owner"
+            | "android_runtime_owner_list"
             | "android_network_endpoints"
             | "certificate_overview"
             | "workspace_certificate_overview" => self.call_runtime_tool(name, arguments).await,
             _ => unknown_tool(name),
         }
+    }
+
+    async fn call_tool_with_context(
+        &self,
+        name: &str,
+        arguments: Value,
+        context: McpCallContext,
+    ) -> ToolResult {
+        if let Some(kind) = super::environment_contract::environment_tool_kind(name) {
+            let request = Self::environment_tool_request(kind, arguments, context)?;
+            return self.call_environment_tool(request).await;
+        }
+        self.call_tool(name, arguments).await
     }
 
     async fn read_resource(&self, uri: &str) -> ToolResult {
@@ -351,7 +371,14 @@ struct BreakpointDetailArguments {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct AndroidPackageArguments {
+    serial: String,
     package_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AndroidDeviceArguments {
+    serial: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -363,7 +390,27 @@ struct AndroidProfileArguments {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 struct AndroidEndpointArguments {
+    serial: String,
     profile_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EnvironmentCreateArguments {
+    candidate: intercept_proxy_application::EnvironmentConfigurationCandidateV1,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EnvironmentCandidateArguments {
+    candidate_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EnvironmentApplyArguments {
+    candidate_id: String,
+    confirmation_token: String,
 }
 
 fn parse<T: DeserializeOwned>(arguments: Value) -> Result<T, ToolFailure> {
@@ -382,13 +429,4 @@ fn json_value(value: impl serde::Serialize) -> ToolResult {
 
 fn unknown_tool(name: &str) -> ToolResult {
     Err(ToolFailure::not_found(format!("Unknown tool: {name}")))
-}
-
-fn snapshot_fingerprint(value: &Value) -> Result<String, ToolFailure> {
-    let bytes =
-        serde_json::to_vec(value).map_err(|error| ToolFailure::internal(error.to_string()))?;
-    let hash = bytes.iter().fold(0xcbf2_9ce4_8422_2325_u64, |hash, byte| {
-        (hash ^ u64::from(*byte)).wrapping_mul(0x0000_0100_0000_01b3)
-    });
-    Ok(format!("{hash:016x}"))
 }

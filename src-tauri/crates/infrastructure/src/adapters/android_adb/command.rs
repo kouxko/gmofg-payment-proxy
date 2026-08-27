@@ -13,7 +13,8 @@ use std::{
 
 use async_trait::async_trait;
 use intercept_proxy_application::{
-    AndroidDeviceState, AndroidDeviceViewModel, AndroidPackageViewModel, AppError, AppResult,
+    AndroidAdbViewModel, AndroidDeviceState, AndroidDeviceViewModel, AndroidPackageViewModel,
+    AppError, AppResult,
 };
 use tokio::{process::Command, time::timeout};
 
@@ -21,17 +22,28 @@ use super::{AndroidAdbAdapter, COMMAND_TIMEOUT};
 use crate::windows_process::configure_background_process;
 
 impl AndroidAdbAdapter {
-    pub(super) fn selected_serial(&self) -> AppResult<String> {
-        self.selected_serial
-            .read()
-            .expect("selected serial lock")
-            .clone()
-            .ok_or_else(|| {
-                AppError::new(
-                    "ANDROID_DEVICE_NOT_SELECTED",
-                    "请先选择一台在线 Android 设备。",
-                )
-            })
+    pub(super) async fn adb_view(&self) -> AppResult<AndroidAdbViewModel> {
+        let version = if self.adb_path.is_some() {
+            Some(
+                self.run(vec!["version".into()], COMMAND_TIMEOUT)
+                    .await?
+                    .stdout
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned(),
+            )
+        } else {
+            None
+        };
+        Ok(super::status::adb_view_model(
+            self.adb_path.as_deref(),
+            version,
+            self.selected_serial
+                .read()
+                .expect("selected serial lock")
+                .clone(),
+        ))
     }
 
     pub(super) fn adb(&self) -> AppResult<&Path> {
@@ -54,14 +66,14 @@ impl AndroidAdbAdapter {
                 AppError::new("ANDROID_ADB_EXEC_FAILED", format!("无法执行 adb：{error}"))
             })?;
         if !output.success {
-            return Err(AppError::new(
-                "ANDROID_ADB_COMMAND_FAILED",
-                format!(
-                    "adb 命令失败：{}",
-                    non_empty(&output.stderr, &output.stdout)
-                ),
-            )
-            .retryable("请检查设备是否在线、已授权且 Companion 状态正常。"));
+            let detail = non_empty(&output.stderr, &output.stdout);
+            let code = if is_device_transport_unreachable(detail) {
+                "ANDROID_ADB_DEVICE_UNREACHABLE"
+            } else {
+                "ANDROID_ADB_COMMAND_FAILED"
+            };
+            return Err(AppError::new(code, format!("adb 命令失败：{detail}"))
+                .retryable("请检查设备是否在线、已授权且 Companion 状态正常。"));
         }
         Ok(output)
     }
@@ -244,6 +256,14 @@ pub(super) fn is_stale_adb_transport_error(error: &AppError) -> bool {
     let message = error.view_model.message.to_ascii_lowercase();
     message.contains("more than one device/emulator")
         || message.contains("more than one device or emulator")
+}
+
+fn is_device_transport_unreachable(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    message.contains("device offline")
+        || message.contains("device not found")
+        || (message.contains("device '") && message.contains("' not found"))
+        || message.contains("no devices/emulators found")
 }
 
 /// 判断 ADB 端口映射是否已经不存在。

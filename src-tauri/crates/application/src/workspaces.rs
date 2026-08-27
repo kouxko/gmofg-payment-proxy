@@ -16,8 +16,9 @@ use parking_lot::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceId,
-    WorkspaceRepositoryPort, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone,
+    WorkspaceCollectionViewModel, WorkspaceId, WorkspaceRepositoryPort, WorkspaceSummaryViewModel,
+    WorkspaceValidationViewModel,
 };
 
 /// 为复制或导入的 Workspace 生成完全独立的聚合身份。
@@ -242,6 +243,14 @@ impl InMemoryWorkspaceStore {
 
 #[async_trait]
 impl WorkspaceRepositoryPort for InMemoryWorkspaceStore {
+    async fn snapshot(&self) -> AppResult<WorkspaceCollectionViewModel> {
+        let state = self.state.read();
+        Ok(WorkspaceCollectionViewModel {
+            summaries: Self::summaries(&state),
+            details: state.workspaces.values().cloned().collect(),
+        })
+    }
+
     async fn list(&self) -> AppResult<Vec<WorkspaceSummaryViewModel>> {
         Ok(Self::summaries(&self.state.read()))
     }

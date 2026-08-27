@@ -36,8 +36,13 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
     async fn application_backup_baseline(
         &self,
     ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
-        self.store
-            .list_protocol_package_headers()
+        self.executor
+            .execute(|store| {
+                store
+                    .list_protocol_package_headers()
+                    .map_err(ProtocolPackageStorageError::from)
+            })
+            .await
             .map(|headers| {
                 headers
                     .into_iter()
@@ -48,28 +53,34 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
                     })
                     .collect()
             })
-            .map_err(ProtocolPackageStorageError::from)
             .map_err(|error| protocol_package_app_error(&error))
     }
 
     async fn export_application_packages(
         &self,
     ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
-        let identities = self
-            .store
-            .list_protocol_package_headers()
-            .map_err(ProtocolPackageStorageError::from)
-            .map_err(|error| protocol_package_app_error(&error))?;
-        let mut exported = identities
-            .into_iter()
-            .map(|header| {
-                let (files, enabled) = self.export_one(&header.package)?;
-                Ok(PortableApplicationProtocolPackage {
-                    package: header.package,
-                    files,
-                    enabled,
-                })
+        let stored = self
+            .executor
+            .execute(|store| {
+                let headers = store
+                    .list_protocol_package_headers()
+                    .map_err(ProtocolPackageStorageError::from)?;
+                headers
+                    .into_iter()
+                    .map(|header| {
+                        let package = header.package.clone();
+                        store
+                            .load_protocol_package(&package)
+                            .map_err(ProtocolPackageStorageError::from)?
+                            .ok_or(ProtocolPackageStorageError::NotFound { package })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
             })
+            .await
+            .map_err(|error| protocol_package_app_error(&error))?;
+        let mut exported = stored
+            .into_iter()
+            .map(|stored| self.export_loaded(stored))
             .collect::<AppResult<Vec<_>>>()?;
         sort_application_packages(&mut exported);
         Ok(exported)
@@ -89,7 +100,40 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
         packages: &[ProtocolPackageRef],
     ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
         require_unique_identities(packages)?;
-        installed_references::prepare_installed_references(self, packages.to_vec())
+        let mut referenced = packages.to_vec();
+        referenced.sort_by(compare_identities);
+        let selected = referenced.clone();
+        let stored = self
+            .executor
+            .execute(move |store| {
+                selected
+                    .into_iter()
+                    .map(|package| {
+                        store
+                            .load_protocol_package(&package)
+                            .map_err(ProtocolPackageStorageError::from)?
+                            .ok_or(ProtocolPackageStorageError::NotFound { package })
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .await
+            .map_err(|error| protocol_package_app_error(&error))?;
+        stored
+            .into_iter()
+            .zip(referenced)
+            .map(|(stored, package)| {
+                let rows = match stored.files {
+                    StoredProtocolPackageFiles::Valid(rows) => rows,
+                    StoredProtocolPackageFiles::Rejected(code) => {
+                        return Err(ProtocolPackageStorageError::StoredPackageInvalid {
+                            package,
+                            code: code.to_owned(),
+                        });
+                    }
+                };
+                self.prepare_rows(&package, rows)
+            })
+            .collect::<Result<Vec<_>, _>>()
             .map(|prepared| application_descriptions(&prepared))
             .map_err(|error| protocol_package_app_error(&error))
     }
@@ -125,17 +169,18 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
             .map(|(prepared, enabled)| prepared_into_write(prepared, enabled))
             .collect::<Vec<_>>();
         let (records, settings) = application_records(&document)?;
-        let mut cache = self.cache.lock();
-        self.store
-            .replace_application_bundle(
-                document.selected_workspace_id.as_uuid(),
-                &records,
-                &settings,
-                &writes,
-            )
-            .map_err(bundle_app_error)?;
-        cache.clear();
-        Ok(())
+        let selected_id = document.selected_workspace_id.as_uuid();
+        let cache = std::sync::Arc::clone(&self.cache);
+        self.executor
+            .execute(move |store| {
+                let mut cache = cache.lock();
+                store
+                    .replace_application_bundle(selected_id, &records, &settings, &writes)
+                    .map_err(bundle_app_error)?;
+                cache.clear();
+                Ok(())
+            })
+            .await
     }
 
     async fn reset_application_bundle(
@@ -150,47 +195,71 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
             ));
         }
         let (records, settings) = application_records(&document)?;
-        self.reset_with_builtin(
-            document.selected_workspace_id.as_uuid(),
-            &records,
-            &settings,
-        )
+        let selected_id = document.selected_workspace_id.as_uuid();
+        let builtin = if self.builtin_archive.is_some() {
+            Some(self.prepare_builtin()?)
+        } else {
+            None
+        };
+        let builtin_write = builtin.as_ref().map(|prepared| StoredProtocolPackageWrite {
+            header: super::builtin::builtin_header(prepared),
+            files: prepared.files.clone(),
+        });
+        let cache = std::sync::Arc::clone(&self.cache);
+        self.executor
+            .execute(move |store| {
+                let mut cache = cache.lock();
+                store
+                    .reset_application_bundle(
+                        selected_id,
+                        &records,
+                        &settings,
+                        builtin_write.as_ref(),
+                    )
+                    .map_err(ProtocolPackageStorageError::from)
+                    .map_err(|error| protocol_package_app_error(&error))?;
+                cache.clear();
+                if let (Some(prepared), Some(write)) = (builtin, builtin_write) {
+                    cache.insert(
+                        write.header.package,
+                        super::CachedCompiledPackage {
+                            generation: write.header.generation,
+                            compiled: std::sync::Arc::new(prepared.compiled),
+                        },
+                    );
+                }
+                Ok(())
+            })
+            .await
     }
 }
 
 impl ProtocolPackageRepositoryAdapter {
-    fn export_one(
+    fn export_loaded(
         &self,
-        package: &ProtocolPackageRef,
-    ) -> AppResult<(Vec<PortableProtocolPackageFile>, bool)> {
-        // 保持注册表的全局锁顺序：先 cache，再进入 SqliteStore。导出不会修改缓存。
-        let _cache = self.cache.lock();
-        let stored = self
-            .store
-            .load_protocol_package(package)
-            .map_err(ProtocolPackageStorageError::from)
-            .map_err(|error| protocol_package_app_error(&error))?
-            .ok_or_else(|| {
-                protocol_package_app_error(&ProtocolPackageStorageError::NotFound {
-                    package: package.clone(),
-                })
-            })?;
+        stored: crate::sqlite::protocol_packages::StoredProtocolPackage,
+    ) -> AppResult<PortableApplicationProtocolPackage> {
+        let package = stored.header.package.clone();
+        let enabled = stored.header.enabled;
         let rows = match stored.files {
             StoredProtocolPackageFiles::Valid(rows) => rows,
             StoredProtocolPackageFiles::Rejected(code) => {
                 return Err(protocol_package_app_error(
                     &ProtocolPackageStorageError::StoredPackageInvalid {
-                        package: package.clone(),
+                        package,
                         code: code.to_owned(),
                     },
                 ));
             }
         };
-        // 数据库始终按不可信输入恢复并重新编译；导出绝不传播损坏或身份错配的内容。
         let prepared = self
-            .prepare_rows(package, rows)
+            .prepare_rows(&package, rows)
             .map_err(|error| protocol_package_app_error(&error))?;
-        Ok((portable_files(&prepared.files), stored.header.enabled))
+        Ok(PortableApplicationProtocolPackage {
+            package,
+            files: portable_files(&prepared.files),
+            enabled,
+        })
     }
 
     fn prepare_application_packages(
@@ -353,9 +422,6 @@ pub(super) fn bundle_app_error(error: StoredProtocolPackageBundleError) -> AppEr
         }
     }
 }
-
-#[path = "portability/installed_references.rs"]
-mod installed_references;
 
 #[cfg(test)]
 #[path = "portability_tests.rs"]

@@ -6,6 +6,7 @@ use std::{
 
 use parking_lot::Mutex;
 use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
 use zeroize::Zeroizing;
 
 use super::{
@@ -13,18 +14,21 @@ use super::{
         EnvironmentBaselinePublic, EnvironmentCandidatePreview, EnvironmentValidationLayerResult,
     },
     types::{
-        EnvironmentApplyTaskId, EnvironmentCandidateEpoch, EnvironmentCandidateId,
-        EnvironmentCandidateLifecycleError, EnvironmentCandidatePolicy, EnvironmentCandidateStatus,
-        EnvironmentCandidateStatusResult, EnvironmentConfirmationToken,
+        EnvironmentApplyTaskId, EnvironmentCandidateCreateResult, EnvironmentCandidateEpoch,
+        EnvironmentCandidateId, EnvironmentCandidateLifecycleError, EnvironmentCandidatePolicy,
+        EnvironmentCandidateStatus, EnvironmentCandidateStatusResult, EnvironmentConfirmationToken,
     },
 };
+use crate::ProxyWorkspace;
 use crate::environment_configuration::{
-    EnvironmentAdmittedTarget, EnvironmentConfigurationCandidateV1, EnvironmentDiagnostic,
-    EnvironmentStatusCode, EnvironmentTerminalResult,
+    EnvironmentAdmittedTarget, EnvironmentCommitReceipt, EnvironmentConfigurationCandidateV1,
+    EnvironmentDiagnostic, EnvironmentStatusCode, EnvironmentTerminalResult,
+    EnvironmentValidatedApplyBaseline, StagedProtectedMaterialHandle,
 };
 
 pub(super) struct PrivateCandidateMaterial {
     encoded_candidate: Zeroizing<Vec<u8>>,
+    validated_workspace: Option<ProxyWorkspace>,
 }
 
 impl PrivateCandidateMaterial {
@@ -33,12 +37,28 @@ impl PrivateCandidateMaterial {
     ) -> Result<Self, EnvironmentCandidateLifecycleError> {
         serde_json::to_vec(candidate)
             .map(Zeroizing::new)
-            .map(|encoded_candidate| Self { encoded_candidate })
+            .map(|encoded_candidate| Self {
+                encoded_candidate,
+                validated_workspace: None,
+            })
             .map_err(|_| EnvironmentCandidateLifecycleError::PrivateMaterialEncodingFailed)
     }
 
     pub(super) fn byte_len(&self) -> usize {
         self.encoded_candidate.len()
+    }
+
+    pub(super) fn set_validated_workspace(&mut self, workspace: ProxyWorkspace) {
+        self.validated_workspace = Some(workspace);
+    }
+
+    fn into_staged(mut self) -> Option<StagedProtectedMaterialHandle> {
+        self.validated_workspace.take().map(|workspace| {
+            StagedProtectedMaterialHandle::from_candidate_json(
+                std::mem::take(&mut self.encoded_candidate),
+                workspace,
+            )
+        })
     }
 }
 
@@ -64,9 +84,28 @@ pub(super) struct CandidateEntry {
     pub(super) terminal_result: Option<EnvironmentTerminalResult>,
     pub(super) errors: Vec<EnvironmentDiagnostic>,
     pub(super) terminal_public_bytes: usize,
+    pub(super) validated_apply_baseline: Option<EnvironmentValidatedApplyBaseline>,
+    pub(super) validation_cancellation: CancellationToken,
 }
 
 impl CandidateEntry {
+    pub(super) fn public_create_result(&self) -> EnvironmentCandidateCreateResult {
+        EnvironmentCandidateCreateResult {
+            candidate_id: self.id.clone(),
+            confirmation_token: match &self.token {
+                Some(TokenState::Available(token)) => Some(token.clone()),
+                Some(TokenState::Consumed) | None => None,
+            },
+            status: self.status,
+            target_key: self.target_key.clone(),
+            baseline_public: self.baseline_public.clone(),
+            validation_layers: self.validation_layers.clone(),
+            preview: self.preview.clone(),
+            expires_on: "app_exit_or_invalidation",
+            errors: self.errors.clone(),
+        }
+    }
+
     pub(super) fn public_status(&self) -> EnvironmentCandidateStatusResult {
         EnvironmentCandidateStatusResult {
             candidate_id: self.id.clone(),
@@ -87,6 +126,7 @@ pub(super) struct RegistryState {
     pub(super) apply_queue: VecDeque<EnvironmentCandidateId>,
     pub(super) terminal_order: VecDeque<EnvironmentCandidateId>,
     pub(super) terminal_public_bytes: usize,
+    pub(super) next_candidate_epoch: u64,
     pub(super) shutting_down: bool,
 }
 
@@ -102,16 +142,10 @@ pub struct EnvironmentApplyWork {
     pub(super) apply_task_id: EnvironmentApplyTaskId,
     pub(super) epoch: EnvironmentCandidateEpoch,
     pub(super) material: Option<PrivateCandidateMaterial>,
+    pub(super) validated_apply_baseline: EnvironmentValidatedApplyBaseline,
     pub(super) completed: bool,
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "G034 owns apply work; G038 will consume its sealed completion methods"
-    )
-)]
 impl EnvironmentApplyWork {
     pub fn candidate_id(&self) -> &EnvironmentCandidateId {
         &self.candidate_id
@@ -121,6 +155,36 @@ impl EnvironmentApplyWork {
     }
     pub const fn epoch(&self) -> EnvironmentCandidateEpoch {
         self.epoch
+    }
+
+    pub fn take_staged_material(
+        &mut self,
+    ) -> Result<StagedProtectedMaterialHandle, EnvironmentCandidateLifecycleError> {
+        self.material
+            .take()
+            .and_then(PrivateCandidateMaterial::into_staged)
+            .ok_or(EnvironmentCandidateLifecycleError::InvalidState)
+    }
+
+    pub fn validated_apply_baseline(&self) -> &EnvironmentValidatedApplyBaseline {
+        &self.validated_apply_baseline
+    }
+
+    pub fn finish_committed(
+        mut self,
+        receipt: EnvironmentCommitReceipt,
+    ) -> Result<(), EnvironmentCandidateLifecycleError> {
+        let (result, receipt_task_id) = receipt.into_parts();
+        if receipt_task_id != self.apply_task_id {
+            return Err(EnvironmentCandidateLifecycleError::InvalidState);
+        }
+        let terminal = EnvironmentTerminalResult::committed(
+            result.workspace_id,
+            result.revision,
+            result.selected_workspace_id,
+            Some(self.apply_task_id.as_str().to_owned()),
+        );
+        self.finish(EnvironmentCandidateStatus::Committed, terminal)
     }
 
     pub fn finish_failed_before_commit(
@@ -140,6 +204,16 @@ impl EnvironmentApplyWork {
         self.finish(
             EnvironmentCandidateStatus::RolledBack,
             EnvironmentTerminalResult::rolled_back(status_code),
+        )
+    }
+
+    pub fn finish_stale(
+        mut self,
+        status_code: EnvironmentStatusCode,
+    ) -> Result<(), EnvironmentCandidateLifecycleError> {
+        self.finish(
+            EnvironmentCandidateStatus::Stale,
+            EnvironmentTerminalResult::stale_with(status_code),
         )
     }
 

@@ -9,6 +9,18 @@ mod bundle;
 mod capture;
 mod certificates;
 pub(crate) mod common;
+#[cfg(test)]
+mod environment_apply_lease_tests;
+mod environment_apply_resources;
+#[cfg(test)]
+#[path = "environment_apply_lease_tests/revision16_integration.rs"]
+mod environment_apply_revision16_integration;
+#[cfg(test)]
+mod environment_apply_shared_gate_integration;
+mod environment_configuration_baseline_capture;
+mod environment_configuration_lease;
+mod environment_configuration_materials;
+mod environment_configuration_validation;
 mod exchange_observation;
 mod external_package_registry;
 mod external_package_server;
@@ -33,37 +45,40 @@ pub use body_codecs::{HeaderBodyCodecResolver, WorkspaceBodyCodecResolver};
 pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;
+pub(crate) use environment_apply_resources::EnvironmentApplyResourceGateRegistry;
+pub use environment_configuration_lease::EnvironmentApplyLeaseAdapter;
+pub(crate) use environment_configuration_lease::EnvironmentApplyRuntimeAdapter;
+#[cfg(test)]
+pub(crate) use environment_configuration_lease::{
+    EnvironmentApplyLeaseResourceKey, EnvironmentApplyLeaseResourceObservation,
+    EnvironmentApplyLeaseRuntime,
+};
+pub use environment_configuration_materials::EnvironmentConfigurationMaterialPreparer;
+pub(crate) use environment_configuration_materials::{
+    PreparedMaterialArena, PreparedMaterialBatch, PreparedMaterialRecord,
+};
+pub(crate) use environment_configuration_validation::EnvironmentConfigurationValidationAdapter;
 pub use exchange_observation::{ExchangeObservationCounters, ExchangeObservationStore};
 pub use external_package_registry::{
     AcceptedExternalPackageConnection, ExternalPackageConnectionId, ExternalPackageRegistryAdapter,
     external_package_registration_fingerprint,
 };
-pub use external_package_server::{
-    ExternalPackageListenerRuntime, ExternalPackageServer, ExternalPackageServerConfig,
-};
+pub use external_package_server::{ExternalPackageServer, ExternalPackageServerConfig};
 pub use external_packages::{
     ExternalPackageClient, ExternalPackageConnectionConfig, ExternalPackageConnectionError,
-    ExternalPackageFatalProtocolError, ExternalPackageRemoteError, accept_packages_websocket,
+    accept_packages_websocket,
 };
 pub use faults::FaultServiceAdapter;
 pub use files::{FileSelection, NativeFileDialog};
 pub use listener_certificates::ManagedListenerCertificateAdapter;
-pub use listener_runtime::{
-    BoundSocketDocument, ListenerRuntimeAdapter, ProtocolDocumentRuleConnection,
-    ProtocolDocumentRuleConnectionFactory,
-};
-pub use pipeline::{
-    RuntimeBodyCodecResolver, RuntimePipelineAdapter, RuntimePipelineProductHooks,
-    RuntimeRuleRepository,
-};
+pub use listener_runtime::ListenerRuntimeAdapter;
+pub use pipeline::{RuntimePipelineAdapter, RuntimePipelineProductHooks};
 pub use protected_secrets::ProtectedSecretAdapter;
 pub use protocol_package_import::ProtocolPackageImportAdapter;
 pub use protocol_package_usage::ProtocolPackageUsageQueryAdapter;
 use protocol_packages::PreparedProtocolPackage;
 pub use protocol_packages::{
-    ProtocolPackageInstallOutcome, ProtocolPackageRecoveryFailure, ProtocolPackageRecoveryReport,
-    ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError, ProtocolPackageStorageErrorCode,
-    ProtocolPackageSummary, ProtocolPackageValidationStatus,
+    ProtocolPackageInstallOutcome, ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError,
 };
 pub use rules::RuleRepositoryAdapter;
 pub use settings::SettingsRepositoryAdapter;

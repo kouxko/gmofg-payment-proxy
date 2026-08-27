@@ -5,18 +5,38 @@ use intercept_proxy_application::{
 };
 use serde_json::json;
 
-use super::{AndroidAdbAdapter, is_owner_unreachable};
+use super::AndroidAdbAdapter;
+
+pub(super) fn is_owner_unreachable(error: &AppError) -> bool {
+    matches!(
+        error.view_model.code.as_str(),
+        "ANDROID_ADB_DEVICE_UNREACHABLE"
+    )
+}
 
 impl AndroidAdbAdapter {
     pub(super) async fn reconcile_runtime_endpoints(
         &self,
+        serial: String,
         activation: Option<AndroidNetworkActivation>,
     ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
-        let _operation = self.network_operation.lock().await;
-        let Some(owner) = self.runtime_owner_snapshot().await else {
+        let owner_for_gate = self.runtime_owner_snapshot_for(&serial).await;
+        let _environment_apply_gates = self
+            .acquire_environment_apply_gates(
+                owner_for_gate
+                    .as_ref()
+                    .map(|owner| owner.profile_id.as_str())
+                    .or_else(|| activation.as_ref().map(|value| value.profile.id.as_str())),
+                Some(&serial),
+            )
+            .await;
+        let gate = self.device_operations.gate(&serial);
+        let _operation = gate.lock().await;
+        let Some(owner) = self.runtime_owner_snapshot_for(&serial).await else {
             return Ok(Vec::new());
         };
-        let persisted = self.runtime_endpoints.lock().await.clone();
+        let owner_state = self.owner_state_snapshot_for(&serial).await;
+        let persisted = owner_state.runtime_endpoints.clone();
         if owner.mode != AndroidRuntimeOwnerMode::Lan {
             return Ok(endpoints_with_owner_health(persisted, owner.state));
         }
@@ -37,7 +57,8 @@ impl AndroidAdbAdapter {
         {
             Ok(Some(host)) => host,
             Err(error) if is_owner_unreachable(&error) => {
-                self.mark_owner_waiting_reconnect(owner.epoch).await?;
+                self.mark_owner_waiting_reconnect(&serial, owner.epoch)
+                    .await?;
                 return Ok(endpoints_with_health(
                     persisted,
                     AndroidRuntimeEndpointHealth::WaitingReconnect,
@@ -46,10 +67,8 @@ impl AndroidAdbAdapter {
             Ok(None) | Err(_) => return self.fault_lan_endpoints(owner, persisted).await,
         };
         let host = lan_host.to_string();
-        let has_active_runtime = self
+        let has_active_runtime = owner_state
             .active_runtime
-            .lock()
-            .await
             .as_ref()
             .is_some_and(|runtime| runtime.serial == owner.serial && runtime.epoch == owner.epoch);
         if owner.state == AndroidRuntimeOwnerState::Active
@@ -78,16 +97,17 @@ impl AndroidAdbAdapter {
         active_owner.state = AndroidRuntimeOwnerState::Active;
         active_owner.transition_reason = AndroidRuntimeOwnerTransitionReason::LanEndpointReapplied;
         active_owner.updated_at = chrono::Utc::now();
+        let serial = active_owner.serial.clone();
         if !self
-            .replace_owner_endpoints_if_epoch(active_owner, runtime.endpoints.clone())
+            .replace_owner_endpoints_and_runtime_if_epoch(
+                active_owner,
+                runtime.endpoints.clone(),
+                runtime.clone(),
+            )
             .await?
         {
-            return Err(AppError::new(
-                "ANDROID_RUNTIME_OWNER_STALE_EPOCH",
-                "Android 运行设备记录已变化，本次 LAN 端点刷新未覆盖新记录。",
-            ));
+            return Err(self.runtime_owner_conflict_error(&serial).await);
         }
-        *self.active_runtime.lock().await = Some(runtime.clone());
         Ok(runtime.endpoints)
     }
 
@@ -100,14 +120,12 @@ impl AndroidAdbAdapter {
         owner.state = AndroidRuntimeOwnerState::Faulted;
         owner.transition_reason = AndroidRuntimeOwnerTransitionReason::LanEndpointFaulted;
         owner.updated_at = chrono::Utc::now();
+        let serial = owner.serial.clone();
         if !self
             .replace_owner_endpoints_if_epoch(owner, endpoints.clone())
             .await?
         {
-            return Err(AppError::new(
-                "ANDROID_RUNTIME_OWNER_STALE_EPOCH",
-                "Android 运行设备记录已变化，本次 LAN 故障状态未覆盖新记录。",
-            ));
+            return Err(self.runtime_owner_conflict_error(&serial).await);
         }
         Ok(endpoints)
     }

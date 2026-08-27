@@ -31,33 +31,15 @@ pub(in crate::adapters::android_adb) fn lan_endpoint_is_eligible(
     routes: &[AndroidProxyRouteActivation],
 ) -> bool {
     same_ipv4_network(host, device, device_prefix)
-        && routes.iter().all(|route| {
-            listener_accepts_lan_host(&route.desktop_listener_bind_address, host)
-                && cidrs_allow_device(&route.allowed_client_cidrs, device)
-        })
+        && routes
+            .iter()
+            .all(|route| listener_accepts_lan_host(&route.desktop_listener_bind_address, host))
 }
 
 fn listener_accepts_lan_host(bind_address: &str, host: Ipv4Addr) -> bool {
     bind_address
         .parse::<IpAddr>()
         .is_ok_and(|address| address.is_unspecified() || address == IpAddr::V4(host))
-}
-
-fn cidrs_allow_device(cidrs: &[String], device: Ipv4Addr) -> bool {
-    cidrs.is_empty() || cidrs.iter().any(|cidr| ipv4_cidr_contains(cidr, device))
-}
-
-fn ipv4_cidr_contains(cidr: &str, candidate: Ipv4Addr) -> bool {
-    let Some((network, prefix)) = cidr.split_once('/') else {
-        return false;
-    };
-    let Ok(network) = network.parse::<Ipv4Addr>() else {
-        return false;
-    };
-    let Ok(prefix) = prefix.parse::<u8>() else {
-        return false;
-    };
-    same_ipv4_network(network, candidate, prefix)
 }
 
 fn same_ipv4_network(left: Ipv4Addr, right: Ipv4Addr, prefix: u8) -> bool {

@@ -3,6 +3,14 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-08-27
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260825-005 | TLS-CA-BUNDLE-FINAL-001 | 验证多 CA Bundle 解析、规范化、受保护持久化、恢复、缺失 Intermediate 的 Socket TLS 与真实后台握手 | PASS | TASK-20260825-005 | TLS-CA-BUNDLE-001 | [父证据](2026-08-25/TASK-20260825-005/TLS-CA-BUNDLE-001/README.md) | [证据](2026-08-27/TASK-20260825-005/TLS-CA-BUNDLE-FINAL-001/README.md) |
+| TASK-20260827-003 | FINAL-REPLAY-001 | 重跑归档场景、本地完整门禁、隔离 App 的 MCP 指南与环境候选 create/apply/status、退出重启和端口释放 | PASS_WITH_NOT_RUN | 多个历史任务 | 见场景清单 | [场景清单](../final-replay-scenario-inventory-20260827.md) | [证据](2026-08-27/TASK-20260827-003/FINAL-REPLAY-001/README.md) |
+| TASK-20260825-006 | MCP-CONFIG-APP-001 | 验证打包 App 完整资源候选预览、原子提交、当前 Workspace 持久化 envelope 与退出重启恢复 | PASS | TASK-20260825-006 | MCP-CONFIG-CONTRACT-001 | [父证据](2026-08-26/TASK-20260825-006/MCP-CONFIG-CONTRACT-001/README.md) | [证据](2026-08-27/TASK-20260825-006/MCP-CONFIG-APP-001/README.md) |
+
 ## 2026-08-26
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
@@ -21,6 +29,10 @@
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TASK-20260825-007 | DOC-GOV-004 | 验证单工作区全局任务锁、所有权恢复链和任务索引一致性 | PASS | 无 | 无 | 无 | [证据](2026-08-25/TASK-20260825-007/DOC-GOV-004/README.md) |
+| TASK-20260825-005 | TLS-CA-BUNDLE-001 | 准备上游多 CA PEM Bundle 实测资源和复测步骤 | PREPARED | 无 | 无 | 无 | [证据](2026-08-25/TASK-20260825-005/TLS-CA-BUNDLE-001/README.md) |
+| TASK-20260825-004 | FINAL-ARCHITECTURE-VALIDATION | G023-G031 稳定树三连跑、完整本地质量门禁和最终独立审查输入 | PASS | 无 | 无 | 无 | [证据](2026-08-25/TASK-20260825-004/FINAL-ARCHITECTURE-VALIDATION/README.md) |
+| TASK-20260825-004 | G030-EXTERNAL-PACKAGE-FAULT-ISOLATION | 验证受信任外部协议包的超时、畸形输入、断连、额度和跨包故障隔离 | PASS | 无 | 无 | 无 | [证据](2026-08-25/TASK-20260825-004/G030-EXTERNAL-PACKAGE-FAULT-ISOLATION/README.md) |
+| TASK-20260825-004 | G029-OBSERVABILITY | 验证观测责任、容量、保留、关联字段和完整 payload 合同 | PASS | 无 | 无 | 无 | [证据](2026-08-25/TASK-20260825-004/G029-OBSERVABILITY/README.md) |
 | TASK-20260825-003 | DOC-GOV-003 | 验证测试资源归档和跨任务复用规范 | PASS | TASK-20260825-001 | DOC-GOV-001 | [父证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) | [证据](2026-08-25/TASK-20260825-003/DOC-GOV-003/README.md) |
 | TASK-20260825-002 | DOC-GOV-002 | 验证小任务对抗审查改为可选、整体审查保持强制 | PASS | TASK-20260825-001 | DOC-GOV-001 | [父证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) | [证据](2026-08-25/TASK-20260825-002/DOC-GOV-002/README.md) |
 | TASK-20260825-001 | DOC-GOV-001 | 验证项目 AGENTS 治理规范 | PASS | 无 | 无 | 无 | [证据](2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md) |

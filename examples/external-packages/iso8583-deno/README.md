@@ -58,13 +58,16 @@ listener。
 `frame` 使用 Proxy 提供的完整方向累积缓冲，因此可以处理长度头半包、payload
 半包和粘包；一次只返回首帧的 `consumed_bytes`，剩余字节由 Proxy 继续处理。
 
-## 安全与日志
+## 连接与日志
 
-外部软件包服务当前没有身份认证；只应监听在受信网络。需要远程连接时应由部署环境提供网络隔离或安全隧道。
+外部软件包服务不要求 token、HMAC、mTLS、Origin、注册身份或授权；所有能够到达配置地址并正确实现 wire
+合同的进程都按受信任外部包接纳。监听范围只由 Proxy bind address 决定，没有额外的 loopback、CIDR
+或来源门禁。
 
-日志是单行 JSON，只记录以下诊断元数据：连接尝试、连接/断线、JSON-RPC ID、方法、耗时和结果类别。
-实现不会记录 frame、Document 字段值、PAN、PIN、ICC、MAC、密钥或 JSON-RPC body。Proxy 侧可用相同的
-软件包身份、业务连接、方向、方法和请求 ID 关联 MCP 只读诊断。
+示例默认输出单行 JSON 诊断元数据，包括连接尝试、连接/断线、JSON-RPC
+ID、方法、耗时和结果类别。按排障需要 可以扩展为完整记录 frame、Document、JSON-RPC body 与结果；完整
+payload 被允许，实际部署应配置容量、轮转和 保留期限，避免无界增长。Proxy
+侧可用相同的软件包身份、业务连接、方向、方法和请求 ID 关联 MCP 查询诊断与 Exchange observation。
 
 ## 故障排查
 

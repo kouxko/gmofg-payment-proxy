@@ -45,6 +45,7 @@ fn every_tool_publishes_a_complete_machine_readable_contract() {
         "entry_status_list",
         "android_device_list",
         "android_package_list",
+        "android_runtime_owner_list",
         "android_profile_list",
         "workspace_certificate_overview",
         "breakpoint_query",
@@ -56,7 +57,11 @@ fn every_tool_publishes_a_complete_machine_readable_contract() {
     ]
     .into_iter()
     .collect::<BTreeSet<_>>();
-    assert_eq!(tools.len(), 37, "the reference documents all public tools");
+    assert_eq!(
+        tools.len(),
+        42,
+        "37 existing reads plus five environment tools"
+    );
 
     let names = tools
         .iter()
@@ -88,8 +93,6 @@ fn every_tool_publishes_a_complete_machine_readable_contract() {
             .unwrap_or_else(|| panic!("{} is missing its successful output schema", tool.name));
         let expected_type = if array_results.contains(tool.name.as_ref()) {
             json!("array")
-        } else if tool.name == "android_runtime_owner" {
-            json!(["object", "null"])
         } else {
             json!("object")
         };
@@ -114,6 +117,13 @@ fn closed_tool_inputs_reject_unknown_top_level_fields() {
     let error = validate_arguments("settings_get", &json!({"unexpected": true}))
         .expect_err("closed schema must reject extra fields");
     assert!(error.contains("unexpected"));
+}
+
+#[test]
+fn unknown_tool_error_uses_the_general_mcp_catalog_wording() {
+    let error = validate_arguments("not_registered", &json!({}))
+        .expect_err("an unknown tool must be rejected");
+    assert_eq!(error, "unknown MCP tool: not_registered");
 }
 
 #[test]
@@ -153,10 +163,26 @@ fn published_schema_constraints_are_enforced_for_all_input_levels() {
             json!({"package": {"id": "example"}}),
             "package.version",
         ),
+        ("android_package_list", json!({}), "serial"),
+        (
+            "android_package_get",
+            json!({"package_name": "com.example"}),
+            "serial",
+        ),
+        ("android_network_status", json!({}), "serial"),
+        ("android_network_endpoints", json!({}), "serial"),
     ] {
         let error = validate_arguments(name, &arguments)
             .err()
             .unwrap_or_else(|| panic!("{name}.{field} must reject arguments {arguments}"));
         assert!(error.contains(field), "{name}: {error}");
     }
+}
+
+#[test]
+fn retired_single_android_owner_tool_is_not_registered() {
+    assert_eq!(
+        validate_arguments("android_runtime_owner", &json!({})),
+        Err("unknown MCP tool: android_runtime_owner".into())
+    );
 }

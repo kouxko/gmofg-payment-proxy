@@ -3,7 +3,13 @@
 //! ADB 只负责把本地临时端口转发到设备的 localabstract socket；请求 ID、协议版本、
 //! 帧上限和最终运行状态都在这里校验，避免把 Activity 启动成功误判为 VPN 已运行。
 
-use std::{fmt::Write as _, net::TcpListener as StdTcpListener, time::Duration};
+use std::{
+    collections::BTreeSet,
+    fmt::Write as _,
+    net::TcpListener as StdTcpListener,
+    sync::{Mutex as StdMutex, OnceLock},
+    time::Duration,
+};
 
 use intercept_proxy_application::{
     ANDROID_COMPANION_PACKAGE, ANDROID_CONTROL_MAX_FRAME_BYTES, ANDROID_CONTROL_PROTOCOL_VERSION,
@@ -41,6 +47,7 @@ impl AndroidAdbAdapter {
         .await?;
         Ok(AndroidNetworkStatusViewModel {
             serial: serial.to_owned(),
+            runtime_epoch: None,
             state: AndroidNetworkState::Stopped,
             state_text: "已停止".into(),
             ui_tone: UiTone::Neutral,
@@ -64,7 +71,8 @@ impl AndroidAdbAdapter {
         payload: Value,
     ) -> AppResult<AndroidNetworkStatusViewModel> {
         let request = AndroidControlRequest::new(operation, payload)?;
-        let port = reserve_loopback_port()?;
+        let port_reservation = reserve_loopback_port()?;
+        let port = port_reservation.port;
         self.run_forward_for_serial(
             serial,
             &[
@@ -83,6 +91,7 @@ impl AndroidAdbAdapter {
         let cleanup = self
             .run_forward_for_serial(serial, &["forward", "--remove", &format!("tcp:{port}")])
             .await;
+        drop(port_reservation);
         reconcile_forward_cleanup(result, cleanup)
     }
 
@@ -292,22 +301,59 @@ fn activation_failed_error(status: &AndroidNetworkStatusViewModel) -> AppError {
     .retryable("请检查 Android 前台通知和设备运行状态，修正后重新启动网络接管。")
 }
 
-fn reserve_loopback_port() -> AppResult<u16> {
-    let listener = StdTcpListener::bind(("127.0.0.1", 0)).map_err(|error| {
-        AppError::new(
-            "ANDROID_ADB_FORWARD_INVALID",
-            format!("无法分配 Android 控制通道本地端口：{error}"),
-        )
-    })?;
-    listener
-        .local_addr()
-        .map(|address| address.port())
-        .map_err(|error| {
+pub(super) struct ControlPortReservation {
+    port: u16,
+}
+
+#[cfg(test)]
+impl ControlPortReservation {
+    pub(super) fn port(&self) -> u16 {
+        self.port
+    }
+}
+
+impl Drop for ControlPortReservation {
+    fn drop(&mut self) {
+        control_port_reservations()
+            .lock()
+            .expect("control port reservations")
+            .remove(&self.port);
+    }
+}
+
+fn control_port_reservations() -> &'static StdMutex<BTreeSet<u16>> {
+    static RESERVATIONS: OnceLock<StdMutex<BTreeSet<u16>>> = OnceLock::new();
+    RESERVATIONS.get_or_init(|| StdMutex::new(BTreeSet::new()))
+}
+
+pub(super) fn reserve_loopback_port() -> AppResult<ControlPortReservation> {
+    for _ in 0..32 {
+        let listener = StdTcpListener::bind(("127.0.0.1", 0)).map_err(|error| {
             AppError::new(
                 "ANDROID_ADB_FORWARD_INVALID",
-                format!("无法读取 Android 控制通道本地端口：{error}"),
+                format!("无法分配 Android 控制通道本地端口：{error}"),
             )
-        })
+        })?;
+        let port = listener
+            .local_addr()
+            .map(|address| address.port())
+            .map_err(|error| {
+                AppError::new(
+                    "ANDROID_ADB_FORWARD_INVALID",
+                    format!("无法读取 Android 控制通道本地端口：{error}"),
+                )
+            })?;
+        let mut reservations = control_port_reservations()
+            .lock()
+            .expect("control port reservations");
+        if reservations.insert(port) {
+            return Ok(ControlPortReservation { port });
+        }
+    }
+    Err(AppError::new(
+        "ANDROID_ADB_FORWARD_INVALID",
+        "无法分配未被并发 Android 控制请求占用的本地端口。",
+    ))
 }
 
 pub(super) fn is_socket_unavailable(error: &AppError) -> bool {

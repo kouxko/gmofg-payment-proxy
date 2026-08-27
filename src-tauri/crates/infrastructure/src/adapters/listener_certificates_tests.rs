@@ -1,11 +1,16 @@
 use std::{collections::VecDeque, path::PathBuf};
 
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_application::CertificateReferenceId;
 use parking_lot::Mutex;
 
 use super::*;
 use crate::{InfrastructureError, adapters::FileSelection};
 
+#[path = "listener_certificates_tests/async_resolution.rs"]
+mod async_resolution;
+#[path = "listener_certificates_tests/bundles.rs"]
+mod bundles;
 #[path = "listener_certificates_test_support.rs"]
 mod test_support;
 
@@ -137,7 +142,8 @@ async fn imports_are_independent_protected_references_and_resolve_in_memory() {
         &ca_der,
         &server_private_key,
         &downstream_ca_der,
-    );
+    )
+    .await;
     assert_inspected_details(&adapter, identity_a, trust_b).await;
 }
 
@@ -257,7 +263,7 @@ async fn pem_client_identity_imports_without_password_and_survives_portable_roun
         .unwrap()
         .unwrap()
         .reference;
-    let resolved = adapter.resolve_identity(&imported).unwrap().unwrap();
+    let resolved = adapter.resolve_identity(&imported).await.unwrap().unwrap();
     assert_eq!(resolved.private_key_pkcs8_der.as_slice(), private_key);
 
     let portable = adapter.export_portable(imported).await.unwrap();
@@ -316,7 +322,7 @@ fn assert_references_are_protected(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn assert_resolved_material(
+async fn assert_resolved_material(
     adapter: &ManagedListenerCertificateAdapter,
     identity_a: &CertificateReference,
     trust_b: &CertificateReference,
@@ -327,14 +333,15 @@ fn assert_resolved_material(
     server_private_key: &[u8],
     downstream_ca_der: &[u8],
 ) {
-    let resolved = adapter.resolve_identity(identity_a).unwrap().unwrap();
+    let resolved = adapter.resolve_identity(identity_a).await.unwrap().unwrap();
     assert_eq!(resolved.private_key_pkcs8_der.as_slice(), private_key);
     assert_eq!(
-        adapter.resolve_trust(trust_b).unwrap().unwrap(),
+        adapter.resolve_trust(trust_b).await.unwrap().unwrap(),
         vec![ca_der.to_vec()]
     );
     let resolved = adapter
         .resolve_identity(downstream_identity)
+        .await
         .unwrap()
         .unwrap();
     assert_eq!(
@@ -342,7 +349,11 @@ fn assert_resolved_material(
         server_private_key
     );
     assert_eq!(
-        adapter.resolve_trust(downstream_trust).unwrap().unwrap(),
+        adapter
+            .resolve_trust(downstream_trust)
+            .await
+            .unwrap()
+            .unwrap(),
         vec![downstream_ca_der.to_vec()]
     );
 }

@@ -55,7 +55,6 @@ fn test_service(ports: Arc<dyn PipelinePorts>) -> ConnectionService {
         endpoint: "unused.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(8).unwrap(),
-        allowed_client_cidrs: Vec::new(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(1),
         write_timeout: Duration::from_secs(1),

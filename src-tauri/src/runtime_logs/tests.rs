@@ -77,6 +77,34 @@ fn retention_and_filters_are_explicit_in_query_results() {
     assert_eq!(page.oldest_retained_log_id, Some(2));
     assert_eq!(page.newest_retained_log_id, Some(4));
     assert!(!page.has_more);
+    assert_eq!(page.queue_dropped_full, 0);
+    assert_eq!(page.queue_dropped_disconnected, 0);
+    assert_eq!(page.queue_dropped_contended, 0);
+}
+
+#[test]
+fn count_capacity_retains_exactly_n_and_evicts_only_at_n_plus_one() {
+    let store = RuntimeLogStore::memory(3);
+    for index in 1..=3 {
+        store.record(
+            ApplicationLogLevel::Info,
+            "count-boundary",
+            &format!("event={index}"),
+        );
+    }
+
+    let at_capacity = store.query(&ApplicationLogQuery::default());
+    assert_eq!(at_capacity.rows.len(), 3);
+    assert_eq!(at_capacity.evicted_count, 0);
+    assert_eq!(at_capacity.oldest_retained_log_id, Some(1));
+
+    store.record(ApplicationLogLevel::Info, "count-boundary", "event=4");
+
+    let over_capacity = store.query(&ApplicationLogQuery::default());
+    assert_eq!(over_capacity.rows.len(), 3);
+    assert_eq!(over_capacity.evicted_count, 1);
+    assert_eq!(over_capacity.oldest_retained_log_id, Some(2));
+    assert_eq!(over_capacity.newest_retained_log_id, Some(4));
 }
 
 #[test]

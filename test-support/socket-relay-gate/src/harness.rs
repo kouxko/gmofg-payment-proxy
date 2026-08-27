@@ -1,15 +1,16 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use intercept_proxy_runtime::socket_relay::{
-    BoundedSocketConnectionObserver, SocketConnectionEvent, SocketDownstreamTlsConfig,
-    SocketEndpoint, SocketRelayConfig, SocketRelaySecurity, SocketRelayService,
-    SocketUpstreamTlsConfig,
+    BoundedSocketConnectionObserver, SocketConnectionEvent, SocketConnectionObserver,
+    SocketDownstreamTlsConfig, SocketEndpoint, SocketRelayConfig, SocketRelaySecurity,
+    SocketRelayService, SocketUpstreamTlsConfig,
 };
 use ring::digest::{SHA256, digest};
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    sync::Notify,
     task::JoinHandle,
 };
 use tokio_util::sync::CancellationToken;
@@ -52,7 +53,33 @@ pub(crate) struct RunningRelay {
     service: Arc<SocketRelayService>,
     cancellation: CancellationToken,
     task: JoinHandle<intercept_proxy_runtime::Result<()>>,
-    observer: Arc<BoundedSocketConnectionObserver>,
+    observer: Arc<NotifyingObserver>,
+}
+
+#[derive(Debug)]
+struct NotifyingObserver {
+    inner: BoundedSocketConnectionObserver,
+    changed: Notify,
+}
+
+impl NotifyingObserver {
+    fn new(capacity: usize) -> Self {
+        Self {
+            inner: BoundedSocketConnectionObserver::new(capacity).expect("valid observer capacity"),
+            changed: Notify::new(),
+        }
+    }
+
+    fn snapshot(&self) -> Vec<SocketConnectionEvent> {
+        self.inner.snapshot()
+    }
+}
+
+impl SocketConnectionObserver for NotifyingObserver {
+    fn record(&self, event: SocketConnectionEvent) {
+        self.inner.record(event);
+        self.changed.notify_waiters();
+    }
 }
 
 impl RunningRelay {
@@ -67,17 +94,21 @@ impl RunningRelay {
     }
 
     async fn terminal_evidence(&self) -> (u64, u64) {
-        for _ in 0..100 {
-            if let Some(bytes) = successful_close_bytes(&self.observer) {
-                return bytes;
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let changed = self.observer.changed.notified();
+                if let Some(bytes) = successful_close_bytes(&self.observer) {
+                    return bytes;
+                }
+                changed.await;
             }
-            tokio::task::yield_now().await;
-        }
-        panic!("Socket observer did not record a successful terminal event");
+        })
+        .await
+        .expect("Socket observer recorded a successful terminal event")
     }
 }
 
-fn successful_close_bytes(observer: &BoundedSocketConnectionObserver) -> Option<(u64, u64)> {
+fn successful_close_bytes(observer: &NotifyingObserver) -> Option<(u64, u64)> {
     observer.snapshot().iter().find_map(|event| match event {
         SocketConnectionEvent::Closed {
             opened: true,
@@ -196,23 +227,22 @@ pub(crate) async fn start_relay(
     upstream: SocketAddr,
     security: SocketRelaySecurity,
 ) -> RunningRelay {
-    let reservation = TcpListener::bind("127.0.0.1:0")
+    let listener = TcpListener::bind("127.0.0.1:0")
         .await
-        .expect("reserve relay address");
-    let address = reservation.local_addr().expect("relay address");
-    drop(reservation);
-    let observer = Arc::new(BoundedSocketConnectionObserver::new(32));
+        .expect("bind relay address");
+    let address = listener.local_addr().expect("relay address");
+    let observer = Arc::new(NotifyingObserver::new(32));
     let service = Arc::new(
         SocketRelayService::build_with_observer(
             SocketRelayConfig {
                 bind_addr: address,
-                allowed_client_cidrs: Vec::new(),
                 upstream: SocketEndpoint {
                     host: "127.0.0.1".into(),
                     port: upstream.port(),
                 },
                 security,
                 maximum_connections: 16,
+                read_chunk_bytes: 16 * 1024,
                 connect_timeout: Duration::from_millis(500),
                 read_timeout: Duration::from_secs(2),
                 write_timeout: Duration::from_secs(2),
@@ -224,7 +254,11 @@ pub(crate) async fn start_relay(
     let cancellation = CancellationToken::new();
     let task_service = Arc::clone(&service);
     let task_cancellation = cancellation.clone();
-    let task = tokio::spawn(async move { task_service.serve(task_cancellation).await });
+    let task = tokio::spawn(async move {
+        task_service
+            .serve_prebound_listener(listener, task_cancellation)
+            .await
+    });
     RunningRelay {
         address,
         service,
@@ -244,6 +278,7 @@ fn security(mode: Mode, proxy: &TestIdentity, target: &TestIdentity) -> SocketRe
         server_trust_der: vec![target.ca.clone()],
         client_identity: None,
         verify_hostname: true,
+        tls_server_name: None,
     };
     match mode {
         Mode::PlainTransparent | Mode::TlsTransparent => SocketRelaySecurity::Transparent,
@@ -257,13 +292,9 @@ fn security(mode: Mode, proxy: &TestIdentity, target: &TestIdentity) -> SocketRe
 }
 
 pub(crate) async fn connect_retry(address: SocketAddr) -> TcpStream {
-    for _ in 0..100 {
-        if let Ok(stream) = TcpStream::connect(address).await {
-            return stream;
-        }
-        tokio::task::yield_now().await;
-    }
-    panic!("relay did not bind {address}");
+    TcpStream::connect(address)
+        .await
+        .unwrap_or_else(|error| panic!("connect to prebound relay {address}: {error}"))
 }
 
 async fn echo_after_eof<S>(mut stream: S, expected: Arc<Vec<u8>>) -> Vec<u8>

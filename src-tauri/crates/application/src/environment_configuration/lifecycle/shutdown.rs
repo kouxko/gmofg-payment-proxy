@@ -1,7 +1,10 @@
 use std::future::Future;
 
-use super::{registry::EnvironmentCandidateRegistry, types::EnvironmentCandidateStatus};
-use crate::environment_configuration::EnvironmentTerminalResult;
+use super::{
+    registry::EnvironmentCandidateRegistry, types::EnvironmentCandidateStatus,
+    validation::signal_validation_cancellation,
+};
+use crate::environment_configuration::{EnvironmentStatusCode, EnvironmentTerminalResult};
 
 impl EnvironmentCandidateRegistry {
     pub(crate) fn begin_shutdown(&self) -> impl Future<Output = ()> + Send + 'static + use<> {
@@ -47,6 +50,10 @@ impl EnvironmentCandidateRegistry {
             .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
         for candidate_id in cancellable {
+            signal_validation_cancellation(
+                &state.candidates[&candidate_id].validation_cancellation,
+                EnvironmentStatusCode::CandidateCancelledByShutdown,
+            );
             self.shared
                 .publish_terminal(
                     &mut state,

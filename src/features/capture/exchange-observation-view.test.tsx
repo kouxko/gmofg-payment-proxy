@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WorkspaceNavigationProvider } from "@/features/shell/workspace-navigation";
 import { ExchangeObservationView } from "./exchange-observation-view";
 import { exchangePage, exchangeRecord } from "./exchange-observation-test-fixture";
 
@@ -80,7 +81,7 @@ describe("ExchangeObservationView realtime refresh", () => {
   });
 
   it("refreshes the unified HTTP and Socket list when Rust records new evidence", () => {
-    render(<ExchangeObservationView />);
+    render(<WorkspaceNavigationProvider><ExchangeObservationView /></WorkspaceNavigationProvider>);
 
     expect(eventRegistrations).toContainEqual(expect.objectContaining({
       eventTypes: expect.arrayContaining(["exchange_observation_changed"]),
@@ -90,7 +91,7 @@ describe("ExchangeObservationView realtime refresh", () => {
 
   it("refreshes only the open Exchange detail for its matching realtime event", async () => {
     const user = userEvent.setup();
-    render(<ExchangeObservationView />);
+    render(<WorkspaceNavigationProvider><ExchangeObservationView /></WorkspaceNavigationProvider>);
 
     await user.click(screen.getByRole("button", { name: /18:00:00/ }));
 

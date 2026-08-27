@@ -21,7 +21,7 @@ mod validation;
 
 pub use listener_model::*;
 pub use socket_topology::*;
-pub use validation::{is_valid_cidr, is_valid_socket_host, is_valid_upstream_origin};
+pub use validation::{is_valid_socket_host, is_valid_upstream_origin};
 use validation::{push_field_error, unique_ids, validate_listener, validate_workspace_references};
 
 /// 首次启动创建的正向代理草稿端口。

@@ -13,7 +13,7 @@ use std::{
 
 use intercept_proxy_application::{
     CapacityLedger, ExchangeObservationEvent, ExchangeObservationPage, ExchangeObservationQuery,
-    ExchangeObservationRecord, RuntimeEpoch,
+    ExchangeObservationQueryPort, ExchangeObservationRecord, RuntimeEpoch,
 };
 use parking_lot::Mutex;
 
@@ -47,15 +47,13 @@ impl ExchangeObservationCounters {
     }
 
     #[must_use]
-    pub fn total_unrecorded(&self) -> u64 {
-        self.dropped_events
-            .load(Ordering::Relaxed)
-            .saturating_add(self.ignored_events.load(Ordering::Relaxed))
+    pub fn dropped_events(&self) -> u64 {
+        self.dropped_events.load(Ordering::Relaxed)
     }
 
     #[must_use]
-    pub fn dropped_events(&self) -> u64 {
-        self.dropped_events.load(Ordering::Relaxed)
+    pub fn ignored_events(&self) -> u64 {
+        self.ignored_events.load(Ordering::Relaxed)
     }
 }
 
@@ -189,7 +187,8 @@ impl ExchangeObservationStore {
                 .get(&query.workspace_id)
                 .copied()
                 .unwrap_or_default(),
-            ignored_events: self.counters.total_unrecorded(),
+            dropped_events: self.counters.dropped_events(),
+            ignored_events: self.counters.ignored_events(),
         }
     }
 
@@ -223,7 +222,12 @@ impl ExchangeObservationStore {
 
     #[must_use]
     pub fn ignored_events(&self) -> u64 {
-        self.counters.total_unrecorded()
+        self.counters.ignored_events()
+    }
+
+    #[must_use]
+    pub fn dropped_events(&self) -> u64 {
+        self.counters.dropped_events()
     }
 
     /// Consumer 无法解析完整 primitive fields 时记录一个原子计数，不保存格式化原文。
@@ -271,6 +275,16 @@ impl ExchangeObservationStore {
             }
         }
         None
+    }
+}
+
+impl ExchangeObservationQueryPort for ExchangeObservationStore {
+    fn query(&self, query: &ExchangeObservationQuery) -> ExchangeObservationPage {
+        Self::query(self, query)
+    }
+
+    fn get(&self, exchange_id: &str) -> Option<ExchangeObservationRecord> {
+        Self::get(self, exchange_id)
     }
 }
 

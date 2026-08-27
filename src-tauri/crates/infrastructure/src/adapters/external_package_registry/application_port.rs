@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use intercept_proxy_application::{
-    AppResult, ExternalPackageApplicationPort, ExternalPackageDetailViewModel,
+    AppError, AppResult, ExternalPackageApplicationPort, ExternalPackageDetailViewModel,
     ExternalPackageServiceStatusViewModel, ProtocolPackageDescriptionViewModel,
     ProtocolPackageVersionViewModel,
 };
@@ -22,8 +22,9 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
     }
 
     async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
-        self.store
-            .list_external_packages()
+        self.executor
+            .execute(crate::SqliteStore::list_external_packages)
+            .await
             .map_err(app_error)
             .map(|records| {
                 records
@@ -40,8 +41,10 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
-        self.store
-            .get_external_package(package)
+        let selected = package.clone();
+        self.executor
+            .execute(move |store| store.get_external_package(&selected))
+            .await
             .map_err(app_error)
             .map(|record| {
                 record.map(|record| application_summary(&record, self.is_online(package)))
@@ -52,9 +55,11 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageDescriptionViewModel> {
+        let selected = package.clone();
         let stored = self
-            .store
-            .get_external_package(package)
+            .executor
+            .execute(move |store| store.get_external_package(&selected))
+            .await
             .map_err(app_error)?
             .ok_or_else(|| not_found(package))?;
         Ok(application_description(&stored.registration))
@@ -64,9 +69,11 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ExternalPackageDetailViewModel> {
+        let selected = package.clone();
         let stored = self
-            .store
-            .get_external_package(package)
+            .executor
+            .execute(move |store| store.get_external_package(&selected))
+            .await
             .map_err(app_error)?
             .ok_or_else(|| not_found(package))?;
         let detail = self.connection_details.lock().get(package).cloned();
@@ -78,9 +85,12 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
     }
 
     async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()> {
+        let _environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
+        let selected = package.clone();
         if self
-            .store
-            .set_external_package_enabled(package, enabled)
+            .executor
+            .execute(move |store| store.set_external_package_enabled(&selected, enabled))
+            .await
             .map_err(app_error)?
         {
             self.publish_catalog_changed(package);
@@ -91,31 +101,70 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
     }
 
     async fn disconnect(&self, package: &ProtocolPackageRef) -> AppResult<()> {
-        self.disconnect_active(package, false).await;
+        let environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
+        let mut completion = self
+            .begin_disconnect(package, Some(environment_apply_gate))
+            .await;
+        Self::wait_for_closing(&mut completion).await;
         Ok(())
     }
 
     async fn delete(&self, package: &ProtocolPackageRef) -> AppResult<()> {
-        // SQLite 删除完成前保留 Closing 门禁，防止并发重注册在断连与删除之间重建记录，
-        // 或发布一个不再受注册表跟踪的在线 client。
-        {
-            let mut online = self.online.lock();
-            online
-                .entry(package.clone())
-                .or_insert_with(|| OnlineConnection::Closing {
-                    id: ExternalPackageConnectionId(Uuid::new_v4()),
-                    client: None,
-                });
-        }
-        self.disconnect_active(package, true).await;
-        let deletion = self
-            .store
-            .delete_external_package(package)
-            .map_err(app_error);
-        self.online.lock().remove(package);
-        deletion.map(|_| {
-            self.publish_catalog_changed(package);
-            self.publish_service_status();
-        })
+        let environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
+        let registry = self.clone();
+        let package = package.clone();
+        let cleanup = tokio::spawn(async move {
+            loop {
+                let mut closing = registry.begin_disconnect(&package, None).await;
+                Self::wait_for_closing(&mut closing).await;
+
+                let gate = registry.connection_mutation(&package);
+                let mutation = gate.lock().await;
+                if registry.online.lock().contains_key(&package) {
+                    drop(mutation);
+                    continue;
+                }
+
+                let deletion_id = ExternalPackageConnectionId(Uuid::new_v4());
+                let (completed, completion) = tokio::sync::watch::channel(false);
+                registry.online.lock().insert(
+                    package.clone(),
+                    OnlineConnection::Closing {
+                        id: deletion_id,
+                        completion,
+                    },
+                );
+                drop(mutation);
+                let selected = package.clone();
+                let deletion = registry
+                    .executor
+                    .execute(move |store| store.delete_external_package(&selected))
+                    .await
+                    .map_err(app_error);
+                let mutation = gate.lock().await;
+                let mut online = registry.online.lock();
+                if matches!(
+                    online.get(&package),
+                    Some(OnlineConnection::Closing { id, .. }) if *id == deletion_id
+                ) {
+                    online.remove(&package);
+                }
+                drop(online);
+                drop(mutation);
+                let _ = completed.send(true);
+                registry.publish_catalog_changed(&package);
+                registry.publish_service_status();
+                #[cfg(test)]
+                registry.deletion_complete.notify_one();
+                drop(environment_apply_gate);
+                return deletion.map(|_| ());
+            }
+        });
+        cleanup.await.map_err(|error| {
+            AppError::new(
+                "INTERNAL_ERROR",
+                format!("外部协议包删除任务异常终止：{error}"),
+            )
+        })?
     }
 }

@@ -27,9 +27,15 @@ use tokio_tungstenite::{
 };
 
 use super::*;
-use crate::{ExternalPackageConnectionId, SqliteStore, external_package_registration_fingerprint};
+use crate::{
+    SqliteStore,
+    adapters::{ExternalPackageConnectionId, external_package_registration_fingerprint},
+};
 
 type Peer = WebSocketStream<DuplexStream>;
+
+#[path = "tests/fault_isolation.rs"]
+mod fault_isolation;
 
 #[derive(Debug)]
 struct BlockingUsage {
@@ -303,8 +309,13 @@ async fn disconnected_registry(
             external_package_registration_fingerprint(&registration).expect("fingerprint"),
             client,
         )
+        .await
         .expect("first registration");
-    assert!(registry.mark_disconnected(&package, accepted.connection_id));
+    assert!(
+        registry
+            .mark_disconnected(&package, accepted.connection_id)
+            .await
+    );
     (registry, package, accepted.connection_id, peer)
 }
 
@@ -317,6 +328,7 @@ async fn reconnect(registry: &ExternalPackageRegistryAdapter, generation: u64) -
             external_package_registration_fingerprint(&registration).expect("fingerprint"),
             client,
         )
+        .await
         .expect("reconnect registration");
     peer
 }
@@ -382,6 +394,7 @@ fn running_usage(listener_id: ListenerId) -> ProtocolPackageUsageViewModel {
 fn stopped_status(listener_id: ListenerId) -> ListenerStatusViewModel {
     ListenerStatusViewModel {
         listener_id,
+        runtime_epoch: None,
         state: ListenerRuntimeState::Stopped,
         state_text: "已停止".into(),
         ui_tone: UiTone::Neutral,
@@ -397,10 +410,14 @@ fn stopped_status(listener_id: ListenerId) -> ListenerStatusViewModel {
 }
 
 fn registration() -> ExternalPackageRegistration {
+    registration_with_id("race-iso8583")
+}
+
+fn registration_with_id(package_id: &str) -> ExternalPackageRegistration {
     serde_json::from_value(serde_json::json!({
         "api": 1,
         "package": {
-            "id": "race-iso8583", "name": "Race ISO8583", "version": "1.0.0",
+            "id": package_id, "name": "Race ISO8583", "version": "1.0.0",
             "description": "reconnect race test"
         },
         "document": {

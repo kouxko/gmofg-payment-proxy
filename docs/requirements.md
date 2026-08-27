@@ -112,14 +112,14 @@ ProxyWorkspace
 
 按请求目标转发时：
 
-- 支持认证策略和客户端 CIDR。当前 HTTP CONNECT/Upgrade 在创建 Server connection 和
+- 支持认证策略。当前 HTTP CONNECT/Upgrade 在创建 Server connection 和
   Exchange 前统一返回 501；配置模型中即使仍保留相关字段，也不代表运行时已经提供隧道或 MITM。
 - HTTP Basic 用户名/密码只通过 `workspace_secret_store_basic` 交给 Rust；Rust 使用当前用户
   Keychain/DPAPI 保护完整认证值，Workspace 只保存 `SecretReference`。
 - 运行时仅在 Listener 启动时解密到自动清零内存，并以常量时间 MAC 校验请求凭据；错误、
   事件和抓包不得包含明文或认证 Header。
 - 默认只能监听 loopback。
-- 客户端 CIDR allowlist 留空表示允许任意地址；非空时按列表准入。非 loopback 正向代理必须配置认证。
+- Listener 不限制客户端 IP；非 loopback 正向代理必须配置认证。
 - HTTP absolute-form 转换为 origin-form。
 - 删除 Proxy-Authorization 和 hop-by-hop Header。
 - CONNECT/Upgrade 当前不会进入 Tunnel、MITM 或透明转发。
@@ -140,6 +140,8 @@ ProxyWorkspace
 - 下游独立服务端 PEM、下游客户端 CA、上游客户端 P12 与上游 Server CA 都必须通过 Rust
   原生文件对话框导入受保护存储。UI 不得创建或编辑裸文件路径引用；已有外部引用失效时必须
   显示明确错误，并允许恢复为本机叶子证书或重新导入对应材料。
+- 上游 Server CA 的单文件 PEM 可以按顺序包含多张 CA；Rust 必须逐张验证、规范化、完整持久化并
+  在 TLS Trust Store 中加载全部成员。不得增加多文件选择或自动合并；单证书 PEM/DER 保持兼容。
 - Server CA 与可选 P12 客户端身份必须在目标 Listener 的“固定 Server”编辑区导入和选择；
   导入后 Rust 只把受保护材料的安全引用写入 Workspace。证书管理页不得提供全局上游
   CA/P12 配置，以免用户误认为所有入口共享一套上游 TLS 身份。
@@ -325,7 +327,7 @@ Selected App → VpnService TUN → Rust ImpairedTun
 - 固定 `tun2proxy = "=0.8.3"`。
 - 支持 IPv4/IPv6、TCP、UDP、SOCKS5 CONNECT 和 UDP ASSOCIATE。
 - 透明桌面代理首版只改送 TCP；UDP 保持原目标直连，不得把 UDP 误送到 HTTP Listener。
-- 设备与电脑处于同一 IPv4 子网、Listener 对 LAN 地址开放且 CIDR 允许设备时，透明代理
+- 设备与电脑处于同一 IPv4 子网且 Listener 对 LAN 地址开放时，透明代理
   路由优先使用 LAN；否则桌面 Rust 为每个被引用 Listener 创建
   `adb reverse tcp:<device-temporary-port> tcp:<listener-port>`，Android 只连接
   `127.0.0.1:<device-temporary-port>`。因此设备没有 Wi-Fi/蜂窝外网时仍可经电脑访问上游。

@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260825-005",
+  "case_id": "TLS-CA-BUNDLE-FINAL-001",
+  "executed_at": "2026-08-27T15:12:00+08:00",
+  "status": "PASS",
+  "environment": {
+    "platform": "macOS",
+    "openssl": "3.6.3",
+    "target": "195.160.171.102:63002"
+  },
+  "expected_certificate_count": 2,
+  "observed_certificate_count": 2,
+  "checks": {
+    "parse_and_canonical_round_trip": "PASS",
+    "invalid_member_fail_closed": "PASS",
+    "protected_persistence_and_restart": "PASS",
+    "missing_intermediate_root_only": "EXPECTED_FAILURE",
+    "bundle_supplies_missing_intermediate": "PASS",
+    "real_tls_handshake": "PASS",
+    "business_payload_sent": false
+  },
+  "resources": [
+    "../../../2026-08-25/TASK-20260825-005/TLS-CA-BUNDLE-001/resources/sub.pem",
+    "../../../2026-08-25/TASK-20260825-005/TLS-CA-BUNDLE-001/resources/DigiCertCA.pem",
+    "../../../2026-08-25/TASK-20260825-005/TLS-CA-BUNDLE-001/outputs/FirstData-trust-chain.pem",
+    "outputs/local-validation.txt",
+    "outputs/remote-tls.txt",
+    "replay/replay.md"
+  ]
+}

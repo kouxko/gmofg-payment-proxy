@@ -7,7 +7,7 @@ fn schema_keeps_all_runtime_payload_storage_absent() {
     assert_eq!(
         tables,
         vec![
-            "android_runtime_owner",
+            "android_runtime_owners",
             "application_feature_state",
             "application_schema",
             "certificate_material",

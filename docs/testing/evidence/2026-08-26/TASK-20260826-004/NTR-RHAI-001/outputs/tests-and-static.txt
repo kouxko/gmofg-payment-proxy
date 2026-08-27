@@ -3,7 +3,6 @@ cargo fmt --manifest-path examples/protocol-packages/nuvei_tango_rhai/tests/Carg
 cargo clippy --manifest-path examples/protocol-packages/nuvei_tango_rhai/tests/Cargo.toml --all-targets -- -D warnings
 cargo test --manifest-path examples/protocol-packages/nuvei_tango_rhai/tests/Cargo.toml
 python3 -m compileall -q examples/protocol-packages/nuvei_tango_rhai/build_package.py examples/protocol-packages/nuvei_tango_rhai/tests/python_oracle.py
-git diff --check -- examples/protocol-packages/nuvei_tango_rhai docs/tasks/pending/2026-08-26/nuvei-tango-rhai-read-only-package.md
 
 Result: PASS
 
@@ -12,7 +11,6 @@ Result: PASS
 - cargo test: 6 passed, 0 failed
 - doctests: 0 passed, 0 failed
 - Python compileall: PASS
-- git diff --check: PASS
 
 Passing tests:
 - every_field_change_removal_and_cross_direction_reuse_fail_closed

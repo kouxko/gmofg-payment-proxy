@@ -8,7 +8,6 @@
     "resources/requirements.md",
     "steps/replay.md",
     "replay/lock-protocol.sh",
-    "outputs/static-check.txt",
     "outputs/lock-check.txt"
   ],
   "proof_basis": [
@@ -16,6 +15,5 @@
     "task and index relationship checks",
     "lock ownership and transition replay output"
   ],
-  "git_evidence": "N/A: Git history, commit IDs, status, and diffs are not task-management acceptance proof",
   "replay": "Follow steps/replay.md from the repository root"
 }

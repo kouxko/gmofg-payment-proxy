@@ -13,7 +13,7 @@
 4. “代码编译通过”“端口正在监听”“外部包在线”和“真实交易成功”是不同层级的结论，必须分别验证。
 
 项目当前支持 HTTP/HTTPS、Socket TCP/TLS/mTLS、协议包、规则、断点、故障注入、Android 按应用透明
-路由、运行观测、只读 MCP 和应用级导入导出。当前不支持 HTTP CONNECT、HTTP Upgrade/WebSocket
+路由、运行观测、MCP 查询/环境配置和应用级导入导出。当前不支持 HTTP CONNECT、HTTP Upgrade/WebSocket
 tunnel、CONNECT MITM 和 HTTP 外部 WebSocket 协议包；完整边界以
 [需求与验收基线](requirements.md)为准。
 
@@ -32,7 +32,7 @@ flowchart TB
     INFRA --> RUNTIME[HTTP Socket TLS Runtime]
     RUNTIME --> EXCHANGE[Exchange 和 Pipeline]
     INFRA --> SCRIPT[内置或外部协议包]
-    DESKTOP --> MCP[只读 MCP]
+    DESKTOP --> MCP[37 个查询 + 5 个环境工具]
     INFRA --> ANDROID[ADB 和 Android Companion]
     ANDROID --> TARGET[目标 Android App]
 ```
@@ -98,7 +98,7 @@ Encode 或 transport 失败要 fail-closed，结束当前 Exchange。
 | runtime epoch | 一次 Listener 启动周期的身份 | runtime/application |
 | revision | 防止旧配置覆盖新配置的乐观锁版本 | domain/application |
 | generation | 外部包连接或运行资源重连后的代次 | infrastructure |
-| MCP | 只读查询当前配置、状态和诊断的本机接口 | `src-tauri/src/mcp` |
+| MCP | 全接口明文、无认证的查询与 Workspace 环境配置接口 | `src-tauri/src/mcp` |
 
 遇到文档中的 Upstream/Downstream 时，以数据方向理解：App 到 Server 是 Upstream，Server 到 App 是
 Downstream。TLS 也有两段：App ↔ Proxy 和 Proxy ↔ Server，证书角色不能混用。
@@ -171,7 +171,8 @@ UI -> Tauri -> Host -> Application -> Domain
 3. `ApplicationHostBuilder` 打开 SQLite、系统密钥保护、EventHub 和各类 Infrastructure service。
 4. Host 构造唯一 Application facade、Listener runtime、Android ADB adapter 和外部包服务。
 5. Tauri 创建 runtime log、ExchangeObservationStore 和 tracing bridge。
-6. App best-effort 启动本机只读 MCP；MCP 端口冲突不会阻止代理主程序启动。
+6. App 必须成功绑定 `0.0.0.0:17653` 才能完成启动；IPv4 成功后的 IPv6 独立绑定、双栈覆盖、
+   不支持或降级状态通过 MCP capability 如实公开。
 7. Tauri 注册 Specta Command、文件对话框和日志插件，把唯一 `AppState` 交给所有 Command。
 8. 退出时由一个关闭门闩停止 Listener、后台任务、MCP 和观测消费者，再显式退出进程。
 
@@ -239,12 +240,20 @@ Scripted 模式一次只处理一帧；`NeedMore` 表示继续累积，完整 Fr
 
 ### 5.7 MCP、日志和抓包
 
-MCP 默认绑定 `http://127.0.0.1:17653/mcp`，只读查询 Application、运行日志和
-ExchangeObservationStore。它不启停 Listener、不修改规则、不写文件。端口是本机访问边界，不等于用户身份认证；
-同机不受信进程仍可能读取 MCP 暴露的信息。
+MCP 以明文 Streamable HTTP 监听 `0.0.0.0:17653`，并在平台支持时监听 `[::]:17653`。服务不检查
+Host、Origin、Authorization、API key、Cookie、来源 IP 或 CIDR；任何网络可达方都能调用工具，
+传输中的私钥、密码和 confirmation token 也可能被网络观察者读取。
+
+原有 37 个工具继续只读调用 Application 查询 facade；ExchangeObservation 查询通过 Application 的
+`ExchangeObservationQueries` port facade，只有 composition root 会把 Infrastructure `ExchangeObservationStore`
+注入该 port。运行日志继续使用其专用只读边界。五个环境配置工具提供 capabilities、create、status、
+cancel、apply：create 完成分层验证并返回完整预览和一次性 token，
+apply 返回 `apply_queued` 后由 Application owned task 持有执行与清理。create 返回前断开会取消候选；
+apply ack 后断开不会取消任务。MCP 不自动启停 Listener、不重放交易、不修改应用级 Settings、其他
+Workspace 或任意本机文件。
 
 抓包/ExchangeObservation 是有界内存证据，不写 SQLite；普通诊断日志使用独立滚动 JSONL。观测丢失不能让
-业务交易失败。工具清单和返回合同见[MCP 只读工具参考](mcp/tool-reference.md)。
+业务交易失败。工具清单和返回合同见[MCP 工具参考](mcp/tool-reference.md)。
 
 ### 5.8 持久化和安全材料
 
@@ -470,8 +479,9 @@ production build、品牌检查、Rust fmt/clippy、Windows Rust 检查和 Cargo
 
 ### 11.2 App 测试
 
-真实 App 回归至少覆盖：App 启动、MCP 只读合同、HTTP Fixed Server、Socket Direct、Socket Scripted、
-不完整 Frame、成功/失败抓包、Deno 外部包、AU EFTEX 外部包，以及外部包断线重连不自动恢复 Listener。
+真实 App 回归至少覆盖：App 启动、MCP 37 个查询与五个环境工具合同、HTTP Fixed Server、
+Socket Direct、Socket Scripted、不完整 Frame、成功/失败抓包、Deno 外部包、AU EFTEX 外部包，
+以及外部包断线重连不自动恢复 Listener。
 当前用例与当次结果见[最新 App 测试结果](testing/release-validation-results-20260825.md)，可重复步骤见
 [发布级验证矩阵](testing/release-validation-matrix.md)。
 
@@ -514,13 +524,15 @@ Windows 产物包括 MSI、NSIS 和 portable ZIP。分支构建明确是 unsigne
 
 ## 13. 安全红线
 
-- 不提交或记录私钥、P12 密码、BDK、派生密钥、PAN、PIN、Track2、完整支付 trace 或生产凭据；
+- 测试和诊断允许按任务需要保存完整 HTTP/Socket payload、Document 与支付 trace；仍不得把真实生产私钥、P12
+  密码、BDK 或其他生产凭据提交到仓库；
 - 不把 Listener TLS、Server TLS、mTLS 客户端身份和 Root CA 当成同一种证书；
 - 不让前端、MCP 或普通 Debug 输出获得密钥材料；
 - 不把 HTTP Basic、证书密码或业务密钥放进 Workspace 明文字段；
 - 不在未明确授权时对生产 App、生产 Server 或客户设备执行流量修改；
 - 不因日志/Display/抓包失败而阻断交易，也不因业务阶段失败而静默透明转发；
-- 不把外部包注册信息当成身份认证；跨主机部署必须另有 WSS 和网络访问控制；
+- 不把外部包注册信息当成身份认证；Proxy 信任所有能到达服务且遵守 wire 合同的外部包，不要求 WSS、
+  token、Origin、mTLS、CIDR、来源或注册授权门禁；
 - 不声称 AU EFTEX MAC 已验证；当前没有可复现的厂商 MAC 合同。
 
 ## 14. 常见排障入口
@@ -537,7 +549,7 @@ Windows 产物包括 MSI、NSIS 和 portable ZIP。分支构建明确是 unsigne
 
 ### 14.3 Listener 启动失败
 
-按配置校验、bind、CIDR、下游 TLS、协议包精确版本、上游解析/连接/TLS 的顺序检查。端口 listening 只证明
+按配置校验、bind、下游 TLS、协议包精确版本、上游解析/连接/TLS 的顺序检查。端口 listening 只证明
 bind；还需要真实 App 请求和 Server 响应。
 
 ### 14.4 Socket 报文失败

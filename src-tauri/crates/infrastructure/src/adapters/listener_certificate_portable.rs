@@ -39,7 +39,7 @@ pub(super) fn validate_portable_material(
             Ok((
                 KIND_UPSTREAM_SERVER_TRUST,
                 String::new(),
-                parsed.certificate_der,
+                parsed.canonical_bytes().to_vec(),
             ))
         }
         CertificateReferenceKind::ReverseServerIdentity => {

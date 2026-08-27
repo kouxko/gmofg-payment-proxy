@@ -3,7 +3,6 @@
   "task_id": "TASK-20260825-003",
   "case_id": "DOC-GOV-003",
   "executed_at": "2026-08-25T17:07:48+08:00",
-  "base_head": "d63ba271387ec353d66f1f02bb304d74268df6de",
   "result": "PASS",
   "derived_from": {
     "task_id": "TASK-20260825-001",

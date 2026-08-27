@@ -55,6 +55,12 @@ pub(crate) struct ApplicationLogPage {
     pub oldest_retained_log_id: Option<u64>,
     pub newest_retained_log_id: Option<u64>,
     pub evicted_count: u64,
+    /// Runtime-log producer messages rejected because the count or shared byte budget was full.
+    pub queue_dropped_full: u64,
+    /// Runtime-log producer messages rejected after the owned consumer was disconnected.
+    pub queue_dropped_disconnected: u64,
+    /// Runtime-log producer messages rejected instead of waiting for the sender lock.
+    pub queue_dropped_contended: u64,
     pub corrupt_line_count: u64,
     pub has_more: bool,
     pub persistence_error: Option<String>,

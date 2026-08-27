@@ -13,6 +13,5 @@ Covered:
 - remote plaintext WebSocket rejection by default
 
 compileall: PASS
-git diff --check: PASS
 ruff: N/A, not installed
 mypy: N/A, not installed

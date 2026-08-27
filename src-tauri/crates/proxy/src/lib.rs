@@ -54,8 +54,9 @@ pub use supervisor::{
 };
 pub use traffic::{JitterScope, TrafficDirection};
 pub use transport::{
-    AcceptedConnection, Clock, ConnectionContext, HandshakePolicy, SystemClock, TlsPeerIdentity,
-    TokioListenerBinder, UpstreamSecurityEvidence, UpstreamTransportSecurity,
+    AcceptedConnection, Clock, ConnectionContext, HandshakePolicy, SystemClock,
+    TLS_HANDSHAKE_POLICY_TIMEOUT, TlsPeerIdentity, TokioListenerBinder, UpstreamSecurityEvidence,
+    UpstreamTransportSecurity,
 };
 
 use std::fmt::Debug;
@@ -80,7 +81,6 @@ pub enum ErrorCode {
     UpstreamConnectTimeout,
     UpstreamWriteTimeout,
     UpstreamReadTimeout,
-    SocketCidrDenied,
     SocketCapacityExhausted,
     SocketDnsFailed,
     SocketDnsTimeout,
@@ -125,7 +125,6 @@ impl ErrorCode {
             Self::UpstreamConnectTimeout => "UPSTREAM_CONNECT_TIMEOUT",
             Self::UpstreamWriteTimeout => "UPSTREAM_WRITE_TIMEOUT",
             Self::UpstreamReadTimeout => "UPSTREAM_READ_TIMEOUT",
-            Self::SocketCidrDenied => "SOCKET_CIDR_DENIED",
             Self::SocketCapacityExhausted => "SOCKET_CAPACITY_EXHAUSTED",
             Self::SocketDnsFailed => "SOCKET_DNS_FAILED",
             Self::SocketDnsTimeout => "SOCKET_DNS_TIMEOUT",
@@ -174,7 +173,6 @@ impl ErrorCode {
             Self::UpstreamConnectTimeout,
             Self::UpstreamWriteTimeout,
             Self::UpstreamReadTimeout,
-            Self::SocketCidrDenied,
             Self::SocketCapacityExhausted,
             Self::SocketDnsFailed,
             Self::SocketDnsTimeout,

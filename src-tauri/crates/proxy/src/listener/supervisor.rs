@@ -1,7 +1,6 @@
 use std::{fmt::Debug, net::SocketAddr, sync::Arc, time::Duration};
 
 use futures_util::FutureExt;
-use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 
@@ -23,7 +22,6 @@ pub(crate) struct ListenerConfig {
     pub(crate) bind_addr: SocketAddr,
     pub(crate) runtime_epoch: uuid::Uuid,
     pub(crate) listener_id: ChannelId,
-    pub(crate) allowed_client_cidrs: Vec<String>,
     pub(crate) capacity: ListenerCapacity,
     pub(crate) shutdown_grace: Duration,
 }
@@ -79,7 +77,6 @@ impl<H: ConnectionHandler + ?Sized + 'static> ListenerSupervisor<H> {
                 "listener shutdown grace must be greater than zero",
             ));
         }
-        ListenerAdmission::new(config.allowed_client_cidrs.clone(), config.capacity.clone())?;
         Ok(Self {
             config,
             binder,
@@ -101,17 +98,14 @@ impl<H: ConnectionHandler + ?Sized + 'static> ListenerSupervisor<H> {
         self.run_bound(listener, cancellation).await
     }
 
-    fn prepare_run(&self) -> Result<(ListenerAdmission, ListenerRunContext)> {
-        let admission = ListenerAdmission::new(
-            self.config.allowed_client_cidrs.clone(),
-            self.config.capacity.clone(),
-        )?;
+    fn prepare_run(&self) -> (ListenerAdmission, ListenerRunContext) {
+        let admission = ListenerAdmission::new(self.config.capacity.clone());
         let context = ListenerRunContext::new(
             self.config.runtime_epoch,
             self.config.listener_id.clone(),
             Arc::clone(&self.clock),
         );
-        Ok((admission, context))
+        (admission, context)
     }
 
     pub(crate) async fn run_bound(
@@ -122,9 +116,8 @@ impl<H: ConnectionHandler + ?Sized + 'static> ListenerSupervisor<H> {
         let local_addr = listener
             .local_addr()
             .map_err(|error| ProxyError::io("read listener address", &error))?;
-        let (admission, run_context) = self.prepare_run()?;
+        let (admission, run_context) = self.prepare_run();
         let mut connections = JoinSet::new();
-        let rejection_projections = Arc::new(Semaphore::new(16));
         let mut listener_fault = None;
 
         loop {
@@ -149,35 +142,8 @@ impl<H: ConnectionHandler + ?Sized + 'static> ListenerSupervisor<H> {
                         }
                     };
                     let context = run_context.connection(peer_addr);
-                    let permit = match admission.admit(peer_addr.ip()) {
+                    let permit = match admission.admit() {
                         AdmissionDecision::Admitted(permit) => permit,
-                        AdmissionDecision::NetworkDenied => {
-                            self.observer.connection_rejected(
-                                peer_addr,
-                                ListenerRejection::NetworkDenied,
-                            );
-                            let Ok(projection_permit) = Arc::clone(&rejection_projections)
-                                .try_acquire_owned()
-                            else {
-                                drop(io);
-                                continue;
-                            };
-                            let handler = Arc::clone(&self.handler);
-                            let rejection_cancel = cancellation.child_token();
-                            connections.spawn(async move {
-                                let _permit = projection_permit;
-                                handler
-                                    .reject(
-                                        io,
-                                        context,
-                                        ListenerRejection::NetworkDenied,
-                                        rejection_cancel,
-                                    )
-                                    .await;
-                                TerminalConnectionOutcome::Success
-                            });
-                            continue;
-                        }
                         AdmissionDecision::CapacityExhausted => {
                             self.observer
                                 .connection_rejected(

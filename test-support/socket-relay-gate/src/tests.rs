@@ -86,6 +86,7 @@ async fn silent_tls_handshake_stops_and_releases_the_port() {
                 server_trust_der: vec![target.ca],
                 client_identity: None,
                 verify_hostname: true,
+                tls_server_name: None,
             },
         },
     )
@@ -102,21 +103,20 @@ async fn silent_tls_handshake_stops_and_releases_the_port() {
 
 #[tokio::test]
 async fn dns_lookup_is_cancelled_on_stop_and_releases_the_port() {
-    let reservation = TcpListener::bind("127.0.0.1:0")
+    let listener = TcpListener::bind("127.0.0.1:0")
         .await
-        .expect("reserve DNS relay");
-    let relay_address = reservation.local_addr().expect("relay address");
-    drop(reservation);
+        .expect("bind DNS relay");
+    let relay_address = listener.local_addr().expect("relay address");
     let service = Arc::new(
         SocketRelayService::build(SocketRelayConfig {
             bind_addr: relay_address,
-            allowed_client_cidrs: Vec::new(),
             upstream: SocketEndpoint {
                 host: "socket-relay-gate-does-not-exist.invalid".into(),
                 port: 443,
             },
             security: SocketRelaySecurity::Transparent,
             maximum_connections: 2,
+            read_chunk_bytes: 16 * 1024,
             connect_timeout: Duration::from_secs(30),
             read_timeout: Duration::from_secs(30),
             write_timeout: Duration::from_secs(30),
@@ -126,7 +126,11 @@ async fn dns_lookup_is_cancelled_on_stop_and_releases_the_port() {
     let cancellation = CancellationToken::new();
     let task_service = Arc::clone(&service);
     let task_cancellation = cancellation.clone();
-    let task = tokio::spawn(async move { task_service.serve(task_cancellation).await });
+    let task = tokio::spawn(async move {
+        task_service
+            .serve_prebound_listener(listener, task_cancellation)
+            .await
+    });
     let mut client = connect_retry(relay_address).await;
     client
         .write_all(b"begin DNS lookup")
@@ -146,29 +150,39 @@ async fn dns_lookup_is_cancelled_on_stop_and_releases_the_port() {
 }
 
 #[tokio::test]
-async fn server_first_half_close_keeps_client_to_server_direction_open() {
+async fn upstream_half_close_keeps_client_to_server_direction_open_after_lazy_dial() {
     let upstream = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind server-first target");
     let upstream_address = upstream.local_addr().expect("target address");
     let expected = payload();
-    let expected_for_target = expected.clone();
+    let expected_len = expected.len();
+    let trailing = b"after-upstream-half-close".to_vec();
     let target = tokio::spawn(async move {
         let (mut stream, _) = upstream.accept().await.expect("accept server-first");
+        let mut initial = vec![0; expected_len];
+        stream
+            .read_exact(&mut initial)
+            .await
+            .expect("read initial App ingress");
         stream
             .write_all(REPLY)
             .await
             .expect("write server-first reply");
         stream.shutdown().await.expect("server-first half close");
-        let mut received = Vec::new();
+        let mut received_after_half_close = Vec::new();
         stream
-            .read_to_end(&mut received)
+            .read_to_end(&mut received_after_half_close)
             .await
             .expect("read after half close");
-        received
+        (initial, received_after_half_close)
     });
     let relay = start_relay(upstream_address, SocketRelaySecurity::Transparent).await;
     let mut client = connect_retry(relay.address).await;
+    client
+        .write_all(&expected)
+        .await
+        .expect("write initial App ingress");
     let mut reply = Vec::new();
     client
         .read_to_end(&mut reply)
@@ -176,13 +190,13 @@ async fn server_first_half_close_keeps_client_to_server_direction_open() {
         .expect("read server-first reply");
     assert_eq!(reply, REPLY);
     client
-        .write_all(&expected)
+        .write_all(&trailing)
         .await
         .expect("write after server half close");
     client.shutdown().await.expect("client half close");
     assert_eq!(
         target.await.expect("join server-first target"),
-        expected_for_target
+        (expected, trailing)
     );
     relay.stop().await;
 }
@@ -194,21 +208,18 @@ async fn dns_and_connect_failure_recovers_on_the_next_connection() {
         .expect("reserve target");
     let upstream_address = reservation.local_addr().expect("target address");
     drop(reservation);
-    let relay_reservation = TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("reserve relay");
-    let relay_address = relay_reservation.local_addr().expect("relay address");
-    drop(relay_reservation);
+    let relay_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind relay");
+    let relay_address = relay_listener.local_addr().expect("relay address");
     let service = Arc::new(
         SocketRelayService::build(SocketRelayConfig {
             bind_addr: relay_address,
-            allowed_client_cidrs: Vec::new(),
             upstream: SocketEndpoint {
                 host: "127.0.0.1".into(),
                 port: upstream_address.port(),
             },
             security: SocketRelaySecurity::Transparent,
             maximum_connections: 4,
+            read_chunk_bytes: 16 * 1024,
             connect_timeout: Duration::from_millis(150),
             read_timeout: Duration::from_secs(2),
             write_timeout: Duration::from_secs(2),
@@ -218,7 +229,11 @@ async fn dns_and_connect_failure_recovers_on_the_next_connection() {
     let cancellation = CancellationToken::new();
     let task_service = Arc::clone(&service);
     let task_cancellation = cancellation.clone();
-    let task = tokio::spawn(async move { task_service.serve(task_cancellation).await });
+    let task = tokio::spawn(async move {
+        task_service
+            .serve_prebound_listener(relay_listener, task_cancellation)
+            .await
+    });
 
     let mut failed_client = connect_retry(relay_address).await;
     failed_client

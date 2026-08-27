@@ -7,9 +7,9 @@ use chrono::Utc;
 
 use super::Application;
 use crate::{
-    AndroidNetworkState, AppError, AppResult, OperationResultViewModel, ProxyWorkspace,
-    UiEventPayload, WorkspaceChangeKind, WorkspaceChangedViewModel, WorkspaceId,
-    WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiEventPayload,
+    WorkspaceChangeKind, WorkspaceChangedViewModel, WorkspaceId, WorkspaceSummaryViewModel,
+    WorkspaceValidationViewModel,
 };
 
 impl Application {
@@ -113,7 +113,7 @@ impl Application {
             return Ok(());
         }
 
-        let status = self.android.network_status().await.map_err(|error| {
+        let owners = self.android.runtime_owners().await.map_err(|error| {
             AppError::new(
                 "WORKSPACE_ANDROID_STATUS_UNAVAILABLE",
                 format!(
@@ -123,16 +123,11 @@ impl Application {
             )
             .retryable("请连接目标设备并刷新 VPN 状态，或先执行紧急恢复网络。")
         })?;
-        let active = matches!(
-            status.state,
-            AndroidNetworkState::StartRequested
-                | AndroidNetworkState::Running
-                | AndroidNetworkState::StopRequested
-        ) && status.active_profile_id.as_ref().is_some_and(|active_id| {
+        let active = owners.iter().any(|owner| {
             workspace
                 .android_network_profiles
                 .iter()
-                .any(|profile| profile.id == *active_id)
+                .any(|profile| profile.id == owner.profile_id)
         });
         if active {
             return Err(AppError::new(
@@ -153,33 +148,19 @@ impl Application {
     /// 停止，否则替换后将失去恢复该运行时所需的配置。
     pub(crate) async fn ensure_android_network_replacement_safe(
         &self,
-        observation_required: bool,
+        _observation_required: bool,
     ) -> AppResult<()> {
-        let status = match self.android.network_status().await {
-            Ok(status) => status,
-            Err(error)
-                if !observation_required
-                    && error.view_model.code == "ANDROID_DEVICE_NOT_SELECTED" =>
-            {
-                return Ok(());
-            }
-            Err(error) => {
-                return Err(AppError::new(
-                    "WORKSPACE_ANDROID_STATUS_UNAVAILABLE",
-                    format!(
-                        "无法确认设备网络接管是否已经停止：{}",
-                        error.view_model.message
-                    ),
-                )
-                .retryable("请连接目标设备并刷新 VPN 状态，或先执行紧急恢复网络。"));
-            }
-        };
-        if matches!(
-            status.state,
-            AndroidNetworkState::StartRequested
-                | AndroidNetworkState::Running
-                | AndroidNetworkState::StopRequested
-        ) {
+        let owners = self.android.runtime_owners().await.map_err(|error| {
+            AppError::new(
+                "WORKSPACE_ANDROID_STATUS_UNAVAILABLE",
+                format!(
+                    "无法确认设备网络接管是否已经停止：{}",
+                    error.view_model.message
+                ),
+            )
+            .retryable("请连接目标设备并刷新 VPN 状态，或先执行紧急恢复网络。")
+        })?;
+        if !owners.is_empty() {
             return Err(AppError::new(
                 "WORKSPACE_ANDROID_NETWORK_ACTIVE",
                 "设备网络接管仍在运行或正在切换状态，不能替换完整配置。",

@@ -94,20 +94,33 @@ fn terminal_action_rejects_wrong_offset_fields_and_unknown_payload_fields() {
         "/../../src/mcp/tests/fixtures/environment_configuration_candidate_v1/full-shape.json"
     )))
     .unwrap();
-    for (index, invalid) in [
-        (18, json!({"TruncateResponse":{"after_bytes":1}})),
+    for (variant, invalid) in [
         (
-            18,
+            "TruncateResponse",
+            json!({"TruncateResponse":{"after_bytes":1}}),
+        ),
+        (
+            "TruncateResponse",
             json!({"TruncateResponse":{"bytes":1,"unexpected":true}}),
         ),
-        (19, json!({"DisconnectDuringUpstreamWrite":{"bytes":1}})),
         (
-            20,
+            "DisconnectDuringUpstreamWrite",
+            json!({"DisconnectDuringUpstreamWrite":{"bytes":1}}),
+        ),
+        (
+            "DisconnectDuringDownstreamWrite",
             json!({"DisconnectDuringDownstreamWrite":{"after_bytes":1,"unexpected":true}}),
         ),
     ] {
         let mut candidate = fixture.clone();
-        candidate["workspace"]["http_rules"][0]["actions"][index]["Terminal"] = invalid;
+        let action = candidate["workspace"]["http_rules"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .flat_map(|rule| rule["actions"].as_array_mut().unwrap())
+            .find(|action| action["Terminal"].get(variant).is_some())
+            .expect("canonical fixture contains the requested terminal variant");
+        action["Terminal"] = invalid;
         assert!(
             parse_environment_configuration_candidate_v1(&serde_json::to_vec(&candidate).unwrap())
                 .is_err()

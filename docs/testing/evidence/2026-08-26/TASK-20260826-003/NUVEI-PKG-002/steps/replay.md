@@ -9,7 +9,6 @@ python3 -m compileall -q \
   examples/external-packages/nuvei_tango_json/nuvei_tango_json \
   examples/external-packages/nuvei_tango_json/tests
 
-git diff --check -- examples/external-packages/nuvei_tango_json
 ```
 
 判定：13 个测试 PASS；日志测试同时断言正常和错误元数据，并断言 Base64、合成敏感值和

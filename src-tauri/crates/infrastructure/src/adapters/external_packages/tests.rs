@@ -12,6 +12,7 @@ use super::*;
 
 mod backpressure;
 mod coverage;
+mod fault_isolation;
 
 type Peer = WebSocketStream<DuplexStream>;
 

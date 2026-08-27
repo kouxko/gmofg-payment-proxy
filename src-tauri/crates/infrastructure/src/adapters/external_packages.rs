@@ -6,9 +6,9 @@ mod error;
 mod handshake;
 
 pub use actor::{ExternalPackageClient, ExternalPackageConnectionConfig};
-pub use error::{
-    ExternalPackageConnectionError, ExternalPackageFatalProtocolError, ExternalPackageRemoteError,
-};
+#[cfg(test)]
+pub use error::ExternalPackageRemoteError;
+pub use error::{ExternalPackageConnectionError, ExternalPackageFatalProtocolError};
 pub use handshake::accept_packages_websocket;
 
 #[cfg(test)]

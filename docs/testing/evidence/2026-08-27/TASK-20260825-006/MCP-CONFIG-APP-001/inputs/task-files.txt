@@ -1,0 +1,9 @@
+src-tauri/crates/application/src/environment_configuration/apply.rs
+src-tauri/crates/infrastructure/src/sqlite/environment_configuration.rs
+src-tauri/crates/infrastructure/src/sqlite/environment_configuration_baseline.rs
+src-tauri/crates/infrastructure/src/sqlite/tests/environment_configuration_commit.rs
+src-tauri/crates/infrastructure/src/sqlite/tests/environment_configuration_commit/behavior.rs
+src-tauri/crates/infrastructure/src/sqlite/tests/environment_configuration_baseline_observer.rs
+src-tauri/crates/infrastructure/src/adapters/environment_apply_lease_tests/revision16_integration.rs
+src-tauri/crates/infrastructure/src/adapters/environment_apply_lease_tests/revision16_integration/internal_package_baseline.rs
+src-tauri/src/mcp/tests/g036_behavior_contract/application_lifecycle/production_apply.rs

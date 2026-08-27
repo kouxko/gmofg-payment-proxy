@@ -26,12 +26,41 @@ struct ConflictOnceRules {
     commit_attempts: AtomicUsize,
 }
 
+#[derive(Debug)]
+struct BlockingCommitRules {
+    snapshot: Mutex<RuleRuntimeSnapshot>,
+    commit_entered: Arc<tokio::sync::Notify>,
+    commit_release: Arc<tokio::sync::Notify>,
+}
+
+#[derive(Debug)]
+struct BlockingStopRules {
+    snapshot: Mutex<RuleRuntimeSnapshot>,
+    reset_calls: AtomicUsize,
+    stop_reset_entered: Arc<tokio::sync::Notify>,
+    stop_reset_release: Arc<tokio::sync::Notify>,
+    stop_reset_completed: Arc<tokio::sync::Notify>,
+}
+
+#[derive(Debug)]
+struct CapacityRules {
+    snapshot: Mutex<RuleRuntimeSnapshot>,
+    commit_calls: AtomicUsize,
+    first_commit_entered: Arc<tokio::sync::Notify>,
+    first_commit_release: Arc<tokio::sync::Notify>,
+}
+
+#[async_trait]
 impl RuntimeRuleRepository for RejectingCommitRules {
-    fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
+    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
         Ok(self.snapshot.lock().clone())
     }
 
-    fn commit_runtime_snapshot(&self, _: &RuleRuntimeSnapshot, _: &[Rule]) -> AppResult<u64> {
+    async fn commit_runtime_snapshot(
+        &self,
+        _: &RuleRuntimeSnapshot,
+        _: &[Rule],
+    ) -> AppResult<u64> {
         if self.reject_commit.load(AtomicOrdering::Acquire) {
             Err(AppError::new(
                 "REVISION_CONFLICT",
@@ -42,17 +71,18 @@ impl RuntimeRuleRepository for RejectingCommitRules {
         }
     }
 
-    fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
+    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
         Ok(())
     }
 }
 
+#[async_trait]
 impl RuntimeRuleRepository for StaticRules {
-    fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
+    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
         Ok(self.snapshot.lock().clone())
     }
 
-    fn commit_runtime_snapshot(
+    async fn commit_runtime_snapshot(
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
@@ -73,7 +103,7 @@ impl RuntimeRuleRepository for StaticRules {
         Ok(next_revision)
     }
 
-    fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
+    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
         let mut current = self.snapshot.lock();
         for rule in &mut current.rules {
             rule.hit_count = 0;
@@ -89,12 +119,13 @@ impl RuntimeRuleRepository for StaticRules {
     }
 }
 
+#[async_trait]
 impl RuntimeRuleRepository for ConflictOnceRules {
-    fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
+    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
         Ok(self.snapshot.lock().clone())
     }
 
-    fn commit_runtime_snapshot(
+    async fn commit_runtime_snapshot(
         &self,
         snapshot: &RuleRuntimeSnapshot,
         evaluated_rules: &[Rule],
@@ -129,9 +160,141 @@ impl RuntimeRuleRepository for ConflictOnceRules {
         Ok(next_revision)
     }
 
-    fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
+    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
         Ok(())
     }
+}
+
+#[async_trait]
+impl RuntimeRuleRepository for BlockingCommitRules {
+    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
+        Ok(self.snapshot.lock().clone())
+    }
+
+    async fn commit_runtime_snapshot(
+        &self,
+        snapshot: &RuleRuntimeSnapshot,
+        evaluated_rules: &[Rule],
+    ) -> AppResult<u64> {
+        self.commit_entered.notify_one();
+        self.commit_release.notified().await;
+        let mut current = self.snapshot.lock();
+        if current.collection_revision != snapshot.collection_revision
+            || current.signature != snapshot.signature
+        {
+            return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
+        }
+        let next_revision = current.collection_revision.saturating_add(1);
+        *current = RuleRuntimeSnapshot::with_collection_identity(
+            snapshot.collection_id,
+            next_revision,
+            evaluated_rules.to_vec(),
+        );
+        Ok(next_revision)
+    }
+
+    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl RuntimeRuleRepository for BlockingStopRules {
+    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
+        Ok(self.snapshot.lock().clone())
+    }
+
+    async fn commit_runtime_snapshot(
+        &self,
+        snapshot: &RuleRuntimeSnapshot,
+        evaluated_rules: &[Rule],
+    ) -> AppResult<u64> {
+        let mut current = self.snapshot.lock();
+        if current.collection_revision != snapshot.collection_revision
+            || current.signature != snapshot.signature
+        {
+            return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
+        }
+        let next_revision = current.collection_revision.saturating_add(1);
+        *current = RuleRuntimeSnapshot::with_collection_identity(
+            snapshot.collection_id,
+            next_revision,
+            evaluated_rules.to_vec(),
+        );
+        Ok(next_revision)
+    }
+
+    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
+        let call = self.reset_calls.fetch_add(1, AtomicOrdering::AcqRel);
+        if call > 0 {
+            self.stop_reset_entered.notify_one();
+            self.stop_reset_release.notified().await;
+        }
+        let mut current = self.snapshot.lock();
+        for rule in &mut current.rules {
+            rule.hit_count = 0;
+            rule.last_hit_at = None;
+        }
+        let revision = current.collection_revision.saturating_add(1);
+        *current = RuleRuntimeSnapshot::with_collection_identity(
+            current.collection_id,
+            revision,
+            current.rules.clone(),
+        );
+        if call > 0 {
+            self.stop_reset_completed.notify_one();
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl RuntimeRuleRepository for CapacityRules {
+    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
+        Ok(self.snapshot.lock().clone())
+    }
+
+    async fn commit_runtime_snapshot(
+        &self,
+        snapshot: &RuleRuntimeSnapshot,
+        evaluated_rules: &[Rule],
+    ) -> AppResult<u64> {
+        let call = self.commit_calls.fetch_add(1, AtomicOrdering::AcqRel);
+        if call == 0 {
+            self.first_commit_entered.notify_one();
+            self.first_commit_release.notified().await;
+        }
+        let mut current = self.snapshot.lock();
+        if current.collection_revision != snapshot.collection_revision
+            || current.signature != snapshot.signature
+        {
+            return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
+        }
+        let revision = current.collection_revision.saturating_add(1);
+        *current = RuleRuntimeSnapshot::with_collection_identity(
+            snapshot.collection_id,
+            revision,
+            evaluated_rules.to_vec(),
+        );
+        Ok(revision)
+    }
+
+    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn runtime_rule_repository_contract_is_async() {
+    let repository = StaticRules {
+        snapshot: Mutex::new(RuleRuntimeSnapshot::new(Vec::new())),
+    };
+
+    let snapshot = RuntimeRuleRepository::runtime_snapshot(&repository, &transaction_channel())
+        .await
+        .unwrap();
+
+    assert!(snapshot.rules.is_empty());
 }
 
 fn pause_rule() -> RuleViewModel {
@@ -266,6 +429,14 @@ fn test_context(epoch: Uuid, connection_id: Uuid, channel: ChannelId) -> Connect
             subject_summary: "CN=Test Client".into(),
         }),
     }
+}
+
+async fn open_test_connection(
+    pipeline: &RuntimePipelineAdapter,
+    context: &ConnectionContext,
+) {
+    pipeline.runtime_started(context.runtime_epoch).await;
+    pipeline.connection_opened(context).await;
 }
 
 fn upstream_tls_evidence(peer_subject: impl Into<String>) -> UpstreamSecurityEvidence {

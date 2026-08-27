@@ -1,7 +1,6 @@
 use super::*;
 use intercept_proxy_application::{
-    AndroidNetworkProfile, AndroidProxyRouteActivation, AndroidTargetApplication,
-    WeakNetworkProfile,
+    AndroidDeviceTarget, AndroidNetworkProfile, AndroidProxyRouteActivation, WeakNetworkProfile,
 };
 use intercept_proxy_domain::ListenerId;
 use std::path::Path;
@@ -10,14 +9,22 @@ use std::path::Path;
 mod fixtures;
 use fixtures::*;
 
+#[path = "tests/environment_apply_gate_revision16.rs"]
+mod environment_apply_gate_revision16;
 #[path = "tests/forward_control.rs"]
 mod forward_control;
+#[path = "tests/multi_device_registry.rs"]
+mod multi_device_registry;
+#[path = "tests/owner_async.rs"]
+mod owner_async;
 #[path = "tests/owner_crash_safety.rs"]
 mod owner_crash_safety;
 #[path = "tests/owner_lifecycle.rs"]
 mod owner_lifecycle;
 #[path = "tests/runtime_endpoints.rs"]
 mod runtime_endpoints;
+#[path = "tests/shared_gate.rs"]
+mod shared_gate;
 
 #[test]
 fn canonical_fingerprint_matches_android_for_cidr_and_url() {
@@ -63,7 +70,6 @@ fn reverse_runtime_mapping_accepts_adb_serial_prefix() {
         original_ports: vec![16_127],
         desktop_listener_bind_address: "0.0.0.0".into(),
         desktop_listener_port: 26_127,
-        allowed_client_cidrs: Vec::new(),
     }];
     let device_port = allocated_reverse_ports(&routes)["listener-a"];
 
@@ -124,7 +130,12 @@ async fn package_inventory_does_not_read_apk_signatures() {
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
     *adapter.selected_serial.write().unwrap() = Some("2740072778".into());
 
-    let packages = adapter.package_list().await.unwrap();
+    let packages = adapter
+        .package_list(AndroidDeviceTarget {
+            serial: "2740072778".into(),
+        })
+        .await
+        .unwrap();
 
     assert_eq!(packages.len(), 1);
     assert_eq!(packages[0].package_name, "com.example.client");

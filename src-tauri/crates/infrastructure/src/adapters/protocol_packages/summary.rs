@@ -47,6 +47,7 @@ pub enum ProtocolPackageInstallOutcome {
 }
 
 /// 启动时单个包的缓存恢复失败。
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProtocolPackageRecoveryFailure {
     /// 无法恢复的精确版本。
@@ -56,6 +57,7 @@ pub struct ProtocolPackageRecoveryFailure {
 }
 
 /// 启动缓存恢复报告；一个坏包不会阻止其他独立版本恢复。
+#[cfg(test)]
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct ProtocolPackageRecoveryReport {
     /// 已重新编译并进入进程缓存的版本。

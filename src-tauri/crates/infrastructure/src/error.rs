@@ -1,7 +1,8 @@
-//! 基础设施错误的稳定分类与脱敏展示。
+//! 基础设施错误的稳定分类与边界化展示。
 //!
-//! 底层库错误在这里被归并成应用可识别的错误码；消息可以说明失败阶段和路径，但禁止
-//! 携带证书私钥、口令、HTTP 载荷等敏感字节。
+//! 底层库错误在这里被归并成应用可识别的错误码。错误只承担失败分类与定位，不复制
+//! HTTP/Socket payload；完整业务报文属于 capture/Exchange observation。私钥和口令不是业务
+//! payload，始终只由专用凭据边界持有。
 
 use std::path::PathBuf;
 
@@ -26,7 +27,7 @@ pub enum InfrastructureErrorCode {
     ExportFailed,
 }
 
-/// Infrastructure failures deliberately omit secret data and payload bytes.
+/// Infrastructure failures carry stable error context; payload evidence belongs to observation stores.
 #[derive(Debug, Error)]
 pub enum InfrastructureError {
     #[error("数据库结构初始化或校验失败")]
@@ -44,6 +45,13 @@ pub enum InfrastructureError {
         #[source]
         source: rusqlite::Error,
     },
+    #[error("数据库阻塞任务异常终止")]
+    DatabaseExecutorTerminated {
+        #[source]
+        source: tokio::task::JoinError,
+    },
+    #[error("数据库阻塞执行器不可用")]
+    DatabaseExecutorUnavailable,
     #[error("数据已被其他操作更新")]
     RevisionConflict,
     #[error("当前平台不支持 Windows DPAPI")]
@@ -100,7 +108,9 @@ impl InfrastructureError {
             Self::DatabaseSchema { .. } | Self::DatabaseSchemaInvalid { .. } => {
                 InfrastructureErrorCode::DatabaseSchemaFailed
             }
-            Self::Database { .. } => InfrastructureErrorCode::DatabaseWriteFailed,
+            Self::Database { .. }
+            | Self::DatabaseExecutorTerminated { .. }
+            | Self::DatabaseExecutorUnavailable => InfrastructureErrorCode::DatabaseWriteFailed,
             Self::RevisionConflict => InfrastructureErrorCode::RevisionConflict,
             Self::DpapiUnsupported => InfrastructureErrorCode::DpapiUnsupported,
             Self::DpapiProtect => InfrastructureErrorCode::DpapiProtectFailed,

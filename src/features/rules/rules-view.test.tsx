@@ -20,6 +20,11 @@ const commandMocks = vi.hoisted(() => ({
   ruleActionDraft: vi.fn(),
   ruleSave: vi.fn(),
   ruleToggle: vi.fn(),
+  ruleCreateFromExchangeObservation: vi.fn(),
+}));
+const navigationMocks = vi.hoisted(() => ({
+  searchParams: new URLSearchParams(),
+  navigate: vi.fn(),
 }));
 const queryMocks = vi.hoisted(() => ({
   listRefresh: vi.fn(),
@@ -53,8 +58,8 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
 vi.mock("@/features/shell/workspace-navigation", () => ({
   useWorkspaceNavigation: () => ({
     pathname: "/rules",
-    searchParams: new URLSearchParams(),
-    navigate: vi.fn(),
+    searchParams: navigationMocks.searchParams,
+    navigate: navigationMocks.navigate,
   }),
 }));
 
@@ -167,6 +172,7 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
 describe("production RulesView async save guard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    navigationMocks.searchParams = new URLSearchParams();
     queryMocks.listRefresh.mockResolvedValue(undefined);
     commandMocks.ruleParseByteInput.mockResolvedValue({
       bytes: [123, 125],
@@ -190,6 +196,30 @@ describe("production RulesView async save guard", () => {
         return { type: kind };
       },
     );
+  });
+
+  it("loads an unsaved Mock draft from the exact Exchange response event", async () => {
+    navigationMocks.searchParams = new URLSearchParams(
+      "exchangeId=exchange-http-1&responseEvent=3",
+    );
+    commandMocks.ruleCreateFromExchangeObservation.mockResolvedValue({
+      ...draft,
+      rule_id: null,
+      expected_revision: null,
+      name: "Mock /payments/42",
+      enabled: false,
+    });
+
+    render(<RulesView />);
+
+    await waitFor(() =>
+      expect(commandMocks.ruleCreateFromExchangeObservation).toHaveBeenCalledWith(
+        "exchange-http-1",
+        3,
+      ),
+    );
+    expect(await screen.findByDisplayValue("Mock /payments/42")).toBeVisible();
+    expect(navigationMocks.navigate).toHaveBeenCalledWith("/rules");
   });
 
   it("toggles one-shot by clicking the HeroUI switch control", async () => {

@@ -101,6 +101,30 @@ fn byte_budget_rejects_large_observation_without_blocking_or_enqueueing() {
 }
 
 #[test]
+fn byte_budget_b_and_b_plus_one_leave_business_result_unchanged() {
+    let (channel, receiver) = sync_channel(2);
+    let shared_budget = Arc::new(QueueByteBudget::new(128));
+    let sender = BoundedSender::from_sync_sender(channel, Arc::clone(&shared_budget));
+
+    assert_eq!(sender.try_send(Occupier(128)), Ok(()));
+    let business_result = || {
+        let observation_result = sender.try_send(Occupier(1));
+        assert_eq!(
+            observation_result,
+            Err(crate::runtime_logs::nonblocking_queue::QueueDropReason::BytesFull)
+        );
+        Result::<_, &'static str>::Ok("business-completed")
+    };
+
+    assert_eq!(business_result(), Ok("business-completed"));
+    assert_eq!(
+        receiver.try_iter().count(),
+        1,
+        "B is admitted and B+1 drops"
+    );
+}
+
+#[test]
 fn oversized_last_event_publishes_loss_refresh_from_consumer_thread() {
     let store = Arc::new(ExchangeObservationStore::new(Arc::new(
         CapacityLedger::new(64 * 1024),
@@ -127,7 +151,8 @@ fn oversized_last_event_publishes_loss_refresh_from_consumer_thread() {
     });
     consumer.shutdown().unwrap();
 
-    assert_eq!(store.ignored_events(), 1);
+    assert_eq!(store.dropped_events(), 1);
+    assert_eq!(store.ignored_events(), 0);
     let replay = events.replay_after(0);
     assert_eq!(replay.events.len(), 1);
     assert!(matches!(
@@ -161,7 +186,8 @@ fn runtime_payload_pressure_cannot_consume_exchange_loss_refresh_lane() {
     });
     consumer.shutdown().unwrap();
 
-    assert_eq!(store.ignored_events(), 1);
+    assert_eq!(store.dropped_events(), 1);
+    assert_eq!(store.ignored_events(), 0);
     let replay = events.replay_after(0);
     assert_eq!(replay.events.len(), 1);
     assert!(matches!(

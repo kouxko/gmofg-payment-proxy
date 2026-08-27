@@ -7,6 +7,7 @@ use std::{
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
+    sync::Notify,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -17,11 +18,15 @@ use super::{
 };
 
 #[derive(Debug, Default)]
-struct RecordingObserver(Mutex<Vec<SocketConnectionEvent>>);
+struct RecordingObserver {
+    events: Mutex<Vec<SocketConnectionEvent>>,
+    changed: Notify,
+}
 
 impl SocketConnectionObserver for RecordingObserver {
     fn record(&self, event: SocketConnectionEvent) {
-        self.0.lock().unwrap().push(event);
+        self.events.lock().unwrap().push(event);
+        self.changed.notify_waiters();
     }
 }
 
@@ -35,7 +40,6 @@ fn reserve_address() -> SocketAddr {
 fn transparent_config(bind_addr: SocketAddr, upstream: SocketAddr) -> SocketRelayConfig {
     SocketRelayConfig {
         bind_addr,
-        allowed_client_cidrs: Vec::new(),
         upstream: SocketEndpoint {
             host: upstream.ip().to_string(),
             port: upstream.port(),
@@ -50,13 +54,15 @@ fn transparent_config(bind_addr: SocketAddr, upstream: SocketAddr) -> SocketRela
 }
 
 async fn connect_retry(address: SocketAddr) -> TcpStream {
-    for _ in 0..40 {
-        if let Ok(stream) = TcpStream::connect(address).await {
-            return stream;
-        }
-        tokio::task::yield_now().await;
-    }
-    panic!("socket listener did not start at {address}");
+    TcpStream::connect(address)
+        .await
+        .unwrap_or_else(|error| panic!("connect to prebound socket listener {address}: {error}"))
+}
+
+async fn bind_listener() -> (TcpListener, SocketAddr) {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    (listener, address)
 }
 
 async fn wait_for_event(
@@ -65,10 +71,11 @@ async fn wait_for_event(
 ) {
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            if observer.0.lock().unwrap().iter().any(&predicate) {
+            let changed = observer.changed.notified();
+            if observer.events.lock().unwrap().iter().any(&predicate) {
                 return;
             }
-            tokio::time::sleep(Duration::from_millis(1)).await;
+            changed.await;
         }
     })
     .await
@@ -94,13 +101,17 @@ async fn transparent_relay_preserves_binary_and_asymmetric_half_close() {
         stream.shutdown().await.unwrap();
     });
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let service = Arc::new(
         SocketRelayService::build(transparent_config(bind_addr, upstream_address)).unwrap(),
     );
     let cancellation = CancellationToken::new();
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { service.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        service
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     client.write_all(&payload).await.unwrap();
@@ -129,13 +140,17 @@ async fn transparent_mode_relays_an_end_to_end_tls_client_hello_opaquely() {
         stream.shutdown().await.unwrap();
     });
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let service = Arc::new(
         SocketRelayService::build(transparent_config(bind_addr, upstream_address)).unwrap(),
     );
     let cancellation = CancellationToken::new();
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { service.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        service
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     client.write_all(expected).await.unwrap();
@@ -185,7 +200,7 @@ async fn cancellation_before_first_ingress_never_opens_upstream_and_resets_metri
         let (_stream, _) = upstream.accept().await.unwrap();
         std::future::pending::<()>().await;
     });
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(RecordingObserver::default());
     let service = Arc::new(
         SocketRelayService::build_with_observer(
@@ -204,7 +219,11 @@ async fn cancellation_before_first_ingress_never_opens_upstream_and_resets_metri
         listener_run_epoch: uuid::Uuid::new_v4(),
     };
     let expected_run = run.clone();
-    let server = tokio::spawn(async move { running.serve_with_context(run, server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener_with_context(listener, run, server_cancel)
+            .await
+    });
     let _client = connect_retry(bind_addr).await;
     wait_for_event(&observer, |event| {
         matches!(event, SocketConnectionEvent::Admitted { .. })
@@ -215,7 +234,7 @@ async fn cancellation_before_first_ingress_never_opens_upstream_and_resets_metri
     upstream_task.abort();
 
     {
-        let events = observer.0.lock().unwrap();
+        let events = observer.events.lock().unwrap();
         assert_eq!(
             events
                 .iter()
@@ -252,7 +271,7 @@ async fn cancellation_before_first_ingress_never_opens_upstream_and_resets_metri
 }
 
 #[tokio::test]
-async fn cidr_and_capacity_rejections_are_typed_and_counted() {
+async fn capacity_rejections_are_typed_and_counted() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
     let upstream_task = tokio::spawn(async move {
@@ -260,7 +279,7 @@ async fn cidr_and_capacity_rejections_are_typed_and_counted() {
         std::future::pending::<()>().await;
     });
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(RecordingObserver::default());
     let mut config = transparent_config(bind_addr, upstream_address);
     config.maximum_connections = 1;
@@ -269,7 +288,11 @@ async fn cidr_and_capacity_rejections_are_typed_and_counted() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
     let mut first = connect_retry(bind_addr).await;
     first.write_all(b"open").await.unwrap();
     wait_for_event(&observer, |event| {
@@ -310,7 +333,7 @@ async fn pre_open_dns_and_connect_failures_have_typed_stages() {
             &["SOCKET_CONNECT_FAILED", "SOCKET_CONNECT_TIMEOUT"][..],
         ),
     ] {
-        let bind_addr = reserve_address();
+        let (listener, bind_addr) = bind_listener().await;
         let observer = Arc::new(RecordingObserver::default());
         let mut config = transparent_config(bind_addr, "127.0.0.1:1".parse().unwrap());
         config.upstream = SocketEndpoint { host, port };
@@ -319,7 +342,11 @@ async fn pre_open_dns_and_connect_failures_have_typed_stages() {
         let cancellation = CancellationToken::new();
         let running = Arc::clone(&service);
         let server_cancel = cancellation.clone();
-        let server = tokio::spawn(async move { running.serve(server_cancel).await });
+        let server = tokio::spawn(async move {
+            running
+                .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+                .await
+        });
         let mut client = connect_retry(bind_addr).await;
         client.write_all(b"trigger-connect").await.unwrap();
         wait_for_event(&observer, |event| match event {
@@ -344,7 +371,7 @@ async fn read_timeout_is_directional_and_terminal_is_unique() {
         let (_stream, _) = upstream.accept().await.unwrap();
         std::future::pending::<()>().await;
     });
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(RecordingObserver::default());
     let mut config = transparent_config(bind_addr, upstream_address);
     config.read_timeout = Duration::from_millis(10);
@@ -353,7 +380,11 @@ async fn read_timeout_is_directional_and_terminal_is_unique() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
     let _client = connect_retry(bind_addr).await;
     wait_for_event(&observer, |event| {
         matches!(event, SocketConnectionEvent::Closed { .. })
@@ -363,7 +394,7 @@ async fn read_timeout_is_directional_and_terminal_is_unique() {
     server.await.unwrap().unwrap();
     upstream_task.abort();
 
-    let events = observer.0.lock().unwrap();
+    let events = observer.events.lock().unwrap();
     let closed = events
         .iter()
         .filter_map(|event| match event {

@@ -1,5 +1,142 @@
 use super::*;
 
+#[derive(Debug)]
+struct DiagnosticAndroidPort {
+    owners: Vec<AndroidRuntimeOwnerViewModel>,
+}
+
+#[async_trait]
+impl AndroidControlPort for DiagnosticAndroidPort {
+    async fn adb_get(&self) -> AppResult<AndroidAdbViewModel> {
+        unused()
+    }
+    async fn adb_select(&self, _: String) -> AppResult<AndroidAdbViewModel> {
+        unused()
+    }
+    async fn device_list(&self) -> AppResult<Vec<AndroidDeviceViewModel>> {
+        unused()
+    }
+    async fn package_list(
+        &self,
+        _: AndroidDeviceTarget,
+    ) -> AppResult<Vec<AndroidPackageViewModel>> {
+        unused()
+    }
+    async fn package_get(
+        &self,
+        _: AndroidDeviceTarget,
+        _: String,
+    ) -> AppResult<AndroidPackageViewModel> {
+        unused()
+    }
+    async fn companion_install(
+        &self,
+        _: AndroidDeviceTarget,
+        _: bool,
+    ) -> AppResult<AndroidCompanionInstallViewModel> {
+        unused()
+    }
+    async fn vpn_open_consent(
+        &self,
+        _: AndroidDeviceTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_start(
+        &self,
+        _: AndroidDeviceTarget,
+        _: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_apply(
+        &self,
+        _: AndroidRuntimeTarget,
+        _: AndroidNetworkActivation,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_runtime_ready(
+        &self,
+        _: AndroidDeviceTarget,
+        _: &AndroidNetworkActivation,
+        _: &AndroidNetworkStatusViewModel,
+    ) -> AppResult<bool> {
+        unused()
+    }
+    async fn network_stop(
+        &self,
+        _: AndroidRuntimeTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn emergency_restore(
+        &self,
+        _: AndroidRuntimeTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        unused()
+    }
+    async fn network_status(
+        &self,
+        target: AndroidDeviceTarget,
+    ) -> AppResult<AndroidNetworkStatusViewModel> {
+        let owner = self
+            .owners
+            .iter()
+            .find(|owner| owner.serial == target.serial)
+            .unwrap();
+        if owner.serial == "DEVICE-A" {
+            return Err(AppError::new("ANDROID_STATUS_FAILED", "status failed"));
+        }
+        Ok(AndroidNetworkStatusViewModel {
+            serial: owner.serial.clone(),
+            runtime_epoch: Some(owner.epoch),
+            state: AndroidNetworkState::Running,
+            state_text: "运行中".into(),
+            ui_tone: UiTone::Positive,
+            verified: true,
+            transport: AndroidControlTransport::LocalAbstractSocket,
+            active_profile_id: Some(owner.profile_id.clone()),
+            active_profile_fingerprint: None,
+            active_route_fingerprint: None,
+            active_route_count: 0,
+            companion_process_running: Some(true),
+            message: "running".into(),
+            unsupported_fields: Vec::new(),
+            stats: None,
+        })
+    }
+    async fn runtime_owners(&self) -> AppResult<Vec<AndroidRuntimeOwnerViewModel>> {
+        Ok(self.owners.clone())
+    }
+    async fn network_runtime_endpoints(
+        &self,
+        target: AndroidDeviceTarget,
+        _: Option<AndroidNetworkActivation>,
+    ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
+        if target.serial == "DEVICE-A" {
+            return Err(AppError::new(
+                "ANDROID_ENDPOINTS_FAILED",
+                "endpoints failed",
+            ));
+        }
+        Ok(Vec::new())
+    }
+}
+
+fn diagnostic_owner(serial: &str) -> AndroidRuntimeOwnerViewModel {
+    AndroidRuntimeOwnerViewModel {
+        serial: serial.into(),
+        epoch: Uuid::new_v4(),
+        mode: AndroidRuntimeOwnerMode::DeviceOnly,
+        profile_id: format!("profile-{serial}"),
+        state: AndroidRuntimeOwnerState::Active,
+        source: AndroidRuntimeOwnerSource::Recovery,
+        transition_reason: AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage,
+        updated_at: Utc::now(),
+    }
+}
+
 fn record_listener_diagnostics(application: &Application, listener_id: ListenerId) {
     for index in 0..150 {
         application.diagnostic_log_record(DiagnosticLogEntryViewModel {
@@ -81,13 +218,17 @@ async fn diagnostic_report_aggregates_bounded_listener_evidence_and_markdown() {
             .iter()
             .all(|row| { row.listener_id.as_deref() == Some(listener.id.to_string().as_str()) })
     );
-    assert!(report.bundle.android_network_status.is_none());
-    assert!(report.bundle.android_runtime_owner.is_none());
+    assert!(report.bundle.android_network_statuses.is_empty());
+    assert!(report.bundle.android_runtime_owners.is_empty());
     assert!(report.bundle.android_runtime_endpoints.is_empty());
-    assert!(report.bundle.collection_errors.iter().any(|error| {
-        error.section == DiagnosticReportSection::AndroidNetworkStatus
-            && error.code == "ANDROID_DEVICE_NOT_SELECTED"
-    }));
+    assert!(
+        report
+            .bundle
+            .collection_errors
+            .iter()
+            .all(|error| { error.section != DiagnosticReportSection::AndroidNetworkStatus }),
+        "没有保留运行所有者时不得虚构一个依赖全局设备选择的 Android 状态查询"
+    );
     assert!(
         report
             .bundle
@@ -107,6 +248,53 @@ async fn diagnostic_report_aggregates_bounded_listener_evidence_and_markdown() {
             .contains("转发方式：按客户端请求目标动态转发")
     );
     assert!(report.markdown.chars().count() <= DIAGNOSTIC_REPORT_MARKDOWN_MAX_CHARS);
+}
+
+#[tokio::test]
+async fn diagnostic_android_errors_keep_owner_serial_and_epoch() {
+    let ports = Arc::new(FakePorts::default());
+    let owner_a = diagnostic_owner("DEVICE-A");
+    let owner_b = diagnostic_owner("DEVICE-B");
+    let application = application_with_fake_ports_and_android(
+        Arc::clone(&ports),
+        Arc::new(DiagnosticAndroidPort {
+            owners: vec![owner_a.clone(), owner_b],
+        }),
+    );
+    let workspace = application.workspace_list().await.unwrap()[0].clone();
+    let listener = application
+        .workspace_get(workspace.id)
+        .await
+        .unwrap()
+        .listeners[0]
+        .clone();
+
+    let report = application
+        .diagnostic_report_generate(DiagnosticReportQuery {
+            workspace_id: workspace.id,
+            listener_id: listener.id,
+        })
+        .await
+        .unwrap();
+
+    let android_errors = report
+        .bundle
+        .collection_errors
+        .iter()
+        .filter(|error| {
+            matches!(
+                error.section,
+                DiagnosticReportSection::AndroidNetworkStatus
+                    | DiagnosticReportSection::AndroidRuntimeEndpoints
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(android_errors.len(), 2);
+    assert!(android_errors.iter().all(|error| {
+        error.entity_id.as_deref() == Some("DEVICE-A") && error.runtime_epoch == Some(owner_a.epoch)
+    }));
+    assert_eq!(report.bundle.android_network_statuses.len(), 1);
+    assert_eq!(report.bundle.android_network_statuses[0].serial, "DEVICE-B");
 }
 
 #[tokio::test]

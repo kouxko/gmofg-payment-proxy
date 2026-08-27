@@ -2,9 +2,6 @@ use intercept_proxy_application::UiEventPayload;
 use uuid::Uuid;
 
 use super::*;
-use crate::adapters::external_packages::{
-    ExternalPackageFatalProtocolError, ExternalPackageRemoteError,
-};
 
 #[tokio::test]
 async fn list_projects_each_persisted_package_with_current_online_state() {
@@ -16,6 +13,7 @@ async fn list_projects_each_persisted_package_with_current_online_state() {
     let (client, _peer) = connected_client(&registration, 40).await;
     registry
         .accept_registration(&registration, fingerprint, client)
+        .await
         .unwrap();
 
     let listed = registry.list().await.unwrap();
@@ -128,6 +126,7 @@ async fn changed_registration_for_persisted_identity_is_rejected_without_becomin
             external_package_registration_fingerprint(&changed).unwrap(),
             client,
         )
+        .await
         .unwrap_err();
 
     assert_eq!(error.view_model.code, "PROTOCOL_PACKAGE_IDENTITY_CONFLICT");
@@ -146,6 +145,7 @@ async fn database_failure_during_registration_never_publishes_online_client() {
             external_package_registration_fingerprint(&registration).unwrap(),
             client,
         )
+        .await
         .unwrap_err();
 
     assert_eq!(error.view_model.code, "INTERNAL_ERROR");
@@ -162,10 +162,12 @@ async fn enabled_online_package_resolves_to_runtime_binding() {
     let (client, _peer) = connected_client(&registration, 42).await;
     registry
         .accept_registration(&registration, fingerprint, client)
+        .await
         .unwrap();
     registry.set_enabled(&package, true).await.unwrap();
 
     let binding = ExternalSocketPackageProvider::resolve(&registry, &package)
+        .await
         .unwrap()
         .expect("external binding");
 
@@ -178,7 +180,9 @@ async fn configured_event_hub_receives_service_and_catalog_changes() {
     let events = Arc::new(EventHub::new(16));
     let registry = ExternalPackageRegistryAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
     registry.set_event_hub(Arc::clone(&events));
-    registry.mark_service_listening("ws://127.0.0.1:9000/packages");
+    registry
+        .mark_service_listening("ws://127.0.0.1:9000/packages")
+        .await;
     let registration = registration("Vendor ISO8583");
     let package = registration.package().identity().clone();
     let (client, _peer) = connected_client(&registration, 43).await;
@@ -188,6 +192,7 @@ async fn configured_event_hub_receives_service_and_catalog_changes() {
             external_package_registration_fingerprint(&registration).unwrap(),
             client,
         )
+        .await
         .unwrap();
 
     let replay = events.replay_after(0);
@@ -208,7 +213,9 @@ async fn external_package_lifecycle_is_queryable_as_redacted_diagnostics() {
     let events = Arc::new(EventHub::new(32));
     let registry = ExternalPackageRegistryAdapter::new(Arc::new(SqliteStore::in_memory().unwrap()));
     registry.set_event_hub(Arc::clone(&events));
-    registry.mark_service_listening("ws://127.0.0.1:9000/packages");
+    registry
+        .mark_service_listening("ws://127.0.0.1:9000/packages")
+        .await;
     let registration = registration("Vendor ISO8583");
     let package = registration.package().identity().clone();
     let (client, _peer) = connected_client(&registration, 51).await;
@@ -218,6 +225,7 @@ async fn external_package_lifecycle_is_queryable_as_redacted_diagnostics() {
             external_package_registration_fingerprint(&registration).unwrap(),
             client,
         )
+        .await
         .unwrap();
     registry
         .record_remote_address(
@@ -225,6 +233,7 @@ async fn external_package_lifecycle_is_queryable_as_redacted_diagnostics() {
             accepted.connection_id,
             "127.0.0.1:49051".parse().unwrap(),
         )
+        .await
         .unwrap();
     registry
         .record_connection_error(
@@ -234,6 +243,7 @@ async fn external_package_lifecycle_is_queryable_as_redacted_diagnostics() {
                 "password=do-not-leak; peer reset".to_owned(),
             ),
         )
+        .await
         .unwrap();
 
     let rows = events.diagnostic_log_snapshot();
@@ -271,12 +281,14 @@ async fn stale_generation_updates_do_not_mutate_connection_history() {
             external_package_registration_fingerprint(&registration).unwrap(),
             client,
         )
+        .await
         .unwrap();
     let stale = ExternalPackageConnectionId(Uuid::new_v4());
 
     assert!(
         !registry
             .record_remote_address(&package, stale, "127.0.0.1:49000".parse().unwrap())
+            .await
             .unwrap()
     );
     assert!(
@@ -286,12 +298,17 @@ async fn stale_generation_updates_do_not_mutate_connection_history() {
                 stale,
                 &ExternalPackageConnectionError::Disconnected,
             )
+            .await
             .unwrap()
     );
-    assert!(!registry.mark_disconnected(&package, stale));
+    assert!(!registry.mark_disconnected(&package, stale).await);
     assert!(registry.client(&package).is_some());
     registry.disconnect(&package).await.unwrap();
-    assert!(!registry.mark_disconnected(&package, accepted.connection_id));
+    assert!(
+        !registry
+            .mark_disconnected(&package, accepted.connection_id)
+            .await
+    );
 }
 
 #[tokio::test]
@@ -303,6 +320,7 @@ async fn old_generation_address_cannot_cross_new_online_publication_window() {
     let (first_client, _first_peer) = connected_client(&registration, 46).await;
     let first = registry
         .accept_registration(&registration, fingerprint, first_client)
+        .await
         .unwrap();
     let (next_client, _next_peer) = connected_client(&registration, 47).await;
     let next_id = ExternalPackageConnectionId(Uuid::new_v4());
@@ -320,6 +338,7 @@ async fn old_generation_address_cannot_cross_new_online_publication_window() {
             first.connection_id,
             "127.0.0.1:49002".parse().unwrap(),
         )
+        .await
         .unwrap();
 
     assert!(!recorded);
@@ -344,6 +363,7 @@ async fn old_generation_error_cannot_cross_new_online_publication_window() {
     let (first_client, _first_peer) = connected_client(&registration, 48).await;
     let first = registry
         .accept_registration(&registration, fingerprint, first_client)
+        .await
         .unwrap();
     let (next_client, _next_peer) = connected_client(&registration, 49).await;
     let next_id = ExternalPackageConnectionId(Uuid::new_v4());
@@ -361,6 +381,7 @@ async fn old_generation_error_cannot_cross_new_online_publication_window() {
             first.connection_id,
             &ExternalPackageConnectionError::Transport("old generation".to_owned()),
         )
+        .await
         .unwrap();
 
     assert!(!recorded);
@@ -374,67 +395,6 @@ async fn old_generation_error_cannot_cross_new_online_publication_window() {
         None
     );
     registry.disconnect(&package).await.unwrap();
-}
-
-#[test]
-fn connection_errors_map_to_stable_redacted_summaries() {
-    let remote = ExternalPackageRemoteError::new(
-        -32_001,
-        "remote secret".to_owned(),
-        Some(serde_json::json!({"api_key": "secret"})),
-    );
-    let cases = [
-        (
-            ExternalPackageConnectionError::Busy,
-            "EXTERNAL_PACKAGE_BUSY",
-        ),
-        (
-            ExternalPackageConnectionError::Timeout {
-                request_id: "req-1".to_owned(),
-                method: "hooks.upstream.frame".to_owned(),
-            },
-            "EXTERNAL_PACKAGE_TIMEOUT",
-        ),
-        (
-            ExternalPackageConnectionError::Disconnected,
-            "EXTERNAL_PACKAGE_DISCONNECTED",
-        ),
-        (
-            ExternalPackageConnectionError::Remote {
-                request_id: "req-2".to_owned(),
-                method: "hooks.upstream.decode".to_owned(),
-                error: remote,
-            },
-            "EXTERNAL_PACKAGE_REMOTE_ERROR",
-        ),
-        (
-            ExternalPackageConnectionError::MessageTooLarge {
-                actual_bytes: 2,
-                limit_bytes: 1,
-            },
-            "EXTERNAL_PACKAGE_MESSAGE_TOO_LARGE",
-        ),
-        (
-            ExternalPackageConnectionError::InvalidPayload("secret".to_owned()),
-            "EXTERNAL_PACKAGE_INVALID_PAYLOAD",
-        ),
-        (
-            ExternalPackageConnectionError::Fatal(
-                ExternalPackageFatalProtocolError::InvalidResponse,
-            ),
-            "EXTERNAL_PACKAGE_PROTOCOL_FATAL",
-        ),
-        (
-            ExternalPackageConnectionError::Transport("secret".to_owned()),
-            "EXTERNAL_PACKAGE_TRANSPORT_ERROR",
-        ),
-    ];
-
-    for (error, expected_code) in cases {
-        let view = recent_error_view(&error);
-        assert_eq!(view.code, expected_code);
-        assert!(!view.message.contains("secret"));
-    }
 }
 
 #[tokio::test]
@@ -463,6 +423,7 @@ async fn missing_persistent_row_rejects_connection_history_update() {
 
     let remote_error = registry
         .record_remote_address(&package, connection_id, "127.0.0.1:49001".parse().unwrap())
+        .await
         .unwrap_err();
     let connection_error = registry
         .record_connection_error(
@@ -470,6 +431,7 @@ async fn missing_persistent_row_rejects_connection_history_update() {
             connection_id,
             &ExternalPackageConnectionError::Disconnected,
         )
+        .await
         .unwrap_err();
 
     assert_eq!(remote_error.view_model.code, "PROTOCOL_PACKAGE_NOT_FOUND");

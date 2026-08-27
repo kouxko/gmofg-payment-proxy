@@ -139,7 +139,7 @@ async fn selected_workspace_owns_rule_list_runtime_snapshot_and_revision() {
     let listed = adapter.list().await.expect("selected rules");
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].name, "second workspace rule");
-    let runtime = runtime_snapshot(&adapter);
+    let runtime = runtime_snapshot(&adapter).await;
     assert_eq!(runtime.collection_revision, second_workspace.revision.get());
     assert_eq!(runtime.rules, vec![second_rule]);
 
@@ -161,7 +161,7 @@ async fn runtime_snapshot_commit_stays_bound_to_owning_workspace_after_ui_switch
         .save(request_delay_draft("shared rule", false))
         .await
         .expect("save rule");
-    let stale = runtime_snapshot(&adapter);
+    let stale = runtime_snapshot(&adapter).await;
 
     let second = ProxyWorkspace {
         revision: Revision::new(stale.collection_revision),
@@ -177,6 +177,7 @@ async fn runtime_snapshot_commit_stays_bound_to_owning_workspace_after_ui_switch
 
     let revision = adapter
         .commit_runtime_snapshot(&stale, &stale.rules)
+        .await
         .expect("runtime commit remains on first workspace");
     assert_eq!(revision, stale.collection_revision + 1);
     let snapshot = store.load_workspaces().expect("workspaces");
@@ -190,4 +191,42 @@ async fn runtime_snapshot_commit_stays_bound_to_owning_workspace_after_ui_switch
             .revision,
         revision
     );
+}
+
+#[test]
+fn application_rule_write_rejects_workspace_that_is_no_longer_selected() {
+    let store = Arc::new(SqliteStore::in_memory().expect("store"));
+    let first = seed_workspace(&store, Vec::new());
+    let second = seed_workspace(&store, Vec::new());
+    store
+        .select_workspace(first.id.as_uuid())
+        .expect("select first workspace");
+
+    let mut edited_first = first.clone();
+    edited_first.rules.push(
+        Rule::create(
+            to_domain_draft(&request_delay_draft("stale editor rule", false), 1).expect("draft"),
+        )
+        .expect("rule"),
+    );
+    store
+        .select_workspace(second.id.as_uuid())
+        .expect("switch selected workspace");
+
+    let error = RuleRepositoryAdapter::save_selected_workspace_to(
+        &store,
+        edited_first,
+        first.revision.get(),
+    )
+    .expect_err("application write must stay bound to current selection");
+    assert_eq!(error.view_model.code, "REVISION_CONFLICT");
+
+    let snapshot = store.load_workspaces().expect("workspaces");
+    assert_eq!(snapshot.selected_id, Some(second.id.as_uuid()));
+    let persisted_first = snapshot
+        .records
+        .into_iter()
+        .find(|record| record.id == first.id.as_uuid())
+        .expect("first workspace");
+    assert_eq!(persisted_first.revision, first.revision.get());
 }

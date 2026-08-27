@@ -63,7 +63,7 @@ describe("统一代理监听编辑器", () => {
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
-    expect(screen.getByText(/签发上游 Server 证书的单个 CA 锚/)).toBeVisible();
+    expect(screen.getByText(/单个 CA，或选择一个按签发顺序包含多张 CA/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));

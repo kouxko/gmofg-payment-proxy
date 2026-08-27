@@ -52,7 +52,7 @@ impl RuntimePipelineAdapter {
         Ok(resolved.unwrap_or_else(|| Arc::clone(&self.body_codec)))
     }
 
-    pub(super) fn evaluate(
+    pub(super) async fn evaluate(
         &self,
         context: &ConnectionContext,
         stage: DomainMessageStage,
@@ -61,6 +61,7 @@ impl RuntimePipelineAdapter {
     ) -> ProxyResult<EvaluatedRules> {
         self.rule_runtime
             .evaluate(context, stage, message, body_codec)
+            .await
     }
 
     pub(super) fn channel_label(&self, channel_id: &str) -> String {

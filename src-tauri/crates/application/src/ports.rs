@@ -23,14 +23,26 @@ use crate::{
     BreakpointDetailViewModel, BreakpointDraft, BreakpointValidationViewModel,
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, CertificateItemViewModel,
     CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
+    ExchangeObservationPage, ExchangeObservationQuery, ExchangeObservationRecord,
     FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
     ListenerId, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
     ProxyListener, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
     RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
     SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
-    SettingsViewModel, WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    SettingsViewModel, WorkspaceCollectionViewModel, WorkspaceId, WorkspaceSummaryViewModel,
+    WorkspaceValidationViewModel,
 };
+
+/// Read-only access to the bounded in-process Exchange observation timeline.
+///
+/// Storage, retention, producer counters, and UI mutation ownership remain in an outer adapter;
+/// presentation adapters query the same store only through this Application dependency port.
+pub trait ExchangeObservationQueryPort: Send + Sync + std::fmt::Debug {
+    fn query(&self, query: &ExchangeObservationQuery) -> ExchangeObservationPage;
+
+    fn get(&self, exchange_id: &str) -> Option<ExchangeObservationRecord>;
+}
 
 #[async_trait]
 /// Listener TLS 材料的原生导入边界。
@@ -111,6 +123,8 @@ pub trait ProtectedSecretPort: Send + Sync + std::fmt::Debug {
 /// 仓储只处理领域模型及其本机安全引用。单文件证书载荷由应用门面通过证书端口恢复后，
 /// 再把重写过引用的 Workspace 交给仓储持久化。
 pub trait WorkspaceRepositoryPort: Send + Sync + std::fmt::Debug {
+    /// 一次读取返回同一代 Workspace 的摘要和详情，避免调用者产生 N+1 查询或混合代快照。
+    async fn snapshot(&self) -> AppResult<WorkspaceCollectionViewModel>;
     async fn list(&self) -> AppResult<Vec<WorkspaceSummaryViewModel>>;
     async fn get(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace>;
     async fn create(&self, name: String) -> AppResult<ProxyWorkspace>;

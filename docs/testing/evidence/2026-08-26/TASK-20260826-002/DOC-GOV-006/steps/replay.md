@@ -78,9 +78,6 @@ rg -q 'recovery ownership persisted, stale runner rejected' \
 rg -q 'two-finalizer race: REJECTED SUCCESS' \
   docs/testing/evidence/2026-08-26/TASK-20260826-002/DOC-GOV-006/outputs/state-scenarios.txt
 
-test -z "$(awk 'BEGIN{outside=1} /^## 15\. Git 提交$/{outside=0} /^## 16\. CI 规则$/{outside=1} outside{print}' \
-  AGENTS.md | rg 'git|Git|版本管理|Commit|SHA|diff|提交' || true)"
-
 after_agents=$(stat -f '%z:%m' AGENTS.md)
 after_index=$(stat -f '%z:%m' docs/testing/quick-validations/README.md)
 test "$before_agents" = "$after_agents"

@@ -8,6 +8,9 @@ use uuid::Uuid;
 
 use super::listener::ProtocolPackageExactRef;
 
+mod projection;
+mod validation;
+
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct HttpRuleTemplate {
@@ -22,6 +25,20 @@ pub(super) struct HttpRuleTemplate {
     conditions: Vec<HttpMatchConditionTemplate>,
     actions: Vec<HttpRuleActionTemplate>,
     one_shot: bool,
+}
+
+impl HttpRuleTemplate {
+    pub(super) fn listener_alias(&self) -> &str {
+        &self.listener_alias
+    }
+
+    pub(crate) const fn domain_stage(&self) -> intercept_proxy_domain::MessageStage {
+        match self.stage {
+            HttpRuleStage::Request => intercept_proxy_domain::MessageStage::Request,
+            HttpRuleStage::Response => intercept_proxy_domain::MessageStage::Response,
+            HttpRuleStage::TlsHandshake => intercept_proxy_domain::MessageStage::TlsHandshake,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
@@ -356,6 +373,16 @@ pub(super) struct ProtocolDocumentRuleTemplate {
     stage: ProtocolRuleStage,
     conditions: Vec<DocumentCondition>,
     actions: Vec<DocumentAction>,
+}
+
+impl ProtocolDocumentRuleTemplate {
+    pub(super) const fn package_ref(&self) -> &ProtocolPackageExactRef {
+        &self.package
+    }
+
+    pub(super) fn listener_alias(&self) -> &str {
+        &self.listener_alias
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]

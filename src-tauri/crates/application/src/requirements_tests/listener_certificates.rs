@@ -6,7 +6,6 @@ async fn listener_save_rejects_unmanaged_file_and_pkcs12_references() {
     let application = application_with_fake_ports(ports);
     let workspace = application.workspace_create("Lab".into()).await.unwrap();
     let listener = workspace.listeners[0].clone();
-
     for value in [
         "file:/tmp/untrusted-server.pem",
         "pkcs12:/tmp/untrusted-client.p12?password_env=PASSWORD",
@@ -62,7 +61,6 @@ async fn listener_certificate_discard_rejects_references_used_by_any_workspace()
         )
         .await
         .unwrap();
-
     let error = application
         .listener_certificate_discard(reference)
         .await
@@ -83,12 +81,10 @@ async fn listener_certificate_discard_cleans_an_unreferenced_import() {
         kind: CertificateReferenceKind::UpstreamClientIdentity,
         reference: "managed:listener-tls:abandoned".into(),
     };
-
     let result = application
         .listener_certificate_discard(reference)
         .await
         .unwrap();
-
     assert!(result.success);
     assert_eq!(ports.certificate_discard_calls.load(Ordering::SeqCst), 1);
 }
@@ -295,6 +291,12 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
             listener_runtime: listener_runtime.clone(),
             protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
+            environment_baseline_capture: test_environment_baseline_capture(),
+            environment_identity_allocator: test_environment_identity_allocator(),
+            environment_apply_lease: test_environment_apply_lease(),
+            environment_material_preparer: test_environment_material_preparer(),
+            environment_commit: test_environment_commit(),
+            environment_validator: test_environment_validator(),
         },
         Arc::new(UnusedAndroidControlPort),
         Arc::new(UnusedProtectedSecretPort),
@@ -362,6 +364,12 @@ async fn running_workspace_listener_allows_saving_and_starting_a_stopped_listene
             listener_runtime: listener_runtime.clone(),
             protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
+            environment_baseline_capture: test_environment_baseline_capture(),
+            environment_identity_allocator: test_environment_identity_allocator(),
+            environment_apply_lease: test_environment_apply_lease(),
+            environment_material_preparer: test_environment_material_preparer(),
+            environment_commit: test_environment_commit(),
+            environment_validator: test_environment_validator(),
         },
         Arc::new(UnusedAndroidControlPort),
         Arc::new(UnusedProtectedSecretPort),
@@ -444,6 +452,12 @@ async fn running_workspace_listener_allows_device_network_profile_persistence() 
             listener_runtime: listener_runtime.clone(),
             protocol_packages: unused_protocol_package_services(),
             events: Arc::new(EventHub::default()),
+            environment_baseline_capture: test_environment_baseline_capture(),
+            environment_identity_allocator: test_environment_identity_allocator(),
+            environment_apply_lease: test_environment_apply_lease(),
+            environment_material_preparer: test_environment_material_preparer(),
+            environment_commit: test_environment_commit(),
+            environment_validator: test_environment_validator(),
         },
         Arc::new(UnusedAndroidControlPort),
         Arc::new(UnusedProtectedSecretPort),

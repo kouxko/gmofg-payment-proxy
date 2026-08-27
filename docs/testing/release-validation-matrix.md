@@ -137,6 +137,7 @@ HTTP Body Protocol 当前只支持内部 ZIP/Rhai 协议包；外部 WebSocket �
 | S-LOCAL-DIRECT | LocalServer | Direct | TCP | 无连接 | 收到什么回复什么；不产生虚假 upstream connect |
 | S-LOCAL-SCRIPT | LocalServer | Scripted | TCP | 无连接 | upstream 文档经本地响应进入 downstream Pipeline |
 | S-UP-TLS | RemoteServer | Direct/Scripted | TCP | TLS | CA、SNI/hostname 成功；错误信任失败 |
+| S-UP-TLS-BUNDLE | RemoteServer | Direct/Scripted | TCP | TLS | 单文件多 CA PEM 全成员解析、持久化、重启恢复并全部进入 Trust Store；任一成员非法时整体拒绝 |
 | S-UP-MTLS | RemoteServer | Direct/Scripted | TCP | mTLS | Proxy 客户端身份成功；缺失/错误身份失败 |
 | S-DOWN-TLS | RemoteServer/LocalServer | Direct/Scripted | TLS | TCP/无连接 | App 侧 Server 身份成功 |
 | S-DOWN-MTLS | RemoteServer/LocalServer | Direct/Scripted | mTLS | TCP/无连接 | required/optional/disabled 三种策略 |
@@ -227,7 +228,7 @@ examples/external-packages/au_eftex/.venv/bin/python -m unittest discover \
 
 ### 8.1.1 MCP 契约专项
 
-修改 `src-tauri/src/mcp`、MCP 资源文档或 Application 只读返回投影时，先执行定向测试，再执行上面的
+修改 `src-tauri/src/mcp`、MCP 资源文档或 Application 查询/环境配置投影时，先执行定向测试，再执行上面的
 完整门禁：
 
 ```bash
@@ -237,10 +238,13 @@ pnpm scan:architecture-docs
 
 定向套件必须同时锁定：
 
-- 37 个公开工具名唯一，并与后端分发清单完全一致；
+- 37 个原有查询工具和五个环境配置工具名唯一，并与后端分发清单完全一致；
 - 每个输入字段（包括 `page`、`package` 等嵌套字段）有说明，所有对象层级均封闭未知字段；
 - object、array、object/null 三类成功根类型与生产返回合同一致，运行时拒绝错误根类型；
-- 输入 256 KiB、输出 8 MiB 的逻辑预算及结构化错误码；
+- 原有查询/capabilities 的 256 KiB 输入、8 MiB 输出、8 秒期限，create 的 1 MiB 输入/输出、30 秒
+  期限，以及 status/cancel/apply 的 16 KiB 输入、1 MiB 输出、8 秒 ack 期限；
+- 五个环境工具的精确 read-only/destructive/idempotent 注解、IPv4 致命绑定、IPv6 warning 状态、
+  任意有效 Host/Origin/凭据不参与认证，以及 create disconnect/apply ack 后所有权；
 - MCP 工具参考以精确反引号名称覆盖全部公开工具，并说明成功、错误和保留边界。
 
 该套件证明工具目录、协议适配器和返回根类型合同一致，但不能单独证明 Listener 已监听、外部包在线、
@@ -307,7 +311,7 @@ CI=true pnpm tauri build --bundles app \
 - 日志/截图/JSON 证据路径
 - 失败根因、修复提交范围和回归测试
 
-机器记录至少包含 `run_id`、`case_id`、源码状态、各轴配置、耗时、稳定错误码、双向字节数与 SHA-256、TLS 版本/SNI/证书指纹/客户端身份提交状态、规则 ID 与阶段、Exchange 有序事件、清理和端口复绑结果。不得记录私钥、密码或完整支付报文。
+机器记录至少包含 `run_id`、`case_id`、源码状态、各轴配置、耗时、稳定错误码、双向字节数与 SHA-256、TLS 版本/SNI/证书指纹/客户端身份提交状态、规则 ID 与阶段、Exchange 有序事件、清理和端口复绑结果。按测试需要可以记录完整支付报文、payload 与 Document；不得记录真实生产私钥、密码、BDK 或其他生产凭据。
 
 ## 10. 清理与幂等性
 

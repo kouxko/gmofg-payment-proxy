@@ -23,7 +23,6 @@ async fn upstream_tls_test_uses_listener_ca_hostname_and_client_identity() {
 
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: (Ipv4Addr::LOCALHOST, 0).into(),
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("https://127.0.0.1:{}", upstream_address.port()),
         downstream_tls: None,
         upstream_tls: Some(ReverseUpstreamTls {
@@ -78,7 +77,6 @@ async fn upstream_tls_test_supports_ordinary_tls_without_a_client_identity() {
 
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: (Ipv4Addr::LOCALHOST, 0).into(),
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("https://127.0.0.1:{}", upstream_address.port()),
         downstream_tls: None,
         upstream_tls: Some(ReverseUpstreamTls {
@@ -110,7 +108,6 @@ async fn upstream_connection_test_uses_tcp_only_for_http() {
     });
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: (Ipv4Addr::LOCALHOST, 0).into(),
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("http://{upstream_address}"),
         downstream_tls: None,
         upstream_tls: None,

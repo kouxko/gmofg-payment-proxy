@@ -15,6 +15,7 @@ use crate::adapters::external_packages::{
 struct ScriptedIo {
     writes: usize,
     fail_write_at: Option<usize>,
+    block_write_at: Option<usize>,
     fail_read: bool,
     read_bytes: &'static [u8],
 }
@@ -24,6 +25,7 @@ impl ScriptedIo {
         Self {
             writes: 0,
             fail_write_at: Some(write),
+            block_write_at: None,
             fail_read: false,
             read_bytes: &[],
         }
@@ -33,6 +35,7 @@ impl ScriptedIo {
         Self {
             writes: 0,
             fail_write_at: None,
+            block_write_at: None,
             fail_read: true,
             read_bytes: &[],
         }
@@ -45,8 +48,19 @@ impl ScriptedIo {
         Self {
             writes: 0,
             fail_write_at: Some(2),
+            block_write_at: None,
             fail_read: false,
             read_bytes: MASKED_PING,
+        }
+    }
+
+    fn block_write_at(write: usize) -> Self {
+        Self {
+            writes: 0,
+            fail_write_at: None,
+            block_write_at: Some(write),
+            fail_read: false,
+            read_bytes: &[],
         }
     }
 }
@@ -85,6 +99,8 @@ impl AsyncWrite for ScriptedIo {
                 io::ErrorKind::BrokenPipe,
                 "scripted write failure",
             )))
+        } else if self.block_write_at == Some(self.writes) {
+            Poll::Pending
         } else {
             Poll::Ready(Ok(buffer.len()))
         }
@@ -153,5 +169,18 @@ async fn registration_reports_heartbeat_write_failure_as_transport_error() {
     assert!(matches!(
         connecting.await.expect("join"),
         ExternalPackageConnectionError::Transport(_)
+    ));
+}
+
+#[tokio::test(start_paused = true)]
+async fn blocked_registration_heartbeat_write_obeys_the_registration_phase_deadline() {
+    let connecting = tokio::spawn(connect(ScriptedIo::block_write_at(2)));
+    tokio::task::yield_now().await;
+    tokio::time::advance(Duration::from_secs(30)).await;
+
+    assert!(matches!(
+        connecting.await.expect("join"),
+        ExternalPackageConnectionError::Timeout { ref method, .. }
+            if method == "package.register"
     ));
 }

@@ -4,17 +4,18 @@ impl AndroidAdbAdapter {
     /// 为单元测试注入可记录、可编排的 ADB 执行器，避免启动真实 adb 进程。
     pub(super) fn with_runner(data_dir: &Path, runner: Arc<dyn AdbCommandRunner>) -> Self {
         let runtime_store = Arc::new(crate::SqliteStore::in_memory().expect("runtime store"));
+        let sqlite_executor = crate::SqliteExecutor::new(Arc::clone(&runtime_store));
         Self {
             adb_path: Some(PathBuf::from("adb")),
             companion_apk: Some(data_dir.join("android-companion.apk")),
             selected_serial: RwLock::new(None),
-            network_operation: Mutex::new(()),
-            active_reverse: Mutex::new(None),
-            active_runtime: Mutex::new(None),
-            runtime_endpoints: Mutex::new(Vec::new()),
-            runtime_owner: Mutex::new(None),
-            runtime_resume_state: Mutex::new(None),
+            device_operations: DeviceOperationGateRegistry::default(),
+            owner_states: Arc::new(Mutex::new(BTreeMap::new())),
+            environment_apply_resource_gates: Arc::new(
+                crate::adapters::EnvironmentApplyResourceGateRegistry::default(),
+            ),
             runtime_store,
+            sqlite_executor,
             runner,
             lan_address: Arc::new(NoLanAddressProvider),
         }
@@ -25,17 +26,18 @@ impl AndroidAdbAdapter {
         runtime_store: Arc<crate::SqliteStore>,
         runner: Arc<dyn AdbCommandRunner>,
     ) -> Self {
+        let sqlite_executor = crate::SqliteExecutor::new(Arc::clone(&runtime_store));
         Self {
             adb_path: Some(PathBuf::from("adb")),
             companion_apk: Some(data_dir.join("android-companion.apk")),
             selected_serial: RwLock::new(None),
-            network_operation: Mutex::new(()),
-            active_reverse: Mutex::new(None),
-            active_runtime: Mutex::new(None),
-            runtime_endpoints: Mutex::new(Vec::new()),
-            runtime_owner: Mutex::new(None),
-            runtime_resume_state: Mutex::new(None),
+            device_operations: DeviceOperationGateRegistry::default(),
+            owner_states: Arc::new(Mutex::new(BTreeMap::new())),
+            environment_apply_resource_gates: Arc::new(
+                crate::adapters::EnvironmentApplyResourceGateRegistry::default(),
+            ),
             runtime_store,
+            sqlite_executor,
             runner,
             lan_address: Arc::new(NoLanAddressProvider),
         }
@@ -129,7 +131,6 @@ pub(super) fn test_activation(
             original_ports: vec![443],
             desktop_listener_bind_address: "0.0.0.0".into(),
             desktop_listener_port,
-            allowed_client_cidrs: Vec::new(),
         }],
     }
 }
@@ -157,8 +158,12 @@ pub(super) async fn seed_active_runtime(
         listener_ports: BTreeMap::new(),
         endpoints: Vec::new(),
     };
-    *adapter.active_reverse.lock().await = Some(reverse.clone());
-    *adapter.active_runtime.lock().await = Some(runtime.clone());
+    {
+        let mut states = adapter.owner_states.lock().await;
+        let state = states.entry(runtime.serial.clone()).or_default();
+        state.active_reverse = Some(reverse.clone());
+        state.active_runtime = Some(runtime.clone());
+    }
     adapter
         .save_owner(runtime.owner(
             AndroidRuntimeOwnerMode::AdbReverse,
@@ -171,6 +176,22 @@ pub(super) async fn seed_active_runtime(
     (reverse, runtime)
 }
 
+pub(super) fn runtime_owner(
+    serial: &str,
+    state: AndroidRuntimeOwnerState,
+) -> AndroidRuntimeOwnerViewModel {
+    AndroidRuntimeOwnerViewModel {
+        serial: serial.into(),
+        epoch: uuid::Uuid::new_v4(),
+        mode: AndroidRuntimeOwnerMode::AdbReverse,
+        profile_id: "profile-test".into(),
+        state,
+        source: AndroidRuntimeOwnerSource::Start,
+        transition_reason: AndroidRuntimeOwnerTransitionReason::ActivationConfirmed,
+        updated_at: chrono::Utc::now(),
+    }
+}
+
 pub(super) fn activation_status(
     state: AndroidNetworkState,
     verified: bool,
@@ -179,6 +200,7 @@ pub(super) fn activation_status(
 ) -> AndroidNetworkStatusViewModel {
     AndroidNetworkStatusViewModel {
         serial: "2740072778".into(),
+        runtime_epoch: None,
         state,
         state_text: String::new(),
         ui_tone: intercept_proxy_application::UiTone::Warning,

@@ -4,10 +4,11 @@ use async_trait::async_trait;
 
 use crate::{
     AppResult, ApplicationBackupProtocolPackageBaseline, ApplicationConfigurationDocument,
-    PortableApplicationProtocolPackage, ProtocolPackageCompilationReceipt,
+    ListenerStatusViewModel, PortableApplicationProtocolPackage, ProtocolPackageCompilationReceipt,
     ProtocolPackageDescriptionViewModel, ProtocolPackageImportPreviewViewModel,
     ProtocolPackageImportToken, ProtocolPackageImportViewModel, ProtocolPackageRef,
     ProtocolPackageUsageCount, ProtocolPackageUsageViewModel, ProtocolPackageVersionViewModel,
+    ProxyWorkspace,
 };
 
 #[async_trait]
@@ -78,6 +79,14 @@ pub trait ProtocolPackageUsageQueryPort: Send + Sync + std::fmt::Debug {
         package: &ProtocolPackageRef,
     ) -> AppResult<Vec<ProtocolPackageUsageViewModel>>;
     async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>>;
+    /// 使用调用者已经持有的一致 Workspace 与运行态快照计算引用数，不再次读取仓储。
+    async fn usage_counts_for_snapshot(
+        &self,
+        _workspaces: &[ProxyWorkspace],
+        _listener_statuses: &[ListenerStatusViewModel],
+    ) -> AppResult<Vec<ProtocolPackageUsageCount>> {
+        self.usage_counts().await
+    }
 }
 
 #[async_trait]

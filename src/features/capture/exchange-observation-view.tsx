@@ -11,6 +11,7 @@ import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import { ExchangeObservationDetail } from "./exchange-observation-detail";
 import { ExchangeObservationList } from "./exchange-observation-list";
 import { defaultExchangeObservationQuery } from "./exchange-observation-model";
@@ -21,6 +22,7 @@ function selectedWorkspace(value: WorkspaceSummaryViewModel[] | undefined) {
 }
 
 export function ExchangeObservationView() {
+  const { navigate } = useWorkspaceNavigation();
   const [pageNumber, setPageNumber] = useState(1);
   const [selectedId, setSelectedId] = useState<string>();
   const [clearOpen, setClearOpen] = useState(false);
@@ -84,7 +86,7 @@ export function ExchangeObservationView() {
 
   return <section aria-label="统一运行记录工作区" className="grid h-full min-h-0 grid-cols-1 grid-rows-1">
     <ExchangeObservationList page={page.data} error={page.error} loading={page.isLoading} selectedId={selectedId} onSelect={(record) => setSelectedId(record.exchange_id)} onPage={setPageNumber} onRetry={() => void page.refresh()} onClear={() => setClearOpen(true)} />
-    <ExchangeObservationDetail selected={selected} detail={detail.data} error={detail.error} loading={detail.isLoading} onClose={() => { const focusId = selectedId; setSelectedId(undefined); detail.invalidate(); if (focusId) requestAnimationFrame(() => document.getElementById(`exchange-observation-row-${focusId}`)?.focus()); }} onRetry={() => void detail.refresh()} />
+    <ExchangeObservationDetail selected={selected} detail={detail.data} error={detail.error} loading={detail.isLoading} onClose={() => { const focusId = selectedId; setSelectedId(undefined); detail.invalidate(); if (focusId) requestAnimationFrame(() => document.getElementById(`exchange-observation-row-${focusId}`)?.focus()); }} onRetry={() => void detail.refresh()} onCreateMockDraft={(exchangeId, responseEventIndex) => navigate(`/rules?exchangeId=${encodeURIComponent(exchangeId)}&responseEvent=${responseEventIndex}`)} />
     <AlertDialog isOpen={clearOpen} onOpenChange={(open) => { if (!clearPending) setClearOpen(open); }}>
       <Button className="hidden" aria-hidden="true">打开清空确认</Button>
       <AlertDialog.Backdrop><AlertDialog.Container><AlertDialog.Dialog>

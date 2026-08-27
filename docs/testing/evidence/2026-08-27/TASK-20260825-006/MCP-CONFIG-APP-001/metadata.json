@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260825-006",
+  "case_id": "MCP-CONFIG-APP-001",
+  "executed_at": "2026-08-27 11:42:52 +08:00",
+  "platform": "macOS arm64",
+  "result": "PASS",
+  "app_bundle": "src-tauri/target/release/bundle/macos/Intercept Proxy.app",
+  "isolated_identifier": "com.interceptproxy.desktop.g032test",
+  "input": "resources/full-resource-candidate.json",
+  "source_traceability": "readable task file list and relevant source extracts",
+  "raw_records": "inputs and outputs contain the actual request envelopes, redacted consumed token, HTTP headers, SQLite query, listener states, runtime log and build output",
+  "expected": {
+    "create_status": "preview_ready",
+    "apply_ack": "apply_queued",
+    "terminal_status": "committed",
+    "persistence_version": 6,
+    "listeners": 2,
+    "http_rules": 14,
+    "protocol_rules": 1,
+    "android_profiles": 1,
+    "restart_recovers": true
+  },
+  "actual": {
+    "create_status": "preview_ready",
+    "apply_ack": "apply_queued",
+    "terminal_status": "committed",
+    "persistence_version": 6,
+    "listeners": 2,
+    "http_rules": 14,
+    "protocol_rules": 1,
+    "android_profiles": 1,
+    "restart_recovers": true
+  },
+  "private_materials": "N/A: packaged smoke candidate contains no certificates or secrets",
+  "business_payload": "N/A: no business payload was sent",
+  "remote_windows_validation": "N/A: performed only during final delivery"
+}

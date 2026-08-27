@@ -205,7 +205,6 @@ impl ReverseProxyService {
             endpoint: self.endpoint.address.to_string(),
             clock: Arc::new(SystemClock),
             admission: ConnectionAdmission::new(maximum_connections)?,
-            allowed_client_cidrs: self.config.allowed_client_cidrs.clone(),
             limits,
             read_timeout: self.config.read_timeout,
             write_timeout: self.config.write_timeout,
@@ -243,7 +242,6 @@ impl ReverseProxyService {
                 bind_addr: self.config.bind_addr,
                 runtime_epoch,
                 listener_id: ChannelId::new("reverse-relay")?,
-                allowed_client_cidrs: self.config.allowed_client_cidrs.clone(),
                 capacity: crate::listener::ListenerCapacity::new(
                     tokio::sync::Semaphore::MAX_PERMITS,
                 )?,
@@ -267,7 +265,14 @@ impl ReverseProxyService {
         cancellation: CancellationToken,
     ) -> Result<()> {
         let downstream: BoxIo = if let Some(acceptor) = &self.downstream_acceptor {
-            acceptor.accept(downstream_io, context).await?.io
+            timeout_cancel(
+                self.config.connect_timeout,
+                &cancellation,
+                acceptor.accept(downstream_io, context),
+                ErrorCode::DownstreamTlsHandshakeFailed,
+            )
+            .await??
+            .io
         } else {
             downstream_io
         };

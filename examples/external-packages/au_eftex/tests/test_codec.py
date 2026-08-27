@@ -252,6 +252,99 @@ class EftexCodecTests(unittest.TestCase):
         self.assertNotIn("999999999", rendered)
         self.assertNotIn("MAC_EXT!", rendered)
 
+    def test_display_decodes_de48_f0_pos_data_and_extended_transaction_type(self) -> None:
+        de48 = (
+            b"\xf0\x00\x19\x90\x00"
+            b"TERM0001"
+            b"000123"
+            b"54321"
+            b"9001"
+        )
+        message = encode_message(
+            {
+                "message_type": {"type": "string", "value": "1200"},
+                "processing_code": {"type": "string", "value": "000000"},
+                "additional_private": {
+                    "type": "blob",
+                    "value_base64": base64.b64encode(de48).decode(),
+                },
+            }
+        )
+        frame = self.codec.encrypt_frame("upstream", self.header, message)
+        document = self.codec.decode("upstream", frame)
+
+        rendered = self.codec.display("upstream", document)
+
+        self.assertIn("F0.1 POS data", rendered)
+        self.assertIn("terminal ID=TERM0001", rendered)
+        self.assertIn("transaction number=000123", rendered)
+        self.assertIn("F0.4 extended transaction type=9001", rendered)
+        self.assertIn("operator ID=[redacted: 5 chars]", rendered)
+        self.assertNotIn("54321", rendered)
+
+    def test_display_falls_back_to_redaction_for_unknown_de48_subfields(self) -> None:
+        de48 = b"\xf0\x00\x03\x20\x00\x00"
+        message = encode_message(
+            {
+                "message_type": {"type": "string", "value": "1200"},
+                "processing_code": {"type": "string", "value": "000000"},
+                "additional_private": {
+                    "type": "blob",
+                    "value_base64": base64.b64encode(de48).decode(),
+                },
+            }
+        )
+        frame = self.codec.encrypt_frame("upstream", self.header, message)
+        document = self.codec.decode("upstream", frame)
+
+        rendered = self.codec.display("upstream", document)
+
+        self.assertIn("[redacted blob: 6 bytes]", rendered)
+
+    def test_display_falls_back_to_redaction_for_malformed_de48_length(self) -> None:
+        de48 = b"\xf0\x00\x18\x90\x00" + b"TERM0001000123543219001"
+        message = encode_message(
+            {
+                "message_type": {"type": "string", "value": "1200"},
+                "processing_code": {"type": "string", "value": "000000"},
+                "additional_private": {
+                    "type": "blob",
+                    "value_base64": base64.b64encode(de48).decode(),
+                },
+            }
+        )
+        frame = self.codec.encrypt_frame("upstream", self.header, message)
+        document = self.codec.decode("upstream", frame)
+
+        rendered = self.codec.display("upstream", document)
+
+        self.assertIn("[redacted blob: 28 bytes]", rendered)
+
+    def test_de48_display_parsing_does_not_change_wire_bytes(self) -> None:
+        de48 = (
+            b"\xf0\x00\x19\x90\x00"
+            b"TERM0001"
+            b"000123"
+            b"54321"
+            b"9001"
+        )
+        message = encode_message(
+            {
+                "message_type": {"type": "string", "value": "1200"},
+                "processing_code": {"type": "string", "value": "000000"},
+                "additional_private": {
+                    "type": "blob",
+                    "value_base64": base64.b64encode(de48).decode(),
+                },
+            }
+        )
+        frame = self.codec.encrypt_frame("upstream", self.header, message)
+        document = self.codec.decode("upstream", frame)
+
+        self.codec.display("upstream", document)
+
+        self.assertEqual(self.codec.encode("upstream", document), frame)
+
     def test_encode_rejects_a_tampered_encoding_context(self) -> None:
         frame = self.codec.encrypt_frame("upstream", self.header, self.message)
         document = self.codec.decode("upstream", frame)

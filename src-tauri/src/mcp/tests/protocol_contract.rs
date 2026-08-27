@@ -1,4 +1,4 @@
-use serde_json::{Value, json};
+use serde_json::json;
 
 use super::{backend, post, protocol, request_meta, start_test_server};
 
@@ -104,7 +104,7 @@ async fn array_and_nullable_successful_output_roots_are_accepted() {
     let server = start_test_server(backend()).await.expect("bind MCP server");
     for (id, name, expected) in [
         (6, "workspace_list", json!([])),
-        (7, "android_runtime_owner", Value::Null),
+        (7, "android_runtime_owner_list", json!([])),
     ] {
         let response = post(
             server.local_addr(),

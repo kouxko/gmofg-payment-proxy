@@ -38,6 +38,50 @@ fn generates_root_and_leaf_with_expected_policies() {
 }
 
 #[test]
+fn upstream_ca_bundle_preserves_every_valid_certificate_in_input_order() {
+    let service = CertificateService;
+    let intermediate = service.generate_root_ca("Bundle Intermediate").unwrap();
+    let root = service.generate_root_ca("Bundle Root").unwrap();
+    let bundle = pem_ca_bundle(&[&intermediate, &root]);
+
+    let parsed = service.parse_upstream_ca(&bundle).unwrap();
+
+    assert_eq!(
+        parsed.certificate_chain_der,
+        vec![
+            intermediate.certificate_der.clone(),
+            root.certificate_der.clone()
+        ]
+    );
+    assert_eq!(parsed.certificate_der, root.certificate_der);
+    let reparsed = service.parse_upstream_ca(parsed.canonical_bytes()).unwrap();
+    assert_eq!(reparsed.certificate_chain_der, parsed.certificate_chain_der);
+}
+
+#[test]
+fn upstream_ca_bundle_rejects_the_whole_input_when_any_certificate_is_not_a_ca() {
+    let service = CertificateService;
+    let root = service.generate_root_ca("Bundle Root").unwrap();
+    let leaf = service
+        .generate_leaf(
+            &root.certificate_der,
+            &root.private_key_pkcs8_der,
+            &LeafCertificateRequest {
+                common_name: "not-a-ca.example".into(),
+                dns_names: vec!["not-a-ca.example".into()],
+                ip_addresses: Vec::new(),
+            },
+        )
+        .unwrap();
+
+    assert!(
+        service
+            .parse_upstream_ca(&pem_ca_bundle(&[&root, &leaf]))
+            .is_err()
+    );
+}
+
+#[test]
 fn generated_leaf_allows_small_client_clock_skew() {
     let service = CertificateService;
     let root = service.generate_root_ca("Root").expect("root");
@@ -267,5 +311,15 @@ fn pem_server_identity(
     pem.push_str("-----BEGIN PRIVATE KEY-----\n");
     pem.push_str(&STANDARD.encode(private_key_pkcs8_der));
     pem.push_str("\n-----END PRIVATE KEY-----\n");
+    pem.into_bytes()
+}
+
+fn pem_ca_bundle(certificates: &[&CertificateBundle]) -> Vec<u8> {
+    let mut pem = String::new();
+    for certificate in certificates {
+        pem.push_str("-----BEGIN CERTIFICATE-----\n");
+        pem.push_str(&STANDARD.encode(&certificate.certificate_der));
+        pem.push_str("\n-----END CERTIFICATE-----\n");
+    }
     pem.into_bytes()
 }

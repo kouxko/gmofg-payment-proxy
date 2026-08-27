@@ -14,8 +14,8 @@ use tokio_util::sync::CancellationToken;
 use super::{
     super::{SocketConnectionEvent, SocketPayloadDirection, SocketRelayService},
     support::{
-        ScriptedFactory, TEST_TIMEOUT, TestObserver, connect_retry, limits, relay_config,
-        reserve_address,
+        ScriptedFactory, TEST_TIMEOUT, TestObserver, bind_listener, connect_retry, limits,
+        relay_config,
     },
 };
 
@@ -32,7 +32,7 @@ async fn scripted_relay_transforms_both_directions_and_creates_each_processor_on
         stream.shutdown().await.unwrap();
     });
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let factory = Arc::new(ScriptedFactory::new(None));
     let observer = Arc::new(TestObserver::default());
     let service = Arc::new(
@@ -47,7 +47,11 @@ async fn scripted_relay_transforms_both_directions_and_creates_each_processor_on
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     client.write_all(&[3, b'a', b'b', b'c']).await.unwrap();
@@ -92,7 +96,7 @@ async fn scripted_exchange_processes_multiple_interactions_sequentially() {
         stream.shutdown().await.unwrap();
     });
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let factory = Arc::new(ScriptedFactory::new(None));
     let service = Arc::new(
         SocketRelayService::build_scripted(
@@ -105,7 +109,11 @@ async fn scripted_exchange_processes_multiple_interactions_sequentially() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     tokio::time::timeout(TEST_TIMEOUT, async {
         let mut client = connect_retry(bind_addr).await;
@@ -132,7 +140,7 @@ async fn scripted_exchange_rejects_pipelined_app_frames_and_emits_one_terminal_e
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();
 
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(TestObserver::default());
     let service = Arc::new(
         SocketRelayService::build_scripted_with_observer(
@@ -146,7 +154,11 @@ async fn scripted_exchange_rejects_pipelined_app_frames_and_emits_one_terminal_e
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     client.write_all(&[1, b'a', 1, b'b']).await.unwrap();

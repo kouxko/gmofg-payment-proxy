@@ -55,7 +55,6 @@ async fn reverse_http_request_reports_ordinary_tls_evidence_to_pipeline() {
     let ports = Arc::new(SecurityPorts::default());
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("https://127.0.0.1:{}", upstream_address.port()),
         downstream_tls: None,
         upstream_tls: Some(ReverseUpstreamTls {
@@ -151,7 +150,6 @@ async fn reverse_http_request_rewrites_ipv6_authority_host() {
     let reverse_address = reverse_listener.local_addr().unwrap();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("http://[::1]:{}", upstream_address.port()),
         downstream_tls: None,
         upstream_tls: None,
@@ -252,7 +250,6 @@ async fn fixed_http_preserves_methods_query_and_body() {
     let reverse_address = reverse_listener.local_addr().unwrap();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: reverse_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("http://{upstream_address}"),
         downstream_tls: None,
         upstream_tls: None,

@@ -8,7 +8,7 @@ import {
   type AndroidRuntimeOwnerViewModel,
 } from "@/generated/rust-types";
 
-type CommandResult = Awaited<ReturnType<typeof commands.deviceNetworkRuntimeOwner>>;
+type CommandResult = Awaited<ReturnType<typeof commands.deviceNetworkRuntimeOwners>>;
 type CommandData = Extract<CommandResult, { status: "ok" }>["data"];
 
 const generatedOwnerFixture = {
@@ -24,7 +24,7 @@ const generatedOwnerFixture = {
 
 describe("generated Android runtime owner contract", () => {
   it("keeps the command payload aligned with the exported DTO", () => {
-    expectTypeOf<CommandData>().toEqualTypeOf<AndroidRuntimeOwnerViewModel | null>();
+    expectTypeOf<CommandData>().toEqualTypeOf<AndroidRuntimeOwnerViewModel[]>();
     expect(generatedOwnerFixture).toMatchObject({
       serial: "device-a",
       mode: "adb_reverse",

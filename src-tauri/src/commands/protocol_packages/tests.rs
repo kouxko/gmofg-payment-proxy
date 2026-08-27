@@ -10,7 +10,7 @@ mod tests {
     use intercept_proxy_application::{AppError, AppErrorViewModel, AppResult};
     use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
     use intercept_proxy_infrastructure::{
-        InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
+        FileSelection, InfrastructureError, NativeFileDialog, SecretProtector,
     };
     use intercept_proxy_domain::{
         ListenerDataPlane, ProtocolPackageRef,

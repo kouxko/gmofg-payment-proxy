@@ -65,6 +65,8 @@ pub(crate) struct ConnectionTaskScope {
     tracker: TaskTracker,
     state: Arc<Mutex<ScopeState>>,
     fatal: Arc<Notify>,
+    #[cfg(test)]
+    completion: Arc<Notify>,
 }
 
 #[derive(Debug)]
@@ -80,6 +82,8 @@ impl ConnectionTaskScope {
         Self {
             tracker: TaskTracker::new(),
             fatal: Arc::new(Notify::new()),
+            #[cfg(test)]
+            completion: Arc::new(Notify::new()),
             state: Arc::new(Mutex::new(ScopeState {
                 phase: ScopePhase::Open,
                 next_id: 0,
@@ -104,7 +108,13 @@ impl ConnectionTaskScope {
             .checked_add(1)
             .expect("connection child task id exhausted");
 
-        let completion = CompletionGuard::new(id, Arc::clone(&self.state), Arc::clone(&self.fatal));
+        let completion = CompletionGuard::new(
+            id,
+            Arc::clone(&self.state),
+            Arc::clone(&self.fatal),
+            #[cfg(test)]
+            Arc::clone(&self.completion),
+        );
         let task = async move {
             let outcome = match AssertUnwindSafe(future).catch_unwind().await {
                 Ok(Ok(())) => ChildCompletion::Success,
@@ -141,6 +151,17 @@ impl ConnectionTaskScope {
         self.close();
         self.drain().await;
         self.snapshot().aggregate
+    }
+
+    #[cfg(test)]
+    async fn wait_for_completed_count(&self, expected: u64) {
+        loop {
+            let changed = self.completion.notified();
+            if self.snapshot().aggregate.completed_count >= expected {
+                return;
+            }
+            changed.await;
+        }
     }
 
     pub(crate) fn abort_live(&self) -> Vec<ChildTaskId> {
@@ -184,15 +205,24 @@ struct CompletionGuard {
     id: ChildTaskId,
     state: Arc<Mutex<ScopeState>>,
     fatal: Arc<Notify>,
+    #[cfg(test)]
+    completion: Arc<Notify>,
     completed: bool,
 }
 
 impl CompletionGuard {
-    fn new(id: ChildTaskId, state: Arc<Mutex<ScopeState>>, fatal: Arc<Notify>) -> Self {
+    fn new(
+        id: ChildTaskId,
+        state: Arc<Mutex<ScopeState>>,
+        fatal: Arc<Notify>,
+        #[cfg(test)] completion: Arc<Notify>,
+    ) -> Self {
         Self {
             id,
             state,
             fatal,
+            #[cfg(test)]
+            completion,
             completed: false,
         }
     }
@@ -225,6 +255,8 @@ impl CompletionGuard {
         if fatal {
             self.fatal.notify_one();
         }
+        #[cfg(test)]
+        self.completion.notify_waiters();
         self.completed = true;
     }
 }

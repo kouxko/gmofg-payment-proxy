@@ -54,7 +54,9 @@ async fn primary_exceeding_shutdown_grace_faults_listener_once() {
         async move { supervisor.run_bound(listener, cancellation).await }
     });
     send_connection(&sender, "10.1.1.1:1001".parse().unwrap());
-    wait_for(|| lock(&observer.admitted).len() == 1).await;
+    observer
+        .wait_until(|| lock(&observer.admitted).len() == 1)
+        .await;
     cancellation.cancel();
     assert!(matches!(
         task.await.unwrap().unwrap(),
@@ -96,9 +98,8 @@ async fn cancellation_wins_when_primary_is_also_ready() {
 
 #[tokio::test]
 async fn stop_joins_and_releases_the_bound_port_for_rebind() {
-    let probe = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let address = probe.local_addr().unwrap();
-    drop(probe);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
     let observer = Arc::new(RecordingObserver::default());
     let mut supervisor = supervisor(
         Arc::new(FakeHandler(HandlerMode::Immediate)),
@@ -107,15 +108,17 @@ async fn stop_joins_and_releases_the_bound_port_for_rebind() {
         Duration::from_millis(50),
     );
     supervisor.config.bind_addr = address;
-    supervisor.config.allowed_client_cidrs.clear();
     let supervisor = Arc::new(supervisor);
     let cancellation = CancellationToken::new();
     let task = tokio::spawn({
         let supervisor = Arc::clone(&supervisor);
         let cancellation = cancellation.clone();
-        async move { supervisor.bind_and_run(cancellation).await }
+        async move {
+            supervisor
+                .run_bound(Arc::new(TokioBoundListener(listener)), cancellation)
+                .await
+        }
     });
-    wait_for_async(|| async { TcpStream::connect(address).await.is_ok() }).await;
     cancellation.cancel();
     assert!(matches!(
         task.await.unwrap().unwrap(),

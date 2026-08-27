@@ -188,6 +188,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             }
             ListenerDataPlane::Socket(socket) => {
                 self.build_socket(workspace, listener, socket, bind_addr, full_runtime)
+                    .await
             }
         }
     }
@@ -202,7 +203,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
         full_runtime: bool,
     ) -> AppResult<PreparedListenerRuntime> {
         let protocol = if full_runtime {
-            HttpProtocolRuntimeSnapshot::prepare(self.adapter, workspace, listener)?
+            HttpProtocolRuntimeSnapshot::prepare_async(self.adapter, workspace, listener).await?
         } else {
             None
         };
@@ -245,7 +246,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             .entity(listener.id.to_string()));
         }
 
-        self.build_forward_http(&context, runtime_epoch)
+        self.build_forward_http(&context, runtime_epoch).await
     }
 
     async fn build_fixed_http(
@@ -256,15 +257,15 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
     ) -> AppResult<PreparedListenerRuntime> {
         let mut service = ReverseProxyService::build(ReverseProxyConfig {
             bind_addr: context.bind_addr,
-            allowed_client_cidrs: context.listener.allowed_client_cidrs.clone(),
             upstream_origin: fixed.upstream_url.clone(),
             downstream_tls: if full_runtime {
                 self.adapter
-                    .downstream_tls(context.workspace, context.listener, context.http)?
+                    .downstream_tls(context.workspace, context.listener, context.http)
+                    .await?
             } else {
                 None
             },
-            upstream_tls: self.adapter.upstream_tls(context.workspace, fixed)?,
+            upstream_tls: self.adapter.upstream_tls(context.workspace, fixed).await?,
             connect_timeout: Duration::from_millis(context.listener.connect_timeout_ms),
             read_timeout: Duration::from_millis(context.listener.read_timeout_ms),
             write_timeout: Duration::from_millis(context.listener.write_timeout_ms),
@@ -292,17 +293,16 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
         })
     }
 
-    fn build_forward_http(
+    async fn build_forward_http(
         &self,
         context: &HttpBuildContext<'_>,
         runtime_epoch: uuid::Uuid,
     ) -> AppResult<PreparedListenerRuntime> {
-        let (authentication, authenticator) = self.authentication(context.http)?;
+        let (authentication, authenticator) = self.authentication(context.http).await?;
         let mut service = ForwardProxyService::new(
             ForwardProxyConfig {
                 bind_addr: context.bind_addr,
                 authentication,
-                allowed_client_cidrs: context.listener.allowed_client_cidrs.clone(),
                 connect_timeout: Duration::from_millis(context.listener.connect_timeout_ms),
                 read_timeout: Duration::from_millis(context.listener.read_timeout_ms),
                 write_timeout: Duration::from_millis(context.listener.write_timeout_ms),
@@ -310,9 +310,10 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             authenticator,
         )
         .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
-        if let Some(tls) =
-            self.adapter
-                .downstream_tls(context.workspace, context.listener, context.http)?
+        if let Some(tls) = self
+            .adapter
+            .downstream_tls(context.workspace, context.listener, context.http)
+            .await?
         {
             service = service
                 .with_downstream_tls(&tls)
@@ -344,7 +345,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
         })
     }
 
-    fn build_socket_probe(
+    async fn build_socket_probe(
         &self,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
@@ -364,11 +365,12 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             socket,
             relay,
             bind_addr,
-            self.socket_probe_security(workspace, &relay.security)?,
+            self.socket_probe_security(workspace, &relay.security)
+                .await?,
         )
     }
 
-    fn authentication(
+    async fn authentication(
         &self,
         http: &HttpListenerSettings,
     ) -> AppResult<(
@@ -384,7 +386,8 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
                 ForwardAuthenticationMode::Required,
                 self.adapter
                     .protected_secrets
-                    .resolve_basic_authenticator(credential)?,
+                    .resolve_basic_authenticator(credential)
+                    .await?,
             )),
         }
     }
@@ -403,7 +406,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             })
     }
 
-    fn socket_security(
+    async fn socket_security(
         &self,
         workspace: &ProxyWorkspace,
         security: &DomainSocketSecurity,
@@ -411,22 +414,26 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
         Ok(match security {
             DomainSocketSecurity::Transparent => RuntimeSocketSecurity::Transparent,
             DomainSocketSecurity::TcpToTls { upstream_tls } => RuntimeSocketSecurity::TcpToTls {
-                upstream_tls: self.socket_upstream_tls(workspace, upstream_tls)?,
+                upstream_tls: self.socket_upstream_tls(workspace, upstream_tls).await?,
             },
             DomainSocketSecurity::TlsToTcp { downstream_tls } => RuntimeSocketSecurity::TlsToTcp {
-                downstream_tls: self.socket_downstream_tls(workspace, downstream_tls)?,
+                downstream_tls: self
+                    .socket_downstream_tls(workspace, downstream_tls)
+                    .await?,
             },
             DomainSocketSecurity::TlsToTls {
                 downstream_tls,
                 upstream_tls,
             } => RuntimeSocketSecurity::TlsToTls {
-                downstream_tls: self.socket_downstream_tls(workspace, downstream_tls)?,
-                upstream_tls: self.socket_upstream_tls(workspace, upstream_tls)?,
+                downstream_tls: self
+                    .socket_downstream_tls(workspace, downstream_tls)
+                    .await?,
+                upstream_tls: self.socket_upstream_tls(workspace, upstream_tls).await?,
             },
         })
     }
 
-    fn socket_probe_security(
+    async fn socket_probe_security(
         &self,
         workspace: &ProxyWorkspace,
         security: &DomainSocketSecurity,
@@ -438,7 +445,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             DomainSocketSecurity::TcpToTls { upstream_tls }
             | DomainSocketSecurity::TlsToTls { upstream_tls, .. } => {
                 RuntimeSocketSecurity::TcpToTls {
-                    upstream_tls: self.socket_upstream_tls(workspace, upstream_tls)?,
+                    upstream_tls: self.socket_upstream_tls(workspace, upstream_tls).await?,
                 }
             }
         })

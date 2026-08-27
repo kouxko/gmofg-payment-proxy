@@ -138,7 +138,7 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 `src-tauri/crates/host/src/lib.rs` 先构造不依赖 UI 的 `ApplicationHost`：
 
 1. 校验 `ProductProfile`，再创建数据目录。
-2. 打开 SQLite；对于 1.0 基线以前的不兼容 schema，按当前产品策略清理后重建。
+2. 打开 SQLite；对于当前预发布阶段的不兼容 schema，按产品策略清理后重建。
 3. 根据产品存储命名空间选择 Keychain 或 DPAPI secret protector。
 4. 创建 Infrastructure service bundle、容量账本、断点协调器和 EventHub。
 5. 构造 `RuntimePipelineAdapter` 并注入 Listener runtime。
@@ -150,7 +150,8 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 1. 解析 Tauri app-data 与安装资源路径。
 2. 注入内置 ISO8583 协议包和原生文件对话框。
 3. 创建 runtime log store、Exchange observation store 和 tracing bridge。
-4. 启动 best-effort 只读 MCP；MCP 端口冲突不阻止代理启动。
+4. 启动 MCP：`0.0.0.0:17653` 的 IPv4 全接口绑定是桌面启动门禁，失败会终止启动；IPv4 成功后，
+   IPv6 独立绑定、双栈覆盖、不支持或降级状态按 capability 如实公开。
 5. 把 Host、Application、日志和观察仓储放入唯一 `AppState`。
 6. 注册 specta Command、对话框和日志插件。
 7. 退出时只允许一个任务执行优雅关闭；重复退出请求等待同一结果。
@@ -179,7 +180,7 @@ sequenceDiagram
 - `features/capture`：HTTP 抓包与 Socket Exchange 连接时间线。
 - `features/rules`、`faults`、`breakpoints`：规则草稿、故障预设和断点交互。
 - `features/certificates`、`android-network`、`settings`：平台配置页面。
-- `features/diagnostics`：运行日志与复现信息。
+- `features/diagnostics`：有界结构化诊断事件与复现报告导出；完整进程 RuntimeLog 由 MCP/报告读取。
 - `features/shared`：真正跨 feature 的无业务所有权组件。
 - `lib/ipc`：统一调用 Tauri Command 和处理 typed error。
 - `generated/rust-types.ts`：Rust/specta 生成，禁止手工编辑。

@@ -4,9 +4,10 @@
 - 日期：2026-08-19
 - Refined by: [ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md)
 
-> 实施阶段说明：ADR-008 已接受新的环境配置方向，但当前运行时仍保持本文定义的 loopback-only、
-> read-only MCP。五个环境配置工具只完成合同登记，待后续 G036 接入 catalog、dispatch、server 与
-> endpoint 后，运行时边界才随实现切换。
+> 历史范围说明：本文记录的是已经被 ADR-008 替代的原始 loopback-only、read-only 决策，不再描述
+> 当前运行时。G036 已把五个环境配置工具接入生产 catalog/dispatch，并把明文 MCP 改为全接口
+> IPv4/IPv6 监听；当前合同、风险和生命周期以 [ADR-008](ADR-008-mcp-environment-configuration.md)
+> 为准。以下决策、备选方案和后果保留为历史记录。
 
 ## 决策
 
@@ -41,9 +42,9 @@ Application 只读模型中，因此 MCP 只能读取其 Manifest 投影、能�
 - HTTP 请求、工具参数、工具/资源结果和最终 HTTP 响应都有明确字节预算。
 - 每个请求和工具调用都有 deadline。
 - 应用退出时取消 MCP，并等待有界时间；超时后中止剩余 MCP 任务。
-- `application_snapshot` 读取两代完整投影并比较；发现变化时最多重试三次，只有连续两代
-  完全相同才返回，并附带 generation 指纹。持续变化返回 `SNAPSHOT_UNSTABLE`，不拼接
-  不同时点的数据。
+- `application_snapshot` 由 Application 在 mutation gate 内编排一次完整投影。Workspace
+  摘要与详情来自仓储的单次聚合读取，协议包引用计数复用相同 Workspace 与 Listener
+  运行态观察，不再执行 N+1 或双全量读取；结果附带稳定 generation 指纹和观察时间。
 
 ## 协议依据
 

@@ -4,36 +4,41 @@
 //! PKCS#12 密码、私钥或代理认证明文写入 Workspace JSON。文件选择由独立平台端口
 //! 完成，因此同一仓储可被 Tauri、未来 CLI/TUI 和无界面测试复用。
 
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use chrono::Utc;
 use intercept_proxy_application::{
     AppError, AppResult, ApplicationConfigurationDocument, ApplicationConfigurationStorePort,
-    OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceId, WorkspaceRepositoryPort,
-    WorkspaceSummaryViewModel, WorkspaceValidationViewModel, remap_workspace_identity,
+    OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceCollectionViewModel, WorkspaceId,
+    WorkspaceRepositoryPort, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    remap_workspace_identity,
 };
 
-use crate::{SqliteStore, WorkspaceRecord};
+use crate::{SqliteExecutor, SqliteStore, WorkspaceRecord};
 
 use super::{
-    common::{app_error, decode_workspace_record, encode_workspace_record, infra},
+    common::{app_error, decode_workspace_record, encode_workspace_record},
     settings::serialize_settings,
 };
 
 #[derive(Debug)]
 pub struct WorkspaceRepositoryAdapter {
-    store: Arc<SqliteStore>,
+    executor: SqliteExecutor,
 }
 
 impl WorkspaceRepositoryAdapter {
     #[must_use]
-    pub fn new(store: Arc<SqliteStore>) -> Self {
-        Self { store }
+    pub fn new(persistence: impl Into<SqliteExecutor>) -> Self {
+        Self {
+            executor: persistence.into(),
+        }
     }
 
-    fn snapshot(&self) -> AppResult<(Option<WorkspaceId>, Vec<ProxyWorkspace>)> {
-        let snapshot = infra(self.store.load_workspaces())?;
+    async fn load_snapshot(&self) -> AppResult<(Option<WorkspaceId>, Vec<ProxyWorkspace>)> {
+        let snapshot = self
+            .executor
+            .execute(SqliteStore::load_workspaces)
+            .await
+            .map_err(app_error)?;
         let selected = snapshot.selected_id.map(WorkspaceId::from_uuid);
         let workspaces = snapshot
             .records
@@ -46,15 +51,18 @@ impl WorkspaceRepositoryAdapter {
         Ok((selected, workspaces))
     }
 
-    fn get_stored(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace> {
-        self.snapshot()?
-            .1
-            .into_iter()
-            .find(|workspace| workspace.id == workspace_id)
+    async fn get_stored(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace> {
+        let record = self
+            .executor
+            .execute(move |store| store.load_workspace(workspace_id.as_uuid()))
+            .await
+            .map_err(app_error)?
             .ok_or_else(|| {
                 AppError::new("WORKSPACE_NOT_FOUND", "Workspace 不存在或已被删除。")
                     .entity(workspace_id.to_string())
-            })
+            })?;
+        decode_workspace_record(record)
+            .map_err(|message| AppError::new("PERSISTENCE_CORRUPT", message))
     }
 
     pub(crate) fn record(workspace: &ProxyWorkspace) -> AppResult<WorkspaceRecord> {
@@ -83,11 +91,13 @@ impl ApplicationConfigurationStorePort for WorkspaceRepositoryAdapter {
                 format!("完整配置中的 Settings 无法持久化：{error}"),
             )
         })?;
-        infra(self.store.replace_application_configuration(
-            document.selected_workspace_id.as_uuid(),
-            &records,
-            &settings,
-        ))
+        let selected_id = document.selected_workspace_id.as_uuid();
+        self.executor
+            .execute(move |store| {
+                store.replace_application_configuration(selected_id, &records, &settings)
+            })
+            .await
+            .map_err(app_error)
     }
 
     async fn reset_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
@@ -103,18 +113,29 @@ impl ApplicationConfigurationStorePort for WorkspaceRepositoryAdapter {
                 format!("默认 Settings 无法持久化：{error}"),
             )
         })?;
-        infra(self.store.reset_application_data(
-            document.selected_workspace_id.as_uuid(),
-            &records,
-            &settings,
-        ))
+        let selected_id = document.selected_workspace_id.as_uuid();
+        self.executor
+            .execute(move |store| store.reset_application_data(selected_id, &records, &settings))
+            .await
+            .map_err(app_error)
     }
 }
 
 #[async_trait]
 impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
+    async fn snapshot(&self) -> AppResult<WorkspaceCollectionViewModel> {
+        let (selected, details) = self.load_snapshot().await?;
+        let summaries = details
+            .iter()
+            .map(|workspace| {
+                WorkspaceSummaryViewModel::from_workspace(workspace, selected == Some(workspace.id))
+            })
+            .collect();
+        Ok(WorkspaceCollectionViewModel { summaries, details })
+    }
+
     async fn list(&self) -> AppResult<Vec<WorkspaceSummaryViewModel>> {
-        let (selected, workspaces) = self.snapshot()?;
+        let (selected, workspaces) = self.load_snapshot().await?;
         Ok(workspaces
             .iter()
             .map(|workspace| {
@@ -124,7 +145,7 @@ impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
     }
 
     async fn get(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace> {
-        self.get_stored(workspace_id)
+        self.get_stored(workspace_id).await
     }
 
     async fn create(&self, name: String) -> AppResult<ProxyWorkspace> {
@@ -133,22 +154,33 @@ impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
             ..ProxyWorkspace::default()
         };
         workspace.validate().map_err(AppError::from)?;
-        infra(self.store.insert_workspace(&Self::record(&workspace)?))?;
+        let record = Self::record(&workspace)?;
+        self.executor
+            .execute(move |store| store.insert_workspace(&record))
+            .await
+            .map_err(app_error)?;
         Ok(workspace)
     }
 
     async fn copy(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace> {
-        let mut workspace = self.get_stored(workspace_id)?;
+        let mut workspace = self.get_stored(workspace_id).await?;
         remap_workspace_identity(&mut workspace)?;
         workspace.name = format!("{} Copy", workspace.name);
         workspace.validate().map_err(AppError::from)?;
-        infra(self.store.insert_workspace(&Self::record(&workspace)?))?;
+        let record = Self::record(&workspace)?;
+        self.executor
+            .execute(move |store| store.insert_workspace(&record))
+            .await
+            .map_err(app_error)?;
         Ok(workspace)
     }
 
     async fn select(&self, workspace_id: WorkspaceId) -> AppResult<WorkspaceSummaryViewModel> {
-        let workspace = self.get_stored(workspace_id)?;
-        infra(self.store.select_workspace(workspace_id.as_uuid()))?;
+        let workspace = self.get_stored(workspace_id).await?;
+        self.executor
+            .execute(move |store| store.select_workspace(workspace_id.as_uuid()))
+            .await
+            .map_err(app_error)?;
         Ok(WorkspaceSummaryViewModel::from_workspace(&workspace, true))
     }
 
@@ -158,24 +190,29 @@ impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
 
     async fn save(&self, mut workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace> {
         workspace.validate().map_err(AppError::from)?;
-        let current = self.get_stored(workspace.id)?;
+        let current = self.get_stored(workspace.id).await?;
         current
             .revision
             .verify(workspace.revision)
             .map_err(AppError::from)?;
         let expected_revision = current.revision.get();
         workspace.revision = current.revision.next();
-        infra(
-            self.store
-                .compare_and_swap_workspace(expected_revision, &Self::record(&workspace)?),
-        )?;
+        let record = Self::record(&workspace)?;
+        self.executor
+            .execute(move |store| store.compare_and_swap_workspace(expected_revision, &record))
+            .await
+            .map_err(app_error)?;
         Ok(workspace)
     }
 
     async fn import_workspace(&self, mut workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace> {
         workspace.validate().map_err(AppError::from)?;
         remap_workspace_identity(&mut workspace)?;
-        infra(self.store.insert_workspace(&Self::record(&workspace)?))?;
+        let record = Self::record(&workspace)?;
+        self.executor
+            .execute(move |store| store.insert_workspace(&record))
+            .await
+            .map_err(app_error)?;
         Ok(workspace)
     }
 
@@ -184,9 +221,10 @@ impl WorkspaceRepositoryPort for WorkspaceRepositoryAdapter {
         workspace_id: WorkspaceId,
         expected_revision: u64,
     ) -> AppResult<OperationResultViewModel> {
-        self.get_stored(workspace_id)?;
-        self.store
-            .delete_workspace(workspace_id.as_uuid(), expected_revision)
+        self.get_stored(workspace_id).await?;
+        self.executor
+            .execute(move |store| store.delete_workspace(workspace_id.as_uuid(), expected_revision))
+            .await
             .map_err(app_error)?;
         Ok(OperationResultViewModel {
             success: true,

@@ -2,6 +2,8 @@ import type {
   ProxyListener,
   ProtocolDocumentRuleDefinition,
   ProtocolRuleCapabilityCatalog,
+  ProtocolRuleEditorContext,
+  ProtocolRuleStage,
 } from "@/generated/rust-types";
 import { defaultSocketRuntimeLimits } from "@/features/listeners/listener-data-plane";
 
@@ -14,7 +16,6 @@ export function socketListener(id: string, mode: "relay" | "local" | "direct" = 
     enabled: true,
     bind_address: "127.0.0.1",
     port: 9000,
-    allowed_client_cidrs: [],
     connect_timeout_ms: 1_000,
     read_timeout_ms: 1_000,
     write_timeout_ms: 1_000,
@@ -65,6 +66,39 @@ export function capability(
       { name: "amount", label: "金额", type: "int", operators: ["equals"], actions: ["set_field"] },
     ],
     common_actions: ["record_match", "clear_document"],
+  };
+}
+
+export function editorContext(
+  listenerId: string,
+  stages: Array<{ stage: ProtocolRuleStage; schemaVersion?: number }>,
+  defaultAction: "record_match" | "clear_document" = "record_match",
+): ProtocolRuleEditorContext {
+  return {
+    listener_id: listenerId,
+    package: packageRef,
+    stages: stages.map(({ stage, schemaVersion = 7 }) => {
+      const catalog = capability(stage, schemaVersion);
+      return {
+        stage,
+        schema_version: schemaVersion,
+        fields: catalog.fields,
+        common_actions: catalog.common_actions,
+        new_rule_draft: {
+          rule_id: null,
+          expected_revision: null,
+          name: "新规则",
+          enabled: true,
+          priority: 100,
+          listener_id: listenerId,
+          package: packageRef,
+          schema_version: schemaVersion,
+          stage,
+          conditions: [],
+          actions: [{ type: defaultAction }],
+        },
+      };
+    }),
   };
 }
 

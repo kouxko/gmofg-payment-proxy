@@ -37,7 +37,7 @@ async fn downstream_server_pkcs12_is_normalized_without_persisting_container_or_
             .windows(13)
             .any(|window| window == b"server-secret")
     );
-    let resolved = adapter.resolve_identity(&imported).unwrap().unwrap();
+    let resolved = adapter.resolve_identity(&imported).await.unwrap().unwrap();
     assert_eq!(resolved.private_key_pkcs8_der.as_slice(), private_key);
 }
 

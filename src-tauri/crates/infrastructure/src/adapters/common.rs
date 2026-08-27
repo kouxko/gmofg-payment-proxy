@@ -115,6 +115,12 @@ pub(crate) fn app_error(error: InfrastructureError) -> AppError {
     AppError::new(code, message)
 }
 
+impl From<InfrastructureError> for AppError {
+    fn from(error: InfrastructureError) -> Self {
+        app_error(error)
+    }
+}
+
 pub(crate) fn infra<T>(result: Result<T, InfrastructureError>) -> AppResult<T> {
     result.map_err(app_error)
 }
@@ -164,7 +170,7 @@ mod tests {
     }
 
     #[test]
-    fn workspace_record_decoder_rejects_unknown_v3_fields_and_versions() {
+    fn workspace_record_decoder_rejects_unknown_fields_and_versions() {
         let workspace = ProxyWorkspace::default();
         for value in [
             {
@@ -184,13 +190,13 @@ mod tests {
                 value,
                 updated_at: Utc::now(),
             };
-            let error = decode_workspace_record(record).expect_err("corrupt v3 must fail");
+            let error = decode_workspace_record(record).expect_err("corrupt workspace must fail");
             assert!(!error.contains("must-not-leak"));
         }
     }
 
     #[test]
-    fn workspace_record_decoder_rejects_invalid_discriminator_and_damaged_v3() {
+    fn workspace_record_decoder_rejects_invalid_discriminator_and_damaged_record() {
         let workspace = ProxyWorkspace::default();
         for value in [
             {

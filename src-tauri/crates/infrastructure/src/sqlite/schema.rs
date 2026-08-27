@@ -4,7 +4,7 @@ use super::InfrastructureError;
 
 // Socket capture 改为纯运行时内存证据，数据库不再创建相关表。
 // 项目仍处于开发期，提升版本使旧开发数据库直接重建为当前结构。
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 19;
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 21;
 
 pub(super) fn create_current_schema(
     transaction: &Transaction<'_>,
@@ -58,9 +58,9 @@ pub(super) fn create_current_schema(
             CREATE TABLE application_feature_state (
                 feature_key TEXT PRIMARY KEY, initialized_at TEXT NOT NULL
             );
-            CREATE TABLE android_runtime_owner (
-                singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
-                serial TEXT NOT NULL, epoch TEXT NOT NULL,
+            CREATE TABLE android_runtime_owners (
+                serial TEXT PRIMARY KEY,
+                epoch TEXT NOT NULL UNIQUE,
                 mode TEXT NOT NULL CHECK(mode IN ('device_only', 'lan', 'adb_reverse')),
                 profile_id TEXT NOT NULL,
                 state TEXT NOT NULL CHECK(state IN (
@@ -78,6 +78,14 @@ pub(super) fn create_current_schema(
                 runtime_endpoints_json TEXT NOT NULL DEFAULT '[]',
                 updated_at TEXT NOT NULL
             );
+            CREATE TRIGGER android_runtime_owners_capacity
+            BEFORE INSERT ON android_runtime_owners
+            WHEN NOT EXISTS (
+                SELECT 1 FROM android_runtime_owners WHERE serial = NEW.serial
+            ) AND (SELECT COUNT(*) FROM android_runtime_owners) >= 8
+            BEGIN
+                SELECT RAISE(ABORT, 'ANDROID_RUNTIME_CAPACITY_EXCEEDED');
+            END;
             ",
         )
         .map_err(|source| InfrastructureError::DatabaseSchema { source })?;

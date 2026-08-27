@@ -14,14 +14,14 @@ use super::{
         SocketProcessingFailureKind, SocketRelayDirection, SocketRelayService, SocketRelayStage,
     },
     support::{
-        LocalFactory, ProcessorOutcome, TestObserver, connect_retry, limits, local_config,
-        reserve_address,
+        LocalFactory, ProcessorOutcome, TestObserver, bind_listener, connect_retry, limits,
+        local_config,
     },
 };
 
 #[tokio::test]
 async fn local_raw_server_echoes_each_app_read_without_an_upstream() {
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(TestObserver::default());
     let mut config = local_config(bind_addr);
     config.read_chunk_bytes = 3;
@@ -32,7 +32,11 @@ async fn local_raw_server_echoes_each_app_read_without_an_upstream() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     let request = b"raw-local-echo";
@@ -65,7 +69,7 @@ async fn local_raw_server_echoes_each_app_read_without_an_upstream() {
 
 #[tokio::test]
 async fn local_server_rejects_pipelined_requests_under_strict_exchange_ordering() {
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let factory = Arc::new(LocalFactory::new(ProcessorOutcome::Transform));
     let service = Arc::new(
         SocketRelayService::build_local_responder(
@@ -78,7 +82,11 @@ async fn local_server_rejects_pipelined_requests_under_strict_exchange_ordering(
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     client
@@ -97,7 +105,7 @@ async fn local_server_rejects_pipelined_requests_under_strict_exchange_ordering(
 
 #[tokio::test]
 async fn local_responder_observer_contains_no_upstream_evidence() {
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(TestObserver::default());
     let service = Arc::new(
         SocketRelayService::build_local_responder_with_observer(
@@ -111,7 +119,11 @@ async fn local_responder_observer_contains_no_upstream_evidence() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     client.write_all(&[1, b'a']).await.unwrap();
@@ -144,7 +156,7 @@ async fn local_responder_observer_contains_no_upstream_evidence() {
 
 #[tokio::test]
 async fn local_responder_records_responses_as_server_to_client_bytes() {
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let service = Arc::new(
         SocketRelayService::build_local_responder(
             local_config(bind_addr),
@@ -156,7 +168,11 @@ async fn local_responder_records_responses_as_server_to_client_bytes() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     client.write_all(&[2, b'o', b'k']).await.unwrap();
@@ -176,7 +192,7 @@ async fn local_responder_records_responses_as_server_to_client_bytes() {
 
 #[tokio::test]
 async fn local_responder_rejects_upstream_probe_but_still_serves_locally() {
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let service = Arc::new(
         SocketRelayService::build_local_responder(
             local_config(bind_addr),
@@ -193,7 +209,11 @@ async fn local_responder_rejects_upstream_probe_but_still_serves_locally() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
     let mut client = connect_retry(bind_addr).await;
     client.write_all(&[1, b'x']).await.unwrap();
     client.shutdown().await.unwrap();
@@ -225,7 +245,7 @@ async fn local_processor_panic_writes_nothing_and_emits_one_stable_terminal() {
 
 #[tokio::test]
 async fn local_stop_while_reading_maps_to_cancelled_and_emits_one_terminal() {
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(TestObserver::default());
     let service = Arc::new(
         SocketRelayService::build_local_responder_with_observer(
@@ -239,7 +259,11 @@ async fn local_stop_while_reading_maps_to_cancelled_and_emits_one_terminal() {
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     observer
@@ -267,7 +291,7 @@ async fn local_stop_while_reading_maps_to_cancelled_and_emits_one_terminal() {
 }
 
 async fn assert_local_failure(outcome: ProcessorOutcome, expected_code: &'static str) {
-    let bind_addr = reserve_address();
+    let (listener, bind_addr) = bind_listener().await;
     let observer = Arc::new(TestObserver::default());
     let service = Arc::new(
         SocketRelayService::build_local_responder_with_observer(
@@ -281,7 +305,11 @@ async fn assert_local_failure(outcome: ProcessorOutcome, expected_code: &'static
     let cancellation = CancellationToken::new();
     let running = Arc::clone(&service);
     let server_cancel = cancellation.clone();
-    let server = tokio::spawn(async move { running.serve(server_cancel).await });
+    let server = tokio::spawn(async move {
+        running
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
 
     let mut client = connect_retry(bind_addr).await;
     client.write_all(&[1, b'x']).await.unwrap();

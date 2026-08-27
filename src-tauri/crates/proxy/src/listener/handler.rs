@@ -9,7 +9,6 @@ use super::{ConnectionTaskScope, PrimaryConnectionOutcome, TerminalConnectionOut
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ListenerRejection {
-    NetworkDenied,
     CapacityExhausted,
 }
 
@@ -19,16 +18,6 @@ pub(crate) mod sealed {
 
 #[async_trait]
 pub(crate) trait ConnectionHandler: sealed::Sealed + Debug + Send + Sync {
-    async fn reject(
-        &self,
-        io: BoxIo,
-        _context: ConnectionContext,
-        _reason: ListenerRejection,
-        _cancellation: CancellationToken,
-    ) {
-        drop(io);
-    }
-
     async fn handle(
         &self,
         io: BoxIo,

@@ -87,8 +87,7 @@ impl Application {
         // 否则保存流程可能在检查完成后、密钥删除前通过材料校验，最终持久化一个已经
         // 被删除的托管引用。
         let _gate = self.mutation_gate.lock().await;
-        for summary in self.workspaces.list().await? {
-            let workspace = self.workspaces.get(summary.id).await?;
+        for workspace in self.workspaces.snapshot().await?.details {
             if workspace
                 .certificate_references
                 .iter()

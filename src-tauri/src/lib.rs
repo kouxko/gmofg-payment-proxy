@@ -1,3 +1,5 @@
+#![recursion_limit = "512"]
+
 //! 桌面进程的 Tauri 组合根。
 //!
 //! 这里创建唯一 `AppState`、注册 Command/插件并协调退出。窗口关闭不会直接杀进程：首个
@@ -12,6 +14,7 @@ mod runtime_logs;
 
 use std::{error::Error, path::PathBuf, sync::Arc};
 
+use intercept_proxy_application::ExchangeObservationQueries;
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::ExchangeObservationStore;
 use intercept_proxy_product_api::InterceptProxyProfile;
@@ -20,7 +23,7 @@ use tauri::{Manager, path::BaseDirectory};
 
 use crate::{
     app_state::AppState,
-    mcp::{ApplicationBackend, MCP_ENDPOINT, ReadOnlyMcpServer},
+    mcp::{ApplicationBackend, MCP_BIND_ENDPOINT, ReadOnlyMcpServer},
     native_dialog::TauriNativeFileDialog,
     runtime_logs::{ApplicationLogLevel, RuntimeLogStore, TracingBridge, install_tracing_bridge},
 };
@@ -128,20 +131,14 @@ fn initialize_application(
     let backend = Arc::new(ApplicationBackend::new(
         host.application(),
         Arc::clone(&runtime_logs),
-        Arc::clone(&exchange_observations),
+        ExchangeObservationQueries::new(exchange_observations.clone()),
     ));
-    let mcp = match tauri::async_runtime::block_on(ReadOnlyMcpServer::start(backend)) {
-        Ok(mcp) => {
-            tracing::info!(endpoint = MCP_ENDPOINT, address = %mcp.local_addr(), "read-only MCP server started");
-            Some(mcp)
-        }
-        Err(error) => {
-            tracing::warn!(endpoint = MCP_ENDPOINT, %error, "read-only MCP unavailable; proxy startup continues");
-            None
-        }
-    };
+    // IPv4 all-interface MCP is part of the accepted product boundary. Its bind
+    // failure is fatal; only IPv6 may degrade according to the server capability table.
+    let mcp = tauri::async_runtime::block_on(ReadOnlyMcpServer::start(backend))?;
+    tracing::info!(endpoint = MCP_BIND_ENDPOINT, address = %mcp.local_addr(), "MCP server started");
     Ok((
-        AppState::production(host, mcp, runtime_logs, exchange_observations),
+        AppState::production(host, Some(mcp), runtime_logs, exchange_observations),
         tracing_bridge,
     ))
 }

@@ -3,20 +3,6 @@
 use std::net::IpAddr;
 
 #[must_use]
-pub fn is_valid_cidr(value: &str) -> bool {
-    let Some((address, prefix)) = value.split_once('/') else {
-        return false;
-    };
-    let Ok(address) = address.parse::<IpAddr>() else {
-        return false;
-    };
-    let Ok(prefix) = prefix.parse::<u8>() else {
-        return false;
-    };
-    prefix <= if address.is_ipv4() { 32 } else { 128 }
-}
-
-#[must_use]
 pub fn is_valid_upstream_origin(value: &str) -> bool {
     let rest = value
         .strip_prefix("http://")

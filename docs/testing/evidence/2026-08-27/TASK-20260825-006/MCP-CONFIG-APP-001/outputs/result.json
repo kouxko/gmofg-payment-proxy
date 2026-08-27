@@ -1,0 +1,34 @@
+{
+  "bundle_build": "passed",
+  "first_start": {
+    "ipv4_wildcard_listener": true,
+    "ipv6_wildcard_listener": true,
+    "create": "preview_ready",
+    "validation_layers": [
+      "schema:passed",
+      "domain:passed",
+      "material:passed",
+      "package_projection:passed",
+      "dns_tcp_port:passed",
+      "tls_mtls:not_applicable",
+      "preview_baseline:passed"
+    ],
+    "apply_ack": "apply_queued",
+    "terminal": "committed",
+    "revision": 1
+  },
+  "persisted_workspace": {
+    "name": "G032 Packaged Full Resources",
+    "persistence_version": 6,
+    "listeners": 2,
+    "http_rules": 14,
+    "protocol_rules": 1,
+    "android_profiles": 1
+  },
+  "second_start": {
+    "persistence_corrupt": false,
+    "ipv4_wildcard_listener": true,
+    "ipv6_wildcard_listener": true,
+    "mcp_request_completed": true
+  }
+}

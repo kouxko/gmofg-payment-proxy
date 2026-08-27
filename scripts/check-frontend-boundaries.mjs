@@ -40,6 +40,158 @@ function featureModuleSource(featureName) {
     .join("\n");
 }
 
+function protocolRuleBoundaryCodes(source) {
+  const codes = [];
+  if (!source.includes("commands.protocolRuleEditorContext")) {
+    codes.push("PROTOCOL_RULE_EDITOR_CONTEXT_MISSING");
+  }
+  if (/\b(?:listenerStages|newProtocolRuleDraft)\b|commands\.protocolRuleCapabilities/.test(source)) {
+    codes.push("PROTOCOL_RULE_LEGACY_BUSINESS_HELPER");
+  }
+  const definitions = new Map();
+  for (const match of source.matchAll(
+    /\b(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*[^=;\n]+)?\s*=\s*(\[[^\]]*\])/g,
+  )) {
+    definitions.set(match[1], match[2]);
+  }
+  const ownershipStatements = [...new Set([
+    ...source.split(";"),
+    ...source.split(/\r?\n/),
+  ].filter((statement) => /\btopology\b/.test(statement)))];
+  for (const statement of ownershipStatements) {
+    const referencedDefinitions = [...definitions]
+      .filter(([identifier]) => new RegExp(`\\b${identifier}\\b`).test(statement))
+      .map(([, definition]) => definition)
+      .join(" ");
+    const ownedSource = `${statement} ${referencedDefinitions}`;
+    const stages = ownedSource.match(
+      /["'](?:app_to_proxy|proxy_to_upstream|upstream_to_proxy|proxy_to_app)["']/g,
+    ) ?? [];
+    if (new Set(stages).size >= 2) {
+      codes.push("PROTOCOL_RULE_TOPOLOGY_MATRIX");
+    }
+    if (/["'](?:record_match|clear_document|set_field|clear_field)["']/.test(ownedSource)) {
+      codes.push("PROTOCOL_RULE_DEFAULT_ACTION_MATRIX");
+    }
+  }
+  return [...new Set(codes)].sort();
+}
+
+function generatedProtocolRuleBindingCodes(source) {
+  const codes = [];
+  if (!/protocolRuleEditorContext:\s*\(listenerId:\s*ListenerId\)[\s\S]{0,240}__TAURI_INVOKE\("protocol_rule_editor_context",\s*\{ listenerId \}\)/.test(source)) {
+    codes.push("PROTOCOL_RULE_GENERATED_IPC_MISSING");
+  }
+  if (!source.includes("export type ProtocolRuleEditorContext = {")
+    || !source.includes("new_rule_draft: ProtocolRuleSaveInput")) {
+    codes.push("PROTOCOL_RULE_EDITOR_DTO_MISSING");
+  }
+  return codes;
+}
+
+function tauriProtocolRuleRegistrationCodes(source) {
+  return source.includes("protocol_rule_editor_context,")
+    ? []
+    : ["PROTOCOL_RULE_TAURI_REGISTRATION_MISSING"];
+}
+
+const protocolRuleBoundaryFixtures = [
+  [
+    "Rust editor context is the only topology source",
+    "const context = commands.protocolRuleEditorContext(listenerId); const stages = context.stages;",
+    [],
+  ],
+  [
+    "frontend listener topology stage matrix is rejected",
+    "const relayOrLocalChoices = listener.data_plane.settings.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']; commands.protocolRuleEditorContext(listener.id);",
+    ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
+  ],
+  [
+    "frontend topology-specific default action matrix is rejected",
+    "const initialBehavior = listener.topology.mode === 'local_responder' ? [{ type: 'record_match' }] : [{ type: 'clear_document' }]; commands.protocolRuleEditorContext(listener.id);",
+    ["PROTOCOL_RULE_DEFAULT_ACTION_MATRIX"],
+  ],
+  [
+    "typed const topology stage matrix is rejected",
+    "const choices: RuleStage[] = listener.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']; commands.protocolRuleEditorContext(listener.id);",
+    ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
+  ],
+  [
+    "return ternary default action matrix is rejected",
+    "commands.protocolRuleEditorContext(listener.id); function draft(listener: Listener) { return listener.topology.mode === 'local_responder' ? [{ type: 'record_match' }] : [{ type: 'clear_document' }] }",
+    ["PROTOCOL_RULE_DEFAULT_ACTION_MATRIX"],
+  ],
+  [
+    "ASI topology stage matrix is rejected",
+    "commands.protocolRuleEditorContext(listener.id)\nconst choices = listener.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']",
+    ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
+  ],
+  [
+    "indirect topology stage arrays are rejected",
+    "const local = ['app_to_proxy']; const relay = ['app_to_proxy', 'proxy_to_upstream']; const choices = listener.topology.mode === 'local_responder' ? local : relay; commands.protocolRuleEditorContext(listener.id);",
+    ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
+  ],
+  [
+    "legacy per-stage capability command is rejected",
+    "commands.protocolRuleEditorContext(listener.id); commands.protocolRuleCapabilities(listener.id, stage);",
+    ["PROTOCOL_RULE_LEGACY_BUSINESS_HELPER"],
+  ],
+  [
+    "missing Rust editor context is rejected",
+    "const stages = server.stages;",
+    ["PROTOCOL_RULE_EDITOR_CONTEXT_MISSING"],
+  ],
+];
+
+const generatedProtocolRuleBindingFixtures = [
+  [
+    "generated binding keeps camelCase argument translation and editor DTO",
+    'protocolRuleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("protocol_rule_editor_context", { listenerId }); export type ProtocolRuleEditorContext = { new_rule_draft: ProtocolRuleSaveInput };',
+    [],
+  ],
+  [
+    "generated binding cannot regress to a snake_case caller argument",
+    'protocolRuleEditorContext: (listener_id: ListenerId) => __TAURI_INVOKE("protocol_rule_editor_context", { listener_id }); export type ProtocolRuleEditorContext = { new_rule_draft: ProtocolRuleSaveInput };',
+    ["PROTOCOL_RULE_GENERATED_IPC_MISSING"],
+  ],
+  [
+    "generated editor context must retain the Rust draft DTO",
+    'protocolRuleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("protocol_rule_editor_context", { listenerId });',
+    ["PROTOCOL_RULE_EDITOR_DTO_MISSING"],
+  ],
+];
+
+for (const [name, source, expected] of protocolRuleBoundaryFixtures) {
+  const actual = protocolRuleBoundaryCodes(source).sort();
+  if (JSON.stringify(actual) !== JSON.stringify([...expected].sort())) {
+    process.stderr.write(
+      `Frontend boundary fixture ${name}: expected [${expected}], got [${actual}]\n`,
+    );
+    process.exitCode = 1;
+  }
+}
+for (const [name, source, expected] of generatedProtocolRuleBindingFixtures) {
+  const actual = generatedProtocolRuleBindingCodes(source).sort();
+  if (JSON.stringify(actual) !== JSON.stringify([...expected].sort())) {
+    process.stderr.write(
+      `Frontend generated-binding fixture ${name}: expected [${expected}], got [${actual}]\n`,
+    );
+    process.exitCode = 1;
+  }
+}
+for (const [name, source, expected] of [
+  ["Tauri command is registered", "protocol_rule_editor_context,", []],
+  ["missing Tauri command registration is rejected", "protocol_rule_list,", ["PROTOCOL_RULE_TAURI_REGISTRATION_MISSING"]],
+]) {
+  const actual = tauriProtocolRuleRegistrationCodes(source);
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    process.stderr.write(
+      `Frontend Tauri-registration fixture ${name}: expected [${expected}], got [${actual}]\n`,
+    );
+    process.exitCode = 1;
+  }
+}
+
 // 第一层是跨文件通用禁令。正则只识别明确的危险模式，命中后要求开发者把逻辑下沉到 Rust
 // 或改用 HeroUI；不要为了“绕过正则”改写同一段前端业务逻辑。
 const forbidden = [
@@ -236,6 +388,39 @@ if (
 ) {
   failures.push(
     "src/features/rules/rule-editor.tsx: Rust 异步草稿必须统一使用保存门禁和代次隔离，解析结果必须函数式合并到最新动作",
+  );
+}
+
+const protocolRuleSource = featureModuleSource("rules");
+const protocolRuleBoundaryFailures = protocolRuleBoundaryCodes(protocolRuleSource);
+if (protocolRuleBoundaryFailures.includes("PROTOCOL_RULE_EDITOR_CONTEXT_MISSING")) {
+  failures.push(
+    "src/features/rules: 协议规则编辑器必须从 Rust protocolRuleEditorContext 取得全部阶段、能力和新规则草稿",
+  );
+}
+if (protocolRuleBoundaryFailures.some((code) => code !== "PROTOCOL_RULE_EDITOR_CONTEXT_MISSING")) {
+  failures.push(
+    "src/features/rules: 禁止在前端推导协议规则阶段或新规则默认值，也不得按前端选择的 stage 查询旧能力接口",
+  );
+}
+
+const generatedBindingsSource = readFileSync(
+  join(sourceRoot, "generated", "rust-types.ts"),
+  "utf8",
+);
+if (generatedProtocolRuleBindingCodes(generatedBindingsSource).length > 0) {
+  failures.push(
+    "src/generated/rust-types.ts: 缺少 protocol_rule_editor_context 的 camelCase 参数绑定或完整编辑上下文 DTO",
+  );
+}
+
+const tauriCommandsSource = readFileSync(
+  join(root, "src-tauri", "src", "commands", "mod.rs"),
+  "utf8",
+);
+if (tauriProtocolRuleRegistrationCodes(tauriCommandsSource).length > 0) {
+  failures.push(
+    "src-tauri/src/commands/mod.rs: protocol_rule_editor_context 必须注册到 Tauri handler",
   );
 }
 

@@ -391,6 +391,7 @@ fn context(fields: &Fields) -> Option<ExchangeContext> {
         ExchangeProtocol::Http => Some(ExchangeContext::Http {
             header: fields.text("context_header")?,
             body: fields.text("context_body")?,
+            body_is_utf8: fields.text("context_body_is_utf8")?.parse().ok()?,
         }),
         ExchangeProtocol::Socket => Some(ExchangeContext::Socket {
             bytes: decode_hex(&fields.text("context_bytes_hex")?)?,

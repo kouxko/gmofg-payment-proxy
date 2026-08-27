@@ -292,7 +292,6 @@ fn service_with_connector(
         endpoint: "echo.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(500).unwrap(),
-        allowed_client_cidrs: Vec::new(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(2),
         write_timeout: Duration::from_secs(2),

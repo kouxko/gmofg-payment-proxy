@@ -7,6 +7,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use uuid::Uuid;
 
 use crate::{
     AndroidNetworkStatusViewModel, AndroidRuntimeEndpointViewModel, AndroidRuntimeOwnerViewModel,
@@ -49,6 +50,8 @@ pub struct DiagnosticReportCollectionError {
     pub section: DiagnosticReportSection,
     pub code: String,
     pub message: String,
+    pub entity_id: Option<String>,
+    pub runtime_epoch: Option<Uuid>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -72,8 +75,8 @@ pub struct DiagnosticReportBundle {
     pub protocol_package_detail: Option<ProtocolPackageDetailViewModel>,
     pub external_package_service: Option<ExternalPackageServiceStatusViewModel>,
     pub diagnostics: Vec<DiagnosticLogRowViewModel>,
-    pub android_network_status: Option<AndroidNetworkStatusViewModel>,
-    pub android_runtime_owner: Option<AndroidRuntimeOwnerViewModel>,
+    pub android_network_statuses: Vec<AndroidNetworkStatusViewModel>,
+    pub android_runtime_owners: Vec<AndroidRuntimeOwnerViewModel>,
     pub android_runtime_endpoints: Vec<AndroidRuntimeEndpointViewModel>,
     pub environment: DiagnosticReportEnvironment,
     pub reproduction_steps: Vec<String>,

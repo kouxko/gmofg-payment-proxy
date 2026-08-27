@@ -53,7 +53,6 @@ async fn plaintext_reverse_listener_preserves_every_byte() {
     let cancellation = CancellationToken::new();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: downstream_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("http://{upstream_address}"),
         downstream_tls: None,
         upstream_tls: None,
@@ -191,7 +190,6 @@ async fn raw_listener_stop_returns_with_an_active_silent_connection() {
     let downstream_address = downstream.local_addr().unwrap();
     let service = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: downstream_address,
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: format!("http://{upstream_address}"),
         downstream_tls: None,
         upstream_tls: None,
@@ -221,7 +219,6 @@ async fn raw_listener_stop_returns_with_an_active_silent_connection() {
 async fn fixed_server_build_reports_dns_failure_before_serving() {
     let error = ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: "127.0.0.1:0".parse().unwrap(),
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: "http://phase-zero-does-not-exist.invalid:18080".into(),
         downstream_tls: None,
         upstream_tls: None,
@@ -236,10 +233,9 @@ async fn fixed_server_build_reports_dns_failure_before_serving() {
 }
 
 #[tokio::test]
-async fn non_loopback_listener_allows_all_clients_without_cidr() {
+async fn non_loopback_listener_allows_all_clients() {
     ReverseProxyService::build(ReverseProxyConfig {
         bind_addr: "0.0.0.0:18080".parse().unwrap(),
-        allowed_client_cidrs: Vec::new(),
         upstream_origin: "http://127.0.0.1:9".into(),
         downstream_tls: None,
         upstream_tls: None,
@@ -248,5 +244,5 @@ async fn non_loopback_listener_allows_all_clients_without_cidr() {
         write_timeout: Duration::from_secs(1),
     })
     .await
-    .expect("empty CIDR list explicitly allows all clients");
+    .expect("non-loopback reverse listener accepts external clients");
 }

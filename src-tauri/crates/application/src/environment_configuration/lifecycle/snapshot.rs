@@ -1,10 +1,19 @@
 use serde::{Deserialize, Serialize};
+use std::fmt::Write as _;
 use uuid::Uuid;
 
-use crate::environment_configuration::{EnvironmentAdmittedTarget, EnvironmentStatusCode};
+use crate::environment_configuration::EnvironmentValidationResult;
+use crate::environment_configuration::{
+    EnvironmentAdmittedTarget, EnvironmentStatusCode, EnvironmentValidationLayer,
+    EnvironmentValidationStatus,
+};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EnvironmentCandidatePublicSnapshot {
+    #[serde(skip)]
+    schema_version: u8,
+    #[serde(skip)]
+    validation_engine_version: u32,
     target_key: String,
     target: EnvironmentPreviewTarget,
     baseline_public: EnvironmentBaselinePublic,
@@ -21,6 +30,8 @@ impl EnvironmentCandidatePublicSnapshot {
         let wire: EnvironmentCandidatePublicSnapshotWire = serde_json::from_slice(bytes)?;
         let target_key = wire.target.public_key();
         Ok(Self {
+            schema_version: 1,
+            validation_engine_version: crate::ENVIRONMENT_VALIDATION_ENGINE_VERSION,
             target_key,
             target: wire.target,
             baseline_public: wire.baseline_public,
@@ -37,8 +48,16 @@ impl EnvironmentCandidatePublicSnapshot {
         })
     }
 
-    pub(super) fn admitted_target(&self) -> EnvironmentAdmittedTarget {
+    pub(crate) fn admitted_target(&self) -> EnvironmentAdmittedTarget {
         self.target.admitted_target()
+    }
+
+    pub(crate) const fn schema_version(&self) -> u8 {
+        self.schema_version
+    }
+
+    pub(crate) const fn validation_engine_version(&self) -> u32 {
+        self.validation_engine_version
     }
 
     pub(super) fn into_parts(
@@ -49,6 +68,11 @@ impl EnvironmentCandidatePublicSnapshot {
         Vec<EnvironmentValidationLayerResult>,
         EnvironmentCandidatePreview,
     ) {
+        debug_assert_eq!(self.schema_version(), 1);
+        debug_assert_eq!(
+            self.validation_engine_version(),
+            crate::ENVIRONMENT_VALIDATION_ENGINE_VERSION
+        );
         (
             self.target_key,
             self.baseline_public,
@@ -104,9 +128,23 @@ impl EnvironmentPreviewTarget {
     }
 
     fn public_key(&self) -> String {
-        match self {
-            Self::Existing { workspace_id, .. } => format!("existing:{workspace_id}"),
-            Self::New { name } => format!("new:{}", name.trim().to_lowercase()),
+        exact_public_target_key(&self.admitted_target())
+    }
+}
+
+pub(crate) fn exact_public_target_key(target: &EnvironmentAdmittedTarget) -> String {
+    match target {
+        EnvironmentAdmittedTarget::Existing { workspace_id, .. } => {
+            format!("existing:{workspace_id}")
+        }
+        EnvironmentAdmittedTarget::New { name } => {
+            let trimmed = name.trim();
+            let mut key = String::with_capacity(4 + trimmed.len() * 2);
+            key.push_str("new:");
+            for byte in trimmed.as_bytes() {
+                write!(&mut key, "{byte:02x}").expect("writing to a String cannot fail");
+            }
+            key
         }
     }
 }
@@ -137,6 +175,16 @@ impl EnvironmentValidationLayerResult {
             code: Some(EnvironmentStatusCode::ValidationLayerFailed),
             reason: Some("environment validation layer failed"),
             duration_ms,
+        }
+    }
+
+    pub(crate) fn from_orchestrated(result: &EnvironmentValidationResult) -> Self {
+        Self {
+            layer: result.layer(),
+            status: result.status(),
+            code: result.code(),
+            reason: result.reason(),
+            duration_ms: result.duration_ms(),
         }
     }
 }
@@ -179,28 +227,6 @@ struct EnvironmentCandidatePublicSnapshotWire {
     materials_public: EnvironmentMaterialsPublic,
     protocol_document_values: Vec<EnvironmentDocumentValue>,
     terminal_action_fields: EnvironmentTerminalActionFields,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum EnvironmentValidationLayer {
-    Schema,
-    Domain,
-    Material,
-    PackageProjection,
-    DnsTcpPort,
-    TlsMtls,
-    PreviewBaseline,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum EnvironmentValidationStatus {
-    Passed,
-    Failed,
-    Cancelled,
-    NotApplicable,
-    SkippedDependency,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -282,7 +308,6 @@ enum EnvironmentCertificateEncoding {
 struct EnvironmentSecretPublic {
     alias: String,
     role: EnvironmentSecretRole,
-    username: String,
     label: String,
 }
 

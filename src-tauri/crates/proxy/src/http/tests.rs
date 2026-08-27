@@ -134,7 +134,6 @@ fn downstream_test_service(
         endpoint: "fixed.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(1).expect("valid test capacity"),
-        allowed_client_cidrs: Vec::new(),
         limits: MessageLimits::default(),
         read_timeout: Duration::from_secs(1),
         write_timeout,

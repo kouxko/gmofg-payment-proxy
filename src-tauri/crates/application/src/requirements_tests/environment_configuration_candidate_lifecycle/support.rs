@@ -1,11 +1,14 @@
+use crate::{
+    EnvironmentApplyGenerations, EnvironmentConfigurationCandidateV1, ProxyWorkspace,
+    parse_environment_configuration_candidate_v1,
+};
 pub(crate) use crate::{
     EnvironmentApplyWork, EnvironmentCancelStatus, EnvironmentCandidateEpoch,
     EnvironmentCandidateId, EnvironmentCandidateLifecycleError, EnvironmentCandidatePolicy,
     EnvironmentCandidatePublicSnapshot, EnvironmentCandidateRegistry, EnvironmentCandidateStatus,
     EnvironmentConfirmationToken, EnvironmentDiagnostic, EnvironmentStatusCode,
-    EnvironmentValidationLayerResult,
+    EnvironmentValidatedApplyBaseline, EnvironmentValidationLayerResult,
 };
-use crate::{EnvironmentConfigurationCandidateV1, parse_environment_configuration_candidate_v1};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -62,6 +65,35 @@ pub(crate) fn registry() -> EnvironmentCandidateRegistry {
     EnvironmentCandidateRegistry::new(EnvironmentCandidatePolicy::default())
 }
 
+pub(crate) fn sealed_baseline() -> EnvironmentValidatedApplyBaseline {
+    EnvironmentValidatedApplyBaseline::validated(
+        EnvironmentApplyGenerations {
+            application_mutation: 1,
+            ..EnvironmentApplyGenerations::default()
+        },
+        [1; 32],
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )
+}
+
+pub(crate) fn validated_workspace() -> ProxyWorkspace {
+    let workspace = ProxyWorkspace::default();
+    workspace.validate().expect("fixture Workspace validates");
+    workspace
+}
+
+pub(crate) fn complete_preview_ready(
+    registry: &EnvironmentCandidateRegistry,
+    candidate_id: &EnvironmentCandidateId,
+    snapshot: EnvironmentCandidatePublicSnapshot,
+) -> Result<crate::EnvironmentCandidateCreateResult, EnvironmentCandidateLifecycleError> {
+    registry.attach_validated_apply_baseline(candidate_id, sealed_baseline())?;
+    registry.complete_preview_ready(candidate_id, snapshot, validated_workspace())
+}
+
 pub(crate) fn json(value: &impl Serialize) -> Value {
     serde_json::to_value(value).expect("public lifecycle output serializes")
 }
@@ -92,9 +124,12 @@ pub(crate) fn admit_preview_ready(
     epoch: u64,
 ) -> crate::EnvironmentCandidateCreateResult {
     let admitted = insert_validating(registry, name, epoch);
-    registry
-        .complete_preview_ready(admitted.candidate_id(), public_snapshot_named(name))
-        .expect("prevalidated candidate becomes preview-ready")
+    complete_preview_ready(
+        registry,
+        admitted.candidate_id(),
+        public_snapshot_named(name),
+    )
+    .expect("prevalidated candidate becomes preview-ready")
 }
 
 pub(crate) fn claim_apply(

@@ -17,7 +17,7 @@ UI 用户意图
 
 ## 2. SQLite 当前保存什么
 
-当前 schema version 为 19，主要表包括：
+当前 schema version 为 21，主要表包括：
 
 - `settings`：全局设置 JSON 和 revision；
 - `workspaces`、`workspace_state`：完整 Workspace JSON、revision 与当前选择；
@@ -25,7 +25,7 @@ UI 用户意图
 - `protected_secrets`：provider/key 对应的受保护 blob；
 - `protocol_packages`、`protocol_package_files`：精确包版本、校验状态和不可变源文件；
 - `external_protocol_packages`：外部包注册指纹、启用状态、最近连接和稳定错误；
-- `android_runtime_owner`：跨进程恢复所需的设备网络所有权事实；
+- `android_runtime_owners`：最多 8 台设备、按 serial + epoch 隔离的跨进程网络所有权事实；
 - `application_feature_state`：一次性初始化状态。
 
 HTTP capture、Socket ExchangeObservation 和运行时报文不创建数据库表；它们保存在有界内存。普通
@@ -74,6 +74,10 @@ Workspace 只保存类型化 `CertificateReference`，引用用途包括：
 SQLite 的证书/秘密列保存 protected blob。macOS 通过 Keychain 中的主密钥保护 envelope；Windows
 使用 current-user DPAPI。明文私钥、P12 密码和密钥只在导入、解析、TLS plan 构造等短生命周期
 内存边界出现，不进入普通 ViewModel 或 Debug 输出。
+
+上游 Server Trust 的单个 PEM 文件可以包含多张 CA。导入边界逐张验证并规范化完整 Bundle，
+protected blob 保存全部成员；恢复和 TLS plan 构造再次解析同一 Bundle，并把每张证书加入现有
+Trust Store。历史单证书 PEM/DER 记录继续作为单成员集合加载，无数据库迁移或双实现路径。
 
 证书公开查询只返回 subject、issuer、指纹、有效期、用途和就绪状态等元数据。`MitmRootCa`
 是本机安装身份，不作为可移植证书材料导出。
@@ -179,11 +183,12 @@ Debug 只显示材料数量和 password 是否存在。
 
 ## 9. 重置与恢复
 
-“重置应用数据”会在事务中删除受保护秘密、证书、Android runtime owner、协议包和 Workspace，
+“重置应用数据”会在事务中删除受保护秘密、证书、全部 Android runtime owners、协议包和 Workspace，
 递增证书状态，并写入唯一默认 Workspace/Settings；可选内置包在同一事务恢复。
 
-Android runtime owner 单独持久化，是因为 ADB reverse 或设备断线可能跨进程遗留资源。它只保存
-恢复/清理所需的端口和状态事实，不保存运行报文。
+Android runtime owners 单独持久化，是因为 ADB reverse 或设备断线可能跨进程遗留资源。每条记录
+只保存对应 serial/epoch 恢复或清理所需的端口和状态事实，不保存运行报文；加载、关停和诊断均按
+serial 稳定排序，单设备失败不得导致其他 owner 被忽略。
 
 ## 10. 验证逻辑
 

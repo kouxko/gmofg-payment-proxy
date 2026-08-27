@@ -52,6 +52,28 @@ pub struct ProtocolRuleCapabilityCatalog {
     pub common_actions: Vec<ProtocolRuleCommonActionCapability>,
 }
 
+/// 单个处理阶段的完整编辑合同。
+///
+/// Schema 版本属于阶段，因为同一个协议包的上行与下行 Schema 可以独立演进。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct ProtocolRuleEditorStage {
+    pub stage: ProtocolRuleStage,
+    pub schema_version: u32,
+    pub fields: Vec<ProtocolRuleFieldCapability>,
+    pub common_actions: Vec<ProtocolRuleCommonActionCapability>,
+    pub new_rule_draft: ProtocolRuleSaveInput,
+}
+
+/// 规则编辑器针对一个 Listener 的 Rust 权威上下文。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct ProtocolRuleEditorContext {
+    pub listener_id: ListenerId,
+    pub package: ProtocolPackageRef,
+    pub stages: Vec<ProtocolRuleEditorStage>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolRuleSaveInput {

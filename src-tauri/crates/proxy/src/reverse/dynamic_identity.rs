@@ -4,6 +4,7 @@
 
 use std::{
     collections::{BTreeMap, VecDeque},
+    panic::{AssertUnwindSafe, catch_unwind},
     sync::{Arc, Condvar, Mutex, MutexGuard},
 };
 
@@ -55,21 +56,26 @@ impl DynamicServerIdentityResolver {
             return flight.wait();
         }
 
-        let issued = self
-            .authority
-            .issue_server_identity(server_name)
-            .and_then(|identity| {
-                certified_key_from_parts(
-                    &identity.certificate_chain_der,
-                    identity.private_key_pkcs8_der.to_vec(),
-                )
-            })
-            .map(Arc::new);
+        let mut owner = FlightOwner::new(self, cache_key, flight);
+        let issued = catch_unwind(AssertUnwindSafe(|| {
+            self.authority
+                .issue_server_identity(server_name)
+                .and_then(|identity| {
+                    certified_key_from_parts(
+                        &identity.certificate_chain_der,
+                        identity.private_key_pkcs8_der.to_vec(),
+                    )
+                })
+                .map(Arc::new)
+        }))
+        .unwrap_or_else(|_| {
+            Err(ProxyError::new(
+                ErrorCode::Internal,
+                "dynamic server identity issuance panicked",
+            ))
+        });
         let outcome = SharedOutcome::from_result(issued);
-        // 先发布结果，再从 in-flight 表中移除 owner。否则这两个操作之间到达的
-        // 请求会创建第二个签发任务，破坏同一 SNI 只签发一次的 single-flight 语义。
-        flight.publish(outcome.clone());
-        self.finish_flight(&cache_key, &flight, outcome.value());
+        owner.complete(&outcome);
         outcome.into_result()
     }
 
@@ -115,6 +121,51 @@ impl DynamicServerIdentityResolver {
     }
 }
 
+struct FlightOwner<'a> {
+    resolver: &'a DynamicServerIdentityResolver,
+    key: String,
+    flight: Arc<IdentityFlight>,
+    completed: bool,
+}
+
+impl<'a> FlightOwner<'a> {
+    fn new(
+        resolver: &'a DynamicServerIdentityResolver,
+        key: String,
+        flight: Arc<IdentityFlight>,
+    ) -> Self {
+        Self {
+            resolver,
+            key,
+            flight,
+            completed: false,
+        }
+    }
+
+    fn complete(&mut self, outcome: &SharedOutcome) {
+        // Publish before removing the exact owner so a concurrent waiter cannot start a second
+        // issuance in the gap.
+        self.flight.publish(outcome.clone());
+        self.resolver
+            .finish_flight(&self.key, &self.flight, outcome.value());
+        self.completed = true;
+    }
+}
+
+impl Drop for FlightOwner<'_> {
+    fn drop(&mut self) {
+        if self.completed {
+            return;
+        }
+        let failure = SharedOutcome::Failure(Arc::new(SharedError {
+            code: ErrorCode::Internal.as_str(),
+            message: "dynamic server identity issuance owner was dropped".into(),
+        }));
+        self.flight.publish(failure);
+        self.resolver.finish_flight(&self.key, &self.flight, None);
+    }
+}
+
 impl ResolvesServerCert for DynamicServerIdentityResolver {
     fn resolve(&self, client_hello: ClientHello<'_>) -> Option<Arc<CertifiedKey>> {
         let Some(server_name) = client_hello.server_name() else {
@@ -155,10 +206,19 @@ enum CacheLookup {
 struct IdentityFlight {
     outcome: Mutex<Option<SharedOutcome>>,
     ready: Condvar,
+    #[cfg(test)]
+    waiter_count: Mutex<usize>,
+    #[cfg(test)]
+    waiter_ready: Condvar,
 }
 
 impl IdentityFlight {
     fn wait(&self) -> Result<Arc<CertifiedKey>> {
+        #[cfg(test)]
+        {
+            *lock_recover(&self.waiter_count) += 1;
+            self.waiter_ready.notify_all();
+        }
         let mut outcome = lock_recover(&self.outcome);
         while outcome.is_none() {
             outcome = self
@@ -171,6 +231,17 @@ impl IdentityFlight {
             .expect("flight outcome is ready")
             .clone()
             .into_result()
+    }
+
+    #[cfg(test)]
+    fn wait_for_waiters(&self, expected: usize) {
+        let mut count = lock_recover(&self.waiter_count);
+        while *count < expected {
+            count = self
+                .waiter_ready
+                .wait(count)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
     }
 
     fn publish(&self, outcome: SharedOutcome) {

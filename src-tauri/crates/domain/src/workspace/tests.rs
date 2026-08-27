@@ -49,7 +49,7 @@ fn listener_body_codec_values_are_deserializable() {
 }
 
 #[test]
-fn non_loopback_forward_listener_requires_authentication_but_allows_empty_cidr() {
+fn non_loopback_forward_listener_requires_authentication() {
     let mut workspace = ProxyWorkspace::default();
     let listener = &mut workspace.listeners[0];
     listener.enabled = true;
@@ -60,15 +60,10 @@ fn non_loopback_forward_listener_requires_authentication_but_allows_empty_cidr()
             .field_errors
             .contains_key("listeners.0.data_plane.settings.authentication")
     );
-    assert!(
-        !error
-            .field_errors
-            .contains_key("listeners.0.allowed_client_cidrs")
-    );
 }
 
 #[test]
-fn non_loopback_fixed_server_allows_all_clients_when_cidr_is_empty() {
+fn non_loopback_fixed_server_allows_all_clients() {
     let mut workspace = ProxyWorkspace::default();
     let listener = &mut workspace.listeners[0];
     listener.enabled = true;
@@ -314,12 +309,4 @@ fn apply_is_atomic_and_preserves_workspace_identity() {
     assert_eq!(revision, Revision::new(2));
     assert_eq!(stored.id, original_id);
     assert_eq!(stored.name, "Renamed");
-}
-
-#[test]
-fn cidr_validation_handles_ipv4_and_ipv6() {
-    assert!(is_valid_cidr("127.0.0.0/8"));
-    assert!(is_valid_cidr("2001:db8::/32"));
-    assert!(!is_valid_cidr("10.0.0.0/33"));
-    assert!(!is_valid_cidr("not-an-ip/24"));
 }
