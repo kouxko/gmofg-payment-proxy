@@ -98,7 +98,7 @@ async fn reopened_adapter_restores_all_owners_in_serial_order() {
     store
         .reserve_android_runtime_owner(&crate::AndroidRuntimeOwnerRecord {
             owner: runtime_owner("DEVICE-B", AndroidRuntimeOwnerState::Active),
-            reverse_ports: Vec::new(),
+            reverse_ports: vec![40_123],
             resume_state: None,
             runtime_endpoints: Vec::new(),
         })
@@ -126,5 +126,14 @@ async fn reopened_adapter_restores_all_owners_in_serial_order() {
         owners
             .iter()
             .all(|owner| owner.source == AndroidRuntimeOwnerSource::Recovery)
+    );
+    assert_eq!(
+        adapter
+            .owner_state_snapshot_for("DEVICE-B")
+            .await
+            .active_reverse
+            .unwrap()
+            .ports,
+        vec![40_123]
     );
 }

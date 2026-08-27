@@ -1,11 +1,13 @@
 use std::{
     io,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::sync::Notify;
 use tokio_tungstenite::{WebSocketStream, tungstenite::protocol::Role};
 
 use crate::adapters::external_packages::{
@@ -18,6 +20,7 @@ struct ScriptedIo {
     block_write_at: Option<usize>,
     fail_read: bool,
     read_bytes: &'static [u8],
+    blocked_write_started: Option<Arc<Notify>>,
 }
 
 impl ScriptedIo {
@@ -28,6 +31,7 @@ impl ScriptedIo {
             block_write_at: None,
             fail_read: false,
             read_bytes: &[],
+            blocked_write_started: None,
         }
     }
 
@@ -38,6 +42,7 @@ impl ScriptedIo {
             block_write_at: None,
             fail_read: true,
             read_bytes: &[],
+            blocked_write_started: None,
         }
     }
 
@@ -51,17 +56,35 @@ impl ScriptedIo {
             block_write_at: None,
             fail_read: false,
             read_bytes: MASKED_PING,
+            blocked_write_started: None,
         }
     }
 
-    fn block_write_at(write: usize) -> Self {
-        Self {
-            writes: 0,
-            fail_write_at: None,
-            block_write_at: Some(write),
-            fail_read: false,
-            read_bytes: &[],
-        }
+    fn ping_then_block_flush() -> (Self, Arc<Notify>) {
+        const MASKED_PING: &[u8] = &[0x89, 0x83, 1, 2, 3, 4, 0, 0, 0];
+        Self::blocking_write_at_with_bytes(2, MASKED_PING)
+    }
+
+    fn blocking_write_at(write: usize) -> (Self, Arc<Notify>) {
+        Self::blocking_write_at_with_bytes(write, &[])
+    }
+
+    fn blocking_write_at_with_bytes(
+        write: usize,
+        read_bytes: &'static [u8],
+    ) -> (Self, Arc<Notify>) {
+        let blocked_write_started = Arc::new(Notify::new());
+        (
+            Self {
+                writes: 0,
+                fail_write_at: None,
+                block_write_at: Some(write),
+                fail_read: false,
+                read_bytes,
+                blocked_write_started: Some(blocked_write_started.clone()),
+            },
+            blocked_write_started,
+        )
     }
 }
 
@@ -100,6 +123,9 @@ impl AsyncWrite for ScriptedIo {
                 "scripted write failure",
             )))
         } else if self.block_write_at == Some(self.writes) {
+            if let Some(blocked_write_started) = &self.blocked_write_started {
+                blocked_write_started.notify_one();
+            }
             Poll::Pending
         } else {
             Poll::Ready(Ok(buffer.len()))
@@ -144,6 +170,20 @@ async fn registration_reports_initial_write_failure_as_transport_error() {
     ));
 }
 
+#[tokio::test(start_paused = true)]
+async fn blocked_registration_write_obeys_the_registration_phase_deadline() {
+    let (io, blocked_write_started) = ScriptedIo::blocking_write_at(1);
+    let connecting = tokio::spawn(connect(io));
+    blocked_write_started.notified().await;
+    tokio::time::advance(Duration::from_secs(30)).await;
+
+    assert!(matches!(
+        connecting.await.expect("join"),
+        ExternalPackageConnectionError::Timeout { ref method, .. }
+            if method == "package.register"
+    ));
+}
+
 #[tokio::test]
 async fn registration_reports_read_failure_as_transport_error() {
     assert!(matches!(
@@ -161,6 +201,20 @@ async fn registration_reports_pong_flush_failure_as_transport_error() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn blocked_registration_pong_flush_obeys_the_registration_phase_deadline() {
+    let (io, blocked_write_started) = ScriptedIo::ping_then_block_flush();
+    let connecting = tokio::spawn(connect(io));
+    blocked_write_started.notified().await;
+    tokio::time::advance(Duration::from_secs(30)).await;
+
+    assert!(matches!(
+        connecting.await.expect("join"),
+        ExternalPackageConnectionError::Timeout { ref method, .. }
+            if method == "package.register"
+    ));
+}
+
+#[tokio::test(start_paused = true)]
 async fn registration_reports_heartbeat_write_failure_as_transport_error() {
     let connecting = tokio::spawn(connect(ScriptedIo::fail_write_at(2)));
     tokio::task::yield_now().await;
@@ -174,9 +228,11 @@ async fn registration_reports_heartbeat_write_failure_as_transport_error() {
 
 #[tokio::test(start_paused = true)]
 async fn blocked_registration_heartbeat_write_obeys_the_registration_phase_deadline() {
-    let connecting = tokio::spawn(connect(ScriptedIo::block_write_at(2)));
-    tokio::task::yield_now().await;
-    tokio::time::advance(Duration::from_secs(30)).await;
+    let (io, blocked_write_started) = ScriptedIo::blocking_write_at(2);
+    let connecting = tokio::spawn(connect(io));
+    tokio::time::advance(Duration::from_secs(5)).await;
+    blocked_write_started.notified().await;
+    tokio::time::advance(Duration::from_secs(25)).await;
 
     assert!(matches!(
         connecting.await.expect("join"),

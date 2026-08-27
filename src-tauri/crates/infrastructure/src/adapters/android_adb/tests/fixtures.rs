@@ -230,3 +230,28 @@ pub(super) fn activation_runtime() -> ActiveRuntimeFacts {
         endpoints: Vec::new(),
     }
 }
+
+pub(super) fn prepared_runtime(owner: AndroidRuntimeOwnerViewModel) -> PreparedUsbProxyRuntime {
+    let runtime = ActiveRuntimeFacts {
+        epoch: owner.epoch,
+        serial: owner.serial.clone(),
+        profile_id: owner.profile_id.clone(),
+        profile_fingerprint: "profile-fingerprint".into(),
+        route_fingerprint: "route-fingerprint".into(),
+        route_count: 1,
+        listener_ports: BTreeMap::new(),
+        uses_adb_reverse: true,
+        endpoints: Vec::new(),
+    };
+    PreparedUsbProxyRuntime {
+        payload: serde_json::json!({}),
+        reverse: None,
+        runtime,
+        owner,
+        previous_owner: None,
+        previous_resume_state: None,
+        previous_reverse: None,
+        previous_runtime: None,
+        previous_endpoints: Vec::new(),
+    }
+}
