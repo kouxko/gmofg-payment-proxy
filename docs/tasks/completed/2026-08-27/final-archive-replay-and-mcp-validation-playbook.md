@@ -3,12 +3,12 @@
 ## 任务信息
 
 - 任务 ID：`TASK-20260827-003`
-- 状态：`进行中`
+- 状态：`已完成`
 - 任务日期：`2026-08-27`
 - 创建时间：`2026-08-27 12:42:34 +08:00`
 - 开始时间：`2026-08-27 12:58:00 +08:00`
-- 最后更新时间：`2026-08-27 15:33:29 +08:00`
-- 完成时间：`N/A`
+- 最后更新时间：`2026-08-27 22:27:08 +08:00`
+- 完成时间：`2026-08-27 22:27:08 +08:00`
 - 创建路径：`docs/tasks/pending/2026-08-27/final-archive-replay-and-mcp-validation-playbook.md`
 - 归档路径：`docs/tasks/completed/2026-08-27/final-archive-replay-and-mcp-validation-playbook.md`
 - 关键词：`final validation`、`archived scenarios`、`running proxy`、`replay`、`MCP resource`、`validation playbook`、`Windows CI`
@@ -104,7 +104,7 @@
 | FVR-03 | 启动最终 Proxy 并复跑本地/协议/网络场景 | FVR-01 | 否 | 已完成 | 实际请求、运行状态和输出可复核 |
 | FVR-04 | 复跑外部服务、真机和人工 UI 场景 | FVR-01 | 可按资源并行 | 已完成 | 可用场景 PASS，资源缺失场景准确 NOT_RUN |
 | FVR-05 | 编写并发布 MCP 验证经验指南 resource | FVR-01..04 | 否 | 已完成 | resource 可列举、读取，内容与实际边界一致 |
-| FVR-06 | 整体对抗审查、最终提交、推送和 Windows CI | FVR-02..05 | 否 | 进行中 | 本地审查与门禁已完成，等待远程 Windows CI |
+| FVR-06 | 整体对抗审查、最终提交、推送和 Windows CI | FVR-02..05 | 否 | 已完成 | 整体审查 APPROVE，完整 CI 与 Windows 安装包构建成功 |
 
 ## 测试计划
 
@@ -134,6 +134,7 @@
 - `2026-08-27 12:42:34 +08:00`：登记最终归档复跑和 MCP 通用经验需求；确定采用只读版本化 resource，不新增自动修改工具。
 - `2026-08-27 14:51:10 +08:00`：完成场景分类、归档资源复跑、全本地门禁、隔离 App 的 MCP 指南读取、完整候选 create/apply/status、退出重启和端口释放；Android 真机与授权 Tango 交易因资源缺失保持 `NOT_RUN`。
 - `2026-08-27 15:33:29 +08:00`：完成多 CA Bundle 功能归档与 Android 多设备最终错误归属回归；重新执行 Rust 工作区、前端全量和全部静态门禁。生产非回环 IPv4 MCP 实调在本机受透明代理截流，严格期限超时并保持 `NOT_RUN`，交远程 Windows 环境复验。
+- `2026-08-27 22:27:08 +08:00`：完成本地最终回归、运行中 App/MCP 冒烟、整体对抗审查、完整远程 CI 和 Windows x64 安装包/便携包构建；所有远程门禁成功，任务关闭。
 
 ## 修改文件
 
@@ -149,19 +150,20 @@
 
 ## 验收结果
 
-- 本地部分 `PASS_WITH_NOT_RUN`：所有可执行自动化、静态、外部包、远端零业务字节 TLS 与隔离 App 场景通过；Android 真机 A/B、授权 Tango 交易和受本机透明代理影响的生产非回环 IPv4 MCP 实调准确记录为 `NOT_RUN`。
+- `PASS_WITH_NOT_RUN`：所有可执行自动化、静态、外部包、远端零业务字节 TLS、隔离 App 和远程 Windows 场景通过；Android 真机 A/B 与授权 Tango 交易因资源缺失准确记录为 `NOT_RUN`。
 
 ## 测试结果
 
-- 前端全量 `67` 个文件、`659` 项 PASS；Rust workspace 除单一本机非回环网络环境用例外，其余单元、集成和 doctest 全部 PASS。
+- 前端完整测试 `671/671 PASS`；Application `480/480 PASS`、Infrastructure `669/669 PASS`、Proxy/Runtime `225/225 PASS`。
 - MCP 定向 `71/71 PASS`；隔离 App create=`preview_ready`、apply=`apply_queued`、status=`committed`，关闭后端口释放且重启恢复。
 - Nuvei Python `14/14`、AU EFTEX `72/72`、Deno ISO `14/14`、Nuvei Rhai `6/6` PASS。
 - 架构、源码规模、格式、严格 Clippy、生产构建、品牌扫描和 Windows 静态编译检查 PASS。
 
 ## CI 情况
 
-- `PENDING`；本地门禁已通过，下一步提交并推送后等待远程 Windows CI。
+- `PASS`：完整 CI 的 Android Companion、Linux 覆盖门禁和 Windows 验证全部成功。
+- `PASS`：Windows x64 构建成功，已生成 MSI、NSIS 安装程序和便携包；安装包为未签名测试版本。
 
 ## 完成总结
 
-- 本地实现、复跑、指南与归档已完成；仅剩最终交付和远程 Windows CI。CI 成功后关闭并归档本任务。
+- 已完成归档场景分类与复跑、运行中 App/MCP 验证、通用 MCP 验证指南、整体审查、完整 CI 和 Windows 测试包交付；不可执行的真机与授权外部交易继续保持明确 `NOT_RUN`。

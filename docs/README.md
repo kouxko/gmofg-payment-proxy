@@ -15,12 +15,7 @@
 
 ## 待实现任务
 
-- [Android 目标设备后台刷新抖动修复](tasks/pending/2026-08-27/android-device-list-refresh-jitter.md)：
-  修复每秒后台设备查询导致目标设备下拉框反复切换禁用状态的问题，并确认自动发现策略。
-- [规则创建入口与协议入口绑定修复](tasks/pending/2026-08-27/rule-creation-entry-requirements.md)：
-  修复无兼容 Listener 时仍可选择 Body/Socket 但不显示编辑器的问题，并确认空白规则及普通 HTTP 规则的绑定语义。
-- [最终归档场景复跑与 MCP 验证经验指南](tasks/pending/2026-08-27/final-archive-replay-and-mcp-validation-playbook.md)：
-  最终提交前重跑归档测试与运行中 Proxy 场景，并把稳定诊断方法发布为 MCP 只读验证指南。
+当前没有待实现任务。
 
 ## 架构
 
