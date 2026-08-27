@@ -1,3 +1,4 @@
+use super::runtime::SystemDeviceLanAddressProvider;
 use super::*;
 use intercept_proxy_application::{
     AndroidDeviceTarget, AndroidNetworkProfile, AndroidProxyRouteActivation, WeakNetworkProfile,
@@ -21,6 +22,8 @@ mod owner_async;
 mod owner_crash_safety;
 #[path = "tests/owner_lifecycle.rs"]
 mod owner_lifecycle;
+#[path = "tests/owner_state_machine.rs"]
+mod owner_state_machine;
 #[path = "tests/runtime_endpoints.rs"]
 mod runtime_endpoints;
 #[path = "tests/shared_gate.rs"]
@@ -114,6 +117,14 @@ fn packaged_apk_candidates_include_windows_installed_and_portable_layout() {
     assert!(candidates.contains(&PathBuf::from(
         "C:/Program Files/Intercept Proxy/resources/android-companion.apk"
     )));
+}
+
+#[test]
+fn system_lan_address_provider_rejects_loopback_routes() {
+    assert_eq!(
+        SystemDeviceLanAddressProvider.local_ipv4_for(std::net::Ipv4Addr::LOCALHOST),
+        None
+    );
 }
 
 #[tokio::test]

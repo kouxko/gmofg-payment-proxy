@@ -2,7 +2,8 @@ use super::*;
 
 #[derive(Debug)]
 struct FailingShutdownAndroid {
-    owner: AndroidRuntimeOwnerViewModel,
+    owners: Vec<AndroidRuntimeOwnerViewModel>,
+    fail_owner_lookup: bool,
     stop_calls: AtomicUsize,
 }
 
@@ -85,7 +86,13 @@ impl AndroidControlPort for FailingShutdownAndroid {
         unused()
     }
     async fn runtime_owners(&self) -> AppResult<Vec<AndroidRuntimeOwnerViewModel>> {
-        Ok(vec![self.owner.clone()])
+        if self.fail_owner_lookup {
+            return Err(AppError::new(
+                "ANDROID_OWNER_LOOKUP_FAILED",
+                "owner lookup failed",
+            ));
+        }
+        Ok(self.owners.clone())
     }
     async fn network_runtime_endpoints(
         &self,
@@ -234,16 +241,20 @@ async fn empty_pkcs12_password_is_forwarded_to_the_rust_certificate_parser() {
 async fn application_shutdown_reports_owner_stop_failure_but_completes_other_cleanup() {
     let ports = Arc::new(FakePorts::default());
     let android = Arc::new(FailingShutdownAndroid {
-        owner: AndroidRuntimeOwnerViewModel {
-            serial: "DEVICE-A".into(),
-            epoch: Uuid::new_v4(),
-            mode: AndroidRuntimeOwnerMode::AdbReverse,
-            profile_id: "profile-a".into(),
-            state: AndroidRuntimeOwnerState::Active,
-            source: AndroidRuntimeOwnerSource::Recovery,
-            transition_reason: AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage,
-            updated_at: Utc::now(),
-        },
+        owners: ["DEVICE-B", "DEVICE-A"]
+            .into_iter()
+            .map(|serial| AndroidRuntimeOwnerViewModel {
+                serial: serial.into(),
+                epoch: Uuid::new_v4(),
+                mode: AndroidRuntimeOwnerMode::AdbReverse,
+                profile_id: format!("profile-{serial}"),
+                state: AndroidRuntimeOwnerState::Active,
+                source: AndroidRuntimeOwnerSource::Recovery,
+                transition_reason: AndroidRuntimeOwnerTransitionReason::RecoveredFromStorage,
+                updated_at: Utc::now(),
+            })
+            .collect(),
+        fail_owner_lookup: false,
         stop_calls: AtomicUsize::new(0),
     });
     let application = application_with_fake_ports_and_android(ports.clone(), android.clone());
@@ -253,10 +264,9 @@ async fn application_shutdown_reports_owner_stop_failure_but_completes_other_cle
             .await
             .unwrap()
             .into_iter()
-            .next()
-            .unwrap()
-            .serial,
-        "DEVICE-A"
+            .map(|owner| owner.serial)
+            .collect::<Vec<_>>(),
+        ["DEVICE-A", "DEVICE-B"]
     );
 
     let error = application
@@ -266,7 +276,25 @@ async fn application_shutdown_reports_owner_stop_failure_but_completes_other_cle
 
     assert_eq!(error.view_model.code, "APP_SHUTDOWN_FAILED");
     assert!(error.view_model.message.contains("DEVICE-A"));
-    assert_eq!(android.stop_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(android.stop_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn runtime_owner_query_preserves_port_failure() {
+    let android = Arc::new(FailingShutdownAndroid {
+        owners: Vec::new(),
+        fail_owner_lookup: true,
+        stop_calls: AtomicUsize::new(0),
+    });
+    let application =
+        application_with_fake_ports_and_android(Arc::new(FakePorts::default()), android);
+
+    let error = application
+        .device_network_runtime_owners()
+        .await
+        .expect_err("owner lookup failure stays visible");
+
+    assert_eq!(error.view_model.code, "ANDROID_OWNER_LOOKUP_FAILED");
 }
 
 #[tokio::test]

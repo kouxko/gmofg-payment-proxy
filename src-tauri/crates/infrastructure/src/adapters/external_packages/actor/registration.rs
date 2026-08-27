@@ -24,13 +24,15 @@ where
     S: AsyncRead + AsyncWrite + Unpin,
 {
     let deadline_at = Instant::now() + config.registration_timeout;
-    timeout_at(
+    match timeout_at(
         deadline_at,
         websocket.send(Message::Text(request.to_string().into())),
     )
     .await
-    .map_err(|_| registration_timeout(register_id))?
-    .map_err(ExternalPackageConnectionError::from)?;
+    {
+        Ok(result) => result.map_err(ExternalPackageConnectionError::from)?,
+        Err(_) => return Err(registration_timeout(register_id)),
+    }
     let deadline = tokio::time::sleep_until(deadline_at);
     tokio::pin!(deadline);
     let mut heartbeat = tokio::time::interval_at(
@@ -42,9 +44,7 @@ where
     loop {
         tokio::select! {
             biased;
-            () = &mut deadline => return Err(ExternalPackageConnectionError::Timeout {
-                request_id: register_id.to_owned(), method: "package.register".into(),
-            }),
+            () = &mut deadline => return Err(registration_timeout(register_id)),
             message = websocket.next() => match message {
                 Some(Ok(Message::Text(text))) => {
                     if text.len() > config.max_registration_message_bytes {
@@ -61,10 +61,10 @@ where
                         Err(kind) => Err(ExternalPackageConnectionError::Fatal(kind)),
                     };
                 }
-                Some(Ok(Message::Ping(_))) => timeout_at(deadline_at, websocket.flush())
-                    .await
-                    .map_err(|_| registration_timeout(register_id))?
-                    .map_err(ExternalPackageConnectionError::from)?,
+                Some(Ok(Message::Ping(_))) => match timeout_at(deadline_at, websocket.flush()).await {
+                    Ok(result) => result.map_err(ExternalPackageConnectionError::from)?,
+                    Err(_) => return Err(registration_timeout(register_id)),
+                },
                 Some(Ok(Message::Pong(_))) => last_pong = Instant::now(),
                 Some(Ok(Message::Close(_))) | None => return Err(ExternalPackageConnectionError::Disconnected),
                 Some(Err(error)) => return Err(ExternalPackageConnectionError::Transport(error.to_string())),
@@ -74,13 +74,15 @@ where
                 if Instant::now().duration_since(last_pong) >= config.heartbeat_timeout {
                     return Err(ExternalPackageConnectionError::Disconnected);
                 }
-                timeout_at(
+                match timeout_at(
                     deadline_at,
                     websocket.send(Message::Ping(Vec::new().into())),
                 )
                 .await
-                .map_err(|_| registration_timeout(register_id))?
-                .map_err(ExternalPackageConnectionError::from)?;
+                {
+                    Ok(result) => result.map_err(ExternalPackageConnectionError::from)?,
+                    Err(_) => return Err(registration_timeout(register_id)),
+                }
             }
         }
     }
