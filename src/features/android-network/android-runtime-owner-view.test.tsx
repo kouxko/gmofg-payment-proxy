@@ -265,10 +265,12 @@ describe("Android runtime owner view", () => {
 
     render(<AndroidNetworkView />);
     await waitFor(() => expect(mocks.deviceNetworkStatus).toHaveBeenCalledOnce());
-    const refresh = mocks.useAppEventRefresh.mock.calls.find(
-      (call) => call.length === 3 && call[2]?.entityId === ownerA.serial,
+    const refreshOwners = mocks.useAppEventRefresh.mock.calls.find(
+      (call) => call.length === 2,
     )?.[1];
-    await act(async () => refresh());
+    await act(async () => refreshOwners());
+    await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.deviceNetworkStatus).toHaveBeenCalledTimes(2));
     expect(await screen.findByText("新 epoch 的设备 A 状态")).toBeVisible();
     await act(async () => resolveOldStatus?.(statusResult({
       ...runningA,
@@ -339,7 +341,7 @@ describe("Android runtime owner view", () => {
     render(<AndroidNetworkView />);
 
     await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledOnce());
-    expect(screen.getByText("尚未选择设备网络方案")).toBeVisible();
+    expect(await screen.findByText("尚未选择设备网络方案")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "停止网络接管 device-a" }));
     await waitFor(() => expect(mocks.deviceNetworkStop).toHaveBeenCalledOnce());
     await waitFor(() => expect(mocks.deviceNetworkRuntimeOwners).toHaveBeenCalledTimes(2));

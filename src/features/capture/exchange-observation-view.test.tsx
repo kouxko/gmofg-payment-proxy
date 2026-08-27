@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceNavigationProvider } from "@/features/shell/workspace-navigation";
@@ -93,7 +93,9 @@ describe("ExchangeObservationView realtime refresh", () => {
     const user = userEvent.setup();
     render(<WorkspaceNavigationProvider><ExchangeObservationView /></WorkspaceNavigationProvider>);
 
-    await user.click(screen.getByRole("button", { name: /18:00:00/ }));
+    const exchangeButton = document.getElementById("exchange-observation-row-exchange-1");
+    expect(exchangeButton).toBeInstanceOf(HTMLButtonElement);
+    await user.click(exchangeButton!);
 
     expect(eventRegistrations).toContainEqual(expect.objectContaining({
       eventTypes: expect.arrayContaining(["exchange_observation_changed"]),
