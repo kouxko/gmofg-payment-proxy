@@ -30,6 +30,7 @@ import sqlite3
 import sys
 import threading
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -217,18 +218,26 @@ def install_workspace(
 def _backup_database(database: Path) -> Path:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     target = database.with_name(f"{database.stem}.before-external-e2e-{stamp}.sqlite3")
-    with sqlite3.connect(database, timeout=10) as source, sqlite3.connect(target) as destination:
+    with closing(sqlite3.connect(database, timeout=10)) as source, closing(
+        sqlite3.connect(target)
+    ) as destination:
         source.backup(destination)
     return target
 
 
-def restore_selected_workspace(database: Path, workspace_id: str) -> None:
+def restore_selected_workspace(
+    database: Path,
+    workspace_id: str,
+    *,
+    require_app_stopped: bool = True,
+) -> None:
     """Restore only the prior selection after the App and E2E listeners stop."""
 
-    _assert_app_stopped()
+    if require_app_stopped:
+        _assert_app_stopped()
     if not database.is_file():
         raise AcceptanceError(f"App database does not exist: {database}")
-    with sqlite3.connect(database, timeout=10) as connection:
+    with closing(sqlite3.connect(database, timeout=10)) as connection:
         exists = connection.execute(
             "SELECT 1 FROM workspaces WHERE id = ?", (workspace_id,)
         ).fetchone()
@@ -261,7 +270,7 @@ def _assert_port_bindable(port: int) -> None:
 
 
 def _assert_fixture_selected(database: Path) -> None:
-    with sqlite3.connect(database, timeout=5) as connection:
+    with closing(sqlite3.connect(database, timeout=5)) as connection:
         selected = connection.execute(
             "SELECT selected_id FROM workspace_state WHERE singleton_id = 1"
         ).fetchone()

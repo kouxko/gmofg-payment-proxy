@@ -6,6 +6,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 
 from scripts import e2e_external_packages as e2e
@@ -30,7 +31,7 @@ class ExternalPackageWorkspaceTests(unittest.TestCase):
 
             outcome = e2e.install_workspace(database, backup=False, require_app_stopped=False)
 
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection:
                 workspaces = connection.execute(
                     "SELECT id FROM workspaces ORDER BY id"
                 ).fetchall()
@@ -45,8 +46,12 @@ class ExternalPackageWorkspaceTests(unittest.TestCase):
             self.assertEqual(outcome.revision, 1)
             self.assertEqual(outcome.previous_selected_id, "original")
 
-            e2e.restore_selected_workspace(database, outcome.previous_selected_id)
-            with sqlite3.connect(database) as connection:
+            e2e.restore_selected_workspace(
+                database,
+                outcome.previous_selected_id,
+                require_app_stopped=False,
+            )
+            with closing(sqlite3.connect(database)) as connection:
                 restored = connection.execute(
                     "SELECT selected_id FROM workspace_state WHERE singleton_id = 1"
                 ).fetchone()
@@ -68,7 +73,7 @@ class ExternalPackageWorkspaceTests(unittest.TestCase):
             with self.assertRaisesRegex(e2e.AcceptanceError, "disabled"):
                 e2e.install_workspace(database, backup=False, require_app_stopped=False)
 
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection:
                 selected = connection.execute(
                     "SELECT selected_id FROM workspace_state WHERE singleton_id = 1"
                 ).fetchone()
@@ -84,9 +89,13 @@ class ExternalPackageWorkspaceTests(unittest.TestCase):
             self._create_database(database)
 
             with self.assertRaisesRegex(e2e.AcceptanceError, "does not exist"):
-                e2e.restore_selected_workspace(database, "missing")
+                e2e.restore_selected_workspace(
+                    database,
+                    "missing",
+                    require_app_stopped=False,
+                )
 
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection:
                 selected = connection.execute(
                     "SELECT selected_id FROM workspace_state WHERE singleton_id = 1"
                 ).fetchone()
@@ -97,7 +106,7 @@ class ExternalPackageWorkspaceTests(unittest.TestCase):
             database = Path(directory) / "app.sqlite3"
             self._create_database(database)
             e2e.install_workspace(database, backup=False, require_app_stopped=False)
-            with sqlite3.connect(database) as connection:
+            with closing(sqlite3.connect(database)) as connection, connection:
                 connection.execute(
                     "UPDATE workspaces SET json = ? WHERE id = ?",
                     ('{"tampered":true}', e2e.WORKSPACE_ID),
@@ -178,7 +187,7 @@ class ExternalPackageWorkspaceTests(unittest.TestCase):
         include_au_eftex: bool = True,
         au_eftex_enabled: bool = True,
     ) -> None:
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             connection.executescript(
                 """
                 CREATE TABLE application_schema(singleton_id INTEGER PRIMARY KEY, version INTEGER);
