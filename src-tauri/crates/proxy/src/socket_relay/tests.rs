@@ -6,7 +6,7 @@ use std::{
 
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    net::{TcpListener, TcpSocket, TcpStream},
     sync::Notify,
 };
 use tokio_util::sync::CancellationToken;
@@ -35,6 +35,13 @@ fn reserve_address() -> SocketAddr {
     let address = listener.local_addr().unwrap();
     drop(listener);
     address
+}
+
+fn reserve_unlistened_tcp_address() -> (TcpSocket, SocketAddr) {
+    let socket = TcpSocket::new_v4().unwrap();
+    socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+    let address = socket.local_addr().unwrap();
+    (socket, address)
 }
 
 fn transparent_config(bind_addr: SocketAddr, upstream: SocketAddr) -> SocketRelayConfig {
@@ -319,18 +326,21 @@ async fn capacity_rejections_are_typed_and_counted() {
 
 #[tokio::test]
 async fn pre_open_dns_and_connect_failures_have_typed_stages() {
-    for (host, port, expected_stage, expected_codes) in [
+    let (unlistened_socket, unlistened_address) = reserve_unlistened_tcp_address();
+    for (host, port, expected_stage, expected_codes, _connect_failure_guard) in [
         (
             "does-not-exist.invalid".to_owned(),
             443,
             SocketRelayStage::Dns,
             &["SOCKET_DNS_FAILED", "SOCKET_DNS_TIMEOUT"][..],
+            None,
         ),
         (
             "127.0.0.1".to_owned(),
-            reserve_address().port(),
+            unlistened_address.port(),
             SocketRelayStage::Connect,
             &["SOCKET_CONNECT_FAILED", "SOCKET_CONNECT_TIMEOUT"][..],
+            Some(unlistened_socket),
         ),
     ] {
         let (listener, bind_addr) = bind_listener().await;

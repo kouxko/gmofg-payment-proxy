@@ -54,6 +54,8 @@ function renderDeviceControl(
       adbLoading={false}
       devices={devices}
       devicesLoading={false}
+      devicesReady
+      devicesError={undefined}
       selectedSerial={selectedSerial}
       runtimeOwners={[{ ...ownerA, ...runtimeOwner }]}
       busySerials={new Set()}

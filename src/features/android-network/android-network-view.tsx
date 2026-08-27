@@ -45,7 +45,7 @@ import { useAndroidOwnerRefresh } from "./use-android-owner-refresh";
  */
 export function AndroidNetworkView(): ReactElement {
   const adb = useIpcQuery("android-adb", () => callCommand(commands.androidAdbGet()));
-  const devices = useIpcQuery("android-devices", () => callCommand(commands.androidDeviceList()), []);
+  const devices = useIpcQuery("android-devices", () => callCommand(commands.androidDeviceList()));
   const profiles = useIpcQuery(
     "android-profiles",
     () => callCommand(commands.deviceNetworkProfileList()),
@@ -55,7 +55,6 @@ export function AndroidNetworkView(): ReactElement {
   const runtimeOwners = useIpcQuery(
     "android-runtime-owners",
     () => callCommand(commands.deviceNetworkRuntimeOwners()),
-    [],
   );
   const refreshRuntimeOwners = runtimeOwners.refresh;
   const refreshDevices = devices.refresh;
@@ -255,7 +254,7 @@ export function AndroidNetworkView(): ReactElement {
   }
 
   async function activate(operation: "start" | "apply"): Promise<void> {
-    if (runtimeOwners.isLoading || runtimeOwners.error || !selectedSerial) {
+    if (runtimeOwners.data === undefined || runtimeOwners.error || !selectedSerial) {
       throw new Error("运行设备列表尚未确认，请等待读取完成后重试。");
     }
     const selectedAtStart = selectedSerial;
@@ -322,7 +321,9 @@ export function AndroidNetworkView(): ReactElement {
             adb={adb.data}
             adbLoading={adb.isLoading}
             devices={devices.data ?? []}
-            devicesLoading={devices.isLoading}
+            devicesLoading={devices.isLoading && devices.data === undefined}
+            devicesReady={devices.data !== undefined}
+            devicesError={devices.error}
             selectedSerial={selectedSerial}
             runtimeOwners={runtimeOwners.data ?? []}
             busySerials={busySerials}
@@ -407,7 +408,7 @@ export function AndroidNetworkView(): ReactElement {
                 selectedSerial={selectedSerial}
                 runtimeOwner={selectedOwner}
                 runtimeOwnerCount={(runtimeOwners.data ?? []).length}
-                runtimeOwnerReady={!runtimeOwners.isLoading && !runtimeOwners.error}
+                runtimeOwnerReady={runtimeOwners.data !== undefined && !runtimeOwners.error}
                 dangerousConfirmed={dangerousConfirmed}
                 onDangerousConfirmedChange={setDangerousConfirmed}
                 onSave={() => void run("save", saveAndNotify)}

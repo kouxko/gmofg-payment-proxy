@@ -287,11 +287,11 @@ function RuleSelects({
         <Label>通道</Label>
         <Select
           aria-label="规则通道"
-          selectedKey={draft.channel ?? "all"}
+          selectedKey={draft.channel ?? undefined}
           onSelectionChange={(key) =>
             onChange({
               ...draft,
-              channel: key === "all" ? null : (key as RuleDraft["channel"]),
+              channel: key as RuleDraft["channel"],
             })
           }
         >
@@ -301,9 +301,6 @@ function RuleSelects({
           </Select.Trigger>
           <Select.Popover>
             <ListBox>
-              <ListBox.Item id="all" textValue="全部">
-                全部
-              </ListBox.Item>
               {channels.map((channel) => (
                 <ListBox.Item
                   key={channel.id}

@@ -1,9 +1,9 @@
 //! 规则与故障注入命令适配层：草稿解析、版本检查和运行时操作全部委托给 application 门面。
 
 use intercept_proxy_application::{
-    ActiveFaultViewModel, FaultConfigurationDraft, FaultTemplateViewModel, MessageStage,
-    OperationResultViewModel, RuleAction, RuleActionKind, RuleByteInputViewModel, RuleCondition,
-    RuleConditionKind, RuleDraft, RuleHeaderInputViewModel, RuleId, RuleMatchField,
+    ActiveFaultViewModel, FaultConfigurationDraft, FaultTemplateViewModel, ListenerId,
+    MessageStage, OperationResultViewModel, RuleAction, RuleActionKind, RuleByteInputViewModel,
+    RuleCondition, RuleConditionKind, RuleDraft, RuleHeaderInputViewModel, RuleId, RuleMatchField,
     RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind, RuleStageCapabilityViewModel,
     RuleSummaryViewModel, RuleViewModel, SessionId,
 };
@@ -30,10 +30,13 @@ pub async fn rule_get(state: State<'_, AppState>, rule_id: RuleId) -> CommandRes
 
 #[tauri::command]
 #[specta::specta]
-pub async fn rule_new_draft(state: State<'_, AppState>) -> CommandResult<RuleDraft> {
+pub async fn rule_new_http_draft(
+    state: State<'_, AppState>,
+    listener_id: ListenerId,
+) -> CommandResult<RuleDraft> {
     state
         .application
-        .rule_new_draft()
+        .rule_new_http_draft(listener_id)
         .await
         .map_err(command_error)
 }

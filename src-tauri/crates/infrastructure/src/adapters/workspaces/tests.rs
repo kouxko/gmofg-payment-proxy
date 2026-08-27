@@ -6,7 +6,7 @@ use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, CertificateReferenceKind, ChannelId,
     DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings,
     HttpListenerSettings, ListenerDataPlane, ListenerId, MatchCondition, MessageStage,
-    ProxyListener, Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings,
+    ProxyListener, Revision as DomainRevision, Rule, RuleAction, RuleId, UpstreamTlsSettings,
     WeakNetworkProfile,
 };
 use std::{collections::BTreeSet, sync::Arc};

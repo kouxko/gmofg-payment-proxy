@@ -24,16 +24,30 @@ pub(super) fn validate_workspace_references(
 ) {
     unique_ids(workspace.rules.iter().map(|item| item.id), "rules", error);
     for (index, rule) in workspace.rules.iter().enumerate() {
-        if let Some(channel) = &rule.channel
-            && !listener_ids
-                .iter()
-                .any(|listener_id| listener_id.to_string() == channel.as_str())
-        {
+        let Some(channel) = &rule.channel else {
             push_field_error(
                 error,
                 format!("rules.{index}.channel"),
-                "规则通道必须引用当前 Workspace 中存在的代理入口",
+                "普通 HTTP 规则必须绑定单个 HTTP 代理入口",
             );
+            continue;
+        };
+        let listener = workspace
+            .listeners
+            .iter()
+            .find(|listener| listener.id.to_string() == channel.as_str());
+        match listener {
+            Some(listener) if matches!(listener.data_plane, ListenerDataPlane::Http(_)) => {}
+            Some(_) => push_field_error(
+                error,
+                format!("rules.{index}.channel"),
+                "普通 HTTP 规则只能绑定 HTTP 代理入口",
+            ),
+            None => push_field_error(
+                error,
+                format!("rules.{index}.channel"),
+                "规则通道必须引用当前 Workspace 中存在的代理入口",
+            ),
         }
     }
 

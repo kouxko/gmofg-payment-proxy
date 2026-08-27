@@ -65,7 +65,9 @@ fn changed_http_rule_body_lifts_its_listener_into_the_affected_runtime_scope() {
             enabled: true,
             priority: 10,
             created_order: 1,
-            channel: None,
+            channel: Some(
+                crate::ChannelId::new(listener_id.to_string()).expect("listener channel"),
+            ),
             stage: MessageStage::Request,
             conditions: Vec::new(),
             actions: vec![RuleAction::ReplaceBodyText("before".into())],

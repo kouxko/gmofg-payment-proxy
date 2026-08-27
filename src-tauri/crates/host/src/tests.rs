@@ -83,10 +83,23 @@ async fn builds_and_invokes_application_without_tauri() {
     assert_eq!(external_status.fixed_path, "/packages");
     assert!(!external_status.authentication_enabled);
 
-    let draft = application
-        .rule_new_draft()
+    let selected = application
+        .workspace_list()
         .await
-        .expect("create rule draft");
+        .expect("workspace list")
+        .into_iter()
+        .find(|workspace| workspace.selected)
+        .expect("selected workspace");
+    let listener_id = application
+        .workspace_get(selected.id)
+        .await
+        .expect("workspace detail")
+        .listeners[0]
+        .id;
+    let draft = application
+        .rule_new_http_draft(listener_id)
+        .await
+        .expect("create HTTP rule draft");
     assert_eq!(draft.name, "新建规则");
 
     host.shutdown().await.expect("shutdown UI-neutral host");

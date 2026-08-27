@@ -51,7 +51,7 @@ async fn runtime_commit_is_full_signature_cas_and_reset_preserves_enabled() {
     engine.evaluate(
         &MatchContext {
             runtime_epoch: epoch,
-            channel: ChannelId::new("alpha").unwrap(),
+            channel: test_channel(),
             stage: MessageStage::Request,
             terminal: &terminal,
             path_or_request_type: None,

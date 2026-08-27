@@ -22,7 +22,7 @@ use crate::{
     ActiveFaultViewModel, AppResult, ApplicationConfigurationDocument, BreakpointDecision,
     BreakpointDetailViewModel, BreakpointDraft, BreakpointValidationViewModel,
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, CertificateItemViewModel,
-    CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
+    CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel, ChannelId,
     ExchangeObservationPage, ExchangeObservationQuery, ExchangeObservationRecord,
     FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
     ListenerId, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
@@ -210,7 +210,7 @@ pub trait CaptureRepositoryPort: Send + Sync + std::fmt::Debug {
 pub trait RuleRepositoryPort: Send + Sync + std::fmt::Debug {
     async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>>;
     async fn get(&self, rule_id: RuleId) -> AppResult<RuleViewModel>;
-    async fn new_draft(&self) -> AppResult<RuleDraft>;
+    async fn new_http_draft(&self, channel: ChannelId) -> AppResult<RuleDraft>;
     async fn create_from_session(&self, session_id: SessionId) -> AppResult<RuleDraft>;
     async fn validate(&self, draft: &RuleDraft) -> AppResult<RuleValidationViewModel>;
     async fn save(&self, draft: RuleDraft) -> AppResult<RuleViewModel>;

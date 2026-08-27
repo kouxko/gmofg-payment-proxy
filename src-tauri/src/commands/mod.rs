@@ -143,7 +143,7 @@ pub fn builder() -> Builder<Wry> {
             breakpoint_resolve,
             rule_list,
             rule_get,
-            rule_new_draft,
+            rule_new_http_draft,
             rule_capabilities,
             rule_condition_draft,
             rule_action_draft,

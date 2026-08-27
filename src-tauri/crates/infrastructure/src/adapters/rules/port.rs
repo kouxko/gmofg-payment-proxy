@@ -1,10 +1,10 @@
 use super::{
     AppError, AppMessageStage, AppResult, AppRuleDraft, AppRuleId, BTreeMap,
-    FieldValidationViewModel, MatchCondition, OperationResultViewModel, RULE_IMPORT_MAX_BYTES,
-    Rule, RuleEngine, RuleRepositoryAdapter, RuleRepositoryPort, RuleSummaryViewModel,
-    RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SessionId, Value, app_draft, async_trait,
-    cancelled, condition_to_app, deserialize_persisted_rule, infra, json_error,
-    serialize_persisted_rule, summary, to_domain_draft, validate_persisted_rule,
+    FieldValidationViewModel, ListenerDataPlane, MatchCondition, OperationResultViewModel,
+    RULE_IMPORT_MAX_BYTES, Rule, RuleEngine, RuleRepositoryAdapter, RuleRepositoryPort,
+    RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SessionId, Value,
+    app_draft, async_trait, cancelled, condition_to_app, deserialize_persisted_rule, infra,
+    json_error, serialize_persisted_rule, summary, to_domain_draft, validate_persisted_rule,
     validate_rule_draft, validation_from_domain, view,
 };
 
@@ -36,7 +36,10 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         view(&rule, &self.channel_names)
     }
 
-    async fn new_draft(&self) -> AppResult<AppRuleDraft> {
+    async fn new_http_draft(
+        &self,
+        channel: intercept_proxy_domain::ChannelId,
+    ) -> AppResult<AppRuleDraft> {
         Ok(AppRuleDraft {
             rule_id: None,
             expected_revision: None,
@@ -44,7 +47,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
             description: String::new(),
             enabled: true,
             priority: 100,
-            channel: None,
+            channel: Some(channel),
             stage: Some(AppMessageStage::Request),
             conditions: Vec::new(),
             actions: Vec::new(),
@@ -77,10 +80,32 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
     }
 
     async fn validate(&self, draft: &AppRuleDraft) -> AppResult<RuleValidationViewModel> {
-        let rules = self
+        let workspace = self
             .executor
-            .execute(RuleRepositoryAdapter::load_from)
+            .execute(RuleRepositoryAdapter::load_selected_workspace_from)
             .await?;
+        let binding_error = match &draft.channel {
+            None => Some("普通 HTTP 规则必须绑定单个 HTTP 代理入口"),
+            Some(channel) => workspace
+                .listeners
+                .iter()
+                .find(|listener| listener.id.to_string() == channel.as_str())
+                .map_or(
+                    Some("规则通道必须引用当前 Workspace 中存在的代理入口"),
+                    |listener| {
+                        (!matches!(listener.data_plane, ListenerDataPlane::Http(_)))
+                            .then_some("普通 HTTP 规则只能绑定 HTTP 代理入口")
+                    },
+                ),
+        };
+        if let Some(message) = binding_error {
+            return Ok(FieldValidationViewModel {
+                valid: false,
+                field_errors: BTreeMap::from([("channel".into(), vec![message.into()])]),
+                warnings: Vec::new(),
+            });
+        }
+        let rules = workspace.rules;
         let creation_order = rules
             .iter()
             .map(|rule| rule.created_order)
