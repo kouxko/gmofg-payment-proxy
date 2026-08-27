@@ -38,6 +38,29 @@ async fn prepared_owner_lifecycle_preserves_epoch_across_reconnect_states() {
         AndroidRuntimeOwnerState::Active
     );
 
+    assert_active_and_cleanup_reconnect(&adapter, &owner, &prepared).await;
+    assert_stop_stopped_and_uncertain_reconnect(&adapter, &owner, &prepared).await;
+
+    assert!(
+        !adapter
+            .clear_owner_if_epoch_under_gate("DEVICE-A", Uuid::new_v4())
+            .await
+            .unwrap()
+    );
+    assert!(
+        adapter
+            .clear_owner_if_epoch_under_gate("DEVICE-A", owner.epoch)
+            .await
+            .unwrap()
+    );
+    assert!(adapter.ensure_can_start("DEVICE-A").await.is_ok());
+}
+
+async fn assert_active_and_cleanup_reconnect(
+    adapter: &AndroidAdbAdapter,
+    owner: &AndroidRuntimeOwnerViewModel,
+    prepared: &PreparedUsbProxyRuntime,
+) {
     adapter
         .mark_owner_waiting_reconnect("DEVICE-A", owner.epoch)
         .await
@@ -60,7 +83,7 @@ async fn prepared_owner_lifecycle_preserves_epoch_across_reconnect_states() {
     );
 
     adapter
-        .stage_prepared_cleanup(&prepared, vec![16_127], Some(owner.epoch))
+        .stage_prepared_cleanup(prepared, vec![16_127], Some(owner.epoch))
         .await
         .unwrap();
     adapter
@@ -79,7 +102,13 @@ async fn prepared_owner_lifecycle_preserves_epoch_across_reconnect_states() {
             .state,
         AndroidRuntimeOwnerState::CleanupRequired
     );
+}
 
+async fn assert_stop_stopped_and_uncertain_reconnect(
+    adapter: &AndroidAdbAdapter,
+    owner: &AndroidRuntimeOwnerViewModel,
+    prepared: &PreparedUsbProxyRuntime,
+) {
     adapter
         .mark_owner_stop_failed("DEVICE-A", owner.epoch, "stop failed".into())
         .await
@@ -103,7 +132,7 @@ async fn prepared_owner_lifecycle_preserves_epoch_across_reconnect_states() {
 
     adapter
         .publish_prepared_owner(
-            &prepared,
+            prepared,
             AndroidRuntimeOwnerState::Active,
             AndroidRuntimeOwnerTransitionReason::ActivationConfirmed,
         )
@@ -128,7 +157,7 @@ async fn prepared_owner_lifecycle_preserves_epoch_across_reconnect_states() {
 
     adapter
         .publish_prepared_owner(
-            &prepared,
+            prepared,
             AndroidRuntimeOwnerState::Active,
             AndroidRuntimeOwnerTransitionReason::ActivationConfirmed,
         )
@@ -150,20 +179,6 @@ async fn prepared_owner_lifecycle_preserves_epoch_across_reconnect_states() {
             .state,
         AndroidRuntimeOwnerState::Uncertain
     );
-
-    assert!(
-        !adapter
-            .clear_owner_if_epoch_under_gate("DEVICE-A", Uuid::new_v4())
-            .await
-            .unwrap()
-    );
-    assert!(
-        adapter
-            .clear_owner_if_epoch_under_gate("DEVICE-A", owner.epoch)
-            .await
-            .unwrap()
-    );
-    assert!(adapter.ensure_can_start("DEVICE-A").await.is_ok());
 }
 
 #[tokio::test]
