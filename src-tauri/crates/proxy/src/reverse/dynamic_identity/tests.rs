@@ -182,7 +182,7 @@ fn different_sni_issuances_run_concurrently() {
         thread::spawn(move || resolver.resolve_identity(server_name))
     });
 
-    wait_for_calls(&authority, 2);
+    wait_for_max_active(&authority, 2);
     assert_eq!(authority.max_active.load(Ordering::SeqCst), 2);
     authority.gate.release();
     for handle in handles {
@@ -313,6 +313,17 @@ fn wait_for_calls(authority: &TestAuthority, expected: usize) {
     let deadline = Instant::now() + Duration::from_secs(2);
     while authority.calls.load(Ordering::SeqCst) < expected {
         assert!(Instant::now() < deadline, "timed out waiting for issuance");
+        thread::yield_now();
+    }
+}
+
+fn wait_for_max_active(authority: &TestAuthority, expected: usize) {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while authority.max_active.load(Ordering::SeqCst) < expected {
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for concurrent issuance"
+        );
         thread::yield_now();
     }
 }
