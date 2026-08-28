@@ -23,6 +23,21 @@ fn parse(value: &Value) -> Result<EnvironmentConfigurationCandidateV1, String> {
         .map_err(|error| error.to_string())
 }
 
+fn workspace_rules(value: &Value) -> &[Value] {
+    value["workspace"]["rules"].as_array().unwrap()
+}
+
+fn workspace_rules_mut(value: &mut Value) -> &mut Vec<Value> {
+    value["workspace"]["rules"].as_array_mut().unwrap()
+}
+
+fn first_rule_mut<'a>(value: &'a mut Value, rule_type: &str) -> &'a mut Value {
+    workspace_rules_mut(value)
+        .iter_mut()
+        .find(|rule| rule["type"] == rule_type)
+        .unwrap()
+}
+
 #[test]
 fn canonical_full_shape_candidate_round_trips_without_wire_drift() {
     let expected = full_shape_value();
@@ -172,7 +187,7 @@ fn protocol_document_values_require_the_adjacent_type_value_wire() {
         json!({"type": "unknown", "value": "1000"}),
     ] {
         let mut value = full_shape_value();
-        value["workspace"]["protocol_rules"][0]["conditions"][0]["value"] = invalid;
+        first_rule_mut(&mut value, "socket")["conditions"][0]["value"] = invalid;
 
         assert!(
             parse(&value).is_err(),
@@ -184,7 +199,7 @@ fn protocol_document_values_require_the_adjacent_type_value_wire() {
 #[test]
 fn existing_rule_id_is_forbidden_for_new_workspace_targets() {
     let mut value = full_shape_value();
-    value["workspace"]["http_rules"][0]["existing_rule_id"] =
+    first_rule_mut(&mut value, "http")["existing_rule_id"] =
         json!("00000000-0000-0000-0000-000000000020");
 
     assert!(
@@ -192,44 +207,46 @@ fn existing_rule_id_is_forbidden_for_new_workspace_targets() {
         "new target accepted retained rule selectors"
     );
 
-    value["workspace"]["http_rules"][0]
+    first_rule_mut(&mut value, "http")
         .as_object_mut()
         .unwrap()
         .remove("existing_rule_id");
     parse(&value).expect("omitted selector represents a new rule");
 
-    value["workspace"]["http_rules"][0]["existing_rule_id"] = Value::Null;
+    first_rule_mut(&mut value, "http")["existing_rule_id"] = Value::Null;
     parse(&value).expect("explicit null selector also represents a new rule");
 }
 
 #[test]
 fn existing_rule_id_may_not_be_reused_twice_in_one_candidate() {
-    for rules_field in ["http_rules", "protocol_rules"] {
+    for rule_type in ["http", "socket"] {
         let mut value: Value = serde_json::from_slice(EXISTING_TARGET).unwrap();
-        let rules = value["workspace"][rules_field].as_array_mut().unwrap();
-        rules.push(rules[0].clone());
+        let duplicate = workspace_rules(&value)
+            .iter()
+            .find(|rule| rule["type"] == rule_type)
+            .unwrap()
+            .clone();
+        workspace_rules_mut(&mut value).push(duplicate);
 
         assert!(
             parse(&value).is_err(),
-            "duplicate selector accepted in {rules_field}"
+            "duplicate selector accepted for {rule_type} rule"
         );
     }
 }
 
 #[test]
 fn created_order_is_never_accepted_from_candidate_rules() {
-    for pointer in ["/workspace/http_rules/0", "/workspace/protocol_rules/0"] {
+    for rule_type in ["http", "socket"] {
         let mut value = full_shape_value();
-        value
-            .pointer_mut(pointer)
-            .unwrap()
+        first_rule_mut(&mut value, rule_type)
             .as_object_mut()
             .unwrap()
             .insert("created_order".to_owned(), json!(42));
 
         assert!(
             parse(&value).is_err(),
-            "submitted created_order accepted at {pointer}"
+            "submitted created_order accepted for {rule_type} rule"
         );
     }
 }
@@ -261,10 +278,9 @@ fn current_domain_terminal_byte_offsets_round_trip_with_exact_field_names() {
 #[test]
 fn canonical_fixture_contains_every_terminal_action_variant_once() {
     let fixture = full_shape_value();
-    let actions = fixture["workspace"]["http_rules"]
-        .as_array()
-        .unwrap()
+    let actions = workspace_rules(&fixture)
         .iter()
+        .filter(|rule| rule["type"] == "http")
         .flat_map(|rule| rule["actions"].as_array().unwrap())
         .filter_map(|action| action.get("Terminal"))
         .map(|terminal| match terminal {

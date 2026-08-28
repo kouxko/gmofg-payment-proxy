@@ -175,7 +175,13 @@ pub struct AndroidNetworkProfile {
     pub proxy_routes: Vec<AndroidProxyRoute>,
     pub confirmed_shared_uids: BTreeSet<u32>,
     pub auto_resume_after_reboot: bool,
+    #[serde(default = "default_stop_vpn_on_control_loss")]
+    pub stop_vpn_on_control_loss: bool,
     pub weak_network: WeakNetworkProfile,
+}
+
+const fn default_stop_vpn_on_control_loss() -> bool {
+    true
 }
 
 impl AndroidNetworkProfile {

@@ -7,8 +7,8 @@
 
 ### 1.1 Workspace
 
-Workspace 是一套可切换的测试配置，保存 Listener、HTTP 基础规则、协议 Document 规则、Android
-Profile 和证书引用。运行时报文、抓包 Exchange 和普通运行日志不属于 Workspace 配置。
+Workspace 是一套可切换的测试配置，保存 Listener、统一规则定义、Android Profile 和证书引用。
+运行时报文、抓包 Exchange 和普通运行日志不属于 Workspace 配置。
 
 切换 Workspace 前应停止当前入口。Listener 启动后使用不可变快照；编辑配置不会偷偷改变正在处理
 的连接，需要明确保存并重新启动入口。
@@ -25,12 +25,15 @@ App 断开或 Server 读写失败时，该 Exchange 结束。
 
 ### 1.3 规则
 
-App 有两套目的不同的规则：
+App 只有一套 `RuleDefinition` 规则。每条规则只绑定一个 Listener，使用带标签的内容区分能力：
 
-- HTTP 基础规则：匹配 Method、Path、Header、JSONPath、证书指纹等，并执行修改、故障或 Mock。
-- 协议 Document 规则：匹配协议包 Decode 后的 Schema 字段，并顺序修改 Document。
+- HTTP 内容可以组合 Method、Path、Header、JSONPath、证书指纹等 HTTP 条件与可选的协议
+  Document 条件，并执行 HTTP 修改、故障、Mock 或 Document 动作。
+- Socket 内容只处理协议包 Decode 后的类型化 Document 条件与动作，不提供 HTTP 能力。
 
-两类规则可以在统一规则列表看到，但运行阶段和保存校验互相独立。
+规则按固定阶段顺序执行；`priority` 只在同一阶段内排序。保存时由 Rust 使用当前 Listener、阶段、
+协议包和 Schema 能力校验整条规则，HTTP 与 Document 条件共同决定同一条 HTTP 规则是否命中。
+Listener 绑定以及 Document 的协议包和 Schema 绑定不能通过编辑改换；需要改绑时应复制或新建规则。
 
 ## 2. 建立测试 Workspace
 
@@ -168,10 +171,11 @@ HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“�
 
 ### 6.1 新建方式
 
-- 空白规则：新建 HTTP 基础规则。
-- Body 报文规则：新建 HTTP Body 的协议 Document 规则。
-- Socket 报文规则：新建 Socket 四方向 Document 规则。
-- 从故障预设创建：把常见故障模板转换为普通 HTTP 规则。
+- 先选择单个 Listener，再选择 Rust 返回的可用阶段；规则创建后不能通过更新切换 Listener。
+- HTTP 规则：在同一内容中编辑 HTTP 条件/动作，并在入口绑定协议包时按能力添加可选 Document。
+- Socket 规则：只编辑协议 Document 条件/动作，不显示 HTTP 字段或 HTTP 动作。
+- 从服务器响应创建：生成未保存、默认停用的 HTTP Mock 草稿，确认后再保存。
+- 从故障预设创建：模板生成统一 HTTP 规则草稿，并通过同一保存、列表和停用流程管理。
 
 “新建规则”对话框关闭后可以再次打开；选择规则或新建草稿不会自动保存。
 
@@ -179,11 +183,13 @@ HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“�
 
 编辑器选项由 Rust 返回，保存时领域层再次校验：
 
-| 阶段 | 可以配置 | 不能配置 |
+| 统一阶段 | 可以配置 | 不能配置 |
 | --- | --- | --- |
-| 请求 | 请求字段、上行延迟/限速、Mock、上游连接/读写故障 | HTTP 响应状态、响应损坏、下行限速 |
-| 响应 | 响应字段、状态码、下行延迟/限速、截断/错误长度/下行断连 | Mock、上游超时、上行断连 |
-| TLS 握手 | 证书指纹、第 N 次命中、拒绝 TLS 握手 | HTTP 字段和其他内容/网络动作 |
+| App → Proxy | 请求 Decode 后的 Document 条件与动作 | HTTP 字段、HTTP 终止动作和响应能力 |
+| Proxy → Server | 请求字段、上行延迟/限速、Mock、上游连接/读写故障，以及入口支持时的 Document | HTTP 响应状态、响应损坏、下行限速 |
+| Server → Proxy | 响应 Decode 后的 Document 条件与动作 | HTTP 字段、HTTP 终止动作和请求能力 |
+| Proxy → App | 响应字段、状态码、下行延迟/限速、截断/错误长度/下行断连，以及入口支持时的 Document | Mock、上游超时、上行断连 |
+| TLS 握手 | 证书指纹、第 N 次命中、拒绝 TLS 握手 | HTTP/Document 字段和其他内容/网络动作 |
 
 额外约束：
 

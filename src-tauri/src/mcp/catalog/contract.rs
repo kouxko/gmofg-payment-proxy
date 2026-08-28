@@ -226,9 +226,8 @@ fn output_root(name: &str) -> Option<OutputRoot> {
         | "android_profile_list"
         | "workspace_certificate_overview"
         | "breakpoint_query"
-        | "http_rule_list"
-        | "protocol_rule_list"
-        | "workspace_protocol_rule_list"
+        | "rule_list"
+        | "workspace_rule_list"
         | "protocol_package_list"
         | "protocol_package_usage" => Some(OutputRoot::Array),
         "application_snapshot"
@@ -252,7 +251,7 @@ fn output_root(name: &str) -> Option<OutputRoot> {
         | "http_capture_query"
         | "http_capture_get"
         | "breakpoint_get"
-        | "http_rule_get"
+        | "rule_get"
         | "protocol_package_catalog"
         | "protocol_package_detail" => Some(OutputRoot::Object),
         _ => None,

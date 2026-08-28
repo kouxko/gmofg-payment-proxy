@@ -30,7 +30,8 @@
 - 根据目标设备包清单校验目标应用和 UID；
 - 把可移植 `proxy_routes` 解析成当次运行端点；
 - 建立/清理 ADB forward 和 reverse；
-- 通过版本化控制协议发送 start/apply/stop/status；
+- 通过版本化控制协议发送 start/apply/stop/status/heartbeat；
+- 为每个活动 serial + runtime epoch 在后台续订独立控制租约；
 - 按设备持久化 runtime owner，并以 serial + runtime epoch 核对运行指纹。
 
 ### 2.2 Kotlin Companion
@@ -41,6 +42,7 @@ Kotlin 只负责 Android 平台边界：
 - `addAllowedApplication()`；
 - TUN 建立、复用、关闭和 fd 所有权；
 - LocalAbstractSocket 控制服务；
+- 当前 generation 的 5 秒控制租约和失联看门狗；
 - JNI 启停与 `VpnService.protect()`；
 - 原生故障回调后在主线程关闭 TUN。
 
@@ -58,6 +60,7 @@ Workspace 保存可移植 `AndroidNetworkProfile`：
 - `proxy_routes`：原始 destination/ports 到 Listener ID；
 - `confirmed_shared_uids`；
 - `auto_resume_after_reboot`；
+- `stop_vpn_on_control_loss`：默认开启；ADB/桌面控制连续失联 5 秒后关闭当前 VPN/TUN；
 - `weak_network`。
 
 每次启动使用当前安装清单 fail-closed 校验：
@@ -129,9 +132,24 @@ Kotlin fail-open。
 adb forward tcp:<desktop-temporary-port> localabstract:intercept_proxy_vpn
 ```
 
-控制帧是 4 字节大端长度 + JSON，协议版本为 1，最大 1 MiB，request/response 必须匹配 UUID。
-操作白名单包含 profile、start/apply/stop/emergency_restore/status。设备 LocalSocket 服务仅接受
+控制帧是 4 字节大端长度 + JSON，协议版本为 2，最大 1 MiB，request/response 必须匹配 UUID。
+操作白名单包含 start/apply/stop/emergency_restore/status/heartbeat。启用控制失联保护时，
+start/apply 携带当前桌面 runtime epoch 和固定 5000 ms 租约；桌面后台每秒按 serial + epoch 续租，
+不依赖 Android 页面是否打开。不同设备的续租以最多八路并发独立执行，单个设备的 gate、ADB 或
+完整响应读取最多占用本设备续租两秒；失败日志固定携带 serial、runtime epoch、错误码和错误消息，
+不能阻塞或停止其他设备。设备 LocalSocket 服务仅接受
 shell/root peer UID。
+
+Companion 只允许匹配当前 owner epoch 的 heartbeat 延长当前 generation；旧 epoch 心跳、已经到期的
+心跳和旧 generation 的超时回调都不能续租或停止新实例。目标 serial 从 `adb devices` 列表消失后，
+桌面不再续租，由设备端自然到期关闭 TUN；列表中仍存在的 offline/unauthorized 条目不会被桌面直接
+标记为“设备缺失”，也不会仅凭该标签发送 stop/force-stop。若该状态确实使控制请求无法送达，真正
+触发关闭的是 Companion 连续五秒没有收到匹配 epoch 的 heartbeat，而不是 ADB 状态字符串本身。
+关闭 Profile 开关时不建立租约，保持既有持续运行行为。
+
+start/apply 在 `startForegroundService` 成功入队前保留旧 generation、运行状态和旧租约；同步入队失败
+会回滚新 generation。若入队结果已与新 generation 的 Service 执行发生竞态、无法安全回滚，则只为
+该 generation 取得 stop 所有权并按既有 fail-open 顺序关闭，绝不清空仍在运行的旧租约后返回失败。
 
 Activity 救援通道只能作为授权/恢复入口；“Intent 已送达”不等于 VPN 已运行。
 
@@ -203,6 +221,11 @@ close main TUN -> clear TUN configuration -> stop native runtime -> unregister r
 恢复只 force-stop 目标设备 Companion 并清理其已知 forward/reverse。stop/apply/emergency restore 都
 携带 expected epoch，迟到操作不得清除同一设备的新运行实例。
 
+控制租约到期使用同一停止顺序，只作用于当前 Android generation：先推进 stop generation，随后关闭
+主 TUN、原生数据面和 Service。它不停止或重启桌面 Listener，也不修改其他 serial 的 owner、ADB
+映射或 VPN。设备重新出现后，桌面通过 status 读取真实 Stopped/Faulted 并把 WaitingReconnect 收敛
+到清理状态，不会把已自动停止的实例恢复成 Active。
+
 只有不含透明路由的 Profile 可以保存自动恢复 activation。透明路由依赖当次 ADB reverse/LAN 与
 桌面 DNS 快照，重启后必须由桌面重新 prepare。
 
@@ -218,8 +241,8 @@ DNS blackhole、指定 TCP flag 第 N 次丢弃、位翻转和 PMTU/MSS 行为�
 ## 12. 验证分层
 
 1. Rust 单元测试：Profile、CIDR、路由表、Fake-IP/domain/IP 匹配、弱网决策；
-2. Kotlin 单元测试：控制帧、VPN 授权、资源释放顺序、generation、TUN 超时关闭；
-3. Infrastructure 测试：forward/reverse prepare/commit/rollback/uncertain、owner 崩溃恢复；
+2. Kotlin 单元测试：控制帧、VPN 授权、资源释放顺序、generation、4.999/5 秒租约边界、旧心跳与 TUN 超时关闭；
+3. Infrastructure 测试：forward/reverse prepare/commit/rollback/uncertain、per-serial 心跳和 owner 崩溃恢复；
 4. 模拟器门禁：安装 Companion、授权、ADB control、reverse、Listener、本地 upstream；
 5. 真机门禁：目标 App 被接管、非目标 App 不受影响、ADB 保持可用、stop/fault 恢复网络；
 6. 业务验收：真实 App、真实 Listener/TLS、真实 Server 和完整请求响应。

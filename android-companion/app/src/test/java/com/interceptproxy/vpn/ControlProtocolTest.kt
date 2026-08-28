@@ -7,12 +7,13 @@ import org.junit.Test
 class ControlProtocolTest {
     @Test
     fun acceptsSupportedEnvelopeFields() {
-        ControlProtocol.validateEnvelope(1, "request-1", "status")
+        ControlProtocol.validateEnvelope(2, "request-1", "status")
+        ControlProtocol.validateEnvelope(2, "request-2", "heartbeat")
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun rejectsUnknownProtocolVersion() {
-        ControlProtocol.validateEnvelope(2, "request-2", "status")
+        ControlProtocol.validateEnvelope(1, "request-2", "status")
     }
 
     @Test

@@ -9,20 +9,19 @@ use async_trait::async_trait;
 use intercept_proxy_application::{
     ActiveFaultViewModel, AppError, AppResult, FaultConfigurationDraft,
     FaultParameterFieldViewModel, FaultParameterKind, FaultParameterValue, FaultServicePort,
-    FaultTemplateViewModel, MessageStage, RuleDraft, RuleRepositoryPort, UiTone,
+    FaultTemplateViewModel, MessageStage, RuleDefinition, RuleDefinitionDraft,
+    RuleDefinitionSaveInput, UiTone,
 };
 use intercept_proxy_domain::{
-    DropResponseMode, JitterScope, MatchCondition, MatchField, MatchOperator, RuleAction,
-    TerminalAction, TrafficDirection,
+    DropResponseMode, HttpRuleContent, JitterScope, ListenerId, MatchCondition, MatchField,
+    MatchOperator, Revision, RuleAction, RuleContent, RuleId, RuleStage, TerminalAction,
+    TrafficDirection,
 };
 use intercept_proxy_product_api::{BodyCodec, ProductFaultTemplate, ProductLabels, ProductProfile};
 use serde_json::Value;
 
-use super::rules::{RuleRepositoryAdapter, action_to_app, condition_to_app};
-
 #[derive(Debug)]
 pub struct FaultServiceAdapter {
-    rules: Arc<RuleRepositoryAdapter>,
     body_codec: Arc<dyn BodyCodec>,
     templates: &'static [ProductFaultTemplate],
     labels: ProductLabels,
@@ -30,13 +29,8 @@ pub struct FaultServiceAdapter {
 
 impl FaultServiceAdapter {
     #[must_use]
-    pub fn new(
-        rules: Arc<RuleRepositoryAdapter>,
-        body_codec: Arc<dyn BodyCodec>,
-        product: &dyn ProductProfile,
-    ) -> Self {
+    pub fn new(body_codec: Arc<dyn BodyCodec>, product: &dyn ProductProfile) -> Self {
         Self {
-            rules,
             body_codec,
             templates: product.fault_templates(),
             labels: product.labels(),
@@ -53,10 +47,10 @@ impl FaultServicePort for FaultServiceAdapter {
             .collect())
     }
 
-    async fn configure(
+    async fn rule_draft(
         &self,
         configuration: FaultConfigurationDraft,
-    ) -> AppResult<ActiveFaultViewModel> {
+    ) -> AppResult<RuleDefinitionSaveInput> {
         let definition = template_definitions(self.templates)?
             .into_iter()
             .find(|template| template.view.template_id == configuration.template_id)
@@ -65,73 +59,76 @@ impl FaultServicePort for FaultServiceAdapter {
             .action
             .invoke(&configuration.parameters, self.body_codec.as_ref())?;
         let conditions = configuration_conditions(&configuration, stage)?;
-        let rule = self
-            .rules
-            .save(RuleDraft {
-                rule_id: configuration.existing_rule_id,
-                expected_revision: configuration.expected_revision,
+        let channel = configuration
+            .channel
+            .ok_or_else(|| AppError::new("RULE_INVALID", "故障规则必须绑定 Listener。"))?;
+        let listener_id = uuid::Uuid::parse_str(channel.as_str())
+            .map(ListenerId::from_uuid)
+            .map_err(|_| AppError::new("RULE_INVALID", "故障规则 Listener ID 无效。"))?;
+        Ok(RuleDefinitionSaveInput {
+            rule_id: configuration.existing_rule_id.map(RuleId::from_uuid),
+            expected_revision: configuration.expected_revision.map(Revision::new),
+            draft: RuleDefinitionDraft {
                 name: format!(
                     "{}{}",
                     self.labels.fault_rule_name_prefix, definition.view.name
                 ),
-                description: format!("fault:{}", definition.view.template_id),
                 enabled: true,
                 priority: configuration.priority,
-                channel: configuration.channel,
-                stage: Some(stage),
-                conditions: conditions.iter().map(condition_to_app).collect(),
-                actions: vec![
-                    action_to_app(&action)
-                        .map_err(|error| AppError::new("RULE_INVALID", error.to_string()))?,
-                ],
-                one_shot: configuration.one_shot,
-            })
-            .await?;
-        Ok(active_from_rule(&rule, &definition.view.name))
+                listener_id,
+                stage: rule_stage(stage)?,
+                content: RuleContent::Http(HttpRuleContent {
+                    description: format!("fault:{}", definition.view.template_id),
+                    conditions,
+                    actions: vec![action],
+                    document: None,
+                    one_shot: configuration.one_shot,
+                    hit_count: 0,
+                    last_hit_at: None,
+                }),
+            },
+        })
     }
 
-    async fn active(&self) -> AppResult<Vec<ActiveFaultViewModel>> {
-        let rules = self.rules.list().await?;
-        Ok(rules
-            .into_iter()
-            .filter(|rule| rule.name.starts_with(self.labels.fault_rule_name_prefix))
-            .map(|rule| ActiveFaultViewModel {
-                rule_id: rule.rule_id,
-                template_name: rule
-                    .name
-                    .trim_start_matches(self.labels.fault_rule_name_prefix)
-                    .into(),
-                target_summary: rule.match_summary,
-                priority: rule.priority,
-                hit_count: rule.hit_count,
-                enabled: rule.enabled,
-                status_text: if rule.enabled {
-                    "活动中".into()
-                } else {
-                    "已停用".into()
-                },
-                ui_tone: if rule.enabled {
-                    UiTone::Warning
-                } else {
-                    UiTone::Neutral
-                },
-                revision: rule.revision,
-            })
-            .collect())
+    fn active_view(&self, rule: &RuleDefinition) -> Option<ActiveFaultViewModel> {
+        let RuleContent::Http(content) = rule.content() else {
+            return None;
+        };
+        content.description.strip_prefix("fault:")?;
+        let template_name = rule
+            .name()
+            .strip_prefix(self.labels.fault_rule_name_prefix)?;
+        Some(ActiveFaultViewModel {
+            rule_id: rule.rule_id().as_uuid(),
+            template_name: template_name.into(),
+            target_summary: format!("{} 个条件", content.conditions.len()),
+            priority: rule.priority(),
+            hit_count: content.hit_count,
+            enabled: rule.enabled(),
+            status_text: if rule.enabled() {
+                "活动中".into()
+            } else {
+                "已停用".into()
+            },
+            ui_tone: if rule.enabled() {
+                UiTone::Warning
+            } else {
+                UiTone::Neutral
+            },
+            revision: rule.revision().get(),
+        })
     }
+}
 
-    async fn stop(
-        &self,
-        rule_id: intercept_proxy_application::RuleId,
-        expected_revision: u64,
-    ) -> AppResult<ActiveFaultViewModel> {
-        let rule = self.rules.toggle(rule_id, expected_revision, false).await?;
-        Ok(active_from_rule(
-            &rule,
-            rule.summary
-                .name
-                .trim_start_matches(self.labels.fault_rule_name_prefix),
-        ))
+fn rule_stage(stage: MessageStage) -> AppResult<RuleStage> {
+    match stage {
+        MessageStage::Request => Ok(RuleStage::ProxyToUpstream),
+        MessageStage::Response => Ok(RuleStage::ProxyToApp),
+        MessageStage::TlsHandshake => Ok(RuleStage::TlsHandshake),
+        MessageStage::Terminal => Err(AppError::new(
+            "RULE_INVALID",
+            "故障模板不能使用仅适用于终端视图的内部阶段。",
+        )),
     }
 }
 
@@ -206,7 +203,7 @@ mod template_fields;
 mod templates;
 
 use actions::{
-    active_from_rule, connect_timeout, custom_status, disconnect, disconnect_downstream_mid_body,
+    connect_timeout, custom_status, disconnect, disconnect_downstream_mid_body,
     disconnect_upstream_mid_body, drop_response, intermittent_downstream, intermittent_upstream,
     invalid_json, jitter_downstream, jitter_upstream, mock_response, modify_json, read_timeout,
     reject_tls, request_delay, response_delay, throttle_downstream, throttle_upstream, truncate,

@@ -412,9 +412,7 @@ fn rule_editor_capabilities_are_stage_exact_and_rust_owned() {
         }
     }
     assert_eq!(
-        application
-            .rule_condition_draft(RuleConditionKind::NthHit, MessageStage::Request)
-            .expect("request condition draft"),
+        application.rule_condition_draft(RuleConditionKind::NthHit, MessageStage::Request),
         RuleCondition::NthHit { count: 1 }
     );
     assert!(matches!(

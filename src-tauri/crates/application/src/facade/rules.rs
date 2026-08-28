@@ -3,37 +3,46 @@
 //! 规则输入解析和修改保护集中在这里，与生命周期、流量和设置流程隔离；所有展示适配器
 //! 仍通过稳定的 [`Application`] API 调用。
 
+#[cfg(test)]
 use std::collections::BTreeMap;
 
 mod exchange_mock;
 
+#[cfg(test)]
 use http::{HeaderName, HeaderValue};
 
-use super::{
-    Application,
-    rule_capabilities::{action_capability, match_field_supported},
-    validation::{ensure_valid, require_confirmation},
-};
+#[cfg(test)]
+use super::rule_capabilities::match_field_supported;
+#[cfg(test)]
+use super::validation::ensure_valid;
+use super::{Application, rule_capabilities::action_capability, validation::require_confirmation};
 use crate::{
     ActiveFaultViewModel, AppError, AppResult, FaultConfigurationDraft, FaultTemplateViewModel,
-    ListenerDataPlane, ListenerId, MessageStage, OperationResultViewModel, RuleAction,
-    RuleActionKind, RuleByteInputViewModel, RuleCondition, RuleConditionKind, RuleDraft,
-    RuleDropResponseMode, RuleHeaderInputViewModel, RuleId, RuleJitterScope, RuleMatchField,
-    RuleMatchFieldKind, RuleMatchOperator, RuleMatchOperatorKind, RuleSummaryViewModel,
-    RuleTerminalAction, RuleViewModel, SessionId,
+    MessageStage, RuleAction, RuleActionKind, RuleCondition, RuleConditionKind,
+    RuleDropResponseMode, RuleId, RuleJitterScope, RuleMatchField, RuleMatchOperator,
+    RuleTerminalAction,
+};
+#[cfg(test)]
+use crate::{
+    ListenerDataPlane, ListenerId, OperationResultViewModel, RuleByteInputViewModel, RuleDraft,
+    RuleHeaderInputViewModel, RuleMatchFieldKind, RuleMatchOperatorKind, RuleSummaryViewModel,
+    RuleViewModel, SessionId,
 };
 
 impl Application {
+    #[cfg(test)]
     pub async fn rule_list(&self) -> AppResult<Vec<RuleSummaryViewModel>> {
         let mut rules = self.rules.list().await?;
         rules.sort_by_key(|rule| (rule.priority, rule.creation_order, rule.rule_id));
         Ok(rules)
     }
 
+    #[cfg(test)]
     pub async fn rule_get(&self, rule_id: RuleId) -> AppResult<RuleViewModel> {
         self.rules.get(rule_id).await
     }
 
+    #[cfg(test)]
     pub async fn rule_new_http_draft(&self, listener_id: ListenerId) -> AppResult<RuleDraft> {
         let selected = self
             .workspaces
@@ -63,12 +72,13 @@ impl Application {
             .await
     }
 
-    pub fn rule_condition_draft(
+    pub(crate) fn rule_condition_draft(
         &self,
         kind: RuleConditionKind,
         stage: MessageStage,
-    ) -> AppResult<RuleCondition> {
-        Ok(match kind {
+    ) -> RuleCondition {
+        let _ = self;
+        match kind {
             RuleConditionKind::Field => RuleCondition::Field {
                 field: if stage == MessageStage::TlsHandshake {
                     RuleMatchField::CertificateFingerprint
@@ -80,9 +90,10 @@ impl Application {
                 },
             },
             RuleConditionKind::NthHit => RuleCondition::NthHit { count: 1 },
-        })
+        }
     }
 
+    #[cfg(test)]
     pub fn rule_match_field_draft(
         &self,
         kind: RuleMatchFieldKind,
@@ -104,6 +115,7 @@ impl Application {
         })
     }
 
+    #[cfg(test)]
     pub fn rule_match_operator_draft(&self, kind: RuleMatchOperatorKind) -> RuleMatchOperator {
         match kind {
             RuleMatchOperatorKind::Equals => RuleMatchOperator::Equals {
@@ -118,11 +130,12 @@ impl Application {
         }
     }
 
-    pub fn rule_action_draft(
+    pub(crate) fn rule_action_draft(
         &self,
         kind: RuleActionKind,
         stage: MessageStage,
     ) -> AppResult<RuleAction> {
+        let _ = self;
         let capability = action_capability(stage, kind)
             .ok_or_else(|| AppError::new("RULE_INVALID", "动作与当前规则阶段不兼容。"))?;
         let traffic_direction = capability.traffic_direction;
@@ -209,6 +222,7 @@ impl Application {
         })
     }
 
+    #[cfg(test)]
     pub fn rule_parse_byte_input(&self, raw: &str) -> AppResult<RuleByteInputViewModel> {
         let trimmed = raw.trim();
         if trimmed.is_empty() {
@@ -245,6 +259,7 @@ impl Application {
         })
     }
 
+    #[cfg(test)]
     pub fn rule_parse_header_input(&self, raw: &str) -> AppResult<RuleHeaderInputViewModel> {
         let mut headers = Vec::new();
         for (index, line) in raw.lines().enumerate() {
@@ -297,11 +312,13 @@ impl Application {
         })
     }
 
+    #[cfg(test)]
     pub async fn rule_create_from_session(&self, session_id: SessionId) -> AppResult<RuleDraft> {
         self.sessions.get(session_id).await?;
         self.rules.create_from_session(session_id).await
     }
 
+    #[cfg(test)]
     pub async fn rule_save(&self, mut draft: RuleDraft) -> AppResult<RuleViewModel> {
         let _gate = self.mutation_gate.lock().await;
         draft.name = draft.name.trim().to_owned();
@@ -311,11 +328,13 @@ impl Application {
         self.rules.save(draft).await
     }
 
+    #[cfg(test)]
     pub async fn rule_copy(&self, rule_id: RuleId) -> AppResult<RuleViewModel> {
         let _gate = self.mutation_gate.lock().await;
         self.rules.copy(rule_id).await
     }
 
+    #[cfg(test)]
     pub async fn rule_delete(
         &self,
         rule_id: RuleId,
@@ -327,6 +346,7 @@ impl Application {
         self.rules.delete(rule_id, expected_revision).await
     }
 
+    #[cfg(test)]
     pub async fn rule_toggle(
         &self,
         rule_id: RuleId,
@@ -337,11 +357,13 @@ impl Application {
         self.rules.toggle(rule_id, expected_revision, enabled).await
     }
 
+    #[cfg(test)]
     pub async fn rule_import(&self) -> AppResult<OperationResultViewModel> {
         let _gate = self.mutation_gate.lock().await;
         self.rules.import().await
     }
 
+    #[cfg(test)]
     pub async fn rule_export(&self) -> AppResult<OperationResultViewModel> {
         self.rules.export().await
     }
@@ -371,12 +393,20 @@ impl Application {
         &self,
         draft: FaultConfigurationDraft,
     ) -> AppResult<ActiveFaultViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        self.faults.configure(draft).await
+        let input = self.faults.rule_draft(draft).await?;
+        let saved = self.rule_definition_save(input).await?;
+        self.faults.active_view(&saved).ok_or_else(|| {
+            AppError::new("RULE_INVALID", "故障模板生成的统一规则无法投影为活动故障。")
+        })
     }
 
     pub async fn fault_active_list(&self) -> AppResult<Vec<ActiveFaultViewModel>> {
-        let mut active = self.faults.active().await?;
+        let mut active = self
+            .rule_definition_list()
+            .await?
+            .iter()
+            .filter_map(|rule| self.faults.active_view(rule))
+            .collect::<Vec<_>>();
         active.sort_by_key(|fault| (fault.priority, fault.rule_id));
         Ok(active)
     }
@@ -387,8 +417,16 @@ impl Application {
         expected_revision: u64,
         confirmed: bool,
     ) -> AppResult<ActiveFaultViewModel> {
-        let _gate = self.mutation_gate.lock().await;
         require_confirmation(confirmed, "停止活动故障需要确认。")?;
-        self.faults.stop(rule_id, expected_revision).await
+        let saved = self
+            .rule_definition_toggle(
+                intercept_proxy_domain::RuleId::from_uuid(rule_id),
+                intercept_proxy_domain::Revision::new(expected_revision),
+                false,
+            )
+            .await?;
+        self.faults
+            .active_view(&saved)
+            .ok_or_else(|| AppError::new("RULE_NOT_FOUND", "指定规则不是活动故障规则。"))
     }
 }

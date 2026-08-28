@@ -50,8 +50,10 @@ async fn deleting_an_imported_high_order_rule_never_reuses_its_created_order() {
         vec![DocumentAction::RecordMatch],
     )
     .unwrap();
-    workspace.protocol_rule_created_order_high_water = imported.created_order();
-    workspace.protocol_rules.push(imported.clone());
+    workspace.rule_created_order_high_water = imported.created_order();
+    workspace
+        .replace_document_runtime_rules(vec![imported.clone()])
+        .unwrap();
     workspaces.save(workspace).await.unwrap();
 
     application
@@ -73,7 +75,7 @@ async fn created_order_exhaustion_is_stable_and_does_not_write() {
     let listener_id = configure_relay(&services, &workspaces, &package).await;
     let selected = workspaces.list().await.unwrap().remove(0);
     let mut workspace = workspaces.get(selected.id).await.unwrap();
-    workspace.protocol_rule_created_order_high_water = MAX_JAVASCRIPT_SAFE_INTEGER;
+    workspace.rule_created_order_high_water = MAX_JAVASCRIPT_SAFE_INTEGER;
     let before = workspaces.save(workspace).await.unwrap();
 
     let error = application
@@ -84,9 +86,9 @@ async fn created_order_exhaustion_is_stable_and_does_not_write() {
     assert_eq!(error_code(&error), "PROTOCOL_RULE_CREATED_ORDER_EXHAUSTED");
     let after = workspaces.get(before.id).await.unwrap();
     assert_eq!(after.revision, before.revision);
-    assert!(after.protocol_rules.is_empty());
+    assert!(after.document_runtime_rules().unwrap().is_empty());
     assert_eq!(
-        after.protocol_rule_created_order_high_water,
+        after.rule_created_order_high_water,
         MAX_JAVASCRIPT_SAFE_INTEGER
     );
 }
@@ -312,7 +314,7 @@ impl ListenerRuntimePort for FailFirstRuleReplacementRuntime {
         self.inner.stop(listener_id).await
     }
 
-    async fn replace_protocol_rules(
+    async fn replace_rule_definitions(
         &self,
         workspace: ProxyWorkspace,
         listener_id: ListenerId,
@@ -324,7 +326,7 @@ impl ListenerRuntimePort for FailFirstRuleReplacementRuntime {
             ));
         }
         self.inner
-            .replace_protocol_rules(workspace, listener_id)
+            .replace_rule_definitions(workspace, listener_id)
             .await
     }
 
@@ -371,8 +373,8 @@ async fn runtime_replacement_failure_restores_the_previous_persisted_rule_set() 
 
     assert_eq!(error_code(&error), "RULE_RUNTIME_REPLACE_FAILED");
     let after = workspaces.get(before.id).await.unwrap();
-    assert!(after.protocol_rules.is_empty());
-    assert_eq!(after.protocol_rule_created_order_high_water, 0);
+    assert!(after.document_runtime_rules().unwrap().is_empty());
+    assert_eq!(after.rule_created_order_high_water, 0);
     assert!(after.revision > before.revision);
     assert_eq!(runtime.replacements.load(Ordering::SeqCst), 2);
 }

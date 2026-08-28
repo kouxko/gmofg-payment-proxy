@@ -386,14 +386,12 @@ impl FaultServicePort for FakePorts {
     async fn templates(&self) -> AppResult<Vec<FaultTemplateViewModel>> {
         unused()
     }
-    async fn configure(&self, _: FaultConfigurationDraft) -> AppResult<ActiveFaultViewModel> {
+    async fn rule_draft(&self, _: FaultConfigurationDraft) -> AppResult<RuleDefinitionSaveInput> {
         unused()
     }
-    async fn active(&self) -> AppResult<Vec<ActiveFaultViewModel>> {
-        unused()
-    }
-    async fn stop(&self, _: RuleId, _: u64) -> AppResult<ActiveFaultViewModel> {
-        unused()
+
+    fn active_view(&self, _: &RuleDefinition) -> Option<ActiveFaultViewModel> {
+        None
     }
 }
 

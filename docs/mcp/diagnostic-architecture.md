@@ -29,7 +29,7 @@
 - `src-tauri/crates/exchange`：协议中立的 `Exchange`、Reader/Writer `Pipeline`、`Envelope`、方向类型与透明 Socket 字节交换核心。
 - `src-tauri/crates/infrastructure`：SQLite 配置/协议包元数据、ListenerRuntime、ADB、证书、external_package WebSocket/JSON-RPC，以及有界内存 `ExchangeObservationStore`。
 - `src-tauri/crates/proxy`：具体 HTTP/Socket transport、能力装配、连接接入、读写和超时；不得依赖 UI 或 SQLite。
-- `src-tauri/src/mcp`：全接口明文 MCP transport、42 项工具目录和资源；37 个既有查询调用 Application 只读 facade，其中 ExchangeObservation 通过 `ExchangeObservationQueries` port facade 查询，只有 composition root 会把 Infrastructure `ExchangeObservationStore` 注入该 port。五个环境配置工具通过类型化边界调用 Application 候选用例。MCP 不直接访问 SQLite、Infrastructure store、保护器或任意文件。
+- `src-tauri/src/mcp`：全接口明文 MCP transport、41 项工具目录和资源；36 个查询调用 Application 只读 facade，其中 ExchangeObservation 通过 `ExchangeObservationQueries` port facade 查询，只有 composition root 会把 Infrastructure `ExchangeObservationStore` 注入该 port。五个环境配置工具通过类型化边界调用 Application 候选用例。MCP 不直接访问 SQLite、Infrastructure store、保护器或任意文件。
 - `src/features`：Tauri/React 展示与用户操作；不能自行推导另一套业务状态。
 - `examples/external-packages`：第三方 WebSocket 软件包示例及可独立运行的测试客户端。
 

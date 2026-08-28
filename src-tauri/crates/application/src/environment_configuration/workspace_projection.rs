@@ -30,63 +30,14 @@ pub(crate) fn project_candidate_workspace(
 
     let (listener_ids, listeners) = project_listeners(candidate, persisted, allocator, checkpoint)?;
 
-    let rules = candidate
-        .workspace
-        .http_rules
-        .iter()
-        .enumerate()
-        .map(|(index, rule)| {
-            ensure_running(checkpoint)?;
-            let listener_id = required_listener(
-                candidate,
-                &listener_ids,
-                rule.listener_alias(),
-                RuleListenerKind::Http,
-            )?;
-            if let Some(id) = rule.existing_rule_id {
-                reconcile_http_rule(
-                    rule,
-                    id,
-                    listener_id,
-                    persisted,
-                    workspace_scope,
-                    checkpoint,
-                )
-            } else {
-                let (id, created_order) = allocator.allocate_http_rule(index);
-                rule.to_domain(id, created_order, listener_id)
-            }
-        })
-        .collect::<AppResult<Vec<_>>>()?;
-    let protocol_rules = candidate
-        .workspace
-        .protocol_rules
-        .iter()
-        .enumerate()
-        .map(|(index, rule)| {
-            ensure_running(checkpoint)?;
-            let listener_id = required_listener(
-                candidate,
-                &listener_ids,
-                rule.listener_alias(),
-                RuleListenerKind::Protocol,
-            )?;
-            if let Some(id) = rule.existing_rule_id {
-                reconcile_protocol_rule(
-                    rule,
-                    id,
-                    listener_id,
-                    persisted,
-                    workspace_scope,
-                    checkpoint,
-                )
-            } else {
-                let (id, created_order) = allocator.allocate_protocol_rule(index);
-                rule.to_domain(id, created_order, listener_id)
-            }
-        })
-        .collect::<AppResult<Vec<_>>>()?;
-    let protocol_rule_created_order_high_water = protocol_created_order_high_water(&protocol_rules);
+    let (rule_definitions, rule_created_order_high_water) = project_rule_definitions(
+        candidate,
+        &listener_ids,
+        persisted,
+        workspace_scope,
+        allocator,
+        checkpoint,
+    )?;
     let android_network_profiles = candidate
         .workspace
         .android_network_profiles
@@ -107,27 +58,87 @@ pub(crate) fn project_candidate_workspace(
         name,
         revision,
         listeners,
-        rules,
-        protocol_rules,
-        protocol_rule_created_order_high_water,
+        rule_definitions,
+        rule_created_order_high_water,
         certificate_references: Vec::new(),
         android_network_profiles,
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+fn project_rule_definitions(
+    candidate: &EnvironmentConfigurationCandidateV1,
+    listener_ids: &BTreeMap<&str, ListenerId>,
+    persisted: Option<&ProxyWorkspace>,
+    workspace_scope: &[ProxyWorkspace],
+    allocator: &dyn EnvironmentIdentityAllocatorPort,
+    checkpoint: &dyn super::EnvironmentValidationCheckpoint,
+) -> AppResult<(Vec<intercept_proxy_domain::RuleDefinition>, u64)> {
+    let mut rule_definitions = Vec::with_capacity(candidate.workspace.rules.len());
+    for (index, rule) in candidate.workspace.rules.iter().enumerate() {
+        ensure_running(checkpoint)?;
+        let listener_id = required_listener(
+            candidate,
+            listener_ids,
+            rule.listener_alias(),
+            if rule.as_http().is_some() {
+                RuleListenerKind::Http
+            } else {
+                RuleListenerKind::Socket
+            },
+        )?;
+        let projected = if let Some(http) = rule.as_http() {
+            if let Some(id) = http.existing_rule_id {
+                reconcile_http_rule(
+                    http,
+                    id,
+                    listener_id,
+                    persisted,
+                    workspace_scope,
+                    checkpoint,
+                )?
+            } else {
+                let (id, created_order) = allocator.allocate_http_rule(index);
+                http.to_domain(id, created_order, listener_id)?
+            }
+        } else {
+            let socket = rule
+                .as_socket()
+                .expect("tagged rule has one content variant");
+            if let Some(id) = socket.existing_rule_id {
+                reconcile_protocol_rule(
+                    socket,
+                    id,
+                    listener_id,
+                    persisted,
+                    workspace_scope,
+                    checkpoint,
+                    false,
+                )?
+            } else {
+                let (id, created_order) = allocator.allocate_protocol_rule(index);
+                socket.to_domain(
+                    intercept_proxy_domain::RuleId::from_uuid(id.as_uuid()),
+                    created_order,
+                    listener_id,
+                    false,
+                )?
+            }
+        };
+        rule_definitions.push(projected);
+    }
+    intercept_proxy_domain::sort_rule_definitions(&mut rule_definitions);
+    let rule_created_order_high_water = rule_definitions
+        .iter()
+        .map(intercept_proxy_domain::RuleDefinition::created_order)
+        .max()
+        .unwrap_or(0);
+    Ok((rule_definitions, rule_created_order_high_water))
+}
+
 fn assemble_workspace(workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace> {
     workspace.validate().map_err(AppError::from)?;
     Ok(workspace)
-}
-
-fn protocol_created_order_high_water(
-    rules: &[intercept_proxy_domain::ProtocolDocumentRuleDefinition],
-) -> u64 {
-    rules
-        .iter()
-        .map(intercept_proxy_domain::ProtocolDocumentRuleDefinition::created_order)
-        .max()
-        .unwrap_or(0)
 }
 
 fn project_listeners<'a>(
@@ -170,7 +181,7 @@ fn reconcile_http_rule(
     persisted: Option<&ProxyWorkspace>,
     workspace_scope: &[ProxyWorkspace],
     checkpoint: &dyn super::EnvironmentValidationCheckpoint,
-) -> AppResult<intercept_proxy_domain::Rule> {
+) -> AppResult<intercept_proxy_domain::RuleDefinition> {
     let Some(workspace) = persisted else {
         return Err(selector_error("EXISTING_RULE_ID_FORBIDDEN"));
     };
@@ -193,7 +204,8 @@ fn reconcile_protocol_rule(
     persisted: Option<&ProxyWorkspace>,
     workspace_scope: &[ProxyWorkspace],
     checkpoint: &dyn super::EnvironmentValidationCheckpoint,
-) -> AppResult<intercept_proxy_domain::ProtocolDocumentRuleDefinition> {
+    http: bool,
+) -> AppResult<intercept_proxy_domain::RuleDefinition> {
     let Some(workspace) = persisted else {
         return Err(selector_error("EXISTING_RULE_ID_FORBIDDEN"));
     };
@@ -201,7 +213,7 @@ fn reconcile_protocol_rule(
         return Err(selector_error("EXISTING_RULE_ID_KIND_MISMATCH"));
     }
     if let Some(existing) = find_protocol_rule(workspace, selector, checkpoint)? {
-        return template.to_domain_existing(existing, listener_id);
+        return template.to_domain_existing(existing, listener_id, http);
     }
     if rule_exists_outside(workspace.id, selector, workspace_scope, checkpoint)? {
         return Err(selector_error("EXISTING_RULE_ID_WORKSPACE_MISMATCH"));
@@ -245,10 +257,12 @@ fn find_http_rule<'a>(
     workspace: &'a ProxyWorkspace,
     selector: uuid::Uuid,
     checkpoint: &dyn super::EnvironmentValidationCheckpoint,
-) -> AppResult<Option<&'a intercept_proxy_domain::Rule>> {
-    for rule in &workspace.rules {
+) -> AppResult<Option<&'a intercept_proxy_domain::RuleDefinition>> {
+    for rule in &workspace.rule_definitions {
         ensure_running(checkpoint)?;
-        if rule.id.as_uuid() == selector {
+        if rule.rule_id().as_uuid() == selector
+            && matches!(rule.content(), intercept_proxy_domain::RuleContent::Http(_))
+        {
             return Ok(Some(rule));
         }
     }
@@ -259,10 +273,15 @@ fn find_protocol_rule<'a>(
     workspace: &'a ProxyWorkspace,
     selector: uuid::Uuid,
     checkpoint: &dyn super::EnvironmentValidationCheckpoint,
-) -> AppResult<Option<&'a intercept_proxy_domain::ProtocolDocumentRuleDefinition>> {
-    for rule in &workspace.protocol_rules {
+) -> AppResult<Option<&'a intercept_proxy_domain::RuleDefinition>> {
+    for rule in &workspace.rule_definitions {
         ensure_running(checkpoint)?;
-        if rule.rule_id().as_uuid() == selector {
+        if rule.rule_id().as_uuid() == selector
+            && matches!(
+                rule.content(),
+                intercept_proxy_domain::RuleContent::Socket(_)
+            )
+        {
             return Ok(Some(rule));
         }
     }
@@ -287,7 +306,7 @@ fn selector_error(code: &'static str) -> AppError {
 #[derive(Clone, Copy)]
 enum RuleListenerKind {
     Http,
-    Protocol,
+    Socket,
 }
 
 fn required_listener(
@@ -315,7 +334,9 @@ fn required_listener(
         })?;
     let compatible = match kind {
         RuleListenerKind::Http => listener.accepts_http_rules(),
-        RuleListenerKind::Protocol => listener.accepts_protocol_rules(),
+        RuleListenerKind::Socket => {
+            listener.accepts_protocol_rules() && !listener.accepts_http_rules()
+        }
     };
     if !compatible {
         return Err(AppError::new(

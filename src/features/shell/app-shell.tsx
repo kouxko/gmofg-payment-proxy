@@ -39,7 +39,10 @@ import {
   useAppEventRefresh,
   useBootstrap,
 } from "./bootstrap-context";
-import { useWorkspaceNavigation } from "./workspace-navigation";
+import {
+  useWorkspaceNavigation,
+  useWorkspaceQueryInvalidation,
+} from "./workspace-navigation";
 import { toneColor } from "@/lib/format";
 import { PageHelp } from "@/features/help/page-help";
 import { commands } from "@/generated/rust-types";
@@ -134,9 +137,13 @@ function GlobalStatusBar() {
     undefined,
     { enabled: Boolean(workspaceId) },
   );
-  useAppEventRefresh(["workspace_changed"], workspaces.refresh);
+  useWorkspaceQueryInvalidation({
+    workspaceId,
+    collection: [workspaces],
+    current: [listenerOverview],
+  });
   useAppEventRefresh(
-    ["workspace_changed", "listener_status_changed", "snapshot_required"],
+    ["listener_status_changed"],
     listenerOverview.refresh,
   );
 

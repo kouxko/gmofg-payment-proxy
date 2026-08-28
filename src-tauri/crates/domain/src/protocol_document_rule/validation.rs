@@ -38,20 +38,40 @@ pub(super) fn validate_structure(
             "created_order 必须在 1 到 JavaScript 安全整数上限之间",
         );
     }
+    add_content_structure_errors(schema_version, conditions, actions, &mut error);
+    finish(error)
+}
+
+pub(super) fn validate_content_structure(
+    schema_version: u32,
+    conditions: &[DocumentCondition],
+    actions: &[DocumentAction],
+) -> Result<(), DomainError> {
+    let mut error = rule_error("协议 Document 规则结构无效");
+    add_content_structure_errors(schema_version, conditions, actions, &mut error);
+    finish(error)
+}
+
+fn add_content_structure_errors(
+    schema_version: u32,
+    conditions: &[DocumentCondition],
+    actions: &[DocumentAction],
+    error: &mut DomainError,
+) {
     if schema_version == 0 {
-        add_error(&mut error, "schema_version", "Schema 版本必须大于 0");
+        add_error(error, "schema_version", "Schema 版本必须大于 0");
     }
     if conditions.len() > MAX_PROTOCOL_DOCUMENT_RULE_CONDITIONS {
-        add_error(&mut error, "conditions", "条件数量不能超过 64 个");
+        add_error(error, "conditions", "条件数量不能超过 64 个");
     }
     if actions.is_empty() || actions.len() > MAX_PROTOCOL_DOCUMENT_RULE_ACTIONS {
-        add_error(&mut error, "actions", "动作数量必须为 1 到 64 个");
+        add_error(error, "actions", "动作数量必须为 1 到 64 个");
     }
     let mut fields = std::collections::BTreeSet::new();
     for (index, condition) in conditions.iter().enumerate() {
         if !fields.insert(condition.field().as_str()) {
             add_error(
-                &mut error,
+                error,
                 format!("conditions.{index}.field"),
                 "同一字段不能重复声明条件",
             );
@@ -59,14 +79,17 @@ pub(super) fn validate_structure(
         validate_value_limit(
             condition.value(),
             &format!("conditions.{index}.value"),
-            &mut error,
+            error,
         );
     }
     for (index, action) in actions.iter().enumerate() {
         if let Some((_, value)) = action.field_and_value() {
-            validate_value_limit(value, &format!("actions.{index}.value"), &mut error);
+            validate_value_limit(value, &format!("actions.{index}.value"), error);
         }
     }
+}
+
+fn finish(error: DomainError) -> Result<(), DomainError> {
     if error.field_errors.is_empty() {
         Ok(())
     } else {

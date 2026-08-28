@@ -50,7 +50,9 @@ impl NativeFileDialog for MutatingOpenDialog {
             .find(|record| record.id == selected_id)
             .expect("selected record");
         let mut workspace = decode_workspace_record(record.clone()).expect("workspace");
-        workspace.rules.push(self.concurrent_rule.clone());
+        let mut rules = workspace.http_runtime_rules()?;
+        rules.push(self.concurrent_rule.clone());
+        workspace.replace_http_runtime_rules(rules)?;
         workspace.revision = workspace.revision.next();
         infra(self.store.compare_and_swap_selected_workspace(
             selected_id,
@@ -97,17 +99,16 @@ fn seed_workspace(store: &Arc<SqliteStore>, rules: Vec<Rule>) -> ProxyWorkspace 
         .expect("workspaces")
         .records
         .is_empty();
-    let mut workspace = ProxyWorkspace {
-        rules,
-        ..ProxyWorkspace::default()
-    };
+    let mut workspace = ProxyWorkspace::default();
     if first_workspace {
         workspace.listeners[0].id = test_listener_id();
     }
     let channel = ChannelId::new(workspace.listeners[0].id.to_string()).expect("channel");
-    for rule in &mut workspace.rules {
+    let mut rules = rules;
+    for rule in &mut rules {
         rule.channel = Some(channel.clone());
     }
+    workspace.replace_http_runtime_rules(rules).expect("rules");
     store
         .insert_workspace(&RuleRepositoryAdapter::workspace_record(&workspace).expect("record"))
         .expect("seed workspace");
@@ -126,12 +127,7 @@ fn adapter_with(
     {
         seed_workspace(&store, Vec::new());
     }
-    Arc::new(RuleRepositoryAdapter::new(
-        store,
-        dialog,
-        Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
-        &[],
-    ))
+    Arc::new(RuleRepositoryAdapter::new(store, dialog, &[]))
 }
 
 fn adapter() -> Arc<RuleRepositoryAdapter> {

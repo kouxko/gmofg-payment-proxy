@@ -148,7 +148,7 @@ impl ListenerRuntimePort for StaticListenerRuntime {
         unused()
     }
 
-    async fn replace_protocol_rules(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
+    async fn replace_rule_definitions(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
         Ok(())
     }
 
@@ -261,6 +261,7 @@ async fn running_vpn_fixture_with_listener_state(
             }],
             confirmed_shared_uids: BTreeSet::default(),
             auto_resume_after_reboot: false,
+            stop_vpn_on_control_loss: true,
             weak_network: WeakNetworkProfile::default(),
         });
     workspaces.save(original.clone()).await.unwrap();

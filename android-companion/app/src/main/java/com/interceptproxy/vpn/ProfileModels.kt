@@ -22,6 +22,7 @@ data class CompanionProfile(
     val targetPackages: List<TargetPackage>,
     val expectedProxyRouteCount: Int,
     val autoResumeAfterReboot: Boolean,
+    val stopVpnOnControlLoss: Boolean,
     val mtu: Int,
 )
 
@@ -131,6 +132,7 @@ object CompanionProfileParser {
             targetPackages = targets,
             expectedProxyRouteCount = root.optJSONArray("proxy_routes")?.length() ?: 0,
             autoResumeAfterReboot = root.optBoolean("auto_resume_after_reboot", false),
+            stopVpnOnControlLoss = root.optBoolean("stop_vpn_on_control_loss", true),
             mtu = TUN_MTU,
         )
     }

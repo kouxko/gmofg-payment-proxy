@@ -92,12 +92,13 @@ pub(super) fn workspace(
         .map(ProtocolDocumentRuleDefinition::created_order)
         .max()
         .unwrap_or(0);
-    ProxyWorkspace {
+    let mut workspace = ProxyWorkspace {
         listeners: vec![listener],
-        protocol_rule_created_order_high_water: created_order_high_water,
-        protocol_rules: rules,
+        rule_created_order_high_water: created_order_high_water,
         ..ProxyWorkspace::default()
-    }
+    };
+    workspace.replace_document_runtime_rules(rules).unwrap();
+    workspace
 }
 
 pub(super) async fn start_local_runtime(

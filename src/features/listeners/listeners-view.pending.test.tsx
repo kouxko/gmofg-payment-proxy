@@ -16,7 +16,10 @@ import {
   workspace,
 } from "./listeners-view.test-support";
 
-vi.mock("@/features/shell/workspace-navigation", () => ({ useWorkspaceNavigation: () => navigationMocks }));
+vi.mock("@/features/shell/workspace-navigation", () => ({
+  useWorkspaceNavigation: () => navigationMocks,
+  useWorkspaceQueryInvalidation: vi.fn(),
+}));
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: () => undefined,
   useBootstrap: () => ({ bootstrap }),

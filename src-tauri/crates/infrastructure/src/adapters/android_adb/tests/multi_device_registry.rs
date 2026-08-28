@@ -210,6 +210,40 @@ async fn device_list_marks_only_missing_owner_waiting_reconnect() {
 }
 
 #[tokio::test]
+async fn offline_or_unauthorized_label_alone_neither_marks_missing_nor_requests_stop() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(SequenceRunner {
+        calls: std::sync::Mutex::new(Vec::new()),
+        outputs: std::sync::Mutex::new(std::collections::VecDeque::from([AdbOutput {
+            success: true,
+            stdout: "List of devices attached\nDEVICE-A offline\nDEVICE-B unauthorized\n".into(),
+            stderr: String::new(),
+        }])),
+    });
+    let adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+    let owner_a = runtime_owner("DEVICE-A", AndroidRuntimeOwnerState::Active);
+    let owner_b = runtime_owner("DEVICE-B", AndroidRuntimeOwnerState::Active);
+    adapter.save_owner(owner_a.clone()).await.unwrap();
+    adapter.save_owner(owner_b.clone()).await.unwrap();
+
+    adapter.device_list().await.unwrap();
+
+    assert_eq!(
+        adapter.runtime_owner_snapshot_for("DEVICE-A").await,
+        Some(owner_a)
+    );
+    assert_eq!(
+        adapter.runtime_owner_snapshot_for("DEVICE-B").await,
+        Some(owner_b)
+    );
+    assert_eq!(
+        *runner.calls.lock().unwrap(),
+        vec![vec![String::from("devices"), String::from("-l")]],
+        "设备状态标签只能更新设备清单；不得直接发送 stop/force-stop"
+    );
+}
+
+#[tokio::test]
 async fn device_list_restores_online_waiting_owner_without_changing_other_owner() {
     let temp = tempfile::tempdir().unwrap();
     let adapter = AndroidAdbAdapter::with_runner(temp.path(), Arc::new(ReconnectRunner::default()));

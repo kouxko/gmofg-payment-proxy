@@ -61,7 +61,7 @@ pub(crate) use lifecycle::{EnvironmentApplyWorker, EnvironmentCandidateRegistry}
 use listener::ListenerTemplate;
 use materials::EnvironmentMaterials;
 pub(crate) use preview::candidate_preview_snapshot;
-use rules::{HttpRuleTemplate, ProtocolDocumentRuleTemplate};
+use rules::{HttpRuleTemplate, ProtocolDocumentRuleTemplate, RuleTemplate};
 pub use terminal::{
     DiagnosticSeverity, EnvironmentDiagnostic, EnvironmentDiagnosticScope, EnvironmentStatusCode,
     EnvironmentTerminalResult,
@@ -106,8 +106,7 @@ enum EnvironmentTarget {
 #[serde(deny_unknown_fields)]
 struct WorkspaceCommitTemplate {
     listeners: Vec<ListenerTemplate>,
-    http_rules: Vec<HttpRuleTemplate>,
-    protocol_rules: Vec<ProtocolDocumentRuleTemplate>,
+    rules: Vec<RuleTemplate>,
     android_network_profiles: Vec<AndroidNetworkProfileTemplate>,
 }
 
@@ -119,10 +118,8 @@ pub enum EnvironmentConfigurationParseError {
     UnsupportedSchemaVersion,
     #[error("new Workspace targets cannot retain persisted listener or rule identifiers")]
     PersistedIdentityForNewTarget,
-    #[error("an existing HTTP rule selector may appear only once")]
-    DuplicateHttpRuleSelector,
-    #[error("an existing protocol Document rule selector may appear only once")]
-    DuplicateProtocolRuleSelector,
+    #[error("an existing rule selector may appear only once")]
+    DuplicateRuleSelector,
     #[error("weak-network numeric values violate the v1 contract")]
     WeakNetworkValueInvalid,
     #[error("candidate contains an unknown field")]
@@ -188,16 +185,22 @@ fn preflight_wire(wire: &Value) -> Result<(), EnvironmentConfigurationParseError
         return Err(EnvironmentConfigurationParseError::UnsupportedSecretRole);
     }
     let workspace = &wire["workspace"];
-    if workspace["protocol_rules"]
+    if workspace["rules"]
         .as_array()
         .into_iter()
         .flatten()
+        .filter(|rule| matches!(rule["type"].as_str(), Some("http" | "socket")))
         .flat_map(|rule| {
-            rule["conditions"]
+            let document = if rule["type"] == "http" {
+                &rule["document"]
+            } else {
+                rule
+            };
+            document["conditions"]
                 .as_array()
                 .into_iter()
                 .flatten()
-                .chain(rule["actions"].as_array().into_iter().flatten())
+                .chain(document["actions"].as_array().into_iter().flatten())
         })
         .filter_map(|entry| entry.get("value"))
         .any(|value| !value.is_object())
@@ -242,14 +245,9 @@ impl EnvironmentConfigurationCandidateV1 {
                 .any(|listener| listener.id.is_some())
                 || self
                     .workspace
-                    .http_rules
+                    .rules
                     .iter()
-                    .any(|rule| rule.existing_rule_id.is_some())
-                || self
-                    .workspace
-                    .protocol_rules
-                    .iter()
-                    .any(|rule| rule.existing_rule_id.is_some()))
+                    .any(|rule| rule.existing_rule_id().is_some()))
         {
             return Err(EnvironmentConfigurationParseError::PersistedIdentityForNewTarget);
         }
@@ -267,17 +265,10 @@ impl EnvironmentConfigurationCandidateV1 {
 
         ensure_unique(
             self.workspace
-                .http_rules
+                .rules
                 .iter()
-                .filter_map(|rule| rule.existing_rule_id),
-            EnvironmentConfigurationParseError::DuplicateHttpRuleSelector,
-        )?;
-        ensure_unique(
-            self.workspace
-                .protocol_rules
-                .iter()
-                .filter_map(|rule| rule.existing_rule_id),
-            EnvironmentConfigurationParseError::DuplicateProtocolRuleSelector,
+                .filter_map(RuleTemplate::existing_rule_id),
+            EnvironmentConfigurationParseError::DuplicateRuleSelector,
         )
     }
 }

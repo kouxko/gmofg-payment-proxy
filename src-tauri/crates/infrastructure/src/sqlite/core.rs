@@ -22,54 +22,37 @@ impl SqliteStore {
         connection
             .execute_batch(
                 "PRAGMA foreign_keys = ON;
-                 PRAGMA busy_timeout = 5000;
-                 PRAGMA journal_mode = WAL;",
+                 PRAGMA busy_timeout = 5000;",
             )
+            .map_err(|source| InfrastructureError::Database { source })?;
+        let database_is_empty = database_is_empty(&connection)?;
+        if !database_is_empty {
+            validate_current_schema_marker(&connection)?;
+        }
+        connection
+            .execute_batch("PRAGMA journal_mode = WAL;")
             .map_err(|source| InfrastructureError::Database { source })?;
         let store = Self {
             connection: Mutex::new(connection),
             blocking_gate: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
         };
-        store.ensure_current_schema()?;
+        if database_is_empty {
+            store.create_schema()?;
+        }
         Ok(store)
     }
 
-    fn ensure_current_schema(&self) -> Result<(), InfrastructureError> {
+    fn create_schema(&self) -> Result<(), InfrastructureError> {
         let mut connection = self.connection.lock();
-        let database_is_empty = database_is_empty(&connection)?;
-        let reset_required = !database_is_empty
-            && validate_current_schema_marker(&connection)? == SchemaState::Older;
-
-        if reset_required {
-            connection
-                .execute_batch("PRAGMA foreign_keys = OFF;")
-                .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-        }
-
-        let result = (|| {
-            let transaction = connection
-                .transaction()
-                .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-            if reset_required {
-                drop_all_user_tables(&transaction)?;
-            }
-            if database_is_empty || reset_required {
-                create_current_schema(&transaction)?;
-                let certificate_revision = stored_certificate_revision(&transaction)?;
-                initialize_singleton_state(&transaction, certificate_revision)?;
-            }
-            migrate_workspace_documents(&transaction)?;
-            transaction
-                .commit()
-                .map_err(|source| InfrastructureError::DatabaseSchema { source })
-        })();
-
-        if reset_required {
-            connection
-                .execute_batch("PRAGMA foreign_keys = ON;")
-                .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-        }
-        result
+        let transaction = connection
+            .transaction()
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+        create_current_schema(&transaction)?;
+        let certificate_revision = stored_certificate_revision(&transaction)?;
+        initialize_singleton_state(&transaction, certificate_revision)?;
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })
     }
 
     pub fn load_settings(&self) -> Result<Option<StoredSettings>, InfrastructureError> {
@@ -199,103 +182,6 @@ impl SqliteStore {
     }
 }
 
-fn migrate_workspace_documents(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), InfrastructureError> {
-    const PREVIOUS_WORKSPACE_VERSION: u64 = 6;
-    let rows = transaction
-        .prepare("SELECT id, revision, json FROM workspaces ORDER BY id")
-        .and_then(|mut statement| {
-            statement
-                .query_map([], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, i64>(1)?,
-                        row.get::<_, String>(2)?,
-                    ))
-                })?
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-    for (id, indexed_revision, json) in rows {
-        let mut value = serde_json::from_str::<serde_json::Value>(&json).map_err(|error| {
-            InfrastructureError::PersistenceCorrupt {
-                entity: "workspaces",
-                message: format!("Workspace {id} JSON 无效：{error}"),
-            }
-        })?;
-        let Some(object) = value.as_object_mut() else {
-            return Err(InfrastructureError::PersistenceCorrupt {
-                entity: "workspaces",
-                message: format!("Workspace {id} 必须是 JSON object"),
-            });
-        };
-        if object
-            .get("_persistence_version")
-            .and_then(serde_json::Value::as_u64)
-            != Some(PREVIOUS_WORKSPACE_VERSION)
-        {
-            continue;
-        }
-        let revision = object
-            .get("revision")
-            .and_then(serde_json::Value::as_u64)
-            .ok_or_else(|| InfrastructureError::PersistenceCorrupt {
-                entity: "workspaces",
-                message: format!("Workspace {id} revision 无效"),
-            })?;
-        if i64::try_from(revision).ok() != Some(indexed_revision) {
-            return Err(InfrastructureError::PersistenceCorrupt {
-                entity: "workspaces",
-                message: format!("Workspace {id} 索引 revision 与 JSON 不一致"),
-            });
-        }
-        let rules = object
-            .get_mut("rules")
-            .and_then(serde_json::Value::as_array_mut)
-            .ok_or_else(|| InfrastructureError::PersistenceCorrupt {
-                entity: "workspaces",
-                message: format!("Workspace {id} v6 rules 必须是数组"),
-            })?;
-        for rule in rules.iter() {
-            let channel = rule
-                .as_object()
-                .and_then(|rule| rule.get("channel"))
-                .ok_or_else(|| InfrastructureError::PersistenceCorrupt {
-                    entity: "workspaces",
-                    message: format!("Workspace {id} v6 普通规则缺少 channel"),
-                })?;
-            if !channel.is_null() && !channel.is_string() {
-                return Err(InfrastructureError::PersistenceCorrupt {
-                    entity: "workspaces",
-                    message: format!("Workspace {id} v6 普通规则 channel 无效"),
-                });
-            }
-        }
-        rules.retain(|rule| !rule["channel"].is_null());
-        let next_revision = revision
-            .checked_add(1)
-            .ok_or(InfrastructureError::RevisionConflict)?;
-        let next_indexed_revision =
-            i64::try_from(next_revision).map_err(|_| InfrastructureError::RevisionConflict)?;
-        object.insert("revision".into(), serde_json::json!(next_revision));
-        object.insert(
-            "_persistence_version".into(),
-            serde_json::json!(intercept_proxy_application::WORKSPACE_PERSISTENCE_VERSION),
-        );
-        let changed = transaction
-            .execute(
-                "UPDATE workspaces SET revision = ?1, json = ?2, updated_at = ?3 WHERE id = ?4 AND revision = ?5",
-                params![next_indexed_revision, value.to_string(), Utc::now().to_rfc3339(), id, indexed_revision],
-            )
-            .map_err(|source| InfrastructureError::Database { source })?;
-        if changed != 1 {
-            return Err(InfrastructureError::RevisionConflict);
-        }
-    }
-    Ok(())
-}
-
 fn database_is_empty(connection: &Connection) -> Result<bool, InfrastructureError> {
     connection
         .query_row(
@@ -309,15 +195,7 @@ fn database_is_empty(connection: &Connection) -> Result<bool, InfrastructureErro
         .map_err(|source| InfrastructureError::DatabaseSchema { source })
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SchemaState {
-    Current,
-    Older,
-}
-
-fn validate_current_schema_marker(
-    connection: &Connection,
-) -> Result<SchemaState, InfrastructureError> {
+fn validate_current_schema_marker(connection: &Connection) -> Result<(), InfrastructureError> {
     let marker_exists = connection
         .query_row(
             "SELECT EXISTS(
@@ -329,7 +207,10 @@ fn validate_current_schema_marker(
         )
         .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     if !marker_exists {
-        return Ok(SchemaState::Older);
+        return Err(InfrastructureError::DatabaseSchemaInvalid {
+            current: CURRENT_SCHEMA_VERSION,
+            found: Vec::new(),
+        });
     }
 
     let markers = connection
@@ -341,37 +222,12 @@ fn validate_current_schema_marker(
         })
         .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     match markers.as_slice() {
-        [(1, version)] if *version == CURRENT_SCHEMA_VERSION => Ok(SchemaState::Current),
-        [(1, version)] if *version < CURRENT_SCHEMA_VERSION => Ok(SchemaState::Older),
+        [(1, version)] if *version == CURRENT_SCHEMA_VERSION => Ok(()),
         _ => Err(InfrastructureError::DatabaseSchemaInvalid {
             current: CURRENT_SCHEMA_VERSION,
             found: markers,
         }),
     }
-}
-
-fn drop_all_user_tables(
-    transaction: &rusqlite::Transaction<'_>,
-) -> Result<(), InfrastructureError> {
-    let tables = transaction
-        .prepare(
-            "SELECT name FROM sqlite_master
-             WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-             ORDER BY name",
-        )
-        .and_then(|mut statement| {
-            statement
-                .query_map([], |row| row.get::<_, String>(0))?
-                .collect::<Result<Vec<_>, _>>()
-        })
-        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-    for table in tables {
-        let quoted = table.replace('"', "\"\"");
-        transaction
-            .execute_batch(&format!("DROP TABLE \"{quoted}\";"))
-            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-    }
-    Ok(())
 }
 
 fn update_length_prefixed(context: &mut ring::digest::Context, bytes: &[u8]) {

@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AndroidNetworkView } from "./android-network-view";
+import { testAndroidNetworkProfile } from "./android-network-test-profile";
 
 const mocks = vi.hoisted(() => ({
   androidAdbGet: vi.fn(), androidDeviceList: vi.fn(), androidAdbSelect: vi.fn(),
@@ -24,28 +25,7 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
 }));
 function ok<T>(data: T) { return Promise.resolve({ status: "ok" as const, data }); }
 function owner(serial = "device-1") { return { serial, epoch: "11111111-1111-4111-8111-111111111111", mode: "adb_reverse", profile_id: "profile-1", state: "active", source: "start", transition_reason: "activation_confirmed", updated_at: "2026-08-17T00:00:00Z" }; }
-
-const profile = {
-  id: "profile-1", name: "移动网络丢包", target_applications: [], destination_targets: [], proxy_routes: [], confirmed_shared_uids: [], auto_resume_after_reboot: false,
-  weak_network: {
-    seed: 1,
-    fixed_delay_millis: 0,
-    uniform_jitter_millis: 0,
-    upload_bytes_per_second: null,
-    download_bytes_per_second: null,
-    random_loss_basis_points: 0,
-    burst_loss: null,
-    duplicate_basis_points: 0,
-    reorder_basis_points: 0,
-    maximum_reorder_hold_millis: 0,
-    blackout_windows: [],
-    dns_blackhole: false,
-    nth_tcp_flag_drops: [],
-    path_mtu: { mtu: null, mss_clamp: null, mode: "pass" },
-    corruption: { probability_basis_points: 0, bits_per_packet: 0 },
-  },
-};
-
+const profile = testAndroidNetworkProfile;
 describe("Android targeted network page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -131,6 +111,7 @@ describe("Android targeted network page", () => {
       name: "已保存方案",
       target_count: 1,
       auto_resume_after_reboot: false,
+      stop_vpn_on_control_loss: true,
     }]));
 
     render(<AndroidNetworkView />);
@@ -148,12 +129,14 @@ describe("Android targeted network page", () => {
         name: "收银应用弱网",
         target_count: 1,
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
       },
       {
         id: "profile-2",
         name: "扫码应用代理",
         target_count: 2,
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
       },
     ]));
     mocks.deviceNetworkStatus.mockReturnValue(ok({
@@ -330,6 +313,24 @@ describe("Android targeted network page", () => {
     await user.click(screen.getByRole("button", { name: "保存方案" }));
     await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
     expect(mocks.deviceNetworkProfileSave.mock.calls[0][1].auto_resume_after_reboot).toBe(true);
+  });
+
+  it("defaults control-loss protection on and persists the user choice", async () => {
+    const user = userEvent.setup();
+    render(<AndroidNetworkView />);
+    await user.click(await screen.findByRole("button", { name: "新建设备网络方案" }));
+
+    const protection = screen.getByRole("switch", {
+      name: "ADB 或桌面控制失联 5 秒后自动关闭 VPN",
+    });
+    expect(protection).toBeChecked();
+
+    await user.click(protection);
+    expect(protection).not.toBeChecked();
+    await user.click(screen.getByRole("button", { name: "保存方案" }));
+
+    await waitFor(() => expect(mocks.deviceNetworkProfileSave).toHaveBeenCalledTimes(1));
+    expect(mocks.deviceNetworkProfileSave.mock.calls[0][1].stop_vpn_on_control_loss).toBe(false);
   });
 
   it("sends package-name filters to Rust instead of filtering the inventory in the page", async () => {

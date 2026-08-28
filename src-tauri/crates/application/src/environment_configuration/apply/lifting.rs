@@ -48,22 +48,13 @@ fn lift_rule_changes(
     candidate: &ProxyWorkspace,
     affected: &mut BTreeSet<ListenerId>,
 ) {
-    if persisted.rules != candidate.rules {
+    if persisted.rule_definitions != candidate.rule_definitions {
         affected.extend(
             persisted
-                .listeners
+                .rule_definitions
                 .iter()
-                .chain(&candidate.listeners)
-                .map(|listener| listener.id),
-        );
-    }
-    if persisted.protocol_rules != candidate.protocol_rules {
-        affected.extend(
-            persisted
-                .protocol_rules
-                .iter()
-                .chain(&candidate.protocol_rules)
-                .map(intercept_proxy_domain::ProtocolDocumentRuleDefinition::listener_id),
+                .chain(&candidate.rule_definitions)
+                .map(intercept_proxy_domain::RuleDefinition::listener_id),
         );
     }
 }

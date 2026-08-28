@@ -1,7 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ExchangeObservationDetail } from "./exchange-observation-detail";
-import { exchangeRecord, httpExchangeRecord } from "./exchange-observation-test-fixture";
+import {
+  exchangeRecord,
+  failedExchangeRecord,
+  httpExchangeRecord,
+} from "./exchange-observation-test-fixture";
 
 describe("ExchangeObservationDetail", () => {
   it("renders the connection Vec in order with four distinct routes", () => {
@@ -53,5 +57,22 @@ describe("ExchangeObservationDetail", () => {
     action.click();
 
     expect(onCreateMockDraft).toHaveBeenCalledWith("exchange-http-1", 3);
+  });
+
+  it("describes a completed close as a normal connection ending", () => {
+    const record = exchangeRecord();
+    render(<ExchangeObservationDetail selected={record} detail={record} loading={false} onClose={vi.fn()} onRetry={vi.fn()} onCreateMockDraft={vi.fn()} />);
+
+    expect(screen.getByText("正常结束")).toBeVisible();
+    expect(screen.getByText("连接状态：正常结束")).toBeVisible();
+  });
+
+  it("describes an error close as abnormal and preserves the original error", () => {
+    const record = failedExchangeRecord();
+    render(<ExchangeObservationDetail selected={record} detail={record} loading={false} onClose={vi.fn()} onRetry={vi.fn()} onCreateMockDraft={vi.fn()} />);
+
+    expect(screen.getByText("异常结束")).toBeVisible();
+    expect(screen.getByText("连接状态：异常结束")).toBeVisible();
+    expect(screen.getByText("Upstream|READ_TIMEOUT: socket Exchange read timed out")).toBeVisible();
   });
 });

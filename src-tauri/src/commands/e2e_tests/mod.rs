@@ -10,15 +10,15 @@ use std::{
 
 use intercept_proxy_application::{
     DiagnosticLogPageViewModel, DiagnosticReportQuery, DocumentAction, DocumentFieldName,
-    DocumentValue, ProtocolDocumentRuleDefinition, ProtocolPackageDetailViewModel,
-    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportViewModel,
-    ProtocolPackageVersionViewModel, ProtocolRuleSaveInput, ProtocolRuleStage, ProxyListener,
-    ProxyWorkspace, WorkspaceSummaryViewModel,
+    DocumentValue, ProtocolPackageDetailViewModel, ProtocolPackageImportPreviewViewModel,
+    ProtocolPackageImportViewModel, ProtocolPackageVersionViewModel, ProxyListener, ProxyWorkspace,
+    RuleDefinitionSaveInput, WorkspaceSummaryViewModel,
 };
 use intercept_proxy_domain::{
-    ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    ScriptedSocketProcessing, SocketDownstreamSecurity, SocketLocalResponderTopology,
-    SocketPayloadProcessing, SocketRelaySettings, SocketTopology,
+    ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, RuleContent,
+    RuleDefinition, RuleDefinitionDraft, RuleStage, ScriptedSocketProcessing,
+    SocketDownstreamSecurity, SocketLocalResponderTopology, SocketPayloadProcessing,
+    SocketRelaySettings, SocketRuleContent, SocketTopology,
 };
 use serde_json::json;
 
@@ -208,25 +208,29 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
     );
     assert!(saved.listeners.contains(&listener));
 
-    let _rule: ProtocolDocumentRuleDefinition = fixture.invoke_ok(
+    let _rule: RuleDefinition = fixture.invoke_ok(
         &webview,
-        "protocol_rule_save",
+        "rule_definition_save",
         json!({
-            "input": ProtocolRuleSaveInput {
+            "input": RuleDefinitionSaveInput {
                 rule_id: None,
                 expected_revision: None,
-                name: "本机应答".into(),
-                enabled: true,
-                priority: 10,
-                listener_id: listener.id,
-                package: package.clone(),
-                schema_version: 1,
-                stage: ProtocolRuleStage::ProxyToApp,
-                conditions: Vec::new(),
-                actions: vec![DocumentAction::SetField {
-                    field: DocumentFieldName::new("message").unwrap(),
-                    value: DocumentValue::Blob(RESPONSE.to_vec()),
-                }],
+                draft: RuleDefinitionDraft {
+                    name: "本机应答".into(),
+                    enabled: true,
+                    priority: 10,
+                    listener_id: listener.id,
+                    stage: RuleStage::ProxyToApp,
+                    content: RuleContent::Socket(SocketRuleContent {
+                        package: package.clone(),
+                        schema_version: 1,
+                        conditions: Vec::new(),
+                        actions: vec![DocumentAction::SetField {
+                            field: DocumentFieldName::new("message").unwrap(),
+                            value: DocumentValue::Blob(RESPONSE.to_vec()),
+                        }],
+                    }),
+                },
             }
         }),
     );

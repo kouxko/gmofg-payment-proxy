@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use serde_json::{Value, json};
 
 use super::super::environment_contract::{environment_contract_tools, public_literal_registry};
+mod catalog;
 #[path = "environment_configuration_schema_support.rs"]
 mod support;
 use support::{
@@ -66,7 +67,30 @@ fn schema_snapshot_covers_required_unions_enums_and_nullable_fields() {
         defs["weakNetwork"]["properties"]["path_mtu"]["properties"]["mss_clamp"]["minimum"],
         1
     );
-    for rule in ["httpRule", "protocolRule"] {
+    assert_eq!(
+        defs["workspace"]["required"],
+        json!(["listeners", "rules", "android_network_profiles"])
+    );
+    assert!(defs["workspace"]["properties"]["http_rules"].is_null());
+    assert!(defs["workspace"]["properties"]["protocol_rules"].is_null());
+    assert_eq!(defs["rule"]["oneOf"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        defs["httpRule"]["properties"]["stage"]["enum"],
+        json!([
+            "app_to_proxy",
+            "proxy_to_upstream",
+            "upstream_to_proxy",
+            "proxy_to_app",
+            "tls_handshake"
+        ])
+    );
+    assert!(
+        !defs["httpRule"]["required"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("document"))
+    );
+    for rule in ["httpRule", "socketRule"] {
         assert!(
             !defs[rule]["required"]
                 .as_array()
@@ -258,11 +282,16 @@ fn expected_preview_has_exact_public_field_by_field_contract() {
             .iter()
             .all(|listener| listener["candidate_local_id"].as_str().is_some())
     );
-    assert_eq!(preview["resources"]["http_rules"][0]["created_order"], 10);
     assert_eq!(
-        preview["resources"]["protocol_rules"][0]["created_order"],
-        20
+        preview["resources"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["android_profile_ids", "listeners", "rules"])
     );
+    assert_eq!(preview["resources"]["rules"][0]["created_order"], 10);
     for forbidden in [
         "content",
         "password",
@@ -459,33 +488,4 @@ fn explicit_positive_capability_status_cancel_apply_and_diagnostic_shapes_cover_
         .copied()
         .collect::<BTreeSet<_>>();
     assert_eq!(actual, expected);
-}
-
-#[test]
-fn old_read_tool_catalog_and_budgets_remain_unchanged() {
-    assert_eq!(super::super::protocol::MAX_TOOL_INPUT_BYTES, 256 * 1024);
-    assert_eq!(
-        super::super::protocol::MAX_LOGICAL_OUTPUT_BYTES,
-        8 * 1024 * 1024
-    );
-    let active = super::super::protocol::tools();
-    let environment_names = [
-        "mcp_environment_capabilities",
-        "environment_candidate_create",
-        "environment_candidate_status",
-        "environment_candidate_cancel",
-        "environment_candidate_apply",
-    ]
-    .into_iter()
-    .collect::<BTreeSet<_>>();
-    let existing_reads = active
-        .iter()
-        .filter(|tool| !environment_names.contains(tool.name.as_ref()))
-        .collect::<Vec<_>>();
-    assert_eq!(existing_reads.len(), 37);
-    assert!(existing_reads.iter().all(|tool| {
-        tool.annotations
-            .as_ref()
-            .is_some_and(|a| a.read_only_hint == Some(true))
-    }));
 }

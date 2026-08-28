@@ -33,10 +33,9 @@ pub(super) fn compile_programs(
     downstream_schema: &DocumentSchema,
 ) -> AppResult<HttpDocumentRulePrograms> {
     let mut rules = workspace
-        .protocol_rules
-        .iter()
+        .document_runtime_rules()?
+        .into_iter()
         .filter(|rule| rule.listener_id() == listener.id)
-        .cloned()
         .collect::<Vec<_>>();
     for rule in &rules {
         let schema = schema_for_stage(rule.stage(), upstream_schema, downstream_schema);

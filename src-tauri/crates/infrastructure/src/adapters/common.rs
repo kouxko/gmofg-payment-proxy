@@ -18,9 +18,7 @@ pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWo
     let indexed_revision = record.revision;
     let mut value = record.value;
     let version = take_workspace_persistence_version(&mut value)?;
-    if version == 6 {
-        remove_unbound_standard_rules(&mut value)?;
-    } else if version != u64::from(WORKSPACE_PERSISTENCE_VERSION) {
+    if version != u64::from(WORKSPACE_PERSISTENCE_VERSION) {
         return Err(format!(
             "Workspace {indexed_id} 持久化版本 {version} 不受支持；当前仅支持版本 {WORKSPACE_PERSISTENCE_VERSION}"
         ));
@@ -36,24 +34,6 @@ pub(crate) fn decode_workspace_record(record: WorkspaceRecord) -> Result<ProxyWo
         .validate()
         .map_err(|error| format!("Workspace {indexed_id} 领域校验失败：{error}"))?;
     Ok(workspace)
-}
-
-fn remove_unbound_standard_rules(value: &mut serde_json::Value) -> Result<(), String> {
-    let rules = value
-        .get_mut("rules")
-        .and_then(serde_json::Value::as_array_mut)
-        .ok_or_else(|| "Workspace v6 rules 必须是数组".to_owned())?;
-    for rule in rules.iter() {
-        let channel = rule
-            .as_object()
-            .and_then(|object| object.get("channel"))
-            .ok_or_else(|| "Workspace v6 普通规则缺少 channel 字段".to_owned())?;
-        if !channel.is_null() && !channel.is_string() {
-            return Err("Workspace v6 普通规则 channel 必须是字符串或 null".to_owned());
-        }
-    }
-    rules.retain(|rule| !rule["channel"].is_null());
-    Ok(())
 }
 
 pub(crate) fn encode_workspace_record(

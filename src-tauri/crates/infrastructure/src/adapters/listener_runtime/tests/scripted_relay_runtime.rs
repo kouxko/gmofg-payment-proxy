@@ -149,12 +149,13 @@ fn workspace(listener: &ProxyListener) -> ProxyWorkspace {
         .map(ProtocolDocumentRuleDefinition::created_order)
         .max()
         .unwrap_or(0);
-    ProxyWorkspace {
+    let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        protocol_rule_created_order_high_water: created_order_high_water,
-        protocol_rules: rules,
+        rule_created_order_high_water: created_order_high_water,
         ..ProxyWorkspace::default()
-    }
+    };
+    workspace.replace_document_runtime_rules(rules).unwrap();
+    workspace
 }
 
 fn add_rule(

@@ -1,4 +1,4 @@
-//! Static MCP tool catalog for 37 reads and 5 environment tools.
+//! Static MCP tool catalog for 36 reads and 5 environment tools.
 
 mod contract;
 
@@ -287,27 +287,21 @@ fn traffic_tools() -> Vec<Tool> {
 fn configuration_tools() -> Vec<Tool> {
     vec![
         tool(
-            "http_rule_list",
-            "HTTP rules",
-            "Read all HTTP rule summaries in runtime order.",
+            "rule_list",
+            "Rules",
+            "Read all HTTP and Socket rules in stage/runtime order.",
             empty_schema(),
         ),
         tool(
-            "http_rule_get",
-            "HTTP rule detail",
-            "Read one complete HTTP rule.",
-            required_uuid("rule_id", "HTTP rule UUID."),
+            "rule_get",
+            "Rule detail",
+            "Read one complete tagged HTTP or Socket rule.",
+            required_uuid("rule_id", "Rule UUID."),
         ),
         tool(
-            "protocol_rule_list",
-            "Selected Workspace protocol rules",
-            "Read all four-stage protocol Document rules for the selected Workspace.",
-            empty_schema(),
-        ),
-        tool(
-            "workspace_protocol_rule_list",
-            "Workspace protocol rules",
-            "Read protocol Document rules from any saved Workspace through its application model.",
+            "workspace_rule_list",
+            "Workspace rules",
+            "Read all tagged rules from any saved Workspace.",
             required_uuid("workspace_id", "Workspace UUID."),
         ),
         tool(

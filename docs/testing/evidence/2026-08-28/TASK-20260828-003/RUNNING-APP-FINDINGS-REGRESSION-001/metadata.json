@@ -1,0 +1,24 @@
+{
+  "task_id": "TASK-20260828-003",
+  "case_id": "RUNNING-APP-FINDINGS-REGRESSION-001",
+  "derived_from": {
+    "task_id": "TASK-20260828-001",
+    "case_id": "RUNNING-APP-REPLAY-001",
+    "evidence_path": "docs/testing/evidence/2026-08-28/TASK-20260828-001/RUNNING-APP-REPLAY-001/"
+  },
+  "executed_at": "2026-08-28 12:38:59 +08:00",
+  "environment": "macOS local tests and running Release application",
+  "result": "PASS_WITH_NOT_RUN",
+  "observed": {
+    "mock_draft_tests": "4/4 passed",
+    "frontend_tests": "681/681 passed",
+    "application_tests": "484 passed",
+    "mcp_lifecycle_tests": "6/6 passed",
+    "static_gates": "passed",
+    "running_app_http_socket_replay": "passed",
+    "running_app_workspace_toolbar_refresh": "passed"
+  },
+  "not_run": [
+    "Additional manual Mock-button exploration stopped after the user confirmed there was no remaining problem"
+  ]
+}

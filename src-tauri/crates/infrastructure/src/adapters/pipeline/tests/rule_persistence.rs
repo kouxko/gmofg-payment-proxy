@@ -51,11 +51,13 @@ async fn request_and_response_wait_for_durable_sqlite_without_blocking_runtime_p
     response_rule.channel = Some(
         intercept_proxy_domain::ChannelId::new(listener.id.to_string()).unwrap(),
     );
-    let workspace = ProxyWorkspace {
+    let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        rules: vec![request_rule, response_rule],
         ..ProxyWorkspace::default()
     };
+    workspace
+        .replace_http_runtime_rules(vec![request_rule, response_rule])
+        .unwrap();
     let record = WorkspaceRecord {
         id: workspace.id.as_uuid(),
         revision: workspace.revision.get(),
@@ -67,7 +69,6 @@ async fn request_and_response_wait_for_durable_sqlite_without_blocking_runtime_p
     let rules = Arc::new(RuleRepositoryAdapter::new(
         (executor.clone(), Arc::clone(&store)),
         Arc::new(RulePersistenceNoDialog),
-        Arc::new(InMemorySessionStore::default()),
         &[],
     ));
     let pipeline = RuntimePipelineAdapter::new(

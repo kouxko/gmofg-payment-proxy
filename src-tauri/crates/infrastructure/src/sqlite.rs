@@ -94,7 +94,7 @@ mod portable_configuration;
 pub(crate) mod protocol_packages;
 mod schema;
 
-/// 当前预发布数据库格式版本。低于该版本的数据由 Host 清空后重建。
+/// 当前数据库格式版本。任何其他版本都 fail-closed，数据只能由用户显式清除。
 pub const CURRENT_APPLICATION_SCHEMA_VERSION: i64 = schema::CURRENT_SCHEMA_VERSION;
 mod workspaces;
 

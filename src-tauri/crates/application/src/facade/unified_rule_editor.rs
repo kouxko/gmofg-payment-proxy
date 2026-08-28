@@ -1,0 +1,435 @@
+//! Rust-authoritative editor context for the unified rule API.
+
+mod validation;
+
+use super::{
+    Application,
+    protocol_packages::{ensure_description_identity, ensure_external_description},
+    rule_capabilities::stage_capability,
+};
+use crate::{
+    AppError, AppResult, HttpBodyProcessing, HttpRuleEditorStage, ListenerDataPlane, ListenerId,
+    MessageStage, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
+    ProtocolPackageRef, ProtocolPackageSourceViewModel, ProtocolRuleCommonActionCapability,
+    ProtocolRuleFieldActionCapability, ProtocolRuleFieldCapability,
+    ProtocolRuleFieldOperatorCapability, ProtocolRuleStage, ProxyListener,
+    RuleAction as AppRuleAction, RuleActionKind, RuleCondition as AppRuleCondition,
+    RuleConditionKind, RuleContent, RuleDefinitionDraft, RuleDefinitionSaveInput,
+    RuleEditorContentContext, RuleEditorContext, RuleMatchField, RuleMatchOperator, RuleStage,
+    RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
+};
+use intercept_proxy_domain::{
+    DropResponseMode, HttpDocumentRuleContent, HttpRuleContent, JitterScope, MatchCondition,
+    MatchField, MatchOperator, RuleAction as DomainRuleAction, SocketRuleContent,
+    TerminalAction as DomainTerminalAction, TrafficDirection,
+};
+
+impl Application {
+    /// Returns every stage and content capability valid for the selected Listener.
+    pub async fn rule_editor_context(
+        &self,
+        listener_id: ListenerId,
+    ) -> AppResult<RuleEditorContext> {
+        let workspace = self.selected_rule_workspace().await?;
+        let listener = workspace
+            .listeners
+            .iter()
+            .find(|listener| listener.id == listener_id)
+            .ok_or_else(|| {
+                AppError::new(
+                    "RULE_LISTENER_NOT_FOUND",
+                    "当前 Workspace 中不存在指定入口。",
+                )
+                .entity(listener_id.to_string())
+            })?;
+        let content = match &listener.data_plane {
+            ListenerDataPlane::Http(settings) => {
+                let description = match &settings.body_processing {
+                    HttpBodyProcessing::Plain => None,
+                    HttpBodyProcessing::Protocol { package } => {
+                        Some(self.rule_package_description(listener, package).await?)
+                    }
+                };
+                RuleEditorContentContext::Http {
+                    stages: http_stages(listener_id, description.as_ref()),
+                }
+            }
+            ListenerDataPlane::Socket(settings) => {
+                let SocketPayloadProcessing::Scripted(scripted) = &settings.processing else {
+                    return Err(AppError::new(
+                        "DOCUMENT_RULE_PROTOCOL_REQUIRED",
+                        "Socket 规则只能绑定已选择协议方案的入口。",
+                    )
+                    .entity(listener_id.to_string()));
+                };
+                let description = self
+                    .rule_package_description(listener, &scripted.package)
+                    .await?;
+                let local_responder =
+                    matches!(settings.topology, SocketTopology::LocalResponder(_));
+                RuleEditorContentContext::Socket {
+                    package: scripted.package.clone(),
+                    stages: socket_stages(listener_id, &description, local_responder),
+                }
+            }
+        };
+        Ok(RuleEditorContext {
+            listener_id,
+            content,
+        })
+    }
+
+    pub fn rule_definition_condition_draft(
+        &self,
+        kind: RuleConditionKind,
+        stage: MessageStage,
+    ) -> AppResult<MatchCondition> {
+        Ok(domain_condition(self.rule_condition_draft(kind, stage)))
+    }
+
+    pub fn rule_definition_action_draft(
+        &self,
+        kind: RuleActionKind,
+        stage: MessageStage,
+    ) -> AppResult<DomainRuleAction> {
+        domain_action(self.rule_action_draft(kind, stage)?)
+    }
+
+    async fn rule_package_description(
+        &self,
+        listener: &ProxyListener,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
+        let version = self.require_protocol_package(package).await?;
+        let description = match version.source {
+            ProtocolPackageSourceViewModel::Internal { .. } => {
+                let description = self.protocol_package_compiler.describe(package).await?;
+                ensure_description_identity(package, &description)?;
+                description
+            }
+            ProtocolPackageSourceViewModel::External { .. } => {
+                let description = self.external_packages.describe(package).await?;
+                ensure_external_description(package, &description)?;
+                description
+            }
+        };
+        let valid_kind = matches!(
+            (&listener.data_plane, description.kind),
+            (
+                ListenerDataPlane::Http(_),
+                ProtocolPackageKindViewModel::Http
+            ) | (
+                ListenerDataPlane::Socket(_),
+                ProtocolPackageKindViewModel::Socket
+            )
+        );
+        if !valid_kind {
+            return Err(AppError::new(
+                "PROTOCOL_PACKAGE_KIND_MISMATCH",
+                "协议包类型与入口数据平面不一致。",
+            )
+            .entity(listener.id.to_string()));
+        }
+        Ok(description)
+    }
+}
+
+pub(super) fn domain_condition(condition: AppRuleCondition) -> MatchCondition {
+    match condition {
+        AppRuleCondition::Field { field, operator } => MatchCondition::Field {
+            field: match field {
+                RuleMatchField::TerminalIp => MatchField::TerminalIp,
+                RuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
+                RuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
+                RuleMatchField::JsonPath { path } => MatchField::JsonPath(path),
+            },
+            operator: match operator {
+                RuleMatchOperator::Equals { value } => MatchOperator::Equals(value),
+                RuleMatchOperator::Contains { value } => MatchOperator::Contains(value),
+                RuleMatchOperator::Regex { pattern } => MatchOperator::Regex(pattern),
+            },
+        },
+        AppRuleCondition::NthHit { count } => MatchCondition::NthHit(count),
+    }
+}
+
+pub(super) fn domain_action(action: AppRuleAction) -> AppResult<DomainRuleAction> {
+    Ok(match action {
+        AppRuleAction::SetJsonField { path, value_json } => DomainRuleAction::SetJsonField {
+            path,
+            value: serde_json::from_str(&value_json).map_err(|_| {
+                AppError::new("RULE_INVALID", "JSON 字段动作的默认值不是有效 JSON。")
+            })?,
+        },
+        AppRuleAction::ReplaceBodyText { text } => DomainRuleAction::ReplaceBodyText(text),
+        AppRuleAction::SetHeader { name, value } => DomainRuleAction::SetHeader { name, value },
+        AppRuleAction::Delay { milliseconds } => DomainRuleAction::Delay { milliseconds },
+        AppRuleAction::Jitter {
+            minimum_milliseconds,
+            maximum_milliseconds,
+            scope,
+        } => DomainRuleAction::Jitter {
+            minimum_milliseconds,
+            maximum_milliseconds,
+            scope: match scope {
+                crate::RuleJitterScope::BeforeMessage => JitterScope::BeforeMessage,
+                crate::RuleJitterScope::PerChunk => JitterScope::PerChunk,
+            },
+        },
+        AppRuleAction::Throttle {
+            bytes_per_second,
+            chunk_bytes,
+            direction,
+        } => DomainRuleAction::Throttle {
+            bytes_per_second,
+            chunk_bytes,
+            direction: domain_direction(direction),
+        },
+        AppRuleAction::Intermittent {
+            available_milliseconds,
+            blocked_milliseconds,
+            direction,
+        } => DomainRuleAction::Intermittent {
+            available_milliseconds,
+            blocked_milliseconds,
+            direction: domain_direction(direction),
+        },
+        AppRuleAction::Pause => DomainRuleAction::Pause,
+        AppRuleAction::CustomHttpStatus { status } => DomainRuleAction::CustomHttpStatus { status },
+        AppRuleAction::Terminal { action } => {
+            DomainRuleAction::Terminal(domain_terminal_action(action))
+        }
+    })
+}
+
+fn domain_direction(direction: crate::RuleTrafficDirection) -> TrafficDirection {
+    match direction {
+        crate::RuleTrafficDirection::Upstream => TrafficDirection::Upstream,
+        crate::RuleTrafficDirection::Downstream => TrafficDirection::Downstream,
+    }
+}
+
+fn domain_terminal_action(action: RuleTerminalAction) -> DomainTerminalAction {
+    match action {
+        RuleTerminalAction::RejectTlsHandshake => DomainTerminalAction::RejectTlsHandshake,
+        RuleTerminalAction::DisconnectBeforeUpstream => {
+            DomainTerminalAction::DisconnectBeforeUpstream
+        }
+        RuleTerminalAction::UpstreamConnectTimeout { milliseconds } => {
+            DomainTerminalAction::UpstreamConnectTimeout { milliseconds }
+        }
+        RuleTerminalAction::UpstreamWriteTimeout { milliseconds } => {
+            DomainTerminalAction::UpstreamWriteTimeout { milliseconds }
+        }
+        RuleTerminalAction::UpstreamReadTimeout { milliseconds } => {
+            DomainTerminalAction::UpstreamReadTimeout { milliseconds }
+        }
+        RuleTerminalAction::DropUpstreamResponse { mode } => {
+            DomainTerminalAction::DropUpstreamResponse {
+                mode: match mode {
+                    crate::RuleDropResponseMode::ReadCompleteResponse => {
+                        DropResponseMode::ReadCompleteResponse
+                    }
+                    crate::RuleDropResponseMode::CloseAfterRequestWrite => {
+                        DropResponseMode::CloseAfterRequestWrite
+                    }
+                },
+            }
+        }
+        RuleTerminalAction::MockResponse {
+            status,
+            headers,
+            body_bytes,
+        } => DomainTerminalAction::MockResponse {
+            status,
+            headers,
+            body_bytes,
+        },
+        RuleTerminalAction::InvalidJson { body_bytes } => {
+            DomainTerminalAction::InvalidJson { body_bytes }
+        }
+        RuleTerminalAction::IncorrectContentLength { delta } => {
+            DomainTerminalAction::IncorrectContentLength { delta }
+        }
+        RuleTerminalAction::TruncateResponse { bytes } => {
+            DomainTerminalAction::TruncateResponse { bytes }
+        }
+        RuleTerminalAction::DisconnectDuringUpstreamWrite { after_bytes } => {
+            DomainTerminalAction::DisconnectDuringUpstreamWrite { after_bytes }
+        }
+        RuleTerminalAction::DisconnectDuringDownstreamWrite { after_bytes } => {
+            DomainTerminalAction::DisconnectDuringDownstreamWrite { after_bytes }
+        }
+    }
+}
+
+fn http_stages(
+    listener_id: ListenerId,
+    description: Option<&ProtocolPackageDescriptionViewModel>,
+) -> Vec<HttpRuleEditorStage> {
+    [
+        RuleStage::TlsHandshake,
+        RuleStage::AppToProxy,
+        RuleStage::ProxyToUpstream,
+        RuleStage::UpstreamToProxy,
+        RuleStage::ProxyToApp,
+    ]
+    .into_iter()
+    .filter_map(|stage| {
+        let http = http_capability(stage);
+        let document = description.and_then(|value| document_capability(value, stage));
+        if http.is_none() && document.is_none() {
+            return None;
+        }
+        let package = document.as_ref().map(|_| {
+            description
+                .expect("document requires description")
+                .package
+                .clone()
+        });
+        let schema_version = document.as_ref().map(|value| value.schema_version);
+        let document_fields = document
+            .as_ref()
+            .map(|value| value.fields.clone())
+            .unwrap_or_default();
+        let document_common_actions = document
+            .as_ref()
+            .map(|value| value.common_actions.clone())
+            .unwrap_or_default();
+        let embedded_document = document.as_ref().map(|value| HttpDocumentRuleContent {
+            package: package.clone().expect("document stage has a package"),
+            schema_version: value.schema_version,
+            conditions: Vec::new(),
+            actions: vec![intercept_proxy_domain::DocumentAction::RecordMatch],
+        });
+        Some(HttpRuleEditorStage {
+            stage,
+            http,
+            package,
+            schema_version,
+            document_fields,
+            document_common_actions,
+            new_rule_draft: RuleDefinitionSaveInput {
+                rule_id: None,
+                expected_revision: None,
+                draft: RuleDefinitionDraft {
+                    name: "新规则".into(),
+                    enabled: true,
+                    priority: 100,
+                    listener_id,
+                    stage,
+                    content: RuleContent::Http(HttpRuleContent {
+                        description: String::new(),
+                        conditions: Vec::new(),
+                        actions: Vec::new(),
+                        document: embedded_document,
+                        one_shot: false,
+                        hit_count: 0,
+                        last_hit_at: None,
+                    }),
+                },
+            },
+        })
+    })
+    .collect()
+}
+
+fn socket_stages(
+    listener_id: ListenerId,
+    description: &ProtocolPackageDescriptionViewModel,
+    local_responder: bool,
+) -> Vec<SocketRuleEditorStage> {
+    let stages: &[RuleStage] = if local_responder {
+        &[RuleStage::AppToProxy, RuleStage::ProxyToApp]
+    } else {
+        &[
+            RuleStage::AppToProxy,
+            RuleStage::ProxyToUpstream,
+            RuleStage::UpstreamToProxy,
+            RuleStage::ProxyToApp,
+        ]
+    };
+    stages
+        .iter()
+        .filter_map(|&stage| {
+            document_capability(description, stage).map(|catalog| (stage, catalog))
+        })
+        .map(|(stage, catalog)| SocketRuleEditorStage {
+            stage,
+            schema_version: catalog.schema_version,
+            fields: catalog.fields.clone(),
+            common_actions: catalog.common_actions.clone(),
+            new_rule_draft: RuleDefinitionSaveInput {
+                rule_id: None,
+                expected_revision: None,
+                draft: RuleDefinitionDraft {
+                    name: "新规则".into(),
+                    enabled: true,
+                    priority: 100,
+                    listener_id,
+                    stage,
+                    content: RuleContent::Socket(SocketRuleContent {
+                        package: description.package.clone(),
+                        schema_version: catalog.schema_version,
+                        conditions: Vec::new(),
+                        actions: vec![intercept_proxy_domain::DocumentAction::RecordMatch],
+                    }),
+                },
+            },
+        })
+        .collect()
+}
+
+fn http_capability(stage: RuleStage) -> Option<crate::RuleStageCapabilityViewModel> {
+    match stage {
+        RuleStage::TlsHandshake => Some(stage_capability(MessageStage::TlsHandshake)),
+        RuleStage::ProxyToUpstream => Some(stage_capability(MessageStage::Request)),
+        RuleStage::ProxyToApp => Some(stage_capability(MessageStage::Response)),
+        RuleStage::AppToProxy | RuleStage::UpstreamToProxy => None,
+    }
+}
+
+#[derive(Clone)]
+struct DocumentCapability {
+    schema_version: u32,
+    fields: Vec<ProtocolRuleFieldCapability>,
+    common_actions: Vec<ProtocolRuleCommonActionCapability>,
+}
+
+fn document_capability(
+    description: &ProtocolPackageDescriptionViewModel,
+    stage: RuleStage,
+) -> Option<DocumentCapability> {
+    let protocol_stage = match stage {
+        RuleStage::AppToProxy => ProtocolRuleStage::AppToProxy,
+        RuleStage::ProxyToUpstream => ProtocolRuleStage::ProxyToUpstream,
+        RuleStage::UpstreamToProxy => ProtocolRuleStage::UpstreamToProxy,
+        RuleStage::ProxyToApp => ProtocolRuleStage::ProxyToApp,
+        RuleStage::TlsHandshake => return None,
+    };
+    let schema = match protocol_stage.direction() {
+        intercept_proxy_domain::ProtocolDirection::Upstream => &description.upstream_schema,
+        intercept_proxy_domain::ProtocolDirection::Downstream => &description.downstream_schema,
+    };
+    Some(DocumentCapability {
+        schema_version: schema.version,
+        fields: schema
+            .fields
+            .iter()
+            .map(|field| ProtocolRuleFieldCapability {
+                name: field.name.clone(),
+                label: field.label.clone(),
+                field_type: field.field_type,
+                operators: vec![ProtocolRuleFieldOperatorCapability::Equals],
+                actions: vec![
+                    ProtocolRuleFieldActionCapability::SetField,
+                    ProtocolRuleFieldActionCapability::ClearField,
+                ],
+            })
+            .collect(),
+        common_actions: vec![
+            ProtocolRuleCommonActionCapability::RecordMatch,
+            ProtocolRuleCommonActionCapability::ClearDocument,
+        ],
+    })
+}

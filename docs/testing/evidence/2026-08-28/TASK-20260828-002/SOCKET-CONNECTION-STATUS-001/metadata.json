@@ -1,0 +1,23 @@
+{
+  "task_id": "TASK-20260828-002",
+  "case_id": "SOCKET-CONNECTION-STATUS-001",
+  "executed_at": "2026-08-28 12:38:59 +08:00",
+  "environment": "macOS local frontend test environment",
+  "result": "PASS",
+  "commands": [
+    "pnpm exec vitest run src/features/capture/exchange-observation-model.test.ts src/features/capture/exchange-observation-list.test.tsx src/features/capture/exchange-observation-detail.test.tsx src/features/help/page-help.test.tsx",
+    "pnpm typecheck",
+    "pnpm scan:source-size"
+  ],
+  "observed": {
+    "focused_tests": "20/20 passed",
+    "capture_tests": "20/20 passed",
+    "typecheck": "passed",
+    "lint": "passed",
+    "source_size": "passed"
+  },
+  "not_applicable": [
+    "No protocol bytes changed",
+    "No fixed network port used"
+  ]
+}

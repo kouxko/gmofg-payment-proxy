@@ -8,11 +8,13 @@ use std::{
 use tokio::sync::Mutex;
 
 mod command;
+mod control_frame_read;
 mod control_port;
 mod device_reconciliation;
 mod endpoint_reconciliation;
 mod environment_apply;
 mod fingerprint;
+mod lease;
 mod owner;
 mod protocol;
 mod reverse;
@@ -47,7 +49,10 @@ use intercept_proxy_application::{
     AndroidRuntimeOwnerTransitionReason, AndroidRuntimeOwnerViewModel, AppError,
 };
 #[cfg(test)]
-use protocol::{ActivationObservation, classify_activation_status, reconcile_forward_cleanup};
+use protocol::{
+    ActivationObservation, classify_activation_status, reconcile_forward_cleanup,
+    should_renew_activation_lease,
+};
 #[cfg(test)]
 use reverse::allocated_reverse_ports;
 const CONTROL_SOCKET: &str = "intercept_proxy_vpn";

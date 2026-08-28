@@ -108,6 +108,77 @@ fn equal_priority_and_creation_order_use_rule_id_as_a_stable_tiebreaker() {
     }
 }
 
+#[test]
+fn failed_joint_gate_does_not_consume_nth_hit_or_one_shot_state() {
+    let epoch = RuntimeEpoch::new();
+    let mut candidate = Rule::create(draft(
+        MessageStage::Request,
+        vec![MatchCondition::NthHit(1)],
+        vec![RuleAction::Pause],
+    ))
+    .expect("joint rule");
+    candidate.one_shot = true;
+    let rule_id = candidate.id;
+    let terminal = TerminalIdentity {
+        source_ip: "10.0.0.1".into(),
+        certificate_sha256: "cert".into(),
+    };
+    let mut engine = RuleEngine::new(epoch, vec![candidate]);
+
+    let first = engine
+        .evaluate_with_gate(
+            &context(epoch, &terminal, None),
+            Utc::now(),
+            |_| Ok::<_, ()>(false),
+        )
+        .expect("gate mismatch is not an execution error");
+    assert!(!first.traces[0].matched);
+    assert_eq!(engine.rules()[0].hit_count, 0);
+    assert!(engine.rules()[0].enabled);
+
+    let second = engine
+        .evaluate_with_gate(
+            &context(epoch, &terminal, None),
+            Utc::now(),
+            |_| Ok::<_, ()>(true),
+        )
+        .expect("second evaluation");
+    assert_eq!(second.traces[0].rule_id, rule_id);
+    assert!(second.traces[0].matched);
+    assert_eq!(engine.rules()[0].hit_count, 1);
+    assert!(!engine.rules()[0].enabled);
+}
+
+#[test]
+fn failed_joint_gate_commits_no_http_actions_or_hit_metadata() {
+    let epoch = RuntimeEpoch::new();
+    let mut candidate = Rule::create(draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![RuleAction::Pause],
+    ))
+    .expect("joint rule");
+    candidate.one_shot = true;
+    let terminal = TerminalIdentity {
+        source_ip: "10.0.0.1".into(),
+        certificate_sha256: "cert".into(),
+    };
+    let mut engine = RuleEngine::new(epoch, vec![candidate]);
+
+    let error = engine
+        .evaluate_with_gate(
+            &context(epoch, &terminal, None),
+            Utc::now(),
+            |_| Err::<bool, _>("document action failed"),
+        )
+        .expect_err("document failure must abort the joint evaluation");
+
+    assert_eq!(error, "document action failed");
+    assert_eq!(engine.rules()[0].hit_count, 0);
+    assert!(engine.rules()[0].last_hit_at.is_none());
+    assert!(engine.rules()[0].enabled);
+}
+
 // RULE-004, ENGINE-003, ENGINE-004, TEST-RULE
 #[test]
 fn matches_json_path_equals_contains_and_regex_without_panicking() {

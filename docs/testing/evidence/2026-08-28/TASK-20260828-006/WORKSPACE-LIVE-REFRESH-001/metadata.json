@@ -1,0 +1,27 @@
+{
+  "task_id": "TASK-20260828-006",
+  "case_id": "WORKSPACE-LIVE-REFRESH-001",
+  "derived_from": {
+    "task_id": "TASK-20260828-003",
+    "case_id": "RUNNING-APP-FINDINGS-REGRESSION-001",
+    "evidence_path": "docs/testing/evidence/2026-08-28/TASK-20260828-003/RUNNING-APP-FINDINGS-REGRESSION-001/"
+  },
+  "executed_at": "2026-08-28 21:36:46 +08:00",
+  "environment": "macOS release application with isolated application data, local MCP and local HTTP/TCP mock servers",
+  "result": "PASS_WITH_NOT_RUN",
+  "observed": {
+    "focused_workspace_tests": "18/18 passed",
+    "frontend": "61 files, 531 tests passed",
+    "release_application_build": "passed",
+    "application_render_after_reboot": "passed",
+    "workspace_revision_before": 16,
+    "workspace_revision_after": 18,
+    "listener_count_after": 2,
+    "enabled_listener_count_after": 0,
+    "active_listener_count_after": 0,
+    "independent_review": "approved with P0=0, P1=0, P2=0"
+  },
+  "not_run": [
+    "Starting listeners again after reboot because the local UI control channel closed on every action"
+  ]
+}

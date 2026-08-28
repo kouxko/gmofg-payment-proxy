@@ -20,6 +20,7 @@ import type {
   WorkspaceSummaryViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
+import { useWorkspaceQueryInvalidation } from "@/features/shell/workspace-navigation";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 
@@ -42,8 +43,18 @@ export function WorkspacesView() {
     undefined,
     { enabled: Boolean(effectiveSelectedId) },
   );
+  useWorkspaceQueryInvalidation({
+    workspaceId: effectiveSelectedId,
+    collection: [list],
+    current: [detail],
+  });
 
-  const effectiveDraft = draft?.id === effectiveSelectedId ? draft : detail.data;
+  const effectiveDraft =
+    draft && draft.id === effectiveSelectedId
+      ? detail.data?.id === effectiveSelectedId
+        ? { ...detail.data, name: draft.name }
+        : draft
+      : detail.data;
 
   function refreshState(selected?: string) {
     if (selected) setSelectedId(selected);
@@ -109,7 +120,8 @@ export function WorkspacesView() {
       return;
     }
     const saved = await callCommand(commands.workspaceSave(validation.normalized));
-    setDraft(saved);
+    setDraft(undefined);
+    detail.setData(saved);
     toast("Workspace 已保存。", { variant: "success" });
     refreshState(saved.id);
   }
@@ -219,6 +231,7 @@ export function WorkspacesView() {
       </div>
       <aside className="min-w-0 space-y-4 overflow-auto border-l border-[var(--telemetry-line)] p-5 max-[1000px]:border-l-0 max-[1000px]:border-t">
         <h2 className="text-lg font-semibold">所选 Workspace</h2>
+        {detail.error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{detail.data ? "Workspace 详情刷新失败" : "Workspace 详情读取失败"}</Alert.Title><Alert.Description>{detail.data ? `以下为刷新前快照：${detail.error}` : `未能读取所选 Workspace 的详情：${detail.error}`}</Alert.Description></Alert.Content><Button size="sm" variant="outline" onPress={() => void detail.refresh()}>重试</Button></Alert>}
         {detail.isLoading ? <Spinner aria-label="正在读取 Workspace 详情" /> : effectiveDraft ? (
           <>
             <div className="grid gap-1"><Label>名称</Label><Input aria-label="Workspace 名称" disabled={Boolean(pendingAction)} value={effectiveDraft.name} onChange={(event) => setDraft({ ...effectiveDraft, name: event.target.value })} /></div>
@@ -235,7 +248,7 @@ export function WorkspacesView() {
               </AlertDialog.Dialog></AlertDialog.Container></AlertDialog.Backdrop>
             </AlertDialog>
           </>
-        ) : <p className="text-sm text-[var(--telemetry-muted)]">选择一个 Workspace 查看详情。</p>}
+        ) : <p className="text-sm text-[var(--telemetry-muted)]">{detail.error ? "详情暂不可用，请重试。" : "选择一个 Workspace 查看详情。"}</p>}
       </aside>
     </section>
   );

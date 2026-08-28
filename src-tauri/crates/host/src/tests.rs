@@ -96,11 +96,15 @@ async fn builds_and_invokes_application_without_tauri() {
         .expect("workspace detail")
         .listeners[0]
         .id;
-    let draft = application
-        .rule_new_http_draft(listener_id)
+    let context = application
+        .rule_editor_context(listener_id)
         .await
-        .expect("create HTTP rule draft");
-    assert_eq!(draft.name, "新建规则");
+        .expect("load unified HTTP rule context");
+    let intercept_proxy_application::RuleEditorContentContext::Http { stages } = context.content
+    else {
+        panic!("HTTP rule context expected");
+    };
+    assert_eq!(stages[0].new_rule_draft.draft.name, "新规则");
 
     host.shutdown().await.expect("shutdown UI-neutral host");
     assert!(host.shutdown_completed());
@@ -227,7 +231,7 @@ async fn external_package_bind_failure_is_visible_without_blocking_host_startup(
 }
 
 #[tokio::test]
-async fn pre_1_0_database_is_deleted_and_recreated_from_current_defaults() {
+async fn older_schema_is_rejected_without_changing_any_sqlite_file() {
     let temp = tempfile::tempdir().expect("temporary host directory");
     let database = temp.path().join("intercept-proxy.sqlite3");
     let connection = Connection::open(&database).expect("create pre-1.0 database");
@@ -243,37 +247,51 @@ async fn pre_1_0_database_is_deleted_and_recreated_from_current_defaults() {
         )
         .expect("write pre-1.0 schema");
     drop(connection);
+    let before = sqlite_files(&database);
 
-    let host = ApplicationHostBuilder::new(
+    let error = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
         Arc::new(InterceptProxyProfile),
     )
     .build()
     .await
-    .expect("pre-1.0 data is replaced by a fresh 1.0 database");
+    .expect_err("older schema must fail closed");
+    assert!(matches!(
+        error,
+        HostBuildError::Infrastructure(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
+    assert_sqlite_files_unchanged(&database, &before);
+}
 
-    let workspaces = host
-        .application()
-        .workspace_list()
-        .await
-        .expect("fresh workspace list");
-    assert_eq!(workspaces.len(), 1);
-    assert!(workspaces[0].selected);
-    host.shutdown().await.expect("shutdown host");
-
-    let connection = Connection::open(database).expect("open recreated database");
-    let sentinel_exists: bool = connection
-        .query_row(
-            "SELECT EXISTS(
-                SELECT 1 FROM sqlite_master
-                WHERE type = 'table' AND name = 'pre_1_0_sentinel'
-            )",
-            [],
-            |row| row.get(0),
+#[tokio::test]
+async fn missing_schema_marker_is_rejected_without_changing_any_sqlite_file() {
+    let temp = tempfile::tempdir().expect("temporary host directory");
+    let database = temp.path().join("intercept-proxy.sqlite3");
+    let connection = Connection::open(&database).expect("create markerless database");
+    connection
+        .execute_batch(
+            "CREATE TABLE markerless_sentinel(value TEXT NOT NULL);
+             INSERT INTO markerless_sentinel(value) VALUES ('must remain');",
         )
-        .expect("query sentinel");
-    assert!(!sentinel_exists);
+        .expect("write markerless database");
+    drop(connection);
+    let before = sqlite_files(&database);
+
+    let error = ApplicationHostBuilder::new(
+        temp.path(),
+        HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
+        Arc::new(InterceptProxyProfile),
+    )
+    .build()
+    .await
+    .expect_err("missing schema marker must fail closed");
+
+    assert!(matches!(
+        error,
+        HostBuildError::Infrastructure(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
+    assert_sqlite_files_unchanged(&database, &before);
 }
 
 #[tokio::test]
@@ -283,6 +301,7 @@ async fn unrelated_database_open_error_does_not_delete_the_file() {
     let original = b"not a sqlite database";
     std::fs::write(&database, original).expect("write invalid database bytes");
 
+    let before = sqlite_files(&database);
     let error = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
@@ -292,14 +311,11 @@ async fn unrelated_database_open_error_does_not_delete_the_file() {
     .await
     .expect_err("ordinary database open errors are not reset automatically");
     assert!(matches!(error, HostBuildError::Infrastructure(_)));
-    assert_eq!(
-        std::fs::read(database).expect("read original file"),
-        original
-    );
+    assert_sqlite_files_unchanged(&database, &before);
 }
 
 #[tokio::test]
-async fn newer_schema_is_not_deleted_by_the_1_0_reset_policy() {
+async fn newer_schema_is_rejected_without_changing_any_sqlite_file() {
     let temp = tempfile::tempdir().expect("temporary host directory");
     let database = temp.path().join("intercept-proxy.sqlite3");
     let connection = Connection::open(&database).expect("create newer database");
@@ -315,26 +331,103 @@ async fn newer_schema_is_not_deleted_by_the_1_0_reset_policy() {
         ))
         .expect("write newer schema");
     drop(connection);
+    let before = sqlite_files(&database);
 
-    ApplicationHostBuilder::new(
+    let error = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
         Arc::new(InterceptProxyProfile),
     )
     .build()
     .await
-    .expect_err("newer schema must not be deleted as pre-1.0 data");
+    .expect_err("newer schema must fail closed");
+    assert!(matches!(
+        error,
+        HostBuildError::Infrastructure(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
+    assert_sqlite_files_unchanged(&database, &before);
+}
 
-    let connection = Connection::open(database).expect("newer database still exists");
-    let sentinel_exists: bool = connection
-        .query_row(
-            "SELECT EXISTS(
-                SELECT 1 FROM sqlite_master
-                WHERE type = 'table' AND name = 'future_sentinel'
-            )",
-            [],
-            |row| row.get(0),
+#[tokio::test]
+async fn incompatible_workspace_record_is_rejected_before_any_sqlite_write() {
+    let temp = tempfile::tempdir().expect("temporary host directory");
+    let database = temp.path().join("intercept-proxy.sqlite3");
+    drop(SqliteStore::open(&database).expect("initialize current schema"));
+    let workspace_id = uuid::Uuid::from_u128(0x50_4552_5349_5354_454e_4345);
+    let connection = Connection::open(&database).expect("open current database");
+    connection
+        .execute(
+            "INSERT INTO workspaces(id, revision, json, updated_at) VALUES (?1, 1, ?2, ?3)",
+            rusqlite::params![
+                workspace_id.to_string(),
+                r#"{"_persistence_version": 6, "rules": []}"#,
+                "2026-08-28T00:00:00Z"
+            ],
         )
-        .expect("query future sentinel");
-    assert!(sentinel_exists);
+        .expect("insert incompatible workspace record");
+    connection
+        .execute(
+            "UPDATE workspace_state SET selected_id = ?1 WHERE singleton_id = 1",
+            [workspace_id.to_string()],
+        )
+        .expect("select incompatible workspace record");
+    drop(connection);
+    let before = sqlite_files(&database);
+
+    let error = ApplicationHostBuilder::new(
+        temp.path(),
+        HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
+        Arc::new(InterceptProxyProfile),
+    )
+    .build()
+    .await
+    .expect_err("incompatible persisted record must fail closed");
+    let HostBuildError::Application(error) = error else {
+        panic!("incompatible workspace must retain the stable Application error boundary");
+    };
+    assert_eq!(error.view_model.code, "PERSISTENCE_CORRUPT");
+    assert_sqlite_files_unchanged(&database, &before);
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct FileSnapshot {
+    bytes: Option<Vec<u8>>,
+    modified: Option<std::time::SystemTime>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct SqliteFiles {
+    database: FileSnapshot,
+    wal: FileSnapshot,
+    shm: FileSnapshot,
+}
+
+fn sqlite_files(database: &std::path::Path) -> SqliteFiles {
+    let sidecar = |suffix: &str| {
+        let mut path = database.as_os_str().to_owned();
+        path.push(suffix);
+        file_snapshot(&PathBuf::from(path))
+    };
+    SqliteFiles {
+        database: file_snapshot(database),
+        wal: sidecar("-wal"),
+        shm: sidecar("-shm"),
+    }
+}
+
+fn file_snapshot(path: &std::path::Path) -> FileSnapshot {
+    FileSnapshot {
+        bytes: std::fs::read(path).ok(),
+        modified: std::fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .ok(),
+    }
+}
+
+fn assert_sqlite_files_unchanged(database: &std::path::Path, before: &SqliteFiles) {
+    let after = sqlite_files(database);
+    assert!(
+        after == *before,
+        "database, WAL, or SHM existence/content/mtime changed"
+    );
 }

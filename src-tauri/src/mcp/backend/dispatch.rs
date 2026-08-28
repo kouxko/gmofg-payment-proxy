@@ -198,19 +198,24 @@ impl ApplicationBackend {
 
     pub(super) async fn call_configuration_tool(&self, name: &str, arguments: Value) -> ToolResult {
         match name {
-            "http_rule_list" => json_value(self.application.rule_list().await?),
-            "http_rule_get" => {
+            "rule_list" => json_value(self.application.rule_definition_list().await?),
+            "rule_get" => {
                 let args: HttpRuleArguments = parse(arguments)?;
-                json_value(self.application.rule_get(args.rule_id).await?)
+                json_value(
+                    self.application
+                        .rule_definition_get(intercept_proxy_domain::RuleId::from_uuid(
+                            args.rule_id,
+                        ))
+                        .await?,
+                )
             }
-            "protocol_rule_list" => json_value(self.application.protocol_rule_list().await?),
-            "workspace_protocol_rule_list" => {
+            "workspace_rule_list" => {
                 let args: WorkspaceArguments = parse(arguments)?;
                 json_value(
                     self.application
                         .workspace_get(args.workspace_id)
                         .await?
-                        .protocol_rules,
+                        .rule_definitions,
                 )
             }
             "protocol_package_list" => json_value(self.application.protocol_package_list().await?),

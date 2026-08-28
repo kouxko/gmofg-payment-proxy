@@ -28,6 +28,7 @@ use crate::{
 };
 
 mod baseline;
+mod events;
 
 const FULL_SHAPE: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -253,10 +254,19 @@ async fn run_worker(
     lease: Arc<FakeLease>,
     prepare: Arc<FakePrepare>,
     commit: Arc<FakeCommit>,
-) {
-    EnvironmentApplyWorker::new(registry.clone(), lease.clone(), prepare, commit).spawn_once();
+) -> Arc<crate::EventHub> {
+    let events = Arc::new(crate::EventHub::default());
+    EnvironmentApplyWorker::new(
+        registry.clone(),
+        lease.clone(),
+        prepare,
+        commit,
+        Arc::clone(&events),
+    )
+    .spawn_once();
     lease.called.notified().await;
     registry.begin_shutdown().await;
+    events
 }
 
 fn poll_once<F: Future>(future: Pin<&mut F>) -> Poll<F::Output> {
@@ -461,7 +471,14 @@ async fn caller_release_does_not_cancel_owned_work_and_shutdown_waits_for_commit
         baselines: Mutex::new(Vec::new()),
     });
 
-    EnvironmentApplyWorker::new(registry.clone(), lease, prepare, commit).spawn_once();
+    EnvironmentApplyWorker::new(
+        registry.clone(),
+        lease,
+        prepare,
+        commit,
+        Arc::new(crate::EventHub::default()),
+    )
+    .spawn_once();
     started.notified().await;
     let mut shutdown = Box::pin(registry.begin_shutdown());
     assert!(poll_once(shutdown.as_mut()).is_pending());

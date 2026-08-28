@@ -2,9 +2,8 @@ use rusqlite::Transaction;
 
 use super::InfrastructureError;
 
-// Socket capture 改为纯运行时内存证据，数据库不再创建相关表。
-// 项目仍处于开发期，提升版本使旧开发数据库直接重建为当前结构。
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 21;
+// 统一规则模型使用全新持久化合同。旧版本只报告不兼容，绝不自动删除或转换。
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = 22;
 
 pub(super) fn create_current_schema(
     transaction: &Transaction<'_>,

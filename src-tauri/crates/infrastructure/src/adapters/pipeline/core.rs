@@ -27,6 +27,7 @@ impl RuntimePipelineAdapter {
             captures,
             capture_cursor: AtomicU64::new(0),
             rule_runtime,
+            joint_http_rules: Arc::new(super::JointHttpRuleRuntime::default()),
             state: Mutex::new(PipelineState::default()),
         }
     }
@@ -34,6 +35,15 @@ impl RuntimePipelineAdapter {
     #[must_use]
     pub fn with_body_codec_resolver(mut self, resolver: Arc<dyn RuntimeBodyCodecResolver>) -> Self {
         self.body_codec_resolver = Some(resolver);
+        self
+    }
+
+    #[must_use]
+    pub(crate) fn with_joint_http_rules(
+        mut self,
+        runtime: Arc<super::JointHttpRuleRuntime>,
+    ) -> Self {
+        self.joint_http_rules = runtime;
         self
     }
 
@@ -57,10 +67,13 @@ impl RuntimePipelineAdapter {
         context: &ConnectionContext,
         stage: DomainMessageStage,
         message: Option<&Message>,
-        body_codec: &dyn BodyCodec,
+        body_codec: Arc<dyn BodyCodec>,
     ) -> ProxyResult<EvaluatedRules> {
+        let joint_document = self
+            .joint_http_rules
+            .take(context, matches!(stage, DomainMessageStage::Response));
         self.rule_runtime
-            .evaluate(context, stage, message, body_codec)
+            .evaluate(context, stage, message, body_codec, joint_document)
             .await
     }
 

@@ -60,8 +60,8 @@ impl Application {
             ),
             None => None,
         };
-        let protocol_rules = workspace
-            .protocol_rules
+        let rule_definitions = workspace
+            .rule_definitions
             .iter()
             .filter(|rule| rule.listener_id() == listener.id)
             .cloned()
@@ -79,7 +79,7 @@ impl Application {
             listener,
             runtime_status,
             settings,
-            protocol_rules,
+            rule_definitions,
             protocol_package_detail,
             external_package_service,
             diagnostics,

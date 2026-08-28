@@ -7,6 +7,7 @@ use crate::environment_configuration::{
     EnvironmentCommitRollbackOutcome, EnvironmentProtectedMaterialPreparePort,
     EnvironmentSelectionPolicy, EnvironmentStatusCode,
 };
+use crate::{EventHub, UiEventPayload};
 
 pub(crate) struct EnvironmentApplyWorker {
     registry: EnvironmentCandidateRegistry,
@@ -14,6 +15,7 @@ pub(crate) struct EnvironmentApplyWorker {
     lease: Arc<dyn EnvironmentApplyLeasePort>,
     prepare: Arc<dyn EnvironmentProtectedMaterialPreparePort>,
     commit: Arc<dyn EnvironmentCommitPort>,
+    events: Arc<EventHub>,
 }
 
 enum BeforeCommitPhase<T> {
@@ -35,6 +37,7 @@ impl EnvironmentApplyWorker {
         lease: Arc<dyn EnvironmentApplyLeasePort>,
         prepare: Arc<dyn EnvironmentProtectedMaterialPreparePort>,
         commit: Arc<dyn EnvironmentCommitPort>,
+        events: Arc<EventHub>,
     ) -> Self {
         Self::new_with_mutation_gate(
             registry,
@@ -42,6 +45,7 @@ impl EnvironmentApplyWorker {
             lease,
             prepare,
             commit,
+            events,
         )
     }
 
@@ -51,6 +55,7 @@ impl EnvironmentApplyWorker {
         lease: Arc<dyn EnvironmentApplyLeasePort>,
         prepare: Arc<dyn EnvironmentProtectedMaterialPreparePort>,
         commit: Arc<dyn EnvironmentCommitPort>,
+        events: Arc<EventHub>,
     ) -> Self {
         Self {
             registry,
@@ -58,6 +63,7 @@ impl EnvironmentApplyWorker {
             lease,
             prepare,
             commit,
+            events,
         }
     }
 
@@ -147,6 +153,15 @@ impl EnvironmentApplyWorker {
                     return Ok(true);
                 }
             };
+            self.events.publish(
+                None,
+                chrono::Utc::now(),
+                Some(result.workspace_id.to_string()),
+                Some(result.revision),
+                UiEventPayload::SnapshotRequired {
+                    reason: "environment_configuration_committed".into(),
+                },
+            );
             let receipt =
                 EnvironmentCommitReceipt::after_commit(result, work.apply_task_id().clone());
             work.finish_committed(receipt)?;

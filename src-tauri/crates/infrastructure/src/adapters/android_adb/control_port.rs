@@ -1,3 +1,9 @@
+use super::{
+    AndroidAdbAdapter, COMMAND_TIMEOUT, INSTALL_TIMEOUT, combine_stop_failures,
+    companion_install_view_model, consent_opened_status, control_unavailable_status,
+    is_owner_unreachable, is_socket_unavailable, no_runtime_owner_status, normalize_packages,
+    owner_disconnected_status, parse_package_version, parse_packages, reverse_mapping_present,
+};
 use async_trait::async_trait;
 use intercept_proxy_application::{
     ANDROID_COMPANION_PACKAGE, AndroidAdbViewModel, AndroidCompanionInstallViewModel,
@@ -7,13 +13,6 @@ use intercept_proxy_application::{
     AndroidRuntimeOwnerViewModel, AndroidRuntimeTarget, AppError, AppResult,
 };
 use serde_json::json;
-
-use super::{
-    AndroidAdbAdapter, COMMAND_TIMEOUT, INSTALL_TIMEOUT, combine_stop_failures,
-    companion_install_view_model, consent_opened_status, control_unavailable_status,
-    is_owner_unreachable, is_socket_unavailable, no_runtime_owner_status, normalize_packages,
-    owner_disconnected_status, parse_package_version, parse_packages, reverse_mapping_present,
-};
 
 #[async_trait]
 impl AndroidControlPort for AndroidAdbAdapter {
@@ -160,8 +159,11 @@ impl AndroidControlPort for AndroidAdbAdapter {
             .prepare_usb_proxy_runtime(&serial, None, &activation, AndroidRuntimeOwnerSource::Start)
             .await?;
         let runtime_epoch = prepared.owner.epoch;
-        let payload =
-            json!({"profile": activation.profile, "proxy_runtime": prepared.payload.clone()});
+        let payload = super::lease::control_request_payload(
+            &activation.profile,
+            &prepared.payload,
+            runtime_epoch,
+        );
         let accepted = match self
             .protocol_request(&serial, "start", payload.clone())
             .await
@@ -221,8 +223,11 @@ impl AndroidControlPort for AndroidAdbAdapter {
             )
             .await?;
         let runtime_epoch = prepared.owner.epoch;
-        let payload =
-            json!({"profile": activation.profile, "proxy_runtime": prepared.payload.clone()});
+        let payload = super::lease::control_request_payload(
+            &activation.profile,
+            &prepared.payload,
+            runtime_epoch,
+        );
         let accepted = match self
             .protocol_request(&serial, "apply", payload.clone())
             .await

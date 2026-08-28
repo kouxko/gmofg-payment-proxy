@@ -19,7 +19,7 @@ pub use runtime_owner::*;
 mod runtime_endpoint;
 pub use runtime_endpoint::*;
 
-pub const ANDROID_CONTROL_PROTOCOL_VERSION: u16 = 1;
+pub const ANDROID_CONTROL_PROTOCOL_VERSION: u16 = 2;
 pub const ANDROID_CONTROL_MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
@@ -126,6 +126,7 @@ pub struct AndroidNetworkProfileSummary {
     pub name: String,
     pub target_count: usize,
     pub auto_resume_after_reboot: bool,
+    pub stop_vpn_on_control_loss: bool,
 }
 
 /// Application 根据当前 Workspace 生成、交给 ADB 适配器解析 USB/LAN 链路的启动计划。
@@ -153,6 +154,7 @@ impl From<&AndroidNetworkProfile> for AndroidNetworkProfileSummary {
             name: profile.name.clone(),
             target_count: profile.target_applications.len(),
             auto_resume_after_reboot: profile.auto_resume_after_reboot,
+            stop_vpn_on_control_loss: profile.stop_vpn_on_control_loss,
         }
     }
 }
@@ -289,6 +291,7 @@ impl AndroidControlRequest {
                 | "stop"
                 | "emergency_restore"
                 | "status"
+                | "heartbeat"
         ) {
             return Err(AppError::new(
                 "ANDROID_PROTOCOL_OPERATION_INVALID",

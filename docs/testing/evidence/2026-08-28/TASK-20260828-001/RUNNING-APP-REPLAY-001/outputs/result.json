@@ -1,0 +1,53 @@
+{
+  "result": "FAILED_WITH_NOT_RUN",
+  "data_plane": {
+    "http": {
+      "result": "PASS",
+      "status": 201,
+      "method": "POST",
+      "path": "/replay/http?case=running-app-replay-20260828",
+      "request_body": "{\"case\":\"running-app-replay-20260828\",\"amount\":1234}",
+      "mock_marker": "running-app-replay-20260828",
+      "capture_stages": ["request", "response", "terminal"],
+      "terminal_result": "成功"
+    },
+    "socket": {
+      "result": "PASS",
+      "sent_hex": "001572756e6e696e672d6170702d7265706c61792d3230323630383238",
+      "received_hex": "4543484f3a001572756e6e696e672d6170702d7265706c61792d3230323630383238",
+      "exchange_outcome": "completed"
+    }
+  },
+  "ui": {
+    "diagnostic_newest_first": "PASS",
+    "empty_workspace_rule_capabilities": "PASS",
+    "http_response_to_mock_draft": {
+      "result": "FAIL",
+      "message": "抓包响应生成的规则草稿校验失败：该 Header 由 Rust 转发管线统一管理，规则不得直接设置"
+    },
+    "workspace_listener_refresh": {
+      "result": "FAIL",
+      "list_requires_route_change": true,
+      "toolbar_after_restore": "全部入口已停止 入口 2 · 活动 0",
+      "authoritative_listener_count": 0
+    }
+  },
+  "cleanup": {
+    "result": "PASS",
+    "runtime_active_guard": "PASS",
+    "restore_preview": "preview_ready",
+    "restore_queue": "apply_queued",
+    "restore_terminal": "committed",
+    "listener_count": 0,
+    "http_rule_count": 0,
+    "protocol_rule_count": 0,
+    "android_profile_count": 0,
+    "entry_status_count": 0
+  },
+  "not_run": [
+    "TLS/mTLS runtime",
+    "external package runtime",
+    "Android device runtime",
+    "remote business transaction"
+  ]
+}

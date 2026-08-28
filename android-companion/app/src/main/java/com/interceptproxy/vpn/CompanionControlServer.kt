@@ -100,6 +100,7 @@ class CompanionControlServer(private val context: Context) {
             ControlProtocol.success(request.requestId, statusJson())
         }
         "status" -> ControlProtocol.success(request.requestId, statusJson())
+        "heartbeat" -> heartbeat(request)
         else -> ControlProtocol.failure(
             request.requestId,
             "ANDROID_PROTOCOL_OPERATION_INVALID",
@@ -152,14 +153,28 @@ class CompanionControlServer(private val context: Context) {
             )
         }
 
-        // 新激活必须先撤销旧的恢复快照。含 ADB reverse/临时桌面端点的路由仅供
-        // 本次 start/apply 使用，绝不能在设备重启后沿用。
-        RuntimeStateStore(context).clearRecovery()
-        val generation = VpnRuntimeRegistry.startRequested(
+        val controlLease = request.payload.optJSONObject("control_lease")
+        val ownerEpoch = controlLease?.optString("owner_epoch")
+            ?.takeIf(String::isNotBlank)
+        val leaseTimeout = controlLease?.optLong("timeout_millis", -1L)
+        if (
+            profile.stopVpnOnControlLoss &&
+            (ownerEpoch == null || leaseTimeout != CONTROL_LEASE_TIMEOUT_MILLIS)
+        ) {
+            return ControlProtocol.failure(
+                request.requestId,
+                "ANDROID_CONTROL_LEASE_MISSING",
+                "启用控制失联保护时 start/apply 必须提供 owner_epoch 和 5000ms 租约。",
+            )
+        }
+
+        val start = ControlLeaseManager.start(
+            context,
             JSONObject(profileJson).getString("id"),
             runtime,
-        )
-        return runCatching {
+            ownerEpoch.orEmpty(),
+            profile.stopVpnOnControlLoss,
+        ) { generation ->
             context.startForegroundService(
                 InterceptVpnService.startIntent(
                     context,
@@ -168,15 +183,33 @@ class CompanionControlServer(private val context: Context) {
                     generation,
                 ),
             )
-            ControlProtocol.success(request.requestId, statusJson())
-        }.getOrElse { error ->
-            VpnRuntimeRegistry.faulted("启动 VpnService 失败：${error.message}")
-            ControlProtocol.failure(
+        }
+        return start.fold(
+            onSuccess = {
+                // 含 ADB reverse/临时桌面端点的路由仅供本次成功入队的 start/apply 使用。
+                RuntimeStateStore(context).clearRecovery()
+                ControlProtocol.success(request.requestId, statusJson())
+            },
+            onFailure = { error ->
+                ControlProtocol.failure(
+                    request.requestId,
+                    "ANDROID_VPN_START_FAILED",
+                    error.message ?: "启动 VpnService 失败",
+                )
+            },
+        )
+    }
+
+    private fun heartbeat(request: ControlProtocol.Request): ByteArray {
+        val ownerEpoch = request.payload.optString("owner_epoch")
+        if (ownerEpoch.isBlank() || !ControlLeaseManager.heartbeat(ownerEpoch)) {
+            return ControlProtocol.failure(
                 request.requestId,
-                "ANDROID_VPN_START_FAILED",
-                error.message ?: "启动 VpnService 失败",
+                "ANDROID_CONTROL_LEASE_STALE",
+                "控制租约不存在、已到期或不属于当前运行实例。",
             )
         }
+        return ControlProtocol.success(request.requestId, statusJson())
     }
 
     private fun statusJson(): JSONObject {
@@ -200,5 +233,6 @@ class CompanionControlServer(private val context: Context) {
     companion object {
         private const val TAG = "InterceptControl"
         private const val IO_TIMEOUT_MILLIS = 5_000
+        private const val CONTROL_LEASE_TIMEOUT_MILLIS = 5_000L
     }
 }

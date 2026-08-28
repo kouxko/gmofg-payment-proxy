@@ -9,8 +9,8 @@ use std::collections::BTreeMap;
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    CertificateReferenceId, ChannelId, DownstreamClientAuthentication, ListenerDataPlane,
-    ListenerId, Revision, RuleId, SocketDownstreamSecurity, SocketRelaySecurity, SocketTopology,
+    CertificateReferenceId, DownstreamClientAuthentication, ListenerDataPlane, ListenerId,
+    Revision, SocketDownstreamSecurity, SocketRelaySecurity, SocketTopology,
 };
 use parking_lot::RwLock;
 use uuid::Uuid;
@@ -44,25 +44,9 @@ pub fn remap_workspace_identity(workspace: &mut ProxyWorkspace) -> AppResult<()>
         remap_listener_certificates(listener, &certificate_ids)?;
     }
 
-    for rule in &mut workspace.rules {
-        rule.id = RuleId::new();
-        if let Some(channel) = &rule.channel
-            && let Some(listener_id) = listener_ids
-                .iter()
-                .find_map(|(old, new)| (channel.as_str() == old.to_string()).then_some(*new))
-        {
-            rule.channel = Some(ChannelId::new(listener_id.to_string()).map_err(AppError::from)?);
-        }
-    }
-    for rule in &mut workspace.protocol_rules {
-        let listener_id = mapped(
-            &listener_ids,
-            rule.listener_id(),
-            "protocol rule Listener reference",
-        )?;
-        // protocol rule ID 的作用域是 Workspace；复制/导入保留规则身份、revision、创建顺序
-        // 与声明顺序，只重绑随聚合一起变化的 Listener ID。
-        rule.rebind_listener_for_workspace_remap(listener_id)?;
+    for rule in &mut workspace.rule_definitions {
+        let listener_id = mapped(&listener_ids, rule.listener_id(), "rule Listener reference")?;
+        rule.remap_for_workspace_copy(listener_id);
     }
     for reference in &mut workspace.certificate_references {
         reference.id = mapped(&certificate_ids, reference.id, "certificate reference")?;

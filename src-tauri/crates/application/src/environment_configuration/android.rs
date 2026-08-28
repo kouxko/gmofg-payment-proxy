@@ -14,7 +14,13 @@ pub(super) struct AndroidNetworkProfileTemplate {
     proxy_routes: Vec<AndroidProxyRouteTemplate>,
     confirmed_shared_uids: Vec<u32>,
     auto_resume_after_reboot: bool,
+    #[serde(default = "default_stop_vpn_on_control_loss")]
+    stop_vpn_on_control_loss: bool,
     weak_network: WeakNetworkProfileTemplate,
+}
+
+const fn default_stop_vpn_on_control_loss() -> bool {
+    true
 }
 
 impl AndroidNetworkProfileTemplate {

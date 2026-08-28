@@ -134,6 +134,7 @@ pub(super) struct ActiveRuntimeFacts {
     pub(super) profile_fingerprint: String,
     pub(super) route_fingerprint: String,
     pub(super) route_count: usize,
+    pub(super) stop_vpn_on_control_loss: bool,
     pub(super) listener_ports: BTreeMap<String, u16>,
     pub(super) uses_adb_reverse: bool,
     pub(super) endpoints: Vec<AndroidRuntimeEndpointViewModel>,

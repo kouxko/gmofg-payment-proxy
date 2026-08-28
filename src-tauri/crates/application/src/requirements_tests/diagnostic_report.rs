@@ -205,7 +205,7 @@ async fn diagnostic_report_aggregates_bounded_listener_evidence_and_markdown() {
     );
     assert!(report.bundle.settings.is_some());
     assert!(report.bundle.external_package_service.is_some());
-    assert!(report.bundle.protocol_rules.is_empty());
+    assert!(report.bundle.rule_definitions.is_empty());
     assert!(report.bundle.protocol_package_detail.is_none());
     assert_eq!(
         report.bundle.diagnostics.len(),

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { exchangeRecord } from "./exchange-observation-test-fixture";
+import {
+  activeExchangeRecord,
+  exchangeRecord,
+  failedExchangeRecord,
+} from "./exchange-observation-test-fixture";
 import {
   defaultExchangeObservationQuery,
+  connectionStatus,
   eventCounts,
   eventRoute,
-  finalOutcome,
 } from "./exchange-observation-model";
 
 describe("exchange observation model", () => {
@@ -29,6 +33,18 @@ describe("exchange observation model", () => {
     record.events.splice(5, 0, ...record.events.slice(1, 5));
     expect(eventCounts(record)).toEqual({ received: 4, sent: 4, failed: 0 });
     expect(record.events).toHaveLength(10);
-    expect(finalOutcome(record)).toBe("已结束");
+    expect(connectionStatus(record)).toBe("正常结束");
+  });
+
+  it("reports a Socket exchange without a closed event as an active connection", () => {
+    expect(connectionStatus(activeExchangeRecord())).toBe("保持连接");
+  });
+
+  it("reports a completed closed event as a normal connection ending", () => {
+    expect(connectionStatus(exchangeRecord())).toBe("正常结束");
+  });
+
+  it("reports an error closed event as an abnormal connection ending", () => {
+    expect(connectionStatus(failedExchangeRecord())).toBe("异常结束");
   });
 });

@@ -1,9 +1,10 @@
+use super::{AppError, AppResult, Rule, RuleRuntimeSnapshot};
+#[cfg(test)]
 use super::{
-    AppError, AppMessageStage, AppResult, AppRuleAction, AppRuleCondition, AppRuleDraft,
-    AppRuleMatchField, AppRuleMatchOperator, BTreeMap, ChannelId, FieldValidationViewModel,
-    MatchCondition, MatchField, MatchOperator, MessageStage, Revision, Rule, RuleDraft,
-    RuleRuntimeSnapshot, RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, UiTone,
-    action_to_app, action_to_domain, json_error,
+    AppMessageStage, AppRuleAction, AppRuleCondition, AppRuleDraft, AppRuleMatchField,
+    AppRuleMatchOperator, BTreeMap, ChannelId, FieldValidationViewModel, MatchCondition,
+    MatchField, MatchOperator, MessageStage, Revision, RuleDraft, RuleSummaryViewModel,
+    RuleValidationViewModel, RuleViewModel, UiTone, action_to_app, action_to_domain, json_error,
 };
 
 pub(super) fn runtime_rules(
@@ -58,6 +59,7 @@ pub(super) fn runtime_rules(
         .collect()
 }
 
+#[cfg(test)]
 pub(super) fn to_domain_draft(
     draft: &AppRuleDraft,
     creation_order: u64,
@@ -137,6 +139,7 @@ pub(super) fn to_domain_draft(
     })
 }
 
+#[cfg(test)]
 pub(super) fn app_draft(rule: &Rule) -> AppResult<AppRuleDraft> {
     Ok(AppRuleDraft {
         rule_id: Some(rule.id.as_uuid()),
@@ -163,6 +166,7 @@ pub(super) fn app_draft(rule: &Rule) -> AppResult<AppRuleDraft> {
     })
 }
 
+#[cfg(test)]
 pub(crate) fn condition_to_domain(condition: &AppRuleCondition) -> MatchCondition {
     match condition {
         AppRuleCondition::Field { field, operator } => MatchCondition::Field {
@@ -182,6 +186,7 @@ pub(crate) fn condition_to_domain(condition: &AppRuleCondition) -> MatchConditio
     }
 }
 
+#[cfg(test)]
 pub(crate) fn condition_to_app(condition: &MatchCondition) -> AppRuleCondition {
     match condition {
         MatchCondition::Field { field, operator } => AppRuleCondition::Field {
@@ -207,6 +212,7 @@ pub(crate) fn condition_to_app(condition: &MatchCondition) -> AppRuleCondition {
     }
 }
 
+#[cfg(test)]
 pub(super) fn summary(
     rule: &Rule,
     channel_names: &BTreeMap<ChannelId, String>,
@@ -245,6 +251,7 @@ pub(super) fn summary(
     })
 }
 
+#[cfg(test)]
 pub(super) fn view(
     rule: &Rule,
     channel_names: &BTreeMap<ChannelId, String>,
@@ -255,6 +262,7 @@ pub(super) fn view(
     })
 }
 
+#[cfg(test)]
 pub(super) fn validation_from_domain(
     error: &intercept_proxy_domain::DomainError,
 ) -> RuleValidationViewModel {

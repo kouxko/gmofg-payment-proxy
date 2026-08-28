@@ -1,7 +1,7 @@
 use crate::adapters::{EnvironmentApplyLeaseResourceKey, EnvironmentApplyResourceGateRegistry};
 
 #[tokio::test(flavor = "current_thread")]
-async fn replace_protocol_rules_waits_for_the_listener_apply_gate() {
+async fn replace_rule_definitions_waits_for_the_listener_apply_gate() {
     use intercept_proxy_application::ListenerRuntimePort;
 
     let gates = Arc::new(EnvironmentApplyResourceGateRegistry::default());
@@ -18,7 +18,7 @@ async fn replace_protocol_rules_waits_for_the_listener_apply_gate() {
         ))
         .await;
 
-    let mut replacement = Box::pin(runtime.replace_protocol_rules(workspace, listener.id));
+    let mut replacement = Box::pin(runtime.replace_rule_definitions(workspace, listener.id));
     assert!(matches!(
         std::future::poll_fn(|context| {
             std::task::Poll::Ready(replacement.as_mut().poll(context))

@@ -15,7 +15,10 @@ import type {
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { useAppEventRefresh, useBootstrap } from "@/features/shell/bootstrap-context";
-import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
+import {
+  useWorkspaceNavigation,
+  useWorkspaceQueryInvalidation,
+} from "@/features/shell/workspace-navigation";
 import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
 import { toneColor } from "@/lib/format";
@@ -89,10 +92,12 @@ export function ListenersView() {
     fieldErrors: Record<string, string[]>;
   }>();
 
-  useAppEventRefresh(
-    ["workspace_changed", "listener_status_changed", "snapshot_required"],
-    listenerOverview.refresh,
-  );
+  useWorkspaceQueryInvalidation({
+    workspaceId: currentId,
+    collection: [workspaces],
+    current: [workspaceQuery, listenerOverview, certificateDetails],
+  });
+  useAppEventRefresh(["listener_status_changed"], listenerOverview.refresh);
   useAppEventRefresh(
     ["workspace_changed", "protocol_package_catalog_changed", "snapshot_required"],
     protocolCatalog.refresh,

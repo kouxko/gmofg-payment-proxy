@@ -7,25 +7,27 @@ use std::{
     collections::BTreeSet,
     fmt::Write as _,
     net::TcpListener as StdTcpListener,
+    path::PathBuf,
+    sync::Arc,
     sync::{Mutex as StdMutex, OnceLock},
     time::Duration,
 };
 
 use intercept_proxy_application::{
-    ANDROID_COMPANION_PACKAGE, ANDROID_CONTROL_MAX_FRAME_BYTES, ANDROID_CONTROL_PROTOCOL_VERSION,
-    AndroidControlRequest, AndroidControlResponse, AndroidControlTransport, AndroidNetworkState,
+    ANDROID_COMPANION_PACKAGE, ANDROID_CONTROL_PROTOCOL_VERSION, AndroidControlRequest,
+    AndroidControlResponse, AndroidControlTransport, AndroidNetworkState,
     AndroidNetworkStatusViewModel, AppError, AppResult, UiTone, encode_android_control_frame,
 };
 use serde_json::{Value, json};
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::TcpStream,
-    time::timeout,
-};
+use tokio::{io::AsyncWriteExt, net::TcpStream, time::timeout};
 
-use super::{ActiveRuntimeFacts, AndroidAdbAdapter, COMMAND_TIMEOUT, CONTROL_SOCKET};
-use crate::adapters::android_adb::command::AdbOutput;
-use crate::adapters::android_adb::command::is_missing_adb_listener_error;
+use super::{
+    ActiveRuntimeFacts, AndroidAdbAdapter, COMMAND_TIMEOUT, CONTROL_SOCKET,
+    control_frame_read::read_control_response_frame,
+};
+use crate::adapters::android_adb::command::{
+    AdbCommandRunner, AdbOutput, is_missing_adb_listener_error, run_forward_owned,
+};
 
 const ACTIVATION_STATUS_ATTEMPTS: usize = 20;
 const ACTIVATION_STATUS_INTERVAL: Duration = Duration::from_millis(250);
@@ -82,15 +84,14 @@ impl AndroidAdbAdapter {
             ],
         )
         .await?;
+        let mut forward = ForwardOwnership::new(self, serial, port)?;
         let response_serial = serial.to_owned();
         let result = self.exchange_frame(port, request).await.map(|mut status| {
             // ADB serial 属于桌面选择上下文，只能在协议校验完成后补回。
             status.serial = response_serial;
             status
         });
-        let cleanup = self
-            .run_forward_for_serial(serial, &["forward", "--remove", &format!("tcp:{port}")])
-            .await;
+        let cleanup = forward.cleanup().await;
         drop(port_reservation);
         reconcile_forward_cleanup(result, cleanup)
     }
@@ -129,32 +130,7 @@ impl AndroidAdbAdapter {
                     format!("写入设备端控制请求失败：{error}"),
                 )
             })?;
-        let mut prefix = [0_u8; 4];
-        timeout(Duration::from_secs(5), stream.read_exact(&mut prefix))
-            .await
-            .map_err(|_| {
-                AppError::new("ANDROID_CONTROL_SOCKET_TIMEOUT", "读取设备端控制响应超时。")
-            })?
-            .map_err(|error| {
-                AppError::new(
-                    "ANDROID_CONTROL_SOCKET_FAILED",
-                    format!("读取设备端控制响应失败：{error}"),
-                )
-            })?;
-        let length = u32::from_be_bytes(prefix) as usize;
-        if length > ANDROID_CONTROL_MAX_FRAME_BYTES {
-            return Err(AppError::new(
-                "ANDROID_PROTOCOL_FRAME_TOO_LARGE",
-                "设备端响应超过 1 MiB 上限。",
-            ));
-        }
-        let mut payload = vec![0; length];
-        stream.read_exact(&mut payload).await.map_err(|error| {
-            AppError::new(
-                "ANDROID_CONTROL_SOCKET_FAILED",
-                format!("设备端响应被截断：{error}"),
-            )
-        })?;
+        let payload = read_control_response_frame(&mut stream, Duration::from_secs(5)).await?;
         let response: AndroidControlResponse =
             serde_json::from_slice(&payload).map_err(|error| {
                 AppError::new(
@@ -248,6 +224,14 @@ impl AndroidAdbAdapter {
             if attempt > 0 {
                 tokio::time::sleep(ACTIVATION_STATUS_INTERVAL).await;
             }
+            if should_renew_activation_lease(runtime.stop_vpn_on_control_loss, attempt) {
+                self.protocol_request(
+                    &runtime.serial,
+                    "heartbeat",
+                    json!({"owner_epoch": runtime.epoch.to_string()}),
+                )
+                .await?;
+            }
             let status = self
                 .protocol_request(&runtime.serial, "status", json!({}))
                 .await?;
@@ -263,6 +247,86 @@ impl AndroidAdbAdapter {
         )
         .retryable("请刷新设备运行状态；若设备报告故障，请停止后重新启动网络接管。"))
     }
+}
+
+struct ForwardOwnership {
+    executable: PathBuf,
+    runner: Arc<dyn AdbCommandRunner>,
+    serial: String,
+    port: u16,
+    armed: bool,
+}
+
+impl ForwardOwnership {
+    fn new(adapter: &AndroidAdbAdapter, serial: &str, port: u16) -> AppResult<Self> {
+        Ok(Self {
+            executable: adapter.adb()?.to_path_buf(),
+            runner: Arc::clone(&adapter.runner),
+            serial: serial.to_owned(),
+            port,
+            armed: true,
+        })
+    }
+
+    async fn cleanup(&mut self) -> AppResult<AdbOutput> {
+        let result = run_forward_owned(
+            self.executable.clone(),
+            Arc::clone(&self.runner),
+            self.serial.clone(),
+            forward_remove_args(self.port),
+        )
+        .await;
+        self.armed = false;
+        result
+    }
+}
+
+impl Drop for ForwardOwnership {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let executable = self.executable.clone();
+        let runner = Arc::clone(&self.runner);
+        let serial = self.serial.clone();
+        let port = self.port;
+        tokio::spawn(async move {
+            if let Err(error) = run_forward_owned(
+                executable,
+                runner,
+                serial.clone(),
+                forward_remove_args(port),
+            )
+            .await
+            {
+                if is_missing_adb_listener_error(&error) {
+                    tracing::warn!(
+                        android_serial = %serial,
+                        local_port = port,
+                        error_code = %error.view_model.code,
+                        error_message = %error.view_model.message,
+                        "cancelled Android control request already released its adb forward"
+                    );
+                } else {
+                    tracing::error!(
+                        android_serial = %serial,
+                        local_port = port,
+                        error_code = %error.view_model.code,
+                        error_message = %error.view_model.message,
+                        "cancelled Android control request failed to release its adb forward"
+                    );
+                }
+            }
+        });
+    }
+}
+
+fn forward_remove_args(port: u16) -> Vec<String> {
+    vec!["forward".into(), "--remove".into(), format!("tcp:{port}")]
+}
+
+pub(super) const fn should_renew_activation_lease(enabled: bool, attempt: usize) -> bool {
+    enabled && attempt.is_multiple_of(4)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

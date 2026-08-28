@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn schema_19_is_reset_to_current_pre_release_schema() {
+fn schema_19_is_rejected_and_legacy_data_is_retained() {
     let directory = tempfile::tempdir().expect("tempdir");
     let path = directory.path().join("state.sqlite");
     let connection = Connection::open(&path).expect("open legacy database");
@@ -18,15 +18,18 @@ fn schema_19_is_reset_to_current_pre_release_schema() {
         .expect("seed schema 19");
     drop(connection);
 
-    let store = SqliteStore::open(&path).expect("reset legacy database");
-    let connection = store.connection.lock();
+    assert!(matches!(
+        SqliteStore::open(&path),
+        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
+    let connection = Connection::open(&path).expect("reopen legacy database");
     let version = connection
         .query_row(
             "SELECT version FROM application_schema WHERE singleton_id = 1",
             [],
             |row| row.get::<_, i64>(0),
         )
-        .expect("current schema marker");
+        .expect("legacy schema marker");
     let legacy_exists = connection
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'legacy_listener_policy')",
@@ -34,8 +37,14 @@ fn schema_19_is_reset_to_current_pre_release_schema() {
             |row| row.get::<_, bool>(0),
         )
         .expect("legacy table probe");
-    assert_eq!(version, crate::sqlite::schema::CURRENT_SCHEMA_VERSION);
-    assert!(!legacy_exists);
+    let legacy_value = connection
+        .query_row("SELECT value FROM legacy_listener_policy", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .expect("legacy row");
+    assert_eq!(version, 19);
+    assert!(legacy_exists);
+    assert_eq!(legacy_value, "obsolete");
 }
 
 #[test]

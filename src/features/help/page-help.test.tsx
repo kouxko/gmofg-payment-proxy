@@ -60,6 +60,19 @@ describe("page-specific usage guides", () => {
     expect(protocolPackageGuide).toContain("导入不会自动修改或重绑任何入口");
   });
 
+  it("documents capture lifecycle as connection status without inferring a business result", () => {
+    const captureGuide = pageHelpGuides["/capture"].sections
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(captureGuide).toContain("连接状态");
+    expect(captureGuide).toContain("保持连接");
+    expect(captureGuide).toContain("正常结束");
+    expect(captureGuide).toContain("异常结束");
+    expect(captureGuide).not.toContain("最终结果");
+    expect(captureGuide).not.toContain("支付成功");
+  });
+
   it("opens the current page guide in a Drawer without document navigation", async () => {
     const user = userEvent.setup();
     const documentUrl = window.location.href;

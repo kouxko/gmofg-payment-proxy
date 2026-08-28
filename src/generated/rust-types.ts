@@ -140,38 +140,17 @@ export const commands = {
 	breakpointRestoreOriginal: (breakpointId: string, runtimeEpoch: string) => typedError<BreakpointDraft, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_restore_original", { breakpointId, runtimeEpoch })),
 	breakpointValidate: (draft: BreakpointDraft, runtimeEpoch: string) => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_validate", { draft, runtimeEpoch })),
 	breakpointResolve: (runtimeEpoch: string, decision: BreakpointDecision) => typedError<BreakpointSummaryViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_resolve", { runtimeEpoch, decision })),
-	ruleList: () => typedError<RuleSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("rule_list")),
-	ruleGet: (ruleId: string) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_get", { ruleId })),
-	ruleNewHttpDraft: (listenerId: ListenerId) => typedError<RuleDraft, AppErrorViewModel>(__TAURI_INVOKE("rule_new_http_draft", { listenerId })),
-	ruleCapabilities: () => typedError<RuleStageCapabilityViewModel[], AppErrorViewModel>(__TAURI_INVOKE("rule_capabilities")),
-	ruleConditionDraft: (kind: RuleConditionKind, stage: MessageStage) => typedError<RuleCondition, AppErrorViewModel>(__TAURI_INVOKE("rule_condition_draft", { kind, stage })),
-	ruleActionDraft: (kind: RuleActionKind, stage: MessageStage) => typedError<RuleAction, AppErrorViewModel>(__TAURI_INVOKE("rule_action_draft", { kind, stage })),
-	ruleMatchFieldDraft: (kind: RuleMatchFieldKind, stage: MessageStage) => typedError<RuleMatchField, AppErrorViewModel>(__TAURI_INVOKE("rule_match_field_draft", { kind, stage })),
-	ruleMatchOperatorDraft: (kind: RuleMatchOperatorKind) => typedError<RuleMatchOperator, AppErrorViewModel>(__TAURI_INVOKE("rule_match_operator_draft", { kind })),
-	ruleParseByteInput: (raw: string) => typedError<RuleByteInputViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_byte_input", { raw })),
-	ruleParseHeaderInput: (raw: string) => typedError<RuleHeaderInputViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_header_input", { raw })),
-	ruleCreateFromSession: (sessionId: string) => typedError<RuleDraft, AppErrorViewModel>(__TAURI_INVOKE("rule_create_from_session", { sessionId })),
-	ruleCreateFromExchangeObservation: (exchangeId: string, responseEventIndex: number) => typedError<RuleDraft, AppErrorViewModel>(__TAURI_INVOKE("rule_create_from_exchange_observation", { exchangeId, responseEventIndex })),
-	ruleSave: (draft: RuleDraft) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_save", { draft })),
-	ruleCopy: (ruleId: string) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_copy", { ruleId })),
-	ruleDelete: (ruleId: string, expectedRevision: number, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_delete", { ruleId, expectedRevision, confirmed })),
-	ruleToggle: (ruleId: string, expectedRevision: number, enabled: boolean) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_toggle", { ruleId, expectedRevision, enabled })),
-	ruleImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_import")),
-	ruleExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_export")),
-	protocolRuleList: () => typedError<ProtocolDocumentRuleDefinition[], AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_list")),
-	/**  保留给非编辑器调用方的单阶段只读查询；WebView 编辑器必须使用完整上下文命令。 */
-	protocolRuleCapabilities: (listenerId: ListenerId, stage: ProtocolRuleStage) => typedError<ProtocolRuleCapabilityCatalog, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_capabilities", { listenerId, stage })),
-	protocolRuleEditorContext: (listenerId: ListenerId) => typedError<ProtocolRuleEditorContext, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_editor_context", { listenerId })),
-	/**
-	 *  把规则编辑器文本解析为 Rust/Schema 认可的类型化值。
-	 *
-	 *  该纯命令不依赖当前 Workspace；前端切换字段时只需提交公开字段类型，不能自行解释
-	 *  UTF-8 字节、JavaScript 安全整数或 Blob Hex。
-	 */
-	protocolRuleParseValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_parse_value", { fieldType, raw })),
-	protocolRuleSave: (input: ProtocolRuleSaveInput) => typedError<ProtocolDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_save", { input })),
-	protocolRuleToggle: (ruleId: ProtocolDocumentRuleId, expectedRevision: number, enabled: boolean) => typedError<ProtocolDocumentRuleDefinition, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_toggle", { ruleId, expectedRevision, enabled })),
-	protocolRuleDelete: (ruleId: ProtocolDocumentRuleId, expectedRevision: number, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_rule_delete", { ruleId, expectedRevision, confirmed })),
+	ruleDefinitionList: () => typedError<RuleDefinition_Serialize[], AppErrorViewModel>(__TAURI_INVOKE("rule_definition_list")),
+	ruleEditorContext: (listenerId: ListenerId) => typedError<RuleEditorContext, AppErrorViewModel>(__TAURI_INVOKE("rule_editor_context", { listenerId })),
+	ruleDefinitionGet: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_get", { ruleId })),
+	ruleDefinitionCopy: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_copy", { ruleId })),
+	ruleDefinitionConditionDraft: (kind: RuleConditionKind, stage: MessageStage) => typedError<MatchCondition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_condition_draft", { kind, stage })),
+	ruleDefinitionActionDraft: (kind: RuleActionKind, stage: MessageStage) => typedError<RuleAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { kind, stage })),
+	ruleDefinitionCreateFromExchangeObservation: (exchangeId: string, responseEventIndex: number) => typedError<RuleDefinitionSaveInput, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_create_from_exchange_observation", { exchangeId, responseEventIndex })),
+	ruleParseDocumentValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_document_value", { fieldType, raw })),
+	ruleDefinitionSave: (input: RuleDefinitionSaveInput) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_save", { input })),
+	ruleDefinitionToggle: (ruleId: RuleId, expectedRevision: Revision, enabled: boolean) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_toggle", { ruleId, expectedRevision, enabled })),
+	ruleDefinitionDelete: (ruleId: RuleId, expectedRevision: Revision, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_delete", { ruleId, expectedRevision, confirmed })),
 	faultTemplateList: () => typedError<FaultTemplateViewModel[], AppErrorViewModel>(__TAURI_INVOKE("fault_template_list")),
 	faultConfigure: (draft: FaultConfigurationDraft) => typedError<ActiveFaultViewModel, AppErrorViewModel>(__TAURI_INVOKE("fault_configure", { draft })),
 	faultActiveList: () => typedError<ActiveFaultViewModel[], AppErrorViewModel>(__TAURI_INVOKE("fault_active_list")),
@@ -267,6 +246,7 @@ export type AndroidNetworkProfile = {
 	proxy_routes: AndroidProxyRoute[],
 	confirmed_shared_uids: number[],
 	auto_resume_after_reboot: boolean,
+	stop_vpn_on_control_loss?: boolean,
 	weak_network: WeakNetworkProfile,
 };
 
@@ -275,6 +255,7 @@ export type AndroidNetworkProfileSummary = {
 	name: string,
 	target_count: number,
 	auto_resume_after_reboot: boolean,
+	stop_vpn_on_control_loss: boolean,
 };
 
 export type AndroidNetworkState = "unknown" | "start_requested" | "running" | "stop_requested" | "stopped" | "faulted";
@@ -855,6 +836,8 @@ export type DownstreamTlsSettings = {
 	client_authentication: DownstreamClientAuthentication,
 };
 
+export type DropResponseMode = "ReadCompleteResponse" | "CloseAfterRequestWrite";
+
 /**  Reader/Writer 的强类型网络上下文；HTTP 保留文本 Header/Body，Socket 保留字节。 */
 export type ExchangeContext = { protocol: "http"; header: string; body: string;
 /**  `false` means the text is only a lossy display projection and cannot seed a rule. */
@@ -1046,6 +1029,13 @@ export type ForwardProxyAuthentication = { mode: "none" } | { mode: "basic"; cre
  */
 export type HttpBodyProcessing = { mode: "plain" } | { mode: "protocol"; package: ProtocolPackageRef };
 
+export type HttpDocumentRuleContent = {
+	package: ProtocolPackageRef,
+	schema_version: number,
+	conditions: DocumentCondition[],
+	actions: DocumentAction[],
+};
+
 export type HttpListenerSettings = {
 	authentication: ForwardProxyAuthentication,
 	mitm: MitmSettings,
@@ -1099,6 +1089,28 @@ export type HttpProtocolRuleStageViewModel = {
 	document: Document,
 	display: HttpProtocolDisplayViewModel,
 };
+
+export type HttpRuleContent = {
+	description: string,
+	conditions: MatchCondition[],
+	actions: RuleAction[],
+	document: HttpDocumentRuleContent | null,
+	one_shot: boolean,
+	hit_count: number,
+	last_hit_at: string | null,
+};
+
+export type HttpRuleEditorStage = {
+	stage: RuleStage,
+	http: RuleStageCapabilityViewModel | null,
+	package: ProtocolPackageRef | null,
+	schema_version: number | null,
+	document_fields: ProtocolRuleFieldCapability[],
+	document_common_actions: ProtocolRuleCommonActionCapability[],
+	new_rule_draft: RuleDefinitionSaveInput,
+};
+
+export type JitterScope = "BeforeMessage" | "PerChunk";
 
 /**
  *  代理监听页面使用的证书引用详情。
@@ -1280,6 +1292,15 @@ export type ListenerUpstreamTlsTestViewModel = {
 	ui_tone: UiTone,
 };
 
+export type MatchCondition = ({ Field: {
+	field: MatchField,
+	operator: MatchOperator,
+} }) & { NthHit?: never } | ({ NthHit: number }) & { Field?: never };
+
+export type MatchField = "TerminalIp" | "CertificateFingerprint" | "PathOrRequestType" | { JsonPath: string };
+
+export type MatchOperator = ({ Equals: string }) & { Contains?: never; Regex?: never } | ({ Contains: string }) & { Equals?: never; Regex?: never } | ({ Regex: string }) & { Contains?: never; Equals?: never };
+
 export type McpInfoViewModel = {
 	available: boolean,
 	endpoint: string,
@@ -1380,27 +1401,6 @@ export type ProtocolDirection =
 "upstream" |
 /**  Server 到 App，或 `LocalResponder` 的响应方向。 */
 "downstream";
-
-/**
- *  可持久化的 协议 Document 规则实体。
- *
- *  `rule_id` 与 `created_order` 在更新时保持稳定，`revision` 对每次成功更新或启停递增。
- *  反序列化会重新执行全部结构限制，因此导入不能绕过空动作、重复字段或资源上限。
- */
-export type ProtocolDocumentRuleDefinition = {
-	rule_id: ProtocolDocumentRuleId,
-	revision: Revision,
-	name: string,
-	enabled: boolean,
-	priority: number,
-	created_order: number,
-	listener_id: ListenerId,
-	package: ProtocolPackageRef,
-	schema_version: number,
-	stage: ProtocolRuleStage,
-	conditions: DocumentCondition[],
-	actions: DocumentAction[],
-};
 
 export type ProtocolDocumentRuleId = string;
 
@@ -1595,35 +1595,7 @@ export type ProtocolPackageVersionViewModel = {
 	installed_at: string,
 };
 
-export type ProtocolRuleCapabilityCatalog = {
-	package: ProtocolPackageRef,
-	schema_version: number,
-	stage: ProtocolRuleStage,
-	fields: ProtocolRuleFieldCapability[],
-	common_actions: ProtocolRuleCommonActionCapability[],
-};
-
 export type ProtocolRuleCommonActionCapability = "record_match" | "clear_document";
-
-/**  规则编辑器针对一个 Listener 的 Rust 权威上下文。 */
-export type ProtocolRuleEditorContext = {
-	listener_id: ListenerId,
-	package: ProtocolPackageRef,
-	stages: ProtocolRuleEditorStage[],
-};
-
-/**
- *  单个处理阶段的完整编辑合同。
- *
- *  Schema 版本属于阶段，因为同一个协议包的上行与下行 Schema 可以独立演进。
- */
-export type ProtocolRuleEditorStage = {
-	stage: ProtocolRuleStage,
-	schema_version: number,
-	fields: ProtocolRuleFieldCapability[],
-	common_actions: ProtocolRuleCommonActionCapability[],
-	new_rule_draft: ProtocolRuleSaveInput,
-};
 
 export type ProtocolRuleFieldActionCapability = "set_field" | "clear_field";
 
@@ -1636,21 +1608,6 @@ export type ProtocolRuleFieldCapability = {
 };
 
 export type ProtocolRuleFieldOperatorCapability = "equals";
-
-export type ProtocolRuleSaveInput = {
-	/**  `None` 表示创建；更新时必须同时提供规则 ID 与期望 revision。 */
-	rule_id: ProtocolDocumentRuleId | null,
-	expected_revision: number | null,
-	name: string,
-	enabled: boolean,
-	priority: number,
-	listener_id: ListenerId,
-	package: ProtocolPackageRef,
-	schema_version: number,
-	stage: ProtocolRuleStage,
-	conditions: DocumentCondition[],
-	actions: DocumentAction[],
-};
 
 /**
  *  协议 Document 经过 App、Proxy、Server 边界时可独立配置的处理阶段。
@@ -1710,7 +1667,29 @@ export type RawHttpHeaderViewModel = {
 
 export type Revision = number;
 
-export type RuleAction = { type: "set_json_field"; path: string; value_json: string } | { type: "replace_body_text"; text: string } | { type: "set_header"; name: string; value: string } | { type: "delay"; milliseconds: number } | { type: "jitter"; minimum_milliseconds: number; maximum_milliseconds: number; scope: RuleJitterScope } | { type: "throttle"; bytes_per_second: number; chunk_bytes: number; direction: RuleTrafficDirection } | { type: "intermittent"; available_milliseconds: number; blocked_milliseconds: number; direction: RuleTrafficDirection } | { type: "pause" } | { type: "custom_http_status"; status: number } | { type: "terminal"; action: RuleTerminalAction };
+export type RuleAction = ({ SetJsonField: {
+	path: string,
+	value: unknown,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; Terminal?: never; Throttle?: never } | ({ ReplaceBodyText: string }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ SetHeader: {
+	name: string,
+	value: string,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Delay: {
+	milliseconds: number,
+} }) & { CustomHttpStatus?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Jitter: {
+	minimum_milliseconds: number,
+	maximum_milliseconds: number,
+	scope: JitterScope,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Throttle: {
+	bytes_per_second: number,
+	chunk_bytes: number,
+	direction: TrafficDirection,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never } | ({ Intermittent: {
+	available_milliseconds: number,
+	blocked_milliseconds: number,
+	direction: TrafficDirection,
+} }) & { CustomHttpStatus?: never; Delay?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | "Pause" | ({ CustomHttpStatus: {
+	status: number,
+} }) & { Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Terminal: TerminalAction }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Throttle?: never };
 
 /**
  *  单个动作在指定 HTTP 阶段中的可用能力。
@@ -1725,46 +1704,71 @@ export type RuleActionCapabilityViewModel = {
 
 export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "pause" | "custom_http_status" | "reject_tls_handshake" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
 
-export type RuleByteInputViewModel = {
-	bytes: number[],
-	normalized: string,
-};
-
-export type RuleCondition = { type: "field"; field: RuleMatchField; operator: RuleMatchOperator } | { type: "nth_hit"; count: number };
-
 export type RuleConditionKind = "field" | "nth_hit";
 
-/**  新建或编辑规则时由展示层提交的输入模型。 */
-export type RuleDraft = {
-	rule_id: string | null,
-	expected_revision: number | null,
+export type RuleContent = { type: "http"; value: HttpRuleContent } | { type: "socket"; value: SocketRuleContent };
+
+export type RuleDefinition = RuleDefinition_Serialize | RuleDefinition_Deserialize;
+
+export type RuleDefinitionDraft = {
 	name: string,
-	description: string,
 	enabled: boolean,
 	priority: number,
-	channel: ChannelId | null,
-	stage: MessageStage | null,
-	conditions: RuleCondition[],
-	actions: RuleAction[],
-	one_shot: boolean,
+	listener_id: ListenerId,
+	stage: RuleStage,
+	content: RuleContent,
 };
 
-export type RuleDropResponseMode = "read_complete_response" | "close_after_request_write";
-
-export type RuleHeaderInputViewModel = {
-	headers: ([string, string])[],
-	normalized: string,
+export type RuleDefinitionSaveInput = {
+	rule_id: RuleId | null,
+	expected_revision: Revision | null,
+	draft: RuleDefinitionDraft,
 };
 
-export type RuleJitterScope = "before_message" | "per_chunk";
+export type RuleDefinitionWire = {
+	rule_id: RuleId,
+	revision: Revision,
+	name: string,
+	enabled: boolean,
+	priority: number,
+	created_order: number,
+	listener_id: ListenerId,
+	stage: RuleStage,
+	content: RuleContent,
+};
 
-export type RuleMatchField = { type: "terminal_ip" } | { type: "certificate_fingerprint" } | { type: "path_or_request_type" } | { type: "json_path"; path: string };
+export type RuleDefinition_Deserialize = RuleDefinitionWire;
+
+export type RuleDefinition_Serialize = {
+	rule_id: RuleId,
+	revision: Revision,
+	name: string,
+	enabled: boolean,
+	priority: number,
+	created_order: number,
+	listener_id: ListenerId,
+	stage: RuleStage,
+	content: RuleContent,
+};
+
+export type RuleEditorContentContext = { type: "http"; value: {
+	stages: HttpRuleEditorStage[],
+} } | { type: "socket"; value: {
+	package: ProtocolPackageRef,
+	stages: SocketRuleEditorStage[],
+} };
+
+/**  Rust-authoritative editor contract for one Listener. */
+export type RuleEditorContext = {
+	listener_id: ListenerId,
+	content: RuleEditorContentContext,
+};
+
+export type RuleId = string;
 
 export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "path_or_request_type" | "json_path";
 
-export type RuleMatchOperator = { type: "equals"; value: string } | { type: "contains"; value: string } | { type: "regex"; pattern: string };
-
-export type RuleMatchOperatorKind = "equals" | "contains" | "regex";
+export type RuleStage = "app_to_proxy" | "proxy_to_upstream" | "upstream_to_proxy" | "proxy_to_app" | "tls_handshake";
 
 /**  HTTP 规则编辑器针对一个阶段的完整能力表。 */
 export type RuleStageCapabilityViewModel = {
@@ -1789,14 +1793,7 @@ export type RuleSummaryViewModel = {
 	ui_tone: UiTone,
 };
 
-export type RuleTerminalAction = { type: "reject_tls_handshake" } | { type: "disconnect_before_upstream" } | { type: "upstream_connect_timeout"; milliseconds: number } | { type: "upstream_write_timeout"; milliseconds: number } | { type: "upstream_read_timeout"; milliseconds: number } | { type: "drop_upstream_response"; mode: RuleDropResponseMode } | { type: "mock_response"; status: number; headers: ([string, string])[]; body_bytes: number[] } | { type: "invalid_json"; body_bytes: number[] } | { type: "incorrect_content_length"; delta: number } | { type: "truncate_response"; bytes: number } | { type: "disconnect_during_upstream_write"; after_bytes: number } | { type: "disconnect_during_downstream_write"; after_bytes: number };
-
 export type RuleTrafficDirection = "upstream" | "downstream";
-
-export type RuleViewModel = {
-	summary: RuleSummaryViewModel,
-	draft: RuleDraft,
-};
 
 /**
  *  Scripted 模式所需的完整、静态 Listener 配置。
@@ -1960,6 +1957,21 @@ export type SocketRelayTopology = {
 	security: SocketRelaySecurity,
 };
 
+export type SocketRuleContent = {
+	package: ProtocolPackageRef,
+	schema_version: number,
+	conditions: DocumentCondition[],
+	actions: DocumentAction[],
+};
+
+export type SocketRuleEditorStage = {
+	stage: RuleStage,
+	schema_version: number,
+	fields: ProtocolRuleFieldCapability[],
+	common_actions: ProtocolRuleCommonActionCapability[],
+	new_rule_draft: RuleDefinitionSaveInput,
+};
+
 /**  Socket 运行时所有内存队列和单次 OS read 的显式资源合同。 */
 export type SocketRuntimeLimits = {
 	read_chunk_bytes: number,
@@ -2000,6 +2012,32 @@ export type SubscriptionAckViewModel = {
 
 /**  需要精确计数的 TCP 标志位。 */
 export type TcpFlag = "syn" | "syn_ack" | "ack" | "fin" | "rst";
+
+export type TerminalAction = "RejectTlsHandshake" | "DisconnectBeforeUpstream" | ({ UpstreamConnectTimeout: {
+	milliseconds: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ UpstreamWriteTimeout: {
+	milliseconds: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never } | ({ UpstreamReadTimeout: {
+	milliseconds: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamWriteTimeout?: never } | ({ DropUpstreamResponse: {
+	mode: DropResponseMode,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ MockResponse: {
+	status: number,
+	headers: ([string, string])[],
+	body_bytes: number[],
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ InvalidJson: {
+	body_bytes: number[],
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ IncorrectContentLength: {
+	delta: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ TruncateResponse: {
+	bytes: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ DisconnectDuringUpstreamWrite: {
+	after_bytes: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ DisconnectDuringDownstreamWrite: {
+	after_bytes: number,
+} }) & { DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never };
+
+export type TrafficDirection = "Upstream" | "Downstream";
 
 /**  带顺序、周期和实体版本的实时事件信封。 */
 export type UiEventEnvelope = {

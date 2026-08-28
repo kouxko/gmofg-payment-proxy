@@ -42,6 +42,8 @@ use super::ProtocolPackageRepositoryAdapter;
 use super::common::{app_error, encode_workspace_record};
 use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
 
+pub(super) use http_protocol_pipeline::{JointDocumentEvaluation, JointHttpRuleRuntime};
+
 /// 读取当前安装实例在证书管理页签发的服务端叶子证书。
 ///
 /// 该端口只在 infrastructure 内部流转 TLS 私钥，Workspace 与 IPC 只用 `None` 表示
@@ -111,6 +113,7 @@ pub struct ListenerRuntimeAdapter {
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
     protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
     document_rule_compiler: DocumentRuleCompiler,
+    joint_http_rules: Arc<JointHttpRuleRuntime>,
     external_package_provider:
         Arc<RwLock<Option<Arc<dyn external_relay::ExternalSocketPackageProvider>>>>,
     pipeline_services: Arc<RwLock<Option<RuntimePipelineServices>>>,
@@ -153,6 +156,7 @@ impl ListenerRuntimeAdapter {
             managed_listener_certificates: None,
             protocol_packages,
             document_rule_compiler: DocumentRuleCompiler::new(4),
+            joint_http_rules: Arc::new(JointHttpRuleRuntime::default()),
             external_package_provider: Arc::new(RwLock::new(None)),
             pipeline_services: Arc::new(RwLock::new(None)),
             body_codec_resolver: Arc::new(RwLock::new(None)),
@@ -183,6 +187,10 @@ impl ListenerRuntimeAdapter {
         F: FnOnce() -> AppResult<T> + Send + 'static,
     {
         self.document_rule_compiler.compile(compile).await
+    }
+
+    pub(super) fn joint_http_rules(&self) -> Arc<JointHttpRuleRuntime> {
+        Arc::clone(&self.joint_http_rules)
     }
 
     /// 注入外部协议包在线注册表。

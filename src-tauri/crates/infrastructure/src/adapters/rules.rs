@@ -3,55 +3,76 @@
 //! 规则集合通过 revision/CAS 更新，避免并发编辑丢失；运行时使用不可变快照执行，持久化
 //! 命中计数失败不会反向篡改已经匹配过的网络消息。
 
-use std::{collections::BTreeMap, sync::Arc};
+#[cfg(test)]
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use async_trait::async_trait;
 use chrono::Utc;
+use intercept_proxy_application::{AppError, AppResult, ProxyWorkspace};
+#[cfg(test)]
 use intercept_proxy_application::{
-    AppError, AppResult, FieldValidationViewModel, MessageStage as AppMessageStage,
-    OperationResultViewModel, ProxyWorkspace, RuleAction as AppRuleAction,
-    RuleCondition as AppRuleCondition, RuleDraft as AppRuleDraft,
+    FieldValidationViewModel, MessageStage as AppMessageStage, OperationResultViewModel,
+    RuleAction as AppRuleAction, RuleCondition as AppRuleCondition, RuleDraft as AppRuleDraft,
     RuleDropResponseMode as AppRuleDropResponseMode, RuleId as AppRuleId,
     RuleJitterScope as AppRuleJitterScope, RuleMatchField as AppRuleMatchField,
-    RuleMatchOperator as AppRuleMatchOperator, RuleRepositoryPort, RuleSummaryViewModel,
+    RuleMatchOperator as AppRuleMatchOperator, RuleSummaryViewModel,
     RuleTerminalAction as AppRuleTerminalAction, RuleTrafficDirection as AppRuleTrafficDirection,
-    RuleValidationViewModel, RuleViewModel, SessionId, SessionQueryPort, UiTone,
+    RuleValidationViewModel, RuleViewModel, UiTone,
 };
+#[cfg(test)]
 use intercept_proxy_domain::{
     ChannelId, DropResponseMode, JitterScope, ListenerDataPlane, MatchCondition, MatchField,
-    MatchOperator, MessageStage, Revision, Rule, RuleAction, RuleDraft, RuleEngine, RuleId,
-    RuleRuntimeSnapshot, RuleSetSignature, RuntimeEpoch, TerminalAction, TrafficDirection,
-    validate_rule_draft,
+    MatchOperator, MessageStage, RuleAction, RuleDraft, RuleEngine, RuleId, RuntimeEpoch,
+    TerminalAction, TrafficDirection, validate_rule_draft,
 };
+use intercept_proxy_domain::{Revision, Rule, RuleRuntimeSnapshot, RuleSetSignature};
 use intercept_proxy_product_api::ProductChannel;
 #[cfg(test)]
 use parking_lot::Mutex;
+#[cfg(test)]
 use serde_json::{Map, Value};
 
+#[cfg(test)]
+use crate::AtomicFileExporter;
+#[cfg(test)]
 use crate::files::RULE_IMPORT_MAX_BYTES;
 use crate::{
-    AtomicFileExporter, InfrastructureError, IntoSqlitePersistence, SqliteExecutor, SqliteStore,
-    WorkspaceRecord,
+    InfrastructureError, IntoSqlitePersistence, SqliteExecutor, SqliteStore, WorkspaceRecord,
 };
 
+#[cfg(test)]
+use super::common::json_error;
+#[cfg(test)]
+use super::files::cancelled;
 use super::{
-    common::{app_error, decode_workspace_record, encode_workspace_record, infra, json_error},
-    files::{NativeFileDialog, cancelled},
+    common::{app_error, decode_workspace_record, encode_workspace_record, infra},
+    files::NativeFileDialog,
 };
 
+#[cfg(test)]
 const PERSISTENCE_VERSION_FIELD: &str = "_persistence_version";
+#[cfg(test)]
 const RULE_PERSISTENCE_VERSION: u64 = 1;
+
+fn persisted_rule_error(message: String) -> AppError {
+    app_error(InfrastructureError::PersistenceCorrupt {
+        entity: "rule",
+        message,
+    })
+}
 
 #[derive(Debug)]
 pub struct RuleRepositoryAdapter {
     #[cfg(test)]
     store: Arc<SqliteStore>,
     executor: SqliteExecutor,
+    #[cfg(test)]
     dialog: Arc<dyn NativeFileDialog>,
-    sessions: Arc<dyn SessionQueryPort>,
+    #[cfg(test)]
     exporter: AtomicFileExporter,
     #[cfg(test)]
     operations: Mutex<()>,
+    #[cfg(test)]
     channel_names: BTreeMap<ChannelId, String>,
 }
 
@@ -60,21 +81,25 @@ impl RuleRepositoryAdapter {
     pub fn new(
         persistence: impl IntoSqlitePersistence,
         dialog: Arc<dyn NativeFileDialog>,
-        sessions: Arc<dyn SessionQueryPort>,
         channels: &[ProductChannel],
     ) -> Self {
         let (executor, store) = persistence.into_sqlite_persistence();
         #[cfg(not(test))]
-        drop(store);
+        {
+            drop(store);
+            let _ = (dialog, channels);
+        }
         Self {
             #[cfg(test)]
             store,
             executor,
+            #[cfg(test)]
             dialog,
-            sessions,
+            #[cfg(test)]
             exporter: AtomicFileExporter,
             #[cfg(test)]
             operations: Mutex::new(()),
+            #[cfg(test)]
             channel_names: channels
                 .iter()
                 .map(|channel| {
@@ -94,6 +119,7 @@ impl RuleRepositoryAdapter {
         Self::load_selected_workspace_from(&self.store)
     }
 
+    #[cfg(test)]
     fn load_selected_workspace_from(store: &SqliteStore) -> AppResult<ProxyWorkspace> {
         let snapshot = infra(store.load_workspaces())?;
         let selected_id = snapshot
@@ -109,11 +135,16 @@ impl RuleRepositoryAdapter {
 
     #[cfg(test)]
     fn load(&self) -> AppResult<Vec<Rule>> {
-        Ok(self.load_selected_workspace()?.rules)
+        self.load_selected_workspace()?
+            .http_runtime_rules()
+            .map_err(AppError::from)
     }
 
+    #[cfg(test)]
     fn load_from(store: &SqliteStore) -> AppResult<Vec<Rule>> {
-        Ok(Self::load_selected_workspace_from(store)?.rules)
+        Self::load_selected_workspace_from(store)?
+            .http_runtime_rules()
+            .map_err(AppError::from)
     }
 
     fn load_workspace_for_channel_from(
@@ -171,6 +202,7 @@ impl RuleRepositoryAdapter {
         })
     }
 
+    #[cfg(test)]
     fn save_selected_workspace_to(
         store: &SqliteStore,
         mut workspace: ProxyWorkspace,
@@ -202,9 +234,10 @@ impl RuleRepositoryAdapter {
         Ok(workspace)
     }
 
+    #[cfg(test)]
     fn save_locked_to(store: &SqliteStore, draft: &AppRuleDraft) -> AppResult<Rule> {
         let mut workspace = Self::load_selected_workspace_from(store)?;
-        let mut rules = workspace.rules.clone();
+        let mut rules = workspace.http_runtime_rules()?;
         let creation_order = draft
             .rule_id
             .and_then(|id| {
@@ -242,7 +275,7 @@ impl RuleRepositoryAdapter {
             rules = RuleEngine::new(RuntimeEpoch::new(), rules).rules().to_vec();
         }
         let expected_workspace_revision = workspace.revision.get();
-        workspace.rules = rules;
+        workspace.replace_http_runtime_rules(rules)?;
         Self::save_selected_workspace_to(store, workspace, expected_workspace_revision)?;
         Ok(changed)
     }
@@ -266,6 +299,7 @@ impl RuleRepositoryAdapter {
         Self::toggle_domain_to(&self.store, id, expected_revision, enabled)
     }
 
+    #[cfg(test)]
     fn toggle_domain_to(
         store: &SqliteStore,
         id: AppRuleId,
@@ -273,7 +307,7 @@ impl RuleRepositoryAdapter {
         enabled: bool,
     ) -> AppResult<Rule> {
         let mut workspace = Self::load_selected_workspace_from(store)?;
-        let mut rules = workspace.rules.clone();
+        let mut rules = workspace.http_runtime_rules()?;
         let domain_id = RuleId::from_uuid(id);
         let mut engine = RuleEngine::new(RuntimeEpoch::new(), rules);
         engine
@@ -286,7 +320,7 @@ impl RuleRepositoryAdapter {
             .cloned()
             .expect("domain engine retained toggled rule");
         let expected_workspace_revision = workspace.revision.get();
-        workspace.rules = rules;
+        workspace.replace_http_runtime_rules(rules)?;
         Self::save_selected_workspace_to(store, workspace, expected_workspace_revision)?;
         Ok(changed)
     }
@@ -296,10 +330,11 @@ impl RuleRepositoryAdapter {
         self.executor
             .execute(move |store| {
                 let workspace = Self::load_workspace_for_channel_from(store, &channel)?;
-                Ok(RuleRuntimeSnapshot::with_collection_identity(
+                Ok(RuleRuntimeSnapshot::with_collection_identity_and_order(
                     Some(workspace.id.as_uuid()),
                     workspace.revision.get(),
-                    workspace.rules,
+                    workspace.http_runtime_rules()?,
+                    workspace.http_runtime_rule_execution_order(),
                 ))
             })
             .await
@@ -324,16 +359,18 @@ impl RuleRepositoryAdapter {
                     AppError::new("REVISION_CONFLICT", "规则运行快照缺少 Workspace 标识。")
                 })?;
                 let mut workspace = Self::load_workspace_by_id_from(store, collection_id)?;
+                let current_rules = workspace.http_runtime_rules()?;
                 if snapshot.collection_id != Some(workspace.id.as_uuid())
                     || workspace.revision.get() != snapshot.collection_revision
-                    || RuleSetSignature::from_rules(&workspace.rules) != snapshot.signature
+                    || RuleSetSignature::from_rules(&current_rules) != snapshot.signature
                 {
                     return Err(AppError::new(
                         "REVISION_CONFLICT",
                         "Workspace 或规则集合已在运行快照之后发生变化。",
                     ));
                 }
-                workspace.rules = runtime_rules(&snapshot, &evaluated_rules)?;
+                workspace
+                    .replace_http_runtime_rules(runtime_rules(&snapshot, &evaluated_rules)?)?;
                 let expected_revision = workspace.revision.get();
                 Ok(
                     Self::save_workspace_to(store, workspace, expected_revision)?
@@ -349,32 +386,37 @@ impl RuleRepositoryAdapter {
             .execute(move |store| {
                 let mut workspace = Self::load_workspace_by_id_from(store, collection_id)?;
                 let expected_revision = workspace.revision.get();
-                for rule in &mut workspace.rules {
+                let mut rules = workspace.http_runtime_rules()?;
+                for rule in &mut rules {
                     rule.hit_count = 0;
                     rule.last_hit_at = None;
                 }
+                workspace.replace_http_runtime_rules(rules)?;
                 Self::save_workspace_to(store, workspace, expected_revision).map(|_| ())
             })
             .await
     }
 }
 
+#[cfg(test)]
 mod action_conversion;
 mod conversion;
+#[cfg(test)]
 mod persistence;
+#[cfg(test)]
 mod port;
 
+#[cfg(test)]
 pub(crate) use action_conversion::{action_to_app, action_to_domain};
+#[cfg(test)]
 pub(crate) use conversion::condition_to_app;
 #[cfg(test)]
 pub(crate) use conversion::condition_to_domain;
-use conversion::{
-    app_draft, runtime_rules, summary, to_domain_draft, validation_from_domain, view,
-};
-use persistence::{
-    deserialize_persisted_rule, persisted_rule_error, serialize_persisted_rule,
-    validate_persisted_rule,
-};
+use conversion::runtime_rules;
+#[cfg(test)]
+use conversion::{summary, to_domain_draft, validation_from_domain, view};
+#[cfg(test)]
+use persistence::{deserialize_persisted_rule, serialize_persisted_rule, validate_persisted_rule};
 
 #[cfg(test)]
 #[path = "rules/tests/mod.rs"]

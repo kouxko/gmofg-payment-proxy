@@ -5,7 +5,7 @@ import type {
   ExchangeObservationRecord,
 } from "@/generated/rust-types";
 import { formatTimestamp } from "@/lib/format";
-import { eventCounts, finalOutcome, openedAt } from "./exchange-observation-model";
+import { connectionStatus, eventCounts, openedAt } from "./exchange-observation-model";
 
 interface Props {
   page?: ExchangeObservationPage;
@@ -68,19 +68,19 @@ export function ExchangeObservationList(props: Props) {
               <Table.Column>协议</Table.Column>
               <Table.Column>对端</Table.Column>
               <Table.Column>收到 / 发送 / 失败</Table.Column>
-              <Table.Column>结果</Table.Column>
+              <Table.Column>连接状态</Table.Column>
               <Table.Column>Exchange ID</Table.Column>
             </Table.Header>
             <Table.Body renderEmptyState={() => <div className="p-10 text-center text-sm text-[var(--telemetry-muted)]">{props.loading ? "正在查询运行记录…" : "当前工作区还没有运行记录"}</div>}>
               {(props.page?.rows ?? []).map((record) => {
                 const counts = eventCounts(record);
-                const outcome = finalOutcome(record);
+                const status = connectionStatus(record);
                 return <Table.Row key={record.exchange_id} id={record.exchange_id}>
                   <Table.Cell><Button id={`exchange-observation-row-${record.exchange_id}`} size="sm" variant="ghost" onPress={() => props.onSelect(record)}>{openedAt(record) ? formatTimestamp(openedAt(record)!) : "未知"}</Button></Table.Cell>
                   <Table.Cell><Chip size="sm" color="accent" variant="soft">{record.protocol.toUpperCase()}</Chip></Table.Cell>
                   <Table.Cell><code className="text-xs">{record.peer_address}</code></Table.Cell>
                   <Table.Cell>{counts.received} / {counts.sent} / {counts.failed}</Table.Cell>
-                  <Table.Cell><Chip size="sm" color={outcome === "失败" ? "danger" : outcome === "连接中" ? "warning" : "success"} variant="soft">{outcome}</Chip></Table.Cell>
+                  <Table.Cell><Chip size="sm" color={status === "异常结束" ? "danger" : status === "保持连接" ? "accent" : "success"} variant="soft">{status}</Chip></Table.Cell>
                   <Table.Cell><code className="text-xs">{record.exchange_id}</code></Table.Cell>
                 </Table.Row>;
               })}

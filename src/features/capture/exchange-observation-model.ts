@@ -35,7 +35,7 @@ export function eventLabel(event: ExchangeObservationEvent): string {
     case "received": return "收到";
     case "sent": return "发送";
     case "failed": return `失败 · ${event.stage}`;
-    case "closed": return event.outcome === "completed" ? "连接结束" : "连接失败结束";
+    case "closed": return event.outcome === "completed" ? "正常结束" : "异常结束";
   }
 }
 
@@ -43,10 +43,12 @@ export function openedAt(record: ExchangeObservationRecord): string | undefined 
   return record.events.find((event) => event.event === "opened")?.observed_at;
 }
 
-export function finalOutcome(record: ExchangeObservationRecord): string {
+export type ConnectionStatus = "保持连接" | "正常结束" | "异常结束";
+
+export function connectionStatus(record: ExchangeObservationRecord): ConnectionStatus {
   const closed = [...record.events].reverse().find((event) => event.event === "closed");
-  if (!closed || closed.event !== "closed") return "连接中";
-  return closed.outcome === "completed" ? "已结束" : "失败";
+  if (!closed || closed.event !== "closed") return "保持连接";
+  return closed.outcome === "completed" ? "正常结束" : "异常结束";
 }
 
 export function eventCounts(record: ExchangeObservationRecord) {

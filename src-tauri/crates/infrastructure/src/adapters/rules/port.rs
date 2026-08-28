@@ -1,16 +1,14 @@
 use super::{
     AppError, AppMessageStage, AppResult, AppRuleDraft, AppRuleId, BTreeMap,
-    FieldValidationViewModel, ListenerDataPlane, MatchCondition, OperationResultViewModel,
-    RULE_IMPORT_MAX_BYTES, Rule, RuleEngine, RuleRepositoryAdapter, RuleRepositoryPort,
-    RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SessionId, Value,
-    app_draft, async_trait, cancelled, condition_to_app, deserialize_persisted_rule, infra,
-    json_error, serialize_persisted_rule, summary, to_domain_draft, validate_persisted_rule,
-    validate_rule_draft, validation_from_domain, view,
+    FieldValidationViewModel, ListenerDataPlane, OperationResultViewModel, RULE_IMPORT_MAX_BYTES,
+    Rule, RuleEngine, RuleRepositoryAdapter, RuleSummaryViewModel, RuleValidationViewModel,
+    RuleViewModel, RuntimeEpoch, Value, cancelled, deserialize_persisted_rule, infra, json_error,
+    summary, to_domain_draft, validate_persisted_rule, validate_rule_draft, validation_from_domain,
+    view,
 };
 
-#[async_trait]
-impl RuleRepositoryPort for RuleRepositoryAdapter {
-    async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>> {
+impl RuleRepositoryAdapter {
+    pub(crate) async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>> {
         let rules = self
             .executor
             .execute(RuleRepositoryAdapter::load_from)
@@ -21,7 +19,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
             .collect()
     }
 
-    async fn get(&self, rule_id: AppRuleId) -> AppResult<RuleViewModel> {
+    pub(crate) async fn get(&self, rule_id: AppRuleId) -> AppResult<RuleViewModel> {
         let rule = self
             .executor
             .execute(move |store| {
@@ -36,11 +34,8 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         view(&rule, &self.channel_names)
     }
 
-    async fn new_http_draft(
-        &self,
-        channel: intercept_proxy_domain::ChannelId,
-    ) -> AppResult<AppRuleDraft> {
-        Ok(AppRuleDraft {
+    pub(crate) fn new_http_draft(channel: intercept_proxy_domain::ChannelId) -> AppRuleDraft {
+        AppRuleDraft {
             rule_id: None,
             expected_revision: None,
             name: "新建规则".into(),
@@ -52,34 +47,13 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
             conditions: Vec::new(),
             actions: Vec::new(),
             one_shot: false,
-        })
+        }
     }
 
-    async fn create_from_session(&self, session_id: SessionId) -> AppResult<AppRuleDraft> {
-        let session = self.sessions.get(session_id).await?;
-        let condition = MatchCondition::Field {
-            field: intercept_proxy_domain::MatchField::PathOrRequestType,
-            operator: intercept_proxy_domain::MatchOperator::Equals(session.summary.target.clone()),
-        };
-        Ok(AppRuleDraft {
-            rule_id: None,
-            expected_revision: None,
-            name: format!("匹配 {}", session.summary.target),
-            description: format!(
-                "基于请求 {} 创建，请确认动作后保存。",
-                session.summary.request_id
-            ),
-            enabled: true,
-            priority: 100,
-            channel: Some(session.summary.channel),
-            stage: Some(AppMessageStage::Request),
-            conditions: vec![condition_to_app(&condition)],
-            actions: Vec::new(),
-            one_shot: false,
-        })
-    }
-
-    async fn validate(&self, draft: &AppRuleDraft) -> AppResult<RuleValidationViewModel> {
+    pub(crate) async fn validate(
+        &self,
+        draft: &AppRuleDraft,
+    ) -> AppResult<RuleValidationViewModel> {
         let workspace = self
             .executor
             .execute(RuleRepositoryAdapter::load_selected_workspace_from)
@@ -105,7 +79,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
                 warnings: Vec::new(),
             });
         }
-        let rules = workspace.rules;
+        let rules = workspace.http_runtime_rules()?;
         let creation_order = rules
             .iter()
             .map(|rule| rule.created_order)
@@ -138,7 +112,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         }
     }
 
-    async fn save(&self, draft: AppRuleDraft) -> AppResult<RuleViewModel> {
+    pub(crate) async fn save(&self, draft: AppRuleDraft) -> AppResult<RuleViewModel> {
         let saved = self
             .executor
             .execute(move |store| RuleRepositoryAdapter::save_locked_to(store, &draft))
@@ -146,56 +120,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         view(&saved, &self.channel_names)
     }
 
-    async fn copy(&self, rule_id: AppRuleId) -> AppResult<RuleViewModel> {
-        let saved = self
-            .executor
-            .execute(move |store| {
-                let source = RuleRepositoryAdapter::load_from(store)?
-                    .into_iter()
-                    .find(|rule| rule.id.as_uuid() == rule_id)
-                    .ok_or_else(|| {
-                        AppError::new("RULE_INVALID", "规则不存在。").entity(rule_id.to_string())
-                    })?;
-                let mut draft = app_draft(&source)?;
-                draft.rule_id = None;
-                draft.expected_revision = None;
-                draft.name = format!("{}（副本）", draft.name);
-                RuleRepositoryAdapter::save_locked_to(store, &draft)
-            })
-            .await?;
-        view(&saved, &self.channel_names)
-    }
-
-    async fn delete(
-        &self,
-        rule_id: AppRuleId,
-        expected_revision: u64,
-    ) -> AppResult<OperationResultViewModel> {
-        self.executor
-            .execute(move |store| {
-                let mut workspace = RuleRepositoryAdapter::load_selected_workspace_from(store)?;
-                let rule = workspace
-                    .rules
-                    .iter()
-                    .find(|rule| rule.id.as_uuid() == rule_id)
-                    .ok_or_else(|| AppError::new("RULE_INVALID", "规则不存在。"))?;
-                if rule.revision.get() != expected_revision {
-                    return Err(AppError::new("REVISION_CONFLICT", "规则已被其他操作更新。"));
-                }
-                let expected_workspace_revision = workspace.revision.get();
-                workspace.rules.retain(|rule| rule.id.as_uuid() != rule_id);
-                RuleRepositoryAdapter::save_selected_workspace_to(
-                    store,
-                    workspace,
-                    expected_workspace_revision,
-                )?;
-                Ok(())
-            })
-            .await?;
-        Ok(OperationResultViewModel::success("规则已删除。"))
-    }
-
-    async fn toggle(
+    pub(crate) async fn toggle(
         &self,
         rule_id: AppRuleId,
         expected_revision: u64,
@@ -210,7 +135,7 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         view(&changed, &self.channel_names)
     }
 
-    async fn import(&self) -> AppResult<OperationResultViewModel> {
+    pub(crate) async fn import(&self) -> AppResult<OperationResultViewModel> {
         let selected = self
             .executor
             .execute(RuleRepositoryAdapter::load_selected_workspace_from)
@@ -243,7 +168,9 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
                         "导入期间当前 Workspace 已切换或被更新。",
                     ));
                 }
-                current.rules = RuleEngine::new(RuntimeEpoch::new(), rules).rules().to_vec();
+                current.replace_http_runtime_rules(
+                    RuleEngine::new(RuntimeEpoch::new(), rules).rules().to_vec(),
+                )?;
                 RuleRepositoryAdapter::save_selected_workspace_to(
                     store,
                     current,
@@ -255,26 +182,5 @@ impl RuleRepositoryPort for RuleRepositoryAdapter {
         Ok(OperationResultViewModel::success(format!(
             "已导入 {imported_count} 条规则。"
         )))
-    }
-
-    async fn export(&self) -> AppResult<OperationResultViewModel> {
-        let Some(selection) = self.dialog.choose_save_file("rules_json", "rules.json")? else {
-            return Ok(cancelled("已取消规则导出。"));
-        };
-        let rules = self
-            .executor
-            .execute(RuleRepositoryAdapter::load_from)
-            .await?
-            .iter()
-            .map(serialize_persisted_rule)
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| json_error("规则导出序列化失败", error))?;
-        let bytes = serde_json::to_vec_pretty(&rules)
-            .map_err(|error| json_error("规则导出序列化失败", error))?;
-        infra(
-            self.exporter
-                .write(&selection.path, &bytes, selection.overwrite_confirmed),
-        )?;
-        Ok(OperationResultViewModel::success("规则已导出。"))
     }
 }

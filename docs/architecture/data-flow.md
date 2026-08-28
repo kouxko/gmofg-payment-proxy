@@ -203,15 +203,19 @@ Writer 必须循环处理底层 partial write；只有整个 Context/chunk 和 f
 - serde `deny_unknown_fields` 拒绝不会生效的配置字段。
 - Workspace 校验 HTTP Body 模式、协议包身份、Socket Topology、processing 和安全组合。
 - Document Schema 校验 ID、版本、标题、字段数量、名称唯一性和值类型。
-- Document 规则校验 Listener/包/Schema/阶段冻结绑定、条件、动作、资源上限和 revision。
-- HTTP 标准规则领域模型校验 stage、匹配字段、动作、终止语义和流量方向。
+- 统一规则冻结 Listener、content type 和 Document package/Schema 绑定；stage 可以更新，但目标阶段
+  必须重新校验完整 HTTP/Document 内容、条件、动作、资源上限和 revision。
+- HTTP 内容按五个统一阶段校验匹配字段、动作、终止语义和流量方向；`app_to_proxy` 与
+  `upstream_to_proxy` 是 Document-only 阶段，拒绝普通 HTTP 条件和动作。
 
 ### 9.2 Application
 
 - Use Case 执行乐观锁、确认操作、跨仓储引用和当前 Listener/协议包状态校验。
-- `rule_capabilities` 按 TLS/Request/Response 返回合法匹配字段和动作，方向敏感动作带固定方向。
-- 草稿命令只生成矩阵允许的字段/动作；保存时再次调用相同能力判断和领域校验。
-- 协议规则 capability catalog 绑定 Listener、精确包版本、Schema 和阶段，HTTP/Socket 不能串用。
+- `rule_editor_context` 按五个统一阶段返回合法匹配字段和动作，方向敏感动作带固定方向。
+- 草稿命令只生成矩阵允许的字段/动作；保存时不依赖 Listener 运行状态，再次调用同一阶段能力
+  判断和领域校验。
+- Document capability 绑定 Listener、精确包版本和 Schema，并按目标阶段重新验证，HTTP/Socket
+  不能串用。
 
 ### 9.3 Infrastructure 与 Runtime
 

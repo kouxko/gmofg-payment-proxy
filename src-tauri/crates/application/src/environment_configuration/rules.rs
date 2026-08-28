@@ -24,6 +24,8 @@ pub(super) struct HttpRuleTemplate {
     stage: HttpRuleStage,
     conditions: Vec<HttpMatchConditionTemplate>,
     actions: Vec<HttpRuleActionTemplate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    document: Option<HttpDocumentRuleTemplate>,
     one_shot: bool,
 }
 
@@ -31,21 +33,24 @@ impl HttpRuleTemplate {
     pub(super) fn listener_alias(&self) -> &str {
         &self.listener_alias
     }
+}
 
-    pub(crate) const fn domain_stage(&self) -> intercept_proxy_domain::MessageStage {
-        match self.stage {
-            HttpRuleStage::Request => intercept_proxy_domain::MessageStage::Request,
-            HttpRuleStage::Response => intercept_proxy_domain::MessageStage::Response,
-            HttpRuleStage::TlsHandshake => intercept_proxy_domain::MessageStage::TlsHandshake,
-        }
-    }
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpDocumentRuleTemplate {
+    package: ProtocolPackageExactRef,
+    schema_version: u32,
+    conditions: Vec<DocumentCondition>,
+    actions: Vec<DocumentAction>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum HttpRuleStage {
-    Request,
-    Response,
+    AppToProxy,
+    ProxyToUpstream,
+    UpstreamToProxy,
+    ProxyToApp,
     TlsHandshake,
 }
 
@@ -392,4 +397,48 @@ enum ProtocolRuleStage {
     ProxyToUpstream,
     UpstreamToProxy,
     ProxyToApp,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub(super) enum RuleTemplate {
+    Http(HttpRuleTemplate),
+    Socket(ProtocolDocumentRuleTemplate),
+}
+
+impl RuleTemplate {
+    pub(super) fn existing_rule_id(&self) -> Option<Uuid> {
+        match self {
+            Self::Http(rule) => rule.existing_rule_id,
+            Self::Socket(rule) => rule.existing_rule_id,
+        }
+    }
+
+    pub(super) fn listener_alias(&self) -> &str {
+        match self {
+            Self::Http(rule) => rule.listener_alias(),
+            Self::Socket(rule) => rule.listener_alias(),
+        }
+    }
+
+    pub(super) fn package_ref(&self) -> Option<&ProtocolPackageExactRef> {
+        match self {
+            Self::Http(rule) => rule.document.as_ref().map(|document| &document.package),
+            Self::Socket(rule) => Some(rule.package_ref()),
+        }
+    }
+
+    pub(super) const fn as_http(&self) -> Option<&HttpRuleTemplate> {
+        match self {
+            Self::Http(rule) => Some(rule),
+            Self::Socket(_) => None,
+        }
+    }
+
+    pub(super) const fn as_socket(&self) -> Option<&ProtocolDocumentRuleTemplate> {
+        match self {
+            Self::Http(_) => None,
+            Self::Socket(rule) => Some(rule),
+        }
+    }
 }

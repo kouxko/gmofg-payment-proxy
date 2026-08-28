@@ -15,6 +15,7 @@ use tempfile::NamedTempFile;
 
 use crate::InfrastructureError;
 
+#[cfg(test)]
 pub(crate) const RULE_IMPORT_MAX_BYTES: u64 = 8 * 1024 * 1024;
 pub(crate) const PKCS12_IMPORT_MAX_BYTES: u64 = 16 * 1024 * 1024;
 pub(crate) const CA_IMPORT_MAX_BYTES: u64 = 2 * 1024 * 1024;

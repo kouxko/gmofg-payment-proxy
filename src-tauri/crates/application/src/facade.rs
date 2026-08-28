@@ -7,6 +7,8 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use chrono::Utc;
 
+#[cfg(test)]
+use crate::RuleRepositoryPort;
 use crate::{
     AndroidControlPort, AppError, AppResult, BreakpointCoordinator, BreakpointValidationPort,
     BuiltinProtocolPackagePort, CertificateOverviewViewModel, CertificateServicePort,
@@ -15,8 +17,8 @@ use crate::{
     ListenerRuntimePort, OperationResultViewModel, ProtectedSecretPort,
     ProtocolPackageApplicationServices, ProtocolPackageCompilerPort, ProtocolPackageImportPort,
     ProtocolPackagePortabilityPort, ProtocolPackageStorePort, ProtocolPackageUsageQueryPort,
-    RuleRepositoryPort, SessionQueryPort, SettingsRepositoryPort, SettingsViewModel,
-    UiEventPayload, WorkspaceRepositoryPort,
+    SessionQueryPort, SettingsRepositoryPort, SettingsViewModel, UiEventPayload,
+    WorkspaceRepositoryPort,
 };
 
 mod android;
@@ -39,6 +41,7 @@ mod protocol_package_portability;
 pub use protocol_package_portability::validate_portable_protocol_bindings;
 mod protocol_packages;
 mod protocol_rule_values;
+#[cfg(test)]
 mod protocol_rules;
 mod rule_capabilities;
 mod rules;
@@ -46,6 +49,8 @@ mod secrets;
 mod settings;
 pub use protocol_rule_values::parse_protocol_rule_value;
 mod traffic;
+mod unified_rule_editor;
+mod unified_rules;
 mod validation;
 mod workspaces;
 
@@ -60,6 +65,7 @@ pub struct Application {
     sessions: Arc<dyn SessionQueryPort>,
     breakpoints: Arc<BreakpointCoordinator>,
     breakpoint_validation: Arc<dyn BreakpointValidationPort>,
+    #[cfg(test)]
     rules: Arc<dyn RuleRepositoryPort>,
     faults: Arc<dyn FaultServicePort>,
     certificates: Arc<dyn CertificateServicePort>,
@@ -121,6 +127,7 @@ pub struct ApplicationDependencies {
     pub sessions: Arc<dyn SessionQueryPort>,
     pub breakpoints: Arc<BreakpointCoordinator>,
     pub breakpoint_validation: Arc<dyn BreakpointValidationPort>,
+    #[cfg(test)]
     pub rules: Arc<dyn RuleRepositoryPort>,
     pub faults: Arc<dyn FaultServicePort>,
     pub certificates: Arc<dyn CertificateServicePort>,
@@ -182,6 +189,7 @@ impl Application {
             sessions: dependencies.sessions,
             breakpoints: dependencies.breakpoints,
             breakpoint_validation: dependencies.breakpoint_validation,
+            #[cfg(test)]
             rules: dependencies.rules,
             faults: dependencies.faults,
             certificates: dependencies.certificates,

@@ -59,23 +59,7 @@ impl AndroidAdbAdapter {
     pub(super) async fn run(&self, args: Vec<String>, duration: Duration) -> AppResult<AdbOutput> {
         let executable = self.adb()?.to_path_buf();
         let runner = Arc::clone(&self.runner);
-        let output = timeout(duration, runner.run(&executable, &args))
-            .await
-            .map_err(|_| AppError::new("ANDROID_ADB_TIMEOUT", "adb 操作超时。"))?
-            .map_err(|error| {
-                AppError::new("ANDROID_ADB_EXEC_FAILED", format!("无法执行 adb：{error}"))
-            })?;
-        if !output.success {
-            let detail = non_empty(&output.stderr, &output.stdout);
-            let code = if is_device_transport_unreachable(detail) {
-                "ANDROID_ADB_DEVICE_UNREACHABLE"
-            } else {
-                "ANDROID_ADB_COMMAND_FAILED"
-            };
-            return Err(AppError::new(code, format!("adb 命令失败：{detail}"))
-                .retryable("请检查设备是否在线、已授权且 Companion 状态正常。"));
-        }
-        Ok(output)
+        run_adb_owned(executable, runner, args, duration).await
     }
 
     pub(super) async fn run_for_serial(
@@ -98,14 +82,56 @@ impl AndroidAdbAdapter {
         serial: &str,
         args: &[&str],
     ) -> AppResult<AdbOutput> {
-        match self.run_for_serial(serial, args, COMMAND_TIMEOUT).await {
-            Err(error) if is_stale_adb_transport_error(&error) => Err(AppError::new(
-                "ANDROID_ADB_SELECTED_TRANSPORT_STALE",
-                format!("选中设备 {serial} 的 ADB 转发被陈旧 transport 干扰；未修改其他设备连接。"),
-            )
-            .retryable("请刷新设备列表或显式清理离线 ADB 连接后重试。")),
-            result => result,
-        }
+        run_forward_owned(
+            self.adb()?.to_path_buf(),
+            Arc::clone(&self.runner),
+            serial.to_owned(),
+            args.iter().map(|value| (*value).to_owned()).collect(),
+        )
+        .await
+    }
+}
+
+async fn run_adb_owned(
+    executable: PathBuf,
+    runner: Arc<dyn AdbCommandRunner>,
+    args: Vec<String>,
+    duration: Duration,
+) -> AppResult<AdbOutput> {
+    let output = timeout(duration, runner.run(&executable, &args))
+        .await
+        .map_err(|_| AppError::new("ANDROID_ADB_TIMEOUT", "adb 操作超时。"))?
+        .map_err(|error| {
+            AppError::new("ANDROID_ADB_EXEC_FAILED", format!("无法执行 adb：{error}"))
+        })?;
+    if !output.success {
+        let detail = non_empty(&output.stderr, &output.stdout);
+        let code = if is_device_transport_unreachable(detail) {
+            "ANDROID_ADB_DEVICE_UNREACHABLE"
+        } else {
+            "ANDROID_ADB_COMMAND_FAILED"
+        };
+        return Err(AppError::new(code, format!("adb 命令失败：{detail}"))
+            .retryable("请检查设备是否在线、已授权且 Companion 状态正常。"));
+    }
+    Ok(output)
+}
+
+pub(super) async fn run_forward_owned(
+    executable: PathBuf,
+    runner: Arc<dyn AdbCommandRunner>,
+    serial: String,
+    args: Vec<String>,
+) -> AppResult<AdbOutput> {
+    let mut owned = vec!["-s".into(), serial.clone()];
+    owned.extend(args);
+    match run_adb_owned(executable, runner, owned, COMMAND_TIMEOUT).await {
+        Err(error) if is_stale_adb_transport_error(&error) => Err(AppError::new(
+            "ANDROID_ADB_SELECTED_TRANSPORT_STALE",
+            format!("选中设备 {serial} 的 ADB 转发被陈旧 transport 干扰；未修改其他设备连接。"),
+        )
+        .retryable("请刷新设备列表或显式清理离线 ADB 连接后重试。")),
+        result => result,
     }
 }
 

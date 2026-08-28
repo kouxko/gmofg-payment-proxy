@@ -2,9 +2,9 @@ package com.interceptproxy.vpn
 
 import org.json.JSONObject
 
-/** 桌面与 Companion 共用的 v1 长度前缀 JSON 信封。 */
+/** 桌面与 Companion 共用的 v2 长度前缀 JSON 信封。 */
 object ControlProtocol {
-    const val VERSION = 1
+    const val VERSION = 2
     const val MAX_FRAME_BYTES = 1024 * 1024
     const val SOCKET_NAME = "intercept_proxy_vpn"
 
@@ -70,6 +70,7 @@ object ControlProtocol {
         "stop",
         "emergency_restore",
         "status",
+        "heartbeat",
     )
     private const val ROOT_UID = 0
     private const val SHELL_UID = 2000

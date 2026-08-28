@@ -19,10 +19,12 @@ async fn frozen_snapshot_ignores_later_package_reinstall_and_workspace_edits() {
     }));
     let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        protocol_rules: vec![rule(&listener, 20, 2), rule(&listener, 10, 1)],
-        protocol_rule_created_order_high_water: 2,
+        rule_created_order_high_water: 2,
         ..ProxyWorkspace::default()
     };
+    workspace
+        .replace_document_runtime_rules(vec![rule(&listener, 20, 2), rule(&listener, 10, 1)])
+        .unwrap();
     workspace.validate().unwrap();
     let runtime = test_listener_runtime_with_packages(store, repository.clone());
     let snapshot = ListenerRuntimePlanBuilder::new(&runtime)
@@ -43,8 +45,10 @@ async fn frozen_snapshot_ignores_later_package_reinstall_and_workspace_edits() {
     let replacement = repository
         .freeze_for_listener_start(&snapshot_package())
         .unwrap();
-    workspace.protocol_rules.clear();
-    workspace.protocol_rule_created_order_high_water = 0;
+    workspace
+        .replace_document_runtime_rules(Vec::new())
+        .unwrap();
+    workspace.rule_created_order_high_water = 0;
     workspace.listeners[0].name = "edited draft".into();
 
     assert_ne!(replacement.generation(), frozen_generation);

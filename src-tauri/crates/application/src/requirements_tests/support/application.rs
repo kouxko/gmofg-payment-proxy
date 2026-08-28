@@ -105,6 +105,20 @@ pub(in crate::requirements_tests) fn application_with_workspace_ports(
     .0
 }
 
+pub(in crate::requirements_tests) fn application_with_workspace_ports_and_listener_runtime(
+    ports: Arc<FakePorts>,
+    workspaces: Arc<InMemoryWorkspaceStore>,
+    listener_runtime: Arc<dyn ListenerRuntimePort>,
+) -> Application {
+    application_with_workspace_configuration_packages_and_runtime(
+        ports,
+        workspaces,
+        Arc::new(NoopApplicationConfigurationStore),
+        listener_runtime,
+    )
+    .0
+}
+
 pub(in crate::requirements_tests) fn application_with_environment_preview_ports(
     ports: Arc<FakePorts>,
     workspaces: Arc<dyn WorkspaceRepositoryPort>,

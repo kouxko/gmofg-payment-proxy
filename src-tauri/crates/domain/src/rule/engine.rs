@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::Infallible};
 
 use chrono::{DateTime, Utc};
 
@@ -115,13 +115,52 @@ impl RuleEngine {
     }
 
     pub fn evaluate(&mut self, context: &MatchContext<'_>, now: DateTime<Utc>) -> RuleEvaluation {
+        self.evaluate_with_gate(context, now, |_| Ok::<_, Infallible>(true))
+            .expect("an infallible rule gate cannot fail")
+    }
+
+    /// Evaluates the ordinary HTTP conditions and an additional per-rule gate as one atomic match.
+    ///
+    /// The gate runs only after all ordinary conditions match. A false gate does not consume
+    /// `NthHit`, increment hit metadata, or disable a one-shot rule. If the gate fails, no rule
+    /// metadata is committed; callers can therefore discard any private working value mutated by
+    /// the gate and preserve all-or-nothing execution across typed Document and HTTP actions.
+    pub fn evaluate_with_gate<E>(
+        &mut self,
+        context: &MatchContext<'_>,
+        now: DateTime<Utc>,
+        gate: impl FnMut(&Rule) -> Result<bool, E>,
+    ) -> Result<RuleEvaluation, E> {
+        self.evaluate_with_gate_in_order(context, now, &[], gate)
+    }
+
+    pub fn evaluate_with_gate_in_order<E>(
+        &mut self,
+        context: &MatchContext<'_>,
+        now: DateTime<Utc>,
+        execution_order: &[RuleId],
+        mut gate: impl FnMut(&Rule) -> Result<bool, E>,
+    ) -> Result<RuleEvaluation, E> {
         if self.runtime_epoch != Some(context.runtime_epoch) {
             self.restart(context.runtime_epoch);
         }
         let mut snapshot = self.rules.clone();
-        snapshot.sort_by_key(|rule| (rule.priority, rule.created_order, rule.id));
+        let order = execution_order
+            .iter()
+            .enumerate()
+            .map(|(index, rule_id)| (*rule_id, index))
+            .collect::<HashMap<_, _>>();
+        snapshot.sort_by_key(|rule| {
+            (
+                order.get(&rule.id).copied().unwrap_or(usize::MAX),
+                rule.priority,
+                rule.created_order,
+                rule.id,
+            )
+        });
         let mut evaluation = RuleEvaluation::default();
         let mut hit_ids = Vec::new();
+        let counters_before_evaluation = self.counters.clone();
 
         for rule in snapshot.iter().filter(|rule| rule.enabled) {
             if rule
@@ -132,28 +171,44 @@ impl RuleEngine {
             {
                 continue;
             }
+            let counters_before_rule = self.counters.clone();
             match self.matches_rule(rule, context) {
-                Ok(true) => {
-                    hit_ids.push(rule.id);
-                    let mut executed = Vec::new();
-                    for action in &rule.actions {
-                        executed.push(action.clone());
-                        evaluation.composed_actions.push(action.clone());
-                        if let RuleAction::Terminal(terminal) = action {
-                            evaluation.terminal_action = Some(terminal.clone());
+                Ok(true) => match gate(rule) {
+                    Ok(true) => {
+                        hit_ids.push(rule.id);
+                        let mut executed = Vec::new();
+                        for action in &rule.actions {
+                            executed.push(action.clone());
+                            evaluation.composed_actions.push(action.clone());
+                            if let RuleAction::Terminal(terminal) = action {
+                                evaluation.terminal_action = Some(terminal.clone());
+                                break;
+                            }
+                        }
+                        evaluation.traces.push(RuleTrace {
+                            rule_id: rule.id,
+                            matched: true,
+                            reason: "全部匹配条件满足".into(),
+                            actions: executed,
+                        });
+                        if evaluation.terminal_action.is_some() {
                             break;
                         }
                     }
-                    evaluation.traces.push(RuleTrace {
-                        rule_id: rule.id,
-                        matched: true,
-                        reason: "全部匹配条件满足".into(),
-                        actions: executed,
-                    });
-                    if evaluation.terminal_action.is_some() {
-                        break;
+                    Ok(false) => {
+                        self.counters = counters_before_rule;
+                        evaluation.traces.push(RuleTrace {
+                            rule_id: rule.id,
+                            matched: false,
+                            reason: "扩展匹配条件不满足".into(),
+                            actions: Vec::new(),
+                        });
                     }
-                }
+                    Err(error) => {
+                        self.counters = counters_before_evaluation;
+                        return Err(error);
+                    }
+                },
                 Ok(false) => evaluation.traces.push(RuleTrace {
                     rule_id: rule.id,
                     matched: false,
@@ -169,7 +224,7 @@ impl RuleEngine {
             }
         }
         self.commit_hits(hit_ids, now);
-        evaluation
+        Ok(evaluation)
     }
 
     #[must_use]

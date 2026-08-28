@@ -134,6 +134,20 @@ export function ProfileBasicsCard({
             </Switch.Content>
           </Switch>
         </div>
+        <div className="col-span-2 flex items-end max-[760px]:col-span-1">
+          <Switch
+            isSelected={draft.stop_vpn_on_control_loss}
+            onChange={(stopOnControlLoss) => onChange({
+              ...draft,
+              stop_vpn_on_control_loss: stopOnControlLoss,
+            })}
+          >
+            <Switch.Content>
+              <Switch.Control><Switch.Thumb /></Switch.Control>
+              <span>ADB 或桌面控制失联 5 秒后自动关闭 VPN</span>
+            </Switch.Content>
+          </Switch>
+        </div>
       </Card.Content>
     </Card>
   );

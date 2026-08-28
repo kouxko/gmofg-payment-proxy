@@ -1,5 +1,24 @@
 use super::*;
 
+fn assert_environment_commit_event(
+    event: &intercept_proxy_application::UiEventEnvelope,
+    terminal: &Value,
+) {
+    assert_eq!(
+        event.entity_id.as_deref(),
+        terminal["terminal_result"]["workspace_id"].as_str()
+    );
+    assert_eq!(
+        event.entity_revision,
+        terminal["terminal_result"]["revision"].as_u64()
+    );
+    assert!(matches!(
+        event.payload,
+        intercept_proxy_application::UiEventPayload::SnapshotRequired { ref reason }
+            if reason == "environment_configuration_committed"
+    ));
+}
+
 #[tokio::test(flavor = "current_thread")]
 async fn production_ports_commit_minimal_new_workspace_with_builtin_package_inventory() {
     let _guard = APPLICATION_HOST_LOCK.lock().await;
@@ -35,6 +54,14 @@ async fn production_ports_commit_minimal_new_workspace_with_builtin_package_inve
     let confirmation_token = created["confirmation_token"]
         .as_str()
         .expect("confirmation token");
+    let event_cursor = application
+        .app_bootstrap()
+        .await
+        .expect("read pre-commit event cursor")
+        .event_cursor;
+    let mut events = application
+        .app_subscribe_events(event_cursor)
+        .expect("subscribe before environment commit");
 
     let queued = call(
         &server,
@@ -70,6 +97,11 @@ async fn production_ports_commit_minimal_new_workspace_with_builtin_package_inve
     .expect("production apply reaches terminal state");
     assert_eq!(terminal["status"], "committed", "{terminal}");
     assert_eq!(terminal["terminal_result"]["result"], "committed");
+    let committed_event = tokio::time::timeout(Duration::from_secs(1), events.live.recv())
+        .await
+        .expect("successful environment commit publishes an application event")
+        .expect("environment commit event remains subscribed");
+    assert_environment_commit_event(&committed_event, &terminal);
 
     server.shutdown().await;
     host.shutdown().await.expect("shutdown production Host");
@@ -209,7 +241,7 @@ fn full_resource_candidate() -> Value {
         "mode":"scripted",
         "settings":{"package":{"id":"iso8583-ascii-standard","version":"1.0.0"}},
     });
-    value["workspace"]["protocol_rules"][0]["package"] =
+    value["workspace"]["rules"][14]["package"] =
         json!({"id":"iso8583-ascii-standard","version":"1.0.0"});
     value["materials"] = json!({"certificates":[],"secrets":[]});
     value

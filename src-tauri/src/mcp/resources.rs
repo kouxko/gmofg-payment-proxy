@@ -96,7 +96,7 @@ pub fn list() -> Vec<Resource> {
             )
             .with_mime_type("text/markdown"),
         Resource::new(TOOL_REFERENCE_URI, "tool-reference")
-            .with_title("Complete MCP tool reference: 37 reads and 5 environment tools")
+            .with_title("Complete MCP tool reference: 36 reads and 5 environment tools")
             .with_description(
                 "Arguments, successful structured results, errors, paging, retention and evidence boundaries for every public tool.",
             )

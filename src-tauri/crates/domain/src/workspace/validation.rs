@@ -7,8 +7,8 @@ use super::{
     SocketPayloadProcessing, SocketTopology,
 };
 use crate::{
-    MAX_JAVASCRIPT_SAFE_INTEGER, MAX_PROTOCOL_DOCUMENT_RULES, ProtocolDocumentRuleDefinition,
-    ProtocolRuleStage,
+    MAX_JAVASCRIPT_SAFE_INTEGER, MAX_PROTOCOL_DOCUMENT_RULES, RuleContent, RuleDefinition,
+    RuleStage,
 };
 
 mod listener;
@@ -22,75 +22,46 @@ pub(super) fn validate_workspace_references(
     listener_ids: &BTreeSet<ListenerId>,
     error: &mut DomainError,
 ) {
-    unique_ids(workspace.rules.iter().map(|item| item.id), "rules", error);
-    for (index, rule) in workspace.rules.iter().enumerate() {
-        let Some(channel) = &rule.channel else {
-            push_field_error(
-                error,
-                format!("rules.{index}.channel"),
-                "普通 HTTP 规则必须绑定单个 HTTP 代理入口",
-            );
-            continue;
-        };
-        let listener = workspace
-            .listeners
-            .iter()
-            .find(|listener| listener.id.to_string() == channel.as_str());
-        match listener {
-            Some(listener) if matches!(listener.data_plane, ListenerDataPlane::Http(_)) => {}
-            Some(_) => push_field_error(
-                error,
-                format!("rules.{index}.channel"),
-                "普通 HTTP 规则只能绑定 HTTP 代理入口",
-            ),
-            None => push_field_error(
-                error,
-                format!("rules.{index}.channel"),
-                "规则通道必须引用当前 Workspace 中存在的代理入口",
-            ),
-        }
-    }
-
-    validate_protocol_rules(workspace, listener_ids, error);
+    validate_rule_definitions(workspace, listener_ids, error);
 
     validate_android_profiles(workspace, listener_ids, error);
 }
 
-fn validate_protocol_rules(
+fn validate_rule_definitions(
     workspace: &ProxyWorkspace,
     listener_ids: &BTreeSet<ListenerId>,
     error: &mut DomainError,
 ) {
-    if workspace.protocol_rule_created_order_high_water > MAX_JAVASCRIPT_SAFE_INTEGER {
+    if workspace.rule_created_order_high_water > MAX_JAVASCRIPT_SAFE_INTEGER {
         push_field_error(
             error,
-            "protocol_rule_created_order_high_water",
-            "协议报文规则创建顺序高水位不能超过 JavaScript 安全整数上限",
+            "rule_created_order_high_water",
+            "规则创建顺序高水位不能超过 JavaScript 安全整数上限",
         );
     }
     if workspace
-        .protocol_rules
+        .rule_definitions
         .iter()
-        .map(ProtocolDocumentRuleDefinition::created_order)
+        .map(RuleDefinition::created_order)
         .max()
-        .is_some_and(|maximum| maximum > workspace.protocol_rule_created_order_high_water)
+        .is_some_and(|maximum| maximum > workspace.rule_created_order_high_water)
     {
         push_field_error(
             error,
-            "protocol_rule_created_order_high_water",
-            "协议报文规则创建顺序高水位不能小于现存规则的 created_order",
+            "rule_created_order_high_water",
+            "规则创建顺序高水位不能小于现存规则的 created_order",
         );
     }
-    if workspace.protocol_rules.len() > MAX_PROTOCOL_DOCUMENT_RULES {
+    if workspace.rule_definitions.len() > MAX_PROTOCOL_DOCUMENT_RULES {
         push_field_error(
             error,
-            "protocol_rules",
-            "单个 Workspace 的 协议报文规则不能超过 1024 条",
+            "rule_definitions",
+            "单个 Workspace 的规则不能超过 1024 条",
         );
     }
     let mut rule_ids = BTreeSet::new();
-    for (index, rule) in workspace.protocol_rules.iter().enumerate() {
-        let prefix = format!("protocol_rules.{index}");
+    for (index, rule) in workspace.rule_definitions.iter().enumerate() {
+        let prefix = format!("rule_definitions.{index}");
         if !rule_ids.insert(rule.rule_id()) {
             push_field_error(error, format!("{prefix}.rule_id"), "规则 ID 不能重复");
         }
@@ -109,51 +80,71 @@ fn validate_protocol_rules(
         else {
             continue;
         };
-        match &listener.data_plane {
-            ListenerDataPlane::Http(settings) => match &settings.body_processing {
-                HttpBodyProcessing::Plain => push_field_error(
+        validate_rule_listener_binding(rule, &listener.data_plane, &prefix, error);
+    }
+}
+
+fn validate_rule_listener_binding(
+    rule: &RuleDefinition,
+    data_plane: &ListenerDataPlane,
+    prefix: &str,
+    error: &mut DomainError,
+) {
+    match (rule.content(), data_plane) {
+        (RuleContent::Http(content), ListenerDataPlane::Http(settings)) => {
+            if let Some(document) = &content.document {
+                match &settings.body_processing {
+                    HttpBodyProcessing::Plain => push_field_error(
+                        error,
+                        format!("{prefix}.listener_id"),
+                        "HTTP Body Document 规则只能绑定已选择协议方案的入口",
+                    ),
+                    HttpBodyProcessing::Protocol { package } if package != &document.package => {
+                        push_field_error(
+                            error,
+                            format!("{prefix}.content.value.document.package"),
+                            "规则包版本必须与入口精确绑定一致",
+                        );
+                    }
+                    HttpBodyProcessing::Protocol { .. } => {}
+                }
+            }
+        }
+        (RuleContent::Http(_), ListenerDataPlane::Socket(_)) => push_field_error(
+            error,
+            format!("{prefix}.listener_id"),
+            "HTTP 规则只能绑定 HTTP Listener",
+        ),
+        (RuleContent::Socket(_), ListenerDataPlane::Http(_)) => push_field_error(
+            error,
+            format!("{prefix}.listener_id"),
+            "Socket 规则只能绑定 Socket Listener",
+        ),
+        (RuleContent::Socket(content), ListenerDataPlane::Socket(settings)) => {
+            let SocketPayloadProcessing::Scripted(scripted) = &settings.processing else {
+                push_field_error(
                     error,
                     format!("{prefix}.listener_id"),
                     "报文规则只能绑定已选择协议方案的入口",
-                ),
-                HttpBodyProcessing::Protocol { package } if package != rule.package() => {
-                    push_field_error(
-                        error,
-                        format!("{prefix}.package"),
-                        "规则包版本必须与入口精确绑定一致",
-                    );
-                }
-                HttpBodyProcessing::Protocol { .. } => {}
-            },
-            ListenerDataPlane::Socket(settings) => {
-                let SocketPayloadProcessing::Scripted(scripted) = &settings.processing else {
-                    push_field_error(
-                        error,
-                        format!("{prefix}.listener_id"),
-                        "报文规则只能绑定已选择协议方案的入口",
-                    );
-                    continue;
-                };
-                if &scripted.package != rule.package() {
-                    push_field_error(
-                        error,
-                        format!("{prefix}.package"),
-                        "规则包版本必须与入口精确绑定一致",
-                    );
-                }
-                match &settings.topology {
-                    SocketTopology::Relay(_) => {}
-                    SocketTopology::LocalResponder(_) => {
-                        if !matches!(
-                            rule.stage(),
-                            ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToApp
-                        ) {
-                            push_field_error(
-                                error,
-                                format!("{prefix}.stage"),
-                                "本机应答只允许配置应用进入代理和代理返回应用两个阶段",
-                            );
-                        }
+                );
+                return;
+            };
+            if scripted.package != content.package {
+                push_field_error(
+                    error,
+                    format!("{prefix}.package"),
+                    "规则包版本必须与入口精确绑定一致",
+                );
+            }
+            match &settings.topology {
+                SocketTopology::Relay(_) => {}
+                SocketTopology::LocalResponder(_) => {
+                    if !matches!(rule.stage(), RuleStage::AppToProxy | RuleStage::ProxyToApp) {
+                        push_field_error(
+                            error,
+                            format!("{prefix}.stage"),
+                            "本机应答只允许配置应用进入代理和代理返回应用两个阶段",
+                        );
                     }
                 }
             }

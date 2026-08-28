@@ -4,8 +4,7 @@ use super::{
     AppError, AppMessageStage, CapturePublication, ChannelId, ConnectionContext, ConnectionRuntime,
     DomainMessageStage, FaultAction, Message, PipelinePorts, ProxyError, ProxyResult, RuntimeEpoch,
     RuntimePipelineAdapter, SessionStore, UiEventPayload, UiTone, UpstreamSecurityEvidence, Utc,
-    Uuid, apply_rule_actions, mock_response, project_response_for_observation, upstream_security,
-    weak_network_seed,
+    Uuid, mock_response, project_response_for_observation, upstream_security,
 };
 
 #[async_trait]
@@ -125,12 +124,15 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 context,
                 DomainMessageStage::Request,
                 Some(message),
-                body_codec.as_ref(),
+                body_codec.clone(),
             )
             .await?;
-        let seed = weak_network_seed(context, DomainMessageStage::Request, &evaluated.hit_rules);
-        let (mut actions, pause) =
-            apply_rule_actions(body_codec.as_ref(), message, &evaluated.actions, seed)?;
+        *message = evaluated
+            .prepared_message
+            .clone()
+            .expect("request evaluation returns a prepared message");
+        let mut actions = evaluated.fault_actions.clone();
+        let pause = evaluated.pause;
         self.rule_runtime
             .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if pause {
@@ -218,12 +220,15 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 context,
                 DomainMessageStage::Response,
                 Some(message),
-                body_codec.as_ref(),
+                body_codec.clone(),
             )
             .await?;
-        let seed = weak_network_seed(context, DomainMessageStage::Response, &evaluated.hit_rules);
-        let (mut actions, pause) =
-            apply_rule_actions(body_codec.as_ref(), message, &evaluated.actions, seed)?;
+        *message = evaluated
+            .prepared_message
+            .clone()
+            .expect("response evaluation returns a prepared message");
+        let mut actions = evaluated.fault_actions.clone();
+        let pause = evaluated.pause;
         self.rule_runtime
             .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if pause {
@@ -327,6 +332,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
             );
         }
         self.finish_session(context, result);
+        self.joint_http_rules.remove_connection(context);
         self.state.lock().remove_connection(context);
     }
 

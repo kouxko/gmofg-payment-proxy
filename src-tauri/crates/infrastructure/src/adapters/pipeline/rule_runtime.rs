@@ -23,7 +23,7 @@ mod actor;
 use actor::{Command, EvaluationInput, Reply, RuleActorSender};
 
 use super::{
-    RuntimeRuleRepository,
+    JointDocumentEvaluation, RuntimeRuleRepository,
     message_projection::{decode_json, message_target},
 };
 
@@ -48,6 +48,9 @@ pub(super) struct EvaluatedRules {
     pub(super) traces: Vec<String>,
     pub(super) matched_ids: Vec<Uuid>,
     pub(super) hit_rules: Vec<RuleSummaryViewModel>,
+    pub(super) prepared_message: Option<Message>,
+    pub(super) fault_actions: Vec<intercept_proxy_runtime::FaultAction>,
+    pub(super) pause: bool,
 }
 
 impl RuleRuntimeService {
@@ -78,14 +81,18 @@ impl RuleRuntimeService {
         context: &ConnectionContext,
         stage: MessageStage,
         message: Option<&Message>,
-        body_codec: &dyn BodyCodec,
+        body_codec: Arc<dyn BodyCodec>,
+        joint_document: Option<JointDocumentEvaluation>,
     ) -> ProxyResult<EvaluatedRules> {
         let input = EvaluationInput {
             context: context.clone(),
             stage,
-            json: message.and_then(|message| decode_json(body_codec, &message.body).ok()),
+            json: message.and_then(|message| decode_json(body_codec.as_ref(), &message.body).ok()),
             target: message
                 .and_then(|message| message_target(&message.start_line).map(str::to_owned)),
+            joint_document,
+            message: message.cloned(),
+            body_codec: Some(body_codec),
         };
         self.submit(input, None).await
     }
@@ -105,6 +112,9 @@ impl RuleRuntimeService {
             json: message.and_then(|message| decode_json(body_codec, &message.body).ok()),
             target: message
                 .and_then(|message| message_target(&message.start_line).map(str::to_owned)),
+            joint_document: None,
+            message: None,
+            body_codec: None,
         };
         self.submit(input, Some(enqueued)).await
     }
@@ -143,6 +153,9 @@ impl RuleRuntimeService {
                     stage: MessageStage::TlsHandshake,
                     json: None,
                     target: None,
+                    joint_document: None,
+                    message: None,
+                    body_codec: None,
                 }),
                 reply: Reply::Handshake(reply),
             })

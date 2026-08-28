@@ -122,7 +122,7 @@ impl ListenerRuntimePort for TrackingRuntime {
         Ok(stopped_status(listener_id))
     }
 
-    async fn replace_protocol_rules(
+    async fn replace_rule_definitions(
         &self,
         _workspace: ProxyWorkspace,
         _listener_id: ListenerId,

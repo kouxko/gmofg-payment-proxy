@@ -57,26 +57,32 @@ fn changed_existing_listener_is_lifted_into_the_affected_runtime_scope() {
 fn changed_http_rule_body_lifts_its_listener_into_the_affected_runtime_scope() {
     let mut persisted = ProxyWorkspace::default();
     let listener_id = persisted.listeners[0].id;
-    persisted.rules.push(
-        Rule::create(RuleDraft {
-            expected_revision: None,
-            name: "body rewrite".into(),
-            description: String::new(),
-            enabled: true,
-            priority: 10,
-            created_order: 1,
-            channel: Some(
-                crate::ChannelId::new(listener_id.to_string()).expect("listener channel"),
-            ),
-            stage: MessageStage::Request,
-            conditions: Vec::new(),
-            actions: vec![RuleAction::ReplaceBodyText("before".into())],
-            one_shot: false,
-        })
-        .expect("valid HTTP rule"),
-    );
+    persisted
+        .replace_http_runtime_rules(vec![
+            Rule::create(RuleDraft {
+                expected_revision: None,
+                name: "body rewrite".into(),
+                description: String::new(),
+                enabled: true,
+                priority: 10,
+                created_order: 1,
+                channel: Some(
+                    crate::ChannelId::new(listener_id.to_string()).expect("listener channel"),
+                ),
+                stage: MessageStage::Request,
+                conditions: Vec::new(),
+                actions: vec![RuleAction::ReplaceBodyText("before".into())],
+                one_shot: false,
+            })
+            .expect("valid HTTP rule"),
+        ])
+        .expect("replace HTTP runtime rules");
     let mut candidate = persisted.clone();
-    candidate.rules[0].actions = vec![RuleAction::ReplaceBodyText("after".into())];
+    let mut candidate_rules = candidate.http_runtime_rules().expect("HTTP runtime rules");
+    candidate_rules[0].actions = vec![RuleAction::ReplaceBodyText("after".into())];
+    candidate
+        .replace_http_runtime_rules(candidate_rules)
+        .expect("replace changed HTTP runtime rules");
 
     assert_eq!(
         existing_request(persisted, candidate).affected_listener_ids(),
@@ -127,6 +133,7 @@ fn changed_android_proxy_route_lifts_its_bound_listener() {
             }],
             confirmed_shared_uids: BTreeSet::new(),
             auto_resume_after_reboot: false,
+            stop_vpn_on_control_loss: true,
             weak_network: WeakNetworkProfile::default(),
         });
     let mut candidate = persisted.clone();

@@ -2,7 +2,7 @@
 
 本文档是 Intercept Proxy 内嵌 MCP 服务的完整工具目录。服务使用 MCP `2026-07-28` 和无会话
 Streamable HTTP，在端口 `17653` 监听全接口 IPv4，并在平台支持时监听全接口 IPv6。当前目录包含
-37 个既有只读工具和五个环境配置工具。
+36 个只读工具和五个环境配置工具。
 
 服务使用明文 HTTP，且不验证调用方身份或权限。任意语法有效的 `Host`、缺失或任意语法有效的
 `Origin`，以及缺失或任意 `Authorization`、API key、Cookie 都会直接进入 MCP 协议处理。不存在
@@ -25,7 +25,7 @@ Transport 启动状态如下：
 - 参数必须是 JSON object。每个工具发布的 input schema 都声明 `additionalProperties: false`；该约束递归应用到 `page`、`package` 等嵌套对象，任意层级的未知字段都会返回 `INVALID_ARGUMENTS`，不会被静默忽略。
 - 工具目录同时发布 output schema。成功结果通过 MCP `structuredContent` 返回；运行时会校验 object、array、object/null 根类型与公开 Schema 一致，下表的“成功结果”描述其根类型和语义投影。
 - 错误结果同样是结构化对象，至少包含 `code`、`message`，应用错误还可包含 `details`。常见代码包括 `INVALID_ARGUMENTS`、`NOT_FOUND`、`INPUT_BUDGET_EXCEEDED`、`OUTPUT_BUDGET_EXCEEDED`、`OUTPUT_SCHEMA_MISMATCH` 和 `TOOL_DEADLINE_EXCEEDED`。`OUTPUT_SCHEMA_MISMATCH` 表示后端成功值违反公开输出合同，应视为服务端缺陷，而不是客户端重试条件。
-- 原有 37 个只读工具和 `mcp_environment_capabilities` 的逻辑 JSON 输入上限为 256 KiB、输出上限
+- 36 个只读工具和 `mcp_environment_capabilities` 的逻辑 JSON 输入上限为 256 KiB、输出上限
   为 8 MiB、执行期限为 8 秒。环境配置写工具使用下节列出的独立预算。HTTP request body 的 transport
   上限为 2 MiB，不能替代更小的逐工具逻辑预算。
 - 分页工具只返回当前保留窗口中的数据；日志、诊断、HTTP 抓包和 Exchange 观察都可能因有界保留策略而淘汰旧记录。调用方应保存稳定 ID、游标和 `runtime_epoch`，并显式处理记录已不在保留范围的情况。
@@ -108,10 +108,9 @@ MCP 不会自动停止、启动或重启 Listener，也不会中断活动连接�
 
 | 工具 | 参数 | 成功结果 | 说明 |
 | --- | --- | --- | --- |
-| `http_rule_list` | 无 | array：按运行顺序排列的 HTTP 规则摘要 | 只读当前应用投影。 |
-| `http_rule_get` | 必填 `rule_id` | object：一条完整 HTTP 规则 | 不执行规则。 |
-| `protocol_rule_list` | 无 | array：当前选中工作区的四阶段协议 Document 规则 | 依赖应用当前选择。 |
-| `workspace_protocol_rule_list` | 必填 `workspace_id` | array：指定已保存工作区的协议 Document 规则 | 不依赖当前选择。 |
+| `rule_list` | 无 | array：当前选中工作区的统一 HTTP/Socket 规则摘要 | 依赖应用当前选择，不执行规则。 |
+| `rule_get` | 必填 `rule_id` | object：一条完整统一规则定义 | 内容以 `http` 或 `socket` 标签区分。 |
+| `workspace_rule_list` | 必填 `workspace_id` | array：指定已保存工作区的统一规则定义 | 不依赖当前选择。 |
 | `protocol_package_list` | 无 | array：所有已安装不可变协议包版本及使用数 | 安装源文件不在 Application facade 中暴露。 |
 | `protocol_package_catalog` | 无 | object：已启用且已完成能力描述的协议包、方向能力、Schema 和目录校验信息 | 在线不等于能力描述成功。 |
 | `protocol_package_detail` | 必填 `package.id`、`package.version` | object：精确版本的 manifest 投影、方向能力、Schema 与 entry 使用情况 | 不返回安装源文件。 |

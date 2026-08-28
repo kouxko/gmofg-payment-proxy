@@ -42,7 +42,7 @@ function featureModuleSource(featureName) {
 
 function protocolRuleBoundaryCodes(source) {
   const codes = [];
-  if (!source.includes("commands.protocolRuleEditorContext")) {
+  if (!source.includes("commands.ruleEditorContext")) {
     codes.push("PROTOCOL_RULE_EDITOR_CONTEXT_MISSING");
   }
   if (/\b(?:listenerStages|newProtocolRuleDraft)\b|commands\.protocolRuleCapabilities/.test(source)) {
@@ -79,18 +79,18 @@ function protocolRuleBoundaryCodes(source) {
 
 function generatedProtocolRuleBindingCodes(source) {
   const codes = [];
-  if (!/protocolRuleEditorContext:\s*\(listenerId:\s*ListenerId\)[\s\S]{0,240}__TAURI_INVOKE\("protocol_rule_editor_context",\s*\{ listenerId \}\)/.test(source)) {
+  if (!/ruleEditorContext:\s*\(listenerId:\s*ListenerId\)[\s\S]{0,240}__TAURI_INVOKE\("rule_editor_context",\s*\{ listenerId \}\)/.test(source)) {
     codes.push("PROTOCOL_RULE_GENERATED_IPC_MISSING");
   }
-  if (!source.includes("export type ProtocolRuleEditorContext = {")
-    || !source.includes("new_rule_draft: ProtocolRuleSaveInput")) {
+  if (!source.includes("export type RuleEditorContext = {")
+    || !source.includes("new_rule_draft: RuleDefinitionSaveInput")) {
     codes.push("PROTOCOL_RULE_EDITOR_DTO_MISSING");
   }
   return codes;
 }
 
 function tauriProtocolRuleRegistrationCodes(source) {
-  return source.includes("protocol_rule_editor_context,")
+  return source.includes("rule_editor_context,")
     ? []
     : ["PROTOCOL_RULE_TAURI_REGISTRATION_MISSING"];
 }
@@ -98,42 +98,42 @@ function tauriProtocolRuleRegistrationCodes(source) {
 const protocolRuleBoundaryFixtures = [
   [
     "Rust editor context is the only topology source",
-    "const context = commands.protocolRuleEditorContext(listenerId); const stages = context.stages;",
+    "const context = commands.ruleEditorContext(listenerId); const stages = context.stages;",
     [],
   ],
   [
     "frontend listener topology stage matrix is rejected",
-    "const relayOrLocalChoices = listener.data_plane.settings.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']; commands.protocolRuleEditorContext(listener.id);",
+    "const relayOrLocalChoices = listener.data_plane.settings.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']; commands.ruleEditorContext(listener.id);",
     ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
   ],
   [
     "frontend topology-specific default action matrix is rejected",
-    "const initialBehavior = listener.topology.mode === 'local_responder' ? [{ type: 'record_match' }] : [{ type: 'clear_document' }]; commands.protocolRuleEditorContext(listener.id);",
+    "const initialBehavior = listener.topology.mode === 'local_responder' ? [{ type: 'record_match' }] : [{ type: 'clear_document' }]; commands.ruleEditorContext(listener.id);",
     ["PROTOCOL_RULE_DEFAULT_ACTION_MATRIX"],
   ],
   [
     "typed const topology stage matrix is rejected",
-    "const choices: RuleStage[] = listener.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']; commands.protocolRuleEditorContext(listener.id);",
+    "const choices: RuleStage[] = listener.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']; commands.ruleEditorContext(listener.id);",
     ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
   ],
   [
     "return ternary default action matrix is rejected",
-    "commands.protocolRuleEditorContext(listener.id); function draft(listener: Listener) { return listener.topology.mode === 'local_responder' ? [{ type: 'record_match' }] : [{ type: 'clear_document' }] }",
+    "commands.ruleEditorContext(listener.id); function draft(listener: Listener) { return listener.topology.mode === 'local_responder' ? [{ type: 'record_match' }] : [{ type: 'clear_document' }] }",
     ["PROTOCOL_RULE_DEFAULT_ACTION_MATRIX"],
   ],
   [
     "ASI topology stage matrix is rejected",
-    "commands.protocolRuleEditorContext(listener.id)\nconst choices = listener.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']",
+    "commands.ruleEditorContext(listener.id)\nconst choices = listener.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']",
     ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
   ],
   [
     "indirect topology stage arrays are rejected",
-    "const local = ['app_to_proxy']; const relay = ['app_to_proxy', 'proxy_to_upstream']; const choices = listener.topology.mode === 'local_responder' ? local : relay; commands.protocolRuleEditorContext(listener.id);",
+    "const local = ['app_to_proxy']; const relay = ['app_to_proxy', 'proxy_to_upstream']; const choices = listener.topology.mode === 'local_responder' ? local : relay; commands.ruleEditorContext(listener.id);",
     ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
   ],
   [
     "legacy per-stage capability command is rejected",
-    "commands.protocolRuleEditorContext(listener.id); commands.protocolRuleCapabilities(listener.id, stage);",
+    "commands.ruleEditorContext(listener.id); commands.protocolRuleCapabilities(listener.id, stage);",
     ["PROTOCOL_RULE_LEGACY_BUSINESS_HELPER"],
   ],
   [
@@ -146,17 +146,17 @@ const protocolRuleBoundaryFixtures = [
 const generatedProtocolRuleBindingFixtures = [
   [
     "generated binding keeps camelCase argument translation and editor DTO",
-    'protocolRuleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("protocol_rule_editor_context", { listenerId }); export type ProtocolRuleEditorContext = { new_rule_draft: ProtocolRuleSaveInput };',
+    'ruleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listenerId }); export type RuleEditorContext = { new_rule_draft: RuleDefinitionSaveInput };',
     [],
   ],
   [
     "generated binding cannot regress to a snake_case caller argument",
-    'protocolRuleEditorContext: (listener_id: ListenerId) => __TAURI_INVOKE("protocol_rule_editor_context", { listener_id }); export type ProtocolRuleEditorContext = { new_rule_draft: ProtocolRuleSaveInput };',
+    'ruleEditorContext: (listener_id: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listener_id }); export type RuleEditorContext = { new_rule_draft: RuleDefinitionSaveInput };',
     ["PROTOCOL_RULE_GENERATED_IPC_MISSING"],
   ],
   [
     "generated editor context must retain the Rust draft DTO",
-    'protocolRuleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("protocol_rule_editor_context", { listenerId });',
+    'ruleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listenerId });',
     ["PROTOCOL_RULE_EDITOR_DTO_MISSING"],
   ],
 ];
@@ -180,7 +180,7 @@ for (const [name, source, expected] of generatedProtocolRuleBindingFixtures) {
   }
 }
 for (const [name, source, expected] of [
-  ["Tauri command is registered", "protocol_rule_editor_context,", []],
+  ["Tauri command is registered", "rule_editor_context,", []],
   ["missing Tauri command registration is rejected", "protocol_rule_list,", ["PROTOCOL_RULE_TAURI_REGISTRATION_MISSING"]],
 ]) {
   const actual = tauriProtocolRuleRegistrationCodes(source);
@@ -336,7 +336,7 @@ if (/commands\.ruleSave/.test(captureSource)) {
 const ruleEditorDirectory = join(sourceRoot, "features/rules");
 const ruleEditorSource = readdirSync(ruleEditorDirectory)
   .filter((name) =>
-    /^(?:rule-editor(?:-controls|-model)?|condition-editor|actions-editor|action-fields|terminal-action-fields)\.tsx?$/.test(
+    /^(?:rule-definition-editor|use-async-request-slots)\.tsx?$/.test(
       name,
     ),
   )
@@ -350,12 +350,8 @@ if (
   );
 }
 for (const command of [
-  "commands.ruleConditionDraft",
-  "commands.ruleActionDraft",
-  "commands.ruleMatchFieldDraft",
-  "commands.ruleMatchOperatorDraft",
-  "commands.ruleParseByteInput",
-  "commands.ruleParseHeaderInput",
+  "commands.ruleDefinitionConditionDraft",
+  "commands.ruleDefinitionActionDraft",
 ]) {
   if (!ruleEditorSource.includes(command)) {
     failures.push(
@@ -382,12 +378,12 @@ if (
 }
 if (
   !ruleEditorSource.includes("useAsyncRequestSlots") ||
-  !ruleEditorSource.includes("function ConditionRow") ||
-  !ruleEditorSource.includes("current.type === \"mock_response\"") ||
-  !ruleEditorSource.includes("current.actions.map")
+  !ruleEditorSource.includes("editorScope") ||
+  !ruleEditorSource.includes("appendHttpFactoryResult") ||
+  !ruleEditorSource.includes("generations.current.get(key) !== generation")
 ) {
   failures.push(
-    "src/features/rules/rule-editor.tsx: Rust 异步草稿必须统一使用保存门禁和代次隔离，解析结果必须函数式合并到最新动作",
+    "src/features/rules/rule-definition-editor.tsx: Rust 异步草稿必须按规则、Listener、阶段使用代次隔离，并函数式合并到最新草稿",
   );
 }
 
@@ -395,7 +391,7 @@ const protocolRuleSource = featureModuleSource("rules");
 const protocolRuleBoundaryFailures = protocolRuleBoundaryCodes(protocolRuleSource);
 if (protocolRuleBoundaryFailures.includes("PROTOCOL_RULE_EDITOR_CONTEXT_MISSING")) {
   failures.push(
-    "src/features/rules: 协议规则编辑器必须从 Rust protocolRuleEditorContext 取得全部阶段、能力和新规则草稿",
+    "src/features/rules: 统一规则编辑器必须从 Rust ruleEditorContext 取得全部阶段、能力和新规则草稿",
   );
 }
 if (protocolRuleBoundaryFailures.some((code) => code !== "PROTOCOL_RULE_EDITOR_CONTEXT_MISSING")) {
@@ -410,7 +406,7 @@ const generatedBindingsSource = readFileSync(
 );
 if (generatedProtocolRuleBindingCodes(generatedBindingsSource).length > 0) {
   failures.push(
-    "src/generated/rust-types.ts: 缺少 protocol_rule_editor_context 的 camelCase 参数绑定或完整编辑上下文 DTO",
+    "src/generated/rust-types.ts: 缺少 rule_editor_context 的 camelCase 参数绑定或完整编辑上下文 DTO",
   );
 }
 
@@ -420,7 +416,7 @@ const tauriCommandsSource = readFileSync(
 );
 if (tauriProtocolRuleRegistrationCodes(tauriCommandsSource).length > 0) {
   failures.push(
-    "src-tauri/src/commands/mod.rs: protocol_rule_editor_context 必须注册到 Tauri handler",
+    "src-tauri/src/commands/mod.rs: rule_editor_context 必须注册到 Tauri handler",
   );
 }
 
@@ -468,7 +464,6 @@ if (
 
 const productChannelUiContracts = [
   ["breakpoints", "features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
-  ["rules", "features/rules/rules-view.tsx", ["workspaceListeners", "channel_text"]],
   ["faults", "features/faults/faults-view.tsx", ["channel_catalog"]],
 ];
 for (const [featureName, relativePath, requiredContracts] of productChannelUiContracts) {

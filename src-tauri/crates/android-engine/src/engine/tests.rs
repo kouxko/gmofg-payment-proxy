@@ -26,6 +26,7 @@ fn validated(mut weak: WeakNetworkProfile) -> ValidatedProfile {
         proxy_routes: Vec::new(),
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: weak,
     }
     .validate_for_start(&installed)
@@ -97,6 +98,7 @@ fn multiple_destination_targets_apply_faults_only_to_matching_remote_addresses()
         proxy_routes: Vec::new(),
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile {
             random_loss_basis_points: 10_000,
             ..WeakNetworkProfile::default()

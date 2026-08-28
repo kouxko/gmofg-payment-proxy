@@ -13,6 +13,7 @@ use crate::requirements_tests::{
     application_with_fake_ports_and_listener_runtime, application_with_workspace_ports,
     test_environment_identity_allocator,
 };
+use crate::requirements_tests::{http_rule_definitions, protocol_rule_definitions};
 use crate::{
     EnvironmentApplyBaselineCapturePort, EnvironmentApplyBaselineCaptureRequest,
     EnvironmentApplyGenerations, EnvironmentCandidateEpoch, EnvironmentIdentityAllocator,
@@ -342,8 +343,8 @@ async fn new_target_preview_captures_the_normalized_candidate_workspace_for_appl
     let workspace = &requests[0].candidate_workspace;
     assert_eq!(workspace.name, "Store Lab");
     assert_eq!(workspace.listeners.len(), 3);
-    assert_eq!(workspace.rules.len(), 14);
-    assert_eq!(workspace.protocol_rules.len(), 1);
+    assert_eq!(http_rule_definitions(workspace).len(), 14);
+    assert_eq!(protocol_rule_definitions(workspace).len(), 1);
     assert_eq!(workspace.android_network_profiles.len(), 1);
 }
 
@@ -386,8 +387,14 @@ async fn existing_target_preview_captures_persisted_and_candidate_workspaces_for
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].persisted_workspace.as_ref(), Some(&persisted));
     assert_eq!(requests[0].candidate_workspace.listeners.len(), 3);
-    assert_eq!(requests[0].candidate_workspace.rules.len(), 14);
-    assert_eq!(requests[0].candidate_workspace.protocol_rules.len(), 1);
+    assert_eq!(
+        http_rule_definitions(&requests[0].candidate_workspace).len(),
+        14
+    );
+    assert_eq!(
+        protocol_rule_definitions(&requests[0].candidate_workspace).len(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -420,27 +427,29 @@ async fn preview_and_apply_projection_share_each_non_idempotent_allocation_once(
     let status =
         serde_json::to_value(application.environment_candidate_status(inserted.candidate_id()))
             .unwrap();
-    let workspace =
-        serde_json::to_value(&capture.requests.lock().unwrap()[0].candidate_workspace).unwrap();
+    let requests = capture.requests.lock().unwrap();
+    let workspace = &requests[0].candidate_workspace;
+    let http_rules = http_rule_definitions(workspace);
+    let protocol_rules = protocol_rule_definitions(workspace);
     assert_eq!(
         status["preview"]["resources"]["listeners"][0]["candidate_local_id"],
-        workspace["listeners"][0]["id"]
+        serde_json::json!(workspace.listeners[0].id)
     );
     assert_eq!(
-        status["preview"]["resources"]["http_rules"][0]["candidate_local_id"],
-        workspace["rules"][0]["id"]
+        status["preview"]["resources"]["rules"][0]["candidate_local_id"],
+        serde_json::json!(http_rules[0].rule_id())
     );
     assert_eq!(
-        status["preview"]["resources"]["http_rules"][0]["created_order"],
-        workspace["rules"][0]["created_order"]
+        status["preview"]["resources"]["rules"][0]["created_order"],
+        serde_json::json!(http_rules[0].created_order())
     );
     assert_eq!(
-        status["preview"]["resources"]["protocol_rules"][0]["candidate_local_id"],
-        workspace["protocol_rules"][0]["rule_id"]
+        status["preview"]["resources"]["rules"][14]["candidate_local_id"],
+        serde_json::json!(protocol_rules[0].rule_id())
     );
     assert_eq!(
-        status["preview"]["resources"]["protocol_rules"][0]["created_order"],
-        workspace["protocol_rules"][0]["created_order"]
+        status["preview"]["resources"]["rules"][14]["created_order"],
+        serde_json::json!(protocol_rules[0].created_order())
     );
     assert_eq!(allocator.workspace.load(Ordering::SeqCst), 1);
     assert_eq!(allocator.listeners.load(Ordering::SeqCst), 3);

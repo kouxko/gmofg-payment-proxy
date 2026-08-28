@@ -6,7 +6,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bootstrap, setupListenerMocks, mocks, workspace, fixedListener, certificateReference, certificateDetail, ok, navigationMocks, withHttpSettings } from "./listeners-view.test-support";
 
-vi.mock("@/features/shell/workspace-navigation", () => ({ useWorkspaceNavigation: () => navigationMocks }));
+vi.mock("@/features/shell/workspace-navigation", () => ({
+  useWorkspaceNavigation: () => navigationMocks,
+  useWorkspaceQueryInvalidation: vi.fn(),
+}));
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: () => undefined,
   useBootstrap: () => ({ bootstrap }),

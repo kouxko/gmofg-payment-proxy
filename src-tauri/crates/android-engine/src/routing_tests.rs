@@ -23,6 +23,7 @@ fn profile(routes: Vec<ProxyRoute>) -> ValidatedProfile {
         proxy_routes: routes,
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile::default(),
     }
     .validate_for_start(&[installed])

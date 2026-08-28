@@ -192,9 +192,17 @@ fn referenced_packages(workspaces: &[ProxyWorkspace]) -> HashSet<ProtocolPackage
     });
     let rules = workspaces.iter().flat_map(|workspace| {
         workspace
-            .protocol_rules
+            .rule_definitions
             .iter()
-            .map(|rule| rule.package().clone())
+            .filter_map(|rule| match rule.content() {
+                intercept_proxy_domain::RuleContent::Http(content) => content
+                    .document
+                    .as_ref()
+                    .map(|document| document.package.clone()),
+                intercept_proxy_domain::RuleContent::Socket(content) => {
+                    Some(content.package.clone())
+                }
+            })
     });
     listeners.chain(rules).collect()
 }

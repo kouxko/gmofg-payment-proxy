@@ -3,7 +3,8 @@ use intercept_proxy_domain::RuleId as DomainRuleId;
 
 use crate::environment_configuration::EnvironmentProjectedCandidate;
 use crate::requirements_tests::{
-    FakePorts, application_with_environment_preview_ports, test_environment_identity_allocator,
+    FakePorts, application_with_environment_preview_ports, http_rule_definitions,
+    protocol_rule_definitions, test_environment_identity_allocator,
 };
 use crate::{
     EnvironmentApplyBaselineCapturePort, EnvironmentApplyBaselineCaptureRequest,
@@ -59,6 +60,37 @@ async fn persisted_full_shape(
     (persisted, value)
 }
 
+async fn persisted_joint_http_shape(
+    store: &InMemoryWorkspaceStore,
+) -> (ProxyWorkspace, serde_json::Value) {
+    let mut value: serde_json::Value = serde_json::from_slice(FULL_SHAPE).unwrap();
+    value["workspace"]["rules"][0]["document"] = serde_json::json!({
+        "package": {"id": "au-eftex", "version": "1.1.0"},
+        "schema_version": 1,
+        "conditions": [{
+            "operator": "equals",
+            "field": "amount",
+            "value": {"type": "int", "value": 1000}
+        }],
+        "actions": [{"type": "record_match"}]
+    });
+    let typed =
+        crate::parse_environment_configuration_candidate_v1(&serde_json::to_vec(&value).unwrap())
+            .unwrap();
+    let allocator = test_environment_identity_allocator();
+    let projected = EnvironmentProjectedCandidate::project(typed, None, allocator.port()).unwrap();
+    let persisted = store
+        .import_workspace(projected.workspace().clone())
+        .await
+        .unwrap();
+    value["target"] = serde_json::json!({
+        "mode": "existing",
+        "workspace_id": persisted.id,
+        "expected_revision": persisted.revision,
+    });
+    (persisted, value)
+}
+
 fn retain_all_ids(candidate: &mut serde_json::Value, persisted: &ProxyWorkspace) {
     for (listener, existing) in candidate["workspace"]["listeners"]
         .as_array_mut()
@@ -68,10 +100,12 @@ fn retain_all_ids(candidate: &mut serde_json::Value, persisted: &ProxyWorkspace)
     {
         listener["id"] = serde_json::json!(existing.id);
     }
-    candidate["workspace"]["http_rules"][0]["existing_rule_id"] =
-        serde_json::json!(persisted.rules[0].id);
-    candidate["workspace"]["protocol_rules"][0]["existing_rule_id"] =
-        serde_json::json!(persisted.protocol_rules[0].rule_id());
+    let http_rules = http_rule_definitions(persisted);
+    let protocol_rules = protocol_rule_definitions(persisted);
+    candidate["workspace"]["rules"][0]["existing_rule_id"] =
+        serde_json::json!(http_rules[0].rule_id());
+    candidate["workspace"]["rules"][14]["existing_rule_id"] =
+        serde_json::json!(protocol_rules[0].rule_id());
 }
 
 async fn validate_existing(
@@ -142,7 +176,7 @@ async fn existing_listener_id_outside_target_workspace_fails_domain() {
 async fn unknown_existing_http_rule_id_fails_with_exact_code() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (_, mut candidate) = persisted_full_shape(&store).await;
-    candidate["workspace"]["http_rules"][0]["existing_rule_id"] = serde_json::json!(UNKNOWN_ID);
+    candidate["workspace"]["rules"][0]["existing_rule_id"] = serde_json::json!(UNKNOWN_ID);
     let report = validate_existing(store, Arc::new(CapturingBaseline::default()), candidate).await;
 
     assert_eq!(
@@ -162,10 +196,23 @@ async fn cross_workspace_existing_http_rule_id_fails_with_exact_code() {
     let mut other = persisted.clone();
     other.id = WorkspaceId::new();
     other.name = "Other Workspace".into();
-    other.rules[0].id = DomainRuleId::from_uuid(uuid::Uuid::new_v4());
+    let existing_http_id = http_rule_definitions(&other)[0].rule_id();
+    let index = other
+        .rule_definitions
+        .iter()
+        .position(|rule| rule.rule_id() == existing_http_id)
+        .unwrap();
+    let existing = other.rule_definitions[index].clone();
+    other.rule_definitions[index] = intercept_proxy_domain::RuleDefinition::restore(
+        DomainRuleId::from_uuid(uuid::Uuid::new_v4()),
+        existing.revision(),
+        existing.to_draft(),
+        existing.created_order(),
+    )
+    .unwrap();
     let other = store.import_workspace(other).await.unwrap();
-    candidate["workspace"]["http_rules"][0]["existing_rule_id"] =
-        serde_json::json!(other.rules[0].id);
+    candidate["workspace"]["rules"][0]["existing_rule_id"] =
+        serde_json::json!(http_rule_definitions(&other)[0].rule_id());
 
     assert_existing_domain_code(
         store,
@@ -179,8 +226,8 @@ async fn cross_workspace_existing_http_rule_id_fails_with_exact_code() {
 async fn existing_rule_id_of_the_wrong_kind_fails_with_exact_code() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (persisted, mut candidate) = persisted_full_shape(&store).await;
-    candidate["workspace"]["http_rules"][0]["existing_rule_id"] =
-        serde_json::json!(persisted.protocol_rules[0].rule_id());
+    candidate["workspace"]["rules"][0]["existing_rule_id"] =
+        serde_json::json!(protocol_rule_definitions(&persisted)[0].rule_id());
 
     assert_existing_domain_code(
         store,
@@ -242,7 +289,7 @@ async fn existing_http_rule_listener_binding_mismatch_fails_with_exact_code() {
     });
     retain_all_ids(&mut candidate, &persisted);
     candidate["workspace"]["listeners"][2]["id"] = serde_json::json!(persisted.listeners[2].id);
-    candidate["workspace"]["http_rules"][0]["listener_alias"] = serde_json::json!("http-entry-alt");
+    candidate["workspace"]["rules"][0]["listener_alias"] = serde_json::json!("http-entry-alt");
 
     assert_existing_domain_code(
         store,
@@ -257,7 +304,7 @@ async fn existing_protocol_rule_package_mismatch_fails_with_exact_code() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (persisted, mut candidate) = persisted_full_shape(&store).await;
     retain_all_ids(&mut candidate, &persisted);
-    candidate["workspace"]["protocol_rules"][0]["package"]["version"] = serde_json::json!("1.2.0");
+    candidate["workspace"]["rules"][14]["package"]["version"] = serde_json::json!("1.2.0");
 
     assert_existing_domain_code(
         store,
@@ -272,7 +319,7 @@ async fn existing_protocol_rule_schema_mismatch_fails_with_exact_code() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (persisted, mut candidate) = persisted_full_shape(&store).await;
     retain_all_ids(&mut candidate, &persisted);
-    candidate["workspace"]["protocol_rules"][0]["schema_version"] = serde_json::json!(2);
+    candidate["workspace"]["rules"][14]["schema_version"] = serde_json::json!(2);
 
     assert_existing_domain_code(
         store,
@@ -283,33 +330,139 @@ async fn existing_protocol_rule_schema_mismatch_fails_with_exact_code() {
 }
 
 #[tokio::test]
-async fn existing_protocol_rule_stage_mismatch_fails_with_exact_code() {
+async fn existing_protocol_rule_can_change_stage_without_changing_binding_or_content() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (persisted, mut candidate) = persisted_full_shape(&store).await;
     retain_all_ids(&mut candidate, &persisted);
-    candidate["workspace"]["protocol_rules"][0]["stage"] = serde_json::json!("proxy_to_upstream");
+    let original = protocol_rule_definitions(&persisted)[0];
+    let original_id = original.rule_id();
+    let original_created_order = original.created_order();
+    let original_listener_id = original.listener_id();
+    let original_content = original.content().clone();
+    candidate["workspace"]["rules"][14]["stage"] = serde_json::json!("proxy_to_upstream");
+    let capture = Arc::new(CapturingBaseline::default());
+    let report = validate_existing(store, capture.clone(), candidate).await;
+
+    assert_eq!(report.status_code(), None);
+    let captured = capture.workspaces.lock().unwrap();
+    let updated = captured[0]
+        .rule_definitions
+        .iter()
+        .find(|rule| rule.rule_id() == original_id)
+        .unwrap();
+    assert_eq!(updated.created_order(), original_created_order);
+    assert_eq!(updated.listener_id(), original_listener_id);
+    assert_eq!(updated.content(), &original_content);
+    assert_eq!(
+        updated.stage(),
+        intercept_proxy_domain::RuleStage::ProxyToUpstream
+    );
+}
+
+#[tokio::test]
+async fn existing_protocol_rule_stage_change_still_rejects_invalid_listener_topology() {
+    let store = Arc::new(InMemoryWorkspaceStore::new_empty());
+    let (persisted, mut candidate) = persisted_full_shape(&store).await;
+    retain_all_ids(&mut candidate, &persisted);
+    candidate["workspace"]["listeners"][1]["data_plane"]["settings"]["topology"] = serde_json::json!({
+        "mode": "local_responder",
+        "settings": {"downstream_security": {"mode": "tcp"}}
+    });
+    candidate["materials"]["certificates"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|material| {
+            !matches!(
+                material["alias"].as_str(),
+                Some("socket-listener-identity" | "socket-upstream-client")
+            )
+        });
+    candidate["workspace"]["rules"][14]["stage"] = serde_json::json!("proxy_to_upstream");
 
     assert_existing_domain_code(
         store,
         candidate,
-        EnvironmentStatusCode::ExistingRuleIdStageMismatch,
+        EnvironmentStatusCode::ValidationLayerFailed,
     )
     .await;
 }
 
 #[tokio::test]
-async fn existing_http_rule_stage_mismatch_fails_with_exact_code() {
+async fn existing_plain_http_rule_can_change_stage_without_changing_identity() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (persisted, mut candidate) = persisted_full_shape(&store).await;
     retain_all_ids(&mut candidate, &persisted);
-    candidate["workspace"]["http_rules"][0]["stage"] = serde_json::json!("response");
+    candidate["workspace"]["rules"][0]["stage"] = serde_json::json!("proxy_to_upstream");
+    let capture = Arc::new(CapturingBaseline::default());
+    let report = validate_existing(store, capture.clone(), candidate).await;
 
-    assert_existing_domain_code(
-        store,
-        candidate,
-        EnvironmentStatusCode::ExistingRuleIdStageMismatch,
-    )
-    .await;
+    assert_eq!(report.status_code(), None);
+    let captured = capture.workspaces.lock().unwrap();
+    let original_id = http_rule_definitions(&persisted)[0].rule_id();
+    let updated = captured[0]
+        .rule_definitions
+        .iter()
+        .find(|rule| rule.rule_id() == original_id)
+        .unwrap();
+    assert_eq!(
+        updated.stage(),
+        intercept_proxy_domain::RuleStage::ProxyToUpstream
+    );
+}
+
+#[tokio::test]
+async fn existing_joint_http_rule_updates_editable_fields_and_keeps_immutable_binding() {
+    let store = Arc::new(InMemoryWorkspaceStore::new_empty());
+    let (persisted, mut candidate) = persisted_joint_http_shape(&store).await;
+    retain_all_ids(&mut candidate, &persisted);
+    let original = persisted
+        .rule_definitions
+        .iter()
+        .find(|rule| {
+            matches!(
+                rule.content(),
+                intercept_proxy_domain::RuleContent::Http(content) if content.document.is_some()
+            )
+        })
+        .unwrap();
+    candidate["workspace"]["rules"][0]["existing_rule_id"] = serde_json::json!(original.rule_id());
+    let original_socket = persisted
+        .rule_definitions
+        .iter()
+        .find(|rule| {
+            matches!(
+                rule.content(),
+                intercept_proxy_domain::RuleContent::Socket(_)
+            )
+        })
+        .unwrap();
+    candidate["workspace"]["rules"][14]["existing_rule_id"] =
+        serde_json::json!(original_socket.rule_id());
+    candidate["workspace"]["rules"][0]["name"] = serde_json::json!("Joint HTTP updated");
+    candidate["workspace"]["rules"][0]["stage"] = serde_json::json!("proxy_to_upstream");
+    candidate["workspace"]["rules"][0]["actions"] =
+        serde_json::json!([{"Delay": {"milliseconds": 7}}]);
+    let capture = Arc::new(CapturingBaseline::default());
+    let report = validate_existing(store, capture.clone(), candidate).await;
+
+    assert_eq!(report.status_code(), None);
+    let captured = capture.workspaces.lock().unwrap();
+    let updated = captured[0]
+        .rule_definitions
+        .iter()
+        .find(|rule| rule.rule_id() == original.rule_id())
+        .unwrap();
+    assert_eq!(updated.name(), "Joint HTTP updated");
+    assert_eq!(
+        updated.stage(),
+        intercept_proxy_domain::RuleStage::ProxyToUpstream
+    );
+    assert_eq!(updated.listener_id(), original.listener_id());
+    assert_eq!(updated.created_order(), original.created_order());
+    let intercept_proxy_domain::RuleContent::Http(content) = updated.content() else {
+        panic!("joint HTTP rule must remain HTTP content");
+    };
+    assert!(content.document.is_some());
 }
 
 #[tokio::test]
@@ -322,17 +475,21 @@ async fn valid_existing_http_and_protocol_rules_retain_id_and_created_order() {
 
     assert_eq!(report.status_code(), None);
     let captured = capture.workspaces.lock().unwrap();
-    assert_eq!(captured[0].rules[0].id, persisted.rules[0].id);
+    let captured_http = http_rule_definitions(&captured[0]);
+    let persisted_http = http_rule_definitions(&persisted);
+    let captured_protocol = protocol_rule_definitions(&captured[0]);
+    let persisted_protocol = protocol_rule_definitions(&persisted);
+    assert_eq!(captured_http[0].rule_id(), persisted_http[0].rule_id());
     assert_eq!(
-        captured[0].rules[0].created_order,
-        persisted.rules[0].created_order
+        captured_http[0].created_order(),
+        persisted_http[0].created_order()
     );
     assert_eq!(
-        captured[0].protocol_rules[0].rule_id(),
-        persisted.protocol_rules[0].rule_id()
+        captured_protocol[0].rule_id(),
+        persisted_protocol[0].rule_id()
     );
     assert_eq!(
-        captured[0].protocol_rules[0].created_order(),
-        persisted.protocol_rules[0].created_order()
+        captured_protocol[0].created_order(),
+        persisted_protocol[0].created_order()
     );
 }

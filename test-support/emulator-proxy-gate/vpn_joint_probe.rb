@@ -193,6 +193,7 @@ profile = {
   ],
   confirmed_shared_uids: [],
   auto_resume_after_reboot: false,
+  stop_vpn_on_control_loss: true,
   weak_network: weak_network
 }
 runtime_routes = [

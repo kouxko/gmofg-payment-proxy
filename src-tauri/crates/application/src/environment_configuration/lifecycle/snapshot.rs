@@ -233,8 +233,7 @@ struct EnvironmentCandidatePublicSnapshotWire {
 #[serde(deny_unknown_fields)]
 struct EnvironmentPreviewResources {
     listeners: Vec<EnvironmentPreviewListener>,
-    http_rules: Vec<EnvironmentPreviewHttpRule>,
-    protocol_rules: Vec<EnvironmentPreviewProtocolRule>,
+    rules: Vec<EnvironmentPreviewRule>,
     android_profile_ids: Vec<String>,
 }
 
@@ -247,16 +246,7 @@ struct EnvironmentPreviewListener {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
-struct EnvironmentPreviewHttpRule {
-    candidate_index: usize,
-    candidate_local_id: Uuid,
-    created_order: u64,
-    listener_alias: String,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-struct EnvironmentPreviewProtocolRule {
+struct EnvironmentPreviewRule {
     candidate_index: usize,
     candidate_local_id: Uuid,
     created_order: u64,
