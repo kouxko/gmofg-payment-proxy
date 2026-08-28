@@ -75,8 +75,10 @@ flowchart LR
 
 - `workspace/`：Listener 数据平面、HTTP Body 模式、Socket 拓扑、安全设置和校验。
 - `document/`：协议无关的 Schema、字段和值槽；当前字段类型是 String、Int、Bool、Blob。
-- `protocol_document_rule/`：Schema 驱动的条件与动作，独立于 HTTP 标准规则。
-- `rule/`：HTTP 标准规则、阶段、匹配条件、动作和终止语义。
+- `protocol_document_rule/`：统一规则内部复用的 Schema 驱动 Document 条件、动作与执行原语；
+  不形成独立规则集合或 CRUD。
+- `unified_rule.rs`：统一 `RuleDefinition`、固定阶段坐标、HTTP/Socket 带标签内容和顶层不变量。
+- `rule/`：统一 HTTP 内容复用的匹配、动作、终止语义与运行时命中提交原语。
 - `certificate`、`settings`、`session`、`android_network`：各自纯领域模型。
 
 领域构造器和反序列化都会执行不变量校验。未知字段、错误类型、越界资源和不兼容组合

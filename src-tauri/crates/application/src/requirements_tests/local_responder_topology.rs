@@ -31,7 +31,7 @@ impl ListenerRuntimePort for CountingNetworkRuntime {
         unused()
     }
 
-    async fn replace_protocol_rules(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
+    async fn replace_rule_definitions(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
         Ok(())
     }
 

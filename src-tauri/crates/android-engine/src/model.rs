@@ -75,7 +75,13 @@ pub struct NetworkProfile {
     /// shared UID 组必须整体选中，并由用户显式确认后把 UID 写入此集合。
     pub confirmed_shared_uids: BTreeSet<u32>,
     pub auto_resume_after_reboot: bool,
+    #[serde(default = "default_stop_vpn_on_control_loss")]
+    pub stop_vpn_on_control_loss: bool,
     pub weak_network: WeakNetworkProfile,
+}
+
+const fn default_stop_vpn_on_control_loss() -> bool {
+    true
 }
 
 /// 引擎内部沿用短名称，序列化契约由领域层的 `PacketDirection` 定义。

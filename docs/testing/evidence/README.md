@@ -3,6 +3,17 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-08-28
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260828-006 | WORKSPACE-LIVE-REFRESH-001 | 验证外部 Workspace 提交后列表与详情刷新、名称草稿合并、刷新失败陈旧标记及重启后真实 App 状态 | PASS_WITH_NOT_RUN | TASK-20260828-003 | RUNNING-APP-FINDINGS-REGRESSION-001 | [父证据](2026-08-28/TASK-20260828-003/RUNNING-APP-FINDINGS-REGRESSION-001/README.md) | [证据](2026-08-28/TASK-20260828-006/WORKSPACE-LIVE-REFRESH-001/README.md) |
+| TASK-20260828-005 | UNIFIED-RULE-CONTRACT-001 | 验证单一 RuleDefinition、统一阶段、单一持久化集合、联合 HTTP 运行时和 Socket 能力隔离 | PASS | 无 | 无 | 无 | [证据](2026-08-28/TASK-20260828-005/UNIFIED-RULE-CONTRACT-001/README.md) |
+| TASK-20260828-004 | ANDROID-CONTROL-LEASE-001 | 验证默认开启的逐设备控制租约、5 秒 generation 看门狗、取消清理和多设备隔离 | PASS_WITH_NOT_RUN | 无 | 无 | 无 | [证据](2026-08-28/TASK-20260828-004/ANDROID-CONTROL-LEASE-001/README.md) |
+| TASK-20260828-003 | RUNNING-APP-FINDINGS-REGRESSION-001 | 验证 Mock 托管 Header 修复、Environment commit 事件与 Workspace 统一刷新链路 | PASS_WITH_NOT_RUN | TASK-20260828-001 | RUNNING-APP-REPLAY-001 | [父证据](2026-08-28/TASK-20260828-001/RUNNING-APP-REPLAY-001/README.md) | [证据](2026-08-28/TASK-20260828-003/RUNNING-APP-FINDINGS-REGRESSION-001/README.md) |
+| TASK-20260828-002 | SOCKET-CONNECTION-STATUS-001 | 验证 Socket Exchange 只表达连接生命周期并保留异常错误 | PASS | 无 | 无 | 无 | [证据](2026-08-28/TASK-20260828-002/SOCKET-CONNECTION-STATUS-001/README.md) |
+| TASK-20260828-001 | RUNNING-APP-REPLAY-001 | 在当前运行 Release App 中用本机 HTTP/TCP 模拟 Server 重放真实 Proxy、抓包、Exchange、日志、规则能力和恢复 | FAILED_WITH_NOT_RUN | TASK-20260827-003 | FINAL-REPLAY-001 | [父证据](2026-08-27/TASK-20260827-003/FINAL-REPLAY-001/README.md) | [证据](2026-08-28/TASK-20260828-001/RUNNING-APP-REPLAY-001/README.md) |
+
 ## 2026-08-27
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

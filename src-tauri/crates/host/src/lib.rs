@@ -40,12 +40,6 @@ pub enum HostBuildError {
         #[source]
         source: io::Error,
     },
-    #[error("无法清空 schema 早于 1.0 的应用数据 {path}: {source}")]
-    ResetIncompatibleData {
-        path: PathBuf,
-        #[source]
-        source: io::Error,
-    },
     #[error(transparent)]
     Infrastructure(#[from] InfrastructureError),
     #[error(transparent)]
@@ -187,18 +181,7 @@ impl ApplicationHostBuilder {
             .data_dir
             .join(self.product.storage().database_file_name);
 
-        match self.clone().build_once(&database_path).await {
-            Ok(host) => Ok(host),
-            Err(error) if incompatible_persisted_data(&error) => {
-                tracing::warn!(
-                    path = %database_path.display(),
-                    "incompatible pre-release database schema was cleared"
-                );
-                remove_sqlite_database(&database_path)?;
-                self.build_once(&database_path).await
-            }
-            Err(error) => Err(error),
-        }
+        self.build_once(&database_path).await
     }
 
     async fn build_once(self, database_path: &Path) -> Result<ApplicationHost, HostBuildError> {
@@ -280,41 +263,6 @@ fn host_event_hub(capacity: &Arc<CapacityLedger>) -> Arc<EventHub> {
         EventHub::DEFAULT_CAPACITY,
         Arc::clone(capacity),
     ))
-}
-
-fn incompatible_persisted_data(error: &HostBuildError) -> bool {
-    match error {
-        HostBuildError::Infrastructure(InfrastructureError::DatabaseSchemaInvalid {
-            current,
-            found,
-        }) => found.is_empty() || matches!(found.as_slice(), [(1, version)] if version < current),
-        HostBuildError::InvalidProductProfile(_)
-        | HostBuildError::CreateDataDirectory { .. }
-        | HostBuildError::ResetIncompatibleData { .. }
-        | HostBuildError::Application(_)
-        | HostBuildError::Infrastructure(_) => false,
-    }
-}
-
-fn remove_sqlite_database(database_path: &Path) -> Result<(), HostBuildError> {
-    for path in [
-        database_path.to_path_buf(),
-        sqlite_sidecar(database_path, "-wal"),
-        sqlite_sidecar(database_path, "-shm"),
-    ] {
-        match std::fs::remove_file(&path) {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(source) => return Err(HostBuildError::ResetIncompatibleData { path, source }),
-        }
-    }
-    Ok(())
-}
-
-fn sqlite_sidecar(database_path: &Path, suffix: &str) -> PathBuf {
-    let mut path = database_path.as_os_str().to_owned();
-    path.push(suffix);
-    PathBuf::from(path)
 }
 
 /// 持有与 UI 无关的应用门面及其后台任务生命周期。

@@ -18,8 +18,31 @@ fn profile_with_routes(proxy_routes: Vec<AndroidProxyRoute>) -> AndroidNetworkPr
         proxy_routes,
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile::default(),
     }
+}
+
+#[test]
+fn missing_control_loss_policy_defaults_to_safe_stop() {
+    let json = serde_json::json!({
+        "id": "legacy-profile",
+        "name": "旧方案",
+        "target_applications": [{
+            "package_name": "com.example.client",
+            "uid": 10001,
+            "display_name": null
+        }],
+        "destination_targets": [],
+        "proxy_routes": [],
+        "confirmed_shared_uids": [],
+        "auto_resume_after_reboot": false,
+        "weak_network": WeakNetworkProfile::default()
+    });
+
+    let profile: AndroidNetworkProfile = serde_json::from_value(json).expect("legacy profile");
+
+    assert!(profile.stop_vpn_on_control_loss);
 }
 
 #[test]

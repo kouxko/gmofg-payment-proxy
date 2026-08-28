@@ -13,9 +13,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
+import { useBootstrap } from "./bootstrap-context";
 
 export type WorkspacePath =
   | "/workspaces"
@@ -100,4 +104,76 @@ export function useWorkspaceNavigation() {
     );
   }
   return value;
+}
+
+type WorkspaceRefreshQuery = {
+  invalidate: (clearData?: boolean) => void;
+  refresh: () => Promise<void>;
+};
+
+export function useWorkspaceQueryInvalidation({
+  workspaceId,
+  collection,
+  current,
+}: {
+  workspaceId?: string;
+  collection: readonly WorkspaceRefreshQuery[];
+  current: readonly WorkspaceRefreshQuery[];
+}) {
+  const { subscribe } = useBootstrap();
+  const queriesRef = useRef({ collection, current });
+  useLayoutEffect(() => {
+    queriesRef.current = { collection, current };
+  }, [collection, current]);
+
+  useEffect(() => {
+    let active = true;
+    let refreshPending = false;
+    const queued = new Set<WorkspaceRefreshQuery>();
+
+    const drain = async () => {
+      refreshPending = true;
+      try {
+        while (active && queued.size > 0) {
+          const batch = [...queued];
+          queued.clear();
+          await Promise.all(batch.map((query) => query.refresh()));
+        }
+      } finally {
+        refreshPending = false;
+      }
+    };
+
+    const invalidateAndRefresh = (
+      queries: readonly WorkspaceRefreshQuery[],
+    ) => {
+      for (const query of queries) {
+        // 每个外部提交先推进查询代次，确保已在途的旧响应没有写回权限。
+        query.invalidate(false);
+        queued.add(query);
+      }
+      if (!refreshPending && queued.size > 0) void drain();
+    };
+
+    const unsubscribe = subscribe((event) => {
+      if (event.payload.type === "snapshot_required") {
+        invalidateAndRefresh([
+          ...queriesRef.current.collection,
+          ...queriesRef.current.current,
+        ]);
+        return;
+      }
+      if (event.payload.type !== "workspace_changed") return;
+
+      invalidateAndRefresh(queriesRef.current.collection);
+      if (event.payload.data.workspace_id === workspaceId) {
+        invalidateAndRefresh(queriesRef.current.current);
+      }
+    });
+    return () => {
+      active = false;
+      queued.clear();
+      unsubscribe();
+    };
+  }, [subscribe, workspaceId]);
 }

@@ -101,6 +101,7 @@ impl Application {
             self.environment_apply_lease.clone(),
             self.environment_material_preparer.clone(),
             self.environment_commit.clone(),
+            self.events.clone(),
         )
         .spawn_once();
     }

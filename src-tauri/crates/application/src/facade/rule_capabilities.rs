@@ -33,11 +33,12 @@ pub(super) fn action_capability(
         .find(|capability| capability.kind == kind)
 }
 
+#[cfg(test)]
 pub(super) fn match_field_supported(stage: MessageStage, kind: RuleMatchFieldKind) -> bool {
     stage_capability(stage).match_field_kinds.contains(&kind)
 }
 
-fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewModel {
+pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewModel {
     use RuleActionKind as Action;
     use RuleMatchFieldKind as Field;
 

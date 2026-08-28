@@ -18,6 +18,7 @@ mod protocol_rule;
 mod rule;
 mod session;
 mod socket_diagnostics;
+mod unified_rule;
 mod workspace;
 
 pub use application_snapshot::*;
@@ -35,4 +36,5 @@ pub use protocol_rule::*;
 pub use rule::*;
 pub use session::*;
 pub use socket_diagnostics::*;
+pub use unified_rule::*;
 pub use workspace::*;

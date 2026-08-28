@@ -52,7 +52,6 @@ async fn complete_server_response_creates_valid_unsaved_disabled_mock_draft() {
 
     let draft = application
         .rule_create_from_exchange_observation(&record, 2)
-        .await
         .unwrap();
 
     assert_eq!(draft.rule_id, None);
@@ -92,9 +91,99 @@ async fn complete_server_response_creates_valid_unsaved_disabled_mock_draft() {
             .count(),
         2
     );
-    assert!(headers.contains(&("content-length".into(), body_bytes.len().to_string())));
-    assert_eq!(ports.rule_validation_calls.load(Ordering::SeqCst), 1);
+    assert!(!headers.iter().any(|(name, _)| name == "content-length"));
+    assert_eq!(ports.rule_validation_calls.load(Ordering::SeqCst), 0);
     assert_eq!(ports.rule_save_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn complete_server_response_creates_a_unified_unsaved_disabled_mock_draft() {
+    let application = application_with_fake_ports(Arc::new(FakePorts::default()));
+    let record = record(
+        "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: 999\r\n\r\n",
+        "{\"approved\":true}",
+    );
+
+    let input = application
+        .rule_definition_create_from_exchange_observation(&record, 2)
+        .unwrap();
+
+    assert_eq!(input.rule_id, None);
+    assert_eq!(input.expected_revision, None);
+    assert!(!input.draft.enabled);
+    assert_eq!(input.draft.listener_id, record.listener_id);
+    assert_eq!(input.draft.stage, RuleStage::ProxyToUpstream);
+    let RuleContent::Http(content) = input.draft.content else {
+        panic!("unified HTTP content expected");
+    };
+    assert!(matches!(
+        content.conditions.as_slice(),
+        [intercept_proxy_domain::MatchCondition::Field {
+            field: intercept_proxy_domain::MatchField::PathOrRequestType,
+            ..
+        }]
+    ));
+    assert!(matches!(
+        content.actions.as_slice(),
+        [intercept_proxy_domain::RuleAction::Terminal(
+            intercept_proxy_domain::TerminalAction::MockResponse { status: 201, .. }
+        )]
+    ));
+}
+
+#[tokio::test]
+async fn server_content_length_is_not_copied_into_domain_valid_mock_headers() {
+    let application = application_with_fake_ports(Arc::new(FakePorts::default()));
+    let record = record(
+        "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: 999\r\nX-Request-Id: request-42\r\n\r\n",
+        "{\"approved\":true}",
+    );
+
+    let draft = application
+        .rule_create_from_exchange_observation(&record, 2)
+        .unwrap();
+
+    let RuleAction::Terminal {
+        action:
+            RuleTerminalAction::MockResponse {
+                status,
+                headers,
+                body_bytes,
+            },
+    } = &draft.actions[0]
+    else {
+        panic!("mock response action expected");
+    };
+    let domain_draft = intercept_proxy_domain::RuleDraft {
+        expected_revision: None,
+        name: draft.name.clone(),
+        description: draft.description.clone(),
+        enabled: draft.enabled,
+        priority: u32::try_from(draft.priority).unwrap(),
+        created_order: 0,
+        channel: draft.channel.clone(),
+        stage: intercept_proxy_domain::MessageStage::Request,
+        conditions: Vec::new(),
+        actions: vec![intercept_proxy_domain::RuleAction::Terminal(
+            intercept_proxy_domain::TerminalAction::MockResponse {
+                status: *status,
+                headers: headers.clone(),
+                body_bytes: body_bytes.clone(),
+            },
+        )],
+        one_shot: draft.one_shot,
+    };
+    intercept_proxy_domain::validate_rule_draft(&domain_draft)
+        .expect("generated mock draft must satisfy Domain validation");
+    assert_eq!(*status, 201);
+    assert_eq!(body_bytes, b"{\"approved\":true}");
+    assert_eq!(
+        headers,
+        &vec![
+            ("content-type".into(), "application/json".into()),
+            ("x-request-id".into(), "request-42".into()),
+        ]
+    );
 }
 
 #[tokio::test]
@@ -106,7 +195,6 @@ async fn mock_draft_filters_transport_headers_and_connection_nominated_headers()
     );
     let draft = application
         .rule_create_from_exchange_observation(&record, 2)
-        .await
         .unwrap();
     let RuleAction::Terminal {
         action: RuleTerminalAction::MockResponse { headers, .. },
@@ -114,13 +202,7 @@ async fn mock_draft_filters_transport_headers_and_connection_nominated_headers()
     else {
         panic!("mock response action expected");
     };
-    assert_eq!(
-        headers,
-        &vec![
-            ("x-public".into(), "keep-me".into()),
-            ("content-length".into(), "2".into())
-        ]
-    );
+    assert_eq!(headers, &vec![("x-public".into(), "keep-me".into())]);
 }
 
 #[tokio::test]
@@ -130,7 +212,6 @@ async fn compressed_non_utf8_and_incomplete_sources_are_rejected() {
     assert_eq!(
         application
             .rule_create_from_exchange_observation(&compressed, 2)
-            .await
             .unwrap_err()
             .view_model
             .code,
@@ -149,7 +230,6 @@ async fn compressed_non_utf8_and_incomplete_sources_are_rejected() {
     assert_eq!(
         application
             .rule_create_from_exchange_observation(&binary, 2)
-            .await
             .unwrap_err()
             .view_model
             .code,
@@ -160,7 +240,6 @@ async fn compressed_non_utf8_and_incomplete_sources_are_rejected() {
     assert_eq!(
         application
             .rule_create_from_exchange_observation(&binary, 2)
-            .await
             .unwrap_err()
             .view_model
             .code,

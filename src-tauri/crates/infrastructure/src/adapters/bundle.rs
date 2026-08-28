@@ -97,18 +97,13 @@ impl InfrastructureServiceBundle {
         let rules = Arc::new(RuleRepositoryAdapter::new(
             (sqlite.clone(), Arc::clone(&store)),
             Arc::clone(dialog),
-            sessions.clone(),
             product.channels(),
         ));
         let settings = Arc::new(SettingsRepositoryAdapter::new(
             sqlite.clone(),
             product.as_ref(),
         ));
-        let faults = Arc::new(FaultServiceAdapter::new(
-            Arc::clone(&rules),
-            body_codec,
-            product.as_ref(),
-        ));
+        let faults = Arc::new(FaultServiceAdapter::new(body_codec, product.as_ref()));
         let certificates = Arc::new(CertificateServiceAdapter::new(
             (sqlite.clone(), Arc::clone(&store)),
             Arc::clone(&protector),
@@ -192,6 +187,10 @@ impl InfrastructureServiceBundle {
     }
 
     pub async fn initialize_installation_state(&self) -> AppResult<()> {
+        // 先完整解码现有配置，再执行内建包、证书或默认 Workspace 的任何写入。
+        // 不兼容的持久化记录必须 fail-closed，并保持数据库及 sidecar 原样等待用户处理。
+        let workspaces = self.workspaces.list().await?;
+        let stored = self.settings.get().await?.stored;
         self.protocol_packages.ensure_builtin_seeded_async().await?;
         if let Err(error) = self
             .certificates
@@ -208,10 +207,9 @@ impl InfrastructureServiceBundle {
                 return Err(error);
             }
         }
-        if self.workspaces.list().await?.is_empty() {
+        if workspaces.is_empty() {
             self.workspaces.create("默认 Workspace".into()).await?;
         }
-        let stored = self.settings.get().await?.stored;
         self.sessions
             .set_limits(stored.max_sessions, stored.max_memory_bytes)?;
         Ok(())
@@ -241,7 +239,8 @@ impl InfrastructureServiceBundle {
                 events.clone(),
                 self.capture.clone(),
             )
-            .with_body_codec_resolver(self.workspace_body_codecs.clone()),
+            .with_body_codec_resolver(self.workspace_body_codecs.clone())
+            .with_joint_http_rules(self.listener_runtime.joint_http_rules()),
         );
         self.listener_runtime
             .set_body_codec_resolver(self.workspace_body_codecs.clone());
@@ -340,6 +339,7 @@ impl InfrastructureServiceBundle {
         let gates = self.environment_apply_resource_gates.clone();
         let android = android.with_environment_apply_resource_gates(gates);
         let android = Arc::new(android);
+        AndroidAdbAdapter::start_control_lease_heartbeat(&android);
         let apply_runtime = Arc::new(EnvironmentApplyRuntimeAdapter::new(
             self.listener_runtime.clone(),
             android.clone(),
@@ -382,7 +382,6 @@ impl InfrastructureServiceBundle {
                 breakpoint_validation: Arc::new(BreakpointValidator::new_with_resolver(Arc::new(
                     HeaderBodyCodecResolver,
                 ))),
-                rules: self.rules,
                 faults: self.faults,
                 certificates: self.certificates,
                 settings: self.settings,

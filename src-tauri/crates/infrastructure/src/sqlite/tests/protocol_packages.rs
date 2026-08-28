@@ -19,7 +19,7 @@ fn empty_database_creates_current_schema_once_and_reopen_is_read_only() {
 }
 
 #[test]
-fn database_without_current_marker_is_cleared_and_recreated() {
+fn database_without_current_marker_is_rejected_without_modifying_user_data() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.sqlite");
     let connection = Connection::open(&path).unwrap();
@@ -37,13 +37,23 @@ fn database_without_current_marker_is_cleared_and_recreated() {
         .unwrap();
     drop(connection);
 
-    let store = SqliteStore::open(&path).unwrap();
-    assert_protocol_tables_and_current_marker(&store);
-    assert!(store.load_settings().unwrap().is_none());
+    assert!(matches!(
+        SqliteStore::open(&path),
+        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
+    let connection = Connection::open(&path).unwrap();
+    let json = connection
+        .query_row(
+            "SELECT json FROM settings WHERE singleton_id = 1",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap();
+    assert_eq!(json, "{\"kept\":true}");
 }
 
 #[test]
-fn old_schema_is_cleared_and_unknown_newer_schema_is_rejected() {
+fn old_and_unknown_newer_schemas_are_rejected_without_modifying_user_data() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.sqlite");
     let store = SqliteStore::open(&path).unwrap();
@@ -58,12 +68,20 @@ fn old_schema_is_cleared_and_unknown_newer_schema_is_rejected() {
         .unwrap();
     drop(store);
 
-    let reopened = SqliteStore::open(&path).unwrap();
-    assert_protocol_tables_and_current_marker(&reopened);
-    assert!(reopened.load_workspaces().unwrap().records.is_empty());
-    drop(reopened);
-
+    assert!(matches!(
+        SqliteStore::open(&path),
+        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
     let connection = Connection::open(&path).unwrap();
+    let retained = connection
+        .query_row(
+            "SELECT COUNT(*) FROM workspaces WHERE id = 'old'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap();
+    assert_eq!(retained, 1);
+
     connection
         .execute("UPDATE application_schema SET version = 999", [])
         .unwrap();

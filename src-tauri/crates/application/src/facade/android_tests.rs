@@ -40,6 +40,7 @@ fn package_toggle_expands_and_confirms_shared_uid_in_rust() {
         proxy_routes: Vec::new(),
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: intercept_proxy_domain::WeakNetworkProfile::default(),
     };
     let packages = vec![

@@ -21,6 +21,7 @@ const workspaceNavigationMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./workspace-navigation", () => ({
+  useWorkspaceQueryInvalidation: vi.fn(),
   useWorkspaceNavigation: () => ({
     pathname: "/workspaces",
     searchParams: new URLSearchParams(),

@@ -52,6 +52,11 @@ internal object InterceptVpnServiceControl {
             JSONObject(profile.rawJson).getString("id"),
             runtime,
         )
+        ControlLeaseManager.configureUnmanagedRecovery(
+            context,
+            generation,
+            profile.stopVpnOnControlLoss,
+        )
         return startIntent(
             context,
             activation.profileJson,
@@ -64,6 +69,7 @@ internal object InterceptVpnServiceControl {
         Intent(context, InterceptVpnService::class.java).setAction(ACTION_STOP)
 
     fun restartSavedProfile(
+        context: Context,
         stateStore: RuntimeStateStore,
         failOpen: (String) -> Unit,
         startProfile: (String, String, Long) -> Unit,
@@ -79,6 +85,11 @@ internal object InterceptVpnServiceControl {
             JSONObject(profile.rawJson).getString("id"),
             runtime,
         )
+        ControlLeaseManager.configureUnmanagedRecovery(
+            context,
+            generation,
+            profile.stopVpnOnControlLoss,
+        )
         startProfile(activation.profileJson, activation.proxyRuntimeJson, generation)
     }
 
@@ -87,8 +98,29 @@ internal object InterceptVpnServiceControl {
      * 再停止排队中的 Service。后台线程等待主线程三秒，超时后直接释放 TUN。
      */
     fun stopFromExternalControl(context: Context, message: String) {
+        ControlLeaseManager.clear()
         RuntimeStateStore(context).autoResumeEnabled = false
         val stopRequest = VpnRuntimeRegistry.stopRequested()
+        completeExternalStop(context, message, stopRequest)
+    }
+
+    fun stopFromExpiredControlLease(
+        context: Context,
+        stopRequest: VpnRuntimeRegistry.StopRequest,
+    ) {
+        RuntimeStateStore(context).autoResumeEnabled = false
+        completeExternalStop(
+            context,
+            "桌面控制租约连续 5 秒未续期，已自动关闭 VPN。",
+            stopRequest,
+        )
+    }
+
+    private fun completeExternalStop(
+        context: Context,
+        message: String,
+        stopRequest: VpnRuntimeRegistry.StopRequest,
+    ) {
         val service = activeService.get()?.get()
         if (service == null) {
             VpnExternalStopCoordinator.completeWithoutActiveService(

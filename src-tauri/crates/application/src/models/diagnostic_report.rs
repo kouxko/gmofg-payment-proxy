@@ -15,8 +15,8 @@ use crate::{
 
 use super::{
     DiagnosticLogRowViewModel, ExternalPackageServiceStatusViewModel, ListenerId,
-    ListenerStatusViewModel, ProtocolDocumentRuleDefinition, ProtocolPackageDetailViewModel,
-    ProxyListener, ProxyWorkspace, SettingsViewModel, WorkspaceId,
+    ListenerStatusViewModel, ProtocolPackageDetailViewModel, ProxyListener, ProxyWorkspace,
+    RuleDefinition, SettingsViewModel, WorkspaceId,
 };
 
 /// 单份报告最多包含的入口诊断行数。
@@ -71,7 +71,7 @@ pub struct DiagnosticReportBundle {
     pub listener: ProxyListener,
     pub runtime_status: Option<ListenerStatusViewModel>,
     pub settings: Option<SettingsViewModel>,
-    pub protocol_rules: Vec<ProtocolDocumentRuleDefinition>,
+    pub rule_definitions: Vec<RuleDefinition>,
     pub protocol_package_detail: Option<ProtocolPackageDetailViewModel>,
     pub external_package_service: Option<ExternalPackageServiceStatusViewModel>,
     pub diagnostics: Vec<DiagnosticLogRowViewModel>,

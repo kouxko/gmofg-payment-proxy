@@ -24,11 +24,8 @@ fn full_configuration_round_trips() {
         wire["format_version"],
         APPLICATION_CONFIGURATION_FORMAT_VERSION
     );
-    assert_eq!(wire["workspaces"][0]["protocol_rules"], json!([]));
-    assert_eq!(
-        wire["workspaces"][0]["protocol_rule_created_order_high_water"],
-        0
-    );
+    assert_eq!(wire["workspaces"][0]["rule_definitions"], json!([]));
+    assert_eq!(wire["workspaces"][0]["rule_created_order_high_water"], 0);
     assert_eq!(wire["protocol_packages"], json!([]));
     assert_eq!(
         parse_application_configuration(&bytes).expect("parse"),

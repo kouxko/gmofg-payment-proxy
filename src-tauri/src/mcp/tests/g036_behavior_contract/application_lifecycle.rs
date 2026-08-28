@@ -412,7 +412,7 @@ fn minimal_candidate(name: &str) -> Value {
     json!({
         "schema_version":1,
         "target":{"mode":"new","name":name},
-        "workspace":{"listeners":[],"http_rules":[],"protocol_rules":[],"android_network_profiles":[]},
+        "workspace":{"listeners":[],"rules":[],"android_network_profiles":[]},
         "materials":{"certificates":[],"secrets":[]}
     })
 }

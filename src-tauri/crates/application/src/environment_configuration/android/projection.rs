@@ -57,6 +57,7 @@ impl AndroidNetworkProfileTemplate {
                 .copied()
                 .collect::<BTreeSet<_>>(),
             auto_resume_after_reboot: self.auto_resume_after_reboot,
+            stop_vpn_on_control_loss: self.stop_vpn_on_control_loss,
             weak_network: serde_json::from_value::<WeakNetworkProfile>(
                 serde_json::to_value(&self.weak_network).map_err(|_| weak_network_error())?,
             )

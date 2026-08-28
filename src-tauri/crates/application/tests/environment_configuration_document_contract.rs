@@ -113,10 +113,11 @@ fn terminal_action_rejects_wrong_offset_fields_and_unknown_payload_fields() {
         ),
     ] {
         let mut candidate = fixture.clone();
-        let action = candidate["workspace"]["http_rules"]
+        let action = candidate["workspace"]["rules"]
             .as_array_mut()
             .unwrap()
             .iter_mut()
+            .filter(|rule| rule["type"] == "http")
             .flat_map(|rule| rule["actions"].as_array_mut().unwrap())
             .find(|action| action["Terminal"].get(variant).is_some())
             .expect("canonical fixture contains the requested terminal variant");

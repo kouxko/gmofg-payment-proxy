@@ -149,45 +149,104 @@
         }
       }
     ],
-    "http_rules": [
+    "rules": [
       {
+        "type": "http",
         "name": "Request transformations",
         "description": "Canonical request-stage non-terminal actions",
         "enabled": true,
         "priority": 10,
         "listener_alias": "http-entry",
-        "stage": "request",
+        "stage": "proxy_to_upstream",
         "conditions": [
-          {"Field":{"field":"TerminalIp","operator":{"Equals":"192.0.2.10"}}},
-          {"Field":{"field":{"JsonPath":"$.amount"},"operator":{"Regex":"^[0-9]+$"}}},
-          {"NthHit":1}
+          {
+            "Field": {
+              "field": "TerminalIp",
+              "operator": {
+                "Equals": "192.0.2.10"
+              }
+            }
+          },
+          {
+            "Field": {
+              "field": {
+                "JsonPath": "$.amount"
+              },
+              "operator": {
+                "Regex": "^[0-9]+$"
+              }
+            }
+          },
+          {
+            "NthHit": 1
+          }
         ],
         "actions": [
           "Pause",
-          {"SetJsonField":{"path":"$.amount","value":1000}},
-          {"ReplaceBodyText":"replacement"},
-          {"SetHeader":{"name":"X-Test","value":"yes"}},
-          {"Delay":{"milliseconds":1}},
-          {"Jitter":{"minimum_milliseconds":1,"maximum_milliseconds":2,"scope":"BeforeMessage"}},
-          {"Throttle":{"bytes_per_second":1024,"chunk_bytes":128,"direction":"Upstream"}}
+          {
+            "SetJsonField": {
+              "path": "$.amount",
+              "value": 1000
+            }
+          },
+          {
+            "ReplaceBodyText": "replacement"
+          },
+          {
+            "SetHeader": {
+              "name": "X-Test",
+              "value": "yes"
+            }
+          },
+          {
+            "Delay": {
+              "milliseconds": 1
+            }
+          },
+          {
+            "Jitter": {
+              "minimum_milliseconds": 1,
+              "maximum_milliseconds": 2,
+              "scope": "BeforeMessage"
+            }
+          },
+          {
+            "Throttle": {
+              "bytes_per_second": 1024,
+              "chunk_bytes": 128,
+              "direction": "Upstream"
+            }
+          }
         ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Response transformations",
         "description": "Canonical response-stage non-terminal actions",
         "enabled": true,
         "priority": 11,
         "listener_alias": "http-entry",
-        "stage": "response",
+        "stage": "proxy_to_app",
         "conditions": [],
         "actions": [
-          {"Intermittent":{"available_milliseconds":10,"blocked_milliseconds":5,"direction":"Downstream"}},
-          {"CustomHttpStatus":{"status":503}}
+          {
+            "Intermittent": {
+              "available_milliseconds": 10,
+              "blocked_milliseconds": 5,
+              "direction": "Downstream"
+            }
+          },
+          {
+            "CustomHttpStatus": {
+              "status": 503
+            }
+          }
         ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Reject TLS handshake",
         "description": "TLS terminal action",
         "enabled": true,
@@ -195,133 +254,243 @@
         "listener_alias": "http-entry",
         "stage": "tls_handshake",
         "conditions": [],
-        "actions": [{"Terminal":"RejectTlsHandshake"}],
+        "actions": [
+          {
+            "Terminal": "RejectTlsHandshake"
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Disconnect before upstream",
         "description": "Request terminal action",
         "enabled": true,
         "priority": 13,
         "listener_alias": "http-entry",
-        "stage": "request",
+        "stage": "proxy_to_upstream",
         "conditions": [],
-        "actions": [{"Terminal":"DisconnectBeforeUpstream"}],
+        "actions": [
+          {
+            "Terminal": "DisconnectBeforeUpstream"
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Upstream connect timeout",
         "description": "Request terminal action",
         "enabled": true,
         "priority": 14,
         "listener_alias": "http-entry",
-        "stage": "request",
+        "stage": "proxy_to_upstream",
         "conditions": [],
-        "actions": [{"Terminal":{"UpstreamConnectTimeout":{"milliseconds":1}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "UpstreamConnectTimeout": {
+                "milliseconds": 1
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Upstream write timeout",
         "description": "Request terminal action",
         "enabled": true,
         "priority": 15,
         "listener_alias": "http-entry",
-        "stage": "request",
+        "stage": "proxy_to_upstream",
         "conditions": [],
-        "actions": [{"Terminal":{"UpstreamWriteTimeout":{"milliseconds":1}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "UpstreamWriteTimeout": {
+                "milliseconds": 1
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Disconnect during upstream write",
         "description": "Request terminal action",
         "enabled": true,
         "priority": 16,
         "listener_alias": "http-entry",
-        "stage": "request",
+        "stage": "proxy_to_upstream",
         "conditions": [],
-        "actions": [{"Terminal":{"DisconnectDuringUpstreamWrite":{"after_bytes":1}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "DisconnectDuringUpstreamWrite": {
+                "after_bytes": 1
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Upstream read timeout",
         "description": "Response terminal action",
         "enabled": true,
         "priority": 17,
         "listener_alias": "http-entry",
-        "stage": "request",
+        "stage": "proxy_to_upstream",
         "conditions": [],
-        "actions": [{"Terminal":{"UpstreamReadTimeout":{"milliseconds":1}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "UpstreamReadTimeout": {
+                "milliseconds": 1
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Drop upstream response",
         "description": "Response terminal action",
         "enabled": true,
         "priority": 18,
         "listener_alias": "http-entry",
-        "stage": "request",
+        "stage": "proxy_to_upstream",
         "conditions": [],
-        "actions": [{"Terminal":{"DropUpstreamResponse":{"mode":"ReadCompleteResponse"}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "DropUpstreamResponse": {
+                "mode": "ReadCompleteResponse"
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Mock response",
         "description": "Response terminal action",
         "enabled": true,
         "priority": 19,
         "listener_alias": "http-entry",
-        "stage": "request",
+        "stage": "proxy_to_upstream",
         "conditions": [],
-        "actions": [{"Terminal":{"MockResponse":{"status":200,"headers":[["X-Test","yes"]],"body_bytes":[79,75]}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "MockResponse": {
+                "status": 200,
+                "headers": [
+                  [
+                    "X-Test",
+                    "yes"
+                  ]
+                ],
+                "body_bytes": [
+                  79,
+                  75
+                ]
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Invalid JSON response",
         "description": "Response terminal action",
         "enabled": true,
         "priority": 20,
         "listener_alias": "http-entry",
-        "stage": "response",
+        "stage": "proxy_to_app",
         "conditions": [],
-        "actions": [{"Terminal":{"InvalidJson":{"body_bytes":[123]}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "InvalidJson": {
+                "body_bytes": [
+                  123
+                ]
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Incorrect content length",
         "description": "Response terminal action",
         "enabled": true,
         "priority": 21,
         "listener_alias": "http-entry",
-        "stage": "response",
+        "stage": "proxy_to_app",
         "conditions": [],
-        "actions": [{"Terminal":{"IncorrectContentLength":{"delta":1}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "IncorrectContentLength": {
+                "delta": 1
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Truncate response",
         "description": "Response terminal action",
         "enabled": true,
         "priority": 22,
         "listener_alias": "http-entry",
-        "stage": "response",
+        "stage": "proxy_to_app",
         "conditions": [],
-        "actions": [{"Terminal":{"TruncateResponse":{"bytes":1}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "TruncateResponse": {
+                "bytes": 1
+              }
+            }
+          }
+        ],
         "one_shot": false
       },
       {
+        "type": "http",
         "name": "Disconnect during downstream write",
         "description": "Response terminal action",
         "enabled": true,
         "priority": 23,
         "listener_alias": "http-entry",
-        "stage": "response",
+        "stage": "proxy_to_app",
         "conditions": [],
-        "actions": [{"Terminal":{"DisconnectDuringDownstreamWrite":{"after_bytes":1}}}],
+        "actions": [
+          {
+            "Terminal": {
+              "DisconnectDuringDownstreamWrite": {
+                "after_bytes": 1
+              }
+            }
+          }
+        ],
         "one_shot": false
-      }
-    ],
-    "protocol_rules": [
+      },
       {
+        "type": "socket",
         "name": "Protocol Document values",
         "enabled": true,
         "priority": 20,
@@ -459,7 +628,8 @@
             "probability_basis_points": 0,
             "bits_per_packet": 0
           }
-        }
+        },
+        "stop_vpn_on_control_loss": true
       }
     ]
   },

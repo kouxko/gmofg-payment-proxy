@@ -95,6 +95,11 @@ class AdbControlActivity : Activity() {
             org.json.JSONObject(profile.rawJson).getString("id"),
             runtime,
         )
+        ControlLeaseManager.configureUnmanagedRecovery(
+            this,
+            generation,
+            profile.stopVpnOnControlLoss,
+        )
         startForegroundService(
             InterceptVpnService.startIntent(this, rawJson, proxyRuntimeJson, generation),
         )

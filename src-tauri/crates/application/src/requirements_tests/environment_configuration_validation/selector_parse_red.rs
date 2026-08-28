@@ -26,7 +26,7 @@ async fn assert_schema_code(candidate: &[u8], expected: EnvironmentStatusCode) {
 #[tokio::test]
 async fn existing_rule_id_on_new_target_preserves_forbidden_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["http_rules"][0]["existing_rule_id"] =
+        candidate["workspace"]["rules"][0]["existing_rule_id"] =
             serde_json::json!("00000000-0000-0000-0000-000000000020");
     });
 
@@ -41,7 +41,7 @@ async fn duplicate_existing_rule_id_preserves_duplicate_code() {
             "workspace_id": "00000000-0000-0000-0000-000000000001",
             "expected_revision": 7,
         });
-        let rules = candidate["workspace"]["http_rules"].as_array_mut().unwrap();
+        let rules = candidate["workspace"]["rules"].as_array_mut().unwrap();
         rules[0]["existing_rule_id"] = serde_json::json!("00000000-0000-0000-0000-000000000020");
         let mut duplicate = rules[0].clone();
         duplicate["name"] = serde_json::json!("Duplicate selector");
@@ -100,7 +100,7 @@ async fn unsupported_mitm_root_material_preserves_material_role_code() {
 #[tokio::test]
 async fn invalid_document_value_wire_preserves_document_wire_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["protocol_rules"][0]["conditions"][0]["value"] =
+        candidate["workspace"]["rules"][14]["conditions"][0]["value"] =
             serde_json::json!("raw-scalar-is-forbidden");
     });
 

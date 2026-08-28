@@ -99,7 +99,10 @@ fn copy_identity_remaps_nested_ids_and_references() {
     assert_ne!(workspace.id, original.id);
     assert_eq!(workspace.revision, DomainRevision::INITIAL);
     assert_ne!(workspace.listeners[0].id, original.listeners[0].id);
-    assert_ne!(workspace.rules[0].id, original.rules[0].id);
+    assert_ne!(
+        workspace.http_runtime_rules().unwrap()[0].id,
+        original.http_runtime_rules().unwrap()[0].id
+    );
     assert_ne!(
         workspace.android_network_profiles[0].id,
         original.android_network_profiles[0].id
@@ -118,7 +121,10 @@ fn copy_identity_remaps_nested_ids_and_references() {
         Some(workspace.certificate_references[0].id)
     );
     assert_eq!(
-        workspace.rules[0].channel.as_ref().map(ChannelId::as_str),
+        workspace.http_runtime_rules().unwrap()[0]
+            .channel
+            .as_ref()
+            .map(ChannelId::as_str),
         Some(listener.id.to_string().as_str())
     );
     assert_eq!(
@@ -161,7 +167,7 @@ fn referenced_workspace() -> ProxyWorkspace {
         reference: format!("pem:/tmp/certificate-{index}.pem"),
     })
     .collect();
-    let workspace = ProxyWorkspace {
+    let mut workspace = ProxyWorkspace {
         id: WorkspaceId::new(),
         name: "Referenced".into(),
         revision: DomainRevision::new(9),
@@ -194,24 +200,8 @@ fn referenced_workspace() -> ProxyWorkspace {
             }),
             ..ProxyListener::default()
         }],
-        rules: vec![Rule {
-            id: RuleId::new(),
-            revision: DomainRevision::INITIAL,
-            name: "Rule".into(),
-            description: String::new(),
-            enabled: true,
-            priority: 1,
-            created_order: 1,
-            channel: Some(ChannelId::new(listener_id.to_string()).expect("channel")),
-            stage: MessageStage::Request,
-            conditions: Vec::<MatchCondition>::new(),
-            actions: Vec::new(),
-            one_shot: false,
-            hit_count: 0,
-            last_hit_at: None,
-        }],
-        protocol_rules: Vec::new(),
-        protocol_rule_created_order_high_water: 0,
+        rule_definitions: Vec::new(),
+        rule_created_order_high_water: 1,
         certificate_references: certificates,
         android_network_profiles: vec![AndroidNetworkProfile {
             id: "android-profile".into(),
@@ -229,9 +219,28 @@ fn referenced_workspace() -> ProxyWorkspace {
             }],
             confirmed_shared_uids: BTreeSet::new(),
             auto_resume_after_reboot: false,
+            stop_vpn_on_control_loss: true,
             weak_network: WeakNetworkProfile::default(),
         }],
     };
+    workspace
+        .replace_http_runtime_rules(vec![Rule {
+            id: RuleId::new(),
+            revision: DomainRevision::INITIAL,
+            name: "Rule".into(),
+            description: String::new(),
+            enabled: true,
+            priority: 1,
+            created_order: 1,
+            channel: Some(ChannelId::new(listener_id.to_string()).expect("channel")),
+            stage: MessageStage::Request,
+            conditions: Vec::<MatchCondition>::new(),
+            actions: vec![RuleAction::Delay { milliseconds: 1 }],
+            one_shot: false,
+            hit_count: 0,
+            last_hit_at: None,
+        }])
+        .unwrap();
     workspace.validate().expect("valid referenced workspace");
     workspace
 }

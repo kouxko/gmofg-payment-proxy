@@ -1,24 +1,20 @@
-//! 协议 Document 规则命令的薄适配层。
+//! 统一规则命令的薄适配层。
 
 use intercept_proxy_application::{
-    DocumentValue, ListenerId, OperationResultViewModel, ProtocolDocumentRuleDefinition,
-    ProtocolDocumentRuleId, ProtocolPackageSchemaFieldTypeViewModel, ProtocolRuleCapabilityCatalog,
-    ProtocolRuleEditorContext, ProtocolRuleSaveInput, ProtocolRuleStage, parse_protocol_rule_value,
+    DocumentValue, MessageStage, OperationResultViewModel, ProtocolPackageSchemaFieldTypeViewModel,
+    RuleActionKind, RuleConditionKind, RuleDefinition, RuleDefinitionSaveInput, RuleEditorContext,
+    parse_protocol_rule_value,
 };
+use intercept_proxy_domain::{ListenerId, MatchCondition, Revision, RuleAction, RuleId};
 use tauri::State;
 
 use super::{CommandResult, command_error};
 use crate::app_state::AppState;
 
-/// 把规则编辑器文本解析为 Rust/Schema 认可的类型化值。
-///
-/// 该纯命令不依赖当前 Workspace；前端切换字段时只需提交公开字段类型，不能自行解释
-/// UTF-8 字节、JavaScript 安全整数或 Blob Hex。
 #[tauri::command]
 #[specta::specta]
-// Tauri IPC 必须拥有反序列化后的 String；CommandResult 则沿用全应用稳定的错误 DTO。
 #[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
-pub fn protocol_rule_parse_value(
+pub fn rule_parse_document_value(
     field_type: ProtocolPackageSchemaFieldTypeViewModel,
     raw: String,
 ) -> CommandResult<DocumentValue> {
@@ -27,87 +23,144 @@ pub fn protocol_rule_parse_value(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn protocol_rule_list(
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn rule_definition_condition_draft(
     app_state: State<'_, AppState>,
-) -> CommandResult<Vec<ProtocolDocumentRuleDefinition>> {
+    kind: RuleConditionKind,
+    stage: MessageStage,
+) -> CommandResult<MatchCondition> {
     app_state
         .application
-        .protocol_rule_list()
+        .rule_definition_condition_draft(kind, stage)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn rule_definition_action_draft(
+    app_state: State<'_, AppState>,
+    kind: RuleActionKind,
+    stage: MessageStage,
+) -> CommandResult<RuleAction> {
+    app_state
+        .application
+        .rule_definition_action_draft(kind, stage)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rule_definition_list(
+    app_state: State<'_, AppState>,
+) -> CommandResult<Vec<RuleDefinition>> {
+    app_state
+        .application
+        .rule_definition_list()
         .await
         .map_err(command_error)
 }
 
-/// 保留给非编辑器调用方的单阶段只读查询；WebView 编辑器必须使用完整上下文命令。
 #[tauri::command]
 #[specta::specta]
-pub async fn protocol_rule_capabilities(
+pub async fn rule_editor_context(
     app_state: State<'_, AppState>,
     listener_id: ListenerId,
-    stage: ProtocolRuleStage,
-) -> CommandResult<ProtocolRuleCapabilityCatalog> {
+) -> CommandResult<RuleEditorContext> {
     app_state
         .application
-        .protocol_rule_capabilities(listener_id, stage)
+        .rule_editor_context(listener_id)
         .await
         .map_err(command_error)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn protocol_rule_editor_context(
+pub async fn rule_definition_get(
     app_state: State<'_, AppState>,
-    listener_id: ListenerId,
-) -> CommandResult<ProtocolRuleEditorContext> {
+    rule_id: RuleId,
+) -> CommandResult<RuleDefinition> {
     app_state
         .application
-        .protocol_rule_editor_context(listener_id)
+        .rule_definition_get(rule_id)
         .await
         .map_err(command_error)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn protocol_rule_save(
+pub async fn rule_definition_copy(
     app_state: State<'_, AppState>,
-    input: ProtocolRuleSaveInput,
-) -> CommandResult<ProtocolDocumentRuleDefinition> {
+    rule_id: RuleId,
+) -> CommandResult<RuleDefinition> {
     app_state
         .application
-        .protocol_rule_save(input)
+        .rule_definition_copy(rule_id)
         .await
         .map_err(command_error)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn protocol_rule_toggle(
+pub async fn rule_definition_create_from_exchange_observation(
     app_state: State<'_, AppState>,
-    rule_id: ProtocolDocumentRuleId,
-    expected_revision: u64,
+    exchange_id: String,
+    response_event_index: u32,
+) -> CommandResult<RuleDefinitionSaveInput> {
+    let record = app_state
+        .exchange_observations()
+        .get(&exchange_id)
+        .ok_or_else(|| {
+            command_error(intercept_proxy_application::AppError::new(
+                "EXCHANGE_OBSERVATION_NOT_FOUND",
+                "Exchange 运行记录不存在或已被内存淘汰。",
+            ))
+        })?;
+    app_state
+        .application
+        .rule_definition_create_from_exchange_observation(&record, response_event_index as usize)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rule_definition_save(
+    app_state: State<'_, AppState>,
+    input: RuleDefinitionSaveInput,
+) -> CommandResult<RuleDefinition> {
+    app_state
+        .application
+        .rule_definition_save(input)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn rule_definition_toggle(
+    app_state: State<'_, AppState>,
+    rule_id: RuleId,
+    expected_revision: Revision,
     enabled: bool,
-) -> CommandResult<ProtocolDocumentRuleDefinition> {
+) -> CommandResult<RuleDefinition> {
     app_state
         .application
-        .protocol_rule_toggle(rule_id, expected_revision, enabled)
+        .rule_definition_toggle(rule_id, expected_revision, enabled)
         .await
         .map_err(command_error)
 }
 
 #[tauri::command]
 #[specta::specta]
-pub async fn protocol_rule_delete(
+pub async fn rule_definition_delete(
     app_state: State<'_, AppState>,
-    rule_id: ProtocolDocumentRuleId,
-    expected_revision: u64,
+    rule_id: RuleId,
+    expected_revision: Revision,
     confirmed: bool,
 ) -> CommandResult<OperationResultViewModel> {
     app_state
         .application
-        .protocol_rule_delete(rule_id, expected_revision, confirmed)
+        .rule_definition_delete(rule_id, expected_revision, confirmed)
         .await
         .map_err(command_error)
 }
-
-#[cfg(test)]
-#[path = "protocol_rules/tests.rs"]
-mod tests;

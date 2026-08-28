@@ -1,0 +1,28 @@
+{
+  "task_id": "TASK-20260828-004",
+  "case_id": "ANDROID-CONTROL-LEASE-001",
+  "executed_at": "2026-08-28 21:36:46 +08:00",
+  "environment": "macOS local Rust, TypeScript and Kotlin controlled tests",
+  "result": "PASS_WITH_NOT_RUN",
+  "sources": [
+    "src-tauri/crates/domain/src/android.rs",
+    "src-tauri/crates/infrastructure/src/adapters/android_adb/lease.rs",
+    "src-tauri/crates/infrastructure/src/adapters/android_adb/protocol.rs",
+    "android/app/src/main/java/com/interceptproxy/companion/ControlLeaseCoordinator.kt",
+    "android/app/src/main/java/com/interceptproxy/companion/VpnRuntimeRegistry.kt",
+    "src/features/android-network/"
+  ],
+  "observed": {
+    "kotlin_control_lease_protocol_generation": "17/17 passed",
+    "rust_heartbeat_contract": "1/1 passed",
+    "rust_forward_cleanup": "11/11 passed",
+    "rust_lease_isolation": "3/3 passed",
+    "android_engine": "47/47 passed",
+    "android_frontend": "32/32 passed",
+    "static_gates": "passed"
+  },
+  "not_run": [
+    "Android Gradle plugin resolution in the offline environment",
+    "Physical USB removal and desktop process termination on an exclusive Android device"
+  ]
+}

@@ -13,14 +13,16 @@ use crate::{
     ProtocolDocumentRuleId, ProtocolPackageRef, Revision,
 };
 
+mod content_validation;
 mod definition;
 mod execution;
 mod validation;
 mod wire;
-pub use execution::*;
-use validation::{
-    add_error, next_rule_revision, rule_error, validate_field_value, validate_structure,
+pub use content_validation::{
+    validate_document_rule_content_against_schema, validate_document_rule_content_structure,
 };
+pub use execution::*;
+use validation::{next_rule_revision, rule_error, validate_structure};
 use wire::{ProtocolDocumentRuleWire, StrictDocumentValue};
 
 /// 单个 Workspace 最多保存的 协议 Document 规则数。
@@ -416,47 +418,12 @@ impl ProtocolDocumentRuleDefinition {
 
     /// 使用具体 Schema 校验版本、未知字段及严格值类型。
     pub fn validate_against_schema(&self, schema: &DocumentSchema) -> Result<(), DomainError> {
-        let mut error = rule_error("协议 Document 规则与 Schema 不兼容");
-        if self.schema_version != schema.version() {
-            add_error(
-                &mut error,
-                "schema_version",
-                "规则 Schema 版本与绑定 Schema 不一致",
-            );
-        }
-        for (index, condition) in self.conditions.iter().enumerate() {
-            validate_field_value(
-                schema,
-                condition.field(),
-                condition.value(),
-                &format!("conditions.{index}"),
-                &mut error,
-            );
-        }
-        for (index, action) in self.actions.iter().enumerate() {
-            if let Some((field, value)) = action.field_and_value() {
-                validate_field_value(
-                    schema,
-                    field,
-                    value,
-                    &format!("actions.{index}"),
-                    &mut error,
-                );
-            } else if let DocumentAction::ClearField { field } = action
-                && schema.field_index(field.as_str()).is_none()
-            {
-                add_error(
-                    &mut error,
-                    format!("actions.{index}.field"),
-                    "字段未在绑定 Schema 中声明",
-                );
-            }
-        }
-        if error.field_errors.is_empty() {
-            Ok(())
-        } else {
-            Err(error)
-        }
+        validate_document_rule_content_against_schema(
+            self.schema_version,
+            &self.conditions,
+            &self.actions,
+            schema,
+        )
     }
 
     fn from_wire(value: ProtocolDocumentRuleWire) -> Result<Self, DomainError> {

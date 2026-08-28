@@ -2,6 +2,17 @@
 
 本文按任务最终完成日期记录已经实现并验收的功能。最新日期排在最前面；同一天按完成时间倒序排列。
 
+## 2026-08-28
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 21:42:26 +08:00 | [修复外部 Workspace 提交后管理页保持旧快照](completed/2026-08-28/fix-workspace-management-external-refresh.md) | 让 Workspace 管理页消费外部提交事件，刷新列表与详情权威快照，同时保留仅名称草稿并显式标记读取失败与陈旧状态 | PASS_WITH_NOT_RUN；组件回归、全量前端、正式构建和独立审查通过；重启后点击式数据面重放因 UI 自动化通道不可用未执行 | 高 | Workspace 管理、snapshot_required、草稿合并、陈旧状态、真实 App |
+| 21:40:47 +08:00 | [统一 HTTP 与 Socket 规则抽象、阶段和持久化合同](completed/2026-08-28/unify-http-socket-rule-abstraction.md) | 使用单一 RuleDefinition、统一阶段、单一持久化集合和公共接口，并在同一 HTTP 规则内联合处理 Header 与 Document | PASS；全栈自动化、正式构建和独立审查通过 | 高 | RuleDefinition、HTTP Document、Socket、统一持久化、MCP |
+| 21:39:24 +08:00 | [ADB 或桌面控制失联后可选自动关闭 Android VPN](completed/2026-08-28/android-vpn-stop-on-adb-device-missing.md) | 默认开启逐设备控制租约；连续失联 5 秒后只关闭当前 generation 的 VPN/TUN，并保持其他设备和 Listener 不变 | PASS_WITH_NOT_RUN；自动化与独立复审通过，真实设备拔线与桌面异常退出未执行 | 高 | Android VPN、控制租约、heartbeat、generation、ADB |
+| 12:38:59 +08:00 | [修复运行中 App 重放发现的 Mock 草稿与入口刷新问题](completed/2026-08-28/fix-running-app-replay-findings.md) | 排除 Mock 草稿中的托管长度 Header，并在 Environment commit 后以统一事件失效当前 Workspace、入口与规则能力查询 | PASS_WITH_NOT_RUN；自动化与运行中 App 数据平面/刷新重放通过，用户确认无需继续额外按钮探索 | 高 | HTTP Mock、Content-Length、Workspace refresh、MCP apply |
+| 12:38:59 +08:00 | [Socket Exchange 连接状态语义修复](completed/2026-08-28/socket-connection-status-semantics.md) | 将抓包状态统一为保持连接、正常结束和异常结束，保留原始错误且不推断业务结果 | PASS；抓包回归、类型检查、lint 和源码大小门禁通过 | 低 | Socket、Exchange、连接状态、UI |
+| 10:12:34 +08:00 | [当前运行 App 的 Proxy 与模拟 Server 归档场景重放](completed/2026-08-28/running-app-proxy-archive-replay.md) | 在用户已启动的 Release App 中用临时 HTTP/TCP 模拟 Server 重放真实 Proxy、抓包、Exchange、日志和规则能力，并恢复空 Workspace | FAILED_WITH_NOT_RUN；HTTP/Socket、日志倒序和清理通过；Mock 草稿与 UI 刷新失败；TLS/mTLS、外部包和 Android 真机未运行 | 高 | running App、Proxy、mock server、HTTP、Socket、MCP |
+
 ## 2026-08-27
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |

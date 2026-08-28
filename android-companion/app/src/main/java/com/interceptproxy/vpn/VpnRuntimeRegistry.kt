@@ -7,6 +7,12 @@ package com.interceptproxy.vpn
  * 也不能重新建立 TUN。
  */
 object VpnRuntimeRegistry {
+    internal data class StartRequest(
+        val generation: Long,
+        val previousSnapshot: Snapshot,
+        val previousDesiredRunning: Boolean,
+    )
+
     data class StopRequest(
         val generation: Long,
         val requiresTeardownConfirmation: Boolean,
@@ -35,7 +41,9 @@ object VpnRuntimeRegistry {
     fun snapshot(): Snapshot = snapshot
 
     @Synchronized
-    fun startRequested(profileId: String, runtime: ProxyRuntimeFacts): Long {
+    internal fun beginStart(profileId: String, runtime: ProxyRuntimeFacts): StartRequest {
+        val previousSnapshot = snapshot
+        val previousDesiredRunning = desiredRunning
         val generation = snapshot.generation + 1
         desiredRunning = true
         snapshot = Snapshot(
@@ -47,7 +55,21 @@ object VpnRuntimeRegistry {
             "已请求启动目标应用 VPN。",
             generation,
         )
-        return generation
+        return StartRequest(generation, previousSnapshot, previousDesiredRunning)
+    }
+
+    @Synchronized
+    fun startRequested(profileId: String, runtime: ProxyRuntimeFacts): Long =
+        beginStart(profileId, runtime).generation
+
+    @Synchronized
+    internal fun rollbackStart(request: StartRequest): Boolean {
+        if (snapshot.generation != request.generation || snapshot.state != "start_requested") {
+            return false
+        }
+        snapshot = request.previousSnapshot
+        desiredRunning = request.previousDesiredRunning
+        return true
     }
 
     @Synchronized
@@ -85,6 +107,12 @@ object VpnRuntimeRegistry {
     }
 
     @Synchronized
+    fun stopRequestedIfCurrent(expectedGeneration: Long): StopRequest? {
+        if (!desiredRunning || snapshot.generation != expectedGeneration) return null
+        return stopRequested()
+    }
+
+    @Synchronized
     fun confirmStopped(generation: Long, message: String = "VPN 已停止，目标应用恢复系统网络。"): Boolean {
         if (desiredRunning || snapshot.generation != generation) return false
         snapshot = stoppedSnapshot(generation, message)
@@ -101,6 +129,22 @@ object VpnRuntimeRegistry {
             return false
         }
         releaseTun()
+        snapshot = stoppedSnapshot(generation, message)
+        return true
+    }
+
+    @Synchronized
+    internal fun completeWithoutActiveService(
+        generation: Long,
+        message: String,
+        stopNativeDataPlane: () -> Unit,
+        stopQueuedService: () -> Unit,
+    ): Boolean {
+        if (desiredRunning || snapshot.state != "stop_requested" || snapshot.generation != generation) {
+            return false
+        }
+        stopNativeDataPlane()
+        stopQueuedService()
         snapshot = stoppedSnapshot(generation, message)
         return true
     }
@@ -171,9 +215,10 @@ internal object VpnExternalStopCoordinator {
         message: String,
         stopNativeDataPlane: () -> Unit,
         stopQueuedService: () -> Unit,
-    ) {
-        stopNativeDataPlane()
-        stopQueuedService()
-        VpnRuntimeRegistry.confirmStopped(stopRequest.generation, message)
-    }
+    ): Boolean = VpnRuntimeRegistry.completeWithoutActiveService(
+        stopRequest.generation,
+        message,
+        stopNativeDataPlane,
+        stopQueuedService,
+    )
 }

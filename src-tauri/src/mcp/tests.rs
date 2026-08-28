@@ -77,7 +77,9 @@ fn tool_catalog_preserves_the_existing_read_only_runtime_and_portable_protocol_t
         "android_network_endpoints",
         "android_runtime_owner_list",
         "certificate_overview",
-        "workspace_protocol_rule_list",
+        "rule_list",
+        "rule_get",
+        "workspace_rule_list",
         "protocol_package_catalog",
         "protocol_package_detail",
         "protocol_package_usage",
@@ -86,8 +88,8 @@ fn tool_catalog_preserves_the_existing_read_only_runtime_and_portable_protocol_t
     }
     assert_eq!(
         read_tools.len(),
-        39,
-        "existing reads plus capabilities/status"
+        38,
+        "unified reads plus capabilities/status"
     );
     for forbidden in [
         "save", "create", "delete", "clear", "reset", "start", "stop", "import", "export",
@@ -138,7 +140,7 @@ fn resources_include_authoring_manifest_and_official_zip() {
         resource.uri == resources::TOOL_REFERENCE_URI
             && resource.mime_type.as_deref() == Some("text/markdown")
             && resource.title.as_deref()
-                == Some("Complete MCP tool reference: 37 reads and 5 environment tools")
+                == Some("Complete MCP tool reference: 36 reads and 5 environment tools")
     }));
     assert!(resources.iter().any(|resource| {
         resource.uri == resources::VALIDATION_PLAYBOOK_URI

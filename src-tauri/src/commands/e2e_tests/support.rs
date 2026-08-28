@@ -154,7 +154,7 @@ impl CrossLayerFixture {
                 protocol_package_import_commit,
                 protocol_package_detail,
                 protocol_package_enable,
-                protocol_rule_save,
+                rule_definition_save,
                 exchange_observation_query,
                 exchange_observation_get,
                 diagnostic_log_query,

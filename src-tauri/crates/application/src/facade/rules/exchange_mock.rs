@@ -1,34 +1,90 @@
 use std::collections::BTreeSet;
 
 use http::{HeaderName, HeaderValue};
-use intercept_proxy_domain::{ChannelId, ProtocolDirection};
+use intercept_proxy_domain::{ChannelId, HttpRuleContent, ProtocolDirection};
 
-use super::{Application, ensure_valid};
+use super::Application;
+use crate::facade::unified_rule_editor::{domain_action, domain_condition};
 use crate::{
     AppError, AppResult, ExchangeContext, ExchangeObservationEvent, ExchangeObservationRecord,
-    ExchangeProtocol, MessageStage, RuleAction, RuleCondition, RuleDraft, RuleMatchField,
-    RuleMatchOperator, RuleTerminalAction,
+    ExchangeProtocol, MessageStage, RuleAction, RuleCondition, RuleContent, RuleDefinition,
+    RuleDefinitionDraft, RuleDefinitionSaveInput, RuleDraft, RuleMatchField, RuleMatchOperator,
+    RuleStage, RuleTerminalAction,
 };
 
 const INVALID_SOURCE: &str = "HTTP_MOCK_DRAFT_SOURCE_INVALID";
 
 impl Application {
     /// 从完整服务器响应构造未保存、未启用的普通 HTTP Mock 规则草稿。
-    pub async fn rule_create_from_exchange_observation(
+    #[cfg(test)]
+    pub(crate) fn rule_create_from_exchange_observation(
         &self,
         record: &ExchangeObservationRecord,
         response_event_index: usize,
     ) -> AppResult<RuleDraft> {
+        let _ = self;
         let source = MockDraftSource::from_record(record, response_event_index)?;
         let draft = source.into_draft(record)?;
-        let validation = self.rules.validate(&draft).await?;
-        ensure_valid(
-            "RULE_INVALID",
-            "抓包响应生成的规则草稿校验失败。",
-            &validation,
-        )?;
+        let unified = unified_input(record, draft.clone())?;
+        RuleDefinition::create(unified.draft, 1)?;
         Ok(draft)
     }
+
+    /// Builds an unsaved unified HTTP rule draft from a complete captured response.
+    pub fn rule_definition_create_from_exchange_observation(
+        &self,
+        record: &ExchangeObservationRecord,
+        response_event_index: usize,
+    ) -> AppResult<RuleDefinitionSaveInput> {
+        let source =
+            MockDraftSource::from_record(record, response_event_index)?.into_draft(record)?;
+        let unified = unified_input(record, source)?;
+        RuleDefinition::create(unified.draft.clone(), 1)?;
+        Ok(unified)
+    }
+}
+
+fn unified_input(
+    record: &ExchangeObservationRecord,
+    source: RuleDraft,
+) -> AppResult<RuleDefinitionSaveInput> {
+    let stage = match source.stage {
+        Some(MessageStage::Request) => RuleStage::ProxyToUpstream,
+        Some(MessageStage::Response) => RuleStage::ProxyToApp,
+        Some(MessageStage::TlsHandshake) => RuleStage::TlsHandshake,
+        Some(MessageStage::Terminal) | None => {
+            return Err(source_error("抓包生成的规则缺少有效 HTTP 阶段。"));
+        }
+    };
+    let actions = source
+        .actions
+        .into_iter()
+        .map(domain_action)
+        .collect::<AppResult<Vec<_>>>()?;
+    Ok(RuleDefinitionSaveInput {
+        rule_id: None,
+        expected_revision: None,
+        draft: RuleDefinitionDraft {
+            name: source.name,
+            enabled: false,
+            priority: source.priority,
+            listener_id: record.listener_id,
+            stage,
+            content: RuleContent::Http(HttpRuleContent {
+                description: source.description,
+                conditions: source
+                    .conditions
+                    .into_iter()
+                    .map(domain_condition)
+                    .collect(),
+                actions,
+                document: None,
+                one_shot: source.one_shot,
+                hit_count: 0,
+                last_hit_at: None,
+            }),
+        },
+    })
 }
 
 struct MockDraftSource<'a> {
@@ -91,7 +147,7 @@ impl<'a> MockDraftSource<'a> {
                 "服务器响应 Body 不是 UTF-8 文本，无法无损生成 Mock 规则草稿。",
             ));
         }
-        let (status, headers) = response_metadata(self.response_header, self.response_body)?;
+        let (status, headers) = response_metadata(self.response_header)?;
         Ok(RuleDraft {
             rule_id: None,
             expected_revision: None,
@@ -135,7 +191,7 @@ fn request_target(header: &str) -> AppResult<String> {
     Ok(target.expect("checked target").to_owned())
 }
 
-fn response_metadata(header: &str, body: &str) -> AppResult<(u16, Vec<(String, String)>)> {
+fn response_metadata(header: &str) -> AppResult<(u16, Vec<(String, String)>)> {
     let mut lines = header.lines();
     let status_line = lines.next().unwrap_or_default().trim_end_matches('\r');
     let mut status_parts = status_line.split_whitespace();
@@ -150,12 +206,11 @@ fn response_metadata(header: &str, body: &str) -> AppResult<(u16, Vec<(String, S
     let parsed = parse_headers(lines)?;
     reject_encoded_body(&parsed)?;
     let connection_tokens = connection_tokens(&parsed);
-    let mut headers = parsed
+    let headers = parsed
         .into_iter()
         .filter(|(name, _)| !is_hop_by_hop(name) && !connection_tokens.contains(name))
         .filter(|(name, _)| name != "content-length")
         .collect::<Vec<_>>();
-    headers.push(("content-length".into(), body.len().to_string()));
     Ok((status.expect("checked status"), headers))
 }
 

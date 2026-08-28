@@ -2,7 +2,9 @@ use super::*;
 
 use crate::{
     environment_configuration::EnvironmentProjectedCandidate,
-    requirements_tests::test_environment_identity_allocator,
+    requirements_tests::{
+        http_rule_definitions, protocol_rule_definitions, test_environment_identity_allocator,
+    },
 };
 
 #[test]
@@ -48,7 +50,7 @@ fn packaged_resource_candidate_projects_with_builtin_package_and_no_private_mate
         "mode":"scripted",
         "settings":{"package":{"id":"iso8583-ascii-standard","version":"1.0.0"}},
     });
-    value["workspace"]["protocol_rules"][0]["package"] =
+    value["workspace"]["rules"][14]["package"] =
         serde_json::json!({"id":"iso8583-ascii-standard","version":"1.0.0"});
     value["materials"] = serde_json::json!({"certificates":[],"secrets":[]});
 
@@ -60,7 +62,7 @@ fn packaged_resource_candidate_projects_with_builtin_package_and_no_private_mate
         .unwrap_or_else(|error| panic!("packaged resource projection failed: {error:?}"));
 
     assert_eq!(projected.workspace().listeners.len(), 2);
-    assert_eq!(projected.workspace().rules.len(), 14);
-    assert_eq!(projected.workspace().protocol_rules.len(), 1);
+    assert_eq!(http_rule_definitions(projected.workspace()).len(), 14);
+    assert_eq!(protocol_rule_definitions(projected.workspace()).len(), 1);
     assert_eq!(projected.workspace().android_network_profiles.len(), 1);
 }

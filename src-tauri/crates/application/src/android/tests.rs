@@ -25,6 +25,12 @@ fn length_prefixed_protocol_rejects_truncation_and_oversize() {
 }
 
 #[test]
+fn heartbeat_is_a_valid_control_protocol_operation() {
+    AndroidControlRequest::new("heartbeat", serde_json::json!({"owner_epoch": "epoch"}))
+        .expect("desktop lease renewal must be part of the versioned protocol");
+}
+
+#[test]
 fn profile_rejects_companion_and_requires_confirmation_for_total_loss() {
     let profile = AndroidNetworkProfile {
         id: "danger".into(),
@@ -41,6 +47,7 @@ fn profile_rejects_companion_and_requires_confirmation_for_total_loss() {
         proxy_routes: Vec::new(),
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile {
             random_loss_basis_points: 10_000,
             ..WeakNetworkProfile::default()
@@ -73,6 +80,7 @@ fn profile_accepts_multiple_destination_addresses_and_rejects_invalid_ranges() {
         proxy_routes: Vec::new(),
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile::default(),
     };
     profile.validate().expect("多个地址应通过校验");
@@ -143,6 +151,7 @@ fn nested_edit_defaults_are_owned_by_rust() {
         proxy_routes: Vec::new(),
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile::default(),
     };
 

@@ -28,7 +28,7 @@ use intercept_proxy_protocol_scripting::{
 };
 use intercept_proxy_runtime::{
     HttpConnectionIdentity, HttpDirectionCapabilities, HttpObservationMetadata,
-    HttpProtocolCapabilityFactory, RulesChain,
+    HttpProtocolCapabilityFactory,
 };
 use parking_lot::{Mutex, RwLock};
 
@@ -36,7 +36,9 @@ use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackage
 
 use super::ListenerRuntimeAdapter;
 
+mod joint_rules;
 mod programs;
+pub(crate) use joint_rules::{JointDocumentEvaluation, JointHttpRuleRuntime};
 use programs::{HttpDocumentRulePrograms, compile_programs};
 
 /// Listener 启动时冻结的协议包与规则集合。
@@ -50,6 +52,7 @@ pub(super) struct HttpProtocolRuntimeSnapshot {
     rule_generation: Arc<AtomicU64>,
     metadata: HttpObservationMetadata,
     listener_id: intercept_proxy_domain::ListenerId,
+    joint_rules: Arc<JointHttpRuleRuntime>,
 }
 
 impl fmt::Debug for HttpProtocolRuntimeSnapshot {
@@ -63,6 +66,21 @@ impl fmt::Debug for HttpProtocolRuntimeSnapshot {
 }
 
 impl HttpProtocolRuntimeSnapshot {
+    #[cfg(test)]
+    pub(super) fn joint_runtime(&self) -> Arc<JointHttpRuleRuntime> {
+        Arc::clone(&self.joint_rules)
+    }
+
+    #[cfg(test)]
+    pub(super) fn take_joint_evaluation(
+        &self,
+        connection: &HttpConnectionIdentity,
+        response: bool,
+    ) -> Option<JointDocumentEvaluation> {
+        self.joint_rules
+            .take_identity(connection.runtime_epoch, connection.connection_id, response)
+    }
+
     pub(super) async fn prepare_async(
         adapter: &ListenerRuntimeAdapter,
         workspace: &ProxyWorkspace,
@@ -116,6 +134,7 @@ impl HttpProtocolRuntimeSnapshot {
                 listener_id: listener.id.to_string(),
             },
             listener_id: listener.id,
+            joint_rules: Arc::clone(&adapter.joint_http_rules),
         })))
     }
 
@@ -157,6 +176,7 @@ impl HttpProtocolRuntimeSnapshot {
                 listener_id: listener.id.to_string(),
             },
             listener_id: listener.id,
+            joint_rules: Arc::clone(&adapter.joint_http_rules),
         })))
     }
 
@@ -209,6 +229,7 @@ impl HttpProtocolRuntimeSnapshot {
         direction: ProtocolDirection,
         first: ProtocolRuleStage,
         second: ProtocolRuleStage,
+        response: bool,
     ) -> Result<HttpDirectionCapabilities<D>, Error> {
         let executor = ProtocolDirectionExecutor::new(
             self.package.compiled(),
@@ -220,15 +241,20 @@ impl HttpProtocolRuntimeSnapshot {
         .map_err(|error| protocol_error(&error))?;
         let executor = Arc::new(Mutex::new(executor));
         let programs = self.programs.read();
-        let rules = RulesChain::new(vec![
-            Box::new(HttpDocumentRules::new(programs.program(first))),
-            Box::new(HttpDocumentRules::new(programs.program(second))),
-        ]);
+        let observed = Arc::new(Mutex::new(None));
+        let rules = HttpDocumentRules::new(
+            Arc::clone(&self.joint_rules),
+            connection.clone(),
+            response,
+            Arc::clone(&executor),
+            Arc::clone(&observed),
+            [programs.program(first), programs.program(second)],
+        );
         Ok(HttpDirectionCapabilities::new(
-            Box::new(HttpDecode::<D>::new(Arc::clone(&executor))),
+            Box::new(HttpDecode::<D>::new(Arc::clone(&executor), observed)),
             Box::new(HttpDisplay::new(Arc::clone(&executor))),
             Box::new(rules),
-            Box::new(HttpEncode::<D>::new(executor)),
+            Box::new(HttpEncode::<D>::new()),
         ))
     }
 }
@@ -247,6 +273,7 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
             ProtocolDirection::Upstream,
             ProtocolRuleStage::AppToProxy,
             ProtocolRuleStage::ProxyToUpstream,
+            false,
         )
     }
 
@@ -259,21 +286,24 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
             ProtocolDirection::Downstream,
             ProtocolRuleStage::UpstreamToProxy,
             ProtocolRuleStage::ProxyToApp,
+            true,
         )
     }
 }
 
-type SharedExecutor = Arc<Mutex<ProtocolDirectionExecutor>>;
+pub(super) type SharedExecutor = Arc<Mutex<ProtocolDirectionExecutor>>;
 
 struct HttpDecode<D: Direction> {
     executor: SharedExecutor,
+    observed: Arc<Mutex<Option<HttpContext>>>,
     direction: PhantomData<fn() -> D>,
 }
 
 impl<D: Direction> HttpDecode<D> {
-    fn new(executor: SharedExecutor) -> Self {
+    fn new(executor: SharedExecutor, observed: Arc<Mutex<Option<HttpContext>>>) -> Self {
         Self {
             executor,
+            observed,
             direction: PhantomData,
         }
     }
@@ -284,7 +314,9 @@ impl<D: Direction> Decode<Http, D> for HttpDecode<D> {
     async fn decode(&mut self, context: &HttpContext) -> Result<Document, Error> {
         let executor = Arc::clone(&self.executor);
         let body = context.body.as_bytes().to_vec();
-        run_stage(move || executor.lock().decode_document(&body)).await
+        let document = run_stage(move || executor.lock().decode_document(&body)).await?;
+        *self.observed.lock() = Some(context.clone());
+        Ok(document)
     }
 }
 
@@ -308,14 +340,12 @@ impl Display for HttpDisplay {
 }
 
 struct HttpEncode<D: Direction> {
-    executor: SharedExecutor,
     direction: PhantomData<fn() -> D>,
 }
 
 impl<D: Direction> HttpEncode<D> {
-    fn new(executor: SharedExecutor) -> Self {
+    fn new() -> Self {
         Self {
-            executor,
             direction: PhantomData,
         }
     }
@@ -328,39 +358,58 @@ impl<D: Direction> Encode<Http, D> for HttpEncode<D> {
         original: &HttpContext,
         document: &Document,
     ) -> Result<HttpContext, Error> {
-        let executor = Arc::clone(&self.executor);
-        let origin = original.body.as_bytes().to_vec();
-        let document = document.clone();
-        let written = run_stage(move || executor.lock().encode_document(&origin, document)).await?;
-        let body = String::from_utf8(written).map_err(|_| {
-            Error::new("HTTP_PROTOCOL_OUTPUT_NOT_UTF8\n协议包 Encode 返回了非 UTF-8 HTTP Body")
-        })?;
-        Ok(HttpContext {
-            header: original.header.clone(),
-            body,
-            body_is_utf8: true,
-        })
+        let _ = document;
+        Ok(original.clone())
     }
 }
 
 struct HttpDocumentRules {
-    program: Arc<ProtocolDocumentRuleProgram>,
+    runtime: Arc<JointHttpRuleRuntime>,
+    connection: HttpConnectionIdentity,
+    response: bool,
+    executor: SharedExecutor,
+    observed: Arc<Mutex<Option<HttpContext>>>,
+    programs: [Arc<ProtocolDocumentRuleProgram>; 2],
 }
 
 impl HttpDocumentRules {
-    fn new(program: Arc<ProtocolDocumentRuleProgram>) -> Self {
-        Self { program }
+    fn new(
+        runtime: Arc<JointHttpRuleRuntime>,
+        connection: HttpConnectionIdentity,
+        response: bool,
+        executor: SharedExecutor,
+        observed: Arc<Mutex<Option<HttpContext>>>,
+        programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+    ) -> Self {
+        Self {
+            runtime,
+            connection,
+            response,
+            executor,
+            observed,
+            programs,
+        }
     }
 }
 
 #[async_trait]
 impl Rules for HttpDocumentRules {
     async fn apply(&mut self, document: Document) -> Result<Document, Error> {
-        let execution = self
-            .program
-            .execute(document)
-            .map_err(|error| Error::new(format!("{}\n{error}", error.code.as_str())))?;
-        Ok(execution.into_parts().0)
+        let original = self.observed.lock().take().ok_or_else(|| {
+            Error::new("HTTP_PROTOCOL_CONTEXT_MISSING\nDocument 缺少对应 HTTP 上下文")
+        })?;
+        self.runtime.stage(
+            self.connection.runtime_epoch,
+            self.connection.connection_id,
+            self.response,
+            JointDocumentEvaluation::new(
+                document.clone(),
+                original.body.into_bytes(),
+                Arc::clone(&self.executor),
+                self.programs.iter().cloned(),
+            ),
+        );
+        Ok(document)
     }
 }
 

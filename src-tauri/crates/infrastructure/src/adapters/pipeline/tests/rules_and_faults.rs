@@ -1,93 +1,50 @@
+include!("rules_and_faults/conflict_retry.rs");
 #[tokio::test]
-async fn nth_hit_retry_preserves_prior_count_without_double_counting_current_message() {
-    let rule = view_to_domain_rule({
-        let mut view = one_shot_delay_rule();
-        view.draft.conditions =
-            vec![intercept_proxy_application::RuleCondition::NthHit { count: 2 }];
-        view.draft.one_shot = false;
-        view
-    })
-    .expect("rule");
-    let rules = Arc::new(ConflictOnceRules {
+async fn failed_http_action_keeps_one_shot_and_hit_metadata_unchanged() {
+    let mut view = one_shot_delay_rule();
+    view.draft.actions = vec![intercept_proxy_application::RuleAction::SetJsonField {
+        path: "$.amount".into(),
+        value_json: "200".into(),
+    }];
+    let rule = view_to_domain_rule(view).expect("rule");
+    let original_rule_revision = rule.revision;
+    let rules = Arc::new(StaticRules {
         snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
-        conflict_once: AtomicBool::new(true),
-        commit_attempts: AtomicUsize::new(0),
     });
     let pipeline = RuntimePipelineAdapter::new(
         test_product_hooks(),
         rules.clone(),
-        Arc::new(InMemorySessionStore::new(10, 64 * 1024 * 1024)),
+        Arc::new(InMemorySessionStore::default()),
         Arc::new(BreakpointCoordinator::default()),
-        Arc::new(EventHub::new(128)),
+        Arc::new(EventHub::new(16)),
         test_capture_repository(),
     );
     let epoch = Uuid::new_v4();
-    pipeline.runtime_started(epoch).await;
     let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
-    let message = request_message(r#"{"amount":100}"#);
-    let body_codec = test_body_codec();
+    pipeline.runtime_started(epoch).await;
+    let message = request_message("not-json");
+    let original = message.clone();
+    let collection_revision = rules.snapshot.lock().collection_revision;
 
-    let first = pipeline
+    let error = pipeline
         .evaluate(
             &context,
             DomainMessageStage::Request,
             Some(&message),
-            body_codec.as_ref(),
+            test_body_codec(),
         )
         .await
-        .expect("first evaluation");
-    assert!(
-        first.actions.is_empty(),
-        "the first NthHit(2) evaluation only advances the in-memory counter"
-    );
-    assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 0);
+        .expect_err("invalid JSON action must fail atomically");
 
-    let second = pipeline
-        .evaluate(
-            &context,
-            DomainMessageStage::Request,
-            Some(&message),
-            body_codec.as_ref(),
-        )
-        .await
-        .expect("second evaluation retries after the injected conflict");
-    assert_eq!(
-        second.actions,
-        vec![RuleAction::Delay { milliseconds: 25 }],
-        "the same second request must still hit after rollback and re-evaluation"
-    );
-    assert_eq!(
-        rules.commit_attempts.load(AtomicOrdering::Acquire),
-        2,
-        "one conflicting CAS and one successful retry are expected"
-    );
-    {
-        let persisted = rules.snapshot.lock();
-        assert_eq!(persisted.rules[0].hit_count, 1);
-        assert_eq!(
-            persisted.collection_revision, 2,
-            "the external advance and successful retry each advance once"
-        );
-    }
-
-    let third = pipeline
-        .evaluate(
-            &context,
-            DomainMessageStage::Request,
-            Some(&message),
-            body_codec.as_ref(),
-        )
-        .await
-        .expect("third evaluation");
-    assert!(
-        third.actions.is_empty(),
-        "the retry must not count the second request twice"
-    );
-    assert_eq!(
-        rules.snapshot.lock().rules[0].hit_count,
-        1,
-        "only the exact second hit executes and persists"
-    );
+    assert_eq!(error.code, "JSON_INVALID");
+    assert_eq!(message.body, original.body);
+    assert_eq!(message.headers, original.headers);
+    let persisted = rules.snapshot.lock();
+    assert_eq!(persisted.collection_revision, collection_revision);
+    assert_eq!(persisted.rules[0].revision, original_rule_revision);
+    assert!(persisted.rules[0].enabled);
+    assert_eq!(persisted.rules[0].hit_count, 0);
+    assert_eq!(persisted.rules[0].last_hit_at, None);
 }
 
 #[tokio::test]
@@ -160,7 +117,7 @@ async fn aborting_http_caller_after_commit_started_does_not_cancel_actor_state_m
                     &context,
                     DomainMessageStage::Request,
                     Some(&message),
-                    test_body_codec().as_ref(),
+                    test_body_codec(),
                 )
                 .await
         }
@@ -176,7 +133,7 @@ async fn aborting_http_caller_after_commit_started_does_not_cancel_actor_state_m
             &context,
             DomainMessageStage::Request,
             Some(&message),
-            test_body_codec().as_ref(),
+            test_body_codec(),
         )
         .await
         .unwrap();
@@ -211,7 +168,7 @@ async fn aborted_runtime_stopping_still_retires_epoch_and_resets_actor() {
     pipeline.runtime_started(epoch).await;
     pipeline.evaluate(
         &context, DomainMessageStage::Request, Some(&request_message("body")),
-        test_body_codec().as_ref(),
+        test_body_codec(),
     ).await.unwrap();
     let entered_wait = entered.notified();
     let completed_wait = completed.notified();
@@ -255,7 +212,7 @@ async fn cancelling_before_mailbox_capacity_is_acquired_never_executes_the_comma
         let context = context.clone();
         let message = message.clone();
         async move { pipeline.evaluate(
-            &context, DomainMessageStage::Request, Some(&message), test_body_codec().as_ref(),
+            &context, DomainMessageStage::Request, Some(&message), test_body_codec(),
         ).await }
     });
     entered.notified().await;

@@ -54,8 +54,9 @@ Settings、Workspace、规则和证书集合均使用 revision/CAS：
 
 ### 3.2 Workspace 是聚合根
 
-Workspace 保存 Listener、HTTP 基础规则、协议 Document 规则、Android Profile 和证书引用等用户
-配置。协议包文件本体、证书私钥本体和运行任务不嵌入 Workspace JSON。
+Workspace 保存 Listener、统一规则定义、Android Profile 和证书引用等用户配置。规则内容使用
+HTTP/Socket 标签隔离能力，HTTP 的可选 Document 属于同一条 HTTP 规则，不是第二个持久化对象。
+协议包文件本体、证书私钥本体和运行任务不嵌入 Workspace JSON。
 
 Listener 启动前，Application/Infrastructure 从 Workspace 和注册表构造不可变 runtime snapshot。
 网络任务只持有该快照，不在报文处理中反复查询 SQLite。配置更新只有通过明确 replace/restart 路径

@@ -43,14 +43,17 @@ impl ValidationProjection {
     ) -> AppResult<Self> {
         validate_domain_graph(&candidate, checkpoint)?;
         let mut packages = BTreeMap::new();
-        for package in candidate
-            .workspace
-            .listeners
-            .iter()
-            .flat_map(|listener| listener.package_refs())
-            .chain(candidate.workspace.protocol_rules.iter().map(
-                crate::environment_configuration::rules::ProtocolDocumentRuleTemplate::package_ref,
-            ))
+        for package in
+            candidate
+                .workspace
+                .listeners
+                .iter()
+                .flat_map(|listener| listener.package_refs())
+                .chain(
+                    candidate.workspace.rules.iter().filter_map(
+                        crate::environment_configuration::rules::RuleTemplate::package_ref,
+                    ),
+                )
         {
             ensure_running(checkpoint)?;
             let package_ref = ProtocolPackageRef {
@@ -163,10 +166,7 @@ fn parse_schema_error(error: &EnvironmentConfigurationParseError) -> AppError {
         EnvironmentConfigurationParseError::PersistedIdentityForNewTarget => {
             "EXISTING_RULE_ID_FORBIDDEN"
         }
-        EnvironmentConfigurationParseError::DuplicateHttpRuleSelector
-        | EnvironmentConfigurationParseError::DuplicateProtocolRuleSelector => {
-            "EXISTING_RULE_ID_DUPLICATE"
-        }
+        EnvironmentConfigurationParseError::DuplicateRuleSelector => "EXISTING_RULE_ID_DUPLICATE",
         EnvironmentConfigurationParseError::WeakNetworkValueInvalid => "WEAK_NETWORK_VALUE_INVALID",
         EnvironmentConfigurationParseError::UnknownField => "UNKNOWN_FIELD",
         EnvironmentConfigurationParseError::ForbiddenField => "FORBIDDEN_FIELD",
@@ -192,8 +192,7 @@ fn validate_domain_graph(
 ) -> AppResult<()> {
     ensure_running(checkpoint)?;
     if candidate.workspace.listeners.len() > 8
-        || candidate.workspace.http_rules.len() > 128
-        || candidate.workspace.protocol_rules.len() > 128
+        || candidate.workspace.rules.len() > 128
         || candidate.materials.certificates.len() > 16
         || candidate.materials.secrets.len() > 16
         || candidate.workspace.android_network_profiles.len() > 8
@@ -237,12 +236,9 @@ fn validate_domain_graph(
     }
     for alias in candidate
         .workspace
-        .http_rules
+        .rules
         .iter()
-        .map(crate::environment_configuration::rules::HttpRuleTemplate::listener_alias)
-        .chain(candidate.workspace.protocol_rules.iter().map(
-            crate::environment_configuration::rules::ProtocolDocumentRuleTemplate::listener_alias,
-        ))
+        .map(crate::environment_configuration::rules::RuleTemplate::listener_alias)
         .chain(
             candidate
                 .workspace
@@ -259,10 +255,12 @@ fn validate_domain_graph(
             ));
         }
     }
-    for rule in &candidate.workspace.http_rules {
+    for rule in &candidate.workspace.rules {
         ensure_running(checkpoint)?;
-        if rule.existing_rule_id.is_none() {
-            rule.validate_domain()?;
+        if rule.existing_rule_id().is_none()
+            && let Some(http) = rule.as_http()
+        {
+            http.validate_domain()?;
         }
     }
 

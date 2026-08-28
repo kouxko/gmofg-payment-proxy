@@ -424,12 +424,13 @@ pub(super) fn external_workspace(
     listener: ProxyListener,
     rules: Vec<ProtocolDocumentRuleDefinition>,
 ) -> ProxyWorkspace {
-    ProxyWorkspace {
+    let mut workspace = ProxyWorkspace {
         name: "External E2E".into(),
         listeners: vec![listener],
-        protocol_rules: rules,
         ..ProxyWorkspace::default()
-    }
+    };
+    workspace.replace_document_runtime_rules(rules).unwrap();
+    workspace
 }
 
 fn registration() -> ExternalPackageRegistration {

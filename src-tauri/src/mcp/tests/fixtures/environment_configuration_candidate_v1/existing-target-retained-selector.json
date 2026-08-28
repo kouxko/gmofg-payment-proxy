@@ -120,142 +120,6 @@
         }
       }
     ],
-    "http_rules": [
-      {
-        "existing_rule_id": "00000000-0000-0000-0000-000000000020",
-        "name": "Retained HTTP request rule",
-        "description": "Canonical retained-selector fixture",
-        "enabled": true,
-        "priority": 10,
-        "listener_alias": "http-entry",
-        "stage": "request",
-        "conditions": [
-          {
-            "Field": {
-              "field": "TerminalIp",
-              "operator": {
-                "Equals": "192.0.2.10"
-              }
-            }
-          },
-          {
-            "Field": {
-              "field": {
-                "JsonPath": "$.amount"
-              },
-              "operator": {
-                "Regex": "^[0-9]+$"
-              }
-            }
-          },
-          {
-            "NthHit": 1
-          }
-        ],
-        "actions": [
-          "Pause",
-          {
-            "SetJsonField": {
-              "path": "$.amount",
-              "value": 1000
-            }
-          },
-          {
-            "ReplaceBodyText": "replacement"
-          },
-          {
-            "SetHeader": {
-              "name": "X-Test",
-              "value": "yes"
-            }
-          },
-          {
-            "Delay": {
-              "milliseconds": 1
-            }
-          },
-          {
-            "Jitter": {
-              "minimum_milliseconds": 1,
-              "maximum_milliseconds": 2,
-              "scope": "BeforeMessage"
-            }
-          },
-          {
-            "Throttle": {
-              "bytes_per_second": 1024,
-              "chunk_bytes": 128,
-              "direction": "Upstream"
-            }
-          }
-        ],
-        "one_shot": false
-      }
-    ],
-    "protocol_rules": [
-      {
-        "existing_rule_id": "00000000-0000-0000-0000-000000000030",
-        "name": "Protocol Document values",
-        "enabled": true,
-        "priority": 20,
-        "listener_alias": "socket-entry",
-        "package": {
-          "id": "au-eftex",
-          "version": "1.1.0"
-        },
-        "schema_version": 1,
-        "stage": "app_to_proxy",
-        "conditions": [
-          {
-            "operator": "equals",
-            "field": "amount",
-            "value": {
-              "type": "int",
-              "value": 1000
-            }
-          },
-          {
-            "operator": "equals",
-            "field": "approved",
-            "value": {
-              "type": "bool",
-              "value": true
-            }
-          },
-          {
-            "operator": "equals",
-            "field": "raw",
-            "value": {
-              "type": "blob",
-              "value": [
-                65,
-                66
-              ]
-            }
-          }
-        ],
-        "actions": [
-          {
-            "type": "record_match"
-          },
-          {
-            "type": "set_field",
-            "field": "approval_code",
-            "value": {
-              "type": "string",
-              "value": "OK1234"
-            }
-          },
-          {
-            "type": "clear_field",
-            "field": "temporary"
-          },
-          {
-            "type": "clear_document"
-          }
-        ]
-      }
-    ],
     "android_network_profiles": [
       {
         "id": "android-lab",
@@ -332,7 +196,166 @@
             "probability_basis_points": 0,
             "bits_per_packet": 0
           }
+        },
+        "stop_vpn_on_control_loss": true
+      }
+    ],
+    "rules": [
+      {
+        "existing_rule_id": "00000000-0000-0000-0000-000000000020",
+        "name": "Retained HTTP request rule",
+        "description": "Canonical retained-selector fixture",
+        "enabled": true,
+        "priority": 10,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "conditions": [
+          {
+            "Field": {
+              "field": "TerminalIp",
+              "operator": {
+                "Equals": "192.0.2.10"
+              }
+            }
+          },
+          {
+            "Field": {
+              "field": {
+                "JsonPath": "$.amount"
+              },
+              "operator": {
+                "Regex": "^[0-9]+$"
+              }
+            }
+          },
+          {
+            "NthHit": 1
+          }
+        ],
+        "actions": [
+          "Pause",
+          {
+            "SetJsonField": {
+              "path": "$.amount",
+              "value": 1000
+            }
+          },
+          {
+            "ReplaceBodyText": "replacement"
+          },
+          {
+            "SetHeader": {
+              "name": "X-Test",
+              "value": "yes"
+            }
+          },
+          {
+            "Delay": {
+              "milliseconds": 1
+            }
+          },
+          {
+            "Jitter": {
+              "minimum_milliseconds": 1,
+              "maximum_milliseconds": 2,
+              "scope": "BeforeMessage"
+            }
+          },
+          {
+            "Throttle": {
+              "bytes_per_second": 1024,
+              "chunk_bytes": 128,
+              "direction": "Upstream"
+            }
+          }
+        ],
+        "one_shot": false,
+        "type": "http",
+        "document": {
+          "package": {
+            "id": "au-eftex",
+            "version": "1.1.0"
+          },
+          "schema_version": 1,
+          "conditions": [
+            {
+              "operator": "equals",
+              "field": "amount",
+              "value": {
+                "type": "int",
+                "value": 1000
+              }
+            }
+          ],
+          "actions": [
+            {
+              "type": "record_match"
+            }
+          ]
         }
+      },
+      {
+        "existing_rule_id": "00000000-0000-0000-0000-000000000030",
+        "name": "Protocol Document values",
+        "enabled": true,
+        "priority": 20,
+        "listener_alias": "socket-entry",
+        "package": {
+          "id": "au-eftex",
+          "version": "1.1.0"
+        },
+        "schema_version": 1,
+        "stage": "app_to_proxy",
+        "conditions": [
+          {
+            "operator": "equals",
+            "field": "amount",
+            "value": {
+              "type": "int",
+              "value": 1000
+            }
+          },
+          {
+            "operator": "equals",
+            "field": "approved",
+            "value": {
+              "type": "bool",
+              "value": true
+            }
+          },
+          {
+            "operator": "equals",
+            "field": "raw",
+            "value": {
+              "type": "blob",
+              "value": [
+                65,
+                66
+              ]
+            }
+          }
+        ],
+        "actions": [
+          {
+            "type": "record_match"
+          },
+          {
+            "type": "set_field",
+            "field": "approval_code",
+            "value": {
+              "type": "string",
+              "value": "OK1234"
+            }
+          },
+          {
+            "type": "clear_field",
+            "field": "temporary"
+          },
+          {
+            "type": "clear_document"
+          }
+        ],
+        "type": "socket"
       }
     ]
   },

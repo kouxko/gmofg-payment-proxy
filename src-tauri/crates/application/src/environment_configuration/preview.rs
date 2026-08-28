@@ -12,64 +12,8 @@ pub(crate) fn candidate_preview_snapshot(
     prior_layers: &[EnvironmentValidationResult],
     projected_workspace: &ProxyWorkspace,
 ) -> AppResult<EnvironmentCandidatePublicSnapshot> {
-    let projected_workspace =
-        serde_json::to_value(projected_workspace).map_err(|_| preview_failure())?;
     let validation_layers = validation_layers_with_preview(prior_layers)?;
-
-    let listeners = candidate
-        .workspace
-        .listeners
-        .iter()
-        .enumerate()
-        .map(|(index, listener)| {
-            let alias = listener.alias();
-            let id = string_field(&projected_workspace["listeners"][index], "id")?;
-            Ok(json!({ "alias": alias, "candidate_local_id": id }))
-        })
-        .collect::<AppResult<Vec<_>>>()?;
-    let http_rules = candidate
-        .workspace
-        .http_rules
-        .iter()
-        .enumerate()
-        .map(|(index, rule)| {
-            let projected = &projected_workspace["rules"][index];
-            Ok(json!({
-                "candidate_index": index,
-                "candidate_local_id": string_field(projected, "id")?,
-                "created_order": integer_field(projected, "created_order")?,
-                "listener_alias": rule.listener_alias()
-            }))
-        })
-        .collect::<AppResult<Vec<_>>>()?;
-    let protocol_rules = candidate
-        .workspace
-        .protocol_rules
-        .iter()
-        .enumerate()
-        .map(|(index, rule)| {
-            let projected = &projected_workspace["protocol_rules"][index];
-            Ok(json!({
-                "candidate_index": index,
-                "candidate_local_id": string_field(projected, "rule_id")?,
-                "created_order": integer_field(projected, "created_order")?,
-                "listener_alias": rule.listener_alias()
-            }))
-        })
-        .collect::<AppResult<Vec<_>>>()?;
-    let android_profile_ids = candidate
-        .workspace
-        .android_network_profiles
-        .iter()
-        .enumerate()
-        .map(|(index, _)| {
-            string_field(
-                &projected_workspace["android_network_profiles"][index],
-                "id",
-            )
-        })
-        .collect::<AppResult<Vec<_>>>()?;
-
+    let resources = preview_resources(candidate, projected_workspace)?;
     let mut certificate_aliases = candidate.materials.certificate_aliases();
     certificate_aliases.sort_unstable();
     let mut secret_aliases = candidate.materials.secret_aliases();
@@ -79,12 +23,7 @@ pub(crate) fn candidate_preview_snapshot(
         "target": public_target(&candidate.target),
         "baseline_public": baseline_public(&candidate.target),
         "validation_layers": validation_layers,
-        "resources": {
-            "listeners": listeners,
-            "http_rules": http_rules,
-            "protocol_rules": protocol_rules,
-            "android_profile_ids": android_profile_ids
-        },
+        "resources": resources,
         "alias_graph": {
             "certificate_aliases": certificate_aliases,
             "secret_aliases": secret_aliases
@@ -104,6 +43,64 @@ pub(crate) fn candidate_preview_snapshot(
         &serde_json::to_vec(&snapshot).map_err(|_| preview_failure())?,
     )
     .map_err(|_| preview_failure())
+}
+
+fn preview_resources(
+    candidate: &EnvironmentConfigurationCandidateV1,
+    projected_workspace: &ProxyWorkspace,
+) -> AppResult<Value> {
+    let projected_workspace_json =
+        serde_json::to_value(projected_workspace).map_err(|_| preview_failure())?;
+    let mut definitions = projected_workspace
+        .rule_definitions
+        .iter()
+        .collect::<Vec<_>>();
+    definitions.sort_by_key(|definition| definition.created_order());
+
+    let listeners = candidate
+        .workspace
+        .listeners
+        .iter()
+        .enumerate()
+        .map(|(index, listener)| {
+            let alias = listener.alias();
+            let id = string_field(&projected_workspace_json["listeners"][index], "id")?;
+            Ok(json!({ "alias": alias, "candidate_local_id": id }))
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    let rules = candidate
+        .workspace
+        .rules
+        .iter()
+        .enumerate()
+        .map(|(index, rule)| {
+            let projected = definitions.get(index).ok_or_else(preview_failure)?;
+            Ok(json!({
+                "candidate_index": index,
+                "candidate_local_id": projected.rule_id().to_string(),
+                "created_order": projected.created_order(),
+                "listener_alias": rule.listener_alias()
+            }))
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+    let android_profile_ids = candidate
+        .workspace
+        .android_network_profiles
+        .iter()
+        .enumerate()
+        .map(|(index, _)| {
+            string_field(
+                &projected_workspace_json["android_network_profiles"][index],
+                "id",
+            )
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+
+    Ok(json!({
+        "listeners": listeners,
+        "rules": rules,
+        "android_profile_ids": android_profile_ids
+    }))
 }
 
 fn validation_layers_with_preview(
@@ -129,10 +126,6 @@ fn string_field(value: &Value, field: &str) -> AppResult<String> {
         .as_str()
         .map(str::to_owned)
         .ok_or_else(preview_failure)
-}
-
-fn integer_field(value: &Value, field: &str) -> AppResult<u64> {
-    value[field].as_u64().ok_or_else(preview_failure)
 }
 
 fn public_target(target: &EnvironmentTarget) -> Value {

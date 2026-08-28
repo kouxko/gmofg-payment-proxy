@@ -19,7 +19,7 @@ const ENVIRONMENT_TOOL_NAMES: [&str; 5] = [
     "environment_candidate_apply",
 ];
 
-const EXISTING_READ_TOOL_NAMES: [&str; 37] = [
+const EXISTING_READ_TOOL_NAMES: [&str; 36] = [
     "application_snapshot",
     "application_log_query",
     "application_log_get",
@@ -49,10 +49,9 @@ const EXISTING_READ_TOOL_NAMES: [&str; 37] = [
     "http_capture_get",
     "breakpoint_query",
     "breakpoint_get",
-    "http_rule_list",
-    "http_rule_get",
-    "protocol_rule_list",
-    "workspace_protocol_rule_list",
+    "rule_list",
+    "rule_get",
+    "workspace_rule_list",
     "protocol_package_list",
     "protocol_package_catalog",
     "protocol_package_detail",
@@ -69,7 +68,7 @@ fn active_catalog_exposes_exactly_the_five_environment_configuration_tools() {
         .collect::<BTreeSet<_>>();
 
     assert_eq!(actual, ENVIRONMENT_TOOL_NAMES.into_iter().collect());
-    assert_eq!(active.len(), 42, "37 existing reads plus five writes");
+    assert_eq!(active.len(), 41, "36 existing reads plus five writes");
 }
 
 #[test]

@@ -1,14 +1,7 @@
 use super::{
-    AppError, InfrastructureError, Map, PERSISTENCE_VERSION_FIELD, RULE_PERSISTENCE_VERSION, Rule,
-    RuleDraft, Value, app_error, validate_rule_draft,
+    Map, PERSISTENCE_VERSION_FIELD, RULE_PERSISTENCE_VERSION, Rule, RuleDraft, Value,
+    validate_rule_draft,
 };
-
-pub(super) fn persisted_rule_error(message: String) -> AppError {
-    app_error(InfrastructureError::PersistenceCorrupt {
-        entity: "rule",
-        message,
-    })
-}
 
 pub(super) fn serialize_persisted_rule(rule: &Rule) -> Result<Value, serde_json::Error> {
     let mut value = serde_json::to_value(rule)?;

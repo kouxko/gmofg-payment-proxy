@@ -1,8 +1,41 @@
 use super::{
-    DocumentAction, DocumentCondition, ListenerId, ProtocolDirection,
+    DocumentAction, DocumentCondition, DomainError, ListenerId, ProtocolDirection,
     ProtocolDocumentRuleDefinition, ProtocolDocumentRuleDraft, ProtocolDocumentRuleId,
-    ProtocolPackageRef, ProtocolRuleStage, Revision,
+    ProtocolDocumentRuleWire, ProtocolPackageRef, ProtocolRuleStage, Revision,
 };
+
+impl ProtocolDocumentRuleDefinition {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn restore_from_unified(
+        rule_id: ProtocolDocumentRuleId,
+        revision: Revision,
+        name: String,
+        enabled: bool,
+        priority: i32,
+        created_order: u64,
+        listener_id: ListenerId,
+        package: ProtocolPackageRef,
+        schema_version: u32,
+        stage: ProtocolRuleStage,
+        conditions: Vec<DocumentCondition>,
+        actions: Vec<DocumentAction>,
+    ) -> Result<Self, DomainError> {
+        Self::from_wire(ProtocolDocumentRuleWire {
+            rule_id,
+            revision,
+            name,
+            enabled,
+            priority,
+            created_order,
+            listener_id,
+            package,
+            schema_version,
+            stage,
+            conditions,
+            actions,
+        })
+    }
+}
 
 impl ProtocolRuleStage {
     #[must_use]

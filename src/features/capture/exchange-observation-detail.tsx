@@ -32,7 +32,7 @@ function ContextEvidence({ context }: { context: ExchangeContext }) {
 
 function EventEvidence({ event }: { event: ExchangeObservationEvent }) {
   if (event.event === "opened") return <p className="text-sm">App connection 已由 Proxy 接受。</p>;
-  if (event.event === "closed") return <div className="space-y-2 text-sm"><p>结果：{event.outcome}</p>{event.error && <p className="break-all text-danger">{event.error}</p>}</div>;
+  if (event.event === "closed") return <div className="space-y-2 text-sm"><p>连接状态：{eventLabel(event)}</p>{event.error && <p className="break-all text-danger">{event.error}</p>}</div>;
   if (event.event === "failed") return <div className="space-y-3"><Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{event.stage}</Alert.Title><Alert.Description>{event.error}</Alert.Description></Alert.Content></Alert>{event.context && <ContextEvidence context={event.context} />}</div>;
   return <div className="space-y-3">
     <ContextEvidence context={event.context} />
@@ -55,7 +55,7 @@ function Timeline({
   return <ol className="space-y-4" aria-label="Exchange 事件时间线">
     {record.events.map((event, index) => <li key={`${event.observed_at}-${index}`} className="rounded-xl border border-[var(--telemetry-line)] p-4">
       <header className="mb-3 flex flex-wrap items-center gap-2">
-        <Chip size="sm" color={event.event === "failed" ? "danger" : event.event === "closed" ? "success" : "accent"} variant="soft">{eventLabel(event)}</Chip>
+        <Chip size="sm" color={event.event === "failed" || (event.event === "closed" && event.outcome !== "completed") ? "danger" : event.event === "closed" ? "success" : "accent"} variant="soft">{eventLabel(event)}</Chip>
         <strong className="text-sm">{eventRoute(event)}</strong>
         <time className="ml-auto text-xs text-[var(--telemetry-muted)]">{formatTimestamp(event.observed_at)}</time>
       </header>

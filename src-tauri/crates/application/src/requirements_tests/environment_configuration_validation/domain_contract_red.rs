@@ -107,7 +107,7 @@ async fn duplicate_enabled_listener_endpoint_fails_domain_before_preview() {
 #[tokio::test]
 async fn http_rule_without_actions_fails_domain_before_preview() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["http_rules"][0]["actions"] = serde_json::json!([]);
+        candidate["workspace"]["rules"][0]["actions"] = serde_json::json!([]);
     });
 
     assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::HttpRuleInvalid).await;
@@ -116,7 +116,7 @@ async fn http_rule_without_actions_fails_domain_before_preview() {
 #[tokio::test]
 async fn http_rule_invalid_regex_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["http_rules"][0]["conditions"][1]["Field"]["operator"] =
+        candidate["workspace"]["rules"][0]["conditions"][1]["Field"]["operator"] =
             serde_json::json!({"Regex": "("});
     });
 
@@ -126,7 +126,7 @@ async fn http_rule_invalid_regex_fails_domain_with_exact_code() {
 #[tokio::test]
 async fn http_rule_zero_nth_hit_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["http_rules"][0]["conditions"][2] = serde_json::json!({"NthHit": 0});
+        candidate["workspace"]["rules"][0]["conditions"][2] = serde_json::json!({"NthHit": 0});
     });
 
     assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::HttpRuleInvalid).await;
@@ -135,7 +135,7 @@ async fn http_rule_zero_nth_hit_fails_domain_with_exact_code() {
 #[tokio::test]
 async fn http_rule_invalid_action_value_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["http_rules"][0]["actions"][4] =
+        candidate["workspace"]["rules"][0]["actions"][4] =
             serde_json::json!({"Delay": {"milliseconds": 0}});
     });
 
@@ -145,7 +145,7 @@ async fn http_rule_invalid_action_value_fails_domain_with_exact_code() {
 #[tokio::test]
 async fn http_rule_invalid_rate_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["http_rules"][0]["actions"][6]["Throttle"]["bytes_per_second"] =
+        candidate["workspace"]["rules"][0]["actions"][6]["Throttle"]["bytes_per_second"] =
             serde_json::json!(0);
     });
 
@@ -155,8 +155,8 @@ async fn http_rule_invalid_rate_fails_domain_with_exact_code() {
 #[tokio::test]
 async fn http_rule_invalid_timeout_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["http_rules"][4]["actions"][0]["Terminal"]["UpstreamConnectTimeout"]
-            ["milliseconds"] = serde_json::json!(0);
+        candidate["workspace"]["rules"][4]["actions"][0]["Terminal"]["UpstreamConnectTimeout"]["milliseconds"] =
+            serde_json::json!(0);
     });
 
     assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::HttpRuleInvalid).await;
@@ -165,8 +165,7 @@ async fn http_rule_invalid_timeout_fails_domain_with_exact_code() {
 #[tokio::test]
 async fn http_rule_bound_to_socket_listener_fails_with_alias_type_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["http_rules"][0]["listener_alias"] =
-            serde_json::json!("socket-entry");
+        candidate["workspace"]["rules"][0]["listener_alias"] = serde_json::json!("socket-entry");
     });
 
     assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::ListenerAliasTypeMismatch)
@@ -277,7 +276,7 @@ async fn rejects_more_than_eight_listeners() {
 async fn rejects_more_than_one_hundred_twenty_eight_http_rules() {
     let candidate = candidate_json_with(|candidate| {
         extend_with_unique_clones(
-            candidate["workspace"]["http_rules"].as_array_mut().unwrap(),
+            candidate["workspace"]["rules"].as_array_mut().unwrap(),
             128,
             "name",
         );
@@ -289,9 +288,7 @@ async fn rejects_more_than_one_hundred_twenty_eight_http_rules() {
 async fn rejects_more_than_one_hundred_twenty_eight_protocol_rules() {
     let candidate = candidate_json_with(|candidate| {
         extend_with_unique_clones(
-            candidate["workspace"]["protocol_rules"]
-                .as_array_mut()
-                .unwrap(),
+            candidate["workspace"]["rules"].as_array_mut().unwrap(),
             128,
             "name",
         );

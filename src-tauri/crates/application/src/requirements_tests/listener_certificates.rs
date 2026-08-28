@@ -483,9 +483,9 @@ async fn running_workspace_listener_allows_device_network_profile_persistence() 
             proxy_routes: Vec::new(),
             confirmed_shared_uids: BTreeSet::default(),
             auto_resume_after_reboot: false,
+            stop_vpn_on_control_loss: true,
             weak_network: WeakNetworkProfile::default(),
         });
-
     let saved = application
         .workspace_save(workspace)
         .await

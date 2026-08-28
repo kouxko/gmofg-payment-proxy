@@ -219,6 +219,30 @@ fn environment_create_schema_accepts_only_the_canonical_full_shape_fixture() {
 }
 
 #[test]
+fn environment_create_rejects_legacy_split_rule_collections_with_stable_error() {
+    let fixture: Value = serde_json::from_slice(include_bytes!(
+        "fixtures/environment_configuration_candidate_v1/full-shape.json"
+    ))
+    .unwrap();
+
+    for legacy_field in ["http_rules", "protocol_rules"] {
+        let mut candidate = fixture.clone();
+        candidate["workspace"]
+            .as_object_mut()
+            .unwrap()
+            .insert(legacy_field.to_owned(), json!([]));
+        assert_eq!(
+            validate_environment_contract_arguments(
+                "environment_candidate_create",
+                &json!({"candidate": candidate}),
+            ),
+            Err("environment candidate violates the published schema".to_owned()),
+            "legacy workspace.{legacy_field} must remain rejected"
+        );
+    }
+}
+
+#[test]
 fn environment_public_literal_registry_is_closed_and_complete() {
     let registry = public_literal_registry();
     let expected = expected_public_literals();

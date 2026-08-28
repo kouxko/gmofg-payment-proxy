@@ -22,16 +22,19 @@ use crate::{
     ActiveFaultViewModel, AppResult, ApplicationConfigurationDocument, BreakpointDecision,
     BreakpointDetailViewModel, BreakpointDraft, BreakpointValidationViewModel,
     CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, CertificateItemViewModel,
-    CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel, ChannelId,
+    CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
     ExchangeObservationPage, ExchangeObservationQuery, ExchangeObservationRecord,
     FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
     ListenerId, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
-    ProxyListener, ProxyWorkspace, RuleDraft, RuleId, RuleSummaryViewModel,
-    RuleValidationViewModel, RuleViewModel, RuntimeEpoch, SecretReference, SessionDetailViewModel,
-    SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
-    SettingsViewModel, WorkspaceCollectionViewModel, WorkspaceId, WorkspaceSummaryViewModel,
-    WorkspaceValidationViewModel,
+    ProxyListener, ProxyWorkspace, RuleDefinition, RuleDefinitionSaveInput, RuntimeEpoch,
+    SecretReference, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
+    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, WorkspaceCollectionViewModel,
+    WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+};
+#[cfg(test)]
+use crate::{
+    ChannelId, RuleDraft, RuleId, RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel,
 };
 
 /// Read-only access to the bounded in-process Exchange observation timeline.
@@ -171,8 +174,8 @@ pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
         listener: ProxyListener,
     ) -> AppResult<ListenerStatusViewModel>;
     async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel>;
-    /// 将已保存的 协议报文规则替换到正在运行的入口；入口未运行时保持无操作。
-    async fn replace_protocol_rules(
+    /// 将已保存的统一规则快照替换到正在运行的入口；入口未运行时保持无操作。
+    async fn replace_rule_definitions(
         &self,
         workspace: ProxyWorkspace,
         listener_id: ListenerId,
@@ -207,6 +210,7 @@ pub trait CaptureRepositoryPort: Send + Sync + std::fmt::Debug {
 /// 规则持久化端口。
 ///
 /// 实现必须保留 revision 并发校验，不能因为换成 TUI/CLI 就绕过规则校验。
+#[cfg(test)]
 pub trait RuleRepositoryPort: Send + Sync + std::fmt::Debug {
     async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>>;
     async fn get(&self, rule_id: RuleId) -> AppResult<RuleViewModel>;
@@ -234,13 +238,11 @@ pub trait RuleRepositoryPort: Send + Sync + std::fmt::Debug {
 /// 将“故障模板”转换为普通规则并管理其生命周期的端口。
 pub trait FaultServicePort: Send + Sync + std::fmt::Debug {
     async fn templates(&self) -> AppResult<Vec<FaultTemplateViewModel>>;
-    async fn configure(&self, draft: FaultConfigurationDraft) -> AppResult<ActiveFaultViewModel>;
-    async fn active(&self) -> AppResult<Vec<ActiveFaultViewModel>>;
-    async fn stop(
+    async fn rule_draft(
         &self,
-        rule_id: RuleId,
-        expected_revision: u64,
-    ) -> AppResult<ActiveFaultViewModel>;
+        draft: FaultConfigurationDraft,
+    ) -> AppResult<RuleDefinitionSaveInput>;
+    fn active_view(&self, rule: &RuleDefinition) -> Option<ActiveFaultViewModel>;
 }
 
 #[async_trait]

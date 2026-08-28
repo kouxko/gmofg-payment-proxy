@@ -26,6 +26,10 @@ impl AndroidAdbAdapter {
         &self,
         devices: &[AndroidDeviceViewModel],
     ) -> AppResult<()> {
+        let present_serials = devices
+            .iter()
+            .map(|device| device.serial.as_str())
+            .collect::<BTreeSet<_>>();
         let online_serials = devices
             .iter()
             .filter(|device| device.state == AndroidDeviceState::Device)
@@ -35,7 +39,11 @@ impl AndroidAdbAdapter {
         let mut first_error: Option<AppError> = None;
         for owner in self.runtime_owner_snapshots().await {
             let result = self
-                .reconcile_device_owner(&owner, online_serials.contains(owner.serial.as_str()))
+                .reconcile_device_owner(
+                    &owner,
+                    present_serials.contains(owner.serial.as_str()),
+                    online_serials.contains(owner.serial.as_str()),
+                )
                 .await;
             if let Err(error) = result
                 && first_error.is_none()
@@ -52,10 +60,11 @@ impl AndroidAdbAdapter {
     async fn reconcile_device_owner(
         &self,
         owner: &AndroidRuntimeOwnerViewModel,
+        present: bool,
         online: bool,
     ) -> AppResult<()> {
-        if online {
-            if owner.state == AndroidRuntimeOwnerState::WaitingReconnect {
+        if present {
+            if online && owner.state == AndroidRuntimeOwnerState::WaitingReconnect {
                 AndroidControlPort::network_status(
                     self,
                     AndroidDeviceTarget {

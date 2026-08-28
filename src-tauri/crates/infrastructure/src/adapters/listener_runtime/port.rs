@@ -78,7 +78,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             .await
     }
 
-    async fn replace_protocol_rules(
+    async fn replace_rule_definitions(
         &self,
         workspace: ProxyWorkspace,
         listener_id: ListenerId,

@@ -166,6 +166,7 @@ class InterceptVpnService : VpnService() {
 
     private fun restartSavedProfile() {
         InterceptVpnServiceControl.restartSavedProfile(
+            context = this,
             stateStore = stateStore,
             failOpen = { reason -> failOpen(reason) },
             startProfile = ::startProfile,

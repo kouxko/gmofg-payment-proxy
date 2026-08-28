@@ -37,6 +37,7 @@ use intercept_proxy_runtime::{
 use parking_lot::Mutex;
 use uuid::Uuid;
 
+use super::listener_runtime::{JointDocumentEvaluation, JointHttpRuleRuntime};
 use super::{CaptureRepositoryAdapter, RuleRepositoryAdapter};
 use message_projection::{
     breakpoint_content_view, classify_request, content_view, decode_json, encode_body,
@@ -45,8 +46,9 @@ use message_projection::{
 #[cfg(test)]
 use message_projection::{decode_body, display_headers, merge_edited_headers};
 #[cfg(test)]
+use rule_actions::apply_rule_actions;
+#[cfg(test)]
 use rule_actions::map_terminal_action;
-use rule_actions::{apply_rule_actions, weak_network_seed};
 use rule_runtime::{EvaluatedRules, RuleRuntimeService};
 
 mod message_projection;
@@ -130,6 +132,7 @@ pub struct RuntimePipelineAdapter {
     captures: Arc<CaptureRepositoryAdapter>,
     capture_cursor: AtomicU64,
     rule_runtime: RuleRuntimeService,
+    joint_http_rules: Arc<JointHttpRuleRuntime>,
     state: Mutex<PipelineState>,
 }
 

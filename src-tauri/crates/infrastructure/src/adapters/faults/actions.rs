@@ -1,7 +1,7 @@
 use super::{
-    ActiveFaultViewModel, AppError, AppResult, BTreeMap, BodyCodec, DropResponseMode,
-    FaultParameterValue, FaultParameters, JitterScope, MessageStage, RuleAction, TerminalAction,
-    TrafficDirection, UiTone, Value,
+    AppError, AppResult, BTreeMap, BodyCodec, DropResponseMode, FaultParameterValue,
+    FaultParameters, JitterScope, MessageStage, RuleAction, TerminalAction, TrafficDirection,
+    Value,
 };
 
 #[allow(clippy::unnecessary_wraps)]
@@ -312,29 +312,4 @@ pub(super) fn encode_body(body_codec: &dyn BodyCodec, text: &str) -> AppResult<V
     body_codec
         .encode(text)
         .map_err(|error| AppError::new(error.code, error.message))
-}
-
-pub(super) fn active_from_rule(
-    rule: &intercept_proxy_application::RuleViewModel,
-    template_name: &str,
-) -> ActiveFaultViewModel {
-    ActiveFaultViewModel {
-        rule_id: rule.summary.rule_id,
-        template_name: template_name.into(),
-        target_summary: rule.summary.match_summary.clone(),
-        priority: rule.summary.priority,
-        hit_count: rule.summary.hit_count,
-        enabled: rule.summary.enabled,
-        status_text: if rule.summary.enabled {
-            "活动中".into()
-        } else {
-            "已停用".into()
-        },
-        ui_tone: if rule.summary.enabled {
-            UiTone::Warning
-        } else {
-            UiTone::Neutral
-        },
-        revision: rule.summary.revision,
-    }
 }

@@ -38,6 +38,7 @@ const profile = {
   proxy_routes: [],
   confirmed_shared_uids: [],
   auto_resume_after_reboot: false,
+  stop_vpn_on_control_loss: true,
   weak_network: {
     seed: 1,
     fixed_delay_millis: 0,
@@ -134,8 +135,8 @@ describe("Android device UI isolation", () => {
     const user = userEvent.setup();
     let resolveA: ((value: Awaited<ReturnType<typeof ok>>) => void) | undefined;
     mocks.deviceNetworkProfileList.mockReturnValue(ok([
-      { id: "profile-a", name: "设备 A 方案", target_count: 0, auto_resume_after_reboot: false },
-      { id: "profile-b", name: "设备 B 方案", target_count: 0, auto_resume_after_reboot: false },
+      { id: "profile-a", name: "设备 A 方案", target_count: 0, auto_resume_after_reboot: false, stop_vpn_on_control_loss: true },
+      { id: "profile-b", name: "设备 B 方案", target_count: 0, auto_resume_after_reboot: false, stop_vpn_on_control_loss: true },
     ]));
     mocks.deviceNetworkProfileGet.mockImplementation((profileId) => {
       if (profileId === "profile-a") {

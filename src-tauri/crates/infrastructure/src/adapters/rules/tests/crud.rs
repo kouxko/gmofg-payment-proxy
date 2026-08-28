@@ -2,10 +2,7 @@ use super::*;
 
 #[tokio::test]
 async fn new_rule_defaults_are_owned_by_the_rust_repository() {
-    let draft = adapter()
-        .new_http_draft(test_channel())
-        .await
-        .expect("new HTTP draft");
+    let draft = RuleRepositoryAdapter::new_http_draft(test_channel());
     assert_eq!(draft.name, "新建规则");
     assert_eq!(draft.priority, 100);
     assert_eq!(draft.stage, Some(AppMessageStage::Request));
@@ -145,7 +142,10 @@ async fn selected_workspace_owns_rule_list_runtime_snapshot_and_revision() {
     assert_eq!(listed[0].name, "second workspace rule");
     let runtime = runtime_snapshot(&adapter).await;
     assert_eq!(runtime.collection_revision, second_workspace.revision.get());
-    assert_eq!(runtime.rules, second_workspace.rules);
+    assert_eq!(
+        runtime.rules,
+        second_workspace.http_runtime_rules().unwrap()
+    );
 
     store
         .select_workspace(first_workspace.id.as_uuid())
@@ -169,7 +169,6 @@ async fn runtime_snapshot_commit_stays_bound_to_owning_workspace_after_ui_switch
 
     let second = ProxyWorkspace {
         revision: Revision::new(stale.collection_revision),
-        rules: Vec::new(),
         ..ProxyWorkspace::default()
     };
     store
@@ -207,12 +206,16 @@ fn application_rule_write_rejects_workspace_that_is_no_longer_selected() {
         .expect("select first workspace");
 
     let mut edited_first = first.clone();
-    edited_first.rules.push(
+    let mut edited_rules = edited_first.http_runtime_rules().unwrap();
+    edited_rules.push(
         Rule::create(
             to_domain_draft(&request_delay_draft("stale editor rule", false), 1).expect("draft"),
         )
         .expect("rule"),
     );
+    edited_first
+        .replace_http_runtime_rules(edited_rules)
+        .unwrap();
     store
         .select_workspace(second.id.as_uuid())
         .expect("switch selected workspace");

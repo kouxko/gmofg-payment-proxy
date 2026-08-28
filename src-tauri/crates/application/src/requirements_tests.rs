@@ -44,4 +44,5 @@ mod local_responder_topology;
 mod protocol_package_lifecycle;
 mod protocol_rule_values;
 mod settings_lifecycle;
+mod unified_rules;
 mod workspace_configuration;

@@ -14,12 +14,14 @@ async fn scripted_relay_always_builds_the_full_rule_chain() {
     install_enabled(&repository);
     let listener = relay_listener();
     let rule = direction_rule(&listener, ProtocolDirection::Upstream, 10, 1, true);
-    let workspace = ProxyWorkspace {
+    let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        protocol_rules: vec![rule],
-        protocol_rule_created_order_high_water: 1,
+        rule_created_order_high_water: 1,
         ..ProxyWorkspace::default()
     };
+    workspace
+        .replace_document_runtime_rules(vec![rule])
+        .unwrap();
     let runtime = test_listener_runtime_with_packages(store, repository);
     let snapshot = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
@@ -45,17 +47,19 @@ async fn snapshot_partitions_both_directions_without_changing_stable_rule_order(
     ));
     install_enabled(&repository);
     let listener = relay_listener();
-    let workspace = ProxyWorkspace {
+    let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        protocol_rules: vec![
+        rule_created_order_high_water: 4,
+        ..ProxyWorkspace::default()
+    };
+    workspace
+        .replace_document_runtime_rules(vec![
             direction_rule(&listener, ProtocolDirection::Downstream, 20, 2, false),
             direction_rule(&listener, ProtocolDirection::Upstream, 10, 4, false),
             direction_rule(&listener, ProtocolDirection::Downstream, 10, 3, false),
             direction_rule(&listener, ProtocolDirection::Upstream, 10, 1, false),
-        ],
-        protocol_rule_created_order_high_water: 4,
-        ..ProxyWorkspace::default()
-    };
+        ])
+        .unwrap();
     let runtime = test_listener_runtime_with_packages(store, repository);
     let plan = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
@@ -85,16 +89,18 @@ async fn local_response_executes_static_response_from_the_frozen_snapshot_factor
     ));
     let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        protocol_rules: vec![direction_rule(
+        rule_created_order_high_water: 1,
+        ..ProxyWorkspace::default()
+    };
+    workspace
+        .replace_document_runtime_rules(vec![direction_rule(
             &listener,
             ProtocolDirection::Downstream,
             10,
             1,
             true,
-        )],
-        protocol_rule_created_order_high_water: 1,
-        ..ProxyWorkspace::default()
-    };
+        )])
+        .unwrap();
     let runtime = test_listener_runtime_with_packages(store, repository);
     let plan = ListenerRuntimePlanBuilder::new(&runtime)
         .build(&workspace, &listener, Uuid::new_v4())
@@ -103,7 +109,9 @@ async fn local_response_executes_static_response_from_the_frozen_snapshot_factor
     let snapshot = plan.scripted_snapshot().unwrap();
 
     // 快照建立后修改 Workspace，不得改变已冻结连接执行结果。
-    workspace.protocol_rules.clear();
+    workspace
+        .replace_document_runtime_rules(Vec::new())
+        .unwrap();
     let connection = snapshot.rule_connections().connection(
         SocketConnectionIdentity {
             runtime_epoch: Uuid::from_u128(1),

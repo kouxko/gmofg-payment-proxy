@@ -80,11 +80,11 @@ pub(super) fn validate_listener_protocol_binding(
     ensure_description_identity(package, description)?;
     ensure_kind(&listener.data_plane, description.kind)?;
     for rule in workspace
-        .protocol_rules
-        .iter()
+        .document_runtime_rules()?
+        .into_iter()
         .filter(|rule| rule.listener_id() == listener_id)
     {
-        validate_rule_binding(package, rule, description)?;
+        validate_rule_binding(package, &rule, description)?;
     }
     Ok(())
 }
@@ -102,7 +102,7 @@ fn validate_workspace_bindings(
         ensure_kind(&listener.data_plane, description.kind)?;
     }
 
-    for rule in &workspace.protocol_rules {
+    for rule in workspace.document_runtime_rules()? {
         let description = required_description(descriptions, rule.package())?;
         ensure_description_identity(rule.package(), description)?;
         let listener = workspace
@@ -113,7 +113,7 @@ fn validate_workspace_bindings(
         let package = crate::listener_protocol_package(listener)
             .ok_or_else(|| portability_error("报文规则只能绑定已选择协议方案的入口。"))?;
         ensure_kind(&listener.data_plane, description.kind)?;
-        validate_rule_binding(package, rule, description)?;
+        validate_rule_binding(package, &rule, description)?;
     }
     Ok(())
 }

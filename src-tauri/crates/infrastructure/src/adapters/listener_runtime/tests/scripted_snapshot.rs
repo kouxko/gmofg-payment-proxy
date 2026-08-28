@@ -17,10 +17,14 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 use super::super::scripted_snapshot::ScriptedSocketSecuritySnapshot;
 use super::*;
 
+#[path = "scripted_snapshot/fixtures.rs"]
+mod fixtures;
 #[path = "scripted_snapshot/isolation.rs"]
 mod isolation;
 #[path = "scripted_snapshot/rule_matrix.rs"]
 mod rule_matrix;
+
+use fixtures::{snapshot_zip, snapshot_zip_with_manifest};
 
 const SNAPSHOT_MANIFEST: &str = r#"
 api = 1
@@ -124,12 +128,14 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts
         }],
         ..ProxyWorkspace::default()
     };
-    workspace.protocol_rules = vec![
-        rule(&listener, 20, 2),
-        rule(&listener, 10, 3),
-        rule(&listener, 10, 1),
-    ];
-    workspace.protocol_rule_created_order_high_water = 3;
+    workspace
+        .replace_document_runtime_rules(vec![
+            rule(&listener, 20, 2),
+            rule(&listener, 10, 3),
+            rule(&listener, 10, 1),
+        ])
+        .unwrap();
+    workspace.rule_created_order_high_water = 3;
     workspace.validate().unwrap();
     let runtime = test_listener_runtime_with_packages(store, repository);
     let plan = ListenerRuntimePlanBuilder::new(&runtime)
@@ -270,12 +276,14 @@ async fn runtime_plan_rejects_rule_schema_drift_even_when_called_below_applicati
     let mut object = wire.as_object().unwrap().clone();
     object.insert("schema_version".into(), serde_json::json!(8));
     invalid_rule = serde_json::from_value(serde_json::Value::Object(object)).unwrap();
-    let workspace = ProxyWorkspace {
+    let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        protocol_rules: vec![invalid_rule],
-        protocol_rule_created_order_high_water: 1,
+        rule_created_order_high_water: 1,
         ..ProxyWorkspace::default()
     };
+    workspace
+        .replace_document_runtime_rules(vec![invalid_rule])
+        .unwrap();
     workspace.validate().unwrap();
     let runtime = test_listener_runtime_with_packages(store, repository);
     let error = ListenerRuntimePlanBuilder::new(&runtime)
@@ -476,24 +484,4 @@ fn snapshot_package() -> ProtocolPackageRef {
         id: ProtocolPackageId::new("snapshot-protocol").unwrap(),
         version: ProtocolPackageVersion::new("1.0.0").unwrap(),
     }
-}
-
-fn snapshot_zip(script: &str) -> Vec<u8> {
-    snapshot_zip_with_manifest(SNAPSHOT_MANIFEST, script)
-}
-
-fn snapshot_zip_with_manifest(manifest: &str, script: &str) -> Vec<u8> {
-    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
-    for (path, contents) in [
-        ("manifest.toml", manifest.as_bytes()),
-        ("document.toml", SNAPSHOT_SCHEMA.as_bytes()),
-        ("protocol.rhai", script.as_bytes()),
-        ("display.rhai", SNAPSHOT_DISPLAY.as_bytes()),
-    ] {
-        writer
-            .start_file(path, SimpleFileOptions::default())
-            .unwrap();
-        writer.write_all(contents).unwrap();
-    }
-    writer.finish().unwrap().into_inner()
 }

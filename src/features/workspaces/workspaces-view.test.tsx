@@ -14,6 +14,9 @@ import {
 import { WorkspacesView } from "./workspaces-view";
 
 vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
+vi.mock("@/features/shell/workspace-navigation", () => ({
+  useWorkspaceQueryInvalidation: vi.fn(),
+}));
 vi.mock("@heroui/react", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@heroui/react")>();
   return { ...actual, toast: mocks.toast };

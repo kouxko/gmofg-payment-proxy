@@ -23,6 +23,40 @@ export function exchangeRecord(): ExchangeObservationRecord {
   };
 }
 
+export function activeExchangeRecord(): ExchangeObservationRecord {
+  const record = exchangeRecord();
+  return {
+    ...record,
+    exchange_id: "exchange-active",
+    events: record.events.filter((event) => event.event !== "closed"),
+  };
+}
+
+export function failedExchangeRecord(): ExchangeObservationRecord {
+  const record = exchangeRecord();
+  return {
+    ...record,
+    exchange_id: "exchange-failed",
+    events: [
+      ...record.events.slice(0, -1),
+      {
+        event: "failed",
+        observed_at: "2026-08-22T10:00:05Z",
+        direction: "upstream",
+        stage: "READ_TIMEOUT",
+        context: null,
+        error: "socket Exchange read timed out",
+      },
+      {
+        event: "closed",
+        observed_at: "2026-08-22T10:00:06Z",
+        outcome: "failed",
+        error: "Upstream|READ_TIMEOUT: socket Exchange read timed out",
+      },
+    ],
+  };
+}
+
 export function httpExchangeRecord(): ExchangeObservationRecord {
   return {
     exchange_id: "exchange-http-1",

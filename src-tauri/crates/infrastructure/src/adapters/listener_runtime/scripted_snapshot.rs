@@ -366,10 +366,9 @@ pub(super) fn compile_document_rules(
     topology: &SocketTopology,
 ) -> AppResult<ProtocolDocumentRuleConnectionFactory> {
     let mut rules = workspace
-        .protocol_rules
-        .iter()
+        .document_runtime_rules()?
+        .into_iter()
         .filter(|rule| rule.listener_id() == listener.id)
-        .cloned()
         .collect::<Vec<_>>();
     for rule in &rules {
         let schema = match rule.direction() {

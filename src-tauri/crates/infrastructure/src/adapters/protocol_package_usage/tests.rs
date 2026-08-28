@@ -222,7 +222,7 @@ impl ListenerRuntimePort for FailingRuntime {
         runtime_failure()
     }
 
-    async fn replace_protocol_rules(
+    async fn replace_rule_definitions(
         &self,
         _: ProxyWorkspace,
         _: intercept_proxy_domain::ListenerId,

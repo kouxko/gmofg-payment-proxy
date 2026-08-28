@@ -1,32 +1,35 @@
 # 规则、Document 与协议包
 
-本文说明两套规则系统、统一的 Document 模型、内置 Rhai 协议包、外部 WebSocket
+本文说明统一规则聚合、Document 模型、内置 Rhai 协议包、外部 WebSocket
 JSON-RPC 协议包，以及它们在 HTTP/Socket Exchange 中的真实执行顺序。这里描述的是当前源码，
 不是未来扩展设想。
 
-## 1. 两套规则为什么保持独立
+## 1. 单一规则聚合与差异内容
 
-项目同时存在两套规则，它们解决的问题不同，不能互相冒充。
+Workspace 只保存一个 `rule_definitions` 集合，所有生命周期操作只通过统一
+`rule_definition_list/get/save/toggle/delete` 用例。规则顶层统一拥有 identity、revision、名称、
+启用状态、priority、created order、Listener 和 `RuleStage`；内容使用带标签的类型保持能力隔离。
 
-| 规则 | 作用对象 | 典型条件 | 典型动作 |
+| 内容 | 作用对象 | 典型条件 | 典型动作 |
 | --- | --- | --- | --- |
-| HTTP 基础规则 `Rule` | HTTP 方法、Header、Body、连接与故障 | 终端 IP、证书指纹、路径/请求类型、JSONPath、第 N 次命中 | 改 JSON、替换文本、改 Header、延迟、限速、Mock、断连 |
-| 协议 Document 规则 `ProtocolDocumentRuleDefinition` | 协议包解码后的类型化 Document | Schema 字段严格相等 | 记录命中、设置字段、清除字段、清空 Document |
+| `RuleContent::Http` | HTTP Header、URL、raw Body、连接与可选协议 Document | HTTP 字段、第 N 次命中、可选 Schema 字段严格相等 | HTTP 修改/故障与可选 Document 动作 |
+| `RuleContent::Socket` | Socket 协议包解码后的类型化 Document | Schema 字段严格相等 | 记录命中、设置字段、清除字段、清空 Document |
 
-HTTP 基础规则不了解协议 Schema；Document 规则不了解 Method、Header、HTTP Status、JSONPath
-或 TLS 传输实现。独立模型避免 Socket 规则携带无意义的 HTTP 字段，也避免协议包重复实现故障注入。
+HTTP 内容可以在同一规则中组合 Header/raw Body 与协议 Document 条件和动作；完整规则成功前不会
+提交命中计数或一次性禁用状态。Socket 内容不会携带 HTTP 字段或 HTTP 动作。前端只消费 Rust 返回的
+stage/content capability 和草稿，不自行拼接默认 payload。
 
-## 2. HTTP 基础规则
+## 2. 统一规则运行顺序
 
 ### 2.1 确定性执行顺序
 
-运行时为每个 Listener/epoch 取得 `RuleRuntimeSnapshot`，按以下键排序：
+运行时为每个 Listener/epoch 取得统一规则快照。消息阶段先按固定顺序执行，每个阶段内部再按以下键排序：
 
 ```text
-(priority 升序, created_order 升序, rule_id 升序)
+固定阶段顺序 -> (priority 升序, created_order 升序, rule_id 升序)
 ```
 
-规则必须已启用、通道匹配且阶段匹配才进入求值。单条规则的普通条件是 AND；`NthHit`
+规则必须已启用、Listener 匹配且阶段匹配才进入求值。单条规则的普通条件是 AND；`NthHit`
 基于规则、终端 IP 与证书指纹维护独立计数。命中后动作按声明顺序组合；遇到终止动作立即停止
 本规则并停止后续规则。`one_shot` 规则命中后自动禁用并递增 revision。
 
@@ -34,11 +37,13 @@ HTTP 基础规则不了解协议 Schema；Document 规则不了解 Method、Head
 
 保存前由 Rust 领域校验器拒绝跨阶段能力。前端只能展示 Rust 返回的能力，不能自行扩展。
 
-| 阶段 | 允许的关键能力 | 明确禁止 |
+| 统一阶段 | 允许的关键能力 | 明确禁止 |
 | --- | --- | --- |
-| 请求 | 请求内容修改、上行延迟/限速、Mock、上游连接/读写故障 | 响应状态、响应故障、下行限速 |
-| 响应 | 响应内容修改、状态码、下行延迟/限速、截断/错误长度/下行断连 | request terminal、上行限速 |
-| TLS 握手 | 客户端证书指纹条件、`RejectTlsHandshake` | HTTP 内容条件、普通内容动作和其他终止动作 |
+| `app_to_proxy` | App 请求 Decode 后的可选 Document 条件与动作 | HTTP Header/终止动作、响应能力 |
+| `proxy_to_upstream` | 请求 Header/URL/raw Body、可选 Document、上行延迟/限速、Mock、上游连接/读写故障 | 响应状态、响应故障、下行限速 |
+| `upstream_to_proxy` | Server 响应 Decode 后的可选 Document 条件与动作 | HTTP Header/终止动作、请求能力 |
+| `proxy_to_app` | 响应 Header/raw Body、可选 Document、状态码、下行延迟/限速、截断/错误长度/下行断连 | 请求终止动作、上行限速 |
+| `tls_handshake` | 客户端证书指纹条件、`RejectTlsHandshake` | HTTP/Document 内容条件、普通内容动作和其他终止动作 |
 
 还必须满足以下不变量：
 
@@ -53,6 +58,10 @@ HTTP 基础规则不了解协议 Schema；Document 规则不了解 Method、Head
 
 Listener 启动时取得不可变配置快照；规则运行服务在明确替换时才接收新快照。一次求值先在内存中
 形成结果，再提交命中计数与一次性禁用状态。revision 或规则集合签名不一致时拒绝静默覆盖。
+
+旧 `rules`/`protocol_rules` 双集合、旧完整配置和旧导入 payload 不读取、不转换、不迁移。Schema
+版本不是当前版本，或记录仍带旧字段时，Host fail-closed 返回稳定错误，并保持数据库及 sidecar 原样；
+只有用户主动清除应用数据后才创建当前 Schema。
 
 ## 3. Document 与 Schema
 
@@ -80,14 +89,16 @@ Listener 启动时取得不可变配置快照；规则运行服务在明确替�
 
 ### 3.2 Document 规则
 
-Document 规则冻结绑定以下身份：
+包含 Document 的统一规则冻结绑定以下身份：
 
 ```text
-Listener ID + package id/version + Schema version + ProtocolRuleStage
+Listener ID + package id/version + Schema version + content type
 ```
 
-创建后不能借更新操作切换这些绑定。每个阶段的 `ProtocolDocumentRuleProgram` 在构造时验证整份
-快照，包括 disabled 规则，然后按 `(priority, created_order, rule_id)` 冻结排序。
+创建后不能借更新操作切换这些绑定。规则阶段可以修改，但保存前必须使用目标阶段的 Rust capability
+重新校验当前全部 HTTP/Document 内容；不兼容时拒绝保存，不能静默隐藏或丢弃内容。每个阶段的运行
+程序在构造时验证整份快照，包括 disabled 规则，然后按阶段内
+`(priority, created_order, rule_id)` 冻结排序。
 
 条件当前只有类型严格相等。多条件按 AND 执行，空条件恒匹配；未赋值字段使条件不匹配。动作按
 声明顺序执行，后续规则可以观察并覆盖前序规则的修改。任何条件或动作失败时 owned 工作副本被
@@ -126,10 +137,9 @@ HTTP 若未绑定协议包，使用内置 `http-text` Schema，字段只有 `hea
 Decode/Encode 保持文本往返。绑定 HTTP 协议包后，协议包只处理 UTF-8 Body，HTTP Header 仍由
 HTTP 运行时管理；Encode 返回非 UTF-8 Body 会失败。
 
-HTTP 基础规则仍由 `PipelinePorts` 在传输 Writer 中针对权威 `Message` 求值。Writer 先执行基础
-wire policy，再把协议 Pipeline 的 Encode 结果中“相对 Reader 原 Context 确实改变”的 Header/Body
-覆盖到待发送 Message；未改变的 lossy 文本视图不会重写原始字节。终止、延迟和传输调度仍由基础
-规则控制。两类规则不共享状态，也不能依赖前端列表的视觉混排顺序。
+HTTP 联合执行器按 Workspace 明确的 stage execution order 处理同一方向的规则；前一阶段的
+Document 修改可被后一阶段条件观察。Document、HTTP action 和 Encode 全部成功后才提交 hit/revision/
+one-shot 元数据；任一步失败都丢弃 working message 与 working Document，不留下半提交状态。
 
 ## 5. 内置 Rhai 协议包
 

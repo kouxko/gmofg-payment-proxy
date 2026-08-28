@@ -23,7 +23,7 @@ impl Application {
         let mut rules = self
             .selected_protocol_rule_workspace()
             .await?
-            .protocol_rules;
+            .document_runtime_rules()?;
         sort_protocol_document_rules(&mut rules);
         Ok(rules)
     }
@@ -48,12 +48,12 @@ impl Application {
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.selected_protocol_rule_workspace().await?;
         let previous_workspace = workspace.clone();
+        let mut protocol_rules = workspace.document_runtime_rules()?;
 
         // 更新先验证本地实体、revision 与冻结绑定，不能让伪造绑定提前触发另一个包的编译查询。
         match (input.rule_id, input.expected_revision) {
             (Some(rule_id), Some(expected_revision)) => {
-                let current = workspace
-                    .protocol_rules
+                let current = protocol_rules
                     .iter()
                     .find(|rule| rule.rule_id() == rule_id)
                     .ok_or_else(|| protocol_rule_not_found(rule_id))?;
@@ -77,10 +77,8 @@ impl Application {
 
         let saved_rule_id = match (input.rule_id, input.expected_revision) {
             (None, None) => {
-                let created_order = next_created_order(
-                    &workspace.protocol_rules,
-                    workspace.protocol_rule_created_order_high_water,
-                )?;
+                let created_order =
+                    next_created_order(&protocol_rules, workspace.rule_created_order_high_water)?;
                 let rule_id = ProtocolDocumentRuleId::new();
                 let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
                     rule_id,
@@ -96,13 +94,12 @@ impl Application {
                     input.actions,
                 )?;
                 rule.validate_against_schema(&context.schema)?;
-                workspace.protocol_rule_created_order_high_water = created_order;
-                workspace.protocol_rules.push(rule);
+                workspace.rule_created_order_high_water = created_order;
+                protocol_rules.push(rule);
                 rule_id
             }
             (Some(rule_id), Some(expected_revision)) => {
-                let current = workspace
-                    .protocol_rules
+                let current = protocol_rules
                     .iter_mut()
                     .find(|rule| rule.rule_id() == rule_id)
                     .ok_or_else(|| protocol_rule_not_found(rule_id))?;
@@ -125,7 +122,8 @@ impl Application {
             _ => unreachable!("rule ID/revision pair was validated before external queries"),
         };
 
-        sort_protocol_document_rules(&mut workspace.protocol_rules);
+        sort_protocol_document_rules(&mut protocol_rules);
+        workspace.replace_document_runtime_rules(protocol_rules)?;
         workspace.validate()?;
         let saved = self
             .save_protocol_rules_with_runtime_rollback(
@@ -136,7 +134,7 @@ impl Application {
             .await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
         saved
-            .protocol_rules
+            .document_runtime_rules()?
             .into_iter()
             .find(|rule| rule.rule_id() == saved_rule_id)
             .ok_or_else(|| protocol_rule_not_found(saved_rule_id))
@@ -151,14 +149,15 @@ impl Application {
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.selected_protocol_rule_workspace().await?;
         let previous_workspace = workspace.clone();
-        let current = workspace
-            .protocol_rules
+        let mut protocol_rules = workspace.document_runtime_rules()?;
+        let current = protocol_rules
             .iter_mut()
             .find(|rule| rule.rule_id() == rule_id)
             .ok_or_else(|| protocol_rule_not_found(rule_id))?;
         current.set_enabled(Revision::new(expected_revision), enabled)?;
         let result = current.clone();
-        sort_protocol_document_rules(&mut workspace.protocol_rules);
+        sort_protocol_document_rules(&mut protocol_rules);
+        workspace.replace_document_runtime_rules(protocol_rules)?;
         let saved = self
             .save_protocol_rules_with_runtime_rollback(
                 previous_workspace,
@@ -180,19 +179,20 @@ impl Application {
         require_confirmation(confirmed, "删除 协议报文规则需要确认。")?;
         let mut workspace = self.selected_protocol_rule_workspace().await?;
         let previous_workspace = workspace.clone();
-        let index = workspace
-            .protocol_rules
+        let mut protocol_rules = workspace.document_runtime_rules()?;
+        let index = protocol_rules
             .iter()
             .position(|rule| rule.rule_id() == rule_id)
             .ok_or_else(|| protocol_rule_not_found(rule_id))?;
-        workspace.protocol_rules[index]
+        protocol_rules[index]
             .revision()
             .verify(Revision::new(expected_revision))?;
-        workspace.protocol_rule_created_order_high_water = workspace
-            .protocol_rule_created_order_high_water
-            .max(workspace.protocol_rules[index].created_order());
-        let listener_id = workspace.protocol_rules[index].listener_id();
-        workspace.protocol_rules.remove(index);
+        workspace.rule_created_order_high_water = workspace
+            .rule_created_order_high_water
+            .max(protocol_rules[index].created_order());
+        let listener_id = protocol_rules[index].listener_id();
+        protocol_rules.remove(index);
+        workspace.replace_document_runtime_rules(protocol_rules)?;
         let saved = self
             .save_protocol_rules_with_runtime_rollback(previous_workspace, workspace, listener_id)
             .await?;
@@ -217,7 +217,7 @@ impl Application {
         let saved = self.workspaces.save(candidate_workspace).await?;
         let replacement_error = match self
             .listener_runtime
-            .replace_protocol_rules(saved.clone(), listener_id)
+            .replace_rule_definitions(saved.clone(), listener_id)
             .await
         {
             Ok(()) => return Ok(saved),
@@ -239,7 +239,7 @@ impl Application {
             .entity(listener_id.to_string())
         })?;
         self.listener_runtime
-            .replace_protocol_rules(restored, listener_id)
+            .replace_rule_definitions(restored, listener_id)
             .await
             .map_err(|error| {
                 AppError::new(

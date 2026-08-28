@@ -7,14 +7,17 @@ use std::{env, error::Error, fs, path::PathBuf, sync::Arc, time::Duration};
 
 use encoding_rs::SHIFT_JIS;
 use intercept_proxy_application::{
-    AppResult, BodyCodecKind, CaptureQuery, CaptureSort, MessageStage, PageRequest, RuleAction,
-    RuleCondition, RuleDraft, RuleDropResponseMode, RuleMatchField, RuleMatchOperator,
-    RuleTerminalAction, SessionDetailViewModel, SessionQuery, SessionSort, SortDirection,
+    AppError, AppResult, BodyCodecKind, CaptureQuery, CaptureSort, ListenerId, PageRequest,
+    RuleDefinitionSaveInput, RuleEditorContentContext, SessionDetailViewModel, SessionQuery,
+    SessionSort, SortDirection,
 };
-use intercept_proxy_domain::{FixedServerSettings, UpstreamTlsSettings};
+use intercept_proxy_domain::{
+    DropResponseMode, FixedServerSettings, MatchCondition, MatchField, MatchOperator, RuleAction,
+    RuleContent, RuleStage, TerminalAction, UpstreamTlsSettings,
+};
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::{
-    InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
+    FileSelection, InfrastructureError, NativeFileDialog, SecretProtector,
 };
 use intercept_proxy_product_api::InterceptProxyProfile;
 use tokio::{
@@ -204,50 +207,76 @@ async fn serve_fixtures(
 }
 
 fn path_rule(
-    mut draft: RuleDraft,
+    mut input: RuleDefinitionSaveInput,
     name: &str,
     path: &str,
-    stage: MessageStage,
+    stage: RuleStage,
     actions: Vec<RuleAction>,
-) -> RuleDraft {
-    draft.name = format!("TEST ONLY - {name}");
-    draft.description = "Android emulator proxy gate scenario".into();
-    draft.enabled = true;
-    draft.priority = 100;
-    draft.stage = Some(stage);
-    draft.conditions = vec![RuleCondition::Field {
-        field: RuleMatchField::PathOrRequestType,
-        operator: RuleMatchOperator::Contains { value: path.into() },
+) -> RuleDefinitionSaveInput {
+    input.draft.name = format!("TEST ONLY - {name}");
+    input.draft.enabled = true;
+    input.draft.priority = 100;
+    input.draft.stage = stage;
+    let RuleContent::Http(content) = &mut input.draft.content else {
+        unreachable!("HTTP Listener must produce an HTTP rule draft");
+    };
+    content.description = "Android emulator proxy gate scenario".into();
+    content.conditions = vec![MatchCondition::Field {
+        field: MatchField::PathOrRequestType,
+        operator: MatchOperator::Contains(path.into()),
     }];
-    draft.actions = actions;
-    draft.one_shot = false;
-    draft
+    content.actions = actions;
+    content.one_shot = false;
+    input
 }
 
 /// Response rules cannot match the original request path because their message target is the HTTP
 /// response status token. Use the response JSON itself as the supported, observable discriminator.
 fn response_json_rule(
-    mut draft: RuleDraft,
+    mut input: RuleDefinitionSaveInput,
     name: &str,
     scenario: &str,
     actions: Vec<RuleAction>,
-) -> RuleDraft {
-    draft.name = format!("TEST ONLY - {name}");
-    draft.description = "Android emulator proxy gate response scenario".into();
-    draft.enabled = true;
-    draft.priority = 100;
-    draft.stage = Some(MessageStage::Response);
-    draft.conditions = vec![RuleCondition::Field {
-        field: RuleMatchField::JsonPath {
-            path: "$.scenario".into(),
-        },
-        operator: RuleMatchOperator::Equals {
-            value: scenario.into(),
-        },
+) -> RuleDefinitionSaveInput {
+    input.draft.name = format!("TEST ONLY - {name}");
+    input.draft.enabled = true;
+    input.draft.priority = 100;
+    input.draft.stage = RuleStage::ProxyToApp;
+    let RuleContent::Http(content) = &mut input.draft.content else {
+        unreachable!("HTTP Listener must produce an HTTP rule draft");
+    };
+    content.description = "Android emulator proxy gate response scenario".into();
+    content.conditions = vec![MatchCondition::Field {
+        field: MatchField::JsonPath("$.scenario".into()),
+        operator: MatchOperator::Equals(scenario.into()),
     }];
-    draft.actions = actions;
-    draft.one_shot = false;
-    draft
+    content.actions = actions;
+    content.one_shot = false;
+    input
+}
+
+async fn new_http_rule_draft(
+    application: &intercept_proxy_application::Application,
+    listener_id: ListenerId,
+    stage: RuleStage,
+) -> AppResult<RuleDefinitionSaveInput> {
+    let context = application.rule_editor_context(listener_id).await?;
+    let RuleEditorContentContext::Http { stages } = context.content else {
+        return Err(AppError::new(
+            "EMULATOR_GATE_HTTP_CONTEXT_REQUIRED",
+            "模拟器代理门禁需要 HTTP Listener 规则上下文。",
+        ));
+    };
+    stages
+        .into_iter()
+        .find(|candidate| candidate.stage == stage)
+        .map(|candidate| candidate.new_rule_draft)
+        .ok_or_else(|| {
+            AppError::new(
+                "EMULATOR_GATE_HTTP_STAGE_REQUIRED",
+                "模拟器代理门禁所需 HTTP 规则阶段不可用。",
+            )
+        })
 }
 
 fn session_for_path<'a>(
@@ -373,10 +402,15 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     workspace = application.workspace_get(workspace.id).await?;
 
     let request_modify = path_rule(
-        application.rule_new_draft().await?,
+        new_http_rule_draft(
+            application.as_ref(),
+            dll_listener_id,
+            RuleStage::ProxyToUpstream,
+        )
+        .await?,
         "request header and JSON modification",
         "/matrix/request-modify",
-        MessageStage::Request,
+        RuleStage::ProxyToUpstream,
         vec![
             RuleAction::SetHeader {
                 name: "x-request-rule".into(),
@@ -384,14 +418,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             },
             RuleAction::SetJsonField {
                 path: "$.amount".into(),
-                value_json: "200".into(),
+                value: serde_json::json!(200),
             },
         ],
     );
-    application.rule_save(request_modify).await?;
+    application.rule_definition_save(request_modify).await?;
 
     let response_modify = response_json_rule(
-        application.rule_new_draft().await?,
+        new_http_rule_draft(application.as_ref(), dll_listener_id, RuleStage::ProxyToApp).await?,
         "response status header and body modification",
         "response-modify",
         vec![
@@ -400,33 +434,34 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 value: "applied".into(),
             },
             RuleAction::CustomHttpStatus { status: 503 },
-            RuleAction::ReplaceBodyText {
-                text: RESPONSE_RULE_TEXT.into(),
-            },
+            RuleAction::ReplaceBodyText(RESPONSE_RULE_TEXT.into()),
         ],
     );
-    application.rule_save(response_modify).await?;
+    application.rule_definition_save(response_modify).await?;
 
     let mock = path_rule(
-        application.rule_new_draft().await?,
+        new_http_rule_draft(
+            application.as_ref(),
+            dll_listener_id,
+            RuleStage::ProxyToUpstream,
+        )
+        .await?,
         "mock response",
         "/matrix/mock",
-        MessageStage::Request,
-        vec![RuleAction::Terminal {
-            action: RuleTerminalAction::MockResponse {
-                status: 202,
-                headers: vec![
-                    ("content-type".into(), "application/json".into()),
-                    ("x-mock-rule".into(), "applied".into()),
-                ],
-                body_bytes: b"{\"result\":\"MOCK\"}".to_vec(),
-            },
-        }],
+        RuleStage::ProxyToUpstream,
+        vec![RuleAction::Terminal(TerminalAction::MockResponse {
+            status: 202,
+            headers: vec![
+                ("content-type".into(), "application/json".into()),
+                ("x-mock-rule".into(), "applied".into()),
+            ],
+            body_bytes: b"{\"result\":\"MOCK\"}".to_vec(),
+        })],
     );
-    application.rule_save(mock).await?;
+    application.rule_definition_save(mock).await?;
 
     let mut nth_hit = response_json_rule(
-        application.rule_new_draft().await?,
+        new_http_rule_draft(application.as_ref(), dll_listener_id, RuleStage::ProxyToApp).await?,
         "second hit one shot",
         "nth-hit",
         vec![RuleAction::SetHeader {
@@ -434,52 +469,68 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             value: "second-only".into(),
         }],
     );
-    nth_hit.conditions.push(RuleCondition::NthHit { count: 2 });
-    nth_hit.one_shot = true;
-    let nth_hit_rule = application.rule_save(nth_hit).await?;
+    let RuleContent::Http(nth_hit_content) = &mut nth_hit.draft.content else {
+        unreachable!("HTTP Listener must produce an HTTP rule draft");
+    };
+    nth_hit_content.conditions.push(MatchCondition::NthHit(2));
+    nth_hit_content.one_shot = true;
+    let nth_hit_rule = application.rule_definition_save(nth_hit).await?;
 
     let delay = path_rule(
-        application.rule_new_draft().await?,
+        new_http_rule_draft(
+            application.as_ref(),
+            dll_listener_id,
+            RuleStage::ProxyToUpstream,
+        )
+        .await?,
         "deterministic delay",
         "/matrix/delay",
-        MessageStage::Request,
+        RuleStage::ProxyToUpstream,
         vec![RuleAction::Delay { milliseconds: 250 }],
     );
-    application.rule_save(delay).await?;
+    application.rule_definition_save(delay).await?;
 
     let truncate = response_json_rule(
-        application.rule_new_draft().await?,
+        new_http_rule_draft(application.as_ref(), dll_listener_id, RuleStage::ProxyToApp).await?,
         "truncate response",
         "truncate",
-        vec![RuleAction::Terminal {
-            action: RuleTerminalAction::TruncateResponse { bytes: 7 },
-        }],
+        vec![RuleAction::Terminal(TerminalAction::TruncateResponse {
+            bytes: 7,
+        })],
     );
-    application.rule_save(truncate).await?;
+    application.rule_definition_save(truncate).await?;
 
     let drop_response = path_rule(
-        application.rule_new_draft().await?,
+        new_http_rule_draft(
+            application.as_ref(),
+            dll_listener_id,
+            RuleStage::ProxyToUpstream,
+        )
+        .await?,
         "drop upstream response",
         "/matrix/drop",
-        MessageStage::Request,
-        vec![RuleAction::Terminal {
-            action: RuleTerminalAction::DropUpstreamResponse {
-                mode: RuleDropResponseMode::ReadCompleteResponse,
-            },
-        }],
+        RuleStage::ProxyToUpstream,
+        vec![RuleAction::Terminal(TerminalAction::DropUpstreamResponse {
+            mode: DropResponseMode::ReadCompleteResponse,
+        })],
     );
-    application.rule_save(drop_response).await?;
+    application.rule_definition_save(drop_response).await?;
 
     let disconnect = path_rule(
-        application.rule_new_draft().await?,
+        new_http_rule_draft(
+            application.as_ref(),
+            dll_listener_id,
+            RuleStage::ProxyToUpstream,
+        )
+        .await?,
         "disconnect before upstream",
         "/matrix/disconnect",
-        MessageStage::Request,
-        vec![RuleAction::Terminal {
-            action: RuleTerminalAction::DisconnectBeforeUpstream,
-        }],
+        RuleStage::ProxyToUpstream,
+        vec![RuleAction::Terminal(
+            TerminalAction::DisconnectBeforeUpstream,
+        )],
     );
-    application.rule_save(disconnect).await?;
+    application.rule_definition_save(disconnect).await?;
 
     workspace = application.workspace_get(workspace.id).await?;
     application
@@ -639,9 +690,14 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     {
         return Err("Nth-hit one-shot rule did not apply exactly once".into());
     }
-    let nth_rule = application.rule_get(nth_hit_rule.summary.rule_id).await?;
-    if nth_rule.summary.hit_count != 1 || nth_rule.summary.enabled {
-        return Err(format!("one-shot state was not persisted: {:?}", nth_rule.summary).into());
+    let nth_rule = application
+        .rule_definition_get(nth_hit_rule.rule_id())
+        .await?;
+    let RuleContent::Http(nth_content) = nth_rule.content() else {
+        return Err("one-shot rule no longer has HTTP content".into());
+    };
+    if nth_content.hit_count != 1 || nth_rule.enabled() {
+        return Err(format!("one-shot state was not persisted: {nth_rule:?}").into());
     }
 
     let delay_session = session_for_path(&sessions, "/matrix/delay")?;
@@ -780,8 +836,8 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
             "body": String::from_utf8_lossy(&request_modified.body),
         },
         "one_shot_persisted": {
-            "hit_count": nth_rule.summary.hit_count,
-            "enabled_after_hit": nth_rule.summary.enabled,
+            "hit_count": nth_content.hit_count,
+            "enabled_after_hit": nth_rule.enabled(),
         },
         "vpn_joint_probe": vpn_probe,
         "upstream_paths": {

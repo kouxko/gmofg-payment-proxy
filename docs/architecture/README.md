@@ -11,7 +11,7 @@ Exchange/Pipeline 模型、HTTP/Socket 数据流和验证逻辑。历史讨论�
 1. [模块与代码组织](modules.md)：Rust crate、Tauri 组合根和前端 feature 的所有权。
 2. [Exchange 与 Pipeline](exchange-pipeline.md)：协议无关核心、强类型方向和可替换能力。
 3. [数据流、错误与验证](data-flow.md)：真实连接如何按顺序转发、观察和失败。
-4. [规则、Document 与协议包](rules-and-protocol-packages.md)：两套规则、Schema、Rhai 与外部包。
+4. [规则、Document 与协议包](rules-and-protocol-packages.md)：统一规则聚合、Schema、Rhai 与外部包。
 5. [运行时观测与诊断](runtime-observability.md)：内存证据、日志、UI 实时刷新、MCP 和复现报告。
 6. [安全、TLS 与持久化](security-and-persistence.md)：双连接 TLS/mTLS、SQLite 与应用导入导出。
 7. [Android VPN 透明路由](android-vpn-transparent-routing.md)：设备侧 TUN、SOCKS5 与流量恢复。
@@ -38,7 +38,9 @@ flowchart LR
   Frame 和 transport 语义。
 - LocalServer 与 RemoteServer 实现同一个 Server 端口；本地回环不是第二套旁路流程。
 - 观察链路与业务链路隔离：观察失败不能影响交易，业务阶段失败必须终止当前 Exchange。
-- HTTP 标准规则能力由 Rust `rule_capabilities` 提供，领域保存时再次校验；前端不复制能力矩阵。
+- HTTP 与 Socket 共用 `RuleDefinition`、四阶段坐标、单 Listener 绑定、单一持久化集合和 CRUD；
+  内容差异由 `RuleContent::Http` 与 `RuleContent::Socket` 保持类型隔离。
+- 规则编辑能力由 Rust `rule_editor_context` 提供，领域保存时再次校验；前端不复制能力矩阵。
 
 ## 代码入口
 

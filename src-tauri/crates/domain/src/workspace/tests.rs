@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use super::*;
 use crate::{
-    AndroidProxyRoute, AndroidTargetApplication, ChannelId, MessageStage, RuleAction, RuleId,
-    WeakNetworkProfile,
+    AndroidProxyRoute, AndroidTargetApplication, HttpRuleContent, RuleAction, RuleContent,
+    RuleDefinition, RuleDefinitionDraft, RuleStage, WeakNetworkProfile,
 };
 
 mod listener_topology;
@@ -31,7 +31,7 @@ fn default_workspace_is_empty_safe_and_serializable() {
     assert!(http(listener).fixed_server.is_none());
     assert_eq!(http(listener).request_body_codec, BodyCodecKind::Auto);
     assert_eq!(http(listener).response_body_codec, BodyCodecKind::Auto);
-    assert!(workspace.rules.is_empty());
+    assert!(workspace.rule_definitions.is_empty());
     workspace.validate().expect("safe draft must validate");
     let json = serde_json::to_string(&workspace).unwrap();
     for forbidden in ["private_key", "password", "pkcs12"] {
@@ -41,34 +41,32 @@ fn default_workspace_is_empty_safe_and_serializable() {
 
 #[test]
 fn standard_http_rules_require_one_existing_http_listener() {
-    let standard_rule = |channel| Rule {
-        id: RuleId::new(),
-        revision: Revision::INITIAL,
-        name: "HTTP rule".into(),
-        description: String::new(),
-        enabled: true,
-        priority: 10,
-        created_order: 1,
-        channel,
-        stage: MessageStage::Request,
-        conditions: Vec::new(),
-        actions: vec![RuleAction::Delay { milliseconds: 10 }],
-        one_shot: false,
-        hit_count: 0,
-        last_hit_at: None,
+    let standard_rule = |listener_id| {
+        RuleDefinition::create(
+            RuleDefinitionDraft {
+                name: "HTTP rule".into(),
+                enabled: true,
+                priority: 10,
+                listener_id,
+                stage: RuleStage::ProxyToUpstream,
+                content: RuleContent::Http(HttpRuleContent {
+                    description: String::new(),
+                    conditions: Vec::new(),
+                    actions: vec![RuleAction::Delay { milliseconds: 10 }],
+                    document: None,
+                    one_shot: false,
+                    hit_count: 0,
+                    last_hit_at: None,
+                }),
+            },
+            1,
+        )
+        .unwrap()
     };
 
-    let mut workspace = ProxyWorkspace {
-        rules: vec![standard_rule(None)],
-        ..ProxyWorkspace::default()
-    };
-    assert_eq!(
-        workspace.validate().unwrap_err().field_errors["rules.0.channel"],
-        vec!["普通 HTTP 规则必须绑定单个 HTTP 代理入口"]
-    );
-
-    let http_channel = ChannelId::new(workspace.listeners[0].id.to_string()).expect("channel");
-    workspace.rules = vec![standard_rule(Some(http_channel))];
+    let mut workspace = ProxyWorkspace::default();
+    workspace.rule_definitions = vec![standard_rule(workspace.listeners[0].id)];
+    workspace.rule_created_order_high_water = 1;
     workspace.validate().expect("HTTP listener binding");
 
     let socket_id = ListenerId::new();
@@ -79,12 +77,10 @@ fn standard_http_rules_require_one_existing_http_listener() {
         data_plane: ListenerDataPlane::Socket(SocketRelaySettings::default()),
         ..ProxyListener::default()
     });
-    workspace.rules = vec![standard_rule(Some(
-        ChannelId::new(socket_id.to_string()).expect("channel"),
-    ))];
+    workspace.rule_definitions = vec![standard_rule(socket_id)];
     assert_eq!(
-        workspace.validate().unwrap_err().field_errors["rules.0.channel"],
-        vec!["普通 HTTP 规则只能绑定 HTTP 代理入口"]
+        workspace.validate().unwrap_err().field_errors["rule_definitions.0.listener_id"],
+        vec!["HTTP 规则只能绑定 HTTP Listener"]
     );
 }
 
@@ -336,6 +332,7 @@ fn android_proxy_routes_must_reference_a_listener_in_the_same_workspace() {
         }],
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile::default(),
     };
     workspace.android_network_profiles.push(profile);

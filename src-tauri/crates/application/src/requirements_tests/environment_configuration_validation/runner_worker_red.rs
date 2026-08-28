@@ -10,6 +10,7 @@ use crate::requirements_tests::{
     FakePorts, application_with_environment_preview_ports, test_environment_baseline_capture,
     test_environment_identity_allocator,
 };
+use crate::requirements_tests::{http_rule_definitions, protocol_rule_definitions};
 use crate::{EnvironmentCandidateEpoch, InMemoryWorkspaceStore, WorkspaceRepositoryPort};
 
 const MID_WORK_CHECKPOINT: usize = 3;
@@ -160,10 +161,12 @@ async fn total_deadline_at_a_cpu_checkpoint_reports_before_candidate_buffer_drop
     {
         listener["id"] = serde_json::json!(existing.id);
     }
-    candidate["workspace"]["http_rules"][0]["existing_rule_id"] =
-        serde_json::json!(persisted.rules[0].id);
-    candidate["workspace"]["protocol_rules"][0]["existing_rule_id"] =
-        serde_json::json!(persisted.protocol_rules[0].rule_id());
+    let http_rules = http_rule_definitions(&persisted);
+    let protocol_rules = protocol_rule_definitions(&persisted);
+    candidate["workspace"]["rules"][0]["existing_rule_id"] =
+        serde_json::json!(http_rules[0].rule_id());
+    candidate["workspace"]["rules"][14]["existing_rule_id"] =
+        serde_json::json!(protocol_rules[0].rule_id());
     let bytes = serde_json::to_vec(&candidate).unwrap();
     let typed = crate::parse_environment_configuration_candidate_v1(&bytes).unwrap();
     let application = application_with_environment_preview_ports(

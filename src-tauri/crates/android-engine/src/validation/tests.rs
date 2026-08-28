@@ -25,6 +25,7 @@ fn profile(targets: &[InstalledApplication]) -> NetworkProfile {
         proxy_routes: Vec::new(),
         confirmed_shared_uids: BTreeSet::new(),
         auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile::default(),
     }
 }

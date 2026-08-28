@@ -115,10 +115,9 @@ pub(super) const DISPATCHED_TOOL_NAMES: &[&str] = &[
     "http_capture_get",
     "breakpoint_query",
     "breakpoint_get",
-    "http_rule_list",
-    "http_rule_get",
-    "protocol_rule_list",
-    "workspace_protocol_rule_list",
+    "rule_list",
+    "rule_get",
+    "workspace_rule_list",
     "protocol_package_list",
     "protocol_package_catalog",
     "protocol_package_detail",
@@ -269,10 +268,9 @@ impl ReadOnlyMcpBackend for ApplicationBackend {
             "http_capture_query" | "http_capture_get" | "breakpoint_query" | "breakpoint_get" => {
                 self.call_traffic_tool(name, arguments).await
             }
-            "http_rule_list"
-            | "http_rule_get"
-            | "protocol_rule_list"
-            | "workspace_protocol_rule_list"
+            "rule_list"
+            | "rule_get"
+            | "workspace_rule_list"
             | "protocol_package_list"
             | "protocol_package_catalog"
             | "protocol_package_detail"

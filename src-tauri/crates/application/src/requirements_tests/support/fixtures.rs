@@ -292,40 +292,72 @@ pub(in crate::requirements_tests) fn scripted_workspace(
             package: package.clone(),
         }),
     });
+    let listener_id = listener.id;
     let direction = if local_responder {
         ProtocolDirection::Downstream
     } else {
         ProtocolDirection::Upstream
     };
-    workspace.protocol_rules.push(
-        ProtocolDocumentRuleDefinition::new(
-            ProtocolDocumentRuleId::new(),
-            true,
-            -10,
-            41,
-            listener.id,
-            package,
-            if local_responder { 8 } else { 7 },
-            direction,
-            vec![
-                document_equals("text", DocumentValue::String("sale".into())),
-                document_equals("amount", DocumentValue::Int(1234)),
-                document_equals("approved", DocumentValue::Bool(true)),
-                document_equals("raw", DocumentValue::Blob(vec![0, 1, 2, 255])),
-            ],
-            vec![
-                DocumentAction::RecordMatch,
-                document_set("text", DocumentValue::String("reply".into())),
-                document_set("amount", DocumentValue::Int(4321)),
-                document_set("approved", DocumentValue::Bool(false)),
-                document_set("raw", DocumentValue::Blob(vec![9, 8, 7])),
-            ],
-        )
-        .unwrap(),
-    );
-    workspace.protocol_rule_created_order_high_water = 41;
+    workspace
+        .replace_document_runtime_rules(vec![
+            ProtocolDocumentRuleDefinition::new(
+                ProtocolDocumentRuleId::new(),
+                true,
+                -10,
+                41,
+                listener_id,
+                package,
+                if local_responder { 8 } else { 7 },
+                direction,
+                vec![
+                    document_equals("text", DocumentValue::String("sale".into())),
+                    document_equals("amount", DocumentValue::Int(1234)),
+                    document_equals("approved", DocumentValue::Bool(true)),
+                    document_equals("raw", DocumentValue::Blob(vec![0, 1, 2, 255])),
+                ],
+                vec![
+                    DocumentAction::RecordMatch,
+                    document_set("text", DocumentValue::String("reply".into())),
+                    document_set("amount", DocumentValue::Int(4321)),
+                    document_set("approved", DocumentValue::Bool(false)),
+                    document_set("raw", DocumentValue::Blob(vec![9, 8, 7])),
+                ],
+            )
+            .unwrap(),
+        ])
+        .unwrap();
     workspace.validate().unwrap();
     workspace
+}
+
+pub(in crate::requirements_tests) fn http_rule_definitions(
+    workspace: &ProxyWorkspace,
+) -> Vec<&intercept_proxy_domain::RuleDefinition> {
+    workspace
+        .rule_definitions
+        .iter()
+        .filter(|rule| {
+            matches!(
+                rule.content(),
+                intercept_proxy_domain::RuleContent::Http(content) if content.document.is_none()
+            )
+        })
+        .collect()
+}
+
+pub(in crate::requirements_tests) fn protocol_rule_definitions(
+    workspace: &ProxyWorkspace,
+) -> Vec<&intercept_proxy_domain::RuleDefinition> {
+    workspace
+        .rule_definitions
+        .iter()
+        .filter(|rule| {
+            !matches!(
+                rule.content(),
+                intercept_proxy_domain::RuleContent::Http(content) if content.document.is_none()
+            )
+        })
+        .collect()
 }
 
 fn document_equals(name: &str, value: DocumentValue) -> DocumentCondition {

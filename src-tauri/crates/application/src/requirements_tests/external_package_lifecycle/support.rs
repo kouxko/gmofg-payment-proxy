@@ -297,7 +297,7 @@ impl ListenerRuntimePort for TrackingRuntime {
         })
     }
 
-    async fn replace_protocol_rules(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
+    async fn replace_rule_definitions(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
         unused()
     }
 

@@ -83,7 +83,7 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
         })
     }
 
-    async fn replace_protocol_rules(
+    async fn replace_rule_definitions(
         &self,
         _workspace: ProxyWorkspace,
         _listener_id: ListenerId,

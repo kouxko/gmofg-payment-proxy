@@ -155,10 +155,10 @@ async fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
         }],
     )
     .unwrap();
-    let workspace = ProxyWorkspace {
-        protocol_rules: vec![rule],
-        ..ProxyWorkspace::default()
-    };
+    let mut workspace = ProxyWorkspace::default();
+    workspace
+        .replace_document_runtime_rules(vec![rule])
+        .unwrap();
     let snapshot = ExternalSocketRuntimeSnapshot::new(
         ExternalSocketPackageBinding::new(registration.clone(), Arc::new(DisconnectedRpc)),
         empty_rules(&registration, listener.id),
@@ -205,10 +205,10 @@ async fn replace_document_rules_rejects_relay_only_stage_for_local_responder() {
         }],
     )
     .unwrap();
-    let workspace = ProxyWorkspace {
-        protocol_rules: vec![rule],
-        ..ProxyWorkspace::default()
-    };
+    let mut workspace = ProxyWorkspace::default();
+    workspace
+        .replace_document_runtime_rules(vec![rule])
+        .unwrap();
     let snapshot = ExternalSocketRuntimeSnapshot::new(
         ExternalSocketPackageBinding::new(registration.clone(), Arc::new(DisconnectedRpc)),
         empty_rules(&registration, listener.id),
@@ -326,10 +326,11 @@ fn relay_rule_workspace(
         }],
     )
     .unwrap();
-    ProxyWorkspace {
-        protocol_rules: vec![rule],
-        ..ProxyWorkspace::default()
-    }
+    let mut workspace = ProxyWorkspace::default();
+    workspace
+        .replace_document_runtime_rules(vec![rule])
+        .unwrap();
+    workspace
 }
 
 fn listener() -> ProxyListener {

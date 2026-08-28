@@ -318,8 +318,7 @@
             "additionalProperties": false,
             "required": [
               "listeners",
-              "http_rules",
-              "protocol_rules",
+              "rules",
               "android_network_profiles"
             ],
             "properties": {
@@ -329,22 +328,16 @@
                   "$ref": "#/$defs/listener"
                 }
               },
-              "http_rules": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/httpRule"
-                }
-              },
-              "protocol_rules": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/protocolRule"
-                }
-              },
               "android_network_profiles": {
                 "type": "array",
                 "items": {
                   "$ref": "#/$defs/androidProfile"
+                }
+              },
+              "rules": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/rule"
                 }
               }
             }
@@ -1253,6 +1246,7 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
+              "type",
               "name",
               "description",
               "enabled",
@@ -1287,8 +1281,10 @@
               },
               "stage": {
                 "enum": [
-                  "request",
-                  "response",
+                  "app_to_proxy",
+                  "proxy_to_upstream",
+                  "upstream_to_proxy",
+                  "proxy_to_app",
                   "tls_handshake"
                 ]
               },
@@ -1306,6 +1302,12 @@
               },
               "one_shot": {
                 "type": "boolean"
+              },
+              "type": {
+                "const": "http"
+              },
+              "document": {
+                "$ref": "#/$defs/httpDocument"
               }
             }
           },
@@ -1884,68 +1886,6 @@
               }
             ]
           },
-          "protocolRule": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "name",
-              "enabled",
-              "priority",
-              "listener_alias",
-              "package",
-              "schema_version",
-              "stage",
-              "conditions",
-              "actions"
-            ],
-            "properties": {
-              "existing_rule_id": {
-                "type": [
-                  "string",
-                  "null"
-                ]
-              },
-              "name": {
-                "type": "string"
-              },
-              "enabled": {
-                "type": "boolean"
-              },
-              "priority": {
-                "type": "integer"
-              },
-              "listener_alias": {
-                "type": "string"
-              },
-              "package": {
-                "$ref": "#/$defs/packageRef"
-              },
-              "schema_version": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "stage": {
-                "enum": [
-                  "app_to_proxy",
-                  "proxy_to_upstream",
-                  "upstream_to_proxy",
-                  "proxy_to_app"
-                ]
-              },
-              "conditions": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/documentCondition"
-                }
-              },
-              "actions": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/documentAction"
-                }
-              }
-            }
-          },
           "documentValue": {
             "oneOf": [
               {
@@ -2113,6 +2053,7 @@
               "proxy_routes",
               "confirmed_shared_uids",
               "auto_resume_after_reboot",
+              "stop_vpn_on_control_loss",
               "weak_network"
             ],
             "properties": {
@@ -2210,6 +2151,9 @@
               },
               "weak_network": {
                 "$ref": "#/$defs/weakNetwork"
+              },
+              "stop_vpn_on_control_loss": {
+                "type": "boolean"
               }
             }
           },
@@ -2546,6 +2490,113 @@
                 }
               }
             ]
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/httpRule"
+              },
+              {
+                "$ref": "#/$defs/socketRule"
+              }
+            ]
+          },
+          "httpDocument": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "package",
+              "schema_version",
+              "conditions",
+              "actions"
+            ],
+            "properties": {
+              "package": {
+                "$ref": "#/$defs/packageRef"
+              },
+              "schema_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "conditions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/documentCondition"
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/documentAction"
+                }
+              }
+            }
+          },
+          "socketRule": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "name",
+              "enabled",
+              "priority",
+              "listener_alias",
+              "package",
+              "schema_version",
+              "stage",
+              "conditions",
+              "actions"
+            ],
+            "properties": {
+              "existing_rule_id": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "priority": {
+                "type": "integer"
+              },
+              "listener_alias": {
+                "type": "string"
+              },
+              "package": {
+                "$ref": "#/$defs/packageRef"
+              },
+              "schema_version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "stage": {
+                "enum": [
+                  "app_to_proxy",
+                  "proxy_to_upstream",
+                  "upstream_to_proxy",
+                  "proxy_to_app"
+                ]
+              },
+              "conditions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/documentCondition"
+                }
+              },
+              "actions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/documentAction"
+                }
+              },
+              "type": {
+                "const": "socket"
+              }
+            }
           }
         }
       },
@@ -2891,8 +2942,7 @@
                 "additionalProperties": false,
                 "required": [
                   "listeners",
-                  "http_rules",
-                  "protocol_rules",
+                  "rules",
                   "android_profile_ids"
                 ],
                 "properties": {
@@ -2916,70 +2966,40 @@
                       }
                     }
                   },
-                  "http_rules": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "candidate_index",
-                        "candidate_local_id",
-                        "created_order",
-                        "listener_alias"
-                      ],
-                      "properties": {
-                        "candidate_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "candidate_local_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "created_order": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "listener_alias": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
-                  "protocol_rules": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "candidate_index",
-                        "candidate_local_id",
-                        "created_order",
-                        "listener_alias"
-                      ],
-                      "properties": {
-                        "candidate_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "candidate_local_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "created_order": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "listener_alias": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
                   "android_profile_ids": {
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "candidate_index",
+                        "candidate_local_id",
+                        "created_order",
+                        "listener_alias"
+                      ],
+                      "properties": {
+                        "candidate_index": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "candidate_local_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "created_order": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "listener_alias": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }
@@ -3753,8 +3773,7 @@
                 "additionalProperties": false,
                 "required": [
                   "listeners",
-                  "http_rules",
-                  "protocol_rules",
+                  "rules",
                   "android_profile_ids"
                 ],
                 "properties": {
@@ -3778,70 +3797,40 @@
                       }
                     }
                   },
-                  "http_rules": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "candidate_index",
-                        "candidate_local_id",
-                        "created_order",
-                        "listener_alias"
-                      ],
-                      "properties": {
-                        "candidate_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "candidate_local_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "created_order": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "listener_alias": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
-                  "protocol_rules": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "candidate_index",
-                        "candidate_local_id",
-                        "created_order",
-                        "listener_alias"
-                      ],
-                      "properties": {
-                        "candidate_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "candidate_local_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "created_order": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "listener_alias": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
                   "android_profile_ids": {
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "candidate_index",
+                        "candidate_local_id",
+                        "created_order",
+                        "listener_alias"
+                      ],
+                      "properties": {
+                        "candidate_index": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "candidate_local_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "created_order": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "listener_alias": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }
@@ -4563,8 +4552,7 @@
                 "additionalProperties": false,
                 "required": [
                   "listeners",
-                  "http_rules",
-                  "protocol_rules",
+                  "rules",
                   "android_profile_ids"
                 ],
                 "properties": {
@@ -4588,70 +4576,40 @@
                       }
                     }
                   },
-                  "http_rules": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "candidate_index",
-                        "candidate_local_id",
-                        "created_order",
-                        "listener_alias"
-                      ],
-                      "properties": {
-                        "candidate_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "candidate_local_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "created_order": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "listener_alias": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
-                  "protocol_rules": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "candidate_index",
-                        "candidate_local_id",
-                        "created_order",
-                        "listener_alias"
-                      ],
-                      "properties": {
-                        "candidate_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "candidate_local_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "created_order": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "listener_alias": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
                   "android_profile_ids": {
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "candidate_index",
+                        "candidate_local_id",
+                        "created_order",
+                        "listener_alias"
+                      ],
+                      "properties": {
+                        "candidate_index": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "candidate_local_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "created_order": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "listener_alias": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }
@@ -5374,8 +5332,7 @@
                 "additionalProperties": false,
                 "required": [
                   "listeners",
-                  "http_rules",
-                  "protocol_rules",
+                  "rules",
                   "android_profile_ids"
                 ],
                 "properties": {
@@ -5399,70 +5356,40 @@
                       }
                     }
                   },
-                  "http_rules": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "candidate_index",
-                        "candidate_local_id",
-                        "created_order",
-                        "listener_alias"
-                      ],
-                      "properties": {
-                        "candidate_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "candidate_local_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "created_order": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "listener_alias": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
-                  "protocol_rules": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "candidate_index",
-                        "candidate_local_id",
-                        "created_order",
-                        "listener_alias"
-                      ],
-                      "properties": {
-                        "candidate_index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "candidate_local_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        },
-                        "created_order": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "listener_alias": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  },
                   "android_profile_ids": {
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "rules": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "candidate_index",
+                        "candidate_local_id",
+                        "created_order",
+                        "listener_alias"
+                      ],
+                      "properties": {
+                        "candidate_index": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "candidate_local_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "created_order": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "listener_alias": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }

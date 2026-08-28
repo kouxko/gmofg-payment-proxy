@@ -12,7 +12,10 @@ const uiMocks = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock("@heroui/react", async (importOriginal) => ({
   ...await importOriginal<typeof import("@heroui/react")>(), toast: uiMocks.toast,
 }));
-vi.mock("@/features/shell/workspace-navigation", () => ({ useWorkspaceNavigation: () => navigationMocks }));
+vi.mock("@/features/shell/workspace-navigation", () => ({
+  useWorkspaceNavigation: () => navigationMocks,
+  useWorkspaceQueryInvalidation: vi.fn(),
+}));
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: () => undefined, useBootstrap: () => ({ bootstrap }),
 }));

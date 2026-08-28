@@ -124,6 +124,7 @@ impl TerminalAction {
 pub enum RuleAction {
     SetJsonField {
         path: String,
+        #[specta(type = specta_typescript::Unknown<Value>)]
         value: Value,
     },
     ReplaceBodyText(String),
@@ -228,6 +229,7 @@ pub struct RuleRuntimeSnapshot {
     pub collection_revision: u64,
     pub signature: RuleSetSignature,
     pub rules: Vec<Rule>,
+    pub execution_order: Vec<RuleId>,
 }
 
 impl RuleRuntimeSnapshot {
@@ -252,6 +254,23 @@ impl RuleRuntimeSnapshot {
             collection_revision,
             signature: RuleSetSignature::from_rules(&rules),
             rules,
+            execution_order: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn with_collection_identity_and_order(
+        collection_id: Option<Uuid>,
+        collection_revision: u64,
+        rules: Vec<Rule>,
+        execution_order: Vec<RuleId>,
+    ) -> Self {
+        Self {
+            collection_id,
+            collection_revision,
+            signature: RuleSetSignature::from_rules(&rules),
+            rules,
+            execution_order,
         }
     }
 }

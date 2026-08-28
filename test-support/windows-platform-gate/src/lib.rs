@@ -46,8 +46,7 @@ pub use dpapi::{DpapiProtector, SecretProtector};
 pub use files::{AtomicFileExporter, ExportOutcome};
 pub use windows_process::configure_background_process;
 
-pub const IMPORT_LIMITS: [u64; 3] = [
-    files::RULE_IMPORT_MAX_BYTES,
+pub const IMPORT_LIMITS: [u64; 2] = [
     files::PKCS12_IMPORT_MAX_BYTES,
     files::CA_IMPORT_MAX_BYTES,
 ];

@@ -1,0 +1,7 @@
+POST /replay/http?case=running-app-replay-20260828 HTTP/1.1
+Host: 127.0.0.1:<temporary-proxy-port>
+Content-Type: application/json
+X-Replay-Case: running-app-replay-20260828
+Connection: close
+
+{"case":"running-app-replay-20260828","amount":1234}

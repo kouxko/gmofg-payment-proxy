@@ -48,20 +48,14 @@ async fn import_rejects_cross_process_changes_instead_of_replacing_them() {
             store: secondary_store,
             concurrent_rule: concurrent.clone(),
         }),
-        Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
         &[],
     );
 
     let error = adapter.import().await.expect_err("stale import");
     assert_eq!(error.view_model.code, "REVISION_CONFLICT");
-    let stored = RuleRepositoryAdapter::new(
-        primary_store,
-        Arc::new(NoDialog),
-        Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
-        &[],
-    )
-    .load()
-    .expect("stored rules");
+    let stored = RuleRepositoryAdapter::new(primary_store, Arc::new(NoDialog), &[])
+        .load()
+        .expect("stored rules");
     assert_eq!(stored.len(), 2);
     assert!(stored.iter().any(|rule| rule.id == existing.id));
     assert!(stored.iter().any(|rule| rule.id == concurrent.id));
@@ -98,12 +92,7 @@ async fn malformed_persisted_rule_maps_to_persistence_corrupt() {
             updated_at: Utc::now(),
         })
         .expect("seed malformed workspace");
-    let adapter = RuleRepositoryAdapter::new(
-        store,
-        Arc::new(NoDialog),
-        Arc::new(intercept_proxy_application::InMemorySessionStore::default()),
-        &[],
-    );
+    let adapter = RuleRepositoryAdapter::new(store, Arc::new(NoDialog), &[]);
 
     let error = adapter.list().await.expect_err("corrupt rule");
     assert_eq!(error.view_model.code, "PERSISTENCE_CORRUPT");

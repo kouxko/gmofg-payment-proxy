@@ -131,6 +131,34 @@ impl ProtocolDocumentRuleProgram {
         })
     }
 
+    /// Applies one rule from this frozen program to a caller-owned working Document.
+    ///
+    /// This is the joint HTTP execution boundary: the HTTP engine invokes it only after that
+    /// rule's ordinary HTTP conditions match. Returning `false` leaves the Document unchanged;
+    /// returning an error requires the caller to discard the whole working Document.
+    pub fn apply_rule_if_matches(
+        &self,
+        rule_id: ProtocolDocumentRuleId,
+        document: &mut Document,
+    ) -> Result<bool, DomainError> {
+        if document.schema() != &self.schema {
+            return Err(
+                rule_program_error("Document 与规则程序绑定的 Schema 不一致")
+                    .with_field_error("document.schema", "必须使用程序构造时绑定的完整 Schema"),
+            );
+        }
+        let Some(rule) = self.rules.iter().find(|rule| rule.rule_id() == rule_id) else {
+            return Err(rule_program_error("规则不属于当前 Document 程序")
+                .with_field_error("rule_id", "必须引用程序冻结的规则"));
+        };
+        let mut never_cancelled = || false;
+        if !rule.enabled() || !matches_rule(rule, document, &mut never_cancelled)? {
+            return Ok(false);
+        }
+        apply_actions(rule.actions(), document, &mut never_cancelled)?;
+        Ok(true)
+    }
+
     /// 返回程序绑定的 Listener。
     #[must_use]
     pub const fn listener_id(&self) -> ListenerId {

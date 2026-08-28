@@ -49,19 +49,14 @@ fn every_tool_publishes_a_complete_machine_readable_contract() {
         "android_profile_list",
         "workspace_certificate_overview",
         "breakpoint_query",
-        "http_rule_list",
-        "protocol_rule_list",
-        "workspace_protocol_rule_list",
+        "rule_list",
+        "workspace_rule_list",
         "protocol_package_list",
         "protocol_package_usage",
     ]
     .into_iter()
     .collect::<BTreeSet<_>>();
-    assert_eq!(
-        tools.len(),
-        42,
-        "37 existing reads plus five environment tools"
-    );
+    assert_eq!(tools.len(), 41, "36 reads plus five environment tools");
 
     let names = tools
         .iter()

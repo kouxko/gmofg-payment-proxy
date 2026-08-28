@@ -95,10 +95,11 @@ impl RuntimeRuleRepository for StaticRules {
             return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
         }
         let next_revision = current.collection_revision.saturating_add(1);
-        *current = RuleRuntimeSnapshot::with_collection_identity(
+        *current = RuleRuntimeSnapshot::with_collection_identity_and_order(
             snapshot.collection_id,
             next_revision,
             evaluated_rules.to_vec(),
+            snapshot.execution_order.clone(),
         );
         Ok(next_revision)
     }
@@ -110,10 +111,11 @@ impl RuntimeRuleRepository for StaticRules {
             rule.last_hit_at = None;
         }
         let next_revision = current.collection_revision.saturating_add(1);
-        *current = RuleRuntimeSnapshot::with_collection_identity(
+        *current = RuleRuntimeSnapshot::with_collection_identity_and_order(
             current.collection_id,
             next_revision,
             current.rules.clone(),
+            current.execution_order.clone(),
         );
         Ok(())
     }
