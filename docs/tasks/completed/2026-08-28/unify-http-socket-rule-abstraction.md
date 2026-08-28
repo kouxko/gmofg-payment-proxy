@@ -7,8 +7,8 @@
 - 任务日期：`2026-08-28`
 - 创建时间：`2026-08-28 11:40:28 +08:00`
 - 开始时间：`2026-08-28 12:39:34 +08:00`
-- 最后更新时间：`2026-08-28 21:40:47 +08:00`
-- 完成时间：`2026-08-28 21:40:47 +08:00`
+- 最后更新时间：`2026-08-29 00:04:06 +08:00`
+- 完成时间：`2026-08-29 00:04:06 +08:00`
 - 创建路径：`docs/tasks/pending/2026-08-28/unify-http-socket-rule-abstraction.md`
 - 归档路径：`docs/tasks/completed/2026-08-28/unify-http-socket-rule-abstraction.md`
 - 关键词：`RuleDefinition`、`RuleContent`、`HTTP Header`、`HTTP Body`、`Socket`、`RuleStage`、`Listener`、`Tauri`、`MCP`、`Workspace migration`
@@ -193,7 +193,7 @@
 
 ## CI 情况
 
-- `PENDING`：本地门禁已完成；外部 Windows 流水线将在本批任务发送后执行。
+- `PASS`：Windows CI 的 Companion、前端、覆盖率、Rust 测试、严格 lint 和独立运行时门禁全部通过；Windows MSI、NSIS 与便携版构建成功。
 
 ## 完成总结
 

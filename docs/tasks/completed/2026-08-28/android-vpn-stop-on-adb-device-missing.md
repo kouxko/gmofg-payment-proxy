@@ -7,8 +7,8 @@
 - 任务日期：`2026-08-28`
 - 创建时间：`2026-08-28 11:30:33 +08:00`
 - 开始时间：`2026-08-28 13:59:23 +08:00`
-- 最后更新时间：`2026-08-28 21:39:24 +08:00`
-- 完成时间：`2026-08-28 21:39:24 +08:00`
+- 最后更新时间：`2026-08-29 00:03:02 +08:00`
+- 完成时间：`2026-08-29 00:03:02 +08:00`
 - 创建路径：`docs/tasks/pending/2026-08-28/android-vpn-stop-on-adb-device-missing.md`
 - 归档路径：`docs/tasks/completed/2026-08-28/android-vpn-stop-on-adb-device-missing.md`
 - 关键词：`Android VPN`、`ADB devices`、`USB 拔出`、`桌面 App 退出`、`控制租约`、`心跳`、`TUN`、`WaitingReconnect`
@@ -196,7 +196,7 @@
 
 ## CI 情况
 
-- `PENDING`：本地门禁已完成；外部 Windows 流水线将在本批任务发送后执行。
+- `PASS`：Windows CI 的 Companion、前端、覆盖率、Rust 测试、严格 lint 和独立运行时门禁全部通过；Windows MSI、NSIS 与便携版构建成功。
 
 ## 完成总结
 

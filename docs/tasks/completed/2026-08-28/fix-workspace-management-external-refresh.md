@@ -7,8 +7,8 @@
 - 任务日期：`2026-08-28`
 - 创建时间：`2026-08-28 21:03:56 +08:00`
 - 开始时间：`2026-08-28 21:03:56 +08:00`
-- 最后更新时间：`2026-08-28 21:42:26 +08:00`
-- 完成时间：`2026-08-28 21:42:26 +08:00`
+- 最后更新时间：`2026-08-29 00:04:54 +08:00`
+- 完成时间：`2026-08-29 00:04:54 +08:00`
 - 创建路径：`docs/tasks/pending/2026-08-28/fix-workspace-management-external-refresh.md`
 - 归档路径：`docs/tasks/completed/2026-08-28/fix-workspace-management-external-refresh.md`
 - 关键词：`Workspace 管理`、`snapshot_required`、`useWorkspaceQueryInvalidation`、`MCP environment apply`、`真实 App 重放`
@@ -159,7 +159,7 @@
 
 ## CI 情况
 
-- `PENDING`：本地门禁已完成；外部 Windows 流水线将在本批任务发送后执行。
+- `PASS`：Windows CI 的 Companion、前端、覆盖率、Rust 测试、严格 lint 和独立运行时门禁全部通过；Windows MSI、NSIS 与便携版构建成功。
 
 ## 完成总结
 
