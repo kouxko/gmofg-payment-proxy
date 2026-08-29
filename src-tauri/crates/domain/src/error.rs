@@ -40,6 +40,16 @@ pub enum ErrorCode {
     ProtocolPackageInvalid,
     /// Document Schema 的身份、字段声明或聚合结构无效。
     DocumentSchemaInvalid,
+    /// A number is not finite.
+    DocumentNumberInvalid,
+    /// An integer JSON literal exceeds JavaScript's exact integer range.
+    DocumentUnsafeInteger,
+    /// JSON Pointer syntax is invalid.
+    DocumentPointerInvalid,
+    /// A requested Document path or array index does not exist.
+    DocumentPathMissing,
+    /// A Document path traverses or targets the wrong JSON type.
+    DocumentPathTypeMismatch,
     /// 脚本或调用方访问了 Schema 未声明的字段。
     DocumentFieldUndeclared,
     /// 字段已声明，但当前 Frame 尚未给它赋值。
@@ -88,6 +98,11 @@ impl ErrorCode {
             Self::RuleConflictWarning => "RULE_CONFLICT_WARNING",
             Self::ProtocolPackageInvalid => "PROTOCOL_PACKAGE_INVALID",
             Self::DocumentSchemaInvalid => "DOCUMENT_SCHEMA_INVALID",
+            Self::DocumentNumberInvalid => "DOCUMENT_NUMBER_INVALID",
+            Self::DocumentUnsafeInteger => "DOCUMENT_UNSAFE_INTEGER",
+            Self::DocumentPointerInvalid => "DOCUMENT_POINTER_INVALID",
+            Self::DocumentPathMissing => "DOCUMENT_PATH_MISSING",
+            Self::DocumentPathTypeMismatch => "DOCUMENT_PATH_TYPE_MISMATCH",
             Self::DocumentFieldUndeclared => "DOCUMENT_FIELD_UNDECLARED",
             Self::DocumentFieldUnassigned => "DOCUMENT_FIELD_UNASSIGNED",
             Self::DocumentFieldTypeMismatch => "DOCUMENT_FIELD_TYPE_MISMATCH",
@@ -207,6 +222,17 @@ mod tests {
                 "PROTOCOL_PACKAGE_INVALID",
             ),
             (ErrorCode::DocumentSchemaInvalid, "DOCUMENT_SCHEMA_INVALID"),
+            (ErrorCode::DocumentNumberInvalid, "DOCUMENT_NUMBER_INVALID"),
+            (ErrorCode::DocumentUnsafeInteger, "DOCUMENT_UNSAFE_INTEGER"),
+            (
+                ErrorCode::DocumentPointerInvalid,
+                "DOCUMENT_POINTER_INVALID",
+            ),
+            (ErrorCode::DocumentPathMissing, "DOCUMENT_PATH_MISSING"),
+            (
+                ErrorCode::DocumentPathTypeMismatch,
+                "DOCUMENT_PATH_TYPE_MISMATCH",
+            ),
             (
                 ErrorCode::DocumentFieldUndeclared,
                 "DOCUMENT_FIELD_UNDECLARED",

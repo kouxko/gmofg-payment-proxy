@@ -8,20 +8,20 @@ use super::{
     ProtocolDocumentRuleDefinition, sort_protocol_document_rules,
 };
 use crate::{
-    Document, DocumentSchema, DomainError, ErrorCode, ListenerId, ProtocolDocumentRuleId,
+    Document, DocumentSchemaNode, DomainError, ErrorCode, ListenerId, ProtocolDocumentRuleId,
     ProtocolPackageRef,
 };
 
 /// 已冻结、可安全跨连接共享的 协议 Document 规则程序。
 ///
-/// Program 在构造时保存精确 Listener、协议包版本、完整 Schema 和方向绑定，并把规则按
+/// Program 在构造时保存精确 Listener、协议包版本、Schema 元数据和方向绑定，并把规则按
 /// `(priority, created_order, rule_id)` 排序。字段均不可从外部修改，因此同一 Program 可由
 /// 多个连接并发调用；每次执行的唯一可变状态都属于传入的 owned [`Document`]。
 #[derive(Clone)]
 pub struct ProtocolDocumentRuleProgram {
     listener_id: ListenerId,
     package: ProtocolPackageRef,
-    schema: DocumentSchema,
+    schema: DocumentSchemaNode,
     stage: ProtocolRuleStage,
     rules: Vec<ProtocolDocumentRuleDefinition>,
 }
@@ -32,8 +32,7 @@ impl fmt::Debug for ProtocolDocumentRuleProgram {
             .debug_struct("ProtocolDocumentRuleProgram")
             .field("listener_id", &self.listener_id)
             .field("package", &self.package)
-            .field("schema_id", &self.schema.id())
-            .field("schema_version", &self.schema.version())
+            .field("schema", &self.schema)
             .field("stage", &self.stage)
             .field("rule_count", &self.rules.len())
             .finish()
@@ -41,7 +40,7 @@ impl fmt::Debug for ProtocolDocumentRuleProgram {
 }
 
 impl ProtocolDocumentRuleProgram {
-    /// 校验精确绑定、Schema 和规则身份后创建不可变程序。
+    /// 校验精确绑定、Schema 定义和规则身份后创建不可变程序。
     ///
     /// 构造采用 fail-closed 语义：即使规则当前处于 disabled 状态，也必须属于同一绑定并通过
     /// Schema 校验；重复规则 ID 或超过 Workspace 上限的快照同样会被拒绝。成功后内部规则
@@ -49,7 +48,7 @@ impl ProtocolDocumentRuleProgram {
     pub fn new(
         listener_id: ListenerId,
         package: ProtocolPackageRef,
-        schema: DocumentSchema,
+        schema: DocumentSchemaNode,
         direction: ProtocolDirection,
         rules: Vec<ProtocolDocumentRuleDefinition>,
     ) -> Result<Self, DomainError> {
@@ -64,10 +63,11 @@ impl ProtocolDocumentRuleProgram {
     pub fn new_for_stage(
         listener_id: ListenerId,
         package: ProtocolPackageRef,
-        schema: DocumentSchema,
+        schema: DocumentSchemaNode,
         stage: ProtocolRuleStage,
         mut rules: Vec<ProtocolDocumentRuleDefinition>,
     ) -> Result<Self, DomainError> {
+        schema.validate_definition()?;
         validate_rule_snapshot(listener_id, &package, &schema, stage, &rules)?;
         sort_protocol_document_rules(&mut rules);
         Ok(Self {
@@ -93,7 +93,7 @@ impl ProtocolDocumentRuleProgram {
 
     /// 在可取消边界上执行全部规则。
     ///
-    /// `is_cancelled` 在 Schema 校验前、每条规则、每个条件、每个动作以及成功提交前调用。
+    /// `is_cancelled` 在执行前、每条规则、每个条件、每个动作以及成功提交前调用。
     /// 调用方可以把连接级取消令牌适配为该闭包，Domain 本身仍不依赖异步运行时或网络身份。
     /// 一旦闭包返回 `true`，当前 owned 工作副本立即丢弃，并返回稳定的取消错误。
     pub fn execute_with_cancellation(
@@ -102,12 +102,6 @@ impl ProtocolDocumentRuleProgram {
         mut is_cancelled: impl FnMut() -> bool,
     ) -> Result<ProtocolDocumentRuleExecution, DomainError> {
         ensure_not_cancelled(&mut is_cancelled)?;
-        if document.schema() != &self.schema {
-            return Err(
-                rule_program_error("Document 与规则程序绑定的 Schema 不一致")
-                    .with_field_error("document.schema", "必须使用程序构造时绑定的完整 Schema"),
-            );
-        }
 
         // owned Document 本身就是本次调用独享的工作副本。这里不把它放入 Program，也不使用
         // interior mutability，因此连续 Frame 和并发连接之间不存在可串用的执行状态。
@@ -141,12 +135,6 @@ impl ProtocolDocumentRuleProgram {
         rule_id: ProtocolDocumentRuleId,
         document: &mut Document,
     ) -> Result<bool, DomainError> {
-        if document.schema() != &self.schema {
-            return Err(
-                rule_program_error("Document 与规则程序绑定的 Schema 不一致")
-                    .with_field_error("document.schema", "必须使用程序构造时绑定的完整 Schema"),
-            );
-        }
         let Some(rule) = self.rules.iter().find(|rule| rule.rule_id() == rule_id) else {
             return Err(rule_program_error("规则不属于当前 Document 程序")
                 .with_field_error("rule_id", "必须引用程序冻结的规则"));
@@ -171,9 +159,9 @@ impl ProtocolDocumentRuleProgram {
         &self.package
     }
 
-    /// 返回程序绑定的完整 Schema。
+    /// 返回程序绑定的 Schema 元数据。
     #[must_use]
-    pub const fn schema(&self) -> &DocumentSchema {
+    pub const fn schema(&self) -> &DocumentSchemaNode {
         &self.schema
     }
 
@@ -209,8 +197,7 @@ impl fmt::Debug for ProtocolDocumentRuleExecution {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ProtocolDocumentRuleExecution")
-            .field("schema_id", &self.document.schema().id())
-            .field("schema_version", &self.document.schema().version())
+            .field("document", &self.document)
             .field("matched_rule_ids", &self.matched_rule_ids)
             .finish()
     }
@@ -245,7 +232,7 @@ impl ProtocolDocumentRuleExecution {
 fn validate_rule_snapshot(
     listener_id: ListenerId,
     package: &ProtocolPackageRef,
-    schema: &DocumentSchema,
+    schema: &DocumentSchemaNode,
     stage: ProtocolRuleStage,
     rules: &[ProtocolDocumentRuleDefinition],
 ) -> Result<(), DomainError> {
@@ -261,15 +248,11 @@ fn validate_rule_snapshot(
             return Err(rule_program_error("规则快照包含重复身份")
                 .with_field_error(format!("{prefix}.rule_id"), "规则 ID 不能重复"));
         }
-        if rule.listener_id() != listener_id
-            || rule.package() != package
-            || rule.schema_version() != schema.version()
-            || rule.stage() != stage
-        {
+        if rule.listener_id() != listener_id || rule.package() != package || rule.stage() != stage {
             return Err(
                 rule_program_error("规则与程序的精确绑定不一致").with_field_error(
                     format!("{prefix}.binding"),
-                    "Listener、包版本、Schema 版本和方向必须全部一致",
+                    "Listener、包版本和处理阶段必须全部一致",
                 ),
             );
         }
@@ -291,11 +274,11 @@ fn matches_rule(
     for condition in rule.conditions() {
         ensure_not_cancelled(is_cancelled)?;
         match condition {
-            DocumentCondition::Equals { field, value } => match document.get(field.as_str()) {
+            DocumentCondition::Equals { field, value } => match document.resolve(field) {
                 Ok(actual) if actual == value => {}
                 Ok(_)
                 | Err(DomainError {
-                    code: ErrorCode::DocumentFieldUnassigned,
+                    code: ErrorCode::DocumentPathMissing,
                     ..
                 }) => {
                     return Ok(false);
@@ -319,12 +302,11 @@ fn apply_actions(
             // 允许一条规则显式声明“只观察、不修改”，因此这里没有额外 Document 副作用。
             DocumentAction::RecordMatch => {}
             DocumentAction::SetField { field, value } => {
-                document.set(field.as_str(), value.clone())?;
+                document.set(field, value.clone())?;
             }
             DocumentAction::ClearField { field } => {
-                document.clear_field(field.as_str())?;
+                document.clear_path(field)?;
             }
-            DocumentAction::ClearDocument => document.clear(),
         }
     }
     Ok(())
@@ -346,4 +328,41 @@ fn rule_program_error(message: &str) -> DomainError {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use crate::{ProtocolPackageId, ProtocolPackageVersion};
+
+    fn package() -> ProtocolPackageRef {
+        ProtocolPackageRef {
+            id: ProtocolPackageId::new("schema-contract").unwrap(),
+            version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+        }
+    }
+
+    #[test]
+    fn program_rejects_invalid_nested_schema_definition_without_a_document_payload() {
+        for title in [" ".to_owned(), "x".repeat(129)] {
+            let schema = DocumentSchemaNode::Object {
+                title: None,
+                properties: BTreeMap::from([(
+                    "nested".to_owned(),
+                    DocumentSchemaNode::String { title: Some(title) },
+                )]),
+            };
+
+            let error = ProtocolDocumentRuleProgram::new_for_stage(
+                ListenerId::new(),
+                package(),
+                schema,
+                ProtocolRuleStage::ProxyToUpstream,
+                Vec::new(),
+            )
+            .unwrap_err();
+
+            assert_eq!(error.code, ErrorCode::DocumentSchemaInvalid);
+            assert!(error.field_errors.contains_key("/nested"));
+        }
+    }
+}

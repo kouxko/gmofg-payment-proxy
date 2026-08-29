@@ -53,7 +53,12 @@ impl Rules for SuffixRules {
             return Err(Error::new("rules failed"));
         }
         let value = format!("{}{}", text(&document), self.suffix);
-        document.set("value", DocumentValue::String(value)).unwrap();
+        document
+            .set(
+                &JsonPointer::property("value"),
+                DocumentValue::String(value),
+            )
+            .unwrap();
         Ok(document)
     }
 }

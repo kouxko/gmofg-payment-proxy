@@ -42,8 +42,8 @@ fn schema_snapshot_covers_required_unions_enums_and_nullable_fields() {
             .len(),
         3
     );
-    assert_eq!(defs["documentValue"]["oneOf"].as_array().unwrap().len(), 4);
-    assert_eq!(defs["documentAction"]["oneOf"].as_array().unwrap().len(), 4);
+    assert_eq!(defs["documentValue"]["oneOf"].as_array().unwrap().len(), 6);
+    assert_eq!(defs["documentAction"]["oneOf"].as_array().unwrap().len(), 3);
     assert_eq!(
         defs["weakNetwork"]["properties"]["burst_loss"]["oneOf"]
             .as_array()
@@ -107,7 +107,9 @@ fn every_structured_object_schema_boundary_is_closed_and_declares_required_field
         match value {
             Value::Object(object) => {
                 if object.get("type") == Some(&json!("object")) {
-                    if path.ends_with("/$defs/jsonValue/oneOf/5") {
+                    if path.ends_with("/$defs/jsonValue/oneOf/5")
+                        || path.ends_with("/$defs/documentValue/oneOf/5")
+                    {
                         assert!(
                             object
                                 .get("additionalProperties")

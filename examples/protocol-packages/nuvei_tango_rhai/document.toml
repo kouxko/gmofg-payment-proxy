@@ -1,12 +1,28 @@
-id = "nuvei-tango-json-document"
-version = 1
+type = "object"
 title = "Nuvei Tango JSON Read-Only Document"
 
-fields = [
-  { name = "frame_length", label = "Frame body length", type = "int" },
-  { name = "control_header", label = "Opaque control header", type = "blob" },
-  { name = "sequence", label = "Sequence", type = "string" },
-  { name = "message_type", label = "Message type", type = "string" },
-  { name = "json_preview", label = "JSON preview", type = "string" },
-  { name = "encoding_context", label = "Read-only direction context", type = "blob" },
-]
+[properties.frame_length]
+type = "number"
+title = "Frame body length"
+
+[properties.control_header]
+type = "array"
+title = "Opaque control header"
+items = { type = "number" }
+
+[properties.sequence]
+type = "string"
+title = "Sequence"
+
+[properties.message_type]
+type = "string"
+title = "Message type"
+
+[properties.json_preview]
+type = "string"
+title = "JSON preview"
+
+[properties.encoding_context]
+type = "array"
+title = "Read-only direction context"
+items = { type = "number" }

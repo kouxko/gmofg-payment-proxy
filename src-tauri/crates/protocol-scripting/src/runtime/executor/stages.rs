@@ -2,17 +2,15 @@
 
 use intercept_proxy_domain::Document;
 
-use crate::{ProtocolEntryPoint, ProtocolRuntimeError, ProtocolRuntimeResult};
+use crate::{ProtocolEntryPoint, ProtocolRuntimeResult};
 
-use super::{ProtocolDirectionExecutor, validate_document_schema};
+use super::ProtocolDirectionExecutor;
 
 impl ProtocolDirectionExecutor {
     /// 只运行当前方向的 Decode，并返回 Schema 绑定的真实 Document。
     pub fn decode_document(&mut self, origin: &[u8]) -> ProtocolRuntimeResult<Document> {
         self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
-        let document = self.call_decode(origin)?;
-        self.validate_stage_document(&document, ProtocolEntryPoint::Decode)?;
-        Ok(document)
+        self.call_decode(origin)
     }
 
     /// 只运行当前方向的 Encode，把 Rules 返回的 owned Document 转成线路字节。
@@ -21,27 +19,12 @@ impl ProtocolDirectionExecutor {
         original: &[u8],
         mut document: Document,
     ) -> ProtocolRuntimeResult<Vec<u8>> {
-        self.validate_stage_document(&document, ProtocolEntryPoint::Encode)?;
         self.ensure_blob_input(ProtocolEntryPoint::Encode, original.len())?;
         self.call_encode(original, &mut document)
     }
 
     /// 只运行当前方向的 Display；错误由 Reader Pipeline 统一生成 Hex fallback。
     pub fn display_document(&mut self, document: &Document) -> ProtocolRuntimeResult<String> {
-        self.validate_stage_document(document, ProtocolEntryPoint::Display)?;
         self.call_display(document)
-    }
-
-    fn validate_stage_document(
-        &self,
-        document: &Document,
-        entry: ProtocolEntryPoint,
-    ) -> ProtocolRuntimeResult<()> {
-        validate_document_schema(document, self.host.create_document().schema()).map_err(|()| {
-            ProtocolRuntimeError::EntryPointFailed {
-                package: self.package.clone(),
-                entry,
-            }
-        })
     }
 }

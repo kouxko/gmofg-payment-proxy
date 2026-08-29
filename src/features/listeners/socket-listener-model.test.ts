@@ -34,8 +34,8 @@ function option(
     package_source: { type: "internal", built_in: false },
     kind: "socket",
     capabilities,
-    upstream_schema: { id: "iso-request", version: 1, title: "ISO Request", fields: [] },
-    downstream_schema: { id: "iso-response", version: 1, title: "ISO Response", fields: [] },
+    upstream_schema: { root: { type: "object", title: "ISO Request", properties: { mti: { type: "string", title: "MTI" } } } },
+    downstream_schema: { root: { type: "object", title: "ISO Response", properties: { response_code: { type: "string", title: "Response" } } } },
   };
 }
 
@@ -72,9 +72,6 @@ function localSettings(): SocketRelaySettings {
 describe("Socket Listener model", () => {
   it("accepts a complete internally consistent Listener package catalog", () => {
     const candidate = option();
-    candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-    candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
-
     expect(isListenerProtocolPackageCatalog({
       options: [candidate],
       installed_version_count: 2,
@@ -90,9 +87,6 @@ describe("Socket Listener model", () => {
       display: true,
     });
     candidate.kind = "http";
-    candidate.upstream_schema.fields = [{ name: "request", label: "Request", type: "string" }];
-    candidate.downstream_schema.fields = [{ name: "response", label: "Response", type: "string" }];
-
     expect(isListenerProtocolPackageCatalog({
       options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
     })).toBe(true);
@@ -111,9 +105,6 @@ describe("Socket Listener model", () => {
   it("accepts only a recommended exact package that exists in the available options", () => {
     const candidate = option();
     candidate.package = { id: "iso8583-ascii-standard", version: "1.0.0" };
-    candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-    candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
-
     expect(isListenerProtocolPackageCatalog({
       options: [candidate],
       installed_version_count: 1,
@@ -135,8 +126,6 @@ describe("Socket Listener model", () => {
     })).toBe(false);
     const userCandidate = option();
     userCandidate.package = { id: "user-package", version: "1.0.0" };
-    userCandidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-    userCandidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
     expect(isListenerProtocolPackageCatalog({
       options: [candidate, userCandidate],
       installed_version_count: 2,
@@ -153,42 +142,30 @@ describe("Socket Listener model", () => {
     ["inconsistent counts", { options: [], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null }],
     ["duplicate exact identity", (() => {
       const candidate = option();
-      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       return { options: [candidate, candidate], installed_version_count: 2, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid package identity", (() => {
       const candidate = option();
       candidate.package.id = "";
-      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid Schema", (() => {
       const candidate = option();
-      candidate.upstream_schema.version = 0;
-      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
+      candidate.upstream_schema.root = { type: "array", items: null as never };
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid capabilities", (() => {
       const candidate = option();
-      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       candidate.capabilities.upstream.decode = "yes" as never;
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["missing required Frame capability", (() => {
       const candidate = option();
-      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       candidate.capabilities.downstream.frame = false;
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["missing required Decode capability", (() => {
       const candidate = option();
-      candidate.upstream_schema.fields = [{ name: "mti", label: "MTI", type: "string" }];
-      candidate.downstream_schema.fields = [{ name: "response_code", label: "Response", type: "string" }];
       candidate.capabilities.upstream.decode = false;
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
@@ -407,13 +384,12 @@ describe("Socket Listener model", () => {
   });
 
   it.each([
-    ["duplicate Schema field", [{ name: "mti", label: "MTI", type: "string" }, { name: "mti", label: "Again", type: "int" }]],
-    ["unknown Schema field type", [{ name: "mti", label: "MTI", type: "float" }]],
-    ["missing Schema field label", [{ name: "mti", type: "string" }]],
-  ])("rejects a catalog with %s", (_case, fields) => {
+    ["unknown Schema node type", { type: "float" }],
+    ["missing array item Schema", { type: "array" }],
+    ["empty Schema title", { type: "string", title: "" }],
+  ])("rejects a catalog with %s", (_case, root) => {
     const candidate = option();
-    candidate.upstream_schema.fields = fields as never;
-    candidate.downstream_schema.fields = [{ name: "response", label: "Response", type: "string" }];
+    candidate.upstream_schema.root = root as never;
 
     expect(isListenerProtocolPackageCatalog({
       options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,

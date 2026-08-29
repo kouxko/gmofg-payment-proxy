@@ -77,54 +77,38 @@ impl<D: Direction> Frame<D> for ExternalFrame<D> {
 }
 
 impl<D: Direction> ExternalDecode<D> {
-    pub(super) fn with_schema(
+    pub(super) fn new(
         rpc: Arc<dyn ExternalPackageRpc>,
         method: String,
-        schema: intercept_proxy_domain::DocumentSchema,
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
         direction: ProtocolDirection,
-    ) -> ExternalDecodeWithSchema<D> {
-        ExternalDecodeWithSchema {
-            capability: Self {
-                rpc,
-                method,
-                package,
-                connection,
-                direction,
-                marker: std::marker::PhantomData,
-            },
-            schema,
+    ) -> Self {
+        Self {
+            rpc,
+            method,
+            package,
+            connection,
+            direction,
+            marker: std::marker::PhantomData,
         }
     }
 }
 
-pub(super) struct ExternalDecodeWithSchema<D: Direction> {
-    capability: ExternalDecode<D>,
-    schema: intercept_proxy_domain::DocumentSchema,
-}
-
 #[async_trait]
-impl<D: Direction> Decode<Socket, D> for ExternalDecodeWithSchema<D> {
+impl<D: Direction> Decode<Socket, D> for ExternalDecode<D> {
     async fn decode(&mut self, context: &SocketContext) -> Result<Document, Error> {
-        self.capability
+        let response = self
             .rpc
             .decode(
-                &self.capability.method,
+                &self.method,
                 &ExternalDecodeRequest::from_bytes(&context.data),
             )
             .await
             .map_err(|error| {
-                rpc_error::<D>(
-                    ExternalCallStage::Decode,
-                    &self.capability.method,
-                    &error,
-                    &self.capability,
-                )
-            })?
-            .document
-            .into_document(&self.schema)
-            .map_err(|_| stage_error::<D>(SocketProcessingFailureKind::DecodeFailed))
+                rpc_error::<D>(ExternalCallStage::Decode, &self.method, &error, self)
+            })?;
+        Ok(response.document.into_document())
     }
 }
 

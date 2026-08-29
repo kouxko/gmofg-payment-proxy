@@ -31,13 +31,9 @@ pub(super) fn status_code_from_error(
         "EXISTING_RULE_ID_KIND_MISMATCH" => EnvironmentStatusCode::ExistingRuleIdKindMismatch,
         "EXISTING_RULE_ID_BINDING_MISMATCH" => EnvironmentStatusCode::ExistingRuleIdBindingMismatch,
         "EXISTING_RULE_ID_PACKAGE_MISMATCH" => EnvironmentStatusCode::ExistingRuleIdPackageMismatch,
-        "EXISTING_RULE_ID_SCHEMA_VERSION_MISMATCH" => {
-            EnvironmentStatusCode::ExistingRuleIdSchemaVersionMismatch
-        }
         "EXISTING_RULE_ID_STAGE_MISMATCH" => EnvironmentStatusCode::ExistingRuleIdStageMismatch,
         "HTTP_RULE_INVALID" => EnvironmentStatusCode::HttpRuleInvalid,
         "PROTOCOL_DOCUMENT_RULE_INVALID" => EnvironmentStatusCode::ProtocolDocumentRuleInvalid,
-        "DOCUMENT_VALUE_WIRE_INVALID" => EnvironmentStatusCode::DocumentValueWireInvalid,
         "WEAK_NETWORK_WIRE_INVALID" => EnvironmentStatusCode::WeakNetworkWireInvalid,
         "WEAK_NETWORK_VALUE_INVALID" => EnvironmentStatusCode::WeakNetworkValueInvalid,
         "MATERIAL_ALIAS_DUPLICATE" => EnvironmentStatusCode::MaterialAliasDuplicate,

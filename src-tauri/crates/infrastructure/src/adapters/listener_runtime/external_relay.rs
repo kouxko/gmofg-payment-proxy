@@ -64,10 +64,9 @@ impl ExternalSocketCapabilityFactoryAdapter {
                 connection.clone(),
                 binding.protocol_direction,
             )),
-            Box::new(ExternalDecode::<D>::with_schema(
+            Box::new(ExternalDecode::<D>::new(
                 Arc::clone(&self.binding.rpc),
                 methods.decode,
-                binding.document.schema().clone(),
                 package.clone(),
                 connection.clone(),
                 binding.protocol_direction,

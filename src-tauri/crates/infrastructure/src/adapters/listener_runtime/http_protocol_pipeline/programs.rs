@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    DocumentSchema, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleProgram, ProtocolRuleStage,
-    ProxyListener, ProxyWorkspace, sort_protocol_document_rules,
+    DocumentSchemaNode, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleProgram,
+    ProtocolRuleStage, ProxyListener, ProxyWorkspace, sort_protocol_document_rules,
 };
 
 #[derive(Clone)]
@@ -29,8 +29,8 @@ pub(super) fn compile_programs(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,
-    upstream_schema: &DocumentSchema,
-    downstream_schema: &DocumentSchema,
+    upstream_schema: &DocumentSchemaNode,
+    downstream_schema: &DocumentSchemaNode,
 ) -> AppResult<HttpDocumentRulePrograms> {
     let mut rules = workspace
         .document_runtime_rules()?
@@ -39,7 +39,7 @@ pub(super) fn compile_programs(
         .collect::<Vec<_>>();
     for rule in &rules {
         let schema = schema_for_stage(rule.stage(), upstream_schema, downstream_schema);
-        if rule.package() != package || rule.schema_version() != schema.version() {
+        if rule.package() != package {
             return Err(AppError::new(
                 "DOCUMENT_RULE_RUNTIME_BINDING_MISMATCH",
                 "报文规则与当前协议包或 Schema 不一致。",
@@ -69,9 +69,9 @@ pub(super) fn compile_programs(
 
 const fn schema_for_stage<'a>(
     stage: ProtocolRuleStage,
-    upstream: &'a DocumentSchema,
-    downstream: &'a DocumentSchema,
-) -> &'a DocumentSchema {
+    upstream: &'a DocumentSchemaNode,
+    downstream: &'a DocumentSchemaNode,
+) -> &'a DocumentSchemaNode {
     match stage {
         ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToUpstream => upstream,
         ProtocolRuleStage::UpstreamToProxy | ProtocolRuleStage::ProxyToApp => downstream,
@@ -81,7 +81,7 @@ const fn schema_for_stage<'a>(
 fn compile_program(
     listener: &ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,
-    schema: &intercept_proxy_domain::DocumentSchema,
+    schema: &intercept_proxy_domain::DocumentSchemaNode,
     stage: ProtocolRuleStage,
     rules: &[ProtocolDocumentRuleDefinition],
 ) -> AppResult<ProtocolDocumentRuleProgram> {

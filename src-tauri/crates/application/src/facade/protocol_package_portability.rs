@@ -7,14 +7,13 @@
 use std::collections::{HashMap, HashSet};
 
 use intercept_proxy_domain::{
-    DocumentField, DocumentFieldType, DocumentSchema, DocumentSchemaId, ListenerDataPlane,
-    ProtocolDirection, ProtocolPackageRef, ProxyWorkspace,
+    DocumentSchemaNode, ListenerDataPlane, ProtocolDirection, ProtocolPackageRef, ProxyWorkspace,
 };
 
 use super::protocol_packages::ensure_description_identity;
 use crate::{
     AppError, AppResult, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
-    ProtocolPackageSchemaFieldTypeViewModel, ProtocolPackageSchemaViewModel,
+    ProtocolPackageSchemaViewModel,
 };
 
 /// 校验 fresh portability 编译描述与待提交聚合的一致性。
@@ -123,7 +122,7 @@ fn validate_rule_binding(
     rule: &intercept_proxy_domain::ProtocolDocumentRuleDefinition,
     description: &ProtocolPackageDescriptionViewModel,
 ) -> AppResult<()> {
-    let schema = domain_schema(schema_for_direction(description, rule.direction()))?;
+    let schema = domain_schema(schema_for_direction(description, rule.direction()));
     rule.validate_against_schema(&schema)?;
     if package != rule.package() {
         return Err(portability_error("规则与入口绑定的精确协议包不一致。"));
@@ -171,29 +170,8 @@ fn schema_for_direction(
     }
 }
 
-fn domain_schema(schema: &ProtocolPackageSchemaViewModel) -> AppResult<DocumentSchema> {
-    let fields = schema
-        .fields
-        .iter()
-        .map(|field| {
-            DocumentField::new(
-                field.name.parse()?,
-                match field.field_type {
-                    ProtocolPackageSchemaFieldTypeViewModel::String => DocumentFieldType::String,
-                    ProtocolPackageSchemaFieldTypeViewModel::Int => DocumentFieldType::Int,
-                    ProtocolPackageSchemaFieldTypeViewModel::Bool => DocumentFieldType::Bool,
-                    ProtocolPackageSchemaFieldTypeViewModel::Blob => DocumentFieldType::Blob,
-                },
-                field.label.clone(),
-            )
-        })
-        .collect::<Result<Vec<_>, intercept_proxy_domain::DomainError>>()?;
-    Ok(DocumentSchema::new(
-        DocumentSchemaId::new(schema.id.clone())?,
-        schema.version,
-        schema.title.clone(),
-        fields,
-    )?)
+fn domain_schema(schema: &ProtocolPackageSchemaViewModel) -> DocumentSchemaNode {
+    schema.root.clone()
 }
 
 fn portability_error(message: impl Into<String>) -> AppError {

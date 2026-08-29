@@ -7,6 +7,7 @@ use crate::environment_configuration::{
     EnvironmentAdmittedTarget, EnvironmentStatusCode, EnvironmentValidationLayer,
     EnvironmentValidationStatus,
 };
+use intercept_proxy_domain::DocumentValue;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EnvironmentCandidatePublicSnapshot {
@@ -21,7 +22,7 @@ pub struct EnvironmentCandidatePublicSnapshot {
     resources: EnvironmentPreviewResources,
     alias_graph: EnvironmentAliasGraph,
     materials_public: EnvironmentMaterialsPublic,
-    protocol_document_values: Vec<EnvironmentDocumentValue>,
+    protocol_document_values: Vec<DocumentValue>,
     terminal_action_fields: EnvironmentTerminalActionFields,
 }
 
@@ -95,7 +96,7 @@ pub struct EnvironmentCandidatePreview {
     resources: EnvironmentPreviewResources,
     alias_graph: EnvironmentAliasGraph,
     materials_public: EnvironmentMaterialsPublic,
-    protocol_document_values: Vec<EnvironmentDocumentValue>,
+    protocol_document_values: Vec<DocumentValue>,
     terminal_action_fields: EnvironmentTerminalActionFields,
 }
 
@@ -225,7 +226,7 @@ struct EnvironmentCandidatePublicSnapshotWire {
     resources: EnvironmentPreviewResources,
     alias_graph: EnvironmentAliasGraph,
     materials_public: EnvironmentMaterialsPublic,
-    protocol_document_values: Vec<EnvironmentDocumentValue>,
+    protocol_document_values: Vec<DocumentValue>,
     terminal_action_fields: EnvironmentTerminalActionFields,
 }
 
@@ -305,15 +306,6 @@ struct EnvironmentSecretPublic {
 #[serde(rename_all = "snake_case")]
 enum EnvironmentSecretRole {
     ProxyBasicAuth,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
-enum EnvironmentDocumentValue {
-    String(String),
-    Int(i64),
-    Bool(bool),
-    Blob(Vec<u8>),
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

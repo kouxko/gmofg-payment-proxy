@@ -1,6 +1,6 @@
 use std::{fmt, sync::Arc};
 
-use intercept_proxy_domain::{DocumentSchema, ProtocolPackageRef};
+use intercept_proxy_domain::{DocumentSchemaNode, ProtocolPackageRef};
 
 use crate::{
     ProtocolDirection, ProtocolManifest, ProtocolPackageKind,
@@ -42,11 +42,11 @@ impl CompiledProtocolPackage {
 
     /// 返回指定方向的不可变 Document Schema。
     #[must_use]
-    pub fn schema(&self, direction: ProtocolDirection) -> &DocumentSchema {
+    pub fn schema(&self, direction: ProtocolDirection) -> &DocumentSchemaNode {
         self.direction(direction).schema()
     }
 
-    pub(crate) fn schema_arc(&self, direction: ProtocolDirection) -> Arc<DocumentSchema> {
+    pub(crate) fn schema_arc(&self, direction: ProtocolDirection) -> Arc<DocumentSchemaNode> {
         self.direction(direction).schema_arc()
     }
 

@@ -1889,72 +1889,27 @@
           "documentValue": {
             "oneOf": [
               {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "type",
-                  "value"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "string"
-                  },
-                  "value": {
-                    "type": "string"
-                  }
+                "type": "null"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/jsonValue"
                 }
               },
               {
                 "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "type",
-                  "value"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "int"
-                  },
-                  "value": {
-                    "type": "integer"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "type",
-                  "value"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "bool"
-                  },
-                  "value": {
-                    "type": "boolean"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "type",
-                  "value"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "blob"
-                  },
-                  "value": {
-                    "type": "array",
-                    "items": {
-                      "type": "integer",
-                      "minimum": 0,
-                      "maximum": 255
-                    }
-                  }
+                "additionalProperties": {
+                  "$ref": "#/$defs/jsonValue"
                 }
               }
             ]
@@ -2026,18 +1981,6 @@
                   },
                   "field": {
                     "type": "string"
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "required": [
-                  "type"
-                ],
-                "properties": {
-                  "type": {
-                    "const": "clear_document"
                   }
                 }
               }
@@ -2506,17 +2449,12 @@
             "additionalProperties": false,
             "required": [
               "package",
-              "schema_version",
               "conditions",
               "actions"
             ],
             "properties": {
               "package": {
                 "$ref": "#/$defs/packageRef"
-              },
-              "schema_version": {
-                "type": "integer",
-                "minimum": 1
               },
               "conditions": {
                 "type": "array",
@@ -2542,7 +2480,6 @@
               "priority",
               "listener_alias",
               "package",
-              "schema_version",
               "stage",
               "conditions",
               "actions"
@@ -2568,10 +2505,6 @@
               },
               "package": {
                 "$ref": "#/$defs/packageRef"
-              },
-              "schema_version": {
-                "type": "integer",
-                "minimum": 1
               },
               "stage": {
                 "enum": [
@@ -2685,14 +2618,12 @@
               "COMMIT_ROLLED_BACK",
               "CONFIRMATION_TOKEN_INVALID",
               "CONFIRMATION_TOKEN_MISSING",
-              "DOCUMENT_VALUE_WIRE_INVALID",
               "DTO_LIMIT_EXCEEDED",
               "EXISTING_RULE_ID_BINDING_MISMATCH",
               "EXISTING_RULE_ID_DUPLICATE",
               "EXISTING_RULE_ID_FORBIDDEN",
               "EXISTING_RULE_ID_KIND_MISMATCH",
               "EXISTING_RULE_ID_PACKAGE_MISMATCH",
-              "EXISTING_RULE_ID_SCHEMA_VERSION_MISMATCH",
               "EXISTING_RULE_ID_STAGE_MISMATCH",
               "EXISTING_RULE_ID_UNKNOWN",
               "EXISTING_RULE_ID_WORKSPACE_MISMATCH",
@@ -3102,77 +3033,7 @@
               "protocol_document_values": {
                 "type": "array",
                 "items": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "int"
-                        },
-                        "value": {
-                          "type": "integer"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "bool"
-                        },
-                        "value": {
-                          "type": "boolean"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "blob"
-                        },
-                        "value": {
-                          "type": "array",
-                          "items": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 255
-                          }
-                        }
-                      }
-                    }
-                  ]
+                  "$ref": "#/$defs/jsonValue"
                 }
               },
               "terminal_action_fields": {
@@ -3393,6 +3254,34 @@
                       "$ref": "#/$defs/diagnostic"
                     }
                   }
+                }
+              }
+            ]
+          },
+          "jsonValue": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/jsonValue"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/jsonValue"
                 }
               }
             ]
@@ -3516,14 +3405,12 @@
               "COMMIT_ROLLED_BACK",
               "CONFIRMATION_TOKEN_INVALID",
               "CONFIRMATION_TOKEN_MISSING",
-              "DOCUMENT_VALUE_WIRE_INVALID",
               "DTO_LIMIT_EXCEEDED",
               "EXISTING_RULE_ID_BINDING_MISMATCH",
               "EXISTING_RULE_ID_DUPLICATE",
               "EXISTING_RULE_ID_FORBIDDEN",
               "EXISTING_RULE_ID_KIND_MISMATCH",
               "EXISTING_RULE_ID_PACKAGE_MISMATCH",
-              "EXISTING_RULE_ID_SCHEMA_VERSION_MISMATCH",
               "EXISTING_RULE_ID_STAGE_MISMATCH",
               "EXISTING_RULE_ID_UNKNOWN",
               "EXISTING_RULE_ID_WORKSPACE_MISMATCH",
@@ -3933,77 +3820,7 @@
               "protocol_document_values": {
                 "type": "array",
                 "items": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "int"
-                        },
-                        "value": {
-                          "type": "integer"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "bool"
-                        },
-                        "value": {
-                          "type": "boolean"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "blob"
-                        },
-                        "value": {
-                          "type": "array",
-                          "items": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 255
-                          }
-                        }
-                      }
-                    }
-                  ]
+                  "$ref": "#/$defs/jsonValue"
                 }
               },
               "terminal_action_fields": {
@@ -4224,6 +4041,34 @@
                       "$ref": "#/$defs/diagnostic"
                     }
                   }
+                }
+              }
+            ]
+          },
+          "jsonValue": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/jsonValue"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/jsonValue"
                 }
               }
             ]
@@ -4295,14 +4140,12 @@
               "COMMIT_ROLLED_BACK",
               "CONFIRMATION_TOKEN_INVALID",
               "CONFIRMATION_TOKEN_MISSING",
-              "DOCUMENT_VALUE_WIRE_INVALID",
               "DTO_LIMIT_EXCEEDED",
               "EXISTING_RULE_ID_BINDING_MISMATCH",
               "EXISTING_RULE_ID_DUPLICATE",
               "EXISTING_RULE_ID_FORBIDDEN",
               "EXISTING_RULE_ID_KIND_MISMATCH",
               "EXISTING_RULE_ID_PACKAGE_MISMATCH",
-              "EXISTING_RULE_ID_SCHEMA_VERSION_MISMATCH",
               "EXISTING_RULE_ID_STAGE_MISMATCH",
               "EXISTING_RULE_ID_UNKNOWN",
               "EXISTING_RULE_ID_WORKSPACE_MISMATCH",
@@ -4712,77 +4555,7 @@
               "protocol_document_values": {
                 "type": "array",
                 "items": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "int"
-                        },
-                        "value": {
-                          "type": "integer"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "bool"
-                        },
-                        "value": {
-                          "type": "boolean"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "blob"
-                        },
-                        "value": {
-                          "type": "array",
-                          "items": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 255
-                          }
-                        }
-                      }
-                    }
-                  ]
+                  "$ref": "#/$defs/jsonValue"
                 }
               },
               "terminal_action_fields": {
@@ -5003,6 +4776,34 @@
                       "$ref": "#/$defs/diagnostic"
                     }
                   }
+                }
+              }
+            ]
+          },
+          "jsonValue": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/jsonValue"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/jsonValue"
                 }
               }
             ]
@@ -5075,14 +4876,12 @@
               "COMMIT_ROLLED_BACK",
               "CONFIRMATION_TOKEN_INVALID",
               "CONFIRMATION_TOKEN_MISSING",
-              "DOCUMENT_VALUE_WIRE_INVALID",
               "DTO_LIMIT_EXCEEDED",
               "EXISTING_RULE_ID_BINDING_MISMATCH",
               "EXISTING_RULE_ID_DUPLICATE",
               "EXISTING_RULE_ID_FORBIDDEN",
               "EXISTING_RULE_ID_KIND_MISMATCH",
               "EXISTING_RULE_ID_PACKAGE_MISMATCH",
-              "EXISTING_RULE_ID_SCHEMA_VERSION_MISMATCH",
               "EXISTING_RULE_ID_STAGE_MISMATCH",
               "EXISTING_RULE_ID_UNKNOWN",
               "EXISTING_RULE_ID_WORKSPACE_MISMATCH",
@@ -5492,77 +5291,7 @@
               "protocol_document_values": {
                 "type": "array",
                 "items": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "string"
-                        },
-                        "value": {
-                          "type": "string"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "int"
-                        },
-                        "value": {
-                          "type": "integer"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "bool"
-                        },
-                        "value": {
-                          "type": "boolean"
-                        }
-                      }
-                    },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "required": [
-                        "type",
-                        "value"
-                      ],
-                      "properties": {
-                        "type": {
-                          "const": "blob"
-                        },
-                        "value": {
-                          "type": "array",
-                          "items": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "maximum": 255
-                          }
-                        }
-                      }
-                    }
-                  ]
+                  "$ref": "#/$defs/jsonValue"
                 }
               },
               "terminal_action_fields": {
@@ -5783,6 +5512,34 @@
                       "$ref": "#/$defs/diagnostic"
                     }
                   }
+                }
+              }
+            ]
+          },
+          "jsonValue": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/jsonValue"
+                }
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/jsonValue"
                 }
               }
             ]

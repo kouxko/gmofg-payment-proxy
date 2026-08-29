@@ -1,8 +1,7 @@
 use std::{collections::BTreeMap, fmt::Write};
 
 use intercept_proxy_domain::{
-    DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema, DocumentSchemaId,
-    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    DocumentSchemaNode, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
 };
 
 use crate::{
@@ -11,8 +10,8 @@ use crate::{
 
 pub(crate) struct CompiledProtocolPackageTestBuilder {
     package: ProtocolPackageRef,
-    upstream_schema: DocumentSchema,
-    downstream_schema: DocumentSchema,
+    upstream_schema: DocumentSchemaNode,
+    downstream_schema: DocumentSchemaNode,
     script: String,
 }
 
@@ -23,34 +22,8 @@ impl CompiledProtocolPackageTestBuilder {
                 id: ProtocolPackageId::new("test-protocol").unwrap(),
                 version: ProtocolPackageVersion::new("1.0.0").unwrap(),
             },
-            upstream_schema: DocumentSchema::new(
-                DocumentSchemaId::new("test-message").unwrap(),
-                1,
-                "Test message",
-                vec![
-                    DocumentField::new(
-                        DocumentFieldName::new("amount").unwrap(),
-                        DocumentFieldType::Int,
-                        "Amount",
-                    )
-                    .unwrap(),
-                ],
-            )
-            .unwrap(),
-            downstream_schema: DocumentSchema::new(
-                DocumentSchemaId::new("test-message").unwrap(),
-                1,
-                "Test message",
-                vec![
-                    DocumentField::new(
-                        DocumentFieldName::new("amount").unwrap(),
-                        DocumentFieldType::Int,
-                        "Amount",
-                    )
-                    .unwrap(),
-                ],
-            )
-            .unwrap(),
+            upstream_schema: amount_schema("Test message"),
+            downstream_schema: amount_schema("Test message"),
             script: concat!(
                 "fn frame(reader, context) { () }\n",
                 "fn decode(origin, context) { document::create() }\n",
@@ -66,7 +39,7 @@ impl CompiledProtocolPackageTestBuilder {
         self
     }
 
-    pub(crate) fn with_schema(mut self, schema: DocumentSchema) -> Self {
+    pub(crate) fn with_schema(mut self, schema: DocumentSchemaNode) -> Self {
         self.upstream_schema = schema.clone();
         self.downstream_schema = schema;
         self
@@ -74,8 +47,8 @@ impl CompiledProtocolPackageTestBuilder {
 
     pub(crate) fn with_directional_schemas(
         mut self,
-        upstream: DocumentSchema,
-        downstream: DocumentSchema,
+        upstream: DocumentSchemaNode,
+        downstream: DocumentSchemaNode,
     ) -> Self {
         self.upstream_schema = upstream;
         self.downstream_schema = downstream;
@@ -173,22 +146,57 @@ encode = "encode"
     }
 }
 
-fn schema_toml(schema: &DocumentSchema) -> String {
-    let mut output = format!(
-        "id = {}\nversion = {}\ntitle = {}\n",
-        serde_json::to_string(schema.id().as_str()).unwrap(),
-        schema.version(),
-        serde_json::to_string(schema.title()).unwrap(),
-    );
-    for field in schema.fields() {
-        write!(
-            output,
-            "\n[[fields]]\nname = {}\nlabel = {}\ntype = {}\n",
-            serde_json::to_string(field.name().as_str()).unwrap(),
-            serde_json::to_string(field.label()).unwrap(),
-            serde_json::to_string(field.field_type().as_str()).unwrap(),
-        )
-        .unwrap();
+fn amount_schema(title: &str) -> DocumentSchemaNode {
+    DocumentSchemaNode::Object {
+        title: Some(title.to_owned()),
+        properties: BTreeMap::from([(
+            "amount".to_owned(),
+            DocumentSchemaNode::Number {
+                title: Some("Amount".to_owned()),
+            },
+        )]),
     }
+}
+
+fn schema_toml(schema: &DocumentSchemaNode) -> String {
+    let mut output = String::new();
+    write_schema_node(&mut output, schema, None);
     output
+}
+
+fn write_schema_node(output: &mut String, schema: &DocumentSchemaNode, table: Option<&str>) {
+    if let Some(table) = table {
+        writeln!(output, "\n[{table}]").unwrap();
+    }
+    let (kind, title) = match schema {
+        DocumentSchemaNode::String { title } => ("string", title),
+        DocumentSchemaNode::Number { title } => ("number", title),
+        DocumentSchemaNode::Boolean { title } => ("boolean", title),
+        DocumentSchemaNode::Object { title, .. } => ("object", title),
+        DocumentSchemaNode::Array { title, .. } => ("array", title),
+    };
+    writeln!(output, "type = {kind:?}").unwrap();
+    if let Some(title) = title {
+        writeln!(output, "title = {}", serde_json::to_string(title).unwrap()).unwrap();
+    }
+    match schema {
+        DocumentSchemaNode::Object { properties, .. } => {
+            let parent = table.map_or_else(
+                || "properties".to_owned(),
+                |table| format!("{table}.properties"),
+            );
+            for (name, child) in properties {
+                write_schema_node(output, child, Some(&format!("{parent}.{}", toml_key(name))));
+            }
+        }
+        DocumentSchemaNode::Array { items, .. } => {
+            let table = table.map_or_else(|| "items".to_owned(), |table| format!("{table}.items"));
+            write_schema_node(output, items, Some(&table));
+        }
+        _ => {}
+    }
+}
+
+fn toml_key(value: &str) -> String {
+    serde_json::to_string(value).expect("JSON and TOML basic-string escaping overlap for test keys")
 }

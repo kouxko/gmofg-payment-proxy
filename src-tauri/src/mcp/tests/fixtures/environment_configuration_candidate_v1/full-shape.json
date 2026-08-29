@@ -499,35 +499,25 @@
           "id": "au-eftex",
           "version": "1.1.0"
         },
-        "schema_version": 1,
         "stage": "app_to_proxy",
         "conditions": [
           {
             "operator": "equals",
-            "field": "amount",
-            "value": {
-              "type": "int",
-              "value": 1000
-            }
+            "field": "/amount",
+            "value": 1000
           },
           {
             "operator": "equals",
-            "field": "approved",
-            "value": {
-              "type": "bool",
-              "value": true
-            }
+            "field": "/approved",
+            "value": true
           },
           {
             "operator": "equals",
-            "field": "raw",
-            "value": {
-              "type": "blob",
-              "value": [
-                65,
-                66
-              ]
-            }
+            "field": "/raw",
+            "value": [
+              65,
+              66
+            ]
           }
         ],
         "actions": [
@@ -536,18 +526,15 @@
           },
           {
             "type": "set_field",
-            "field": "approval_code",
-            "value": {
-              "type": "string",
-              "value": "OK1234"
-            }
+            "field": "/approval_code",
+            "value": "OK1234"
           },
           {
             "type": "clear_field",
-            "field": "temporary"
+            "field": "/temporary"
           },
           {
-            "type": "clear_document"
+            "type": "record_match"
           }
         ]
       }

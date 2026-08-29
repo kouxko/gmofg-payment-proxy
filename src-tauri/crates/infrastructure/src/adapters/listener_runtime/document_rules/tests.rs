@@ -1,9 +1,8 @@
-use std::{sync::Arc, thread};
+use std::{collections::BTreeMap, sync::Arc, thread};
 
 use intercept_proxy_domain::{
-    Document, DocumentAction, DocumentCondition, DocumentField, DocumentFieldName,
-    DocumentFieldType, DocumentSchema, DocumentSchemaId, DocumentValue, ListenerId,
-    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    Document, DocumentAction, DocumentCondition, DocumentSchemaNode, DocumentValue, JsonPointer,
+    ListenerId, ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
     ProtocolDocumentRuleProgram, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
     ProtocolRuleStage,
 };
@@ -19,27 +18,24 @@ fn package() -> ProtocolPackageRef {
     }
 }
 
-fn schema() -> DocumentSchema {
-    DocumentSchema::new(
-        DocumentSchemaId::new("rules-test").unwrap(),
-        1,
-        "Rules test",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("request").unwrap(),
-                DocumentFieldType::String,
-                "Request",
-            )
-            .unwrap(),
-            DocumentField::new(
-                DocumentFieldName::new("response").unwrap(),
-                DocumentFieldType::String,
-                "Response",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap()
+fn schema() -> DocumentSchemaNode {
+    DocumentSchemaNode::Object {
+        title: Some("Rules test".into()),
+        properties: BTreeMap::from([
+            (
+                "request".into(),
+                DocumentSchemaNode::String {
+                    title: Some("Request".into()),
+                },
+            ),
+            (
+                "response".into(),
+                DocumentSchemaNode::String {
+                    title: Some("Response".into()),
+                },
+            ),
+        ]),
+    }
 }
 
 fn rule(
@@ -55,7 +51,6 @@ fn rule(
         created_order,
         listener_id,
         package(),
-        1,
         ProtocolDirection::Downstream,
         conditions,
         actions,
@@ -83,7 +78,7 @@ fn program(listener_id: ListenerId) -> Arc<ProtocolDocumentRuleProgram> {
                     listener_id,
                     1,
                     vec![DocumentCondition::Equals {
-                        field: DocumentFieldName::new("request").unwrap(),
+                        field: JsonPointer::property("request"),
                         value: DocumentValue::String("sale".into()),
                     }],
                     vec![DocumentAction::RecordMatch],
@@ -93,7 +88,7 @@ fn program(listener_id: ListenerId) -> Arc<ProtocolDocumentRuleProgram> {
                     2,
                     Vec::new(),
                     vec![DocumentAction::SetField {
-                        field: DocumentFieldName::new("response").unwrap(),
+                        field: JsonPointer::property("response"),
                         value: DocumentValue::String("approved".into()),
                     }],
                 ),
@@ -141,14 +136,22 @@ fn local_empty_document_allows_static_assignment_but_field_condition_is_non_matc
 
     assert_eq!(result.matched_rule_ids().len(), 1);
     assert_eq!(
-        result.document().get("response").unwrap(),
+        result
+            .document()
+            .resolve(&JsonPointer::property("response"))
+            .unwrap(),
         &DocumentValue::String("approved".into())
     );
-    assert!(!result.document().has("request").unwrap());
+    assert!(
+        result
+            .document()
+            .resolve(&JsonPointer::property("request"))
+            .is_err()
+    );
 }
 
 #[test]
-fn runtime_rejects_cross_connection_and_every_frozen_binding_mismatch() {
+fn runtime_rejects_identity_mismatches_but_not_fields_missing_from_schema_metadata() {
     let listener_id = ListenerId::new();
     let factory = factory(listener_id);
     let first = factory.connection(
@@ -178,22 +181,19 @@ fn runtime_rejects_cross_connection_and_every_frozen_binding_mismatch() {
     wrong_stage.stage = ProtocolRuleStage::AppToProxy;
     assert!(first.execute(wrong_stage).is_err());
 
-    let other_schema = DocumentSchema::new(
-        DocumentSchemaId::new("other-test").unwrap(),
-        1,
-        "Other",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("other").unwrap(),
-                DocumentFieldType::String,
-                "Other",
-            )
+    let incomplete_metadata_document = first.bind_document(Document::new(DocumentValue::Object(
+        BTreeMap::from([("other".into(), DocumentValue::String("Other".into()))]),
+    )));
+    let result = first
+        .execute(incomplete_metadata_document)
+        .expect("schema metadata does not constrain the complete Document shape");
+    assert_eq!(
+        result
+            .document()
+            .resolve(&JsonPointer::property("other"))
             .unwrap(),
-        ],
-    )
-    .unwrap();
-    let wrong_schema = first.bind_document(Document::new(other_schema));
-    assert!(first.execute(wrong_schema).is_err());
+        &DocumentValue::String("Other".into())
+    );
 }
 
 #[test]
@@ -204,16 +204,23 @@ fn successive_frames_and_concurrent_connections_share_no_document_state() {
         connection(Uuid::from_u128(20)),
         ProtocolRuleStage::ProxyToApp,
     );
-    let mut decoded = Document::new(schema());
+    let mut decoded = Document::new(DocumentValue::Object(BTreeMap::new()));
     decoded
-        .set("request", DocumentValue::String("sale".into()))
+        .set(
+            &JsonPointer::property("request"),
+            DocumentValue::String("sale".into()),
+        )
         .unwrap();
     let first_result = first.execute(first.bind_document(decoded)).unwrap();
     assert_eq!(first_result.matched_rule_ids().len(), 2);
 
     let next = first.execute(first.empty_document()).unwrap();
     assert_eq!(next.matched_rule_ids().len(), 1);
-    assert!(!next.document().has("request").unwrap());
+    assert!(
+        next.document()
+            .resolve(&JsonPointer::property("request"))
+            .is_err()
+    );
 
     let handles = (30_u128..34)
         .map(|id| {
@@ -230,7 +237,12 @@ fn successive_frames_and_concurrent_connections_share_no_document_state() {
     for handle in handles {
         let result = handle.join().unwrap();
         assert_eq!(result.matched_rule_ids().len(), 1);
-        assert!(!result.document().has("request").unwrap());
+        assert!(
+            result
+                .document()
+                .resolve(&JsonPointer::property("request"))
+                .is_err()
+        );
     }
 }
 
@@ -241,9 +253,12 @@ fn runtime_debug_exposes_binding_shape_but_never_document_values() {
         connection(Uuid::from_u128(40)),
         ProtocolRuleStage::ProxyToApp,
     );
-    let mut document = Document::new(schema());
+    let mut document = Document::new(DocumentValue::Object(BTreeMap::new()));
     document
-        .set("request", DocumentValue::String("secret-sale".into()))
+        .set(
+            &JsonPointer::property("request"),
+            DocumentValue::String("secret-sale".into()),
+        )
         .unwrap();
     let bound = runtime.bind_document(document);
 
@@ -319,26 +334,23 @@ fn factory_debug_reports_all_four_stage_counts() {
 #[test]
 fn factory_rejects_different_schemas_within_one_direction() {
     let listener_id = ListenerId::new();
-    let different_schema = DocumentSchema::new(
-        DocumentSchemaId::new("different-rules-test").unwrap(),
-        1,
-        "Different rules test",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("request").unwrap(),
-                DocumentFieldType::String,
-                "Request",
-            )
-            .unwrap(),
-            DocumentField::new(
-                DocumentFieldName::new("response").unwrap(),
-                DocumentFieldType::String,
-                "Response",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
+    let different_schema = DocumentSchemaNode::Object {
+        title: Some("Different rules test".into()),
+        properties: BTreeMap::from([
+            (
+                "request".into(),
+                DocumentSchemaNode::String {
+                    title: Some("Request".into()),
+                },
+            ),
+            (
+                "response".into(),
+                DocumentSchemaNode::String {
+                    title: Some("Response".into()),
+                },
+            ),
+        ]),
+    };
     let mismatched = Arc::new(
         ProtocolDocumentRuleProgram::new_for_stage(
             listener_id,
@@ -375,7 +387,7 @@ fn existing_connection_reads_replaced_rules_on_the_next_document() {
             .execute(runtime.empty_document())
             .unwrap()
             .document()
-            .get("response")
+            .resolve(&JsonPointer::property("response"))
             .unwrap(),
         &DocumentValue::String("approved".into())
     );
@@ -391,7 +403,7 @@ fn existing_connection_reads_replaced_rules_on_the_next_document() {
                 1,
                 Vec::new(),
                 vec![DocumentAction::SetField {
-                    field: DocumentFieldName::new("response").unwrap(),
+                    field: JsonPointer::property("response"),
                     value: DocumentValue::String("declined".into()),
                 }],
             )],
@@ -413,7 +425,7 @@ fn existing_connection_reads_replaced_rules_on_the_next_document() {
             .execute(runtime.empty_document())
             .unwrap()
             .document()
-            .get("response")
+            .resolve(&JsonPointer::property("response"))
             .unwrap(),
         &DocumentValue::String("declined".into())
     );

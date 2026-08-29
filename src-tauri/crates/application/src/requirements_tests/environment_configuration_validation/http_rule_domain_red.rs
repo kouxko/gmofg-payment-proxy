@@ -3,7 +3,6 @@ use super::*;
 fn protocol_document() -> serde_json::Value {
     serde_json::json!({
         "package": {"id": "au-eftex", "version": "1.1.0"},
-        "schema_version": 1,
         "conditions": [],
         "actions": [{"type": "record_match"}]
     })

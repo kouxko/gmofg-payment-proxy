@@ -79,7 +79,7 @@ impl std::fmt::Debug for JointDocumentEvaluation {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
             .debug_struct("JointDocumentEvaluation")
-            .field("schema", self.document.schema())
+            .field("document", &self.document)
             .field("rule_count", &self.programs.len())
             .finish_non_exhaustive()
     }

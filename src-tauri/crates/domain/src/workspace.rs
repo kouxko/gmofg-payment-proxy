@@ -82,7 +82,6 @@ fn restore_document_rule(
         definition.created_order(),
         definition.listener_id(),
         content.package,
-        content.schema_version,
         protocol_stage_from_rule(definition.stage())?,
         content.conditions,
         content.actions,
@@ -288,7 +287,6 @@ impl ProxyWorkspace {
                 RuleContent::Http(content) => content.document.clone(),
                 RuleContent::Socket(content) => Some(HttpDocumentRuleContent {
                     package: content.package.clone(),
-                    schema_version: content.schema_version,
                     conditions: content.conditions.clone(),
                     actions: content.actions.clone(),
                 }),
@@ -328,7 +326,6 @@ impl ProxyWorkspace {
             });
             let document = HttpDocumentRuleContent {
                 package: rule.package().clone(),
-                schema_version: rule.schema_version(),
                 conditions: rule.conditions().to_vec(),
                 actions: rule.actions().to_vec(),
             };
@@ -338,7 +335,6 @@ impl ProxyWorkspace {
             } else {
                 RuleContent::Socket(SocketRuleContent {
                     package: document.package,
-                    schema_version: document.schema_version,
                     conditions: document.conditions,
                     actions: document.actions,
                 })

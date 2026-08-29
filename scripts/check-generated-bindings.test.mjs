@@ -86,3 +86,18 @@ test("restores checked-in bytes and preserves the generator error when output is
     assert.equal(await readFile(generatedPath, "utf8"), "checked-in\n");
   });
 });
+
+test("exports recursive Document scalar contracts exactly", async () => {
+  const generated = await readFile(
+    new URL("../src/generated/rust-types.ts", import.meta.url),
+    "utf8",
+  );
+  const documentValue = generated.match(
+    /export type DocumentValue =(?<definition>[\s\S]*?);\n/u,
+  )?.groups?.definition;
+  assert.ok(documentValue, "DocumentValue binding must be exported");
+  assert.match(generated, /export type DocumentNumber = number;/u);
+  assert.match(documentValue, /(?:^|\n)null \|/u);
+  assert.doesNotMatch(documentValue, /"Null"/u);
+  assert.doesNotMatch(generated, /ClearDocument|clear_document/u);
+});

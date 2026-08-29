@@ -45,25 +45,3 @@ encode = "downstream_encode"
 "#
     .to_owned()
 }
-
-pub(super) fn schema_with_fields(fields: &str) -> String {
-    format!(
-        r#"
-id = "example-message"
-version = 1
-title = "Example Message"
-{fields}
-"#
-    )
-}
-
-pub(super) fn one_field_schema() -> String {
-    schema_with_fields(
-        r#"
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
-"#,
-    )
-}

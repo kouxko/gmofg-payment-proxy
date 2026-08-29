@@ -55,7 +55,6 @@ fn application_boundary_http_stages_reject_ordinary_work_but_accept_pure_documen
                 actions,
                 document: Some(HttpDocumentRuleContent {
                     package: package(),
-                    schema_version: 1,
                     conditions: Vec::new(),
                     actions: vec![DocumentAction::RecordMatch],
                 }),
@@ -87,7 +86,6 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
                     actions: vec![RuleAction::Delay { milliseconds: 1 }],
                     document: Some(HttpDocumentRuleContent {
                         package: package(),
-                        schema_version: 1,
                         conditions: Vec::new(),
                         actions: vec![DocumentAction::RecordMatch],
                     }),
@@ -114,7 +112,6 @@ fn listener_and_content_kind_are_immutable_after_creation() {
             stage: RuleStage::AppToProxy,
             content: RuleContent::Socket(SocketRuleContent {
                 package: package(),
-                schema_version: 1,
                 conditions: Vec::<DocumentCondition>::new(),
                 actions: vec![DocumentAction::RecordMatch],
             }),

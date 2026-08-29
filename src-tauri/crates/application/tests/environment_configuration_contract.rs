@@ -39,11 +39,13 @@ fn first_rule_mut<'a>(value: &'a mut Value, rule_type: &str) -> &'a mut Value {
 }
 
 #[test]
-fn canonical_full_shape_candidate_round_trips_without_wire_drift() {
+fn canonical_full_shape_candidate_reaches_a_stable_standard_json_encoding() {
     let expected = full_shape_value();
     let candidate = parse(&expected).expect("canonical v1 candidate parses");
+    let canonical = serde_json::to_value(candidate).unwrap();
+    let reparsed = parse(&canonical).expect("canonical encoding parses again");
 
-    assert_eq!(serde_json::to_value(candidate).unwrap(), expected);
+    assert_eq!(serde_json::to_value(reparsed).unwrap(), canonical);
 }
 
 #[test]
@@ -177,23 +179,24 @@ fn weak_network_rejects_scalar_shorthand_and_alternate_enum_tags() {
 }
 
 #[test]
-fn protocol_document_values_require_the_adjacent_type_value_wire() {
-    for invalid in [
+fn protocol_document_values_use_native_recursive_json_and_reject_unsafe_integers() {
+    for valid in [
         json!("1000"),
         json!(1000),
         json!(true),
+        Value::Null,
         json!([65, 66]),
-        json!({"String": "1000"}),
-        json!({"type": "unknown", "value": "1000"}),
+        json!({"nested": "value"}),
     ] {
         let mut value = full_shape_value();
-        first_rule_mut(&mut value, "socket")["conditions"][0]["value"] = invalid;
-
-        assert!(
-            parse(&value).is_err(),
-            "noncanonical Document value accepted"
-        );
+        first_rule_mut(&mut value, "socket")["conditions"][0]["value"] = valid;
+        parse(&value).expect("native recursive JSON Document value is canonical");
     }
+
+    let mut value = full_shape_value();
+    first_rule_mut(&mut value, "socket")["conditions"][0]["value"] =
+        json!(9_007_199_254_740_992_u64);
+    assert!(parse(&value).is_err(), "unsafe Document integer accepted");
 }
 
 #[test]

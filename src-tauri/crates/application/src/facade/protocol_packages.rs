@@ -416,8 +416,14 @@ pub(super) fn ensure_external_description(
         && capabilities.downstream.decode
         && capabilities.downstream.encode
         && capabilities.display
-        && !description.upstream_schema.fields.is_empty()
-        && !description.downstream_schema.fields.is_empty()
+        && matches!(
+            description.upstream_schema.root,
+            intercept_proxy_domain::DocumentSchemaNode::Object { .. }
+        )
+        && matches!(
+            description.downstream_schema.root,
+            intercept_proxy_domain::DocumentSchemaNode::Object { .. }
+        )
     {
         return Ok(());
     }

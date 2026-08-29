@@ -1,6 +1,6 @@
 use super::*;
 use intercept_proxy_domain::{
-    DocumentAction, DocumentFieldName, DocumentValue, ExternalDocumentWire, ListenerId,
+    DocumentAction, DocumentValue, ExternalDocumentWire, JsonPointer, ListenerId,
     ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
     ProtocolRuleStage, SocketLocalResponderTopology,
 };
@@ -146,11 +146,10 @@ async fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
         1,
         listener.id,
         package,
-        registration.document().upstream().schema().version(),
         ProtocolRuleStage::ProxyToUpstream,
         Vec::new(),
         vec![DocumentAction::SetField {
-            field: DocumentFieldName::new("request").unwrap(),
+            field: JsonPointer::property("request"),
             value: DocumentValue::String("updated".to_owned()),
         }],
     )
@@ -196,11 +195,10 @@ async fn replace_document_rules_rejects_relay_only_stage_for_local_responder() {
         1,
         listener.id,
         package,
-        registration.document().upstream().schema().version(),
         ProtocolRuleStage::ProxyToUpstream,
         Vec::new(),
         vec![DocumentAction::SetField {
-            field: DocumentFieldName::new("request").unwrap(),
+            field: JsonPointer::property("request"),
             value: DocumentValue::String("updated".to_owned()),
         }],
     )
@@ -317,11 +315,10 @@ fn relay_rule_workspace(
         1,
         listener.id,
         registration.package().identity().clone(),
-        registration.document().upstream().schema().version(),
         ProtocolRuleStage::ProxyToUpstream,
         Vec::new(),
         vec![DocumentAction::SetField {
-            field: DocumentFieldName::new("request").unwrap(),
+            field: JsonPointer::property("request"),
             value: DocumentValue::String("updated".to_owned()),
         }],
     )
@@ -380,23 +377,21 @@ fn registration() -> ExternalPackageRegistration {
         "document": {
             "upstream": {
                 "schema": {
-                    "id": "contract-upstream",
+                    "type": "object",
                     "title": "Upstream",
-                    "version": 1,
-                    "fields": [
-                        {"name": "request", "label": "Request", "type": "string"}
-                    ]
+                    "properties": {
+                        "request": {"type": "string", "title": "Request"}
+                    }
                 },
                 "display": "render"
             },
             "downstream": {
                 "schema": {
-                    "id": "contract-downstream",
+                    "type": "object",
                     "title": "Downstream",
-                    "version": 1,
-                    "fields": [
-                        {"name": "response", "label": "Response", "type": "string"}
-                    ]
+                    "properties": {
+                        "response": {"type": "string", "title": "Response"}
+                    }
                 },
                 "display": "render"
             }

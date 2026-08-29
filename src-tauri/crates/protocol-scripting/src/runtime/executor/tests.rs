@@ -1,48 +1,8 @@
-use std::sync::Arc;
-
-use intercept_proxy_domain::{
-    DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema, DocumentSchemaId,
-};
 use rhai::{Dynamic, EvalAltResult, Position};
 
 use crate::ProtocolResourceLimit;
 
-use super::{find_resource_limit, validate_document_schema};
-
-#[test]
-fn document_schema_identity_is_checked_at_runtime_boundary() {
-    let expected = DocumentSchema::new(
-        DocumentSchemaId::new("expected").unwrap(),
-        1,
-        "Expected",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("amount").unwrap(),
-                DocumentFieldType::Int,
-                "Amount",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
-    let other = DocumentSchema::new(
-        DocumentSchemaId::new("other").unwrap(),
-        1,
-        "Other",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("trace").unwrap(),
-                DocumentFieldType::String,
-                "Trace",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
-    let document = intercept_proxy_domain::Document::new(Arc::new(other));
-
-    assert!(validate_document_schema(&document, &expected).is_err());
-}
+use super::find_resource_limit;
 
 #[test]
 fn nested_rhai_resource_errors_map_without_using_display_text() {

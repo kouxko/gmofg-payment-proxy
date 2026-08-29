@@ -5,7 +5,8 @@ use super::{
     EnvironmentValidationResult, lifecycle::exact_public_target_key,
 };
 use crate::{AppError, AppResult};
-use intercept_proxy_domain::ProxyWorkspace;
+use intercept_proxy_domain::{DocumentNumber, DocumentValue, ProxyWorkspace};
+use std::collections::BTreeMap;
 
 pub(crate) fn candidate_preview_snapshot(
     candidate: &EnvironmentConfigurationCandidateV1,
@@ -158,12 +159,17 @@ fn baseline_public(target: &EnvironmentTarget) -> Value {
     }
 }
 
-fn protocol_document_value_contract() -> Vec<Value> {
+fn protocol_document_value_contract() -> Vec<DocumentValue> {
     vec![
-        json!({ "type": "string", "value": "abc" }),
-        json!({ "type": "int", "value": 7 }),
-        json!({ "type": "bool", "value": true }),
-        json!({ "type": "blob", "value": [0, 255] }),
+        DocumentValue::String("abc".to_owned()),
+        DocumentValue::Number(DocumentNumber::new(7.5).expect("finite preview number")),
+        DocumentValue::Boolean(true),
+        DocumentValue::null(),
+        DocumentValue::Object(BTreeMap::from([(
+            "nested".to_owned(),
+            DocumentValue::String("value".to_owned()),
+        )])),
+        DocumentValue::Array(vec![DocumentValue::integer(0).expect("safe integer")]),
     ]
 }
 

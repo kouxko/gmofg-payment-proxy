@@ -26,14 +26,6 @@ async fn editor_context_owns_relay_stages_capabilities_and_new_rule_drafts() {
             ProtocolRuleStage::ProxyToApp,
         ]
     );
-    assert_eq!(
-        context
-            .stages
-            .iter()
-            .map(|item| item.schema_version)
-            .collect::<Vec<_>>(),
-        [1, 1, 2, 2]
-    );
     for stage in &context.stages {
         assert_eq!(stage.new_rule_draft.rule_id, None);
         assert_eq!(stage.new_rule_draft.expected_revision, None);
@@ -42,7 +34,6 @@ async fn editor_context_owns_relay_stages_capabilities_and_new_rule_drafts() {
         assert_eq!(stage.new_rule_draft.priority, 100);
         assert_eq!(stage.new_rule_draft.listener_id, listener_id);
         assert_eq!(stage.new_rule_draft.package, context.package);
-        assert_eq!(stage.new_rule_draft.schema_version, stage.schema_version);
         assert_eq!(stage.new_rule_draft.stage, stage.stage);
         assert!(stage.new_rule_draft.conditions.is_empty());
         assert_eq!(stage.new_rule_draft.actions, [DocumentAction::RecordMatch]);
@@ -57,7 +48,7 @@ async fn editor_context_owns_relay_stages_capabilities_and_new_rule_drafts() {
 }
 
 #[tokio::test]
-async fn editor_context_owns_local_responder_stages_and_clear_document_default() {
+async fn editor_context_owns_local_responder_stages_and_record_match_default() {
     let (application, services, workspaces, _) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let listener_id = configure_relay(&services, &workspaces, &package).await;
@@ -86,7 +77,7 @@ async fn editor_context_owns_local_responder_stages_and_clear_document_default()
         context
             .stages
             .iter()
-            .all(|stage| { stage.new_rule_draft.actions == [DocumentAction::ClearDocument] })
+            .all(|stage| { stage.new_rule_draft.actions == [DocumentAction::RecordMatch] })
     );
 }
 
@@ -134,7 +125,6 @@ async fn editor_context_owns_all_http_protocol_stages_and_defaults() {
         stage.new_rule_draft.listener_id == listener_id
             && stage.new_rule_draft.package == package
             && stage.new_rule_draft.stage == stage.stage
-            && stage.new_rule_draft.schema_version == stage.schema_version
             && stage.new_rule_draft.actions == [DocumentAction::RecordMatch]
     }));
 }
@@ -180,30 +170,18 @@ async fn relay_exposes_all_stages_and_local_responder_limits_stages_only_by_topo
     let (application, services, workspaces, _) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let listener_id = configure_relay(&services, &workspaces, &package).await;
-    for (stage, expected_schema_version) in [
-        (ProtocolRuleStage::AppToProxy, 1),
-        (ProtocolRuleStage::ProxyToUpstream, 1),
-        (ProtocolRuleStage::UpstreamToProxy, 2),
-        (ProtocolRuleStage::ProxyToApp, 2),
+    for stage in [
+        ProtocolRuleStage::AppToProxy,
+        ProtocolRuleStage::ProxyToUpstream,
+        ProtocolRuleStage::UpstreamToProxy,
+        ProtocolRuleStage::ProxyToApp,
     ] {
         let capabilities = application
             .protocol_rule_capabilities(listener_id, stage)
             .await
             .unwrap();
-        assert_eq!(capabilities.schema_version, expected_schema_version);
-
-        let mut wrong_schema = input(listener_id, package.clone(), stage.direction(), 0);
-        wrong_schema.stage = stage;
-        wrong_schema.schema_version = if expected_schema_version == 1 { 2 } else { 1 };
-        assert_eq!(
-            error_code(
-                &application
-                    .protocol_rule_save(wrong_schema)
-                    .await
-                    .unwrap_err()
-            ),
-            "PROTOCOL_RULE_SCHEMA_MISMATCH"
-        );
+        assert_eq!(capabilities.package, package);
+        assert_eq!(capabilities.stage, stage);
     }
 
     let selected = workspaces.list().await.unwrap().remove(0);

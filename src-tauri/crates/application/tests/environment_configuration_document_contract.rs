@@ -1,8 +1,9 @@
 use intercept_proxy_application::{
     EnvironmentTerminalResult, parse_environment_configuration_candidate_v1,
 };
-use intercept_proxy_domain::{DocumentAction, DocumentCondition, DocumentValue};
+use intercept_proxy_domain::{DocumentAction, DocumentCondition, DocumentNumber, DocumentValue};
 use serde_json::{Value, json};
+use std::collections::BTreeMap;
 
 fn round_trip<T>(expected: &Value)
 where
@@ -13,20 +14,27 @@ where
 }
 
 #[test]
-fn document_value_four_variant_wire_round_trips_without_drift() {
+fn document_value_recursive_json_wire_round_trips_without_drift() {
     for (typed, expected) in [
+        (DocumentValue::String("abc".to_owned()), json!("abc")),
         (
-            DocumentValue::String("abc".to_owned()),
-            json!({"type":"string","value":"abc"}),
+            DocumentValue::Number(DocumentNumber::new(7.5).unwrap()),
+            json!(7.5),
         ),
-        (DocumentValue::Int(7), json!({"type":"int","value":7})),
+        (DocumentValue::Boolean(true), json!(true)),
+        (DocumentValue::null(), Value::Null),
         (
-            DocumentValue::Bool(true),
-            json!({"type":"bool","value":true}),
+            DocumentValue::Object(BTreeMap::from([(
+                "nested".to_owned(),
+                DocumentValue::String("value".to_owned()),
+            )])),
+            json!({"nested":"value"}),
         ),
         (
-            DocumentValue::Blob(vec![0, 255]),
-            json!({"type":"blob","value":[0,255]}),
+            DocumentValue::Array(vec![DocumentValue::Number(
+                DocumentNumber::new(0.0).unwrap(),
+            )]),
+            json!([0.0]),
         ),
     ] {
         assert_eq!(serde_json::to_value(&typed).unwrap(), expected);
@@ -38,23 +46,22 @@ fn document_value_four_variant_wire_round_trips_without_drift() {
 }
 
 #[test]
-fn document_condition_and_action_preserve_adjacent_value_wire() {
+fn document_condition_and_action_preserve_rfc6901_and_native_value_wire() {
     round_trip::<DocumentCondition>(&json!({
-        "operator":"equals", "field":"amount", "value":{"type":"int","value":7}
+        "operator":"equals", "field":"/amount", "value":7.0
     }));
     round_trip::<DocumentAction>(&json!({
-        "type":"set_field", "field":"approval_code",
-        "value":{"type":"string","value":"abc"}
+        "type":"set_field", "field":"/approval_code", "value":"abc"
     }));
 }
 
 #[test]
 fn document_contract_rejects_variant_and_tag_drift() {
     for invalid in [
-        json!({"operator":"Equals","field":"amount","value":{"type":"int","value":7}}),
-        json!({"operator":"equals","field":"amount","value":{"type":"integer","value":7}}),
-        json!({"type":"SetField","field":"amount","value":{"type":"int","value":7}}),
-        json!({"type":"set_field","field":"amount","value":{"Int":7}}),
+        json!({"operator":"Equals","field":"/amount","value":7}),
+        json!({"operator":"equals","field":"amount","value":7}),
+        json!({"type":"SetField","field":"/amount","value":7}),
+        json!({"type":"set_field","field":"amount","value":7}),
     ] {
         let accepted = serde_json::from_value::<DocumentCondition>(invalid.clone()).is_ok()
             || serde_json::from_value::<DocumentAction>(invalid).is_ok();
@@ -71,10 +78,12 @@ fn expected_preview_contains_all_document_variants_and_terminal_field_contract()
     .unwrap();
     let actual_values = preview["protocol_document_values"].as_array().unwrap();
     let expected_values = [
-        json!({"type":"string","value":"abc"}),
-        json!({"type":"int","value":7}),
-        json!({"type":"bool","value":true}),
-        json!({"type":"blob","value":[0,255]}),
+        json!("abc"),
+        json!(7.5),
+        json!(true),
+        Value::Null,
+        json!({"nested":"value"}),
+        json!([0.0]),
     ];
     assert_eq!(actual_values, &expected_values);
     assert_eq!(

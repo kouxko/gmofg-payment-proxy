@@ -79,14 +79,12 @@ encode = "encode"
 "#;
 
 const SNAPSHOT_SCHEMA: &str = r#"
-id = "snapshot-message"
-version = 7
+type = "object"
 title = "Snapshot Message"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 "#;
 
 const SNAPSHOT_SCRIPT: &str = r"
@@ -258,7 +256,7 @@ async fn local_responder_plan_has_no_upstream_security_or_probe_and_starts_local
 }
 
 #[tokio::test]
-async fn runtime_plan_rejects_rule_schema_drift_even_when_called_below_application() {
+async fn runtime_plan_rejects_rule_value_schema_mismatch_even_when_called_below_application() {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
     let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
         Arc::clone(&store),
@@ -271,11 +269,21 @@ async fn runtime_plan_rejects_rule_schema_drift_even_when_called_below_applicati
         },
         security: SocketRelaySecurity::Transparent,
     }));
-    let mut invalid_rule = rule(&listener, 10, 1);
-    let wire = serde_json::to_value(&invalid_rule).unwrap();
-    let mut object = wire.as_object().unwrap().clone();
-    object.insert("schema_version".into(), serde_json::json!(8));
-    invalid_rule = serde_json::from_value(serde_json::Value::Object(object)).unwrap();
+    let invalid_rule = ProtocolDocumentRuleDefinition::new(
+        ProtocolDocumentRuleId::new(),
+        true,
+        10,
+        1,
+        listener.id,
+        snapshot_package(),
+        ProtocolDirection::Upstream,
+        Vec::new(),
+        vec![DocumentAction::SetField {
+            field: intercept_proxy_domain::JsonPointer::property("amount"),
+            value: intercept_proxy_domain::DocumentValue::String("not-a-number".into()),
+        }],
+    )
+    .unwrap();
     let mut workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
         rule_created_order_high_water: 1,
@@ -290,11 +298,8 @@ async fn runtime_plan_rejects_rule_schema_drift_even_when_called_below_applicati
         .build(&workspace, &listener, Uuid::new_v4())
         .await
         .err()
-        .expect("fresh compiled Schema must reject persisted rule drift");
-    assert_eq!(
-        error.view_model.code,
-        "PROTOCOL_RULE_RUNTIME_BINDING_MISMATCH"
-    );
+        .expect("fresh compiled Schema must reject persisted rule value mismatch");
+    assert_eq!(error.view_model.code, "RULE_INVALID");
 }
 
 #[tokio::test]
@@ -464,7 +469,6 @@ fn rule(
         created_order,
         listener.id,
         snapshot_package(),
-        7,
         ProtocolDirection::Upstream,
         Vec::new(),
         vec![DocumentAction::RecordMatch],

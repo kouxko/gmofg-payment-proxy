@@ -13,14 +13,14 @@ fn frame(reader, context) {
 
 fn decode(origin, context) {
     let result = document::create();
-    if origin[1] != 0 { result.set("amount", origin[1]); }
+    if origin[1] != 0 { result.set("/amount", origin[1]); }
     result
 }
 
 fn encode(origin, document, context) {
     let result = origin;
     result[0] = if context.direction() == "upstream" { 161 } else { 209 };
-    result[1] = if document.has("amount") { document.get("amount") } else { 0 };
+    result[1] = if document.has("/amount") { document.get("/amount") } else { 0 };
     result
 }
 

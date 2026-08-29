@@ -38,8 +38,14 @@ async fn listener_catalog_only_returns_enabled_valid_current_descriptions_in_sta
         [first.clone(), second.clone()]
     );
     assert_eq!(catalog.options[0].name, format!("alpha {}", first.version));
-    assert_eq!(catalog.options[0].upstream_schema.id, "payments");
-    assert_eq!(catalog.options[0].downstream_schema.id, "responses");
+    assert_eq!(
+        catalog.options[0].upstream_schema.root.title(),
+        Some("Payments")
+    );
+    assert_eq!(
+        catalog.options[0].downstream_schema.root.title(),
+        Some("Payments")
+    );
     assert!(catalog.options[0].capabilities.upstream.encode);
     assert_eq!(services.describe_calls.load(Ordering::SeqCst), 0);
     assert_eq!(services.compile_calls.load(Ordering::SeqCst), 0);
@@ -162,14 +168,14 @@ async fn list_groups_versions_by_id_and_detail_uses_the_exact_version() {
         detail.downstream_schema,
         expected_description.downstream_schema
     );
+    let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } =
+        &detail.upstream_schema.root
+    else {
+        unreachable!()
+    };
     assert_eq!(
-        detail
-            .upstream_schema
-            .fields
-            .iter()
-            .map(|field| field.name.as_str())
-            .collect::<Vec<_>>(),
-        ["trace_id", "amount", "approved"]
+        properties.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["amount", "approved", "trace_id"]
     );
     assert_eq!(detail.usages, vec![expected_usage]);
     assert_eq!(services.describe_calls.load(Ordering::SeqCst), 1);
@@ -351,15 +357,18 @@ async fn internal_detail_serializes_the_closed_wire_shape_with_no_external_metad
     );
     assert!(value["external"].is_null());
     assert_eq!(
-        value["upstream_schema"]["fields"]
-            .as_array()
+        value["upstream_schema"]["root"]["properties"]
+            .as_object()
             .unwrap()
-            .iter()
-            .map(|field| field["name"].as_str().unwrap())
-            .collect::<Vec<_>>(),
-        ["trace_id", "amount", "approved"]
+            .keys()
+            .cloned()
+            .collect::<BTreeSet<_>>(),
+        ["amount", "approved", "trace_id"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect()
     );
-    assert_eq!(value["downstream_schema"]["id"], "responses");
+    assert_eq!(value["downstream_schema"]["root"]["title"], "Payments");
     assert_no_forbidden_protocol_package_keys(&value);
 }
 

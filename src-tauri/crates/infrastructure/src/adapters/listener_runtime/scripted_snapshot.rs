@@ -338,7 +338,7 @@ impl std::fmt::Debug for ScriptedSocketSecuritySnapshot {
 fn compile_rule_program(
     listener: &ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,
-    schema: &intercept_proxy_domain::DocumentSchema,
+    schema: &intercept_proxy_domain::DocumentSchemaNode,
     stage: ProtocolRuleStage,
     rules: &[ProtocolDocumentRuleDefinition],
 ) -> AppResult<ProtocolDocumentRuleProgram> {
@@ -361,8 +361,8 @@ pub(super) fn compile_document_rules(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,
-    upstream_schema: &intercept_proxy_domain::DocumentSchema,
-    downstream_schema: &intercept_proxy_domain::DocumentSchema,
+    upstream_schema: &intercept_proxy_domain::DocumentSchemaNode,
+    downstream_schema: &intercept_proxy_domain::DocumentSchemaNode,
     topology: &SocketTopology,
 ) -> AppResult<ProtocolDocumentRuleConnectionFactory> {
     let mut rules = workspace
@@ -375,7 +375,7 @@ pub(super) fn compile_document_rules(
             RuleDirection::Upstream => upstream_schema,
             RuleDirection::Downstream => downstream_schema,
         };
-        if rule.package() != package || rule.schema_version() != schema.version() {
+        if rule.package() != package {
             return Err(AppError::new(
                 "PROTOCOL_RULE_RUNTIME_BINDING_MISMATCH",
                 "协议报文规则与当前协议包或 Schema 不一致。",

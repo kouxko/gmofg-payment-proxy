@@ -40,7 +40,6 @@ impl RuleStage {
 #[serde(deny_unknown_fields)]
 pub struct HttpDocumentRuleContent {
     pub package: ProtocolPackageRef,
-    pub schema_version: u32,
     pub conditions: Vec<DocumentCondition>,
     pub actions: Vec<DocumentAction>,
 }
@@ -61,7 +60,6 @@ pub struct HttpRuleContent {
 #[serde(deny_unknown_fields)]
 pub struct SocketRuleContent {
     pub package: ProtocolPackageRef,
-    pub schema_version: u32,
     pub conditions: Vec<DocumentCondition>,
     pub actions: Vec<DocumentAction>,
 }
@@ -86,16 +84,12 @@ impl RuleContent {
             (Self::Http(current), Self::Http(candidate)) => {
                 match (&current.document, &candidate.document) {
                     (None, None) => true,
-                    (Some(current), Some(candidate)) => {
-                        current.package == candidate.package
-                            && current.schema_version == candidate.schema_version
-                    }
+                    (Some(current), Some(candidate)) => current.package == candidate.package,
                     _ => false,
                 }
             }
             (Self::Socket(current), Self::Socket(candidate)) => {
                 current.package == candidate.package
-                    && current.schema_version == candidate.schema_version
             }
             _ => false,
         }
@@ -278,7 +272,6 @@ impl RuleDefinition {
                 validate_http_runtime_content(self, content)?;
                 if let Some(document) = &content.document {
                     validate_document_rule_content_structure(
-                        document.schema_version,
                         &document.conditions,
                         &document.actions,
                     )?;
@@ -292,7 +285,6 @@ impl RuleDefinition {
                     ));
                 }
                 validate_document_rule_content_structure(
-                    content.schema_version,
                     &content.conditions,
                     content.actions.as_slice(),
                 )?;

@@ -73,15 +73,12 @@ impl HttpRuleTemplate {
         let existing_binding = existing_content
             .document
             .as_ref()
-            .map(|document| (&document.package, document.schema_version));
+            .map(|document| &document.package);
         match (candidate_binding.as_ref(), existing_binding) {
             (None, None) => {}
-            (Some((candidate_package, candidate_schema)), Some((package, schema))) => {
+            (Some(candidate_package), Some(package)) => {
                 if candidate_package != package {
                     return Err(selector_error("EXISTING_RULE_ID_PACKAGE_MISMATCH"));
-                }
-                if *candidate_schema != schema {
-                    return Err(selector_error("EXISTING_RULE_ID_SCHEMA_VERSION_MISMATCH"));
                 }
             }
             _ => return Err(selector_error("EXISTING_RULE_ID_KIND_MISMATCH")),
@@ -120,15 +117,13 @@ impl HttpRuleTemplate {
 }
 
 impl super::HttpDocumentRuleTemplate {
-    fn binding(&self) -> AppResult<(intercept_proxy_domain::ProtocolPackageRef, u32)> {
-        Ok((self.package.to_domain()?, self.schema_version))
+    fn binding(&self) -> AppResult<intercept_proxy_domain::ProtocolPackageRef> {
+        self.package.to_domain()
     }
 
     fn to_domain(&self) -> AppResult<HttpDocumentRuleContent> {
-        let (package, schema_version) = self.binding()?;
         Ok(HttpDocumentRuleContent {
-            package,
-            schema_version,
+            package: self.binding()?,
             conditions: self.conditions.clone(),
             actions: self.actions.clone(),
         })
@@ -145,7 +140,6 @@ impl ProtocolDocumentRuleTemplate {
     ) -> AppResult<RuleDefinition> {
         let document = HttpDocumentRuleContent {
             package: self.package.to_domain()?,
-            schema_version: self.schema_version,
             conditions: self.conditions.clone(),
             actions: self.actions.clone(),
         };
@@ -162,7 +156,6 @@ impl ProtocolDocumentRuleTemplate {
         } else {
             RuleContent::Socket(SocketRuleContent {
                 package: document.package,
-                schema_version: document.schema_version,
                 conditions: document.conditions,
                 actions: document.actions,
             })
@@ -192,20 +185,17 @@ impl ProtocolDocumentRuleTemplate {
         if existing.listener_id() != listener_id {
             return Err(selector_error("EXISTING_RULE_ID_BINDING_MISMATCH"));
         }
-        let (package, schema_version) = match existing.content() {
+        let package = match existing.content() {
             RuleContent::Http(content) if http => content
                 .document
                 .as_ref()
-                .map(|document| (&document.package, document.schema_version))
+                .map(|document| &document.package)
                 .ok_or_else(|| selector_error("EXISTING_RULE_ID_KIND_MISMATCH"))?,
-            RuleContent::Socket(content) if !http => (&content.package, content.schema_version),
+            RuleContent::Socket(content) if !http => &content.package,
             _ => return Err(selector_error("EXISTING_RULE_ID_KIND_MISMATCH")),
         };
         if package != &self.package.to_domain()? {
             return Err(selector_error("EXISTING_RULE_ID_PACKAGE_MISMATCH"));
-        }
-        if schema_version != self.schema_version {
-            return Err(selector_error("EXISTING_RULE_ID_SCHEMA_VERSION_MISMATCH"));
         }
         let projected = self.to_domain(
             existing.rule_id(),

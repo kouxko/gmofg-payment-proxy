@@ -82,24 +82,25 @@
       ]
     },
     {
-      "id": "flat-document-value",
+      "id": "recursive-document-value",
       "path": "src-tauri/crates/domain/src/document/model.rs",
       "owner_phase": 3,
       "required_fragments": [
+        "pub struct DocumentNumber(f64)",
         "pub enum DocumentValue",
-        "Int(i64)",
-        "Blob(Vec<u8>)",
-        "values: Vec<Option<DocumentValue>>"
+        "Number(DocumentNumber)",
+        "Object(BTreeMap<String, DocumentValue>)",
+        "Array(Vec<DocumentValue>)"
       ]
     },
     {
-      "id": "flat-document-schema",
+      "id": "recursive-document-schema",
       "path": "src-tauri/crates/domain/src/document/schema.rs",
       "owner_phase": 3,
       "required_fragments": [
-        "pub enum DocumentFieldType",
-        "pub struct DocumentField",
-        "pub struct DocumentSchema"
+        "pub enum DocumentSchemaNode",
+        "properties: BTreeMap<String, DocumentSchemaNode>",
+        "items: Box<DocumentSchemaNode>"
       ]
     },
     {
@@ -135,15 +136,15 @@
       ]
     },
     {
-      "id": "generated-flat-document-types",
+      "id": "generated-recursive-document-types",
       "path": "src/generated/rust-types.ts",
       "owner_phase": 3,
       "required_fragments": [
-        "export type DocumentSchemaWire",
-        "fields: DocumentField[]",
-        "export type DocumentValue =",
-        "{ type: \"int\"; value: number }",
-        "{ type: \"blob\"; value: number[] }"
+        "export type Document = DocumentValue",
+        "export type DocumentSchemaNode =",
+        "properties: { [key in string]: DocumentSchemaNode_Deserialize }",
+        "items: DocumentSchemaNode_Deserialize",
+        "export type DocumentValue ="
       ]
     },
     {

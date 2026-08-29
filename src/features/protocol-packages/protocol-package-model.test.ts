@@ -81,8 +81,8 @@ describe("protocol package presentation model", () => {
         downstream: { frame: true, decode: true, encode: true },
         display: true,
       },
-      upstream_schema: { id: "iso8583-request", version: 1, title: "ISO Request", fields: [{ name: "mti", label: "MTI", type: "string" }] },
-      downstream_schema: { id: "iso8583-response", version: 1, title: "ISO Response", fields: [{ name: "code", label: "Code", type: "string" }] },
+      upstream_schema: { root: { type: "object", title: "ISO Request", properties: { mti: { type: "string", title: "MTI" } } } },
+      downstream_schema: { root: { type: "object", title: "ISO Response", properties: { code: { type: "string", title: "Code" } } } },
     })).toBeUndefined();
     expect(builtInRestoreResultError({
       outcome: "installed",
@@ -145,17 +145,17 @@ describe("protocol package presentation model", () => {
     }, expected)).toBe("协议包详情数据不完整。");
   });
 
-  it("rejects empty, duplicate, and extended Schema fields", () => {
+  it("rejects malformed and extended recursive Schema nodes", () => {
     const expected = { id: "iso-8583", version: "2.0.0" };
     const base = detail();
-    for (const fields of [
-      [],
-      [{ name: "mti", label: "MTI", type: "string" }, { name: "mti", label: "Again", type: "int" }],
-      [{ name: "mti", label: "MTI", type: "string", legacy: true }],
+    for (const root of [
+      { type: "array" },
+      { type: "float" },
+      { type: "string", legacy: true },
     ]) {
       expect(protocolPackageDetailError({
         ...base,
-        upstream_schema: { ...base.upstream_schema, fields: fields as never },
+        upstream_schema: { root: root as never },
       }, expected)).toBe("协议包详情数据不完整。");
     }
   });

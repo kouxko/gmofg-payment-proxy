@@ -42,24 +42,20 @@ encode = "encode"
 "#;
 
 const SCHEMA: &str = r#"
-id = "example-message"
-version = 1
+type = "object"
 title = "Example Message"
 
-[[fields]]
-name = "trace_id"
-label = "Trace ID"
+[properties.trace_id]
 type = "string"
+title = "Trace ID"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 
-[[fields]]
-name = "approved"
-label = "Approved"
-type = "bool"
+[properties.approved]
+type = "boolean"
+title = "Approved"
 "#;
 
 const SCRIPT: &str = r"
@@ -194,14 +190,14 @@ async fn valid_zip_returns_safe_capabilities_schema_and_idempotent_outcome() {
     assert!(installed.capabilities.upstream.encode);
     assert!(installed.capabilities.downstream.encode);
     assert!(installed.capabilities.display);
+    let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } =
+        &installed.upstream_schema.root
+    else {
+        unreachable!()
+    };
     assert_eq!(
-        installed
-            .upstream_schema
-            .fields
-            .iter()
-            .map(|field| field.name.as_str())
-            .collect::<Vec<_>>(),
-        ["trace_id", "amount", "approved"]
+        properties.keys().map(String::as_str).collect::<Vec<_>>(),
+        ["amount", "approved", "trace_id"]
     );
 }
 

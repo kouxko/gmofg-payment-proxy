@@ -21,8 +21,8 @@ pub(super) fn valid_registration() -> Value {
         "api": 1,
         "package": {"id":"vendor-dukpt-iso8583","name":"DUKPT ISO8583","version":"1.0.0","description":"external test package"},
         "document": {
-            "upstream": {"schema":{"id":"dukpt-upstream","title":"Upstream","version":1,"fields":[{"name":"mti","label":"MTI","type":"string"}]},"display":"render_message"},
-            "downstream": {"schema":{"id":"dukpt-downstream","title":"Downstream","version":1,"fields":[{"name":"response_code","label":"RC","type":"string"}]},"display":"render_message"}
+            "upstream": {"schema":{"type":"object","title":"Upstream","properties":{"mti":{"type":"string","title":"MTI"}}},"display":"render_message"},
+            "downstream": {"schema":{"type":"object","title":"Downstream","properties":{"response_code":{"type":"string","title":"RC"}}},"display":"render_message"}
         },
         "hooks": {
             "upstream":{"frame":"split_frame","decode":"decode","encode":"encode"},

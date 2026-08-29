@@ -1,6 +1,6 @@
 //! Scripted 启动快照的方向能力矩阵与冻结规则执行回归。
 
-use intercept_proxy_domain::{DocumentFieldName, DocumentValue, ProtocolDocumentRuleDefinition};
+use intercept_proxy_domain::{DocumentValue, JsonPointer, ProtocolDocumentRuleDefinition};
 use intercept_proxy_runtime::SocketConnectionIdentity;
 
 use super::*;
@@ -124,8 +124,11 @@ async fn local_response_executes_static_response_from_the_frozen_snapshot_factor
 
     assert_eq!(result.matched_rule_ids().len(), 1);
     assert_eq!(
-        result.document().get("amount").unwrap(),
-        &DocumentValue::Int(42)
+        result
+            .document()
+            .resolve(&JsonPointer::property("amount"))
+            .unwrap(),
+        &DocumentValue::integer(42).unwrap()
     );
     assert!(
         snapshot
@@ -154,8 +157,8 @@ fn direction_rule(
 ) -> ProtocolDocumentRuleDefinition {
     let actions = if modifies {
         vec![DocumentAction::SetField {
-            field: DocumentFieldName::new("amount").unwrap(),
-            value: DocumentValue::Int(42),
+            field: JsonPointer::property("amount"),
+            value: DocumentValue::integer(42).unwrap(),
         }]
     } else {
         vec![DocumentAction::RecordMatch]
@@ -167,7 +170,6 @@ fn direction_rule(
         created_order,
         listener.id,
         snapshot_package(),
-        7,
         direction,
         Vec::new(),
         actions,

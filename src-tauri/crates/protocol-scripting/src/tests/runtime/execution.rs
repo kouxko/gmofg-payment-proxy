@@ -8,8 +8,8 @@ fn upstream_executes_decode_encode_and_display_as_one_complete_chain() {
     assert_eq!(output.origin(), origin);
     assert_eq!(output.written(), &[0x55, 7]);
     assert_eq!(
-        output.decoded_document().unwrap().get("amount").unwrap(),
-        &DocumentValue::Int(7)
+        output.decoded_document().unwrap().resolve(&JsonPointer::property("amount")).unwrap(),
+        &DocumentValue::integer(7).unwrap()
     );
     assert_eq!(
         executor.render_display(&output),
@@ -28,7 +28,7 @@ fn socket_pipeline_can_call_decode_display_and_encode_as_independent_stages() {
         executor.display_document(&document).unwrap(),
         "upstream-html"
     );
-    document.set("amount", DocumentValue::Int(42)).unwrap();
+    document.set(&JsonPointer::property("amount"), DocumentValue::integer(42).unwrap()).unwrap();
     let written = executor.encode_document(&origin, document).unwrap();
 
     assert_eq!(written, [0x55, 42]);
@@ -62,15 +62,15 @@ fn document_rules_run_only_after_decode_and_before_encode() {
     let output = enabled
         .execute_frame_with_rules(vec![1], |document| {
             calls.fetch_add(1, Ordering::Relaxed);
-            document.set("amount", DocumentValue::Int(42)).unwrap();
+            document.set(&JsonPointer::property("amount"), DocumentValue::integer(42).unwrap()).unwrap();
             Ok(())
         })
         .unwrap();
     assert_eq!(calls.load(Ordering::Relaxed), 1);
     assert_eq!(output.written(), &[0x55, 42]);
     assert_eq!(
-        output.decoded_document().unwrap().get("amount").unwrap(),
-        &DocumentValue::Int(42)
+        output.decoded_document().unwrap().resolve(&JsonPointer::property("amount")).unwrap(),
+        &DocumentValue::integer(42).unwrap()
     );
 }
 
@@ -80,7 +80,7 @@ fn owned_document_transform_is_atomic() {
     let mut enabled = executor(&package, ProtocolDirection::Upstream);
     let output = enabled
         .execute_frame_with_document_transform(vec![1], |mut document| {
-            document.set("amount", DocumentValue::Int(42)).unwrap();
+            document.set(&JsonPointer::property("amount"), DocumentValue::integer(42).unwrap()).unwrap();
             Ok(document)
         })
         .unwrap();
@@ -109,19 +109,19 @@ fn changed_message_document_is_encoded_once() {
 
     let output = executor
         .execute_message_with_document_transform(vec![0x10], |mut document| {
-            document.set("amount", DocumentValue::Int(42)).unwrap();
+            document.set(&JsonPointer::property("amount"), DocumentValue::integer(42).unwrap()).unwrap();
             Ok(document)
         })
         .unwrap();
 
     assert_eq!(output.written(), &[0x55, 42]);
     assert_eq!(
-        output.decoded_document().unwrap().get("amount").unwrap(),
-        &DocumentValue::Int(7)
+        output.decoded_document().unwrap().resolve(&JsonPointer::property("amount")).unwrap(),
+        &DocumentValue::integer(7).unwrap()
     );
     assert_eq!(
-        output.execution_document().get("amount").unwrap(),
-        &DocumentValue::Int(42)
+        output.execution_document().resolve(&JsonPointer::property("amount")).unwrap(),
+        &DocumentValue::integer(42).unwrap()
     );
 }
 
@@ -131,7 +131,7 @@ fn frame_output_debug_exposes_shape_without_payload_or_document_values() {
     let mut executor = executor(&package, ProtocolDirection::Upstream);
     let output = executor
         .execute_frame_with_document_transform(vec![0xde, 0xad], |mut document| {
-            document.set("amount", DocumentValue::Int(0x55aa)).unwrap();
+            document.set(&JsonPointer::property("amount"), DocumentValue::integer(0x55aa).unwrap()).unwrap();
             Ok(document)
         })
         .unwrap();
@@ -144,35 +144,21 @@ fn frame_output_debug_exposes_shape_without_payload_or_document_values() {
 }
 
 #[test]
-fn rules_cannot_replace_the_document_with_another_package_schema() {
+fn rules_can_replace_the_document_with_fields_missing_from_schema_metadata() {
     let package = package_with_all_entries();
-    let other_schema = DocumentSchema::new(
-        DocumentSchemaId::new("other-schema").unwrap(),
-        1,
-        "Other",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("trace").unwrap(),
-                DocumentFieldType::String,
-                "Trace",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
     let mut executor = executor(&package, ProtocolDirection::Upstream);
-    let result = executor.execute_frame_with_rules(vec![1], |document| {
-        *document = Document::new(other_schema);
+    let output = executor.execute_frame_with_rules(vec![1], |document| {
+        *document = Document::new(DocumentValue::Object(BTreeMap::from([(
+            "trace".to_owned(),
+            DocumentValue::String("other".to_owned()),
+        )])));
         Ok(())
-    });
+    }).expect("schema metadata does not constrain complete documents");
 
-    assert!(matches!(
-        result,
-        Err(ProtocolRuntimeError::EntryPointFailed {
-            entry: ProtocolEntryPoint::Decode,
-            ..
-        })
-    ));
+    assert_eq!(
+        output.execution_document().resolve(&JsonPointer::property("trace")).unwrap(),
+        &DocumentValue::String("other".to_owned())
+    );
 }
 
 #[test]

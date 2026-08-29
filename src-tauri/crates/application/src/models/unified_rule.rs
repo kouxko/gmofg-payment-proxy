@@ -22,7 +22,6 @@ pub struct HttpRuleEditorStage {
     pub stage: RuleStage,
     pub http: Option<RuleStageCapabilityViewModel>,
     pub package: Option<ProtocolPackageRef>,
-    pub schema_version: Option<u32>,
     pub document_fields: Vec<ProtocolRuleFieldCapability>,
     pub document_common_actions: Vec<ProtocolRuleCommonActionCapability>,
     pub new_rule_draft: RuleDefinitionSaveInput,
@@ -32,7 +31,6 @@ pub struct HttpRuleEditorStage {
 #[serde(deny_unknown_fields)]
 pub struct SocketRuleEditorStage {
     pub stage: RuleStage,
-    pub schema_version: u32,
     pub fields: Vec<ProtocolRuleFieldCapability>,
     pub common_actions: Vec<ProtocolRuleCommonActionCapability>,
     pub new_rule_draft: RuleDefinitionSaveInput,

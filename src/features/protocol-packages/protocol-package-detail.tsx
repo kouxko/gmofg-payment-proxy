@@ -3,6 +3,7 @@ import type {
   ListenerRuntimeState,
   ProtocolPackageDetailViewModel,
 } from "@/generated/rust-types";
+import { flattenSchema, schemaTitle } from "@/lib/protocol-package-schema";
 import {
   capabilityItems,
   isBuiltInPackage,
@@ -226,7 +227,7 @@ function SchemaSection({ id, title, schema }: {
     <section aria-labelledby={`${id}-heading`}>
       <h3 id={`${id}-heading`} className="mb-2 font-semibold">{title}</h3>
       <p className="mb-2 min-w-0 break-words text-sm text-[var(--telemetry-muted)]">
-        {schema.title || "未命名 Schema"} · <span className="font-mono">{schema.id || "—"}</span> · v{schema.version}
+        {schemaTitle(schema)}
       </p>
       <Table>
         <Table.ScrollContainer>
@@ -237,11 +238,11 @@ function SchemaSection({ id, title, schema }: {
               <Table.Column>类型</Table.Column>
             </Table.Header>
             <Table.Body renderEmptyState={() => <div className="p-6 text-center text-sm text-[var(--telemetry-muted)]">此 Schema 没有声明字段。</div>}>
-              {schema.fields.map((field, index) => (
-                <Table.Row key={`${field.name}:${index}`} id={`${id}:${field.name}:${index}`}>
-                  <Table.Cell className="max-w-64 break-all font-mono text-xs">{field.name || "—"}</Table.Cell>
-                  <Table.Cell className="max-w-80 break-words">{field.label || "—"}</Table.Cell>
-                  <Table.Cell className="font-mono text-xs">{field.type || "—"}</Table.Cell>
+              {flattenSchema(schema.root).map((node, index) => (
+                <Table.Row key={`${node.path}:${index}`} id={`${id}:${node.path}:${index}`}>
+                  <Table.Cell className="max-w-64 break-all font-mono text-xs">{node.path}</Table.Cell>
+                  <Table.Cell className="max-w-80 break-words">{node.title || "—"}</Table.Cell>
+                  <Table.Cell className="font-mono text-xs">{node.type}</Table.Cell>
                 </Table.Row>
               ))}
             </Table.Body>

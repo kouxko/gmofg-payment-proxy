@@ -1,228 +1,392 @@
-use super::schema::{DocumentField, DocumentFieldType, DocumentSchema};
+use super::JsonPointer;
 use crate::{DomainError, ErrorCode};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Visitor};
 use specta::Type;
-use std::sync::Arc;
+use std::{collections::BTreeMap, fmt};
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(tag = "type", content = "value", rename_all = "snake_case")]
-/// 当前 Frame 中某个已声明字段的实际值。
-///
-/// serde 使用相邻标签 `{ "type": ..., "value": ... }`，因此文本 `"7"`、整数 `7` 和
-/// 单字节 Blob `[7]` 不会产生歧义或隐式转换。
+/// JavaScript `Number` compatible finite numeric value.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Type)]
+#[specta(type = specta_typescript::Number)]
+pub struct DocumentNumber(f64);
+
+impl Eq for DocumentNumber {}
+
+impl DocumentNumber {
+    /// Largest integer that JavaScript can represent exactly.
+    pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
+    const MAX_SAFE_INTEGER_F64: f64 = 9_007_199_254_740_991.0;
+    /// Creates a finite number.
+    pub fn new(value: f64) -> Result<Self, DomainError> {
+        if !value.is_finite() {
+            return Err(DomainError::new(
+                ErrorCode::DocumentNumberInvalid,
+                "Document number must be finite",
+            ));
+        }
+        if value.fract() == 0.0 && value.abs() > Self::MAX_SAFE_INTEGER_F64 {
+            return Err(DomainError::new(
+                ErrorCode::DocumentUnsafeInteger,
+                "integer exceeds JavaScript safe integer range",
+            ));
+        }
+        Ok(Self(value))
+    }
+    /// Returns the validated number.
+    #[must_use]
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    const fn from_safe_i64(value: i64) -> Self {
+        Self(value as f64)
+    }
+
+    #[allow(clippy::cast_precision_loss)]
+    const fn from_safe_u64(value: u64) -> Self {
+        Self(value as f64)
+    }
+}
+
+impl<'de> Deserialize<'de> for DocumentNumber {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct NumberVisitor;
+        impl Visitor<'_> for NumberVisitor {
+            type Value = DocumentNumber;
+            fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("a finite JavaScript number")
+            }
+            fn visit_i64<E: serde::de::Error>(self, value: i64) -> Result<Self::Value, E> {
+                if value.unsigned_abs() > DocumentNumber::MAX_SAFE_INTEGER as u64 {
+                    return Err(E::custom("DOCUMENT_UNSAFE_INTEGER"));
+                }
+                Ok(DocumentNumber::from_safe_i64(value))
+            }
+            fn visit_u64<E: serde::de::Error>(self, value: u64) -> Result<Self::Value, E> {
+                if value > DocumentNumber::MAX_SAFE_INTEGER as u64 {
+                    return Err(E::custom("DOCUMENT_UNSAFE_INTEGER"));
+                }
+                Ok(DocumentNumber::from_safe_u64(value))
+            }
+            fn visit_f64<E: serde::de::Error>(self, value: f64) -> Result<Self::Value, E> {
+                DocumentNumber::new(value).map_err(E::custom)
+            }
+        }
+        deserializer.deserialize_any(NumberVisitor)
+    }
+}
+
+/// Recursive JSON value owned by a [`Document`].
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Type)]
+#[serde(untagged)]
 pub enum DocumentValue {
-    /// 对应 [`DocumentFieldType::String`]。
+    /// JSON string.
     String(String),
-    /// 对应 [`DocumentFieldType::Int`]。
-    Int(i64),
-    /// 对应 [`DocumentFieldType::Bool`]。
-    Bool(bool),
-    /// 对应 [`DocumentFieldType::Blob`]。
-    Blob(Vec<u8>),
+    /// Finite JavaScript number.
+    Number(DocumentNumber),
+    /// JSON boolean.
+    Boolean(bool),
+    /// JSON null.
+    Null(()),
+    /// JSON object. Key order is not semantic.
+    Object(BTreeMap<String, DocumentValue>),
+    /// JSON array.
+    Array(Vec<DocumentValue>),
+}
+
+impl Eq for DocumentValue {}
+
+/// Schema-visible kind of a document value.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DocumentValueType {
+    /// String.
+    String,
+    /// Number.
+    Number,
+    /// Boolean.
+    Boolean,
+    /// Null.
+    Null,
+    /// Object.
+    Object,
+    /// Array.
+    Array,
 }
 
 impl DocumentValue {
+    /// Creates the JSON null value.
     #[must_use]
-    /// 返回值自身的 Schema 类型，用于写入和反序列化校验。
-    pub const fn field_type(&self) -> DocumentFieldType {
-        match self {
-            Self::String(_) => DocumentFieldType::String,
-            Self::Int(_) => DocumentFieldType::Int,
-            Self::Bool(_) => DocumentFieldType::Bool,
-            Self::Blob(_) => DocumentFieldType::Blob,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-/// [`Document::fields`] 返回的借用视图。
-///
-/// `value = None` 表示字段已在 Schema 声明，但当前报文没有为它赋值；它不是未知字段。
-pub struct DocumentFieldState<'a> {
-    /// 按 Schema 顺序借用的字段声明。
-    pub field: &'a DocumentField,
-    /// 当前 Frame 的字段值；未赋值时为 `None`。
-    pub value: Option<&'a DocumentValue>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(try_from = "DocumentWire", into = "DocumentWire")]
-/// 一个完整 Frame 解码后的稀疏、有序字段集合。
-///
-/// Document 共享不可变 [`DocumentSchema`]，并为每个 Schema 字段维护一个同索引的可空值槽。
-/// 这种表示不需要第三方有序 Map，也天然区分“字段未声明”和“已声明但当前未赋值”。
-pub struct Document {
-    schema: Arc<DocumentSchema>,
-    values: Vec<Option<DocumentValue>>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, Type)]
-#[serde(deny_unknown_fields)]
-// Arc 不直接进入 wire；反序列化后重新共享 Schema，并校验槽数量及每个非空值的类型。
-struct DocumentWire {
-    schema: DocumentSchema,
-    values: Vec<Option<DocumentValue>>,
-}
-
-impl Document {
-    #[must_use]
-    /// 为指定 Schema 创建所有字段均未赋值的 Document。
-    ///
-    /// 接受 `DocumentSchema` 或 `Arc<DocumentSchema>`；后续 Clone 只增加 Schema 引用计数。
-    pub fn new(schema: impl Into<Arc<DocumentSchema>>) -> Self {
-        let schema = schema.into();
-        let values = vec![None; schema.fields().len()];
-        Self { schema, values }
+    pub const fn null() -> Self {
+        Self::Null(())
     }
 
+    /// Returns whether this value is JSON null.
     #[must_use]
-    /// 返回当前 Document 绑定的不可变 Schema。
-    pub fn schema(&self) -> &DocumentSchema {
-        &self.schema
+    pub const fn is_null(&self) -> bool {
+        matches!(self, Self::Null(()))
     }
 
-    /// 写入或替换一个已声明字段的值。
-    ///
-    /// 未知字段返回 [`ErrorCode::DocumentFieldUndeclared`]；值类型与 Schema 不符返回
-    /// [`ErrorCode::DocumentFieldTypeMismatch`]，失败时原值槽保持不变。
-    pub fn set(&mut self, name: &str, value: DocumentValue) -> Result<(), DomainError> {
-        let index = self.field_index(name)?;
-        let expected = self.schema.fields()[index].field_type();
-        let actual = value.field_type();
-        if expected != actual {
+    /// Creates a Number from an exactly representable signed integer.
+    pub fn integer(value: i64) -> Result<Self, DomainError> {
+        if value.unsigned_abs() > DocumentNumber::MAX_SAFE_INTEGER as u64 {
             return Err(DomainError::new(
-                ErrorCode::DocumentFieldTypeMismatch,
-                format!(
-                    "字段 {name} 需要 {}，实际得到 {}",
-                    expected.as_str(),
-                    actual.as_str()
-                ),
-            )
-            .with_field_error(
-                format!("document.{name}"),
-                format!("需要 {}，实际得到 {}", expected.as_str(), actual.as_str()),
+                ErrorCode::DocumentUnsafeInteger,
+                "integer exceeds JavaScript safe integer range",
             ));
         }
-        self.values[index] = Some(value);
-        Ok(())
+        Ok(Self::Number(DocumentNumber::from_safe_i64(value)))
     }
 
-    /// 读取一个已赋值字段。
-    ///
-    /// 未知字段与已声明但未赋值分别返回 `DocumentFieldUndeclared` 和
-    /// [`ErrorCode::DocumentFieldUnassigned`]，调用方可以据此给脚本稳定诊断。
-    pub fn get(&self, name: &str) -> Result<&DocumentValue, DomainError> {
-        let index = self.field_index(name)?;
-        self.values[index].as_ref().ok_or_else(|| {
-            DomainError::new(
-                ErrorCode::DocumentFieldUnassigned,
-                format!("字段 {name} 已声明但尚未赋值"),
-            )
-            .with_field_error(format!("document.{name}"), "字段尚未赋值")
-        })
+    /// Represents bytes as a JSON array of numeric octets.
+    #[must_use]
+    pub fn byte_array(values: impl IntoIterator<Item = u8>) -> Self {
+        Self::Array(
+            values
+                .into_iter()
+                .map(|value| Self::Number(DocumentNumber(f64::from(value))))
+                .collect(),
+        )
     }
 
-    /// 判断一个已声明字段在当前 Frame 中是否已有值。
-    ///
-    /// 该方法只表达 presence，不表达协议必填性；未知字段仍然返回错误而不是 `false`。
-    pub fn has(&self, name: &str) -> Result<bool, DomainError> {
-        let index = self.field_index(name)?;
-        Ok(self.values[index].is_some())
-    }
-
-    /// 清除一个已声明字段的值，保留其他字段以及当前 Schema。
-    pub fn clear_field(&mut self, name: &str) -> Result<(), DomainError> {
-        let index = self.field_index(name)?;
-        self.values[index] = None;
-        Ok(())
-    }
-
-    /// 清空当前 Document 的全部字段值，但保留原 Schema 身份、版本、字段顺序和共享关系。
-    ///
-    /// 规则的 `ClearDocument` 动作使用此方法生成同一协议下的空响应骨架。它不会把字段从
-    /// Schema 中删除，因此后续仍可通过 [`Self::set`] 按原声明类型重新赋值。
-    pub fn clear(&mut self) {
-        self.values.fill(None);
-    }
-
-    /// 按 Schema 声明顺序遍历所有字段及其可选值。
-    ///
-    /// 迭代器长度恒等于 `schema().fields().len()`，适合 UI Display 和稳定序列化。
-    pub fn fields(&self) -> impl ExactSizeIterator<Item = DocumentFieldState<'_>> {
-        self.schema
-            .fields()
-            .iter()
-            .zip(&self.values)
-            .map(|(field, value)| DocumentFieldState {
-                field,
-                value: value.as_ref(),
-            })
-    }
-
-    fn field_index(&self, name: &str) -> Result<usize, DomainError> {
-        self.schema.field_index(name).ok_or_else(|| {
-            DomainError::new(
-                ErrorCode::DocumentFieldUndeclared,
-                format!("字段 {name} 未在 Schema 中声明"),
-            )
-            .with_field_error(format!("document.{name}"), "字段未声明")
-        })
-    }
-
-    fn try_from_parts(
-        schema: DocumentSchema,
-        values: Vec<Option<DocumentValue>>,
-    ) -> Result<Self, DomainError> {
-        if schema.fields().len() != values.len() {
-            return Err(DomainError::new(
-                ErrorCode::DocumentSchemaInvalid,
-                "Document 值槽数量必须与 Schema 字段数量一致",
-            )
-            .with_field_error("document.values", "值槽数量与 Schema 字段数量不一致"));
+    /// Returns this value's JSON kind.
+    #[must_use]
+    pub const fn value_type(&self) -> DocumentValueType {
+        match self {
+            Self::String(_) => DocumentValueType::String,
+            Self::Number(_) => DocumentValueType::Number,
+            Self::Boolean(_) => DocumentValueType::Boolean,
+            Self::Null(()) => DocumentValueType::Null,
+            Self::Object(_) => DocumentValueType::Object,
+            Self::Array(_) => DocumentValueType::Array,
         }
+    }
+}
 
-        let document = Self {
-            schema: Arc::new(schema),
-            values,
-        };
-        for state in document.fields() {
-            if let Some(value) = state.value {
-                let expected = state.field.field_type();
-                let actual = value.field_type();
-                if expected != actual {
-                    let name = state.field.name().as_str();
+/// Identity-free, owned recursive JSON document.
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize, Type)]
+#[serde(transparent)]
+pub struct Document(DocumentValue);
+
+impl Eq for Document {}
+
+impl Document {
+    /// Creates a document from its root value.
+    #[must_use]
+    pub const fn new(root: DocumentValue) -> Self {
+        Self(root)
+    }
+    /// Parses standard JSON under the JavaScript-number contract.
+    pub fn parse_json(input: &str) -> Result<Self, DomainError> {
+        let value: serde_json::Value = serde_json::from_str(input).map_err(|error| {
+            DomainError::new(
+                ErrorCode::JsonInvalid,
+                format!("Invalid Document JSON: {error}"),
+            )
+        })?;
+        Ok(Self(from_json_value(value)?))
+    }
+    /// Serializes this document as standard JSON.
+    pub fn to_json(&self) -> Result<String, DomainError> {
+        serde_json::to_string(self).map_err(|error| {
+            DomainError::new(
+                ErrorCode::JsonInvalid,
+                format!("Cannot encode Document JSON: {error}"),
+            )
+        })
+    }
+    /// Borrows the root value.
+    #[must_use]
+    pub const fn root(&self) -> &DocumentValue {
+        &self.0
+    }
+    /// Resolves an RFC 6901 pointer.
+    pub fn resolve(&self, pointer: &JsonPointer) -> Result<&DocumentValue, DomainError> {
+        resolve_tokens(&self.0, pointer.tokens(), pointer.as_str())
+    }
+    /// Replaces root/existing node, or adds a final object property when its parent exists.
+    pub fn set(&mut self, pointer: &JsonPointer, value: DocumentValue) -> Result<(), DomainError> {
+        if pointer.tokens().is_empty() {
+            self.0 = value;
+            return Ok(());
+        }
+        let (parents, final_token) = pointer.tokens().split_at(pointer.tokens().len() - 1);
+        match resolve_tokens_mut(&mut self.0, parents, pointer.as_str())? {
+            DocumentValue::Object(values) => {
+                values.insert(final_token[0].clone(), value);
+                Ok(())
+            }
+            DocumentValue::Array(values) => {
+                let index = array_index(&final_token[0], values.len(), pointer.as_str())?;
+                values[index] = value;
+                Ok(())
+            }
+            _ => Err(type_error(
+                pointer.as_str(),
+                "set parent must be object or array",
+            )),
+        }
+    }
+    /// Removes an object property or array item. Root cannot be cleared.
+    pub fn clear_path(&mut self, pointer: &JsonPointer) -> Result<(), DomainError> {
+        if pointer.tokens().is_empty() {
+            return Err(path_error(
+                pointer.as_str(),
+                "document root cannot be cleared",
+            ));
+        }
+        let (parents, final_token) = pointer.tokens().split_at(pointer.tokens().len() - 1);
+        match resolve_tokens_mut(&mut self.0, parents, pointer.as_str())? {
+            DocumentValue::Object(values) => values
+                .remove(&final_token[0])
+                .map(|_| ())
+                .ok_or_else(|| path_error(pointer.as_str(), "object property is missing")),
+            DocumentValue::Array(values) => {
+                let index = array_index(&final_token[0], values.len(), pointer.as_str())?;
+                values.remove(index);
+                Ok(())
+            }
+            _ => Err(type_error(
+                pointer.as_str(),
+                "clear parent must be object or array",
+            )),
+        }
+    }
+    /// Inserts a value into an existing array at `0..=len`.
+    pub fn insert(
+        &mut self,
+        pointer: &JsonPointer,
+        index: usize,
+        value: DocumentValue,
+    ) -> Result<(), DomainError> {
+        match resolve_tokens_mut(&mut self.0, pointer.tokens(), pointer.as_str())? {
+            DocumentValue::Array(values) if index <= values.len() => {
+                values.insert(index, value);
+                Ok(())
+            }
+            DocumentValue::Array(_) => Err(path_error(
+                pointer.as_str(),
+                "array insert index is out of range",
+            )),
+            _ => Err(type_error(
+                pointer.as_str(),
+                "insert target must be an array",
+            )),
+        }
+    }
+    /// Appends a value to an existing array.
+    pub fn append(
+        &mut self,
+        pointer: &JsonPointer,
+        value: DocumentValue,
+    ) -> Result<(), DomainError> {
+        match resolve_tokens_mut(&mut self.0, pointer.tokens(), pointer.as_str())? {
+            DocumentValue::Array(values) => {
+                values.push(value);
+                Ok(())
+            }
+            _ => Err(type_error(
+                pointer.as_str(),
+                "append target must be an array",
+            )),
+        }
+    }
+}
+
+fn from_json_value(value: serde_json::Value) -> Result<DocumentValue, DomainError> {
+    Ok(match value {
+        serde_json::Value::String(value) => DocumentValue::String(value),
+        serde_json::Value::Bool(value) => DocumentValue::Boolean(value),
+        serde_json::Value::Null => DocumentValue::null(),
+        serde_json::Value::Array(values) => DocumentValue::Array(
+            values
+                .into_iter()
+                .map(from_json_value)
+                .collect::<Result<_, _>>()?,
+        ),
+        serde_json::Value::Object(values) => DocumentValue::Object(
+            values
+                .into_iter()
+                .map(|(key, value)| Ok((key, from_json_value(value)?)))
+                .collect::<Result<_, DomainError>>()?,
+        ),
+        serde_json::Value::Number(value) => {
+            if let Some(integer) = value.as_i64() {
+                if integer.unsigned_abs() > DocumentNumber::MAX_SAFE_INTEGER as u64 {
                     return Err(DomainError::new(
-                        ErrorCode::DocumentFieldTypeMismatch,
-                        format!(
-                            "字段 {name} 需要 {}，实际得到 {}",
-                            expected.as_str(),
-                            actual.as_str()
-                        ),
-                    )
-                    .with_field_error(
-                        format!("document.{name}"),
-                        format!("需要 {}，实际得到 {}", expected.as_str(), actual.as_str()),
+                        ErrorCode::DocumentUnsafeInteger,
+                        "integer exceeds JavaScript safe integer range",
                     ));
                 }
+                DocumentValue::Number(DocumentNumber::from_safe_i64(integer))
+            } else if let Some(integer) = value.as_u64() {
+                if integer > DocumentNumber::MAX_SAFE_INTEGER as u64 {
+                    return Err(DomainError::new(
+                        ErrorCode::DocumentUnsafeInteger,
+                        "integer exceeds JavaScript safe integer range",
+                    ));
+                }
+                DocumentValue::Number(DocumentNumber::from_safe_u64(integer))
+            } else {
+                DocumentValue::Number(DocumentNumber::new(value.as_f64().ok_or_else(|| {
+                    DomainError::new(ErrorCode::DocumentNumberInvalid, "invalid JSON number")
+                })?)?)
             }
         }
-        Ok(document)
-    }
+    })
 }
 
-impl TryFrom<DocumentWire> for Document {
-    type Error = DomainError;
-
-    fn try_from(value: DocumentWire) -> Result<Self, Self::Error> {
-        Self::try_from_parts(value.schema, value.values)
+fn array_index(token: &str, len: usize, path: &str) -> Result<usize, DomainError> {
+    if token.is_empty()
+        || (token.len() > 1 && token.starts_with('0'))
+        || !token.bytes().all(|b| b.is_ascii_digit())
+    {
+        return Err(path_error(path, "invalid array index"));
     }
+    let index = token
+        .parse::<usize>()
+        .map_err(|_| path_error(path, "invalid array index"))?;
+    (index < len)
+        .then_some(index)
+        .ok_or_else(|| path_error(path, "array index is out of range"))
 }
-
-impl From<Document> for DocumentWire {
-    fn from(value: Document) -> Self {
-        Self {
-            schema: (*value.schema).clone(),
-            values: value.values,
-        }
+fn resolve_tokens<'a>(
+    mut value: &'a DocumentValue,
+    tokens: &[String],
+    path: &str,
+) -> Result<&'a DocumentValue, DomainError> {
+    for token in tokens {
+        value = match value {
+            DocumentValue::Object(values) => values
+                .get(token)
+                .ok_or_else(|| path_error(path, "object property is missing"))?,
+            DocumentValue::Array(values) => &values[array_index(token, values.len(), path)?],
+            _ => return Err(type_error(path, "path traverses a scalar")),
+        };
     }
+    Ok(value)
+}
+fn resolve_tokens_mut<'a>(
+    mut value: &'a mut DocumentValue,
+    tokens: &[String],
+    path: &str,
+) -> Result<&'a mut DocumentValue, DomainError> {
+    for token in tokens {
+        value = match value {
+            DocumentValue::Object(values) => values
+                .get_mut(token)
+                .ok_or_else(|| path_error(path, "object property is missing"))?,
+            DocumentValue::Array(values) => {
+                let index = array_index(token, values.len(), path)?;
+                &mut values[index]
+            }
+            _ => return Err(type_error(path, "path traverses a scalar")),
+        };
+    }
+    Ok(value)
+}
+fn path_error(path: &str, message: &str) -> DomainError {
+    DomainError::new(ErrorCode::DocumentPathMissing, message).with_field_error(path, message)
+}
+fn type_error(path: &str, message: &str) -> DomainError {
+    DomainError::new(ErrorCode::DocumentPathTypeMismatch, message).with_field_error(path, message)
 }

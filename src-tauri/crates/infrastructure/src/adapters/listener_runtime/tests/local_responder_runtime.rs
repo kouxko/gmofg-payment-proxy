@@ -1,8 +1,8 @@
 //! `LocalServer` 从 Listener 到两条协议 Flow 的生产接线测试。
 
 use intercept_proxy_domain::{
-    DocumentAction, DocumentFieldName, DocumentValue, ProtocolDirection,
-    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    DocumentAction, DocumentValue, JsonPointer, ProtocolDirection, ProtocolDocumentRuleDefinition,
+    ProtocolDocumentRuleId,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -45,12 +45,11 @@ async fn local_server_echoes_upstream_payload_then_runs_downstream_pipeline() {
         1,
         listener.id,
         package_ref(id),
-        1,
         ProtocolDirection::Downstream,
         Vec::new(),
         vec![DocumentAction::SetField {
-            field: DocumentFieldName::new("amount").unwrap(),
-            value: DocumentValue::Int(42),
+            field: JsonPointer::property("amount"),
+            value: DocumentValue::integer(42).unwrap(),
         }],
     )
     .unwrap();

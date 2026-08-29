@@ -48,14 +48,12 @@ encode = "encode"
 "#;
 
 const SCHEMA: &str = r#"
-id = "example-message"
-version = 1
+type = "object"
 title = "Example Message"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 "#;
 
 const SCRIPT: &str = r"

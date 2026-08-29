@@ -9,10 +9,9 @@ use intercept_proxy_application::{
     AppError, AppErrorDiagnosticViewModel, AppResult, ProtocolPackageCapabilitiesViewModel,
     ProtocolPackageCompilationReceipt, ProtocolPackageCompilerPort,
     ProtocolPackageDescriptionViewModel, ProtocolPackageDirectionCapabilitiesViewModel,
-    ProtocolPackageKindViewModel, ProtocolPackageSchemaFieldTypeViewModel,
-    ProtocolPackageSchemaFieldViewModel, ProtocolPackageSchemaViewModel,
-    ProtocolPackageSourceViewModel, ProtocolPackageStorePort, ProtocolPackageValidationViewModel,
-    ProtocolPackageVersionViewModel, is_builtin_protocol_package,
+    ProtocolPackageKindViewModel, ProtocolPackageSchemaViewModel, ProtocolPackageSourceViewModel,
+    ProtocolPackageStorePort, ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
+    is_builtin_protocol_package,
 };
 use intercept_proxy_protocol_scripting::CompiledProtocolPackage;
 use intercept_proxy_protocol_scripting::{ProtocolDirection, ProtocolPackageKind};
@@ -175,34 +174,10 @@ pub(in crate::adapters) fn application_description(
 }
 
 fn application_schema(
-    schema: &intercept_proxy_domain::DocumentSchema,
+    schema: &intercept_proxy_domain::DocumentSchemaNode,
 ) -> ProtocolPackageSchemaViewModel {
     ProtocolPackageSchemaViewModel {
-        id: schema.id().as_str().to_owned(),
-        version: schema.version(),
-        title: schema.title().to_owned(),
-        fields: schema
-            .fields()
-            .iter()
-            .map(|field| ProtocolPackageSchemaFieldViewModel {
-                name: field.name().as_str().to_owned(),
-                label: field.label().to_owned(),
-                field_type: match field.field_type() {
-                    intercept_proxy_domain::DocumentFieldType::String => {
-                        ProtocolPackageSchemaFieldTypeViewModel::String
-                    }
-                    intercept_proxy_domain::DocumentFieldType::Int => {
-                        ProtocolPackageSchemaFieldTypeViewModel::Int
-                    }
-                    intercept_proxy_domain::DocumentFieldType::Bool => {
-                        ProtocolPackageSchemaFieldTypeViewModel::Bool
-                    }
-                    intercept_proxy_domain::DocumentFieldType::Blob => {
-                        ProtocolPackageSchemaFieldTypeViewModel::Blob
-                    }
-                },
-            })
-            .collect(),
+        root: schema.clone(),
     }
 }
 

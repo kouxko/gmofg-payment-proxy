@@ -1,16 +1,15 @@
 //! 持久化前基于 Listener 与协议包描述的统一 Document 规则校验。
 
 use intercept_proxy_domain::{
-    DocumentAction, DocumentCondition, DocumentField, DocumentFieldType, DocumentSchema,
-    DocumentSchemaId, ProtocolPackageRef, RuleContent,
+    DocumentAction, DocumentCondition, DocumentSchemaNode, ProtocolPackageRef, RuleContent,
     validate_document_rule_content_against_schema,
 };
 
 use super::Application;
 use crate::{
-    AppError, AppResult, HttpBodyProcessing, ListenerDataPlane,
-    ProtocolPackageSchemaFieldTypeViewModel, ProtocolPackageSchemaViewModel, ProxyListener,
-    ProxyWorkspace, RuleDefinition, RuleStage, SocketPayloadProcessing, SocketTopology,
+    AppError, AppResult, HttpBodyProcessing, ListenerDataPlane, ProtocolPackageSchemaViewModel,
+    ProxyListener, ProxyWorkspace, RuleDefinition, RuleStage, SocketPayloadProcessing,
+    SocketTopology,
 };
 
 impl Application {
@@ -34,11 +33,11 @@ impl Application {
             .await?;
         let (schema, capabilities) = match rule.stage().direction() {
             Some(intercept_proxy_domain::ProtocolDirection::Upstream) => (
-                domain_schema(&description.upstream_schema)?,
+                domain_schema(&description.upstream_schema),
                 description.capabilities.upstream,
             ),
             Some(intercept_proxy_domain::ProtocolDirection::Downstream) => (
-                domain_schema(&description.downstream_schema)?,
+                domain_schema(&description.downstream_schema),
                 description.capabilities.downstream,
             ),
             None => return Err(rule_invalid("stage", "TLS 握手阶段不支持 Document 规则")),
@@ -56,7 +55,6 @@ impl Application {
             ));
         }
         validate_document_rule_content_against_schema(
-            candidate.schema_version,
             candidate.conditions,
             candidate.actions,
             &schema,
@@ -67,7 +65,6 @@ impl Application {
 
 struct DocumentCandidate<'a> {
     package: &'a ProtocolPackageRef,
-    schema_version: u32,
     conditions: &'a [DocumentCondition],
     actions: &'a [DocumentAction],
 }
@@ -95,7 +92,6 @@ fn document_candidate<'a>(
             }
             Ok(Some(DocumentCandidate {
                 package,
-                schema_version: document.schema_version,
                 conditions: &document.conditions,
                 actions: &document.actions,
             }))
@@ -123,7 +119,6 @@ fn document_candidate<'a>(
             }
             Ok(Some(DocumentCandidate {
                 package: &scripted.package,
-                schema_version: content.schema_version,
                 conditions: &content.conditions,
                 actions: &content.actions,
             }))
@@ -150,27 +145,6 @@ fn rule_invalid(field: &str, message: &str) -> AppError {
     )
 }
 
-fn domain_schema(schema: &ProtocolPackageSchemaViewModel) -> AppResult<DocumentSchema> {
-    let fields = schema
-        .fields
-        .iter()
-        .map(|field| {
-            DocumentField::new(
-                field.name.parse()?,
-                match field.field_type {
-                    ProtocolPackageSchemaFieldTypeViewModel::String => DocumentFieldType::String,
-                    ProtocolPackageSchemaFieldTypeViewModel::Int => DocumentFieldType::Int,
-                    ProtocolPackageSchemaFieldTypeViewModel::Bool => DocumentFieldType::Bool,
-                    ProtocolPackageSchemaFieldTypeViewModel::Blob => DocumentFieldType::Blob,
-                },
-                field.label.clone(),
-            )
-        })
-        .collect::<Result<Vec<_>, intercept_proxy_domain::DomainError>>()?;
-    Ok(DocumentSchema::new(
-        DocumentSchemaId::new(schema.id.clone())?,
-        schema.version,
-        schema.title.clone(),
-        fields,
-    )?)
+fn domain_schema(schema: &ProtocolPackageSchemaViewModel) -> DocumentSchemaNode {
+    schema.root.clone()
 }

@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    DocumentAction, DocumentFieldName, DocumentValue, ExternalDecodeRequest,
-    ExternalDecodeResponse, ExternalDisplayRequest, ExternalDisplayResponse, ExternalDocumentWire,
-    ExternalEncodeRequest, ExternalEncodeResponse, ExternalFrameRequest, ExternalFrameResult,
-    ExternalPackageRegistration, ListenerId, ProtocolDocumentRuleDefinition,
-    ProtocolDocumentRuleId, ProtocolDocumentRuleProgram, SocketTopology,
+    DocumentAction, DocumentValue, ExternalDecodeRequest, ExternalDecodeResponse,
+    ExternalDisplayRequest, ExternalDisplayResponse, ExternalDocumentWire, ExternalEncodeRequest,
+    ExternalEncodeResponse, ExternalFrameRequest, ExternalFrameResult, ExternalPackageRegistration,
+    JsonPointer, ListenerId, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolDocumentRuleProgram, SocketTopology,
 };
 use intercept_proxy_exchange::{FrameResult, SocketContext};
 use parking_lot::Mutex;
@@ -171,7 +171,7 @@ async fn capabilities_run_frame_decode_display_rules_encode_in_order() {
     let encoded_document = rpc.encoded_document.lock().clone().unwrap();
     assert_eq!(
         serde_json::to_value(encoded_document).unwrap()["amount"],
-        json!({"type": "int", "value": "42"})
+        json!(42.0)
     );
 }
 
@@ -251,10 +251,7 @@ impl ExternalPackageRpc for FakeExternalRpc {
             });
         }
         Ok(ExternalDecodeResponse {
-            document: serde_json::from_value(json!({
-                "message_type": {"type": "string", "value": "0200"}
-            }))
-            .unwrap(),
+            document: serde_json::from_value(json!({"message_type": "0200"})).unwrap(),
         })
     }
 
@@ -292,24 +289,22 @@ fn registration() -> ExternalPackageRegistration {
         "document": {
             "upstream": {
                 "schema": {
-                    "id": "external-runtime-upstream",
+                    "type": "object",
                     "title": "Upstream",
-                    "version": 1,
-                    "fields": [
-                        {"name": "message_type", "label": "MTI", "type": "string"},
-                        {"name": "amount", "label": "Amount", "type": "int"}
-                    ]
+                    "properties": {
+                        "message_type": {"type": "string", "title": "MTI"},
+                        "amount": {"type": "number", "title": "Amount"}
+                    }
                 },
                 "display": "render_message"
             },
             "downstream": {
                 "schema": {
-                    "id": "external-runtime-downstream",
+                    "type": "object",
                     "title": "Downstream",
-                    "version": 1,
-                    "fields": [
-                        {"name": "response_code", "label": "Response code", "type": "string"}
-                    ]
+                    "properties": {
+                        "response_code": {"type": "string", "title": "Response code"}
+                    }
                 },
                 "display": "render_message"
             }
@@ -361,12 +356,11 @@ fn rules(registration: &ExternalPackageRegistration) -> ProtocolDocumentRuleConn
         1,
         listener_id(),
         package.clone(),
-        upstream.version(),
         ProtocolRuleStage::ProxyToUpstream,
         Vec::new(),
         vec![DocumentAction::SetField {
-            field: DocumentFieldName::new("amount").unwrap(),
-            value: DocumentValue::Int(42),
+            field: JsonPointer::property("amount"),
+            value: DocumentValue::integer(42).unwrap(),
         }],
     )
     .unwrap();

@@ -226,41 +226,38 @@ pub(in crate::requirements_tests) fn protocol_package_description(
             },
             display: true,
         },
-        upstream_schema: ProtocolPackageSchemaViewModel {
-            id: "portable-message".into(),
-            version: 7,
-            title: "Portable Message".into(),
-            fields: [
-                ("text", ProtocolPackageSchemaFieldTypeViewModel::String),
-                ("amount", ProtocolPackageSchemaFieldTypeViewModel::Int),
-                ("approved", ProtocolPackageSchemaFieldTypeViewModel::Bool),
-                ("raw", ProtocolPackageSchemaFieldTypeViewModel::Blob),
-            ]
-            .into_iter()
-            .map(|(name, field_type)| ProtocolPackageSchemaFieldViewModel {
-                name: name.into(),
-                label: name.into(),
-                field_type,
-            })
-            .collect(),
-        },
-        downstream_schema: ProtocolPackageSchemaViewModel {
-            id: "portable-response".into(),
-            version: 8,
-            title: "Portable Response".into(),
-            fields: [
-                ("text", ProtocolPackageSchemaFieldTypeViewModel::String),
-                ("amount", ProtocolPackageSchemaFieldTypeViewModel::Int),
-                ("approved", ProtocolPackageSchemaFieldTypeViewModel::Bool),
-                ("raw", ProtocolPackageSchemaFieldTypeViewModel::Blob),
-            ]
-            .into_iter()
-            .map(|(name, field_type)| ProtocolPackageSchemaFieldViewModel {
-                name: name.into(),
-                label: name.into(),
-                field_type,
-            })
-            .collect(),
+        upstream_schema: portable_schema("Portable Message"),
+        downstream_schema: portable_schema("Portable Response"),
+    }
+}
+
+fn portable_schema(title: &str) -> ProtocolPackageSchemaViewModel {
+    ProtocolPackageSchemaViewModel {
+        root: intercept_proxy_domain::DocumentSchemaNode::Object {
+            title: Some(title.to_owned()),
+            properties: std::collections::BTreeMap::from([
+                (
+                    "text".to_owned(),
+                    intercept_proxy_domain::DocumentSchemaNode::String { title: None },
+                ),
+                (
+                    "amount".to_owned(),
+                    intercept_proxy_domain::DocumentSchemaNode::Number { title: None },
+                ),
+                (
+                    "approved".to_owned(),
+                    intercept_proxy_domain::DocumentSchemaNode::Boolean { title: None },
+                ),
+                (
+                    "raw".to_owned(),
+                    intercept_proxy_domain::DocumentSchemaNode::Array {
+                        title: None,
+                        items: Box::new(intercept_proxy_domain::DocumentSchemaNode::Number {
+                            title: None,
+                        }),
+                    },
+                ),
+            ]),
         },
     }
 }
@@ -307,20 +304,19 @@ pub(in crate::requirements_tests) fn scripted_workspace(
                 41,
                 listener_id,
                 package,
-                if local_responder { 8 } else { 7 },
                 direction,
                 vec![
                     document_equals("text", DocumentValue::String("sale".into())),
-                    document_equals("amount", DocumentValue::Int(1234)),
-                    document_equals("approved", DocumentValue::Bool(true)),
-                    document_equals("raw", DocumentValue::Blob(vec![0, 1, 2, 255])),
+                    document_equals("amount", DocumentValue::integer(1234).unwrap()),
+                    document_equals("approved", DocumentValue::Boolean(true)),
+                    document_equals("raw", DocumentValue::byte_array(vec![0, 1, 2, 255])),
                 ],
                 vec![
                     DocumentAction::RecordMatch,
                     document_set("text", DocumentValue::String("reply".into())),
-                    document_set("amount", DocumentValue::Int(4321)),
-                    document_set("approved", DocumentValue::Bool(false)),
-                    document_set("raw", DocumentValue::Blob(vec![9, 8, 7])),
+                    document_set("amount", DocumentValue::integer(4321).unwrap()),
+                    document_set("approved", DocumentValue::Boolean(false)),
+                    document_set("raw", DocumentValue::byte_array(vec![9, 8, 7])),
                 ],
             )
             .unwrap(),
@@ -362,14 +358,14 @@ pub(in crate::requirements_tests) fn protocol_rule_definitions(
 
 fn document_equals(name: &str, value: DocumentValue) -> DocumentCondition {
     DocumentCondition::Equals {
-        field: DocumentFieldName::new(name).unwrap(),
+        field: JsonPointer::property(name),
         value,
     }
 }
 
 fn document_set(name: &str, value: DocumentValue) -> DocumentAction {
     DocumentAction::SetField {
-        field: DocumentFieldName::new(name).unwrap(),
+        field: JsonPointer::property(name),
         value,
     }
 }

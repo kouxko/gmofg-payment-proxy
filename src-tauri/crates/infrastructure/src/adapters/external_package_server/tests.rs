@@ -423,15 +423,15 @@ fn registration_with_id(package_id: &str) -> ExternalPackageRegistration {
         "document": {
             "upstream": {
                 "schema": {
-                    "id": "race-upstream", "version": 1, "title": "Upstream",
-                    "fields": [{"name": "mti", "label": "MTI", "type": "string"}]
+                    "type": "object", "title": "Upstream",
+                    "properties": {"mti": {"type": "string", "title": "MTI"}}
                 },
                 "display": "render"
             },
             "downstream": {
                 "schema": {
-                    "id": "race-downstream", "version": 1, "title": "Downstream",
-                    "fields": [{"name": "response_code", "label": "RC", "type": "string"}]
+                    "type": "object", "title": "Downstream",
+                    "properties": {"response_code": {"type": "string", "title": "RC"}}
                 },
                 "display": "render"
             }

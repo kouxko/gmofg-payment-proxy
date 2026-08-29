@@ -192,13 +192,21 @@ async fn fresh_rule_schema_revalidation_failure_writes_nothing() {
         .application_backup_import_prepare(&source, Vec::new())
         .await
         .unwrap();
-    portability
-        .descriptions
-        .lock()
-        .get_mut(&candidate.protocol_packages[0].package)
-        .unwrap()
-        .upstream_schema
-        .version += 1;
+    {
+        let mut descriptions = portability.descriptions.lock();
+        let schema = &mut descriptions
+            .get_mut(&candidate.protocol_packages[0].package)
+            .unwrap()
+            .upstream_schema
+            .root;
+        let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } = schema else {
+            unreachable!()
+        };
+        properties.insert(
+            "amount".into(),
+            intercept_proxy_domain::DocumentSchemaNode::String { title: None },
+        );
+    }
 
     let error = application
         .application_backup_import_commit(&source, preview.token)

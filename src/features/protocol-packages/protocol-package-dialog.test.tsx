@@ -65,15 +65,11 @@ describe("ProtocolPackageDialog details", () => {
       const selected = version(packageRef.version, {
         name: packageRef.version === "1.10.0" ? "旧版专用名称" : "最新版专用名称",
       });
-      const schemaVersion = packageRef.version.replaceAll(".", "-");
       return detail(selected, {
         upstream_schema: {
-          id: `schema-${schemaVersion}`,
-          version: packageRef.version === "1.10.0" ? 7 : 8,
-          title: packageRef.version === "1.10.0" ? "旧版 Schema" : "最新版 Schema",
-          fields: packageRef.version === "1.10.0"
-            ? [{ name: "old_field", label: "旧版字段", type: "bool" }]
-            : [{ name: "new_field", label: "新版字段", type: "blob" }],
+          root: { type: "object", title: packageRef.version === "1.10.0" ? "旧版 Schema" : "最新版 Schema", properties: packageRef.version === "1.10.0"
+            ? { old_field: { type: "boolean", title: "旧版字段" } }
+            : { new_field: { type: "array", title: "新版字段", items: { type: "number" } } } },
         },
       });
     });
@@ -103,9 +99,9 @@ describe("ProtocolPackageDialog details", () => {
     expect(within(table).getByText("字段名")).toBeVisible();
     expect(within(table).getByText("标签")).toBeVisible();
     expect(within(table).getByText("类型")).toBeVisible();
-    expect(within(table).getByText("new_field")).toBeVisible();
+    expect(within(table).getByText("/new_field")).toBeVisible();
     expect(within(table).getByText("新版字段")).toBeVisible();
-    expect(within(table).getByText("blob")).toBeVisible();
+    expect(within(table).getByText("array")).toBeVisible();
   });
 
   it("shows the external connection contract without exposing payloads", async () => {
@@ -194,8 +190,8 @@ describe("ProtocolPackageDialog details", () => {
 
     await user.click(screen.getByRole("button", { name: /1\.10\.0/ }));
     expect(await screen.findByText("旧版专用名称")).toBeVisible();
-    expect(screen.getByText("old_field")).toBeVisible();
-    expect(screen.queryByText("new_field")).not.toBeInTheDocument();
+    expect(screen.getByText("/old_field")).toBeVisible();
+    expect(screen.queryByText("/new_field")).not.toBeInTheDocument();
     expect(mocks.protocolPackageDetail).toHaveBeenLastCalledWith({ id: "iso-8583", version: "1.10.0" });
   });
 
@@ -205,10 +201,7 @@ describe("ProtocolPackageDialog details", () => {
       if (packageRef.version === "2.0.0") return latest.promise;
       return detail(version("1.10.0", { name: "当前旧版" }), {
         upstream_schema: {
-          id: "old-schema",
-          version: 1,
-          title: "当前 Schema",
-          fields: [{ name: "current_field", label: "当前字段", type: "string" }],
+          root: { type: "object", title: "当前 Schema", properties: { current_field: { type: "string", title: "当前字段" } } },
         },
       });
     });
@@ -216,19 +209,16 @@ describe("ProtocolPackageDialog details", () => {
     render(<ProtocolPackagesView />);
     await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
     await user.click(screen.getByRole("button", { name: /1\.10\.0/ }));
-    expect(await screen.findByText("current_field")).toBeVisible();
+    expect(await screen.findByText("/current_field")).toBeVisible();
 
     latest.resolve(detail(version("2.0.0"), {
       upstream_schema: {
-        id: "late-schema",
-        version: 1,
-        title: "迟到 Schema",
-        fields: [{ name: "late_field", label: "迟到字段", type: "string" }],
+        root: { type: "object", title: "迟到 Schema", properties: { late_field: { type: "string", title: "迟到字段" } } },
       },
     }));
 
-    await waitFor(() => expect(screen.getByText("current_field")).toBeVisible());
-    expect(screen.queryByText("late_field")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("/current_field")).toBeVisible());
+    expect(screen.queryByText("/late_field")).not.toBeInTheDocument();
   });
 
   it("fails closed when detail identity does not match the selected version", async () => {
@@ -247,7 +237,7 @@ describe("ProtocolPackageDialog details", () => {
       group({ name: `协议包${"很长".repeat(80)}`, versions: [version("3.0.0")] }),
     ]);
     mocks.protocolPackageDetail.mockResolvedValue(detail(version("3.0.0"), {
-      upstream_schema: { id: "long-schema", version: 1, title: "长字段 Schema", fields: [{ name: "long_field", label: longName, type: "string" }] },
+      upstream_schema: { root: { type: "object", title: "长字段 Schema", properties: { long_field: { type: "string", title: longName } } } },
       usages: [],
     }));
     const user = userEvent.setup();
@@ -268,10 +258,10 @@ describe("ProtocolPackageDialog details", () => {
       .toEqual(["protocolPackageList", "protocolPackageDetail"]);
   });
 
-  it("rejects an empty Schema instead of presenting impossible Rust data", async () => {
+  it("rejects a malformed recursive Schema instead of presenting impossible Rust data", async () => {
     mocks.protocolPackageDetail.mockResolvedValue(detail(version("2.0.0"), {
-      upstream_schema: { id: "empty", version: 1, title: "空 Schema", fields: [] },
-      downstream_schema: { id: "empty-response", version: 1, title: "空响应 Schema", fields: [] },
+      upstream_schema: { root: { type: "array" } as never },
+      downstream_schema: { root: { type: "object", title: "空响应 Schema", properties: {} } },
       usages: [],
     }));
     const user = userEvent.setup();

@@ -5,13 +5,11 @@ use intercept_proxy_application::{
     ExternalPackageDetailViewModel, ExternalPackageDirectionMethodsViewModel,
     ExternalPackageRecentErrorViewModel, ProtocolPackageCapabilitiesViewModel,
     ProtocolPackageDescriptionViewModel, ProtocolPackageDirectionCapabilitiesViewModel,
-    ProtocolPackageKindViewModel, ProtocolPackageSchemaFieldTypeViewModel,
-    ProtocolPackageSchemaFieldViewModel, ProtocolPackageSchemaViewModel,
-    ProtocolPackageSourceViewModel, ProtocolPackageValidationViewModel,
-    ProtocolPackageVersionViewModel,
+    ProtocolPackageKindViewModel, ProtocolPackageSchemaViewModel, ProtocolPackageSourceViewModel,
+    ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
 };
 use intercept_proxy_domain::{
-    DocumentFieldType, DocumentSchema, ExternalPackageDirection, ExternalPackageMethodNamespace,
+    DocumentSchemaNode, ExternalPackageDirection, ExternalPackageMethodNamespace,
     ExternalPackageRegistration,
 };
 
@@ -130,25 +128,9 @@ fn direction_methods(
     }
 }
 
-fn application_schema(schema: &DocumentSchema) -> ProtocolPackageSchemaViewModel {
+fn application_schema(schema: &DocumentSchemaNode) -> ProtocolPackageSchemaViewModel {
     ProtocolPackageSchemaViewModel {
-        id: schema.id().as_str().to_owned(),
-        version: schema.version(),
-        title: schema.title().to_owned(),
-        fields: schema
-            .fields()
-            .iter()
-            .map(|field| ProtocolPackageSchemaFieldViewModel {
-                name: field.name().as_str().to_owned(),
-                label: field.label().to_owned(),
-                field_type: match field.field_type() {
-                    DocumentFieldType::String => ProtocolPackageSchemaFieldTypeViewModel::String,
-                    DocumentFieldType::Int => ProtocolPackageSchemaFieldTypeViewModel::Int,
-                    DocumentFieldType::Bool => ProtocolPackageSchemaFieldTypeViewModel::Bool,
-                    DocumentFieldType::Blob => ProtocolPackageSchemaFieldTypeViewModel::Blob,
-                },
-            })
-            .collect(),
+        root: schema.clone(),
     }
 }
 

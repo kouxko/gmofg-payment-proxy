@@ -10,14 +10,12 @@ use super::{
     ProtocolFramingErrorCode, ProtocolFramingLimit, ProtocolFramingLimits, ProtocolReader,
 };
 
-const DOCUMENT_SCHEMA: &str = r#"id = "framing-test"
-version = 1
+const DOCUMENT_SCHEMA: &str = r#"type = "object"
 title = "Framing Test"
 
-[[fields]]
-name = "kind"
-label = "Kind"
-type = "int"
+[properties.kind]
+type = "number"
+title = "Kind"
 "#;
 
 include!("tests/reader_and_limits.rs");

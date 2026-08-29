@@ -1,9 +1,6 @@
 use std::{collections::BTreeMap, fmt::Write};
 
-use intercept_proxy_domain::{
-    DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema, DocumentSchemaId,
-    DocumentValue,
-};
+use intercept_proxy_domain::{DocumentSchemaNode, DocumentValue, JsonPointer};
 use serde::Deserialize;
 
 use crate::{
@@ -87,20 +84,28 @@ fn official_iso8583_secondary_bitmap_field_round_trips() {
     let output = executor.execute_frame(frame.clone()).unwrap();
     let document = output.decoded_document().unwrap();
     assert_eq!(
-        document.get("primary_account_number").unwrap(),
+        document
+            .resolve(&JsonPointer::property("primary_account_number"))
+            .unwrap(),
         &DocumentValue::String("4761739001010010".to_owned())
     );
     assert_eq!(
-        document.get("processing_code").unwrap(),
+        document
+            .resolve(&JsonPointer::property("processing_code"))
+            .unwrap(),
         &DocumentValue::String("000000".to_owned())
     );
     assert_eq!(
-        document.get("network_management_code").unwrap(),
+        document
+            .resolve(&JsonPointer::property("network_management_code"))
+            .unwrap(),
         &DocumentValue::String("301".to_owned())
     );
     assert_eq!(
-        document.get("icc_data").unwrap(),
-        &DocumentValue::Blob(vec![0x9f, 0x02, 0x06, 0x00])
+        document
+            .resolve(&JsonPointer::property("icc_data"))
+            .unwrap(),
+        &DocumentValue::byte_array(vec![0x9f, 0x02, 0x06, 0x00])
     );
     assert_eq!(output.written(), frame);
 }
@@ -123,7 +128,12 @@ fn official_iso8583_rule_change_rebuilds_length_bitmap_and_amount() {
     let mut transform_executor = executor(&package, ProtocolDirection::Upstream);
     let output = transform_executor
         .execute_frame_with_rules(origin, |document| {
-            document.set("amount", DocumentValue::Int(2500)).unwrap();
+            document
+                .set(
+                    &JsonPointer::property("amount"),
+                    DocumentValue::integer(2500).unwrap(),
+                )
+                .unwrap();
             Ok(())
         })
         .unwrap();
@@ -142,8 +152,12 @@ fn official_iso8583_rule_change_rebuilds_length_bitmap_and_amount() {
     let mut verifier = executor(&package, ProtocolDirection::Upstream);
     let decoded = verifier.execute_frame(written.to_vec()).unwrap();
     assert_eq!(
-        decoded.decoded_document().unwrap().get("amount").unwrap(),
-        &DocumentValue::Int(2500)
+        decoded
+            .decoded_document()
+            .unwrap()
+            .resolve(&JsonPointer::property("amount"))
+            .unwrap(),
+        &DocumentValue::integer(2500).unwrap()
     );
 }
 
@@ -169,7 +183,12 @@ fn official_iso8583_downstream_sticky_responses_stay_independent() {
     let mut downstream = executor(&package, ProtocolDirection::Downstream);
     let first_output = downstream
         .execute_frame_with_rules(frames[0].clone(), |document| {
-            document.set("amount", DocumentValue::Int(2000)).unwrap();
+            document
+                .set(
+                    &JsonPointer::property("amount"),
+                    DocumentValue::integer(2000).unwrap(),
+                )
+                .unwrap();
             Ok(())
         })
         .unwrap();
@@ -212,7 +231,7 @@ fn template_syntax_schema_and_manifest_entry_damage_fail_during_import() {
         Err(ProtocolPackageCompilationError::Script(_))
     ));
 
-    let schema = TEMPLATE_SCHEMA.replace("type = \"int\"", "type = \"decimal\"");
+    let schema = TEMPLATE_SCHEMA.replace("type = \"number\"", "type = \"decimal\"");
     assert!(matches!(
         compile_template_with(TEMPLATE_MANIFEST, &schema, TEMPLATE_PROTOCOL),
         Err(ProtocolPackageCompilationError::Declaration(_))
@@ -228,26 +247,24 @@ fn template_syntax_schema_and_manifest_entry_damage_fail_during_import() {
 
 #[test]
 fn non_iso_length_prefixed_tlv_uses_the_same_host_contract() {
-    let schema = DocumentSchema::new(
-        DocumentSchemaId::new("length-prefixed-tlv").unwrap(),
-        1,
-        "Length-prefixed TLV",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("tag").unwrap(),
-                DocumentFieldType::Int,
-                "Tag",
-            )
-            .unwrap(),
-            DocumentField::new(
-                DocumentFieldName::new("value").unwrap(),
-                DocumentFieldType::Blob,
-                "Value",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
+    let schema = DocumentSchemaNode::Object {
+        title: Some("Length-prefixed TLV".to_owned()),
+        properties: BTreeMap::from([
+            (
+                "tag".to_owned(),
+                DocumentSchemaNode::Number {
+                    title: Some("Tag".to_owned()),
+                },
+            ),
+            (
+                "value".to_owned(),
+                DocumentSchemaNode::Array {
+                    title: Some("Value".to_owned()),
+                    items: Box::new(DocumentSchemaNode::Number { title: None }),
+                },
+            ),
+        ]),
+    };
     let package = CompiledProtocolPackageTestBuilder::new()
         .with_schema(schema)
         .with_script(TLV_SCRIPT)
@@ -264,10 +281,13 @@ fn non_iso_length_prefixed_tlv_uses_the_same_host_contract() {
     let mut executor = executor(&package, ProtocolDirection::Upstream);
     let output = executor.execute_frame(frames[0].clone()).unwrap();
     let document = output.decoded_document().unwrap();
-    assert_eq!(document.get("tag").unwrap(), &DocumentValue::Int(1));
     assert_eq!(
-        document.get("value").unwrap(),
-        &DocumentValue::Blob(b"ABC".to_vec())
+        document.resolve(&JsonPointer::property("tag")).unwrap(),
+        &DocumentValue::integer(1).unwrap()
+    );
+    assert_eq!(
+        document.resolve(&JsonPointer::property("value")).unwrap(),
+        &DocumentValue::byte_array(b"ABC".iter().copied())
     );
     assert_eq!(output.written(), frames[0]);
     assert_eq!(
@@ -291,21 +311,21 @@ fn decode(origin, context) {
         throw "TLV length mismatch";
     }
     let document = document::create();
-    document.set("tag", origin[2].to_int());
-    document.set("value", origin.extract(4, value_length));
+    document.set("/tag", origin[2].to_int());
+    document.set("/value", origin.extract(4, value_length));
     document
 }
 
 fn encode(origin, document, context) {
-    let value = document.get("value");
+    let value = document.get("/value");
     let payload_length = 2 + value.len();
     if payload_length > 65535 || value.len() > 255 { throw "TLV value is too large"; }
     let result = blob(4, 0);
     result[0] = (payload_length >> 8) & 0xff;
     result[1] = payload_length & 0xff;
-    result[2] = document.get("tag");
+    result[2] = document.get("/tag");
     result[3] = value.len();
-    result += value;
+    for index in 0..value.len() { result += blob(1, value[index]); }
     result
 }
 "#;
@@ -401,7 +421,7 @@ fn assert_document(
             "processing_code",
             DocumentValue::String(expected.processing_code.clone()),
         ),
-        ("amount", DocumentValue::Int(expected.amount)),
+        ("amount", DocumentValue::integer(expected.amount).unwrap()),
         (
             "transmission_time",
             DocumentValue::String(expected.transmission_time.clone()),
@@ -413,7 +433,11 @@ fn assert_document(
         ),
         ("currency", DocumentValue::String(expected.currency.clone())),
     ] {
-        assert_eq!(document.get(name).unwrap(), &value, "field {name}");
+        assert_eq!(
+            document.resolve(&JsonPointer::property(name)).unwrap(),
+            &value,
+            "field {name}"
+        );
     }
 }
 

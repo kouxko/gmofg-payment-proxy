@@ -10,7 +10,7 @@ use crate::ProtocolResourceLimit;
 /// [`ProtocolFrameOutput::decoded_document`] 返回 `None`，避免调用方误判为真正执行过 Decode。
 #[derive(Clone)]
 pub struct ProtocolFrameOutput {
-    owner: Arc<()>,
+    owner: Arc<u8>,
     origin: Vec<u8>,
     written: Arc<[u8]>,
     decoded_document: Option<Document>,
@@ -19,7 +19,7 @@ pub struct ProtocolFrameOutput {
 
 impl ProtocolFrameOutput {
     pub(super) fn new(
-        owner: Arc<()>,
+        owner: Arc<u8>,
         origin: Vec<u8>,
         written: Vec<u8>,
         decoded_document: Option<Document>,
@@ -64,7 +64,7 @@ impl ProtocolFrameOutput {
         &self.execution_document
     }
 
-    pub(super) fn belongs_to(&self, owner: &Arc<()>) -> bool {
+    pub(super) fn belongs_to(&self, owner: &Arc<u8>) -> bool {
         Arc::ptr_eq(&self.owner, owner)
     }
 }
@@ -76,10 +76,9 @@ impl fmt::Debug for ProtocolFrameOutput {
             .field("origin_bytes", &self.origin.len())
             .field("written_bytes", &self.written.len())
             .field("decoded", &self.decoded_document.is_some())
-            .field("schema_id", &self.execution_document.schema().id())
             .field(
-                "schema_version",
-                &self.execution_document.schema().version(),
+                "document_type",
+                &self.execution_document.root().value_type(),
             )
             .finish_non_exhaustive()
     }

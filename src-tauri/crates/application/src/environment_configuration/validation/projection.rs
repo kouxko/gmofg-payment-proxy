@@ -170,9 +170,6 @@ fn parse_schema_error(error: &EnvironmentConfigurationParseError) -> AppError {
         EnvironmentConfigurationParseError::WeakNetworkValueInvalid => "WEAK_NETWORK_VALUE_INVALID",
         EnvironmentConfigurationParseError::UnknownField => "UNKNOWN_FIELD",
         EnvironmentConfigurationParseError::ForbiddenField => "FORBIDDEN_FIELD",
-        EnvironmentConfigurationParseError::DocumentValueWireInvalid => {
-            "DOCUMENT_VALUE_WIRE_INVALID"
-        }
         EnvironmentConfigurationParseError::WeakNetworkWireInvalid => "WEAK_NETWORK_WIRE_INVALID",
         EnvironmentConfigurationParseError::UnsupportedMaterialRole => "UNSUPPORTED_MATERIAL_ROLE",
         EnvironmentConfigurationParseError::UnsupportedSecretRole => "UNSUPPORTED_SECRET_ROLE",

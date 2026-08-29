@@ -8,7 +8,7 @@ async fn http_and_document_conditions_gate_both_action_sets_as_one_rule() {
         1,
         "route",
         vec![DocumentCondition::Equals {
-            field: DocumentFieldName::new("route").unwrap(),
+            field: JsonPointer::property("route"),
             value: DocumentValue::String("decoded".into()),
         }],
         "joint",
@@ -182,7 +182,6 @@ fn prepare_snapshot(
         .map(|definition| {
             let RuleContent::Socket(SocketRuleContent {
                 package,
-                schema_version,
                 conditions,
                 actions,
             }) = definition.content()
@@ -204,7 +203,6 @@ fn prepare_snapshot(
                         actions: Vec::new(),
                         document: Some(intercept_proxy_domain::HttpDocumentRuleContent {
                             package: package.clone(),
-                            schema_version: *schema_version,
                             conditions: conditions.clone(),
                             actions: actions.clone(),
                         }),
@@ -268,11 +266,10 @@ fn set_string_rule(
         created_order,
         listener.id,
         http_package(),
-        1,
         stage,
         conditions,
         vec![DocumentAction::SetField {
-            field: DocumentFieldName::new(field).unwrap(),
+            field: JsonPointer::property(field),
             value: DocumentValue::String(value.into()),
         }],
     )

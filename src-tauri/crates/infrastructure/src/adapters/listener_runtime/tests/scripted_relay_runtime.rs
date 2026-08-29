@@ -4,7 +4,7 @@ use std::io::{Cursor, Write};
 use std::sync::Arc;
 
 use intercept_proxy_domain::{
-    DocumentAction, DocumentCondition, DocumentFieldName, DocumentValue, ListenerDataPlane,
+    DocumentAction, DocumentCondition, DocumentValue, JsonPointer, ListenerDataPlane,
     ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolPackageId,
     ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyWorkspace,
     ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
@@ -46,14 +46,12 @@ encode = "encode"
 "#;
 
 const SCHEMA: &str = r#"
-id = "runtime-message"
-version = 1
+type = "object"
 title = "Runtime Message"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 "#;
 
 const SCRIPT: &str = r#"
@@ -63,14 +61,14 @@ fn frame(reader, context) {
 
 fn decode(origin, context) {
     let result = document::create();
-    result.set("amount", origin[1]);
+    result.set("/amount", origin[1]);
     result
 }
 
 fn encode(origin, document, context) {
     let result = origin;
     result[0] = if context.direction() == "upstream" { 161 } else { 209 };
-    result[1] = if document.has("amount") { document.get("amount") } else { 0 };
+    result[1] = if document.has("/amount") { document.get("/amount") } else { 0 };
     result
 }
 "#;
@@ -176,15 +174,14 @@ fn add_rule(
             created_order,
             listener.id,
             package(),
-            1,
             direction,
             vec![DocumentCondition::Equals {
-                field: DocumentFieldName::new("amount").unwrap(),
-                value: DocumentValue::Int(expected_decoded_amount),
+                field: JsonPointer::property("amount"),
+                value: DocumentValue::integer(expected_decoded_amount).unwrap(),
             }],
             vec![DocumentAction::SetField {
-                field: DocumentFieldName::new("amount").unwrap(),
-                value: DocumentValue::Int(42),
+                field: JsonPointer::property("amount"),
+                value: DocumentValue::integer(42).unwrap(),
             }],
         )
         .unwrap(),

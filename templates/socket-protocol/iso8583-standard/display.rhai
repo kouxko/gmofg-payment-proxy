@@ -6,8 +6,9 @@
 import "libraries/iso8583" as iso8583;
 
 fn field_row(document, name, label) {
-    if !document.has(name) { return ""; }
-    `<tr><th>${label}</th><td>${document.get(name)}</td></tr>`
+    let path = "/" + name;
+    if !document.has(path) { return ""; }
+    `<tr><th>${label}</th><td>${document.get(path)}</td></tr>`
 }
 
 fn display(document, context) {

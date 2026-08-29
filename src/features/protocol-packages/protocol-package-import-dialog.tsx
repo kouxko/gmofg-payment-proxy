@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Alert, Button, Chip, Modal, Spinner } from "@heroui/react";
+import { schemaNodeCount, schemaTitle } from "@/lib/protocol-package-schema";
 import { capabilityItems, protocolPackageKindText } from "./protocol-package-model";
 import type {
   ImportPreviewDisplay,
@@ -135,11 +136,11 @@ function ImportPreview({
           <dt className="text-[var(--telemetry-muted)]">适用协议</dt><dd>{protocolPackageKindText(preview.kind)}</dd>
           <dt className="text-[var(--telemetry-muted)]">上行 Schema</dt>
           <dd className="break-words">
-            {preview.upstream_schema.title} · <span className="font-mono">{preview.upstream_schema.id}</span> · v{preview.upstream_schema.version} · {preview.upstream_schema.fields.length} 个字段
+            {schemaTitle(preview.upstream_schema)} · {schemaNodeCount(preview.upstream_schema.root)} 个节点
           </dd>
           <dt className="text-[var(--telemetry-muted)]">下行 Schema</dt>
           <dd className="break-words">
-            {preview.downstream_schema.title} · <span className="font-mono">{preview.downstream_schema.id}</span> · v{preview.downstream_schema.version} · {preview.downstream_schema.fields.length} 个字段
+            {schemaTitle(preview.downstream_schema)} · {schemaNodeCount(preview.downstream_schema.root)} 个节点
           </dd>
         </dl>
       </section>

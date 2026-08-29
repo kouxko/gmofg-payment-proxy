@@ -5,6 +5,7 @@
 //! 对应方向的 processor，而不是被透明转发。
 
 use std::{
+    collections::BTreeMap,
     net::SocketAddr,
     sync::{
         Arc, Mutex,
@@ -15,9 +16,8 @@ use std::{
 
 use async_trait::async_trait;
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Document, DocumentField, DocumentFieldName, DocumentFieldType,
-    DocumentSchema, DocumentSchemaId, DocumentValue, Downstream, Encode, Error, Frame, FrameResult,
-    Rules, Socket, SocketContext, Upstream,
+    Decode, Direction, Display, Document, DocumentValue, Downstream, Encode, Error, Frame,
+    FrameResult, JsonPointer, Rules, Socket, SocketContext, Upstream,
 };
 use tokio::{
     net::TcpStream,
@@ -170,10 +170,13 @@ impl<D: Direction> Rules for TestRules<D> {
         match self.outcome {
             ProcessorOutcome::Transform => {
                 if let Some(tag) = self.tag {
-                    let mut data = blob(&document)?.clone();
+                    let mut data = blob(&document)?;
                     data[0] = tag;
                     document
-                        .set("data", DocumentValue::Blob(data))
+                        .set(
+                            &JsonPointer::property("data"),
+                            DocumentValue::byte_array(data),
+                        )
                         .map_err(|error| domain_error(&error))?;
                 }
                 Ok(document)
@@ -202,7 +205,7 @@ impl<D: Direction> Encode<Socket, D> for TestEncode<D> {
         document: &Document,
     ) -> Result<SocketContext, Error> {
         Ok(SocketContext {
-            data: blob(document)?.clone(),
+            data: blob(document)?,
         })
     }
 }
@@ -329,31 +332,34 @@ impl SocketProtocolCapabilityFactory for LocalFactory {
 }
 
 fn wire_document(data: Vec<u8>) -> Result<Document, Error> {
-    let schema = DocumentSchema::new(
-        DocumentSchemaId::new("socket-test").unwrap(),
-        1,
-        "Socket Test",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("data").unwrap(),
-                DocumentFieldType::Blob,
-                "data",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
-    let mut document = Document::new(schema);
+    let mut document = Document::new(DocumentValue::Object(BTreeMap::default()));
     document
-        .set("data", DocumentValue::Blob(data))
+        .set(
+            &JsonPointer::property("data"),
+            DocumentValue::byte_array(data),
+        )
         .map_err(|error| domain_error(&error))?;
     Ok(document)
 }
 
-fn blob(document: &Document) -> Result<&Vec<u8>, Error> {
-    match document.get("data").map_err(|error| domain_error(&error))? {
-        DocumentValue::Blob(value) => Ok(value),
-        _ => Err(Error::new("test document data must be Blob")),
+fn blob(document: &Document) -> Result<Vec<u8>, Error> {
+    match document
+        .resolve(&JsonPointer::property("data"))
+        .map_err(|error| domain_error(&error))?
+    {
+        DocumentValue::Array(values) => values
+            .iter()
+            .map(|value| match value {
+                DocumentValue::Number(number)
+                    if number.get().fract() == 0.0 && (0.0..=255.0).contains(&number.get()) =>
+                {
+                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                    Ok(number.get() as u8)
+                }
+                _ => Err(Error::new("test document data must contain byte numbers")),
+            })
+            .collect(),
+        _ => Err(Error::new("test document data must be an array")),
     }
 }
 
