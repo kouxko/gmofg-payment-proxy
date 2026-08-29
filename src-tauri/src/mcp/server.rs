@@ -24,8 +24,8 @@ use tokio_util::sync::CancellationToken;
 use tower_service::Service as _;
 
 use super::{
-    backend::ReadOnlyMcpBackend,
-    protocol::{self, ReadOnlyMcpHandler},
+    backend::McpBackend,
+    protocol::{self, McpHandler},
 };
 pub(crate) use capabilities::{
     Ipv6BindOutcome, McpIpCapability, McpTransportCapabilities, McpTransportWarningCode,
@@ -52,7 +52,7 @@ const DUAL_STACK_PROBE_DEADLINE: Duration = Duration::from_secs(1);
 const DUAL_STACK_PROBE: &[u8] = b"mcp-dual-stack-probe";
 
 #[derive(Clone)]
-pub struct ReadOnlyMcpServer {
+pub struct McpServer {
     inner: Arc<ServerInner>,
 }
 
@@ -63,10 +63,10 @@ struct ServerInner {
     task: std::sync::Mutex<Option<JoinHandle<()>>>,
 }
 
-impl fmt::Debug for ReadOnlyMcpServer {
+impl fmt::Debug for McpServer {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("ReadOnlyMcpServer")
+            .debug_struct("McpServer")
             .field("local_addr", &self.inner.local_addr)
             .field("transport_capabilities", &self.inner.transport_capabilities)
             .field("cancelled", &self.inner.cancellation.is_cancelled())
@@ -74,8 +74,8 @@ impl fmt::Debug for ReadOnlyMcpServer {
     }
 }
 
-impl ReadOnlyMcpServer {
-    pub async fn start(backend: Arc<dyn ReadOnlyMcpBackend>) -> io::Result<Self> {
+impl McpServer {
+    pub async fn start(backend: Arc<dyn McpBackend>) -> io::Result<Self> {
         let (listeners, local_addr, ipv6) = bind_production_listeners().await?;
         Ok(Self::start_with_listeners(
             listeners,
@@ -86,7 +86,7 @@ impl ReadOnlyMcpServer {
     }
 
     #[cfg(test)]
-    async fn start_on(address: &str, backend: Arc<dyn ReadOnlyMcpBackend>) -> io::Result<Self> {
+    async fn start_on(address: &str, backend: Arc<dyn McpBackend>) -> io::Result<Self> {
         let listener = TcpListener::bind(address).await?;
         let local_addr = listener.local_addr()?;
         Ok(Self::start_with_listeners(
@@ -101,7 +101,7 @@ impl ReadOnlyMcpServer {
         listeners: Vec<TcpListener>,
         local_addr: SocketAddr,
         transport_capabilities: McpTransportCapabilities,
-        backend: Arc<dyn ReadOnlyMcpBackend>,
+        backend: Arc<dyn McpBackend>,
     ) -> Self {
         let cancellation = CancellationToken::new();
         let transport_capabilities = Arc::new(transport_capabilities);
@@ -298,11 +298,11 @@ fn ipv6_is_unsupported(error: &io::Error) -> bool {
     )
 }
 
-type McpHttpService = StreamableHttpService<ReadOnlyMcpHandler, LocalSessionManager>;
+type McpHttpService = StreamableHttpService<McpHandler, LocalSessionManager>;
 
 async fn run(
     listeners: Vec<TcpListener>,
-    backend: Arc<dyn ReadOnlyMcpBackend>,
+    backend: Arc<dyn McpBackend>,
     transport_capabilities: Arc<McpTransportCapabilities>,
     cancellation: CancellationToken,
 ) {
@@ -316,7 +316,7 @@ async fn run(
         .with_stateless_protocol_metadata_required(true)
         .disable_allowed_hosts()
         .disable_allowed_origins();
-    let handler = ReadOnlyMcpHandler::new(backend, transport_capabilities);
+    let handler = McpHandler::new(backend, transport_capabilities);
     let service = StreamableHttpService::new(
         move || Ok(handler.clone()),
         Arc::new(LocalSessionManager::default()),
@@ -441,8 +441,6 @@ async fn serve(
 }
 
 #[cfg(test)]
-pub(super) async fn start_test_server(
-    backend: Arc<dyn ReadOnlyMcpBackend>,
-) -> io::Result<ReadOnlyMcpServer> {
-    ReadOnlyMcpServer::start_on("127.0.0.1:0", backend).await
+pub(super) async fn start_test_server(backend: Arc<dyn McpBackend>) -> io::Result<McpServer> {
+    McpServer::start_on("127.0.0.1:0", backend).await
 }

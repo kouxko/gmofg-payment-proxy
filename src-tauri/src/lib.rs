@@ -23,7 +23,7 @@ use tauri::{Manager, path::BaseDirectory};
 
 use crate::{
     app_state::AppState,
-    mcp::{ApplicationBackend, MCP_BIND_ENDPOINT, ReadOnlyMcpServer},
+    mcp::{ApplicationBackend, MCP_BIND_ENDPOINT, McpServer},
     native_dialog::TauriNativeFileDialog,
     runtime_logs::{ApplicationLogLevel, RuntimeLogStore, TracingBridge, install_tracing_bridge},
 };
@@ -135,7 +135,7 @@ fn initialize_application(
     ));
     // IPv4 all-interface MCP is part of the accepted product boundary. Its bind
     // failure is fatal; only IPv6 may degrade according to the server capability table.
-    let mcp = tauri::async_runtime::block_on(ReadOnlyMcpServer::start(backend))?;
+    let mcp = tauri::async_runtime::block_on(McpServer::start(backend))?;
     tracing::info!(endpoint = MCP_BIND_ENDPOINT, address = %mcp.local_addr(), "MCP server started");
     Ok((
         AppState::production(host, Some(mcp), runtime_logs, exchange_observations),

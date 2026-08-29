@@ -158,7 +158,7 @@ pub(crate) enum EnvironmentToolRequest {
 }
 
 #[async_trait]
-pub trait ReadOnlyMcpBackend: Debug + Send + Sync {
+pub trait McpBackend: Debug + Send + Sync {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult;
     async fn call_tool_with_context(
         &self,
@@ -246,7 +246,7 @@ impl ApplicationBackend {
 }
 
 #[async_trait]
-impl ReadOnlyMcpBackend for ApplicationBackend {
+impl McpBackend for ApplicationBackend {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult {
         if !DISPATCHED_TOOL_NAMES.contains(&name) {
             return unknown_tool(name);

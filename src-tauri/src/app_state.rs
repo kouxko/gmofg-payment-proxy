@@ -9,7 +9,7 @@ use intercept_proxy_application::Application;
 use intercept_proxy_host::ApplicationHost;
 use intercept_proxy_infrastructure::ExchangeObservationStore;
 
-use crate::mcp::ReadOnlyMcpServer;
+use crate::mcp::McpServer;
 use crate::runtime_logs::RuntimeLogStore;
 
 /// Tauri exposes only the application facade to commands.
@@ -20,7 +20,7 @@ use crate::runtime_logs::RuntimeLogStore;
 pub struct AppState {
     pub application: Arc<Application>,
     host: Arc<ApplicationHost>,
-    mcp: Option<ReadOnlyMcpServer>,
+    mcp: Option<McpServer>,
     runtime_logs: Arc<RuntimeLogStore>,
     exchange_observations: Arc<ExchangeObservationStore>,
 }
@@ -42,7 +42,7 @@ impl AppState {
     /// The optional shape is retained only for command tests that omit outer adapters.
     pub fn production(
         host: ApplicationHost,
-        mcp: Option<ReadOnlyMcpServer>,
+        mcp: Option<McpServer>,
         runtime_logs: Arc<RuntimeLogStore>,
         exchange_observations: Arc<ExchangeObservationStore>,
     ) -> Self {
@@ -51,7 +51,7 @@ impl AppState {
 
     fn with_optional_mcp(
         host: ApplicationHost,
-        mcp: Option<ReadOnlyMcpServer>,
+        mcp: Option<McpServer>,
         runtime_logs: Arc<RuntimeLogStore>,
         exchange_observations: Arc<ExchangeObservationStore>,
     ) -> Self {
@@ -85,7 +85,7 @@ impl AppState {
         Arc::clone(&self.host)
     }
 
-    pub fn mcp(&self) -> Option<ReadOnlyMcpServer> {
+    pub fn mcp(&self) -> Option<McpServer> {
         self.mcp.clone()
     }
 

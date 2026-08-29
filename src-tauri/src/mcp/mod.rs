@@ -14,9 +14,9 @@ mod server;
 
 pub use backend::ApplicationBackend;
 #[cfg(test)]
-pub(crate) use backend::ReadOnlyMcpBackend;
+pub(crate) use backend::McpBackend;
 pub(crate) use server::McpIpCapability;
-pub use server::ReadOnlyMcpServer;
+pub use server::McpServer;
 
 /// Bind projection shown to users. Clients must replace `0.0.0.0` with this
 /// machine's reachable address; it is not presented as a fabricated client URL.

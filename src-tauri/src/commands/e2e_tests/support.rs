@@ -21,7 +21,7 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::super::*;
 use crate::app_state::AppState;
-use crate::mcp::{ApplicationBackend, ReadOnlyMcpBackend};
+use crate::mcp::{ApplicationBackend, McpBackend};
 
 const MANIFEST: &str = r#"
 api = 1

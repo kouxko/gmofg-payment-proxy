@@ -6,7 +6,7 @@ use tauri::State;
 
 use crate::{
     app_state::AppState,
-    mcp::{MCP_BIND_ENDPOINT, McpIpCapability, ReadOnlyMcpServer, catalog_size},
+    mcp::{MCP_BIND_ENDPOINT, McpIpCapability, McpServer, catalog_size},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Type)]
@@ -40,7 +40,7 @@ pub struct McpInfoViewModel {
 pub fn mcp_info(state: State<'_, AppState>) -> McpInfoViewModel {
     let (tool_count, resource_count) = catalog_size();
     let mcp = state.mcp();
-    let capabilities = mcp.as_ref().map(ReadOnlyMcpServer::transport_capabilities);
+    let capabilities = mcp.as_ref().map(McpServer::transport_capabilities);
     let project_ip = |capability: Option<&McpIpCapability>| McpIpCapabilityViewModel {
         available: capability.is_some_and(McpIpCapability::available),
         bind_address: capability.map_or_else(String::new, |value| value.bind_address().to_owned()),

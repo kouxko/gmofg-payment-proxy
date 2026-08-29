@@ -5,7 +5,7 @@ use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 use super::{
-    backend::{ReadOnlyMcpBackend, ToolFailure, ToolResult},
+    backend::{McpBackend, ToolFailure, ToolResult},
     protocol, resources,
     server::start_test_server,
 };
@@ -21,7 +21,7 @@ mod protocol_contract;
 struct FakeBackend;
 
 #[async_trait]
-impl ReadOnlyMcpBackend for FakeBackend {
+impl McpBackend for FakeBackend {
     async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult {
         match name {
             "application_snapshot" => Ok(json!({ "tool": name, "arguments": arguments })),
@@ -47,7 +47,7 @@ impl ReadOnlyMcpBackend for FakeBackend {
     }
 }
 
-fn backend() -> Arc<dyn ReadOnlyMcpBackend> {
+fn backend() -> Arc<dyn McpBackend> {
     Arc::new(FakeBackend)
 }
 
