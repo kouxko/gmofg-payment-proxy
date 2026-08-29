@@ -2,8 +2,12 @@ use rusqlite::Transaction;
 
 use super::InfrastructureError;
 
-// 统一规则模型使用全新持久化合同。旧版本只报告不兼容，绝不自动删除或转换。
-pub(super) const CURRENT_SCHEMA_VERSION: i64 = 22;
+/// 产品 1.00 的正式数据库兼容起点。
+///
+/// 更早的版本只属于发布前开发数据，可以在启动时清空。后续版本必须从这个基线开始
+/// 提供显式兼容迁移，不能再次使用清空策略。
+pub(super) const COMPATIBILITY_BASELINE_SCHEMA_VERSION: i64 = 100;
+pub(super) const CURRENT_SCHEMA_VERSION: i64 = COMPATIBILITY_BASELINE_SCHEMA_VERSION;
 
 pub(super) fn create_current_schema(
     transaction: &Transaction<'_>,

@@ -12,10 +12,26 @@ fn empty_database_creates_current_schema_once_and_reopen_is_read_only() {
     let path = directory.path().join("state.sqlite");
     let store = SqliteStore::open(&path).unwrap();
     assert_protocol_tables_and_current_marker(&store);
+    store
+        .connection
+        .lock()
+        .execute_batch(
+            "CREATE TABLE version_100_sentinel(value TEXT NOT NULL);
+             INSERT INTO version_100_sentinel(value) VALUES ('must remain');",
+        )
+        .unwrap();
     drop(store);
 
     let reopened = SqliteStore::open(&path).unwrap();
     assert_protocol_tables_and_current_marker(&reopened);
+    let value = reopened
+        .connection
+        .lock()
+        .query_row("SELECT value FROM version_100_sentinel", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .unwrap();
+    assert_eq!(value, "must remain");
 }
 
 #[test]
@@ -53,7 +69,7 @@ fn database_without_current_marker_is_rejected_without_modifying_user_data() {
 }
 
 #[test]
-fn old_and_unknown_newer_schemas_are_rejected_without_modifying_user_data() {
+fn pre_1_0_schema_is_reset_but_unknown_newer_schema_is_rejected() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.sqlite");
     let store = SqliteStore::open(&path).unwrap();
@@ -68,22 +84,24 @@ fn old_and_unknown_newer_schemas_are_rejected_without_modifying_user_data() {
         .unwrap();
     drop(store);
 
-    assert!(matches!(
-        SqliteStore::open(&path),
-        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
-    ));
+    drop(SqliteStore::open(&path).expect("pre-1.0 schema reset"));
     let connection = Connection::open(&path).unwrap();
-    let retained = connection
+    let legacy_table_exists = connection
         .query_row(
-            "SELECT COUNT(*) FROM workspaces WHERE id = 'old'",
+            "SELECT EXISTS(
+                SELECT 1 FROM workspaces WHERE id = 'old'
+            )",
             [],
-            |row| row.get::<_, i64>(0),
+            |row| row.get::<_, bool>(0),
         )
         .unwrap();
-    assert_eq!(retained, 1);
+    assert!(!legacy_table_exists);
 
     connection
-        .execute("UPDATE application_schema SET version = 999", [])
+        .execute(
+            "UPDATE application_schema SET version = ?1",
+            [CURRENT_SCHEMA_VERSION + 1],
+        )
         .unwrap();
     drop(connection);
     assert!(matches!(

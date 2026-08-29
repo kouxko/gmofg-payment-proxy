@@ -94,7 +94,9 @@ mod portable_configuration;
 pub(crate) mod protocol_packages;
 mod schema;
 
-/// 当前数据库格式版本。任何其他版本都 fail-closed，数据只能由用户显式清除。
+/// 当前数据库格式版本。版本 100 是产品 1.00 的正式兼容基线。
+///
+/// 启动时仅清空合法的发布前版本；从版本 100 开始的后续升级必须使用显式迁移。
 pub const CURRENT_APPLICATION_SCHEMA_VERSION: i64 = schema::CURRENT_SCHEMA_VERSION;
 mod workspaces;
 
