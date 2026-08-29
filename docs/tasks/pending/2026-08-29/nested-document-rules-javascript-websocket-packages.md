@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-08-29 23:56:14 +08:00`
+- 最后更新时间：`2026-08-30 01:03:11 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -236,7 +236,7 @@ result: "<HTML string>"
 
 | ID | 任务 | 依赖 | 可并行 | 状态 | 验收 |
 | --- | --- | --- | --- | --- | --- |
-| NDR-JS-01 | 映射当前源码，锁定旧行为与新合同 RED 测试；加入开发期 DB100 每启动重建及正式发布移除门禁 | TASK-20260829-001 | 否 | 进行中 | G042 / Phase 1 基线已 VERIFIED；开发期 DB100 启动重建门禁由下一阶段继续完成 |
+| NDR-JS-01 | 映射当前源码，锁定旧行为与新合同 RED 测试；加入开发期 DB100 每启动重建及正式发布移除门禁 | TASK-20260829-001 | 否 | 进行中 | G042 / Phase 1 已 VERIFIED；G043 / Phase 2 独立 delta 复审 APPROVE，P0/P1/P2=0，可创建 rollback checkpoint |
 | NDR-JS-02 | 实现递归 Document、Number、RFC6901、Schema 和规则本地元数据 | NDR-JS-01 | 否 | 待实现 | 全类型、JSON、路径、数组、Schema/no-Schema 测试通过 |
 | NDR-JS-03 | 实现统一 HTTP/Document/Socket 规则、两写出阶段、多动作顺序、终止动作和方向级原子提交 | NDR-JS-02 | 否 | 待实现 | 条件/动作矩阵、前序可见、失败全回滚及生命周期提交通过 |
 | NDR-JS-04 | 定义严格 Manifest、稳定错误和唯一 JSON-RPC wire | NDR-JS-01 | 否 | 待实现 | 本地/远程逐字段同形，注册与 Hook contract tests 通过 |
@@ -320,7 +320,18 @@ result: "<HTML string>"
 - `2026-08-29 23:44:04 +08:00`：完成上述 Verifier 问题修复。bindings `finally` 改为不依赖输出存在性的无条件原字节写回，并新增 unlink-then-throw 回归，验证写回 checked-in bytes 且传播同一个 generator error；checkpoint、inventory 与 validator 统一为十条严格有序命令并 fail-closed；four-stage 统一归 Phase 12，前端同一测试文件按 Phase 5 rule order 与 Phase 12 four-stage 两项 harness 分拆。fresh 本地 Node tests、真实 bindings 和完整 checkpoint 均 `PASS`；G042 仍等待独立 Verifier 复验、正式证据和本地 rollback commit，主 Agent 复验前不得 checkpoint。
 - `2026-08-29 23:54:37 +08:00`：G042 独立复验完成，结论 `VERIFIED`，P0/P1/P2 均为 0。首次完整 checkpoint 的前九项 PASS，但最后 Rust workspace 中既有 ADB deadline 测试偶发失败一次（647 passed / 1 failed）；同一测试随后定向连续 3/3 PASS，完整十门禁复跑 exit 0。首次失败、精确测试名、panic、定向复跑及最终结果已完整保存到正式证据，不把首次失败隐藏或改写为成功。
 - `2026-08-29 23:54:37 +08:00`：正式证据归档完成：[phase1-green-contract-baseline](../../../testing/evidence/2026-08-29/TASK-20260829-002/phase1-green-contract-baseline/README.md)。G042 / Phase 1 标记已完成；NDR-JS-01 仍需下一阶段完成开发期 DB100 启动重建门禁，因此子任务和任务总体均保持进行中。
-- 下一步：主 Agent 创建 G042 本地 rollback commit；随后进入 G043 / Phase 2 数据库 100 开发期每启动重建门禁。
+- `2026-08-30 00:34:03 +08:00`：G043 / Phase 2 按独立测试预检重塑为明确分层：Tauri debug composition root 显式 opt-in `RecreateCurrent`，Host builder 默认 `Preserve`，Tauri Release 显式 `Preserve`，Infrastructure 现有唯一异步 SQLite open 入口接收 policy；`AppState` 与 `ProductProfile` 不参与。初始把 Host 所有 debug 启动默认清空并用 `cfg!(debug_assertions)` 合并测试的错误 RED 已撤回，未作为 checkpoint。
+- `2026-08-30 00:34:03 +08:00`：Infrastructure `RecreateCurrent` 在打开连接后关闭 FK、使用一个 `BEGIN IMMEDIATE` 事务删除全部非 `sqlite_%` trigger/view/table、初始化当前 Schema100 并提交，成功或失败均恢复 FK；不先解析、接受或迁移旧版本。覆盖 `<100`、旧 layout100、当前100、committed WAL、失败全回滚/FK 恢复及 Host 构建失败传播。Schema 版本仍为 `100`，未引入迁移或第二 runtime path。
+- `2026-08-30 00:34:03 +08:00`：同一双启动 helper 的第一次 Host 通过公开 Application/Host 能力创建唯一 Workspace、disabled Listener、带真实 revision/hit_count/last_hit_at/one_shot 的统一 Rule，并通过真实本地 ZIP `prepare/commit` 导入 Package，关闭前逐字段 readback；第二次显式 Recreate 按唯一 identity 验证全部不存在但不要求表空，默认 Preserve 分支逐字段验证保留，供 Phase 17 原 helper 反转复用。未使用 raw SQL 伪造 Package 或 lifecycle sentinel。
+- `2026-08-30 00:34:03 +08:00`：加入紧贴 Tauri debug opt-in 的唯一 marker `TASK_20260829_002_PRE_RELEASE_DATABASE_RESET`、fail-closed release checker 与初版 Node 自测。当前 release scan 按设计输出 `NOT_RELEASE_READY` 并 exit 1，不纳入日常 checkpoint；Phase 17 必须删除整个临时 startup policy/runtime branch 与 marker，并使同一 checker PASS。
+- `2026-08-30 00:34:03 +08:00`：正确 Infrastructure RED 以缺少 `recreate_current_schema*` 的 `E0425`、exit 101 失败；GREEN 后 targeted tests 为 Infrastructure core 6/6、Host policy 3/3。首次 source-size 因 Host tests 文件 696 行失败，拆分 Phase 2 专用测试模块后在不放宽 500 行阈值的情况下通过。受影响 crates 全目标/全特性、Release Tauri compile、strict Clippy、Phase 1 十门禁 checkpoint 与 `git diff --check` 均 fresh PASS；正式证据：[phase2-development-database-recreate](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/README.md)。结论为本地 `GREEN / RECHECK PENDING`，任务总体继续进行中。
+- `2026-08-30 00:50:42 +08:00`：G043 第一次独立 Verifier 结论为 `FAILED`：checker 只计数 marker，删除 marker/日志但保留实际 `RecreateCurrent` 会假 PASS。Reviewer 同时发现 checker 未接入 `tauri:build`、成功日志发生在 tracing subscriber 安装前而不可观察、双启动 absence 仅用 `is_err()` 无法证明目标 identity 不存在。以上结论未隐藏或改写为成功。
+- `2026-08-30 00:50:42 +08:00`：修复后 checker 只扫描六个显式生产 Rust 文件，独立阻断 marker 与 `SqliteStartupPolicy` / `DatabaseStartupPolicy` / `RecreateCurrent` / policy 注入及 open branch；只删除 marker、opt-in 或 policy 任一部分仍失败，全部删除才 PASS。`tauri:build` 现先串行执行同一 checker，当前在 Android companion build 与 `tauri build` 前预期阻断，不影响 `tauri:dev` 或普通 Cargo check。删除了 subscriber 安装前的无效日志；Workspace 通过公开 list 精确 ID、Package 通过公开 list 精确版本 identity 断言不存在，Listener/Rule 作为 Workspace 聚合成员随聚合消失。
+- `2026-08-30 00:50:42 +08:00`：fresh 修复验证为 Node 8/8、Infrastructure core 6/6、Host policy 3/3；当前 release scan exit 1，独立报告 1 个 marker 与 32 个临时 reset contract 引用；`pnpm tauri:build` 预期 exit 1；Release Cargo check、完整十门禁 checkpoint（前端 61/531、Rust workspace 0 failed）与 `git diff --check` 均 PASS。当前仍为 `GREEN / RECHECK PENDING`，不得创建 checkpoint。
+- `2026-08-30 00:59:11 +08:00`：复审新增 P1：通用 package script `"tauri": "tauri"` 允许 `pnpm tauri build` 绕过只挂在 `tauri:build` alias 的早期 gate，因此上一轮仍不可 checkpoint。修复把同一只读 checker 接入 `src-tauri/tauri.conf.json` 的 `build.beforeBuildCommand` 并保留后续 `pnpm build`；`beforeDevCommand` 仍为 `pnpm dev`。package alias 的早期 gate 保留，用于在 Android companion build 前阻断；Tauri 配置 gate 覆盖通用 package script 与直接 CLI。双调用可接受，因为 checker 只读且确定性：第一层避免 companion 副作用，第二层封闭所有 Tauri build 入口。
+- `2026-08-30 00:59:11 +08:00`：配置回归先 RED（实际 `beforeBuildCommand` 仅为 `pnpm build`），修复后 Node 8/8；`pnpm tauri:build` 在 Android companion 前预期 exit 1，`pnpm tauri build` 明确进入 `beforeBuildCommand` 并在 `pnpm build` 前预期 exit 1。Phase 2 8/8+6/6+3/3、Release Cargo check、完整十门禁 checkpoint（前端 61/531、Rust workspace 0 failed）及 `git diff --check` fresh PASS；状态继续 `GREEN / RECHECK PENDING`，等待新一轮独立复验。
+- `2026-08-30 01:03:11 +08:00`：G043 修复后的独立 delta 复审结论为 `APPROVE`，P0=0、P1=0、P2=0。复审确认 package `tauri:build` 与通用 `pnpm tauri build` 两入口均由同一只读 checker fresh 预期阻断，Node 8/8 与 `git diff --check` PASS；G043 现在可创建 Phase 2 rollback checkpoint。任务总体仍为进行中，当前 `NOT_RELEASE_READY` 是 Phase 2 明确保留至 Phase 17 的发布阻断合同。
+- 下一步：主 Agent 创建 Phase 2 本地 rollback checkpoint，再进入 G044 / Phase 3。
 
 ## 修改文件
 
@@ -330,7 +341,11 @@ result: "<HTML string>"
 - `scripts/check-generated-bindings.mjs`、`scripts/check-generated-bindings.test.mjs`：跨平台验证 generated bindings freshness/determinism；`finally` 无条件写回原字节，回归覆盖 generator 删除输出后抛错并保留原错误。
 - `test-support/fixtures/task-20260829-002/phase-1/current-contract-inventory.json`：Phase 1 当前合同、后续 owning phase、测试入口与 checkpoint/rollback 规则。
 - `docs/testing/evidence/2026-08-29/TASK-20260829-002/phase1-green-contract-baseline/`：Phase 1 inventory 快照、结构化命令结果、复测入口、ADB 偶发失败与独立复验记录。
-- 产品代码：`N/A`。
+- `src-tauri/crates/infrastructure/src/sqlite.rs`、`sqlite/core.rs`、`sqlite/executor.rs`、相关 tests 与 crate export：增加显式 `Preserve/RecreateCurrent` policy 和单事务 Schema100 重建原语，保留原 strict Preserve 合同。
+- `src-tauri/crates/host/src/lib.rs`、`src-tauri/crates/host/src/tests/phase2_database_startup.rs`：Host 默认 Preserve，提供显式 policy 注入；加入可由 Phase 17 复用的公开 API 双启动 fixture 与失败传播测试。
+- `src-tauri/src/lib.rs`：Tauri debug 显式 Recreate、Release 显式 Preserve；唯一临时 release blocker marker 紧贴 debug opt-in，不含 subscriber 安装前的无效日志。`src-tauri/src/app_state.rs` 无需修改。
+- `scripts/check-task-20260829-002-phase2-release-blocker.mjs`、对应 Node tests、`package.json`、`src-tauri/tauri.conf.json`：增加 Phase 2 targeted gate 与独立 release-readiness scan；package alias 在 companion 前早期阻断，Tauri `beforeBuildCommand` 封闭通用/直接 build 入口，dev 路径不挂 gate；不改变 Phase 1 十门禁语义。
+- `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/`：Phase 2 合同、实际 ZIP 资源快照、结构化结果和复测命令。
 
 ## 附加文件
 
@@ -349,11 +364,13 @@ result: "<HTML string>"
 - 相关基线：`docs/architecture/exchange-pipeline.md`、`docs/architecture/rules-and-protocol-packages.md`、`docs/architecture/decisions/ADR-002-protocol-packages-http.md`、`docs/architecture/decisions/ADR-007-exchange-pipeline-runtime-boundary.md`。
 - Phase 1 活动 fixture：`test-support/fixtures/task-20260829-002/phase-1/current-contract-inventory.json`。
 - Phase 1 正式证据：[phase1-green-contract-baseline](../../../testing/evidence/2026-08-29/TASK-20260829-002/phase1-green-contract-baseline/README.md)。
+- Phase 2 正式证据：[phase2-development-database-recreate](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/README.md)。
 
 ## 验收结果
 
 - `VERIFIED`：G042 / Phase 1 current-state inventory、compileable harness 映射、generated bindings 门禁和十命令 checkpoint 已在修复后 fresh 通过；不改变产品运行行为，不包含故意失败测试。独立 Verifier 结论 P0=0、P1=0、P2=0；正式证据见 [phase1-green-contract-baseline](../../../testing/evidence/2026-08-29/TASK-20260829-002/phase1-green-contract-baseline/README.md)。
-- `NOT_RUN`：Phase 2 至 Phase 18 产品合同替换、真实链路、打包与最终任务验收尚未执行。
+- `APPROVE / CHECKPOINT READY`：G043 / Phase 2 的显式数据库启动 policy、单事务开发重建、Tauri debug/Release composition、双启动 fixture 和双层 release blocker 已在早期 Verifier FAILED 与 build 绕过 P1 后完成修复；独立 delta 复审 P0/P1/P2=0，可创建 rollback checkpoint。
+- `NOT_RUN`：Phase 3 至 Phase 18 产品合同替换、真实链路、打包与最终任务验收尚未执行。
 
 ## 测试结果
 
@@ -368,6 +385,14 @@ result: "<HTML string>"
 - `PASS`：`pnpm check:task-20260829-002:checkpoint`；严格依次执行 Phase 1 tests、bindings、architecture、source-size、lint、typecheck、全量前端测试、Rust fmt、Rust clippy、workspace all-target/all-feature tests。
 - `OBSERVED THEN PASS`：独立 Verifier 首次完整 checkpoint 的 Rust workspace gate 中，既有 ADB deadline 测试 `cancelled_stalled_response_removes_owned_forward_without_blocking_other_serial` 偶发失败一次，结果 647 passed / 1 failed / 0 ignored；该测试随后定向连续 3/3 PASS，完整十门禁复跑 exit 0。原始失败与复跑摘要已归档到正式证据。
 - `PASS`：`git diff --check`。
+- `PASS`：`pnpm test:task-20260829-002:phase2`；Node release-blocker tests 8/8、Infrastructure core 6/6、Host policy 3/3。
+- `PASS`：`cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure -p intercept-proxy-host --all-targets --all-features`；Host unit 12/12 及全部 integration/architecture tests、Infrastructure unit 651/651 及全部 integration tests 通过。
+- `PASS`：`cargo check --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib`；Release composition 编译通过并显式选择 Preserve。
+- `PASS`：`cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure -p intercept-proxy-host -p intercept-proxy --all-targets --all-features -- -D warnings`。
+- `EXPECTED FAIL / NOT_RELEASE_READY`：`pnpm check:task-20260829-002:phase2-release-ready` exit 1，独立发现 1 个临时 reset marker 与 32 个临时 reset contract 引用；该扫描只用于阻止发布，不加入 Phase 2 日常 GREEN checkpoint。
+- `EXPECTED FAIL / BUILD BLOCKED`：`pnpm tauri:build` exit 1，在 Android companion build 与 `tauri build` 前由同一 release checker 阻断。
+- `EXPECTED FAIL / GENERIC BUILD BLOCKED`：`pnpm tauri build` exit 1，Tauri 明确执行 `build.beforeBuildCommand`，在 `pnpm build` 与打包前由同一 release checker 阻断；`beforeDevCommand` 保持 `pnpm dev`。
+- `PASS`：Phase 2 变更后的 `pnpm check:task-20260829-002:checkpoint` fresh exit 0，严格十门禁全部通过；前端仍为 61 files / 531 tests，Rust workspace all-target/all-feature 0 failed。
 
 ## CI 情况
 

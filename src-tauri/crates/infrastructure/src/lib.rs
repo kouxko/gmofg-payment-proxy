@@ -48,6 +48,6 @@ pub use keychain::MacKeychainProtector;
 pub use sqlite::{
     AndroidRuntimeOwnerRecord, CURRENT_APPLICATION_SCHEMA_VERSION, CertificateMaterialRecord,
     CertificateMaterialSnapshot, EnvironmentCommitFaultPoint, IntoSqlitePersistence,
-    ProtectedSecretRecord, SqliteExecutor, SqliteStore, StoredSettings,
+    ProtectedSecretRecord, SqliteExecutor, SqliteStartupPolicy, SqliteStore, StoredSettings,
     WorkspaceCollectionSnapshot, WorkspaceRecord, open_sqlite_persistence,
 };

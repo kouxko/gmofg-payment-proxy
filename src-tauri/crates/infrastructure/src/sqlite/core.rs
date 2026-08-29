@@ -4,7 +4,10 @@ use super::{
     create_current_schema, initialize_singleton_state, params, parse_settings_row,
     stored_certificate_revision,
 };
-use crate::sqlite::schema::{COMPATIBILITY_BASELINE_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION};
+use crate::sqlite::{
+    SqliteStartupPolicy,
+    schema::{COMPATIBILITY_BASELINE_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION},
+};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExistingSchema {
@@ -14,29 +17,44 @@ enum ExistingSchema {
 
 impl SqliteStore {
     pub fn open(path: &Path) -> Result<Self, InfrastructureError> {
+        Self::open_with_startup_policy(path, SqliteStartupPolicy::Preserve)
+    }
+
+    pub(crate) fn open_with_startup_policy(
+        path: &Path,
+        startup_policy: SqliteStartupPolicy,
+    ) -> Result<Self, InfrastructureError> {
         let connection =
             Connection::open(path).map_err(|source| InfrastructureError::Database { source })?;
-        Self::from_connection(connection)
+        Self::from_connection(connection, startup_policy)
     }
 
     pub fn in_memory() -> Result<Self, InfrastructureError> {
         let connection = Connection::open_in_memory()
             .map_err(|source| InfrastructureError::Database { source })?;
-        Self::from_connection(connection)
+        Self::from_connection(connection, SqliteStartupPolicy::Preserve)
     }
 
-    fn from_connection(connection: Connection) -> Result<Self, InfrastructureError> {
+    fn from_connection(
+        connection: Connection,
+        startup_policy: SqliteStartupPolicy,
+    ) -> Result<Self, InfrastructureError> {
         connection
             .execute_batch(
                 "PRAGMA foreign_keys = ON;
                  PRAGMA busy_timeout = 5000;",
             )
             .map_err(|source| InfrastructureError::Database { source })?;
-        let database_is_empty = database_is_empty(&connection)?;
-        let existing_schema = if database_is_empty {
-            None
-        } else {
-            Some(classify_existing_schema(&connection)?)
+        let existing_schema = match startup_policy {
+            SqliteStartupPolicy::Preserve => {
+                let database_is_empty = database_is_empty(&connection)?;
+                if database_is_empty {
+                    None
+                } else {
+                    Some(classify_existing_schema(&connection)?)
+                }
+            }
+            SqliteStartupPolicy::RecreateCurrent => None,
         };
         connection
             .execute_batch("PRAGMA journal_mode = WAL;")
@@ -45,12 +63,15 @@ impl SqliteStore {
             connection: Mutex::new(connection),
             blocking_gate: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
         };
-        match existing_schema {
-            None => store.create_schema()?,
-            Some(ExistingSchema::PreCompatibilityBaseline) => {
-                store.reset_pre_compatibility_schema()?;
-            }
-            Some(ExistingSchema::Current) => {}
+        match startup_policy {
+            SqliteStartupPolicy::RecreateCurrent => store.recreate_current_schema()?,
+            SqliteStartupPolicy::Preserve => match existing_schema {
+                None => store.create_schema()?,
+                Some(ExistingSchema::PreCompatibilityBaseline) => {
+                    store.reset_pre_compatibility_schema()?;
+                }
+                Some(ExistingSchema::Current) => {}
+            },
         }
         Ok(store)
     }
@@ -82,6 +103,11 @@ impl SqliteStore {
     fn reset_pre_compatibility_schema(&self) -> Result<(), InfrastructureError> {
         let mut connection = self.connection.lock();
         reset_pre_compatibility_schema(&mut connection)
+    }
+
+    fn recreate_current_schema(&self) -> Result<(), InfrastructureError> {
+        let mut connection = self.connection.lock();
+        recreate_current_schema(&mut connection)
     }
 
     pub fn load_settings(&self) -> Result<Option<StoredSettings>, InfrastructureError> {
@@ -232,17 +258,14 @@ fn reset_pre_compatibility_schema_with(
     connection: &mut Connection,
     before_initialize: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<(), InfrastructureError>,
 ) -> Result<(), InfrastructureError> {
-    connection
-        .execute_batch("PRAGMA foreign_keys = OFF;")
-        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-    let reset = (|| {
+    with_foreign_keys_disabled(connection, |connection| {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
         match classify_existing_schema(&transaction)? {
             ExistingSchema::Current => {}
             ExistingSchema::PreCompatibilityBaseline => {
-                drop_pre_compatibility_objects(&transaction)?;
+                drop_non_sqlite_objects(&transaction)?;
                 before_initialize(&transaction)?;
                 initialize_current_schema(&transaction)?;
             }
@@ -250,14 +273,45 @@ fn reset_pre_compatibility_schema_with(
         transaction
             .commit()
             .map_err(|source| InfrastructureError::DatabaseSchema { source })
-    })();
+    })
+}
+
+fn recreate_current_schema(connection: &mut Connection) -> Result<(), InfrastructureError> {
+    recreate_current_schema_with(connection, |_| Ok(()))
+}
+
+fn recreate_current_schema_with(
+    connection: &mut Connection,
+    before_initialize: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<(), InfrastructureError>,
+) -> Result<(), InfrastructureError> {
+    with_foreign_keys_disabled(connection, |connection| {
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+        drop_non_sqlite_objects(&transaction)?;
+        before_initialize(&transaction)?;
+        initialize_current_schema(&transaction)?;
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })
+    })
+}
+
+fn with_foreign_keys_disabled(
+    connection: &mut Connection,
+    operation: impl FnOnce(&mut Connection) -> Result<(), InfrastructureError>,
+) -> Result<(), InfrastructureError> {
+    connection
+        .execute_batch("PRAGMA foreign_keys = OFF;")
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+    let result = operation(connection);
     let foreign_keys = connection
         .execute_batch("PRAGMA foreign_keys = ON;")
         .map_err(|source| InfrastructureError::DatabaseSchema { source });
-    reset.and(foreign_keys)
+    result.and(foreign_keys)
 }
 
-fn drop_pre_compatibility_objects(
+fn drop_non_sqlite_objects(
     transaction: &rusqlite::Transaction<'_>,
 ) -> Result<(), InfrastructureError> {
     let objects = {

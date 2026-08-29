@@ -16,6 +16,7 @@ use intercept_proxy_application::{
     AppError, AppResult, Application, BreakpointCoordinator, CapacityLedger,
     EnvironmentConfigurationApplicationServices, EventHub, OperationResultViewModel,
 };
+pub use intercept_proxy_infrastructure::SqliteStartupPolicy as DatabaseStartupPolicy;
 use intercept_proxy_infrastructure::{
     ApplicationBackupImportPreparer, ExternalPackageServer, InfrastructureError,
     InfrastructureServiceBundle, NativeFileDialog, SecretProtector,
@@ -112,6 +113,7 @@ pub struct ApplicationHostBuilder {
     product: Arc<dyn ProductProfile>,
     breakpoint_coordinator: Option<Arc<BreakpointCoordinator>>,
     environment_configuration_services: Option<EnvironmentConfigurationApplicationServices>,
+    database_startup_policy: DatabaseStartupPolicy,
 }
 
 impl ApplicationHostBuilder {
@@ -129,6 +131,7 @@ impl ApplicationHostBuilder {
             product,
             breakpoint_coordinator: None,
             environment_configuration_services: None,
+            database_startup_policy: DatabaseStartupPolicy::default(),
         }
     }
 
@@ -172,6 +175,16 @@ impl ApplicationHostBuilder {
         self
     }
 
+    /// Selects the database behavior for this Host startup.
+    ///
+    /// The default is [`DatabaseStartupPolicy::Preserve`]. Outer composition roots may opt into
+    /// a temporary reset explicitly without changing CLI, embedding, or test callers.
+    #[must_use]
+    pub fn with_database_startup_policy(mut self, policy: DatabaseStartupPolicy) -> Self {
+        self.database_startup_policy = policy;
+        self
+    }
+
     pub async fn build(self) -> Result<ApplicationHost, HostBuildError> {
         // 必须先验证纯静态产品配置，再创建目录和打开数据库。若产品契约错误，构建过程
         // 不应在磁盘留下任何新状态。
@@ -185,9 +198,11 @@ impl ApplicationHostBuilder {
     }
 
     async fn build_once(self, database_path: &Path) -> Result<ApplicationHost, HostBuildError> {
-        let persistence =
-            intercept_proxy_infrastructure::open_sqlite_persistence(database_path.to_path_buf())
-                .await?;
+        let persistence = intercept_proxy_infrastructure::open_sqlite_persistence(
+            database_path.to_path_buf(),
+            self.database_startup_policy,
+        )
+        .await?;
         let secret_protector = self
             .platform
             .secret_protector_override
