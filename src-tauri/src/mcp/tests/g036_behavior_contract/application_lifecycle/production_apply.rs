@@ -177,7 +177,7 @@ async fn build_production_host(directory: &TempDir) -> ApplicationHost {
     .expect("build production environment services")
 }
 
-async fn await_terminal(server: &ReadOnlyMcpServer, candidate_id: &str, id: usize) -> Value {
+async fn await_terminal(server: &McpServer, candidate_id: &str, id: usize) -> Value {
     tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             let status = call(
@@ -247,7 +247,7 @@ fn full_resource_candidate() -> Value {
     value
 }
 
-async fn call(server: &ReadOnlyMcpServer, id: usize, name: &str, arguments: Value) -> Value {
+async fn call(server: &McpServer, id: usize, name: &str, arguments: Value) -> Value {
     let response = post(
         server.local_addr(),
         "tools/call",

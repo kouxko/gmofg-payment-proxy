@@ -28,7 +28,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::*;
 use crate::{
-    mcp::{ApplicationBackend, ReadOnlyMcpBackend},
+    mcp::{ApplicationBackend, McpBackend},
     runtime_logs::RuntimeLogStore,
 };
 
@@ -201,7 +201,7 @@ struct LifecycleFixture {
     host: ApplicationHost,
     application: Arc<intercept_proxy_application::Application>,
     backend: Arc<ApplicationBackend>,
-    server: ReadOnlyMcpServer,
+    server: McpServer,
 }
 
 impl LifecycleFixture {

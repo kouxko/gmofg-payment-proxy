@@ -8,7 +8,7 @@ use http::post_tool_call_to_non_loopback;
 struct SnapshotCapabilitiesBackend;
 
 #[async_trait]
-impl ReadOnlyMcpBackend for SnapshotCapabilitiesBackend {
+impl McpBackend for SnapshotCapabilitiesBackend {
     async fn call_tool(&self, name: &str, _arguments: Value) -> ToolResult {
         Err(ToolFailure::not_found(format!("unexpected tool: {name}")))
     }
@@ -134,7 +134,7 @@ async fn ipv4_bind_failure_is_fatal_instead_of_starting_ipv6_only() {
     let blocker = tokio::net::TcpListener::bind(MCP_ADDRESS)
         .await
         .expect("reserve production IPv4 MCP address for deterministic failure");
-    let error = ReadOnlyMcpServer::start(backend())
+    let error = McpServer::start(backend())
         .await
         .expect_err("IPv4 bind failure must fail startup");
 
@@ -149,7 +149,7 @@ async fn ipv4_bind_failure_is_fatal_instead_of_starting_ipv6_only() {
 async fn production_bind_is_reachable_on_current_platform_interfaces_without_false_availability() {
     let _guard = production_bind_guard().await;
     let reached = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let server = ReadOnlyMcpServer::start(Arc::new(InterfaceMarkerBackend {
+    let server = McpServer::start(Arc::new(InterfaceMarkerBackend {
         reached: Arc::clone(&reached),
     }))
     .await
@@ -215,7 +215,7 @@ struct InterfaceMarkerBackend {
 }
 
 #[async_trait]
-impl ReadOnlyMcpBackend for InterfaceMarkerBackend {
+impl McpBackend for InterfaceMarkerBackend {
     async fn call_tool(&self, name: &str, _arguments: Value) -> ToolResult {
         self.reached
             .lock()
@@ -237,7 +237,7 @@ impl ReadOnlyMcpBackend for InterfaceMarkerBackend {
 struct MarkerBackend;
 
 #[async_trait]
-impl ReadOnlyMcpBackend for MarkerBackend {
+impl McpBackend for MarkerBackend {
     async fn call_tool(&self, _name: &str, _arguments: Value) -> ToolResult {
         Err(ToolFailure {
             code: "BACKEND_REACHED".to_owned(),
@@ -337,7 +337,7 @@ struct SizedOutputBackend {
 }
 
 #[async_trait]
-impl ReadOnlyMcpBackend for SizedOutputBackend {
+impl McpBackend for SizedOutputBackend {
     async fn call_tool(&self, _name: &str, _arguments: Value) -> ToolResult {
         let mut failure = ToolFailure {
             code: "BACKEND_ERROR".to_owned(),

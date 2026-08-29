@@ -17,12 +17,12 @@ static PRODUCTION_BIND_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_
 
 use super::{backend, post, protocol, request_meta, start_test_server};
 use crate::mcp::{
-    backend::{McpCallContext, ReadOnlyMcpBackend, ToolFailure, ToolResult},
+    backend::{McpBackend, McpCallContext, ToolFailure, ToolResult},
     environment_contract::{
         EnvironmentIpBindingProjection, EnvironmentTransportProjection,
         environment_capabilities_output,
     },
-    server::{MCP_ADDRESS, ReadOnlyMcpServer},
+    server::{MCP_ADDRESS, McpServer},
 };
 
 mod application_lifecycle;
@@ -39,7 +39,7 @@ struct DelayedBackend {
 }
 
 #[async_trait]
-impl ReadOnlyMcpBackend for DelayedBackend {
+impl McpBackend for DelayedBackend {
     async fn call_tool(&self, _name: &str, _arguments: Value) -> ToolResult {
         self.entered.notify_one();
         tokio::time::sleep(self.delay).await;
@@ -155,7 +155,7 @@ struct CancellationBackend {
 }
 
 #[async_trait]
-impl ReadOnlyMcpBackend for CancellationBackend {
+impl McpBackend for CancellationBackend {
     async fn call_tool(&self, _name: &str, _arguments: Value) -> ToolResult {
         unreachable!("create must use context-aware dispatch")
     }
@@ -222,7 +222,7 @@ struct OwnedApplyBackend {
 }
 
 #[async_trait]
-impl ReadOnlyMcpBackend for OwnedApplyBackend {
+impl McpBackend for OwnedApplyBackend {
     async fn call_tool(&self, _name: &str, _arguments: Value) -> ToolResult {
         unreachable!("apply must use context-aware dispatch")
     }

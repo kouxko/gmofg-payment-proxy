@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 use tokio::time::timeout;
 
 use super::{
-    backend::{McpCallContext, ReadOnlyMcpBackend},
+    backend::{McpBackend, McpCallContext},
     catalog,
     environment_contract::{EnvironmentToolKind, environment_tool_kind},
     resources,
@@ -40,14 +40,14 @@ pub const MAX_LOGICAL_OUTPUT_BYTES: usize = READ_OUTPUT_BYTES;
 const RESOURCE_TTL_MS: u64 = 1_000;
 
 #[derive(Debug, Clone)]
-pub struct ReadOnlyMcpHandler {
-    backend: Arc<dyn ReadOnlyMcpBackend>,
+pub struct McpHandler {
+    backend: Arc<dyn McpBackend>,
     transport_capabilities: Arc<McpTransportCapabilities>,
 }
 
-impl ReadOnlyMcpHandler {
+impl McpHandler {
     pub fn new(
-        backend: Arc<dyn ReadOnlyMcpBackend>,
+        backend: Arc<dyn McpBackend>,
         transport_capabilities: Arc<McpTransportCapabilities>,
     ) -> Self {
         Self {
@@ -133,7 +133,7 @@ impl ReadOnlyMcpHandler {
     }
 }
 
-impl ServerHandler for ReadOnlyMcpHandler {
+impl ServerHandler for McpHandler {
     fn supported_protocol_versions(&self) -> Cow<'static, [ProtocolVersion]> {
         Cow::Borrowed(&[ProtocolVersion::V_2026_07_28])
     }
