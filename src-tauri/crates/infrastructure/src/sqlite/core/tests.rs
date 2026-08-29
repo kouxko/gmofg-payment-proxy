@@ -129,3 +129,135 @@ fn delayed_empty_database_initialization_rechecks_and_resets_pre_baseline_schema
         .expect("foreign key state");
     assert!(foreign_keys);
 }
+
+#[test]
+fn recreate_current_replaces_pre_baseline_old_layout_and_current_schema() {
+    for seed in [
+        "CREATE TABLE application_schema(singleton_id INTEGER PRIMARY KEY, version INTEGER NOT NULL);\
+         INSERT INTO application_schema(singleton_id, version) VALUES (1, 99);\
+         CREATE TABLE phase2_sentinel(value TEXT NOT NULL);\
+         INSERT INTO phase2_sentinel(value) VALUES ('pre-baseline');",
+        "CREATE TABLE application_schema(singleton_id INTEGER PRIMARY KEY, version INTEGER NOT NULL);\
+         INSERT INTO application_schema(singleton_id, version) VALUES (1, 100);\
+         CREATE TABLE phase2_sentinel(value TEXT NOT NULL);\
+         INSERT INTO phase2_sentinel(value) VALUES ('old-layout-100');",
+    ] {
+        let mut connection = Connection::open_in_memory().expect("connection");
+        connection
+            .execute_batch("PRAGMA foreign_keys = ON;")
+            .expect("enable foreign keys");
+        connection.execute_batch(seed).expect("seed old database");
+
+        recreate_current_schema(&mut connection).expect("recreate current Schema100");
+
+        assert_recreated_current_schema(&connection);
+    }
+
+    let mut connection = Connection::open_in_memory().expect("current connection");
+    connection
+        .execute_batch("PRAGMA foreign_keys = ON;")
+        .expect("enable foreign keys");
+    let transaction = connection.transaction().expect("schema transaction");
+    initialize_current_schema(&transaction).expect("current schema");
+    transaction.commit().expect("commit current schema");
+    connection
+        .execute_batch(
+            "CREATE VIEW phase2_view AS SELECT version FROM application_schema;\
+             CREATE TRIGGER phase2_trigger AFTER INSERT ON settings BEGIN SELECT 1; END;",
+        )
+        .expect("seed current layout objects");
+
+    recreate_current_schema(&mut connection).expect("recreate current Schema100");
+
+    assert_recreated_current_schema(&connection);
+}
+
+#[test]
+fn failed_recreate_rolls_back_all_objects_and_restores_foreign_keys() {
+    let mut connection = Connection::open_in_memory().expect("connection");
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys = ON;\
+             CREATE TABLE phase2_sentinel(value TEXT NOT NULL);\
+             INSERT INTO phase2_sentinel(value) VALUES ('must remain');",
+        )
+        .expect("seed database");
+
+    let error = recreate_current_schema_with(&mut connection, |_| {
+        Err(InfrastructureError::PersistenceCorrupt {
+            entity: "phase2_recreate_test",
+            message: "injected initialization failure".to_owned(),
+        })
+    })
+    .expect_err("recreate failure must propagate");
+
+    assert!(matches!(
+        error,
+        InfrastructureError::PersistenceCorrupt {
+            entity: "phase2_recreate_test",
+            ..
+        }
+    ));
+    assert_eq!(
+        connection
+            .query_row("SELECT value FROM phase2_sentinel", [], |row| row
+                .get::<_, String>(0))
+            .expect("rolled-back sentinel"),
+        "must remain"
+    );
+    assert!(
+        connection
+            .query_row("PRAGMA foreign_keys", [], |row| row.get::<_, bool>(0))
+            .expect("foreign key state")
+    );
+}
+
+#[test]
+fn recreate_current_replaces_data_committed_in_wal() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("state.sqlite");
+    let writer = Connection::open(&path).expect("writer");
+    writer
+        .execute_batch(
+            "PRAGMA journal_mode = WAL;\
+             CREATE TABLE phase2_wal_sentinel(value TEXT NOT NULL);\
+             INSERT INTO phase2_wal_sentinel(value) VALUES ('committed in WAL');",
+        )
+        .expect("commit WAL-backed data");
+    let wal_path = path.with_file_name("state.sqlite-wal");
+    assert!(wal_path.is_file(), "committed WAL exists before recreate");
+
+    let store = SqliteStore::open_with_startup_policy(&path, SqliteStartupPolicy::RecreateCurrent)
+        .expect("recreate committed WAL database");
+    let connection = store.connection.lock();
+    assert_recreated_current_schema(&connection);
+    drop(connection);
+    drop(store);
+    drop(writer);
+}
+
+fn assert_recreated_current_schema(connection: &Connection) {
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT version FROM application_schema WHERE singleton_id = 1",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("Schema100 marker"),
+        100
+    );
+    let leftover = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name LIKE 'phase2_%')",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .expect("leftover object probe");
+    assert!(!leftover, "old tables, views, and triggers must be removed");
+    assert!(
+        connection
+            .query_row("PRAGMA foreign_keys", [], |row| row.get::<_, bool>(0))
+            .expect("foreign key state")
+    );
+}

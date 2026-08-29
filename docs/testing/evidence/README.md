@@ -3,6 +3,12 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-08-30
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260829-002 | phase2-development-database-recreate | 验证显式开发期 Schema100 重建、Host 默认与 Release Preserve、WAL/回滚/FK/双启动合同及 package/Tauri 双层发布阻断门禁；保留 Verifier FAILED、build 绕过 P1、修复复跑与最终 delta APPROVE | APPROVED_WITH_RELEASE_BLOCKER | TASK-20260829-002 | phase1-green-contract-baseline | [父证据](2026-08-29/TASK-20260829-002/phase1-green-contract-baseline/README.md) | [证据](2026-08-30/TASK-20260829-002/phase2-development-database-recreate/README.md) |
+
 ## 2026-08-29
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

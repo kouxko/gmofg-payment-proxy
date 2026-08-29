@@ -1,0 +1,54 @@
+{
+  "schema_version": 100,
+  "policies": {
+    "host_default": "Preserve",
+    "tauri_debug": "RecreateCurrent",
+    "tauri_release": "Preserve"
+  },
+  "recreate_transaction": [
+    "PRAGMA foreign_keys = OFF",
+    "BEGIN IMMEDIATE",
+    "drop every non-sqlite trigger, view, and table",
+    "initialize current Schema100",
+    "COMMIT",
+    "PRAGMA foreign_keys = ON on success or failure"
+  ],
+  "two_start_fixture": {
+    "workspace_name": "phase2-two-start-workspace",
+    "listener_enabled": false,
+    "rule_name": "phase2-two-start-rule",
+    "rule_priority": 29,
+    "rule_enabled_after_toggle": false,
+    "rule_one_shot": true,
+    "rule_hit_count": 7,
+    "rule_last_hit_at": "2026-08-30T03:04:05Z",
+    "package_active_source": "examples/protocol-packages/nuvei_tango_rhai/dist/nuvei-tango-json-rhai-1.0.0.zip",
+    "package_usage": "NativeFileDialog selection -> Application protocol_package_import prepare -> protocol_package_import_commit"
+  },
+  "database_shapes": [
+    "pre-baseline version 99",
+    "old layout marker version 100",
+    "current Schema100 with trigger and view",
+    "committed WAL data",
+    "injected initialization failure"
+  ],
+  "release_blocker": {
+    "marker": "TASK_20260829_002_PRE_RELEASE_DATABASE_RESET",
+    "production_rust_files": 6,
+    "blocked_contract_identifiers": [
+      "SqliteStartupPolicy",
+      "DatabaseStartupPolicy",
+      "RecreateCurrent",
+      "with_database_startup_policy",
+      "open_with_startup_policy"
+    ],
+    "build_entries": {
+      "package_alias": "tauri:build runs the checker before Android companion build",
+      "tauri_config": "build.beforeBuildCommand runs the checker before pnpm build",
+      "generic_cli": "pnpm tauri build reaches the same beforeBuildCommand",
+      "development": "beforeDevCommand remains pnpm dev without the release checker"
+    },
+    "phase2_expected_result": "NOT_RELEASE_READY",
+    "phase17_pass_condition": "marker and complete temporary startup policy/runtime branch removed"
+  }
+}

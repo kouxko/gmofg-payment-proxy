@@ -15,6 +15,8 @@ mod runtime_logs;
 use std::{error::Error, path::PathBuf, sync::Arc};
 
 use intercept_proxy_application::ExchangeObservationQueries;
+#[cfg(debug_assertions)]
+use intercept_proxy_host::DatabaseStartupPolicy;
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::ExchangeObservationStore;
 use intercept_proxy_product_api::InterceptProxyProfile;
@@ -109,6 +111,17 @@ fn initialize_application(
         host_builder = host_builder.with_android_companion_apk(companion_apk);
     }
     host_builder = host_builder.with_builtin_protocol_package(Arc::from(BUILTIN_ISO8583_ARCHIVE));
+    #[cfg(debug_assertions)]
+    {
+        // TASK_20260829_002_PRE_RELEASE_DATABASE_RESET
+        host_builder =
+            host_builder.with_database_startup_policy(DatabaseStartupPolicy::RecreateCurrent);
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        host_builder = host_builder
+            .with_database_startup_policy(intercept_proxy_host::DatabaseStartupPolicy::Preserve);
+    }
     let host = tauri::async_runtime::block_on(host_builder.build())?;
     let observation_queue_capacity =
         tauri::async_runtime::block_on(host.application().settings_get())?

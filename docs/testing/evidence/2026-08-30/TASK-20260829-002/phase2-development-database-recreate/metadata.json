@@ -1,0 +1,74 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase2-development-database-recreate",
+  "executed_at": "2026-08-30 00:31:00 +08:00",
+  "archived_at": "2026-08-30 00:32:23 +08:00",
+  "timezone": "Asia/Shanghai",
+  "reverified_at": "2026-08-30 00:59:11 +08:00",
+  "delta_reviewed_at": "2026-08-30 01:03:11 +08:00",
+  "result": "APPROVED_WITH_EXPECTED_RELEASE_BLOCKER",
+  "scope": "G043 / Phase 2 local implementation and gates",
+  "environment": {
+    "platform": "macOS arm64",
+    "node": "v26.7.0",
+    "pnpm": "11.13.1",
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "1.97.1 (c980f4866 2026-06-30)"
+  },
+  "tested_state": {
+    "branch": "codex/task-20260829-002",
+    "head": "0927997175f01428aa5d31bfd8247fb7056b47d7",
+    "head_tree": "c25d267996d9adcbc50c13681db21b750d9c398a",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase 2 changes and an unrelated user docs/README.md modification",
+    "changed_during_checkpoint": false,
+    "generated_bindings_sha256": "15d730c6afae0f9011bd6539ea98f339342d4e4b22a4751bff595d893815891c",
+    "tauri_composition_root_sha256": "4f308c4187d74cfd00e81a4daaf6fb73b9898a550ec03e76b5a050aafdfe71df",
+    "tauri_config_sha256": "c8dcdabc58babfd044926246d194112ec205a5ee62a7d6c3498137f191091176"
+  },
+  "input": {
+    "contract_snapshot": "inputs/phase2-contract-snapshot.json",
+    "active_package_fixture": "examples/protocol-packages/nuvei_tango_rhai/dist/nuvei-tango-json-rhai-1.0.0.zip",
+    "archived_package_fixture": "resources/nuvei-tango-json-rhai-1.0.0.zip",
+    "package_fixture_sha256": "0595af171e20ae9eee21da42a8327971c99689a278cab6ffd7612ba20a4049ea",
+    "package_fixture_bytes": 6706
+  },
+  "actual": {
+    "phase2_node_tests": { "passed": 8, "failed": 0 },
+    "infrastructure_core_tests": { "passed": 6, "failed": 0 },
+    "host_policy_tests": { "passed": 3, "failed": 0 },
+    "host_full_unit_tests": { "passed": 12, "failed": 0 },
+    "infrastructure_full_unit_tests": { "passed": 651, "failed": 0 },
+    "release_compile": "PASS",
+    "targeted_clippy": "PASS",
+    "release_readiness_scan": "NOT_RELEASE_READY, exit 1, one marker blocker and one temporary reset-contract blocker across six explicit production Rust files",
+    "tauri_build_alias": "EXPECTED_BLOCKED, exit 1 before Android companion build and tauri build",
+    "generic_tauri_build": "EXPECTED_BLOCKED, exit 1 from build.beforeBuildCommand before pnpm build",
+    "phase1_ten_gate_checkpoint": "PASS, exit 0",
+    "frontend": { "files_passed": 61, "tests_passed": 531, "failed": 0 },
+    "rust_workspace_all_targets_all_features": "PASS, 0 failed",
+    "diff_check": "PASS"
+  },
+  "development_observations": {
+    "discarded_initial_shape": "cfg-dependent combined test and Host-wide debug default were rejected before checkpoint and replaced with explicit policy composition",
+    "correct_red": "cargo exit 101 with E0425 for missing recreate_current_schema functions",
+    "source_size_first_run": "failed at host/src/tests.rs 696 lines",
+    "source_size_fix": "moved Phase 2 fixture to a dedicated module; rerun passed without changing threshold",
+    "first_independent_verifier": "FAILED because marker-only scanning could pass while the reset contract remained",
+    "verifier_repair": "scan marker and temporary reset contract independently; gate tauri:build; remove pre-subscriber log; assert absent identities through public list APIs",
+    "generic_build_bypass_review": "FAILED because the generic tauri script could bypass the package alias gate",
+    "generic_build_bypass_repair": "the same read-only checker is also the Tauri build.beforeBuildCommand; beforeDevCommand remains unchanged",
+    "dual_gate_rationale": "the package gate prevents Android companion side effects and the Tauri config gate covers every direct build entry; repeated checker execution is read-only and deterministic",
+    "current_review_state": "APPROVE",
+    "delta_review_findings": { "p0": 0, "p1": 0, "p2": 0 },
+    "checkpoint_ready": true
+  },
+  "outputs": ["outputs/verification-summary.json"],
+  "replay": "replay/commands.txt",
+  "not_applicable": {
+    "protocol_frames": "No proxy data-plane exchange is part of Phase 2.",
+    "screenshots": "No UI behavior changed.",
+    "real_release_app_two_start": "Phase 17 removes the temporary blocker and performs release persistence validation.",
+    "real_device_or_remote_service": "Outside the database startup contract.",
+    "remote_ci_push_release_deploy_commit": "Not authorized and not run."
+  }
+}

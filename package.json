@@ -13,6 +13,8 @@
     "test:bindings-check": "node --test scripts/check-generated-bindings.test.mjs",
     "check:bindings": "node scripts/check-generated-bindings.mjs",
     "test:task-20260829-002:phase1": "node --test scripts/check-task-20260829-002-phase-baseline.test.mjs",
+    "test:task-20260829-002:phase2": "node --test scripts/check-task-20260829-002-phase2-release-blocker.test.mjs && cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib sqlite::core::tests:: && cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib policy_",
+    "check:task-20260829-002:phase2-release-ready": "node scripts/check-task-20260829-002-phase2-release-blocker.mjs",
     "check:task-20260829-002:checkpoint": "pnpm test:task-20260829-002:phase1 && pnpm check:bindings && pnpm scan:architecture && pnpm scan:source-size && pnpm lint && pnpm typecheck && pnpm test && pnpm check:rust:fmt && pnpm check:rust:clippy && cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features",
     "check:coverage:frontend": "vitest run --coverage",
     "check:coverage:rust": "node scripts/check-rust-coverage.mjs",
@@ -33,7 +35,7 @@
     "bindings": "cargo run --release --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
-    "tauri:build": "pnpm build:android-companion && tauri build",
+    "tauri:build": "pnpm check:task-20260829-002:phase2-release-ready && pnpm build:android-companion && tauri build",
     "check": "pnpm bindings && pnpm scan:architecture && pnpm scan:source-size && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm scan:bundle-branding && pnpm check:rust:fmt && pnpm check:rust:clippy && pnpm check:rust:windows && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
   },
   "dependencies": {

@@ -70,6 +70,15 @@ pub struct SqliteStore {
     blocking_gate: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum SqliteStartupPolicy {
+    /// Open the existing database under the product's strict compatibility rules.
+    #[default]
+    Preserve,
+    /// Atomically replace every non-SQLite object with the current Schema100 layout.
+    RecreateCurrent,
+}
+
 #[cfg(test)]
 impl SqliteStore {
     pub(crate) fn execute_test_batch(&self, sql: &str) -> Result<(), InfrastructureError> {

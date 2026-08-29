@@ -10,6 +10,9 @@ use rusqlite::Connection;
 
 use super::*;
 
+#[path = "tests/phase2_database_startup.rs"]
+mod phase2_database_startup;
+
 #[derive(Debug)]
 struct NoFileDialog;
 
