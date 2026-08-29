@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn schema_19_is_rejected_and_legacy_data_is_retained() {
+fn schema_19_is_cleared_and_rebuilt_as_version_100() {
     let directory = tempfile::tempdir().expect("tempdir");
     let path = directory.path().join("state.sqlite");
     let connection = Connection::open(&path).expect("open legacy database");
@@ -18,10 +18,8 @@ fn schema_19_is_rejected_and_legacy_data_is_retained() {
         .expect("seed schema 19");
     drop(connection);
 
-    assert!(matches!(
-        SqliteStore::open(&path),
-        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
-    ));
+    assert_eq!(CURRENT_APPLICATION_SCHEMA_VERSION, 100);
+    drop(SqliteStore::open(&path).expect("reset pre-1.0 schema"));
     let connection = Connection::open(&path).expect("reopen legacy database");
     let version = connection
         .query_row(
@@ -29,7 +27,7 @@ fn schema_19_is_rejected_and_legacy_data_is_retained() {
             [],
             |row| row.get::<_, i64>(0),
         )
-        .expect("legacy schema marker");
+        .expect("rebuilt schema marker");
     let legacy_exists = connection
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'legacy_listener_policy')",
@@ -37,14 +35,118 @@ fn schema_19_is_rejected_and_legacy_data_is_retained() {
             |row| row.get::<_, bool>(0),
         )
         .expect("legacy table probe");
-    let legacy_value = connection
-        .query_row("SELECT value FROM legacy_listener_policy", [], |row| {
+    assert_eq!(version, 100);
+    assert!(!legacy_exists, "pre-1.0 table must be removed");
+}
+
+#[test]
+fn committed_version_99_wal_data_is_cleared_and_foreign_keys_are_restored() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("state.sqlite");
+    let seed = Connection::open(&path).expect("open version 99 database");
+    seed.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         PRAGMA wal_autocheckpoint = 0;
+         CREATE TABLE application_schema(
+             singleton_id INTEGER PRIMARY KEY,
+             version INTEGER NOT NULL
+         );
+         INSERT INTO application_schema(singleton_id, version) VALUES (1, 99);
+         CREATE TABLE wal_sentinel(value TEXT NOT NULL);
+         INSERT INTO wal_sentinel(value) VALUES ('committed in WAL');",
+    )
+    .expect("commit version 99 WAL data");
+    assert!(path.with_extension("sqlite-wal").exists());
+
+    let store = SqliteStore::open(&path).expect("reset committed WAL database");
+    let connection = store.connection.lock();
+    let version = connection
+        .query_row(
+            "SELECT version FROM application_schema WHERE singleton_id = 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("version 100 marker");
+    let sentinel_exists = connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sqlite_schema
+                WHERE type = 'table' AND name = 'wal_sentinel'
+            )",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .expect("sentinel probe");
+    let foreign_keys = connection
+        .query_row("PRAGMA foreign_keys", [], |row| row.get::<_, bool>(0))
+        .expect("foreign key state");
+    assert_eq!(version, 100);
+    assert!(!sentinel_exists);
+    assert!(foreign_keys);
+}
+
+#[test]
+fn view_only_database_is_rejected_without_being_initialized() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let path = directory.path().join("state.sqlite");
+    let connection = Connection::open(&path).expect("open view-only database");
+    connection
+        .execute_batch("CREATE VIEW legacy_view AS SELECT 'must remain' AS value;")
+        .expect("create view");
+    drop(connection);
+    let before = std::fs::read(&path).expect("read original database");
+
+    assert!(matches!(
+        SqliteStore::open(&path),
+        Err(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
+    assert_eq!(
+        std::fs::read(&path).expect("read rejected database"),
+        before
+    );
+    let connection = Connection::open(&path).expect("reopen view-only database");
+    let value = connection
+        .query_row("SELECT value FROM legacy_view", [], |row| {
             row.get::<_, String>(0)
         })
-        .expect("legacy row");
-    assert_eq!(version, 19);
-    assert!(legacy_exists);
-    assert_eq!(legacy_value, "obsolete");
+        .expect("view remains readable");
+    assert_eq!(value, "must remain");
+}
+
+#[test]
+fn malformed_schema_markers_are_rejected_without_clearing_user_data() {
+    let cases = [
+        "CREATE TABLE application_schema(singleton_id INTEGER, version INTEGER)",
+        "CREATE TABLE application_schema(singleton_id INTEGER, version INTEGER);
+         INSERT INTO application_schema VALUES (2, 99)",
+        "CREATE TABLE application_schema(singleton_id INTEGER, version INTEGER);
+         INSERT INTO application_schema VALUES (1, 99);
+         INSERT INTO application_schema VALUES (2, 98)",
+        "CREATE TABLE application_schema(singleton_id INTEGER, version TEXT);
+         INSERT INTO application_schema VALUES (1, 'broken')",
+    ];
+    for (index, marker_sql) in cases.into_iter().enumerate() {
+        let directory = tempfile::tempdir().expect("tempdir");
+        let path = directory.path().join(format!("invalid-{index}.sqlite"));
+        let connection = Connection::open(&path).expect("open invalid database");
+        connection.execute_batch(marker_sql).expect("seed marker");
+        connection
+            .execute_batch(
+                "CREATE TABLE user_sentinel(value TEXT NOT NULL);
+                 INSERT INTO user_sentinel(value) VALUES ('must remain');",
+            )
+            .expect("seed user data");
+        drop(connection);
+
+        assert!(SqliteStore::open(&path).is_err(), "case {index} must fail");
+        let connection = Connection::open(&path).expect("reopen invalid database");
+        let value = connection
+            .query_row("SELECT value FROM user_sentinel", [], |row| {
+                row.get::<_, String>(0)
+            })
+            .expect("user data remains");
+        assert_eq!(value, "must remain");
+    }
 }
 
 #[test]

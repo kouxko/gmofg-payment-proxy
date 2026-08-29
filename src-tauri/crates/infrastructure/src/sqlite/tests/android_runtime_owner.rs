@@ -294,7 +294,7 @@ fn capacity_trigger_does_not_reject_same_serial_upsert_when_full() {
 }
 
 #[test]
-fn version_twenty_singleton_schema_is_rejected_without_modifying_owner_data() {
+fn version_twenty_singleton_schema_is_cleared_without_migrating_owner_data() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("legacy.sqlite");
     let legacy_epoch = Uuid::new_v4();
@@ -313,8 +313,9 @@ fn version_twenty_singleton_schema_is_rejected_without_modifying_owner_data() {
         .unwrap();
     drop(connection);
 
-    let error = SqliteStore::open(&path).unwrap_err();
-    assert!(format!("{error:?}").contains("DatabaseSchemaInvalid"));
+    let store = SqliteStore::open(&path).expect("reset pre-1.0 owner schema");
+    assert!(store.load_android_runtime_owners().unwrap().is_empty());
+    drop(store);
 
     let connection = Connection::open(&path).unwrap();
     let version: i64 = connection
@@ -324,15 +325,18 @@ fn version_twenty_singleton_schema_is_rejected_without_modifying_owner_data() {
             |row| row.get(0),
         )
         .unwrap();
-    let legacy: (String, String) = connection
+    let legacy_table_exists: bool = connection
         .query_row(
-            "SELECT serial, epoch FROM android_runtime_owner WHERE singleton_id = 1",
+            "SELECT EXISTS(
+                SELECT 1 FROM sqlite_master
+                WHERE type = 'table' AND name = 'android_runtime_owner'
+            )",
             [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| row.get(0),
         )
         .unwrap();
-    assert_eq!(version, 20);
-    assert_eq!(legacy, ("LEGACY".into(), legacy_epoch.to_string()));
+    assert_eq!(version, crate::sqlite::CURRENT_APPLICATION_SCHEMA_VERSION);
+    assert!(!legacy_table_exists);
 }
 
 #[test]

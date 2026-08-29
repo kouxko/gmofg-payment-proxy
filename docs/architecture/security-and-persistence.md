@@ -17,7 +17,7 @@ UI 用户意图
 
 ## 2. SQLite 当前保存什么
 
-当前 schema version 为 21，主要表包括：
+当前 schema version 为 `100`。版本 `100` 是产品 `1.00` 的正式兼容基线，主要表包括：
 
 - `settings`：全局设置 JSON 和 revision；
 - `workspaces`、`workspace_state`：完整 Workspace JSON、revision 与当前选择；
@@ -31,8 +31,12 @@ UI 用户意图
 HTTP capture、Socket ExchangeObservation 和运行时报文不创建数据库表；它们保存在有界内存。普通
 运行日志使用独立 JSONL 文件，不写入 SQLite。
 
-项目仍处于开发期：数据库版本不匹配时 Host 会清空旧预发布数据库并按当前 schema 重建，而不是
-执行向后兼容迁移。不要把这一行为描述成已具备生产迁移能力。
+启动时，合法单行 Schema 标记 `<100` 的数据库被认定为正式版前开发数据。Infrastructure 在一个
+SQLite 事务中删除全部旧用户 Schema 和数据，再按版本 `100` 重建；缺失、重复或损坏标记不能触发
+清理。版本 `100` 数据原样保留；当前程序遇到 `>100` 的未来数据库时 fail-closed，不能改写。
+
+从版本 `100` 开始，任何后续 Schema 升级都必须提供显式、可回滚验证的兼容迁移，不得再次通过
+清空数据库完成升级。当前版本尚无 `100` 之后的迁移步骤；版本常量提升时必须同步增加迁移和回归。
 
 ## 3. 事务与并发
 

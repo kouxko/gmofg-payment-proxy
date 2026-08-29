@@ -16,8 +16,10 @@ Intercept Proxy 是与具体业务应用无关的 HTTP/HTTPS/Socket 测试代理
 4. Android Companion，通过 `VpnService` 只接管指定包名，在 TCP/IP 包层实施弱网。
 5. UI 无关的 Rust Host，可被桌面、自动化测试以及未来 TUI/CLI 复用。
 
-新应用不兼容旧数据，不读取旧数据库、证书目录、Keychain 或 DPAPI 命名空间。旧应用与
-Intercept Proxy 可以并存。
+数据库版本 `100` 是产品 `1.00` 的正式兼容基线。合法 Schema 标记 `<100` 的发布前开发数据库在
+启动时清空并按版本 `100` 重建；从版本 `100` 开始，后续升级必须使用显式兼容迁移。当前程序遇到
+未来版本、缺失/重复标记或损坏数据库时 fail-closed，不得清空或改写。旧应用与 Intercept Proxy
+可以并存；证书目录、Keychain 和 DPAPI 命名空间仍只按当前产品身份读取。
 
 ## 2. 应用身份与默认状态
 

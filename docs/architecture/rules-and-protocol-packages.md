@@ -59,9 +59,10 @@ stage/content capability 和草稿，不自行拼接默认 payload。
 Listener 启动时取得不可变配置快照；规则运行服务在明确替换时才接收新快照。一次求值先在内存中
 形成结果，再提交命中计数与一次性禁用状态。revision 或规则集合签名不一致时拒绝静默覆盖。
 
-旧 `rules`/`protocol_rules` 双集合、旧完整配置和旧导入 payload 不读取、不转换、不迁移。Schema
-版本不是当前版本，或记录仍带旧字段时，Host fail-closed 返回稳定错误，并保持数据库及 sidecar 原样；
-只有用户主动清除应用数据后才创建当前 Schema。
+旧 `rules`/`protocol_rules` 双集合、旧完整配置和旧导入 payload 不读取、不转换、不迁移。数据库
+版本 `100` 是产品 `1.00` 的正式兼容基线：合法 Schema 标记 `<100` 的发布前数据库会整体清空并按
+版本 `100` 重建；从版本 `100` 开始，后续版本只能通过显式兼容迁移升级。当前程序遇到未来 Schema、
+损坏标记，或版本 `100` 记录仍带旧字段时继续 fail-closed，不得用清空掩盖正式数据错误。
 
 ## 3. Document 与 Schema
 

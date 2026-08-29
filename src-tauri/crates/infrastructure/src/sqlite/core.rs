@@ -1,9 +1,16 @@
 use super::{
     Connection, DateTime, InfrastructureError, Mutex, OptionalExtension, Path,
-    ProtectedSecretRecord, SqliteStore, StoredSettings, Utc, create_current_schema,
-    initialize_singleton_state, params, parse_settings_row, stored_certificate_revision,
+    ProtectedSecretRecord, SqliteStore, StoredSettings, TransactionBehavior, Utc,
+    create_current_schema, initialize_singleton_state, params, parse_settings_row,
+    stored_certificate_revision,
 };
-use crate::sqlite::schema::CURRENT_SCHEMA_VERSION;
+use crate::sqlite::schema::{COMPATIBILITY_BASELINE_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ExistingSchema {
+    Current,
+    PreCompatibilityBaseline,
+}
 
 impl SqliteStore {
     pub fn open(path: &Path) -> Result<Self, InfrastructureError> {
@@ -26,9 +33,11 @@ impl SqliteStore {
             )
             .map_err(|source| InfrastructureError::Database { source })?;
         let database_is_empty = database_is_empty(&connection)?;
-        if !database_is_empty {
-            validate_current_schema_marker(&connection)?;
-        }
+        let existing_schema = if database_is_empty {
+            None
+        } else {
+            Some(classify_existing_schema(&connection)?)
+        };
         connection
             .execute_batch("PRAGMA journal_mode = WAL;")
             .map_err(|source| InfrastructureError::Database { source })?;
@@ -36,8 +45,12 @@ impl SqliteStore {
             connection: Mutex::new(connection),
             blocking_gate: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
         };
-        if database_is_empty {
-            store.create_schema()?;
+        match existing_schema {
+            None => store.create_schema()?,
+            Some(ExistingSchema::PreCompatibilityBaseline) => {
+                store.reset_pre_compatibility_schema()?;
+            }
+            Some(ExistingSchema::Current) => {}
         }
         Ok(store)
     }
@@ -45,14 +58,30 @@ impl SqliteStore {
     fn create_schema(&self) -> Result<(), InfrastructureError> {
         let mut connection = self.connection.lock();
         let transaction = connection
-            .transaction()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
-        create_current_schema(&transaction)?;
-        let certificate_revision = stored_certificate_revision(&transaction)?;
-        initialize_singleton_state(&transaction, certificate_revision)?;
-        transaction
-            .commit()
-            .map_err(|source| InfrastructureError::DatabaseSchema { source })
+        if database_is_empty(&transaction)? {
+            initialize_current_schema(&transaction)?;
+            return transaction
+                .commit()
+                .map_err(|source| InfrastructureError::DatabaseSchema { source });
+        }
+        match classify_existing_schema(&transaction)? {
+            ExistingSchema::Current => transaction
+                .commit()
+                .map_err(|source| InfrastructureError::DatabaseSchema { source }),
+            ExistingSchema::PreCompatibilityBaseline => {
+                transaction
+                    .rollback()
+                    .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+                reset_pre_compatibility_schema(&mut connection)
+            }
+        }
+    }
+
+    fn reset_pre_compatibility_schema(&self) -> Result<(), InfrastructureError> {
+        let mut connection = self.connection.lock();
+        reset_pre_compatibility_schema(&mut connection)
     }
 
     pub fn load_settings(&self) -> Result<Option<StoredSettings>, InfrastructureError> {
@@ -186,8 +215,8 @@ fn database_is_empty(connection: &Connection) -> Result<bool, InfrastructureErro
     connection
         .query_row(
             "SELECT NOT EXISTS(
-                SELECT 1 FROM sqlite_master
-                WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                SELECT 1 FROM sqlite_schema
+                WHERE name NOT LIKE 'sqlite_%'
             )",
             [],
             |row| row.get(0),
@@ -195,7 +224,80 @@ fn database_is_empty(connection: &Connection) -> Result<bool, InfrastructureErro
         .map_err(|source| InfrastructureError::DatabaseSchema { source })
 }
 
-fn validate_current_schema_marker(connection: &Connection) -> Result<(), InfrastructureError> {
+fn reset_pre_compatibility_schema(connection: &mut Connection) -> Result<(), InfrastructureError> {
+    reset_pre_compatibility_schema_with(connection, |_| Ok(()))
+}
+
+fn reset_pre_compatibility_schema_with(
+    connection: &mut Connection,
+    before_initialize: impl FnOnce(&rusqlite::Transaction<'_>) -> Result<(), InfrastructureError>,
+) -> Result<(), InfrastructureError> {
+    connection
+        .execute_batch("PRAGMA foreign_keys = OFF;")
+        .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+    let reset = (|| {
+        let transaction = connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+        match classify_existing_schema(&transaction)? {
+            ExistingSchema::Current => {}
+            ExistingSchema::PreCompatibilityBaseline => {
+                drop_pre_compatibility_objects(&transaction)?;
+                before_initialize(&transaction)?;
+                initialize_current_schema(&transaction)?;
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })
+    })();
+    let foreign_keys = connection
+        .execute_batch("PRAGMA foreign_keys = ON;")
+        .map_err(|source| InfrastructureError::DatabaseSchema { source });
+    reset.and(foreign_keys)
+}
+
+fn drop_pre_compatibility_objects(
+    transaction: &rusqlite::Transaction<'_>,
+) -> Result<(), InfrastructureError> {
+    let objects = {
+        let mut statement = transaction
+            .prepare(
+                "SELECT type, name FROM sqlite_schema
+                 WHERE name NOT LIKE 'sqlite_%'
+                   AND type IN ('trigger', 'view', 'table')
+                 ORDER BY CASE type
+                     WHEN 'trigger' THEN 0
+                     WHEN 'view' THEN 1
+                     ELSE 2
+                 END, name",
+            )
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .and_then(Iterator::collect::<Result<Vec<_>, _>>)
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })?
+    };
+    for (object_type, name) in objects {
+        let object_type = match object_type.as_str() {
+            "trigger" => "TRIGGER",
+            "view" => "VIEW",
+            "table" => "TABLE",
+            _ => unreachable!("query restricts SQLite object types"),
+        };
+        let quoted_name = name.replace('"', "\"\"");
+        transaction
+            .execute_batch(&format!("DROP {object_type} IF EXISTS \"{quoted_name}\";"))
+            .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
+    }
+    Ok(())
+}
+
+fn classify_existing_schema(
+    connection: &Connection,
+) -> Result<ExistingSchema, InfrastructureError> {
     let marker_exists = connection
         .query_row(
             "SELECT EXISTS(
@@ -222,7 +324,10 @@ fn validate_current_schema_marker(connection: &Connection) -> Result<(), Infrast
         })
         .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     match markers.as_slice() {
-        [(1, version)] if *version == CURRENT_SCHEMA_VERSION => Ok(()),
+        [(1, version)] if *version == CURRENT_SCHEMA_VERSION => Ok(ExistingSchema::Current),
+        [(1, version)] if *version < COMPATIBILITY_BASELINE_SCHEMA_VERSION => {
+            Ok(ExistingSchema::PreCompatibilityBaseline)
+        }
         _ => Err(InfrastructureError::DatabaseSchemaInvalid {
             current: CURRENT_SCHEMA_VERSION,
             found: markers,
@@ -230,7 +335,18 @@ fn validate_current_schema_marker(connection: &Connection) -> Result<(), Infrast
     }
 }
 
+fn initialize_current_schema(
+    transaction: &rusqlite::Transaction<'_>,
+) -> Result<(), InfrastructureError> {
+    create_current_schema(transaction)?;
+    let certificate_revision = stored_certificate_revision(transaction)?;
+    initialize_singleton_state(transaction, certificate_revision)
+}
+
 fn update_length_prefixed(context: &mut ring::digest::Context, bytes: &[u8]) {
     context.update(&(bytes.len() as u64).to_le_bytes());
     context.update(bytes);
 }
+
+#[cfg(test)]
+mod tests;
