@@ -27,16 +27,10 @@ function option(
       display: true,
     },
     upstream_schema: {
-      id: "http-req",
-      version: 1,
-      title: "http-req",
-      fields: [{ name: "body", label: "body", type: "string" }],
+      root: { type: "object", title: "http-req", properties: { body: { type: "string", title: "body" } } },
     },
     downstream_schema: {
-      id: "http-res",
-      version: 1,
-      title: "http-res",
-      fields: [{ name: "code", label: "code", type: "string" }],
+      root: { type: "object", title: "http-res", properties: { code: { type: "string", title: "code" } } },
     },
     ...overrides,
   };

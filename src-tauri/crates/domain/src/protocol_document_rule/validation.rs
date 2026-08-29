@@ -2,21 +2,18 @@
 
 use super::{
     DocumentAction, DocumentCondition, MAX_PROTOCOL_DOCUMENT_RULE_ACTIONS,
-    MAX_PROTOCOL_DOCUMENT_RULE_BLOB_BYTES, MAX_PROTOCOL_DOCUMENT_RULE_CONDITIONS,
-    MAX_PROTOCOL_DOCUMENT_RULE_NAME_BYTES, MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES,
+    MAX_PROTOCOL_DOCUMENT_RULE_CONDITIONS, MAX_PROTOCOL_DOCUMENT_RULE_NAME_BYTES,
+    MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES,
 };
 use crate::{
-    DocumentFieldName, DocumentSchema, DocumentValue, DomainError, ErrorCode,
+    DocumentSchemaNode, DocumentValue, DomainError, ErrorCode, JsonPointer,
     MAX_JAVASCRIPT_SAFE_INTEGER, Revision,
 };
-
-const MAX_JAVASCRIPT_SAFE_SIGNED_INTEGER: i64 = 9_007_199_254_740_991;
 
 pub(super) fn validate_structure(
     name: &str,
     revision: Revision,
     created_order: u64,
-    schema_version: u32,
     conditions: &[DocumentCondition],
     actions: &[DocumentAction],
 ) -> Result<(), DomainError> {
@@ -38,29 +35,24 @@ pub(super) fn validate_structure(
             "created_order 必须在 1 到 JavaScript 安全整数上限之间",
         );
     }
-    add_content_structure_errors(schema_version, conditions, actions, &mut error);
+    add_content_structure_errors(conditions, actions, &mut error);
     finish(error)
 }
 
 pub(super) fn validate_content_structure(
-    schema_version: u32,
     conditions: &[DocumentCondition],
     actions: &[DocumentAction],
 ) -> Result<(), DomainError> {
     let mut error = rule_error("协议 Document 规则结构无效");
-    add_content_structure_errors(schema_version, conditions, actions, &mut error);
+    add_content_structure_errors(conditions, actions, &mut error);
     finish(error)
 }
 
 fn add_content_structure_errors(
-    schema_version: u32,
     conditions: &[DocumentCondition],
     actions: &[DocumentAction],
     error: &mut DomainError,
 ) {
-    if schema_version == 0 {
-        add_error(error, "schema_version", "Schema 版本必须大于 0");
-    }
     if conditions.len() > MAX_PROTOCOL_DOCUMENT_RULE_CONDITIONS {
         add_error(error, "conditions", "条件数量不能超过 64 个");
     }
@@ -102,14 +94,15 @@ fn validate_value_limit(value: &DocumentValue, field: &str, error: &mut DomainEr
         DocumentValue::String(value) if value.len() > MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES => {
             add_error(error, field, "文本值不能超过 16 KiB UTF-8 字节");
         }
-        DocumentValue::Blob(value) if value.len() > MAX_PROTOCOL_DOCUMENT_RULE_BLOB_BYTES => {
-            add_error(error, field, "Blob 值不能超过 64 KiB");
+        DocumentValue::Array(values) => {
+            for value in values {
+                validate_value_limit(value, field, error);
+            }
         }
-        DocumentValue::Int(value)
-            if !(-MAX_JAVASCRIPT_SAFE_SIGNED_INTEGER..=MAX_JAVASCRIPT_SAFE_SIGNED_INTEGER)
-                .contains(value) =>
-        {
-            add_error(error, field, "整数值必须位于 JavaScript 安全整数范围");
+        DocumentValue::Object(values) => {
+            for value in values.values() {
+                validate_value_limit(value, field, error);
+            }
         }
         _ => {}
     }
@@ -128,30 +121,20 @@ pub(super) fn next_rule_revision(current: Revision) -> Result<Revision, DomainEr
 }
 
 pub(super) fn validate_field_value(
-    schema: &DocumentSchema,
-    field: &DocumentFieldName,
+    schema: &DocumentSchemaNode,
+    field: &JsonPointer,
     value: &DocumentValue,
     prefix: &str,
     error: &mut DomainError,
 ) {
-    let Some(index) = schema.field_index(field.as_str()) else {
-        add_error(
-            error,
-            format!("{prefix}.field"),
-            "字段未在绑定 Schema 中声明",
-        );
+    let Ok(expected) = schema.resolve(field) else {
         return;
     };
-    let expected = schema.fields()[index].field_type();
-    if expected != value.field_type() {
+    if !expected.accepts(value.value_type()) {
         add_error(
             error,
             format!("{prefix}.value"),
-            format!(
-                "需要 {}，实际得到 {}",
-                expected.as_str(),
-                value.field_type().as_str()
-            ),
+            format!("需要 schema node，实际得到 {:?}", value.value_type()),
         );
     }
 }

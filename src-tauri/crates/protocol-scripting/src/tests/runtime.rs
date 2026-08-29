@@ -1,9 +1,9 @@
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-use intercept_proxy_domain::{
-    Document, DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema,
-    DocumentSchemaId, DocumentValue,
+use std::{
+    collections::BTreeMap,
+    sync::atomic::{AtomicUsize, Ordering},
 };
+
+use intercept_proxy_domain::{Document, DocumentSchemaNode, DocumentValue, JsonPointer};
 
 use crate::{
     DirectionExecutionPlan, DisplayFallbackReason, ProtocolDirection, ProtocolDirectionExecutor,
@@ -19,9 +19,9 @@ fn decode(origin, context) {
     if context.stage() != "receive" { throw "wrong decode stage"; }
     let value = document::create();
     if context.direction() == "upstream" {
-        value.set("amount", 7);
+        value.set("/amount", 7);
     } else {
-        value.set("amount", 8);
+        value.set("/amount", 8);
     }
     value
 }
@@ -30,7 +30,7 @@ fn encode(origin, document, context) {
     if context.stage() != "send" { throw "wrong encode stage"; }
     let result = blob(2, 0);
     result[0] = if context.direction() == "upstream" { 0x55 } else { 0x44 };
-    result[1] = if document.has("amount") { document.get("amount") } else { 0 };
+    result[1] = if document.has("/amount") { document.get("/amount") } else { 0 };
     result
 }
 

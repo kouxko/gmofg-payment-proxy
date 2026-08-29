@@ -71,7 +71,6 @@ fn unified_rule_remap_changes_rule_identity_preserves_revision_and_order_and_reb
         42,
         old_listener_id,
         package,
-        1,
         ProtocolDirection::Upstream,
         Vec::new(),
         vec![DocumentAction::RecordMatch],

@@ -66,11 +66,10 @@ async fn persisted_joint_http_shape(
     let mut value: serde_json::Value = serde_json::from_slice(FULL_SHAPE).unwrap();
     value["workspace"]["rules"][0]["document"] = serde_json::json!({
         "package": {"id": "au-eftex", "version": "1.1.0"},
-        "schema_version": 1,
         "conditions": [{
             "operator": "equals",
-            "field": "amount",
-            "value": {"type": "int", "value": 1000}
+            "field": "/amount",
+            "value": 1000
         }],
         "actions": [{"type": "record_match"}]
     });
@@ -310,21 +309,6 @@ async fn existing_protocol_rule_package_mismatch_fails_with_exact_code() {
         store,
         candidate,
         EnvironmentStatusCode::ExistingRuleIdPackageMismatch,
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn existing_protocol_rule_schema_mismatch_fails_with_exact_code() {
-    let store = Arc::new(InMemoryWorkspaceStore::new_empty());
-    let (persisted, mut candidate) = persisted_full_shape(&store).await;
-    retain_all_ids(&mut candidate, &persisted);
-    candidate["workspace"]["rules"][14]["schema_version"] = serde_json::json!(2);
-
-    assert_existing_domain_code(
-        store,
-        candidate,
-        EnvironmentStatusCode::ExistingRuleIdSchemaVersionMismatch,
     )
     .await;
 }

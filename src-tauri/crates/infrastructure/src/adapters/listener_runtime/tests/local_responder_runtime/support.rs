@@ -20,14 +20,12 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 use super::*;
 
 pub(super) const BASIC_SCHEMA: &str = r#"
-id = "local-basic"
-version = 1
+type = "object"
 title = "Local Basic"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 "#;
 
 pub(super) const BASIC_SCRIPT: &str = r#"
@@ -43,14 +41,14 @@ fn frame(reader, context) {
 
 fn decode(origin, context) {
     let result = document::create();
-    result.set("amount", origin[1].to_int());
+    result.set("/amount", origin[1].to_int());
     result
 }
 
 fn encode(origin, document, context) {
     let result = blob(2, 0);
     result[0] = 2;
-    result[1] = if document.has("amount") { document.get("amount") } else { 0 };
+    result[1] = if document.has("/amount") { document.get("/amount") } else { 0 };
     result
 }
 

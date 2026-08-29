@@ -4,7 +4,7 @@ fn empty_encode_blob_is_valid_and_html_is_explicitly_untrusted() {
         .replace("let result = blob(2, 0);", "let result = blob();")
         .replace("result[0] = if context.direction() == \"upstream\" { 0x55 } else { 0x44 };", "")
         .replace(
-            "result[1] = if document.has(\"amount\") { document.get(\"amount\") } else { 0 };",
+            "result[1] = if document.has(\"/amount\") { document.get(\"/amount\") } else { 0 };",
             "",
         )
         .replace(

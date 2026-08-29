@@ -1,5 +1,6 @@
 import type {
   DocumentAction,
+  DocumentValue,
   HttpDocumentRuleContent,
   HttpRuleEditorStage,
   MatchCondition,
@@ -82,28 +83,26 @@ function httpStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draf
     }
   }
   return content.document
-    ? documentIncompatibility(content.document, stage.package, stage.schema_version, stage.document_fields, stage.document_common_actions)
+    ? documentIncompatibility(content.document, stage.package, stage.document_fields, stage.document_common_actions)
     : null;
 }
 
 function socketStageIncompatibility(content: SocketRuleContent, expectedPackage: ProtocolPackageRef, stage: SocketRuleEditorStage) {
-  return documentIncompatibility(content, expectedPackage, stage.schema_version, stage.fields, stage.common_actions);
+  return documentIncompatibility(content, expectedPackage, stage.fields, stage.common_actions);
 }
 
 function documentIncompatibility(
   content: HttpDocumentRuleContent | SocketRuleContent,
   expectedPackage: ProtocolPackageRef | null,
-  expectedSchemaVersion: number | null,
   fields: ProtocolRuleFieldCapability[],
   commonActions: ProtocolRuleCommonActionCapability[],
 ) {
   if (!expectedPackage || content.package.id !== expectedPackage.id || content.package.version !== expectedPackage.version) {
     return "目标阶段的 Document 协议包与当前内容不一致。";
   }
-  if (content.schema_version !== expectedSchemaVersion) return "目标阶段的 Document Schema 与当前内容不一致。";
   for (const condition of content.conditions) {
     const field = fields.find((item) => item.name === condition.field);
-    if (!field || !field.operators.includes(condition.operator) || field.type !== condition.value.type) {
+    if (!field || !field.operators.includes(condition.operator) || !valueMatchesType(condition.value, field.type)) {
       return `目标阶段不能编辑 Document 条件字段 ${condition.field}。`;
     }
   }
@@ -119,14 +118,22 @@ function documentActionIncompatibility(
   fields: ProtocolRuleFieldCapability[],
   commonActions: ProtocolRuleCommonActionCapability[],
 ) {
-  if (action.type === "record_match" || action.type === "clear_document") {
+  if (action.type === "record_match") {
     return commonActions.includes(action.type) ? null : `目标阶段不支持 Document 动作 ${action.type}。`;
   }
   const field = fields.find((item) => item.name === action.field);
-  if (!field || !field.actions.includes(action.type) || (action.type === "set_field" && field.type !== action.value.type)) {
+  if (!field || !field.actions.includes(action.type) || (action.type === "set_field" && !valueMatchesType(action.value, field.type))) {
     return `目标阶段不能编辑 Document 动作字段 ${action.field}。`;
   }
   return null;
+}
+
+function valueMatchesType(value: DocumentValue, type: ProtocolRuleFieldCapability["type"]): boolean {
+  if (type === "string") return typeof value === "string";
+  if (type === "number") return typeof value === "number";
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "array") return Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function matchFieldKind(condition: MatchCondition): RuleMatchFieldKind | null {

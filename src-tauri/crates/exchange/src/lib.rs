@@ -6,8 +6,7 @@
 // Document 是 Exchange capability contract 的组成部分。由核心 crate 统一重导出，外层
 // transport runtime 不需要反向依赖 Domain crate。
 pub use intercept_proxy_domain::{
-    Document, DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema,
-    DocumentSchemaId, DocumentValue, DomainError,
+    Document, DocumentNumber, DocumentSchemaNode, DocumentValue, DomainError, JsonPointer,
 };
 
 mod capability;

@@ -28,7 +28,6 @@ pub enum ProtocolRuleFieldActionCapability {
 #[serde(rename_all = "snake_case")]
 pub enum ProtocolRuleCommonActionCapability {
     RecordMatch,
-    ClearDocument,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -46,7 +45,6 @@ pub struct ProtocolRuleFieldCapability {
 #[serde(deny_unknown_fields)]
 pub struct ProtocolRuleCapabilityCatalog {
     pub package: ProtocolPackageRef,
-    pub schema_version: u32,
     pub stage: ProtocolRuleStage,
     pub fields: Vec<ProtocolRuleFieldCapability>,
     pub common_actions: Vec<ProtocolRuleCommonActionCapability>,
@@ -54,12 +52,11 @@ pub struct ProtocolRuleCapabilityCatalog {
 
 /// 单个处理阶段的完整编辑合同。
 ///
-/// Schema 版本属于阶段，因为同一个协议包的上行与下行 Schema 可以独立演进。
+/// 每个阶段独立携带由对应方向 Schema 元数据投影出的编辑能力。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolRuleEditorStage {
     pub stage: ProtocolRuleStage,
-    pub schema_version: u32,
     pub fields: Vec<ProtocolRuleFieldCapability>,
     pub common_actions: Vec<ProtocolRuleCommonActionCapability>,
     pub new_rule_draft: ProtocolRuleSaveInput,
@@ -85,7 +82,6 @@ pub struct ProtocolRuleSaveInput {
     pub priority: i32,
     pub listener_id: ListenerId,
     pub package: ProtocolPackageRef,
-    pub schema_version: u32,
     pub stage: ProtocolRuleStage,
     pub conditions: Vec<DocumentCondition>,
     pub actions: Vec<DocumentAction>,

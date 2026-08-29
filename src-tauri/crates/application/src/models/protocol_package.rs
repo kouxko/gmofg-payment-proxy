@@ -249,21 +249,19 @@ pub struct ProtocolPackageSchemaFieldViewModel {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
-/// Host API v1 Schema 可向 UI 和规则目录公开的四种字段类型。
+/// Legacy package-editor projection pending the package-contract phase.
 pub enum ProtocolPackageSchemaFieldTypeViewModel {
     String,
-    Int,
-    Bool,
-    Blob,
+    Number,
+    Boolean,
+    Object,
+    Array,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 协议包提前声明的 Document Schema；不包含 Schema 文件路径或原始 TOML。
+/// 协议包编辑器投影；权威领域 Schema 是递归 `DocumentSchemaNode`。
 pub struct ProtocolPackageSchemaViewModel {
-    pub id: String,
-    pub version: u32,
-    pub title: String,
-    pub fields: Vec<ProtocolPackageSchemaFieldViewModel>,
+    pub root: intercept_proxy_domain::DocumentSchemaNode,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

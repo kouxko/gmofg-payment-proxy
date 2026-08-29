@@ -19,8 +19,8 @@ use crate::{
     RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
 };
 use intercept_proxy_domain::{
-    DropResponseMode, HttpDocumentRuleContent, HttpRuleContent, JitterScope, MatchCondition,
-    MatchField, MatchOperator, RuleAction as DomainRuleAction, SocketRuleContent,
+    DocumentSchemaNode, DropResponseMode, HttpDocumentRuleContent, HttpRuleContent, JitterScope,
+    MatchCondition, MatchField, MatchOperator, RuleAction as DomainRuleAction, SocketRuleContent,
     TerminalAction as DomainTerminalAction, TrafficDirection,
 };
 
@@ -287,7 +287,6 @@ fn http_stages(
                 .package
                 .clone()
         });
-        let schema_version = document.as_ref().map(|value| value.schema_version);
         let document_fields = document
             .as_ref()
             .map(|value| value.fields.clone())
@@ -296,9 +295,8 @@ fn http_stages(
             .as_ref()
             .map(|value| value.common_actions.clone())
             .unwrap_or_default();
-        let embedded_document = document.as_ref().map(|value| HttpDocumentRuleContent {
+        let embedded_document = document.as_ref().map(|_| HttpDocumentRuleContent {
             package: package.clone().expect("document stage has a package"),
-            schema_version: value.schema_version,
             conditions: Vec::new(),
             actions: vec![intercept_proxy_domain::DocumentAction::RecordMatch],
         });
@@ -306,7 +304,6 @@ fn http_stages(
             stage,
             http,
             package,
-            schema_version,
             document_fields,
             document_common_actions,
             new_rule_draft: RuleDefinitionSaveInput {
@@ -356,7 +353,6 @@ fn socket_stages(
         })
         .map(|(stage, catalog)| SocketRuleEditorStage {
             stage,
-            schema_version: catalog.schema_version,
             fields: catalog.fields.clone(),
             common_actions: catalog.common_actions.clone(),
             new_rule_draft: RuleDefinitionSaveInput {
@@ -370,7 +366,6 @@ fn socket_stages(
                     stage,
                     content: RuleContent::Socket(SocketRuleContent {
                         package: description.package.clone(),
-                        schema_version: catalog.schema_version,
                         conditions: Vec::new(),
                         actions: vec![intercept_proxy_domain::DocumentAction::RecordMatch],
                     }),
@@ -391,7 +386,6 @@ fn http_capability(stage: RuleStage) -> Option<crate::RuleStageCapabilityViewMod
 
 #[derive(Clone)]
 struct DocumentCapability {
-    schema_version: u32,
     fields: Vec<ProtocolRuleFieldCapability>,
     common_actions: Vec<ProtocolRuleCommonActionCapability>,
 }
@@ -411,25 +405,53 @@ fn document_capability(
         intercept_proxy_domain::ProtocolDirection::Upstream => &description.upstream_schema,
         intercept_proxy_domain::ProtocolDirection::Downstream => &description.downstream_schema,
     };
+    let actions = vec![
+        ProtocolRuleFieldActionCapability::SetField,
+        ProtocolRuleFieldActionCapability::ClearField,
+    ];
+    let mut fields = Vec::new();
+    collect_document_schema_fields(&schema.root, "", &actions, &mut fields);
     Some(DocumentCapability {
-        schema_version: schema.version,
-        fields: schema
-            .fields
-            .iter()
-            .map(|field| ProtocolRuleFieldCapability {
-                name: field.name.clone(),
-                label: field.label.clone(),
-                field_type: field.field_type,
-                operators: vec![ProtocolRuleFieldOperatorCapability::Equals],
-                actions: vec![
-                    ProtocolRuleFieldActionCapability::SetField,
-                    ProtocolRuleFieldActionCapability::ClearField,
-                ],
-            })
-            .collect(),
-        common_actions: vec![
-            ProtocolRuleCommonActionCapability::RecordMatch,
-            ProtocolRuleCommonActionCapability::ClearDocument,
-        ],
+        fields,
+        common_actions: vec![ProtocolRuleCommonActionCapability::RecordMatch],
     })
+}
+
+fn collect_document_schema_fields(
+    schema: &DocumentSchemaNode,
+    path: &str,
+    actions: &[ProtocolRuleFieldActionCapability],
+    output: &mut Vec<ProtocolRuleFieldCapability>,
+) {
+    let field_type = match schema {
+        DocumentSchemaNode::String { .. } => crate::ProtocolPackageSchemaFieldTypeViewModel::String,
+        DocumentSchemaNode::Number { .. } => crate::ProtocolPackageSchemaFieldTypeViewModel::Number,
+        DocumentSchemaNode::Boolean { .. } => {
+            crate::ProtocolPackageSchemaFieldTypeViewModel::Boolean
+        }
+        DocumentSchemaNode::Object { properties, .. } => {
+            for (name, child) in properties {
+                collect_document_schema_fields(
+                    child,
+                    &format!("{path}/{}", name.replace('~', "~0").replace('/', "~1")),
+                    actions,
+                    output,
+                );
+            }
+            crate::ProtocolPackageSchemaFieldTypeViewModel::Object
+        }
+        DocumentSchemaNode::Array { items, .. } => {
+            collect_document_schema_fields(items, &format!("{path}/0"), actions, output);
+            crate::ProtocolPackageSchemaFieldTypeViewModel::Array
+        }
+    };
+    if !path.is_empty() {
+        output.push(ProtocolRuleFieldCapability {
+            name: path.to_owned(),
+            label: schema.title().unwrap_or(path).to_owned(),
+            field_type,
+            operators: vec![ProtocolRuleFieldOperatorCapability::Equals],
+            actions: actions.to_vec(),
+        });
+    }
 }

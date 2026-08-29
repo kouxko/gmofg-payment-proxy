@@ -4,13 +4,12 @@
 //! 内建实现都通过同一个 factory 注入，禁止把已经完成整条协议处理的旧 processor 包进
 //! Decode 再用空 adapter 冒充其余阶段。
 
-use std::{fmt::Debug, marker::PhantomData};
+use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData};
 
 use async_trait::async_trait;
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Document, DocumentField, DocumentFieldName, DocumentFieldType,
-    DocumentSchema, DocumentSchemaId, DocumentValue, Downstream, Encode, Error, Http, HttpContext,
-    Rules, Upstream,
+    Decode, Direction, Display, Document, DocumentValue, Downstream, Encode, Error, Http,
+    HttpContext, JsonPointer, Rules, Upstream,
 };
 use uuid::Uuid;
 
@@ -175,12 +174,18 @@ struct TextDecode<D: Direction>(PhantomData<fn() -> D>);
 #[async_trait]
 impl<D: Direction> Decode<Http, D> for TextDecode<D> {
     async fn decode(&mut self, context: &HttpContext) -> Result<Document, Error> {
-        let mut document = Document::new(text_schema());
+        let mut document = Document::new(DocumentValue::Object(BTreeMap::default()));
         document
-            .set(HEADER_FIELD, DocumentValue::String(context.header.clone()))
+            .set(
+                &JsonPointer::property(HEADER_FIELD),
+                DocumentValue::String(context.header.clone()),
+            )
             .map_err(|error| domain_error(&error))?;
         document
-            .set(BODY_FIELD, DocumentValue::String(context.body.clone()))
+            .set(
+                &JsonPointer::property(BODY_FIELD),
+                DocumentValue::String(context.body.clone()),
+            )
             .map_err(|error| domain_error(&error))?;
         Ok(document)
     }
@@ -212,29 +217,11 @@ impl<D: Direction> Encode<Http, D> for TextEncode<D> {
     }
 }
 
-fn text_schema() -> DocumentSchema {
-    let fields = [HEADER_FIELD, BODY_FIELD]
-        .into_iter()
-        .map(|name| {
-            DocumentField::new(
-                DocumentFieldName::new(name).expect("static HTTP field name is valid"),
-                DocumentFieldType::String,
-                name,
-            )
-            .expect("static HTTP field is valid")
-        })
-        .collect();
-    DocumentSchema::new(
-        DocumentSchemaId::new("http-text").expect("static HTTP schema id is valid"),
-        1,
-        "HTTP Text",
-        fields,
-    )
-    .expect("static HTTP schema is valid")
-}
-
 fn text<'a>(document: &'a Document, field: &str) -> Result<&'a String, Error> {
-    match document.get(field).map_err(|error| domain_error(&error))? {
+    match document
+        .resolve(&JsonPointer::property(field))
+        .map_err(|error| domain_error(&error))?
+    {
         DocumentValue::String(value) => Ok(value),
         _ => Err(Error::new(format!(
             "HTTP_DOCUMENT_INVALID\n{field} must be a String"

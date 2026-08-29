@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fmt, sync::Arc};
 
 use rhai::{AST, FnAccess};
 
-use intercept_proxy_domain::DocumentSchema;
+use intercept_proxy_domain::DocumentSchemaNode;
 
 use crate::{
     DirectionHooks, DocumentDeclaration, PackageFilePath, ProtocolEntryPoint, ProtocolFunctionName,
@@ -60,7 +60,7 @@ impl CompiledEntry {
 /// 单方向已经编译的 Schema、Frame、Decode、Encode 与 Display 入口。
 #[derive(Clone, Debug)]
 pub(crate) struct CompiledDirection {
-    schema: Arc<DocumentSchema>,
+    schema: Arc<DocumentSchemaNode>,
     frame: Option<CompiledEntry>,
     decode: CompiledEntry,
     encode: CompiledEntry,
@@ -68,11 +68,11 @@ pub(crate) struct CompiledDirection {
 }
 
 impl CompiledDirection {
-    pub(crate) fn schema(&self) -> &DocumentSchema {
+    pub(crate) fn schema(&self) -> &DocumentSchemaNode {
         &self.schema
     }
 
-    pub(crate) fn schema_arc(&self) -> Arc<DocumentSchema> {
+    pub(crate) fn schema_arc(&self) -> Arc<DocumentSchemaNode> {
         Arc::clone(&self.schema)
     }
 
@@ -96,8 +96,8 @@ impl CompiledDirection {
 pub(crate) fn validate_manifest_entries(
     manifest: &ProtocolManifest,
     scripts: &BTreeMap<PackageFilePath, Arc<AST>>,
-    upstream_schema: Arc<DocumentSchema>,
-    downstream_schema: Arc<DocumentSchema>,
+    upstream_schema: Arc<DocumentSchemaNode>,
+    downstream_schema: Arc<DocumentSchemaNode>,
 ) -> Result<(CompiledDirection, CompiledDirection), ProtocolScriptCompileError> {
     let upstream = validate_direction(
         manifest.hooks().upstream(),
@@ -117,7 +117,7 @@ pub(crate) fn validate_manifest_entries(
 fn validate_direction(
     hooks: &DirectionHooks,
     document: &DocumentDeclaration,
-    schema: Arc<DocumentSchema>,
+    schema: Arc<DocumentSchemaNode>,
     scripts: &BTreeMap<PackageFilePath, Arc<AST>>,
 ) -> Result<CompiledDirection, ProtocolScriptCompileError> {
     let frame = hooks

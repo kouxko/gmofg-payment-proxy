@@ -34,16 +34,14 @@ function detail() {
       display: true,
     },
     upstream_schema: {
-      id: "iso-request",
-      version: 7,
-      title: "ISO Request",
-      fields: [{ name: "mti", label: "MTI", type: "string" as const }],
+      root: { type: "object" as const, title: "ISO Request", properties: {
+        mti: { type: "string" as const, title: "MTI" },
+      } },
     },
     downstream_schema: {
-      id: "iso-response",
-      version: 8,
-      title: "ISO Response",
-      fields: [{ name: "response_code", label: "Response", type: "string" as const }],
+      root: { type: "object" as const, title: "ISO Response", properties: {
+        response_code: { type: "string" as const, title: "Response" },
+      } },
     },
     usages: [],
     external: null,
@@ -65,7 +63,7 @@ describe("SocketProtocolPackageDialog", () => {
     await user.keyboard("{Enter}");
 
     expect(await screen.findByRole("dialog", { name: "入口协议包详情" })).toBeVisible();
-    expect(screen.getByText("mti")).toBeVisible();
+    expect(screen.getByText("/mti")).toBeVisible();
     expect(mocks.protocolPackageDetail).toHaveBeenCalledWith({ id: "iso-8583", version: "2.0.0" });
   });
 

@@ -84,8 +84,8 @@ export const commands = {
 	listenerTestUpstreamTls: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	protocolPackageList: () => typedError<ProtocolPackageGroupViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_list")),
 	externalPackageServiceStatus: () => typedError<ExternalPackageServiceStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("external_package_service_status")),
-	listenerProtocolPackageCatalog: () => typedError<ListenerProtocolPackageCatalogViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_protocol_package_catalog")),
-	protocolPackageDetail: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_detail", { packageRef })),
+	listenerProtocolPackageCatalog: () => typedError<ListenerProtocolPackageCatalogViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("listener_protocol_package_catalog")),
+	protocolPackageDetail: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageDetailViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_detail", { packageRef })),
 	protocolPackageImport: () => typedError<{
 	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
 	token: ProtocolPackageImportToken | null,
@@ -95,12 +95,12 @@ export const commands = {
 	host_api: number,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel,
-	downstream_schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
 } | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import")),
-	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
+	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
 	protocolPackageImportDiscard: (token: ProtocolPackageImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_discard", { token })),
-	protocolPackageRestoreBuiltin: () => typedError<ProtocolPackageImportViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_restore_builtin")),
+	protocolPackageRestoreBuiltin: () => typedError<ProtocolPackageImportViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_restore_builtin")),
 	protocolPackageExportBuiltin: () => typedError<{
 	bytes_written: number,
 	replaced_existing: boolean,
@@ -714,118 +714,107 @@ export type DisabledReason = {
 	message: string,
 };
 
-/**
- *  一个完整 Frame 解码后的稀疏、有序字段集合。
- *
- *  Document 共享不可变 [`DocumentSchema`]，并为每个 Schema 字段维护一个同索引的可空值槽。
- *  这种表示不需要第三方有序 Map，也天然区分“字段未声明”和“已声明但当前未赋值”。
- */
-export type Document = DocumentWire;
+/**  Identity-free, owned recursive JSON document. */
+export type Document = DocumentValue;
 
 /**  v1 Document 动作。动作按声明顺序执行，不包含隐式终止或 first-match 语义。 */
 export type DocumentAction =
 /**  只记录命中，不修改 Document。 */
 { type: "record_match" } |
-/**  只替换一个 Schema 已声明字段的值。 */
+/**  替换一个 Document 路径的值。 */
 { type: "set_field";
-/**  Schema 中声明的目标字段。 */
-field: DocumentFieldName;
-/**  与字段声明类型严格一致的新值。 */
+/**  Document 中的目标路径。 */
+field: JsonPointer;
+/**  规则自身携带的严格类型化新值；Schema 已声明该路径时还须与其类型一致。 */
 value: DocumentValue } |
-/**  清除一个 Schema 已声明字段的值。 */
+/**  清除一个 Document 路径的值。 */
 { type: "clear_field";
-/**  Schema 中声明的目标字段。 */
-field: DocumentFieldName } |
-/**  清空所有字段值槽，但保留当前 Schema 身份和结构。 */
-{ type: "clear_document" };
+/**  Document 中的目标路径。 */
+field: JsonPointer };
 
 /**  v1 Document 条件。多个条件按声明顺序读取并执行 AND；空列表恒匹配。 */
 export type DocumentCondition =
 /**  字段当前值必须与给定类型化值严格相等；不进行文本或数字转换。 */
 { operator: "equals";
-/**  Schema 中声明的字段名。 */
-field: DocumentFieldName;
+/**  Document 中的目标路径。 */
+field: JsonPointer;
 /**  参与严格比较的值。 */
 value: DocumentValue };
 
-/**
- *  一个可由协议脚本赋值、UI 展示并被 协议报文规则引用的字段声明。
- *
- *  此类型只声明允许的名称和类型，不表达字段是否必须出现；协议条件完整性属于脚本。
- */
-export type DocumentField = DocumentFieldWire;
+/**  JavaScript `Number` compatible finite numeric value. */
+export type DocumentNumber = number;
 
-/**
- *  Schema 字段名，也是协议报文规则使用的稳定变量名。
- *
- *  名称只遵循协议无关的 `[a-z][a-z0-9_]*` 语法。脚本语言关键字由相应脚本边界校验，
- *  不属于通用 Document 领域模型。
- */
-export type DocumentFieldName = string;
+/**  Recursive, identity-free metadata describing a Document shape. */
+export type DocumentSchemaNode = DocumentSchemaNode_Serialize | DocumentSchemaNode_Deserialize;
 
-/**
- *  Host API v1 支持的协议无关字段类型。
- *
- *  serde 形式固定为 `string`、`int`、`bool`、`blob`，不根据 JSON 数字或文本进行隐式转换。
- */
-export type DocumentFieldType =
-/**  UTF-8 文本或编码后标识符。 */
-"string" |
-/**  有符号 64 位整数，金额通常用最小货币单位表达。 */
-"int" |
-/**  布尔标志。 */
-"bool" |
-/**  必须逐字节保真的未解释二进制值。 */
-"blob";
+/**  Recursive, identity-free metadata describing a Document shape. */
+export type DocumentSchemaNode_Deserialize =
+/**  String value metadata. */
+({ type: "string";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Number value metadata. */
+({ type: "number";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Boolean value metadata. */
+({ type: "boolean";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Object metadata keyed by JSON property name. */
+({ type: "object";
+/**  Optional UI title. */
+title?: string | null;
+/**  Per-property schema metadata. */
+properties: { [key in string]: DocumentSchemaNode_Deserialize } }) & { items?: never } |
+/**  Array metadata. Every array must declare its item schema. */
+({ type: "array";
+/**  Optional UI title. */
+title?: string | null;
+/**  Required item schema. */
+items: DocumentSchemaNode_Deserialize }) & { properties?: never };
 
-export type DocumentFieldWire = {
-	name: DocumentFieldName,
-	type: DocumentFieldType,
-	label: string,
-};
+/**  Recursive, identity-free metadata describing a Document shape. */
+export type DocumentSchemaNode_Serialize =
+/**  String value metadata. */
+({ type: "string";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Number value metadata. */
+({ type: "number";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Boolean value metadata. */
+({ type: "boolean";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Object metadata keyed by JSON property name. */
+({ type: "object";
+/**  Optional UI title. */
+title?: string | null;
+/**  Per-property schema metadata. */
+properties: { [key in string]: DocumentSchemaNode_Serialize } }) & { items?: never } |
+/**  Array metadata. Every array must declare its item schema. */
+({ type: "array";
+/**  Optional UI title. */
+title?: string | null;
+/**  Required item schema. */
+items: DocumentSchemaNode_Serialize }) & { properties?: never };
 
-/**
- *  协议包提前声明的有序 Document 字段契约。
- *
- *  字段顺序是 wire/UI 稳定契约，也是 [`crate::Document`] 值槽的索引来源。Schema 至少包含一个
- *  字段，且同一 Schema 内字段名不能重复。
- */
-export type DocumentSchema = DocumentSchemaWire;
-
-/**
- *  协议包内 Document Schema 的稳定 ID。
- *
- *  Wire 形式是匹配 `[a-z][a-z0-9-]*` 的字符串。它标识字段契约，不等同于协议包 ID。
- */
-export type DocumentSchemaId = string;
-
-export type DocumentSchemaWire = {
-	id: DocumentSchemaId,
-	version: number,
-	title: string,
-	fields: DocumentField[],
-};
-
-/**
- *  当前 Frame 中某个已声明字段的实际值。
- *
- *  serde 使用相邻标签 `{ "type": ..., "value": ... }`，因此文本 `"7"`、整数 `7` 和
- *  单字节 Blob `[7]` 不会产生歧义或隐式转换。
- */
+/**  Recursive JSON value owned by a [`Document`]. */
 export type DocumentValue =
-/**  对应 [`DocumentFieldType::String`]。 */
-{ type: "string"; value: string } |
-/**  对应 [`DocumentFieldType::Int`]。 */
-{ type: "int"; value: number } |
-/**  对应 [`DocumentFieldType::Bool`]。 */
-{ type: "bool"; value: boolean } |
-/**  对应 [`DocumentFieldType::Blob`]。 */
-{ type: "blob"; value: number[] };
-
-export type DocumentWire = {
-	schema: DocumentSchema,
-	values: (DocumentValue | null)[],
-};
+/**  JSON string. */
+string |
+/**  Finite JavaScript number. */
+DocumentNumber |
+/**  JSON boolean. */
+boolean |
+/**  JSON null. */
+null |
+/**  JSON object. Key order is not semantic. */
+{ [key in string]: DocumentValue } |
+/**  JSON array. */
+DocumentValue[];
 
 export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "optional"; trust: CertificateReferenceId } | { mode: "required"; trust: CertificateReferenceId };
 
@@ -1031,7 +1020,6 @@ export type HttpBodyProcessing = { mode: "plain" } | { mode: "protocol"; package
 
 export type HttpDocumentRuleContent = {
 	package: ProtocolPackageRef,
-	schema_version: number,
 	conditions: DocumentCondition[],
 	actions: DocumentAction[],
 };
@@ -1104,13 +1092,15 @@ export type HttpRuleEditorStage = {
 	stage: RuleStage,
 	http: RuleStageCapabilityViewModel | null,
 	package: ProtocolPackageRef | null,
-	schema_version: number | null,
 	document_fields: ProtocolRuleFieldCapability[],
 	document_common_actions: ProtocolRuleCommonActionCapability[],
 	new_rule_draft: RuleDefinitionSaveInput,
 };
 
 export type JitterScope = "BeforeMessage" | "PerChunk";
+
+/**  Parsed RFC 6901 JSON Pointer. The document root is the empty string. */
+export type JsonPointer = string;
 
 /**
  *  代理监听页面使用的证书引用详情。
@@ -1183,8 +1173,30 @@ export type ListenerOverviewViewModel = {
  *  `options` 只包含当前可选版本；停用、历史校验无效、无法由当前 Host 描述或返回错包
  *  描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
  */
-export type ListenerProtocolPackageCatalogViewModel = {
-	options: ListenerProtocolPackageOptionViewModel[],
+export type ListenerProtocolPackageCatalogViewModel = ListenerProtocolPackageCatalogViewModel_Serialize | ListenerProtocolPackageCatalogViewModel_Deserialize;
+
+/**
+ *  Listener 协议包选择器的一次权威目录快照。
+ *
+ *  `options` 只包含当前可选版本；停用、历史校验无效、无法由当前 Host 描述或返回错包
+ *  描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
+ */
+export type ListenerProtocolPackageCatalogViewModel_Deserialize = {
+	options: ListenerProtocolPackageOptionViewModel_Deserialize[],
+	/**  新建按协议转发/本地应答可采用的官方精确版本。 */
+	recommended_package: ProtocolPackageRef | null,
+	installed_version_count: number,
+	unavailable_version_count: number,
+};
+
+/**
+ *  Listener 协议包选择器的一次权威目录快照。
+ *
+ *  `options` 只包含当前可选版本；停用、历史校验无效、无法由当前 Host 描述或返回错包
+ *  描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
+ */
+export type ListenerProtocolPackageCatalogViewModel_Serialize = {
+	options: ListenerProtocolPackageOptionViewModel_Serialize[],
 	/**  新建按协议转发/本地应答可采用的官方精确版本。 */
 	recommended_package: ProtocolPackageRef | null,
 	installed_version_count: number,
@@ -1197,15 +1209,40 @@ export type ListenerProtocolPackageCatalogViewModel = {
  *  该模型只由 Rust 在读取启用状态、最近校验结果并重新取得当前编译描述后构造。前端不得
  *  根据 Host API 数字猜测兼容性，也不需要逐版本发起详情查询。
  */
-export type ListenerProtocolPackageOptionViewModel = {
+export type ListenerProtocolPackageOptionViewModel = ListenerProtocolPackageOptionViewModel_Serialize | ListenerProtocolPackageOptionViewModel_Deserialize;
+
+/**
+ *  Listener 编辑器可以绑定的一个精确协议包版本。
+ *
+ *  该模型只由 Rust 在读取启用状态、最近校验结果并重新取得当前编译描述后构造。前端不得
+ *  根据 Host API 数字猜测兼容性，也不需要逐版本发起详情查询。
+ */
+export type ListenerProtocolPackageOptionViewModel_Deserialize = {
 	package: ProtocolPackageRef,
 	name: string,
 	/**  选择器明确区分内置 Rhai 与外部进程，不从其他字段反推来源。 */
 	package_source: ProtocolPackageSourceViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel,
-	downstream_schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+};
+
+/**
+ *  Listener 编辑器可以绑定的一个精确协议包版本。
+ *
+ *  该模型只由 Rust 在读取启用状态、最近校验结果并重新取得当前编译描述后构造。前端不得
+ *  根据 Host API 数字猜测兼容性，也不需要逐版本发起详情查询。
+ */
+export type ListenerProtocolPackageOptionViewModel_Serialize = {
+	package: ProtocolPackageRef,
+	name: string,
+	/**  选择器明确区分内置 Rhai 与外部进程，不从其他字段反推来源。 */
+	package_source: ProtocolPackageSourceViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
 };
 
 export type ListenerRuntimeState = "stopped" | "starting" | "running" | "stopping" | "faulted";
@@ -1412,12 +1449,27 @@ export type ProtocolPackageCapabilitiesViewModel = {
 };
 
 /**  精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。 */
-export type ProtocolPackageDetailViewModel = {
+export type ProtocolPackageDetailViewModel = ProtocolPackageDetailViewModel_Serialize | ProtocolPackageDetailViewModel_Deserialize;
+
+/**  精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。 */
+export type ProtocolPackageDetailViewModel_Deserialize = {
 	version: ProtocolPackageVersionViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel,
-	downstream_schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	usages: ProtocolPackageUsageViewModel[],
+	/**  仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。 */
+	external: ExternalPackageDetailViewModel | null,
+};
+
+/**  精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。 */
+export type ProtocolPackageDetailViewModel_Serialize = {
+	version: ProtocolPackageVersionViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
 	usages: ProtocolPackageUsageViewModel[],
 	/**  仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。 */
 	external: ExternalPackageDetailViewModel | null,
@@ -1482,7 +1534,10 @@ export type ProtocolPackageImportDispositionViewModel = "new" | "reusable" | "id
 export type ProtocolPackageImportOutcomeViewModel = "installed" | "reused";
 
 /**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
-export type ProtocolPackageImportPreviewViewModel = {
+export type ProtocolPackageImportPreviewViewModel = ProtocolPackageImportPreviewViewModel_Serialize | ProtocolPackageImportPreviewViewModel_Deserialize;
+
+/**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+export type ProtocolPackageImportPreviewViewModel_Deserialize = {
 	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
 	token: ProtocolPackageImportToken | null,
 	disposition: ProtocolPackageImportDispositionViewModel,
@@ -1491,8 +1546,22 @@ export type ProtocolPackageImportPreviewViewModel = {
 	host_api: number,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel,
-	downstream_schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+};
+
+/**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+export type ProtocolPackageImportPreviewViewModel_Serialize = {
+	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
+	token: ProtocolPackageImportToken | null,
+	disposition: ProtocolPackageImportDispositionViewModel,
+	package: ProtocolPackageRef,
+	name: string,
+	host_api: number,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
 };
 
 /**  一次已验证但未安装的 pending import 随机令牌。 */
@@ -1503,13 +1572,34 @@ export type ProtocolPackageImportToken = string;
  *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 Rhai 错误均作为
  *  稳定 `AppError` 返回，不会构造该类型。
  */
-export type ProtocolPackageImportViewModel = {
+export type ProtocolPackageImportViewModel = ProtocolPackageImportViewModel_Serialize | ProtocolPackageImportViewModel_Deserialize;
+
+/**
+ *  原生文件选择和完整校验成功后的无源码导入结果。
+ *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 Rhai 错误均作为
+ *  稳定 `AppError` 返回，不会构造该类型。
+ */
+export type ProtocolPackageImportViewModel_Deserialize = {
 	outcome: ProtocolPackageImportOutcomeViewModel,
 	version: ProtocolPackageVersionViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel,
-	downstream_schema: ProtocolPackageSchemaViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+};
+
+/**
+ *  原生文件选择和完整校验成功后的无源码导入结果。
+ *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 Rhai 错误均作为
+ *  稳定 `AppError` 返回，不会构造该类型。
+ */
+export type ProtocolPackageImportViewModel_Serialize = {
+	outcome: ProtocolPackageImportOutcomeViewModel,
+	version: ProtocolPackageVersionViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
 };
 
 /**  Manifest 结构推导出的协议包数据平面。 */
@@ -1526,22 +1616,20 @@ export type ProtocolPackageRef = {
 	version: ProtocolPackageVersion,
 };
 
-/**  Host API v1 Schema 可向 UI 和规则目录公开的四种字段类型。 */
-export type ProtocolPackageSchemaFieldTypeViewModel = "string" | "int" | "bool" | "blob";
+/**  Legacy package-editor projection pending the package-contract phase. */
+export type ProtocolPackageSchemaFieldTypeViewModel = "string" | "number" | "boolean" | "object" | "array";
 
-/**  一个按作者声明顺序返回的 Schema 字段。 */
-export type ProtocolPackageSchemaFieldViewModel = {
-	name: string,
-	label: string,
-	type: ProtocolPackageSchemaFieldTypeViewModel,
+/**  协议包编辑器投影；权威领域 Schema 是递归 `DocumentSchemaNode`。 */
+export type ProtocolPackageSchemaViewModel = ProtocolPackageSchemaViewModel_Serialize | ProtocolPackageSchemaViewModel_Deserialize;
+
+/**  协议包编辑器投影；权威领域 Schema 是递归 `DocumentSchemaNode`。 */
+export type ProtocolPackageSchemaViewModel_Deserialize = {
+	root: DocumentSchemaNode_Deserialize,
 };
 
-/**  协议包提前声明的 Document Schema；不包含 Schema 文件路径或原始 TOML。 */
-export type ProtocolPackageSchemaViewModel = {
-	id: string,
-	version: number,
-	title: string,
-	fields: ProtocolPackageSchemaFieldViewModel[],
+/**  协议包编辑器投影；权威领域 Schema 是递归 `DocumentSchemaNode`。 */
+export type ProtocolPackageSchemaViewModel_Serialize = {
+	root: DocumentSchemaNode_Serialize,
 };
 
 /**
@@ -1595,7 +1683,7 @@ export type ProtocolPackageVersionViewModel = {
 	installed_at: string,
 };
 
-export type ProtocolRuleCommonActionCapability = "record_match" | "clear_document";
+export type ProtocolRuleCommonActionCapability = "record_match";
 
 export type ProtocolRuleFieldActionCapability = "set_field" | "clear_field";
 
@@ -1959,14 +2047,12 @@ export type SocketRelayTopology = {
 
 export type SocketRuleContent = {
 	package: ProtocolPackageRef,
-	schema_version: number,
 	conditions: DocumentCondition[],
 	actions: DocumentAction[],
 };
 
 export type SocketRuleEditorStage = {
 	stage: RuleStage,
-	schema_version: number,
 	fields: ProtocolRuleFieldCapability[],
 	common_actions: ProtocolRuleCommonActionCapability[],
 	new_rule_draft: RuleDefinitionSaveInput,

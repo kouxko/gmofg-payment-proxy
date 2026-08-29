@@ -18,15 +18,15 @@ fn registration(name: &str) -> ExternalPackageRegistration {
         "document": {
             "upstream": {
                 "schema": {
-                    "id": "vendor-upstream", "version": 1, "title": "Upstream",
-                    "fields": [{"name": "mti", "label": "MTI", "type": "string"}]
+                    "type": "object", "title": "Upstream",
+                    "properties": {"mti": {"type": "string", "title": "MTI"}}
                 },
                 "display": "render"
             },
             "downstream": {
                 "schema": {
-                    "id": "vendor-downstream", "version": 1, "title": "Downstream",
-                    "fields": [{"name": "code", "label": "Code", "type": "string"}]
+                    "type": "object", "title": "Downstream",
+                    "properties": {"code": {"type": "string", "title": "Code"}}
                 },
                 "display": "render"
             }

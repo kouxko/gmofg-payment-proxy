@@ -51,14 +51,15 @@ encode = "encode"
 "#;
 
 const SCHEMA: &str = r#"
-id = "t30-iso8583"
-version = 1
+type = "object"
 title = "T30 ISO8583"
 
-[[fields]]
-name = "message"
-label = "Message"
-type = "blob"
+[properties.message]
+type = "array"
+title = "Message"
+
+[properties.message.items]
+type = "number"
 "#;
 
 const SCRIPT: &str = r#"
@@ -69,12 +70,15 @@ fn frame(reader, context) {
 
 fn decode(origin, context) {
     let result = document::create();
-    result.set("message", origin);
+    result.set("/message", origin);
     result
 }
 
 fn encode(origin, document, context) {
-    document.get("message")
+    let message = document.get("/message");
+    let result = blob(message.len(), 0);
+    for index in 0..message.len() { result[index] = message[index]; }
+    result
 }
 
 fn display(document, context) { "<p>T30 ISO response</p>" }

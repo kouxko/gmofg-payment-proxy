@@ -5,7 +5,7 @@ fn frame(reader, context) { () }
 fn decode(origin, context) {
     if origin[0] == 0 { while true {} }
     let value = document::create();
-    value.set("amount", origin[0]);
+    value.set("/amount", origin[0]);
     value
 }
 "#;
@@ -48,8 +48,8 @@ fn decode(origin, context) {
     assert!(!cancellation.is_cancelled());
     let output = executor.execute_frame(vec![7]).unwrap();
     assert_eq!(
-        output.decoded_document().unwrap().get("amount").unwrap(),
-        &DocumentValue::Int(7)
+        output.decoded_document().unwrap().resolve(&JsonPointer::property("amount")).unwrap(),
+        &DocumentValue::integer(7).unwrap()
     );
 }
 
@@ -59,7 +59,7 @@ fn cancellation_interrupts_nonterminating_encode_and_reset_rearms_executor() {
 fn frame(reader, context) { () }
 fn decode(origin, context) {
     let value = document::create();
-    value.set("amount", origin[0]);
+    value.set("/amount", origin[0]);
     value
 }
 fn encode(origin, document, context) {

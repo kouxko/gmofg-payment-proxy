@@ -99,9 +99,9 @@ describe("ProtocolPackage ZIP import", () => {
     const preview = await screen.findByLabelText("协议包无源码预览");
     expect(preview).toHaveTextContent("iso-8583");
     expect(preview).toHaveTextContent("3.0.0");
-    expect(preview).toHaveTextContent("2 个字段");
-    expect(preview).toHaveTextContent("iso-message");
-    expect(preview).toHaveTextContent("iso-response");
+    expect(preview).toHaveTextContent("3 个节点");
+    expect(preview).toHaveTextContent("ISO 导入 Schema");
+    expect(preview).toHaveTextContent("ISO 导入响应 Schema");
     expect(preview).toHaveTextContent("Socket");
     expect(preview).toHaveTextContent("可安装新版本");
     expect(preview).toHaveTextContent("默认停用");

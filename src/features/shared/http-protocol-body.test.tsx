@@ -10,15 +10,7 @@ import { HttpProtocolBodyViewer } from "./http-protocol-body";
 const asciiBytes = (value: string) => Array.from(value, (character) => character.charCodeAt(0));
 
 function document(value: string): Document {
-  return {
-    schema: {
-      id: "http-upstream",
-      version: 1,
-      title: "支付请求字段",
-      fields: [{ name: "amount", type: "string", label: "金额" }],
-    },
-    values: [{ type: "string", value }],
-  };
+  return { amount: value };
 }
 
 const message: MessageContentViewModel = {
@@ -69,16 +61,16 @@ describe("HTTP 协议 Body 四阶段证据", () => {
 
     expect(screen.getByRole("tab", { name: "应用 → 代理" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "最终协议视图" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByText("200")).toBeVisible();
+    expect(screen.getByText(/"amount": "200"/)).toBeVisible();
     expect(screen.getByText("命中 2 条规则")).toBeVisible();
     expect(screen.queryByText("entry_point_failed")).not.toBeInTheDocument();
     expect(screen.getByText("协议视图生成失败，请查看原始或写出 Body。")).toBeVisible();
 
     await user.click(screen.getByRole("tab", { name: "代理 → 上游服务" }));
-    expect(screen.getByText("200")).toBeVisible();
+    expect(screen.getByText(/"amount": "200"/)).toBeVisible();
     await user.click(screen.getByRole("tab", { name: "应用 → 代理" }));
-    expect(screen.getByText("100")).toBeVisible();
-    expect(screen.queryByText("200")).not.toBeInTheDocument();
+    expect(screen.getByText(/"amount": "100"/)).toBeVisible();
+    expect(screen.queryByText(/"amount": "200"/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "原始 Body" }));
     expect(screen.getByText('{"amount":"0"}')).toBeVisible();

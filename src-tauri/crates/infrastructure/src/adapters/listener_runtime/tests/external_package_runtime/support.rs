@@ -8,7 +8,6 @@ use std::{
 };
 
 use async_trait::async_trait;
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::{SinkExt, StreamExt};
 use intercept_proxy_application::{
     AppResult, ExternalPackageApplicationPort, ListenerRuntimePort, ListenerRuntimeState,
@@ -328,19 +327,29 @@ async fn respond<S>(
             let decoded: ExternalDecodeRequest =
                 serde_json::from_value(request["params"].clone()).unwrap();
             serde_json::to_value(ExternalDecodeResponse {
-                document: serde_json::from_value(json!({
-                    "payload": {"type": "blob", "value_base64": STANDARD.encode(decoded.bytes().unwrap())}
-                })).unwrap(),
-            }).unwrap()
+                document: serde_json::from_value(json!({"payload": decoded.bytes().unwrap()}))
+                    .unwrap(),
+            })
+            .unwrap()
         }
         method if method.ends_with(".encode_and_encrypt") => {
             let encoded: ExternalEncodeRequest =
                 serde_json::from_value(request["params"].clone()).unwrap();
             let document = serde_json::to_value(encoded.document).unwrap();
-            let bytes = document["payload"]["value_base64"].as_str().map_or_else(
-                || vec![3, b'O', b'K'],
-                |value| STANDARD.decode(value).unwrap(),
-            );
+            let bytes = document["payload"]
+                .as_array()
+                .and_then(|values| {
+                    values
+                        .iter()
+                        .map(|value| {
+                            let value = value.as_f64()?;
+                            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+                            (value.fract() == 0.0 && (0.0..=255.0).contains(&value))
+                                .then_some(value as u8)
+                        })
+                        .collect::<Option<Vec<_>>>()
+                })
+                .unwrap_or_else(|| vec![3, b'O', b'K']);
             serde_json::to_value(ExternalEncodeResponse::from_bytes(&bytes)).unwrap()
         }
         method if method.ends_with(".render_message") => {
@@ -444,13 +453,13 @@ fn registration() -> ExternalPackageRegistration {
         },
         "document": {
             "upstream": {
-                "schema": {"id": "external-up", "title": "Up", "version": 1,
-                    "fields": [{"name": "payload", "label": "Payload", "type": "blob"}]},
+                "schema": {"type": "object", "title": "Up",
+                    "properties": {"payload": {"type": "array", "title": "Payload", "items": {"type": "number"}}}},
                 "display": "render_message"
             },
             "downstream": {
-                "schema": {"id": "external-down", "title": "Down", "version": 1,
-                    "fields": [{"name": "payload", "label": "Payload", "type": "blob"}]},
+                "schema": {"type": "object", "title": "Down",
+                    "properties": {"payload": {"type": "array", "title": "Payload", "items": {"type": "number"}}}},
                 "display": "render_message"
             }
         },

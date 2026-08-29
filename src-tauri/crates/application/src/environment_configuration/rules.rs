@@ -39,7 +39,6 @@ impl HttpRuleTemplate {
 #[serde(deny_unknown_fields)]
 struct HttpDocumentRuleTemplate {
     package: ProtocolPackageExactRef,
-    schema_version: u32,
     conditions: Vec<DocumentCondition>,
     actions: Vec<DocumentAction>,
 }
@@ -374,7 +373,6 @@ pub(super) struct ProtocolDocumentRuleTemplate {
     priority: i32,
     listener_alias: String,
     package: ProtocolPackageExactRef,
-    schema_version: u32,
     stage: ProtocolRuleStage,
     conditions: Vec<DocumentCondition>,
     actions: Vec<DocumentAction>,

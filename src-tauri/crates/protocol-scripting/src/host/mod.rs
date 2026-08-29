@@ -9,7 +9,7 @@ mod document;
 
 use std::sync::Arc;
 
-use intercept_proxy_domain::DocumentSchema;
+use intercept_proxy_domain::DocumentSchemaNode;
 use rhai::Engine;
 
 use crate::framing;
@@ -21,7 +21,7 @@ use crate::{CompiledProtocolPackage, ProtocolDirection};
 /// 创建其他协议包的 Document。注册器本身不保存 Document 或 Context，也就没有跨 Frame 状态。
 #[derive(Clone, Debug)]
 pub(crate) struct ProtocolHostApi {
-    schema: Arc<DocumentSchema>,
+    schema: Arc<DocumentSchemaNode>,
 }
 
 impl ProtocolHostApi {
@@ -43,10 +43,5 @@ impl ProtocolHostApi {
         document::register(engine, Arc::clone(&self.schema));
         context::register(engine);
         framing::register(engine);
-    }
-
-    /// 创建 Encode-only 等场景需要的空 Document，语义与脚本 `document::create()` 完全一致。
-    pub(crate) fn create_document(&self) -> intercept_proxy_domain::Document {
-        intercept_proxy_domain::Document::new(Arc::clone(&self.schema))
     }
 }

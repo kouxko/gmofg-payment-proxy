@@ -24,11 +24,10 @@ describe("protocol package import boundary model", () => {
       ...importPreview().capabilities,
       downstream: { ...importPreview().capabilities.downstream, encode: false },
     } }))).toBe(false);
-    expect(isImportPreview(importPreview({ upstream_schema: { ...importPreview().upstream_schema, fields: [{} as never] } }))).toBe(false);
-    expect(isImportPreview(importPreview({ upstream_schema: { ...importPreview().upstream_schema, fields: [] } }))).toBe(false);
+    expect(isImportPreview(importPreview({ upstream_schema: { root: { type: "array", items: {} as never } } }))).toBe(false);
+    expect(isImportPreview(importPreview({ upstream_schema: { root: { type: "array" } as never } }))).toBe(false);
     expect(isImportPreview(importPreview({ upstream_schema: {
-      ...importPreview().upstream_schema,
-      fields: [{ name: "mti", label: "MTI", type: "string" }, { name: "mti", label: "Again", type: "int" }],
+      root: { type: "object", properties: { mti: { type: "float" } as never } },
     } }))).toBe(false);
     expect(isImportPreview({ ...importPreview(), schema: importPreview().upstream_schema })).toBe(false);
     expect(isImportPreview({ ...importPreview(), content_types: ["application/json"] })).toBe(false);

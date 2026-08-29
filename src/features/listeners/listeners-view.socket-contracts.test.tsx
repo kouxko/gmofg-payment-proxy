@@ -66,8 +66,8 @@ function setupScriptedSocket() {
         upstream: { frame: true, decode: true, encode: true },
         downstream: { frame: true, decode: true, encode: true }, display: true,
       },
-      upstream_schema: { id: "iso-request", version: 1, title: "ISO Request", fields: [{ name: "mti", label: "MTI", type: "string" }] },
-      downstream_schema: { id: "iso-response", version: 1, title: "ISO Response", fields: [{ name: "response_code", label: "Response", type: "string" }] },
+      upstream_schema: { root: { type: "object", title: "ISO Request", properties: { mti: { type: "string", title: "MTI" } } } },
+      downstream_schema: { root: { type: "object", title: "ISO Response", properties: { response_code: { type: "string", title: "Response" } } } },
     }],
     installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
   }));

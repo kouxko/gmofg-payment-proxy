@@ -126,8 +126,6 @@ pub enum EnvironmentConfigurationParseError {
     UnknownField,
     #[error("candidate contains a server-owned forbidden field")]
     ForbiddenField,
-    #[error("protocol Document value wire is invalid")]
-    DocumentValueWireInvalid,
     #[error("weak-network wire is invalid")]
     WeakNetworkWireInvalid,
     #[error("certificate material role is unsupported")]
@@ -185,28 +183,6 @@ fn preflight_wire(wire: &Value) -> Result<(), EnvironmentConfigurationParseError
         return Err(EnvironmentConfigurationParseError::UnsupportedSecretRole);
     }
     let workspace = &wire["workspace"];
-    if workspace["rules"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|rule| matches!(rule["type"].as_str(), Some("http" | "socket")))
-        .flat_map(|rule| {
-            let document = if rule["type"] == "http" {
-                &rule["document"]
-            } else {
-                rule
-            };
-            document["conditions"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .chain(document["actions"].as_array().into_iter().flatten())
-        })
-        .filter_map(|entry| entry.get("value"))
-        .any(|value| !value.is_object())
-    {
-        return Err(EnvironmentConfigurationParseError::DocumentValueWireInvalid);
-    }
     if workspace["android_network_profiles"]
         .as_array()
         .into_iter()

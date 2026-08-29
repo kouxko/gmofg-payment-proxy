@@ -5,14 +5,12 @@ use crate::{
     ProtocolPackageCompiler, ProtocolPackageFiles, ProtocolScriptCompileError,
 };
 
-pub(super) const DOCUMENT_SCHEMA: &str = r#"id = "test-message"
-version = 1
+pub(super) const DOCUMENT_SCHEMA: &str = r#"type = "object"
 title = "Test Message"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 "#;
 
 pub(super) fn minimal_manifest() -> String {

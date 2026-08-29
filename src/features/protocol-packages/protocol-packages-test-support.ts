@@ -52,21 +52,15 @@ export function detail(
       display: true,
     },
     upstream_schema: {
-      id: "iso-message",
-      version: 1,
-      title: "ISO 8583 消息",
-      fields: [
-        { name: "message_type", label: "消息类型", type: "string" },
-        { name: "amount", label: "交易金额", type: "int" },
-      ],
+      root: { type: "object", title: "ISO 8583 消息", properties: {
+        message_type: { type: "string", title: "消息类型" },
+        amount: { type: "number", title: "交易金额" },
+      } },
     },
     downstream_schema: {
-      id: "iso-response",
-      version: 1,
-      title: "ISO 8583 响应",
-      fields: [
-        { name: "response_code", label: "响应码", type: "string" },
-      ],
+      root: { type: "object", title: "ISO 8583 响应", properties: {
+        response_code: { type: "string", title: "响应码" },
+      } },
     },
     usages: [
       {
@@ -122,19 +116,15 @@ export function importPreview(
       display: true,
     },
     upstream_schema: {
-      id: "iso-message",
-      version: 2,
-      title: "ISO 导入 Schema",
-      fields: [
-        { name: "mti", label: "消息类型", type: "string" },
-        { name: "amount", label: "金额", type: "int" },
-      ],
+      root: { type: "object", title: "ISO 导入 Schema", properties: {
+        mti: { type: "string", title: "消息类型" },
+        amount: { type: "number", title: "金额" },
+      } },
     },
     downstream_schema: {
-      id: "iso-response",
-      version: 2,
-      title: "ISO 导入响应 Schema",
-      fields: [{ name: "response_code", label: "响应码", type: "string" }],
+      root: { type: "object", title: "ISO 导入响应 Schema", properties: {
+        response_code: { type: "string", title: "响应码" },
+      } },
     },
     ...overrides,
   };

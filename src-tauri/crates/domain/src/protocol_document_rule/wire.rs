@@ -6,27 +6,12 @@ use super::{DocumentAction, DocumentCondition, ProtocolDocumentRuleDefinition, P
 use crate::{DocumentValue, ListenerId, ProtocolDocumentRuleId, ProtocolPackageRef, Revision};
 
 #[derive(Deserialize)]
-#[serde(
-    tag = "type",
-    content = "value",
-    rename_all = "snake_case",
-    deny_unknown_fields
-)]
-pub(super) enum StrictDocumentValue {
-    String(String),
-    Int(i64),
-    Bool(bool),
-    Blob(Vec<u8>),
-}
+#[serde(transparent)]
+pub(super) struct StrictDocumentValue(DocumentValue);
 
 impl From<StrictDocumentValue> for DocumentValue {
     fn from(value: StrictDocumentValue) -> Self {
-        match value {
-            StrictDocumentValue::String(value) => Self::String(value),
-            StrictDocumentValue::Int(value) => Self::Int(value),
-            StrictDocumentValue::Bool(value) => Self::Bool(value),
-            StrictDocumentValue::Blob(value) => Self::Blob(value),
-        }
+        value.0
     }
 }
 
@@ -41,7 +26,6 @@ pub(super) struct ProtocolDocumentRuleWire {
     pub(super) created_order: u64,
     pub(super) listener_id: ListenerId,
     pub(super) package: ProtocolPackageRef,
-    pub(super) schema_version: u32,
     pub(super) stage: ProtocolRuleStage,
     pub(super) conditions: Vec<DocumentCondition>,
     pub(super) actions: Vec<DocumentAction>,
@@ -87,7 +71,6 @@ impl From<ProtocolDocumentRuleDefinition> for ProtocolDocumentRuleWire {
             created_order: value.created_order,
             listener_id: value.listener_id,
             package: value.package,
-            schema_version: value.schema_version,
             stage: value.stage,
             conditions: value.conditions,
             actions: value.actions,

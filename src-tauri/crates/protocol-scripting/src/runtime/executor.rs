@@ -20,7 +20,7 @@ use crate::{
 mod helpers;
 mod stages;
 
-use helpers::{compiled_direction, exceeds_limit, find_resource_limit, validate_document_schema};
+use helpers::{compiled_direction, exceeds_limit, find_resource_limit};
 
 use super::{
     DirectionExecutionPlan, DisplayFallbackReason, ProtocolDisplayResult, ProtocolFrameOutput,
@@ -37,14 +37,13 @@ pub struct ProtocolDirectionExecutor {
     deadline: CallDeadline,
     package: ProtocolPackageRef,
     plan: DirectionExecutionPlan,
-    host: ProtocolHostApi,
     decode: CompiledEntry,
     encode: CompiledEntry,
     display: CompiledEntry,
     connection_id: String,
     listener_id: String,
     limits: ProtocolRuntimeLimits,
-    output_owner: Arc<()>,
+    output_owner: Arc<u8>,
     cancellation: ProtocolExecutionCancellation,
 }
 
@@ -106,14 +105,13 @@ impl ProtocolDirectionExecutor {
             deadline,
             package: package.package().clone(),
             plan,
-            host,
             decode: direction.decode().clone(),
             encode: direction.encode().clone(),
             display: package.display(plan.direction()).clone(),
             connection_id: connection_id.into(),
             listener_id: listener_id.into(),
             limits,
-            output_owner: Arc::new(()),
+            output_owner: Arc::new(0),
             cancellation,
         })
     }
@@ -153,12 +151,6 @@ impl ProtocolDirectionExecutor {
     ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
         self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
         let decoded = self.call_decode(&origin)?;
-        validate_document_schema(&decoded, self.host.create_document().schema()).map_err(|()| {
-            ProtocolRuntimeError::EntryPointFailed {
-                package: self.package.clone(),
-                entry: ProtocolEntryPoint::Decode,
-            }
-        })?;
         self.finish_frame(origin, transform(decoded)?, true)
     }
 
@@ -173,19 +165,7 @@ impl ProtocolDirectionExecutor {
     ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
         self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
         let decoded = self.call_decode(&origin)?;
-        validate_document_schema(&decoded, self.host.create_document().schema()).map_err(|()| {
-            ProtocolRuntimeError::EntryPointFailed {
-                package: self.package.clone(),
-                entry: ProtocolEntryPoint::Decode,
-            }
-        })?;
         let transformed = transform(decoded)?;
-        validate_document_schema(&transformed, self.host.create_document().schema()).map_err(
-            |()| ProtocolRuntimeError::EntryPointFailed {
-                package: self.package.clone(),
-                entry: ProtocolEntryPoint::Decode,
-            },
-        )?;
         Ok(ProtocolFrameOutput::new(
             Arc::clone(&self.output_owner),
             origin.clone(),
@@ -206,19 +186,7 @@ impl ProtocolDirectionExecutor {
     ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
         self.ensure_blob_input(ProtocolEntryPoint::Decode, origin.len())?;
         let decoded = self.call_decode(&origin)?;
-        validate_document_schema(&decoded, self.host.create_document().schema()).map_err(|()| {
-            ProtocolRuntimeError::EntryPointFailed {
-                package: self.package.clone(),
-                entry: ProtocolEntryPoint::Decode,
-            }
-        })?;
         let mut transformed = transform(decoded.clone())?;
-        validate_document_schema(&transformed, self.host.create_document().schema()).map_err(
-            |()| ProtocolRuntimeError::EntryPointFailed {
-                package: self.package.clone(),
-                entry: ProtocolEntryPoint::Decode,
-            },
-        )?;
         let written = if transformed == decoded {
             origin.clone()
         } else {
@@ -252,14 +220,6 @@ impl ProtocolDirectionExecutor {
         mut document: Document,
         decoded: bool,
     ) -> ProtocolRuntimeResult<ProtocolFrameOutput> {
-        // 规则实现也只能通过 Domain API 修改 Document；这里再次验证身份，防止未来闭包边界扩展后
-        // 把其他包的 Document 带入 Encode。
-        validate_document_schema(&document, self.host.create_document().schema()).map_err(
-            |()| ProtocolRuntimeError::EntryPointFailed {
-                package: self.package.clone(),
-                entry: ProtocolEntryPoint::Decode,
-            },
-        )?;
         let decoded_document = decoded.then(|| document.clone());
         self.ensure_blob_input(ProtocolEntryPoint::Encode, origin.len())?;
         let written = self.call_encode(&origin, &mut document)?;
@@ -315,15 +275,12 @@ impl ProtocolDirectionExecutor {
         }
     }
 
-    /// 对当前方向、当前 Schema 的中间 Document 生成 UI HTML。
+    /// 对当前方向的中间 Document 生成 UI HTML。
     ///
     /// HTTP 会在同一网络方向内顺序执行两段规则；该入口让调用方分别冻结每段规则执行后的
     /// Document 与 Display，而不会把中间状态误当作最终网络输出。
     #[must_use]
     pub fn render_document_display(&mut self, document: &Document) -> ProtocolDisplayResult {
-        if validate_document_schema(document, self.host.create_document().schema()).is_err() {
-            return ProtocolDisplayResult::HexFallback(DisplayFallbackReason::EntryPointFailed);
-        }
         match self.call_display(document) {
             Ok(html) => ProtocolDisplayResult::UntrustedHtml(html),
             Err(ProtocolRuntimeError::ResourceLimitExceeded { limit, .. }) => {

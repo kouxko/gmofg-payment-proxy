@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use rhai::{AST, Position};
 
-use intercept_proxy_domain::DocumentSchema;
+use intercept_proxy_domain::DocumentSchemaNode;
 
 use crate::{
     CompiledProtocolPackage, PackageFilePath, ProtocolPackageFile, ProtocolPackageFiles,
@@ -98,7 +98,7 @@ fn parse_schema(
     files: &ProtocolPackageFiles,
     path: &PackageFilePath,
     field: &'static str,
-) -> Result<Arc<DocumentSchema>, ProtocolPackageCompilationError> {
+) -> Result<Arc<DocumentSchemaNode>, ProtocolPackageCompilationError> {
     let bytes = files.get(path).ok_or_else(|| {
         ProtocolPackageParseError::new(
             ProtocolPackageParseErrorCode::ReferencedFileMissing,

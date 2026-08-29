@@ -6,7 +6,7 @@ use std::{
     },
 };
 
-use intercept_proxy_domain::{Document, DocumentSchema, ProtocolPackageRef};
+use intercept_proxy_domain::{Document, DocumentSchemaNode, ProtocolPackageRef};
 
 use crate::{
     CompiledProtocolPackage, LocalResponseOwnershipViolation, ProtocolDirection,
@@ -21,9 +21,9 @@ use super::{DirectionExecutionPlan, ProtocolDisplayResult, ProtocolFrameOutput};
 /// 字段全部私有且只提供不可变借用，所以下游规则无法修改 Request Document；协调器会在
 /// response 阶段按下行 Schema 创建独立的空 Document。
 pub struct LocalRequestOutput {
-    owner: Arc<()>,
+    owner: Arc<u8>,
     package: ProtocolPackageRef,
-    schema: Arc<DocumentSchema>,
+    schema: Arc<DocumentSchemaNode>,
     connection_id: String,
     output: ProtocolFrameOutput,
     response_started: AtomicBool,
@@ -50,16 +50,16 @@ impl fmt::Debug for LocalRequestOutput {
             .field("package", &self.package)
             .field("connection_id", &self.connection_id)
             .field("origin_bytes", &self.origin().len())
-            .field("document_schema", self.document().schema().id())
+            .field("document_schema", &self.schema)
             .finish_non_exhaustive()
     }
 }
 
 /// `LocalResponder` 已确定但尚未由调用方确认 write + flush 的单次 response。
 pub struct LocalResponseOutput {
-    owner: Arc<()>,
+    owner: Arc<u8>,
     package: ProtocolPackageRef,
-    schema: Arc<DocumentSchema>,
+    schema: Arc<DocumentSchemaNode>,
     connection_id: String,
     output: Arc<ProtocolFrameOutput>,
     committed: AtomicBool,
@@ -99,8 +99,7 @@ impl fmt::Debug for LocalResponseOutput {
             .field("connection_id", &self.connection_id)
             .field("request_bytes", &self.request_origin().len())
             .field("response_bytes", &self.written().len())
-            .field("schema_id", &self.schema.id())
-            .field("schema_version", &self.schema.version())
+            .field("schema", &self.schema)
             .finish_non_exhaustive()
     }
 }
@@ -109,9 +108,9 @@ impl fmt::Debug for LocalResponseOutput {
 ///
 /// 句柄没有公开构造器，也不暴露线路字节；Display 只是提交后的 UI 旁路，失败只能降级 Hex。
 pub struct LocalResponseDisplayHandle {
-    owner: Arc<()>,
+    owner: Arc<u8>,
     package: ProtocolPackageRef,
-    schema: Arc<DocumentSchema>,
+    schema: Arc<DocumentSchemaNode>,
     connection_id: String,
     output: Arc<ProtocolFrameOutput>,
 }
@@ -131,10 +130,10 @@ impl fmt::Debug for LocalResponseDisplayHandle {
 ///
 /// 上游负责解析请求，下游负责编码响应；同一个 exchange 只通过显式 Document 桥接。
 pub struct LocalResponderCoordinator {
-    owner: Arc<()>,
+    owner: Arc<u8>,
     package: ProtocolPackageRef,
-    upstream_schema: Arc<DocumentSchema>,
-    downstream_schema: Arc<DocumentSchema>,
+    upstream_schema: Arc<DocumentSchemaNode>,
+    downstream_schema: Arc<DocumentSchemaNode>,
     connection_id: String,
     listener_id: String,
     upstream: ProtocolDirectionExecutor,
@@ -189,7 +188,7 @@ impl LocalResponderCoordinator {
             cancellation.clone(),
         )?;
         Ok(Self {
-            owner: Arc::new(()),
+            owner: Arc::new(0),
             package: package.package().clone(),
             upstream_schema: package.schema_arc(ProtocolDirection::Upstream),
             downstream_schema: package.schema_arc(ProtocolDirection::Downstream),
@@ -254,10 +253,11 @@ impl LocalResponderCoordinator {
         {
             return Err(self.ownership_error(LocalResponseOwnershipViolation::Output));
         }
-        let initial = Document::new(Arc::clone(&self.downstream_schema));
+        let initial = Document::new(intercept_proxy_domain::DocumentValue::Object(
+            std::collections::BTreeMap::default(),
+        ));
         let document = transform(initial)?;
         self.ensure_not_cancelled()?;
-        self.validate_downstream_schema(document.schema())?;
         let output = self
             .downstream
             .execute_predecoded_document(request.origin().to_vec(), document)?;
@@ -330,14 +330,13 @@ impl LocalResponderCoordinator {
     fn validate_request(&self, request: &LocalRequestOutput) -> ProtocolRuntimeResult<()> {
         self.validate_identity(&request.owner, &request.package, &request.connection_id)?;
         self.validate_upstream_schema(&request.schema)?;
-        self.validate_upstream_schema(request.document().schema())?;
         Ok(())
     }
 
     fn validate_response(&self, response: &LocalResponseOutput) -> ProtocolRuntimeResult<()> {
         self.validate_identity(&response.owner, &response.package, &response.connection_id)?;
         self.validate_downstream_schema(&response.schema)?;
-        self.validate_downstream_schema(response.response_document().schema())
+        Ok(())
     }
 
     fn validate_display_handle(
@@ -346,12 +345,12 @@ impl LocalResponderCoordinator {
     ) -> ProtocolRuntimeResult<()> {
         self.validate_identity(&handle.owner, &handle.package, &handle.connection_id)?;
         self.validate_downstream_schema(&handle.schema)?;
-        self.validate_downstream_schema(handle.output.execution_document().schema())
+        Ok(())
     }
 
     fn validate_identity(
         &self,
-        owner: &Arc<()>,
+        owner: &Arc<u8>,
         package: &ProtocolPackageRef,
         connection_id: &str,
     ) -> ProtocolRuntimeResult<()> {
@@ -367,7 +366,7 @@ impl LocalResponderCoordinator {
         Ok(())
     }
 
-    fn validate_upstream_schema(&self, schema: &DocumentSchema) -> ProtocolRuntimeResult<()> {
+    fn validate_upstream_schema(&self, schema: &DocumentSchemaNode) -> ProtocolRuntimeResult<()> {
         if schema == self.upstream_schema.as_ref() {
             Ok(())
         } else {
@@ -375,7 +374,7 @@ impl LocalResponderCoordinator {
         }
     }
 
-    fn validate_downstream_schema(&self, schema: &DocumentSchema) -> ProtocolRuntimeResult<()> {
+    fn validate_downstream_schema(&self, schema: &DocumentSchemaNode) -> ProtocolRuntimeResult<()> {
         if schema == self.downstream_schema.as_ref() {
             Ok(())
         } else {
@@ -406,8 +405,8 @@ impl fmt::Debug for LocalResponderCoordinator {
         formatter
             .debug_struct("LocalResponderCoordinator")
             .field("package", &self.package)
-            .field("upstream_schema_id", &self.upstream_schema.id())
-            .field("downstream_schema_id", &self.downstream_schema.id())
+            .field("upstream_schema", &self.upstream_schema)
+            .field("downstream_schema", &self.downstream_schema)
             .field("connection_id", &self.connection_id)
             .field("listener_id", &self.listener_id)
             .field("limits", &self.limits)

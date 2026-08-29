@@ -242,13 +242,17 @@ async fn schema_rule_mismatch_fails_before_token_retention_or_writes() {
     let prepared = two_package_backup();
     register_packages(&portability, &prepared);
     let first = prepared.protocol_packages[0].package.clone();
-    portability
-        .descriptions
-        .lock()
-        .get_mut(&first)
-        .unwrap()
-        .upstream_schema
-        .version = 99;
+    {
+        let mut descriptions = portability.descriptions.lock();
+        let schema = &mut descriptions.get_mut(&first).unwrap().upstream_schema.root;
+        let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } = schema else {
+            unreachable!()
+        };
+        properties.insert(
+            "amount".into(),
+            intercept_proxy_domain::DocumentSchemaNode::String { title: None },
+        );
+    }
     let before = workspaces.list().await.unwrap();
     let source = FakeBackupPrepareSource::new(prepared);
 

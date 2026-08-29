@@ -327,35 +327,29 @@ pub(super) fn usage(
 
 pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescriptionViewModel {
     let upstream_schema = ProtocolPackageSchemaViewModel {
-        id: "payments".into(),
-        version: 1,
-        title: "Payments".into(),
-        fields: [
-            (
-                "trace_id",
-                ProtocolPackageSchemaFieldTypeViewModel::String,
-                "Trace ID",
-            ),
-            (
-                "amount",
-                ProtocolPackageSchemaFieldTypeViewModel::Int,
-                "Amount",
-            ),
-            (
-                "approved",
-                ProtocolPackageSchemaFieldTypeViewModel::Bool,
-                "Approved",
-            ),
-        ]
-        .into_iter()
-        .map(
-            |(name, field_type, label)| ProtocolPackageSchemaFieldViewModel {
-                name: name.into(),
-                label: label.into(),
-                field_type,
-            },
-        )
-        .collect(),
+        root: intercept_proxy_domain::DocumentSchemaNode::Object {
+            title: Some("Payments".into()),
+            properties: std::collections::BTreeMap::from([
+                (
+                    "trace_id".into(),
+                    intercept_proxy_domain::DocumentSchemaNode::String {
+                        title: Some("Trace ID".into()),
+                    },
+                ),
+                (
+                    "amount".into(),
+                    intercept_proxy_domain::DocumentSchemaNode::Number {
+                        title: Some("Amount".into()),
+                    },
+                ),
+                (
+                    "approved".into(),
+                    intercept_proxy_domain::DocumentSchemaNode::Boolean {
+                        title: Some("Approved".into()),
+                    },
+                ),
+            ]),
+        },
     };
     ProtocolPackageDescriptionViewModel {
         package,
@@ -375,10 +369,7 @@ pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescrip
         },
         upstream_schema: upstream_schema.clone(),
         downstream_schema: ProtocolPackageSchemaViewModel {
-            id: "responses".into(),
-            version: 2,
-            title: "Responses".into(),
-            fields: upstream_schema.fields,
+            root: upstream_schema.root,
         },
     }
 }

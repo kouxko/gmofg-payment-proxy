@@ -76,7 +76,7 @@ LLLVAR 字段保存；真实接入必须根据收单机构或交换网络规范�
 
 ```rhai
 let document = document::create();
-document.set("amount", 1000);
+document.set("/amount", 1000);
 ```
 
 因此应用在收到报文前就知道 MTI 和全部 DE2-DE128 规则变量。例如：

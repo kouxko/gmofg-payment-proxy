@@ -27,12 +27,12 @@ fn ipc_returns_all_four_strict_document_value_variants() {
     let webview = test_webview(&app);
     for (field_type, raw, expected) in [
         ("string", "金额", DocumentValue::String("金额".into())),
-        ("int", "-42", DocumentValue::Int(-42)),
-        ("bool", "false", DocumentValue::Bool(false)),
+        ("int", "-42", DocumentValue::integer(-42).unwrap()),
+        ("bool", "false", DocumentValue::Boolean(false)),
         (
             "blob",
             "01:a0-FF",
-            DocumentValue::Blob(vec![0x01, 0xA0, 0xFF]),
+            DocumentValue::byte_array(vec![0x01, 0xA0, 0xFF]),
         ),
     ] {
         let actual: DocumentValue =
@@ -53,7 +53,7 @@ fn ipc_preserves_exact_boundaries_and_returns_payload_free_errors() {
     assert_eq!(actual, DocumentValue::String("x".repeat(16 * 1_024)));
 
     let exact_blob = "AA".repeat(64 * 1_024);
-    let DocumentValue::Blob(actual) =
+    let DocumentValue::byte_array(actual) =
         invoke_ok::<DocumentValue>(&webview, json!({ "fieldType": "blob", "raw": exact_blob }))
     else {
         panic!("Blob IPC result must keep its tagged type")
@@ -76,7 +76,7 @@ fn ipc_preserves_exact_boundaries_and_returns_payload_free_errors() {
     let exact_int = format!("{}1", " ".repeat(127));
     assert_eq!(
         invoke_ok::<DocumentValue>(&webview, json!({ "fieldType": "int", "raw": exact_int }),),
-        DocumentValue::Int(1)
+        DocumentValue::integer(1).unwrap()
     );
     let exact_long_digits = invoke_error(
         &webview,

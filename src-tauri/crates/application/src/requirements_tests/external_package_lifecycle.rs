@@ -49,7 +49,7 @@ async fn external_socket_package_exposes_rule_capabilities_and_accepts_rules() {
         .await
         .unwrap();
     assert_eq!(capabilities.package, package);
-    assert_eq!(capabilities.fields[0].name, "amount");
+    assert_eq!(capabilities.fields[0].name, "/amount");
 
     let saved = application
         .protocol_rule_save(ProtocolRuleSaveInput {
@@ -60,7 +60,6 @@ async fn external_socket_package_exposes_rule_capabilities_and_accepts_rules() {
             priority: 0,
             listener_id,
             package,
-            schema_version: 1,
             stage: ProtocolRuleStage::AppToProxy,
             conditions: Vec::new(),
             actions: vec![DocumentAction::RecordMatch],

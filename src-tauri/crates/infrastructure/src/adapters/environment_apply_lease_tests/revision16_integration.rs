@@ -285,8 +285,8 @@ fn external_registration() -> ExternalPackageRegistration {
             "description": "external baseline projection"
         },
         "document": {
-            "upstream": {"schema": {"id": "up", "version": 1, "title": "Up", "fields": [{"name":"mti","label":"MTI","type":"string"}]}, "display": "render"},
-            "downstream": {"schema": {"id": "down", "version": 1, "title": "Down", "fields": [{"name":"code","label":"Code","type":"string"}]}, "display": "render"}
+            "upstream": {"schema": {"type": "object", "title": "Up", "properties": {"mti":{"type":"string","title":"MTI"}}}, "display": "render"},
+            "downstream": {"schema": {"type": "object", "title": "Down", "properties": {"code":{"type":"string","title":"Code"}}}, "display": "render"}
         },
         "hooks": {
             "upstream": {"frame": "frame", "decode": "decode", "encode": "encode"},

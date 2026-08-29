@@ -8,7 +8,7 @@ fn frame(reader, context) { throw "frame is owned by the inspector" }
 fn decode(origin, context) {
     if context.direction() != "upstream" { throw "downstream decode must be skipped"; }
     let value = document::create();
-    value.set("amount", origin[0]);
+    value.set("/amount", origin[0]);
     value
 }
 
@@ -16,7 +16,7 @@ fn encode(origin, document, context) {
     if context.direction() == "upstream" { return origin; }
     let result = blob(2, 0);
     result[0] = 0x44;
-    result[1] = if document.has("amount") { document.get("amount") } else { 0 };
+    result[1] = if document.has("/amount") { document.get("/amount") } else { 0 };
     result
 }
 
@@ -47,70 +47,56 @@ fn local_responder_transforms_request_then_builds_an_independent_response() {
     let mut coordinator = local_coordinator(&package);
     let request = coordinator
         .decode_request_with_document_transform(vec![7], |mut document| {
-            document.set("amount", DocumentValue::Int(8)).unwrap();
+            document.set(&JsonPointer::property("amount"), DocumentValue::integer(8).unwrap()).unwrap();
             Ok(document)
         })
         .unwrap();
     let response = coordinator
         .build_response(&request, |mut document| {
-            document.set("amount", DocumentValue::Int(42)).unwrap();
+            document.set(&JsonPointer::property("amount"), DocumentValue::integer(42).unwrap()).unwrap();
             Ok(document)
         })
         .unwrap();
 
     assert_eq!(response.written(), &[0x44, 42]);
     assert_eq!(
-        response.response_document().get("amount").unwrap(),
-        &DocumentValue::Int(42)
+        response.response_document().resolve(&JsonPointer::property("amount")).unwrap(),
+        &DocumentValue::integer(42).unwrap()
     );
     assert_eq!(
-        request.document().get("amount").unwrap(),
-        &DocumentValue::Int(8)
+        request.document().resolve(&JsonPointer::property("amount")).unwrap(),
+        &DocumentValue::integer(8).unwrap()
     );
 }
 
 #[test]
 fn local_responder_uses_directional_schemas_for_request_and_response() {
-    let upstream = DocumentSchema::new(
-        DocumentSchemaId::new("local-request").unwrap(),
-        1,
-        "Local Request",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("request_amount").unwrap(),
-                DocumentFieldType::Int,
-                "Request Amount",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
-    let downstream = DocumentSchema::new(
-        DocumentSchemaId::new("local-response").unwrap(),
-        1,
-        "Local Response",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("response_amount").unwrap(),
-                DocumentFieldType::Int,
-                "Response Amount",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
+    let upstream = DocumentSchemaNode::Object {
+        title: Some("Local Request".to_owned()),
+        properties: BTreeMap::from([(
+            "request_amount".to_owned(),
+            DocumentSchemaNode::Number { title: Some("Request Amount".to_owned()) },
+        )]),
+    };
+    let downstream = DocumentSchemaNode::Object {
+        title: Some("Local Response".to_owned()),
+        properties: BTreeMap::from([(
+            "response_amount".to_owned(),
+            DocumentSchemaNode::Number { title: Some("Response Amount".to_owned()) },
+        )]),
+    };
     let script = r#"
 fn frame(reader, context) { () }
 fn decode(origin, context) {
     let result = document::create();
-    result.set("request_amount", origin[1].to_int());
+    result.set("/request_amount", origin[1].to_int());
     result
 }
 fn encode(origin, document, context) {
     let result = blob(2, 0);
     result[0] = 209;
-    result[1] = if document.has("response_amount") {
-        document.get("response_amount")
+    result[1] = if document.has("/response_amount") {
+        document.get("/response_amount")
     } else { 0 };
     result
 }
@@ -124,23 +110,23 @@ fn display(document, context) { "<p>directional local response</p>" }
 
     let request = coordinator.decode_request(vec![2, 11]).unwrap();
     assert_eq!(
-        request.document().get("request_amount").unwrap(),
-        &DocumentValue::Int(11)
+        request.document().resolve(&JsonPointer::property("request_amount")).unwrap(),
+        &DocumentValue::integer(11).unwrap()
     );
     let response = coordinator
         .build_response(&request, |mut document| {
             document
-                .set("response_amount", DocumentValue::Int(42))
+                .set(&JsonPointer::property("response_amount"), DocumentValue::integer(42).unwrap())
                 .unwrap();
             Ok(document)
         })
         .unwrap();
     assert_eq!(response.written(), &[209, 42]);
     assert_eq!(
-        response.response_document().get("response_amount").unwrap(),
-        &DocumentValue::Int(42)
+        response.response_document().resolve(&JsonPointer::property("response_amount")).unwrap(),
+        &DocumentValue::integer(42).unwrap()
     );
-    assert!(response.response_document().get("request_amount").is_err());
+    assert!(response.response_document().resolve(&JsonPointer::property("request_amount")).is_err());
 }
 
 #[test]
@@ -210,20 +196,13 @@ fn local_bridge_rejects_foreign_package_schema_connection_and_output() {
         LocalResponseOwnershipViolation::Package,
     );
 
-    let foreign_schema = DocumentSchema::new(
-        DocumentSchemaId::new("foreign-schema").unwrap(),
-        1,
-        "Foreign",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("amount").unwrap(),
-                DocumentFieldType::Int,
-                "Amount",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
+    let foreign_schema = DocumentSchemaNode::Object {
+        title: Some("Foreign".to_owned()),
+        properties: BTreeMap::from([(
+            "amount".to_owned(),
+            DocumentSchemaNode::Number { title: Some("Amount".to_owned()) },
+        )]),
+    };
     let schema_package = CompiledProtocolPackageTestBuilder::new()
         .with_schema(foreign_schema)
         .with_script(LOCAL_SCRIPT)
@@ -253,16 +232,21 @@ fn local_bridge_rejects_foreign_package_schema_connection_and_output() {
         LocalResponseOwnershipViolation::Output,
     );
 
-    let schema_request = source.decode_request(vec![7]).unwrap();
-    assert_ownership_violation(
-        &source
-            .build_response(&schema_request, |_| {
-                Ok(Document::new(
-                    schema_package.schema(ProtocolDirection::Downstream).clone(),
-                ))
-            })
-            .unwrap_err(),
-        LocalResponseOwnershipViolation::Schema,
+    let metadata_request = source.decode_request(vec![7]).unwrap();
+    let response = source
+        .build_response(&metadata_request, |_| {
+            Ok(Document::new(DocumentValue::Object(BTreeMap::from([(
+                "undeclared".to_owned(),
+                DocumentValue::null(),
+            )]))))
+        })
+        .expect("incomplete schema metadata does not reject response fields");
+    assert_eq!(
+        response
+            .response_document()
+            .resolve(&JsonPointer::property("undeclared"))
+            .unwrap(),
+        &DocumentValue::null()
     );
 }
 

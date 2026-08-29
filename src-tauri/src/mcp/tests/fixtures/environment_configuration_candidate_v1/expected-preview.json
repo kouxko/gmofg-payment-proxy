@@ -232,25 +232,16 @@
     ]
   },
   "protocol_document_values": [
+    "abc",
+    7.5,
+    true,
+    null,
     {
-      "type": "string",
-      "value": "abc"
+      "nested": "value"
     },
-    {
-      "type": "int",
-      "value": 7
-    },
-    {
-      "type": "bool",
-      "value": true
-    },
-    {
-      "type": "blob",
-      "value": [
-        0,
-        255
-      ]
-    }
+    [
+      0.0
+    ]
   ],
   "terminal_action_fields": {
     "TruncateResponse": [

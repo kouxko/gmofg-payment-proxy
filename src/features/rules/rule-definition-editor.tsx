@@ -213,7 +213,6 @@ function DocumentEditor(props: { packageLabel: string; editorScope: string; fiel
     </div></div>)}
     <div className="flex flex-wrap gap-2">
       {props.commonActions.includes("record_match") && <Button size="sm" variant="outline" onPress={() => props.onCreateAction({ type: "record_match" })}>添加：记录命中</Button>}
-      {props.commonActions.includes("clear_document") && <Button size="sm" variant="outline" onPress={() => props.onCreateAction({ type: "clear_document" })}>添加：清空 Document</Button>}
     </div>
     {props.conditions.map((condition, index) => <div className="flex items-center rounded-md border p-2 text-sm" key={`${condition.field}-${index}`}><span>{condition.field} equals</span><Button aria-label={`删除 Document 条件 ${index + 1}`} className="ml-auto" size="sm" variant="ghost" onPress={() => props.onConditionsChange(props.conditions.filter((_, itemIndex) => itemIndex !== index))}>删除</Button></div>)}
     {props.actions.map((action, index) => <div className="flex items-center rounded-md border p-2 text-sm" key={`${action.type}-${index}`}><span>{documentActionLabel(action)}</span><Button aria-label={`删除 Document 动作 ${index + 1}`} className="ml-auto" size="sm" variant="ghost" onPress={() => props.onActionsChange(props.actions.filter((_, itemIndex) => itemIndex !== index))}>删除</Button></div>)}
@@ -295,7 +294,6 @@ function httpConditionLabel(condition: import("@/generated/rust-types").MatchCon
 
 function documentActionLabel(action: DocumentAction) {
   if (action.type === "record_match") return "记录命中";
-  if (action.type === "clear_document") return "清空 Document";
   if (action.type === "clear_field") return `清除字段 ${action.field}`;
   return `设置字段 ${action.field}`;
 }

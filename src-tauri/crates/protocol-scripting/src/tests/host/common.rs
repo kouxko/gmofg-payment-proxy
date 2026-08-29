@@ -1,6 +1,6 @@
-use intercept_proxy_domain::{
-    DocumentField, DocumentFieldName, DocumentFieldType, DocumentSchema, DocumentSchemaId,
-};
+use std::collections::BTreeMap;
+
+use intercept_proxy_domain::DocumentSchemaNode;
 use rhai::Engine;
 
 use crate::{
@@ -8,35 +8,45 @@ use crate::{
     test_support::CompiledProtocolPackageTestBuilder,
 };
 
-pub(super) fn schema() -> DocumentSchema {
-    DocumentSchema::new(
-        DocumentSchemaId::new("host-test-message").unwrap(),
-        3,
-        "Host Test Message",
-        vec![
-            field("text_value", DocumentFieldType::String, "Text"),
-            field("int_value", DocumentFieldType::Int, "Integer"),
-            field("bool_value", DocumentFieldType::Bool, "Boolean"),
-            field("blob_value", DocumentFieldType::Blob, "Binary"),
-        ],
-    )
-    .unwrap()
-}
-
-pub(super) fn host() -> ProtocolHostApi {
-    let package = CompiledProtocolPackageTestBuilder::new()
-        .with_schema(schema())
-        .build();
-    ProtocolHostApi::for_package(&package, ProtocolDirection::Upstream)
+pub(super) fn schema() -> DocumentSchemaNode {
+    DocumentSchemaNode::Object {
+        title: Some("Host Test Message".to_owned()),
+        properties: BTreeMap::from([
+            (
+                "text".to_owned(),
+                DocumentSchemaNode::String { title: None },
+            ),
+            (
+                "number".to_owned(),
+                DocumentSchemaNode::Number { title: None },
+            ),
+            (
+                "flag".to_owned(),
+                DocumentSchemaNode::Boolean { title: None },
+            ),
+            (
+                "nested".to_owned(),
+                DocumentSchemaNode::Object {
+                    title: None,
+                    properties: BTreeMap::from([(
+                        "items".to_owned(),
+                        DocumentSchemaNode::Array {
+                            title: None,
+                            items: Box::new(DocumentSchemaNode::Number { title: None }),
+                        },
+                    )]),
+                },
+            ),
+        ]),
+    }
 }
 
 pub(super) fn engine() -> Engine {
-    let host = host();
+    let package = CompiledProtocolPackageTestBuilder::new()
+        .with_schema(schema())
+        .build();
+    let host = ProtocolHostApi::for_package(&package, ProtocolDirection::Upstream);
     let mut engine = build_engine(ProtocolRuntimeLimits::default());
     host.register(&mut engine);
     engine
-}
-
-fn field(name: &str, field_type: DocumentFieldType, label: &str) -> DocumentField {
-    DocumentField::new(DocumentFieldName::new(name).unwrap(), field_type, label).unwrap()
 }

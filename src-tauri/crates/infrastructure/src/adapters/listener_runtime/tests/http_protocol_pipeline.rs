@@ -16,8 +16,8 @@ use intercept_proxy_application::{
     AppError, AppResult, BreakpointCoordinator, EventHub, InMemorySessionStore,
 };
 use intercept_proxy_domain::{
-    ChannelId, DocumentAction, DocumentCondition, DocumentFieldName, DocumentValue,
-    HttpBodyProcessing, HttpListenerSettings, HttpRuleContent, ListenerDataPlane, MatchCondition,
+    ChannelId, DocumentAction, DocumentCondition, DocumentValue, HttpBodyProcessing,
+    HttpListenerSettings, HttpRuleContent, JsonPointer, ListenerDataPlane, MatchCondition,
     MatchContext, MatchField, MatchOperator, MessageStage, ProtocolDocumentRuleDefinition,
     ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
     ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleAction, RuleContent, RuleDefinition,
@@ -73,51 +73,47 @@ encode = "encode"
 "#;
 
 const UPSTREAM_SCHEMA: &str = r#"
-id = "http-upstream"
-version = 1
+type = "object"
 title = "HTTP upstream"
 
-[[fields]]
-name = "route"
-label = "Route"
+[properties.route]
 type = "string"
+title = "Route"
 "#;
 
 const DOWNSTREAM_SCHEMA: &str = r#"
-id = "http-downstream"
-version = 1
+type = "object"
 title = "HTTP downstream"
 
-[[fields]]
-name = "result"
-label = "Result"
+[properties.result]
 type = "string"
+title = "Result"
 "#;
 
 const PIPELINE_SCRIPT: &str = r#"
 fn decode(origin, context) {
     let value = document::create();
     if context.direction() == "upstream" {
-        value.set("route", "decoded");
+        value.set("/route", "decoded");
     } else {
-        value.set("result", "decoded");
+        value.set("/result", "decoded");
     }
     value
 }
 
 fn encode(origin, document, context) {
     if context.direction() == "upstream" {
-        origin + ("|" + document.get("route")).to_blob()
+        origin + ("|" + document.get("/route")).to_blob()
     } else {
-        origin + ("|" + document.get("result")).to_blob()
+        origin + ("|" + document.get("/result")).to_blob()
     }
 }
 
 fn display(document, context) {
     if context.direction() == "upstream" {
-        "<p>upstream:" + document.get("route") + "</p>"
+        "<p>upstream:" + document.get("/route") + "</p>"
     } else {
-        "<p>downstream:" + document.get("result") + "</p>"
+        "<p>downstream:" + document.get("/result") + "</p>"
     }
 }
 "#;
@@ -126,9 +122,9 @@ const DECODE_ONLY_SCRIPT: &str = r#"
 fn decode(origin, context) {
     let value = document::create();
     if context.direction() == "upstream" {
-        value.set("route", "decoded");
+        value.set("/route", "decoded");
     } else {
-        value.set("result", "decoded");
+        value.set("/result", "decoded");
     }
     value
 }
@@ -140,9 +136,9 @@ const NON_UTF8_ENCODE_SCRIPT: &str = r#"
 fn decode(origin, context) {
     let value = document::create();
     if context.direction() == "upstream" {
-        value.set("route", "decoded");
+        value.set("/route", "decoded");
     } else {
-        value.set("result", "decoded");
+        value.set("/result", "decoded");
     }
     value
 }
@@ -160,9 +156,9 @@ const DISPLAY_FAILURE_SCRIPT: &str = r#"
 fn decode(origin, context) {
     let value = document::create();
     if context.direction() == "upstream" {
-        value.set("route", "decoded");
+        value.set("/route", "decoded");
     } else {
-        value.set("result", "decoded");
+        value.set("/result", "decoded");
     }
     value
 }
@@ -190,7 +186,7 @@ async fn upstream_capabilities_are_independent_and_rules_run_in_order() {
             2,
             "route",
             vec![DocumentCondition::Equals {
-                field: DocumentFieldName::new("route").unwrap(),
+                field: JsonPointer::property("route"),
                 value: DocumentValue::String("after_app".into()),
             }],
             "after_proxy",
@@ -211,7 +207,7 @@ async fn upstream_capabilities_are_independent_and_rules_run_in_order() {
     );
     let document = capabilities.rules.apply(document).await.unwrap();
     assert_eq!(
-        document.get("route").unwrap(),
+        document.resolve(&JsonPointer::property("route")).unwrap(),
         &DocumentValue::String("decoded".into())
     );
     let (written, _) = execute_joint(&snapshot, &workspace, &identity, false, &original)
@@ -240,7 +236,7 @@ async fn earlier_stage_document_actions_are_visible_to_later_stage_conditions() 
             2,
             "route",
             vec![DocumentCondition::Equals {
-                field: DocumentFieldName::new("route").unwrap(),
+                field: JsonPointer::property("route"),
                 value: DocumentValue::String("stage-one".into()),
             }],
             "stage-two",
@@ -311,7 +307,7 @@ async fn downstream_uses_downstream_schema_and_rule_stages() {
             2,
             "result",
             vec![DocumentCondition::Equals {
-                field: DocumentFieldName::new("result").unwrap(),
+                field: JsonPointer::property("result"),
                 value: DocumentValue::String("after_server".into()),
             }],
             "after_proxy",
@@ -331,20 +327,14 @@ async fn downstream_uses_downstream_schema_and_rule_stages() {
 }
 
 #[test]
-fn http_snapshot_rejects_rule_package_and_schema_drift_below_application() {
+fn http_snapshot_rejects_rule_package_drift_below_application() {
     let listener = http_listener();
-    let cases = [
-        (
-            ProtocolPackageRef {
-                id: ProtocolPackageId::new("other-http-package").unwrap(),
-                version: ProtocolPackageVersion::new("1.0.0").unwrap(),
-            },
-            1,
-        ),
-        (http_package(), 2),
-    ];
+    let cases = [ProtocolPackageRef {
+        id: ProtocolPackageId::new("other-http-package").unwrap(),
+        version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+    }];
 
-    for (index, (package, schema_version)) in cases.into_iter().enumerate() {
+    for (index, package) in cases.into_iter().enumerate() {
         let rule_id = ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(100 + index as u128));
         let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
             rule_id,
@@ -354,7 +344,6 @@ fn http_snapshot_rejects_rule_package_and_schema_drift_below_application() {
             1,
             listener.id,
             package,
-            schema_version,
             ProtocolRuleStage::AppToProxy,
             Vec::new(),
             vec![DocumentAction::RecordMatch],
@@ -387,7 +376,7 @@ async fn decode_does_not_invoke_encode() {
         .unwrap();
 
     assert_eq!(
-        document.get("route").unwrap(),
+        document.resolve(&JsonPointer::property("route")).unwrap(),
         &DocumentValue::String("decoded".into())
     );
 }

@@ -17,12 +17,8 @@ fn unified_socket_input(
             stage,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
-                schema_version: match stage.direction().unwrap() {
-                    ProtocolDirection::Upstream => 1,
-                    ProtocolDirection::Downstream => 2,
-                },
                 conditions: vec![equals("trace_id", DocumentValue::String("abc".into()))],
-                actions: vec![set("amount", DocumentValue::Int(2))],
+                actions: vec![set("amount", DocumentValue::integer(2).unwrap())],
             }),
         },
     }
@@ -30,7 +26,7 @@ fn unified_socket_input(
 
 #[tokio::test]
 async fn stopped_listener_rejects_invalid_unified_document_before_persistence() {
-    for invalid_case in ["package", "schema", "field", "type", "stage"] {
+    for invalid_case in ["package", "type", "stage"] {
         let (application, services, workspaces, runtime) = fixture();
         let package = pkg("unified-validation", "1.0.0");
         let listener_id = configure_relay(&services, &workspaces, &package).await;
@@ -45,11 +41,6 @@ async fn stopped_listener_rejects_invalid_unified_document_before_persistence() 
         };
         match invalid_case {
             "package" => content.package = pkg("forged-package", "1.0.0"),
-            "schema" => content.schema_version = 99,
-            "field" => {
-                content.conditions =
-                    vec![equals("missing_field", DocumentValue::String("abc".into()))];
-            }
             "type" => {
                 content.actions = vec![set("amount", DocumentValue::String("wrong".into()))];
             }
@@ -75,6 +66,25 @@ async fn stopped_listener_rejects_invalid_unified_document_before_persistence() 
 }
 
 #[tokio::test]
+async fn stopped_listener_accepts_rule_paths_missing_from_incomplete_schema_metadata() {
+    let (application, services, workspaces, runtime) = fixture();
+    let package = pkg("unified-validation", "1.0.0");
+    let listener_id = configure_relay(&services, &workspaces, &package).await;
+    let mut input = unified_socket_input(listener_id, package, RuleStage::ProxyToUpstream);
+    let RuleContent::Socket(content) = &mut input.draft.content else {
+        unreachable!()
+    };
+    content.conditions = vec![equals("missing_field", DocumentValue::String("abc".into()))];
+    content.actions = vec![set("extension_value", DocumentValue::Boolean(true))];
+
+    application
+        .rule_definition_save(input)
+        .await
+        .expect("rule-owned paths need not appear in incomplete schema metadata");
+    assert!(runtime.statuses().await.unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn unified_document_save_enforces_direction_decode_and_encode_capabilities() {
     for (case, decode, encode, actions) in [
         ("decode", false, true, vec![DocumentAction::RecordMatch]),
@@ -82,7 +92,7 @@ async fn unified_document_save_enforces_direction_decode_and_encode_capabilities
             "encode",
             true,
             false,
-            vec![set("amount", DocumentValue::Int(2))],
+            vec![set("amount", DocumentValue::integer(2).unwrap())],
         ),
     ] {
         let (application, services, workspaces, runtime) = fixture();
@@ -145,9 +155,8 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                     actions: vec![intercept_proxy_domain::RuleAction::Delay { milliseconds: 1 }],
                     document: Some(HttpDocumentRuleContent {
                         package: http_package,
-                        schema_version: 1,
                         conditions: vec![equals("trace_id", DocumentValue::String("abc".into()))],
-                        actions: vec![set("amount", DocumentValue::Int(2))],
+                        actions: vec![set("amount", DocumentValue::integer(2).unwrap())],
                     }),
                     one_shot: false,
                     hit_count: 0,
@@ -207,10 +216,6 @@ async fn stopped_http_listener_rejects_ordinary_http_work_at_document_only_stage
                         actions,
                         document: Some(HttpDocumentRuleContent {
                             package,
-                            schema_version: match stage.direction().unwrap() {
-                                ProtocolDirection::Upstream => 1,
-                                ProtocolDirection::Downstream => 2,
-                            },
                             conditions: Vec::new(),
                             actions: vec![DocumentAction::RecordMatch],
                         }),
@@ -261,10 +266,6 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                             .collect(),
                         document: Some(HttpDocumentRuleContent {
                             package,
-                            schema_version: match stage.direction().unwrap() {
-                                ProtocolDirection::Upstream => 1,
-                                ProtocolDirection::Downstream => 2,
-                            },
                             conditions: Vec::new(),
                             actions: vec![DocumentAction::RecordMatch],
                         }),

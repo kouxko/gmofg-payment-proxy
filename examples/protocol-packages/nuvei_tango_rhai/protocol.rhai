@@ -79,23 +79,23 @@ fn decode_message(origin, context) {
     }
 
     let document = document::create();
-    document.set("frame_length", declared);
-    document.set("control_header", control);
-    document.set("sequence", sequence);
-    document.set("message_type", message_type);
-    document.set("json_preview", message.to_json());
-    document.set("encoding_context", direction_context(context));
+    document.set("/frame_length", declared);
+    document.set("/control_header", control);
+    document.set("/sequence", sequence);
+    document.set("/message_type", message_type);
+    document.set("/json_preview", message.to_json());
+    document.set("/encoding_context", direction_context(context));
     document
 }
 
 fn assert_read_only(document, expected) {
     for field in [
-        "frame_length",
-        "control_header",
-        "sequence",
-        "message_type",
-        "json_preview",
-        "encoding_context",
+        "/frame_length",
+        "/control_header",
+        "/sequence",
+        "/message_type",
+        "/json_preview",
+        "/encoding_context",
     ] {
         if !document.has(field) || document.get(field) != expected.get(field) {
             throw "Nuvei Tango read-only document was modified";

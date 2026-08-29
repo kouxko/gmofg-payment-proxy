@@ -141,8 +141,8 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
 function PackageSummary({ option }: { option: ListenerProtocolPackageOptionViewModel }) {
   return <div className="flex flex-wrap gap-2 text-sm"><Chip variant="soft">{option.package.id}@{option.package.version}</Chip>
     <Chip variant="soft" color={option.package_source.type === "external" ? "warning" : "accent"}>{sourceLabel(option)}</Chip>
-    <Chip variant="soft">上行字段结构 {option.upstream_schema.id} v{option.upstream_schema.version}</Chip>
-    <Chip variant="soft">下行字段结构 {option.downstream_schema.id} v{option.downstream_schema.version}</Chip>
+    <Chip variant="soft">上行字段结构 {option.upstream_schema.root.title || "未命名 Schema"}</Chip>
+    <Chip variant="soft">下行字段结构 {option.downstream_schema.root.title || "未命名 Schema"}</Chip>
     <Chip variant="soft">报文边界与字段解析：双向支持</Chip>
     <Chip variant="soft">报文重建：上行 {option.capabilities.upstream.encode ? "支持" : "不支持"}，下行 {option.capabilities.downstream.encode ? "支持" : "不支持"}</Chip>
     <Chip variant="soft" color={option.capabilities.display ? "success" : "default"}>协议视图：{option.capabilities.display ? "支持" : "未提供"}</Chip></div>;

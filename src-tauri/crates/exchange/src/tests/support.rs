@@ -1,4 +1,8 @@
-use std::{collections::VecDeque, marker::PhantomData, sync::Arc};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    marker::PhantomData,
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
@@ -59,29 +63,15 @@ impl<P: Protocol, D: Direction> Writer<P, D> for RecordingWriter<P, D> {
 }
 
 pub(super) fn document(value: &str) -> Document {
-    let schema = DocumentSchema::new(
-        DocumentSchemaId::new("message").unwrap(),
-        1,
-        "Message",
-        vec![
-            DocumentField::new(
-                DocumentFieldName::new("value").unwrap(),
-                DocumentFieldType::String,
-                "Value",
-            )
-            .unwrap(),
-        ],
-    )
-    .unwrap();
-    let mut document = Document::new(schema);
-    document
-        .set("value", DocumentValue::String(value.to_owned()))
-        .unwrap();
-    document
+    Document::new(DocumentValue::Object(BTreeMap::from([(
+        "value".to_owned(),
+        DocumentValue::String(value.to_owned()),
+    )])))
 }
 
 pub(super) fn text(document: &Document) -> String {
-    let DocumentValue::String(value) = document.get("value").unwrap() else {
+    let DocumentValue::String(value) = document.resolve(&JsonPointer::property("value")).unwrap()
+    else {
         panic!("value field must be String");
     };
     value.clone()

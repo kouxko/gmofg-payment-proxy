@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-use intercept_proxy_domain::{Document, DocumentValue};
+use intercept_proxy_domain::{Document, DocumentValue, JsonPointer};
 use intercept_proxy_protocol_scripting::{
     DirectionExecutionPlan, ProtocolArchiveLimits, ProtocolDirection, ProtocolDirectionExecutor,
     ProtocolExecutionCancellation, ProtocolFrameInspection, ProtocolFrameInspector,
@@ -175,25 +175,32 @@ fn every_field_change_removal_and_cross_direction_reuse_fail_closed() {
     let original = upstream.decode_document(&frame).unwrap();
 
     for (field, replacement) in [
-        ("frame_length", DocumentValue::Int(1)),
-        ("control_header", DocumentValue::Blob(vec![0, 0, 0, 0])),
+        ("frame_length", DocumentValue::integer(1).unwrap()),
+        (
+            "control_header",
+            DocumentValue::byte_array([0, 0, 0, 0]),
+        ),
         ("sequence", DocumentValue::String("99999999".to_owned())),
         ("message_type", DocumentValue::String("Changed".to_owned())),
         ("json_preview", DocumentValue::String("{}".to_owned())),
         (
             "encoding_context",
-            DocumentValue::Blob(b"tampered".to_vec()),
+            DocumentValue::byte_array(b"tampered".iter().copied()),
         ),
     ] {
         let mut changed = original.clone();
-        changed.set(field, replacement).unwrap();
+        changed
+            .set(&JsonPointer::property(field), replacement)
+            .unwrap();
         assert!(
             upstream.encode_document(&frame, changed).is_err(),
             "changed field {field} must fail before producing bytes"
         );
 
         let mut removed = original.clone();
-        removed.clear_field(field).unwrap();
+        removed
+            .clear_path(&JsonPointer::property(field))
+            .unwrap();
         assert!(
             upstream.encode_document(&frame, removed).is_err(),
             "removed field {field} must fail before producing bytes"
@@ -359,24 +366,35 @@ fn sized_frame(total_bytes: usize, message_type: &str) -> Vec<u8> {
 }
 
 fn int(document: &Document, name: &str) -> i64 {
-    let DocumentValue::Int(value) = document.get(name).unwrap() else {
-        panic!("field {name} is not int");
+    let DocumentValue::Number(value) = document.resolve(&JsonPointer::property(name)).unwrap()
+    else {
+        panic!("field {name} is not number");
     };
-    *value
+    value.get() as i64
 }
 
 fn string<'a>(document: &'a Document, name: &str) -> &'a str {
-    let DocumentValue::String(value) = document.get(name).unwrap() else {
+    let DocumentValue::String(value) = document.resolve(&JsonPointer::property(name)).unwrap()
+    else {
         panic!("field {name} is not string");
     };
     value
 }
 
-fn blob<'a>(document: &'a Document, name: &str) -> &'a [u8] {
-    let DocumentValue::Blob(value) = document.get(name).unwrap() else {
-        panic!("field {name} is not blob");
+fn blob(document: &Document, name: &str) -> Vec<u8> {
+    let DocumentValue::Array(values) = document.resolve(&JsonPointer::property(name)).unwrap()
+    else {
+        panic!("field {name} is not a byte array");
     };
-    value
+    values
+        .iter()
+        .map(|value| {
+            let DocumentValue::Number(value) = value else {
+                panic!("field {name} contains a non-number byte");
+            };
+            value.get() as u8
+        })
+        .collect()
 }
 
 fn hex(bytes: &[u8]) -> String {

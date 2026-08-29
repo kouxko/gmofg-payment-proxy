@@ -1,6 +1,6 @@
 //! Schema 驱动的 协议 Document 规则领域模型。
 //!
-//! 本模块与 HTTP [`crate::Rule`] 完全独立：条件只认识 Schema 字段和值类型，动作只认识
+//! 本模块与 HTTP [`crate::Rule`] 完全独立：条件只认识 Document 路径和值类型，动作只认识
 //! Document，不暴露 Method、Header、Status、JSONPath 或 HTTP Body 能力。包安装状态及
 //! Manifest 入口能力需要查询外部注册表，仍由 Application 层校验。
 //! [`ProtocolRuleStage`] 只描述 App、Proxy、Server 三者之间的协议处理位置；HTTP 或 Socket
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    DocumentFieldName, DocumentSchema, DocumentValue, DomainError, ListenerId,
+    DocumentSchemaNode, DocumentValue, DomainError, JsonPointer, ListenerId,
     ProtocolDocumentRuleId, ProtocolPackageRef, Revision,
 };
 
@@ -33,8 +33,6 @@ pub const MAX_PROTOCOL_DOCUMENT_RULE_CONDITIONS: usize = 64;
 pub const MAX_PROTOCOL_DOCUMENT_RULE_ACTIONS: usize = 64;
 /// 规则中单个 UTF-8 文本值的最大字节数（16 KiB）。
 pub const MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES: usize = 16 * 1_024;
-/// 规则中单个 Blob 值的最大字节数（64 KiB）。
-pub const MAX_PROTOCOL_DOCUMENT_RULE_BLOB_BYTES: usize = 64 * 1_024;
 /// 规则名称的最大 UTF-8 字节数。
 pub const MAX_PROTOCOL_DOCUMENT_RULE_NAME_BYTES: usize = 128;
 
@@ -70,8 +68,8 @@ pub enum ProtocolRuleStage {
 pub enum DocumentCondition {
     /// 字段当前值必须与给定类型化值严格相等；不进行文本或数字转换。
     Equals {
-        /// Schema 中声明的字段名。
-        field: DocumentFieldName,
+        /// Document 中的目标路径。
+        field: JsonPointer,
         /// 参与严格比较的值。
         value: DocumentValue,
     },
@@ -86,7 +84,7 @@ impl<'de> Deserialize<'de> for DocumentCondition {
         #[serde(tag = "operator", rename_all = "snake_case", deny_unknown_fields)]
         enum Wire {
             Equals {
-                field: DocumentFieldName,
+                field: JsonPointer,
                 value: StrictDocumentValue,
             },
         }
@@ -102,7 +100,7 @@ impl<'de> Deserialize<'de> for DocumentCondition {
 impl DocumentCondition {
     #[must_use]
     /// 返回条件读取的字段。
-    pub const fn field(&self) -> &DocumentFieldName {
+    pub const fn field(&self) -> &JsonPointer {
         match self {
             Self::Equals { field, .. } => field,
         }
@@ -121,20 +119,18 @@ impl DocumentCondition {
 pub enum DocumentAction {
     /// 只记录命中，不修改 Document。
     RecordMatch,
-    /// 只替换一个 Schema 已声明字段的值。
+    /// 替换一个 Document 路径的值。
     SetField {
-        /// Schema 中声明的目标字段。
-        field: DocumentFieldName,
-        /// 与字段声明类型严格一致的新值。
+        /// Document 中的目标路径。
+        field: JsonPointer,
+        /// 规则自身携带的严格类型化新值；Schema 已声明该路径时还须与其类型一致。
         value: DocumentValue,
     },
-    /// 清除一个 Schema 已声明字段的值。
+    /// 清除一个 Document 路径的值。
     ClearField {
-        /// Schema 中声明的目标字段。
-        field: DocumentFieldName,
+        /// Document 中的目标路径。
+        field: JsonPointer,
     },
-    /// 清空所有字段值槽，但保留当前 Schema 身份和结构。
-    ClearDocument,
 }
 
 impl<'de> Deserialize<'de> for DocumentAction {
@@ -147,13 +143,12 @@ impl<'de> Deserialize<'de> for DocumentAction {
         enum Wire {
             RecordMatch {},
             SetField {
-                field: DocumentFieldName,
+                field: JsonPointer,
                 value: StrictDocumentValue,
             },
             ClearField {
-                field: DocumentFieldName,
+                field: JsonPointer,
             },
-            ClearDocument {},
         }
         Ok(match Wire::deserialize(deserializer)? {
             Wire::RecordMatch {} => Self::RecordMatch,
@@ -162,7 +157,6 @@ impl<'de> Deserialize<'de> for DocumentAction {
                 value: value.into(),
             },
             Wire::ClearField { field } => Self::ClearField { field },
-            Wire::ClearDocument {} => Self::ClearDocument,
         })
     }
 }
@@ -170,7 +164,7 @@ impl<'de> Deserialize<'de> for DocumentAction {
 /// 创建或编辑规则时由 Application 提交的字段。
 ///
 /// Draft 不包含实体身份、revision 或 `created_order`。绑定字段在创建后被冻结；更新提交若
-/// 试图切换 Listener、协议包、Schema 版本或方向，会由领域层 fail-closed 拒绝。
+/// 试图切换 Listener、协议包或方向，会由领域层 fail-closed 拒绝。
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct ProtocolDocumentRuleDraft {
@@ -184,8 +178,6 @@ pub struct ProtocolDocumentRuleDraft {
     pub listener_id: ListenerId,
     /// 冻结绑定的精确协议包版本。
     pub package: ProtocolPackageRef,
-    /// 冻结绑定的正整数 Schema 版本。
-    pub schema_version: u32,
     /// 冻结绑定的处理阶段。
     pub stage: ProtocolRuleStage,
     /// 按声明顺序执行 AND 的条件；允许为空。
@@ -195,10 +187,10 @@ pub struct ProtocolDocumentRuleDraft {
 }
 
 impl DocumentAction {
-    fn field_and_value(&self) -> Option<(&DocumentFieldName, &DocumentValue)> {
+    fn field_and_value(&self) -> Option<(&JsonPointer, &DocumentValue)> {
         match self {
             Self::SetField { field, value } => Some((field, value)),
-            Self::RecordMatch | Self::ClearField { .. } | Self::ClearDocument => None,
+            Self::RecordMatch | Self::ClearField { .. } => None,
         }
     }
 }
@@ -217,7 +209,6 @@ pub struct ProtocolDocumentRuleDefinition {
     created_order: u64,
     listener_id: ListenerId,
     package: ProtocolPackageRef,
-    schema_version: u32,
     stage: ProtocolRuleStage,
     conditions: Vec<DocumentCondition>,
     actions: Vec<DocumentAction>,
@@ -237,7 +228,6 @@ impl ProtocolDocumentRuleDefinition {
             created_order,
             draft.listener_id,
             draft.package,
-            draft.schema_version,
             draft.stage,
             draft.conditions,
             draft.actions,
@@ -253,7 +243,6 @@ impl ProtocolDocumentRuleDefinition {
         created_order: u64,
         listener_id: ListenerId,
         package: ProtocolPackageRef,
-        schema_version: u32,
         direction: ProtocolDirection,
         conditions: Vec<DocumentCondition>,
         actions: Vec<DocumentAction>,
@@ -266,7 +255,6 @@ impl ProtocolDocumentRuleDefinition {
             created_order,
             listener_id,
             package,
-            schema_version,
             direction,
             conditions,
             actions,
@@ -283,7 +271,6 @@ impl ProtocolDocumentRuleDefinition {
         created_order: u64,
         listener_id: ListenerId,
         package: ProtocolPackageRef,
-        schema_version: u32,
         direction: ProtocolDirection,
         conditions: Vec<DocumentCondition>,
         actions: Vec<DocumentAction>,
@@ -300,7 +287,6 @@ impl ProtocolDocumentRuleDefinition {
             created_order,
             listener_id,
             package,
-            schema_version,
             stage,
             conditions,
             actions,
@@ -317,7 +303,6 @@ impl ProtocolDocumentRuleDefinition {
         created_order: u64,
         listener_id: ListenerId,
         package: ProtocolPackageRef,
-        schema_version: u32,
         stage: ProtocolRuleStage,
         conditions: Vec<DocumentCondition>,
         actions: Vec<DocumentAction>,
@@ -331,7 +316,6 @@ impl ProtocolDocumentRuleDefinition {
             created_order,
             listener_id,
             package,
-            schema_version,
             stage,
             conditions,
             actions,
@@ -347,7 +331,6 @@ impl ProtocolDocumentRuleDefinition {
         self.revision.verify(expected_revision)?;
         if self.listener_id != draft.listener_id
             || self.package != draft.package
-            || self.schema_version != draft.schema_version
             || self.stage != draft.stage
         {
             return Err(
@@ -364,7 +347,6 @@ impl ProtocolDocumentRuleDefinition {
             created_order: self.created_order,
             listener_id: self.listener_id,
             package: self.package.clone(),
-            schema_version: self.schema_version,
             stage: self.stage,
             conditions: draft.conditions,
             actions: draft.actions,
@@ -398,7 +380,7 @@ impl ProtocolDocumentRuleDefinition {
 
     /// Workspace 复制/导入在 Listener ID 映射完成后受控替换绑定 Listener。
     ///
-    /// 该操作保留 `rule_id`、revision、`created_order`、包、Schema、方向、条件和动作；
+    /// 该操作保留 `rule_id`、revision、`created_order`、包、Schema 元数据、方向、条件和动作；
     /// 它不是普通规则编辑能力，调用方仍须在 Workspace 聚合校验中确认新 Listener 的拓扑与开关。
     pub fn rebind_listener_for_workspace_remap(
         &mut self,
@@ -408,7 +390,6 @@ impl ProtocolDocumentRuleDefinition {
             &self.name,
             self.revision,
             self.created_order,
-            self.schema_version,
             &self.conditions,
             &self.actions,
         )?;
@@ -416,14 +397,9 @@ impl ProtocolDocumentRuleDefinition {
         Ok(())
     }
 
-    /// 使用具体 Schema 校验版本、未知字段及严格值类型。
-    pub fn validate_against_schema(&self, schema: &DocumentSchema) -> Result<(), DomainError> {
-        validate_document_rule_content_against_schema(
-            self.schema_version,
-            &self.conditions,
-            &self.actions,
-            schema,
-        )
+    /// 仅对 Schema 已声明路径校验值类型；未声明路径保留规则自身的类型化值合同。
+    pub fn validate_against_schema(&self, schema: &DocumentSchemaNode) -> Result<(), DomainError> {
+        validate_document_rule_content_against_schema(&self.conditions, &self.actions, schema)
     }
 
     fn from_wire(value: ProtocolDocumentRuleWire) -> Result<Self, DomainError> {
@@ -431,7 +407,6 @@ impl ProtocolDocumentRuleDefinition {
             &value.name,
             value.revision,
             value.created_order,
-            value.schema_version,
             &value.conditions,
             &value.actions,
         )?;
@@ -444,7 +419,6 @@ impl ProtocolDocumentRuleDefinition {
             created_order: value.created_order,
             listener_id: value.listener_id,
             package: value.package,
-            schema_version: value.schema_version,
             stage: value.stage,
             conditions: value.conditions,
             actions: value.actions,
@@ -461,6 +435,3 @@ pub fn sort_protocol_document_rules(rules: &mut [ProtocolDocumentRuleDefinition]
             .then_with(|| left.rule_id.cmp(&right.rule_id))
     });
 }
-
-#[cfg(test)]
-mod tests;

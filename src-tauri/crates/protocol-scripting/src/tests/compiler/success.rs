@@ -8,24 +8,20 @@ use crate::tests::fixtures::{
     TEMPLATE_DISPLAY, TEMPLATE_LIBRARY, TEMPLATE_MANIFEST, TEMPLATE_PROTOCOL, TEMPLATE_SCHEMA,
 };
 
-const UPSTREAM_SCHEMA: &str = r#"id = "upstream-message"
-version = 1
+const UPSTREAM_SCHEMA: &str = r#"type = "object"
 title = "Upstream Message"
 
-[[fields]]
-name = "request_code"
-label = "Request Code"
+[properties.request_code]
 type = "string"
+title = "Request Code"
 "#;
 
-const DOWNSTREAM_SCHEMA: &str = r#"id = "downstream-message"
-version = 2
+const DOWNSTREAM_SCHEMA: &str = r#"type = "object"
 title = "Downstream Message"
 
-[[fields]]
-name = "response_code"
-label = "Response Code"
-type = "int"
+[properties.response_code]
+type = "number"
+title = "Response Code"
 "#;
 
 fn directional_manifest(frame: bool) -> String {
@@ -61,12 +57,12 @@ fn assert_distinct_directional_schemas(compiled: &crate::CompiledProtocolPackage
     let upstream = compiled.schema(ProtocolDirection::Upstream);
     let downstream = compiled.schema(ProtocolDirection::Downstream);
 
-    assert_eq!(upstream.id().as_str(), "upstream-message");
-    assert_eq!(upstream.version(), 1);
-    assert_eq!(upstream.fields()[0].name().as_str(), "request_code");
-    assert_eq!(downstream.id().as_str(), "downstream-message");
-    assert_eq!(downstream.version(), 2);
-    assert_eq!(downstream.fields()[0].name().as_str(), "response_code");
+    assert!(
+        matches!(upstream, intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } if properties.contains_key("request_code"))
+    );
+    assert!(
+        matches!(downstream, intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } if properties.contains_key("response_code"))
+    );
     assert!(!ptr::eq(upstream, downstream));
     assert_eq!(compiled.upstream().decode().function().as_str(), "decode");
     assert_eq!(compiled.downstream().decode().function().as_str(), "decode");
@@ -141,10 +137,10 @@ fn official_iso8583_template_compiles_with_real_rhai_and_package_modules() {
     let compiled = compile(&files).unwrap();
     assert_eq!(compiled.package().id.as_str(), "iso8583-ascii-standard");
     assert_eq!(compiled.package().version.as_str(), "1.0.0");
-    assert_eq!(
-        compiled.schema(ProtocolDirection::Upstream).id().as_str(),
-        "iso8583-financial-message"
-    );
+    assert!(matches!(
+        compiled.schema(ProtocolDirection::Upstream),
+        intercept_proxy_domain::DocumentSchemaNode::Object { .. }
+    ));
     assert!(compiled.supports_display());
     assert!(compiled.supports_upstream_encode());
     assert!(compiled.supports_downstream_encode());

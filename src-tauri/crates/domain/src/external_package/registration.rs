@@ -1,23 +1,20 @@
 use crate::{
-    DocumentSchema, DomainError, ErrorCode, ProtocolPackageId, ProtocolPackageRef,
+    DocumentSchemaNode, DomainError, ErrorCode, ProtocolPackageId, ProtocolPackageRef,
     ProtocolPackageVersion,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::fmt;
-
 /// 第一版外部软件包注册合同的唯一受支持 API 主版本。
 pub const EXTERNAL_PACKAGE_API_V1: u32 = 1;
 /// 方法后缀允许的最大 ASCII 字节数。
 pub const MAX_EXTERNAL_METHOD_SUFFIX_LEN: usize = 64;
 /// 外部软件包展示名称允许的最大 Unicode 字符数。
 pub const MAX_EXTERNAL_PACKAGE_NAME_LEN: usize = 128;
-
 fn invalid_registration(field: &str, message: impl Into<String>) -> DomainError {
     DomainError::new(ErrorCode::ProtocolPackageInvalid, "外部软件包注册合同无效")
         .with_field_error(field, message)
 }
-
 /// 外部软件包声明的方法后缀。
 ///
 /// 后缀必须是长度为 1 到 64 的 ASCII 标识符 `[A-Za-z_][A-Za-z0-9_]*`。它不允许包含 `.`，
@@ -214,14 +211,14 @@ impl From<ExternalPackageMetadata> for ExternalPackageMetadataWire {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct ExternalPackageDocumentDirection {
-    schema: DocumentSchema,
+    schema: DocumentSchemaNode,
     display: ExternalPackageMethodSuffix,
 }
 
 impl ExternalPackageDocumentDirection {
     /// 返回该方向规则、解码和编码共用的 Schema。
     #[must_use]
-    pub const fn schema(&self) -> &DocumentSchema {
+    pub const fn schema(&self) -> &DocumentSchemaNode {
         &self.schema
     }
 
@@ -381,6 +378,8 @@ impl ExternalPackageRegistration {
                 format!("仅支持 API {EXTERNAL_PACKAGE_API_V1}"),
             ));
         }
+        document.upstream().schema().validate_definition()?;
+        document.downstream().schema().validate_definition()?;
         Ok(Self {
             api,
             package,

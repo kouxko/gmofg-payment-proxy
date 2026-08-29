@@ -31,16 +31,10 @@ function packageOption(
       display: true,
     },
     upstream_schema: {
-      id: "iso-request",
-      version: 3,
-      title: "ISO Request",
-      fields: [{ name: "mti", label: "MTI", type: "string" }],
+      root: { type: "object", title: "ISO Request", properties: { mti: { type: "string", title: "MTI" } } },
     },
     downstream_schema: {
-      id: "iso-response",
-      version: 4,
-      title: "ISO Response",
-      fields: [{ name: "response_code", label: "Response", type: "string" }],
+      root: { type: "object", title: "ISO Response", properties: { response_code: { type: "string", title: "Response" } } },
     },
     ...overrides,
   };
@@ -112,8 +106,8 @@ describe("SocketProcessingCard", () => {
     expect(details).not.toHaveAttribute("open");
     await user.click(screen.getByText("高级技术信息"));
     expect(screen.getByText("iso-8583@1.0.0", { selector: "span" })).toBeVisible();
-    expect(screen.getByText("上行字段结构 iso-request v3")).toBeVisible();
-    expect(screen.getByText("下行字段结构 iso-response v4")).toBeVisible();
+    expect(screen.getByText("上行字段结构 ISO Request")).toBeVisible();
+    expect(screen.getByText("下行字段结构 ISO Response")).toBeVisible();
     expect(screen.getByText("报文边界与字段解析：双向支持")).toBeVisible();
     expect(screen.getByText("报文重建：上行 支持，下行 支持")).toBeVisible();
     expect(screen.getByText("协议视图：支持")).toBeVisible();

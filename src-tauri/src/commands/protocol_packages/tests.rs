@@ -62,19 +62,16 @@ encode = "encode"
 "#;
 
     const SCHEMA: &str = r#"
-id = "example-message"
-version = 1
+type = "object"
 title = "Example Message"
 
-[[fields]]
-name = "trace_id"
-label = "Trace ID"
+[properties.trace_id]
 type = "string"
+title = "Trace ID"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 "#;
 
     const SCRIPT: &str = r#"
@@ -143,14 +140,8 @@ fn display(document, context) { "<p>ok</p>" }
         let preview: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
         assert_eq!(preview["package"], package);
         assert_eq!(preview["disposition"], "new");
-        assert_eq!(
-            preview["upstream_schema"]["fields"][0]["name"],
-            "trace_id"
-        );
-        assert_eq!(
-            preview["downstream_schema"]["fields"][0]["name"],
-            "trace_id"
-        );
+        assert_eq!(preview["upstream_schema"]["root"]["properties"]["trace_id"]["type"], "string");
+        assert_eq!(preview["downstream_schema"]["root"]["properties"]["trace_id"]["type"], "string");
         let imported: Value = invoke_ok(
             &webview,
             "protocol_package_import_commit",
@@ -169,14 +160,8 @@ fn display(document, context) { "<p>ok</p>" }
         );
         assert_eq!(detail["capabilities"]["upstream"]["encode"], true);
         assert_eq!(detail["capabilities"]["downstream"]["encode"], true);
-        assert_eq!(
-            detail["upstream_schema"]["fields"][0]["name"],
-            "trace_id"
-        );
-        assert_eq!(
-            detail["downstream_schema"]["fields"][1]["name"],
-            "amount"
-        );
+        assert_eq!(detail["upstream_schema"]["root"]["properties"]["trace_id"]["type"], "string");
+        assert_eq!(detail["downstream_schema"]["root"]["properties"]["amount"]["type"], "number");
         assert_no_source_fields(&detail);
 
         let usages: Value = invoke_ok(
@@ -200,8 +185,8 @@ fn display(document, context) { "<p>ok</p>" }
         assert_eq!(catalog["unavailable_version_count"], 0);
         assert_eq!(catalog["options"][0]["package"], package);
         assert_eq!(
-            catalog["options"][0]["upstream_schema"]["id"],
-            "example-message"
+            catalog["options"][0]["upstream_schema"]["root"]["title"],
+            "Example Message"
         );
         assert_no_source_fields(&catalog);
         let disabled: Value = invoke_ok(

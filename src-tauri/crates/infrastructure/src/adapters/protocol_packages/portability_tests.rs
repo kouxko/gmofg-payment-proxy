@@ -46,14 +46,12 @@ encode = "encode"
 "#;
 
 const SCHEMA: &str = r#"
-id = "portable-message"
-version = 1
+type = "object"
 title = "Portable Message"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 "#;
 
 const SCRIPT: &str = r"

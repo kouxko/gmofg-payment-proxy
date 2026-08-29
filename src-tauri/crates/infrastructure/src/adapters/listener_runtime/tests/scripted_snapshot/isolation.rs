@@ -62,8 +62,8 @@ async fn frozen_snapshot_ignores_later_package_reinstall_and_workspace_edits() {
             .package()
             .compiled()
             .schema(intercept_proxy_protocol_scripting::ProtocolDirection::Upstream)
-            .version(),
-        7
+            .title(),
+        Some("Snapshot Message")
     );
     assert_eq!(snapshot.runtime_limits(), limits);
     assert_eq!(

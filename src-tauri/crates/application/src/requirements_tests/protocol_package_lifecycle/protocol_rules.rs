@@ -9,8 +9,8 @@ fn pkg(id: &str, version: &str) -> ProtocolPackageRef {
     super::package(id, version)
 }
 
-fn field(name: &str) -> DocumentFieldName {
-    DocumentFieldName::new(name).unwrap()
+fn field(name: &str) -> JsonPointer {
+    JsonPointer::property(name)
 }
 
 fn equals(name: &str, value: DocumentValue) -> DocumentCondition {
@@ -41,10 +41,6 @@ fn input(
         priority,
         listener_id,
         package,
-        schema_version: match direction {
-            ProtocolDirection::Upstream => 1,
-            ProtocolDirection::Downstream => 2,
-        },
         stage: match direction {
             ProtocolDirection::Upstream => ProtocolRuleStage::ProxyToUpstream,
             ProtocolDirection::Downstream => ProtocolRuleStage::ProxyToApp,
@@ -57,14 +53,18 @@ fn input(
 fn description_with_blob(package: ProtocolPackageRef) -> ProtocolPackageDescriptionViewModel {
     let mut value = description(package);
     value.capabilities.downstream.encode = true;
-    value
-        .upstream_schema
-        .fields
-        .push(ProtocolPackageSchemaFieldViewModel {
-            name: "raw".into(),
-            label: "Raw".into(),
-            field_type: ProtocolPackageSchemaFieldTypeViewModel::Blob,
-        });
+    let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } =
+        &mut value.upstream_schema.root
+    else {
+        unreachable!()
+    };
+    properties.insert(
+        "raw".into(),
+        intercept_proxy_domain::DocumentSchemaNode::Array {
+            title: Some("Raw".into()),
+            items: Box::new(intercept_proxy_domain::DocumentSchemaNode::Number { title: None }),
+        },
+    );
     value
 }
 
@@ -196,8 +196,15 @@ async fn capability_catalog_is_schema_typed_and_has_no_http_surface() {
         .await
         .unwrap();
     assert_eq!(upstream.package, package);
-    assert_eq!(upstream.schema_version, 1);
-    assert_eq!(upstream.fields.len(), 4);
+    assert_eq!(upstream.fields.len(), 5);
+    assert_eq!(
+        upstream
+            .fields
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<Vec<_>>(),
+        ["/amount", "/approved", "/raw/0", "/raw", "/trace_id"]
+    );
     assert!(upstream.fields.iter().all(|item| {
         item.operators == [ProtocolRuleFieldOperatorCapability::Equals]
             && item.actions
@@ -208,10 +215,7 @@ async fn capability_catalog_is_schema_typed_and_has_no_http_surface() {
     }));
     assert_eq!(
         upstream.common_actions,
-        [
-            ProtocolRuleCommonActionCapability::RecordMatch,
-            ProtocolRuleCommonActionCapability::ClearDocument,
-        ]
+        [ProtocolRuleCommonActionCapability::RecordMatch]
     );
 
     let downstream = application
@@ -227,10 +231,7 @@ async fn capability_catalog_is_schema_typed_and_has_no_http_surface() {
     }));
     assert_eq!(
         downstream.common_actions,
-        [
-            ProtocolRuleCommonActionCapability::RecordMatch,
-            ProtocolRuleCommonActionCapability::ClearDocument,
-        ]
+        [ProtocolRuleCommonActionCapability::RecordMatch]
     );
 
     let json = serde_json::to_value(&upstream).unwrap();
@@ -268,20 +269,31 @@ async fn save_validates_all_four_schema_value_types_and_exact_bindings() {
     let mut valid = input(listener_id, package.clone(), ProtocolDirection::Upstream, 0);
     valid.conditions = vec![
         equals("trace_id", DocumentValue::String("abc".into())),
-        equals("amount", DocumentValue::Int(1000)),
-        equals("approved", DocumentValue::Bool(true)),
-        equals("raw", DocumentValue::Blob(vec![0, 255])),
+        equals("amount", DocumentValue::integer(1000).unwrap()),
+        equals("approved", DocumentValue::Boolean(true)),
+        equals("raw", DocumentValue::byte_array(vec![0, 255])),
     ];
     valid.actions = vec![
-        DocumentAction::ClearDocument,
+        DocumentAction::RecordMatch,
         set("trace_id", DocumentValue::String("next".into())),
-        set("amount", DocumentValue::Int(2)),
-        set("approved", DocumentValue::Bool(false)),
-        set("raw", DocumentValue::Blob(vec![1, 2])),
+        set("amount", DocumentValue::integer(2).unwrap()),
+        set("approved", DocumentValue::Boolean(false)),
+        set("raw", DocumentValue::byte_array(vec![1, 2])),
     ];
     application.protocol_rule_save(valid).await.unwrap();
 
-    let mut wrong_type = input(listener_id, package.clone(), ProtocolDirection::Upstream, 1);
+    let mut undeclared = input(listener_id, package.clone(), ProtocolDirection::Upstream, 1);
+    undeclared.conditions = vec![equals("extension_flag", DocumentValue::Boolean(true))];
+    undeclared.actions = vec![set(
+        "extension_value",
+        DocumentValue::String("preserved by rule metadata".into()),
+    )];
+    application
+        .protocol_rule_save(undeclared)
+        .await
+        .expect("incomplete schema metadata allows rule-owned paths and values");
+
+    let mut wrong_type = input(listener_id, package.clone(), ProtocolDirection::Upstream, 2);
     wrong_type.conditions = vec![equals("amount", DocumentValue::String("1000".into()))];
     assert_eq!(
         error_code(
@@ -293,7 +305,7 @@ async fn save_validates_all_four_schema_value_types_and_exact_bindings() {
         "RULE_INVALID"
     );
 
-    let mut wrong_package = input(
+    let wrong_package = input(
         listener_id,
         pkg("iso-8583", "2.0.0"),
         ProtocolDirection::Upstream,
@@ -307,17 +319,6 @@ async fn save_validates_all_four_schema_value_types_and_exact_bindings() {
                 .unwrap_err()
         ),
         "PROTOCOL_RULE_PACKAGE_MISMATCH"
-    );
-    wrong_package.package = package.clone();
-    wrong_package.schema_version = 2;
-    assert_eq!(
-        error_code(
-            &application
-                .protocol_rule_save(wrong_package)
-                .await
-                .unwrap_err()
-        ),
-        "PROTOCOL_RULE_SCHEMA_MISMATCH"
     );
 }
 

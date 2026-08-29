@@ -44,7 +44,6 @@ async fn deleting_an_imported_high_order_rule_never_reuses_its_created_order() {
         10_000,
         listener_id,
         package.clone(),
-        1,
         ProtocolDirection::Upstream,
         Vec::new(),
         vec![DocumentAction::RecordMatch],
@@ -94,10 +93,11 @@ async fn created_order_exhaustion_is_stable_and_does_not_write() {
 }
 
 #[tokio::test]
-async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_rules() {
+async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_identity_free_schema()
+{
     let (application, services, workspaces, _) = fixture();
     let package = pkg("iso-8583", "1.0.0");
-    let listener_id = configure_relay(&services, &workspaces, &package).await;
+    let _listener_id = configure_relay(&services, &workspaces, &package).await;
     let selected = workspaces.list().await.unwrap().remove(0);
     let mut workspace = workspaces.get(selected.id).await.unwrap();
     let mut disabled = services.record(&package).unwrap();
@@ -125,21 +125,19 @@ async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_rul
     assert_eq!(services.compile_calls.load(Ordering::SeqCst), 2);
     assert_eq!(services.describe_calls.load(Ordering::SeqCst), 2);
 
-    services.set_description(package.clone(), description_with_blob(package.clone()));
-    let rule = application
-        .protocol_rule_save(input(
-            listener_id,
-            package.clone(),
-            ProtocolDirection::Upstream,
-            0,
-        ))
-        .await
-        .unwrap();
-    let mut wrong_schema = description_with_blob(package);
-    wrong_schema.upstream_schema.version = rule.schema_version() + 1;
-    services.set_description(wrong_schema.package.clone(), wrong_schema);
+    let mut incompatible = description_with_blob(package);
+    let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } =
+        &mut incompatible.upstream_schema.root
+    else {
+        unreachable!()
+    };
+    properties.insert(
+        "amount".into(),
+        intercept_proxy_domain::DocumentSchemaNode::String { title: None },
+    );
+    services.set_description(incompatible.package.clone(), incompatible);
     let current = workspaces.get(workspace.id).await.unwrap();
-    let error = application
+    application
         .listener_validate(
             current.id,
             current.revision.get(),
@@ -147,8 +145,7 @@ async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_rul
             Vec::new(),
         )
         .await
-        .unwrap_err();
-    assert_eq!(error_code(&error), "RULE_INVALID");
+        .unwrap();
 }
 
 #[tokio::test]

@@ -207,16 +207,10 @@ describe("SocketListenerSettings", () => {
         display: true,
       },
       upstream_schema: {
-        id: "iso8583-request",
-        version: 1,
-        title: "ISO 8583 Request",
-        fields: [{ name: "mti", label: "MTI", type: "string" as const }],
+        root: { type: "object" as const, title: "ISO 8583 Request", properties: { mti: { type: "string" as const, title: "MTI" } } },
       },
       downstream_schema: {
-        id: "iso8583-response",
-        version: 1,
-        title: "ISO 8583 Response",
-        fields: [{ name: "response_code", label: "Response", type: "string" as const }],
+        root: { type: "object" as const, title: "ISO 8583 Response", properties: { response_code: { type: "string" as const, title: "Response" } } },
       },
     };
     const { onChange } = renderSettings(relayTlsSettings(), false, {

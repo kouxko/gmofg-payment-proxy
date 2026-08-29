@@ -1,4 +1,4 @@
-use intercept_proxy_domain::{DocumentField, DocumentFieldType, DocumentSchema, DocumentSchemaId};
+use intercept_proxy_domain::DocumentSchemaNode;
 
 use super::super::{
     Application,
@@ -24,11 +24,7 @@ impl Application {
         let workspace = self.selected_protocol_rule_workspace().await?;
         let listener = find_listener(&workspace, listener_id)?;
         let description_context = self.protocol_rule_description_context(listener).await?;
-        let default_action = if description_context.local_responder {
-            intercept_proxy_domain::DocumentAction::ClearDocument
-        } else {
-            intercept_proxy_domain::DocumentAction::RecordMatch
-        };
+        let default_action = intercept_proxy_domain::DocumentAction::RecordMatch;
         let valid_stages = valid_protocol_rule_stages(description_context.local_responder);
         let mut stages = Vec::with_capacity(valid_stages.len());
         for &stage in valid_stages {
@@ -36,7 +32,6 @@ impl Application {
             let catalog = capability_catalog(&context, stage);
             stages.push(ProtocolRuleEditorStage {
                 stage,
-                schema_version: catalog.schema_version,
                 fields: catalog.fields,
                 common_actions: catalog.common_actions,
                 new_rule_draft: ProtocolRuleSaveInput {
@@ -47,7 +42,6 @@ impl Application {
                     priority: 100,
                     listener_id,
                     package: description_context.package.clone(),
-                    schema_version: context.schema.version(),
                     stage,
                     conditions: Vec::new(),
                     actions: vec![default_action.clone()],
@@ -141,7 +135,7 @@ struct ProtocolRuleDescriptionContext {
 pub(super) struct ProtocolRuleContext {
     pub(super) package: ProtocolPackageRef,
     description: ProtocolPackageDescriptionViewModel,
-    pub(super) schema: DocumentSchema,
+    pub(super) schema: DocumentSchemaNode,
 }
 
 fn protocol_rule_context_from_description(
@@ -159,7 +153,7 @@ fn protocol_rule_context_from_description(
             "本机应答只允许配置“应用 → 代理”和“代理 → 应用”阶段。",
         ));
     }
-    let schema = domain_schema(schema_for_stage(&description_context.description, stage))?;
+    let schema = domain_schema(schema_for_stage(&description_context.description, stage));
     Ok(ProtocolRuleContext {
         package: description_context.package.clone(),
         description: description_context.description.clone(),
@@ -193,29 +187,8 @@ fn schema_for_stage(
     }
 }
 
-fn domain_schema(schema: &crate::ProtocolPackageSchemaViewModel) -> AppResult<DocumentSchema> {
-    let fields = schema
-        .fields
-        .iter()
-        .map(|field| {
-            DocumentField::new(
-                field.name.parse()?,
-                match field.field_type {
-                    ProtocolPackageSchemaFieldTypeViewModel::String => DocumentFieldType::String,
-                    ProtocolPackageSchemaFieldTypeViewModel::Int => DocumentFieldType::Int,
-                    ProtocolPackageSchemaFieldTypeViewModel::Bool => DocumentFieldType::Bool,
-                    ProtocolPackageSchemaFieldTypeViewModel::Blob => DocumentFieldType::Blob,
-                },
-                field.label.clone(),
-            )
-        })
-        .collect::<Result<Vec<_>, intercept_proxy_domain::DomainError>>()?;
-    Ok(DocumentSchema::new(
-        DocumentSchemaId::new(schema.id.clone())?,
-        schema.version,
-        schema.title.clone(),
-        fields,
-    )?)
+fn domain_schema(schema: &crate::ProtocolPackageSchemaViewModel) -> DocumentSchemaNode {
+    schema.root.clone()
 }
 
 pub(super) fn capability_catalog(
@@ -226,26 +199,51 @@ pub(super) fn capability_catalog(
         ProtocolRuleFieldActionCapability::SetField,
         ProtocolRuleFieldActionCapability::ClearField,
     ];
-    let fields = schema_for_stage(&context.description, stage)
-        .fields
-        .iter()
-        .map(|field| ProtocolRuleFieldCapability {
-            name: field.name.clone(),
-            label: field.label.clone(),
-            field_type: field.field_type,
-            operators: vec![ProtocolRuleFieldOperatorCapability::Equals],
-            actions: field_actions.clone(),
-        })
-        .collect();
-    let common_actions = vec![
-        ProtocolRuleCommonActionCapability::RecordMatch,
-        ProtocolRuleCommonActionCapability::ClearDocument,
-    ];
+    let mut fields = Vec::new();
+    collect_schema_fields(
+        &schema_for_stage(&context.description, stage).root,
+        "",
+        &field_actions,
+        &mut fields,
+    );
+    let common_actions = vec![ProtocolRuleCommonActionCapability::RecordMatch];
     ProtocolRuleCapabilityCatalog {
         package: context.package.clone(),
-        schema_version: context.schema.version(),
         stage,
         fields,
         common_actions,
+    }
+}
+
+pub(super) fn collect_schema_fields(
+    schema: &DocumentSchemaNode,
+    path: &str,
+    actions: &[ProtocolRuleFieldActionCapability],
+    output: &mut Vec<ProtocolRuleFieldCapability>,
+) {
+    let field_type = match schema {
+        DocumentSchemaNode::String { .. } => ProtocolPackageSchemaFieldTypeViewModel::String,
+        DocumentSchemaNode::Number { .. } => ProtocolPackageSchemaFieldTypeViewModel::Number,
+        DocumentSchemaNode::Boolean { .. } => ProtocolPackageSchemaFieldTypeViewModel::Boolean,
+        DocumentSchemaNode::Object { properties, .. } => {
+            for (name, child) in properties {
+                let escaped = name.replace('~', "~0").replace('/', "~1");
+                collect_schema_fields(child, &format!("{path}/{escaped}"), actions, output);
+            }
+            ProtocolPackageSchemaFieldTypeViewModel::Object
+        }
+        DocumentSchemaNode::Array { items, .. } => {
+            collect_schema_fields(items, &format!("{path}/0"), actions, output);
+            ProtocolPackageSchemaFieldTypeViewModel::Array
+        }
+    };
+    if !path.is_empty() {
+        output.push(ProtocolRuleFieldCapability {
+            name: path.to_owned(),
+            label: schema.title().unwrap_or(path).to_owned(),
+            field_type,
+            operators: vec![ProtocolRuleFieldOperatorCapability::Equals],
+            actions: actions.to_vec(),
+        });
     }
 }

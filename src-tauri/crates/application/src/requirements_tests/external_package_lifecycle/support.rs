@@ -141,14 +141,15 @@ pub(super) fn external_record(
 
 pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescriptionViewModel {
     let schema = ProtocolPackageSchemaViewModel {
-        id: "external".into(),
-        version: 1,
-        title: "External".into(),
-        fields: vec![ProtocolPackageSchemaFieldViewModel {
-            name: "amount".into(),
-            label: "Amount".into(),
-            field_type: ProtocolPackageSchemaFieldTypeViewModel::Int,
-        }],
+        root: intercept_proxy_domain::DocumentSchemaNode::Object {
+            title: Some("External".into()),
+            properties: std::collections::BTreeMap::from([(
+                "amount".into(),
+                intercept_proxy_domain::DocumentSchemaNode::Number {
+                    title: Some("Amount".into()),
+                },
+            )]),
+        },
     };
     ProtocolPackageDescriptionViewModel {
         package,

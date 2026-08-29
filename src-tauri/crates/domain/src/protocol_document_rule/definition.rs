@@ -15,7 +15,6 @@ impl ProtocolDocumentRuleDefinition {
         created_order: u64,
         listener_id: ListenerId,
         package: ProtocolPackageRef,
-        schema_version: u32,
         stage: ProtocolRuleStage,
         conditions: Vec<DocumentCondition>,
         actions: Vec<DocumentAction>,
@@ -29,7 +28,6 @@ impl ProtocolDocumentRuleDefinition {
             created_order,
             listener_id,
             package,
-            schema_version,
             stage,
             conditions,
             actions,
@@ -51,10 +49,7 @@ impl DocumentAction {
     /// 是否会修改 Document；Workspace 用它强制要求对应方向开启 Encode。
     #[must_use]
     pub const fn modifies_document(&self) -> bool {
-        matches!(
-            self,
-            Self::SetField { .. } | Self::ClearField { .. } | Self::ClearDocument
-        )
+        matches!(self, Self::SetField { .. } | Self::ClearField { .. })
     }
 }
 
@@ -106,11 +101,6 @@ impl ProtocolDocumentRuleDefinition {
     }
 
     #[must_use]
-    pub const fn schema_version(&self) -> u32 {
-        self.schema_version
-    }
-
-    #[must_use]
     pub const fn direction(&self) -> ProtocolDirection {
         self.stage.direction()
     }
@@ -144,7 +134,6 @@ impl ProtocolDocumentRuleDefinition {
             priority: self.priority,
             listener_id: self.listener_id,
             package: self.package.clone(),
-            schema_version: self.schema_version,
             stage: self.stage,
             conditions: self.conditions.clone(),
             actions: self.actions.clone(),

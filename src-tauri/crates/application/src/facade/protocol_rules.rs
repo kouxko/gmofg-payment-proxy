@@ -73,7 +73,7 @@ impl Application {
 
         let listener = find_listener(&workspace, input.listener_id)?.clone();
         let context = self.protocol_rule_context(&listener, input.stage).await?;
-        ensure_requested_binding(&input, &context.package, context.schema.version())?;
+        ensure_requested_binding(&input, &context.package)?;
 
         let saved_rule_id = match (input.rule_id, input.expected_revision) {
             (None, None) => {
@@ -88,7 +88,6 @@ impl Application {
                     created_order,
                     input.listener_id,
                     input.package,
-                    input.schema_version,
                     input.stage,
                     input.conditions,
                     input.actions,
@@ -110,7 +109,6 @@ impl Application {
                     priority: input.priority,
                     listener_id: input.listener_id,
                     package: input.package,
-                    schema_version: input.schema_version,
                     stage: input.stage,
                     conditions: input.conditions,
                     actions: input.actions,
@@ -283,18 +281,11 @@ fn find_listener(workspace: &ProxyWorkspace, listener_id: ListenerId) -> AppResu
 fn ensure_requested_binding(
     input: &ProtocolRuleSaveInput,
     package: &ProtocolPackageRef,
-    schema_version: u32,
 ) -> AppResult<()> {
     if input.package != *package {
         return Err(AppError::new(
             "PROTOCOL_RULE_PACKAGE_MISMATCH",
             "规则协议包必须与入口的精确绑定一致。",
-        ));
-    }
-    if input.schema_version != schema_version {
-        return Err(AppError::new(
-            "PROTOCOL_RULE_SCHEMA_MISMATCH",
-            "规则 Schema 版本必须与协议包编译描述一致。",
         ));
     }
     Ok(())
@@ -306,7 +297,6 @@ fn ensure_immutable_binding(
 ) -> AppResult<()> {
     if current.listener_id() == input.listener_id
         && current.package() == &input.package
-        && current.schema_version() == input.schema_version
         && current.stage() == input.stage
     {
         return Ok(());

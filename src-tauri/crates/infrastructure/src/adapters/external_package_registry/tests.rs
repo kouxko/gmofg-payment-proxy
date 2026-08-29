@@ -26,20 +26,20 @@ fn registration(name: &str) -> ExternalPackageRegistration {
         "document": {
             "upstream": {
                 "schema": {
-                    "id": "vendor-upstream", "version": 1, "title": "Upstream",
-                    "fields": [
-                        {"name": "mti", "label": "MTI", "type": "string"},
-                        {"name": "amount", "label": "Amount", "type": "int"},
-                        {"name": "approved", "label": "Approved", "type": "bool"},
-                        {"name": "raw", "label": "Raw", "type": "blob"}
-                    ]
+                    "type": "object", "title": "Upstream",
+                    "properties": {
+                        "mti": {"type": "string", "title": "MTI"},
+                        "amount": {"type": "number", "title": "Amount"},
+                        "approved": {"type": "boolean", "title": "Approved"},
+                        "raw": {"type": "array", "title": "Raw", "items": {"type": "number"}}
+                    }
                 },
                 "display": "render"
             },
             "downstream": {
                 "schema": {
-                    "id": "vendor-downstream", "version": 1, "title": "Downstream",
-                    "fields": [{"name": "code", "label": "Code", "type": "string"}]
+                    "type": "object", "title": "Downstream",
+                    "properties": {"code": {"type": "string", "title": "Code"}}
                 },
                 "display": "render"
             }

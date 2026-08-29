@@ -98,13 +98,13 @@ async fn unsupported_mitm_root_material_preserves_material_role_code() {
 }
 
 #[tokio::test]
-async fn invalid_document_value_wire_preserves_document_wire_code() {
+async fn unsafe_document_integer_is_rejected_as_invalid_schema() {
     let candidate = candidate_json_with(|candidate| {
         candidate["workspace"]["rules"][14]["conditions"][0]["value"] =
-            serde_json::json!("raw-scalar-is-forbidden");
+            serde_json::json!(9_007_199_254_740_992_u64);
     });
 
-    assert_schema_code(&candidate, EnvironmentStatusCode::DocumentValueWireInvalid).await;
+    assert_schema_code(&candidate, EnvironmentStatusCode::SchemaInvalid).await;
 }
 
 #[tokio::test]

@@ -215,16 +215,27 @@ fn zero_pad(number, length, field_name) {
     result + text
 }
 
+fn byte_array_to_blob(value, field_name) {
+    let result = blob(value.len(), 0);
+    for index in 0..value.len() {
+        let byte = value[index].to_int();
+        if byte < 0 || byte > 255 { throw field_name + " contains a value outside one byte"; }
+        result[index] = byte;
+    }
+    result
+}
+
 fn encode_field(value, spec) {
     let field_name = "DE" + spec.number + " " + spec.name;
     if spec.kind == "fixed_blob" {
         if value.len() != spec.length { throw field_name + " must contain exactly " + spec.length + " bytes"; }
-        return value;
+        return byte_array_to_blob(value, field_name);
     }
     if spec.kind.ends_with("_blob") {
         if value.len() > spec.length { throw field_name + " length exceeds profile maximum"; }
         let prefix_length = if spec.kind.starts_with("ll_") { 2 } else { 3 };
-        return zero_pad(value.len(), prefix_length, field_name + " length").to_blob() + value;
+        return zero_pad(value.len(), prefix_length, field_name + " length").to_blob()
+            + byte_array_to_blob(value, field_name);
     }
 
     if spec.kind == "fixed_amount" { return zero_pad(value, spec.length, field_name).to_blob(); }
@@ -249,7 +260,7 @@ fn encode_field(value, spec) {
 fn decode(message) {
     if message.len() < 12 { throw "ISO 8583 message must contain MTI and primary bitmap"; }
     let document = document::create();
-    document.set("message_type", require_digit_text(ascii_from_blob(message.extract(0, 4), "MTI"), "MTI"));
+    document.set("/message_type", require_digit_text(ascii_from_blob(message.extract(0, 4), "MTI"), "MTI"));
 
     let bitmap = message.extract(4, 8);
     let offset = 12;
@@ -263,8 +274,9 @@ fn decode(message) {
     for spec in field_specs() {
         if bitmap_has(bitmap, spec.number) {
             let field = read_field(message, offset, spec);
-            if spec.kind == "fixed_amount" { document.set(spec.name, field.value.parse_int()); }
-            else { document.set(spec.name, field.value); }
+            let path = "/" + spec.name;
+            if spec.kind == "fixed_amount" { document.set(path, field.value.parse_int()); }
+            else { document.set(path, field.value); }
             offset = field.next_offset;
         }
     }
@@ -273,17 +285,18 @@ fn decode(message) {
 }
 
 fn encode(document) {
-    if !document.has("message_type") { throw "message_type is required"; }
-    let message_type = require_digit_text(document.get("message_type").to_string(), "message_type");
+    if !document.has("/message_type") { throw "message_type is required"; }
+    let message_type = require_digit_text(document.get("/message_type").to_string(), "message_type");
     if message_type.len() != 4 { throw "message_type must contain exactly 4 digits"; }
 
     let bitmap = blob(16, 0);
     let fields = blob();
     let secondary = false;
     for spec in field_specs() {
-        if document.has(spec.name) {
+        let path = "/" + spec.name;
+        if document.has(path) {
             bitmap = bitmap_set(bitmap, spec.number);
-            fields += encode_field(document.get(spec.name), spec);
+            fields += encode_field(document.get(path), spec);
             if spec.number > 64 { secondary = true; }
         }
     }

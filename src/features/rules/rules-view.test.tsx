@@ -62,7 +62,7 @@ function socketRule(): RuleDefinition_Serialize {
     rule_id: "socket-rule", revision: 4, name: "Socket document", enabled: true, priority: 20,
     created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app",
     content: { type: "socket", value: {
-      package: { id: "iso8583", version: "1.0.0" }, schema_version: 1,
+      package: { id: "iso8583", version: "1.0.0" },
       conditions: [], actions: [{ type: "record_match" }],
     } },
   };
@@ -73,13 +73,13 @@ const httpContext: RuleEditorContext = {
   content: { type: "http", value: { stages: [{
     stage: "proxy_to_upstream",
     http: { stage: "request", match_field_kinds: ["path_or_request_type", "json_path"], actions: [{ kind: "set_header", terminal: false, traffic_direction: null }] },
-    package: { id: "iso8583", version: "1.0.0" }, schema_version: 1,
+    package: { id: "iso8583", version: "1.0.0" },
     document_fields: [], document_common_actions: ["record_match"],
     new_rule_draft: { rule_id: null, expected_revision: null, draft: {
       name: "新建 HTTP 规则", enabled: true, priority: 100, listener_id: httpListener.id,
       stage: "proxy_to_upstream", content: { type: "http", value: {
         description: "", conditions: [], actions: [], one_shot: false, hit_count: 0, last_hit_at: null,
-        document: { package: { id: "iso8583", version: "1.0.0" }, schema_version: 1, conditions: [], actions: [] },
+        document: { package: { id: "iso8583", version: "1.0.0" }, conditions: [], actions: [] },
       } },
     } },
   }] } },
@@ -88,11 +88,11 @@ const httpContext: RuleEditorContext = {
 const socketContext: RuleEditorContext = {
   listener_id: socketListener.id,
   content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, stages: [{
-    stage: "proxy_to_app", schema_version: 1, fields: [], common_actions: ["record_match"],
+    stage: "proxy_to_app", fields: [], common_actions: ["record_match"],
     new_rule_draft: { rule_id: null, expected_revision: null, draft: {
       name: "新建 Socket 规则", enabled: true, priority: 100, listener_id: socketListener.id,
       stage: "proxy_to_app", content: { type: "socket", value: {
-        package: { id: "iso8583", version: "1.0.0" }, schema_version: 1, conditions: [], actions: [],
+        package: { id: "iso8583", version: "1.0.0" }, conditions: [], actions: [],
       } },
     } },
   }] } },
@@ -132,7 +132,7 @@ describe("unified rule workspace", () => {
     });
     commandMocks.ruleDefinitionConditionDraft.mockResolvedValue({ Field: { field: "PathOrRequestType", operator: { Equals: "" } } });
     commandMocks.ruleDefinitionActionDraft.mockResolvedValue({ SetHeader: { name: "x-proxy-test", value: "" } });
-    commandMocks.ruleParseDocumentValue.mockResolvedValue({ type: "int", value: 0 });
+    commandMocks.ruleParseDocumentValue.mockResolvedValue(0);
   });
 
   it("uses one list and groups rules by the fixed pipeline stage order", async () => {
@@ -317,13 +317,13 @@ describe("unified rule workspace", () => {
     await user.click(screen.getByRole("button", { name: "保存规则" }));
 
     expect(commandMocks.ruleParseDocumentValue).toHaveBeenCalledTimes(2);
-    expect(commandMocks.ruleParseDocumentValue).toHaveBeenCalledWith("int", "0");
+    expect(commandMocks.ruleParseDocumentValue).toHaveBeenCalledWith("number", "0");
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ document: expect.objectContaining({
-        conditions: [{ operator: "equals", field: "amount", value: { type: "int", value: 0 } }],
+        conditions: [{ operator: "equals", field: "/amount", value: 0 }],
         actions: [
-          { type: "set_field", field: "amount", value: { type: "int", value: 0 } },
-          { type: "clear_field", field: "amount" },
+          { type: "set_field", field: "/amount", value: 0 },
+          { type: "clear_field", field: "/amount" },
           { type: "record_match" },
         ],
       }) }) } }),
@@ -344,11 +344,11 @@ describe("unified rule workspace", () => {
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       rule_id: "socket-rule",
       draft: expect.objectContaining({ content: { type: "socket", value: expect.objectContaining({
-        conditions: [{ operator: "equals", field: "amount", value: { type: "int", value: 0 } }],
+        conditions: [{ operator: "equals", field: "/amount", value: 0 }],
         actions: [
           { type: "record_match" },
-          { type: "set_field", field: "amount", value: { type: "int", value: 0 } },
-          { type: "clear_field", field: "amount" },
+          { type: "set_field", field: "/amount", value: 0 },
+          { type: "clear_field", field: "/amount" },
         ],
       }) } }),
     }));
@@ -423,7 +423,7 @@ function httpContextWithOptionalDocument() {
     ...httpContext,
     content: { type: "http", value: { stages: [{
       ...stage,
-      document_fields: [{ name: "amount", label: "Amount", type: "int", operators: ["equals"], actions: ["set_field", "clear_field"] }],
+      document_fields: [{ name: "/amount", label: "Amount", type: "number", operators: ["equals"], actions: ["set_field", "clear_field"] }],
     }] } },
   } as unknown as RuleEditorContext;
 }
@@ -435,7 +435,7 @@ function socketContextWithFields() {
     ...socketContext,
     content: { type: "socket", value: { ...socketContext.content.value, stages: [{
       ...stage,
-      fields: [{ name: "amount", label: "Amount", type: "int", operators: ["equals"], actions: ["set_field", "clear_field"] }],
+      fields: [{ name: "/amount", label: "Amount", type: "number", operators: ["equals"], actions: ["set_field", "clear_field"] }],
     }] } },
   } as RuleEditorContext;
 }

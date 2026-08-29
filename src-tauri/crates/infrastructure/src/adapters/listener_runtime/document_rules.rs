@@ -61,8 +61,7 @@ impl fmt::Debug for ProtocolDocumentRuleConnectionFactory {
             .debug_struct("ProtocolDocumentRuleConnectionFactory")
             .field("listener_id", &programs.app_to_proxy.listener_id())
             .field("package", programs.app_to_proxy.package())
-            .field("schema_id", &programs.app_to_proxy.schema().id())
-            .field("schema_version", &programs.app_to_proxy.schema().version())
+            .field("schema", &programs.app_to_proxy.schema())
             .field("app_to_proxy", &programs.app_to_proxy.rules().len())
             .field(
                 "proxy_to_upstream",
@@ -99,8 +98,7 @@ impl fmt::Debug for BoundSocketDocument {
             .field("listener_id", &self.listener_id)
             .field("package", &self.package)
             .field("stage", &self.stage)
-            .field("schema_id", &self.document.schema().id())
-            .field("schema_version", &self.document.schema().version())
+            .field("document", &"<redacted>")
             .finish_non_exhaustive()
     }
 }
@@ -129,7 +127,7 @@ impl ProtocolDocumentRuleConnection {
         }
     }
 
-    /// 绑定 Decode 产生的 owned Document；完整 Schema 在执行边界由 Program 复核。
+    /// 绑定 Decode 产生的 owned Document；Program 只持有规则路径所需的 Schema 元数据。
     pub fn bind_document(&self, document: Document) -> BoundSocketDocument {
         let program = self.program();
         BoundSocketDocument {
@@ -147,7 +145,9 @@ impl ProtocolDocumentRuleConnection {
     /// 未赋值稳定 non-match；上一 request 的值不会被复用。
     #[cfg(test)]
     pub fn empty_document(&self) -> BoundSocketDocument {
-        self.bind_document(Document::new(self.program().schema().clone()))
+        self.bind_document(Document::new(
+            intercept_proxy_domain::DocumentValue::Object(std::collections::BTreeMap::default()),
+        ))
     }
 
     /// 复核运行时归属后执行整组规则，并只返回一个聚合结果。

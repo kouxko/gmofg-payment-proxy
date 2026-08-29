@@ -3,14 +3,12 @@
 use super::*;
 
 const TEST_SCHEMA: &str = r#"
-id = "runtime-message"
-version = 1
+type = "object"
 title = "Runtime Message"
 
-[[fields]]
-name = "amount"
-label = "Amount"
-type = "int"
+[properties.amount]
+type = "number"
+title = "Amount"
 "#;
 
 pub(super) fn package_ref(id: &str) -> ProtocolPackageRef {
