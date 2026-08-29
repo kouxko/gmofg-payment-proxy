@@ -7,6 +7,7 @@
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260829-002 | phase1-green-contract-baseline | 验证 Phase 1 当前合同 inventory、bindings freshness/determinism、完整十门禁及独立复验；保留首次 ADB deadline 偶发失败和成功复跑记录 | PASS | 无 | 无 | 无 | [证据](2026-08-29/TASK-20260829-002/phase1-green-contract-baseline/README.md) |
 | TASK-20260829-001 | DB-SCHEMA-100-001 | 验证版本 100 正式兼容基线、pre-1.00 原子重建、并发/FK/WAL/异常 marker 边界及真实 App 启动 | PASS | TASK-20260828-005 | UNIFIED-RULE-CONTRACT-001 | [父证据](2026-08-28/TASK-20260828-005/UNIFIED-RULE-CONTRACT-001/README.md) | [证据](2026-08-29/TASK-20260829-001/DB-SCHEMA-100-001/README.md) |
 
 ## 2026-08-28

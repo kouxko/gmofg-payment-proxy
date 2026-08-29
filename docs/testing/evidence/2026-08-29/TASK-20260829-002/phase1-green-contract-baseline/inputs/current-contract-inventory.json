@@ -1,0 +1,168 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260829-002",
+  "phase": 1,
+  "purpose": "Compileable GREEN baseline for the contracts that later TASK-20260829-002 phases replace.",
+  "checkpoint": {
+    "package_script": "check:task-20260829-002:checkpoint",
+    "commands": [
+      "pnpm test:task-20260829-002:phase1",
+      "pnpm check:bindings",
+      "pnpm scan:architecture",
+      "pnpm scan:source-size",
+      "pnpm lint",
+      "pnpm typecheck",
+      "pnpm test",
+      "pnpm check:rust:fmt",
+      "pnpm check:rust:clippy",
+      "cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features"
+    ],
+    "rules": [
+      "Every phase checkpoint keeps the touched Rust crates and workspace tests GREEN.",
+      "Every phase checkpoint keeps pnpm typecheck GREEN.",
+      "A phase may introduce a temporary compile adapter only while that phase is active; no checkpoint may retain a second runtime behavior path.",
+      "The next phase starts only after the current phase has a local Git rollback point."
+    ]
+  },
+  "harnesses": [
+    {
+      "id": "domain-contract-tests",
+      "kind": "rust-integration-test",
+      "path": "src-tauri/crates/domain/tests/unified_rule_contract.rs",
+      "owner_phase": 3
+    },
+    {
+      "id": "protocol-package-tests",
+      "kind": "rust-unit-test-module",
+      "path": "src-tauri/crates/protocol-scripting/src/tests/fixtures.rs",
+      "owner_phase": 7
+    },
+    {
+      "id": "infrastructure-contract-tests",
+      "kind": "rust-unit-test-module",
+      "path": "src-tauri/crates/infrastructure/src/sqlite/core.rs",
+      "owner_phase": 2
+    },
+    {
+      "id": "frontend-rule-order-model-tests",
+      "kind": "vitest",
+      "path": "src/features/rules/rule-definition-model.test.ts",
+      "owner_phase": 5,
+      "required_fragments": [
+        "groupRulesByStage",
+        "created_order"
+      ]
+    },
+    {
+      "id": "frontend-four-stage-model-tests",
+      "kind": "vitest",
+      "path": "src/features/rules/rule-definition-model.test.ts",
+      "owner_phase": 12,
+      "required_fragments": [
+        "RULE_STAGE_ORDER",
+        "\"app_to_proxy\"",
+        "\"proxy_to_app\""
+      ]
+    },
+    {
+      "id": "generated-types",
+      "kind": "typescript-generated-contract",
+      "path": "src/generated/rust-types.ts",
+      "owner_phase": 3
+    }
+  ],
+  "baselines": [
+    {
+      "id": "database-schema-version-100",
+      "path": "src-tauri/crates/infrastructure/src/sqlite/schema.rs",
+      "owner_phase": 2,
+      "required_fragments": [
+        "COMPATIBILITY_BASELINE_SCHEMA_VERSION: i64 = 100",
+        "CURRENT_SCHEMA_VERSION: i64 = COMPATIBILITY_BASELINE_SCHEMA_VERSION"
+      ]
+    },
+    {
+      "id": "flat-document-value",
+      "path": "src-tauri/crates/domain/src/document/model.rs",
+      "owner_phase": 3,
+      "required_fragments": [
+        "pub enum DocumentValue",
+        "Int(i64)",
+        "Blob(Vec<u8>)",
+        "values: Vec<Option<DocumentValue>>"
+      ]
+    },
+    {
+      "id": "flat-document-schema",
+      "path": "src-tauri/crates/domain/src/document/schema.rs",
+      "owner_phase": 3,
+      "required_fragments": [
+        "pub enum DocumentFieldType",
+        "pub struct DocumentField",
+        "pub struct DocumentSchema"
+      ]
+    },
+    {
+      "id": "four-stage-document-rules",
+      "path": "src-tauri/crates/domain/src/protocol_document_rule.rs",
+      "owner_phase": 12,
+      "required_fragments": [
+        "pub enum ProtocolRuleStage",
+        "AppToProxy",
+        "ProxyToUpstream",
+        "UpstreamToProxy",
+        "ProxyToApp"
+      ]
+    },
+    {
+      "id": "rhai-toml-package-runtime",
+      "path": "src-tauri/crates/protocol-scripting/src/compiler/package_compiler.rs",
+      "owner_phase": 7,
+      "required_fragments": [
+        "use rhai::{AST, Position}",
+        "parse_protocol_manifest",
+        "PackageModuleResolver"
+      ]
+    },
+    {
+      "id": "socket-specific-external-rpc",
+      "path": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/contract.rs",
+      "owner_phase": 7,
+      "required_fragments": [
+        "trait ExternalPackageRpc",
+        "rpc_timeout: Duration",
+        "ExternalSocketPackageBinding"
+      ]
+    },
+    {
+      "id": "generated-flat-document-types",
+      "path": "src/generated/rust-types.ts",
+      "owner_phase": 3,
+      "required_fragments": [
+        "export type DocumentSchemaWire",
+        "fields: DocumentField[]",
+        "export type DocumentValue =",
+        "{ type: \"int\"; value: number }",
+        "{ type: \"blob\"; value: number[] }"
+      ]
+    },
+    {
+      "id": "generated-four-stage-types",
+      "path": "src/generated/rust-types.ts",
+      "owner_phase": 12,
+      "required_fragments": [
+        "export type ProtocolRuleStage =",
+        "\"app_to_proxy\"",
+        "\"upstream_to_proxy\""
+      ]
+    },
+    {
+      "id": "cargo-workspace-future-crate-slot",
+      "path": "src-tauri/Cargo.toml",
+      "owner_phase": 4,
+      "required_fragments": [
+        "members = [\".\", \"crates/*\"]"
+      ]
+    }
+  ]
+}
