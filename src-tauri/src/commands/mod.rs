@@ -36,6 +36,13 @@ pub use settings::*;
 pub use workspace::*;
 
 use intercept_proxy_application::{AppError, AppErrorViewModel};
+use intercept_proxy_package_contract::{
+    CanonicalBase64, DecodeParams, DecodeRpcSuccess, DisplayParams, DisplayRpcSuccess,
+    EncodeParams, EncodeRpcSuccess, FrameParams, FrameResult, FrameRpcSuccess, JsonRpcVersion,
+    PackageDocumentDirection, PackageDocuments, PackageKind, PackageManifest, PackageMetadata,
+    PackageRegisterMethod, PackageRegisterNotification, PackageRpcError, PackageRpcErrorData,
+    PackageRpcFailure, PackageRpcRequest,
+};
 use tauri::Wry;
 use tauri_specta::{Builder, collect_commands};
 
@@ -170,4 +177,26 @@ pub fn builder() -> Builder<Wry> {
             settings_reset_defaults,
             application_data_reset,
         ])
+        .typ::<CanonicalBase64>()
+        .typ::<DecodeParams>()
+        .typ::<DecodeRpcSuccess>()
+        .typ::<DisplayParams>()
+        .typ::<DisplayRpcSuccess>()
+        .typ::<EncodeParams>()
+        .typ::<EncodeRpcSuccess>()
+        .typ::<FrameParams>()
+        .typ::<FrameResult>()
+        .typ::<FrameRpcSuccess>()
+        .typ::<JsonRpcVersion>()
+        .typ::<PackageDocumentDirection>()
+        .typ::<PackageDocuments>()
+        .typ::<PackageKind>()
+        .typ::<PackageManifest>()
+        .typ::<PackageMetadata>()
+        .typ::<PackageRegisterMethod>()
+        .typ::<PackageRegisterNotification>()
+        .typ::<PackageRpcError>()
+        .typ::<PackageRpcErrorData>()
+        .typ::<PackageRpcFailure>()
+        .typ::<PackageRpcRequest>()
 }

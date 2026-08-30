@@ -1,0 +1,19 @@
+{
+  "source_root": "test-support/fixtures/task-20260829-002/phase-4/package-contract/",
+  "fixtures": {
+    "http-manifest.json": { "sha256": "19848d4e11f6aee5d0fc5ae68bc4fffeaef2d6049c2aaf7852eddfc3a9296a3f" },
+    "socket-manifest.json": { "sha256": "0f18d983bccf26846121d4a999b4c201b06932bf39c16c5f00e01de9f5c8d0cd" },
+    "register-notification.json": { "sha256": "fc6259887d8915229960f619eacb4303b4488dbbc93204903ba08dd1a7d9e500" },
+    "rpc-examples.json": { "sha256": "4ef68cf6a84d4ffd0377d34bb7803d86680a2c40bfe0d30e7a4ef9d3e9547ca0" },
+    "golden.json": { "sha256": "0b90566267d6b1373f184306e8b5cb3ee1a454366e1b1617096d15eda91cc2e4" },
+    "validation-corpus.json": { "sha256": "440e2c1a101036ce34c5a972e9f704b9b149ff4da1e5a7676035388f9f84fa2c" },
+    "inventory.json": { "sha256": "166d43cce0b23000c59c414a7fc7e35bc94451cfe46c99865480e74ba8ea72a7" }
+  },
+  "mcp_schema_snapshot": {
+    "source": "src-tauri/src/mcp/tests/fixtures/package_contract_api1/schema.snapshot.json",
+    "sha256": "59bd1df449b243b6ea085afc2d675fe08aa52682c6d668ac96ef884a5f10a8fe",
+    "golden_source": "src-tauri/src/mcp/tests/fixtures/package_contract_api1/golden.json",
+    "golden_sha256": "0b90566267d6b1373f184306e8b5cb3ee1a454366e1b1617096d15eda91cc2e4"
+  },
+  "usage": "Rust integration targets, Node fail-closed checker, independent MCP snapshot validation and Vitest unknown-boundary guards"
+}

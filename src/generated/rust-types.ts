@@ -519,6 +519,9 @@ export type BurstLossProfile = {
 	bad_state_loss_basis_points: number,
 };
 
+/**  Canonical padded standard Base64 bytes. */
+export type CanonicalBase64 = string;
+
 export type CaptureDetailViewModel = {
 	session_id: string,
 	request_id: string,
@@ -643,6 +646,15 @@ export type ChannelSettingsDraft = {
 	upstream_url: string,
 };
 
+/**  Positive number of bytes consumed by one complete frame. */
+export type ConsumedBytes = number;
+
+/**  Parameters for a decode hook. */
+export type DecodeParams = {
+	/**  HTTP Unicode text or Socket canonical Base64, interpreted by the package kind adapter. */
+	input: string,
+};
+
 /**
  *  生产者提交的有界控制面诊断。完整报文由 capture/Exchange observation 负责；密码、私钥和
  *  PKCS12 字节只属于专用凭据边界。
@@ -712,6 +724,12 @@ export type DiagnosticReportQuery = {
 export type DisabledReason = {
 	code: string,
 	message: string,
+};
+
+/**  Parameters for a display hook. */
+export type DisplayParams = {
+	/**  Natural recursive JSON Document. */
+	document: Document,
 };
 
 /**  Identity-free, owned recursive JSON document. */
@@ -826,6 +844,38 @@ export type DownstreamTlsSettings = {
 };
 
 export type DropResponseMode = "ReadCompleteResponse" | "CloseAfterRequestWrite";
+
+/**  Parameters for an encode hook. */
+export type EncodeParams = {
+	/**  Original HTTP text or Socket Base64 input. */
+	originalInput: string,
+	/**  Natural recursive JSON Document. */
+	document: Document,
+};
+
+export type ErrorCode = "PROXY_ALREADY_RUNNING" | "PROXY_NOT_RUNNING" | "OPERATION_IN_PROGRESS" | "PORT_IN_USE" | "CONFIG_INVALID" | "REVISION_CONFLICT" | "CERTIFICATE_NOT_READY" | "CERTIFICATE_INVALID" | "PKCS12_PASSWORD_INVALID" | "DPAPI_PROTECT_FAILED" | "DPAPI_UNPROTECT_FAILED" | "TLS_HANDSHAKE_FAILED" | "UPSTREAM_CONNECT_TIMEOUT" | "UPSTREAM_WRITE_TIMEOUT" | "UPSTREAM_READ_TIMEOUT" | "BODY_TOO_LARGE" | "HEADER_LIMIT_EXCEEDED" | "BODY_DECODE_FAILED" | "BODY_ENCODE_FAILED" | "JSON_INVALID" | "RULE_INVALID" |
+/**  协议 Document 规则执行被调用方显式取消。 */
+"RULE_EXECUTION_CANCELLED" | "RULE_CONFLICT_WARNING" |
+/**  协议包 ID 或 `SemVer` 不符合稳定身份约束。 */
+"PROTOCOL_PACKAGE_INVALID" |
+/**  Document Schema 的身份、字段声明或聚合结构无效。 */
+"DOCUMENT_SCHEMA_INVALID" |
+/**  A number is not finite. */
+"DOCUMENT_NUMBER_INVALID" |
+/**  An integer JSON literal exceeds JavaScript's exact integer range. */
+"DOCUMENT_UNSAFE_INTEGER" |
+/**  JSON Pointer syntax is invalid. */
+"DOCUMENT_POINTER_INVALID" |
+/**  A requested Document path or array index does not exist. */
+"DOCUMENT_PATH_MISSING" |
+/**  A Document path traverses or targets the wrong JSON type. */
+"DOCUMENT_PATH_TYPE_MISMATCH" |
+/**  脚本或调用方访问了 Schema 未声明的字段。 */
+"DOCUMENT_FIELD_UNDECLARED" |
+/**  字段已声明，但当前 Frame 尚未给它赋值。 */
+"DOCUMENT_FIELD_UNASSIGNED" |
+/**  写入值的类型与 Schema 声明不一致。 */
+"DOCUMENT_FIELD_TYPE_MISMATCH" | "BREAKPOINT_NOT_FOUND" | "BREAKPOINT_ALREADY_RESOLVED" | "BREAKPOINT_CLIENT_DISCONNECTED" | "BREAKPOINT_PROXY_STOPPED" | "RESOURCE_EXHAUSTED" | "EVENT_CURSOR_EXPIRED" | "EXPORT_FAILED" | "IMPORT_FAILED" | "DATABASE_SCHEMA_INVALID" | "INVALID_STATE_TRANSITION" | "INTERNAL_ERROR";
 
 /**  Reader/Writer 的强类型网络上下文；HTTP 保留文本 Header/Body，Socket 保留字节。 */
 export type ExchangeContext = { protocol: "http"; header: string; body: string;
@@ -1010,6 +1060,45 @@ export type FixedServerSettings = {
 
 export type ForwardProxyAuthentication = { mode: "none" } | { mode: "basic"; credential: SecretReference };
 
+/**  Parameters for a frame hook. */
+export type FrameParams = {
+	/**  Current accumulated Socket buffer. */
+	buffer: CanonicalBase64,
+};
+
+/**  Closed result of one fixed frame hook. */
+export type FrameResult = FrameResult_Serialize | FrameResult_Deserialize;
+
+/**  Closed result of one fixed frame hook. */
+export type FrameResult_Deserialize =
+/**  The current buffer does not yet contain one complete frame. */
+({ status: "need_more";
+/**  Optional byte count needed before trying the frame hook again. */
+requiredBytes?: number | null }) & { consumedBytes?: never; reason?: never } |
+/**  The buffer prefix is one complete frame. */
+({ status: "complete";
+/**  Positive byte count consumed from the buffer prefix. */
+consumedBytes: ConsumedBytes }) & { reason?: never; requiredBytes?: never } |
+/**  The package rejects the current buffer as an invalid frame. */
+({ status: "reject";
+/**  Package-supplied rejection reason. */
+reason: string }) & { consumedBytes?: never; requiredBytes?: never };
+
+/**  Closed result of one fixed frame hook. */
+export type FrameResult_Serialize =
+/**  The current buffer does not yet contain one complete frame. */
+({ status: "need_more";
+/**  Optional byte count needed before trying the frame hook again. */
+requiredBytes?: number | null }) & { consumedBytes?: never; reason?: never } |
+/**  The buffer prefix is one complete frame. */
+({ status: "complete";
+/**  Positive byte count consumed from the buffer prefix. */
+consumedBytes: ConsumedBytes }) & { reason?: never; requiredBytes?: never } |
+/**  The package rejects the current buffer as an invalid frame. */
+({ status: "reject";
+/**  Package-supplied rejection reason. */
+reason: string }) & { consumedBytes?: never; requiredBytes?: never };
+
 /**
  *  HTTP Body 的处理方式。
  *
@@ -1101,6 +1190,11 @@ export type JitterScope = "BeforeMessage" | "PerChunk";
 
 /**  Parsed RFC 6901 JSON Pointer. The document root is the empty string. */
 export type JsonPointer = string;
+
+/**  Fixed JSON-RPC version. */
+export type JsonRpcVersion =
+/**  JSON-RPC 2.0. */
+"2.0";
 
 /**
  *  代理监听页面使用的证书引用详情。
@@ -1413,6 +1507,189 @@ export type OperationResultViewModel = {
 	requires_restart: boolean,
 };
 
+/**  Optional Schema metadata for one HTTP or Socket direction. */
+export type PackageDocumentDirection = PackageDocumentDirection_Serialize | PackageDocumentDirection_Deserialize;
+
+/**  Optional Schema metadata for one HTTP or Socket direction. */
+export type PackageDocumentDirection_Deserialize = {
+	schema?: DocumentSchemaNode_Deserialize | null,
+};
+
+/**  Optional Schema metadata for one HTTP or Socket direction. */
+export type PackageDocumentDirection_Serialize = {
+	schema?: DocumentSchemaNode_Serialize | null,
+};
+
+/**  Independent upstream and downstream Document metadata. */
+export type PackageDocuments = PackageDocuments_Serialize | PackageDocuments_Deserialize;
+
+/**  Independent upstream and downstream Document metadata. */
+export type PackageDocuments_Deserialize = {
+	upstream: PackageDocumentDirection_Deserialize,
+	downstream: PackageDocumentDirection_Deserialize,
+};
+
+/**  Independent upstream and downstream Document metadata. */
+export type PackageDocuments_Serialize = {
+	upstream: PackageDocumentDirection_Serialize,
+	downstream: PackageDocumentDirection_Serialize,
+};
+
+/**  Protocol kind owned by one package version. */
+export type PackageKind =
+/**  HTTP body package. */
+"http" |
+/**  Socket frame package. */
+"socket";
+
+/**  Strict final API 1 package Manifest. */
+export type PackageManifest = PackageManifest_Serialize | PackageManifest_Deserialize;
+
+/**  Strict final API 1 package Manifest. */
+export type PackageManifest_Deserialize = {
+	api: number,
+	kind: PackageKind,
+	package: PackageMetadata,
+	document: PackageDocuments_Deserialize,
+};
+
+/**  Strict final API 1 package Manifest. */
+export type PackageManifest_Serialize = {
+	api: number,
+	kind: PackageKind,
+	package: PackageMetadata,
+	document: PackageDocuments_Serialize,
+};
+
+/**  Exact package identity and human-readable metadata. */
+export type PackageMetadata = {
+	id: ProtocolPackageId,
+	version: ProtocolPackageVersion,
+	name: string,
+	description: string,
+};
+
+/**  The only registration method. */
+export type PackageRegisterMethod =
+/**  `package.register`. */
+"package.register";
+
+/**  One-way package registration notification. Its strict shape cannot contain an `id`. */
+export type PackageRegisterNotification = PackageRegisterNotification_Serialize | PackageRegisterNotification_Deserialize;
+
+/**  One-way package registration notification. Its strict shape cannot contain an `id`. */
+export type PackageRegisterNotification_Deserialize = {
+	jsonrpc: JsonRpcVersion,
+	method: PackageRegisterMethod,
+	params: PackageManifest_Deserialize,
+};
+
+/**  One-way package registration notification. Its strict shape cannot contain an `id`. */
+export type PackageRegisterNotification_Serialize = {
+	jsonrpc: JsonRpcVersion,
+	method: PackageRegisterMethod,
+	params: PackageManifest_Serialize,
+};
+
+/**  Strict JSON-RPC error object. */
+export type PackageRpcError = {
+	code: number,
+	message: string,
+	data: PackageRpcErrorData,
+};
+
+/**  Stable-code error data shared with Domain and UI. */
+export type PackageRpcErrorData = {
+	code: ErrorCode,
+};
+
+/**  Strict failed JSON-RPC response. */
+export type PackageRpcFailure = {
+	/**  JSON-RPC 2.0 marker. */
+	jsonrpc: JsonRpcVersion,
+	/**  String request ID copied from the request. */
+	id: string,
+	/**  Typed error object. */
+	error: PackageRpcError,
+};
+
+/**  Every fixed package hook request. */
+export type PackageRpcRequest =
+/**  Upstream framing. */
+{ method: "hooks.upstream.frame";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Frame parameters. */
+params: FrameParams } |
+/**  Downstream framing. */
+{ method: "hooks.downstream.frame";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Frame parameters. */
+params: FrameParams } |
+/**  Upstream decode. */
+{ method: "hooks.upstream.decode";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Decode parameters. */
+params: DecodeParams } |
+/**  Downstream decode. */
+{ method: "hooks.downstream.decode";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Decode parameters. */
+params: DecodeParams } |
+/**  Upstream encode. */
+{ method: "hooks.upstream.encode";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Encode parameters. */
+params: EncodeParams } |
+/**  Downstream encode. */
+{ method: "hooks.downstream.encode";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Encode parameters. */
+params: EncodeParams } |
+/**  Upstream Document display. */
+{ method: "document.upstream.display";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Display parameters. */
+params: DisplayParams } |
+/**  Downstream Document display. */
+{ method: "document.downstream.display";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Display parameters. */
+params: DisplayParams };
+
+/**  Strict successful JSON-RPC response. */
+export type PackageRpcSuccess<R> = {
+	/**  JSON-RPC 2.0 marker. */
+	jsonrpc: JsonRpcVersion,
+	/**  String request ID copied from the request. */
+	id: string,
+	/**  Method-specific result. */
+	result: R,
+};
+
 /**  包在 TUN 中的移动方向。 */
 export type PacketDirection = "upload" | "download";
 
@@ -1508,7 +1785,7 @@ export type ProtocolPackageGroupViewModel = {
 
 /**
  *  应用级协议包的稳定 ID。
- *  Wire 形式是字符串，必须匹配 `[a-z][a-z0-9-]*`；小写限制保证跨平台文件系统、
+ *  Wire 形式是字符串，必须匹配 `[a-z][a-z0-9-]*(\.[a-z0-9-]+)*`；小写限制保证跨平台文件系统、
  *  ZIP 条目和数据库查询使用同一规范形式。
  */
 export type ProtocolPackageId = string;
@@ -2215,3 +2492,6 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
+
+
+export const PACKAGE_CONTRACT_VALIDATION = {"packageIdPattern":"^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)*$","packageIdMaxBytes":64,"packageVersionPattern":"^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$","packageVersionMaxBytes":128,"packageVersionCoreNumericMax":"18446744073709551615","schemaTitleMaxChars":128,"stableErrorCodes":["PROXY_ALREADY_RUNNING","PROXY_NOT_RUNNING","OPERATION_IN_PROGRESS","PORT_IN_USE","CONFIG_INVALID","REVISION_CONFLICT","CERTIFICATE_NOT_READY","CERTIFICATE_INVALID","PKCS12_PASSWORD_INVALID","DPAPI_PROTECT_FAILED","DPAPI_UNPROTECT_FAILED","TLS_HANDSHAKE_FAILED","UPSTREAM_CONNECT_TIMEOUT","UPSTREAM_WRITE_TIMEOUT","UPSTREAM_READ_TIMEOUT","BODY_TOO_LARGE","HEADER_LIMIT_EXCEEDED","BODY_DECODE_FAILED","BODY_ENCODE_FAILED","JSON_INVALID","RULE_INVALID","RULE_EXECUTION_CANCELLED","RULE_CONFLICT_WARNING","PROTOCOL_PACKAGE_INVALID","DOCUMENT_SCHEMA_INVALID","DOCUMENT_NUMBER_INVALID","DOCUMENT_UNSAFE_INTEGER","DOCUMENT_POINTER_INVALID","DOCUMENT_PATH_MISSING","DOCUMENT_PATH_TYPE_MISMATCH","DOCUMENT_FIELD_UNDECLARED","DOCUMENT_FIELD_UNASSIGNED","DOCUMENT_FIELD_TYPE_MISMATCH","BREAKPOINT_NOT_FOUND","BREAKPOINT_ALREADY_RESOLVED","BREAKPOINT_CLIENT_DISCONNECTED","BREAKPOINT_PROXY_STOPPED","RESOURCE_EXHAUSTED","EVENT_CURSOR_EXPIRED","EXPORT_FAILED","IMPORT_FAILED","DATABASE_SCHEMA_INVALID","INVALID_STATE_TRANSITION","INTERNAL_ERROR"]} as const;

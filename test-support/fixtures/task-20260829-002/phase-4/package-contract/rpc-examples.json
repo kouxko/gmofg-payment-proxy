@@ -1,0 +1,10 @@
+{
+  "requests": [
+    { "jsonrpc": "2.0", "id": "frame-1", "method": "hooks.upstream.frame", "params": { "buffer": "AP8=" } },
+    { "jsonrpc": "2.0", "id": "decode-1", "method": "hooks.downstream.decode", "params": { "input": "hello" } },
+    { "jsonrpc": "2.0", "id": "encode-1", "method": "hooks.upstream.encode", "params": { "originalInput": "hello", "document": { "message": "hello", "items": [1.5, true, null] } } },
+    { "jsonrpc": "2.0", "id": "display-1", "method": "document.downstream.display", "params": { "document": { "message": "hello" } } }
+  ],
+  "success": { "jsonrpc": "2.0", "id": "decode-1", "result": { "message": "hello" } },
+  "failure": { "jsonrpc": "2.0", "id": "decode-1", "error": { "code": -32000, "message": "decode rejected", "data": { "code": "BODY_DECODE_FAILED" } } }
+}

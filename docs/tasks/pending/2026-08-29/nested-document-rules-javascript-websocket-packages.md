@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-08-30 04:16:20 +08:00`
+- 最后更新时间：`2026-08-30 08:49:12 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -341,7 +341,20 @@ result: "<HTML string>"
 - `2026-08-30 04:09:47 +08:00`：最终复审新增 P2：Application facade `protocol_rule_values.rs` 仍保留过时 Int/Bool/Blob Hex 文本合同、`MAX_PROTOCOL_RULE_INT_TEXT_BYTES` 和整数文本错误。最小修复删除旧预算/文案，Number 与 Boolean 统一走标准 JSON + Domain recursive value 校验；非法 JSON 与合法但类型错误分别保持现有 typed `JSON_INVALID` / `PROTOCOL_RULE_VALUE_INVALID`，不增加兼容、抽象或错误映射。fresh Application 定向 4/4、Phase 3 Node 14/14、workspace strict Clippy、bindings freshness/determinism、精确旧 scalar-text 扫描 0、`git diff --check` PASS。状态回到 `修复完成 / LOCAL GREEN / RECHECK PENDING`，等待最终独立复验。
 - `2026-08-30 04:13:38 +08:00`：最终独立 Verifier fresh 重跑精确十门 checkpoint 全部 PASS；新增 facade 回归使 Application unit 实际计数为 459/459。修正 README、metadata、verification summary 与任务测试记录中不再准确的旧计数；不改产品与测试。正式 verdict 尚未到达，继续保持 `RECHECK PENDING`、`checkpoint_ready=false`。
 - `2026-08-30 04:16:20 +08:00`：G044 正式独立 Verdict 为 `VERIFIED / APPROVED / CHECKPOINT READY`，P0=0、P1=0、P2=0，无剩余阻断；确认独立 fresh 精确十门 checkpoint 全部 PASS。G044 可创建 Phase 3 rollback checkpoint；TASK-20260829-002 总体状态保持进行中。
-- 下一步：创建 Phase 3 rollback checkpoint 后进入 G045 / Phase 4。
+- `2026-08-30 04:52:48 +08:00`：G045 / Phase 4 新增唯一 `intercept-proxy-package-contract` crate，唯一内部依赖为 Domain；权威拥有 final API1 Manifest、无 id 单向 `package.register`、八个固定 Hook/Display request、严格 result/error envelope、closed FrameResult、canonical Base64 与 Domain stable-code wire。复用 Domain Document/Schema/Package identity/ErrorCode，未切换 WebSocket/Sidecar 生命周期或旧 protocol-scripting import。
+- `2026-08-30 04:52:48 +08:00`：TDD RED 为五个 Cargo 自动发现 targets 因合同类型不存在触发 `E0432`、exit 101；GREEN 为 Rust 10/10、fail-closed checker 6/6、TS unknown-boundary guard 4/4、MCP 独立 snapshot mutation、bindings deterministic、typecheck/lint/architecture/source-size/fmt/target strict Clippy/diff PASS。删除两个从未被 Cargo 挂载且锁定旧动态 hook 合同的 domain coverage 文件；旧运行 actor wire 仅保留 Phase7 精确 allowlist。
+- `2026-08-30 04:52:48 +08:00`：首次完整十门 checkpoint 前九门与前端 63 files/538 tests PASS，workspace strict Clippy PASS；最后 workspace tests 在既有 MCP non-loopback HTTP 环境测试中 132/133 后 10 秒超时，定向复测同样超时。该失败与 Phase4 crate 无依赖/调用关系，但未把全仓 checkpoint 记为 PASS。正式证据：[phase4-package-contract](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/README.md)。当前为 `LOCAL CONTRACT GREEN / GLOBAL CHECKPOINT ENVIRONMENT BLOCKED / RECHECK PENDING`，G045 不可 checkpoint。
+- `2026-08-30 05:23:47 +08:00`：G045 独立 review 判定 `REQUEST CHANGES`（P0=0/P1=3/P2=1）：checker 可被注释测试名、替代命名 wire owner、generated/MCP 局部漂移及宽泛 legacy allowlist 绕过；golden/TS 未覆盖完整响应与 Domain identity/Schema invariant；`consumedBytes>0` 仍可由 Rust 直接构造，且 evidence 资源不是活动 fixture 的逐字节副本。所有 finding 均先增加 mutation/合同 RED 再修复。
+- `2026-08-30 05:23:47 +08:00`：修复后 checker 以 Cargo `--list` 实际发现 5 targets/12 tests，结构扫描任意 Manifest-shaped owner，generated 与 MCP 全文件 SHA，stale generated type，精确 file+symbol Phase7 allowlist及 evidence SHA/byte copy 全部 fail-closed，Node 10/10。单一 golden 覆盖 Manifest/register/8 requests/所有 success/error/FrameResult 变体并由 Rust 全量 round-trip、TS 全量消费；TS 校验参数由 Rust 生成。`ConsumedBytes(NonZeroUsize)` 私有构造令 0 不可表达，合同新增 adapter-context buffer length 校验但不切换 Phase7 runtime。
+- `2026-08-30 05:23:47 +08:00`：fresh Phase4 Rust 12/12、TS 6/6、Domain 108/108、bindings deterministic、前九门复验（前端 63 files/540 tests、workspace strict Clippy）与 diff PASS。按已知 macOS ALF 外部阻断不重复执行第十个 non-loopback workspace test；状态为 `REVIEW FINDINGS FIXED / LOCAL GREEN / GLOBAL CHECKPOINT ENVIRONMENT BLOCKED / RECHECK PENDING`，等待独立复审。
+- `2026-08-30 05:29:54 +08:00`：最终差异自审进一步关闭 TS stable-code 边界：Domain 新增完整 `ErrorCode::ALL`，与 identity/Schema 参数一并由 Rust bindings 生成；TS error guard 只消费该集合并新增未知 code 拒绝。fresh bindings、TS 6/6、Rust 12/12、target strict Clippy、checker 10/10、typecheck 与 diff PASS；generated SHA-256 为 `a0b1b96d65d50c6fb5f9de792807905d36134baa257bf4336a9dbef4699344ed`。
+- `2026-08-30 05:44:03 +08:00`：最终 delta review 仍为 P1：原 MCP snapshot 仅摘要，若同步修改 snapshot/evidence/hash 可夹带 `legacy_retry`；结构 owner 扫描可由 `#[serde(rename="package")] metadata` 绕过。精确 mutation 先 RED 后修复：MCP fixture 现包含完整 executable schema 与 canonical golden，覆盖 Manifest/registration/八个 params 和 method result/success/failure/FrameResult/stable-code enum，checker 独立核对全语义，coherent hash mutation 仍失败；owner 扫描按 serialize/deserialize wire field set 识别 `rename`、`alias`、deserialize-only variants。fresh checker 14/14、Rust 12/12、TS 6/6、bindings deterministic、target strict Clippy、fmt/typecheck/diff PASS；runtime、ALF blocker 与 `RECHECK PENDING` 不变。
+- `2026-08-30 05:55:48 +08:00`：同轮 final review 的 P2 已显式关闭。TS decode success 改用真实 `isPackageDocument` 并回归 unsafe integer/非法递归值。共享 ID/SemVer corpus 由 Domain constructors 与 generated metadata 双向执行；RED 发现 core number `18446744073709551616` 被正则接受但被 Rust `semver` 拒绝，现 Rust 生成 `u64` core numeric max，TS/MCP 共同执行。`ErrorCode` 改为单一宏表生成 enum、serde wire、`ALL` 与 `as_str`，行为不变。fresh checker 15/15、Domain 108/108、Rust contract 12/12、TS 6/6、bindings deterministic、lint/typecheck/source-size/fmt、Domain+contract strict Clippy 与 diff PASS；状态仍 `RECHECK PENDING / ALF blocked`。
+- `2026-08-30 06:15:08 +08:00`：最终复审 P1 先以精确 mutation 复现私有 serde struct、`#[serde(untagged)]` enum struct variant 与 `serde(flatten)` owner 绕过；checker 现不依赖 `pub`/类型名，解析 struct/variant wire shape，并对合同 owner 或 Phase7 精确 file+symbol allowlist 外的 flatten fail-closed。任务权威 Manifest 示例 `com.example.payment` 不改；唯一 Domain `ProtocolPackageId` 最小扩展点分段，保留既有 ID，拒绝前导/尾随/重复点，并由 Domain、contract、TS 与 MCP 共用 pattern/corpus。fresh checker 17/17、Domain 108/108、Rust contract 13/13、TS 7/7、MCP/golden、bindings deterministic、typecheck/fmt/Domain+contract strict Clippy/diff PASS；状态仍 `RECHECK_PENDING / ALF blocked`，未切换 runtime、未跑 full checkpoint。
+- `2026-08-30 06:30:07 +08:00`：checker 正控继续发现过宽误报：无关 filters flatten、注释/字符串 Phantom Manifest、非 Serde 内部同字段 struct 均不应成为 wire owner。精确 RED 后，扫描先词法屏蔽 Rust comments/string literals，只接受 derive/manual impl 证明的 Serialize/Deserialize eligibility，按方向解析 rename/alias/skip，并以 visited set 递归合并本地 flattened type 的有效字段；仅真实形成 `api/kind/package/document` 才拒绝。非 Serde `ProtocolManifest` 的旧 Phase7 Manifest allowlist 被判 stale 并删除，不改变旧 TOML runtime。fresh checker 18/18、Phase4 Rust 13/13、TS 7/7、lint/source-size/typecheck/fmt/diff PASS；状态仍 `RECHECK_PENDING / ALF blocked`。
+- `2026-08-30 06:39:29 +08:00`：最终 manual Serde P1 以三个 RED/正控关闭：声明 `metadata/payload` 但 custom Serialize 发出四个 Manifest key、custom Deserialize/Visitor 接受四个 key 均须拒绝；声明字段看似 Manifest 但 manual Serialize 只输出 harmless string 必须通过。checker 使用去字符串结构视图定位 impl，并从保留字面量的同索引视图提取 `serialize_field/entry`、Deserialize fields const 与关联 Visitor match keys；manual owner 只按实际 wire key 集合判定，同时修复 lifetime `'de` 与 char literal 词法区分。fresh checker 21/21、Phase4 Rust 13/13、TS 7/7、lint/source-size/typecheck/fmt/diff PASS；状态保持 `RECHECK_PENDING / ALF blocked`。
+- `2026-08-30 08:49:12 +08:00`：G045 最终独立 Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`，P0=0、P1=0、P2=0。历史 132/133 ALF timeout 保留；用户授权 exact b171 test binary（SHA-256 `c7dc870daca6f4f86eeebe29270ef65d4f61eab70b943b55cd994527544143aa`）并允许 firewall 后，短函数名 `--exact` 首次发现 0 tests，明确为 `NOT EVIDENCE`；完整模块名、`--all-features`、`--test-threads=1` 定向 1/1 PASS。最终独立十门 checkpoint exit 0，前端 63 files/541 tests、顶层 Rust 133/133、workspace all-target/all-feature exit 0；Phase4 21/21+13/13+7/7、Domain 108/108、generated SHA `897edb991e8bd7efc6d114ca4eb1c6b67eb162574e0bb764ebed7a93e39c3c9e`、七组 evidence byte copies 与 diff-check PASS。G045 可创建 rollback checkpoint；TASK 总体仍为进行中。
+- 下一步：创建 G045 / Phase 4 rollback checkpoint，并继续 TASK-20260829-002 后续计划阶段。
 
 ## 修改文件
 
@@ -357,6 +370,9 @@ result: "<HTML string>"
 - `scripts/check-task-20260829-002-phase2-release-blocker.mjs`、对应 Node tests、`package.json`、`src-tauri/tauri.conf.json`：增加 Phase 2 targeted gate 与独立 release-readiness scan；package alias 在 companion 前早期阻断，Tauri `beforeBuildCommand` 封闭通用/直接 build 入口，dev 路径不挂 gate；不改变 Phase 1 十门禁语义。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/`：Phase 2 合同、实际 ZIP 资源快照、结构化结果和复测命令。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase3-recursive-document-contract/`：Phase 3 recursive Document/Schema、RFC6901、即时消费者、旧合同零残留、派生 Nuvei ZIP 与完整 checkpoint 证据。
+- `src-tauri/crates/package-contract/`、`src-tauri/src/commands/mod.rs`、`src/generated/rust-types.ts`：Phase 4 唯一 Rust package wire crate 与确定性 generated TS。
+- `src/lib/package-contract.ts`、对应 tests、Phase 4 scripts/fixtures/MCP snapshot：unknown-boundary guard、五目标精确 checker 与独立 parity fixture。
+- `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/`：Phase 4 RED/GREEN、合同资源、门禁结果与当前非 loopback MCP 环境阻断证据。
 
 ## 附加文件
 
@@ -377,13 +393,15 @@ result: "<HTML string>"
 - Phase 1 正式证据：[phase1-green-contract-baseline](../../../testing/evidence/2026-08-29/TASK-20260829-002/phase1-green-contract-baseline/README.md)。
 - Phase 2 正式证据：[phase2-development-database-recreate](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/README.md)。
 - Phase 3 正式证据：[phase3-recursive-document-contract](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase3-recursive-document-contract/README.md)。
+- Phase 4 正式证据：[phase4-package-contract](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/README.md)。
 
 ## 验收结果
 
 - `VERIFIED`：G042 / Phase 1 current-state inventory、compileable harness 映射、generated bindings 门禁和十命令 checkpoint 已在修复后 fresh 通过；不改变产品运行行为，不包含故意失败测试。独立 Verifier 结论 P0=0、P1=0、P2=0；正式证据见 [phase1-green-contract-baseline](../../../testing/evidence/2026-08-29/TASK-20260829-002/phase1-green-contract-baseline/README.md)。
 - `APPROVE / CHECKPOINT READY`：G043 / Phase 2 的显式数据库启动 policy、单事务开发重建、Tauri debug/Release composition、双启动 fixture 和双层 release blocker 已在早期 Verifier FAILED 与 build 绕过 P1 后完成修复；独立 delta 复审 P0/P1/P2=0，可创建 rollback checkpoint。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G044 / Phase 3 初版独立 Verifier findings 与最终 scalar-text P2 均已修复；独立 fresh 十门全部 PASS，P0=0、P1=0、P2=0，无剩余阻断，可创建 rollback checkpoint。
-- `NOT_RUN`：Phase 4 至 Phase 18 产品合同替换、真实链路、打包与最终任务验收尚未执行。
+- `VERIFIED / APPROVED / CHECKPOINT READY`：G045 / Phase 4 全部 review findings 已修复；firewall permitted 后完整名定向 1/1 与独立十门 checkpoint 全部 PASS，Verifier P0/P1/P2=0，可创建 rollback checkpoint。历史 132/133 ALF timeout 与短名 `--exact` 0 tests 继续保留且不作为成功证据。
+- `NOT_RUN`：Phase 5 至 Phase 18 产品合同替换、真实链路、打包与最终任务验收尚未执行。
 
 ## 测试结果
 
@@ -404,6 +422,12 @@ result: "<HTML string>"
 - `PASS`：Phase 3 Domain recursive 6/6、Domain 87/87、Application 459/459、protocol-scripting 160/160、Infrastructure 651/651、Nuvei example 6/6、Socket package dialog 7/7、Phase 3 Node 14/14；最终 P2 Application facade 定向 4/4。
 - `PASS`：Phase 3 修复后最终 `pnpm check:task-20260829-002:checkpoint`，前端 62 files / 534 tests，Rust workspace all-target/all-feature 0 failed；bindings freshness/determinism、architecture、source-size、lint、typecheck、fmt、strict clippy 全部通过。
 - `PASS`：Phase 3 既有四类旧合同扫描与 `ClearDocument|clear_document|字段值槽|Schema 身份和结构|MAX_PROTOCOL_RULE_INT_TEXT_BYTES|Blob Hex|整数文本不能超过` 精确扫描均为 0；generated bindings SHA-256 `ba0dcb545e4f5c04f381d337a4a11062fef789e8d0b28660f575bff37b7dc356`，Nuvei 派生 ZIP SHA-256 `047fe2701973d860d40fe30f5c74a735e46934d808ffb7dd1f16bf404460e30b`，`git diff --check` PASS。
+- `PASS`：Phase4 final manual Serde 修复后 `pnpm test:task-20260829-002:phase4`，checker 21/21、五个 Rust integration targets 13/13、TS guard 7/7；MCP 完整 schema/golden 对语义、SHA 与 evidence 字节漂移均 fail-closed，identity/SemVer metadata 与 Domain constructors corpus parity PASS。
+- `PASS`：Phase4 review 修复后 Domain 108/108、`pnpm check:bindings`、typecheck、lint、architecture、source-size、fmt、workspace strict Clippy 与 `git diff --check`；前端既有复验 63 files/540 tests，最终 generated bindings SHA-256 `897edb991e8bd7efc6d114ca4eb1c6b67eb162574e0bb764ebed7a93e39c3c9e`。
+- `FAILED / ENVIRONMENT BLOCKED`：Phase4 完整 checkpoint 前九门及前端 63 files/538 tests PASS，Rust workspace 顶层 132/133 后既有 `production_bind_is_reachable_on_current_platform_interfaces_without_false_availability` 在当前 macOS non-loopback MCP HTTP response deadline 超时；定向复测同样超时，未记录为 PASS。
+- `NOT EVIDENCE`：firewall permitted 后第一次仅用短函数名配合 `--exact`，实际发现 0 tests；未作为定向验证成功依据。
+- `PASS`：完整模块测试名配合 `--all-features -- --exact --nocapture --test-threads=1`，non-loopback 目标用例 1/1 PASS；使用 exact executable `intercept_proxy-b171a3f7a5c9b203`，SHA-256 `c7dc870daca6f4f86eeebe29270ef65d4f61eab70b943b55cd994527544143aa`。
+- `PASS`：G045 最终独立 `pnpm check:task-20260829-002:checkpoint` exit 0；前端 63 files/541 tests、顶层 Rust 133/133、workspace all-target/all-feature exit 0，Verifier P0=0、P1=0、P2=0。
 - `PASS`：`cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure -p intercept-proxy-host -p intercept-proxy --all-targets --all-features -- -D warnings`。
 - `EXPECTED FAIL / NOT_RELEASE_READY`：`pnpm check:task-20260829-002:phase2-release-ready` exit 1，独立发现 1 个临时 reset marker 与 32 个临时 reset contract 引用；该扫描只用于阻止发布，不加入 Phase 2 日常 GREEN checkpoint。
 - `EXPECTED FAIL / BUILD BLOCKED`：`pnpm tauri:build` exit 1，在 Android companion build 与 `tauri build` 前由同一 release checker 阻断。

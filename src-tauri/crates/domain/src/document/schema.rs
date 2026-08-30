@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::BTreeMap;
 
+/// Schema 标题允许的最大 Unicode 字符数。
+pub const MAX_DOCUMENT_SCHEMA_TITLE_CHARS: usize = 128;
+
 /// Recursive, identity-free metadata describing a Document shape.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -101,10 +104,9 @@ impl DocumentSchemaNode {
         )
     }
     fn validate_definition_at(&self, path: &str) -> Result<(), DomainError> {
-        if self
-            .title()
-            .is_some_and(|title| title.trim().is_empty() || title.chars().count() > 128)
-        {
+        if self.title().is_some_and(|title| {
+            title.trim().is_empty() || title.chars().count() > MAX_DOCUMENT_SCHEMA_TITLE_CHARS
+        }) {
             return Err(DomainError::new(
                 ErrorCode::DocumentSchemaInvalid,
                 "schema title must contain 1 to 128 visible characters",
