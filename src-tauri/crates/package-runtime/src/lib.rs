@@ -12,6 +12,10 @@ use intercept_proxy_domain::{DomainError, ErrorCode};
 use intercept_proxy_package_contract::PackageManifest;
 use zip::ZipArchive;
 
+mod sidecar;
+
+pub use sidecar::*;
+
 const REQUIRED_ROOT_FILES: [&str; 3] = ["manifest.json", "protocol.js", "display.js"];
 
 /// Confirmed package archive resource limits supplied by the host configuration owner.

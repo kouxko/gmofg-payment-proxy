@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-08-30 21:21:22 +08:00`
+- 最后更新时间：`2026-08-30 23:03:28 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -144,8 +144,8 @@ result: "<HTML string>"
 - `display.js` 固定 exports：`upstreamDisplay/downstreamDisplay`。
 - 每个固定 export 接收与公共 JSON-RPC 方法同形的单一 params object，返回同形结果。Sidecar 在内部完成固定 RPC method 到固定 export 的映射。
 - Socket Base64 在 Sidecar 内转换为 `Uint8Array`，结果反向转换为 canonical Base64；这是内部实现细节。
-- Module 及相对依赖在启动时 load/link/evaluate 一次，exports 缓存到进程退出。注册前只验证所需 export 存在且 callable，不试运行、不探测业务、不自动修复。
-- 运行环境只提供 Boa ECMAScript、JSON、`Uint8Array` 和包内相对 ES module import；不提供 Node.js、fs、process、Buffer、fetch、timer、WebSocket 等 Host API。
+- 入口 Module 及静态相对依赖在启动时 load/link/evaluate，固定 exports 缓存到进程退出；合法 `dynamic import()` 由 Boa 原生 module loader 在 Hook 调用时加载和求值。注册前只验证所需 export 存在且 callable，不试运行、不探测业务、不自动修复。
+- 不人为限制 Boa 自身提供的 ECMAScript 能力或 default features；Proxy 不额外注入 Boa 本身没有的 Node.js、fs、process、Buffer、fetch、timer、WebSocket 等 Host bindings。
 - 不设置 Hook timeout、应用层队列上限、busy 拒绝、自动限流、自动中断、自动重试或恢复；脚本长期执行和队列占用由包作者修复脚本。
 
 ### 10. 安装与生命周期
@@ -193,6 +193,7 @@ result: "<HTML string>"
 | `2026-08-29 20:30:00 +08:00` 至 `2026-08-29 21:55:00 +08:00` | 用户逐项确认数据库 100 开发清空、递归 Document、Number/JSON、Schema、统一规则、多动作顺序、方向级原子性、严格 Set/Clear、HTTP codec、Manifest、RPC、生命周期、UI、跨平台与交付边界。 |
 | `2026-08-29 21:55:00 +08:00` | 用户确认 `package.register` 为无 id、无回复的单向 notification。 |
 | `2026-08-29 22:00:00 +08:00` | 用户最终确认本地 Sidecar 是本机运行的外部软件包，与远程包的方法名、调用方式、注册方式完全相同；内部 Boa 适配不构成第二套协议。 |
+| `2026-08-30 22:35:02 +08:00` | 用户明确覆盖 Phase8 旧安全限制：不考虑安全问题，不人为限制 Boa 自身能力；旧“不提供 Host API”“启动时一次图冻结”“错误脱敏”验收失效。新验收为 Boa default features/原生能力不受 Proxy 限制、允许合法 `dynamic import()`、错误无需安全脱敏；Proxy 仍不额外发明 Boa 本身没有的 Node/fs/process 等 bindings。受影响的 Host API absence、dynamic-import reject、secret-redaction tests/checker 必须删除或反转；固定八 exports、单 Context、ESM、HTTP string、Socket `Uint8Array`/Base64 和公共 JSON-RPC 合同不变。 |
 
 旧任务正文中与本节最终合同冲突的初始结论全部失效，不得作为实现依据。
 
@@ -240,7 +241,7 @@ result: "<HTML string>"
 | NDR-JS-02 | 实现递归 Document、Number、RFC6901、Schema 和规则本地元数据 | NDR-JS-01 | 否 | 待实现 | 全类型、JSON、路径、数组、Schema/no-Schema 测试通过 |
 | NDR-JS-03 | 实现统一 HTTP/Document/Socket 规则、两写出阶段、多动作顺序、终止动作和方向级原子提交 | NDR-JS-02 | 否 | 待实现 | 条件/动作矩阵、前序可见、失败全回滚及生命周期提交通过 |
 | NDR-JS-04 | 定义严格 Manifest、稳定错误和唯一 JSON-RPC wire | NDR-JS-01 | 否 | 待实现 | 本地/远程逐字段同形，注册与 Hook contract tests 通过 |
-| NDR-JS-05 | 实现通用 Boa Sidecar、固定 exports、ESM 加载和内部字节适配 | NDR-JS-04 | 否 | 待实现 | export 预检、单 Context 串行、HTTP string、Socket Uint8Array/Base64 通过 |
+| NDR-JS-05 | 实现通用 Boa Sidecar、固定 exports、ESM 加载和内部字节适配 | NDR-JS-04 | 否 | 已完成 | G049 / Phase 8 已 `VERIFIED / APPROVED / CHECKPOINT READY`；P0/P1/P2=0，`blockers=[]` |
 | NDR-JS-06 | 实现 ZIP 安装、包注册表和 enabled/online/failed/disabled 生命周期 | NDR-JS-05 | 否 | 待实现 | 10 秒注册、冲突、启停、断连停 Listener、删除与无孤儿进程通过 |
 | NDR-JS-07 | 将 HTTP/Socket Pipeline 切换到统一规则和唯一 WebSocket 包端口，删除旧执行路径 | NDR-JS-03、NDR-JS-06 | 否 | 待实现 | 两方向完整 Pipeline、codec、失败边界与原始字节保留通过 |
 | NDR-JS-08 | 将内置 JSON、ISO8583 和第三方本地包迁移为同一 ZIP/Sidecar；保留远程同协议接入 | NDR-JS-07 | 可按包并行 | 待实现 | 四类包共享同一注册/RPC/capability 链，测试向量一致 |
@@ -268,7 +269,7 @@ result: "<HTML string>"
 - 软件包主动 notification 注册，无 id、无 response；合法 online+enabled，非法或重复记录 code 后立即断开。
 - 固定 RPC methods、params 严格字段、Document result、HTTP string 和 Socket canonical Base64 逐字节往返。
 - Frame closed union、requiredBytes、consumedBytes、reject、JSON-RPC error 和稳定 `error.data.code`。
-- 固定 exports 注册前 existence/callable 预检；Module/相对 ESM 一次求值并缓存；不提供 Host API。
+- 固定 exports 注册前 existence/callable 预检并缓存；入口和静态相对 ESM 正常链接求值，合法 dynamic import 由 Boa 原生 loader 执行；不限制 Boa 自身能力，也不额外注入 Node/fs/process 等 bindings。
 - 同一 Boa Context 串行执行；WebSocket I/O 与 heartbeat 不由 Boa Hook 线程阻塞；无 timeout/队列上限合同不被隐藏限额改变。
 
 ### 生命周期、数据面与 UI
@@ -375,7 +376,13 @@ result: "<HTML string>"
 - `2026-08-30 20:39:34 +08:00`：第二轮 review repair 以 forged ZIP declared/actual mismatch 真实 RED 开始；修复 bounded actual-byte accounting、stable Domain code 经 Exchange/SocketProcessingFailure/terminal observer 到 `external_package_call.stable_code` 的活动链、production WebSocket 三类 wire ceiling 与 `/packages` RPC B/B+1，并修正 import Phase8/Rhai 边界注释。checker23/23、ZIP6/6、transport7/7、active E2E4/4、WS1/1、diagnostic1/1；affected full、bindings、architecture/source-size/lint/typecheck/fmt/workspace strict Clippy、diff 与唯一完整十门均 fresh PASS，Infrastructure585/585、前端63 files/543 tests、non-loopback通过。状态继续 `REPAIR LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`，等待独立复审；Phase8+、提交与推送未执行。
 - `2026-08-30 21:09:06 +08:00`：最终 cross-phase repair 删除活动 Phase4 inventory 中 18 条已完成迁移的 `phase7_legacy_wire_allowlist` 并以 checker 永久约束为空；活动 generated SHA 按 fresh deterministic bindings 复算为 `413e42788f02a616b18141bf9e7bbcc5217f775fc636b53a3f2d4bdd3b144123`，Phase4 历史 evidence snapshot 未改。新增精确旧 wire reallow 与 stale SHA mutation，Phase4 23/23；Phase7 聚合真实纳入 Phase4 contract checker并 fresh 全部通过。bindings/static gates 与唯一完整十门 session51772 exit0，前端63 files/543 tests、workspace all-target/all-feature 0 failed/0 ignored。状态继续 `REPAIR LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`，等待独立复审；未提交、未推送。
 - `2026-08-30 21:21:22 +08:00`：G048 最终独立 Reviewer 结论为 `APPROVE`，Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`；P0=0、P1=0、P2=0、`blockers=[]`、`checkpoint_ready=true`。全部历史 findings、repairs、RED/GREEN 与 `NOT_RUN` 边界保留，Phase 7 可创建 rollback checkpoint；TASK 总体仍为进行中，Phase8+、提交、推送、CI 与 Release 未执行。
-- 下一步：Phase 7 为 `VERIFIED / APPROVED / CHECKPOINT READY`，可创建 rollback checkpoint；Phase 8+ 暂不提前实施。
+- `2026-08-30 22:22:53 +08:00`：G049 / Phase 8 在精确 HEAD `03144593ca929379fdb848516c35fcd92743106c` detached worktree 真实取得缺少 Sidecar binary/`LocalSidecarRuntime` 的 Cargo exit101 RED；ordinary Array encode 另取得 0/1 RED。实现单 Boa Context 串行、package-relative `.js` ESM 一次 parse/load/link/evaluate、固定八 callable export 预检缓存、HTTP string 与 Socket 严格 `Uint8Array`/canonical Base64；不注入 Host API，不提供 Rhai 回退。generic Sidecar executable 仅为 compile marker，未实现 Phase9 参数/启动/注册/lifecycle/timeout/queue/retry/recovery，未改 Tauri `externalBin`。
+- `2026-08-30 22:22:53 +08:00`：Phase8 checker mutation/正控18/18、Cargo实际发现10/10，Phase7 ZIP6/6、package-contract13/13、protocol-scripting160/160、Infrastructure585/585及相关 suites fresh PASS；bindings deterministic、architecture/source-size/lint/typecheck/fmt/package-runtime strict Clippy/diff PASS。唯一完整十门 PID18568 已结束且全程未观察到失败，但原调用通道未保存最终 shell exit code；证据按 `LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false` 收口，未把观察结果升级为 checkpoint PASS。正式证据：[phase8-boa-sidecar-runtime](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase8-boa-sidecar-runtime/README.md)。
+- `2026-08-30 22:49:48 +08:00`：用户 22:35 明确覆盖旧安全限制后，删除 Host API absence/default-features-disabled checker 与测试，不添加 dynamic-import reject 或错误脱敏。真实 RED 证明 async dynamic import Hook Promise 曾错误成为空 Document；修复为持续驱动 Boa jobs 直到 fulfilled/rejected，Pending 不设 timeout/Busy，永久 pending 占用单 Context。Boa default features 实际启用；合法 lazy import 两次调用只求值一次，nested `../`、static cycle once、越根拒绝均通过。
+- `2026-08-30 22:49:48 +08:00`：repair checker18/18、Phase8 runtime9/9+review3/3、Phase7 ZIP6/6、fmt/diff/package-runtime strict Clippy 与全部静态门 fresh PASS。唯一最终十门 session47419 终态 exit0，前端63 files/543 tests、workspace all-target/all-feature零失败；旧 PID18568/26450 缺 exit 的观察不再作为当前验收。证据保持 `LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`，等待独立复验。
+- `2026-08-30 22:57:57 +08:00`：最终 P2 checker 先以 `register_global_*`、`NativeFunction`、custom `HostHooks` 三类 mutation 取得18/21 RED；加入去注释/字符串后的精确结构 token 扫描，禁止 Proxy 侧注入非 Boa Host binding，不恢复运行时 Host absence 测试、不扫描或限制 Boa 自身 globals/default features。fresh checker21/21、Phase8 aggregate（ZIP6+runtime9+review3）、lint、diff PASS；按要求未重跑 workspace/十门，session47419 exit0 仍为最近唯一全量。状态保持 `LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`。
+- `2026-08-30 23:03:28 +08:00`：G049 最终独立 Reviewer 结论为 `APPROVE`，Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`；P0=0、P1=0、P2=0、`blockers=[]`、`checkpoint_ready=true`。全部需求变更、历史 findings、RED/GREEN 与 `NOT_RUN` 边界保留，Phase 8 可创建 rollback checkpoint；TASK 总体仍为进行中。
+- 下一步：Phase 8 当前状态为 `VERIFIED / APPROVED / CHECKPOINT READY`；进入 Phase 9 前保持 checkpoint 冻结。Phase9+、提交、推送、CI 与 Release 保持 `NOT_RUN`。
 
 ## 修改文件
 
@@ -397,6 +404,9 @@ result: "<HTML string>"
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase5-unified-rule-domain/`：Phase 5 条件树、谓词、统一动作、排序/working-state/terminal、跨层消费者、mutation checker 与完整十门证据。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase6-rule-chain-transaction/`：Phase 6 共用 lifecycle/NthHit、唯一应用事务、delta no-retry、跨层原子性、checker mutation 与完整十门证据。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/`：Phase 7 严格 ZIP、package-initiated registration、固定 typed transport、canonical Base64/FrameResult、旧 dynamic path 删除、checker mutation、活动 E2E、Phase6 真实 RED、affected full 与完整十门 PASS 证据。
+- `src-tauri/crates/package-runtime/src/sidecar.rs`、`src/bin/intercept-proxy-package-sidecar.rs`、Phase8 tests 与 Cargo manifests/lock：Phase 8 单 Boa Context、严格 ESM/exports/HTTP/Socket 转换及 compile-only generic Sidecar marker。
+- `scripts/check-task-20260829-002-phase8-sidecar.mjs`、对应 mutation tests 与 `package.json`：Phase 8 fail-closed checker、真实 Cargo discovery 和 focused 入口。
+- `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase8-boa-sidecar-runtime/`：Phase 8 baseline compile、ordinary Array、dynamic Promise、Host-binding checker 四组真实 RED，focused/affected/static、唯一十门 exit0、SHA 与复测入口。
 
 ## 附加文件
 
@@ -431,7 +441,8 @@ result: "<HTML string>"
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G046 / Phase 5 初始 Verifier/Review findings 已按 RED→GREEN 修复，领域合同、即时跨层消费者、checker 与完整十门均 fresh PASS；最终 reviewer/verifier P0/P1/P2=0、`blockers=[]`，可创建 Phase 5 rollback checkpoint。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G047 / Phase 6 的 terminal-scoped Nth lifecycle、validated Application 唯一事务、save/runtime stats 分离、Infrastructure fail-closed delta no-retry、完整 AppError、即时 generated/TS 消费者与完整十门均 fresh PASS；初版 Reviewer `REQUEST CHANGES`（P1=4/P2=1）、Verifier `FAILED`（P1=2）及第二轮独立复审 `REQUEST CHANGES`（P1=2）均已按 RED→GREEN 修复，最终 Reviewer/Verifier P0/P1/P2=0、`blockers=[]`，可创建 Phase 6 rollback checkpoint。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G048 / Phase 7 两轮 review finding 已按 RED→GREEN 关闭；strict ZIP/shared Manifest 与 actual-byte accounting、唯一 typed transport、package-initiated registration、canonical Base64/FrameResult、stable Domain code 贯穿真实 Socket diagnostic、production WebSocket ceiling、取消/顺序 RPC/raw-vs-wire 边界、活动 runtime 接入及旧 dynamic path 删除均 fresh PASS。完整十门 exit0；最终 Reviewer/Verifier P0/P1/P2=0、`blockers=[]`、`checkpoint_ready=true`，可创建 Phase 7 rollback checkpoint。
-- `NOT_RUN`：Phase 8 至 Phase 18 产品合同替换、完整 Phase10/11 真实链路、打包与最终任务验收尚未执行。
+- `VERIFIED / APPROVED / CHECKPOINT READY`：G049 / Phase 8 的单 Boa Context 串行、package-relative ESM、dynamic import Promise、固定八 exports、HTTP string、Socket Uint8Array/canonical Base64、generic sidecar marker 与 Proxy Host-binding checker 均已通过；最终 Reviewer/Verifier P0/P1/P2=0、`blockers=[]`、`checkpoint_ready=true`，可创建 Phase 8 rollback checkpoint。需求变更与历史 findings 保留。
+- `NOT_RUN`：Phase 9 至 Phase 18 产品合同替换、完整 Phase10/11 真实链路、打包与最终任务验收尚未执行。
 
 ## 测试结果
 
