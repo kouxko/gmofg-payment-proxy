@@ -171,7 +171,7 @@ async fn enabled_online_package_resolves_to_runtime_binding() {
         .unwrap()
         .expect("external binding");
 
-    assert_eq!(binding.registration().package().identity(), &package);
+    assert_eq!(binding.registration().package().identity(), package);
     registry.disconnect(&package).await.unwrap();
 }
 
@@ -239,9 +239,7 @@ async fn external_package_lifecycle_is_queryable_as_redacted_diagnostics() {
         .record_connection_error(
             &package,
             accepted.connection_id,
-            &ExternalPackageConnectionError::Transport(
-                "password=do-not-leak; peer reset".to_owned(),
-            ),
+            &PackageTransportError::Transport("password=do-not-leak; peer reset".to_owned()),
         )
         .await
         .unwrap();
@@ -293,11 +291,7 @@ async fn stale_generation_updates_do_not_mutate_connection_history() {
     );
     assert!(
         !registry
-            .record_connection_error(
-                &package,
-                stale,
-                &ExternalPackageConnectionError::Disconnected,
-            )
+            .record_connection_error(&package, stale, &PackageTransportError::Disconnected,)
             .await
             .unwrap()
     );
@@ -379,7 +373,7 @@ async fn old_generation_error_cannot_cross_new_online_publication_window() {
         .record_connection_error(
             &package,
             first.connection_id,
-            &ExternalPackageConnectionError::Transport("old generation".to_owned()),
+            &PackageTransportError::Transport("old generation".to_owned()),
         )
         .await
         .unwrap();
@@ -416,7 +410,6 @@ async fn missing_persistent_row_rejects_connection_history_update() {
         ConnectionDetailSnapshot {
             connection_id,
             remote_address: None,
-            rpc_timeout: Duration::from_secs(5),
             recent_error: None,
         },
     );
@@ -429,7 +422,7 @@ async fn missing_persistent_row_rejects_connection_history_update() {
         .record_connection_error(
             &package,
             connection_id,
-            &ExternalPackageConnectionError::Disconnected,
+            &PackageTransportError::Disconnected,
         )
         .await
         .unwrap_err();

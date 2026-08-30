@@ -2457,6 +2457,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
+ "zip",
 ]
 
 [[package]]
@@ -2473,6 +2474,8 @@ dependencies = [
  "intercept-proxy-application",
  "intercept-proxy-domain",
  "intercept-proxy-exchange",
+ "intercept-proxy-package-contract",
+ "intercept-proxy-package-runtime",
  "intercept-proxy-product-api",
  "intercept-proxy-protocol-scripting",
  "intercept-proxy-runtime",
@@ -2514,6 +2517,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "intercept-proxy-package-runtime"
+version = "1.0.0"
+dependencies = [
+ "intercept-proxy-domain",
+ "intercept-proxy-package-contract",
+ "serde_json",
+ "zip",
+]
+
+[[package]]
 name = "intercept-proxy-product-api"
 version = "1.0.0"
 
@@ -2522,6 +2535,7 @@ name = "intercept-proxy-protocol-scripting"
 version = "1.0.0"
 dependencies = [
  "intercept-proxy-domain",
+ "intercept-proxy-package-runtime",
  "rhai",
  "serde",
  "serde_json",

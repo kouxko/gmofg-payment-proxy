@@ -23,71 +23,9 @@ use super::super::*;
 use crate::app_state::AppState;
 use crate::mcp::{ApplicationBackend, McpBackend};
 
-const MANIFEST: &str = r#"
-api = 1
-
-[package]
-id = "t30-iso-local"
-name = "T30 ISO LocalResponder"
-version = "1.0.0"
-
-[document.upstream]
-schema = "document.toml"
-display = "display"
-
-[document.downstream]
-schema = "document.toml"
-display = "display"
-
-[hooks.upstream]
-frame = "frame"
-decode = "decode"
-encode = "encode"
-
-[hooks.downstream]
-frame = "frame"
-decode = "decode"
-encode = "encode"
-"#;
-
-const SCHEMA: &str = r#"
-type = "object"
-title = "T30 ISO8583"
-
-[properties.message]
-type = "array"
-title = "Message"
-
-[properties.message.items]
-type = "number"
-
-[properties.message_kind]
-type = "string"
-title = "Message kind"
-"#;
-
-const SCRIPT: &str = r#"
-fn frame(reader, context) {
-    if reader.available() < 18 { framing::need_more(18) }
-    else { framing::complete(18) }
-}
-
-fn decode(origin, context) {
-    let result = document::create();
-    result.set("/message", origin);
-    result.set("/message_kind", "iso8583");
-    result
-}
-
-fn encode(origin, document, context) {
-    let message = document.get("/message");
-    let result = blob(message.len(), 0);
-    for index in 0..message.len() { result[index] = message[index]; }
-    result
-}
-
-fn display(document, context) { "<p>T30 ISO response</p>" }
-"#;
+const MANIFEST: &str = include_str!(
+    "../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json"
+);
 
 #[derive(Debug)]
 struct TestDialog {
@@ -200,6 +138,19 @@ impl CrossLayerFixture {
             .unwrap()
     }
 
+    pub(super) fn invoke_error(
+        &self,
+        webview: &tauri::WebviewWindow<MockRuntime>,
+        command: &str,
+        body: Value,
+    ) -> AppErrorViewModel {
+        assert!(self.app.get_webview_window(webview.label()).is_some());
+        serde_json::from_value(
+            tauri::test::get_ipc_response(webview, request(command, body)).unwrap_err(),
+        )
+        .unwrap()
+    }
+
     pub(super) fn assert_dialog_boundaries(&self) {
         assert_eq!(
             self.dialog.calls.lock().unwrap().as_slice(),
@@ -230,14 +181,6 @@ impl CrossLayerFixture {
     }
 }
 
-pub(super) fn unused_local_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
-}
-
 fn request(command: &str, body: Value) -> tauri::webview::InvokeRequest {
     tauri::webview::InvokeRequest {
         cmd: command.into(),
@@ -259,10 +202,9 @@ fn request(command: &str, body: Value) -> tauri::webview::InvokeRequest {
 fn package_zip() -> Vec<u8> {
     let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
     for (path, contents) in [
-        ("manifest.toml", MANIFEST.as_bytes()),
-        ("document.toml", SCHEMA.as_bytes()),
-        ("protocol.rhai", SCRIPT.as_bytes()),
-        ("display.rhai", SCRIPT.as_bytes()),
+        ("manifest.json", MANIFEST.as_bytes()),
+        ("protocol.js", b"export {}".as_slice()),
+        ("display.js", b"export {}".as_slice()),
     ] {
         archive
             .start_file(path, SimpleFileOptions::default())

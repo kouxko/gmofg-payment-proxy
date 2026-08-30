@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use super::*;
 
-fn run() -> SocketRelayRunContext {
+pub(super) fn run() -> SocketRelayRunContext {
     SocketRelayRunContext {
         workspace_id: "test-workspace".into(),
         listener_id: "listener-socket-1".into(),
@@ -59,6 +59,7 @@ fn record_partial_relay_failure(
             stage: SocketRelayStage::RelayWrite,
             direction: Some(SocketRelayDirection::ClientToServer),
             code: "SOCKET_WRITE_FAILED",
+            external_package_call: None,
         }),
         at,
     });
@@ -288,10 +289,11 @@ fn tls_failures_map_to_the_correct_application_stage() {
         ),
     ] {
         assert_eq!(
-            diagnostic_stage(SocketRelayFailure {
+            diagnostic_stage(&SocketRelayFailure {
                 stage,
                 direction: None,
                 code: "TEST",
+                external_package_call: None,
             }),
             expected
         );
@@ -347,6 +349,7 @@ fn socket_failures_keep_distinct_sanitized_stages() {
             stage: runtime_stage,
             direction: Some(SocketRelayDirection::LocalExchange),
             code,
+            external_package_call: None,
         })
         .unwrap();
         assert_eq!(failure.stage, expected);

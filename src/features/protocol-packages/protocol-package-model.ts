@@ -185,7 +185,7 @@ function isExternalDetail(value: unknown): boolean {
   return isRecord(value)
     && hasOnly(value, [
       "remote_address", "connection_id", "first_connected_at", "last_connected_at",
-      "registration_fingerprint_sha256", "rpc_timeout_seconds", "upstream_methods",
+      "registration_fingerprint_sha256", "upstream_methods",
       "downstream_methods", "recent_error",
     ])
     && (value.remote_address === null || typeof value.remote_address === "string")
@@ -194,9 +194,6 @@ function isExternalDetail(value: unknown): boolean {
     && typeof value.last_connected_at === "string"
     && typeof value.registration_fingerprint_sha256 === "string"
     && /^[0-9a-f]{64}$/.test(value.registration_fingerprint_sha256)
-    && typeof value.rpc_timeout_seconds === "number"
-    && Number.isSafeInteger(value.rpc_timeout_seconds)
-    && value.rpc_timeout_seconds > 0
     && isExternalMethods(value.upstream_methods)
     && isExternalMethods(value.downstream_methods)
     && (value.recent_error === null || isExternalRecentError(value.recent_error));

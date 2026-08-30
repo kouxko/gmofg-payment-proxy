@@ -964,6 +964,7 @@ export type ExternalPackageCallDiagnosticViewModel = {
 	method: string,
 	request_id: string | null,
 	remote_code: number | null,
+	stable_code: string | null,
 	remote_message: string | null,
 	/**  只允许 `null/bool/number/string(bytes=N)/array(items=N)/object(fields=N)` 形状摘要。 */
 	remote_data_summary: string | null,
@@ -978,7 +979,6 @@ export type ExternalPackageDetailViewModel = {
 	first_connected_at: string,
 	last_connected_at: string,
 	registration_fingerprint_sha256: string,
-	rpc_timeout_seconds: number,
 	upstream_methods: ExternalPackageDirectionMethodsViewModel,
 	downstream_methods: ExternalPackageDirectionMethodsViewModel,
 	recent_error: ExternalPackageRecentErrorViewModel | null,
@@ -1002,14 +1002,11 @@ export type ExternalPackageRecentErrorViewModel = {
 /**
  *  外部软件包 WebSocket 服务的启动配置。
  *
- *  监听地址和端口只在进程启动时读取；保存后由设置页明确提示重启。RPC 超时和并发上限
- *  同样固定进一次连接快照，避免一个已建立连接在处理中途改变资源语义。
+ *  监听地址和端口只在进程启动时读取；保存后由设置页明确提示重启。
  */
 export type ExternalPackageServiceSettingsDraft = {
 	bind_address: string,
 	port: number,
-	rpc_timeout_seconds: number,
-	max_in_flight: number,
 };
 
 /**  外部软件包 WebSocket 服务的启动状态。 */
@@ -1342,8 +1339,8 @@ export type ListenerProtocolPackageOptionViewModel_Deserialize = {
 	package_source: ProtocolPackageSourceViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
 };
 
 /**
@@ -1359,8 +1356,8 @@ export type ListenerProtocolPackageOptionViewModel_Serialize = {
 	package_source: ProtocolPackageSourceViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
 };
 
 export type ListenerRuntimeState = "stopped" | "starting" | "running" | "stopping" | "faulted";
@@ -1778,8 +1775,8 @@ export type ProtocolPackageDetailViewModel_Deserialize = {
 	version: ProtocolPackageVersionViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
 	usages: ProtocolPackageUsageViewModel[],
 	/**  仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。 */
 	external: ExternalPackageDetailViewModel | null,
@@ -1790,8 +1787,8 @@ export type ProtocolPackageDetailViewModel_Serialize = {
 	version: ProtocolPackageVersionViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
 	usages: ProtocolPackageUsageViewModel[],
 	/**  仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。 */
 	external: ExternalPackageDetailViewModel | null,

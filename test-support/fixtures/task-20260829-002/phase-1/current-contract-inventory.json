@@ -131,7 +131,7 @@
       "owner_phase": 7,
       "required_fragments": [
         "trait ExternalPackageRpc",
-        "rpc_timeout: Duration",
+        "request: FrameParams",
         "ExternalSocketPackageBinding"
       ]
     },

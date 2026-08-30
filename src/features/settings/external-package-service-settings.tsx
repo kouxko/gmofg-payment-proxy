@@ -124,12 +124,6 @@ export function ExternalPackageServiceSettings({
         <ServiceNumberField label="端口" value={settings.port} minValue={1} maxValue={65535}
           error={fieldError("external_package_service.port")} isDisabled={isDisabled}
           onChange={(port) => update({ port })} />
-        <ServiceNumberField label="RPC 超时（秒）" value={settings.rpc_timeout_seconds} minValue={1} maxValue={300}
-          error={fieldError("external_package_service.rpc_timeout_seconds")} isDisabled={isDisabled}
-          onChange={(rpc_timeout_seconds) => update({ rpc_timeout_seconds })} />
-        <ServiceNumberField label="最大并发 RPC" value={settings.max_in_flight} minValue={1}
-          error={fieldError("external_package_service.max_in_flight")} isDisabled={isDisabled}
-          onChange={(max_in_flight) => update({ max_in_flight })} />
       </div>
 
       <Alert status="accent">

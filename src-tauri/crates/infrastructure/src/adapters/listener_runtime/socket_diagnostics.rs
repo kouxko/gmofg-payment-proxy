@@ -15,8 +15,8 @@ use intercept_proxy_runtime::{
 #[path = "socket_diagnostics/mapping.rs"]
 mod mapping;
 use mapping::{
-    application_direction, application_stage, diagnostic_stage, route_from_target, socket_failure,
-    tls_evidence,
+    application_direction, application_stage, diagnostic_stage, external_package_call_view,
+    route_from_target, socket_failure, tls_evidence,
 };
 
 #[derive(Debug)]
@@ -47,7 +47,7 @@ impl SocketConnectionObserver for SocketDiagnosticObserver {
             occurred_at,
             entity_id,
             None,
-            UiEventPayload::DiagnosticLogAdded(entry.sanitized()),
+            UiEventPayload::DiagnosticLogAdded(Box::new(entry.sanitized())),
         );
     }
 
@@ -103,7 +103,7 @@ fn diagnostic_entry(
                     run,
                     Some(*connection_id),
                     Some(route_from_target(target)),
-                    None,
+                    SocketDiagnosticFailureContext::default(),
                     SocketRelayStage::Admission,
                     None,
                     SocketRelayBytes::default(),
@@ -195,7 +195,7 @@ fn request_parsed_entry(
             Some(SocketConnectionRouteViewModel::LocalResponder {
                 downstream_tls_peer: None,
             }),
-            None,
+            SocketDiagnosticFailureContext::default(),
             SocketRelayStage::FrameProcess,
             Some(SocketRelayDirection::LocalExchange),
             SocketRelayBytes::default(),
@@ -299,7 +299,7 @@ fn opened_entry(
             run,
             Some(connection_id),
             Some(route),
-            None,
+            SocketDiagnosticFailureContext::default(),
             stage,
             None,
             SocketRelayBytes::default(),
@@ -336,7 +336,7 @@ fn rejected_entry(
             run,
             None,
             None,
-            None,
+            SocketDiagnosticFailureContext::default(),
             SocketRelayStage::Admission,
             None,
             SocketRelayBytes::default(),
@@ -359,7 +359,7 @@ fn closed_entry(
             DiagnosticLogLevel::Info
         },
         stage: failure.map_or(DiagnosticLogStage::Socket, |failure| {
-            diagnostic_stage(*failure)
+            diagnostic_stage(failure)
         }),
         summary: if failure.is_some() {
             "Socket 连接已失败".into()
@@ -378,7 +378,11 @@ fn closed_entry(
             run,
             Some(connection_id),
             Some(route_from_target(target)),
-            failure.and_then(socket_failure),
+            SocketDiagnosticFailureContext {
+                socket: failure.and_then(socket_failure),
+                external_package_call: failure
+                    .and_then(|failure| failure.external_package_call.as_deref()),
+            },
             failure.map_or(SocketRelayStage::Shutdown, |failure| failure.stage),
             failure.and_then(|failure| failure.direction),
             bytes,
@@ -390,7 +394,7 @@ fn socket_context(
     run: &SocketRelayRunContext,
     connection_id: Option<uuid::Uuid>,
     route: Option<SocketConnectionRouteViewModel>,
-    socket_failure: Option<SocketFailureDiagnostic>,
+    failure: SocketDiagnosticFailureContext<'_>,
     stage: SocketRelayStage,
     direction: Option<SocketRelayDirection>,
     bytes: SocketRelayBytes,
@@ -400,8 +404,10 @@ fn socket_context(
         workspace_runtime_epoch: run.workspace_runtime_epoch.to_string(),
         listener_run_epoch: run.listener_run_epoch.to_string(),
         route,
-        socket_failure,
-        external_package_call: None,
+        socket_failure: failure.socket,
+        external_package_call: failure
+            .external_package_call
+            .map(external_package_call_view),
         stage: application_stage(stage),
         direction: direction.map(application_direction),
         client_to_server_read_bytes: bytes.client_to_server_read,
@@ -409,6 +415,12 @@ fn socket_context(
         server_to_client_read_bytes: bytes.server_to_client_read,
         server_to_client_bytes: bytes.server_to_client,
     }
+}
+
+#[derive(Default)]
+struct SocketDiagnosticFailureContext<'a> {
+    socket: Option<SocketFailureDiagnostic>,
+    external_package_call: Option<&'a intercept_proxy_exchange::ExternalPackageCallFailure>,
 }
 
 fn closed_detail(
@@ -453,6 +465,9 @@ fn direction_text(direction: SocketRelayDirection) -> String {
     }
 }
 
+#[cfg(test)]
+#[path = "socket_diagnostics/phase7_tests.rs"]
+mod phase7_tests;
 #[cfg(test)]
 #[path = "socket_diagnostics_tests.rs"]
 mod tests;

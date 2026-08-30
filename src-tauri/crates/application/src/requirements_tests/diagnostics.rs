@@ -24,21 +24,21 @@ fn diagnostic_logs_are_sorted_by_time_then_event_id_newest_first() {
         same_time + chrono::Duration::seconds(1),
         None,
         None,
-        UiEventPayload::DiagnosticLogAdded(diagnostic_entry("latest-time")),
+        UiEventPayload::DiagnosticLogAdded(Box::new(diagnostic_entry("latest-time"))),
     );
     events.publish(
         None,
         same_time,
         None,
         None,
-        UiEventPayload::DiagnosticLogAdded(diagnostic_entry("same-time-older-id")),
+        UiEventPayload::DiagnosticLogAdded(Box::new(diagnostic_entry("same-time-older-id"))),
     );
     events.publish(
         None,
         same_time,
         None,
         None,
-        UiEventPayload::DiagnosticLogAdded(diagnostic_entry("same-time-newer-id")),
+        UiEventPayload::DiagnosticLogAdded(Box::new(diagnostic_entry("same-time-newer-id"))),
     );
 
     let page = application.diagnostic_log_query(&DiagnosticLogQuery::default());

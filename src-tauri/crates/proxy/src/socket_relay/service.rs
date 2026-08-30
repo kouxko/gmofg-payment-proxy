@@ -397,6 +397,7 @@ fn terminal_failure(outcome: &TerminalConnectionOutcome) -> Option<SocketRelayFa
         stage: SocketRelayStage::Shutdown,
         direction: None,
         code,
+        external_package_call: None,
     })
 }
 

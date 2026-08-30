@@ -2,8 +2,9 @@
 //!
 //! 导入在事务外完成 ZIP 安全读取和 Rhai 编译；数据库只保存规范文件，缓存可由相同校验链重建。
 
-use std::{collections::HashMap, io::Cursor, sync::Arc};
+use std::{io::Cursor, sync::Arc};
 
+#[cfg(test)]
 use chrono::Utc;
 use intercept_proxy_domain::ProtocolPackageRef;
 use intercept_proxy_protocol_scripting::{
@@ -11,6 +12,7 @@ use intercept_proxy_protocol_scripting::{
     read_protocol_package_zip,
 };
 use parking_lot::Mutex;
+#[cfg(test)]
 use uuid::Uuid;
 
 const MAX_RUNTIME_PACKAGE_COMPILATIONS: usize = 4;
@@ -19,9 +21,11 @@ const MAX_RUNTIME_PACKAGE_COMPILATIONS: usize = 4;
 use crate::SqliteStore;
 use crate::{IntoSqlitePersistence, SqliteExecutor};
 
+#[cfg(test)]
+use super::super::sqlite::protocol_packages::StoredProtocolPackageInstallOutcome;
+#[cfg(test)]
 use super::super::sqlite::protocol_packages::{
-    StoredProtocolPackageHeader, StoredProtocolPackageInstallOutcome,
-    StoredProtocolPackageValidation,
+    StoredProtocolPackageHeader, StoredProtocolPackageValidation,
 };
 
 /// `SQLite` 持久化与可重建 Rhai 编译缓存的组合适配器。
@@ -35,7 +39,7 @@ pub struct ProtocolPackageRepositoryAdapter {
     compiler: ProtocolPackageCompiler,
     runtime_compile_gate: Arc<tokio::sync::Semaphore>,
     builtin_archive: Option<Arc<[u8]>>,
-    cache: Arc<Mutex<HashMap<ProtocolPackageRef, CachedCompiledPackage>>>,
+    cache: Arc<Mutex<CompiledPackageCache>>,
     #[cfg(test)]
     revalidate_after_load_hook: Arc<Mutex<Option<RevalidateAfterLoadHook>>>,
 }
@@ -69,7 +73,7 @@ impl ProtocolPackageRepositoryAdapter {
                 MAX_RUNTIME_PACKAGE_COMPILATIONS,
             )),
             builtin_archive: None,
-            cache: Arc::new(Mutex::new(HashMap::new())),
+            cache: Arc::new(Mutex::new(CompiledPackageCache::default())),
             #[cfg(test)]
             revalidate_after_load_hook: Arc::new(Mutex::new(None)),
         }
@@ -82,6 +86,10 @@ impl ProtocolPackageRepositoryAdapter {
             ProtocolArchiveLimits::default(),
             ProtocolRuntimeLimits::default(),
         )
+    }
+
+    pub(crate) const fn archive_limits(&self) -> &ProtocolArchiveLimits {
+        &self.archive_limits
     }
 
     /// 完整校验 ZIP 后原子安装。新包默认停用；相同内容重入不改变已有启用状态和安装时间。
@@ -164,6 +172,7 @@ impl ProtocolPackageRepositoryAdapter {
         })
     }
 
+    #[cfg(test)]
     pub(crate) async fn install_prepared_async(
         &self,
         prepared: PreparedProtocolPackage,
@@ -287,15 +296,12 @@ pub(super) use application_port::{
     application_description, application_descriptions, application_summary,
     protocol_package_app_error,
 };
-#[path = "protocol_packages/disposition.rs"]
-mod disposition;
-pub(in crate::adapters) use disposition::PreparedProtocolPackageDisposition;
 #[path = "protocol_packages/error.rs"]
 mod error;
 pub use error::{ProtocolPackageStorageError, ProtocolPackageStorageErrorCode};
 #[path = "protocol_packages/cache.rs"]
 mod cache;
-use cache::CachedCompiledPackage;
+use cache::{CachedCompiledPackage, CompiledPackageCache};
 #[path = "protocol_packages/builtin.rs"]
 mod builtin;
 #[path = "protocol_packages/prepared.rs"]
@@ -306,12 +312,12 @@ mod portability;
 pub(in crate::adapters) mod runtime_snapshot;
 #[path = "protocol_packages/summary.rs"]
 mod summary;
+#[cfg(test)]
+pub use summary::ProtocolPackageInstallOutcome;
 use summary::summary_from_header;
-pub use summary::{
-    ProtocolPackageInstallOutcome, ProtocolPackageSummary, ProtocolPackageValidationStatus,
-};
 #[cfg(test)]
 pub use summary::{ProtocolPackageRecoveryFailure, ProtocolPackageRecoveryReport};
+pub use summary::{ProtocolPackageSummary, ProtocolPackageValidationStatus};
 #[cfg(test)]
 #[path = "protocol_packages/tests.rs"]
 mod tests;

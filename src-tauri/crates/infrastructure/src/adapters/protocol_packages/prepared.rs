@@ -18,12 +18,6 @@ impl PreparedProtocolPackage {
     pub(crate) const fn compiled(&self) -> &CompiledProtocolPackage {
         &self.compiled
     }
-
-    /// 返回 pending import 资源记账使用的解压后累计字节数。
-    #[must_use]
-    pub(crate) const fn total_bytes(&self) -> u64 {
-        self.files.total_bytes()
-    }
 }
 
 impl std::fmt::Debug for PreparedProtocolPackage {

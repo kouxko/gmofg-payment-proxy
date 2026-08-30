@@ -40,6 +40,7 @@ pub struct ProtocolPackageSummary {
 }
 
 /// 幂等导入结果；相同身份与完全相同文件集合会复用现有记录。
+#[cfg(test)]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProtocolPackageInstallOutcome {
     Installed(ProtocolPackageSummary),

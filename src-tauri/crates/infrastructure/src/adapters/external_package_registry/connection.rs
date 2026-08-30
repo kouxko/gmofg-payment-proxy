@@ -1,6 +1,6 @@
 //! 外部协议包在线连接及展示快照值。
 
-use std::{net::SocketAddr, time::Duration};
+use std::net::SocketAddr;
 
 use intercept_proxy_application::{
     ExternalPackageRecentErrorViewModel, ExternalPackageServiceStateViewModel,
@@ -8,7 +8,7 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::ProtocolPackageRef;
 use uuid::Uuid;
 
-use crate::adapters::external_packages::ExternalPackageClient;
+use crate::package_transport::PackageTransportClient;
 use tokio::sync::watch;
 
 /// 一次在线注册的稳定标识，用于忽略被新连接取代后的迟到断线通知。
@@ -43,7 +43,7 @@ pub struct AcceptedExternalPackageConnection {
 pub(super) enum OnlineConnection {
     Active {
         id: ExternalPackageConnectionId,
-        client: ExternalPackageClient,
+        client: PackageTransportClient,
     },
     Closing {
         id: ExternalPackageConnectionId,
@@ -55,7 +55,6 @@ pub(super) enum OnlineConnection {
 pub(super) struct ConnectionDetailSnapshot {
     pub(super) connection_id: ExternalPackageConnectionId,
     pub(super) remote_address: Option<SocketAddr>,
-    pub(super) rpc_timeout: Duration,
     pub(super) recent_error: Option<ExternalPackageRecentErrorViewModel>,
 }
 

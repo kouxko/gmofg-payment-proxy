@@ -10,7 +10,7 @@ use tokio::{sync::oneshot, task::JoinHandle};
 use super::*;
 use crate::InfrastructureError;
 
-fn registration_with_id(name: &str, id: &str) -> ExternalPackageRegistration {
+fn registration_with_id(name: &str, id: &str) -> PackageManifest {
     let mut value = serde_json::to_value(registration(name)).expect("serialize registration");
     value["package"]["id"] = serde_json::Value::String(id.to_owned());
     serde_json::from_value(value).expect("registration with alternate identity")
@@ -113,7 +113,7 @@ async fn server_registry_persistence_uses_async_executor_without_locking_runtime
     let mut error_future = Box::pin(registry.record_connection_error(
         &package,
         accepted.connection_id,
-        &ExternalPackageConnectionError::Disconnected,
+        &PackageTransportError::Disconnected,
     ));
     assert!(matches!(
         poll_once(error_future.as_mut()).await,
@@ -193,6 +193,6 @@ async fn runtime_binding_resolution_waits_asynchronously_and_cancel_does_not_str
         .await
         .expect("later resolution succeeds")
         .expect("enabled online package resolves");
-    assert_eq!(binding.registration().package().identity(), &package);
+    assert_eq!(binding.registration().package().identity(), package);
     registry.disconnect(&package).await.unwrap();
 }

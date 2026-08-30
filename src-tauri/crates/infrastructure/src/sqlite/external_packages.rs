@@ -4,7 +4,8 @@
 //! WebSocket client、RPC 载荷与第三方内部状态严格留在内存中，避免应用重启后伪造在线状态。
 
 use chrono::{DateTime, Utc};
-use intercept_proxy_domain::{ExternalPackageRegistration, ProtocolPackageRef};
+use intercept_proxy_domain::ProtocolPackageRef;
+use intercept_proxy_package_contract::PackageManifest;
 use rusqlite::{OptionalExtension, params};
 use std::net::SocketAddr;
 
@@ -39,7 +40,7 @@ impl SqliteStore {
     /// 调用方传入错误指纹，也避免极低概率摘要碰撞静默改变 Schema 或方法映射。
     pub(crate) fn accept_external_package_registration(
         &self,
-        registration: &ExternalPackageRegistration,
+        registration: &PackageManifest,
         fingerprint: [u8; 32],
         connected_at: DateTime<Utc>,
     ) -> Result<StoredExternalPackageRegistrationOutcome, InfrastructureError> {

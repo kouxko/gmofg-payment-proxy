@@ -126,6 +126,27 @@ impl ProtocolArchiveLimits {
     }
 }
 
+impl intercept_proxy_package_runtime::PackageArchiveResourceLimits for ProtocolArchiveLimits {
+    fn max_archive_bytes(&self) -> u64 {
+        self.max_archive_bytes()
+    }
+    fn max_entries(&self) -> usize {
+        self.max_entries()
+    }
+    fn max_file_bytes(&self) -> u64 {
+        self.max_file_bytes()
+    }
+    fn max_total_bytes(&self) -> u64 {
+        self.max_total_bytes()
+    }
+    fn max_compression_ratio(&self) -> u64 {
+        self.max_compression_ratio()
+    }
+    fn max_path_depth(&self) -> usize {
+        self.max_path_depth()
+    }
+}
+
 impl Default for ProtocolArchiveLimits {
     fn default() -> Self {
         Self {

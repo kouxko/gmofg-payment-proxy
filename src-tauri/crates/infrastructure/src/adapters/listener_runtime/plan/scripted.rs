@@ -161,7 +161,6 @@ impl ListenerRuntimePlanBuilder<'_> {
         binding: crate::adapters::listener_runtime::ExternalSocketPackageBinding,
     ) -> AppResult<PreparedListenerRuntime> {
         let max_frame_bytes = binding.max_frame_bytes();
-        let rpc_timeout = binding.rpc_timeout();
         let registration = binding.registration();
         let rules = self
             .compile_external_document_rules(workspace, listener, socket, registration)
@@ -175,7 +174,6 @@ impl ListenerRuntimePlanBuilder<'_> {
             max_frame_bytes,
             max_frame_bytes,
             read_chunk_bytes(listener, socket)?,
-            rpc_timeout,
         )
         .map_err(|error| {
             runtime_error(
@@ -259,13 +257,23 @@ impl ListenerRuntimePlanBuilder<'_> {
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
         socket: &SocketRelaySettings,
-        registration: &intercept_proxy_domain::ExternalPackageRegistration,
+        registration: &intercept_proxy_package_contract::PackageManifest,
     ) -> AppResult<crate::adapters::listener_runtime::ProtocolDocumentRuleConnectionFactory> {
         let workspace_for_compile = workspace.clone();
         let listener_for_compile = listener.clone();
         let package = registration.package().identity().clone();
-        let upstream_schema = registration.document().upstream().schema().clone();
-        let downstream_schema = registration.document().downstream().schema().clone();
+        let upstream_schema = registration
+            .document()
+            .upstream()
+            .schema()
+            .expect("validated Socket Manifest requires upstream schema")
+            .clone();
+        let downstream_schema = registration
+            .document()
+            .downstream()
+            .schema()
+            .expect("validated Socket Manifest requires downstream schema")
+            .clone();
         let topology = socket.topology.clone();
         self.adapter
             .compile_document_rules_on_blocking_owner(move || {

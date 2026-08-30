@@ -58,8 +58,6 @@ export function SettingsView() {
     "rewrite_host",
     "external_package_service.bind_address",
     "external_package_service.port",
-    "external_package_service.rpc_timeout_seconds",
-    "external_package_service.max_in_flight",
   ]);
   const globalErrors = Object.entries(validation?.field_errors ?? {})
     .filter(([field]) => !mappedFields.has(field))

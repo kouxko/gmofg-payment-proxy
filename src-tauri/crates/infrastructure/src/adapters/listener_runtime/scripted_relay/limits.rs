@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use intercept_proxy_protocol_scripting::{
     DirectionExecutionPlan, ProtocolFramingLimits, ProtocolRuntimeLimits,
 };
@@ -23,18 +21,12 @@ fn pipeline_limits_for_entry_calls(
     read_chunk_bytes: usize,
     entry_calls: u64,
 ) -> Result<SocketPipelineLimits, SocketProcessingFailure> {
-    let processing_ms =
-        processing_budget_ms(runtime.max_wall_time_ms(), entry_calls).ok_or_else(invalid_limits)?;
+    processing_budget_ms(runtime.max_wall_time_ms(), entry_calls).ok_or_else(invalid_limits)?;
     let max_buffer_bytes =
         usize::try_from(framing.max_fifo_bytes()).map_err(|_| invalid_limits())?;
     let max_output_bytes = usize::try_from(framing.max_frame_bytes().max(runtime.max_blob_bytes()))
         .map_err(|_| invalid_limits())?;
-    SocketPipelineLimits::new(
-        max_buffer_bytes,
-        max_output_bytes,
-        read_chunk_bytes,
-        Duration::from_millis(processing_ms),
-    )
+    SocketPipelineLimits::new(max_buffer_bytes, max_output_bytes, read_chunk_bytes)
 }
 
 pub(super) fn processing_budget_ms(max_wall_time_ms: u64, entry_calls: u64) -> Option<u64> {

@@ -1,11 +1,37 @@
 use intercept_proxy_application::{
-    DiagnosticLogStage, SocketConnectionRouteViewModel, SocketDiagnosticDirection,
-    SocketDiagnosticStage, SocketFailureDiagnostic, SocketFailureStage,
-    SocketRelayRouteEvidenceViewModel, SocketTlsEvidenceViewModel,
+    DiagnosticLogStage, ExternalPackageCallDiagnosticViewModel, ExternalPackageCallStage,
+    SocketConnectionRouteViewModel, SocketDiagnosticDirection, SocketDiagnosticStage,
+    SocketFailureDiagnostic, SocketFailureStage, SocketRelayRouteEvidenceViewModel,
+    SocketTlsEvidenceViewModel,
+};
+use intercept_proxy_exchange::{
+    ExternalPackageCallFailure, ExternalPackageCallStage as ExchangeExternalPackageCallStage,
 };
 use intercept_proxy_runtime::{
     SocketConnectionTarget, SocketRelayDirection, SocketRelayFailure, SocketRelayStage,
 };
+
+pub(super) fn external_package_call_view(
+    call: &ExternalPackageCallFailure,
+) -> ExternalPackageCallDiagnosticViewModel {
+    ExternalPackageCallDiagnosticViewModel {
+        package: call.package.clone(),
+        direction: call.direction,
+        stage: match call.stage {
+            ExchangeExternalPackageCallStage::Frame => ExternalPackageCallStage::Frame,
+            ExchangeExternalPackageCallStage::Decode => ExternalPackageCallStage::Decode,
+            ExchangeExternalPackageCallStage::Display => ExternalPackageCallStage::Display,
+            ExchangeExternalPackageCallStage::Encode => ExternalPackageCallStage::Encode,
+        },
+        method: call.method.clone(),
+        request_id: call.request_id.clone(),
+        remote_code: call.remote_code,
+        stable_code: call.stable_code.clone(),
+        remote_message: call.remote_message.clone(),
+        remote_data_summary: call.remote_data_summary.clone(),
+    }
+    .sanitized()
+}
 
 pub(super) fn route_from_target(target: &SocketConnectionTarget) -> SocketConnectionRouteViewModel {
     match target {
@@ -118,7 +144,7 @@ pub(super) const fn application_direction(
     }
 }
 
-pub(super) fn diagnostic_stage(failure: SocketRelayFailure) -> DiagnosticLogStage {
+pub(super) fn diagnostic_stage(failure: &SocketRelayFailure) -> DiagnosticLogStage {
     match failure.stage {
         SocketRelayStage::DownstreamTls => DiagnosticLogStage::DownstreamTls,
         SocketRelayStage::UpstreamTls => DiagnosticLogStage::UpstreamTls,
@@ -146,6 +172,7 @@ mod tests {
             stage: SocketRelayStage::Decode,
             direction: None,
             code: "PAN_4111111111111111",
+            external_package_call: None,
         };
         assert_eq!(socket_failure(&failure).unwrap().code, "SOCKET_FAILURE");
     }

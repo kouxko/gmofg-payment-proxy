@@ -14,12 +14,14 @@ use intercept_proxy_application::{
     ProtocolPackageUsageCount, ProtocolPackageUsageQueryPort, ProtocolPackageUsageViewModel,
 };
 use intercept_proxy_domain::{
-    ExternalDecodeRequest, ExternalDecodeResponse, ExternalDisplayResponse, ExternalEncodeRequest,
-    ExternalEncodeResponse, ExternalFrameRequest, ExternalFrameResult, ExternalPackageRegistration,
     ListenerDataPlane, ListenerId, ProtocolDocumentRuleDefinition, ProtocolPackageRef,
     ProxyListener, ProxyWorkspace, ScriptedSocketProcessing, SocketDownstreamSecurity,
     SocketEndpoint, SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
     SocketRelaySettings, SocketRelayTopology, SocketTopology,
+};
+use intercept_proxy_package_contract::{
+    CanonicalBase64, DecodeParams, EncodeParams, FrameParams, FrameResult, PackageManifest,
+    PackageRegisterNotification,
 };
 use parking_lot::Mutex;
 use serde_json::{Value, json};
@@ -35,8 +37,7 @@ use super::super::{test_listener_runtime, *};
 use crate::{
     ExternalPackageServer, SqliteStore,
     adapters::{
-        ExternalPackageConnectionConfig, ExternalPackageRegistryAdapter,
-        ExternalPackageServerConfig,
+        ExternalPackageRegistryAdapter, ExternalPackageServerConfig, PackageTransportConfig,
     },
 };
 
@@ -107,7 +108,15 @@ impl ExternalRuntimeHarness {
         let server = ExternalPackageServer::start(
             ExternalPackageServerConfig {
                 bind_address: server_address,
-                connection: ExternalPackageConnectionConfig::default(),
+                connection: PackageTransportConfig::new(
+                    Duration::from_secs(30),
+                    Duration::from_secs(10),
+                    Duration::from_secs(30),
+                    8 * 1024 * 1024,
+                    8 * 1024 * 1024,
+                    1024 * 1024,
+                    128 * 1024,
+                ),
             },
             Arc::clone(&registry),
             usage.clone(),
@@ -209,7 +218,7 @@ pub(super) struct TestExternalPeer {
 }
 
 impl TestExternalPeer {
-    fn spawn(address: SocketAddr, registration: ExternalPackageRegistration) -> Self {
+    fn spawn(address: SocketAddr, registration: PackageManifest) -> Self {
         let registrations = Arc::new(AtomicUsize::new(0));
         let invalid_boundary_once = Arc::new(AtomicBool::new(false));
         let (need_more_tx, need_more_rx) = mpsc::unbounded_channel();
@@ -224,6 +233,15 @@ impl TestExternalPeer {
             .await
             .expect("external peer connection deadline")
             .expect("external peer WebSocket connection");
+            socket
+                .send(Message::Text(
+                    serde_json::to_string(&PackageRegisterNotification::new(registration))
+                        .unwrap()
+                        .into(),
+                ))
+                .await
+                .unwrap();
+            task_registrations.fetch_add(1, Ordering::AcqRel);
             loop {
                 tokio::select! {
                     _ = &mut close_rx => {
@@ -235,8 +253,6 @@ impl TestExternalPeer {
                         match incoming.unwrap() {
                             Message::Text(text) => respond(
                                 &mut socket,
-                                &registration,
-                                &task_registrations,
                                 &task_invalid_boundary_once,
                                 &need_more_tx,
                                 &text,
@@ -287,8 +303,6 @@ impl TestExternalPeer {
 
 async fn respond<S>(
     socket: &mut tokio_tungstenite::WebSocketStream<S>,
-    registration: &ExternalPackageRegistration,
-    registrations: &AtomicUsize,
     invalid_boundary_once: &AtomicBool,
     need_more: &mpsc::UnboundedSender<()>,
     text: &str,
@@ -298,43 +312,31 @@ async fn respond<S>(
     let request: Value = serde_json::from_str(text).unwrap();
     let method = request["method"].as_str().unwrap();
     let result = match method {
-        "package.register" => {
-            registrations.fetch_add(1, Ordering::AcqRel);
-            serde_json::to_value(registration).unwrap()
-        }
-        method if method.ends_with(".split_frame") => {
-            let frame: ExternalFrameRequest =
-                serde_json::from_value(request["params"].clone()).unwrap();
-            let bytes = frame.bytes().unwrap();
+        "hooks.upstream.frame" | "hooks.downstream.frame" => {
+            let frame: FrameParams = serde_json::from_value(request["params"].clone()).unwrap();
+            let bytes = frame.buffer.bytes();
             let boundary = if invalid_boundary_once.swap(false, Ordering::AcqRel) {
-                ExternalFrameResult::Complete {
-                    consumed_bytes: bytes.len() + 1,
-                }
+                FrameResult::complete(bytes.len() + 1).unwrap()
             } else if bytes
                 .first()
                 .is_some_and(|length| bytes.len() >= usize::from(*length))
             {
-                ExternalFrameResult::Complete {
-                    consumed_bytes: usize::from(bytes[0]),
-                }
+                FrameResult::complete(usize::from(bytes[0])).unwrap()
             } else {
                 let _ = need_more.send(());
-                ExternalFrameResult::NeedMore
+                FrameResult::NeedMore {
+                    required_bytes: bytes.first().copied().map(usize::from),
+                }
             };
             serde_json::to_value(boundary).unwrap()
         }
-        method if method.ends_with(".decrypt_and_decode") => {
-            let decoded: ExternalDecodeRequest =
-                serde_json::from_value(request["params"].clone()).unwrap();
-            serde_json::to_value(ExternalDecodeResponse {
-                document: serde_json::from_value(json!({"payload": decoded.bytes().unwrap()}))
-                    .unwrap(),
-            })
-            .unwrap()
+        "hooks.upstream.decode" | "hooks.downstream.decode" => {
+            let decoded: DecodeParams = serde_json::from_value(request["params"].clone()).unwrap();
+            let buffer: CanonicalBase64 = decoded.input.try_into().unwrap();
+            json!({"payload": buffer.bytes()})
         }
-        method if method.ends_with(".encode_and_encrypt") => {
-            let encoded: ExternalEncodeRequest =
-                serde_json::from_value(request["params"].clone()).unwrap();
+        "hooks.upstream.encode" | "hooks.downstream.encode" => {
+            let encoded: EncodeParams = serde_json::from_value(request["params"].clone()).unwrap();
             let document = serde_json::to_value(encoded.document).unwrap();
             let bytes = document["payload"]
                 .as_array()
@@ -350,14 +352,9 @@ async fn respond<S>(
                         .collect::<Option<Vec<_>>>()
                 })
                 .unwrap_or_else(|| vec![3, b'O', b'K']);
-            serde_json::to_value(ExternalEncodeResponse::from_bytes(&bytes)).unwrap()
+            json!(CanonicalBase64::from_bytes(&bytes).as_str())
         }
-        method if method.ends_with(".render_message") => {
-            serde_json::to_value(ExternalDisplayResponse {
-                html: "<p>external e2e</p>".into(),
-            })
-            .unwrap()
-        }
+        "document.upstream.display" | "document.downstream.display" => json!("<p>external e2e</p>"),
         other => panic!("unexpected external method: {other}"),
     };
     socket
@@ -442,9 +439,10 @@ pub(super) fn external_workspace(
     workspace
 }
 
-fn registration() -> ExternalPackageRegistration {
+fn registration() -> PackageManifest {
     serde_json::from_value(json!({
         "api": 1,
+        "kind": "socket",
         "package": {
             "id": "external-listener-e2e",
             "name": "External listener E2E",
@@ -454,18 +452,12 @@ fn registration() -> ExternalPackageRegistration {
         "document": {
             "upstream": {
                 "schema": {"type": "object", "title": "Up",
-                    "properties": {"payload": {"type": "array", "title": "Payload", "items": {"type": "number"}}}},
-                "display": "render_message"
+                    "properties": {"payload": {"type": "array", "title": "Payload", "items": {"type": "number"}}}}
             },
             "downstream": {
                 "schema": {"type": "object", "title": "Down",
-                    "properties": {"payload": {"type": "array", "title": "Payload", "items": {"type": "number"}}}},
-                "display": "render_message"
+                    "properties": {"payload": {"type": "array", "title": "Down", "items": {"type": "number"}}}}
             }
-        },
-        "hooks": {
-            "upstream": {"frame": "split_frame", "decode": "decrypt_and_decode", "encode": "encode_and_encrypt"},
-            "downstream": {"frame": "split_frame", "decode": "decrypt_and_decode", "encode": "encode_and_encrypt"}
         }
     }))
     .unwrap()

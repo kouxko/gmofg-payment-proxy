@@ -69,8 +69,6 @@ const draft: SettingsDraft = {
   external_package_service: {
     bind_address: "0.0.0.0",
     port: 8765,
-    rpc_timeout_seconds: 5,
-    max_in_flight: 256,
   },
 };
 
@@ -322,8 +320,6 @@ describe("production SettingsView overlay", () => {
     expect(screen.getByText(/重启应用后生效/)).toBeVisible();
     expect(screen.getByRole("textbox", { name: "监听地址" })).toHaveValue("0.0.0.0");
     expect(screen.getByRole("textbox", { name: "端口" })).toHaveValue("8,765");
-    expect(screen.getByRole("textbox", { name: "RPC 超时（秒）" })).toHaveValue("5");
-    expect(screen.getByRole("textbox", { name: "最大并发 RPC" })).toHaveValue("256");
     expect(screen.getByRole("button", { name: "保存设置" })).toBeVisible();
   });
 

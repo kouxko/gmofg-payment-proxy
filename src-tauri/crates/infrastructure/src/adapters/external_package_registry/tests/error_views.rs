@@ -1,58 +1,50 @@
 use super::*;
-use crate::adapters::external_packages::{
-    ExternalPackageFatalProtocolError, ExternalPackageRemoteError,
-};
+use intercept_proxy_domain::{DomainError, ErrorCode};
+use intercept_proxy_package_contract::PackageRpcError;
 
 #[test]
 fn connection_errors_map_to_stable_redacted_summaries() {
-    let remote = ExternalPackageRemoteError::new(
+    let remote = PackageRpcError::new(
         -32_001,
         "remote secret".to_owned(),
-        Some(serde_json::json!({"api_key": "secret"})),
+        ErrorCode::BodyDecodeFailed,
     );
     let cases = [
         (
-            ExternalPackageConnectionError::Busy,
-            "EXTERNAL_PACKAGE_BUSY",
-        ),
-        (
-            ExternalPackageConnectionError::Timeout {
-                request_id: "req-1".to_owned(),
-                method: "hooks.upstream.frame".to_owned(),
-            },
+            PackageTransportError::RegistrationDeadline,
             "EXTERNAL_PACKAGE_TIMEOUT",
         ),
         (
-            ExternalPackageConnectionError::Disconnected,
+            PackageTransportError::Disconnected,
             "EXTERNAL_PACKAGE_DISCONNECTED",
         ),
         (
-            ExternalPackageConnectionError::Remote {
+            PackageTransportError::Remote {
                 request_id: "req-2".to_owned(),
-                method: "hooks.upstream.decode".to_owned(),
+                method: "hooks.upstream.decode",
                 error: remote,
             },
-            "EXTERNAL_PACKAGE_REMOTE_ERROR",
+            "BODY_DECODE_FAILED",
         ),
         (
-            ExternalPackageConnectionError::MessageTooLarge {
+            PackageTransportError::MessageTooLarge {
                 actual_bytes: 2,
                 limit_bytes: 1,
             },
             "EXTERNAL_PACKAGE_MESSAGE_TOO_LARGE",
         ),
         (
-            ExternalPackageConnectionError::InvalidPayload("secret".to_owned()),
-            "EXTERNAL_PACKAGE_INVALID_PAYLOAD",
+            PackageTransportError::Package {
+                error: DomainError::new(ErrorCode::ProtocolPackageInvalid, "secret"),
+            },
+            "PROTOCOL_PACKAGE_INVALID",
         ),
         (
-            ExternalPackageConnectionError::Fatal(
-                ExternalPackageFatalProtocolError::InvalidResponse,
-            ),
+            PackageTransportError::InvalidResponse,
             "EXTERNAL_PACKAGE_PROTOCOL_FATAL",
         ),
         (
-            ExternalPackageConnectionError::Transport("secret".to_owned()),
+            PackageTransportError::Transport("secret".to_owned()),
             "EXTERNAL_PACKAGE_TRANSPORT_ERROR",
         ),
     ];

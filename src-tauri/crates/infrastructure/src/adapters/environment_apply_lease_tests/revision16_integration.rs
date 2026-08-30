@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::SinkExt;
 use intercept_proxy_application::{
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidControlPort, AndroidDeviceTarget,
     AndroidDeviceViewModel, AndroidNetworkActivation, AndroidNetworkStatusViewModel,
@@ -11,9 +11,9 @@ use intercept_proxy_application::{
     EnvironmentCommitTarget, ExternalPackageApplicationPort, HttpBodyProcessing,
     ListenerRuntimePort, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
 };
-use intercept_proxy_domain::{ExternalPackageRegistration, ListenerDataPlane, ProxyWorkspace};
+use intercept_proxy_domain::{ListenerDataPlane, ProxyWorkspace};
+use intercept_proxy_package_contract::{PackageManifest, PackageRegisterNotification};
 use intercept_proxy_runtime::NoopPipelinePorts;
-use serde_json::Value;
 use tokio::io::DuplexStream;
 use tokio_tungstenite::{
     WebSocketStream,
@@ -277,51 +277,42 @@ async fn android_none_present_none_retains_a_monotonic_tombstone_generation() {
 
 type Peer = WebSocketStream<DuplexStream>;
 
-fn external_registration() -> ExternalPackageRegistration {
+fn external_registration() -> PackageManifest {
     serde_json::from_value(serde_json::json!({
         "api": 1,
+        "kind": "socket",
         "package": {
             "id": "revision16-external", "name": "Revision 16", "version": "1.10.0",
             "description": "external baseline projection"
         },
         "document": {
-            "upstream": {"schema": {"type": "object", "title": "Up", "properties": {"mti":{"type":"string","title":"MTI"}}}, "display": "render"},
-            "downstream": {"schema": {"type": "object", "title": "Down", "properties": {"code":{"type":"string","title":"Code"}}}, "display": "render"}
-        },
-        "hooks": {
-            "upstream": {"frame": "frame", "decode": "decode", "encode": "encode"},
-            "downstream": {"frame": "frame", "decode": "decode", "encode": "encode"}
+            "upstream": {"schema": {"type": "object", "title": "Up", "properties": {"mti":{"type":"string","title":"MTI"}}}},
+            "downstream": {"schema": {"type": "object", "title": "Down", "properties": {"code":{"type":"string","title":"Code"}}}}
         }
     }))
     .unwrap()
 }
 
 async fn connected_client(
-    registration: &ExternalPackageRegistration,
+    registration: &PackageManifest,
     generation: u64,
-) -> (ExternalPackageClient, Peer) {
+) -> (PackageTransportClient, Peer) {
     let (actor_io, peer_io) = tokio::io::duplex(2 * 1024 * 1024);
     let actor = WebSocketStream::from_raw_socket(actor_io, Role::Server, None).await;
     let mut peer = WebSocketStream::from_raw_socket(peer_io, Role::Client, None).await;
-    let config = ExternalPackageConnectionConfig::new(
+    let config = PackageTransportConfig::new(
         Duration::from_secs(30),
-        Duration::from_secs(5),
         Duration::from_secs(10),
         Duration::from_secs(30),
-        4,
         1024 * 1024,
         1024 * 1024,
         1024 * 1024,
         128 * 1024,
     );
-    let connecting = tokio::spawn(ExternalPackageClient::connect(actor, generation, config));
-    let Message::Text(request) = peer.next().await.unwrap().unwrap() else {
-        panic!("registration request must be text")
-    };
-    let request: Value = serde_json::from_str(&request).unwrap();
+    let connecting = tokio::spawn(PackageTransportClient::connect(actor, generation, config));
     peer.send(Message::Text(
-        serde_json::json!({"jsonrpc":"2.0","id":request["id"],"result":registration})
-            .to_string()
+        serde_json::to_string(&PackageRegisterNotification::new(registration.clone()))
+            .unwrap()
             .into(),
     ))
     .await

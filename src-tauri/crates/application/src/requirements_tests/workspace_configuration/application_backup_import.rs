@@ -244,7 +244,13 @@ async fn schema_rule_mismatch_fails_before_token_retention_or_writes() {
     let first = prepared.protocol_packages[0].package.clone();
     {
         let mut descriptions = portability.descriptions.lock();
-        let schema = &mut descriptions.get_mut(&first).unwrap().upstream_schema.root;
+        let schema = &mut descriptions
+            .get_mut(&first)
+            .unwrap()
+            .upstream_schema
+            .as_mut()
+            .unwrap()
+            .root;
         let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } = schema else {
             unreachable!()
         };

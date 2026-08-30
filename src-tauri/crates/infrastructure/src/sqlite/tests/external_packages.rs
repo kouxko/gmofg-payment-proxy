@@ -1,14 +1,15 @@
 use chrono::Utc;
-use intercept_proxy_domain::ExternalPackageRegistration;
+use intercept_proxy_package_contract::PackageManifest;
 use std::net::SocketAddr;
 
 use super::*;
 use crate::sqlite::external_packages::StoredExternalPackageRegistrationOutcome;
 use crate::sqlite::external_packages::canonical_external_registration_fingerprint;
 
-fn registration(name: &str) -> ExternalPackageRegistration {
+fn registration(name: &str) -> PackageManifest {
     serde_json::from_value(serde_json::json!({
         "api": 1,
+        "kind": "socket",
         "package": {
             "id": "vendor-iso8583",
             "name": name,
@@ -20,20 +21,14 @@ fn registration(name: &str) -> ExternalPackageRegistration {
                 "schema": {
                     "type": "object", "title": "Upstream",
                     "properties": {"mti": {"type": "string", "title": "MTI"}}
-                },
-                "display": "render"
+                }
             },
             "downstream": {
                 "schema": {
                     "type": "object", "title": "Downstream",
                     "properties": {"code": {"type": "string", "title": "Code"}}
-                },
-                "display": "render"
+                }
             }
-        },
-        "hooks": {
-            "upstream": {"frame": "frame", "decode": "decode", "encode": "encode"},
-            "downstream": {"frame": "frame", "decode": "decode", "encode": "encode"}
         }
     }))
     .expect("valid external registration")

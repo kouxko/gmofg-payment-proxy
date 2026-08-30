@@ -222,10 +222,10 @@ impl ProtocolPackagePortabilityPort for ProtocolPackageRepositoryAdapter {
                 if let (Some(prepared), Some(write)) = (builtin, builtin_write) {
                     cache.insert(
                         write.header.package,
-                        super::CachedCompiledPackage {
-                            generation: write.header.generation,
-                            compiled: std::sync::Arc::new(prepared.compiled),
-                        },
+                        super::CachedCompiledPackage::new(
+                            write.header.generation,
+                            std::sync::Arc::new(prepared.compiled),
+                        ),
                     );
                 }
                 Ok(())

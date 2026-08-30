@@ -1,6 +1,11 @@
 //! 可重建编译缓存及其持久化代际校验。
 
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
+
+#[cfg(test)]
+use std::collections::HashMap;
+#[cfg(not(test))]
+use std::collections::HashSet;
 
 use intercept_proxy_domain::ProtocolPackageRef;
 use intercept_proxy_protocol_scripting::{CompiledProtocolPackage, restore_protocol_package_files};
@@ -15,14 +20,85 @@ use crate::sqlite::protocol_packages::{
 };
 
 #[derive(Debug)]
+#[cfg_attr(not(test), derive(Clone, Copy))]
 pub(super) struct CachedCompiledPackage {
+    #[cfg(test)]
     pub(super) generation: Uuid,
+    #[cfg(test)]
     pub(super) compiled: Arc<CompiledProtocolPackage>,
 }
 
 impl CachedCompiledPackage {
+    pub(super) fn new(generation: Uuid, compiled: Arc<CompiledProtocolPackage>) -> Self {
+        #[cfg(not(test))]
+        let _ = (generation, compiled);
+        Self {
+            #[cfg(test)]
+            generation,
+            #[cfg(test)]
+            compiled,
+        }
+    }
+
+    #[cfg(test)]
     pub(super) fn matches(&self, generation: Uuid, package: &ProtocolPackageRef) -> bool {
         self.generation == generation && self.compiled.package() == package
+    }
+}
+
+#[derive(Debug, Default)]
+pub(super) struct CompiledPackageCache {
+    #[cfg(test)]
+    entries: HashMap<ProtocolPackageRef, CachedCompiledPackage>,
+    #[cfg(not(test))]
+    packages: HashSet<ProtocolPackageRef>,
+}
+
+impl CompiledPackageCache {
+    pub(super) fn insert(&mut self, package: ProtocolPackageRef, cached: CachedCompiledPackage) {
+        #[cfg(test)]
+        self.entries.insert(package, cached);
+        #[cfg(not(test))]
+        {
+            let _ = cached;
+            self.packages.insert(package);
+        }
+    }
+
+    pub(super) fn remove(&mut self, package: &ProtocolPackageRef) {
+        #[cfg(test)]
+        self.entries.remove(package);
+        #[cfg(not(test))]
+        self.packages.remove(package);
+    }
+
+    pub(super) fn clear(&mut self) {
+        #[cfg(test)]
+        self.entries.clear();
+        #[cfg(not(test))]
+        self.packages.clear();
+    }
+
+    #[cfg(test)]
+    pub(super) fn get(&self, package: &ProtocolPackageRef) -> Option<&CachedCompiledPackage> {
+        self.entries.get(package)
+    }
+
+    #[cfg(test)]
+    pub(super) fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&ProtocolPackageRef, &CachedCompiledPackage)> {
+        self.entries.iter()
+    }
+
+    #[cfg(test)]
+    pub(super) fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    #[cfg(test)]
+    pub(super) fn is_empty(&self) -> bool {
+        self.entries.is_empty()
     }
 }
 
@@ -59,7 +135,7 @@ impl ProtocolPackageRepositoryAdapter {
         package: &ProtocolPackageRef,
         archive_limits: &intercept_proxy_protocol_scripting::ProtocolArchiveLimits,
         package_compiler: intercept_proxy_protocol_scripting::ProtocolPackageCompiler,
-        cache: &mut HashMap<ProtocolPackageRef, CachedCompiledPackage>,
+        cache: &mut CompiledPackageCache,
         #[cfg(test)] revalidate_after_load_hook: &Arc<
             parking_lot::Mutex<Option<super::RevalidateAfterLoadHook>>,
         >,
@@ -115,10 +191,7 @@ impl ProtocolPackageRepositoryAdapter {
         let compiled = Arc::new(compiled_package);
         cache.insert(
             package.clone(),
-            CachedCompiledPackage {
-                generation: stored.header.generation,
-                compiled: Arc::clone(&compiled),
-            },
+            CachedCompiledPackage::new(stored.header.generation, Arc::clone(&compiled)),
         );
         Ok(compiled)
     }
@@ -127,7 +200,7 @@ impl ProtocolPackageRepositoryAdapter {
         store: &crate::SqliteStore,
         package: &ProtocolPackageRef,
         code: &str,
-        cache: &mut HashMap<ProtocolPackageRef, CachedCompiledPackage>,
+        cache: &mut CompiledPackageCache,
     ) -> Result<T, ProtocolPackageStorageError> {
         cache.remove(package);
         if !store.set_protocol_package_validation(package, Some(code))? {
@@ -182,7 +255,7 @@ impl ProtocolPackageRepositoryAdapter {
     fn compiled_locked(
         &self,
         package: &ProtocolPackageRef,
-        cache: &mut HashMap<ProtocolPackageRef, CachedCompiledPackage>,
+        cache: &mut CompiledPackageCache,
     ) -> Result<Arc<CompiledProtocolPackage>, ProtocolPackageStorageError> {
         if let Some((cached_generation, cached_compiled)) = cache
             .get(package)
@@ -238,10 +311,7 @@ impl ProtocolPackageRepositoryAdapter {
         let compiled = Arc::new(compiled);
         cache.insert(
             package.clone(),
-            CachedCompiledPackage {
-                generation: stored.header.generation,
-                compiled: Arc::clone(&compiled),
-            },
+            CachedCompiledPackage::new(stored.header.generation, Arc::clone(&compiled)),
         );
         Ok(compiled)
     }
@@ -279,7 +349,7 @@ impl ProtocolPackageRepositoryAdapter {
         &self,
         package: &ProtocolPackageRef,
         code: &str,
-        cache: &mut HashMap<ProtocolPackageRef, CachedCompiledPackage>,
+        cache: &mut CompiledPackageCache,
     ) -> Result<T, ProtocolPackageStorageError> {
         cache.remove(package);
         self.require_validation_update(package, Some(code))?;

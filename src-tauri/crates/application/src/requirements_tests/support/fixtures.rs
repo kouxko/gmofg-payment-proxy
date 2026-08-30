@@ -226,8 +226,8 @@ pub(in crate::requirements_tests) fn protocol_package_description(
             },
             display: true,
         },
-        upstream_schema: portable_schema("Portable Message"),
-        downstream_schema: portable_schema("Portable Response"),
+        upstream_schema: Some(portable_schema("Portable Message")),
+        downstream_schema: Some(portable_schema("Portable Response")),
     }
 }
 

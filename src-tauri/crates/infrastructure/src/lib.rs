@@ -14,6 +14,7 @@ pub mod error;
 pub mod files;
 #[cfg(target_os = "macos")]
 pub mod keychain;
+mod package_transport;
 pub mod sqlite;
 mod windows_process;
 
@@ -45,6 +46,9 @@ pub use files::{
 };
 #[cfg(target_os = "macos")]
 pub use keychain::MacKeychainProtector;
+pub use package_transport::{
+    PackageTransportClient, PackageTransportConfig, PackageTransportError,
+};
 pub use sqlite::{
     AndroidRuntimeOwnerRecord, CURRENT_APPLICATION_SCHEMA_VERSION, CertificateMaterialRecord,
     CertificateMaterialSnapshot, EnvironmentCommitFaultPoint, IntoSqlitePersistence,

@@ -317,6 +317,30 @@ test("Phase 4 checker rejects broad and stale Phase 7 allowlist entries", async 
   assert(failures.some((failure) => failure.includes("stale or unused")));
 });
 
+test("Phase 4 checker forbids reallowing a migrated Phase 7 legacy wire", async () => {
+  const value = await inventory();
+  value.phase7_legacy_wire_allowlist = [{
+    file: "src-tauri/crates/domain/src/lib.rs",
+    symbol: "ExternalFrameRequest",
+    reason: "attempt to restore a completed Phase 7 migration",
+  }];
+  const read = async (file, encoding) => {
+    const source = await readFile(file, encoding);
+    return file.endsWith("crates/domain/src/lib.rs")
+      ? `${source}\npub struct ExternalFrameRequest;\n`
+      : source;
+  };
+  const failures = await checkPhase4({ inventory: value, read, discoveredTests: declaredTests(value) });
+  assert(failures.some((failure) => failure.includes("must remain empty after Phase 7 migration")));
+});
+
+test("Phase 4 checker rejects a stale generated SHA in the active inventory", async () => {
+  const value = await inventory();
+  value.generated_sha256 = "0".repeat(64);
+  const failures = await checkPhase4({ inventory: value, discoveredTests: declaredTests(value) });
+  assert(failures.some((failure) => failure.includes("exact recorded Rust export")));
+});
+
 test("Phase 4 checker rejects evidence resources that are not exact SHA-256 copies", async () => {
   const value = await inventory();
   const read = async (file, encoding) => {

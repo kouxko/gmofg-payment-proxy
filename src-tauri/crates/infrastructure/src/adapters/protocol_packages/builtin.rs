@@ -55,10 +55,7 @@ impl ProtocolPackageRepositoryAdapter {
         if let StoredBuiltinSeedOutcome::Ready(generation) = outcome {
             cache.insert(
                 package,
-                CachedCompiledPackage {
-                    generation,
-                    compiled: Arc::new(prepared.compiled),
-                },
+                CachedCompiledPackage::new(generation, Arc::new(prepared.compiled)),
             );
         }
         Ok(())
@@ -81,10 +78,7 @@ impl ProtocolPackageRepositoryAdapter {
                 if let StoredBuiltinSeedOutcome::Ready(generation) = outcome {
                     cache.insert(
                         package,
-                        CachedCompiledPackage {
-                            generation,
-                            compiled: Arc::new(prepared.compiled),
-                        },
+                        CachedCompiledPackage::new(generation, Arc::new(prepared.compiled)),
                     );
                 }
                 Ok(())
@@ -141,10 +135,7 @@ impl ProtocolPackageRepositoryAdapter {
         if let (Some(prepared), Some(write)) = (builtin, builtin_write) {
             cache.insert(
                 write.header.package,
-                CachedCompiledPackage {
-                    generation: write.header.generation,
-                    compiled: Arc::new(prepared.compiled),
-                },
+                CachedCompiledPackage::new(write.header.generation, Arc::new(prepared.compiled)),
             );
         }
         Ok(())
@@ -180,10 +171,7 @@ impl BuiltinProtocolPackagePort for ProtocolPackageRepositoryAdapter {
                     .map_err(super::portability::bundle_app_error)?;
                 cache.insert(
                     package.clone(),
-                    CachedCompiledPackage {
-                        generation,
-                        compiled: Arc::new(prepared.compiled),
-                    },
+                    CachedCompiledPackage::new(generation, Arc::new(prepared.compiled)),
                 );
                 store
                     .load_protocol_package_header(&package)
@@ -202,8 +190,12 @@ impl BuiltinProtocolPackagePort for ProtocolPackageRepositoryAdapter {
             version: application_summary(summary),
             kind: description.kind,
             capabilities: description.capabilities,
-            upstream_schema: description.upstream_schema,
-            downstream_schema: description.downstream_schema,
+            upstream_schema: description
+                .upstream_schema
+                .expect("compiled legacy package always has upstream schema"),
+            downstream_schema: description
+                .downstream_schema
+                .expect("compiled legacy package always has downstream schema"),
         })
     }
 }

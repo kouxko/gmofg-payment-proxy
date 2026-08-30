@@ -324,7 +324,7 @@ fn observation_span(
 }
 
 fn exchange_error(error: ExchangeError) -> ProxyError {
-    let ExchangeError { message } = error;
+    let ExchangeError { message, .. } = error;
     let (code, detail) = message.split_once('\n').map_or(
         (crate::ErrorCode::Internal, message.as_str()),
         |(code, message)| {

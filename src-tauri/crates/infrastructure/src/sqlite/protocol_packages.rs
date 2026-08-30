@@ -4,11 +4,16 @@
 //! `protocol-scripting` 完整校验，读取后仍必须由上层重新执行路径门禁和编译，数据库内容不能被当作可信输入。
 
 use intercept_proxy_domain::ProtocolPackageRef;
+#[cfg(test)]
+use intercept_proxy_protocol_scripting::ProtocolPackageFiles;
 use intercept_proxy_protocol_scripting::{
     MAX_ARCHIVE_ENTRIES_LIMIT, MAX_FILE_BYTES_LIMIT, MAX_PACKAGE_FILE_PATH_BYTES,
-    MAX_TOTAL_BYTES_LIMIT, ProtocolPackageFiles, ProtocolPackageKind,
+    MAX_TOTAL_BYTES_LIMIT, ProtocolPackageKind,
 };
-use rusqlite::{OptionalExtension, Transaction, TransactionBehavior, params};
+#[cfg(test)]
+use rusqlite::TransactionBehavior;
+use rusqlite::{OptionalExtension, Transaction, params};
+#[cfg(test)]
 use uuid::Uuid;
 
 use super::{InfrastructureError, SqliteStore};
@@ -18,9 +23,11 @@ mod test_support;
 
 #[path = "protocol_packages/rows.rs"]
 mod rows;
+#[cfg(test)]
+pub(crate) use rows::StoredProtocolPackageInstallOutcome;
 pub(crate) use rows::{
     StoredProtocolPackage, StoredProtocolPackageFiles, StoredProtocolPackageHeader,
-    StoredProtocolPackageInstallOutcome, StoredProtocolPackageValidation,
+    StoredProtocolPackageValidation,
 };
 use rows::{parse_header, read_header_row};
 
@@ -62,6 +69,7 @@ impl SqliteStore {
         load_protocol_package_header(&connection, package)
     }
 
+    #[cfg(test)]
     pub(crate) fn install_protocol_package(
         &self,
         header: &StoredProtocolPackageHeader,
@@ -281,6 +289,7 @@ mod builtin;
 pub(crate) use builtin::{BUILTIN_ISO8583_FEATURE_KEY, StoredBuiltinSeedOutcome};
 #[path = "protocol_packages/identity.rs"]
 mod identity;
+#[cfg(test)]
 use identity::exact_external_package_exists;
 
 fn preflight_protocol_package_files(

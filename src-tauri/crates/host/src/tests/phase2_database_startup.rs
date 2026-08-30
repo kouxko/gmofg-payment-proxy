@@ -1,13 +1,22 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    io::{Cursor, Write},
+    path::PathBuf,
+    sync::Arc,
+};
 
 use intercept_proxy_application::{
-    AppResult, ConditionTree, MessageStage, ProtocolPackageRef, RuleActionKind, RuleConditionKind,
-    RuleContent, RuleEditorContentContext, RuleStage, UnifiedAction, WorkspaceId,
+    AppResult, ConditionTree, MessageStage, RuleActionKind, RuleConditionKind, RuleContent,
+    RuleEditorContentContext, RuleStage, UnifiedAction, WorkspaceId,
 };
 use intercept_proxy_infrastructure::{FileSelection, NativeFileDialog};
 use intercept_proxy_product_api::InterceptProxyProfile;
+use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::*;
+
+const MANIFEST: &str = include_str!(
+    "../../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json"
+);
 
 #[derive(Debug)]
 struct StaticOpenDialog(PathBuf);
@@ -38,7 +47,6 @@ struct TwoStartFixture {
     workspace_id: WorkspaceId,
     listener_id: intercept_proxy_application::ListenerId,
     rule: intercept_proxy_application::RuleDefinition,
-    package: ProtocolPackageRef,
 }
 
 #[tokio::test]
@@ -82,10 +90,9 @@ async fn assert_two_start_database_contract(
     expectation: SecondStartExpectation,
 ) {
     let temp = tempfile::tempdir().expect("temporary two-start host directory");
-    let package_zip = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-        "../../../examples/protocol-packages/nuvei_tango_rhai/dist/nuvei-tango-json-rhai-1.0.0.zip",
-    );
-    assert!(package_zip.is_file(), "tracked protocol package fixture");
+    let package_zip = temp.path().join("strict-javascript-package.zip");
+    std::fs::write(&package_zip, javascript_package_zip())
+        .expect("write strict JavaScript package ZIP");
     let first = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(
@@ -172,22 +179,25 @@ async fn seed_two_start_fixture(host: &ApplicationHost) -> TwoStartFixture {
         .await
         .expect("advance Rule revision through Application");
 
-    let preview = application
+    let import_error = application
         .protocol_package_import()
         .await
-        .expect("prepare tracked ZIP through Application")
-        .expect("native dialog selected tracked ZIP");
-    let token = preview.token.expect("new package has commit token");
-    let imported = application
-        .protocol_package_import_commit(token)
-        .await
-        .expect("commit tracked ZIP through Application");
+        .expect_err("strict JavaScript ZIP stops at the Phase 8 runtime boundary");
+    assert_eq!(import_error.view_model.code, "PROTOCOL_PACKAGE_INVALID");
+    assert!(import_error.view_model.field_errors.contains_key("runtime"));
+    assert!(
+        application
+            .protocol_package_list()
+            .await
+            .expect("list Packages after Phase 8 fail-closed import")
+            .is_empty(),
+        "Phase 7 must not persist a package before JavaScript compilation exists"
+    );
 
     TwoStartFixture {
         workspace_id: workspace.id,
         listener_id: listener.id,
         rule: toggled,
-        package: imported.version.package,
     }
 }
 
@@ -218,11 +228,14 @@ async fn assert_two_start_fixture_present(
     assert!(rule.one_shot());
     assert_eq!(rule.lifecycle().hit_count, 0);
     assert_eq!(rule.lifecycle().last_hit_at, None);
-    let package = application
-        .protocol_package_detail(fixture.package.clone())
-        .await
-        .expect("unique imported Package is present");
-    assert_eq!(package.version.package, fixture.package);
+    assert!(
+        application
+            .protocol_package_list()
+            .await
+            .expect("list Packages after preserved Host restart")
+            .is_empty(),
+        "Phase 8 has not run, so no package may have been persisted"
+    );
 }
 
 async fn assert_two_start_fixture_absent(
@@ -240,17 +253,32 @@ async fn assert_two_start_fixture_absent(
         "the unique Workspace must be absent; its Listener and Rule are owned by that aggregate"
     );
 
-    let packages = application
-        .protocol_package_list()
-        .await
-        .expect("list Packages after recreate");
     assert!(
-        packages.iter().all(|group| {
-            group
-                .versions
-                .iter()
-                .all(|version| version.package != fixture.package)
-        }),
-        "the exact imported Package identity must be absent"
+        application
+            .protocol_package_list()
+            .await
+            .expect("list Packages after recreate")
+            .is_empty(),
+        "Phase 8 has not run, so no package may have been persisted"
     );
+}
+
+fn javascript_package_zip() -> Vec<u8> {
+    let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
+    for (path, contents) in [
+        ("manifest.json", MANIFEST.as_bytes()),
+        ("protocol.js", b"export {}".as_slice()),
+        ("display.js", b"export {}".as_slice()),
+    ] {
+        archive
+            .start_file(path, SimpleFileOptions::default())
+            .expect("start strict JavaScript package entry");
+        archive
+            .write_all(contents)
+            .expect("write strict JavaScript package entry");
+    }
+    archive
+        .finish()
+        .expect("finish strict JavaScript package ZIP")
+        .into_inner()
 }

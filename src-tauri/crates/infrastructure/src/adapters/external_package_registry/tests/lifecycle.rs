@@ -2,7 +2,7 @@ use std::{future::Future, pin::Pin, task::Poll};
 
 use super::*;
 
-fn registration_with_id(name: &str, id: &str) -> ExternalPackageRegistration {
+fn registration_with_id(name: &str, id: &str) -> PackageManifest {
     let mut value = serde_json::to_value(registration(name)).unwrap();
     value["package"]["id"] = serde_json::Value::String(id.to_owned());
     serde_json::from_value(value).unwrap()
@@ -15,7 +15,7 @@ async fn poll_once<F: Future>(future: Pin<&mut F>) -> Poll<F::Output> {
 
 async fn register(
     registry: &ExternalPackageRegistryAdapter,
-    registration: &ExternalPackageRegistration,
+    registration: &PackageManifest,
     generation: u64,
 ) -> (ExternalPackageConnectionId, Peer) {
     let (client, peer) = connected_client(registration, generation).await;

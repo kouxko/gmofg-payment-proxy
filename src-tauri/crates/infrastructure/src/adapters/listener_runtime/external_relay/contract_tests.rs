@@ -1,8 +1,12 @@
 use super::*;
 use intercept_proxy_domain::{
-    DocumentAction, DocumentCondition, DocumentValue, ExternalDocumentWire, JsonPointer,
-    ListenerId, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    Document, DocumentAction, DocumentCondition, DocumentValue, JsonPointer, ListenerId,
+    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
     ProtocolDocumentRuleProgram, ProtocolRuleStage, SocketLocalResponderTopology,
+};
+use intercept_proxy_package_contract::{
+    CanonicalBase64, DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult,
+    PackageManifest,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -14,34 +18,34 @@ struct DisconnectedRpc;
 impl ExternalPackageRpc for DisconnectedRpc {
     async fn frame(
         &self,
-        _method: &str,
-        _request: &ExternalFrameRequest,
-    ) -> Result<ExternalFrameResult, ExternalPackageConnectionError> {
-        Err(ExternalPackageConnectionError::Disconnected)
+        _direction: ProtocolDirection,
+        _request: FrameParams,
+    ) -> Result<FrameResult, PackageTransportError> {
+        Err(PackageTransportError::Disconnected)
     }
 
     async fn decode(
         &self,
-        _method: &str,
-        _request: &ExternalDecodeRequest,
-    ) -> Result<ExternalDecodeResponse, ExternalPackageConnectionError> {
-        Err(ExternalPackageConnectionError::Disconnected)
+        _direction: ProtocolDirection,
+        _request: DecodeParams,
+    ) -> Result<Document, PackageTransportError> {
+        Err(PackageTransportError::Disconnected)
     }
 
     async fn encode(
         &self,
-        _method: &str,
-        _request: &ExternalEncodeRequest,
-    ) -> Result<ExternalEncodeResponse, ExternalPackageConnectionError> {
-        Err(ExternalPackageConnectionError::Disconnected)
+        _direction: ProtocolDirection,
+        _request: EncodeParams,
+    ) -> Result<String, PackageTransportError> {
+        Err(PackageTransportError::Disconnected)
     }
 
     async fn display(
         &self,
-        _method: &str,
-        _request: &ExternalDisplayRequest,
-    ) -> Result<ExternalDisplayResponse, ExternalPackageConnectionError> {
-        Err(ExternalPackageConnectionError::Disconnected)
+        _direction: ProtocolDirection,
+        _request: DisplayParams,
+    ) -> Result<String, PackageTransportError> {
+        Err(PackageTransportError::Disconnected)
     }
 }
 
@@ -49,9 +53,14 @@ impl ExternalPackageRpc for DisconnectedRpc {
 async fn rpc_contract_frame_preserves_connection_failure() {
     let rpc = DisconnectedRpc;
     assert!(matches!(
-        rpc.frame("frame", &ExternalFrameRequest::from_bytes(b"frame"))
-            .await,
-        Err(ExternalPackageConnectionError::Disconnected)
+        rpc.frame(
+            ProtocolDirection::Upstream,
+            FrameParams {
+                buffer: CanonicalBase64::from_bytes(b"frame")
+            }
+        )
+        .await,
+        Err(PackageTransportError::Disconnected)
     ));
 }
 
@@ -59,9 +68,14 @@ async fn rpc_contract_frame_preserves_connection_failure() {
 async fn rpc_contract_decode_preserves_connection_failure() {
     let rpc = DisconnectedRpc;
     assert!(matches!(
-        rpc.decode("decode", &ExternalDecodeRequest::from_bytes(b"frame"))
-            .await,
-        Err(ExternalPackageConnectionError::Disconnected)
+        rpc.decode(
+            ProtocolDirection::Upstream,
+            DecodeParams {
+                input: CanonicalBase64::from_bytes(b"frame").as_str().to_owned()
+            }
+        )
+        .await,
+        Err(PackageTransportError::Disconnected)
     ));
 }
 
@@ -70,13 +84,14 @@ async fn rpc_contract_encode_preserves_connection_failure() {
     let rpc = DisconnectedRpc;
     assert!(matches!(
         rpc.encode(
-            "encode",
-            &ExternalEncodeRequest {
-                document: ExternalDocumentWire::default(),
-            },
+            ProtocolDirection::Upstream,
+            EncodeParams {
+                original_input: CanonicalBase64::from_bytes(b"frame").as_str().to_owned(),
+                document: serde_json::from_value(json!({})).unwrap(),
+            }
         )
         .await,
-        Err(ExternalPackageConnectionError::Disconnected)
+        Err(PackageTransportError::Disconnected)
     ));
 }
 
@@ -85,13 +100,13 @@ async fn rpc_contract_display_preserves_connection_failure() {
     let rpc = DisconnectedRpc;
     assert!(matches!(
         rpc.display(
-            "display",
-            &ExternalDisplayRequest {
-                document: ExternalDocumentWire::default(),
-            },
+            ProtocolDirection::Upstream,
+            DisplayParams {
+                document: serde_json::from_value(json!({})).unwrap(),
+            }
         )
         .await,
-        Err(ExternalPackageConnectionError::Disconnected)
+        Err(PackageTransportError::Disconnected)
     ));
 }
 
@@ -99,16 +114,11 @@ async fn rpc_contract_display_preserves_connection_failure() {
 fn binding_preserves_registration_limits_and_safe_debug_identity() {
     let registration = registration();
     let package = registration.package().identity().clone();
-    let binding = ExternalSocketPackageBinding::with_limits(
-        registration,
-        Arc::new(DisconnectedRpc),
-        4096,
-        Duration::from_millis(250),
-    );
+    let binding =
+        ExternalSocketPackageBinding::with_limits(registration, Arc::new(DisconnectedRpc), 4096);
 
-    assert_eq!(binding.registration().package().identity(), &package);
+    assert_eq!(binding.registration().package().identity(), package);
     assert_eq!(binding.max_frame_bytes(), 4096);
-    assert_eq!(binding.rpc_timeout(), Duration::from_millis(250));
     assert_eq!(
         format!("{binding:?}"),
         "ExternalSocketPackageBinding { package: ProtocolPackageRef { id: ProtocolPackageId(\"contract-test\"), version: ProtocolPackageVersion(\"1.0.0\") }, .. }"
@@ -288,9 +298,9 @@ fn stale_rule_compile_generation_cannot_overwrite_newer_rules() {
     let newer = scripted_snapshot::compile_document_rules(
         &workspace,
         &listener,
-        registration.package().identity(),
-        registration.document().upstream().schema(),
-        registration.document().downstream().schema(),
+        &registration.package().identity(),
+        registration.document().upstream().schema().unwrap(),
+        registration.document().downstream().schema().unwrap(),
         &SocketTopology::default(),
     )
     .unwrap();
@@ -310,7 +320,7 @@ fn stale_rule_compile_generation_cannot_overwrite_newer_rules() {
 }
 
 fn relay_rule_workspace(
-    registration: &ExternalPackageRegistration,
+    registration: &PackageManifest,
     listener: &ProxyListener,
 ) -> ProxyWorkspace {
     let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
@@ -347,12 +357,17 @@ fn listener() -> ProxyListener {
 }
 
 fn empty_rules(
-    registration: &ExternalPackageRegistration,
+    registration: &PackageManifest,
     listener_id: ListenerId,
 ) -> ProtocolDocumentRuleConnectionFactory {
     let package = registration.package().identity().clone();
-    let upstream = registration.document().upstream().schema().clone();
-    let downstream = registration.document().downstream().schema().clone();
+    let upstream = registration.document().upstream().schema().unwrap().clone();
+    let downstream = registration
+        .document()
+        .downstream()
+        .schema()
+        .unwrap()
+        .clone();
     let program = |stage, schema| {
         Arc::new(
             ProtocolDocumentRuleProgram::new_for_stage(
@@ -374,9 +389,10 @@ fn empty_rules(
     .unwrap()
 }
 
-fn registration() -> ExternalPackageRegistration {
+fn registration() -> PackageManifest {
     serde_json::from_value(json!({
         "api": 1,
+        "kind": "socket",
         "package": {
             "id": "contract-test",
             "name": "Contract test",
@@ -391,8 +407,7 @@ fn registration() -> ExternalPackageRegistration {
                     "properties": {
                         "request": {"type": "string", "title": "Request"}
                     }
-                },
-                "display": "render"
+                }
             },
             "downstream": {
                 "schema": {
@@ -401,13 +416,8 @@ fn registration() -> ExternalPackageRegistration {
                     "properties": {
                         "response": {"type": "string", "title": "Response"}
                     }
-                },
-                "display": "render"
+                }
             }
-        },
-        "hooks": {
-            "upstream": {"frame": "frame", "decode": "decode", "encode": "encode"},
-            "downstream": {"frame": "frame", "decode": "decode", "encode": "encode"}
         }
     }))
     .unwrap()

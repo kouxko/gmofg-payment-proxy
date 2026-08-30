@@ -1,19 +1,19 @@
 //! 外部协议包注册合同的规范化指纹。
 
-use intercept_proxy_domain::ExternalPackageRegistration;
+use intercept_proxy_package_contract::PackageManifest;
 
 use super::{InfrastructureError, corrupt_external_package};
 
 /// 对严格注册对象的稳定 JSON 表达计算 SHA-256 指纹。
 pub(crate) fn canonical_external_registration_fingerprint(
-    registration: &ExternalPackageRegistration,
+    registration: &PackageManifest,
 ) -> Result<[u8; 32], InfrastructureError> {
     let json = canonical_external_registration_json(registration)?;
     Ok(sha256(json.as_bytes()))
 }
 
 pub(super) fn canonical_external_registration_json(
-    registration: &ExternalPackageRegistration,
+    registration: &PackageManifest,
 ) -> Result<String, InfrastructureError> {
     serde_json::to_string(registration).map_err(registration_serialization_error)
 }

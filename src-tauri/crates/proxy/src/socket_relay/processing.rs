@@ -1,9 +1,9 @@
 use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
-use std::time::Duration;
 
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Downstream, Encode, Frame, Rules, Socket, Upstream,
+    Decode, Direction, Display, Downstream, Encode, ExternalPackageCallFailure, Frame, Rules,
+    Socket, Upstream,
 };
 use uuid::Uuid;
 
@@ -109,6 +109,7 @@ pub struct SocketProcessingFailure {
     pub direction: Option<SocketPayloadDirection>,
     _message: String,
     bytes: RelayBytes,
+    pub external_package_call: Option<Box<ExternalPackageCallFailure>>,
 }
 
 impl SocketProcessingFailure {
@@ -121,7 +122,14 @@ impl SocketProcessingFailure {
             direction: None,
             _message: message.into(),
             bytes: RelayBytes::default(),
+            external_package_call: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_external_package_call(mut self, failure: ExternalPackageCallFailure) -> Self {
+        self.external_package_call = Some(Box::new(failure));
+        self
     }
 
     /// 将失败绑定到 Pump 已知的真实方向。
@@ -159,14 +167,13 @@ impl Debug for SocketProcessingFailure {
 
 /// 每连接、每方向的硬资源限制。
 ///
-/// Buffer/output 上限在开始下一次读取或写入前检查；processing timeout 同时覆盖
-/// `inspect` 与 `process`。读写 timeout 来自 Listener 配置，由 Socket Pipeline 调用方提供。
+/// Buffer/output 上限在开始下一次读取或写入前检查。读写 timeout 来自 Listener 配置；
+/// package Hook 不增加执行期限。
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SocketPipelineLimits {
-    max_buffer_bytes: usize,
-    max_output_bytes: usize,
-    read_chunk_bytes: usize,
-    processing_timeout: Duration,
+    max_buffer: usize,
+    max_output: usize,
+    read_chunk: usize,
 }
 
 impl SocketPipelineLimits {
@@ -175,13 +182,11 @@ impl SocketPipelineLimits {
         max_buffer_bytes: usize,
         max_output_bytes: usize,
         read_chunk_bytes: usize,
-        processing_timeout: Duration,
     ) -> Result<Self, SocketProcessingFailure> {
         if max_buffer_bytes == 0
             || max_output_bytes == 0
             || read_chunk_bytes == 0
             || read_chunk_bytes > max_buffer_bytes
-            || processing_timeout.is_zero()
         {
             return Err(SocketProcessingFailure::new(
                 SocketProcessingFailureKind::InvalidLimits,
@@ -189,31 +194,25 @@ impl SocketPipelineLimits {
             ));
         }
         Ok(Self {
-            max_buffer_bytes,
-            max_output_bytes,
-            read_chunk_bytes,
-            processing_timeout,
+            max_buffer: max_buffer_bytes,
+            max_output: max_output_bytes,
+            read_chunk: read_chunk_bytes,
         })
     }
 
     /// 单方向允许保留的最大未消费输入字节数。
     pub const fn max_buffer_bytes(self) -> usize {
-        self.max_buffer_bytes
+        self.max_buffer
     }
 
     /// 单个 processor 输出允许写入线路的最大字节数。
     pub const fn max_output_bytes(self) -> usize {
-        self.max_output_bytes
+        self.max_output
     }
 
     /// 每次从 Socket 读取的最大字节数。
     pub const fn read_chunk_bytes(self) -> usize {
-        self.read_chunk_bytes
-    }
-
-    /// 单次 `inspect` 或 `process` 的执行上限。
-    pub const fn processing_timeout(self) -> Duration {
-        self.processing_timeout
+        self.read_chunk
     }
 }
 

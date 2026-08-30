@@ -16,9 +16,8 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use super::{
-    AcceptedExternalPackageConnection, ExternalPackageClient, ExternalPackageConnectionConfig,
-    ExternalPackageConnectionError, ExternalPackageRegistryAdapter,
-    external_package_registration_fingerprint,
+    AcceptedExternalPackageConnection, ExternalPackageRegistryAdapter, PackageTransportClient,
+    PackageTransportConfig, PackageTransportError, external_package_registration_fingerprint,
 };
 
 const WEBSOCKET_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -51,7 +50,7 @@ struct ConnectionServices {
 #[derive(Clone, Debug)]
 pub struct ExternalPackageServerConfig {
     pub bind_address: SocketAddr,
-    pub connection: ExternalPackageConnectionConfig,
+    pub connection: PackageTransportConfig,
 }
 
 /// Host 持有的外部软件包服务任务。
@@ -138,7 +137,7 @@ impl Drop for ExternalPackageServer {
 
 async fn run_accept_loop(
     listener: TcpListener,
-    config: ExternalPackageConnectionConfig,
+    config: PackageTransportConfig,
     registry: Arc<ExternalPackageRegistryAdapter>,
     usage: Arc<dyn ProtocolPackageUsageQueryPort>,
     listener_runtime: Arc<dyn ExternalPackageListenerRuntime>,
@@ -216,13 +215,12 @@ async fn handle_connection(
     stream: tokio::net::TcpStream,
     remote_address: SocketAddr,
     generation: u64,
-    config: ExternalPackageConnectionConfig,
+    config: PackageTransportConfig,
     services: ConnectionServices,
     cancellation: CancellationToken,
     _permit: tokio::sync::OwnedSemaphorePermit,
 ) {
-    let handshake =
-        super::accept_packages_websocket(stream, config.registration_websocket_message_bytes());
+    let handshake = super::accept_packages_websocket(stream, config.websocket_message_bytes());
     let websocket = match tokio::select! {
         () = cancellation.cancelled() => return,
         result = tokio::time::timeout(WEBSOCKET_HANDSHAKE_TIMEOUT, handshake) => result,
@@ -249,7 +247,7 @@ async fn handle_connection(
             }
         },
     };
-    let connecting = super::ExternalPackageClient::connect(websocket, generation, config);
+    let connecting = super::PackageTransportClient::connect(websocket, generation, config);
     let (registration, client) = match tokio::select! {
         () = cancellation.cancelled() => return,
         connection = connecting => connection,
@@ -270,7 +268,7 @@ async fn handle_connection(
             services.registry.record_application_failure(
                 "fingerprint",
                 remote_address,
-                Some(registration.package().identity()),
+                Some(&registration.package().identity()),
                 &error,
             );
             client.disconnect().await;
@@ -289,7 +287,7 @@ async fn handle_connection(
             services.registry.record_application_failure(
                 "identity",
                 remote_address,
-                Some(registration.package().identity()),
+                Some(&registration.package().identity()),
                 &error,
             );
             monitor.disconnect().await;
@@ -301,7 +299,7 @@ async fn handle_connection(
 
 async fn monitor_connection(
     accepted: AcceptedExternalPackageConnection,
-    mut monitor: ExternalPackageClient,
+    mut monitor: PackageTransportClient,
     remote_address: SocketAddr,
     services: &ConnectionServices,
     cancellation: &CancellationToken,
@@ -317,7 +315,7 @@ async fn monitor_connection(
     let reason = tokio::select! {
         () = cancellation.cancelled() => {
             monitor.disconnect().await;
-            super::ExternalPackageConnectionError::Disconnected
+            super::PackageTransportError::Disconnected
         }
         reason = monitor.wait_closed() => reason,
     };
@@ -367,7 +365,7 @@ async fn persist_remote_address(
 async fn persist_connection_error(
     registry: &ExternalPackageRegistryAdapter,
     accepted: &AcceptedExternalPackageConnection,
-    reason: &ExternalPackageConnectionError,
+    reason: &PackageTransportError,
 ) {
     if let Err(error) = registry
         .record_connection_error(&accepted.package, accepted.connection_id, reason)
