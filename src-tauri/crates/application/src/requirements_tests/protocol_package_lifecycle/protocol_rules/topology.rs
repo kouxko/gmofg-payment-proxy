@@ -20,9 +20,7 @@ async fn editor_context_owns_relay_stages_capabilities_and_new_rule_drafts() {
             .map(|item| item.stage)
             .collect::<Vec<_>>(),
         [
-            ProtocolRuleStage::AppToProxy,
             ProtocolRuleStage::ProxyToUpstream,
-            ProtocolRuleStage::UpstreamToProxy,
             ProtocolRuleStage::ProxyToApp,
         ]
     );
@@ -71,7 +69,10 @@ async fn editor_context_owns_local_responder_stages_and_record_match_default() {
             .iter()
             .map(|item| item.stage)
             .collect::<Vec<_>>(),
-        [ProtocolRuleStage::AppToProxy, ProtocolRuleStage::ProxyToApp,]
+        [
+            ProtocolRuleStage::ProxyToUpstream,
+            ProtocolRuleStage::ProxyToApp,
+        ]
     );
     assert!(
         context
@@ -107,7 +108,7 @@ async fn editor_context_owns_all_http_protocol_stages_and_defaults() {
         .await
         .unwrap();
 
-    assert_eq!(context.stages.len(), 4);
+    assert_eq!(context.stages.len(), 2);
     assert_eq!(
         context
             .stages
@@ -115,9 +116,7 @@ async fn editor_context_owns_all_http_protocol_stages_and_defaults() {
             .map(|item| item.stage)
             .collect::<Vec<_>>(),
         [
-            ProtocolRuleStage::AppToProxy,
             ProtocolRuleStage::ProxyToUpstream,
-            ProtocolRuleStage::UpstreamToProxy,
             ProtocolRuleStage::ProxyToApp,
         ]
     );
@@ -206,7 +205,7 @@ async fn relay_exposes_all_stages_and_local_responder_limits_stages_only_by_topo
     assert_eq!(
         error_code(
             &application
-                .protocol_rule_capabilities(listener_id, ProtocolRuleStage::ProxyToUpstream)
+                .protocol_rule_capabilities(listener_id, ProtocolRuleStage::AppToProxy)
                 .await
                 .unwrap_err()
         ),

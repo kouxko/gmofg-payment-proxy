@@ -21,6 +21,7 @@ pub mod session;
 pub mod settings;
 pub mod state;
 pub mod unified_rule;
+pub mod unified_rule_execution;
 pub mod workspace;
 
 #[cfg(test)]
@@ -43,4 +44,5 @@ pub use session::*;
 pub use settings::*;
 pub use state::*;
 pub use unified_rule::*;
+pub use unified_rule_execution::*;
 pub use workspace::*;

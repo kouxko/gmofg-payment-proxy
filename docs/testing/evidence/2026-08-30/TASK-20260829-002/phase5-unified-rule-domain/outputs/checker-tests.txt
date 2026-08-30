@@ -1,0 +1,10 @@
+command: node --test scripts/check-task-20260829-002-phase5-contract.test.mjs
+result: PASS
+tests: 15
+pass: 15
+fail: 0
+skipped: 0
+duration_ms: 9852.858834
+
+Review mutations: unlisted comparator helper; second serde owner; generated extra variant; extra allowlisted-file owner; comment-only test count; alias owner.
+Positive controls: harmless sort helper, non-wire enum, unrelated alias, comments.

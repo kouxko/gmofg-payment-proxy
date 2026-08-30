@@ -36,6 +36,10 @@ pub use settings::*;
 pub use workspace::*;
 
 use intercept_proxy_application::{AppError, AppErrorViewModel};
+use intercept_proxy_domain::{
+    BooleanPredicate, Condition, ConditionTree, DocumentMutation, DocumentPredicate,
+    NumberOperator, NumberPredicate, StringOperator, StringPredicate, UnifiedAction,
+};
 use intercept_proxy_package_contract::{
     CanonicalBase64, DecodeParams, DecodeRpcSuccess, DisplayParams, DisplayRpcSuccess,
     EncodeParams, EncodeRpcSuccess, FrameParams, FrameResult, FrameRpcSuccess, JsonRpcVersion,
@@ -199,4 +203,14 @@ pub fn builder() -> Builder<Wry> {
         .typ::<PackageRpcErrorData>()
         .typ::<PackageRpcFailure>()
         .typ::<PackageRpcRequest>()
+        .typ::<BooleanPredicate>()
+        .typ::<Condition>()
+        .typ::<ConditionTree>()
+        .typ::<DocumentMutation>()
+        .typ::<DocumentPredicate>()
+        .typ::<NumberOperator>()
+        .typ::<NumberPredicate>()
+        .typ::<StringOperator>()
+        .typ::<StringPredicate>()
+        .typ::<UnifiedAction>()
 }

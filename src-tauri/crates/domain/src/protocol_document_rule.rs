@@ -426,12 +426,11 @@ impl ProtocolDocumentRuleDefinition {
     }
 }
 
-/// 按 `(priority, created_order, rule_id)` 原地排序，不重写规则身份或创建顺序。
+/// 按 `(priority, rule_id)` 原地排序；`created_order` 只保留为 UI/history 元数据。
 pub fn sort_protocol_document_rules(rules: &mut [ProtocolDocumentRuleDefinition]) {
     rules.sort_by(|left, right| {
         left.priority
             .cmp(&right.priority)
-            .then_with(|| left.created_order.cmp(&right.created_order))
             .then_with(|| left.rule_id.cmp(&right.rule_id))
     });
 }

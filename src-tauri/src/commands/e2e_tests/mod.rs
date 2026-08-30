@@ -9,16 +9,17 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    DiagnosticLogPageViewModel, DiagnosticReportQuery, DocumentAction, DocumentValue, JsonPointer,
-    ProtocolPackageDetailViewModel, ProtocolPackageImportPreviewViewModel,
-    ProtocolPackageImportViewModel, ProtocolPackageVersionViewModel, ProxyListener, ProxyWorkspace,
-    RuleDefinitionSaveInput, WorkspaceSummaryViewModel,
+    DiagnosticLogPageViewModel, DiagnosticReportQuery, DocumentAction, DocumentCondition,
+    DocumentValue, JsonPointer, ProtocolPackageDetailViewModel,
+    ProtocolPackageImportPreviewViewModel, ProtocolPackageImportViewModel,
+    ProtocolPackageVersionViewModel, ProxyListener, ProxyWorkspace, RuleDefinitionSaveInput,
+    WorkspaceSummaryViewModel,
 };
 use intercept_proxy_domain::{
-    ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, RuleContent,
-    RuleDefinition, RuleDefinitionDraft, RuleStage, ScriptedSocketProcessing,
-    SocketDownstreamSecurity, SocketLocalResponderTopology, SocketPayloadProcessing,
-    SocketRelaySettings, SocketRuleContent, SocketTopology,
+    ConditionTree, ListenerDataPlane, ProtocolPackageId, ProtocolPackageRef,
+    ProtocolPackageVersion, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
+    ScriptedSocketProcessing, SocketDownstreamSecurity, SocketLocalResponderTopology,
+    SocketPayloadProcessing, SocketRelaySettings, SocketRuleContent, SocketTopology, UnifiedAction,
 };
 use serde_json::json;
 
@@ -174,7 +175,7 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
     assert_eq!(detail.upstream_schema.root.title(), Some("T30 ISO8583"));
     assert_eq!(detail.downstream_schema.root.title(), Some("T30 ISO8583"));
     assert!(
-        matches!(&detail.upstream_schema.root, intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } if properties.len() == 1)
+        matches!(&detail.upstream_schema.root, intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } if properties.len() == 2)
     );
     let enabled: ProtocolPackageVersionViewModel = fixture.invoke_ok(
         &webview,
@@ -225,11 +226,14 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
                     stage: RuleStage::ProxyToApp,
                     content: RuleContent::Socket(SocketRuleContent {
                         package: package.clone(),
-                        conditions: Vec::new(),
-                        actions: vec![DocumentAction::SetField {
+                        condition: ConditionTree::from_document_conditions(vec![DocumentCondition::Equals {
+                            field: JsonPointer::property("message_kind"),
+                            value: DocumentValue::String("iso8583".into()),
+                        }]),
+                        actions: vec![UnifiedAction::from(DocumentAction::SetField {
                             field: JsonPointer::property("message"),
                             value: DocumentValue::byte_array(RESPONSE.iter().copied()),
-                        }],
+                        })],
                     }),
                 },
             }

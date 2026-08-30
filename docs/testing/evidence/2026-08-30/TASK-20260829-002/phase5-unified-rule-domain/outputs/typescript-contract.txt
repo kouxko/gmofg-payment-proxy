@@ -1,0 +1,7 @@
+command: pnpm exec vitest run src/features/rules/rule-definition-model.test.ts
+result: PASS
+test_files: 1 passed
+tests: 4 passed
+duration: 666ms
+
+The checker independently discovered the same four names through `vitest list --json`.

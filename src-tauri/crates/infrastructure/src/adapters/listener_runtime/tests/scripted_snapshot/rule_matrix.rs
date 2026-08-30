@@ -1,6 +1,8 @@
 //! Scripted 启动快照的方向能力矩阵与冻结规则执行回归。
 
-use intercept_proxy_domain::{DocumentValue, JsonPointer, ProtocolDocumentRuleDefinition};
+use intercept_proxy_domain::{
+    Document, DocumentCondition, DocumentValue, JsonPointer, ProtocolDocumentRuleDefinition,
+};
 use intercept_proxy_runtime::SocketConnectionIdentity;
 
 use super::*;
@@ -69,7 +71,7 @@ async fn snapshot_partitions_both_directions_without_changing_stable_rule_order(
 
     assert_eq!(
         orders(&snapshot, ProtocolDirection::Upstream),
-        vec![(10, 1), (10, 4)]
+        vec![(10, 4), (10, 1)]
     );
     assert_eq!(
         orders(&snapshot, ProtocolDirection::Downstream),
@@ -120,7 +122,16 @@ async fn local_response_executes_static_response_from_the_frozen_snapshot_factor
         },
         ProtocolRuleStage::ProxyToApp,
     );
-    let result = connection.execute(connection.empty_document()).unwrap();
+    let mut document = Document::new(DocumentValue::Object(std::collections::BTreeMap::default()));
+    document
+        .set(
+            &JsonPointer::property("amount"),
+            DocumentValue::integer(1).unwrap(),
+        )
+        .unwrap();
+    let result = connection
+        .execute(connection.bind_document(document))
+        .unwrap();
 
     assert_eq!(result.matched_rule_ids().len(), 1);
     assert_eq!(
@@ -164,14 +175,17 @@ fn direction_rule(
         vec![DocumentAction::RecordMatch]
     };
     ProtocolDocumentRuleDefinition::new(
-        ProtocolDocumentRuleId::new(),
+        ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(u128::from(10 - created_order))),
         true,
         priority,
         created_order,
         listener.id,
         snapshot_package(),
         direction,
-        Vec::new(),
+        vec![DocumentCondition::Equals {
+            field: JsonPointer::property("amount"),
+            value: DocumentValue::integer(1).unwrap(),
+        }],
         actions,
     )
     .unwrap()

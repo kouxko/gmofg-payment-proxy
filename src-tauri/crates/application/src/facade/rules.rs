@@ -33,7 +33,7 @@ impl Application {
     #[cfg(test)]
     pub async fn rule_list(&self) -> AppResult<Vec<RuleSummaryViewModel>> {
         let mut rules = self.rules.list().await?;
-        rules.sort_by_key(|rule| (rule.priority, rule.creation_order, rule.rule_id));
+        rules.sort_by_key(|rule| (rule.priority, rule.rule_id));
         Ok(rules)
     }
 

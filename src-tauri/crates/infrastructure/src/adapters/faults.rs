@@ -79,8 +79,10 @@ impl FaultServicePort for FaultServiceAdapter {
                 stage: rule_stage(stage)?,
                 content: RuleContent::Http(HttpRuleContent {
                     description: format!("fault:{}", definition.view.template_id),
-                    conditions,
-                    actions: vec![action],
+                    condition: intercept_proxy_domain::ConditionTree::from_http_conditions(
+                        conditions,
+                    ),
+                    actions: vec![intercept_proxy_domain::UnifiedAction::from(action)],
                     document: None,
                     one_shot: configuration.one_shot,
                     hit_count: 0,
@@ -101,7 +103,7 @@ impl FaultServicePort for FaultServiceAdapter {
         Some(ActiveFaultViewModel {
             rule_id: rule.rule_id().as_uuid(),
             template_name: template_name.into(),
-            target_summary: format!("{} 个条件", content.conditions.len()),
+            target_summary: format!("{} 个条件", content.condition.leaf_count()),
             priority: rule.priority(),
             hit_count: content.hit_count,
             enabled: rule.enabled(),

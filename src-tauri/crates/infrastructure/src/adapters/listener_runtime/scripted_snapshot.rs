@@ -150,7 +150,6 @@ impl ScriptedSocketRuntimeSnapshot {
         rules.sort_by(|left, right| {
             left.priority()
                 .cmp(&right.priority())
-                .then_with(|| left.created_order().cmp(&right.created_order()))
                 .then_with(|| left.rule_id().cmp(&right.rule_id()))
         });
         rules

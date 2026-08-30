@@ -70,7 +70,7 @@ fn changed_http_rule_body_lifts_its_listener_into_the_affected_runtime_scope() {
                     crate::ChannelId::new(listener_id.to_string()).expect("listener channel"),
                 ),
                 stage: MessageStage::Request,
-                conditions: Vec::new(),
+                conditions: vec![intercept_proxy_domain::MatchCondition::NthHit(1)],
                 actions: vec![RuleAction::ReplaceBodyText("before".into())],
                 one_shot: false,
             })

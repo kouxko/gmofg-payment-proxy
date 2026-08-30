@@ -1,8 +1,8 @@
 use super::*;
 use intercept_proxy_domain::{
-    DocumentAction, DocumentValue, ExternalDocumentWire, JsonPointer, ListenerId,
-    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
-    ProtocolRuleStage, SocketLocalResponderTopology,
+    DocumentAction, DocumentCondition, DocumentValue, ExternalDocumentWire, JsonPointer,
+    ListenerId, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolDocumentRuleProgram, ProtocolRuleStage, SocketLocalResponderTopology,
 };
 use serde_json::json;
 use uuid::Uuid;
@@ -147,7 +147,10 @@ async fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
         listener.id,
         package,
         ProtocolRuleStage::ProxyToUpstream,
-        Vec::new(),
+        vec![DocumentCondition::Equals {
+            field: JsonPointer::property("request"),
+            value: DocumentValue::String("original".to_owned()),
+        }],
         vec![DocumentAction::SetField {
             field: JsonPointer::property("request"),
             value: DocumentValue::String("updated".to_owned()),
@@ -196,7 +199,10 @@ async fn replace_document_rules_rejects_relay_only_stage_for_local_responder() {
         listener.id,
         package,
         ProtocolRuleStage::ProxyToUpstream,
-        Vec::new(),
+        vec![DocumentCondition::Equals {
+            field: JsonPointer::property("request"),
+            value: DocumentValue::String("original".to_owned()),
+        }],
         vec![DocumentAction::SetField {
             field: JsonPointer::property("request"),
             value: DocumentValue::String("updated".to_owned()),
@@ -316,7 +322,10 @@ fn relay_rule_workspace(
         listener.id,
         registration.package().identity().clone(),
         ProtocolRuleStage::ProxyToUpstream,
-        Vec::new(),
+        vec![DocumentCondition::Equals {
+            field: JsonPointer::property("request"),
+            value: DocumentValue::String("original".to_owned()),
+        }],
         vec![DocumentAction::SetField {
             field: JsonPointer::property("request"),
             value: DocumentValue::String("updated".to_owned()),

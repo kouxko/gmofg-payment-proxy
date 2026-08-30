@@ -173,10 +173,13 @@ async fn upstream_capabilities_are_independent_and_rules_run_in_order() {
         set_string_rule(
             &listener,
             ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(1)),
-            ProtocolRuleStage::AppToProxy,
+            ProtocolRuleStage::ProxyToUpstream,
             1,
             "route",
-            Vec::new(),
+            vec![DocumentCondition::Equals {
+                field: JsonPointer::property("route"),
+                value: DocumentValue::String("decoded".into()),
+            }],
             "after_app",
         ),
         set_string_rule(
@@ -217,13 +220,13 @@ async fn upstream_capabilities_are_independent_and_rules_run_in_order() {
 }
 
 #[tokio::test]
-async fn earlier_stage_document_actions_are_visible_to_later_stage_conditions() {
+async fn earlier_rule_document_actions_are_visible_to_later_rule_conditions() {
     let listener = http_listener();
     let rules = vec![
         set_string_rule(
             &listener,
             ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(21)),
-            ProtocolRuleStage::AppToProxy,
+            ProtocolRuleStage::ProxyToUpstream,
             1,
             "route",
             Vec::new(),
@@ -246,8 +249,8 @@ async fn earlier_stage_document_actions_are_visible_to_later_stage_conditions() 
     let first = workspace
         .rule_definitions
         .iter_mut()
-        .find(|rule| rule.stage() == intercept_proxy_domain::RuleStage::AppToProxy)
-        .expect("first stage rule");
+        .find(|rule| rule.created_order() == 1)
+        .expect("first ordered rule");
     let mut draft = first.to_draft();
     draft.priority = 100;
     first.update(first.revision(), draft).unwrap();
@@ -261,10 +264,14 @@ async fn earlier_stage_document_actions_are_visible_to_later_stage_conditions() 
     let RuleContent::Http(content) = &mut draft.content else {
         panic!("HTTP rule expected");
     };
-    content.actions.push(RuleAction::SetHeader {
-        name: "x-stage-two".into(),
-        value: "matched".into(),
-    });
+    content
+        .actions
+        .push(intercept_proxy_domain::UnifiedAction::from(
+            RuleAction::SetHeader {
+                name: "x-stage-two".into(),
+                value: "matched".into(),
+            },
+        ));
     second.update(second.revision(), draft).unwrap();
 
     let identity = identity();
@@ -294,7 +301,7 @@ async fn downstream_uses_downstream_schema_and_rule_stages() {
         set_string_rule(
             &listener,
             ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(3)),
-            ProtocolRuleStage::UpstreamToProxy,
+            ProtocolRuleStage::ProxyToApp,
             1,
             "result",
             Vec::new(),
@@ -344,8 +351,11 @@ fn http_snapshot_rejects_rule_package_drift_below_application() {
             1,
             listener.id,
             package,
-            ProtocolRuleStage::AppToProxy,
-            Vec::new(),
+            ProtocolRuleStage::ProxyToUpstream,
+            vec![DocumentCondition::Equals {
+                field: JsonPointer::property("route"),
+                value: DocumentValue::String("decoded".into()),
+            }],
             vec![DocumentAction::RecordMatch],
         )
         .unwrap();
@@ -387,7 +397,7 @@ async fn non_utf8_encode_output_is_rejected_without_mutating_input() {
     let rule = set_string_rule(
         &listener,
         ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(5)),
-        ProtocolRuleStage::AppToProxy,
+        ProtocolRuleStage::ProxyToUpstream,
         1,
         "route",
         Vec::new(),

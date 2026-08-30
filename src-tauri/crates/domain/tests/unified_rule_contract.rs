@@ -1,7 +1,9 @@
 use intercept_proxy_domain::{
-    DocumentAction, DocumentCondition, HttpDocumentRuleContent, HttpRuleContent, ListenerId,
-    MatchCondition, ProtocolPackageId, ProtocolPackageRef, ProxyWorkspace, RuleAction, RuleContent,
-    RuleDefinition, RuleDefinitionDraft, RuleStage, SocketRuleContent,
+    Condition, ConditionTree, DocumentMutation, DocumentPredicate, DropResponseMode,
+    HttpDocumentRuleContent, HttpRuleContent, JsonPointer, ListenerId, MatchCondition,
+    ProtocolPackageId, ProtocolPackageRef, ProxyWorkspace, RuleAction, RuleContent, RuleDefinition,
+    RuleDefinitionDraft, RuleStage, SocketRuleContent, StringOperator, StringPredicate,
+    TerminalAction, UnifiedAction,
 };
 
 fn package() -> ProtocolPackageRef {
@@ -9,6 +11,29 @@ fn package() -> ProtocolPackageRef {
         id: ProtocolPackageId::new("iso8583").expect("package id"),
         version: "1.0.0".parse().expect("version"),
     }
+}
+
+fn http_condition() -> ConditionTree {
+    ConditionTree::Leaf(Condition::Http {
+        condition: MatchCondition::NthHit(1),
+    })
+}
+
+fn document_condition() -> ConditionTree {
+    ConditionTree::Leaf(Condition::Document {
+        path: JsonPointer::parse("/value").expect("pointer"),
+        predicate: DocumentPredicate::String(StringPredicate {
+            operator: StringOperator::Equal,
+            value: "x".into(),
+        }),
+    })
+}
+
+fn document_action() -> UnifiedAction {
+    UnifiedAction::Document(DocumentMutation::Set {
+        path: JsonPointer::parse("/value").expect("pointer"),
+        value: intercept_proxy_domain::DocumentValue::String("y".into()),
+    })
 }
 
 #[test]
@@ -22,8 +47,8 @@ fn unified_rule_serializes_one_tagged_content_variant() {
             stage: RuleStage::ProxyToUpstream,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                conditions: Vec::<MatchCondition>::new(),
-                actions: vec![RuleAction::Delay { milliseconds: 1 }],
+                condition: http_condition(),
+                actions: vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
                 document: None,
                 one_shot: false,
                 hit_count: 0,
@@ -41,7 +66,7 @@ fn unified_rule_serializes_one_tagged_content_variant() {
 }
 
 #[test]
-fn application_boundary_http_stages_reject_ordinary_work_but_accept_pure_document() {
+fn old_message_stages_are_restore_only_and_rejected_for_new_saves() {
     for stage in [RuleStage::AppToProxy, RuleStage::UpstreamToProxy] {
         let draft = |actions| RuleDefinitionDraft {
             name: "HTTP stage contract".into(),
@@ -51,22 +76,23 @@ fn application_boundary_http_stages_reject_ordinary_work_but_accept_pure_documen
             stage,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                conditions: Vec::new(),
+                condition: document_condition(),
                 actions,
-                document: Some(HttpDocumentRuleContent {
-                    package: package(),
-                    conditions: Vec::new(),
-                    actions: vec![DocumentAction::RecordMatch],
-                }),
+                document: Some(HttpDocumentRuleContent { package: package() }),
                 one_shot: false,
                 hit_count: 0,
                 last_hit_at: None,
             }),
         };
-        let error = RuleDefinition::create(draft(vec![RuleAction::Delay { milliseconds: 1 }]), 1)
-            .expect_err("ordinary HTTP work is unavailable at application boundary stages");
+        let error = RuleDefinition::create(
+            draft(vec![UnifiedAction::Http(RuleAction::Delay {
+                milliseconds: 1,
+            })]),
+            1,
+        )
+        .expect_err("old message stages are restore-only until Phase 12 removes their runtime");
         assert_eq!(error.code.as_str(), "RULE_INVALID");
-        RuleDefinition::create(draft(Vec::new()), 1).expect("pure Document remains valid");
+        assert!(RuleDefinition::create(draft(vec![document_action()]), 1).is_err());
     }
 }
 
@@ -82,13 +108,12 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
                 stage,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    conditions: Vec::new(),
-                    actions: vec![RuleAction::Delay { milliseconds: 1 }],
-                    document: Some(HttpDocumentRuleContent {
-                        package: package(),
-                        conditions: Vec::new(),
-                        actions: vec![DocumentAction::RecordMatch],
-                    }),
+                    condition: ConditionTree::All(vec![http_condition(), document_condition()]),
+                    actions: vec![
+                        UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 }),
+                        document_action(),
+                    ],
+                    document: Some(HttpDocumentRuleContent { package: package() }),
                     one_shot: false,
                     hit_count: 0,
                     last_hit_at: None,
@@ -101,6 +126,113 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
 }
 
 #[test]
+fn http_without_document_binding_rejects_recursive_document_conditions_and_actions_on_save() {
+    let nested_document_condition = ConditionTree::All(vec![ConditionTree::Any(vec![
+        http_condition(),
+        document_condition(),
+    ])]);
+    let draft = |condition, actions| RuleDefinitionDraft {
+        name: "HTTP without Document".into(),
+        enabled: true,
+        priority: 5,
+        listener_id: ListenerId::new(),
+        stage: RuleStage::ProxyToUpstream,
+        content: RuleContent::Http(HttpRuleContent {
+            description: String::new(),
+            condition,
+            actions,
+            document: None,
+            one_shot: false,
+            hit_count: 0,
+            last_hit_at: None,
+        }),
+    };
+
+    assert!(
+        RuleDefinition::create(
+            draft(
+                nested_document_condition,
+                vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
+            ),
+            1,
+        )
+        .is_err()
+    );
+    assert!(RuleDefinition::create(draft(http_condition(), vec![document_action()]), 1).is_err());
+
+    let listener_id = ListenerId::new();
+    let mut rule = RuleDefinition::create(
+        RuleDefinitionDraft {
+            listener_id,
+            ..draft(
+                http_condition(),
+                vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
+            )
+        },
+        1,
+    )
+    .expect("valid HTTP-only rule");
+    assert!(
+        rule.update(
+            rule.revision(),
+            RuleDefinitionDraft {
+                listener_id,
+                ..draft(document_condition(), vec![document_action()])
+            },
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn socket_save_rejects_every_terminal_variant_until_socket_capabilities_define_one() {
+    let terminals = vec![
+        TerminalAction::RejectTlsHandshake,
+        TerminalAction::DisconnectBeforeUpstream,
+        TerminalAction::UpstreamConnectTimeout { milliseconds: 1 },
+        TerminalAction::UpstreamWriteTimeout { milliseconds: 1 },
+        TerminalAction::UpstreamReadTimeout { milliseconds: 1 },
+        TerminalAction::DropUpstreamResponse {
+            mode: DropResponseMode::ReadCompleteResponse,
+        },
+        TerminalAction::MockResponse {
+            status: 200,
+            headers: Vec::new(),
+            body_bytes: Vec::new(),
+        },
+        TerminalAction::InvalidJson {
+            body_bytes: b"{".to_vec(),
+        },
+        TerminalAction::IncorrectContentLength { delta: 1 },
+        TerminalAction::TruncateResponse { bytes: 0 },
+        TerminalAction::DisconnectDuringUpstreamWrite { after_bytes: 0 },
+        TerminalAction::DisconnectDuringDownstreamWrite { after_bytes: 0 },
+    ];
+
+    for terminal in terminals {
+        let result = RuleDefinition::create(
+            RuleDefinitionDraft {
+                name: "Socket terminal".into(),
+                enabled: true,
+                priority: 0,
+                listener_id: ListenerId::new(),
+                stage: RuleStage::ProxyToUpstream,
+                content: RuleContent::Socket(SocketRuleContent {
+                    package: package(),
+                    condition: document_condition(),
+                    actions: vec![UnifiedAction::Terminal(terminal.clone())],
+                }),
+            },
+            1,
+        );
+        assert!(
+            result.is_err(),
+            "Socket accepted terminal variant {terminal:?}"
+        );
+    }
+}
+
+#[test]
 fn listener_and_content_kind_are_immutable_after_creation() {
     let listener_id = ListenerId::new();
     let mut rule = RuleDefinition::create(
@@ -109,11 +241,11 @@ fn listener_and_content_kind_are_immutable_after_creation() {
             enabled: true,
             priority: 0,
             listener_id,
-            stage: RuleStage::AppToProxy,
+            stage: RuleStage::ProxyToUpstream,
             content: RuleContent::Socket(SocketRuleContent {
                 package: package(),
-                conditions: Vec::<DocumentCondition>::new(),
-                actions: vec![DocumentAction::RecordMatch],
+                condition: document_condition(),
+                actions: vec![document_action()],
             }),
         },
         1,
@@ -128,11 +260,11 @@ fn listener_and_content_kind_are_immutable_after_creation() {
                 enabled: true,
                 priority: 0,
                 listener_id: ListenerId::new(),
-                stage: RuleStage::AppToProxy,
+                stage: RuleStage::ProxyToUpstream,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    conditions: Vec::new(),
-                    actions: Vec::new(),
+                    condition: http_condition(),
+                    actions: vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
                     document: None,
                     one_shot: false,
                     hit_count: 0,

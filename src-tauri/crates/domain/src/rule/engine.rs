@@ -154,7 +154,6 @@ impl RuleEngine {
             (
                 order.get(&rule.id).copied().unwrap_or(usize::MAX),
                 rule.priority,
-                rule.created_order,
                 rule.id,
             )
         });
@@ -230,7 +229,7 @@ impl RuleEngine {
     #[must_use]
     pub fn conflict_warnings(&self) -> Vec<RuleConflictWarning> {
         let mut sorted: Vec<&Rule> = self.rules.iter().filter(|rule| rule.enabled).collect();
-        sorted.sort_by_key(|rule| (rule.priority, rule.created_order, rule.id));
+        sorted.sort_by_key(|rule| (rule.priority, rule.id));
         let mut warnings = Vec::new();
         for (index, higher) in sorted.iter().enumerate() {
             if !higher.actions.iter().any(RuleAction::is_terminal) {

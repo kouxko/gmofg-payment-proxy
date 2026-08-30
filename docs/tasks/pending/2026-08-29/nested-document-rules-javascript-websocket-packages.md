@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-08-30 08:49:12 +08:00`
+- 最后更新时间：`2026-08-30 11:04:03 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -354,7 +354,12 @@ result: "<HTML string>"
 - `2026-08-30 06:30:07 +08:00`：checker 正控继续发现过宽误报：无关 filters flatten、注释/字符串 Phantom Manifest、非 Serde 内部同字段 struct 均不应成为 wire owner。精确 RED 后，扫描先词法屏蔽 Rust comments/string literals，只接受 derive/manual impl 证明的 Serialize/Deserialize eligibility，按方向解析 rename/alias/skip，并以 visited set 递归合并本地 flattened type 的有效字段；仅真实形成 `api/kind/package/document` 才拒绝。非 Serde `ProtocolManifest` 的旧 Phase7 Manifest allowlist 被判 stale 并删除，不改变旧 TOML runtime。fresh checker 18/18、Phase4 Rust 13/13、TS 7/7、lint/source-size/typecheck/fmt/diff PASS；状态仍 `RECHECK_PENDING / ALF blocked`。
 - `2026-08-30 06:39:29 +08:00`：最终 manual Serde P1 以三个 RED/正控关闭：声明 `metadata/payload` 但 custom Serialize 发出四个 Manifest key、custom Deserialize/Visitor 接受四个 key 均须拒绝；声明字段看似 Manifest 但 manual Serialize 只输出 harmless string 必须通过。checker 使用去字符串结构视图定位 impl，并从保留字面量的同索引视图提取 `serialize_field/entry`、Deserialize fields const 与关联 Visitor match keys；manual owner 只按实际 wire key 集合判定，同时修复 lifetime `'de` 与 char literal 词法区分。fresh checker 21/21、Phase4 Rust 13/13、TS 7/7、lint/source-size/typecheck/fmt/diff PASS；状态保持 `RECHECK_PENDING / ALF blocked`。
 - `2026-08-30 08:49:12 +08:00`：G045 最终独立 Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`，P0=0、P1=0、P2=0。历史 132/133 ALF timeout 保留；用户授权 exact b171 test binary（SHA-256 `c7dc870daca6f4f86eeebe29270ef65d4f61eab70b943b55cd994527544143aa`）并允许 firewall 后，短函数名 `--exact` 首次发现 0 tests，明确为 `NOT EVIDENCE`；完整模块名、`--all-features`、`--test-threads=1` 定向 1/1 PASS。最终独立十门 checkpoint exit 0，前端 63 files/541 tests、顶层 Rust 133/133、workspace all-target/all-feature exit 0；Phase4 21/21+13/13+7/7、Domain 108/108、generated SHA `897edb991e8bd7efc6d114ca4eb1c6b67eb162574e0bb764ebed7a93e39c3c9e`、七组 evidence byte copies 与 diff-check PASS。G045 可创建 rollback checkpoint；TASK 总体仍为进行中。
-- 下一步：创建 G045 / Phase 4 rollback checkpoint，并继续 TASK-20260829-002 后续计划阶段。
+- `2026-08-30 11:04:03 +08:00`：G046 / Phase 5 以真实 Cargo-discovered RED 开始，随后建立唯一 `ConditionTree` / `DocumentPredicate` / `UnifiedAction` / `UnifiedRuleProgram` owner。权威 `RuleContent` 切换为非空递归 AND/OR tree 与单一有序 actions；Document 严格 mutation 留在 Domain，HTTP 组合不污染 Document。新保存消息规则只允许 `ProxyToUpstream` / `ProxyToApp`，旧 enum/runtime 仅按 Phase 12 restore 边界保留，不增加兼容 alias 或双模型。
+- `2026-08-30 11:04:03 +08:00`：Phase5 checker 真实发现 Rust7/TS4，mutation/正控 8/8；Domain 115/115、Application 497/497、Infrastructure 690/690、Host 33/33、Tauri 133/133、bindings deterministic、typecheck/lint/architecture/source-size/fmt/workspace strict Clippy 与 `git diff --check` 全部 fresh PASS。完整十门 checkpoint exit 0，前端 63 files/542 tests、Rust workspace all-target/all-feature 0 failed。正式证据：[phase5-unified-rule-domain](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase5-unified-rule-domain/README.md)。当前仅为 `LOCAL GREEN / RECHECK PENDING`，`checkpoint_ready=false`；未提前实现 Phase6 transaction/lifecycle commit、Phase10/11 pipeline/codec、Phase12 删除旧 runtime/enum或 Phase15 完整 editor。
+- `2026-08-30 11:57:30 +08:00`：G046 初始独立 Verifier 为 `FAILED`（P0=0/P1=3/P2=1），独立 review 为 `REQUEST CHANGES`（P1=6/P2=1）。修复 RED/变异覆盖 JS Number `-0 == +0`、Socket 无 terminal capability、HTTP 无 Document binding、删除未确认 64/1024/64 规则内硬上限、`priority + rule_id` 唯一排序，以及实际 Cargo/Vitest discovery、全 production comparator helper、真实 serde/Specta owner、generated 完整 golden/SHA 与精确 Phase12 allowlist。fresh checker15/15、Cargo9/TS4、Domain119/119、Application497/497、Infrastructure690/690、Host33/33、Tauri133/133，bindings/typecheck/lint/architecture/source-size/fmt/strict Clippy/diff 均 PASS。
+- `2026-08-30 11:57:30 +08:00`：首次十门在第7门出现既有 `protocol-package-dialog` 焦点时序失败（541/542），后3门未运行；完整名定向 3/3 PASS，未改产品/断言/超时/重试。第二次完整十门 exit 0，前端542/542、Rust workspace 0 failed。Phase5 HTTP action仍仅收集，Phase6 transaction保持 `NOT_RUN`。当前为 `REPAIR LOCAL GREEN / RECHECK PENDING`，`checkpoint_ready=false`。
+- `2026-08-30 12:16:01 +08:00`：G046 最终独立 reviewer 结论为 `APPROVE`，最终独立 verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`；P0=0、P1=0、P2=0，`blockers=[]`。初版 `FAILED` / `REQUEST CHANGES`、全部 findings/repairs、首次焦点 flake 与后续 PASS、完整十门 exit 0 均保留。Phase6/10/11/12/15、push/CI/Release 继续 `NOT_RUN`；TASK 总体仍为进行中。
+- 下一步：创建 Phase 5 rollback checkpoint，随后进入 G047 / Phase 6。
 
 ## 修改文件
 
@@ -373,6 +378,7 @@ result: "<HTML string>"
 - `src-tauri/crates/package-contract/`、`src-tauri/src/commands/mod.rs`、`src/generated/rust-types.ts`：Phase 4 唯一 Rust package wire crate 与确定性 generated TS。
 - `src/lib/package-contract.ts`、对应 tests、Phase 4 scripts/fixtures/MCP snapshot：unknown-boundary guard、五目标精确 checker 与独立 parity fixture。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/`：Phase 4 RED/GREEN、合同资源、门禁结果与当前非 loopback MCP 环境阻断证据。
+- `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase5-unified-rule-domain/`：Phase 5 条件树、谓词、统一动作、排序/working-state/terminal、跨层消费者、mutation checker 与完整十门证据。
 
 ## 附加文件
 
@@ -394,6 +400,7 @@ result: "<HTML string>"
 - Phase 2 正式证据：[phase2-development-database-recreate](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/README.md)。
 - Phase 3 正式证据：[phase3-recursive-document-contract](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase3-recursive-document-contract/README.md)。
 - Phase 4 正式证据：[phase4-package-contract](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/README.md)。
+- Phase 5 正式证据：[phase5-unified-rule-domain](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase5-unified-rule-domain/README.md)。
 
 ## 验收结果
 
@@ -401,7 +408,8 @@ result: "<HTML string>"
 - `APPROVE / CHECKPOINT READY`：G043 / Phase 2 的显式数据库启动 policy、单事务开发重建、Tauri debug/Release composition、双启动 fixture 和双层 release blocker 已在早期 Verifier FAILED 与 build 绕过 P1 后完成修复；独立 delta 复审 P0/P1/P2=0，可创建 rollback checkpoint。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G044 / Phase 3 初版独立 Verifier findings 与最终 scalar-text P2 均已修复；独立 fresh 十门全部 PASS，P0=0、P1=0、P2=0，无剩余阻断，可创建 rollback checkpoint。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G045 / Phase 4 全部 review findings 已修复；firewall permitted 后完整名定向 1/1 与独立十门 checkpoint 全部 PASS，Verifier P0/P1/P2=0，可创建 rollback checkpoint。历史 132/133 ALF timeout 与短名 `--exact` 0 tests 继续保留且不作为成功证据。
-- `NOT_RUN`：Phase 5 至 Phase 18 产品合同替换、真实链路、打包与最终任务验收尚未执行。
+- `VERIFIED / APPROVED / CHECKPOINT READY`：G046 / Phase 5 初始 Verifier/Review findings 已按 RED→GREEN 修复，领域合同、即时跨层消费者、checker 与完整十门均 fresh PASS；最终 reviewer/verifier P0/P1/P2=0、`blockers=[]`，可创建 Phase 5 rollback checkpoint。
+- `NOT_RUN`：Phase 6 至 Phase 18 产品合同替换、真实链路、打包与最终任务验收尚未执行。
 
 ## 测试结果
 
@@ -428,6 +436,10 @@ result: "<HTML string>"
 - `NOT EVIDENCE`：firewall permitted 后第一次仅用短函数名配合 `--exact`，实际发现 0 tests；未作为定向验证成功依据。
 - `PASS`：完整模块测试名配合 `--all-features -- --exact --nocapture --test-threads=1`，non-loopback 目标用例 1/1 PASS；使用 exact executable `intercept_proxy-b171a3f7a5c9b203`，SHA-256 `c7dc870daca6f4f86eeebe29270ef65d4f61eab70b943b55cd994527544143aa`。
 - `PASS`：G045 最终独立 `pnpm check:task-20260829-002:checkpoint` exit 0；前端 63 files/541 tests、顶层 Rust 133/133、workspace all-target/all-feature exit 0，Verifier P0=0、P1=0、P2=0。
+- `PASS`：G046 修复后 `pnpm test:task-20260829-002:phase5`；checker mutation/正控 15/15、Cargo 实际发现 Rust9/TS4、Domain 119/119、最小 TS 4/4。
+- `PASS`：G046 affected full：Application 497/497、Infrastructure 690/690、Host 33/33、Tauri 133/133；bindings fresh/deterministic、architecture、source-size、lint、typecheck、fmt、workspace strict Clippy 与 `git diff --check` 全部通过。
+- `PASS`：G046 `pnpm check:task-20260829-002:checkpoint` exit 0；前端 63 files/542 tests，Rust workspace all-target/all-feature 0 failed。
+- `OBSERVED THEN PASS`：G046 修复后首次十门在第7门焦点时序失败（541/542），完整名定向 3/3 PASS；完整十门随后从头复跑 exit 0。失败、未运行后门和复跑均保留在 Phase5 evidence。
 - `PASS`：`cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure -p intercept-proxy-host -p intercept-proxy --all-targets --all-features -- -D warnings`。
 - `EXPECTED FAIL / NOT_RELEASE_READY`：`pnpm check:task-20260829-002:phase2-release-ready` exit 1，独立发现 1 个临时 reset marker 与 32 个临时 reset contract 引用；该扫描只用于阻止发布，不加入 Phase 2 日常 GREEN checkpoint。
 - `EXPECTED FAIL / BUILD BLOCKED`：`pnpm tauri:build` exit 1，在 Android companion build 与 `tauri build` 前由同一 release checker 阻断。

@@ -228,7 +228,7 @@
         "priority": 11,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Intermittent": {
@@ -253,7 +253,7 @@
         "priority": 12,
         "listener_alias": "http-entry",
         "stage": "tls_handshake",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": "RejectTlsHandshake"
@@ -269,7 +269,7 @@
         "priority": 13,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": "DisconnectBeforeUpstream"
@@ -285,7 +285,7 @@
         "priority": 14,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -305,7 +305,7 @@
         "priority": 15,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -325,7 +325,7 @@
         "priority": 16,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -345,7 +345,7 @@
         "priority": 17,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -365,7 +365,7 @@
         "priority": 18,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -385,7 +385,7 @@
         "priority": 19,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -415,7 +415,7 @@
         "priority": 20,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -437,7 +437,7 @@
         "priority": 21,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -457,7 +457,7 @@
         "priority": 22,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -477,7 +477,7 @@
         "priority": 23,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [],
+        "conditions": [{"NthHit": 1}],
         "actions": [
           {
             "Terminal": {
@@ -499,7 +499,7 @@
           "id": "au-eftex",
           "version": "1.1.0"
         },
-        "stage": "app_to_proxy",
+      "stage": "proxy_to_upstream",
         "conditions": [
           {
             "operator": "equals",
@@ -510,14 +510,6 @@
             "operator": "equals",
             "field": "/approved",
             "value": true
-          },
-          {
-            "operator": "equals",
-            "field": "/raw",
-            "value": [
-              65,
-              66
-            ]
           }
         ],
         "actions": [

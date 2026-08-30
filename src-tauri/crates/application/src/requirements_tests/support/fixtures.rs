@@ -309,7 +309,6 @@ pub(in crate::requirements_tests) fn scripted_workspace(
                     document_equals("text", DocumentValue::String("sale".into())),
                     document_equals("amount", DocumentValue::integer(1234).unwrap()),
                     document_equals("approved", DocumentValue::Boolean(true)),
-                    document_equals("raw", DocumentValue::byte_array(vec![0, 1, 2, 255])),
                 ],
                 vec![
                     DocumentAction::RecordMatch,

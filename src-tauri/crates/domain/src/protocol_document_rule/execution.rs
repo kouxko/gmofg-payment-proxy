@@ -15,7 +15,7 @@ use crate::{
 /// 已冻结、可安全跨连接共享的 协议 Document 规则程序。
 ///
 /// Program 在构造时保存精确 Listener、协议包版本、Schema 元数据和方向绑定，并把规则按
-/// `(priority, created_order, rule_id)` 排序。字段均不可从外部修改，因此同一 Program 可由
+/// `(priority, rule_id)` 排序；`created_order` 只作为 UI/history 元数据。字段均不可从外部修改，因此同一 Program 可由
 /// 多个连接并发调用；每次执行的唯一可变状态都属于传入的 owned [`Document`]。
 #[derive(Clone)]
 pub struct ProtocolDocumentRuleProgram {

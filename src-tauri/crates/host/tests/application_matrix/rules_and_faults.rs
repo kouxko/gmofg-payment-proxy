@@ -110,9 +110,17 @@ async fn exercise_unified_rule_lifecycle(
         panic!("HTTP rule draft expected");
     };
     http_content.description = "Application facade matrix".into();
-    http_content.actions = vec![application
+    http_content.condition = intercept_proxy_application::ConditionTree::from_http_conditions(
+        vec![application
+            .rule_definition_condition_draft(
+                intercept_proxy_application::RuleConditionKind::NthHit,
+                MessageStage::Request,
+            )
+            .expect("Rust-owned NthHit condition")],
+    );
+    http_content.actions = vec![intercept_proxy_application::UnifiedAction::from(application
         .rule_definition_action_draft(RuleActionKind::Delay, MessageStage::Request)
-        .expect("Rust-owned delay action")];
+        .expect("Rust-owned delay action"))];
     let saved_rule = application
         .rule_definition_save(input)
         .await

@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    DocumentAction, DocumentCondition, DomainError, ErrorCode, ListenerId, MatchCondition,
-    MessageStage, ProtocolDirection, ProtocolPackageRef, Revision, RuleAction, RuleDraft, RuleId,
-    validate_document_rule_content_structure, validate_rule_draft,
+    Condition, ConditionTree, DomainError, ErrorCode, ListenerId, MatchCondition, MessageStage,
+    ProtocolDirection, ProtocolPackageRef, Revision, RuleAction, RuleDraft, RuleId,
+    RuleProgramEntry, UnifiedAction, validate_rule_draft,
 };
 
 #[derive(
@@ -40,16 +40,14 @@ impl RuleStage {
 #[serde(deny_unknown_fields)]
 pub struct HttpDocumentRuleContent {
     pub package: ProtocolPackageRef,
-    pub conditions: Vec<DocumentCondition>,
-    pub actions: Vec<DocumentAction>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct HttpRuleContent {
     pub description: String,
-    pub conditions: Vec<MatchCondition>,
-    pub actions: Vec<RuleAction>,
+    pub condition: ConditionTree,
+    pub actions: Vec<UnifiedAction>,
     pub document: Option<HttpDocumentRuleContent>,
     pub one_shot: bool,
     pub hit_count: u64,
@@ -60,8 +58,8 @@ pub struct HttpRuleContent {
 #[serde(deny_unknown_fields)]
 pub struct SocketRuleContent {
     pub package: ProtocolPackageRef,
-    pub conditions: Vec<DocumentCondition>,
-    pub actions: Vec<DocumentAction>,
+    pub condition: ConditionTree,
+    pub actions: Vec<UnifiedAction>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -174,7 +172,7 @@ impl RuleDefinition {
             stage: draft.stage,
             content: draft.content,
         };
-        definition.validate()?;
+        definition.validate_for_save()?;
         Ok(definition)
     }
 
@@ -225,7 +223,7 @@ impl RuleDefinition {
         candidate.priority = draft.priority;
         candidate.stage = draft.stage;
         candidate.content = draft.content;
-        candidate.validate()?;
+        candidate.validate_for_save()?;
         candidate.revision = self.revision.checked_next()?;
         let revision = candidate.revision;
         *self = candidate;
@@ -269,13 +267,26 @@ impl RuleDefinition {
                         "TLS 握手阶段不能执行 HTTP Body Document 规则",
                     ));
                 }
-                validate_http_runtime_content(self, content)?;
-                if let Some(document) = &content.document {
-                    validate_document_rule_content_structure(
-                        &document.conditions,
-                        &document.actions,
-                    )?;
+                if content.document.is_none()
+                    && (content.condition.contains_document_condition()
+                        || content
+                            .actions
+                            .iter()
+                            .any(|action| matches!(action, UnifiedAction::Document(_))))
+                {
+                    return Err(rule_binding_error(
+                        "content.document",
+                        "HTTP 规则未绑定 Document 软件包时不能包含 Document 条件或动作",
+                    ));
                 }
+                validate_http_runtime_content(self, content)?;
+                RuleProgramEntry::new(
+                    self.rule_id,
+                    self.priority,
+                    self.created_order,
+                    content.condition.clone(),
+                    content.actions.clone(),
+                )?;
             }
             RuleContent::Socket(content) => {
                 if self.stage == RuleStage::TlsHandshake {
@@ -284,13 +295,48 @@ impl RuleDefinition {
                         "Socket 消息规则不能使用 TLS 握手阶段",
                     ));
                 }
-                validate_document_rule_content_structure(
-                    &content.conditions,
-                    content.actions.as_slice(),
+                ensure_socket_only(&content.condition, &content.actions)?;
+                RuleProgramEntry::new(
+                    self.rule_id,
+                    self.priority,
+                    self.created_order,
+                    content.condition.clone(),
+                    content.actions.clone(),
                 )?;
             }
         }
         Ok(())
+    }
+
+    /// Validates the persisted rule shape accepted by current create/update operations.
+    ///
+    /// [`Self::restore`] intentionally accepts legacy message stages until Phase 12 so old
+    /// records remain readable. Callers projecting a new save from an existing identity must
+    /// invoke this stricter boundary before persistence.
+    pub fn validate_for_save(&self) -> Result<(), DomainError> {
+        self.validate()?;
+        self.validate_new_save_stage()
+    }
+
+    fn validate_new_save_stage(&self) -> Result<(), DomainError> {
+        match (&self.content, self.stage) {
+            (RuleContent::Http(_), RuleStage::TlsHandshake)
+            | (
+                RuleContent::Http(_) | RuleContent::Socket(_),
+                RuleStage::ProxyToUpstream | RuleStage::ProxyToApp,
+            ) => Ok(()),
+            (
+                RuleContent::Http(_) | RuleContent::Socket(_),
+                RuleStage::AppToProxy | RuleStage::UpstreamToProxy,
+            ) => Err(rule_binding_error(
+                "stage",
+                "新消息规则只允许 proxy_to_upstream 或 proxy_to_app；旧四阶段数据仅保留到 Phase 12 运行时删除",
+            )),
+            (RuleContent::Socket(_), RuleStage::TlsHandshake) => Err(rule_binding_error(
+                "stage",
+                "Socket 消息规则不能使用 TLS 握手阶段",
+            )),
+        }
     }
 
     #[must_use]
@@ -355,7 +401,18 @@ fn validate_http_runtime_content(
     definition: &RuleDefinition,
     content: &HttpRuleContent,
 ) -> Result<(), DomainError> {
-    let has_ordinary_http_work = !content.conditions.is_empty() || !content.actions.is_empty();
+    let mut conditions = Vec::new();
+    collect_http_conditions(&content.condition, &mut conditions);
+    let actions = content
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            UnifiedAction::Http(action) => Some(action.clone()),
+            UnifiedAction::Terminal(action) => Some(RuleAction::Terminal(action.clone())),
+            UnifiedAction::RecordMatch | UnifiedAction::Document(_) => None,
+        })
+        .collect::<Vec<_>>();
+    let has_ordinary_http_work = !conditions.is_empty() || !actions.is_empty();
     if !has_ordinary_http_work && content.document.is_some() {
         return Ok(());
     }
@@ -381,10 +438,38 @@ fn validate_http_runtime_content(
         created_order: definition.created_order,
         channel: None,
         stage,
-        conditions: content.conditions.clone(),
-        actions: content.actions.clone(),
+        conditions,
+        actions,
         one_shot: content.one_shot,
     })
+}
+
+fn collect_http_conditions(tree: &ConditionTree, output: &mut Vec<MatchCondition>) {
+    match tree {
+        ConditionTree::All(children) | ConditionTree::Any(children) => {
+            for child in children {
+                collect_http_conditions(child, output);
+            }
+        }
+        ConditionTree::Leaf(Condition::Http { condition }) => output.push(condition.clone()),
+        ConditionTree::Leaf(Condition::Document { .. }) => {}
+    }
+}
+
+fn ensure_socket_only(tree: &ConditionTree, actions: &[UnifiedAction]) -> Result<(), DomainError> {
+    let mut http = Vec::new();
+    collect_http_conditions(tree, &mut http);
+    if !http.is_empty()
+        || actions
+            .iter()
+            .any(|action| matches!(action, UnifiedAction::Http(_) | UnifiedAction::Terminal(_)))
+    {
+        return Err(rule_binding_error(
+            "content",
+            "Socket 规则不能包含 HTTP 条件、HTTP 动作或尚未声明的终止动作",
+        ));
+    }
+    Ok(())
 }
 
 fn rule_binding_error(field: &str, message: &str) -> DomainError {
@@ -392,12 +477,5 @@ fn rule_binding_error(field: &str, message: &str) -> DomainError {
 }
 
 pub fn sort_rule_definitions(rules: &mut [RuleDefinition]) {
-    rules.sort_by_key(|rule| {
-        (
-            rule.stage(),
-            rule.priority(),
-            rule.created_order(),
-            rule.rule_id(),
-        )
-    });
+    rules.sort_by_key(|rule| (rule.priority(), rule.rule_id()));
 }

@@ -60,6 +60,10 @@ title = "Message"
 
 [properties.message.items]
 type = "number"
+
+[properties.message_kind]
+type = "string"
+title = "Message kind"
 "#;
 
 const SCRIPT: &str = r#"
@@ -71,6 +75,7 @@ fn frame(reader, context) {
 fn decode(origin, context) {
     let result = document::create();
     result.set("/message", origin);
+    result.set("/message_kind", "iso8583");
     result
 }
 

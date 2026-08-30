@@ -34,6 +34,8 @@ vi.mock("@/features/shell/workspace-navigation", () => ({
 
 const httpListener = listener("http-listener", "HTTP Listener", "http");
 const socketListener = listener("socket-listener", "Socket Listener", "socket");
+const httpCondition = { operator: "leaf" as const, children: { source: "http" as const, condition: { Field: { field: "PathOrRequestType" as const, operator: { Equals: "/" } } } } };
+const documentCondition = (path = "/amount", value = 0) => ({ operator: "leaf" as const, children: { source: "document" as const, path, predicate: { type: "number" as const, value: { operator: "equal" as const, value } } } });
 
 function listener(id: string, name: string, kind: "http" | "socket"): ProxyListener {
   return {
@@ -50,7 +52,7 @@ function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): RuleDefini
     rule_id: "http-rule", revision: 3, name: "HTTP combined", enabled: true, priority: 50,
     created_order: 2, listener_id: httpListener.id, stage: "proxy_to_upstream",
     content: { type: "http", value: {
-      description: "headers and body", conditions: [], actions: [], document: null,
+      description: "headers and body", condition: httpCondition, actions: [{ source: "record_match" }], document: null,
       one_shot: false, hit_count: 0, last_hit_at: null,
     } },
     ...overrides,
@@ -63,7 +65,7 @@ function socketRule(): RuleDefinition_Serialize {
     created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app",
     content: { type: "socket", value: {
       package: { id: "iso8583", version: "1.0.0" },
-      conditions: [], actions: [{ type: "record_match" }],
+      condition: documentCondition(), actions: [{ source: "record_match" }],
     } },
   };
 }
@@ -78,8 +80,8 @@ const httpContext: RuleEditorContext = {
     new_rule_draft: { rule_id: null, expected_revision: null, draft: {
       name: "新建 HTTP 规则", enabled: true, priority: 100, listener_id: httpListener.id,
       stage: "proxy_to_upstream", content: { type: "http", value: {
-        description: "", conditions: [], actions: [], one_shot: false, hit_count: 0, last_hit_at: null,
-        document: { package: { id: "iso8583", version: "1.0.0" }, conditions: [], actions: [] },
+        description: "", condition: httpCondition, actions: [{ source: "record_match" }], one_shot: false, hit_count: 0, last_hit_at: null,
+        document: { package: { id: "iso8583", version: "1.0.0" } },
       } },
     } },
   }] } },
@@ -92,7 +94,7 @@ const socketContext: RuleEditorContext = {
     new_rule_draft: { rule_id: null, expected_revision: null, draft: {
       name: "新建 Socket 规则", enabled: true, priority: 100, listener_id: socketListener.id,
       stage: "proxy_to_app", content: { type: "socket", value: {
-        package: { id: "iso8583", version: "1.0.0" }, conditions: [], actions: [],
+        package: { id: "iso8583", version: "1.0.0" }, condition: documentCondition(), actions: [{ source: "record_match" }],
       } },
     } },
   }] } },
@@ -125,7 +127,7 @@ describe("unified rule workspace", () => {
           type: "http",
           value: {
             ...httpContext.content.value.stages[0].new_rule_draft.draft.content.value,
-            actions: [{ Terminal: { MockResponse: { status: 201, headers: [["content-type", "application/json"]], body_bytes: [123, 125] } } }],
+            actions: [{ source: "terminal", value: { MockResponse: { status: 201, headers: [["content-type", "application/json"]], body_bytes: [123, 125] } } }],
           },
         },
       },
@@ -225,8 +227,8 @@ describe("unified rule workspace", () => {
     expect(commandMocks.ruleDefinitionActionDraft).toHaveBeenCalledWith("set_header", "request");
     expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledWith(expect.objectContaining({
       draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({
-        conditions: [{ Field: { field: "PathOrRequestType", operator: { Equals: "" } } }],
-        actions: [{ SetHeader: { name: "x-proxy-test", value: "" } }],
+        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "" } } } } }] },
+        actions: [{ source: "record_match" }, { source: "http", value: { SetHeader: { name: "x-proxy-test", value: "" } } }],
       }) } }),
     }));
   });
@@ -253,7 +255,7 @@ describe("unified rule workspace", () => {
     await user.click(screen.getByRole("button", { name: "保存规则" }));
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       rule_id: secondRule.rule_id,
-      draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ conditions: [] }) } }),
+      draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ condition: httpCondition }) } }),
     }));
   });
 
@@ -280,8 +282,8 @@ describe("unified rule workspace", () => {
 
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({
-        conditions: [{ Field: { field: "PathOrRequestType", operator: { Equals: "/pay" } } }],
-        actions: [{ SetHeader: { name: "x-latest", value: "1" } }],
+        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "/pay" } } } } }] },
+        actions: [{ source: "record_match" }, { source: "http", value: { SetHeader: { name: "x-latest", value: "1" } } }],
       }) } }),
     }));
   });
@@ -319,14 +321,16 @@ describe("unified rule workspace", () => {
     expect(commandMocks.ruleParseDocumentValue).toHaveBeenCalledTimes(2);
     expect(commandMocks.ruleParseDocumentValue).toHaveBeenCalledWith("number", "0");
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
-      draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ document: expect.objectContaining({
-        conditions: [{ operator: "equals", field: "/amount", value: 0 }],
+      draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({
+        document: { package: { id: "iso8583", version: "1.0.0" } },
+        condition: { operator: "all", children: [httpCondition, documentCondition()] },
         actions: [
-          { type: "set_field", field: "/amount", value: 0 },
-          { type: "clear_field", field: "/amount" },
-          { type: "record_match" },
+          { source: "record_match" },
+          { source: "document", value: { type: "set", path: "/amount", value: 0 } },
+          { source: "document", value: { type: "clear", path: "/amount" } },
+          { source: "record_match" },
         ],
-      }) }) } }),
+      }) } }),
     }));
   });
 
@@ -344,11 +348,11 @@ describe("unified rule workspace", () => {
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       rule_id: "socket-rule",
       draft: expect.objectContaining({ content: { type: "socket", value: expect.objectContaining({
-        conditions: [{ operator: "equals", field: "/amount", value: 0 }],
+        condition: { operator: "all", children: [documentCondition(), documentCondition()] },
         actions: [
-          { type: "record_match" },
-          { type: "set_field", field: "/amount", value: 0 },
-          { type: "clear_field", field: "/amount" },
+          { source: "record_match" },
+          { source: "document", value: { type: "set", path: "/amount", value: 0 } },
+          { source: "document", value: { type: "clear", path: "/amount" } },
         ],
       }) } }),
     }));
@@ -357,7 +361,7 @@ describe("unified rule workspace", () => {
   it("blocks an HTTP stage whose Rust capabilities cannot edit the retained payload", async () => {
     const rule = httpRule({
       content: { type: "http", value: {
-        description: "headers and body", conditions: [], actions: [{ SetHeader: { name: "x-test", value: "1" } }],
+        description: "headers and body", condition: httpCondition, actions: [{ source: "http", value: { SetHeader: { name: "x-test", value: "1" } } }],
         document: null, one_shot: false, hit_count: 0, last_hit_at: null,
       } },
     });
@@ -376,7 +380,7 @@ describe("unified rule workspace", () => {
 
   it("disables save when Rust no longer declares the selected stage payload compatible", async () => {
     const rule = httpRule({ content: { type: "http", value: {
-      description: "", conditions: [], actions: [{ SetHeader: { name: "x-test", value: "1" } }],
+      description: "", condition: httpCondition, actions: [{ source: "http", value: { SetHeader: { name: "x-test", value: "1" } } }],
       document: null, one_shot: false, hit_count: 0, last_hit_at: null,
     } } });
     const context = httpContextWithSecondStage([]);
@@ -394,8 +398,8 @@ describe("unified rule workspace", () => {
 
   it("switches only to a compatible stage and preserves the complete HTTP payload", async () => {
     const retainedContent = {
-      description: "preserve me", conditions: [{ Field: { field: "PathOrRequestType" as const, operator: { Equals: "/pay" } } }],
-      actions: [{ SetHeader: { name: "x-test", value: "1" } }], document: null,
+      description: "preserve me", condition: { operator: "leaf" as const, children: { source: "http" as const, condition: { Field: { field: "PathOrRequestType" as const, operator: { Equals: "/pay" } } } } },
+      actions: [{ source: "http" as const, value: { SetHeader: { name: "x-test", value: "1" } } }], document: null,
       one_shot: true, hit_count: 7, last_hit_at: "2026-08-28T00:00:00Z",
     };
     const rule = httpRule({ content: { type: "http", value: retainedContent } });
