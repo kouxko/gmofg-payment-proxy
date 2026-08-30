@@ -13,9 +13,9 @@ use intercept_proxy_application::{
     RuleDefinitionSaveInput, UiTone,
 };
 use intercept_proxy_domain::{
-    DropResponseMode, HttpRuleContent, JitterScope, ListenerId, MatchCondition, MatchField,
-    MatchOperator, Revision, RuleAction, RuleContent, RuleId, RuleStage, TerminalAction,
-    TrafficDirection,
+    Condition, DropResponseMode, HttpRuleContent, JitterScope, ListenerId, MatchCondition,
+    MatchField, MatchOperator, Revision, RuleAction, RuleContent, RuleId, RuleStage,
+    TerminalAction, TrafficDirection,
 };
 use intercept_proxy_product_api::{BodyCodec, ProductFaultTemplate, ProductLabels, ProductProfile};
 use serde_json::Value;
@@ -77,16 +77,17 @@ impl FaultServicePort for FaultServiceAdapter {
                 priority: configuration.priority,
                 listener_id,
                 stage: rule_stage(stage)?,
+                one_shot: configuration.one_shot,
                 content: RuleContent::Http(HttpRuleContent {
                     description: format!("fault:{}", definition.view.template_id),
-                    condition: intercept_proxy_domain::ConditionTree::from_http_conditions(
-                        conditions,
+                    condition: intercept_proxy_domain::ConditionTree::All(
+                        conditions
+                            .into_iter()
+                            .map(intercept_proxy_domain::ConditionTree::Leaf)
+                            .collect(),
                     ),
                     actions: vec![intercept_proxy_domain::UnifiedAction::from(action)],
                     document: None,
-                    one_shot: configuration.one_shot,
-                    hit_count: 0,
-                    last_hit_at: None,
                 }),
             },
         })
@@ -105,7 +106,7 @@ impl FaultServicePort for FaultServiceAdapter {
             template_name: template_name.into(),
             target_summary: format!("{} 个条件", content.condition.leaf_count()),
             priority: rule.priority(),
-            hit_count: content.hit_count,
+            hit_count: rule.lifecycle().hit_count,
             enabled: rule.enabled(),
             status_text: if rule.enabled() {
                 "活动中".into()
@@ -137,7 +138,7 @@ fn rule_stage(stage: MessageStage) -> AppResult<RuleStage> {
 fn configuration_conditions(
     configuration: &FaultConfigurationDraft,
     stage: MessageStage,
-) -> AppResult<Vec<MatchCondition>> {
+) -> AppResult<Vec<Condition>> {
     if stage == MessageStage::TlsHandshake {
         let mut field_errors = BTreeMap::new();
         if configuration
@@ -169,7 +170,11 @@ fn configuration_conditions(
         }
         return Ok(configuration
             .nth_hit
-            .map(|nth| vec![MatchCondition::NthHit(u64::from(nth))])
+            .map(|nth| {
+                vec![Condition::NthHit {
+                    count: u64::from(nth),
+                }]
+            })
             .unwrap_or_default());
     }
 
@@ -179,23 +184,31 @@ fn configuration_conditions(
         .as_ref()
         .filter(|value| !value.is_empty())
     {
-        conditions.push(MatchCondition::Field {
-            field: MatchField::TerminalIp,
-            operator: MatchOperator::Equals(terminal.clone()),
-        });
+        conditions.push(
+            MatchCondition::Field {
+                field: MatchField::TerminalIp,
+                operator: MatchOperator::Equals(terminal.clone()),
+            }
+            .into(),
+        );
     }
     if let Some(target) = configuration
         .target
         .as_ref()
         .filter(|value| !value.is_empty())
     {
-        conditions.push(MatchCondition::Field {
-            field: MatchField::PathOrRequestType,
-            operator: MatchOperator::Contains(target.clone()),
-        });
+        conditions.push(
+            MatchCondition::Field {
+                field: MatchField::PathOrRequestType,
+                operator: MatchOperator::Contains(target.clone()),
+            }
+            .into(),
+        );
     }
     if let Some(nth) = configuration.nth_hit {
-        conditions.push(MatchCondition::NthHit(u64::from(nth)));
+        conditions.push(Condition::NthHit {
+            count: u64::from(nth),
+        });
     }
     Ok(conditions)
 }

@@ -204,9 +204,12 @@ async fn cross_workspace_existing_http_rule_id_fails_with_exact_code() {
     let existing = other.rule_definitions[index].clone();
     other.rule_definitions[index] = intercept_proxy_domain::RuleDefinition::restore(
         DomainRuleId::from_uuid(uuid::Uuid::new_v4()),
-        existing.revision(),
         existing.to_draft(),
-        existing.created_order(),
+        intercept_proxy_domain::RuleDefinitionRestoreSnapshot {
+            revision: existing.revision(),
+            created_order: existing.created_order(),
+            lifecycle: existing.lifecycle().clone(),
+        },
     )
     .unwrap();
     let other = store.import_workspace(other).await.unwrap();

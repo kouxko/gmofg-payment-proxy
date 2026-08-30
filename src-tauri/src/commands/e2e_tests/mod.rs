@@ -224,6 +224,7 @@ fn iso_local_responder_crosses_real_ipc_sqlite_rhai_tcp_and_capture() {
                     priority: 10,
                     listener_id: listener.id,
                     stage: RuleStage::ProxyToApp,
+                    one_shot: false,
                     content: RuleContent::Socket(SocketRuleContent {
                         package: package.clone(),
                         condition: ConditionTree::from_document_conditions(vec![DocumentCondition::Equals {

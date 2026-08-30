@@ -13,10 +13,7 @@ async fn non_utf8_encode_failure_keeps_one_shot_runtime_metadata_unchanged() {
     let (snapshot, mut workspace) = snapshot(NON_UTF8_ENCODE_SCRIPT, &listener, vec![rule]);
     let definition = &mut workspace.rule_definitions[0];
     let mut draft = definition.to_draft();
-    let RuleContent::Http(content) = &mut draft.content else {
-        panic!("HTTP rule expected");
-    };
-    content.one_shot = true;
+    draft.one_shot = true;
     definition.update(definition.revision(), draft).unwrap();
     let runtime_rules = workspace.http_runtime_rules().unwrap();
     let original_rule_revision = runtime_rules[0].revision;
@@ -155,7 +152,7 @@ async fn joint_document_state_is_isolated_by_connection_and_cleanup() {
 }
 
 #[tokio::test]
-async fn revision_conflict_retries_joint_document_from_checkpoint() {
+async fn revision_conflict_keeps_joint_message_and_lifecycle_uncommitted() {
     let listener = http_listener();
     let rule = set_string_rule(
         &listener,
@@ -210,16 +207,18 @@ async fn revision_conflict_retries_joint_document_from_checkpoint() {
     )
     .unwrap();
 
-    pipeline
+    let error = pipeline
         .apply_request_policy(&connection_context, &mut message)
         .await
-        .expect("retry succeeds");
+        .expect_err("commit conflict is not retried");
 
-    assert_eq!(message.body, Bytes::from_static(b"wire|changed"));
-    assert_eq!(repository.commit_attempts.load(Ordering::Acquire), 2);
+    assert_eq!(error.code, "REVISION_CONFLICT");
+    assert_eq!(message.body, Bytes::from_static(b"wire"));
+    assert_eq!(repository.commit_attempts.load(Ordering::Acquire), 1);
     let persisted = repository.snapshot.lock();
-    assert_eq!(persisted.rules[0].hit_count, 1);
-    assert_eq!(persisted.collection_revision, 9);
+    assert_eq!(persisted.rules[0].hit_count, 0);
+    assert!(persisted.rules[0].enabled);
+    assert_eq!(persisted.collection_revision, 8);
 }
 
 fn connection_context(
@@ -260,10 +259,10 @@ impl RuntimeRuleRepository for ConflictJointRules {
         Ok(self.snapshot.lock().clone())
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &intercept_proxy_domain::RuleRuntimeSnapshot,
-        evaluated_rules: &[intercept_proxy_domain::Rule],
+        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
         self.commit_attempts.fetch_add(1, Ordering::AcqRel);
         let mut current = self.snapshot.lock();
@@ -282,7 +281,7 @@ impl RuntimeRuleRepository for ConflictJointRules {
         *current = intercept_proxy_domain::RuleRuntimeSnapshot::with_collection_identity_and_order(
             snapshot.collection_id,
             next,
-            evaluated_rules.to_vec(),
+            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
             snapshot.execution_order.clone(),
         );
         Ok(next)
@@ -302,17 +301,17 @@ impl RuntimeRuleRepository for JointAtomicRules {
         Ok(self.snapshot.lock().clone())
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &intercept_proxy_domain::RuleRuntimeSnapshot,
-        evaluated_rules: &[intercept_proxy_domain::Rule],
+        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
         let mut current = self.snapshot.lock();
         let next = current.collection_revision + 1;
         *current = intercept_proxy_domain::RuleRuntimeSnapshot::with_collection_identity_and_order(
             snapshot.collection_id,
             next,
-            evaluated_rules.to_vec(),
+            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
             snapshot.execution_order.clone(),
         );
         Ok(next)

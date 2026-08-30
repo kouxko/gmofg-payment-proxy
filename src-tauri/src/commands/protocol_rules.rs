@@ -5,7 +5,7 @@ use intercept_proxy_application::{
     RuleActionKind, RuleConditionKind, RuleDefinition, RuleDefinitionSaveInput, RuleEditorContext,
     parse_protocol_rule_value,
 };
-use intercept_proxy_domain::{ListenerId, MatchCondition, Revision, RuleAction, RuleId};
+use intercept_proxy_domain::{Condition, ListenerId, Revision, RuleAction, RuleId};
 use tauri::State;
 
 use super::{CommandResult, command_error};
@@ -28,7 +28,7 @@ pub fn rule_definition_condition_draft(
     app_state: State<'_, AppState>,
     kind: RuleConditionKind,
     stage: MessageStage,
-) -> CommandResult<MatchCondition> {
+) -> CommandResult<Condition> {
     app_state
         .application
         .rule_definition_condition_draft(kind, stage)

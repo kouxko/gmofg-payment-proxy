@@ -36,7 +36,6 @@ pub enum MatchCondition {
         field: MatchField,
         operator: MatchOperator,
     },
-    NthHit(u64),
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -174,7 +173,7 @@ pub struct RuleDraft {
     pub created_order: u64,
     pub channel: Option<ChannelId>,
     pub stage: MessageStage,
-    pub conditions: Vec<MatchCondition>,
+    pub conditions: Vec<crate::Condition>,
     pub actions: Vec<RuleAction>,
     pub one_shot: bool,
 }
@@ -190,7 +189,7 @@ pub struct Rule {
     pub created_order: u64,
     pub channel: Option<ChannelId>,
     pub stage: MessageStage,
-    pub conditions: Vec<MatchCondition>,
+    pub conditions: Vec<crate::Condition>,
     pub actions: Vec<RuleAction>,
     pub one_shot: bool,
     pub hit_count: u64,

@@ -2,11 +2,13 @@ use std::{collections::HashMap, convert::Infallible};
 
 use chrono::{DateTime, Utc};
 
-use crate::{DomainError, ErrorCode, Revision, RuleId, RuntimeEpoch};
+use crate::{
+    DomainError, ErrorCode, NthCounterSnapshot, Revision, RuleId, RuntimeEpoch, TerminalIdentity,
+};
 
 use super::{
-    MatchCondition, MatchContext, Rule, RuleAction, RuleConflictWarning, RuleDraft, RuleEvaluation,
-    RuleTrace, matching::matches_condition, validate_rule_draft,
+    MatchContext, Rule, RuleAction, RuleConflictWarning, RuleDraft, RuleEvaluation, RuleTrace,
+    matching::matches_condition, validate_rule_draft,
 };
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -36,6 +38,21 @@ impl RuleEngine {
     #[must_use]
     pub fn rules(&self) -> &[Rule] {
         &self.rules
+    }
+
+    #[must_use]
+    pub fn nth_counter_snapshots(&self) -> Vec<NthCounterSnapshot> {
+        self.counters
+            .iter()
+            .map(|(key, attempts)| NthCounterSnapshot {
+                rule_id: key.rule_id,
+                terminal: TerminalIdentity {
+                    source_ip: key.source_ip.clone(),
+                    certificate_sha256: key.certificate_sha256.clone(),
+                },
+                attempts: *attempts,
+            })
+            .collect()
     }
 
     pub fn restart(&mut self, runtime_epoch: RuntimeEpoch) {
@@ -280,8 +297,11 @@ impl RuleEngine {
         for condition in rule
             .conditions
             .iter()
-            .filter(|condition| !matches!(condition, MatchCondition::NthHit(_)))
+            .filter(|condition| !matches!(condition, crate::Condition::NthHit { .. }))
         {
+            let crate::Condition::Http { condition } = condition else {
+                return Err("旧 HTTP runtime 不支持 Document 条件".into());
+            };
             if !matches_condition(condition, context)? {
                 return Ok(false);
             }
@@ -290,8 +310,8 @@ impl RuleEngine {
             .conditions
             .iter()
             .filter_map(|condition| match condition {
-                MatchCondition::NthHit(value) => Some(*value),
-                MatchCondition::Field { .. } => None,
+                crate::Condition::NthHit { count } => Some(*count),
+                crate::Condition::Http { .. } | crate::Condition::Document { .. } => None,
             })
             .collect::<Vec<_>>();
         if nth_values.is_empty() {

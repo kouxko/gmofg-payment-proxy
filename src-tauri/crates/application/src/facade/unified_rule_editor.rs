@@ -19,9 +19,10 @@ use crate::{
     RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
 };
 use intercept_proxy_domain::{
-    ConditionTree, DocumentSchemaNode, DropResponseMode, HttpDocumentRuleContent, HttpRuleContent,
-    JitterScope, MatchCondition, MatchField, MatchOperator, RuleAction as DomainRuleAction,
-    SocketRuleContent, TerminalAction as DomainTerminalAction, TrafficDirection, UnifiedAction,
+    Condition, ConditionTree, DocumentSchemaNode, DropResponseMode, HttpDocumentRuleContent,
+    HttpRuleContent, JitterScope, MatchCondition, MatchField, MatchOperator,
+    RuleAction as DomainRuleAction, SocketRuleContent, TerminalAction as DomainTerminalAction,
+    TrafficDirection, UnifiedAction,
 };
 
 impl Application {
@@ -83,7 +84,7 @@ impl Application {
         &self,
         kind: RuleConditionKind,
         stage: MessageStage,
-    ) -> AppResult<MatchCondition> {
+    ) -> AppResult<Condition> {
         Ok(domain_condition(self.rule_condition_draft(kind, stage)))
     }
 
@@ -134,22 +135,24 @@ impl Application {
     }
 }
 
-pub(super) fn domain_condition(condition: AppRuleCondition) -> MatchCondition {
+pub(super) fn domain_condition(condition: AppRuleCondition) -> Condition {
     match condition {
-        AppRuleCondition::Field { field, operator } => MatchCondition::Field {
-            field: match field {
-                RuleMatchField::TerminalIp => MatchField::TerminalIp,
-                RuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
-                RuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
-                RuleMatchField::JsonPath { path } => MatchField::JsonPath(path),
-            },
-            operator: match operator {
-                RuleMatchOperator::Equals { value } => MatchOperator::Equals(value),
-                RuleMatchOperator::Contains { value } => MatchOperator::Contains(value),
-                RuleMatchOperator::Regex { pattern } => MatchOperator::Regex(pattern),
+        AppRuleCondition::Field { field, operator } => Condition::Http {
+            condition: MatchCondition::Field {
+                field: match field {
+                    RuleMatchField::TerminalIp => MatchField::TerminalIp,
+                    RuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
+                    RuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
+                    RuleMatchField::JsonPath { path } => MatchField::JsonPath(path),
+                },
+                operator: match operator {
+                    RuleMatchOperator::Equals { value } => MatchOperator::Equals(value),
+                    RuleMatchOperator::Contains { value } => MatchOperator::Contains(value),
+                    RuleMatchOperator::Regex { pattern } => MatchOperator::Regex(pattern),
+                },
             },
         },
-        AppRuleCondition::NthHit { count } => MatchCondition::NthHit(count),
+        AppRuleCondition::NthHit { count } => Condition::NthHit { count },
     }
 }
 
@@ -311,14 +314,12 @@ fn http_stages(
                     priority: 100,
                     listener_id,
                     stage,
+                    one_shot: false,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
                         condition: ConditionTree::All(Vec::new()),
                         actions: vec![UnifiedAction::RecordMatch],
                         document: embedded_document,
-                        one_shot: false,
-                        hit_count: 0,
-                        last_hit_at: None,
                     }),
                 },
             },
@@ -352,6 +353,7 @@ fn socket_stages(
                     priority: 100,
                     listener_id,
                     stage,
+                    one_shot: false,
                     content: RuleContent::Socket(SocketRuleContent {
                         package: description.package.clone(),
                         condition: ConditionTree::All(Vec::new()),

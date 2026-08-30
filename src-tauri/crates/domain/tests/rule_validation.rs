@@ -4,16 +4,12 @@
 //! 真实设备的规则命中证据。每个测试直接构造领域草稿，以便定位到最小规则语义。
 
 use intercept_proxy_domain::{
-    DropResponseMode, ErrorCode, MatchCondition, MatchField, MatchOperator, MessageStage,
-    RuleAction, RuleDraft, TerminalAction, validate_rule_draft,
+    Condition, DropResponseMode, ErrorCode, MatchCondition, MatchField, MatchOperator,
+    MessageStage, RuleAction, RuleDraft, TerminalAction, validate_rule_draft,
 };
 use serde_json::json;
 
-fn draft(
-    stage: MessageStage,
-    conditions: Vec<MatchCondition>,
-    actions: Vec<RuleAction>,
-) -> RuleDraft {
+fn draft(stage: MessageStage, conditions: Vec<Condition>, actions: Vec<RuleAction>) -> RuleDraft {
     RuleDraft {
         expected_revision: None,
         name: "validation test".into(),
@@ -54,10 +50,13 @@ fn rejects_action_when_it_is_not_legal_for_the_rule_stage() {
 fn rejects_invalid_json_path_in_match_condition() {
     let invalid = draft(
         MessageStage::Request,
-        vec![MatchCondition::Field {
-            field: MatchField::JsonPath("$.items[]".into()),
-            operator: MatchOperator::Equals("item".into()),
-        }],
+        vec![
+            MatchCondition::Field {
+                field: MatchField::JsonPath("$.items[]".into()),
+                operator: MatchOperator::Equals("item".into()),
+            }
+            .into(),
+        ],
         vec![RuleAction::Pause],
     );
 
@@ -82,10 +81,13 @@ fn rejects_invalid_json_path_in_set_json_action() {
 fn rejects_invalid_regular_expression() {
     let invalid = draft(
         MessageStage::Request,
-        vec![MatchCondition::Field {
-            field: MatchField::TerminalIp,
-            operator: MatchOperator::Regex("(".into()),
-        }],
+        vec![
+            MatchCondition::Field {
+                field: MatchField::TerminalIp,
+                operator: MatchOperator::Regex("(".into()),
+            }
+            .into(),
+        ],
         vec![RuleAction::Pause],
     );
 
@@ -149,7 +151,7 @@ fn rejects_every_header_managed_by_the_forwarding_pipeline() {
 fn rejects_zero_nth_hit() {
     let invalid = draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(0)],
+        vec![Condition::NthHit { count: 0 }],
         vec![RuleAction::Pause],
     );
 

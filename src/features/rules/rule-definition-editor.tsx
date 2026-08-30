@@ -145,7 +145,7 @@ function HttpFactoryControls(props: {
   stage: import("@/generated/rust-types").MessageStage;
   onChange: (condition: ConditionTree, actions: UnifiedAction[]) => void;
   onCreateAction: (action: RuleAction) => void;
-  onCreateCondition: (condition: import("@/generated/rust-types").MatchCondition) => void;
+  onCreateCondition: (condition: Condition) => void;
 }) {
   const [error, setError] = useState<string>();
   const { pending, runAsync } = useAsyncRequestSlots(props.editorScope);
@@ -240,12 +240,12 @@ function appendHttpFactoryResult(
   input: RuleDefinitionSaveInput,
   expectedScope: string,
   kind: "condition" | "action",
-  value: import("@/generated/rust-types").MatchCondition | RuleAction,
+  value: Condition | RuleAction,
 ) {
   if (editorScope(input) !== expectedScope || input.draft.content.type !== "http") return input;
   const content = input.draft.content.value;
   const next = kind === "condition"
-    ? { ...content, condition: appendCondition(content.condition, { source: "http", condition: value as import("@/generated/rust-types").MatchCondition }) }
+    ? { ...content, condition: appendCondition(content.condition, value as Condition) }
     : { ...content, actions: [...content.actions, wrapRuleAction(value as RuleAction)] };
   return { ...input, draft: { ...input.draft, content: { type: "http" as const, value: next } } };
 }

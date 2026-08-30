@@ -1,8 +1,8 @@
 use super::{
     Condition, ConditionTree, DocumentAction, DocumentCondition, DocumentMutation,
-    DocumentPredicate, DomainError, ErrorCode, HttpDocumentRuleContent, MatchCondition,
-    MessageStage, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolRuleStage,
-    RuleAction, RuleContent, RuleDefinition, RuleStage, SocketRuleContent, UnifiedAction,
+    DocumentPredicate, DomainError, ErrorCode, HttpDocumentRuleContent, MessageStage,
+    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolRuleStage, RuleAction,
+    RuleContent, RuleDefinition, RuleStage, SocketRuleContent, UnifiedAction,
 };
 use crate::ProtocolPackageRef;
 
@@ -28,7 +28,7 @@ pub(super) fn restore_document_rule(
 
 pub(super) fn legacy_http_parts(
     content: &crate::HttpRuleContent,
-) -> Result<(Vec<MatchCondition>, Vec<RuleAction>), DomainError> {
+) -> Result<(Vec<Condition>, Vec<RuleAction>), DomainError> {
     let mut conditions = Vec::new();
     collect_legacy_http_conditions(&content.condition, &mut conditions)?;
     let actions = content
@@ -45,7 +45,7 @@ pub(super) fn legacy_http_parts(
 
 fn collect_legacy_http_conditions(
     tree: &ConditionTree,
-    output: &mut Vec<MatchCondition>,
+    output: &mut Vec<Condition>,
 ) -> Result<(), DomainError> {
     match tree {
         ConditionTree::All(children) => {
@@ -59,10 +59,16 @@ fn collect_legacy_http_conditions(
             "旧 HTTP runtime 尚不支持 OR；Phase 7 将切换统一执行",
         )),
         ConditionTree::Leaf(Condition::Http { condition }) => {
-            output.push(condition.clone());
+            output.push(Condition::Http {
+                condition: condition.clone(),
+            });
             Ok(())
         }
         ConditionTree::Leaf(Condition::Document { .. }) => Ok(()),
+        ConditionTree::Leaf(Condition::NthHit { count }) => {
+            output.push(Condition::NthHit { count: *count });
+            Ok(())
+        }
     }
 }
 
@@ -146,17 +152,12 @@ fn collect_legacy_document_conditions(
             });
             Ok(())
         }
-        ConditionTree::Leaf(Condition::Http { .. }) => Ok(()),
+        ConditionTree::Leaf(Condition::Http { .. } | Condition::NthHit { .. }) => Ok(()),
     }
 }
 
-pub(super) fn unified_http_tree(conditions: Vec<MatchCondition>) -> ConditionTree {
-    ConditionTree::All(
-        conditions
-            .into_iter()
-            .map(|condition| ConditionTree::Leaf(Condition::Http { condition }))
-            .collect(),
-    )
+pub(super) fn unified_http_tree(conditions: Vec<Condition>) -> ConditionTree {
+    ConditionTree::All(conditions.into_iter().map(ConditionTree::Leaf).collect())
 }
 
 pub(super) fn unified_http_actions(actions: Vec<RuleAction>) -> Vec<UnifiedAction> {

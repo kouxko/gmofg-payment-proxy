@@ -179,7 +179,7 @@ async fn runtime_snapshot_commit_stays_bound_to_owning_workspace_after_ui_switch
         .expect("switch workspace");
 
     let revision = adapter
-        .commit_runtime_snapshot(&stale, &stale.rules)
+        .commit_runtime_deltas(&stale, &[])
         .await
         .expect("runtime commit remains on first workspace");
     assert_eq!(revision, stale.collection_revision + 1);

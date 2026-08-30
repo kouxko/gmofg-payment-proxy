@@ -5,7 +5,7 @@ fn validates_regex_delay_terminal_order_phase_and_action_parameters() {
         vec![MatchCondition::Field {
             field: MatchField::TerminalIp,
             operator: MatchOperator::Regex("(".into()),
-        }],
+        }.into()],
         vec![
             RuleAction::Delay {
                 milliseconds: MAX_TOTAL_DELAY_MS + 1,
@@ -187,7 +187,7 @@ fn nth_hit_counter_is_scoped_by_both_terminal_identity_components() {
     let epoch = RuntimeEpoch::new();
     let rule = Rule::create(draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(2)],
+        vec![Condition::NthHit { count: 2 }],
         vec![RuleAction::Pause],
     ))
     .expect("valid nth-hit rule");
@@ -229,7 +229,7 @@ fn tls_rejection_preserves_nth_hit_semantics() {
     let epoch = RuntimeEpoch::new();
     let rule = Rule::create(draft(
         MessageStage::TlsHandshake,
-        vec![MatchCondition::NthHit(2)],
+        vec![Condition::NthHit { count: 2 }],
         vec![RuleAction::Terminal(TerminalAction::RejectTlsHandshake)],
     ))
     .expect("TLS NthHit is a valid pre-HTTP condition");

@@ -3,7 +3,7 @@ fn nth_hit_is_per_terminal_and_resets_on_restart_reenable_and_condition_change()
     let epoch = RuntimeEpoch::new();
     let mut rule = Rule::create(draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(2)],
+        vec![Condition::NthHit { count: 2 }],
         vec![RuleAction::Pause],
     ))
     .unwrap();
@@ -61,7 +61,7 @@ fn changing_match_conditions_resets_existing_hit_counters() {
     let epoch = RuntimeEpoch::new();
     let rule = Rule::create(draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(2)],
+        vec![Condition::NthHit { count: 2 }],
         vec![RuleAction::Pause],
     ))
     .unwrap();
@@ -79,7 +79,7 @@ fn changing_match_conditions_resets_existing_hit_counters() {
     );
     let mut changed = draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(3)],
+        vec![Condition::NthHit { count: 3 }],
         vec![RuleAction::Pause],
     );
     changed.expected_revision = Some(Revision::INITIAL);
@@ -104,13 +104,13 @@ fn reconcile_preserves_unrelated_rule_counters_and_resets_changed_rule() {
     let epoch = RuntimeEpoch::new();
     let unchanged = Rule::create(draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(3)],
+        vec![Condition::NthHit { count: 3 }],
         vec![RuleAction::Pause],
     ))
     .unwrap();
     let mut changed = Rule::create(draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(2)],
+        vec![Condition::NthHit { count: 2 }],
         vec![RuleAction::Pause],
     ))
     .unwrap();
@@ -129,7 +129,7 @@ fn reconcile_preserves_unrelated_rule_counters_and_resets_changed_rule() {
         "both counters should be below their thresholds"
     );
 
-    changed.conditions = vec![MatchCondition::NthHit(3)];
+    changed.conditions = vec![Condition::NthHit { count: 3 }];
     changed.revision = changed.revision.next();
     engine.reconcile(vec![unchanged, changed]);
 

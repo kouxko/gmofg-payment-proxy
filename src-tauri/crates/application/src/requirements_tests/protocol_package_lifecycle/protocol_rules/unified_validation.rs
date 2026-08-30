@@ -11,8 +11,8 @@ fn document_actions(actions: Vec<DocumentAction>) -> Vec<UnifiedAction> {
     actions.into_iter().map(UnifiedAction::from).collect()
 }
 
-fn http_tree(conditions: Vec<intercept_proxy_domain::MatchCondition>) -> ConditionTree {
-    ConditionTree::from_http_conditions(conditions)
+fn http_tree(conditions: Vec<intercept_proxy_domain::Condition>) -> ConditionTree {
+    ConditionTree::All(conditions.into_iter().map(ConditionTree::Leaf).collect())
 }
 
 fn http_actions(actions: Vec<intercept_proxy_domain::RuleAction>) -> Vec<UnifiedAction> {
@@ -33,6 +33,7 @@ fn unified_socket_input(
             priority: 10,
             listener_id,
             stage,
+            one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
                 condition: document_tree(vec![equals(
@@ -167,10 +168,11 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                 priority: 10,
                 listener_id: http_listener,
                 stage: RuleStage::ProxyToUpstream,
+                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: "header + document".into(),
                     condition: ConditionTree::All(vec![
-                        http_tree(vec![intercept_proxy_domain::MatchCondition::NthHit(1)]),
+                        http_tree(vec![intercept_proxy_domain::Condition::NthHit { count: 1 }]),
                         document_tree(vec![equals(
                             "trace_id",
                             DocumentValue::String("abc".into()),
@@ -188,9 +190,6 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                     document: Some(HttpDocumentRuleContent {
                         package: http_package,
                     }),
-                    one_shot: false,
-                    hit_count: 0,
-                    last_hit_at: None,
                 }),
             },
         })
@@ -205,7 +204,7 @@ async fn stopped_http_listener_rejects_ordinary_http_work_at_document_only_stage
     for (stage, conditions, actions) in [
         (
             RuleStage::AppToProxy,
-            vec![intercept_proxy_domain::MatchCondition::NthHit(1)],
+            vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
             Vec::new(),
         ),
         (
@@ -215,7 +214,7 @@ async fn stopped_http_listener_rejects_ordinary_http_work_at_document_only_stage
         ),
         (
             RuleStage::UpstreamToProxy,
-            vec![intercept_proxy_domain::MatchCondition::NthHit(1)],
+            vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
             Vec::new(),
         ),
         (
@@ -240,14 +239,12 @@ async fn stopped_http_listener_rejects_ordinary_http_work_at_document_only_stage
                     priority: 10,
                     listener_id,
                     stage,
+                    one_shot: false,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
                         condition: http_tree(conditions),
                         actions: http_actions(actions),
                         document: Some(HttpDocumentRuleContent { package }),
-                        one_shot: false,
-                        hit_count: 0,
-                        last_hit_at: None,
                     }),
                 },
             })
@@ -279,6 +276,7 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                     priority: 10,
                     listener_id,
                     stage,
+                    one_shot: false,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
                         condition: document_tree(vec![equals(
@@ -297,9 +295,6 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                         .chain([UnifiedAction::RecordMatch])
                         .collect(),
                         document: Some(HttpDocumentRuleContent { package }),
-                        one_shot: false,
-                        hit_count: 0,
-                        last_hit_at: None,
                     }),
                 },
             })

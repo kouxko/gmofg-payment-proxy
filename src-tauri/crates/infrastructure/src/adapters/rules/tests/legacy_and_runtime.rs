@@ -59,8 +59,9 @@ async fn runtime_commit_is_full_signature_cas_and_reset_preserves_enabled() {
         },
         Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
     );
+    let deltas = super::super::conversion::runtime_deltas(&snapshot, engine.rules(), &[]).unwrap();
     adapter
-        .commit_runtime_snapshot(&snapshot, engine.rules())
+        .commit_runtime_deltas(&snapshot, &deltas)
         .await
         .expect("runtime commit");
 
@@ -89,7 +90,7 @@ async fn runtime_commit_is_full_signature_cas_and_reset_preserves_enabled() {
         .toggle_domain(created.summary.rule_id, 2, true)
         .expect("concurrent config update");
     let error = adapter
-        .commit_runtime_snapshot(&stale, &stale.rules)
+        .commit_runtime_deltas(&stale, &[])
         .await
         .expect_err("stale runtime commit");
     assert_eq!(error.view_model.code, "REVISION_CONFLICT");

@@ -1,6 +1,6 @@
 use regex::Regex;
 
-use crate::{DomainError, ErrorCode, JsonPath, MessageStage};
+use crate::{Condition, DomainError, ErrorCode, JsonPath, MessageStage};
 
 use super::{
     MAX_THROTTLE_BYTES_PER_SECOND, MAX_TOTAL_DELAY_MS, MAX_TRAFFIC_CHUNK_BYTES, MatchCondition,
@@ -31,26 +31,32 @@ pub fn validate_rule_draft(draft: &RuleDraft) -> Result<(), DomainError> {
 fn validate_conditions(draft: &RuleDraft, error: &mut DomainError) {
     for (index, condition) in draft.conditions.iter().enumerate() {
         match condition {
-            MatchCondition::Field {
-                field: MatchField::JsonPath(path),
-                ..
+            Condition::Http {
+                condition:
+                    MatchCondition::Field {
+                        field: MatchField::JsonPath(path),
+                        ..
+                    },
             } if JsonPath::parse(path).is_err() => push_field_error(
                 error,
                 format!("conditions.{index}.path"),
                 "JSON 字段路径非法",
             ),
-            MatchCondition::Field {
-                operator: MatchOperator::Regex(pattern),
-                ..
+            Condition::Http {
+                condition:
+                    MatchCondition::Field {
+                        operator: MatchOperator::Regex(pattern),
+                        ..
+                    },
             } if Regex::new(pattern).is_err() => {
                 push_field_error(error, format!("conditions.{index}.regex"), "正则表达式非法");
             }
-            MatchCondition::NthHit(0) => push_field_error(
+            Condition::NthHit { count: 0 } => push_field_error(
                 error,
                 format!("conditions.{index}.nth_hit"),
                 "第 N 次命中必须大于 0",
             ),
-            MatchCondition::Field { .. } | MatchCondition::NthHit(_) => {}
+            Condition::Http { .. } | Condition::NthHit { .. } | Condition::Document { .. } => {}
         }
     }
 }
@@ -76,10 +82,12 @@ fn validate_tls_conditions(draft: &RuleDraft, error: &mut DomainError) {
         && draft.conditions.iter().any(|condition| {
             !matches!(
                 condition,
-                MatchCondition::Field {
-                    field: MatchField::CertificateFingerprint,
-                    ..
-                } | MatchCondition::NthHit(_)
+                Condition::Http {
+                    condition: MatchCondition::Field {
+                        field: MatchField::CertificateFingerprint,
+                        ..
+                    }
+                } | Condition::NthHit { .. }
             )
         })
     {

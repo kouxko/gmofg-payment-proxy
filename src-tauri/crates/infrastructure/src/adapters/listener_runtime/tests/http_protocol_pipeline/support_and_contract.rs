@@ -190,13 +190,13 @@ fn prepare_snapshot(
             };
             RuleDefinition::restore(
                 definition.rule_id(),
-                definition.revision(),
                 RuleDefinitionDraft {
                     name: definition.name().to_owned(),
                     enabled: definition.enabled(),
                     priority: definition.priority(),
                     listener_id: definition.listener_id(),
                     stage: definition.stage(),
+                    one_shot: definition.one_shot(),
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
                         condition: condition.clone(),
@@ -204,12 +204,13 @@ fn prepare_snapshot(
                         document: Some(intercept_proxy_domain::HttpDocumentRuleContent {
                             package: package.clone(),
                         }),
-                        one_shot: false,
-                        hit_count: 0,
-                        last_hit_at: None,
                     }),
                 },
-                definition.created_order(),
+                intercept_proxy_domain::RuleDefinitionRestoreSnapshot {
+                    revision: definition.revision(),
+                    created_order: definition.created_order(),
+                    lifecycle: definition.lifecycle().clone(),
+                },
             )
             .unwrap()
         })

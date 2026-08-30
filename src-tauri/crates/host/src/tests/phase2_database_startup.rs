@@ -1,6 +1,5 @@
 use std::{path::PathBuf, sync::Arc};
 
-use chrono::{TimeZone, Utc};
 use intercept_proxy_application::{
     AppResult, ConditionTree, MessageStage, ProtocolPackageRef, RuleActionKind, RuleConditionKind,
     RuleContent, RuleEditorContentContext, RuleStage, UnifiedAction, WorkspaceId,
@@ -40,7 +39,6 @@ struct TwoStartFixture {
     listener_id: intercept_proxy_application::ListenerId,
     rule: intercept_proxy_application::RuleDefinition,
     package: ProtocolPackageRef,
-    last_hit_at: chrono::DateTime<Utc>,
 }
 
 #[tokio::test]
@@ -150,27 +148,21 @@ async fn seed_two_start_fixture(host: &ApplicationHost) -> TwoStartFixture {
         .new_rule_draft;
     input.draft.name = "phase2-two-start-rule".into();
     input.draft.priority = 29;
-    let last_hit_at = Utc
-        .with_ymd_and_hms(2026, 8, 30, 3, 4, 5)
-        .single()
-        .expect("fixed lifecycle timestamp");
     let RuleContent::Http(content) = &mut input.draft.content else {
         panic!("HTTP rule draft expected");
     };
     content.description = "phase2 lifecycle fixture".into();
-    content.condition = ConditionTree::from_http_conditions(vec![
+    content.condition = ConditionTree::Leaf(
         application
             .rule_definition_condition_draft(RuleConditionKind::NthHit, MessageStage::Request)
             .expect("current NthHit condition"),
-    ]);
-    content.one_shot = true;
-    content.hit_count = 7;
-    content.last_hit_at = Some(last_hit_at);
+    );
     content.actions = vec![UnifiedAction::from(
         application
             .rule_definition_action_draft(RuleActionKind::Delay, MessageStage::Request)
             .expect("current delay action"),
     )];
+    input.draft.one_shot = true;
     let created = application
         .rule_definition_save(input)
         .await
@@ -196,7 +188,6 @@ async fn seed_two_start_fixture(host: &ApplicationHost) -> TwoStartFixture {
         listener_id: listener.id,
         rule: toggled,
         package: imported.version.package,
-        last_hit_at,
     }
 }
 
@@ -224,12 +215,9 @@ async fn assert_two_start_fixture_present(
         .expect("unique Rule is present");
     assert_eq!(rule.revision(), fixture.rule.revision());
     assert!(!rule.enabled());
-    let RuleContent::Http(content) = rule.content() else {
-        panic!("HTTP rule expected");
-    };
-    assert!(content.one_shot);
-    assert_eq!(content.hit_count, 7);
-    assert_eq!(content.last_hit_at, Some(fixture.last_hit_at));
+    assert!(rule.one_shot());
+    assert_eq!(rule.lifecycle().hit_count, 0);
+    assert_eq!(rule.lifecycle().last_hit_at, None);
     let package = application
         .protocol_package_detail(fixture.package.clone())
         .await

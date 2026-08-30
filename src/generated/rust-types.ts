@@ -144,7 +144,7 @@ export const commands = {
 	ruleEditorContext: (listenerId: ListenerId) => typedError<RuleEditorContext, AppErrorViewModel>(__TAURI_INVOKE("rule_editor_context", { listenerId })),
 	ruleDefinitionGet: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_get", { ruleId })),
 	ruleDefinitionCopy: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_copy", { ruleId })),
-	ruleDefinitionConditionDraft: (kind: RuleConditionKind, stage: MessageStage) => typedError<MatchCondition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_condition_draft", { kind, stage })),
+	ruleDefinitionConditionDraft: (kind: RuleConditionKind, stage: MessageStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_condition_draft", { kind, stage })),
 	ruleDefinitionActionDraft: (kind: RuleActionKind, stage: MessageStage) => typedError<RuleAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { kind, stage })),
 	ruleDefinitionCreateFromExchangeObservation: (exchangeId: string, responseEventIndex: number) => typedError<RuleDefinitionSaveInput, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_create_from_exchange_observation", { exchangeId, responseEventIndex })),
 	ruleParseDocumentValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_document_value", { fieldType, raw })),
@@ -662,7 +662,11 @@ predicate: DocumentPredicate } |
 /**  Existing typed HTTP/runtime condition, retained as a leaf rather than a parallel tree. */
 { source: "http";
 /**  Typed HTTP condition. */
-condition: MatchCondition };
+condition: MatchCondition } |
+/**  Shared lifecycle predicate, independent from HTTP capabilities. */
+{ source: "nth_hit";
+/**  Exact next successful hit number. */
+count: number };
 
 /**  Recursive non-empty AND/OR condition tree. NOT is intentionally not representable. */
 export type ConditionTree =
@@ -1195,9 +1199,6 @@ export type HttpRuleContent = {
 	condition: ConditionTree,
 	actions: UnifiedAction[],
 	document: HttpDocumentRuleContent | null,
-	one_shot: boolean,
-	hit_count: number,
-	last_hit_at: string | null,
 };
 
 export type HttpRuleEditorStage = {
@@ -1446,10 +1447,10 @@ export type ListenerUpstreamTlsTestViewModel = {
 	ui_tone: UiTone,
 };
 
-export type MatchCondition = ({ Field: {
+export type MatchCondition = { Field: {
 	field: MatchField,
 	operator: MatchOperator,
-} }) & { NthHit?: never } | ({ NthHit: number }) & { Field?: never };
+} };
 
 export type MatchField = "TerminalIp" | "CertificateFingerprint" | "PathOrRequestType" | { JsonPath: string };
 
@@ -2125,6 +2126,7 @@ export type RuleDefinitionDraft = {
 	priority: number,
 	listener_id: ListenerId,
 	stage: RuleStage,
+	one_shot: boolean,
 	content: RuleContent,
 };
 
@@ -2143,6 +2145,8 @@ export type RuleDefinitionWire = {
 	created_order: number,
 	listener_id: ListenerId,
 	stage: RuleStage,
+	one_shot: boolean,
+	lifecycle: RuleLifecycle,
 	content: RuleContent,
 };
 
@@ -2157,6 +2161,8 @@ export type RuleDefinition_Serialize = {
 	created_order: number,
 	listener_id: ListenerId,
 	stage: RuleStage,
+	one_shot: boolean,
+	lifecycle: RuleLifecycle,
 	content: RuleContent,
 };
 
@@ -2174,6 +2180,12 @@ export type RuleEditorContext = {
 };
 
 export type RuleId = string;
+
+/**  Lifecycle shared by HTTP and Socket rule definitions. */
+export type RuleLifecycle = {
+	hit_count: number,
+	last_hit_at: string | null,
+};
 
 export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "path_or_request_type" | "json_path";
 

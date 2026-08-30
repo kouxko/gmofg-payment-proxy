@@ -6,11 +6,12 @@ const stringCondition = (path = "/value", value = "value") => ({
   operator: "leaf" as const,
   children: { source: "document" as const, path, predicate: { type: "string" as const, value: { operator: "equal" as const, value } } },
 });
+const lifecycle = { hit_count: 0, last_hit_at: null };
 
 function rule(stage: RuleDefinition_Serialize["stage"], priority: number, createdOrder: number): RuleDefinition_Serialize {
   return {
     rule_id: `${stage}-${createdOrder}`, revision: 1, name: stage, enabled: true, priority,
-    created_order: createdOrder, listener_id: "listener", stage,
+    created_order: createdOrder, listener_id: "listener", stage, one_shot: false, lifecycle,
     content: { type: "socket", value: { package: { id: "pkg", version: "1" }, condition: stringCondition(), actions: [{ source: "record_match" }] } },
   };
 }
@@ -37,9 +38,9 @@ describe("ruleStageIncompatibility", () => {
     const input: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
-        name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_upstream",
+        name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_upstream", one_shot: false,
         content: { type: "http", value: {
-          description: "", condition: stringCondition(), actions: [{ source: "document", value: { type: "set", path: "/amount", value: 1 } }], one_shot: false, hit_count: 0, last_hit_at: null,
+          description: "", condition: stringCondition(), actions: [{ source: "document", value: { type: "set", path: "/amount", value: 1 } }],
           document: { package: { id: "pkg", version: "1" } },
         } },
       },
@@ -62,7 +63,7 @@ describe("ruleStageIncompatibility", () => {
     const base: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
-        name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app",
+        name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
           condition: stringCondition("/value", "Null"), actions: [{ source: "record_match" }],
@@ -89,5 +90,26 @@ describe("ruleStageIncompatibility", () => {
     expect(ruleStageIncompatibility(actualNull, context, "proxy_to_app")).toBe(
       "目标阶段不能编辑 Document 条件字段 /value。",
     );
+  });
+});
+
+describe("unified lifecycle wire", () => {
+  it("keeps lifecycle at the rule definition and exposes nth-hit as a common condition leaf", () => {
+    const socket = rule("proxy_to_app", 1, 1);
+    expect(socket.lifecycle).toEqual(lifecycle);
+    expect(socket.one_shot).toBe(false);
+    expect(socket.content.value).not.toHaveProperty("one_shot");
+    const nthHit: RuleDefinitionSaveInput["draft"]["content"] = {
+      type: "socket",
+      value: {
+        package: { id: "pkg", version: "1" },
+        condition: { operator: "leaf", children: { source: "nth_hit", count: 2 } },
+        actions: [{ source: "record_match" }],
+      },
+    };
+    expect(nthHit.value.condition).toEqual({
+      operator: "leaf",
+      children: { source: "nth_hit", count: 2 },
+    });
   });
 });

@@ -1,7 +1,7 @@
 use intercept_proxy_domain::{
     ConditionTree, HttpDocumentRuleContent, HttpRuleContent, ListenerId, Revision, RuleAction,
-    RuleContent, RuleDefinition, RuleDefinitionDraft, RuleId, RuleStage, SocketRuleContent,
-    UnifiedAction,
+    RuleContent, RuleDefinition, RuleDefinitionDraft, RuleDefinitionRestoreSnapshot, RuleId,
+    RuleLifecycle, RuleStage, SocketRuleContent, UnifiedAction,
 };
 
 use super::{
@@ -24,13 +24,13 @@ impl HttpRuleTemplate {
         })?;
         let definition = RuleDefinition::restore(
             RuleId::from_uuid(id),
-            Revision::INITIAL,
             RuleDefinitionDraft {
                 name: self.name.clone(),
                 enabled: self.enabled,
                 priority,
                 listener_id,
                 stage: self.unified_stage(),
+                one_shot: self.one_shot,
                 content: RuleContent::Http(HttpRuleContent {
                     description: self.description.clone(),
                     condition: ConditionTree::All(
@@ -38,11 +38,7 @@ impl HttpRuleTemplate {
                             .clone()
                             .into_iter()
                             .map(Into::into)
-                            .map(|condition| {
-                                intercept_proxy_domain::ConditionTree::Leaf(
-                                    intercept_proxy_domain::Condition::Http { condition },
-                                )
-                            })
+                            .map(intercept_proxy_domain::ConditionTree::Leaf)
                             .chain(self.document.iter().flat_map(|document| {
                                 match ConditionTree::from_document_conditions(
                                     document.conditions.clone(),
@@ -72,12 +68,13 @@ impl HttpRuleTemplate {
                         .as_ref()
                         .map(super::HttpDocumentRuleTemplate::to_domain)
                         .transpose()?,
-                    one_shot: self.one_shot,
-                    hit_count: 0,
-                    last_hit_at: None,
                 }),
             },
-            created_order,
+            RuleDefinitionRestoreSnapshot {
+                revision: Revision::INITIAL,
+                created_order,
+                lifecycle: RuleLifecycle::default(),
+            },
         )
         .map_err(AppError::from)
         .map_err(http_rule_invalid)?;
@@ -123,18 +120,15 @@ impl HttpRuleTemplate {
             existing.created_order(),
             listener_id,
         )?;
-        let RuleContent::Http(mut content) = projected.to_draft().content else {
-            unreachable!("HTTP projection creates HTTP content")
-        };
-        content.hit_count = existing_content.hit_count;
-        content.last_hit_at = existing_content.last_hit_at;
-        let mut draft = projected.to_draft();
-        draft.content = RuleContent::Http(content);
+        let draft = projected.to_draft();
         let definition = RuleDefinition::restore(
             existing.rule_id(),
-            existing.revision(),
             draft,
-            existing.created_order(),
+            RuleDefinitionRestoreSnapshot {
+                revision: existing.revision(),
+                created_order: existing.created_order(),
+                lifecycle: existing.lifecycle().clone(),
+            },
         )
         .map_err(AppError::from)
         .map_err(http_rule_invalid)?;
@@ -192,9 +186,6 @@ impl ProtocolDocumentRuleTemplate {
                 condition,
                 actions,
                 document: Some(document),
-                one_shot: false,
-                hit_count: 0,
-                last_hit_at: None,
             })
         } else {
             RuleContent::Socket(SocketRuleContent {
@@ -205,16 +196,20 @@ impl ProtocolDocumentRuleTemplate {
         };
         let definition = RuleDefinition::restore(
             id,
-            Revision::INITIAL,
             RuleDefinitionDraft {
                 name: self.name.clone(),
                 enabled: self.enabled,
                 priority: self.priority,
                 listener_id,
                 stage: self.unified_stage(),
+                one_shot: false,
                 content,
             },
-            created_order,
+            RuleDefinitionRestoreSnapshot {
+                revision: Revision::INITIAL,
+                created_order,
+                lifecycle: RuleLifecycle::default(),
+            },
         )
         .map_err(AppError::from)
         .map_err(protocol_document_rule_invalid)?;
@@ -254,9 +249,12 @@ impl ProtocolDocumentRuleTemplate {
         )?;
         let definition = RuleDefinition::restore(
             existing.rule_id(),
-            existing.revision(),
             projected.to_draft(),
-            existing.created_order(),
+            RuleDefinitionRestoreSnapshot {
+                revision: existing.revision(),
+                created_order: existing.created_order(),
+                lifecycle: existing.lifecycle().clone(),
+            },
         )
         .map_err(AppError::from)
         .map_err(protocol_document_rule_invalid)?;

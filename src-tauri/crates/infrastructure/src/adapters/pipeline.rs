@@ -23,9 +23,11 @@ use intercept_proxy_application::{
     MessageContentViewModel, MessageStage as AppMessageStage, SessionDetailViewModel,
     SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone,
 };
+#[cfg(test)]
+use intercept_proxy_domain::Rule;
 use intercept_proxy_domain::{
-    ChannelId as DomainChannelId, MessageStage as DomainMessageStage, Rule, RuleAction,
-    RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
+    ChannelId as DomainChannelId, MessageStage as DomainMessageStage, RuleAction,
+    RuleLifecycleDelta, RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
 };
 use intercept_proxy_product_api::{BodyCodec, RequestClassifier};
 use intercept_proxy_runtime::{
@@ -71,10 +73,10 @@ macro_rules! proxy_status {
 #[async_trait]
 pub trait RuntimeRuleRepository: std::fmt::Debug + Send + Sync {
     async fn runtime_snapshot(&self, channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot>;
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &RuleRuntimeSnapshot,
-        evaluated_rules: &[Rule],
+        deltas: &[RuleLifecycleDelta],
     ) -> AppResult<u64>;
     async fn reset_runtime_hit_metadata(&self, collection_id: Uuid) -> AppResult<()>;
 }
@@ -85,12 +87,12 @@ impl RuntimeRuleRepository for RuleRepositoryAdapter {
         RuleRepositoryAdapter::runtime_snapshot(self, channel.as_str()).await
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &RuleRuntimeSnapshot,
-        evaluated_rules: &[Rule],
+        deltas: &[RuleLifecycleDelta],
     ) -> AppResult<u64> {
-        RuleRepositoryAdapter::commit_runtime_snapshot(self, snapshot, evaluated_rules).await
+        RuleRepositoryAdapter::commit_runtime_deltas(self, snapshot, deltas).await
     }
 
     async fn reset_runtime_hit_metadata(&self, collection_id: Uuid) -> AppResult<()> {

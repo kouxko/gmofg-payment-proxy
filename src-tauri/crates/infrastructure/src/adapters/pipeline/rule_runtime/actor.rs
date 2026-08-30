@@ -6,7 +6,8 @@ use std::{
 use chrono::Utc;
 use intercept_proxy_application::EventHub;
 use intercept_proxy_domain::{
-    MatchContext, MessageStage, RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch,
+    MatchContext, MessageStage, NthCounterAdvance, NthCounterSnapshot, RuleEngine,
+    RuleRuntimeSnapshot, RuntimeEpoch,
 };
 use intercept_proxy_runtime::{ConnectionContext, Result as ProxyResult};
 use tokio::sync::{mpsc, oneshot};
@@ -120,88 +121,135 @@ async fn evaluate_owned(
     events: &EventHub,
     channel_labels: &BTreeMap<String, String>,
 ) -> ProxyResult<EvaluatedRules> {
-    let joint_checkpoint = input.joint_document.clone();
-    for remaining_retries in (0..=3).rev() {
-        input.joint_document.clone_from(&joint_checkpoint);
-        prepare_runtime(runtime, input, rules).await?;
-        let current = runtime.as_mut().expect("rule runtime was initialized");
-        let checkpoint = current.engine.clone();
-        let terminal = terminal_identity(&input.context);
-        let match_context = MatchContext {
-            runtime_epoch: RuntimeEpoch::from_uuid(epoch),
-            channel: domain_channel(&input.context.channel)?,
-            stage: input.stage,
-            terminal: &terminal,
-            path_or_request_type: input.target.as_deref(),
-            json_body: input.json.as_ref(),
+    prepare_runtime(runtime, input, rules).await?;
+    let current = runtime.as_mut().expect("rule runtime was initialized");
+    let checkpoint = current.engine.clone();
+    let counters_before = checkpoint.nth_counter_snapshots();
+    let terminal = terminal_identity(&input.context);
+    let match_context = MatchContext {
+        runtime_epoch: RuntimeEpoch::from_uuid(epoch),
+        channel: domain_channel(&input.context.channel)?,
+        stage: input.stage,
+        terminal: &terminal,
+        path_or_request_type: input.target.as_deref(),
+        json_body: input.json.as_ref(),
+    };
+    let execution_order = current.snapshot.execution_order.clone();
+    let evaluation = match input.joint_document.as_mut() {
+        Some(joint) => current
+            .engine
+            .evaluate_with_gate_in_order(&match_context, Utc::now(), &execution_order, |rule| {
+                joint.gate(rule)
+            })
+            .map_err(|error| app_to_proxy(error.into()))?,
+        None => current
+            .engine
+            .evaluate_with_gate_in_order(&match_context, Utc::now(), &execution_order, |_| {
+                Ok::<_, std::convert::Infallible>(true)
+            })
+            .expect("an infallible rule gate cannot fail"),
+    };
+    let hit_rules = matched_rule_summaries(&evaluation, current.engine.rules(), channel_labels);
+    let (prepared_message, fault_actions, pause) =
+        match prepare_evaluated_message(input, &evaluation, &hit_rules).await {
+            Ok(prepared) => prepared,
+            Err(error) => {
+                current.engine = checkpoint;
+                return Err(error);
+            }
         };
-        let execution_order = current.snapshot.execution_order.clone();
-        let evaluation = match input.joint_document.as_mut() {
-            Some(joint) => current
-                .engine
-                .evaluate_with_gate_in_order(&match_context, Utc::now(), &execution_order, |rule| {
-                    joint.gate(rule)
-                })
-                .map_err(|error| app_to_proxy(error.into()))?,
-            None => current
-                .engine
-                .evaluate_with_gate_in_order(&match_context, Utc::now(), &execution_order, |_| {
-                    Ok::<_, std::convert::Infallible>(true)
-                })
-                .expect("an infallible rule gate cannot fail"),
+    let nth_advances = match nth_advances(&counters_before, &current.engine.nth_counter_snapshots())
+    {
+        Ok(advances) => advances,
+        Err(error) => {
+            current.engine = checkpoint;
+            return Err(app_to_proxy(error.into()));
+        }
+    };
+    if evaluation.traces.iter().any(|trace| trace.matched) || !nth_advances.is_empty() {
+        let base = current.snapshot.clone();
+        let evaluated_rules = current.engine.rules().to_vec();
+        let deltas = match crate::adapters::rules::conversion::runtime_deltas(
+            &base,
+            &evaluated_rules,
+            &nth_advances,
+        ) {
+            Ok(deltas) => deltas,
+            Err(error) => {
+                current.engine = checkpoint;
+                return Err(app_to_proxy(error));
+            }
         };
-        let hit_rules = matched_rule_summaries(&evaluation, current.engine.rules(), channel_labels);
-        let (prepared_message, fault_actions, pause) =
-            match prepare_evaluated_message(input, &evaluation, &hit_rules).await {
-                Ok(prepared) => prepared,
-                Err(error) => {
-                    current.engine = checkpoint;
-                    return Err(error);
-                }
-            };
-        if evaluation.traces.iter().any(|trace| trace.matched) {
-            let base = current.snapshot.clone();
-            let evaluated_rules = current.engine.rules().to_vec();
-            match rules.commit_runtime_snapshot(&base, &evaluated_rules).await {
-                Ok(revision) => {
-                    current.snapshot = RuleRuntimeSnapshot::with_collection_identity_and_order(
-                        base.collection_id,
-                        revision,
-                        evaluated_rules,
-                        base.execution_order,
-                    );
-                }
-                Err(error)
-                    if error.view_model.code == "REVISION_CONFLICT" && remaining_retries > 0 =>
-                {
-                    current.engine = checkpoint;
-                    continue;
-                }
-                Err(error) => {
-                    *runtime = None;
-                    publish_repository_error(events, epoch, &error);
-                    return Err(app_to_proxy(error));
-                }
+        match rules.commit_runtime_deltas(&base, &deltas).await {
+            Ok(revision) => {
+                current.snapshot = RuleRuntimeSnapshot::with_collection_identity_and_order(
+                    base.collection_id,
+                    revision,
+                    evaluated_rules,
+                    base.execution_order,
+                );
+            }
+            Err(error) => {
+                current.engine = checkpoint;
+                *runtime = None;
+                publish_repository_error(events, epoch, &error);
+                return Err(app_to_proxy(error));
             }
         }
-        let traces = rule_trace_text(&evaluation);
-        let matched_ids = evaluation
-            .traces
-            .iter()
-            .filter(|trace| trace.matched)
-            .map(|trace| trace.rule_id.as_uuid())
-            .collect();
-        return Ok(EvaluatedRules {
-            actions: evaluation.composed_actions,
-            traces,
-            matched_ids,
-            hit_rules,
-            prepared_message,
-            fault_actions,
-            pause,
-        });
     }
-    unreachable!("retry loop always returns")
+    let traces = rule_trace_text(&evaluation);
+    let matched_ids = evaluation
+        .traces
+        .iter()
+        .filter(|trace| trace.matched)
+        .map(|trace| trace.rule_id.as_uuid())
+        .collect();
+    Ok(EvaluatedRules {
+        actions: evaluation.composed_actions,
+        traces,
+        matched_ids,
+        hit_rules,
+        prepared_message,
+        fault_actions,
+        pause,
+    })
+}
+
+fn nth_advances(
+    before: &[NthCounterSnapshot],
+    after: &[NthCounterSnapshot],
+) -> Result<Vec<NthCounterAdvance>, intercept_proxy_domain::DomainError> {
+    let mut advances = Vec::new();
+    for next in after {
+        let expected_attempts = before
+            .iter()
+            .find(|previous| previous.rule_id == next.rule_id && previous.terminal == next.terminal)
+            .map_or(0, |previous| previous.attempts);
+        let increment = next
+            .attempts
+            .checked_sub(expected_attempts)
+            .ok_or_else(|| {
+                intercept_proxy_domain::DomainError::new(
+                    intercept_proxy_domain::ErrorCode::RuleInvalid,
+                    "Nth counter 不得减少",
+                )
+            })?;
+        if increment > 0 {
+            if increment != 1 {
+                return Err(intercept_proxy_domain::DomainError::new(
+                    intercept_proxy_domain::ErrorCode::RuleInvalid,
+                    "Nth counter 每次事务只能增加 1",
+                ));
+            }
+            advances.push(NthCounterAdvance {
+                rule_id: next.rule_id,
+                terminal: next.terminal.clone(),
+                expected_attempts,
+                increment,
+            });
+        }
+    }
+    Ok(advances)
 }
 
 async fn prepare_evaluated_message(

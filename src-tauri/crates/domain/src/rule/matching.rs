@@ -9,9 +9,7 @@ pub(super) fn matches_condition(
     condition: &MatchCondition,
     context: &MatchContext<'_>,
 ) -> Result<bool, String> {
-    let MatchCondition::Field { field, operator } = condition else {
-        return Ok(true);
-    };
+    let MatchCondition::Field { field, operator } = condition;
     let value = match field {
         MatchField::TerminalIp => context.terminal.source_ip.clone(),
         MatchField::CertificateFingerprint => context.terminal.certificate_sha256.clone(),
