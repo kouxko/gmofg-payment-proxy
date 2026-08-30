@@ -56,10 +56,10 @@ impl RuntimeRuleRepository for RejectingCommitRules {
         Ok(self.snapshot.lock().clone())
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         _: &RuleRuntimeSnapshot,
-        _: &[Rule],
+        _: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
         if self.reject_commit.load(AtomicOrdering::Acquire) {
             Err(AppError::new(
@@ -82,10 +82,10 @@ impl RuntimeRuleRepository for StaticRules {
         Ok(self.snapshot.lock().clone())
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &RuleRuntimeSnapshot,
-        evaluated_rules: &[Rule],
+        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
         let mut current = self.snapshot.lock();
         if current.collection_id != snapshot.collection_id
@@ -98,7 +98,7 @@ impl RuntimeRuleRepository for StaticRules {
         *current = RuleRuntimeSnapshot::with_collection_identity_and_order(
             snapshot.collection_id,
             next_revision,
-            evaluated_rules.to_vec(),
+            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
             snapshot.execution_order.clone(),
         );
         Ok(next_revision)
@@ -127,10 +127,10 @@ impl RuntimeRuleRepository for ConflictOnceRules {
         Ok(self.snapshot.lock().clone())
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &RuleRuntimeSnapshot,
-        evaluated_rules: &[Rule],
+        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
         self.commit_attempts.fetch_add(1, AtomicOrdering::AcqRel);
         let mut current = self.snapshot.lock();
@@ -157,7 +157,7 @@ impl RuntimeRuleRepository for ConflictOnceRules {
         *current = RuleRuntimeSnapshot::with_collection_identity(
             snapshot.collection_id,
             next_revision,
-            evaluated_rules.to_vec(),
+            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
         );
         Ok(next_revision)
     }
@@ -173,10 +173,10 @@ impl RuntimeRuleRepository for BlockingCommitRules {
         Ok(self.snapshot.lock().clone())
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &RuleRuntimeSnapshot,
-        evaluated_rules: &[Rule],
+        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
         self.commit_entered.notify_one();
         self.commit_release.notified().await;
@@ -190,7 +190,7 @@ impl RuntimeRuleRepository for BlockingCommitRules {
         *current = RuleRuntimeSnapshot::with_collection_identity(
             snapshot.collection_id,
             next_revision,
-            evaluated_rules.to_vec(),
+            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
         );
         Ok(next_revision)
     }
@@ -206,10 +206,10 @@ impl RuntimeRuleRepository for BlockingStopRules {
         Ok(self.snapshot.lock().clone())
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &RuleRuntimeSnapshot,
-        evaluated_rules: &[Rule],
+        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
         let mut current = self.snapshot.lock();
         if current.collection_revision != snapshot.collection_revision
@@ -221,7 +221,7 @@ impl RuntimeRuleRepository for BlockingStopRules {
         *current = RuleRuntimeSnapshot::with_collection_identity(
             snapshot.collection_id,
             next_revision,
-            evaluated_rules.to_vec(),
+            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
         );
         Ok(next_revision)
     }
@@ -256,10 +256,10 @@ impl RuntimeRuleRepository for CapacityRules {
         Ok(self.snapshot.lock().clone())
     }
 
-    async fn commit_runtime_snapshot(
+    async fn commit_runtime_deltas(
         &self,
         snapshot: &RuleRuntimeSnapshot,
-        evaluated_rules: &[Rule],
+        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
         let call = self.commit_calls.fetch_add(1, AtomicOrdering::AcqRel);
         if call == 0 {
@@ -276,7 +276,7 @@ impl RuntimeRuleRepository for CapacityRules {
         *current = RuleRuntimeSnapshot::with_collection_identity(
             snapshot.collection_id,
             revision,
-            evaluated_rules.to_vec(),
+            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
         );
         Ok(revision)
     }

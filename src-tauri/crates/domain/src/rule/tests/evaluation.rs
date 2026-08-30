@@ -1,11 +1,11 @@
 use super::*;
-use crate::{ChannelId, ErrorCode, MessageStage, Revision, RuleId, RuntimeEpoch, TerminalIdentity};
+use crate::{ChannelId, Condition, ErrorCode, MessageStage, Revision, RuleId, RuntimeEpoch, TerminalIdentity};
 use chrono::Utc;
 use serde_json::{Value, json};
 
 fn draft(
     stage: MessageStage,
-    conditions: Vec<MatchCondition>,
+    conditions: Vec<Condition>,
     actions: Vec<RuleAction>,
 ) -> RuleDraft {
     RuleDraft {
@@ -120,7 +120,7 @@ fn failed_joint_gate_does_not_consume_nth_hit_or_one_shot_state() {
     let epoch = RuntimeEpoch::new();
     let mut candidate = Rule::create(draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(1)],
+        vec![Condition::NthHit { count: 1 }],
         vec![RuleAction::Pause],
     ))
     .expect("joint rule");
@@ -196,15 +196,15 @@ fn matches_json_path_equals_contains_and_regex_without_panicking() {
             MatchCondition::Field {
                 field: MatchField::JsonPath("$.payment.items[0].name".into()),
                 operator: MatchOperator::Equals("商品A".into()),
-            },
+            }.into(),
             MatchCondition::Field {
                 field: MatchField::PathOrRequestType,
                 operator: MatchOperator::Contains("pay".into()),
-            },
+            }.into(),
             MatchCondition::Field {
                 field: MatchField::TerminalIp,
                 operator: MatchOperator::Regex(r"^10\.0\.".into()),
-            },
+            }.into(),
         ],
         vec![RuleAction::Pause],
     ))
@@ -233,14 +233,14 @@ fn invalid_persisted_json_path_is_a_non_match_instead_of_a_panic() {
         vec![MatchCondition::Field {
             field: MatchField::JsonPath("$.valid".into()),
             operator: MatchOperator::Equals("value".into()),
-        }],
+        }.into()],
         vec![RuleAction::Pause],
     ))
     .expect("initial valid rule");
     rule.conditions = vec![MatchCondition::Field {
         field: MatchField::JsonPath("$.items[]".into()),
         operator: MatchOperator::Equals("value".into()),
-    }];
+    }.into()];
     let terminal = TerminalIdentity {
         source_ip: "10.0.0.8".into(),
         certificate_sha256: "cert".into(),

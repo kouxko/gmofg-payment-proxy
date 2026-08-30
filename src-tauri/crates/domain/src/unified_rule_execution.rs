@@ -11,8 +11,10 @@ use crate::{
     TerminalAction,
 };
 
+mod condition_evaluation;
 mod program;
 
+pub use condition_evaluation::ConditionEvaluation;
 pub use program::{RuleProgramEntry, UnifiedRuleExecution, UnifiedRuleProgram};
 
 /// String comparison supported by a typed Document predicate.
@@ -87,49 +89,6 @@ pub enum DocumentPredicate {
     NullEqual,
 }
 
-impl DocumentPredicate {
-    /// Returns the rule-local JSON type carried by this predicate.
-    #[must_use]
-    pub const fn value_type(&self) -> DocumentValueType {
-        match self {
-            Self::String(_) => DocumentValueType::String,
-            Self::Number(_) => DocumentValueType::Number,
-            Self::Boolean(_) => DocumentValueType::Boolean,
-            Self::NullEqual => DocumentValueType::Null,
-        }
-    }
-
-    fn matches(&self, actual: &DocumentValue) -> bool {
-        match (self, actual) {
-            (Self::String(expected), DocumentValue::String(actual)) => match expected.operator {
-                StringOperator::Equal => actual == &expected.value,
-                StringOperator::Contains => actual.contains(&expected.value),
-                StringOperator::StartsWith => actual.starts_with(&expected.value),
-                StringOperator::EndsWith => actual.ends_with(&expected.value),
-            },
-            (Self::Number(expected), DocumentValue::Number(actual)) => {
-                let actual = actual.get();
-                let expected_value = expected.value.get();
-                match expected.operator {
-                    NumberOperator::Equal => matches!(
-                        actual.partial_cmp(&expected_value),
-                        Some(std::cmp::Ordering::Equal)
-                    ),
-                    NumberOperator::Less => actual < expected_value,
-                    NumberOperator::LessEqual => actual <= expected_value,
-                    NumberOperator::Greater => actual > expected_value,
-                    NumberOperator::GreaterEqual => actual >= expected_value,
-                }
-            }
-            (Self::Boolean(BooleanPredicate::Equal(expected)), DocumentValue::Boolean(actual)) => {
-                actual == expected
-            }
-            (Self::NullEqual, DocumentValue::Null(())) => true,
-            _ => false,
-        }
-    }
-}
-
 /// One typed leaf in a unified condition tree.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "source", rename_all = "snake_case")]
@@ -146,6 +105,17 @@ pub enum Condition {
         /// Typed HTTP condition.
         condition: MatchCondition,
     },
+    /// Shared lifecycle predicate, independent from HTTP capabilities.
+    NthHit {
+        /// Exact next successful hit number.
+        count: u64,
+    },
+}
+
+impl From<MatchCondition> for Condition {
+    fn from(condition: MatchCondition) -> Self {
+        Self::Http { condition }
+    }
 }
 
 /// Recursive non-empty AND/OR condition tree. NOT is intentionally not representable.
@@ -244,6 +214,9 @@ impl ConditionTree {
                     }
                     pending.extend(children);
                 }
+                Self::Leaf(Condition::NthHit { count: 0 }) => {
+                    return Err(rule_error("condition.count", "第 N 次命中的次数必须大于 0"));
+                }
                 Self::Leaf(_) => {}
             }
         }
@@ -256,7 +229,7 @@ impl ConditionTree {
             match node {
                 Self::All(children) | Self::Any(children) => pending.extend(children),
                 Self::Leaf(Condition::Document { .. }) => return true,
-                Self::Leaf(Condition::Http { .. }) => {}
+                Self::Leaf(Condition::Http { .. } | Condition::NthHit { .. }) => {}
             }
         }
         false
@@ -267,7 +240,7 @@ impl ConditionTree {
     /// A typed HTTP leaf requires the Application-owned HTTP context evaluator and is rejected at
     /// this Document-only boundary. A missing path or runtime JSON type mismatch is a normal false.
     pub fn matches_document(&self, document: &Document) -> Result<bool, DomainError> {
-        self.matches_with(document, &mut |_| {
+        self.matches_with(document, 1, &mut |_| {
             Err(rule_error(
                 "condition",
                 "HTTP 条件需要应用层提供类型化 HTTP 上下文",
@@ -276,37 +249,78 @@ impl ConditionTree {
     }
 
     /// Matches this tree using a caller-provided evaluator for typed HTTP leaves.
-    pub fn matches_with(
+    pub fn matches_with<E>(
         &self,
         document: &Document,
-        http_matches: &mut impl FnMut(&MatchCondition) -> Result<bool, DomainError>,
-    ) -> Result<bool, DomainError> {
+        nth_attempt: u64,
+        http_matches: &mut impl FnMut(&MatchCondition) -> Result<bool, E>,
+    ) -> Result<bool, E>
+    where
+        E: From<DomainError>,
+    {
+        Ok(self
+            .evaluate_with_nth(document, nth_attempt, http_matches)?
+            .matched)
+    }
+
+    pub fn evaluate_with_nth<E>(
+        &self,
+        document: &Document,
+        nth_attempt: u64,
+        http_matches: &mut impl FnMut(&MatchCondition) -> Result<bool, E>,
+    ) -> Result<ConditionEvaluation, E>
+    where
+        E: From<DomainError>,
+    {
         match self {
             Self::All(children) => {
+                let mut matched = true;
+                let mut eligible_without_nth = true;
+                let mut contains_nth = false;
                 for child in children {
-                    if !child.matches_with(document, http_matches)? {
-                        return Ok(false);
-                    }
+                    let evaluated = child.evaluate_with_nth(document, nth_attempt, http_matches)?;
+                    matched &= evaluated.matched;
+                    eligible_without_nth &= evaluated.eligible_without_nth;
+                    contains_nth |= evaluated.contains_nth;
                 }
-                Ok(true)
+                Ok(ConditionEvaluation {
+                    matched,
+                    eligible_without_nth,
+                    contains_nth,
+                })
             }
             Self::Any(children) => {
+                let mut matched = false;
+                let mut eligible_without_nth = false;
+                let mut contains_nth = false;
                 for child in children {
-                    if child.matches_with(document, http_matches)? {
-                        return Ok(true);
-                    }
+                    let evaluated = child.evaluate_with_nth(document, nth_attempt, http_matches)?;
+                    matched |= evaluated.matched;
+                    eligible_without_nth |= evaluated.eligible_without_nth;
+                    contains_nth |= evaluated.contains_nth;
                 }
-                Ok(false)
+                Ok(ConditionEvaluation {
+                    matched,
+                    eligible_without_nth,
+                    contains_nth,
+                })
             }
             Self::Leaf(Condition::Document { path, predicate }) => match document.resolve(path) {
-                Ok(actual) => Ok(predicate.matches(actual)),
+                Ok(actual) => Ok(ConditionEvaluation::ordinary(predicate.matches(actual))),
                 Err(DomainError {
                     code: ErrorCode::DocumentPathMissing | ErrorCode::DocumentPathTypeMismatch,
                     ..
-                }) => Ok(false),
-                Err(error) => Err(error),
+                }) => Ok(ConditionEvaluation::ordinary(false)),
+                Err(error) => Err(error.into()),
             },
-            Self::Leaf(Condition::Http { condition }) => http_matches(condition),
+            Self::Leaf(Condition::Http { condition }) => {
+                http_matches(condition).map(ConditionEvaluation::ordinary)
+            }
+            Self::Leaf(Condition::NthHit { count }) => Ok(ConditionEvaluation {
+                matched: *count > 0 && nth_attempt == *count,
+                eligible_without_nth: true,
+                contains_nth: true,
+            }),
         }
     }
 
@@ -345,7 +359,7 @@ impl ConditionTree {
                 Ok(())
             }
             Self::Leaf(Condition::Document { path, predicate }) => visitor(path, predicate),
-            Self::Leaf(Condition::Http { .. }) => Ok(()),
+            Self::Leaf(Condition::Http { .. } | Condition::NthHit { .. }) => Ok(()),
         }
     }
 }
@@ -375,7 +389,7 @@ pub enum DocumentMutation {
 }
 
 impl DocumentMutation {
-    fn apply(&self, document: &mut Document) -> Result<(), DomainError> {
+    pub fn apply(&self, document: &mut Document) -> Result<(), DomainError> {
         match self {
             Self::Set { path, value } => document.set(path, value.clone()),
             Self::Clear { path } => document.clear_path(path),

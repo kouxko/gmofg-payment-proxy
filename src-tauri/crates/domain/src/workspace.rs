@@ -10,10 +10,10 @@ use std::collections::BTreeMap;
 use crate::{
     AndroidNetworkProfile, CertificateReferenceId, ChannelId, Condition, ConditionTree,
     DocumentAction, DocumentCondition, DocumentMutation, DocumentPredicate, DomainError, ErrorCode,
-    HttpDocumentRuleContent, ListenerId, MatchCondition, MessageStage,
-    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolRuleStage, Revision, Rule,
-    RuleAction, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleId, RuleStage,
-    SocketRuleContent, UnifiedAction, WorkspaceId,
+    HttpDocumentRuleContent, ListenerId, MessageStage, ProtocolDocumentRuleDefinition,
+    ProtocolDocumentRuleId, ProtocolRuleStage, Revision, Rule, RuleAction, RuleContent,
+    RuleDefinition, RuleDefinitionDraft, RuleId, RuleStage, SocketRuleContent, UnifiedAction,
+    WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -131,9 +131,9 @@ impl ProxyWorkspace {
                 && content.actions.is_empty()
                 && content.document.is_none()
                 && content.description.is_empty()
-                && !content.one_shot
-                && content.hit_count == 0
-                && content.last_hit_at.is_none()
+                && !definition.one_shot()
+                && definition.lifecycle().hit_count == 0
+                && definition.lifecycle().last_hit_at.is_none()
             {
                 continue;
             }
@@ -149,9 +149,9 @@ impl ProxyWorkspace {
                 stage: message_stage_from_rule(definition.stage()),
                 conditions,
                 actions,
-                one_shot: content.one_shot,
-                hit_count: content.hit_count,
-                last_hit_at: content.last_hit_at,
+                one_shot: definition.one_shot(),
+                hit_count: definition.lifecycle().hit_count,
+                last_hit_at: definition.lifecycle().last_hit_at,
             });
         }
         Ok(rules)
@@ -195,24 +195,28 @@ impl ProxyWorkspace {
             preserved.retain(|definition| definition.rule_id() != rule.id);
             preserved.push(RuleDefinition::restore(
                 rule.id,
-                rule.revision,
                 crate::RuleDefinitionDraft {
                     name: rule.name,
                     enabled: rule.enabled,
                     priority,
                     listener_id,
                     stage,
+                    one_shot: rule.one_shot,
                     content: RuleContent::Http(crate::HttpRuleContent {
                         description: rule.description,
                         condition: unified_http_tree(rule.conditions),
                         actions: unified_http_actions(rule.actions),
                         document,
-                        one_shot: rule.one_shot,
-                        hit_count: rule.hit_count,
-                        last_hit_at: rule.last_hit_at,
                     }),
                 },
-                rule.created_order,
+                crate::RuleDefinitionRestoreSnapshot {
+                    revision: rule.revision,
+                    created_order: rule.created_order,
+                    lifecycle: crate::RuleLifecycle {
+                        hit_count: rule.hit_count,
+                        last_hit_at: rule.last_hit_at,
+                    },
+                },
             )?);
         }
         crate::sort_rule_definitions(&mut preserved);
@@ -282,16 +286,20 @@ impl ProxyWorkspace {
             };
             definitions.push(RuleDefinition::restore(
                 rule_id,
-                rule.revision(),
                 RuleDefinitionDraft {
                     name: rule.name().to_owned(),
                     enabled: rule.enabled(),
                     priority: rule.priority(),
                     listener_id: rule.listener_id(),
                     stage: rule_stage_from_protocol(rule.stage()),
+                    one_shot: false,
                     content,
                 },
-                rule.created_order(),
+                crate::RuleDefinitionRestoreSnapshot {
+                    revision: rule.revision(),
+                    created_order: rule.created_order(),
+                    lifecycle: crate::RuleLifecycle::default(),
+                },
             )?);
         }
         crate::sort_rule_definitions(&mut definitions);

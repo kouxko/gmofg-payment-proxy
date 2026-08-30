@@ -55,6 +55,11 @@ impl RuleProgramEntry {
         &self.condition
     }
 
+    #[must_use]
+    pub fn actions(&self) -> &[UnifiedAction] {
+        &self.actions
+    }
+
     pub fn replace_condition(&mut self, condition: ConditionTree) -> Result<(), DomainError> {
         condition.validate()?;
         self.condition = condition;
@@ -126,7 +131,10 @@ impl UnifiedRuleProgram {
         let mut http_actions = Vec::new();
         let mut terminal_action = None;
         'rules: for rule in &self.rules {
-            if !rule.condition.matches_with(&working, &mut http_matches)? {
+            if !rule
+                .condition
+                .matches_with(&working, 1, &mut http_matches)?
+            {
                 continue;
             }
             for action in &rule.actions {

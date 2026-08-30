@@ -217,14 +217,16 @@ struct StrictAfterBytes {
     after_bytes: u64,
 }
 
-impl From<HttpMatchConditionTemplate> for MatchCondition {
+impl From<HttpMatchConditionTemplate> for intercept_proxy_domain::Condition {
     fn from(value: HttpMatchConditionTemplate) -> Self {
         match value {
-            HttpMatchConditionTemplate::Field(condition) => Self::Field {
-                field: condition.field.into(),
-                operator: condition.operator.into(),
+            HttpMatchConditionTemplate::Field(condition) => Self::Http {
+                condition: MatchCondition::Field {
+                    field: condition.field.into(),
+                    operator: condition.operator.into(),
+                },
             },
-            HttpMatchConditionTemplate::NthHit(nth) => Self::NthHit(nth),
+            HttpMatchConditionTemplate::NthHit(count) => Self::NthHit { count },
         }
     }
 }

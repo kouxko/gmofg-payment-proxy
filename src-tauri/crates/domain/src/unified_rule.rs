@@ -3,14 +3,22 @@
 //! 顶层生命周期、排序、Listener 绑定和 revision 只在 [`RuleDefinition`] 中存在一次；
 //! HTTP 与 Socket 的差异能力由带标签的 [`RuleContent`] 保持类型隔离。
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    Condition, ConditionTree, DomainError, ErrorCode, ListenerId, MatchCondition, MessageStage,
-    ProtocolDirection, ProtocolPackageRef, Revision, RuleAction, RuleDraft, RuleId,
-    RuleProgramEntry, UnifiedAction, validate_rule_draft,
+    ConditionTree, DomainError, ErrorCode, ListenerId, ProtocolDirection, ProtocolPackageRef,
+    Revision, RuleId, RuleProgramEntry, UnifiedAction,
+};
+
+mod lifecycle;
+mod validation;
+
+use validation::{ensure_socket_only, validate_http_runtime_content};
+
+pub use lifecycle::{
+    NthCounterAdvance, NthCounterSnapshot, RuleDefinitionRestoreSnapshot, RuleLifecycle,
+    RuleLifecycleDelta, RuleLifecycleSnapshot,
 };
 
 #[derive(
@@ -49,9 +57,6 @@ pub struct HttpRuleContent {
     pub condition: ConditionTree,
     pub actions: Vec<UnifiedAction>,
     pub document: Option<HttpDocumentRuleContent>,
-    pub one_shot: bool,
-    pub hit_count: u64,
-    pub last_hit_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -108,6 +113,7 @@ pub struct RuleDefinitionDraft {
     pub priority: i32,
     pub listener_id: ListenerId,
     pub stage: RuleStage,
+    pub one_shot: bool,
     pub content: RuleContent,
 }
 
@@ -122,6 +128,8 @@ pub struct RuleDefinition {
     created_order: u64,
     listener_id: ListenerId,
     stage: RuleStage,
+    one_shot: bool,
+    lifecycle: RuleLifecycle,
     content: RuleContent,
 }
 
@@ -136,6 +144,8 @@ struct RuleDefinitionWire {
     created_order: u64,
     listener_id: ListenerId,
     stage: RuleStage,
+    one_shot: bool,
+    lifecycle: RuleLifecycle,
     content: RuleContent,
 }
 
@@ -152,6 +162,8 @@ impl TryFrom<RuleDefinitionWire> for RuleDefinition {
             created_order: value.created_order,
             listener_id: value.listener_id,
             stage: value.stage,
+            one_shot: value.one_shot,
+            lifecycle: value.lifecycle,
             content: value.content,
         };
         definition.validate()?;
@@ -170,6 +182,8 @@ impl RuleDefinition {
             created_order,
             listener_id: draft.listener_id,
             stage: draft.stage,
+            one_shot: draft.one_shot,
+            lifecycle: RuleLifecycle::default(),
             content: draft.content,
         };
         definition.validate_for_save()?;
@@ -178,19 +192,20 @@ impl RuleDefinition {
 
     pub fn restore(
         rule_id: RuleId,
-        revision: Revision,
         draft: RuleDefinitionDraft,
-        created_order: u64,
+        snapshot: RuleDefinitionRestoreSnapshot,
     ) -> Result<Self, DomainError> {
         let definition = Self {
             rule_id,
-            revision,
+            revision: snapshot.revision,
             name: draft.name,
             enabled: draft.enabled,
             priority: draft.priority,
-            created_order,
+            created_order: snapshot.created_order,
             listener_id: draft.listener_id,
             stage: draft.stage,
+            one_shot: draft.one_shot,
+            lifecycle: snapshot.lifecycle,
             content: draft.content,
         };
         definition.validate()?;
@@ -222,6 +237,7 @@ impl RuleDefinition {
         candidate.enabled = draft.enabled;
         candidate.priority = draft.priority;
         candidate.stage = draft.stage;
+        candidate.one_shot = draft.one_shot;
         candidate.content = draft.content;
         candidate.validate_for_save()?;
         candidate.revision = self.revision.checked_next()?;
@@ -244,6 +260,8 @@ impl RuleDefinition {
     pub fn remap_for_workspace_copy(&mut self, listener_id: ListenerId) {
         self.rule_id = RuleId::new();
         self.listener_id = listener_id;
+        self.revision = Revision::INITIAL;
+        self.lifecycle = RuleLifecycle::default();
     }
 
     pub fn validate(&self) -> Result<(), DomainError> {
@@ -385,6 +403,11 @@ impl RuleDefinition {
     }
 
     #[must_use]
+    pub const fn one_shot(&self) -> bool {
+        self.one_shot
+    }
+
+    #[must_use]
     pub fn to_draft(&self) -> RuleDefinitionDraft {
         RuleDefinitionDraft {
             name: self.name.clone(),
@@ -392,84 +415,10 @@ impl RuleDefinition {
             priority: self.priority,
             listener_id: self.listener_id,
             stage: self.stage,
+            one_shot: self.one_shot,
             content: self.content.clone(),
         }
     }
-}
-
-fn validate_http_runtime_content(
-    definition: &RuleDefinition,
-    content: &HttpRuleContent,
-) -> Result<(), DomainError> {
-    let mut conditions = Vec::new();
-    collect_http_conditions(&content.condition, &mut conditions);
-    let actions = content
-        .actions
-        .iter()
-        .filter_map(|action| match action {
-            UnifiedAction::Http(action) => Some(action.clone()),
-            UnifiedAction::Terminal(action) => Some(RuleAction::Terminal(action.clone())),
-            UnifiedAction::RecordMatch | UnifiedAction::Document(_) => None,
-        })
-        .collect::<Vec<_>>();
-    let has_ordinary_http_work = !conditions.is_empty() || !actions.is_empty();
-    if !has_ordinary_http_work && content.document.is_some() {
-        return Ok(());
-    }
-    let stage = match definition.stage {
-        RuleStage::ProxyToUpstream => MessageStage::Request,
-        RuleStage::ProxyToApp => MessageStage::Response,
-        RuleStage::TlsHandshake => MessageStage::TlsHandshake,
-        RuleStage::AppToProxy | RuleStage::UpstreamToProxy => {
-            return Err(rule_binding_error(
-                "stage",
-                "该处理阶段只支持 Document 条件和动作，不支持普通 HTTP 条件或动作",
-            ));
-        }
-    };
-    let priority = u32::try_from(definition.priority)
-        .map_err(|_| rule_binding_error("priority", "HTTP 规则优先级不能为负数"))?;
-    validate_rule_draft(&RuleDraft {
-        expected_revision: Some(definition.revision),
-        name: definition.name.clone(),
-        description: content.description.clone(),
-        enabled: definition.enabled,
-        priority,
-        created_order: definition.created_order,
-        channel: None,
-        stage,
-        conditions,
-        actions,
-        one_shot: content.one_shot,
-    })
-}
-
-fn collect_http_conditions(tree: &ConditionTree, output: &mut Vec<MatchCondition>) {
-    match tree {
-        ConditionTree::All(children) | ConditionTree::Any(children) => {
-            for child in children {
-                collect_http_conditions(child, output);
-            }
-        }
-        ConditionTree::Leaf(Condition::Http { condition }) => output.push(condition.clone()),
-        ConditionTree::Leaf(Condition::Document { .. }) => {}
-    }
-}
-
-fn ensure_socket_only(tree: &ConditionTree, actions: &[UnifiedAction]) -> Result<(), DomainError> {
-    let mut http = Vec::new();
-    collect_http_conditions(tree, &mut http);
-    if !http.is_empty()
-        || actions
-            .iter()
-            .any(|action| matches!(action, UnifiedAction::Http(_) | UnifiedAction::Terminal(_)))
-    {
-        return Err(rule_binding_error(
-            "content",
-            "Socket 规则不能包含 HTTP 条件、HTTP 动作或尚未声明的终止动作",
-        ));
-    }
-    Ok(())
 }
 
 fn rule_binding_error(field: &str, message: &str) -> DomainError {

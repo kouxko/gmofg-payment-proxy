@@ -36,6 +36,7 @@ const httpListener = listener("http-listener", "HTTP Listener", "http");
 const socketListener = listener("socket-listener", "Socket Listener", "socket");
 const httpCondition = { operator: "leaf" as const, children: { source: "http" as const, condition: { Field: { field: "PathOrRequestType" as const, operator: { Equals: "/" } } } } };
 const documentCondition = (path = "/amount", value = 0) => ({ operator: "leaf" as const, children: { source: "document" as const, path, predicate: { type: "number" as const, value: { operator: "equal" as const, value } } } });
+const lifecycle = { hit_count: 0, last_hit_at: null };
 
 function listener(id: string, name: string, kind: "http" | "socket"): ProxyListener {
   return {
@@ -50,10 +51,9 @@ function listener(id: string, name: string, kind: "http" | "socket"): ProxyListe
 function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): RuleDefinition_Serialize {
   return {
     rule_id: "http-rule", revision: 3, name: "HTTP combined", enabled: true, priority: 50,
-    created_order: 2, listener_id: httpListener.id, stage: "proxy_to_upstream",
+    created_order: 2, listener_id: httpListener.id, stage: "proxy_to_upstream", one_shot: false, lifecycle,
     content: { type: "http", value: {
       description: "headers and body", condition: httpCondition, actions: [{ source: "record_match" }], document: null,
-      one_shot: false, hit_count: 0, last_hit_at: null,
     } },
     ...overrides,
   };
@@ -62,7 +62,7 @@ function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): RuleDefini
 function socketRule(): RuleDefinition_Serialize {
   return {
     rule_id: "socket-rule", revision: 4, name: "Socket document", enabled: true, priority: 20,
-    created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app",
+    created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app", one_shot: false, lifecycle,
     content: { type: "socket", value: {
       package: { id: "iso8583", version: "1.0.0" },
       condition: documentCondition(), actions: [{ source: "record_match" }],
@@ -79,8 +79,8 @@ const httpContext: RuleEditorContext = {
     document_fields: [], document_common_actions: ["record_match"],
     new_rule_draft: { rule_id: null, expected_revision: null, draft: {
       name: "新建 HTTP 规则", enabled: true, priority: 100, listener_id: httpListener.id,
-      stage: "proxy_to_upstream", content: { type: "http", value: {
-        description: "", condition: httpCondition, actions: [{ source: "record_match" }], one_shot: false, hit_count: 0, last_hit_at: null,
+      stage: "proxy_to_upstream", one_shot: false, content: { type: "http", value: {
+        description: "", condition: httpCondition, actions: [{ source: "record_match" }],
         document: { package: { id: "iso8583", version: "1.0.0" } },
       } },
     } },
@@ -93,7 +93,7 @@ const socketContext: RuleEditorContext = {
     stage: "proxy_to_app", fields: [], common_actions: ["record_match"],
     new_rule_draft: { rule_id: null, expected_revision: null, draft: {
       name: "新建 Socket 规则", enabled: true, priority: 100, listener_id: socketListener.id,
-      stage: "proxy_to_app", content: { type: "socket", value: {
+      stage: "proxy_to_app", one_shot: false, content: { type: "socket", value: {
         package: { id: "iso8583", version: "1.0.0" }, condition: documentCondition(), actions: [{ source: "record_match" }],
       } },
     } },
@@ -132,7 +132,7 @@ describe("unified rule workspace", () => {
         },
       },
     });
-    commandMocks.ruleDefinitionConditionDraft.mockResolvedValue({ Field: { field: "PathOrRequestType", operator: { Equals: "" } } });
+    commandMocks.ruleDefinitionConditionDraft.mockResolvedValue({ source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "" } } } });
     commandMocks.ruleDefinitionActionDraft.mockResolvedValue({ SetHeader: { name: "x-proxy-test", value: "" } });
     commandMocks.ruleParseDocumentValue.mockResolvedValue(0);
   });
@@ -248,7 +248,7 @@ describe("unified rule workspace", () => {
     expect(await screen.findByDisplayValue("HTTP second")).toBeVisible();
 
     await act(async () => {
-      finishOldRequest({ Field: { field: "PathOrRequestType", operator: { Equals: "old" } } });
+      finishOldRequest({ source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "old" } } } });
       await Promise.resolve();
     });
     expect(screen.getByDisplayValue("HTTP second")).toBeVisible();
@@ -275,7 +275,7 @@ describe("unified rule workspace", () => {
     await act(async () => {
       finishAction({ SetHeader: { name: "x-latest", value: "1" } });
       await Promise.resolve();
-      finishCondition({ Field: { field: "PathOrRequestType", operator: { Equals: "/pay" } } });
+      finishCondition({ source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "/pay" } } } });
       await Promise.resolve();
     });
     await user.click(screen.getByRole("button", { name: "保存规则" }));
@@ -362,7 +362,7 @@ describe("unified rule workspace", () => {
     const rule = httpRule({
       content: { type: "http", value: {
         description: "headers and body", condition: httpCondition, actions: [{ source: "http", value: { SetHeader: { name: "x-test", value: "1" } } }],
-        document: null, one_shot: false, hit_count: 0, last_hit_at: null,
+        document: null,
       } },
     });
     commandMocks.ruleDefinitionList.mockResolvedValue([rule]);
@@ -381,7 +381,7 @@ describe("unified rule workspace", () => {
   it("disables save when Rust no longer declares the selected stage payload compatible", async () => {
     const rule = httpRule({ content: { type: "http", value: {
       description: "", condition: httpCondition, actions: [{ source: "http", value: { SetHeader: { name: "x-test", value: "1" } } }],
-      document: null, one_shot: false, hit_count: 0, last_hit_at: null,
+      document: null,
     } } });
     const context = httpContextWithSecondStage([]);
     if (context.content.type !== "http" || !context.content.value.stages[0].http) throw new Error("HTTP context fixture is invalid");
@@ -400,9 +400,9 @@ describe("unified rule workspace", () => {
     const retainedContent = {
       description: "preserve me", condition: { operator: "leaf" as const, children: { source: "http" as const, condition: { Field: { field: "PathOrRequestType" as const, operator: { Equals: "/pay" } } } } },
       actions: [{ source: "http" as const, value: { SetHeader: { name: "x-test", value: "1" } } }], document: null,
-      one_shot: true, hit_count: 7, last_hit_at: "2026-08-28T00:00:00Z",
     };
-    const rule = httpRule({ content: { type: "http", value: retainedContent } });
+    const retainedLifecycle = { one_shot: true, hit_count: 7, last_hit_at: "2026-08-28T00:00:00Z" };
+    const rule = httpRule({ lifecycle: retainedLifecycle, content: { type: "http", value: retainedContent } });
     commandMocks.ruleDefinitionList.mockResolvedValue([rule]);
     commandMocks.ruleDefinitionGet.mockResolvedValue(rule);
     commandMocks.ruleEditorContext.mockResolvedValue(httpContextWithSecondStage(["set_header"]));

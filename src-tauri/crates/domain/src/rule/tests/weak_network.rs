@@ -5,7 +5,7 @@ fn validates_tls_match_scope_and_truncation_boundary() {
         vec![MatchCondition::Field {
             field: MatchField::TerminalIp,
             operator: MatchOperator::Equals("10.0.0.8".into()),
-        }],
+        }.into()],
         vec![RuleAction::Terminal(TerminalAction::RejectTlsHandshake)],
     );
     assert!(validate_rule_draft(&tls_rule).is_err());
@@ -32,7 +32,7 @@ fn validates_json_paths_and_headers_without_assuming_a_product_codec() {
         vec![MatchCondition::Field {
             field: MatchField::JsonPath("$.items[]".into()),
             operator: MatchOperator::Equals("x".into()),
-        }],
+        }.into()],
         vec![
             RuleAction::SetJsonField {
                 path: "missing_root.field".into(),
@@ -92,7 +92,7 @@ fn warns_when_higher_priority_terminal_rule_can_shadow_lower_rule() {
     .unwrap();
     let mut lower = Rule::create(draft(
         MessageStage::Request,
-        vec![MatchCondition::NthHit(2)],
+        vec![Condition::NthHit { count: 2 }],
         vec![RuleAction::Pause],
     ))
     .unwrap();

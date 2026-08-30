@@ -194,6 +194,7 @@ function toSaveInput(rule: RuleDefinition_Serialize): RuleDefinitionSaveInput {
       priority: rule.priority,
       listener_id: rule.listener_id,
       stage: rule.stage,
+      one_shot: rule.one_shot,
       content: rule.content,
     },
   };

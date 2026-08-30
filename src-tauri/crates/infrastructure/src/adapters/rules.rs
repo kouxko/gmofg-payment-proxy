@@ -25,7 +25,9 @@ use intercept_proxy_domain::{
     MatchOperator, MessageStage, RuleAction, RuleDraft, RuleEngine, RuleId, RuntimeEpoch,
     TerminalAction, TrafficDirection, validate_rule_draft,
 };
-use intercept_proxy_domain::{Revision, Rule, RuleRuntimeSnapshot, RuleSetSignature};
+use intercept_proxy_domain::{
+    Revision, Rule, RuleLifecycleDelta, RuleRuntimeSnapshot, RuleSetSignature,
+};
 use intercept_proxy_product_api::ProductChannel;
 #[cfg(test)]
 use parking_lot::Mutex;
@@ -340,13 +342,13 @@ impl RuleRepositoryAdapter {
             .await
     }
 
-    pub async fn commit_runtime_snapshot(
+    pub async fn commit_runtime_deltas(
         &self,
         snapshot: &RuleRuntimeSnapshot,
-        evaluated_rules: &[Rule],
+        deltas: &[RuleLifecycleDelta],
     ) -> AppResult<u64> {
         let snapshot = snapshot.clone();
-        let evaluated_rules = evaluated_rules.to_vec();
+        let deltas = deltas.to_vec();
         self.executor
             .execute(move |store| {
                 if RuleSetSignature::from_rules(&snapshot.rules) != snapshot.signature {
@@ -369,8 +371,7 @@ impl RuleRepositoryAdapter {
                         "Workspace 或规则集合已在运行快照之后发生变化。",
                     ));
                 }
-                workspace
-                    .replace_http_runtime_rules(runtime_rules(&snapshot, &evaluated_rules)?)?;
+                workspace.replace_http_runtime_rules(apply_runtime_deltas(&snapshot, &deltas)?)?;
                 let expected_revision = workspace.revision.get();
                 Ok(
                     Self::save_workspace_to(store, workspace, expected_revision)?
@@ -400,7 +401,7 @@ impl RuleRepositoryAdapter {
 
 #[cfg(test)]
 mod action_conversion;
-mod conversion;
+pub(crate) mod conversion;
 #[cfg(test)]
 mod persistence;
 #[cfg(test)]
@@ -408,11 +409,11 @@ mod port;
 
 #[cfg(test)]
 pub(crate) use action_conversion::{action_to_app, action_to_domain};
+use conversion::apply_runtime_deltas;
 #[cfg(test)]
 pub(crate) use conversion::condition_to_app;
 #[cfg(test)]
 pub(crate) use conversion::condition_to_domain;
-use conversion::runtime_rules;
 #[cfg(test)]
 use conversion::{summary, to_domain_draft, validation_from_domain, view};
 #[cfg(test)]

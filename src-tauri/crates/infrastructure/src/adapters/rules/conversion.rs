@@ -6,11 +6,17 @@ use super::{
     MatchField, MatchOperator, MessageStage, Revision, RuleDraft, RuleSummaryViewModel,
     RuleValidationViewModel, RuleViewModel, UiTone, action_to_app, action_to_domain, json_error,
 };
+#[cfg(test)]
+use intercept_proxy_domain::Condition;
+use intercept_proxy_domain::{
+    NthCounterAdvance, RuleLifecycle, RuleLifecycleDelta, RuleLifecycleSnapshot, RuleSetSignature,
+};
 
-pub(super) fn runtime_rules(
+pub(crate) fn runtime_deltas(
     snapshot: &RuleRuntimeSnapshot,
     evaluated_rules: &[Rule],
-) -> AppResult<Vec<Rule>> {
+    nth_advances: &[NthCounterAdvance],
+) -> AppResult<Vec<RuleLifecycleDelta>> {
     let mut expected_ids = snapshot
         .rules
         .iter()
@@ -28,14 +34,11 @@ pub(super) fn runtime_rules(
             "运行态提交不得增加、删除或重复规则。",
         ));
     }
-    snapshot
+    let mut deltas = snapshot
         .rules
         .iter()
-        .map(|original| {
-            let evaluated = evaluated_rules
-                .iter()
-                .find(|rule| rule.id == original.id)
-                .ok_or_else(|| AppError::new("RULE_INVALID", "运行态提交缺少规则。"))?;
+        .filter_map(|original| {
+            let evaluated = evaluated_rules.iter().find(|rule| rule.id == original.id)?;
             let one_shot_fired = original.one_shot
                 && original.enabled
                 && !evaluated.enabled
@@ -48,15 +51,127 @@ pub(super) fn runtime_rules(
                 allowed.revision = evaluated.revision;
             }
             if allowed != *evaluated {
-                return Err(AppError::new(
+                return Some(Err(AppError::new(
                     "RULE_INVALID",
                     "运行态提交包含非命中元数据的配置变更。",
                 )
-                .entity(original.id.to_string()));
+                .entity(original.id.to_string())));
             }
-            Ok(evaluated.clone())
+            let Some(increment) = evaluated.hit_count.checked_sub(original.hit_count) else {
+                return Some(Err(AppError::new(
+                    "RULE_INVALID",
+                    "运行态命中计数不得减少。",
+                )));
+            };
+            if increment == 0 && !one_shot_fired {
+                return None;
+            }
+            let Some(last_hit_at) = evaluated.last_hit_at else {
+                return Some(Err(AppError::new(
+                    "RULE_INVALID",
+                    "命中生命周期增量缺少 last_hit_at。",
+                )));
+            };
+            Some(Ok(RuleLifecycleDelta {
+                rule_id: original.id,
+                expected_revision: original.revision,
+                hit_count_increment: increment,
+                last_hit_at: Some(last_hit_at),
+                disable_one_shot: one_shot_fired,
+                nth_counter_advance: None,
+            }))
         })
-        .collect()
+        .collect::<AppResult<Vec<_>>>()?;
+    for advance in nth_advances {
+        if let Some(delta) = deltas
+            .iter_mut()
+            .find(|delta| delta.rule_id == advance.rule_id)
+        {
+            delta.nth_counter_advance = Some(advance.clone());
+        } else {
+            let original = snapshot
+                .rules
+                .iter()
+                .find(|rule| rule.id == advance.rule_id)
+                .ok_or_else(|| AppError::new("RULE_INVALID", "Nth counter 增量引用未知规则。"))?;
+            deltas.push(RuleLifecycleDelta {
+                rule_id: advance.rule_id,
+                expected_revision: original.revision,
+                hit_count_increment: 0,
+                last_hit_at: None,
+                disable_one_shot: false,
+                nth_counter_advance: Some(advance.clone()),
+            });
+        }
+    }
+    apply_runtime_deltas(snapshot, &deltas)?;
+    Ok(deltas)
+}
+
+pub(crate) fn apply_runtime_deltas(
+    snapshot: &RuleRuntimeSnapshot,
+    deltas: &[RuleLifecycleDelta],
+) -> AppResult<Vec<Rule>> {
+    if RuleSetSignature::from_rules(&snapshot.rules) != snapshot.signature {
+        return Err(AppError::new(
+            "REVISION_CONFLICT",
+            "规则运行快照签名与内容不一致。",
+        ));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for delta in deltas {
+        if !seen.insert(delta.rule_id) {
+            return Err(AppError::new(
+                "RULE_INVALID",
+                "生命周期增量不得重复 rule_id。",
+            ));
+        }
+        let rule = snapshot
+            .rules
+            .iter()
+            .find(|rule| rule.id == delta.rule_id)
+            .ok_or_else(|| AppError::new("RULE_INVALID", "生命周期增量引用未知规则。"))?;
+        delta
+            .validate_against(&RuleLifecycleSnapshot {
+                rule_id: rule.id,
+                revision: rule.revision,
+                enabled: rule.enabled,
+                one_shot: rule.one_shot,
+                lifecycle: RuleLifecycle {
+                    hit_count: rule.hit_count,
+                    last_hit_at: rule.last_hit_at,
+                },
+            })
+            .map_err(AppError::from)?;
+        rule.hit_count
+            .checked_add(delta.hit_count_increment)
+            .ok_or_else(|| AppError::new("RULE_INVALID", "规则命中次数溢出。"))?;
+        if delta.disable_one_shot {
+            rule.revision.checked_next().map_err(AppError::from)?;
+        }
+    }
+    let mut rules = snapshot.rules.clone();
+    for delta in deltas {
+        let rule = rules
+            .iter_mut()
+            .find(|rule| rule.id == delta.rule_id)
+            .ok_or_else(|| AppError::new("RULE_INVALID", "生命周期增量引用未知规则。"))?;
+        if rule.revision != delta.expected_revision {
+            return Err(AppError::new("REVISION_CONFLICT", "规则 revision 已变化。"));
+        }
+        rule.hit_count = rule
+            .hit_count
+            .checked_add(delta.hit_count_increment)
+            .ok_or_else(|| AppError::new("RULE_INVALID", "规则命中次数溢出。"))?;
+        if let Some(last_hit_at) = delta.last_hit_at {
+            rule.last_hit_at = Some(last_hit_at);
+        }
+        if delta.disable_one_shot {
+            rule.enabled = false;
+            rule.revision = rule.revision.checked_next().map_err(AppError::from)?;
+        }
+    }
+    Ok(rules)
 }
 
 #[cfg(test)]
@@ -167,29 +282,37 @@ pub(super) fn app_draft(rule: &Rule) -> AppResult<AppRuleDraft> {
 }
 
 #[cfg(test)]
-pub(crate) fn condition_to_domain(condition: &AppRuleCondition) -> MatchCondition {
+pub(crate) fn condition_to_domain(condition: &AppRuleCondition) -> Condition {
     match condition {
-        AppRuleCondition::Field { field, operator } => MatchCondition::Field {
-            field: match field {
-                AppRuleMatchField::TerminalIp => MatchField::TerminalIp,
-                AppRuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
-                AppRuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
-                AppRuleMatchField::JsonPath { path } => MatchField::JsonPath(path.clone()),
-            },
-            operator: match operator {
-                AppRuleMatchOperator::Equals { value } => MatchOperator::Equals(value.clone()),
-                AppRuleMatchOperator::Contains { value } => MatchOperator::Contains(value.clone()),
-                AppRuleMatchOperator::Regex { pattern } => MatchOperator::Regex(pattern.clone()),
+        AppRuleCondition::Field { field, operator } => Condition::Http {
+            condition: MatchCondition::Field {
+                field: match field {
+                    AppRuleMatchField::TerminalIp => MatchField::TerminalIp,
+                    AppRuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
+                    AppRuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
+                    AppRuleMatchField::JsonPath { path } => MatchField::JsonPath(path.clone()),
+                },
+                operator: match operator {
+                    AppRuleMatchOperator::Equals { value } => MatchOperator::Equals(value.clone()),
+                    AppRuleMatchOperator::Contains { value } => {
+                        MatchOperator::Contains(value.clone())
+                    }
+                    AppRuleMatchOperator::Regex { pattern } => {
+                        MatchOperator::Regex(pattern.clone())
+                    }
+                },
             },
         },
-        AppRuleCondition::NthHit { count } => MatchCondition::NthHit(*count),
+        AppRuleCondition::NthHit { count } => Condition::NthHit { count: *count },
     }
 }
 
 #[cfg(test)]
-pub(crate) fn condition_to_app(condition: &MatchCondition) -> AppRuleCondition {
+pub(crate) fn condition_to_app(condition: &Condition) -> AppRuleCondition {
     match condition {
-        MatchCondition::Field { field, operator } => AppRuleCondition::Field {
+        Condition::Http {
+            condition: MatchCondition::Field { field, operator },
+        } => AppRuleCondition::Field {
             field: match field {
                 MatchField::TerminalIp => AppRuleMatchField::TerminalIp,
                 MatchField::CertificateFingerprint => AppRuleMatchField::CertificateFingerprint,
@@ -208,7 +331,10 @@ pub(crate) fn condition_to_app(condition: &MatchCondition) -> AppRuleCondition {
                 },
             },
         },
-        MatchCondition::NthHit(count) => AppRuleCondition::NthHit { count: *count },
+        Condition::NthHit { count } => AppRuleCondition::NthHit { count: *count },
+        Condition::Document { .. } => {
+            unreachable!("legacy HTTP rule cannot contain Document conditions")
+        }
     }
 }
 

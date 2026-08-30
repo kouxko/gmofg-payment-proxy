@@ -4,8 +4,8 @@ use intercept_proxy_domain::{
     RuleAction as DomainRuleAction, TerminalAction, UnifiedAction,
 };
 
-fn http_tree(conditions: Vec<MatchCondition>) -> ConditionTree {
-    ConditionTree::from_http_conditions(conditions)
+fn http_tree(conditions: Vec<Condition>) -> ConditionTree {
+    ConditionTree::All(conditions.into_iter().map(ConditionTree::Leaf).collect())
 }
 
 fn http_actions(actions: Vec<DomainRuleAction>) -> Vec<UnifiedAction> {
@@ -97,14 +97,12 @@ async fn unified_copy_persists_an_independent_rule_with_monotonic_order() {
                 priority: 10,
                 listener_id: workspace.listeners[0].id,
                 stage: RuleStage::ProxyToUpstream,
+                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: "source".into(),
-                    condition: http_tree(vec![MatchCondition::NthHit(1)]),
+                    condition: http_tree(vec![Condition::NthHit { count: 1 }]),
                     actions: http_actions(vec![DomainRuleAction::Delay { milliseconds: 10 }]),
                     document: None,
-                    one_shot: false,
-                    hit_count: 0,
-                    last_hit_at: None,
                 }),
             },
         })
@@ -131,9 +129,11 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
         .unwrap();
     assert!(matches!(
         condition,
-        MatchCondition::Field {
-            field: MatchField::PathOrRequestType,
-            ..
+        Condition::Http {
+            condition: MatchCondition::Field {
+                field: MatchField::PathOrRequestType,
+                ..
+            }
         }
     ));
     assert_eq!(
@@ -177,14 +177,12 @@ async fn unified_runtime_failure_restores_business_state_with_rebased_revision()
                 priority: 10,
                 listener_id: before.listeners[0].id,
                 stage: RuleStage::ProxyToUpstream,
+                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    condition: http_tree(vec![MatchCondition::NthHit(1)]),
+                    condition: http_tree(vec![Condition::NthHit { count: 1 }]),
                     actions: http_actions(vec![DomainRuleAction::Delay { milliseconds: 10 }]),
                     document: None,
-                    one_shot: false,
-                    hit_count: 0,
-                    last_hit_at: None,
                 }),
             },
         })
@@ -210,15 +208,18 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
     let invalid_shapes = [
         (
             RuleStage::ProxyToUpstream,
-            vec![MatchCondition::NthHit(0)],
+            vec![Condition::NthHit { count: 0 }],
             vec![DomainRuleAction::Delay { milliseconds: 10 }],
         ),
         (
             RuleStage::ProxyToUpstream,
-            vec![MatchCondition::Field {
-                field: MatchField::PathOrRequestType,
-                operator: MatchOperator::Regex("[".into()),
-            }],
+            vec![
+                MatchCondition::Field {
+                    field: MatchField::PathOrRequestType,
+                    operator: MatchOperator::Regex("[".into()),
+                }
+                .into(),
+            ],
             vec![DomainRuleAction::Delay { milliseconds: 10 }],
         ),
         (
@@ -251,14 +252,12 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
                     priority: 10,
                     listener_id: before.listeners[0].id,
                     stage,
+                    one_shot: false,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
                         condition: http_tree(conditions),
                         actions: http_actions(actions),
                         document: None,
-                        one_shot: false,
-                        hit_count: 0,
-                        last_hit_at: None,
                     }),
                 },
             })

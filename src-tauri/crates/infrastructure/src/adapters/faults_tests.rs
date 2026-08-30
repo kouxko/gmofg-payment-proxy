@@ -257,9 +257,9 @@ fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage(
                 )
             }
         };
-        let conditions = vec![intercept_proxy_domain::MatchCondition::NthHit(u64::from(
-            definition.view.default_nth_hit,
-        ))];
+        let conditions = vec![intercept_proxy_domain::Condition::NthHit {
+            count: u64::from(definition.view.default_nth_hit),
+        }];
         let draft = intercept_proxy_domain::RuleDraft {
             expected_revision: None,
             name: definition.view.name.clone(),
@@ -302,7 +302,7 @@ fn tls_template_preserves_nth_hit_and_rejects_http_only_filters() {
     assert_eq!(
         configuration_conditions(&defaults, MessageStage::TlsHandshake)
             .expect("default TLS configuration"),
-        vec![intercept_proxy_domain::MatchCondition::NthHit(1)]
+        vec![intercept_proxy_domain::Condition::NthHit { count: 1 }]
     );
 
     let invalid = FaultConfigurationDraft {

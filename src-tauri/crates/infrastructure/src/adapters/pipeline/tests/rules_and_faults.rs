@@ -1,4 +1,4 @@
-include!("rules_and_faults/conflict_retry.rs");
+include!("rules_and_faults/conflict_no_retry.rs");
 #[tokio::test]
 async fn failed_http_action_keeps_one_shot_and_hit_metadata_unchanged() {
     let mut view = one_shot_delay_rule();

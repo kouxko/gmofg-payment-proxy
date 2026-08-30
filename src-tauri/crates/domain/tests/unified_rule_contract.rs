@@ -1,7 +1,7 @@
 use intercept_proxy_domain::{
     Condition, ConditionTree, DocumentMutation, DocumentPredicate, DropResponseMode,
-    HttpDocumentRuleContent, HttpRuleContent, JsonPointer, ListenerId, MatchCondition,
-    ProtocolPackageId, ProtocolPackageRef, ProxyWorkspace, RuleAction, RuleContent, RuleDefinition,
+    HttpDocumentRuleContent, HttpRuleContent, JsonPointer, ListenerId, ProtocolPackageId,
+    ProtocolPackageRef, ProxyWorkspace, RuleAction, RuleContent, RuleDefinition,
     RuleDefinitionDraft, RuleStage, SocketRuleContent, StringOperator, StringPredicate,
     TerminalAction, UnifiedAction,
 };
@@ -14,9 +14,7 @@ fn package() -> ProtocolPackageRef {
 }
 
 fn http_condition() -> ConditionTree {
-    ConditionTree::Leaf(Condition::Http {
-        condition: MatchCondition::NthHit(1),
-    })
+    ConditionTree::Leaf(Condition::NthHit { count: 1 })
 }
 
 fn document_condition() -> ConditionTree {
@@ -45,14 +43,12 @@ fn unified_rule_serializes_one_tagged_content_variant() {
             priority: 5,
             listener_id: ListenerId::new(),
             stage: RuleStage::ProxyToUpstream,
+            one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
                 condition: http_condition(),
                 actions: vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
                 document: None,
-                one_shot: false,
-                hit_count: 0,
-                last_hit_at: None,
             }),
         },
         7,
@@ -74,14 +70,12 @@ fn old_message_stages_are_restore_only_and_rejected_for_new_saves() {
             priority: 5,
             listener_id: ListenerId::new(),
             stage,
+            one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
                 condition: document_condition(),
                 actions,
                 document: Some(HttpDocumentRuleContent { package: package() }),
-                one_shot: false,
-                hit_count: 0,
-                last_hit_at: None,
             }),
         };
         let error = RuleDefinition::create(
@@ -106,6 +100,7 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
                 priority: 5,
                 listener_id: ListenerId::new(),
                 stage,
+                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
                     condition: ConditionTree::All(vec![http_condition(), document_condition()]),
@@ -114,9 +109,6 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
                         document_action(),
                     ],
                     document: Some(HttpDocumentRuleContent { package: package() }),
-                    one_shot: false,
-                    hit_count: 0,
-                    last_hit_at: None,
                 }),
             },
             1,
@@ -137,14 +129,12 @@ fn http_without_document_binding_rejects_recursive_document_conditions_and_actio
         priority: 5,
         listener_id: ListenerId::new(),
         stage: RuleStage::ProxyToUpstream,
+        one_shot: false,
         content: RuleContent::Http(HttpRuleContent {
             description: String::new(),
             condition,
             actions,
             document: None,
-            one_shot: false,
-            hit_count: 0,
-            last_hit_at: None,
         }),
     };
 
@@ -217,6 +207,7 @@ fn socket_save_rejects_every_terminal_variant_until_socket_capabilities_define_o
                 priority: 0,
                 listener_id: ListenerId::new(),
                 stage: RuleStage::ProxyToUpstream,
+                one_shot: false,
                 content: RuleContent::Socket(SocketRuleContent {
                     package: package(),
                     condition: document_condition(),
@@ -242,6 +233,7 @@ fn listener_and_content_kind_are_immutable_after_creation() {
             priority: 0,
             listener_id,
             stage: RuleStage::ProxyToUpstream,
+            one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package: package(),
                 condition: document_condition(),
@@ -261,14 +253,12 @@ fn listener_and_content_kind_are_immutable_after_creation() {
                 priority: 0,
                 listener_id: ListenerId::new(),
                 stage: RuleStage::ProxyToUpstream,
+                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
                     condition: http_condition(),
                     actions: vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
                     document: None,
-                    one_shot: false,
-                    hit_count: 0,
-                    last_hit_at: None,
                 }),
             },
         )

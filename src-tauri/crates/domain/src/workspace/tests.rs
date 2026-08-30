@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use super::*;
 use crate::{
     AndroidProxyRoute, AndroidTargetApplication, Condition, ConditionTree, HttpRuleContent,
-    MatchCondition, RuleAction, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
-    UnifiedAction, WeakNetworkProfile,
+    RuleAction, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage, UnifiedAction,
+    WeakNetworkProfile,
 };
 
 mod listener_topology;
@@ -50,16 +50,12 @@ fn standard_http_rules_require_one_existing_http_listener() {
                 priority: 10,
                 listener_id,
                 stage: RuleStage::ProxyToUpstream,
+                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    condition: ConditionTree::Leaf(Condition::Http {
-                        condition: MatchCondition::NthHit(1),
-                    }),
+                    condition: ConditionTree::Leaf(Condition::NthHit { count: 1 }),
                     actions: vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 10 })],
                     document: None,
-                    one_shot: false,
-                    hit_count: 0,
-                    last_hit_at: None,
                 }),
             },
             1,

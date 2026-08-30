@@ -39,7 +39,7 @@ async fn create_validate_save_copy_select_and_delete_share_one_revision_contract
 }
 
 #[test]
-fn unified_rule_remap_changes_rule_identity_preserves_revision_and_order_and_rebinds_listener() {
+fn unified_rule_remap_changes_identity_resets_revision_and_preserves_order_and_binding() {
     use intercept_proxy_domain::{
         DocumentAction, ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
         ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ScriptedSocketProcessing,
@@ -80,7 +80,6 @@ fn unified_rule_remap_changes_rule_identity_preserves_revision_and_order_and_reb
     )
     .unwrap();
     rule.toggle(rule.revision(), false).unwrap();
-    let original_revision = rule.revision();
     workspace.rule_created_order_high_water = rule.created_order();
     workspace
         .replace_document_runtime_rules(vec![rule])
@@ -91,7 +90,10 @@ fn unified_rule_remap_changes_rule_identity_preserves_revision_and_order_and_reb
     let remapped_rules = workspace.document_runtime_rules().unwrap();
     let remapped = &remapped_rules[0];
     assert_ne!(remapped.rule_id(), rule_id);
-    assert_eq!(remapped.revision(), original_revision);
+    assert_eq!(
+        remapped.revision(),
+        intercept_proxy_domain::Revision::INITIAL
+    );
     assert_eq!(remapped.created_order(), 42);
     assert_eq!(remapped.priority(), -7);
     assert_ne!(workspace.listeners[0].id, old_listener_id);

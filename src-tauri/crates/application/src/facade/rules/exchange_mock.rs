@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use http::{HeaderName, HeaderValue};
 use intercept_proxy_domain::{
-    ChannelId, Condition, ConditionTree, HttpRuleContent, ProtocolDirection, UnifiedAction,
+    ChannelId, ConditionTree, HttpRuleContent, ProtocolDirection, UnifiedAction,
 };
 
 use super::Application;
@@ -72,6 +72,7 @@ fn unified_input(
             priority: source.priority,
             listener_id: record.listener_id,
             stage,
+            one_shot: source.one_shot,
             content: RuleContent::Http(HttpRuleContent {
                 description: source.description,
                 condition: ConditionTree::All(
@@ -79,14 +80,11 @@ fn unified_input(
                         .conditions
                         .into_iter()
                         .map(domain_condition)
-                        .map(|condition| ConditionTree::Leaf(Condition::Http { condition }))
+                        .map(ConditionTree::Leaf)
                         .collect(),
                 ),
                 actions: actions.into_iter().map(UnifiedAction::from).collect(),
                 document: None,
-                one_shot: source.one_shot,
-                hit_count: 0,
-                last_hit_at: None,
             }),
         },
     })
