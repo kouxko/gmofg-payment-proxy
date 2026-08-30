@@ -302,16 +302,16 @@ async fn native_import_cancellation_success_and_errors_are_forwarded_without_par
         host_api: version.host_api,
         kind: description.kind,
         capabilities: description.capabilities,
-        upstream_schema: description.upstream_schema.clone().unwrap(),
-        downstream_schema: description.downstream_schema.clone().unwrap(),
+        upstream_schema: description.upstream_schema.clone(),
+        downstream_schema: description.downstream_schema.clone(),
     };
     let imported = ProtocolPackageImportViewModel {
         outcome: ProtocolPackageImportOutcomeViewModel::Installed,
         version,
         kind: description.kind,
         capabilities: description.capabilities,
-        upstream_schema: description.upstream_schema.unwrap(),
-        downstream_schema: description.downstream_schema.unwrap(),
+        upstream_schema: description.upstream_schema,
+        downstream_schema: description.downstream_schema,
     };
     services.push_import_response(Ok(None));
     services.push_import_response(Ok(Some(preview.clone())));

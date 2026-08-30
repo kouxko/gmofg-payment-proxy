@@ -30,6 +30,7 @@ mod cleanup;
 mod connection;
 mod diagnostics;
 mod identity;
+mod local_archives;
 mod service;
 mod views;
 
@@ -39,6 +40,7 @@ pub use connection::{AcceptedExternalPackageConnection, ExternalPackageConnectio
 use connection::{ConnectionDetailSnapshot, ExternalPackageServiceSnapshot, OnlineConnection};
 pub use identity::external_package_registration_fingerprint;
 use identity::{not_found, package_error};
+pub(crate) use views::application_description;
 use views::recent_error_view;
 
 /// 外部协议包的 `SQLite` + 活动连接组合注册表。
@@ -53,6 +55,8 @@ pub struct ExternalPackageRegistryAdapter {
     service: Arc<Mutex<ExternalPackageServiceSnapshot>>,
     events: Arc<RwLock<Option<Arc<EventHub>>>>,
     connection_details: Arc<Mutex<HashMap<ProtocolPackageRef, ConnectionDetailSnapshot>>>,
+    online_changed: Arc<tokio::sync::Notify>,
+    local_supervisor: Arc<RwLock<Option<std::sync::Weak<super::LocalPackageSupervisor>>>>,
     #[cfg(test)]
     disconnect_barriers: Arc<Mutex<HashMap<ProtocolPackageRef, DisconnectBarrier>>>,
     #[cfg(test)]
@@ -100,6 +104,8 @@ impl ExternalPackageRegistryAdapter {
             })),
             events: Arc::new(RwLock::new(None)),
             connection_details: Arc::new(Mutex::new(HashMap::new())),
+            online_changed: Arc::new(tokio::sync::Notify::new()),
+            local_supervisor: Arc::new(RwLock::new(None)),
             #[cfg(test)]
             disconnect_barriers: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(test)]
@@ -133,6 +139,17 @@ impl ExternalPackageRegistryAdapter {
     /// 注入应用级事件中心，使注册、断线和服务状态变化能刷新所有展示适配器。
     pub fn set_event_hub(&self, events: Arc<EventHub>) {
         *self.events.write() = Some(events);
+    }
+
+    pub(crate) fn set_local_supervisor(&self, supervisor: &Arc<super::LocalPackageSupervisor>) {
+        *self.local_supervisor.write() = Some(Arc::downgrade(supervisor));
+    }
+
+    pub(super) fn local_supervisor(&self) -> Option<Arc<super::LocalPackageSupervisor>> {
+        self.local_supervisor
+            .read()
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
     }
 
     /// 原子接纳完成握手的注册结果，并发布活动 client。
@@ -185,7 +202,7 @@ impl ExternalPackageRegistryAdapter {
                     &package,
                 ));
             }
-            StoredExternalPackageRegistrationOutcome::Inserted => false,
+            StoredExternalPackageRegistrationOutcome::Inserted => true,
             StoredExternalPackageRegistrationOutcome::Reconnected { enabled } => enabled,
         };
         let connection_id = ExternalPackageConnectionId::new();
@@ -210,6 +227,7 @@ impl ExternalPackageRegistryAdapter {
             );
         }
         drop(mutation);
+        self.online_changed.notify_waiters();
         self.publish_catalog_changed(&package);
         self.publish_service_status();
         Ok(AcceptedExternalPackageConnection {
@@ -372,11 +390,21 @@ impl ExternalPackageRegistryAdapter {
             .is_some_and(|detail| detail.connection_id == connection_id)
     }
 
-    fn is_online(&self, package: &ProtocolPackageRef) -> bool {
+    pub(crate) fn is_online(&self, package: &ProtocolPackageRef) -> bool {
         matches!(
             self.online.lock().get(package),
             Some(OnlineConnection::Active { .. })
         )
+    }
+
+    pub(crate) async fn wait_until_online(&self, package: &ProtocolPackageRef) {
+        loop {
+            let changed = self.online_changed.notified();
+            if self.is_online(package) {
+                return;
+            }
+            changed.await;
+        }
     }
 
     fn service_status_snapshot(&self) -> ExternalPackageServiceStatusViewModel {

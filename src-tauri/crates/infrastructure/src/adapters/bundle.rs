@@ -25,7 +25,7 @@ use super::{
     EnvironmentApplyLeaseAdapter, EnvironmentApplyRuntimeAdapter,
     EnvironmentConfigurationMaterialPreparer, EnvironmentConfigurationValidationAdapter,
     ExternalPackageRegistryAdapter, ExternalPackageServer, ExternalPackageServerConfig,
-    FaultServiceAdapter, HeaderBodyCodecResolver, ListenerRuntimeAdapter,
+    FaultServiceAdapter, HeaderBodyCodecResolver, ListenerRuntimeAdapter, LocalPackageSupervisor,
     ManagedListenerCertificateAdapter, NativeFileDialog, PackageTransportConfig,
     ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageRepositoryAdapter,
     ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, RuntimePipelineAdapter,
@@ -124,10 +124,6 @@ impl InfrastructureServiceBundle {
             None => protocol_packages,
         };
         let protocol_packages = Arc::new(protocol_packages);
-        let protocol_package_import = Arc::new(ProtocolPackageImportAdapter::new(
-            protocol_packages.clone(),
-            Arc::clone(dialog),
-        ));
         let listener_certificates = Arc::new(ManagedListenerCertificateAdapter::new(
             (sqlite.clone(), Arc::clone(&store)),
             protector,
@@ -139,6 +135,11 @@ impl InfrastructureServiceBundle {
         let gates = environment_apply_resource_gates.clone();
         let external_packages = external_packages.with_environment_apply_resource_gates(gates);
         let external_packages = Arc::new(external_packages);
+        let protocol_package_import = Arc::new(ProtocolPackageImportAdapter::new(
+            protocol_packages.clone(),
+            external_packages.clone(),
+            Arc::clone(dialog),
+        ));
         let environment_validator = Arc::new(EnvironmentConfigurationValidationAdapter::new(
             protocol_packages.clone(),
             external_packages.clone(),
@@ -271,7 +272,24 @@ impl InfrastructureServiceBundle {
             1024 * 1024,
             128 * 1024,
         );
-        Ok(ExternalPackageServer::start(
+        let websocket_url = format!("ws://{}:{}/packages", ip, external.port);
+        let executable = std::env::current_exe()
+            .map_err(|error| AppError::new("EXTERNAL_PACKAGE_PROCESS_FAILED", error.to_string()))?
+            .with_file_name(if cfg!(windows) {
+                "intercept-proxy-package-sidecar.exe"
+            } else {
+                "intercept-proxy-package-sidecar"
+            });
+        let supervisor = Arc::new(LocalPackageSupervisor::new(
+            executable,
+            websocket_url,
+            self.external_packages.clone(),
+        ));
+        self.external_packages.set_local_supervisor(&supervisor);
+        self.protocol_package_import
+            .set_supervisor(supervisor.clone());
+        let enabled = self.external_packages.enabled_local_archives().await?;
+        let server = ExternalPackageServer::start(
             ExternalPackageServerConfig {
                 bind_address: SocketAddr::new(ip, external.port),
                 connection,
@@ -280,7 +298,10 @@ impl InfrastructureServiceBundle {
             self.protocol_package_usage.clone(),
             self.listener_runtime.clone(),
         )
-        .await)
+        .await
+        .with_local_supervisor(supervisor.clone());
+        supervisor.start_enabled(enabled);
+        Ok(server)
     }
 
     pub async fn into_application(

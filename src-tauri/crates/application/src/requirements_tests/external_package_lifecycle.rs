@@ -159,6 +159,78 @@ async fn external_enable_requires_online_description_without_invoking_rhai_compi
 }
 
 #[tokio::test]
+async fn disabled_local_offline_package_can_enable_and_start_its_owned_process() {
+    let external = Arc::new(FakeExternalPackages::default());
+    let target = package("local-external", "1.0.0");
+    external.records.lock().insert(
+        target.clone(),
+        external_record(target.clone(), false, false),
+    );
+    external
+        .descriptions
+        .lock()
+        .insert(target.clone(), description(target.clone()));
+    external.local_packages.lock().insert(target.clone());
+    let application = fixture(
+        external.clone(),
+        Arc::new(EmptyUsage),
+        Arc::new(InMemoryListenerRuntime::default()),
+    );
+
+    let enabled = application.protocol_package_enable(target).await.unwrap();
+
+    assert!(enabled.enabled);
+    assert_eq!(external.set_enabled_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn manual_restart_is_available_only_for_local_external_packages() {
+    let external = Arc::new(FakeExternalPackages::default());
+    let local = package("local-external", "1.0.0");
+    let disabled_local = package("disabled-local-external", "1.0.0");
+    let remote = package("remote-external", "1.0.0");
+    for package in [&local, &remote] {
+        external.records.lock().insert(
+            package.clone(),
+            external_record(package.clone(), true, false),
+        );
+    }
+    external.records.lock().insert(
+        disabled_local.clone(),
+        external_record(disabled_local.clone(), false, false),
+    );
+    external
+        .local_packages
+        .lock()
+        .extend([local.clone(), disabled_local.clone()]);
+    let application = fixture(
+        external.clone(),
+        Arc::new(EmptyUsage),
+        Arc::new(InMemoryListenerRuntime::default()),
+    );
+
+    let restarted = application.protocol_package_restart(local).await.unwrap();
+    assert!(matches!(
+        restarted.source,
+        ProtocolPackageSourceViewModel::External { online: true }
+    ));
+    let error = application
+        .protocol_package_restart(remote)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        error.view_model.code,
+        "EXTERNAL_PACKAGE_RESTART_UNAVAILABLE"
+    );
+    let error = application
+        .protocol_package_restart(disabled_local)
+        .await
+        .unwrap_err();
+    assert_eq!(error.view_model.code, "PROTOCOL_PACKAGE_DISABLED");
+    assert_eq!(external.restart_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn external_disable_stops_all_active_exact_references_and_preserves_connection() {
     let external = Arc::new(FakeExternalPackages::default());
     let target = package("external", "1.0.0");

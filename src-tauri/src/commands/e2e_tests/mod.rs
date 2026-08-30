@@ -129,14 +129,25 @@ fn mcp_reproduction_report_and_runtime_logs_are_read_only_and_queryable() {
 }
 
 #[test]
-fn javascript_package_import_reaches_phase8_fail_closed_through_real_ipc() {
+fn javascript_package_import_reaches_phase9_enabled_failed_state_through_real_ipc() {
     let fixture = CrossLayerFixture::new();
     let webview = fixture.webview();
 
-    let error = fixture.invoke_error(&webview, "protocol_package_import", json!({}));
+    let preview: serde_json::Value =
+        fixture.invoke_ok(&webview, "protocol_package_import", json!({}));
+    let committed: serde_json::Value = fixture.invoke_ok(
+        &webview,
+        "protocol_package_import_commit",
+        json!({ "token": preview["token"] }),
+    );
+    let packages: serde_json::Value =
+        fixture.invoke_ok(&webview, "protocol_package_list", json!({}));
 
-    assert_eq!(error.code, "PROTOCOL_PACKAGE_INVALID");
-    assert!(error.field_errors.contains_key("runtime"));
+    assert_eq!(preview["disposition"], "new");
+    assert_eq!(committed["outcome"], "installed");
+    assert_eq!(committed["version"]["enabled"], true);
+    assert_eq!(committed["version"]["package_source"]["online"], false);
+    assert_eq!(packages.as_array().unwrap().len(), 1);
     fixture.assert_dialog_boundaries();
 }
 

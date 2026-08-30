@@ -136,11 +136,15 @@ function ImportPreview({
           <dt className="text-[var(--telemetry-muted)]">适用协议</dt><dd>{protocolPackageKindText(preview.kind)}</dd>
           <dt className="text-[var(--telemetry-muted)]">上行 Schema</dt>
           <dd className="break-words">
-            {schemaTitle(preview.upstream_schema)} · {schemaNodeCount(preview.upstream_schema.root)} 个节点
+            {preview.upstream_schema
+              ? `${schemaTitle(preview.upstream_schema)} · ${schemaNodeCount(preview.upstream_schema.root)} 个节点`
+              : "无 Schema"}
           </dd>
           <dt className="text-[var(--telemetry-muted)]">下行 Schema</dt>
           <dd className="break-words">
-            {schemaTitle(preview.downstream_schema)} · {schemaNodeCount(preview.downstream_schema.root)} 个节点
+            {preview.downstream_schema
+              ? `${schemaTitle(preview.downstream_schema)} · ${schemaNodeCount(preview.downstream_schema.root)} 个节点`
+              : "无 Schema"}
           </dd>
         </dl>
       </section>

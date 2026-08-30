@@ -139,6 +139,10 @@ impl ExternalPackageApplicationPort for UnusedExternalPackagePort {
         unused()
     }
 
+    async fn restart(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        unused()
+    }
+
     async fn disconnect(&self, _: &ProtocolPackageRef) -> AppResult<()> {
         unused()
     }

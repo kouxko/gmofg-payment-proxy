@@ -17,7 +17,10 @@ pub(crate) use fingerprint::canonical_external_registration_fingerprint;
 use fingerprint::{canonical_external_registration_json, sha256};
 #[path = "external_packages/rows.rs"]
 mod rows;
-pub(crate) use rows::{StoredExternalPackage, StoredExternalPackageRegistrationOutcome};
+pub(crate) use rows::{
+    StoredExternalPackage, StoredExternalPackageRegistrationOutcome,
+    StoredLocalPackageInstallOutcome,
+};
 use rows::{
     parse_enabled, parse_external_package_row, read_external_package_row, validate_stable_error,
 };
@@ -109,8 +112,8 @@ impl SqliteStore {
                     .execute(
                         "INSERT INTO external_protocol_packages(
                             package_id, version, registration_json, registration_fingerprint,
-                            enabled, first_connected_at, last_connected_at
-                         ) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)",
+                            local_archive, enabled, first_connected_at, last_connected_at
+                         ) VALUES (?1, ?2, ?3, ?4, NULL, 1, ?5, ?5)",
                         params![
                             identity.id.as_str(),
                             identity.version.as_str(),
@@ -127,6 +130,75 @@ impl SqliteStore {
         Ok(outcome)
     }
 
+    pub(crate) fn install_local_external_package(
+        &self,
+        registration: &PackageManifest,
+        archive: &[u8],
+        installed_at: DateTime<Utc>,
+    ) -> Result<StoredLocalPackageInstallOutcome, InfrastructureError> {
+        let identity = registration.package().identity();
+        let registration_json = canonical_external_registration_json(registration)?;
+        let fingerprint = sha256(registration_json.as_bytes());
+        let mut connection = self.connection.lock();
+        let transaction = connection.transaction().map_err(database_error)?;
+        let internal_identity_exists = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM protocol_packages WHERE package_id = ?1 AND version = ?2)",
+                params![identity.id.as_str(), identity.version.as_str()],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(database_error)?;
+        if internal_identity_exists {
+            return Ok(StoredLocalPackageInstallOutcome::IdentityConflict);
+        }
+        let existing = transaction
+            .query_row(
+                "SELECT registration_json, registration_fingerprint, local_archive
+                 FROM external_protocol_packages WHERE package_id = ?1 AND version = ?2",
+                params![identity.id.as_str(), identity.version.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Vec<u8>>(1)?,
+                        row.get::<_, Option<Vec<u8>>>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .map_err(database_error)?;
+        let outcome = match existing {
+            Some((stored_json, stored_fingerprint, Some(stored_archive)))
+                if stored_json == registration_json
+                    && stored_fingerprint == fingerprint
+                    && stored_archive == archive =>
+            {
+                StoredLocalPackageInstallOutcome::Reused
+            }
+            Some(_) => StoredLocalPackageInstallOutcome::IdentityConflict,
+            None => {
+                transaction
+                    .execute(
+                        "INSERT INTO external_protocol_packages(
+                            package_id, version, registration_json, registration_fingerprint,
+                            local_archive, enabled, first_connected_at, last_connected_at
+                         ) VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6)",
+                        params![
+                            identity.id.as_str(),
+                            identity.version.as_str(),
+                            registration_json,
+                            fingerprint.as_slice(),
+                            archive,
+                            installed_at.to_rfc3339(),
+                        ],
+                    )
+                    .map_err(database_error)?;
+                StoredLocalPackageInstallOutcome::Installed
+            }
+        };
+        transaction.commit().map_err(database_error)?;
+        Ok(outcome)
+    }
+
     /// 列出全部外部协议包精确版本，按身份稳定排序。
     pub(crate) fn list_external_packages(
         &self,
@@ -135,7 +207,7 @@ impl SqliteStore {
         let mut statement = connection
             .prepare(
                 "SELECT package_id, version, registration_json, registration_fingerprint,
-                        enabled, first_connected_at, last_connected_at, last_remote_address,
+                        local_archive, enabled, first_connected_at, last_connected_at, last_remote_address,
                         recent_error_code, recent_error_message, recent_error_occurred_at
                  FROM external_protocol_packages ORDER BY package_id, version",
             )
@@ -159,7 +231,7 @@ impl SqliteStore {
         connection
             .query_row(
                 "SELECT package_id, version, registration_json, registration_fingerprint,
-                        enabled, first_connected_at, last_connected_at, last_remote_address,
+                        local_archive, enabled, first_connected_at, last_connected_at, last_remote_address,
                         recent_error_code, recent_error_message, recent_error_occurred_at
                  FROM external_protocol_packages
                  WHERE package_id = ?1 AND version = ?2",

@@ -332,6 +332,10 @@ fn every_supported_safe_error_summary_round_trips() {
         ),
         ("EXTERNAL_PACKAGE_PROTOCOL_FATAL", "外部软件包协议失效。"),
         ("EXTERNAL_PACKAGE_TRANSPORT_ERROR", "外部软件包传输失败。"),
+        (
+            "EXTERNAL_PACKAGE_PROCESS_FAILED",
+            "本地软件包进程启动失败。",
+        ),
     ];
 
     for (code, message) in cases {

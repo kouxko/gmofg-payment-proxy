@@ -2876,10 +2876,14 @@ name = "intercept-proxy-package-runtime"
 version = "1.0.0"
 dependencies = [
  "boa_engine",
+ "futures-util",
  "intercept-proxy-domain",
  "intercept-proxy-package-contract",
  "serde",
  "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
  "zip",
 ]
 

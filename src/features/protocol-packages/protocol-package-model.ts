@@ -184,10 +184,11 @@ export function protocolPackageDetailError(
 function isExternalDetail(value: unknown): boolean {
   return isRecord(value)
     && hasOnly(value, [
-      "remote_address", "connection_id", "first_connected_at", "last_connected_at",
+      "local_process", "remote_address", "connection_id", "first_connected_at", "last_connected_at",
       "registration_fingerprint_sha256", "upstream_methods",
       "downstream_methods", "recent_error",
     ])
+    && typeof value.local_process === "boolean"
     && (value.remote_address === null || typeof value.remote_address === "string")
     && (value.connection_id === null || typeof value.connection_id === "string")
     && typeof value.first_connected_at === "string"

@@ -201,6 +201,8 @@ pub struct ExternalPackageRecentErrorViewModel {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 外部协议包详情的严格连接投影。
 pub struct ExternalPackageDetailViewModel {
+    /// `true` 表示由 Proxy 持久化 ZIP 并拥有本地 Sidecar 进程生命周期。
+    pub local_process: bool,
     pub remote_address: Option<String>,
     pub connection_id: Option<Uuid>,
     pub first_connected_at: DateTime<Utc>,
@@ -351,8 +353,8 @@ pub struct ProtocolPackageImportPreviewViewModel {
     pub host_api: u32,
     pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub upstream_schema: ProtocolPackageSchemaViewModel,
-    pub downstream_schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: Option<ProtocolPackageSchemaViewModel>,
+    pub downstream_schema: Option<ProtocolPackageSchemaViewModel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -364,8 +366,8 @@ pub struct ProtocolPackageImportViewModel {
     pub version: ProtocolPackageVersionViewModel,
     pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub upstream_schema: ProtocolPackageSchemaViewModel,
-    pub downstream_schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: Option<ProtocolPackageSchemaViewModel>,
+    pub downstream_schema: Option<ProtocolPackageSchemaViewModel>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]

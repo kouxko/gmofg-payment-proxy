@@ -85,7 +85,7 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
     }
 
     async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()> {
-        let _environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
+        let environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
         let selected = package.clone();
         if self
             .executor
@@ -93,6 +93,16 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
             .await
             .map_err(app_error)?
         {
+            drop(environment_apply_gate);
+            if let Some(archive) = self.local_archive(package).await?
+                && let Some(supervisor) = self.local_supervisor()
+            {
+                if enabled {
+                    supervisor.launch(package.clone(), &archive).await?;
+                } else {
+                    supervisor.stop(package).await;
+                }
+            }
             self.publish_catalog_changed(package);
             Ok(())
         } else {
@@ -109,7 +119,26 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
         Ok(())
     }
 
+    async fn restart(&self, package: &ProtocolPackageRef) -> AppResult<()> {
+        let archive = self.local_archive(package).await?.ok_or_else(|| {
+            AppError::new(
+                "EXTERNAL_PACKAGE_RESTART_UNAVAILABLE",
+                "远端外部软件包进程不由 Proxy 管理。",
+            )
+        })?;
+        let supervisor = self.local_supervisor().ok_or_else(|| {
+            AppError::new(
+                "EXTERNAL_PACKAGE_PROCESS_FAILED",
+                "本地软件包进程监督器尚未启动。",
+            )
+        })?;
+        supervisor.launch(package.clone(), &archive).await
+    }
+
     async fn delete(&self, package: &ProtocolPackageRef) -> AppResult<()> {
+        if let Some(supervisor) = self.local_supervisor() {
+            supervisor.stop(package).await;
+        }
         let environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
         let registry = self.clone();
         let package = package.clone();

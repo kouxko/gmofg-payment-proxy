@@ -113,6 +113,7 @@ fn create_external_package_schema(
                 registration_json TEXT NOT NULL,
                 registration_fingerprint BLOB NOT NULL
                     CHECK(length(registration_fingerprint) = 32),
+                local_archive BLOB NULL,
                 enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
                 first_connected_at TEXT NOT NULL,
                 last_connected_at TEXT NOT NULL,

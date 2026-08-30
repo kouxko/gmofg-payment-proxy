@@ -60,6 +60,7 @@ pub struct ExternalPackageServerConfig {
 pub struct ExternalPackageServer {
     cancellation: CancellationToken,
     task: Mutex<Option<JoinHandle<()>>>,
+    local_supervisor: Option<Arc<super::LocalPackageSupervisor>>,
 }
 
 impl ExternalPackageServer {
@@ -83,6 +84,7 @@ impl ExternalPackageServer {
                 return Self {
                     cancellation,
                     task: Mutex::new(None),
+                    local_supervisor: None,
                 };
             }
         };
@@ -102,7 +104,16 @@ impl ExternalPackageServer {
         Self {
             cancellation,
             task: Mutex::new(Some(task)),
+            local_supervisor: None,
         }
+    }
+
+    pub(crate) fn with_local_supervisor(
+        mut self,
+        supervisor: Arc<super::LocalPackageSupervisor>,
+    ) -> Self {
+        self.local_supervisor = Some(supervisor);
+        self
     }
 
     /// 取消接受循环并等待所有已纳管连接任务结束。
@@ -117,6 +128,15 @@ impl ExternalPackageServer {
                 ?error,
                 "external package server task failed during shutdown"
             );
+        }
+        if let Some(supervisor) = &self.local_supervisor {
+            supervisor.shutdown().await;
+        }
+    }
+
+    pub async fn shutdown_local_packages(&self) {
+        if let Some(supervisor) = &self.local_supervisor {
+            supervisor.shutdown().await;
         }
     }
 

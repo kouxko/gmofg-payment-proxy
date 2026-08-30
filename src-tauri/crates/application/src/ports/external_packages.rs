@@ -11,9 +11,9 @@ use crate::{
 /// 外部软件包元数据、用户启用位和活动连接的应用边界。
 ///
 /// 实现返回的版本必须使用 `ProtocolPackageSourceViewModel::External`，并将 `online` 作为
-/// 当前连接状态快照。注册首次成功时实现负责持久化为“在线 + 停用”；重连只能改变在线
-/// 投影，不能自动启用或启动入口。所有方法都按精确 `(package_id, version)` 操作，不得
-/// 自动选择同 ID 的其他版本。
+/// 当前连接状态快照。首次合法注册立即持久化为 enabled；断线只改变 online 投影，不得
+/// 自动重启 Sidecar 或 Listener。所有方法都按精确 `(package_id, version)` 操作，不得自动
+/// 选择同 ID 的其他版本。
 pub trait ExternalPackageApplicationPort: Send + Sync + std::fmt::Debug {
     /// 返回启动期监听结果和当前在线连接数；查询不得触发绑定或重连。
     async fn service_status(&self) -> AppResult<ExternalPackageServiceStatusViewModel>;
@@ -39,8 +39,13 @@ pub trait ExternalPackageApplicationPort: Send + Sync + std::fmt::Debug {
         package: &ProtocolPackageRef,
     ) -> AppResult<ExternalPackageDetailViewModel>;
 
-    /// 原子写入用户启用位；不得改变连接在线状态或启动入口。
+    /// 原子写入用户启用位。本地 Sidecar 启用时必须启动 exact process，停用时必须停止并回收；
+    /// 远端软件包只修改启用位，不接管其进程或连接。
     async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()>;
+
+    /// 仅重启 Proxy 拥有的本地 exact Sidecar；必须先 kill+wait 旧进程并使 pending 调用失败，
+    /// 不 replay，再启动同一持久化 ZIP。远端软件包必须拒绝。
+    async fn restart(&self, package: &ProtocolPackageRef) -> AppResult<()>;
 
     /// 主动关闭当前精确版本的 WebSocket 连接；离线时应幂等成功。
     async fn disconnect(&self, package: &ProtocolPackageRef) -> AppResult<()>;

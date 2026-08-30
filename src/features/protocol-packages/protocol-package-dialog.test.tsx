@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   protocolPackageDetail: vi.fn(),
   protocolPackageEnable: vi.fn(),
   protocolPackageDisable: vi.fn(),
+  protocolPackageRestart: vi.fn(),
   protocolPackageDelete: vi.fn(),
 }));
 
@@ -26,6 +27,7 @@ vi.mock("@/generated/rust-types", () => ({
     protocolPackageDetail: mocks.protocolPackageDetail,
     protocolPackageEnable: mocks.protocolPackageEnable,
     protocolPackageDisable: mocks.protocolPackageDisable,
+    protocolPackageRestart: mocks.protocolPackageRestart,
     protocolPackageDelete: mocks.protocolPackageDelete,
   },
 }));
@@ -51,6 +53,11 @@ describe("ProtocolPackageDialog details", () => {
       package: packageRef,
       package_source: { type: "external", online: true },
       enabled: false,
+    }));
+    mocks.protocolPackageRestart.mockImplementation(async (packageRef) => version(packageRef.version, {
+      package: packageRef,
+      package_source: { type: "external", online: true },
+      enabled: true,
     }));
     mocks.protocolPackageDelete.mockResolvedValue({
       success: true,
@@ -112,6 +119,7 @@ describe("ProtocolPackageDialog details", () => {
       version("2.0.0", { package_source: { type: "external", online: true } }),
       {
         external: {
+          local_process: false,
           remote_address: "127.0.0.1:49152",
           connection_id: "018f6fc0-65d8-7d90-b25b-392f6d9b9481",
           first_connected_at: "2026-08-20T08:00:00Z",

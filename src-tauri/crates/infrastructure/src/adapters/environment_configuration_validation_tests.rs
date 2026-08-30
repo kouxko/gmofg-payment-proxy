@@ -94,6 +94,10 @@ impl ExternalPackageApplicationPort for ProjectionPorts {
         panic!("package validation must not call package RPC/detail")
     }
 
+    async fn restart(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        panic!("package validation must not restart")
+    }
+
     async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
         panic!("package validation must not mutate")
     }

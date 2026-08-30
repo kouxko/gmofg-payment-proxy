@@ -107,6 +107,7 @@ impl ExternalPackageRegistryAdapter {
                 if owns_closing {
                     registry.publish_catalog_changed(&package);
                     registry.publish_service_status();
+                    registry.online_changed.notify_waiters();
                 }
                 drop(environment_apply_gate);
                 #[cfg(test)]

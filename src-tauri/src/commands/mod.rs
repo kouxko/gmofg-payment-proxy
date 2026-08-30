@@ -132,6 +132,7 @@ pub fn builder() -> Builder<Wry> {
             protocol_package_export_builtin,
             protocol_package_enable,
             protocol_package_disable,
+            protocol_package_restart,
             protocol_package_delete,
             protocol_package_usage,
             listener_import_downstream_server_identity,

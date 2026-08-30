@@ -137,16 +137,16 @@ async fn runtime_provider_distinguishes_internal_disabled_and_offline() {
             Utc::now(),
         )
         .unwrap();
-    let disabled = ExternalSocketPackageProvider::resolve(&registry, &package)
-        .await
-        .unwrap_err();
-    assert_eq!(disabled.view_model.code, "EXTERNAL_PACKAGE_DISABLED");
-
-    assert!(store.set_external_package_enabled(&package, true).unwrap());
     let offline = ExternalSocketPackageProvider::resolve(&registry, &package)
         .await
         .unwrap_err();
     assert_eq!(offline.view_model.code, "EXTERNAL_PACKAGE_OFFLINE");
+
+    assert!(store.set_external_package_enabled(&package, false).unwrap());
+    let disabled = ExternalSocketPackageProvider::resolve(&registry, &package)
+        .await
+        .unwrap_err();
+    assert_eq!(disabled.view_model.code, "EXTERNAL_PACKAGE_DISABLED");
 }
 
 #[tokio::test]
@@ -195,8 +195,8 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
         .accept_registration(&registration, fingerprint, first_client.clone())
         .await
         .unwrap();
-    assert!(!first.enabled);
-    registry.set_enabled(&package, true).await.unwrap();
+    assert!(first.enabled);
+    registry.set_enabled(&package, false).await.unwrap();
 
     let (duplicate_client, _duplicate_peer) = connected_client(&registration, 2).await;
     let duplicate = registry
@@ -222,7 +222,7 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
         .accept_registration(&registration, fingerprint, reconnected_client)
         .await
         .unwrap();
-    assert!(reconnected.enabled);
+    assert!(!reconnected.enabled);
     assert!(
         !registry
             .mark_disconnected(&package, first.connection_id)
@@ -260,9 +260,9 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
         1
     );
     registry.disconnect(&package).await.unwrap();
-    // API 边界对重复断连保持幂等，且不会改变持久化启用位。
+    // API 边界对重复断连保持幂等，且保留用户显式停用位。
     registry.disconnect(&package).await.unwrap();
-    assert!(registry.get(&package).await.unwrap().unwrap().enabled);
+    assert!(!registry.get(&package).await.unwrap().unwrap().enabled);
 }
 
 #[tokio::test]
@@ -382,6 +382,6 @@ async fn online_delete_closes_connection_and_next_registration_is_first_install(
         .accept_registration(&registration, fingerprint, new_client)
         .await
         .unwrap();
-    assert!(!new_registration.enabled);
+    assert!(new_registration.enabled);
     registry.disconnect(&package).await.unwrap();
 }

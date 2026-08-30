@@ -24,9 +24,12 @@ export function ProtocolPackageDetail({
   enableError,
   disablePending = false,
   disableError,
+  restartPending = false,
+  restartError,
   deleteBlockedReason,
   onEnable,
   onDisable,
+  onRestart,
   onRequestDelete,
 }: {
   detail: DetailState;
@@ -34,9 +37,12 @@ export function ProtocolPackageDetail({
   enableError?: string;
   disablePending?: boolean;
   disableError?: string;
+  restartPending?: boolean;
+  restartError?: string;
   deleteBlockedReason?: string;
   onEnable?: () => void;
   onDisable?: () => void;
+  onRestart?: () => void;
   onRequestDelete?: () => void;
 }) {
   if (detail.isLoading) {
@@ -86,13 +92,13 @@ export function ProtocolPackageDetail({
             ) : null}
             <Button
               variant="primary"
-              isDisabled={enablePending || (version.package_source.type === "external" && !version.package_source.online)}
+              isDisabled={enablePending || (version.package_source.type === "external" && !version.package_source.online && !external?.local_process)}
               onPress={onEnable}
             >
               {enablePending ? "正在启用…" : "启用协议包"}
             </Button>
             <p className="text-sm text-[var(--telemetry-muted)]">
-              {version.package_source.type === "external" && !version.package_source.online
+              {version.package_source.type === "external" && !version.package_source.online && !external?.local_process
                 ? "外部软件包离线，重新连接并完成注册后才能启用。"
                 : "启用后可在匹配的入口配置中选择此版本。"}
             </p>
@@ -110,14 +116,28 @@ export function ProtocolPackageDetail({
                 </Alert.Content>
               </Alert>
             ) : null}
+            {restartError ? (
+              <Alert status="danger">
+                <Alert.Indicator />
+                <Alert.Content>
+                  <Alert.Title>本地软件包重启失败</Alert.Title>
+                  <Alert.Description>{restartError}</Alert.Description>
+                </Alert.Content>
+              </Alert>
+            ) : null}
             <div className="flex flex-wrap gap-2">
               {version.enabled && onDisable ? (
-                <Button variant="outline" isDisabled={disablePending} onPress={onDisable}>
+                <Button variant="outline" isDisabled={disablePending || restartPending} onPress={onDisable}>
                   {disablePending ? "正在停用…" : "停用外部软件包"}
                 </Button>
               ) : null}
+              {version.enabled && external?.local_process && onRestart ? (
+                <Button variant="outline" isDisabled={disablePending || restartPending} onPress={onRestart}>
+                  {restartPending ? "正在重启…" : "重启本地软件包"}
+                </Button>
+              ) : null}
               {onRequestDelete ? (
-                <Button variant="danger" isDisabled={disablePending || deleteBlockedReason !== undefined} onPress={onRequestDelete}>
+                <Button variant="danger" isDisabled={disablePending || restartPending || deleteBlockedReason !== undefined} onPress={onRequestDelete}>
                   删除外部软件包
                 </Button>
               ) : null}
