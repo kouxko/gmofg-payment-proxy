@@ -5,10 +5,16 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+boa_engine.workspace = true
 intercept-proxy-domain = { path = "../domain" }
 intercept-proxy-package-contract = { path = "../package-contract" }
+serde.workspace = true
 serde_json.workspace = true
 zip.workspace = true
+
+[[bin]]
+name = "intercept-proxy-package-sidecar"
+path = "src/bin/intercept-proxy-package-sidecar.rs"
 
 [dev-dependencies]
 serde_json.workspace = true

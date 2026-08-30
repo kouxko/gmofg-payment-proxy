@@ -1,0 +1,17 @@
+# Focused Phase 8 contract and Cargo discovery
+node --test scripts/check-task-20260829-002-phase8-sidecar.test.mjs
+pnpm check:task-20260829-002:phase8-contract
+cargo test --offline --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-runtime --all-targets
+
+# Static checks
+pnpm check:bindings
+pnpm scan:architecture
+pnpm scan:source-size
+pnpm lint
+pnpm typecheck
+cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+cargo clippy --offline --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-runtime --all-targets -- -D warnings
+git diff --check
+
+# Full checkpoint; local repair run passed, independent verifier must repeat
+pnpm check:task-20260829-002:checkpoint

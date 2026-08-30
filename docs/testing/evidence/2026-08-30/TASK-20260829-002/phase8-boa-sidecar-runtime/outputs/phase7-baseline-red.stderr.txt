@@ -1,0 +1,17 @@
+Command:
+cargo test --offline --manifest-path /tmp/g049-phase8-red.7RiP2Q/src-tauri/Cargo.toml -p intercept-proxy-package-runtime --test phase8_sidecar_runtime --no-run
+
+Baseline:
+03144593ca929379fdb848516c35fcd92743106c
+
+Result: RED, exit 101
+
+error: couldn't read `crates/package-runtime/src/bin/intercept-proxy-package-sidecar.rs`: No such file or directory (os error 2)
+error: could not compile `intercept-proxy-package-runtime` (bin "intercept-proxy-package-sidecar") due to 1 previous error
+error[E0432]: unresolved import `intercept_proxy_package_runtime::LocalSidecarRuntime`
+ --> crates/package-runtime/tests/phase8_sidecar_runtime.rs:8:5
+  |
+8 | use intercept_proxy_package_runtime::LocalSidecarRuntime;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no `LocalSidecarRuntime` in the root
+
+error: could not compile `intercept-proxy-package-runtime` (test "phase8_sidecar_runtime") due to 1 previous error

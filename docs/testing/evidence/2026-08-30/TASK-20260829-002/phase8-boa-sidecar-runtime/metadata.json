@@ -1,0 +1,62 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase8-boa-sidecar-runtime",
+  "executed_at": "2026-08-30 21:25:00 +08:00",
+  "completed_at": "2026-08-30 22:57:40 +08:00",
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase7-package-runtime",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "03144593ca929379fdb848516c35fcd92743106c",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase8 changes and unrelated user docs/README.md"
+  },
+  "resources": {
+    "sidecar_sha256": "dd99dc3970ef2f0ee2216554c9a6e2c0000f19ce3e2c65bd54d52deb09f693ac",
+    "phase8_runtime_test_sha256": "0dd0bc12cdb4cd693e72897ae2e85fed002b9bef95f45b38622d4194634ea7a6",
+    "phase8_review_test_sha256": "9defd21fdb88481dc6d5d8ee54c4a6d62195cfeb881c89610da8cea223f6628c",
+    "checker_sha256": "8eda3ee9ed72733ebc518a42e35484dc3bbeafd0216971ac208eacb7c779028f",
+    "checker_test_sha256": "72f776d7955f6cbdfa8180a05674e5f958ee9a7e72b892f4f75e986ed9a143ef",
+    "cargo_lock_sha256": "7b4019a4dcf9449f15e4156a78a3e1745b8a5b87ef9724eec1d10ee0dfefe234"
+  },
+  "results": {
+    "phase7_clean_baseline_compile_red": { "exit": 101, "result": "RED" },
+    "ordinary_array_encode_red": { "passed": 0, "failed": 1, "result": "RED" },
+    "dynamic_import_promise_red": { "passed": 0, "failed": 1, "result": "RED" },
+    "host_binding_checker_red": { "passed": 18, "failed": 3, "result": "RED" },
+    "phase8_checker_mutations_and_controls": { "passed": 21, "failed": 0 },
+    "phase8_runtime_cargo_discovery": { "passed": 9, "failed": 0 },
+    "phase8_review_cargo_discovery": { "passed": 3, "failed": 0 },
+    "phase7_archive_regression": { "passed": 6, "failed": 0 },
+    "package_contract_full": { "passed": 13, "failed": 0 },
+    "protocol_scripting_full": { "passed": 160, "failed": 0 },
+    "infrastructure_full": { "passed": 585, "failed": 0 },
+    "bindings": "PASS fresh and deterministic",
+    "architecture_source_size_lint_typecheck_fmt_clippy_diff": "PASS",
+    "frontend_full": { "files": 63, "passed": 543, "failed": 0 },
+    "tauri_full": { "passed": 130, "failed": 0 },
+    "application_full": { "passed": 458, "failed": 0 },
+    "android_engine_full": { "passed": 47, "failed": 0 },
+    "global_checkpoint": "PASS exit 0; unique session 47419"
+  },
+  "not_run": [
+    "Phase9 Sidecar process launch arguments, registration and lifecycle",
+    "Phase9 process queue, retry and recovery policy",
+    "Tauri externalBin and bundle integration",
+    "Phase10/11 complete HTTP and Socket pipeline/codec switch",
+    "Phase12 full legacy deletion",
+    "Phase13 built-in and template conversion",
+    "Phase15 complete UI",
+    "remote CI, push, Release, Windows/macOS bundle and E2E"
+  ],
+  "blockers": [],
+  "checkpoint_ready": true,
+  "review_status": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "review_findings": { "p0": 0, "p1": 0, "p2": 0 },
+  "reviewer_verdict": "APPROVE",
+  "verifier_verdict": "VERIFIED / APPROVED / CHECKPOINT READY"
+}

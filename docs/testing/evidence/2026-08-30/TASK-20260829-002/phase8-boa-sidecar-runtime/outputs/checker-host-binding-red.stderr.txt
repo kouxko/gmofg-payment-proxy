@@ -1,0 +1,14 @@
+Command:
+node --test scripts/check-task-20260829-002-phase8-sidecar.test.mjs
+
+Result: RED, 18 passed / 3 failed
+
+The canonical repository and the previous 17 fail-closed cases passed. These three new mutations
+were incorrectly accepted before the structural scan existed:
+
+- Proxy global Host binding injection via `register_global_builtin_callable` and `NativeFunction`
+- Proxy `NativeFunction` Host binding construction
+- Proxy custom `HostHooks` implementation
+
+Each failed with `Expected "actual" to be strictly unequal to: 0`, proving the checker returned
+success for the mutated source. After the repair, the same complete suite passed 21/21.
