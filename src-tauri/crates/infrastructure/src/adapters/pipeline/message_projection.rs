@@ -229,6 +229,7 @@ pub(super) fn decode_body(body_codec: &dyn BodyCodec, bytes: &[u8]) -> ProxyResu
     body_codec.decode(bytes).map_err(|error| ProxyError {
         code: error.code,
         message: error.message,
+        external_package_call: None,
     })
 }
 
@@ -236,6 +237,7 @@ pub(super) fn encode_body(body_codec: &dyn BodyCodec, text: &str) -> ProxyResult
     body_codec.encode(text).map_err(|error| ProxyError {
         code: error.code,
         message: error.message,
+        external_package_call: None,
     })
 }
 
@@ -244,6 +246,7 @@ pub(super) fn decode_json(body_codec: &dyn BodyCodec, bytes: &[u8]) -> ProxyResu
     serde_json::from_str(&text).map_err(|error| ProxyError {
         code: "JSON_INVALID",
         message: format!("decoded body is not valid JSON: {error}"),
+        external_package_call: None,
     })
 }
 

@@ -2,55 +2,67 @@
 //!
 //! 本模块不再实现 `PipelinePorts`：通用 HTTP action/session 仍由原端口负责，而协议包的
 //! Decode、Display、Rules、Encode 由 Exchange Pipeline 按固定顺序分别调用。每个 capability
-//! 只进入一个 Rhai 单阶段 API，避免旧组合 processor 隐藏或重复执行阶段。
+//! 只进入 Sidecar JSON-RPC 的一个固定阶段方法，避免旧组合 processor 隐藏或重复执行阶段。
 
 use std::{
+    collections::BTreeMap,
     fmt,
-    marker::PhantomData,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
 };
 
-use async_trait::async_trait;
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    Document, HttpBodyProcessing, ProtocolDocumentRuleProgram, ProtocolRuleStage, ProxyListener,
-    ProxyWorkspace,
+    BodyCodecKind, DocumentSchemaNode, HttpBodyProcessing, ProtocolDirection, ProtocolRuleStage,
+    ProxyListener, ProxyWorkspace,
 };
-use intercept_proxy_exchange::{
-    Decode, Direction, Display, Downstream, Encode, Error, Http, HttpContext, Rules, Upstream,
-};
+use intercept_proxy_exchange::{Direction, Downstream, Error, Upstream};
+use intercept_proxy_package_contract::PackageKind;
+#[cfg(test)]
 use intercept_proxy_protocol_scripting::{
-    DirectionExecutionPlan, ProtocolDirection, ProtocolDirectionExecutor, ProtocolPackageKind,
-    ProtocolRuntimeError,
+    DirectionExecutionPlan, ProtocolDirection as LegacyProtocolDirection,
+    ProtocolDirectionExecutor, ProtocolPackageKind,
 };
 use intercept_proxy_runtime::{
     HttpConnectionIdentity, HttpDirectionCapabilities, HttpObservationMetadata,
     HttpProtocolCapabilityFactory,
 };
-use parking_lot::{Mutex, RwLock};
+#[cfg(test)]
+use parking_lot::Mutex;
+use parking_lot::RwLock;
 
+#[cfg(test)]
 use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackageSnapshot;
 
-use super::ListenerRuntimeAdapter;
+use super::{ListenerRuntimeAdapter, external_relay::RuntimeExternalSocketPackageBinding};
 
+mod external_http;
 mod joint_rules;
+#[cfg(test)]
+mod legacy_http;
 mod programs;
+#[cfg(test)]
+pub(super) use external_http::decode_http_body_for_package;
 pub(crate) use joint_rules::{JointDocumentEvaluation, JointHttpRuleRuntime};
 use programs::{HttpDocumentRulePrograms, compile_programs};
 
 /// Listener 启动时冻结的协议包与规则集合。
 ///
-/// 协议脚本版本在 Listener 生命周期内不可变；规则集合可原子替换。每次创建 Exchange 时会为
-/// upstream/downstream 各创建一个独占执行器，Document 不会跨连接保存或复用。
+/// 精确协议包版本在 Listener 生命周期内不可变；规则集合可原子替换。upstream/downstream
+/// capability 共享该版本对应的在线 Sidecar actor，连接级 Document 只在 joint runtime 暂存。
 #[derive(Clone)]
 pub(super) struct HttpProtocolRuntimeSnapshot {
-    package: RuntimeProtocolPackageSnapshot,
+    #[cfg(test)]
+    package: Option<RuntimeProtocolPackageSnapshot>,
+    external: Option<RuntimeExternalSocketPackageBinding>,
+    request_codec: BodyCodecKind,
+    response_codec: BodyCodecKind,
     programs: Arc<RwLock<HttpDocumentRulePrograms>>,
     rule_generation: Arc<AtomicU64>,
     metadata: HttpObservationMetadata,
+    #[cfg(test)]
     listener_id: intercept_proxy_domain::ListenerId,
     joint_rules: Arc<JointHttpRuleRuntime>,
 }
@@ -59,7 +71,24 @@ impl fmt::Debug for HttpProtocolRuntimeSnapshot {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("HttpProtocolRuntimeSnapshot")
-            .field("package", self.package.compiled().package())
+            .field(
+                "package",
+                &self.external.as_ref().map_or_else(
+                    || {
+                        #[cfg(test)]
+                        {
+                            self.package
+                                .as_ref()
+                                .map(|package| format!("{:?}", package.compiled().package()))
+                        }
+                        #[cfg(not(test))]
+                        {
+                            None
+                        }
+                    },
+                    |binding| Some(format!("{:?}", binding.registration().package().identity())),
+                ),
+            )
             .field("metadata", &self.metadata)
             .finish_non_exhaustive()
     }
@@ -92,11 +121,25 @@ impl HttpProtocolRuntimeSnapshot {
         let HttpBodyProcessing::Protocol { package } = &http.body_processing else {
             return Ok(None);
         };
-        let frozen = adapter
-            .protocol_packages
-            .freeze_for_listener_start_async(package)
-            .await?;
-        if frozen.compiled().kind() != ProtocolPackageKind::Http {
+        let provider = adapter
+            .external_package_provider
+            .read()
+            .clone()
+            .ok_or_else(|| {
+                AppError::new(
+                    "EXTERNAL_PACKAGE_PROVIDER_MISSING",
+                    "HTTP 协议包注册表尚未装配。",
+                )
+                .entity(listener.id.to_string())
+            })?;
+        let binding = provider.resolve(package).await?.ok_or_else(|| {
+            AppError::new(
+                "EXTERNAL_PACKAGE_NOT_FOUND",
+                "HTTP 协议包未在统一注册表中找到。",
+            )
+            .entity(format!("{}@{}", package.id, package.version))
+        })?;
+        if binding.registration().kind() != PackageKind::Http {
             return Err(AppError::new(
                 "PROTOCOL_PACKAGE_KIND_MISMATCH",
                 "HTTP Body 必须绑定 HTTP 协议包。",
@@ -106,13 +149,23 @@ impl HttpProtocolRuntimeSnapshot {
         let workspace_for_compile = workspace.clone();
         let listener_for_compile = listener.clone();
         let package_for_compile = package.clone();
-        let upstream_schema = frozen
-            .compiled()
-            .schema(ProtocolDirection::Upstream)
+        let fallback_schema = DocumentSchemaNode::Object {
+            title: None,
+            properties: BTreeMap::new(),
+        };
+        let upstream_schema = binding
+            .registration()
+            .document()
+            .upstream()
+            .schema()
+            .unwrap_or(&fallback_schema)
             .clone();
-        let downstream_schema = frozen
-            .compiled()
-            .schema(ProtocolDirection::Downstream)
+        let downstream_schema = binding
+            .registration()
+            .document()
+            .downstream()
+            .schema()
+            .unwrap_or(&fallback_schema)
             .clone();
         let programs = adapter
             .compile_document_rules_on_blocking_owner(move || {
@@ -126,13 +179,18 @@ impl HttpProtocolRuntimeSnapshot {
             })
             .await?;
         Ok(Some(Arc::new(Self {
-            package: frozen,
+            #[cfg(test)]
+            package: None,
+            external: Some(binding),
+            request_codec: http.request_body_codec,
+            response_codec: http.response_body_codec,
             programs: Arc::new(RwLock::new(programs)),
             rule_generation: Arc::new(AtomicU64::new(0)),
             metadata: HttpObservationMetadata {
                 workspace_id: workspace.id.to_string(),
                 listener_id: listener.id.to_string(),
             },
+            #[cfg(test)]
             listener_id: listener.id,
             joint_rules: Arc::clone(&adapter.joint_http_rules),
         })))
@@ -164,11 +222,16 @@ impl HttpProtocolRuntimeSnapshot {
             workspace,
             listener,
             package,
-            frozen.compiled().schema(ProtocolDirection::Upstream),
-            frozen.compiled().schema(ProtocolDirection::Downstream),
+            frozen.compiled().schema(LegacyProtocolDirection::Upstream),
+            frozen
+                .compiled()
+                .schema(LegacyProtocolDirection::Downstream),
         )?;
         Ok(Some(Arc::new(Self {
-            package: frozen,
+            package: Some(frozen),
+            external: None,
+            request_codec: http.request_body_codec,
+            response_codec: http.response_body_codec,
             programs: Arc::new(RwLock::new(programs)),
             rule_generation: Arc::new(AtomicU64::new(0)),
             metadata: HttpObservationMetadata {
@@ -196,16 +259,49 @@ impl HttpProtocolRuntimeSnapshot {
         let workspace = workspace.clone();
         let listener = listener.clone();
         let package = package.clone();
-        let upstream_schema = self
-            .package
-            .compiled()
-            .schema(ProtocolDirection::Upstream)
-            .clone();
-        let downstream_schema = self
-            .package
-            .compiled()
-            .schema(ProtocolDirection::Downstream)
-            .clone();
+        let fallback_schema = DocumentSchemaNode::Object {
+            title: None,
+            properties: BTreeMap::new(),
+        };
+        let (upstream_schema, downstream_schema) = if let Some(binding) = &self.external {
+            (
+                binding
+                    .registration()
+                    .document()
+                    .upstream()
+                    .schema()
+                    .unwrap_or(&fallback_schema)
+                    .clone(),
+                binding
+                    .registration()
+                    .document()
+                    .downstream()
+                    .schema()
+                    .unwrap_or(&fallback_schema)
+                    .clone(),
+            )
+        } else {
+            #[cfg(test)]
+            {
+                let compiled = self
+                    .package
+                    .as_ref()
+                    .expect("legacy HTTP snapshot has a compiled package")
+                    .compiled();
+                (
+                    compiled.schema(LegacyProtocolDirection::Upstream).clone(),
+                    compiled.schema(LegacyProtocolDirection::Downstream).clone(),
+                )
+            }
+            #[cfg(not(test))]
+            {
+                return Err(AppError::new(
+                    "EXTERNAL_PACKAGE_NOT_FOUND",
+                    "HTTP 协议包统一注册绑定不存在。",
+                )
+                .entity(listener.id.to_string()));
+            }
+        };
         let replacement = adapter
             .compile_document_rules_on_blocking_owner(move || {
                 compile_programs(
@@ -231,31 +327,56 @@ impl HttpProtocolRuntimeSnapshot {
         second: ProtocolRuleStage,
         response: bool,
     ) -> Result<HttpDirectionCapabilities<D>, Error> {
-        let executor = ProtocolDirectionExecutor::new(
-            self.package.compiled(),
-            DirectionExecutionPlan::new(direction),
-            connection.connection_id.to_string(),
-            self.listener_id.to_string(),
-            self.package.runtime_limits(),
-        )
-        .map_err(|error| protocol_error(&error))?;
-        let executor = Arc::new(Mutex::new(executor));
-        let programs = self.programs.read();
-        let observed = Arc::new(Mutex::new(None));
-        let rules = HttpDocumentRules::new(
-            Arc::clone(&self.joint_rules),
-            connection.clone(),
-            response,
-            Arc::clone(&executor),
-            Arc::clone(&observed),
-            [programs.program(first), programs.program(second)],
-        );
-        Ok(HttpDirectionCapabilities::new(
-            Box::new(HttpDecode::<D>::new(Arc::clone(&executor), observed)),
-            Box::new(HttpDisplay::new(Arc::clone(&executor))),
-            Box::new(rules),
-            Box::new(HttpEncode::<D>::new()),
-        ))
+        if let Some(binding) = &self.external {
+            let programs = self.programs.read();
+            return Ok(external_http::build_capabilities(
+                Arc::clone(&self.joint_rules),
+                connection,
+                direction,
+                response,
+                if response {
+                    self.response_codec
+                } else {
+                    self.request_codec
+                },
+                binding,
+                [programs.program(first), programs.program(second)],
+            ));
+        }
+        #[cfg(test)]
+        {
+            let package = self
+                .package
+                .as_ref()
+                .expect("legacy HTTP snapshot has a compiled package");
+            let legacy_direction = match direction {
+                ProtocolDirection::Upstream => LegacyProtocolDirection::Upstream,
+                ProtocolDirection::Downstream => LegacyProtocolDirection::Downstream,
+            };
+            let executor = ProtocolDirectionExecutor::new(
+                package.compiled(),
+                DirectionExecutionPlan::new(legacy_direction),
+                connection.connection_id.to_string(),
+                self.listener_id.to_string(),
+                package.runtime_limits(),
+            )
+            .map_err(|error| legacy_http::protocol_error(&error))?;
+            let executor = Arc::new(Mutex::new(executor));
+            let programs = self.programs.read();
+            Ok(legacy_http::build_capabilities(
+                Arc::clone(&self.joint_rules),
+                connection,
+                response,
+                &executor,
+                [programs.program(first), programs.program(second)],
+            ))
+        }
+        #[cfg(not(test))]
+        {
+            Err(Error::new(
+                "EXTERNAL_PACKAGE_NOT_FOUND\nHTTP 协议包统一注册绑定不存在",
+            ))
+        }
     }
 }
 
@@ -289,139 +410,4 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
             true,
         )
     }
-}
-
-pub(super) type SharedExecutor = Arc<Mutex<ProtocolDirectionExecutor>>;
-
-struct HttpDecode<D: Direction> {
-    executor: SharedExecutor,
-    observed: Arc<Mutex<Option<HttpContext>>>,
-    direction: PhantomData<fn() -> D>,
-}
-
-impl<D: Direction> HttpDecode<D> {
-    fn new(executor: SharedExecutor, observed: Arc<Mutex<Option<HttpContext>>>) -> Self {
-        Self {
-            executor,
-            observed,
-            direction: PhantomData,
-        }
-    }
-}
-
-#[async_trait]
-impl<D: Direction> Decode<Http, D> for HttpDecode<D> {
-    async fn decode(&mut self, context: &HttpContext) -> Result<Document, Error> {
-        let executor = Arc::clone(&self.executor);
-        let body = context.body.as_bytes().to_vec();
-        let document = run_stage(move || executor.lock().decode_document(&body)).await?;
-        *self.observed.lock() = Some(context.clone());
-        Ok(document)
-    }
-}
-
-struct HttpDisplay {
-    executor: SharedExecutor,
-}
-
-impl HttpDisplay {
-    fn new(executor: SharedExecutor) -> Self {
-        Self { executor }
-    }
-}
-
-#[async_trait]
-impl Display for HttpDisplay {
-    async fn display(&mut self, document: &Document) -> Result<String, Error> {
-        let executor = Arc::clone(&self.executor);
-        let document = document.clone();
-        run_stage(move || executor.lock().display_document(&document)).await
-    }
-}
-
-struct HttpEncode<D: Direction> {
-    direction: PhantomData<fn() -> D>,
-}
-
-impl<D: Direction> HttpEncode<D> {
-    fn new() -> Self {
-        Self {
-            direction: PhantomData,
-        }
-    }
-}
-
-#[async_trait]
-impl<D: Direction> Encode<Http, D> for HttpEncode<D> {
-    async fn encode(
-        &mut self,
-        original: &HttpContext,
-        document: &Document,
-    ) -> Result<HttpContext, Error> {
-        let _ = document;
-        Ok(original.clone())
-    }
-}
-
-struct HttpDocumentRules {
-    runtime: Arc<JointHttpRuleRuntime>,
-    connection: HttpConnectionIdentity,
-    response: bool,
-    executor: SharedExecutor,
-    observed: Arc<Mutex<Option<HttpContext>>>,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 2],
-}
-
-impl HttpDocumentRules {
-    fn new(
-        runtime: Arc<JointHttpRuleRuntime>,
-        connection: HttpConnectionIdentity,
-        response: bool,
-        executor: SharedExecutor,
-        observed: Arc<Mutex<Option<HttpContext>>>,
-        programs: [Arc<ProtocolDocumentRuleProgram>; 2],
-    ) -> Self {
-        Self {
-            runtime,
-            connection,
-            response,
-            executor,
-            observed,
-            programs,
-        }
-    }
-}
-
-#[async_trait]
-impl Rules for HttpDocumentRules {
-    async fn apply(&mut self, document: Document) -> Result<Document, Error> {
-        let original = self.observed.lock().take().ok_or_else(|| {
-            Error::new("HTTP_PROTOCOL_CONTEXT_MISSING\nDocument 缺少对应 HTTP 上下文")
-        })?;
-        self.runtime.stage(
-            self.connection.runtime_epoch,
-            self.connection.connection_id,
-            self.response,
-            JointDocumentEvaluation::new(
-                document.clone(),
-                original.body.into_bytes(),
-                Arc::clone(&self.executor),
-                self.programs.iter().cloned(),
-            ),
-        );
-        Ok(document)
-    }
-}
-
-async fn run_stage<T: Send + 'static>(
-    stage: impl FnOnce() -> Result<T, ProtocolRuntimeError> + Send + 'static,
-) -> Result<T, Error> {
-    tokio::task::spawn_blocking(stage)
-        .await
-        .map_err(|_| Error::new("HTTP_PROTOCOL_WORKER_FAILED\nHTTP 协议处理任务异常终止"))?
-        .map_err(|error| protocol_error(&error))
-}
-
-fn protocol_error(error: &ProtocolRuntimeError) -> Error {
-    Error::new(format!("{}\n{error}", error.code()))
 }

@@ -386,16 +386,38 @@ fn http_failure_keeps_typed_context_and_available_error_fields() {
             context_header = "HTTP/1.1 500\r\nContent-Length: 4\r\n\r\n",
             context_body = "fail",
             context_body_is_utf8 = true,
-            error = "peer reset"
+            error = "peer reset",
+            external_package_id = "phase10.http",
+            external_package_version = "1.0.0",
+            external_stage = "decode",
+            external_method = "hooks.downstream.decode",
+            external_request_id = "capture-9",
+            external_remote_code = -32411_i64,
+            external_stable_code = "BODY_DECODE_FAILED",
+            external_remote_message = "decode rejected",
+            external_remote_data_summary = "object(fields=1)"
         );
     });
     consumer.shutdown().unwrap();
 
     let record = wait_for_record(&store, "42", 2);
-    let ExchangeObservationEvent::Failed { context, error, .. } = &record.events[1] else {
+    let ExchangeObservationEvent::Failed {
+        context,
+        error,
+        external_package_call,
+        ..
+    } = &record.events[1]
+    else {
         panic!("failure event expected");
     };
     assert_eq!(error, "peer reset");
+    let external = external_package_call
+        .as_ref()
+        .expect("typed external failure");
+    assert_eq!(external.method, "hooks.downstream.decode");
+    assert_eq!(external.request_id.as_deref(), Some("capture-9"));
+    assert_eq!(external.remote_code, Some(-32411));
+    assert_eq!(external.stable_code.as_deref(), Some("BODY_DECODE_FAILED"));
     assert_eq!(
         context,
         &Some(ExchangeContext::Http {

@@ -293,6 +293,7 @@ impl SharedError {
         ProxyError {
             code: self.code,
             message: self.message.clone(),
+            external_package_call: None,
         }
     }
 }

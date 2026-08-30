@@ -78,6 +78,7 @@ impl ConnectionService {
                 return Err(ProxyError {
                     code: error.code,
                     message: error.message,
+                    external_package_call: error.external_package_call,
                 });
             }
         }

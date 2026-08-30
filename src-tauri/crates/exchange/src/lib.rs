@@ -7,6 +7,7 @@
 // transport runtime 不需要反向依赖 Domain crate。
 pub use intercept_proxy_domain::{
     Document, DocumentNumber, DocumentSchemaNode, DocumentValue, DomainError, JsonPointer,
+    ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
 };
 
 mod capability;

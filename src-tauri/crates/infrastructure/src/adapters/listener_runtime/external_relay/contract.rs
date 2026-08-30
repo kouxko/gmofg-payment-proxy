@@ -121,6 +121,10 @@ impl ExternalSocketPackageBinding {
     pub(crate) const fn max_frame_bytes(&self) -> usize {
         self.max_frame_bytes
     }
+
+    pub(crate) fn rpc(&self) -> Arc<dyn ExternalPackageRpc> {
+        Arc::clone(&self.rpc)
+    }
 }
 
 impl fmt::Debug for ExternalSocketPackageBinding {

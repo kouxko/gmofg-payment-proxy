@@ -18,6 +18,8 @@ pub(crate) struct ChildTaskId(u64);
 pub(crate) struct ChildTaskError {
     pub(crate) code: &'static str,
     pub(crate) message: String,
+    pub(crate) external_package_call:
+        Option<Box<intercept_proxy_exchange::ExternalPackageCallFailure>>,
 }
 
 impl ChildTaskError {
@@ -25,6 +27,15 @@ impl ChildTaskError {
         Self {
             code,
             message: message.into(),
+            external_package_call: None,
+        }
+    }
+
+    pub(crate) fn from_proxy(error: crate::ProxyError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            external_package_call: error.external_package_call,
         }
     }
 }

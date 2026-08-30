@@ -44,6 +44,7 @@ impl ListenerRunOutcome {
             Self::Faulted { code, .. } => Err(ProxyError {
                 code,
                 message: fault_message.to_owned(),
+                external_package_call: None,
             }),
         }
     }

@@ -268,9 +268,10 @@ async fn prepare_evaluated_message(
     if let Some(joint) = input.joint_document.take() {
         joint.encode_into(message).await.map_err(|error| {
             intercept_proxy_runtime::ProxyError::new(
-                intercept_proxy_runtime::ErrorCode::Internal,
-                format!("联合 Document Encode 失败：{error}"),
+                intercept_proxy_runtime::ErrorCode::ExternalPackageCallFailed,
+                format!("联合 Document Encode 失败：{}", error.message),
             )
+            .with_external_package_call(error.external_package_call)
         })?;
     }
     let body_codec = input

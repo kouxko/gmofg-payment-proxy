@@ -76,6 +76,7 @@ impl<D: Direction> Encode<Http, D> for TextEncode {
             header: original.header.clone(),
             body: text(document),
             body_is_utf8: true,
+            wire_body: text(document).into_bytes(),
         })
     }
 }
@@ -116,6 +117,7 @@ async fn http_reader_fixes_display_and_writer_mutates_only_a_document_clone() {
         header: "POST /sale HTTP/1.1".to_owned(),
         body: "sale".to_owned(),
         body_is_utf8: true,
+        wire_body: b"sale".to_vec(),
     };
     let mut reader = QueueReader::<Http, Upstream>::contexts([original.clone()]);
     let mut pipeline = Pipeline::new(
@@ -150,6 +152,7 @@ async fn display_failure_is_fail_open_with_protocol_specific_evidence() {
         header: "POST / HTTP/1.1".to_owned(),
         body: "plain body".to_owned(),
         body_is_utf8: true,
+        wire_body: b"plain body".to_vec(),
     }]);
     let mut http = HttpRead::new(
         Box::new(TextDecode),
@@ -182,6 +185,7 @@ async fn rules_failure_preserves_envelope_and_performs_no_transport_write() {
         header: String::new(),
         body: "sale".to_owned(),
         body_is_utf8: true,
+        wire_body: b"sale".to_vec(),
     }]);
     let mut pipeline = Pipeline::new(
         Box::new(HttpRead::new(
@@ -268,6 +272,7 @@ async fn writer_failure_is_a_single_error_without_partial_commit_model() {
         header: String::new(),
         body: "sale".to_owned(),
         body_is_utf8: true,
+        wire_body: b"sale".to_vec(),
     }]);
     let mut pipeline = Pipeline::new(
         Box::new(HttpRead::new(

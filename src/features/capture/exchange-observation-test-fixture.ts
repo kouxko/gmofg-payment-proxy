@@ -46,6 +46,7 @@ export function failedExchangeRecord(): ExchangeObservationRecord {
         stage: "READ_TIMEOUT",
         context: null,
         error: "socket Exchange read timed out",
+        external_package_call: null,
       },
       {
         event: "closed",

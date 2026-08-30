@@ -217,7 +217,7 @@ impl HttpExchangeRuntime {
                         .expect("HTTP Exchange state mutex poisoned")
                         .fail(error);
                 }
-                result.map_err(|error| ChildTaskError::new(error.code, error.message))
+                result.map_err(ChildTaskError::from_proxy)
             })
             .map_err(|_| {
                 ProxyError::new(
@@ -289,6 +289,7 @@ fn copy_error(error: &ProxyError) -> ProxyError {
     ProxyError {
         code: error.code,
         message: error.message.clone(),
+        external_package_call: error.external_package_call.clone(),
     }
 }
 
@@ -324,7 +325,10 @@ fn observation_span(
 }
 
 fn exchange_error(error: ExchangeError) -> ProxyError {
-    let ExchangeError { message, .. } = error;
+    let ExchangeError {
+        message,
+        external_package_call,
+    } = error;
     let (code, detail) = message.split_once('\n').map_or(
         (crate::ErrorCode::Internal, message.as_str()),
         |(code, message)| {
@@ -335,6 +339,7 @@ fn exchange_error(error: ExchangeError) -> ProxyError {
         },
     );
     ProxyError::new(code, format!("HTTP Exchange failed: {detail}"))
+        .with_external_package_call(external_package_call)
 }
 
 impl From<ForwardRequest> for HttpExchangeRequest {
@@ -349,7 +354,10 @@ impl From<ForwardRequest> for HttpExchangeRequest {
 
 #[cfg(test)]
 mod tests {
-    use intercept_proxy_exchange::Error;
+    use intercept_proxy_exchange::{
+        Error, ExternalPackageCallFailure, ExternalPackageCallStage, ProtocolDirection,
+        ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    };
 
     use super::exchange_error;
     use crate::ErrorCode;
@@ -372,5 +380,30 @@ mod tests {
                 .message
                 .contains("Server disconnected before replying")
         );
+    }
+
+    #[test]
+    fn exchange_error_preserves_typed_external_package_failure() {
+        let failure = ExternalPackageCallFailure {
+            package: ProtocolPackageRef {
+                id: ProtocolPackageId::new("phase10.http").unwrap(),
+                version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+            },
+            direction: ProtocolDirection::Upstream,
+            stage: ExternalPackageCallStage::Display,
+            method: "document.upstream.display".into(),
+            request_id: Some("proxy-4".into()),
+            remote_code: Some(-32412),
+            stable_code: Some("DISPLAY_FAILED".into()),
+            remote_message: Some("display rejected".into()),
+            remote_data_summary: Some("object(fields=1)".into()),
+        };
+        let error = exchange_error(
+            Error::new("EXTERNAL_PACKAGE_CALL_FAILED\ndisplay rejected")
+                .with_external_package_call(failure.clone()),
+        );
+        assert_eq!(error.code, "EXTERNAL_PACKAGE_CALL_FAILED");
+        assert_ne!(error.code, ErrorCode::Internal.as_str());
+        assert_eq!(error.external_package_call.as_deref(), Some(&failure));
     }
 }

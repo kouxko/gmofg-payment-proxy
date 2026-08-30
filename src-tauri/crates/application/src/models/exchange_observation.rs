@@ -10,7 +10,7 @@ use serde_json::Value;
 use specta::Type;
 use uuid::Uuid;
 
-use super::PageRequest;
+use super::{ExternalPackageCallDiagnosticViewModel, PageRequest};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -61,6 +61,7 @@ pub enum ExchangeObservationEvent {
         stage: String,
         context: Option<ExchangeContext>,
         error: String,
+        external_package_call: Option<ExternalPackageCallDiagnosticViewModel>,
     },
     Closed {
         observed_at: DateTime<Utc>,
@@ -136,9 +137,15 @@ fn event_bytes(event: &ExchangeObservationEvent) -> u64 {
                 stage,
                 context,
                 error,
+                external_package_call,
                 ..
             } => {
-                stage.len() as u64 + context.as_ref().map_or(0, context_bytes) + error.len() as u64
+                stage.len() as u64
+                    + context.as_ref().map_or(0, context_bytes)
+                    + error.len() as u64
+                    + external_package_call.as_ref().map_or(0, |value| {
+                        serde_json::to_vec(value).map_or(u64::MAX, |bytes| bytes.len() as u64)
+                    })
             }
             ExchangeObservationEvent::Closed { outcome, error, .. } => {
                 outcome.len() as u64 + error.as_ref().map_or(0, |value| value.len() as u64)

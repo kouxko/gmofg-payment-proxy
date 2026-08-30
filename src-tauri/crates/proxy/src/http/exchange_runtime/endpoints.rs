@@ -75,7 +75,7 @@ impl Reader<Http, Upstream> for BufferedAppReader {
         let command = match input {
             HttpExchangeInput::Request(command) => command,
             HttpExchangeInput::Fail(error) => {
-                return Err(adapter_error(error.code, error.message));
+                return Err(proxy_write_error(error));
             }
         };
         if command.endpoint != self.endpoint {
@@ -423,6 +423,7 @@ fn message_context(message: &Message) -> HttpContext {
         header: message_header_text(message),
         body: String::from_utf8_lossy(&message.body).into_owned(),
         body_is_utf8: std::str::from_utf8(&message.body).is_ok(),
+        wire_body: message.body.to_vec(),
     }
 }
 
@@ -453,7 +454,7 @@ fn apply_context_changes(
     }
     // 非 UTF-8 body 的文本 Context 是 lossy view；未改变时保留权威原字节和 wire policy。
     if encoded.body != original.body {
-        message.replace_body(Bytes::copy_from_slice(encoded.body.as_bytes()));
+        message.replace_body(Bytes::copy_from_slice(&encoded.wire_body));
     }
     Ok(())
 }
@@ -469,7 +470,12 @@ fn write_error(code: impl AsRef<str>, message: impl AsRef<str>) -> Error {
 }
 
 fn proxy_write_error(error: super::ProxyError) -> Error {
-    write_error(error.code, error.message)
+    let exchange_error = write_error(error.code, error.message);
+    error
+        .external_package_call
+        .map_or(exchange_error.clone(), |failure| {
+            exchange_error.with_external_package_call(*failure)
+        })
 }
 
 #[cfg(test)]

@@ -20,10 +20,11 @@ use capabilities::{ExternalDecode, ExternalDisplay, ExternalEncode, ExternalFram
 mod capabilities;
 pub(super) mod contract;
 mod diagnostics;
+pub(crate) use contract::ExternalPackageRpc;
 pub(crate) use contract::ExternalSocketPackageBinding as RuntimeExternalSocketPackageBinding;
+use contract::ExternalSocketPackageBinding;
 pub(crate) use contract::ExternalSocketPackageProvider;
 pub(crate) use contract::ExternalSocketRuntimeSnapshot;
-use contract::{ExternalPackageRpc, ExternalSocketPackageBinding};
 #[cfg(test)]
 use diagnostics::redacted_data_summary;
 pub(super) use diagnostics::trace_external_rpc_failure;

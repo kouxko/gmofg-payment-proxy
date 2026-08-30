@@ -39,6 +39,7 @@ pub(super) fn apply_breakpoint_decision(
                     message.body_text.as_deref().ok_or_else(|| ProxyError {
                         code: "BODY_ENCODE_FAILED",
                         message: "mock body text is missing".into(),
+                        external_package_call: None,
                     })?,
                 )?),
             });
@@ -191,6 +192,7 @@ pub(super) fn app_to_proxy(error: AppError) -> ProxyError {
         return ProxyError {
             code,
             message: error.view_model.message,
+            external_package_call: None,
         };
     }
     if matches!(
@@ -204,6 +206,7 @@ pub(super) fn app_to_proxy(error: AppError) -> ProxyError {
                 "BODY_ENCODE_FAILED"
             },
             message: error.view_model.message,
+            external_package_call: None,
         };
     }
     let code = match error.view_model.code.as_str() {

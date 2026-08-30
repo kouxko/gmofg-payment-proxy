@@ -317,6 +317,7 @@ impl SocketConnectionHandler {
                 Err(ProxyError {
                     code,
                     message: failure.error.message,
+                    external_package_call: failure.error.external_package_call,
                 })
             }
         }
@@ -346,6 +347,7 @@ impl SocketConnectionHandler {
                 Err(ProxyError {
                     code: socket_failure.code,
                     message: "socket frame processing failed".into(),
+                    external_package_call: failure.external_package_call,
                 })
             }
         }
