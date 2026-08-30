@@ -3,7 +3,7 @@ use crate::ErrorCode;
 
 #[test]
 fn package_id_accepts_contract_and_boundaries() {
-    for value in ["a", "iso8583", "iso-8583", "a-"] {
+    for value in ["a", "iso8583", "iso-8583", "a-", "com.example.payment"] {
         let id = ProtocolPackageId::new(value).unwrap();
         assert_eq!(id.as_str(), value);
         assert_eq!(id.to_string(), value);
@@ -17,7 +17,16 @@ fn package_id_accepts_contract_and_boundaries() {
 #[test]
 fn package_id_rejects_every_invalid_character_class() {
     for value in [
-        "", "1iso", "Iso", "iso_8583", "iso.8583", "iso/8583", "iso 8583", "协议",
+        "",
+        "1iso",
+        "Iso",
+        "iso_8583",
+        ".iso",
+        "iso.",
+        "iso..8583",
+        "iso/8583",
+        "iso 8583",
+        "协议",
     ] {
         let error = ProtocolPackageId::new(value).unwrap_err();
         assert_eq!(error.code, ErrorCode::ProtocolPackageInvalid, "{value}");

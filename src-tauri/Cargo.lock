@@ -2348,6 +2348,7 @@ dependencies = [
  "intercept-proxy-domain",
  "intercept-proxy-host",
  "intercept-proxy-infrastructure",
+ "intercept-proxy-package-contract",
  "intercept-proxy-product-api",
  "intercept-proxy-runtime",
  "log",
@@ -2499,6 +2500,17 @@ dependencies = [
  "x509-parser",
  "zeroize",
  "zip",
+]
+
+[[package]]
+name = "intercept-proxy-package-contract"
+version = "1.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "intercept-proxy-domain",
+ "serde",
+ "serde_json",
+ "specta",
 ]
 
 [[package]]

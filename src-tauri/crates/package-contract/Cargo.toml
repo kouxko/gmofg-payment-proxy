@@ -1,0 +1,17 @@
+[package]
+name = "intercept-proxy-package-contract"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+base64.workspace = true
+intercept-proxy-domain = { path = "../domain" }
+serde.workspace = true
+specta.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "method": "package.register",
+  "params": {
+    "api": 1,
+    "kind": "http",
+    "package": {
+      "id": "com.example.payment",
+      "version": "1.0.0",
+      "name": "Payment JSON",
+      "description": ""
+    },
+    "document": {
+      "upstream": {},
+      "downstream": {}
+    }
+  }
+}

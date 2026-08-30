@@ -5,6 +5,8 @@ use std::{cmp::Ordering, fmt, str::FromStr};
 
 /// 协议包 ID 的最大 ASCII 字节数。
 pub const MAX_PROTOCOL_PACKAGE_ID_LEN: usize = 64;
+/// 协议包 ID 的跨语言完整校验正则。
+pub const PROTOCOL_PACKAGE_ID_PATTERN: &str = r"^[a-z][a-z0-9-]*(?:\.[a-z0-9-]+)*$";
 /// 协议包 `SemVer` 文本的最大 ASCII 字节数。
 pub const MAX_PROTOCOL_PACKAGE_VERSION_LEN: usize = 128;
 
@@ -13,20 +15,22 @@ fn invalid_identity(field: &str, message: impl Into<String>) -> DomainError {
         .with_field_error(field, message)
 }
 
-fn valid_kebab_id(value: &str) -> bool {
+fn valid_package_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_PROTOCOL_PACKAGE_ID_LEN
         && value.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
-        && value
-            .bytes()
-            .skip(1)
-            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        && value.split('.').all(|segment| {
+            !segment.is_empty()
+                && segment
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        })
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
 #[serde(try_from = "String", into = "String")]
 /// 应用级协议包的稳定 ID。
-/// Wire 形式是字符串，必须匹配 `[a-z][a-z0-9-]*`；小写限制保证跨平台文件系统、
+/// Wire 形式是字符串，必须匹配 `[a-z][a-z0-9-]*(\.[a-z0-9-]+)*`；小写限制保证跨平台文件系统、
 /// ZIP 条目和数据库查询使用同一规范形式。
 pub struct ProtocolPackageId(String);
 
@@ -37,12 +41,12 @@ impl ProtocolPackageId {
     /// [`ErrorCode::ProtocolPackageInvalid`]。
     pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
         let value = value.into();
-        if valid_kebab_id(&value) {
+        if valid_package_id(&value) {
             Ok(Self(value))
         } else {
             Err(invalid_identity(
                 "package.id",
-                "必须匹配 [a-z][a-z0-9-]*，且长度为 1 到 64 个 ASCII 字节",
+                "必须匹配 [a-z][a-z0-9-]*(.[a-z0-9-]+)*，且长度为 1 到 64 个 ASCII 字节",
             ))
         }
     }

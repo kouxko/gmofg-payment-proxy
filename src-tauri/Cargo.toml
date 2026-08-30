@@ -117,6 +117,7 @@ intercept-proxy-application = { path = "crates/application" }
 intercept-proxy-domain = { path = "crates/domain" }
 intercept-proxy-host = { path = "crates/host" }
 intercept-proxy-infrastructure = { path = "crates/infrastructure" }
+intercept-proxy-package-contract = { path = "crates/package-contract" }
 intercept-proxy-product-api = { path = "crates/product-api" }
 intercept-proxy-runtime = { path = "crates/proxy" }
 log = "0.4"
