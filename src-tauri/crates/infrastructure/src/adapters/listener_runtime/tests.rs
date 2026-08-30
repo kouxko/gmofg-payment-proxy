@@ -45,6 +45,8 @@ mod external_package_runtime_tests;
 mod http_protocol_pipeline_tests;
 #[path = "tests/local_responder_runtime.rs"]
 mod local_responder_runtime_tests;
+#[path = "tests/phase10_http_pipeline.rs"]
+mod phase10_http_pipeline_tests;
 #[path = "tests/runtime_epoch_aba.rs"]
 mod runtime_epoch_aba_tests;
 #[path = "tests/scripted_relay_runtime.rs"]

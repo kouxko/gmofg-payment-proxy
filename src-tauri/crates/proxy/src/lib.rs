@@ -104,6 +104,7 @@ pub enum ErrorCode {
     FaultExecutionCancelled,
     ClientDisconnected,
     ProxyStopped,
+    ExternalPackageCallFailed,
     Io,
     Internal,
 }
@@ -148,6 +149,7 @@ impl ErrorCode {
             Self::FaultExecutionCancelled => "FAULT_EXECUTION_CANCELLED",
             Self::ClientDisconnected => "BREAKPOINT_CLIENT_DISCONNECTED",
             Self::ProxyStopped => "BREAKPOINT_PROXY_STOPPED",
+            Self::ExternalPackageCallFailed => "EXTERNAL_PACKAGE_CALL_FAILED",
             Self::Io => "IO_ERROR",
             Self::Internal => "INTERNAL_ERROR",
         }
@@ -196,6 +198,7 @@ impl ErrorCode {
             Self::FaultExecutionCancelled,
             Self::ClientDisconnected,
             Self::ProxyStopped,
+            Self::ExternalPackageCallFailed,
             Self::Io,
             Self::Internal,
         ]
@@ -209,6 +212,7 @@ impl ErrorCode {
 pub struct ProxyError {
     pub code: &'static str,
     pub message: String,
+    pub external_package_call: Option<Box<intercept_proxy_exchange::ExternalPackageCallFailure>>,
 }
 
 impl ProxyError {
@@ -216,7 +220,17 @@ impl ProxyError {
         Self {
             code: code.as_str(),
             message: message.into(),
+            external_package_call: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_external_package_call(
+        mut self,
+        failure: Option<Box<intercept_proxy_exchange::ExternalPackageCallFailure>>,
+    ) -> Self {
+        self.external_package_call = failure;
+        self
     }
 
     pub fn io(context: &str, error: &io::Error) -> Self {

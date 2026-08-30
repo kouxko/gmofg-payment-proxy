@@ -37,6 +37,7 @@ impl Reader<Http, Upstream> for AppReader {
         self.events.lock().push(format!("app_read:{body}"));
         Ok(Some(HttpContext {
             header: "POST /sale HTTP/1.1".to_owned(),
+            wire_body: body.as_bytes().to_vec(),
             body,
             body_is_utf8: true,
         }))
@@ -191,6 +192,7 @@ impl<D: Direction> Encode<Http, D> for TextCodec {
             header: original.header.clone(),
             body: text(document),
             body_is_utf8: true,
+            wire_body: text(document).into_bytes(),
         })
     }
 }

@@ -3,6 +3,12 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-08-31
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260829-002 | phase10-http-shared-rpc-pipeline | 验证HTTP Body统一shared `/packages` RPC、strict UTF-8/Shift-JIS与Content-Encoding gate、authoritative wire bytes、unchanged 0 Encode RPC、changed Encode、typed remote failure贯穿Exchange/Proxy/capture、stable top-level external code、Display fail-open typed observation、production prepare_async双向capability与joint rollback及legacy仅cfg(test)；checker19/19、focused6/6、affected Application460/460/Exchange24/24/Runtime227/227/Infrastructure643/643及静态门PASS；最终Reviewer/Verifier P0/P1/P2=0，唯一checkpoint session3469的既有non-loopback环境阻塞与人工NOT_RUN保留 | VERIFIED / APPROVED / CHECKPOINT READY | TASK-20260829-002 | phase9-local-sidecar-lifecycle | [父证据](2026-08-30/TASK-20260829-002/phase9-local-sidecar-lifecycle/README.md) | [证据](2026-08-31/TASK-20260829-002/phase10-http-shared-rpc-pipeline/README.md) |
+
 ## 2026-08-30
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

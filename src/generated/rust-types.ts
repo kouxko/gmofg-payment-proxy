@@ -916,7 +916,7 @@ export type ExchangeObservationEvent = { event: "opened"; observed_at: string } 
 /**  协议 Pipeline 提供 Document；透明 Socket chunk 没有 Document。 */
 document: unknown | null;
 /**  协议 Reader 固定 Display；透明 Socket 不调用 Display。 */
-display: string | null } | { event: "sent"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext } | { event: "failed"; observed_at: string; direction: ProtocolDirection | null; stage: string; context: ExchangeContext | null; error: string } | { event: "closed"; observed_at: string; outcome: string; error: string | null };
+display: string | null } | { event: "sent"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext } | { event: "failed"; observed_at: string; direction: ProtocolDirection | null; stage: string; context: ExchangeContext | null; error: string; external_package_call: ExternalPackageCallDiagnosticViewModel | null } | { event: "closed"; observed_at: string; outcome: string; error: string | null };
 
 export type ExchangeObservationPage = {
 	rows: ExchangeObservationRecord[],

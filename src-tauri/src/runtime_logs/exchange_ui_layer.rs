@@ -8,9 +8,12 @@ use std::{io, sync::Arc};
 use chrono::Utc;
 use intercept_proxy_application::{
     EventHub, ExchangeContext, ExchangeObservationEvent, ExchangeObservationRecord,
-    ExchangeProtocol, UiEventPayload,
+    ExchangeProtocol, ExternalPackageCallDiagnosticViewModel, ExternalPackageCallStage,
+    UiEventPayload,
 };
-use intercept_proxy_domain::ProtocolDirection;
+use intercept_proxy_domain::{
+    ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+};
 use intercept_proxy_infrastructure::{ExchangeObservationCounters, ExchangeObservationStore};
 use tracing::{Event, Subscriber, span::Attributes};
 use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
@@ -350,6 +353,7 @@ fn observation_event(
             stage: fields.text("stage")?,
             context: context(fields),
             error: fields.text("error")?,
+            external_package_call: external_package_call(fields),
         }),
         "closed" => Some(ExchangeObservationEvent::Closed {
             observed_at,
@@ -358,6 +362,39 @@ fn observation_event(
         }),
         _ => None,
     }
+}
+
+fn external_package_call(fields: &Fields) -> Option<ExternalPackageCallDiagnosticViewModel> {
+    let id = fields.text("external_package_id")?;
+    if id.is_empty() {
+        return None;
+    }
+    let version = fields.text("external_package_version")?;
+    let stage = match fields.text("external_stage")?.as_str() {
+        "frame" => ExternalPackageCallStage::Frame,
+        "decode" => ExternalPackageCallStage::Decode,
+        "display" => ExternalPackageCallStage::Display,
+        "encode" => ExternalPackageCallStage::Encode,
+        _ => return None,
+    };
+    let optional = |name: &str| fields.text(name).filter(|value| !value.is_empty());
+    Some(ExternalPackageCallDiagnosticViewModel {
+        package: ProtocolPackageRef {
+            id: ProtocolPackageId::new(id).ok()?,
+            version: ProtocolPackageVersion::new(version).ok()?,
+        },
+        direction: direction(fields)?,
+        stage,
+        method: fields.text("external_method")?,
+        request_id: optional("external_request_id"),
+        remote_code: fields
+            .text("external_remote_code")
+            .and_then(|value| value.parse().ok())
+            .filter(|value| *value != 0),
+        stable_code: optional("external_stable_code"),
+        remote_message: optional("external_remote_message"),
+        remote_data_summary: optional("external_remote_data_summary"),
+    })
 }
 
 fn protocol(fields: &Fields) -> Option<ExchangeProtocol> {

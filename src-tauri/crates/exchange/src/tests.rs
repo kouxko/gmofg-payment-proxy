@@ -14,6 +14,7 @@ fn protocol_markers_expose_the_expected_context_types() {
         header: "POST /sale HTTP/1.1".to_owned(),
         body: "body".to_owned(),
         body_is_utf8: true,
+        wire_body: b"body".to_vec(),
     });
     assert_socket(SocketContext {
         data: vec![0x01, 0x02],

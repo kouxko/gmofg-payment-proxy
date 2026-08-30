@@ -105,7 +105,10 @@ async fn execute_joint(
         Bytes::copy_from_slice(original.body.as_bytes()),
     )
     .map_err(|error| error.to_string())?;
-    joint.encode_into(&mut message).await?;
+    joint
+        .encode_into(&mut message)
+        .await
+        .map_err(|error| error.message)?;
     Ok((message, evaluation))
 }
 
@@ -232,6 +235,7 @@ fn context(header: &str, body: &str) -> HttpContext {
         header: header.into(),
         body: body.into(),
         body_is_utf8: true,
+        wire_body: body.as_bytes().to_vec(),
     }
 }
 
@@ -248,7 +252,7 @@ fn http_listener() -> ProxyListener {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn set_string_rule(
+pub(super) fn set_string_rule(
     listener: &ProxyListener,
     id: ProtocolDocumentRuleId,
     stage: ProtocolRuleStage,
@@ -283,6 +287,63 @@ fn set_string_rule(
         }],
     )
     .unwrap()
+}
+
+pub(super) fn workspace_with_http_rules(
+    listener: &ProxyListener,
+    rules: Vec<ProtocolDocumentRuleDefinition>,
+) -> ProxyWorkspace {
+    let created_order_high_water = rules
+        .iter()
+        .map(ProtocolDocumentRuleDefinition::created_order)
+        .max()
+        .unwrap_or(0);
+    let mut workspace = ProxyWorkspace {
+        listeners: vec![listener.clone()],
+        rule_created_order_high_water: created_order_high_water,
+        ..ProxyWorkspace::default()
+    };
+    workspace.replace_document_runtime_rules(rules).unwrap();
+    workspace.rule_definitions = workspace
+        .rule_definitions
+        .iter()
+        .map(|definition| {
+            let RuleContent::Socket(SocketRuleContent {
+                package,
+                condition,
+                actions,
+            }) = definition.content()
+            else {
+                return definition.clone();
+            };
+            RuleDefinition::restore(
+                definition.rule_id(),
+                RuleDefinitionDraft {
+                    name: definition.name().to_owned(),
+                    enabled: definition.enabled(),
+                    priority: definition.priority(),
+                    listener_id: definition.listener_id(),
+                    stage: definition.stage(),
+                    one_shot: definition.one_shot(),
+                    content: RuleContent::Http(HttpRuleContent {
+                        description: String::new(),
+                        condition: condition.clone(),
+                        actions: actions.clone(),
+                        document: Some(intercept_proxy_domain::HttpDocumentRuleContent {
+                            package: package.clone(),
+                        }),
+                    }),
+                },
+                intercept_proxy_domain::RuleDefinitionRestoreSnapshot {
+                    revision: definition.revision(),
+                    created_order: definition.created_order(),
+                    lifecycle: definition.lifecycle().clone(),
+                },
+            )
+            .unwrap()
+        })
+        .collect();
+    workspace
 }
 
 fn http_package() -> ProtocolPackageRef {

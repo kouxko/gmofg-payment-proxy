@@ -46,6 +46,8 @@ pub struct HttpContext {
     pub body: String,
     /// `false` means `body` is only a lossy display projection of the wire bytes.
     pub body_is_utf8: bool,
+    /// Authoritative framed HTTP Body bytes. Text is only a decoded/display projection.
+    pub wire_body: Vec<u8>,
 }
 
 /// Socket 协议模式的一次 transport read 或一个完整 Frame 所持有的字节。

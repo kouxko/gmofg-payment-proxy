@@ -1,13 +1,19 @@
 use std::{collections::HashMap, sync::Arc};
 
 use intercept_proxy_domain::{
-    Document, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram, Rule, RuleId,
+    Document, ProtocolDirection, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
+    ProtocolPackageRef, Rule, RuleId,
 };
+use intercept_proxy_exchange::{Error, ExternalPackageCallFailure, ExternalPackageCallStage};
+use intercept_proxy_package_contract::EncodeParams;
+use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::{ConnectionContext, Message};
 use parking_lot::Mutex;
 use uuid::Uuid;
 
-use super::{SharedExecutor, run_stage};
+use super::super::external_relay::ExternalPackageRpc;
+#[cfg(test)]
+use super::legacy_http::{SharedExecutor, run_stage};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct PendingKey {
@@ -70,9 +76,25 @@ impl JointHttpRuleRuntime {
 #[derive(Clone)]
 pub(crate) struct JointDocumentEvaluation {
     document: Document,
-    origin: Vec<u8>,
-    executor: SharedExecutor,
+    original_document: Document,
+    encoder: JointDocumentEncoder,
     programs: HashMap<RuleId, Arc<ProtocolDocumentRuleProgram>>,
+}
+
+#[derive(Clone)]
+enum JointDocumentEncoder {
+    #[cfg(test)]
+    Legacy {
+        origin: Vec<u8>,
+        executor: SharedExecutor,
+    },
+    External {
+        original_input: String,
+        rpc: Arc<dyn ExternalPackageRpc>,
+        direction: ProtocolDirection,
+        codec: Arc<dyn BodyCodec>,
+        package: ProtocolPackageRef,
+    },
 }
 
 impl std::fmt::Debug for JointDocumentEvaluation {
@@ -86,6 +108,7 @@ impl std::fmt::Debug for JointDocumentEvaluation {
 }
 
 impl JointDocumentEvaluation {
+    #[cfg(test)]
     pub(super) fn new(
         document: Document,
         origin: Vec<u8>,
@@ -108,9 +131,49 @@ impl JointDocumentEvaluation {
             })
             .collect();
         Self {
+            original_document: document.clone(),
             document,
-            origin,
-            executor,
+            encoder: JointDocumentEncoder::Legacy { origin, executor },
+            programs,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_external(
+        document: Document,
+        original_document: Document,
+        original_input: String,
+        rpc: Arc<dyn ExternalPackageRpc>,
+        direction: ProtocolDirection,
+        codec: Arc<dyn BodyCodec>,
+        package: ProtocolPackageRef,
+        programs: impl IntoIterator<Item = Arc<ProtocolDocumentRuleProgram>>,
+    ) -> Self {
+        let programs = programs
+            .into_iter()
+            .flat_map(|program| {
+                program
+                    .rules()
+                    .iter()
+                    .map(|rule| {
+                        (
+                            RuleId::from_uuid(rule.rule_id().as_uuid()),
+                            Arc::clone(&program),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        Self {
+            document,
+            original_document,
+            encoder: JointDocumentEncoder::External {
+                original_input,
+                rpc,
+                direction,
+                codec,
+                package,
+            },
             programs,
         }
     }
@@ -128,16 +191,93 @@ impl JointDocumentEvaluation {
         )
     }
 
-    pub(crate) async fn encode_into(self, message: &mut Message) -> Result<(), String> {
-        let executor = Arc::clone(&self.executor);
-        let document = self.document;
-        let written = run_stage(move || executor.lock().encode_document(&self.origin, document))
-            .await
-            .map_err(|error| error.to_string())?;
-        std::str::from_utf8(&written).map_err(|_| {
-            "HTTP_PROTOCOL_OUTPUT_NOT_UTF8: 协议包 Encode 返回了非 UTF-8 HTTP Body".to_owned()
-        })?;
+    pub(crate) async fn encode_into(self, message: &mut Message) -> Result<(), Error> {
+        let written = match self.encoder {
+            #[cfg(test)]
+            JointDocumentEncoder::Legacy { origin, executor } => {
+                let written =
+                    run_stage(move || executor.lock().encode_document(&origin, self.document))
+                        .await
+                        .map_err(|error| Error::new(error.to_string()))?;
+                std::str::from_utf8(&written).map_err(|_| {
+                    Error::new(
+                        "HTTP_PROTOCOL_OUTPUT_NOT_UTF8: 测试专用旧执行器 Encode 返回了非 UTF-8 HTTP Body",
+                    )
+                })?;
+                written
+            }
+            JointDocumentEncoder::External {
+                original_input,
+                rpc,
+                direction,
+                codec,
+                package,
+            } => {
+                if self.document == self.original_document {
+                    return Ok(());
+                }
+                let encoded = rpc
+                    .encode(
+                        direction,
+                        EncodeParams {
+                            original_input,
+                            document: self.document,
+                        },
+                    )
+                    .await
+                    .map_err(|error| {
+                        external_rpc_error(
+                            package,
+                            direction,
+                            ExternalPackageCallStage::Encode,
+                            "hooks.encode",
+                            &error,
+                        )
+                    })?;
+                codec
+                    .encode(&encoded)
+                    .map_err(|error| Error::new(format!("{}: {}", error.code, error.message)))?
+            }
+        };
         message.replace_body(written.into());
         Ok(())
     }
+}
+
+fn external_rpc_error(
+    package: ProtocolPackageRef,
+    direction: ProtocolDirection,
+    stage: ExternalPackageCallStage,
+    default_method: &'static str,
+    error: &crate::adapters::PackageTransportError,
+) -> Error {
+    let (method, request_id, remote_code, stable_code, remote_message, remote_data_summary) =
+        match error {
+            crate::adapters::PackageTransportError::Remote {
+                request_id,
+                method,
+                error,
+            } => (
+                (*method).to_owned(),
+                Some(request_id.clone()),
+                Some(error.code()),
+                Some(error.data().code().as_str().to_owned()),
+                Some(error.message().to_owned()),
+                Some("object(fields=1)".to_owned()),
+            ),
+            _ => (default_method.to_owned(), None, None, None, None, None),
+        };
+    Error::new(format!("EXTERNAL_PACKAGE_CALL_FAILED\n{error}")).with_external_package_call(
+        ExternalPackageCallFailure {
+            package,
+            direction,
+            stage,
+            method,
+            request_id,
+            remote_code,
+            stable_code,
+            remote_message,
+            remote_data_summary,
+        },
+    )
 }

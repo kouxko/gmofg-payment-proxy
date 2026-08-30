@@ -95,6 +95,7 @@ async fn request_reader_preserves_original_and_writer_reports_effective_wire_mes
             header: read.header,
             body: "app-request".into(),
             body_is_utf8: true,
+            wire_body: b"app-request".to_vec(),
         })
         .await
         .unwrap();
@@ -146,6 +147,7 @@ async fn response_reader_preserves_original_and_writer_reports_effective_wire_me
             header: read.header,
             body: "origin-response".into(),
             body_is_utf8: true,
+            wire_body: b"origin-response".to_vec(),
         })
         .await
         .unwrap();
@@ -219,4 +221,31 @@ fn server_writer(
         cancellation: CancellationToken::new(),
         informational: None,
     }
+}
+
+#[test]
+fn proxy_write_error_keeps_typed_external_package_failure() {
+    let failure = intercept_proxy_exchange::ExternalPackageCallFailure {
+        package: intercept_proxy_exchange::ProtocolPackageRef {
+            id: intercept_proxy_exchange::ProtocolPackageId::new("phase10.http").unwrap(),
+            version: intercept_proxy_exchange::ProtocolPackageVersion::new("1.0.0").unwrap(),
+        },
+        direction: intercept_proxy_exchange::ProtocolDirection::Upstream,
+        stage: intercept_proxy_exchange::ExternalPackageCallStage::Encode,
+        method: "hooks.upstream.encode".into(),
+        request_id: Some("endpoint-encode-1".into()),
+        remote_code: Some(-32_410),
+        stable_code: Some("BODY_ENCODE_FAILED".into()),
+        remote_message: Some("encode rejected".into()),
+        remote_data_summary: Some("object(fields=1)".into()),
+    };
+    let error = proxy_write_error(
+        crate::ProxyError::new(
+            crate::ErrorCode::ExternalPackageCallFailed,
+            "encode rejected",
+        )
+        .with_external_package_call(Some(Box::new(failure.clone()))),
+    );
+
+    assert_eq!(error.external_package_call.as_deref(), Some(&failure));
 }

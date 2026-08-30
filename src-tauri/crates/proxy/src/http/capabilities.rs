@@ -213,6 +213,7 @@ impl<D: Direction> Encode<Http, D> for TextEncode<D> {
             header: text(document, HEADER_FIELD)?.clone(),
             body: text(document, BODY_FIELD)?.clone(),
             body_is_utf8: true,
+            wire_body: text(document, BODY_FIELD)?.as_bytes().to_vec(),
         })
     }
 }
@@ -246,6 +247,7 @@ mod tests {
             header: "POST /sale HTTP/1.1\r\n\r\n".into(),
             body: "0200".into(),
             body_is_utf8: true,
+            wire_body: b"0200".to_vec(),
         };
         let mut decode = TextDecode::<Upstream>(PhantomData);
         let document = decode.decode(&context).await.unwrap();

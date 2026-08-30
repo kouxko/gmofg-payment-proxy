@@ -114,6 +114,7 @@ impl<D: Direction> ReadPipeline<Http, D> for HttpRead<D> {
         let display = match self.display.display(&document).await {
             Ok(display) => display,
             Err(error) => {
+                observation::failed_with_context::<Http, D>("display", &context, &error);
                 tracing::warn!(
                     target: "intercept_proxy::exchange::diagnostic",
                     direction = ?D::KIND,
@@ -240,6 +241,7 @@ impl<D: Direction> SocketRead<D> {
         let display = match self.display.display(&document).await {
             Ok(display) => display,
             Err(error) => {
+                observation::failed_with_context::<Socket, D>("display", &context, &error);
                 tracing::warn!(
                     target: "intercept_proxy::exchange::diagnostic",
                     direction = ?D::KIND,

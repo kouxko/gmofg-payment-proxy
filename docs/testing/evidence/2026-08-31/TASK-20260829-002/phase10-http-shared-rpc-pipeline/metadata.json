@@ -1,0 +1,69 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase10-http-shared-rpc-pipeline",
+  "executed_at": "2026-08-31 01:15:00 +08:00",
+  "completed_at": "2026-08-31 03:16:51 +08:00",
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase9-local-sidecar-lifecycle",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase9-local-sidecar-lifecycle/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "82e10ce",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase10 changes and unrelated user docs/README.md"
+  },
+  "resources": {
+    "checker_sha256": "2cd404f1337242d38abf78bd873e986553ffb4f25fbb788f0de3eaed2771e29b",
+    "checker_test_sha256": "7f0ede46d6cf6c8b79e0e309b60ddd9cf05621a8b646a06e751098359d53ca1e",
+    "exchange_context_sha256": "4df052dafd64784c6fc5f5c141b88603f81270d6b3bec4a5fda9c2d8e27302d7",
+    "exchange_pipeline_sha256": "3d70223a0c3fcfa04356c666334860022c8469da857f3c3f8aaba03fe1cac860",
+    "exchange_observation_sha256": "e7bb84f031a7eb244295fa03ed1b3da739acc04b8a3b454e0338277a9cc28eac",
+    "http_pipeline_sha256": "1dadace700d2c50330d83ce405fc5b83c39006723ddb860547c0da8116a3b0a1",
+    "external_http_sha256": "61d5c0629b6d05e00ba5e45a54150c60ff4c58ec5c2cf64365a0e353fbc4770a",
+    "joint_rules_sha256": "a4615b67d022a17b4d6c303c9e53a6577ed6ff38ad72b05194c9c06b6ba80597",
+    "focused_test_sha256": "c5bceeb0c5691c5016a93f28b8aa4b9da560068afccfe88497f17e8f1e7d8c5e",
+    "production_shape_test_sha256": "d5301f2d30c0ea975383d976bc478db5adbbff6ff9c9045beb7243cf39689172",
+    "joint_actor_sha256": "8c576738025f6a8b6fa769f10dd05ca232e5ad27991bdceb3cd44071e02afa15",
+    "proxy_error_sha256": "15cd0c229ca4d6104c73229ec97f5a3d6693749a75db1d6e0926475952aec54f",
+    "endpoint_sha256": "656f30c7c30f2cf77b790a1f1d5c9798a556e6b19f40cafb787679e462fbe087",
+    "generated_bindings_sha256": "f619221b47387b0aa53a5dbf4c939df2e24a6e8297c6e10c75badf98957eaa07"
+  },
+  "results": {
+    "phase10_checker_mutations_and_control": { "passed": 19, "failed": 0 },
+    "phase10_focused": { "passed": 6, "failed": 0 },
+    "legacy_http_regression": { "passed": 12, "failed": 0 },
+    "exchange_full": { "passed": 24, "failed": 0 },
+    "application_full": { "passed": 460, "failed": 0 },
+    "runtime_full": { "passed": 227, "failed": 0 },
+    "infrastructure_full": { "passed": 643, "failed": 0 },
+    "frontend_checkpoint": { "passed": 545, "failed": 0, "files": 64 },
+    "bindings": "PASS fresh and deterministic",
+    "architecture_source_size_typecheck_lint_fmt_clippy_diff": "PASS",
+    "global_checkpoint": "ENVIRONMENT_BLOCKED in unique session 3469 after all preceding gates passed; Tauri lib 129/130 then existing non-loopback MCP HTTP exchange deadline elapsed; later workspace targets NOT_RUN because the && chain stopped"
+  },
+  "not_run": [
+    "workspace targets after the failing Tauri lib target in session 3469",
+    "human-assisted non-loopback network permission action",
+    "real signed macOS app bundle and firewall/system permission prompt E2E",
+    "Phase11 Socket pipeline integration",
+    "Phase12 full legacy deletion",
+    "Phase15 complete UI",
+    "remote CI, push, Release and Windows bundle E2E"
+  ],
+  "blockers": [
+    "existing non-loopback MCP HTTP exchange environment test timed out in the single final workspace checkpoint",
+    "human-assisted macOS bundle and system permission validation is NOT_RUN"
+  ],
+  "checkpoint_ready": true,
+  "review_status": "VERIFIED_APPROVED",
+  "final_verdict": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED / APPROVED / CHECKPOINT READY",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  }
+}
